@@ -1,3 +1,15 @@
+# Standards for Per-Type Detail Forms
+
+The following standards apply to this work. Both are reproduced in full, so this spec
+remains readable if the standards later change.
+
+---
+
+## components/ux-principles
+
+**Why it applies:** the drawer, the tabs, the read-only rollups, the inline-vs-drawer split,
+and the confirmation dialog are all direct applications of its decision guide.
+
 # UI/UX Design Principles
 
 The design philosophy behind our component patterns. Read this before the
@@ -62,13 +74,9 @@ Never use a modal for a standard create/edit flow.
 everything, and routinely opens modals on top of modals. That is the part of its design
 worth leaving behind — the workflow it encodes is excellent; the containers it uses are not.
 
-`ConfirmDialog` in `src/components/detail/` is the component for both permitted cases. It
-serves the outline's delete flow and the drawer's unsaved-changes prompt; use it rather than
-`window.confirm`.
-
-The stacked-modal rule bites hardest in the repeating lists inside a detail form — Achieve
-opens a second modal to edit an Objective or a Risk. We expand the row in place instead
-(`ItemList`).
+> **Known deviation:** the outline's delete flow currently uses `window.confirm`. That is
+> the right _category_ of interaction under this standard, but it should become a proper
+> dialog when the drawer work lands.
 
 ### Tabs organise sections within a form
 
@@ -94,15 +102,8 @@ Prefer explicit, discoverable actions over hidden gestures, and standardise whic
 trigger is chosen across every view — users should never have to relearn how to open a
 record.
 
-The bindings, which every view must match:
-
-| Gesture                  | Opens                                          |
-| ------------------------ | ---------------------------------------------- |
-| `Enter`, or double-click | The full record, in a drawer — as Achieve does |
-| `F2`                     | Inline name editing, the Windows convention    |
-
-Both also appear as toolbar buttons, and the selected row carries a small open-record
-affordance — a gesture nobody can see is not a discoverable action.
+Inline name editing is triggered by `Enter` on the selected row or double-click. Opening the
+full record should have a single, consistent trigger everywhere it exists.
 
 ## Forms & Validation
 
@@ -143,3 +144,87 @@ the drawer. Never cram them into grid cells.
 | Does the form have distinct groups of fields?         | Tabs within the drawer         | A single scrolling pane         |
 | Is this destructive or irreversible?                  | Confirmation dialog            | Just do it, with clear feedback |
 | Does the user need the outline visible while editing? | Drawer                         | Drawer is still fine            |
+
+---
+
+## components/drawer-pattern
+
+**Why it applies:** this spec is the first work to build the drawer this standard
+describes. Structure, width, positioning, focus handling, open/close flow, unsaved-changes
+handling, and the server-action save contract all come from here.
+
+# Form Drawer Pattern
+
+> For why we use drawers instead of modals, see `ux-principles.md`.
+
+Editing a full record uses a **right-sliding drawer**, never a modal and never full-page
+navigation. The outline stays visible behind it.
+
+Adapted from the `wrcs/reactwrcs` standard of the same name. That version is written for MUI
+and AG Grid (`<Drawer anchor="right">`, `ModalProps`, `sx`, `refreshData`); none of that
+applies here. This project is Tailwind, React Server Components, and server actions — so the
+**rules** carry over and the code does not.
+
+## Structure
+
+A drawer is a client component holding its own form state, rendered from the page shell:
+
+```tsx
+<Drawer open={open} onClose={close} labelledBy="node-form-title">
+  {open && node && <NodeForm node={node} onSaved={close} />}
+</Drawer>
+```
+
+## Rules
+
+- **Guard the content**, not the container: `{open && node && ...}`. Never render a form
+  before the record it edits is available.
+- **Do not unmount the form on close** if the user might reopen it mid-edit. Where state
+  must survive, lift it; where it must not, key the form on the node id so switching records
+  resets it.
+- **Width**: full-width on small screens, capped around `720px` on desktop
+  (`w-full sm:w-[90%] md:max-w-[45rem]`).
+- **Position below the app chrome** — the tab strip stays visible and clickable.
+- **Escape closes**, a backdrop click closes, and focus is trapped inside while open. Return
+  focus to the row that opened it.
+- **Respect `prefers-reduced-motion`** — the slide transition is already disabled globally
+  in `globals.css`, so don't reintroduce it inline.
+
+## Open/close flow
+
+1. **Edit** — set the selected node and open, together.
+2. **Create** — clear the selected node and open, together.
+3. **Close** — reset open, selected node, and dirty state in one action. Leaving any of the
+   three behind is the source of most drawer bugs.
+
+## Unsaved changes
+
+If the form is dirty, closing prompts for confirmation. This is a destructive-confirmation
+case under `ux-principles.md`, so a dialog is appropriate here.
+
+## Saving
+
+Drawer forms submit through **server actions**, following the pattern already established in
+`src/app/outline/actions.ts`: the action returns `{ ok: false, error }` rather than throwing,
+so a rejected save renders inline instead of crashing the view.
+
+```tsx
+const result = await saveNodeAction(values);
+if (!result.ok) {
+  setError(result.error); // check the error first
+  return; // and stay open so the user can fix it
+}
+close(); // revalidatePath already refreshed the outline
+```
+
+Order matters: check the error, then close. Never close a drawer over a failed save — the
+user's input disappears with it.
+
+`revalidatePath` in the action refreshes the outline, so there is no separate refresh call
+to make.
+
+## Tabs inside the drawer
+
+Group a record's fields into tabs when there are enough to warrant it, as Achieve does. On
+save, run full validation across **every** tab and switch to the first tab containing an
+error — never leave a user staring at a valid-looking tab wondering why save did nothing.

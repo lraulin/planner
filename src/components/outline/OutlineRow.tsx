@@ -51,7 +51,7 @@ export function OutlineRow({
   today,
   stateLabel,
   onSelect,
-  onStartEdit,
+  onOpenDetail,
   onFinishEdit,
   onCancelEdit,
   onToggleCollapsed,
@@ -69,7 +69,11 @@ export function OutlineRow({
   today: string | null;
   stateLabel: string;
   onSelect: () => void;
-  onStartEdit: () => void;
+  /**
+   * Opens the detail drawer. Double-click and Enter both land here, as they do in Achieve;
+   * inline rename moved to F2 and the toolbar.
+   */
+  onOpenDetail: () => void;
   onFinishEdit: (name: string) => void;
   onCancelEdit: () => void;
   onToggleCollapsed: () => void;
@@ -99,7 +103,7 @@ export function OutlineRow({
       aria-expanded={node.hasChildren ? !node.collapsed : undefined}
       aria-label={`${TYPE_LABELS[node.type]}: ${node.name || "Untitled"}`}
       onClick={onSelect}
-      onDoubleClick={onStartEdit}
+      onDoubleClick={onOpenDetail}
       className={[
         "grid",
         GRID_TEMPLATE,
@@ -148,7 +152,6 @@ export function OutlineRow({
           />
         ) : (
           <span
-            onDoubleClick={onStartEdit}
             className={[
               "min-w-0 flex-1 self-center truncate",
               TYPE_STYLE[node.type],
@@ -164,6 +167,27 @@ export function OutlineRow({
           <span className="tabular ml-2 flex-none self-center text-[0.6875rem] text-ink-faint">
             {node.childCount}
           </span>
+        )}
+
+        {/*
+          A visible way in, so opening a record is not a gesture you have to already know
+          about. Only on the selected row — one of these per row would be noise in a grid
+          this dense.
+        */}
+        {selected && !editing && (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenDetail();
+            }}
+            aria-label={`Open ${TYPE_LABELS[node.type].toLowerCase()}`}
+            title="Open record (Enter)"
+            tabIndex={-1}
+            className="ml-2 flex-none self-center rounded px-1 text-[0.6875rem] leading-none text-ink-muted hover:bg-surface hover:text-ink"
+          >
+            ⤢
+          </button>
         )}
       </div>
 

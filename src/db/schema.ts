@@ -2,6 +2,7 @@ import {
   boolean,
   index,
   integer,
+  numeric,
   pgEnum,
   pgTable,
   smallint,
@@ -37,6 +38,38 @@ export const nodeStateEnum = pgEnum("node_state", [
   "waiting",
   "completed",
   "cancelled",
+]);
+
+/** Achieve's project Sensitivity field. Carried for parity; nothing keys off it yet. */
+export const sensitivityEnum = pgEnum("sensitivity", [
+  "normal",
+  "personal",
+  "private",
+  "confidential",
+]);
+
+/**
+ * The repeating child lists inside the detail forms. Achieve gives each its own grid, but
+ * they share one shape — an ordered list of priority + title + description rows with a few
+ * extra columns each — so they share one table. See `node_items`.
+ */
+export const nodeItemKindEnum = pgEnum("node_item_kind", [
+  // Project
+  "objective",
+  "constraint",
+  "strategy",
+  "stakeholder",
+  "risk",
+  "role",
+  "contact",
+  "issue",
+  "attachment",
+  // Result area
+  "guiding_principle",
+  "wish_want_dont_have",
+  "wish_dont_want_have",
+  "wish_want_have",
+  "wish_want_avoid",
 ]);
 
 export const users = pgTable("users", {
@@ -112,6 +145,9 @@ export const taskDetails = pgTable("task_details", {
 /**
  * Result-area-only fields. `category` backs the Outline tab's "Group by Category" toggle;
  * whether categories deserve their own entity is still an open question.
+ *
+ * The prose columns back the Mission / Vision / S.W.O.T tabs of the Result Area form. The
+ * form's Notes tab writes to `nodes.notes`, which every type already has.
  */
 export const resultAreaDetails = pgTable("result_area_details", {
   nodeId: uuid("node_id")
@@ -119,13 +155,158 @@ export const resultAreaDetails = pgTable("result_area_details", {
     .references(() => nodes.id, { onDelete: "cascade" }),
   color: text("color"),
   category: text("category"),
+  // General
+  description: text("description").notNull().default(""),
+  /** Achieve's 0–100 weighting of this area against the others. */
+  importance: smallint("importance"),
+  reason: text("reason").notNull().default(""),
+  // Mission
+  mission: text("mission").notNull().default(""),
+  // Vision
+  idealOuterVision: text("ideal_outer_vision").notNull().default(""),
+  idealInnerVision: text("ideal_inner_vision").notNull().default(""),
+  // S.W.O.T
+  strengths: text("strengths").notNull().default(""),
+  weaknesses: text("weaknesses").notNull().default(""),
+  opportunities: text("opportunities").notNull().default(""),
+  threats: text("threats").notNull().default(""),
 });
+
+/**
+ * Project-only fields, backing the eleven tabs of Achieve's Project form.
+ *
+ * Effort, % complete, and the subproject/task counts are absent on purpose: they are
+ * rollups of the subtree, computed at read time in `src/lib/tree/derive.ts` and rendered
+ * read-only. Recurrence, templates, labels, and resource pools are out of scope.
+ */
+export const projectDetails = pgTable("project_details", {
+  nodeId: uuid("node_id")
+    .primaryKey()
+    .references(() => nodes.id, { onDelete: "cascade" }),
+  // General — scheduling. The weekly calendar will read these; nothing does yet.
+  projectStart: timestamp("project_start", { withTimezone: true }),
+  targetEnd: timestamp("target_end", { withTimezone: true }),
+  /** When set, the schedule stretches to fit the effort rather than the calendar. */
+  effortDriven: boolean("effort_driven").notNull().default(true),
+  onlyShowNextTask: boolean("only_show_next_task").notNull().default(false),
+  /** Slack Achieve leaves before a deadline when auto-scheduling. */
+  leadTimeMinutes: integer("lead_time_minutes"),
+  /** Preferred length of a single work block on the weekly calendar. */
+  blockSizeMinutes: integer("block_size_minutes"),
+  timePerWeekMinutes: integer("time_per_week_minutes"),
+  recomputeTaskDeadlines: boolean("recompute_task_deadlines").notNull().default(false),
+  reminderAt: timestamp("reminder_at", { withTimezone: true }),
+  sensitivity: sensitivityEnum("sensitivity").notNull().default("normal"),
+  assignedTo: text("assigned_to").notNull().default(""),
+  place: text("place").notNull().default(""),
+  contexts: text("contexts").array().notNull().default([]),
+  // Objectives
+  purpose: text("purpose").notNull().default(""),
+  // Vision
+  idealVision: text("ideal_vision").notNull().default(""),
+  sufficientVision: text("sufficient_vision").notNull().default(""),
+  // Strategy
+  strategy: text("strategy").notNull().default(""),
+  // Details
+  billingInformation: text("billing_information").notNull().default(""),
+  company: text("company").notNull().default(""),
+  mileage: text("mileage").notNull().default(""),
+  expectedCost: numeric("expected_cost", { precision: 12, scale: 2 }),
+  lowCost: numeric("low_cost", { precision: 12, scale: 2 }),
+  highCost: numeric("high_cost", { precision: 12, scale: 2 }),
+  costToDate: numeric("cost_to_date", { precision: 12, scale: 2 }),
+  description: text("description").notNull().default(""),
+});
+
+/**
+ * Every repeating row inside a detail form, of any kind — objectives, risks, stakeholders,
+ * wish-list entries, and the rest. One table rather than fourteen: they all share priority,
+ * title, description, and sibling ordering, and differ only in a handful of extra columns.
+ * Which columns a kind actually uses is declared in `src/components/detail/itemKinds.ts`.
+ *
+ * Ordering uses the same lexicographic `sortKey` as the outline, so reordering a row
+ * rewrites one row rather than renumbering the list.
+ */
+export const nodeItems = pgTable(
+  "node_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    nodeId: uuid("node_id")
+      .notNull()
+      .references(() => nodes.id, { onDelete: "cascade" }),
+    kind: nodeItemKindEnum("kind").notNull(),
+    sortKey: text("sort_key").notNull(),
+    priorityLetter: priorityLetterEnum("priority_letter"),
+    priorityRank: smallint("priority_rank"),
+    /** Also carries an Issue's "Summary" and a Contact's "Name". */
+    title: text("title").notNull().default(""),
+    description: text("description").notNull().default(""),
+
+    // Objective
+    criteria: text("criteria").notNull().default(""),
+    stakeholders: text("stakeholders").notNull().default(""),
+    // Stakeholder and Role both classify their rows; the option list comes from the kind
+    // config rather than a second enum, since the two vocabularies do not overlap.
+    itemType: text("item_type"),
+    stake: text("stake").notNull().default(""),
+    // Risk
+    severity: smallint("severity"),
+    probability: smallint("probability"),
+    detection: text("detection").notNull().default(""),
+    prevention: text("prevention").notNull().default(""),
+    mitigation: text("mitigation").notNull().default(""),
+    // Candidate strategy
+    advantages: text("advantages").notNull().default(""),
+    disadvantages: text("disadvantages").notNull().default(""),
+    decision: text("decision").notNull().default(""),
+    // Role
+    idealCandidate: text("ideal_candidate").notNull().default(""),
+    candidates: text("candidates").notNull().default(""),
+    filled: boolean("filled").notNull().default(false),
+    filledBy: text("filled_by").notNull().default(""),
+    // Contact
+    association: text("association").notNull().default(""),
+    contact: text("contact").notNull().default(""),
+    // Issue
+    source: text("source").notNull().default(""),
+    resolution: text("resolution").notNull().default(""),
+    resolved: boolean("resolved").notNull().default(false),
+    // Attachment
+    url: text("url").notNull().default(""),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("node_items_owner_list_idx").on(
+      table.userId,
+      table.nodeId,
+      table.kind,
+      table.sortKey,
+    ),
+    // Two rows in the same list may not share a sort key.
+    unique("node_items_sibling_sort_key_uq").on(
+      table.userId,
+      table.nodeId,
+      table.kind,
+      table.sortKey,
+    ),
+  ],
+);
 
 export type User = typeof users.$inferSelect;
 export type Node = typeof nodes.$inferSelect;
 export type NewNode = typeof nodes.$inferInsert;
 export type TaskDetails = typeof taskDetails.$inferSelect;
 export type ResultAreaDetails = typeof resultAreaDetails.$inferSelect;
+export type ProjectDetails = typeof projectDetails.$inferSelect;
+export type NodeItem = typeof nodeItems.$inferSelect;
+export type NewNodeItem = typeof nodeItems.$inferInsert;
 export type NodeType = (typeof nodeTypeEnum.enumValues)[number];
 export type PriorityLetter = (typeof priorityLetterEnum.enumValues)[number];
 export type NodeState = (typeof nodeStateEnum.enumValues)[number];
+export type Sensitivity = (typeof sensitivityEnum.enumValues)[number];
+export type NodeItemKind = (typeof nodeItemKindEnum.enumValues)[number];

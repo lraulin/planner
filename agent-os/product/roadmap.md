@@ -9,15 +9,18 @@ The core Achieve Planner loop — plan the week, block the time, work the outlin
   hierarchy — Result Areas → Goals → Projects → Tasks, nestable without limit — with
   keyboard-driven inline editing, indent/outdent, reordering, and collapse/expand.
   Drag-to-reorder is still outstanding; keyboard and toolbar commands cover it for now.
-- **🟡 Priorities & scheduling fields.** Partly delivered. Priority (A/B/C/D plus rank),
-  deadline, state, focus, and effort are editable in the outline, and effort rolls up
-  through the tree. Effort Left and Actual Effort are stored and rolled up but only
-  reachable from the seed — they need the per-type detail forms. % complete is stored and
-  computed but not yet editable.
-- **Per-type detail forms.** Each type opens its own form, tabbed by section, in a drawer.
-  Achieve uses modals for this; see `standards/components/ux-principles.md` for why we
-  don't. Reference captures are in `screenshots/project_form/`,
-  `screenshots/result_area_form/`, and `screenshots/welcome_wizard/`.
+- **✅ Priorities & scheduling fields.** Priority (A/B/C/D plus rank), deadline, state,
+  focus, and effort are editable in the outline, and effort rolls up through the tree.
+  Effort Left, Actual Effort, and % complete became editable in the Task form, delivered by
+  `specs/2026-07-27-1318-per-type-detail-forms`.
+- **🟡 Per-type detail forms.** Delivered for Result Areas and Projects by
+  `specs/2026-07-27-1318-per-type-detail-forms`, at parity with Achieve — all six Result
+  Area tabs and all eleven Project tabs, including the repeating child lists (Objectives,
+  Risks, Stakeholders, Roles, Issues, and the rest). Each opens in a drawer rather than a
+  modal; see `standards/components/ux-principles.md` for why. Goals and Tasks have a
+  minimal single-pane form over the existing schema — their full Achieve forms still need
+  reference captures, alongside `screenshots/welcome_wizard/`. Recurrence, templates,
+  labels, and resource pools were left out of scope.
 - **Weekly calendar + time blocking.** Week grid where projects are scheduled into time
   blocks, tracking estimated vs. actual duration.
 - **Weekly planning workflow.** A guided weekly review: pick goals, pull tasks from the

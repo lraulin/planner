@@ -27,6 +27,8 @@ import {
   setStateAction,
   type ActionResult,
 } from "@/app/outline/actions";
+import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
+import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import { OutlineRow } from "./OutlineRow";
 import { HintBar } from "./HintBar";
 
@@ -53,6 +55,8 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     initialNodes[0]?.id ?? null,
   );
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<OutlineNode | null>(null);
   const [filters, setFilters] = useState<TypeFilters>(ALL_TYPES_SHOWN);
   const [focusOnly, setFocusOnly] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -200,18 +204,16 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     [patch, apply],
   );
 
-  const removeSelected = useCallback(() => {
-    if (!selected) return;
-    const label = selected.name || `this ${TYPE_LABELS[selected.type].toLowerCase()}`;
-    const suffix = selected.hasChildren ? " and everything under it" : "";
-    if (!window.confirm(`Delete ${label}${suffix}?`)) return;
-
-    // Move the selection somewhere sensible before the row disappears.
-    const index = visible.findIndex((n) => n.id === selected.id);
-    const nextSelection = visible[index + 1]?.id ?? visible[index - 1]?.id ?? null;
-    setSelectedId(nextSelection);
-    apply(() => deleteNodeAction(selected.id));
-  }, [selected, visible, apply]);
+  const confirmDelete = useCallback(
+    (node: OutlineNode) => {
+      // Move the selection somewhere sensible before the row disappears.
+      const index = visible.findIndex((n) => n.id === node.id);
+      const nextSelection = visible[index + 1]?.id ?? visible[index - 1]?.id ?? null;
+      setSelectedId(nextSelection);
+      apply(() => deleteNodeAction(node.id));
+    },
+    [visible, apply],
+  );
 
   const commands = useMemo(
     () => ({
@@ -224,25 +226,24 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         selected && apply(() => moveNodeVerticallyAction(selected.id, "up")),
       moveDown: () =>
         selected && apply(() => moveNodeVerticallyAction(selected.id, "down")),
-      remove: removeSelected,
-      edit: () => selected && setEditingId(selected.id),
+      remove: () => selected && setPendingDelete(selected),
+      rename: () => selected && setEditingId(selected.id),
+      openDetail: () => selected && setDetailId(selected.id),
       collapse: () => selected && toggleCollapsed(selected, true),
       expand: () => selected && toggleCollapsed(selected, false),
       selectUp: () => selectRelative(-1),
       selectDown: () => selectRelative(1),
     }),
-    [
-      addSibling,
-      addChild,
-      selected,
-      apply,
-      removeSelected,
-      toggleCollapsed,
-      selectRelative,
-    ],
+    [addSibling, addChild, selected, apply, toggleCollapsed, selectRelative],
   );
 
-  useOutlineKeyboard({ commands, editingId });
+  // A dialog or the drawer owns the keyboard while it is open; the outline behind it must
+  // not also act on arrows and Delete.
+  const suspended = detailId !== null || pendingDelete !== null;
+
+  useOutlineKeyboard({ commands, editingId, suspended });
+
+  const detailNode = detailId ? (byId.get(detailId) ?? null) : null;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
@@ -296,9 +297,9 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
               today={today}
               stateLabel={STATE_LABELS[node.state]}
               onSelect={() => setSelectedId(node.id)}
-              onStartEdit={() => {
+              onOpenDetail={() => {
                 setSelectedId(node.id);
-                setEditingId(node.id);
+                setDetailId(node.id);
               }}
               onFinishEdit={(name) => {
                 setEditingId(null);
@@ -340,8 +341,32 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
       </div>
 
       <HintBar />
+
+      <NodeDetailDrawer node={detailNode} onClose={() => setDetailId(null)} />
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title={`Delete this ${pendingDelete ? TYPE_LABELS[pendingDelete.type].toLowerCase() : "row"}?`}
+        message={deleteMessage(pendingDelete)}
+        confirmLabel="Delete"
+        destructive
+        onConfirm={() => {
+          const target = pendingDelete;
+          setPendingDelete(null);
+          if (target) confirmDelete(target);
+        }}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
+}
+
+function deleteMessage(node: OutlineNode | null): string {
+  if (!node) return "";
+  const label = node.name || `This ${TYPE_LABELS[node.type].toLowerCase()}`;
+  return node.hasChildren
+    ? `${label} and all ${node.childCount} items under it will be deleted. This cannot be undone.`
+    : `${label} will be deleted. This cannot be undone.`;
 }
 
 /**
@@ -355,14 +380,17 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
 function useOutlineKeyboard({
   commands,
   editingId,
+  suspended,
 }: {
   commands: Record<string, () => void>;
   editingId: string | null;
+  /** True while a drawer or dialog is open above the grid. */
+  suspended: boolean;
 }) {
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       // While a cell is being edited, the field owns the keyboard.
-      if (editingId) return;
+      if (editingId || suspended) return;
 
       const target = event.target as HTMLElement | null;
       if (
@@ -409,9 +437,14 @@ function useOutlineKeyboard({
           if (event.shiftKey) commands.outdent();
           else commands.indent();
           break;
+        // Achieve opens the record on Enter and renames on F2, the Windows convention.
         case "Enter":
           event.preventDefault();
-          commands.edit();
+          commands.openDetail();
+          break;
+        case "F2":
+          event.preventDefault();
+          commands.rename();
           break;
         case "Delete":
         case "Backspace":
@@ -423,7 +456,7 @@ function useOutlineKeyboard({
 
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [commands, editingId]);
+  }, [commands, editingId, suspended]);
 }
 
 function FilterBar({
@@ -452,6 +485,17 @@ function FilterBar({
         </Command>
         <Command onClick={commands.addChild} disabled={!hasSelection}>
           Add child
+        </Command>
+      </div>
+
+      <span className="h-4 w-px bg-rule" aria-hidden />
+
+      <div className="flex items-center gap-1">
+        <Command onClick={commands.openDetail} disabled={!hasSelection} title="Enter">
+          Open
+        </Command>
+        <Command onClick={commands.rename} disabled={!hasSelection} title="F2">
+          Rename
         </Command>
       </div>
 
