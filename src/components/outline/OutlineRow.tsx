@@ -3,7 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import type { NodeState, PriorityLetter } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
-import { formatEffort, formatPriority } from "@/lib/tree/derive";
+import {
+  formatEffort,
+  formatPriority,
+  parseEffort,
+  parsePriority,
+} from "@/lib/tree/format";
 import { TYPE_LABELS } from "@/lib/tree/hierarchy";
 import { GRID_TEMPLATE } from "./OutlineGrid";
 
@@ -54,6 +59,7 @@ export function OutlineRow({
   onStateChange,
   onFocusChange,
   onDeadlineChange,
+  onEffortChange,
 }: {
   node: OutlineNode;
   ancestorPriorities: (PriorityLetter | null)[];
@@ -71,6 +77,7 @@ export function OutlineRow({
   onStateChange: (state: NodeState) => void;
   onFocusChange: (focus: boolean) => void;
   onDeadlineChange: (deadline: string | null) => void;
+  onEffortChange: (minutes: number | null) => void;
 }) {
   const done = node.state === "completed" || node.state === "cancelled";
   const rowRef = useRef<HTMLDivElement>(null);
@@ -167,12 +174,12 @@ export function OutlineRow({
         onChange={onPriorityChange}
       />
 
-      <span
-        className="tabular text-right text-[0.75rem] text-ink-muted"
-        title={node.hasChildren ? "Rolled up from everything below" : undefined}
-      >
-        {formatEffort(node.effortRollupMinutes)}
-      </span>
+      {/* Keyed on the stored value so a server-side change resets the field. */}
+      <EffortCell
+        key={formatEffort(node.effortMinutes)}
+        node={node}
+        onChange={onEffortChange}
+      />
 
       <DeadlineCell node={node} today={today} onChange={onDeadlineChange} />
 
@@ -257,30 +264,27 @@ function PriorityCell({
   const [invalid, setInvalid] = useState(false);
 
   function commit() {
-    const text = value.trim().toUpperCase();
+    const parsed = parsePriority(value);
 
-    if (text === "") {
-      setInvalid(false);
-      onChange(null, null);
-      return;
-    }
-
-    const match = /^([ABCD])(\d{1,2})?$/.exec(text);
-    if (!match) {
+    if (!parsed) {
       setInvalid(true);
       setValue(current);
       return;
     }
 
     setInvalid(false);
-    onChange(match[1] as PriorityLetter, match[2] ? Number(match[2]) : null);
+    onChange(parsed.letter, parsed.rank);
   }
 
   return (
     <input
       value={value}
       onClick={(event) => event.stopPropagation()}
-      onChange={(event) => setValue(event.target.value)}
+      onChange={(event) => {
+        // The reverted value is valid again, so stop flagging it the moment they retype.
+        setInvalid(false);
+        setValue(event.target.value);
+      }}
       onBlur={commit}
       onKeyDown={(event) => {
         if (event.key === "Enter") {
@@ -305,6 +309,83 @@ function PriorityCell({
           : node.priorityLetter
             ? PRIORITY_COLOR[node.priorityLetter]
             : "text-ink-faint",
+      ].join(" ")}
+    />
+  );
+}
+
+/**
+ * Effort is typed the way Achieve writes it — "2 h", "3:45 h", "45 min", "3 d" — and read
+ * back by `parseEffort`, which also accepts the shorthand people actually type.
+ *
+ * Only a leaf task is editable. A parent shows the total of everything beneath it, so an
+ * estimate of its own would have nowhere to appear.
+ */
+function EffortCell({
+  node,
+  onChange,
+}: {
+  node: OutlineNode;
+  onChange: (minutes: number | null) => void;
+}) {
+  const editable = node.type === "task" && !node.hasChildren;
+  const current = formatEffort(node.effortMinutes);
+  const [value, setValue] = useState(current);
+  const [invalid, setInvalid] = useState(false);
+
+  if (!editable) {
+    return (
+      <span
+        className="tabular text-right text-[0.75rem] text-ink-muted"
+        title={node.hasChildren ? "Total of everything below" : undefined}
+      >
+        {formatEffort(node.effortRollupMinutes)}
+      </span>
+    );
+  }
+
+  function commit() {
+    const minutes = parseEffort(value);
+
+    if (minutes === undefined) {
+      setInvalid(true);
+      setValue(current);
+      return;
+    }
+
+    setInvalid(false);
+    onChange(minutes);
+  }
+
+  return (
+    <input
+      value={value}
+      onClick={(event) => event.stopPropagation()}
+      onChange={(event) => {
+        // The reverted value is valid again, so stop flagging it the moment they retype.
+        setInvalid(false);
+        setValue(event.target.value);
+      }}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          commit();
+          event.currentTarget.blur();
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          setValue(current);
+          setInvalid(false);
+          event.currentTarget.blur();
+        }
+      }}
+      aria-label="Effort — for example 45 min, 2 h, 3:45 h, or 3 d"
+      aria-invalid={invalid}
+      placeholder="—"
+      maxLength={8}
+      className={[
+        "tabular w-full border-none bg-transparent text-right text-[0.75rem] outline-none placeholder:text-ink-faint/50",
+        invalid ? "text-priority-a" : "text-ink-muted",
       ].join(" ")}
     />
   );

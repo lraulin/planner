@@ -1,7 +1,8 @@
 import { db } from "./index";
 import { nodes, resultAreaDetails, taskDetails, users } from "./schema";
-import type { NodeType, PriorityLetter } from "./schema";
+import type { NodeType } from "./schema";
 import { DEV_USER_EMAIL } from "@/lib/auth";
+import { parsePriority } from "@/lib/tree/format";
 import { assertCanNest } from "@/lib/tree/hierarchy";
 import { between } from "@/lib/tree/sortKey";
 import { eq } from "drizzle-orm";
@@ -189,17 +190,10 @@ const HIERARCHY: Seed[] = [
 ];
 
 /** Splits Achieve's combined priority notation ("A1", "B") into letter and rank. */
-function parsePriority(priority: string | undefined): {
-  letter: PriorityLetter | null;
-  rank: number | null;
-} {
-  if (!priority) return { letter: null, rank: null };
-  const match = /^([ABCD])(\d+)?$/.exec(priority);
-  if (!match) throw new Error(`Unrecognized priority: ${priority}`);
-  return {
-    letter: match[1] as PriorityLetter,
-    rank: match[2] ? Number(match[2]) : null,
-  };
+function priorityOf(priority: string | undefined) {
+  const parsed = parsePriority(priority ?? "");
+  if (!parsed) throw new Error(`Unrecognized priority: ${priority}`);
+  return parsed;
 }
 
 async function insertLevel(
@@ -215,7 +209,7 @@ async function insertLevel(
     assertCanNest(item.type, parentType);
     sortKey = between(sortKey, null);
 
-    const { letter, rank } = parsePriority(item.priority);
+    const { letter, rank } = priorityOf(item.priority);
     const [row] = await db
       .insert(nodes)
       .values({

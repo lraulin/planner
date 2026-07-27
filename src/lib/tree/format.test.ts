@@ -1,0 +1,100 @@
+import { describe, expect, it } from "vitest";
+import { formatEffort, formatPriority, parseEffort, parsePriority } from "./format";
+
+describe("formatEffort", () => {
+  it("formats the way Achieve does", () => {
+    expect(formatEffort(45)).toBe("45 min");
+    expect(formatEffort(120)).toBe("2 h");
+    expect(formatEffort(225)).toBe("3:45 h");
+    expect(formatEffort(60)).toBe("1 h");
+    expect(formatEffort(1440)).toBe("3 d");
+    expect(formatEffort(480)).toBe("1 d");
+  });
+
+  it("renders nothing for no estimate", () => {
+    expect(formatEffort(null)).toBe("");
+    expect(formatEffort(0)).toBe("");
+  });
+});
+
+describe("parseEffort", () => {
+  it("reads back everything formatEffort emits", () => {
+    for (const minutes of [15, 45, 60, 90, 120, 225, 480, 960, 1440]) {
+      expect(parseEffort(formatEffort(minutes))).toBe(minutes);
+    }
+  });
+
+  it("accepts the shorthand someone would type", () => {
+    expect(parseEffort("45")).toBe(45);
+    expect(parseEffort("45m")).toBe(45);
+    expect(parseEffort("45 min")).toBe(45);
+    expect(parseEffort("2h")).toBe(120);
+    expect(parseEffort("2 hr")).toBe(120);
+    expect(parseEffort("3:45")).toBe(225);
+    expect(parseEffort("1d")).toBe(480);
+    expect(parseEffort("2 days")).toBe(960);
+  });
+
+  it("counts a day as eight hours, not twenty-four", () => {
+    expect(parseEffort("1 d")).toBe(480);
+  });
+
+  it("accepts fractions of an hour", () => {
+    expect(parseEffort("1.5h")).toBe(90);
+    expect(parseEffort("0.5 d")).toBe(240);
+  });
+
+  it("ignores surrounding whitespace and case", () => {
+    expect(parseEffort("  2H  ")).toBe(120);
+    expect(parseEffort("45 MIN")).toBe(45);
+  });
+
+  it("clears the value on empty input", () => {
+    expect(parseEffort("")).toBeNull();
+    expect(parseEffort("   ")).toBeNull();
+  });
+
+  it("reports unrecognised input rather than clearing it", () => {
+    expect(parseEffort("soon")).toBeUndefined();
+    expect(parseEffort("2 weeks")).toBeUndefined();
+    expect(parseEffort("-3h")).toBeUndefined();
+    expect(parseEffort("3:75")).toBeUndefined();
+    expect(parseEffort("h")).toBeUndefined();
+  });
+});
+
+describe("formatPriority", () => {
+  it("combines letter and rank", () => {
+    expect(formatPriority("A", 1)).toBe("A1");
+    expect(formatPriority("B", null)).toBe("B");
+    expect(formatPriority(null, null)).toBe("");
+  });
+});
+
+describe("parsePriority", () => {
+  it("reads back everything formatPriority emits", () => {
+    for (const [letter, rank] of [
+      ["A", 1],
+      ["B", null],
+      ["C", 12],
+      ["D", null],
+    ] as const) {
+      expect(parsePriority(formatPriority(letter, rank))).toEqual({ letter, rank });
+    }
+  });
+
+  it("accepts lowercase and whitespace", () => {
+    expect(parsePriority(" a1 ")).toEqual({ letter: "A", rank: 1 });
+  });
+
+  it("clears the priority on empty input", () => {
+    expect(parsePriority("")).toEqual({ letter: null, rank: null });
+  });
+
+  it("reports unrecognised input rather than clearing it", () => {
+    expect(parsePriority("E")).toBeUndefined();
+    expect(parsePriority("A123")).toBeUndefined();
+    expect(parsePriority("1A")).toBeUndefined();
+    expect(parsePriority("AA")).toBeUndefined();
+  });
+});

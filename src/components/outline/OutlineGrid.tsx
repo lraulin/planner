@@ -21,6 +21,7 @@ import {
   renameNodeAction,
   setCollapsedAction,
   setDeadlineAction,
+  setEffortAction,
   setFocusAction,
   setPriorityAction,
   setStateAction,
@@ -323,6 +324,15 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
               onDeadlineChange={(deadline) => {
                 patch(node.id, { deadline: deadline ? new Date(deadline) : null });
                 apply(() => setDeadlineAction(node.id, deadline));
+              }}
+              onEffortChange={(minutes) => {
+                // Only leaf tasks are editable, so the row's own estimate and its rollup
+                // are the same number. Ancestor totals catch up when the server responds.
+                patch(node.id, {
+                  effortMinutes: minutes,
+                  effortRollupMinutes: minutes,
+                });
+                apply(() => setEffortAction(node.id, minutes));
               }}
             />
           ))

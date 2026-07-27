@@ -123,30 +123,3 @@ export function derive(rows: OutlineRow[]): OutlineNode[] {
     };
   });
 }
-
-/** Formats minutes the way Achieve does: "45 min", "2 h", "3:45 h", "3 d". */
-export function formatEffort(minutes: number | null): string {
-  if (minutes === null || minutes === 0) return "";
-
-  const MINUTES_PER_DAY = 8 * 60;
-  if (minutes % MINUTES_PER_DAY === 0) {
-    return `${minutes / MINUTES_PER_DAY} d`;
-  }
-
-  if (minutes < 60) return `${minutes} min`;
-
-  const hours = Math.floor(minutes / 60);
-  const remainder = minutes % 60;
-  return remainder === 0
-    ? `${hours} h`
-    : `${hours}:${String(remainder).padStart(2, "0")} h`;
-}
-
-/** Formats a priority the way Achieve does: "A1", or bare "A" when unranked. */
-export function formatPriority(
-  letter: OutlineRow["priorityLetter"],
-  rank: number | null,
-): string {
-  if (letter === null) return "";
-  return rank === null ? letter : `${letter}${rank}`;
-}

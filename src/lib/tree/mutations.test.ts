@@ -10,6 +10,7 @@ import {
   moveNodeVertically,
   outdentNode,
   renameNode,
+  setEffort,
   setPriority,
 } from "./mutations";
 import { loadOutline } from "./queries";
@@ -158,6 +159,101 @@ describeDb("tree mutations", () => {
 
     await deleteNode(userId, area);
     expect(await outlineOf(userId)).toEqual([]);
+  });
+
+  describe("effort", () => {
+    /** Builds Work > Project > Task and returns the task id. */
+    async function taskUnderProject() {
+      const area = await createNode({
+        userId,
+        parentId: null,
+        type: "result_area",
+        name: "Work",
+      });
+      const project = await createNode({
+        userId,
+        parentId: area,
+        type: "project",
+        name: "P",
+      });
+      return {
+        project,
+        task: await createNode({ userId, parentId: project, type: "task", name: "T" }),
+      };
+    }
+
+    it("sets an estimate on a task", async () => {
+      const { task } = await taskUnderProject();
+      await setEffort(userId, task, 225);
+
+      const rows = await loadOutline(userId);
+      expect(rows.find((r) => r.id === task)?.effortMinutes).toBe(225);
+    });
+
+    it("seeds Effort Left from the first estimate", async () => {
+      const { task } = await taskUnderProject();
+      await setEffort(userId, task, 120);
+
+      const rows = await loadOutline(userId);
+      expect(rows.find((r) => r.id === task)?.effortLeftMinutes).toBe(120);
+    });
+
+    it("leaves Effort Left alone once it exists", async () => {
+      const { task } = await taskUnderProject();
+      await setEffort(userId, task, 120);
+      await setEffort(userId, task, 300);
+
+      const row = (await loadOutline(userId)).find((r) => r.id === task);
+      expect(row?.effortMinutes).toBe(300);
+      expect(row?.effortLeftMinutes).toBe(120);
+    });
+
+    it("clears both when the estimate is cleared", async () => {
+      const { task } = await taskUnderProject();
+      await setEffort(userId, task, 120);
+      await setEffort(userId, task, null);
+
+      const row = (await loadOutline(userId)).find((r) => r.id === task);
+      expect(row?.effortMinutes).toBeNull();
+      expect(row?.effortLeftMinutes).toBeNull();
+    });
+
+    it("rolls a task's estimate up into its ancestors", async () => {
+      const { project, task } = await taskUnderProject();
+      await setEffort(userId, task, 225);
+
+      const rows = await loadOutline(userId);
+      expect(rows.find((r) => r.id === project)?.effortRollupMinutes).toBe(225);
+      expect(rows[0].effortRollupMinutes).toBe(225); // the result area
+    });
+
+    it("refuses a project, whose effort is a rollup", async () => {
+      const { project } = await taskUnderProject();
+      await expect(setEffort(userId, project, 120)).rejects.toThrow(
+        "Effort is only tracked on tasks",
+      );
+    });
+
+    it("refuses another user's task", async () => {
+      const other = await makeUser();
+      const area = await createNode({
+        userId: other,
+        parentId: null,
+        type: "result_area",
+      });
+      const project = await createNode({
+        userId: other,
+        parentId: area,
+        type: "project",
+      });
+      const theirs = await createNode({
+        userId: other,
+        parentId: project,
+        type: "task",
+      });
+
+      await expect(setEffort(userId, theirs, 120)).rejects.toThrow("Node not found");
+    });
   });
 
   describe("indent", () => {

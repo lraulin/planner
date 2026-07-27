@@ -2,7 +2,7 @@ import { db } from "@/db";
 import { nodes, resultAreaDetails, taskDetails } from "@/db/schema";
 import type { NodeState, NodeType, PriorityLetter } from "@/db/schema";
 import { and, asc, eq, isNull } from "drizzle-orm";
-import { assertCanNest } from "./hierarchy";
+import { assertCanNest, TYPE_LABELS } from "./hierarchy";
 import { between } from "./sortKey";
 import type { Position } from "./types";
 
@@ -197,6 +197,45 @@ export async function setCollapsed(
     .update(nodes)
     .set({ collapsed, updatedAt: new Date() })
     .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+}
+
+/**
+ * Sets a task's effort estimate, in minutes. Passing null clears it.
+ *
+ * Only tasks carry an estimate — a project's effort is the rollup of its tasks, computed at
+ * read time and never stored, so writing one would be silently discarded.
+ */
+export async function setEffort(
+  userId: string,
+  nodeId: string,
+  minutes: number | null,
+): Promise<void> {
+  const node = await requireNode(db, userId, nodeId);
+
+  if (node.type !== "task") {
+    throw new Error(
+      `Effort is only tracked on tasks. A ${TYPE_LABELS[node.type]} shows the total of everything below it.`,
+    );
+  }
+
+  const [existing] = await db
+    .select({ effortLeftMinutes: taskDetails.effortLeftMinutes })
+    .from(taskDetails)
+    .where(eq(taskDetails.nodeId, nodeId))
+    .limit(1);
+
+  // Effort Left starts equal to Effort and diverges as work is recorded, so it is seeded
+  // on the first estimate and left alone afterwards. Clearing the estimate clears both.
+  const effortLeftMinutes =
+    minutes === null ? null : (existing?.effortLeftMinutes ?? minutes);
+
+  await db
+    .insert(taskDetails)
+    .values({ nodeId, effortMinutes: minutes, effortLeftMinutes })
+    .onConflictDoUpdate({
+      target: taskDetails.nodeId,
+      set: { effortMinutes: minutes, effortLeftMinutes },
+    });
 }
 
 export async function setDeadline(

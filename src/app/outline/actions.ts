@@ -77,6 +77,13 @@ export async function setCollapsedAction(
   return run((userId) => tree.setCollapsed(userId, nodeId, collapsed));
 }
 
+export async function setEffortAction(
+  nodeId: string,
+  minutes: number | null,
+): Promise<ActionResult> {
+  return run((userId) => tree.setEffort(userId, nodeId, minutes));
+}
+
 export async function setDeadlineAction(
   nodeId: string,
   deadline: string | null,

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { derive, formatEffort, formatPriority } from "./derive";
+import { derive } from "./derive";
+import { formatEffort } from "./format";
 import type { OutlineRow } from "./types";
 
 let counter = 0;
@@ -181,29 +182,5 @@ describe("derive — structure", () => {
 
   it("handles an empty tree", () => {
     expect(derive([])).toEqual([]);
-  });
-});
-
-describe("formatEffort", () => {
-  it("formats the way Achieve does", () => {
-    expect(formatEffort(45)).toBe("45 min");
-    expect(formatEffort(120)).toBe("2 h");
-    expect(formatEffort(225)).toBe("3:45 h");
-    expect(formatEffort(60)).toBe("1 h");
-    expect(formatEffort(1440)).toBe("3 d");
-    expect(formatEffort(480)).toBe("1 d");
-  });
-
-  it("renders nothing for no estimate", () => {
-    expect(formatEffort(null)).toBe("");
-    expect(formatEffort(0)).toBe("");
-  });
-});
-
-describe("formatPriority", () => {
-  it("combines letter and rank", () => {
-    expect(formatPriority("A", 1)).toBe("A1");
-    expect(formatPriority("B", null)).toBe("B");
-    expect(formatPriority(null, null)).toBe("");
   });
 });
