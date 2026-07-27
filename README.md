@@ -45,6 +45,30 @@ The app runs at http://localhost:3000.
 | `npm run db:studio`   | Drizzle Studio                             |
 | `npm run db:seed`     | Seed the dev user and sample hierarchy     |
 
+## Deploying
+
+Hosting targets the free tiers: Vercel Hobby for the app, Neon for Postgres.
+
+1. Create a Neon project named `planner`. Copy the **pooled** connection string — the host
+   containing `-pooler`. Serverless functions open a connection per invocation, so the
+   pooled endpoint is the one to use.
+2. Import this repository into Vercel. The defaults are correct; no build settings need
+   changing.
+3. Set `DATABASE_URL` in the Vercel project's environment variables to the Neon pooled
+   string.
+4. Apply the schema and create the dev user, from your machine, against the Neon database:
+
+   ```sh
+   DATABASE_URL="<neon-string>" npm run db:migrate
+   DATABASE_URL="<neon-string>" npm run db:seed   # optional: adds sample data too
+   ```
+
+   Migrations are deliberately not run during the Vercel build — a schema change should be
+   an explicit act, not a side effect of deploying.
+
+Vercel's Hobby tier is free but its terms limit it to non-commercial use. If this ever
+becomes something you sell, hosting has to move.
+
 ## Notes
 
 - **Authentication is not implemented yet.** Every table carries a `user_id` and every query
