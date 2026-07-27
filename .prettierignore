@@ -6,3 +6,5 @@ public
 screenshots
 agent-os/specs/**/visuals
 package-lock.json
+# Agent tooling config, not project source — formatting it produces noise in every diff.
+.claude
