@@ -29,23 +29,36 @@ The app runs at http://localhost:3000.
 
 ## Scripts
 
-| Script                | Purpose                                    |
-| --------------------- | ------------------------------------------ |
-| `npm run dev`         | Development server                         |
-| `npm run build`       | Production build                           |
-| `npm test`            | Unit tests (Vitest)                        |
-| `npm run typecheck`   | `tsc --noEmit`                             |
-| `npm run lint`        | ESLint                                     |
-| `npm run format`      | Prettier                                   |
-| `npm run db:up`       | Start local Postgres (Docker)              |
-| `npm run db:down`     | Stop local Postgres                        |
-| `npm run db:generate` | Generate a migration from schema changes   |
-| `npm run db:migrate`  | Apply pending migrations                   |
-| `npm run db:push`     | Push the schema directly (development)     |
-| `npm run db:studio`   | Drizzle Studio                             |
-| `npm run db:seed`     | Seed the dev user and sample hierarchy     |
+| Script                | Purpose                                  |
+| --------------------- | ---------------------------------------- |
+| `npm run dev`         | Development server                       |
+| `npm run build`       | Production build                         |
+| `npm test`            | Unit tests (Vitest)                      |
+| `npm run typecheck`   | `tsc --noEmit`                           |
+| `npm run lint`        | ESLint                                   |
+| `npm run format`      | Prettier                                 |
+| `npm run db:up`       | Start local Postgres (Docker)            |
+| `npm run db:down`     | Stop local Postgres                      |
+| `npm run db:generate` | Generate a migration from schema changes |
+| `npm run db:migrate`  | Apply pending migrations                 |
+| `npm run db:push`     | Push the schema directly (development)   |
+| `npm run db:studio`   | Drizzle Studio                           |
+| `npm run db:seed`     | Seed the dev user and sample hierarchy   |
 
 ## Deploying
+
+Live at **https://planner-sable-three.vercel.app**, on Vercel Hobby with a Neon database.
+
+> ### ⚠️ The deployed app has no authentication
+>
+> `getCurrentUserId()` returns a hardcoded dev user, so **anyone with the URL can read and
+> edit the outline.** Vercel's Hobby plan cannot protect a production domain — Standard
+> Protection covers preview and deployment URLs only; protecting production needs Pro.
+>
+> This is accepted while the database holds nothing but sample data. It must be resolved
+> before real planning data goes in. The options, cheapest first: point the project's
+> production branch at a branch you never push and use the protected branch URL with Vercel
+> Authentication; or land Better Auth (Phase 2), which is the actual fix.
 
 Hosting targets the free tiers: Vercel Hobby for the app, Neon for Postgres.
 

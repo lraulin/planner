@@ -1,2 +1,7 @@
 # Agent OS Standards Index
 
+components:
+  ux-principles:
+    description: Core UI/UX philosophy — outline grid + drawer, inline editing for grid columns, avoid modals, tabs for form sections
+  drawer-pattern:
+    description: Right-sliding drawer for full-record editing, with server actions and unsaved-changes handling

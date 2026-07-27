@@ -4,12 +4,22 @@
 
 The core Achieve Planner loop — plan the week, block the time, work the outline.
 
-- **Project/task outline.** Hierarchical tree of projects, subprojects, and tasks with
-  inline editing, drag-to-reorder, and collapse/expand. The central view.
-- **Weekly calendar + time blocking.** Week grid where tasks are scheduled into time
+- **✅ Project/task outline.** Delivered by
+  `specs/2026-07-27-1100-scaffold-and-outline-tab`. The Outline tab shows the whole
+  hierarchy — Result Areas → Goals → Projects → Tasks, nestable without limit — with
+  keyboard-driven inline editing, indent/outdent, reordering, and collapse/expand.
+  Drag-to-reorder is still outstanding; keyboard and toolbar commands cover it for now.
+- **🟡 Priorities & scheduling fields.** Partly delivered. Priority (A/B/C/D plus rank),
+  deadline, state, focus, and effort are editable in the outline, and effort rolls up
+  through the tree. Effort Left and Actual Effort are stored and rolled up but only
+  reachable from the seed — they need the per-type detail forms. % complete is stored and
+  computed but not yet editable.
+- **Per-type detail forms.** Each type opens its own form, tabbed by section, in a drawer.
+  Achieve uses modals for this; see `standards/components/ux-principles.md` for why we
+  don't. Reference captures are in `screenshots/project_form/`,
+  `screenshots/result_area_form/`, and `screenshots/welcome_wizard/`.
+- **Weekly calendar + time blocking.** Week grid where projects are scheduled into time
   blocks, tracking estimated vs. actual duration.
-- **Priorities & scheduling fields.** Priority levels (A/B/C plus numbers), due dates,
-  estimated time, status, and % complete on each task.
 - **Weekly planning workflow.** A guided weekly review: pick goals, pull tasks from the
   master list, block them onto the week.
 

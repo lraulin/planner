@@ -18,9 +18,9 @@ The product being reimplemented. Reference material gathered during shaping:
     (Outline / Projects / Tasks / Weekly Schedule / Notes); header toggles (Group by
     Category, Show Result Areas, Show Goals, Show Tasks, Next Actions Only); columns
     (Icon, Stat, Priori, Name, Deadline, Contexts, Status, Fo); left command panel (New,
-    Insert Row, Edit, Move); and the hint bar: *"Press Insert key to add row after,
+    Insert Row, Edit, Move); and the hint bar: _"Press Insert key to add row after,
     Shift+Insert to add row before, Ctrl+Insert to add row as child, Esc to cancel row
-    insert."*
+    insert."_
   - `ProjectsTabSS.png` — Result Area selector, grouping headers with item counts, and the
     `Tasks` (10/12), `%`, `Status`, `L.A.P.` columns.
   - `TasksTabSS.png` — project-scoped task list with `Effort` / `Effort L` columns.
@@ -46,7 +46,7 @@ The product being reimplemented. Reference material gathered during shaping:
   - **Effort fields** — `Effort` (expected effort to complete), `Effort Left` (work still
     needed; can go up if the estimate was low), `Actual Effort` (work actually spent).
   - **Project blocks** — committed time on the weekly schedule, deliberately scheduled at
-    the *project* level rather than the task level to avoid overscheduling; 30 min–2 h is
+    the _project_ level rather than the task level to avoid overscheduling; 30 min–2 h is
     the recommended duration. Each block links back to its project.
   - **Time charts / activity zones** — an "ideal week" template (health & fitness, family,
     finances…) rendered as color-coded calendar background.

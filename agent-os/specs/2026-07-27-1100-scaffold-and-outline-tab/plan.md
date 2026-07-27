@@ -71,6 +71,7 @@ Create `agent-os/specs/2026-07-27-1100-scaffold-and-outline-tab/`:
 - `visuals/` — copy the outline/projects/tasks/schedule screenshots here
 
 Open questions to record in `shape.md`:
+
 - "Fo" column is Focus, a boolean used for filtering — confirm whether it has any other
   behavior.
 - L.A.P. is believed to be inherited ancestor priority, used as a sort key. Confirm against
@@ -185,3 +186,34 @@ End to end, after Task 7:
    and confirm it is rejected if it would violate `canNest`.
 4. Reload and confirm structure, order, collapse state, priorities, and focus flags survive.
 5. Confirm the deployed instance behaves identically.
+
+## Execution notes
+
+Where the build diverged from this plan. Recorded after the fact, on 2026-07-27.
+
+- **Keyboard handling is bound to `document`, not the grid.** The plan assumed a focused
+  grid element would receive key events. It never reliably held focus — clicking a row left
+  `document.activeElement` on `<body>`, so nothing fired. Binding at document level and
+  ignoring events whose target is a form field is both simpler and better suited to a page
+  whose entire content is the outline. An earlier attempt to force focus on row click was
+  reverted: focusing the scroll container jumped the scroll position.
+
+- **The first deploy went to production, not preview.** Vercel assigns a project's first
+  deployment to production regardless of flags. The intent had been to keep an
+  unauthenticated app off a public URL. It is public at
+  `planner-sable-three.vercel.app`, and Vercel's Hobby plan cannot protect a production
+  domain — Standard Protection covers preview and deployment URLs only. Accepted knowingly
+  while the database holds nothing but sample data; see `README.md`.
+
+- **Drag-and-drop reordering is still deferred**, as scoped. Keyboard (`Alt+↑`/`Alt+↓`) and
+  the toolbar cover reordering.
+
+- **Effort entry was missing and added afterwards.** The plan's Task 5 listed Effort as a
+  displayed column and never as an editable one, so the feature shipped with effort
+  unenterable outside the seed script. Fixed in a follow-up: leaf tasks are now editable,
+  and duration/priority parsing lives in `src/lib/tree/format.ts`.
+
+- **Standards were imported rather than discovered.** `standards.md` recommended running
+  `/agent-os:discover-standards`. Instead, two standards were adapted from Lee's
+  `wrcs/reactwrcs` project — see `agent-os/standards/components/`. Discovery against this
+  codebase's own conventions is still worth doing later.
