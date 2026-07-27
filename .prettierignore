@@ -1,0 +1,8 @@
+.next
+node_modules
+coverage
+drizzle
+public
+screenshots
+agent-os/specs/**/visuals
+package-lock.json
