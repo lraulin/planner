@@ -1,26 +1,126 @@
 @import "tailwindcss";
 
+/*
+ * The outline is an instrument, not a document: dense rows, tabular data columns, and
+ * priority carried by color rather than by text weight.
+ *
+ * The four priority hues run hot to cold, matching what ABCD means — A is a signal you
+ * cannot ignore, D recedes until it is nearly gone.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  --shell: #fafafb;
+  --surface: #ffffff;
+  --surface-raised: #f1f2f5;
+  --ink: #1b1d23;
+  --ink-muted: #6b7080;
+  --ink-faint: #9aa0b0;
+  --rule: #e3e5ea;
+  --rule-strong: #cfd2da;
+  --select: #dde7f3;
+  --select-edge: #4a7fa5;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --priority-a: #d4472f;
+  --priority-b: #b07d16;
+  --priority-c: #3f6f93;
+  --priority-d: #7c7489;
+  --priority-none: #c8ccd6;
+
+  --row-height: 1.75rem;
+  --indent-step: 0.875rem;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --shell: #15171c;
+    --surface: #1b1e25;
+    --surface-raised: #23262f;
+    --ink: #e6e8ee;
+    --ink-muted: #949aab;
+    --ink-faint: #6b7182;
+    --rule: #2a2e38;
+    --rule-strong: #3a3f4c;
+    --select: #23384c;
+    --select-edge: #6ba3cd;
+
+    --priority-a: #f0705a;
+    --priority-b: #d9a53f;
+    --priority-c: #6ba3cd;
+    --priority-d: #9b93a9;
+    --priority-none: #3d4250;
   }
 }
 
+@theme inline {
+  --color-shell: var(--shell);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+  --color-select: var(--select);
+  --color-select-edge: var(--select-edge);
+
+  --color-priority-a: var(--priority-a);
+  --color-priority-b: var(--priority-b);
+  --color-priority-c: var(--priority-c);
+  --color-priority-d: var(--priority-d);
+  --color-priority-none: var(--priority-none);
+
+  --font-sans: var(--font-archivo);
+  --font-mono: var(--font-plex-mono);
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--shell);
+  color: var(--ink);
+  font-family: var(--font-archivo), system-ui, sans-serif;
+  /* The grid is the scroll container; the page itself never scrolls. */
+  overflow: hidden;
+}
+
+/* Data columns align on the digit, so priorities and durations read as a column. */
+.tabular {
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * The priority spine. Each level of indentation draws the rail of the ancestor at that
+ * level, so the tree's shape and its priority distribution are the same visual.
+ */
+.spine {
+  width: var(--indent-step);
+  flex: none;
+  position: relative;
+}
+
+.spine::before {
+  content: "";
+  position: absolute;
+  left: 0.3125rem;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: currentColor;
+  opacity: 0.32;
+}
+
+.spine-own::before {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--select-edge);
+  outline-offset: -2px;
 }
