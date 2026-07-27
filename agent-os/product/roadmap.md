@@ -13,14 +13,13 @@ The core Achieve Planner loop — plan the week, block the time, work the outlin
   focus, and effort are editable in the outline, and effort rolls up through the tree.
   Effort Left, Actual Effort, and % complete became editable in the Task form, delivered by
   `specs/2026-07-27-1318-per-type-detail-forms`.
-- **🟡 Per-type detail forms.** Delivered for Result Areas and Projects by
-  `specs/2026-07-27-1318-per-type-detail-forms`, at parity with Achieve — all six Result
-  Area tabs and all eleven Project tabs, including the repeating child lists (Objectives,
-  Risks, Stakeholders, Roles, Issues, and the rest). Each opens in a drawer rather than a
-  modal; see `standards/components/ux-principles.md` for why. Goals and Tasks have a
-  minimal single-pane form over the existing schema — their full Achieve forms still need
-  reference captures, alongside `screenshots/welcome_wizard/`. Recurrence, templates,
-  labels, and resource pools were left out of scope.
+- **✅ Per-type detail forms.** Delivered by
+  `specs/2026-07-27-1318-per-type-detail-forms`, at parity with Achieve for all four types
+  — Result Area (6 tabs), Goal (12), Project (11), Task (5) — including all 24 repeating
+  child lists. Each opens in a drawer rather than a modal; see
+  `standards/components/ux-principles.md` for why. Recurrence, templates, labels, resource
+  pools, and file upload for attachments were left out of scope, as was the welcome wizard
+  in `screenshots/welcome_wizard/`.
 - **Weekly calendar + time blocking.** Week grid where projects are scheduled into time
   blocks, tracking estimated vs. actual duration.
 - **Weekly planning workflow.** A guided weekly review: pick goals, pull tasks from the
@@ -36,6 +35,10 @@ The core Achieve Planner loop — plan the week, block the time, work the outlin
 
 ### Then
 
+- **Wish List tab.** Achieve has a top-level tab listing every wish across all result areas,
+  grouped by area and typed by quadrant. The data already exists — the detail forms write it
+  — so this is a view over `node_items`, not new modelling. Achieve also has **Goals** and
+  **Life Plan** top-level tabs worth capturing at the same time.
 - **Time tracking & reports.** Start/stop timers, actual-vs-estimated analysis, and
   time-spent-by-project/role reporting.
 - **Roles & goals (Covey).** Define life roles and long-term goals, link projects and tasks

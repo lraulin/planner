@@ -9,9 +9,9 @@ import {
   useSyncExternalStore,
   useTransition,
 } from "react";
-import type { NodeState, NodeType, PriorityLetter } from "@/db/schema";
+import type { NodeType, PriorityLetter } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
-import { defaultChildType, TYPE_LABELS } from "@/lib/tree/hierarchy";
+import { defaultChildType, STATE_LABELS, TYPE_LABELS } from "@/lib/tree/hierarchy";
 import {
   createNodeAction,
   deleteNodeAction,
@@ -31,14 +31,6 @@ import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import { OutlineRow } from "./OutlineRow";
 import { HintBar } from "./HintBar";
-
-const STATE_LABELS: Record<NodeState, string> = {
-  not_started: "Not started",
-  in_progress: "In progress",
-  waiting: "Waiting",
-  completed: "Completed",
-  cancelled: "Cancelled",
-};
 
 type TypeFilters = Record<NodeType, boolean>;
 
@@ -195,6 +187,35 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     );
   }, [apply, startNaming]);
 
+  /**
+   * Goals need their own command: `defaultChildType` sends a result area's children
+   * straight to Project, which is the common case but leaves the Goal level with no way in.
+   */
+  const addGoal = useCallback(() => {
+    if (!selected) return;
+    // A goal may sit under a result area or another goal. Anywhere deeper, add it beside
+    // the nearest ancestor that can hold one rather than refusing.
+    const host =
+      selected.type === "result_area" || selected.type === "goal"
+        ? selected
+        : nearestGoalHost(selected, byId);
+
+    if (!host) {
+      setError("Goals sit under a result area. Select one first.");
+      return;
+    }
+
+    apply(
+      () =>
+        createNodeAction({
+          parentId: host.id,
+          type: "goal",
+          position: { at: "last" },
+        }),
+      startNaming,
+    );
+  }, [selected, byId, apply, startNaming]);
+
   const toggleCollapsed = useCallback(
     (node: OutlineNode, collapsed: boolean) => {
       if (!node.hasChildren) return;
@@ -256,6 +277,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         onToggleFocusOnly={() => setFocusOnly((v) => !v)}
         commands={commands}
         onAddResultArea={addResultArea}
+        onAddGoal={addGoal}
         hasSelection={selected !== null}
       />
 
@@ -359,6 +381,19 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
       />
     </div>
   );
+}
+
+/** The closest ancestor a goal may legally hang from, or null if there is none. */
+function nearestGoalHost(
+  from: OutlineNode,
+  byId: Map<string, OutlineNode>,
+): OutlineNode | null {
+  let current = from.parentId ? (byId.get(from.parentId) ?? null) : null;
+  while (current) {
+    if (current.type === "result_area" || current.type === "goal") return current;
+    current = current.parentId ? (byId.get(current.parentId) ?? null) : null;
+  }
+  return null;
 }
 
 function deleteMessage(node: OutlineNode | null): string {
@@ -466,6 +501,7 @@ function FilterBar({
   onToggleFocusOnly,
   commands,
   onAddResultArea,
+  onAddGoal,
   hasSelection,
 }: {
   filters: TypeFilters;
@@ -474,12 +510,16 @@ function FilterBar({
   onToggleFocusOnly: () => void;
   commands: Record<string, () => void>;
   onAddResultArea: () => void;
+  onAddGoal: () => void;
   hasSelection: boolean;
 }) {
   return (
     <div className="flex flex-none flex-wrap items-center gap-x-4 gap-y-2 border-b border-rule px-3 py-2">
       <div className="flex items-center gap-1">
         <Command onClick={onAddResultArea}>New result area</Command>
+        <Command onClick={onAddGoal} disabled={!hasSelection}>
+          New goal
+        </Command>
         <Command onClick={commands.addSiblingAfter} disabled={!hasSelection}>
           Add sibling
         </Command>

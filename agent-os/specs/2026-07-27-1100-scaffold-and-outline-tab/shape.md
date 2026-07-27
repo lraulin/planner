@@ -7,12 +7,18 @@ the **Outline tab** — a single tree view of the whole hierarchy:
 
 ```
 Result Areas  (optionally grouped by category)
-  └─ Dreams/Goals
+  └─ Goals
        └─ Projects
             └─ Tasks
 ```
 
 with arbitrary nesting depth at every level.
+
+> **Correction (2026-07-27):** this originally read "Dreams/Goals", implying two levels or two
+> types. It is one. Achieve has no Dream entity — its Goal form carries a **Dream checkbox**
+> beside a Range dropdown, so a Dream is a Goal flagged as one. Nothing about the hierarchy
+> changes; `node_type` stays four values. See
+> `specs/2026-07-27-1318-per-type-detail-forms/visuals/goal_form/`.
 
 The Outline tab is the first slice because it is the app's spine — the Projects tab, Tasks
 tab, and Weekly Schedule all read from this same tree.

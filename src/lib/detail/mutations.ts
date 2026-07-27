@@ -1,5 +1,6 @@
 import { db } from "@/db";
 import {
+  goalDetails,
   nodeItems,
   nodes,
   projectDetails,
@@ -91,12 +92,56 @@ const PROJECT_KEYS = [
   "description",
 ] as const;
 
+const GOAL_KEYS = [
+  "isDream",
+  "range",
+  "plannedStart",
+  "values",
+  "question",
+  "affirmation",
+  "definition",
+  "purpose",
+  "contexts",
+  "vision",
+  "kindOfPerson",
+  "personalChanges",
+  "baseline",
+  "limitingFactor",
+  "strategy",
+  "progressReview",
+  "scorecard",
+] as const;
+
 const TASK_KEYS = [
   "effortMinutes",
   "effortLeftMinutes",
   "actualEffortMinutes",
   "percentComplete",
   "contexts",
+  "targetStartDate",
+  "targetEndDate",
+  "deferredDate",
+  "leadTimeMinutes",
+  "deadlineLeadTimeMinutes",
+  "source",
+  "place",
+  "reminderAt",
+  "private",
+  "effortDriven",
+  "milestone",
+  "actualStartDate",
+  "dateCompleted",
+  "durationMinutes",
+  "constraint",
+  "constraintDate",
+  "wbs",
+  "costLow",
+  "costHigh",
+  "actualCost",
+  "billingInformation",
+  "company",
+  "mileage",
+  "description",
 ] as const;
 
 const ITEM_KEYS = [
@@ -126,6 +171,22 @@ const ITEM_KEYS = [
   "resolution",
   "resolved",
   "url",
+  "purpose",
+  "strategy",
+  "people",
+  "completed",
+  "received",
+  "conditions",
+  "awarded",
+  "reason",
+  "active",
+  "category",
+  "question",
+  "target",
+  "assignedTo",
+  "entryDate",
+  "score",
+  "comments",
 ] as const;
 
 async function requireNode(tx: Executor, userId: string, nodeId: string) {
@@ -195,6 +256,14 @@ export async function saveNodeDetail(
           .insert(resultAreaDetails)
           .values({ nodeId, ...set })
           .onConflictDoUpdate({ target: resultAreaDetails.nodeId, set });
+      }
+    } else if (node.type === "goal") {
+      const set = pick(values.goal, GOAL_KEYS);
+      if (hasValues(set)) {
+        await tx
+          .insert(goalDetails)
+          .values({ nodeId, ...set })
+          .onConflictDoUpdate({ target: goalDetails.nodeId, set });
       }
     } else if (node.type === "project") {
       const set = pick(values.project, PROJECT_KEYS);

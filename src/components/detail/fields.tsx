@@ -229,6 +229,7 @@ export function SelectField<T extends string>({
   onChange,
   allowEmpty = false,
   emptyLabel = "—",
+  hint,
   className,
 }: {
   label: string;
@@ -237,11 +238,12 @@ export function SelectField<T extends string>({
   onChange: (value: T | null) => void;
   allowEmpty?: boolean;
   emptyLabel?: string;
+  hint?: string;
   className?: string;
 }) {
   const id = useId();
   return (
-    <Field label={label} htmlFor={id} className={className}>
+    <Field label={label} htmlFor={id} hint={hint} className={className}>
       <select
         id={id}
         value={value ?? ""}

@@ -1,5 +1,11 @@
 import { db } from "@/db";
-import { nodes, projectDetails, resultAreaDetails, taskDetails } from "@/db/schema";
+import {
+  goalDetails,
+  nodes,
+  projectDetails,
+  resultAreaDetails,
+  taskDetails,
+} from "@/db/schema";
 import type { NodeState, NodeType, PriorityLetter } from "@/db/schema";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { assertCanNest, TYPE_LABELS } from "./hierarchy";
@@ -125,6 +131,8 @@ export async function createNode(params: {
       await tx.insert(resultAreaDetails).values({ nodeId: created.id });
     } else if (type === "project") {
       await tx.insert(projectDetails).values({ nodeId: created.id });
+    } else if (type === "goal") {
+      await tx.insert(goalDetails).values({ nodeId: created.id });
     }
 
     return created.id;

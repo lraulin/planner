@@ -1,4 +1,5 @@
 import type {
+  GoalDetails,
   NodeItem,
   NodeItemKind,
   NodeState,
@@ -28,6 +29,7 @@ export type NodeDetail = {
   focus: boolean;
   notes: string;
   resultArea: ResultAreaDetails | null;
+  goal: GoalDetails | null;
   project: ProjectDetails | null;
   task: TaskDetails | null;
   items: NodeItem[];
@@ -51,6 +53,7 @@ export type CoreValues = {
  */
 export type NodeDetailValues = CoreValues & {
   resultArea?: Partial<Omit<ResultAreaDetails, "nodeId">>;
+  goal?: Partial<Omit<GoalDetails, "nodeId">>;
   project?: Partial<Omit<ProjectDetails, "nodeId">>;
   task?: Partial<Omit<TaskDetails, "nodeId">>;
 };

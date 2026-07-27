@@ -9,7 +9,7 @@ import {
   parseEffort,
   parsePriority,
 } from "@/lib/tree/format";
-import { TYPE_LABELS } from "@/lib/tree/hierarchy";
+import { STATE_OPTIONS, TYPE_LABELS } from "@/lib/tree/hierarchy";
 import { GRID_TEMPLATE } from "./OutlineGrid";
 
 const PRIORITY_COLOR: Record<PriorityLetter, string> = {
@@ -18,14 +18,6 @@ const PRIORITY_COLOR: Record<PriorityLetter, string> = {
   C: "text-priority-c",
   D: "text-priority-d",
 };
-
-const STATE_OPTIONS: { value: NodeState; label: string }[] = [
-  { value: "not_started", label: "Not started" },
-  { value: "in_progress", label: "In progress" },
-  { value: "waiting", label: "Waiting" },
-  { value: "completed", label: "Completed" },
-  { value: "cancelled", label: "Cancelled" },
-];
 
 /**
  * Type is carried by typography rather than an icon column: result areas are set in small
@@ -191,16 +183,19 @@ export function OutlineRow({
         )}
       </div>
 
-      {/* Keyed on the stored value so a server-side change resets the field. */}
+      {/*
+        Keyed on the stored value so a server-side change resets the field. The prefix
+        matters: both formatters return "" for an unset value, so on a row with neither a
+        priority nor an effort the two cells would otherwise be siblings sharing the key "".
+      */}
       <PriorityCell
-        key={formatPriority(node.priorityLetter, node.priorityRank)}
+        key={`priority:${formatPriority(node.priorityLetter, node.priorityRank)}`}
         node={node}
         onChange={onPriorityChange}
       />
 
-      {/* Keyed on the stored value so a server-side change resets the field. */}
       <EffortCell
-        key={formatEffort(node.effortMinutes)}
+        key={`effort:${formatEffort(node.effortMinutes)}`}
         node={node}
         onChange={onEffortChange}
       />

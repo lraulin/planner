@@ -38,6 +38,31 @@ export const nodeStateEnum = pgEnum("node_state", [
   "waiting",
   "completed",
   "cancelled",
+  // Achieve's remaining four. Delegated and Should Delegate carry real weight in its weekly
+  // review — "who else could do this" is a step of the process, not a synonym for waiting.
+  "postponed",
+  "delegated",
+  "should_delegate",
+  "proposed",
+]);
+
+/** How often a goal is scored on its Progress tab. */
+export const progressReviewEnum = pgEnum("progress_review", [
+  "none",
+  "daily",
+  "weekly",
+]);
+
+/** Achieve's task scheduling constraint. Inert until the weekly calendar reads it. */
+export const taskConstraintEnum = pgEnum("task_constraint", [
+  "as_soon_as_possible",
+  "as_late_as_possible",
+  "start_no_earlier_than",
+  "start_no_later_than",
+  "finish_no_earlier_than",
+  "finish_no_later_than",
+  "must_start_on",
+  "must_finish_on",
 ]);
 
 /** Achieve's project Sensitivity field. Carried for parity; nothing keys off it yet. */
@@ -66,10 +91,24 @@ export const nodeItemKindEnum = pgEnum("node_item_kind", [
   "attachment",
   // Result area
   "guiding_principle",
+  // The four Wish quadrants. Achieve models these as one Wish record with a Type, listed
+  // across every result area on its own top-level tab; splitting the type into the
+  // discriminator gives the same rows, and that tab becomes a query over these four kinds.
   "wish_want_dont_have",
   "wish_dont_want_have",
   "wish_want_have",
   "wish_want_avoid",
+  // Goal
+  "benefit",
+  "obstacle",
+  "action",
+  "belief",
+  "resource",
+  "environment",
+  "reward",
+  "metric",
+  "progress_entry",
+  "goal_win",
 ]);
 
 export const users = pgTable("users", {
@@ -140,6 +179,77 @@ export const taskDetails = pgTable("task_details", {
   actualEffortMinutes: integer("actual_effort_minutes").notNull().default(0),
   percentComplete: smallint("percent_complete").notNull().default(0),
   contexts: text("contexts").array().notNull().default([]),
+  // General
+  targetStartDate: timestamp("target_start_date", { withTimezone: true }),
+  targetEndDate: timestamp("target_end_date", { withTimezone: true }),
+  /** When a task is pushed out of view until a date, without losing its deadline. */
+  deferredDate: timestamp("deferred_date", { withTimezone: true }),
+  leadTimeMinutes: integer("lead_time_minutes"),
+  /** Slack Achieve leaves between finishing and the deadline. */
+  deadlineLeadTimeMinutes: integer("deadline_lead_time_minutes"),
+  source: text("source").notNull().default(""),
+  place: text("place").notNull().default(""),
+  reminderAt: timestamp("reminder_at", { withTimezone: true }),
+  private: boolean("private").notNull().default(false),
+  // Schedule
+  effortDriven: boolean("effort_driven").notNull().default(true),
+  /** A zero-duration marker rather than a piece of work. */
+  milestone: boolean("milestone").notNull().default(false),
+  actualStartDate: timestamp("actual_start_date", { withTimezone: true }),
+  dateCompleted: timestamp("date_completed", { withTimezone: true }),
+  /** Wall-clock span the work is spread over, as distinct from effort spent inside it. */
+  durationMinutes: integer("duration_minutes"),
+  constraint: taskConstraintEnum("constraint").notNull().default("as_soon_as_possible"),
+  constraintDate: timestamp("constraint_date", { withTimezone: true }),
+  /** Work-breakdown-structure code, e.g. "1.2.3". */
+  wbs: text("wbs").notNull().default(""),
+  costLow: numeric("cost_low", { precision: 12, scale: 2 }),
+  costHigh: numeric("cost_high", { precision: 12, scale: 2 }),
+  actualCost: numeric("actual_cost", { precision: 12, scale: 2 }),
+  // Details
+  billingInformation: text("billing_information").notNull().default(""),
+  company: text("company").notNull().default(""),
+  mileage: text("mileage").notNull().default(""),
+  description: text("description").notNull().default(""),
+});
+
+/**
+ * Goal-only fields, backing the twelve tabs of Achieve's Goal form.
+ *
+ * A **Dream is a Goal with `isDream` set**, not a type of its own — Achieve puts a Dream
+ * checkbox on this form beside the Range dropdown, and the form is otherwise identical.
+ */
+export const goalDetails = pgTable("goal_details", {
+  nodeId: uuid("node_id")
+    .primaryKey()
+    .references(() => nodes.id, { onDelete: "cascade" }),
+  // General
+  isDream: boolean("is_dream").notNull().default(false),
+  /**
+   * Achieve's Range dropdown — the horizon a goal is set against. Free text rather than an
+   * enum: the capture only shows "1-Year", so the full option list is unknown and guessing
+   * one would bake a wrong constraint into a migration.
+   */
+  range: text("range").notNull().default(""),
+  plannedStart: timestamp("planned_start", { withTimezone: true }),
+  values: text("values").notNull().default(""),
+  question: text("question").notNull().default(""),
+  affirmation: text("affirmation").notNull().default(""),
+  definition: text("definition").notNull().default(""),
+  purpose: text("purpose").notNull().default(""),
+  contexts: text("contexts").array().notNull().default([]),
+  // Vision
+  vision: text("vision").notNull().default(""),
+  kindOfPerson: text("kind_of_person").notNull().default(""),
+  personalChanges: text("personal_changes").notNull().default(""),
+  // Obstacles
+  baseline: text("baseline").notNull().default(""),
+  limitingFactor: text("limiting_factor").notNull().default(""),
+  // Strategy
+  strategy: text("strategy").notNull().default(""),
+  // Progress
+  progressReview: progressReviewEnum("progress_review").notNull().default("none"),
+  scorecard: boolean("scorecard").notNull().default(false),
 });
 
 /**
@@ -276,6 +386,29 @@ export const nodeItems = pgTable(
     resolved: boolean("resolved").notNull().default(false),
     // Attachment
     url: text("url").notNull().default(""),
+    // Wish and goal action
+    purpose: text("purpose").notNull().default(""),
+    // Goal obstacle
+    strategy: text("strategy").notNull().default(""),
+    people: text("people").notNull().default(""),
+    completed: boolean("completed").notNull().default(false),
+    // Goal benefit and reward
+    received: boolean("received").notNull().default(false),
+    conditions: text("conditions").notNull().default(""),
+    awarded: boolean("awarded").notNull().default(false),
+    // Goal environment/lifestyle
+    reason: text("reason").notNull().default(""),
+    // Goal metric
+    active: boolean("active").notNull().default(true),
+    category: text("category").notNull().default(""),
+    question: text("question").notNull().default(""),
+    target: text("target").notNull().default(""),
+    // Goal team
+    assignedTo: text("assigned_to").notNull().default(""),
+    // Goal progress entry and win — a dated log rather than a titled row
+    entryDate: timestamp("entry_date", { withTimezone: true }),
+    score: smallint("score"),
+    comments: text("comments").notNull().default(""),
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -303,6 +436,7 @@ export type NewNode = typeof nodes.$inferInsert;
 export type TaskDetails = typeof taskDetails.$inferSelect;
 export type ResultAreaDetails = typeof resultAreaDetails.$inferSelect;
 export type ProjectDetails = typeof projectDetails.$inferSelect;
+export type GoalDetails = typeof goalDetails.$inferSelect;
 export type NodeItem = typeof nodeItems.$inferSelect;
 export type NewNodeItem = typeof nodeItems.$inferInsert;
 export type NodeType = (typeof nodeTypeEnum.enumValues)[number];
@@ -310,3 +444,5 @@ export type PriorityLetter = (typeof priorityLetterEnum.enumValues)[number];
 export type NodeState = (typeof nodeStateEnum.enumValues)[number];
 export type Sensitivity = (typeof sensitivityEnum.enumValues)[number];
 export type NodeItemKind = (typeof nodeItemKindEnum.enumValues)[number];
+export type ProgressReview = (typeof progressReviewEnum.enumValues)[number];
+export type TaskConstraint = (typeof taskConstraintEnum.enumValues)[number];

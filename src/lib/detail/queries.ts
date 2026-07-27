@@ -1,5 +1,6 @@
 import { db } from "@/db";
 import {
+  goalDetails,
   nodeItems,
   nodes,
   projectDetails,
@@ -42,15 +43,18 @@ export async function loadNodeDetail(
 
   if (!node) return null;
 
-  // Only one of the three side tables can match, so they are fetched together rather than
+  // Only one of the four side tables can match, so they are fetched together rather than
   // branching on type and paying an extra round trip for the branch.
-  const [resultArea, project, task, items] = await Promise.all([
+  const [resultArea, goal, project, task, items] = await Promise.all([
     node.type === "result_area"
       ? db
           .select()
           .from(resultAreaDetails)
           .where(eq(resultAreaDetails.nodeId, nodeId))
           .limit(1)
+      : [],
+    node.type === "goal"
+      ? db.select().from(goalDetails).where(eq(goalDetails.nodeId, nodeId)).limit(1)
       : [],
     node.type === "project"
       ? db
@@ -73,6 +77,7 @@ export async function loadNodeDetail(
     ...node,
     priorityRank: node.priorityRank === null ? null : Number(node.priorityRank),
     resultArea: resultArea[0] ?? null,
+    goal: goal[0] ?? null,
     project: project[0] ?? null,
     task: task[0] ?? null,
     items,

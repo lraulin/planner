@@ -6,6 +6,7 @@ import { formatPriority } from "@/lib/tree/format";
 import type { NodeItemValues } from "@/lib/detail/types";
 import {
   CheckboxField,
+  DateField,
   DraftTextArea,
   DraftTextField,
   FieldGrid,
@@ -165,9 +166,16 @@ function columnClass(column: ItemColumnKey): string {
       return "w-8 flex-none text-center";
     case "severity":
     case "probability":
+    case "score":
       return "w-12 flex-none text-right";
+    case "entryDate":
+      return "tabular w-24 flex-none";
     case "filled":
     case "resolved":
+    case "completed":
+    case "received":
+    case "awarded":
+    case "active":
       return "w-14 flex-none";
     default:
       return "min-w-0 flex-1";
@@ -182,6 +190,7 @@ function summaryOf(item: NodeItem, column: ItemColumnKey): string {
   const value = item[column];
   if (value === null || value === undefined) return "";
   if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
   return String(value);
 }
 
@@ -266,6 +275,16 @@ function ItemEditor({
               />
             );
 
+          case "date":
+            return (
+              <DateField
+                key={field.key}
+                label={field.label}
+                value={dateValue(item, field.key)}
+                onChange={(value) => onChange({ [field.key]: value })}
+              />
+            );
+
           case "select":
             return (
               <SelectField
@@ -317,4 +336,10 @@ function numberValue(item: NodeItem, key: ItemColumnKey): number | null {
   if (key === "priority") return item.priorityRank;
   const value = item[key];
   return typeof value === "number" ? value : null;
+}
+
+function dateValue(item: NodeItem, key: ItemColumnKey): Date | null {
+  if (key === "priority") return null;
+  const value = item[key];
+  return value instanceof Date ? value : null;
 }

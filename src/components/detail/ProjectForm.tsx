@@ -15,8 +15,9 @@ import {
   TextArea,
   TextField,
 } from "./fields";
+import { STATE_OPTIONS } from "@/lib/tree/hierarchy";
 import type { FormTab } from "./FormTabs";
-import { CoreHeaderFields, STATE_OPTIONS, type DetailFormProps } from "./formShared";
+import { CoreHeaderFields, type DetailFormProps } from "./formShared";
 
 const SENSITIVITY_OPTIONS: { value: Sensitivity; label: string }[] = [
   { value: "normal", label: "Normal" },

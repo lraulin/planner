@@ -9,8 +9,8 @@ parity for **Result Areas and Projects**:
 - **Project** — 11 tabs: General, Objectives, Vision, Stakeholders, Risks, Strategy, Team,
   Contacts, Issues, Attachments, Details
 
-Goals and Tasks get a **minimal single-pane drawer** over the schema that already exists,
-so the open gesture is never dead on a row. Their full forms wait on reference captures.
+**Amended 2026-07-27:** Goal and Task captures arrived the same afternoon, so all four types
+landed at full parity in one spec rather than two. See **Round two** below.
 
 This is the third Phase 1 item in `agent-os/product/roadmap.md`, and the first work to
 actually implement `standards/components/drawer-pattern.md` — until now that standard
@@ -27,7 +27,7 @@ described a pattern nothing had built.
 
 ### Out of scope
 
-- **Goal and Task full forms.** Lee will capture those screens from Achieve separately.
+- ~~**Goal and Task full forms.**~~ Delivered in round two, below.
 - **Recurrence.** Achieve's Project toolbar has a Recurrence dialog; there is no recurrence
   model in the schema and adding one is its own spec.
 - **Labels, resource pools, and the resource-assignment dialog.** Multi-user concepts that
@@ -76,9 +76,10 @@ described a pattern nothing had built.
 
 ## Context
 
-- **Visuals:** `visuals/project_form/` (22 captures) and `visuals/result_area_form/`
-  (6 captures), copied from the repo-root `screenshots/`. Every tab and every sub-grid
-  editor dialog of both forms is captured.
+- **Visuals:** `visuals/project_form/` (22), `visuals/result_area_form/` (6),
+  `visuals/goal_form/` (14), `visuals/task_form/` (6), and `visuals/wishes_form/` (1),
+  copied from the repo-root `screenshots/`. Every tab and every sub-grid editor dialog of
+  all four forms is captured.
 - **References:** See `references.md` — all in-repo, from the Outline tab spec.
 - **Product alignment:** Confirmed against `mission.md` ("Achieve's exact workflow" —
   hence parity rather than a curated subset) and `tech-stack.md` (every table carries
@@ -93,3 +94,58 @@ described a pattern nothing had built.
 - **`components/drawer-pattern.md`** — the drawer's structure, width, positioning, focus
   handling, open/close flow, unsaved-changes prompt, and the server-action save contract
   (check the error first, close only on success).
+
+---
+
+## Round two — Goal and Task (2026-07-27, same day)
+
+Round one shipped Result Area and Project and deferred Goal and Task for want of reference
+captures. Lee captured them a couple of hours later, along with the Wish List, so both forms
+were built to the same parity rather than being spun out into a follow-up spec.
+
+### What the captures settled
+
+- **A Dream is a Goal with a checkbox ticked.** Achieve has no Dream entity. Its Goal form
+  carries a `Dream` checkbox beside a `Range` dropdown, and the form is otherwise identical.
+  `node_type` stays four values. The old "Dreams/Goals" phrasing in
+  `specs/2026-07-27-1100-scaffold-and-outline-tab/shape.md` has been corrected in place.
+- **A Wish is one record with a Type**, not four kinds — Title, Result Area, Priority, Type,
+  Description, **Purpose** — surfaced on its own top-level **Wish List** tab that groups
+  across result areas. Our four `wish_*` kinds encode that Type in the discriminator, which
+  yields the same rows and makes the future Wish List tab a query over four kinds. Kept as
+  is; `purpose` was the one genuinely missing field and has been added.
+- **Achieve's task states number nine, not five.** Postponed, Delegated, Should Delegate,
+  and Proposed joined the enum. Delegated and Should Delegate carry real weight in the
+  weekly review — "who else could do this" is a step of the process, not a synonym for
+  Waiting.
+
+### Decisions
+
+- **Goal gets all twelve tabs**, including Progress. That tab is closer to a time-series log
+  than a form — review cadence, dated scores, dated wins — but the log is the point of it,
+  and modelling it as two dated `node_items` lists cost nothing beyond two more kinds.
+- **Goal Progress and Goal Wins lead with a date and carry no priority.** Every other list
+  in the app is priority + title; these two are the exception, which the per-kind column
+  config already handles without a second renderer.
+- **Task Contacts and Attachments reuse the Project kinds.** The payoff of one `node_items`
+  table: a list appearing on two forms is one config and one renderer, not two of each.
+- **Goal Team reuses the `role` kind**, with `assignedTo` added. Achieve's Goal Team grid has
+  that column and its Project Team grid does not; one kind serves both and the field is
+  simply left blank on projects.
+- **`Range` is free text, not an enum.** Only "1-Year" is legible in the capture, so the
+  option list is unknown. A guessed enum would bake a wrong constraint into a migration;
+  widening text later is free. **Worth correcting once the real list is known.**
+- **State labels were consolidated.** Three copies of the state list existed (outline grid,
+  its row, the forms). Widening the enum would have left two of them behind, so they now
+  read from `STATE_LABELS` / `STATE_OPTIONS` in `src/lib/tree/hierarchy.ts`.
+
+### Still out of scope
+
+Recurrence, templates, labels, resource pools, and file upload for attachments — unchanged
+from round one. Newly noted from these captures, and **not** built:
+
+- The **Wish List**, **Goals**, and **Life Plan** top-level tabs. The data behind Wish List
+  now exists; the tab itself is a separate piece of work.
+- **Resource assignments** on the Task Schedule tab, which need the resource model that
+  round one already declared out of scope.
+- Achieve's **Scorecard** view. The `scorecard` flag is stored; nothing renders it.

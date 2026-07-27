@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useMemo, useState, useTransition } from "react";
 import type {
+  GoalDetails,
   NodeItem,
   NodeItemKind,
   ProjectDetails,
@@ -24,9 +25,10 @@ import { Drawer, DrawerFooter, DrawerHeader } from "./Drawer";
 import { FormTabs } from "./FormTabs";
 import { ITEM_KINDS } from "./itemKinds";
 import { ItemList } from "./ItemList";
+import { goalTabs } from "./GoalForm";
 import { projectTabs } from "./ProjectForm";
 import { resultAreaTabs } from "./ResultAreaForm";
-import { simpleNodeTabs } from "./SimpleNodeForm";
+import { taskTabs } from "./TaskForm";
 import type { DetailFormProps } from "./formShared";
 
 /**
@@ -151,6 +153,11 @@ function DetailForm({
     }));
   }, []);
 
+  const patchGoal = useCallback((changes: Partial<GoalDetails>) => {
+    setDirty(true);
+    setValues((current) => ({ ...current, goal: { ...current.goal, ...changes } }));
+  }, []);
+
   const patchProject = useCallback((changes: Partial<ProjectDetails>) => {
     setDirty(true);
     setValues((current) => ({
@@ -221,22 +228,36 @@ function DetailForm({
       values,
       patch,
       patchResultArea,
+      patchGoal,
       patchProject,
       patchTask,
       list,
       busy,
     }),
-    [detail, node, values, patch, patchResultArea, patchProject, patchTask, list, busy],
+    [
+      detail,
+      node,
+      values,
+      patch,
+      patchResultArea,
+      patchGoal,
+      patchProject,
+      patchTask,
+      list,
+      busy,
+    ],
   );
 
   const tabs = useMemo(() => {
     switch (detail.type) {
       case "result_area":
         return resultAreaTabs(formProps);
+      case "goal":
+        return goalTabs(formProps);
       case "project":
         return projectTabs(formProps);
       default:
-        return simpleNodeTabs(formProps);
+        return taskTabs(formProps);
     }
   }, [detail.type, formProps]);
 
@@ -323,6 +344,7 @@ function initialValues(detail: NodeDetail): NodeDetailValues {
     focus: detail.focus,
     notes: detail.notes,
     resultArea: withoutKey(detail.resultArea),
+    goal: withoutKey(detail.goal),
     project: withoutKey(detail.project),
     task: withoutKey(detail.task),
   };

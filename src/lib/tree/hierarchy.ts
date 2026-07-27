@@ -1,4 +1,4 @@
-import type { NodeType } from "@/db/schema";
+import type { NodeState, NodeType } from "@/db/schema";
 
 /**
  * Which parents each node type may sit under. `null` means the root of the outline.
@@ -23,6 +23,29 @@ export const TYPE_LABELS: Record<NodeType, string> = {
   project: "Project",
   task: "Task",
 };
+
+/**
+ * Display names for the work states, in the order Achieve lists them.
+ *
+ * One definition rather than one per surface: the outline column, its row editor, and the
+ * detail forms all read from here, so widening the enum cannot leave a dropdown behind.
+ */
+export const STATE_LABELS: Record<NodeState, string> = {
+  not_started: "Not started",
+  in_progress: "In progress",
+  waiting: "Waiting",
+  completed: "Completed",
+  postponed: "Postponed",
+  delegated: "Delegated",
+  should_delegate: "Should delegate",
+  cancelled: "Cancelled",
+  proposed: "Proposed",
+};
+
+/** The same list as `{ value, label }` pairs, for `<select>` and the form fields. */
+export const STATE_OPTIONS: { value: NodeState; label: string }[] = (
+  Object.keys(STATE_LABELS) as NodeState[]
+).map((value) => ({ value, label: STATE_LABELS[value] }));
 
 export function canNest(child: NodeType, parent: NodeType | null): boolean {
   return LEGAL_PARENTS[child].includes(parent);

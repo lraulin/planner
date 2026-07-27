@@ -1,8 +1,9 @@
 "use client";
 
 import { FieldGrid, NumberField, SelectField, TextArea, TextField } from "./fields";
+import { STATE_OPTIONS } from "@/lib/tree/hierarchy";
 import type { FormTab } from "./FormTabs";
-import { CoreHeaderFields, STATE_OPTIONS, type DetailFormProps } from "./formShared";
+import { CoreHeaderFields, type DetailFormProps } from "./formShared";
 
 /**
  * The Result Area form: General / Mission / Vision / Wish / S.W.O.T / Notes.

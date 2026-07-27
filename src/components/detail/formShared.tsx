@@ -1,8 +1,8 @@
 "use client";
 
 import type {
+  GoalDetails,
   NodeItemKind,
-  NodeState,
   ProjectDetails,
   ResultAreaDetails,
   TaskDetails,
@@ -28,20 +28,13 @@ export type DetailFormProps = {
   values: NodeDetailValues;
   patch: (changes: Partial<NodeDetailValues>) => void;
   patchResultArea: (changes: Partial<ResultAreaDetails>) => void;
+  patchGoal: (changes: Partial<GoalDetails>) => void;
   patchProject: (changes: Partial<ProjectDetails>) => void;
   patchTask: (changes: Partial<TaskDetails>) => void;
   /** Renders a fully wired repeating list for one kind. */
   list: (kind: NodeItemKind) => React.ReactNode;
   busy: boolean;
 };
-
-export const STATE_OPTIONS: { value: NodeState; label: string }[] = [
-  { value: "not_started", label: "Not started" },
-  { value: "in_progress", label: "In progress" },
-  { value: "waiting", label: "Waiting" },
-  { value: "completed", label: "Completed" },
-  { value: "cancelled", label: "Cancelled" },
-];
 
 /**
  * Name, priority, and focus — the fields every type shares, at the top of every General tab.
