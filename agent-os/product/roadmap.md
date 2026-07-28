@@ -95,6 +95,37 @@ Treat as one track with staged depth:
 2. **Optional later** — Tasks/Keep-style capture only if calendar alone is not enough;
    avoid boiling the ocean.
 
+### Attachments (files on projects / tasks / goals)
+
+Achieve lets you attach a **local filesystem path**. That only works on the machine that
+has the file — fine for a Windows desktop app, broken for a multi-device web app. We also
+should not host binary blobs ourselves: **S3 (or similar) is paid**, and free hosting
+(Vercel / Neon free tiers) is not a file store.
+
+**Constraint:** the planner stores **references**, not file bytes. The file lives in the
+user’s cloud (or stays a plain URL); we open it in a new tab or via the provider’s UI.
+
+Stage it:
+
+1. **MVP — links only.** Title + URL on the existing attachment rows (and any other place
+   attachments appear). Paste a public or share link (Google Drive, Dropbox, OneDrive,
+   Notion, GitHub, raw `https://…`). No upload; no local path field pretending to work
+   cross-device. Prefer share links that open without the app being a download proxy.
+
+2. **Next — cloud pickers (no hosting).** After auth exists, optional **Google Drive**
+   and/or **Dropbox** file pickers (OAuth): user picks a file, we store provider file id +
+   open URL + display name. Bytes never pass through our servers. Google Drive pairs
+   naturally with Google Calendar OAuth if we already have a Google consent flow; Dropbox
+   is a second provider only if Drive alone is not enough.
+
+3. **Out unless constraints change — first-party file storage.** Uploading to S3/R2/Neon
+   blob and serving downloads. Revisit only if personal use demands offline-ish embeds and
+   a free tier actually fits (unlikely for real documents). Prefer not to build a CDN.
+
+Also out of the MVP: syncing Achieve’s `file://` / Windows paths into anything useful —
+import can keep the path as a note or dead link for archaeology, but the product path is
+cloud links + pickers.
+
 ---
 
 ## Phase 3: Beyond Achieve
@@ -137,14 +168,15 @@ YNAB-like, but simpler — and connected to goals over time.
 ## Phase order (dependency sketch)
 
 ```text
-Phase 1 remaining ──► weekly calendar + planning workflow
+Phase 1 remaining ──► weekly planning workflow (+ calendar polish)
         │
-        ├──► Google Calendar (needs a schedule surface)
+        ├──► Google Calendar (needs schedule surface — now present)
         │
 Phase 2 ──► Pomodoro on task/project (writes Actual Effort)
         │         └──► session log ──► full time reports
         │
         ├──► auth, export, Alfred capture
+        ├──► attachments: URL links → Drive/Dropbox pickers (no S3)
         ├──► AI tools/API (useful earlier on single-user + local agent)
         │
 Beyond Achieve (can start MVPs in parallel once Phase 1 core is daily-usable):
@@ -157,6 +189,8 @@ AI **tooling for local agents** does not need Bedrock or multi-user first. Fitne
 finance MVPs should stay separate modules that **link into** nodes/goals rather than
 forking a second hierarchy. Pomodoro can ship before the weekly calendar — it only needs
 a selected task/project — but reports get more useful once schedule and actuals meet.
+Attachment **links** can ship any time the detail forms are open; **Drive/Dropbox pickers**
+want real auth (and ideally share Google OAuth with Calendar).
 
 ---
 
