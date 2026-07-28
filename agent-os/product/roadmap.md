@@ -32,13 +32,15 @@ The core Achieve Planner loop — plan the week, block the time, work the outlin
   Fields. Outline migrated onto the same grid. Known polish (not blockers for “spec done”):
   Project scope is a select rather than a filtered tree popover; Show Fields move
   up/down is coarse; screenshot walkthrough and a few open questions in the plan remain.
+- **✅ Weekly calendar + time blocking.** `specs/2026-07-28-1234-weekly-schedule`. Week
+  grid (FullCalendar Standard), Time Chart background + full-page template editor
+  (drag-create, multi-day), appointments (full form, recurrence, three-state check),
+  project drag-to-schedule, mini-month + projects rail. Deferred out of this slice:
+  Google Calendar, appointment-check → Actual Effort, estimated-vs-actual reports, and
+  the guided weekly planning wizard.
 
 ### Still in Phase 1
 
-- **Weekly calendar + time blocking.** `specs/2026-07-28-1234-weekly-schedule` — Week grid
-  (FullCalendar Standard), Time Chart background, appointments with recurrence, project
-  drag-to-schedule. Estimated vs actual duration analysis and the guided weekly planning
-  wizard remain separate.
 - **Weekly planning workflow.** Guided weekly review: pick goals, pull tasks from the
   master list, block them onto the week.
 - **Outline drag-to-reorder** (carried from the outline spec).

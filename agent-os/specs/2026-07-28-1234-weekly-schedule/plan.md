@@ -197,6 +197,30 @@ Add Drizzle tables + migration for `time_charts`, `time_chart_areas`, and `appoi
 - `typecheck`, `test`, `lint`; manual walkthrough against screenshots.
 - Update `roadmap.md` Phase 1 checkbox when done (implementation time).
 
+## Status (closed)
+
+**Shipped** (2026-07-28). Spec tasks 1–9 are done in substance:
+
+| Task | Outcome |
+| --- | --- |
+| 1 Spec docs | `agent-os/specs/2026-07-28-1234-weekly-schedule/` |
+| 2 Schema | `time_charts`, `time_chart_areas`, `appointments` (+ check_state) |
+| 3 Domain | queries/mutations, recurrence + geometry tests |
+| 4 Shell | `/schedule`, TabStrip, toolbar, week nav |
+| 5 Week grid | FullCalendar Standard, background chart, drag/create/drop |
+| 6 Time Chart editor | Full page `/schedule/time-chart/[id]` template week + panel |
+| 7 Appointments | Drawer form + recurrence + three-state checkbox |
+| 8 Projects rail | Mini-month, filters, drag-to-schedule |
+| 9 Polish | Seed Ideal Week, contrast/icons, port 3047, roadmap ✅ |
+
+**Follow-ups (not blockers for closing this spec):**
+
+- Deeper keyboard/a11y pass on the calendar (not required for daily use)
+- Hatch patterns on Time Chart labels (optional fidelity)
+- `blockSizeMinutes` from project details when dragging (defaults to 60 today)
+- Appointment **done** → Actual Effort (roadmap: time-tracking track)
+- Recurring series edit UX (“this occurrence vs entire series”) if it becomes painful
+
 ## Out of scope (this spec)
 
 - Google Calendar OAuth / two-way sync
