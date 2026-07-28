@@ -4,20 +4,22 @@ import type { NodeType } from "@/db/schema";
  * One glyph per node type, carrying the same idea as Achieve's icon column without its
  * Windows-XP gloss: Achieve draws a checked globe for a result area, a folder-and-clock
  * stack for a project, and a clipboard with a red tick for a task. These are the same
- * concepts as line art — a globe, a target, a folder, a clipboard — at a single stroke
+ * concepts as line art — a compass, a target, a folder, a clipboard — at a single stroke
  * weight so a column of them reads as one set.
+ *
+ * The result area is a compass rather than Achieve's globe: a globe and the goal's target
+ * are both a plain ring at row size, and the needle tells them apart at a glance.
  *
  * They are drawn in `currentColor` and stay monochrome on purpose. Colour in the outline
  * means priority (the spine, the priority cell); a second colour system arguing with it
  * would cost more than the icons are worth.
  */
 const PATHS: Record<NodeType, React.ReactNode> = {
-  /* A globe: a result area is a dimension of life, not a thing to finish. */
+  /* A compass: a result area is a direction you hold to, not a thing to finish. */
   result_area: (
     <>
       <circle cx="12" cy="12" r="8.25" />
-      <path d="M3.75 12h16.5" />
-      <path d="M12 3.75a12.5 12.5 0 0 1 0 16.5a12.5 12.5 0 0 1 0-16.5Z" />
+      <path d="M15.2 8.8l-1.9 4.5-4.5 1.9 1.9-4.5z" />
     </>
   ),
 
