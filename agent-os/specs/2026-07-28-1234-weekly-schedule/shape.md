@@ -33,9 +33,12 @@ Phase 1 **Weekly Schedule**: Achieve’s week grid with a **Time Chart** backgro
   hand-rolled.
 - **Multi-day Time Chart areas** — day-of-week checkboxes + presets (improvement over
   Achieve’s per-day Ctrl+drag duplicates).
-- **Drawers not modals** for appointment and chart-area editing (`ux-principles`).
+- **Time Chart editor is a full page** (`/schedule/time-chart/[id]`), not a drawer —
+  template week Sun–Sat, areas only, click-drag create (Achieve’s separate window).
+- **Drawers not modals** for **appointment** editing (`ux-principles`).
 - **Appointments**: free-floating + project-linked; full Achieve-ish field set locally so
   Google sync can attach later without a schema rewrite.
+- **Three-state check** (open / done / missed); effort rollup deferred to time tracking.
 
 ## Context
 
@@ -48,4 +51,8 @@ Phase 1 **Weekly Schedule**: Achieve’s week grid with a **Time Chart** backgro
 ## Standards Applied
 
 - `components/ux-principles.md` — drawers not stacked modals; keyboard-first; ConfirmDialog
-- `components/drawer-pattern.md` — open/close/dirty/save for appointment and chart editors
+- `components/drawer-pattern.md` — open/close/dirty/save for appointment forms
+
+## Status
+
+**Closed** 2026-07-28 — see `plan.md` Status section.
