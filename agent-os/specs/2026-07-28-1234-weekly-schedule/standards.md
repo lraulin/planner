@@ -1,14 +1,18 @@
 # Standards for Weekly Schedule
 
-The following standards apply to this work.
+**Status: frozen / complete** (2026-07-28)
+
+The following standards applied to this work. Note: the **Time Chart editor** shipped as a
+full page, not a drawer — drawers apply to **appointments** only. See `plan.md`.
 
 ---
 
 ## components/ux-principles
 
-**Why it applies:** Appointment and Time Chart editing must use drawers (not Achieve’s
-stacked modals). Keyboard-first, progressive disclosure, and ConfirmDialog for destructive
-/ dirty-close apply to the schedule surface the same way as the outline and grids.
+**Why it applies:** Appointment create/edit uses drawers (not Achieve’s stacked modals).
+Keyboard-first, progressive disclosure, and ConfirmDialog for destructive / dirty-close
+apply on the schedule surface. The Time Chart editor is a full-page sub-route (Achieve’s
+separate window), which is still consistent with “no modal for routine editing.”
 
 # UI/UX Design Principles
 
@@ -160,9 +164,9 @@ the drawer. Never cram them into grid cells.
 
 ## components/drawer-pattern
 
-**Why it applies:** Appointment Information and Time Chart area editing use the same
-right-sliding drawer pattern as node detail forms — guard content, dirty close, server
-actions returning `{ ok, error }`, revalidate layout.
+**Why it applies:** Appointment Information uses the same right-sliding drawer pattern as
+node detail forms — guard content, dirty close, server actions returning `{ ok, error }`,
+revalidate layout. (Time Chart areas edit on the full-page editor + side panel, not here.)
 
 # Form Drawer Pattern
 
