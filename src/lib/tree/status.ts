@@ -65,5 +65,7 @@ export function scheduleStatus(
  */
 function daysBetween(from: string, to: string): number {
   const MS_PER_DAY = 24 * 60 * 60 * 1000;
-  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / MS_PER_DAY);
+  return Math.round(
+    (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / MS_PER_DAY,
+  );
 }

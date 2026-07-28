@@ -141,10 +141,7 @@ function rebasedDepth(
  * area picks up both, and a result area's own `category` is available for grouping even
  * when the area itself is not kept.
  */
-function contextFor(
-  node: OutlineNode,
-  byId: Map<string, OutlineNode>,
-): RowContext {
+function contextFor(node: OutlineNode, byId: Map<string, OutlineNode>): RowContext {
   let resultAreaId: string | null = null;
   let resultAreaName: string | null = null;
   let resultAreaColor: string | null = null;
@@ -244,10 +241,7 @@ function emitGrouped(kept: Prepared[], groupBy: GroupBy[]): GridRow[] {
       closeTo(level);
 
       const rowIndex = out.length;
-      const idParts = [
-        ...stack.map((f) => `${f.dim}:${f.key}`),
-        `${dim}:${key}`,
-      ];
+      const idParts = [...stack.map((f) => `${f.dim}:${f.key}`), `${dim}:${key}`];
       out.push({
         kind: "group",
         id: `group:${idParts.join("|")}`,

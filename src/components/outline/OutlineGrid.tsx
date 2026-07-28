@@ -1,17 +1,10 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-  useTransition,
-} from "react";
-import type { NodeType, PriorityLetter } from "@/db/schema";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { NodeType } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
-import { defaultChildType, STATE_LABELS, TYPE_LABELS } from "@/lib/tree/hierarchy";
+import type { GridRow } from "@/lib/tree/slice";
+import { defaultChildType, TYPE_LABELS } from "@/lib/tree/hierarchy";
 import {
   createNodeAction,
   deleteNodeAction,
@@ -25,12 +18,14 @@ import {
   setFocusAction,
   setPriorityAction,
   setStateAction,
-  type ActionResult,
 } from "@/app/outline/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
-import { OutlineRow } from "./OutlineRow";
+import { DataGrid, buildAncestorPriorities } from "@/components/grid/DataGrid";
+import { useOptimisticNodes } from "@/components/grid/useOptimisticNodes";
+import { useToday } from "@/components/grid/useToday";
 import { HintBar } from "./HintBar";
+import { outlineColumns, type OutlineColumnCtx } from "./outlineColumns";
 
 type TypeFilters = Record<NodeType, boolean>;
 
@@ -41,8 +36,13 @@ const ALL_TYPES_SHOWN: TypeFilters = {
   task: true,
 };
 
+/**
+ * Outline tab host: tree commands, type filters, drawer, and the shared DataGrid with the
+ * outline's column set. Grouping is off — the outline is the tree itself.
+ */
 export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
-  const [patches, setPatches] = useState<Record<string, Partial<OutlineNode>>>({});
+  const { nodes, byId, patch, apply, error, setError } =
+    useOptimisticNodes(initialNodes);
   const [selectedId, setSelectedId] = useState<string | null>(
     initialNodes[0]?.id ?? null,
   );
@@ -51,43 +51,12 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const [pendingDelete, setPendingDelete] = useState<OutlineNode | null>(null);
   const [filters, setFilters] = useState<TypeFilters>(ALL_TYPES_SHOWN);
   const [focusOnly, setFocusOnly] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [, startTransition] = useTransition();
-  const gridRef = useRef<HTMLDivElement>(null);
   const today = useToday();
 
-  // The server is the source of truth. Optimistic edits are layered on top of it during
-  // render, so there is no local copy of the tree to keep in sync.
-  const nodes = useMemo(
-    () => initialNodes.map((n) => (patches[n.id] ? { ...n, ...patches[n.id] } : n)),
-    [initialNodes, patches],
+  const ancestorPriorities = useMemo(
+    () => buildAncestorPriorities(nodes, byId),
+    [nodes, byId],
   );
-
-  const byId = useMemo(() => {
-    const map = new Map<string, OutlineNode>();
-    for (const node of nodes) map.set(node.id, node);
-    return map;
-  }, [nodes]);
-
-  /**
-   * The chain of ancestor priorities for each node, which the spine renders as one rail
-   * per level — the tree's shape and its priority distribution in a single visual.
-   */
-  const ancestorPriorities = useMemo(() => {
-    const chains = new Map<string, (PriorityLetter | null)[]>();
-    for (const node of nodes) {
-      const chain: (PriorityLetter | null)[] = [];
-      let current = node.parentId;
-      while (current) {
-        const parent = byId.get(current);
-        if (!parent) break;
-        chain.unshift(parent.priorityLetter);
-        current = parent.parentId;
-      }
-      chains.set(node.id, chain);
-    }
-    return chains;
-  }, [nodes, byId]);
 
   const visible = useMemo(() => {
     const dropped = new Set<string>();
@@ -102,36 +71,32 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     });
   }, [nodes, filters, focusOnly]);
 
-  const selected = selectedId ? (byId.get(selectedId) ?? null) : null;
-
-  const apply = useCallback(
-    (action: () => Promise<ActionResult>, onSuccess?: (id?: string) => void) => {
-      setError(null);
-      startTransition(async () => {
-        const result = await action();
-        if (result.ok) onSuccess?.(result.id);
-        else setError(result.error);
-        // The server's answer is authoritative either way, so drop the optimistic layer:
-        // an accepted change is already reflected, and a rejected one visibly reverts.
-        setPatches({});
-      });
-    },
-    [],
+  /** The outline is a flat list of node rows — no group headers, depth from the tree. */
+  const gridRows: GridRow[] = useMemo(
+    () =>
+      visible.map((node) => ({
+        kind: "node" as const,
+        id: node.id,
+        node,
+        depth: node.depth,
+        context: {
+          resultAreaId: null,
+          resultAreaName: null,
+          resultAreaColor: null,
+          category: null,
+          goalId: null,
+          goalName: null,
+        },
+      })),
+    [visible],
   );
 
-  /** A new row is selected and open for typing, so inserting flows straight into naming. */
+  const selected = selectedId ? (byId.get(selectedId) ?? null) : null;
+
   const startNaming = useCallback((id?: string) => {
     if (!id) return;
     setSelectedId(id);
     setEditingId(id);
-  }, []);
-
-  /** Applies a change locally first so typing and toggling feel immediate. */
-  const patch = useCallback((nodeId: string, changes: Partial<OutlineNode>) => {
-    setPatches((current) => ({
-      ...current,
-      [nodeId]: { ...current[nodeId], ...changes },
-    }));
   }, []);
 
   const selectRelative = useCallback(
@@ -187,14 +152,8 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     );
   }, [apply, startNaming]);
 
-  /**
-   * Goals need their own command: `defaultChildType` sends a result area's children
-   * straight to Project, which is the common case but leaves the Goal level with no way in.
-   */
   const addGoal = useCallback(() => {
     if (!selected) return;
-    // A goal may sit under a result area or another goal. Anywhere deeper, add it beside
-    // the nearest ancestor that can hold one rather than refusing.
     const host =
       selected.type === "result_area" || selected.type === "goal"
         ? selected
@@ -214,7 +173,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         }),
       startNaming,
     );
-  }, [selected, byId, apply, startNaming]);
+  }, [selected, byId, apply, startNaming, setError]);
 
   const toggleCollapsed = useCallback(
     (node: OutlineNode, collapsed: boolean) => {
@@ -227,7 +186,6 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
 
   const confirmDelete = useCallback(
     (node: OutlineNode) => {
-      // Move the selection somewhere sensible before the row disappears.
       const index = visible.findIndex((n) => n.id === node.id);
       const nextSelection = visible[index + 1]?.id ?? visible[index - 1]?.id ?? null;
       setSelectedId(nextSelection);
@@ -258,11 +216,54 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     [addSibling, addChild, selected, apply, toggleCollapsed, selectRelative],
   );
 
-  // A dialog or the drawer owns the keyboard while it is open; the outline behind it must
-  // not also act on arrows and Delete.
   const suspended = detailId !== null || pendingDelete !== null;
-
   useOutlineKeyboard({ commands, editingId, suspended });
+
+  const columnCtx: OutlineColumnCtx = useMemo(
+    () => ({
+      today,
+      selectedId,
+      editingId,
+      ancestorPriorities,
+      onToggleCollapsed: (node) => toggleCollapsed(node, !node.collapsed),
+      onOpenDetail: (node) => {
+        setSelectedId(node.id);
+        setDetailId(node.id);
+      },
+      onFinishEdit: (node, name) => {
+        setEditingId(null);
+        if (name !== node.name) {
+          patch(node.id, { name });
+          apply(() => renameNodeAction(node.id, name));
+        }
+      },
+      onCancelEdit: () => setEditingId(null),
+      onPriorityChange: (node, letter, rank) => {
+        patch(node.id, { priorityLetter: letter, priorityRank: rank });
+        apply(() => setPriorityAction(node.id, letter, rank));
+      },
+      onStateChange: (node, state) => {
+        patch(node.id, { state });
+        apply(() => setStateAction(node.id, state));
+      },
+      onFocusChange: (node, focus) => {
+        patch(node.id, { focus });
+        apply(() => setFocusAction(node.id, focus));
+      },
+      onDeadlineChange: (node, deadline) => {
+        patch(node.id, { deadline: deadline ? new Date(deadline) : null });
+        apply(() => setDeadlineAction(node.id, deadline));
+      },
+      onEffortChange: (node, minutes) => {
+        patch(node.id, {
+          effortMinutes: minutes,
+          effortRollupMinutes: minutes,
+        });
+        apply(() => setEffortAction(node.id, minutes));
+      },
+    }),
+    [today, selectedId, editingId, ancestorPriorities, toggleCollapsed, patch, apply],
+  );
 
   const detailNode = detailId ? (byId.get(detailId) ?? null) : null;
 
@@ -290,16 +291,18 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         </p>
       )}
 
-      <ColumnHeader />
-
-      <div
-        ref={gridRef}
-        tabIndex={0}
-        role="tree"
-        aria-label="Outline"
-        className="min-h-0 flex-1 overflow-auto outline-none"
-      >
-        {visible.length === 0 ? (
+      <DataGrid
+        rows={gridRows}
+        columns={outlineColumns}
+        columnCtx={columnCtx}
+        selectedId={selectedId}
+        onSelect={setSelectedId}
+        onOpenDetail={(id) => {
+          setSelectedId(id);
+          setDetailId(id);
+        }}
+        ariaLabel="Outline"
+        empty={
           <EmptyState
             filtered={nodes.length > 0}
             onAddResultArea={addResultArea}
@@ -308,59 +311,8 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
               setFocusOnly(false);
             }}
           />
-        ) : (
-          visible.map((node) => (
-            <OutlineRow
-              key={node.id}
-              node={node}
-              ancestorPriorities={ancestorPriorities.get(node.id) ?? []}
-              selected={node.id === selectedId}
-              editing={node.id === editingId}
-              today={today}
-              stateLabel={STATE_LABELS[node.state]}
-              onSelect={() => setSelectedId(node.id)}
-              onOpenDetail={() => {
-                setSelectedId(node.id);
-                setDetailId(node.id);
-              }}
-              onFinishEdit={(name) => {
-                setEditingId(null);
-                if (name !== node.name) {
-                  patch(node.id, { name });
-                  apply(() => renameNodeAction(node.id, name));
-                }
-              }}
-              onCancelEdit={() => setEditingId(null)}
-              onToggleCollapsed={() => toggleCollapsed(node, !node.collapsed)}
-              onPriorityChange={(letter, rank) => {
-                patch(node.id, { priorityLetter: letter, priorityRank: rank });
-                apply(() => setPriorityAction(node.id, letter, rank));
-              }}
-              onStateChange={(state) => {
-                patch(node.id, { state });
-                apply(() => setStateAction(node.id, state));
-              }}
-              onFocusChange={(focus) => {
-                patch(node.id, { focus });
-                apply(() => setFocusAction(node.id, focus));
-              }}
-              onDeadlineChange={(deadline) => {
-                patch(node.id, { deadline: deadline ? new Date(deadline) : null });
-                apply(() => setDeadlineAction(node.id, deadline));
-              }}
-              onEffortChange={(minutes) => {
-                // Only leaf tasks are editable, so the row's own estimate and its rollup
-                // are the same number. Ancestor totals catch up when the server responds.
-                patch(node.id, {
-                  effortMinutes: minutes,
-                  effortRollupMinutes: minutes,
-                });
-                apply(() => setEffortAction(node.id, minutes));
-              }}
-            />
-          ))
-        )}
-      </div>
+        }
+      />
 
       <HintBar />
 
@@ -383,7 +335,6 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   );
 }
 
-/** The closest ancestor a goal may legally hang from, or null if there is none. */
 function nearestGoalHost(
   from: OutlineNode,
   byId: Map<string, OutlineNode>,
@@ -419,12 +370,10 @@ function useOutlineKeyboard({
 }: {
   commands: Record<string, () => void>;
   editingId: string | null;
-  /** True while a drawer or dialog is open above the grid. */
   suspended: boolean;
 }) {
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      // While a cell is being edited, the field owns the keyboard.
       if (editingId || suspended) return;
 
       const target = event.target as HTMLElement | null;
@@ -472,7 +421,6 @@ function useOutlineKeyboard({
           if (event.shiftKey) commands.outdent();
           else commands.indent();
           break;
-        // Achieve opens the record on Enter and renames on F2, the Windows convention.
         case "Enter":
           event.preventDefault();
           commands.openDetail();
@@ -620,26 +568,6 @@ function Toggle({
   );
 }
 
-/** Column widths are shared with OutlineRow through the grid template in both files. */
-export const GRID_TEMPLATE =
-  "grid-cols-[minmax(16rem,1fr)_3rem_4.5rem_7rem_7rem_3rem] gap-x-3";
-
-function ColumnHeader() {
-  return (
-    <div
-      className={`grid flex-none ${GRID_TEMPLATE} items-center border-b border-rule-strong bg-surface-raised px-3 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted`}
-      style={{ height: "var(--row-height)" }}
-    >
-      <span>Name</span>
-      <span className="text-center">Pri</span>
-      <span className="text-right">Effort</span>
-      <span className="text-right">Deadline</span>
-      <span>State</span>
-      <span className="text-center">Focus</span>
-    </div>
-  );
-}
-
 function EmptyState({
   filtered,
   onAddResultArea,
@@ -668,20 +596,5 @@ function EmptyState({
         </>
       )}
     </div>
-  );
-}
-
-/**
- * Today's date, as YYYY-MM-DD, or null on the server.
- *
- * "Overdue" depends on the reader's clock, which the server does not have. Reading it
- * through an external store keeps the server and first client render agreeing on null,
- * so nothing flashes the wrong colour during hydration.
- */
-function useToday(): string | null {
-  return useSyncExternalStore(
-    () => () => {},
-    () => new Date().toISOString().slice(0, 10),
-    () => null,
   );
 }

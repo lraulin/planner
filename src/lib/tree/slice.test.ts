@@ -5,9 +5,7 @@ import { sliceTree, type GridRow } from "./slice";
 import type { OutlineNode } from "./types";
 
 /** Build a derived tree from plain rows — the same shape every tab hands `sliceTree`. */
-function tree(
-  ...rows: Parameters<typeof row>[0][]
-): OutlineNode[] {
+function tree(...rows: Parameters<typeof row>[0][]): OutlineNode[] {
   return derive(rows.map((r) => row(r)));
 }
 
@@ -19,8 +17,7 @@ function groups(rows: GridRow[]): Extract<GridRow, { kind: "group" }>[] {
   return rows.filter((r) => r.kind === "group");
 }
 
-const projectsAndGoals = (n: OutlineNode) =>
-  n.type === "project" || n.type === "goal";
+const projectsAndGoals = (n: OutlineNode) => n.type === "project" || n.type === "goal";
 const projectsOnly = (n: OutlineNode) => n.type === "project";
 const tasksOnly = (n: OutlineNode) => n.type === "task";
 
@@ -75,15 +72,11 @@ describe("sliceTree — keep and scope", () => {
     );
 
     expect(
-      nodeIds(
-        sliceTree(withDeferred, { keep: projectsOnly, includeDeferred: false }),
-      ),
+      nodeIds(sliceTree(withDeferred, { keep: projectsOnly, includeDeferred: false })),
     ).toEqual(["active"]);
 
     expect(
-      nodeIds(
-        sliceTree(withDeferred, { keep: projectsOnly, includeDeferred: true }),
-      ),
+      nodeIds(sliceTree(withDeferred, { keep: projectsOnly, includeDeferred: true })),
     ).toEqual(["active", "parked"]);
   });
 });
