@@ -11,6 +11,11 @@
 # testing
 /coverage
 
+# Achieve Planner reference captures. Kept on disk as the source material for the
+# reimplementation, but out of git — they are large, numerous, and never built against.
+/screenshots
+agent-os/specs/**/visuals/
+
 # next.js
 /.next/
 /out/
