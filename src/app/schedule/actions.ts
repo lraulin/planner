@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUserId } from "@/lib/auth";
 import type {
+  AppointmentCheck,
   PriorityLetter,
   RecurrenceEnd,
   RecurrenceFrequency,
@@ -76,7 +77,7 @@ export type AppointmentFormPayload = {
   startAt: string; // ISO
   endAt: string;
   allDay?: boolean;
-  completed?: boolean;
+  checkState?: AppointmentCheck;
   reminderMinutes?: number | null;
   showAs?: ShowAs;
   priorityLetter?: PriorityLetter | null;
@@ -133,6 +134,13 @@ export async function deleteAppointmentAction(id: string): Promise<ActionResult>
   return run((userId) => schedule.deleteAppointment(userId, id));
 }
 
+export async function setAppointmentCheckStateAction(
+  id: string,
+  checkState: AppointmentCheck,
+): Promise<ActionResult> {
+  return run((userId) => schedule.setAppointmentCheckState(userId, id, checkState));
+}
+
 export async function rescheduleAppointmentAction(
   id: string,
   startAt: string,
@@ -161,7 +169,7 @@ export async function duplicateAppointmentAction(
       startAt: new Date(startAt),
       endAt: new Date(endAt),
       allDay: existing.allDay,
-      completed: false,
+      checkState: "open",
       reminderMinutes: existing.reminderMinutes,
       showAs: existing.showAs,
       priorityLetter: existing.priorityLetter,

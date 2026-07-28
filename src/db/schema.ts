@@ -73,6 +73,17 @@ export const showAsEnum = pgEnum("show_as", [
   "out_of_office",
 ]);
 
+/**
+ * Achieve's three-state checkbox on calendar appointments:
+ * empty (open) → checked (done) → X (missed) → empty.
+ * Does not yet feed Actual Effort; that waits on the time-tracking track.
+ */
+export const appointmentCheckEnum = pgEnum("appointment_check", [
+  "open",
+  "done",
+  "missed",
+]);
+
 /** How an appointment repeats. `none` is a single instance. */
 export const recurrenceFrequencyEnum = pgEnum("recurrence_frequency", [
   "none",
@@ -528,7 +539,11 @@ export const appointments = pgTable(
     startAt: timestamp("start_at", { withTimezone: true }).notNull(),
     endAt: timestamp("end_at", { withTimezone: true }).notNull(),
     allDay: boolean("all_day").notNull().default(false),
-    completed: boolean("completed").notNull().default(false),
+    /**
+     * Three-state checkbox: open / done / missed. Replaces Achieve's tri-state
+     * control; not yet linked to project Actual Effort.
+     */
+    checkState: appointmentCheckEnum("check_state").notNull().default("open"),
     /** Minutes before start; null = no reminder. */
     reminderMinutes: integer("reminder_minutes"),
     showAs: showAsEnum("show_as").notNull().default("busy"),
@@ -577,5 +592,6 @@ export type NodeItemKind = (typeof nodeItemKindEnum.enumValues)[number];
 export type ProgressReview = (typeof progressReviewEnum.enumValues)[number];
 export type TaskConstraint = (typeof taskConstraintEnum.enumValues)[number];
 export type ShowAs = (typeof showAsEnum.enumValues)[number];
+export type AppointmentCheck = (typeof appointmentCheckEnum.enumValues)[number];
 export type RecurrenceFrequency = (typeof recurrenceFrequencyEnum.enumValues)[number];
 export type RecurrenceEnd = (typeof recurrenceEndEnum.enumValues)[number];

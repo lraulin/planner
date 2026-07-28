@@ -4,6 +4,7 @@ import {
   appointments,
   timeChartAreas,
   timeCharts,
+  type AppointmentCheck,
   type NewAppointment,
   type PriorityLetter,
   type RecurrenceEnd,
@@ -122,7 +123,7 @@ export type AppointmentInput = {
   startAt: Date;
   endAt: Date;
   allDay?: boolean;
-  completed?: boolean;
+  checkState?: AppointmentCheck;
   reminderMinutes?: number | null;
   showAs?: ShowAs;
   priorityLetter?: PriorityLetter | null;
@@ -160,7 +161,7 @@ export async function createAppointment(userId: string, input: AppointmentInput)
     startAt: input.startAt,
     endAt: input.endAt,
     allDay: input.allDay ?? false,
-    completed: input.completed ?? false,
+    checkState: input.checkState ?? "open",
     reminderMinutes: input.reminderMinutes ?? null,
     showAs: input.showAs ?? "busy",
     priorityLetter: input.priorityLetter ?? null,
@@ -207,7 +208,7 @@ export async function updateAppointment(
   if (input.subject !== undefined) patch.subject = input.subject.trim() || "Appointment";
   if (input.location !== undefined) patch.location = input.location;
   if (input.allDay !== undefined) patch.allDay = input.allDay;
-  if (input.completed !== undefined) patch.completed = input.completed;
+  if (input.checkState !== undefined) patch.checkState = input.checkState;
   if (input.reminderMinutes !== undefined) patch.reminderMinutes = input.reminderMinutes;
   if (input.showAs !== undefined) patch.showAs = input.showAs;
   if (input.priorityLetter !== undefined) patch.priorityLetter = input.priorityLetter;
@@ -245,6 +246,20 @@ export async function deleteAppointment(userId: string, id: string) {
     .where(and(eq(appointments.id, id), eq(appointments.userId, userId)))
     .returning({ id: appointments.id });
   if (deleted.length === 0) throw new Error("Appointment not found.");
+}
+
+export async function setAppointmentCheckState(
+  userId: string,
+  id: string,
+  checkState: AppointmentCheck,
+) {
+  const [row] = await db
+    .update(appointments)
+    .set({ checkState, updatedAt: new Date() })
+    .where(and(eq(appointments.id, id), eq(appointments.userId, userId)))
+    .returning();
+  if (!row) throw new Error("Appointment not found.");
+  return row;
 }
 
 /** Move/resize: update only the timed range (and clear recurrence for simplicity). */

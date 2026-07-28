@@ -3,7 +3,12 @@
  * Pure — no I/O. Occurrences are not stored; only the series master is.
  */
 
-import type { Appointment, RecurrenceEnd, RecurrenceFrequency } from "@/db/schema";
+import type {
+  Appointment,
+  AppointmentCheck,
+  RecurrenceEnd,
+  RecurrenceFrequency,
+} from "@/db/schema";
 import { toDateKey } from "./geometry";
 
 export type Occurrence = {
@@ -15,7 +20,7 @@ export type Occurrence = {
   startAt: Date;
   endAt: Date;
   allDay: boolean;
-  completed: boolean;
+  checkState: AppointmentCheck;
   projectId: string | null;
   isRecurring: boolean;
 };
@@ -26,7 +31,7 @@ export type RecurrenceInput = {
   startAt: Date;
   endAt: Date;
   allDay: boolean;
-  completed: boolean;
+  checkState: AppointmentCheck;
   projectId: string | null;
   recurrenceFrequency: RecurrenceFrequency;
   recurrenceInterval: number;
@@ -75,7 +80,7 @@ function occurrenceOf(
     startAt: start,
     endAt: end,
     allDay: master.allDay,
-    completed: master.completed,
+    checkState: master.checkState,
     projectId: master.projectId,
     isRecurring: master.recurrenceFrequency !== "none",
   };
@@ -247,7 +252,7 @@ export function appointmentToRecurrenceInput(a: Appointment): RecurrenceInput {
     startAt: a.startAt,
     endAt: a.endAt,
     allDay: a.allDay,
-    completed: a.completed,
+    checkState: a.checkState,
     projectId: a.projectId,
     recurrenceFrequency: a.recurrenceFrequency,
     recurrenceInterval: a.recurrenceInterval,

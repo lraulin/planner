@@ -7,7 +7,7 @@ function master(partial: Partial<RecurrenceInput> & Pick<RecurrenceInput, "start
     id: "a1",
     subject: "Test",
     allDay: false,
-    completed: false,
+    checkState: "open",
     projectId: null,
     recurrenceFrequency: "none",
     recurrenceInterval: 1,

@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type { Appointment, TimeChart, TimeChartArea } from "@/db/schema";
+import type {
+  Appointment,
+  AppointmentCheck,
+  TimeChart,
+  TimeChartArea,
+} from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { SchedulePayload } from "@/lib/schedule/queries";
 import type { Occurrence } from "@/lib/schedule/recurrence";
@@ -13,6 +18,7 @@ import {
   deleteAppointmentAction,
   duplicateAppointmentAction,
   rescheduleAppointmentAction,
+  setAppointmentCheckStateAction,
 } from "@/app/schedule/actions";
 import { WeekCalendar } from "./WeekCalendar";
 import { ProjectsRail } from "./ProjectsRail";
@@ -114,6 +120,23 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
       startAt: start,
       endAt: end,
     });
+  }
+
+  async function handleCycleCheck(id: string, next: AppointmentCheck) {
+    // Optimistic: flip local occurrence styling immediately.
+    setOccurrences((prev) =>
+      prev.map((o) => (o.id === id ? { ...o, checkState: next } : o)),
+    );
+    setMasters((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, checkState: next } : a)),
+    );
+    const result = await setAppointmentCheckStateAction(id, next);
+    if (!result.ok) {
+      alert(result.error);
+      refresh();
+      return;
+    }
+    refresh();
   }
 
   async function handleEventDrop(
@@ -295,6 +318,7 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
             onEventClick={openOccurrence}
             onEventDrop={handleEventDrop}
             onExternalDrop={handleExternalProjectDrop}
+            onCycleCheck={handleCycleCheck}
           />
         </div>
 

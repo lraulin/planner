@@ -14,8 +14,10 @@ import type {
   EventDropArg,
   EventInput,
 } from "@fullcalendar/core";
+import type { AppointmentCheck } from "@/db/schema";
 import type { Occurrence } from "@/lib/schedule/recurrence";
 import { contrastText } from "@/lib/schedule/geometry";
+import { checkStateMark, nextCheckState } from "@/lib/schedule/checkState";
 
 type BackgroundEvent = {
   id: string;
@@ -45,6 +47,7 @@ type Props = {
     start: Date,
     durationMinutes: number,
   ) => void;
+  onCycleCheck: (id: string, next: AppointmentCheck) => void;
 };
 
 export function WeekCalendar({
@@ -55,6 +58,7 @@ export function WeekCalendar({
   onEventClick,
   onEventDrop,
   onExternalDrop,
+  onCycleCheck,
 }: Props) {
   const ctrlDown = useRef(false);
   const occByKey = useMemo(() => {
@@ -65,8 +69,6 @@ export function WeekCalendar({
 
   const events: EventInput[] = useMemo(() => {
     const bg: EventInput[] = backgroundEvents.map((e) => {
-      // Prefer luminance over stored foreColor — FC often ignores textColor on bg events,
-      // and seed/user colors can fail in dark chrome.
       const label = contrastText(e.backgroundColor);
       return {
         id: e.id,
@@ -83,26 +85,31 @@ export function WeekCalendar({
       };
     });
 
-    const appts: EventInput[] = occurrences.map((o) => ({
-      id: o.occurrenceKey,
-      title: o.subject || "(no subject)",
-      start: o.startAt,
-      end: o.endAt,
-      allDay: o.allDay,
-      backgroundColor: o.completed ? "#e8e8e8" : "#ffffff",
-      borderColor: "#2a5a8a",
-      textColor: "#1b1d23",
-      classNames: [
-        "fc-appointment",
-        o.completed ? "fc-appointment-done" : "",
-        o.projectId ? "fc-appointment-project" : "",
-      ].filter(Boolean),
-      extendedProps: {
-        appointmentId: o.id,
-        projectId: o.projectId,
-        isRecurring: o.isRecurring,
-      },
-    }));
+    const appts: EventInput[] = occurrences.map((o) => {
+      const doneOrMissed = o.checkState !== "open";
+      return {
+        id: o.occurrenceKey,
+        title: o.subject || "(no subject)",
+        start: o.startAt,
+        end: o.endAt,
+        allDay: o.allDay,
+        backgroundColor: doneOrMissed ? "#e8e8e8" : "#ffffff",
+        borderColor: o.checkState === "missed" ? "#a05050" : "#2a5a8a",
+        textColor: "#1b1d23",
+        classNames: [
+          "fc-appointment",
+          o.checkState === "done" ? "fc-appointment-done" : "",
+          o.checkState === "missed" ? "fc-appointment-missed" : "",
+          o.projectId ? "fc-appointment-project" : "",
+        ].filter(Boolean),
+        extendedProps: {
+          appointmentId: o.id,
+          projectId: o.projectId,
+          isRecurring: o.isRecurring,
+          checkState: o.checkState,
+        },
+      };
+    });
 
     return [...bg, ...appts];
   }, [backgroundEvents, occurrences]);
@@ -141,16 +148,48 @@ export function WeekCalendar({
         firstDay={0}
         dayHeaderFormat={{ weekday: "long", month: "short", day: "numeric" }}
         events={events}
+        eventContent={(arg) => {
+          if (arg.event.display === "background") {
+            return { html: `<div class="fc-event-title">${escapeHtml(arg.event.title)}</div>` };
+          }
+          const state = (arg.event.extendedProps.checkState as AppointmentCheck) ?? "open";
+          const mark = checkStateMark(state);
+          const title = escapeHtml(arg.event.title);
+          return {
+            html: `<div class="fc-appt-inner">
+              <button type="button" class="fc-appt-check" data-check="1"
+                title="Cycle: open → done → missed"
+                aria-label="Mark appointment">${mark}</button>
+              <span class="fc-event-title">${title}</span>
+            </div>`,
+          };
+        }}
         eventDidMount={(info) => {
-          if (info.event.display !== "background") return;
-          const label =
-            (info.event.extendedProps.labelColor as string | undefined) ??
-            info.event.textColor ??
-            contrastText(String(info.event.backgroundColor ?? "#ccc"));
-          info.el.style.color = label;
-          info.el.style.setProperty("--fc-event-text-color", label);
-          const title = info.el.querySelector<HTMLElement>(".fc-event-title");
-          if (title) title.style.color = label;
+          if (info.event.display === "background") {
+            const label =
+              (info.event.extendedProps.labelColor as string | undefined) ??
+              info.event.textColor ??
+              contrastText(String(info.event.backgroundColor ?? "#ccc"));
+            info.el.style.color = label;
+            info.el.style.setProperty("--fc-event-text-color", label);
+            const title = info.el.querySelector<HTMLElement>(".fc-event-title");
+            if (title) title.style.color = label;
+            return;
+          }
+          const btn = info.el.querySelector<HTMLButtonElement>(".fc-appt-check");
+          if (!btn) return;
+          btn.addEventListener("pointerdown", (e) => {
+            // Keep drag from starting on the checkbox.
+            e.stopPropagation();
+          });
+          btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const id = info.event.extendedProps.appointmentId as string;
+            const current =
+              (info.event.extendedProps.checkState as AppointmentCheck) ?? "open";
+            onCycleCheck(id, nextCheckState(current));
+          });
         }}
         select={(arg: DateSelectArg) => {
           onSelectRange(arg.start, arg.end);
@@ -158,6 +197,8 @@ export function WeekCalendar({
         }}
         eventClick={(arg: EventClickArg) => {
           if (arg.event.display === "background") return;
+          const t = arg.jsEvent.target as HTMLElement | null;
+          if (t?.closest?.("[data-check]")) return;
           const occ = occByKey.get(arg.event.id);
           if (occ) onEventClick(occ);
         }}
@@ -167,7 +208,8 @@ export function WeekCalendar({
             arg.revert();
             return;
           }
-          const duplicate = arg.jsEvent?.ctrlKey || arg.jsEvent?.metaKey || ctrlDown.current;
+          const duplicate =
+            arg.jsEvent?.ctrlKey || arg.jsEvent?.metaKey || ctrlDown.current;
           if (duplicate) {
             arg.revert();
             onEventDrop(id, arg.event.start, arg.event.end, { duplicate: true });
@@ -192,7 +234,6 @@ export function WeekCalendar({
             arg.revert();
             return;
           }
-          // Remove the temporary received event; we create via server action.
           arg.event.remove();
           onExternalDrop(projectId, projectName, arg.event.start, duration);
         }}
@@ -202,4 +243,12 @@ export function WeekCalendar({
       />
     </div>
   );
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }

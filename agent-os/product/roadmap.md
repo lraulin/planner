@@ -70,6 +70,12 @@ Features that complete or surround the original product, plus making it multi-de
      actual-vs-estimated analysis, time by project/result area/role, and feed the
      weekly calendar’s estimated-vs-actual story. Same data model as (2); richer UI
      and reporting on top.
+  4. **Appointment check → effort (later).** Appointments already have Achieve’s
+     three-state checkbox (open / done / missed). Marking **done** should eventually
+     contribute duration to the linked project’s Actual Effort (Effort to Date) —
+     but project effort fields are rollups of tasks today, and the right model is
+     the session log in (2), not a one-off write from the calendar. Wire this when
+     time tracking exists; until then the checkbox is a local record only.
 
 - **Roles & goals (Covey).** Explicit life roles, balance review in weekly planning —
   partly already modeled as Result Areas; deepen where Achieve or Covey still beats us.

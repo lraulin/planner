@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Appointment, RecurrenceEnd, RecurrenceFrequency, ShowAs } from "@/db/schema";
+import type {
+  Appointment,
+  AppointmentCheck,
+  RecurrenceEnd,
+  RecurrenceFrequency,
+  ShowAs,
+} from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
 import { Drawer } from "@/components/detail/Drawer";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
@@ -12,6 +18,11 @@ import {
   type AppointmentFormPayload,
 } from "@/app/schedule/actions";
 import { WEEKDAY_LABELS } from "@/lib/schedule/geometry";
+import {
+  checkStateLabel,
+  checkStateMark,
+  nextCheckState,
+} from "@/lib/schedule/checkState";
 import type { DraftAppointment } from "./ScheduleView";
 
 type Props = {
@@ -29,7 +40,7 @@ function toLocalInputValue(d: Date): string {
 }
 
 function isFullAppointment(v: Appointment | DraftAppointment): v is Appointment {
-  return "location" in v && "showAs" in v;
+  return "location" in v && "showAs" in v && "checkState" in v;
 }
 
 export function AppointmentDrawer({
@@ -45,7 +56,7 @@ export function AppointmentDrawer({
   const [startLocal, setStartLocal] = useState("");
   const [endLocal, setEndLocal] = useState("");
   const [allDay, setAllDay] = useState(false);
-  const [completed, setCompleted] = useState(false);
+  const [checkState, setCheckState] = useState<AppointmentCheck>("open");
   const [reminderMinutes, setReminderMinutes] = useState<string>("");
   const [showAs, setShowAs] = useState<ShowAs>("busy");
   const [projectId, setProjectId] = useState<string>("");
@@ -75,7 +86,7 @@ export function AppointmentDrawer({
     if (isFullAppointment(value)) {
       setLocation(value.location);
       setAllDay(value.allDay);
-      setCompleted(value.completed);
+      setCheckState(value.checkState);
       setReminderMinutes(
         value.reminderMinutes != null ? String(value.reminderMinutes) : "",
       );
@@ -96,7 +107,7 @@ export function AppointmentDrawer({
     } else {
       setLocation("");
       setAllDay(false);
-      setCompleted(false);
+      setCheckState("open");
       setReminderMinutes("");
       setShowAs("busy");
       setNotes("");
@@ -144,7 +155,7 @@ export function AppointmentDrawer({
       startAt: startAt.toISOString(),
       endAt: endAt.toISOString(),
       allDay,
-      completed,
+      checkState,
       reminderMinutes: reminderMinutes === "" ? null : Number(reminderMinutes),
       showAs,
       projectId: projectId || null,
@@ -271,17 +282,32 @@ export function AppointmentDrawer({
                     />
                   </label>
                 </FieldGrid>
-                <div className="mt-2 flex flex-wrap gap-4">
+                <div className="mt-2 flex flex-wrap items-center gap-4">
                   <CheckboxField
                     label="All day"
                     checked={allDay}
                     onChange={mark(setAllDay)}
                   />
-                  <CheckboxField
-                    label="Completed"
-                    checked={completed}
-                    onChange={mark(setCompleted)}
-                  />
+                  <label className="flex items-center gap-2 text-[0.875rem] text-ink">
+                    <button
+                      type="button"
+                      title={`Status: ${checkStateLabel(checkState)} (click to cycle)`}
+                      aria-label={`Status: ${checkStateLabel(checkState)}. Click to cycle open, done, missed.`}
+                      className="inline-flex h-5 w-5 items-center justify-center rounded border border-rule bg-surface text-[0.75rem] font-semibold leading-none text-ink hover:border-select-edge"
+                      onClick={() => {
+                        setCheckState(nextCheckState(checkState));
+                        setDirty(true);
+                      }}
+                    >
+                      {checkStateMark(checkState)}
+                    </button>
+                    <span>
+                      {checkStateLabel(checkState)}
+                      <span className="ml-1 text-[0.75rem] text-ink-faint">
+                        (open → done → missed)
+                      </span>
+                    </span>
+                  </label>
                   <CheckboxField
                     label="Private"
                     checked={isPrivate}
