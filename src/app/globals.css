@@ -223,6 +223,8 @@ body {
 
 .schedule-calendar .fc-appt-check {
   flex: none;
+  position: relative;
+  z-index: 2;
   width: 14px;
   height: 14px;
   margin-top: 1px;
@@ -235,6 +237,13 @@ body {
   font-weight: 700;
   line-height: 12px;
   cursor: pointer;
+  /* Stay clickable even when the event is semi-transparent (done/missed). */
+  pointer-events: auto;
+}
+
+.schedule-calendar .fc-appointment-done .fc-appt-check,
+.schedule-calendar .fc-appointment-missed .fc-appt-check {
+  opacity: 1;
 }
 
 .schedule-calendar .fc-appointment-missed .fc-appt-check {

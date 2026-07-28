@@ -17,7 +17,11 @@ import type {
 import type { AppointmentCheck } from "@/db/schema";
 import type { Occurrence } from "@/lib/schedule/recurrence";
 import { contrastText } from "@/lib/schedule/geometry";
-import { checkStateMark, nextCheckState } from "@/lib/schedule/checkState";
+import {
+  checkStateLabel,
+  checkStateMark,
+  nextCheckState,
+} from "@/lib/schedule/checkState";
 
 type BackgroundEvent = {
   id: string;
@@ -61,6 +65,10 @@ export function WeekCalendar({
   onCycleCheck,
 }: Props) {
   const ctrlDown = useRef(false);
+  // Keep latest callbacks without re-binding eventContent closures only on mount.
+  const onCycleCheckRef = useRef(onCycleCheck);
+  onCycleCheckRef.current = onCycleCheck;
+
   const occByKey = useMemo(() => {
     const m = new Map<string, Occurrence>();
     for (const o of occurrences) m.set(o.occurrenceKey, o);
@@ -150,46 +158,53 @@ export function WeekCalendar({
         events={events}
         eventContent={(arg) => {
           if (arg.event.display === "background") {
-            return { html: `<div class="fc-event-title">${escapeHtml(arg.event.title)}</div>` };
+            return (
+              <div className="fc-event-title fc-sticky">{arg.event.title}</div>
+            );
           }
-          const state = (arg.event.extendedProps.checkState as AppointmentCheck) ?? "open";
+
+          const state =
+            (arg.event.extendedProps.checkState as AppointmentCheck) ?? "open";
+          const appointmentId = arg.event.extendedProps.appointmentId as string;
           const mark = checkStateMark(state);
-          const title = escapeHtml(arg.event.title);
-          return {
-            html: `<div class="fc-appt-inner">
-              <button type="button" class="fc-appt-check" data-check="1"
-                title="Cycle: open → done → missed"
-                aria-label="Mark appointment">${mark}</button>
-              <span class="fc-event-title">${title}</span>
-            </div>`,
-          };
+
+          return (
+            <div className="fc-appt-inner">
+              <button
+                type="button"
+                className="fc-appt-check"
+                data-check="1"
+                title={`Status: ${checkStateLabel(state)}. Click to cycle open → done → missed.`}
+                aria-label={`Status: ${checkStateLabel(state)}. Click to cycle.`}
+                onPointerDown={(e) => {
+                  // Prevent FullCalendar from starting an event drag on the checkbox.
+                  e.stopPropagation();
+                }}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                }}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onCycleCheckRef.current(appointmentId, nextCheckState(state));
+                }}
+              >
+                {mark}
+              </button>
+              <span className="fc-event-title">{arg.event.title}</span>
+            </div>
+          );
         }}
         eventDidMount={(info) => {
-          if (info.event.display === "background") {
-            const label =
-              (info.event.extendedProps.labelColor as string | undefined) ??
-              info.event.textColor ??
-              contrastText(String(info.event.backgroundColor ?? "#ccc"));
-            info.el.style.color = label;
-            info.el.style.setProperty("--fc-event-text-color", label);
-            const title = info.el.querySelector<HTMLElement>(".fc-event-title");
-            if (title) title.style.color = label;
-            return;
-          }
-          const btn = info.el.querySelector<HTMLButtonElement>(".fc-appt-check");
-          if (!btn) return;
-          btn.addEventListener("pointerdown", (e) => {
-            // Keep drag from starting on the checkbox.
-            e.stopPropagation();
-          });
-          btn.addEventListener("click", (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            const id = info.event.extendedProps.appointmentId as string;
-            const current =
-              (info.event.extendedProps.checkState as AppointmentCheck) ?? "open";
-            onCycleCheck(id, nextCheckState(current));
-          });
+          if (info.event.display !== "background") return;
+          const label =
+            (info.event.extendedProps.labelColor as string | undefined) ??
+            info.event.textColor ??
+            contrastText(String(info.event.backgroundColor ?? "#ccc"));
+          info.el.style.color = label;
+          info.el.style.setProperty("--fc-event-text-color", label);
+          const title = info.el.querySelector<HTMLElement>(".fc-event-title");
+          if (title) title.style.color = label;
         }}
         select={(arg: DateSelectArg) => {
           onSelectRange(arg.start, arg.end);
@@ -197,8 +212,9 @@ export function WeekCalendar({
         }}
         eventClick={(arg: EventClickArg) => {
           if (arg.event.display === "background") return;
+          // Checkbox handles itself via React onClick; don't open the drawer.
           const t = arg.jsEvent.target as HTMLElement | null;
-          if (t?.closest?.("[data-check]")) return;
+          if (t?.closest?.("[data-check], .fc-appt-check")) return;
           const occ = occByKey.get(arg.event.id);
           if (occ) onEventClick(occ);
         }}
@@ -243,12 +259,4 @@ export function WeekCalendar({
       />
     </div>
   );
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }
