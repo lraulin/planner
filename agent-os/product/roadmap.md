@@ -1,59 +1,149 @@
 # Product Roadmap
 
-## Phase 1: MVP
+Big-picture path for Planner. Specs under `agent-os/specs/` implement slices of this;
+this file is the product-level map, not a task list.
+
+**How to read it:** Phase 1 is the Achieve reimplementation core. Later phases and the
+“beyond Achieve” tracks are real product intent, ordered by dependence and value — not
+promises with dates.
+
+---
+
+## Phase 1: Achieve MVP
 
 The core Achieve Planner loop — plan the week, block the time, work the outline.
 
-- **✅ Project/task outline.** Delivered by
-  `specs/2026-07-27-1100-scaffold-and-outline-tab`. The Outline tab shows the whole
-  hierarchy — Result Areas → Goals → Projects → Tasks, nestable without limit — with
-  keyboard-driven inline editing, indent/outdent, reordering, and collapse/expand.
-  Drag-to-reorder is still outstanding; keyboard and toolbar commands cover it for now.
-- **✅ Priorities & scheduling fields.** Priority (A/B/C/D plus rank), deadline, state,
-  focus, and effort are editable in the outline, and effort rolls up through the tree.
-  Effort Left, Actual Effort, and % complete became editable in the Task form, delivered by
-  `specs/2026-07-27-1318-per-type-detail-forms`.
-- **✅ Per-type detail forms.** Delivered by
-  `specs/2026-07-27-1318-per-type-detail-forms`, at parity with Achieve for all four types
-  — Result Area (6 tabs), Goal (12), Project (11), Task (5) — including all 24 repeating
-  child lists. Each opens in a drawer rather than a modal; see
-  `standards/components/ux-principles.md` for why. Recurrence, templates, labels, resource
-  pools, and file upload for attachments were left out of scope, as was the welcome wizard
-  in `screenshots/welcome_wizard/`.
-- **Weekly calendar + time blocking.** Week grid where projects are scheduled into time
-  blocks, tracking estimated vs. actual duration.
-- **Weekly planning workflow.** A guided weekly review: pick goals, pull tasks from the
+### Delivered
+
+- **✅ Project/task outline.** `specs/2026-07-27-1100-scaffold-and-outline-tab`. Result
+  Areas → Goals → Projects → Tasks, keyboard-driven inline editing, indent/outdent,
+  reordering, collapse/expand. Drag-to-reorder is still outstanding; keyboard and toolbar
+  cover it for now.
+- **✅ Priorities & scheduling fields.** Priority (A/B/C/D + rank), deadline, state, focus,
+  effort (with rollups). Effort Left, Actual Effort, and % complete editable in the Task
+  form (`specs/2026-07-27-1318-per-type-detail-forms`).
+- **✅ Per-type detail forms.** Same spec — Result Area / Goal / Project / Task drawers at
+  Achieve parity for the in-scope fields and 24 repeating child lists. Recurrence,
+  templates, labels, resource pools, file upload, and the welcome wizard stayed out of
+  scope.
+- **✅ Main grid tabs.** `specs/2026-07-28-1121-main-grid-tabs`. Shared `DataGrid`, derived
+  schedule status, tree slice, and four list tabs — **Projects**, **Tasks**, **Goals**,
+  **Wish List** — with scope pickers, built-in Views, grouping, column filters, and Show
+  Fields. Outline migrated onto the same grid. Known polish (not blockers for “spec done”):
+  Project scope is a select rather than a filtered tree popover; Show Fields move
+  up/down is coarse; screenshot walkthrough and a few open questions in the plan remain.
+
+### Still in Phase 1
+
+- **Weekly calendar + time blocking.** Week grid; projects/tasks scheduled into blocks;
+  estimated vs actual duration.
+- **Weekly planning workflow.** Guided weekly review: pick goals, pull tasks from the
   master list, block them onto the week.
+- **Outline drag-to-reorder** (carried from the outline spec).
+- **Light polish on the main grids** if needed after using them day-to-day (scope popover,
+  Show Fields selection, Life Plan / Task Chooser only if still wanted).
 
-## Phase 2: Post-Launch
+---
 
-### Near-term priority
+## Phase 2: Achieve depth & platform
 
-- **Quick capture to inbox.** A global shortcut to add an item to the inbox without opening
-  the app, via an **Alfred** workflow on macOS. Further Alfred integrations may follow, and
-  other launchers (Raycast) are possible later.
+Features that complete or surround the original product, plus making it multi-device.
 
-### Then
+### Near-term Achieve surfaces
 
-- **Wish List tab.** Achieve has a top-level tab listing every wish across all result areas,
-  grouped by area and typed by quadrant. The data already exists — the detail forms write it
-  — so this is a view over `node_items`, not new modelling. Achieve also has **Goals** and
-  **Life Plan** top-level tabs worth capturing at the same time.
-- **Time tracking & reports.** Start/stop timers, actual-vs-estimated analysis, and
-  time-spent-by-project/role reporting.
-- **Roles & goals (Covey).** Define life roles and long-term goals, link projects and tasks
-  to them, and review balance across roles during weekly planning.
-- **Multi-user accounts & sync.** Activate real auth, per-user data isolation, and
-  cross-device sync — the payoff for building multi-user-ready in Phase 1.
-- **Import/export & integrations.** Import existing Achieve Planner data, export to standard
-  formats, and sync with external calendars (Google / CalDAV).
+- **Life Plan tab** (if still desired after living with Goals + Result Areas).
+- **Task Chooser** and any remaining Achieve chrome that earns its keep.
+- **Time tracking & reports.** Start/stop timers, actual-vs-estimated, time by
+  project/role.
+- **Roles & goals (Covey).** Explicit life roles, balance review in weekly planning —
+  partly already modeled as Result Areas; deepen where Achieve or Covey still beats us.
 
-## Phase 3: Exploratory
+### Capture & access
 
-Ideas worth pursuing, not yet committed.
+- **Quick capture to inbox.** Global shortcut without opening the full app — **Alfred** on
+  macOS first; Raycast later if useful.
 
-- **Financial planning.** Lee has a separate personal finance app in progress; folding it in
-  would let financial goals connect to the roles-and-goals system.
-- **AI personal assistant.** A prior attempt used a git repo as agent memory. The newer idea
-  is an assistant on AWS Bedrock that manages its own memory using Bedrock's memory
-  features, with this app exposing tools the assistant can call to read and modify the plan.
+### Platform
+
+- **Multi-user accounts & sync.** Real auth (Better Auth, self-run — see `tech-stack.md`),
+  per-user isolation activated, cross-device sync. Schema is already multi-user-ready.
+- **Import/export.** Achieve data import, full export (own-your-data mandate in
+  `mission.md`).
+
+### Google integration
+
+Treat as one track with staged depth:
+
+1. **Calendar sync** — show Google Calendar alongside (or inside) the weekly schedule;
+   push time blocks / pull busy times.
+2. **Optional later** — Tasks/Keep-style capture only if calendar alone is not enough;
+   avoid boiling the ocean.
+
+---
+
+## Phase 3: Beyond Achieve
+
+Product lines that use the outline/goals as a hub. Each has its own MVP → medium → long
+horizon. Ship vertical slices; do not wait for full Achieve parity to start an MVP if the
+core loop is already useful.
+
+### Fitness tracker
+
+- **Short-term MVP:** Record sets/reps and runs (simple log, no platform integrations).
+- **Medium-term:** Link workouts and habits to **Goals** / Result Areas (progress that
+  shows up in the same system that plans the week).
+- **Long-term:** Optional **Apple Health** (or similar) import — read-only first.
+
+### AI integration
+
+- **Near-term:** Tooling / API / instructions so an **agent can operate the planner**
+  (read outline, create/update tasks, report status) — usable from a local coding agent
+  with the repo or a thin HTTP/tool surface.
+- **Medium-term:** Same tools from a hosted assistant when auth and multi-device exist.
+- **Long-term:** Possible **custom AI** (e.g. AWS Bedrock) with durable memory, calling
+  those tools to manage the plan. Earlier Bedrock-memory idea stays relevant; prefer
+  tools over “dump the whole tree into the prompt.”
+
+### Financial planning
+
+YNAB-like, but simpler — and connected to goals over time.
+
+- **MVP:** Import CSVs; **envelopes** for known expenses and contingencies; basic
+  register and balances.
+- **Next:** Analyze past spending; light categorization.
+- **Then:** AI assistance/advice on top of that data; **integration with Goals**
+  (save for X, fund project Y).
+- **Eventually:** **Plaid** (or equivalent) to pull bank data by API — only after
+  CSV + envelopes are trustworthy, given lock-in and security cost.
+
+---
+
+## Phase order (dependency sketch)
+
+```text
+Phase 1 remaining ──► weekly calendar + planning workflow
+        │
+        ├──► Google Calendar (needs a schedule surface)
+        │
+Phase 2 platform ──► auth, export, Alfred capture
+        │
+        ├──► AI tools/API (useful earlier on single-user + local agent)
+        │
+Beyond Achieve (can start MVPs in parallel once Phase 1 core is daily-usable):
+        ├── Fitness log MVP
+        └── Finance CSV + envelopes MVP
+              └── later: goals links, AI advice, Plaid / Health
+```
+
+AI **tooling for local agents** does not need Bedrock or multi-user first. Fitness and
+finance MVPs should stay separate modules that **link into** nodes/goals rather than
+forking a second hierarchy.
+
+---
+
+## Out of roadmap (for now)
+
+- Marketing / legal distinctiveness from Achieve (see `mission.md`) — personal use first.
+- Achieve recurrence, printing views, custom filter builder, Views/Filters sidebar —
+  called out as out of scope in the main-grid-tabs shape unless we reopen them.
+- Neon Auth / vendor-owned identity schema — declined; see `tech-stack.md`.
