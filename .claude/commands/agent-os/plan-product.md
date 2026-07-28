@@ -4,7 +4,9 @@ Establish foundational product documentation through an interactive conversation
 
 ## Important Guidelines
 
-- **Always use AskUserQuestion tool** when asking the user anything
+- **Always use the structured question tool** when asking the user anything:
+  `AskUserQuestion` (Claude Code) or `ask_user_question` (Grok). Prefer options the user
+  can confirm or adjust. One question at a time — don't overwhelm.
 - **Keep it lightweight** — gather enough to create useful docs without over-documenting
 - **One question at a time** — don't overwhelm with multiple questions
 

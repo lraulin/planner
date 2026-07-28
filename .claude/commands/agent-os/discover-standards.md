@@ -4,7 +4,9 @@ Extract tribal knowledge from your codebase into concise, documented standards.
 
 ## Important Guidelines
 
-- **Always use AskUserQuestion tool** when asking the user anything
+- **Always use the structured question tool** when asking the user anything:
+  `AskUserQuestion` (Claude Code) or `ask_user_question` (Grok). Prefer options the user
+  can confirm, choose between, or correct.
 - **Write concise standards** — Use minimal words. Standards must be scannable by AI agents without bloating context windows.
 - **Offer suggestions** — Present options the user can confirm, choose between, or correct. Don't make them think harder than necessary.
 

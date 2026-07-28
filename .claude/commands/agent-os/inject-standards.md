@@ -2,6 +2,9 @@
 
 Inject relevant standards into the current context, formatted appropriately for the situation.
 
+When this command says **AskUserQuestion**, use the structured question tool for the
+current harness: `AskUserQuestion` (Claude Code) or `ask_user_question` (Grok).
+
 ## Usage Modes
 
 This command supports two modes:
@@ -33,16 +36,19 @@ Before injecting standards, determine which scenario we're in. Read the current 
 **Three scenarios:**
 
 1. **Conversation** — Regular chat, implementing code, answering questions
-2. **Creating a Skill** — Building a `.claude/skills/` file
+2. **Creating a Skill** — Building a skill under `.claude/skills/`, `.grok/skills/`, or
+   `~/.grok/skills/` (or the harness equivalent)
 3. **Shaping/Planning** — In plan mode, building a spec, running `/shape-spec`
 
 **Detection logic:**
 
 - If currently in plan mode OR conversation clearly mentions "spec", "plan", "shape" → **Shaping/Planning**
-- If conversation clearly mentions creating a skill, editing `.claude/skills/`, or building a reusable procedure → **Creating a Skill**
+- If conversation clearly mentions creating a skill, editing `.claude/skills/` or
+  `.grok/skills/`, or building a reusable procedure → **Creating a Skill**
 - Otherwise → **Ask to confirm** (do not assume)
 
-**If neither skill nor plan is clearly detected**, use AskUserQuestion to confirm:
+**If neither skill nor plan is clearly detected**, use the structured question tool
+(`AskUserQuestion` / `ask_user_question`) to confirm:
 
 ```
 I'll inject the relevant standards. How should I format them?
@@ -229,7 +235,10 @@ These standards cover:
 
 ### Step 6: Surface Related Skills (Conversation scenario only)
 
-When in conversation scenario, check if `.claude/skills/` exists and contains related skills:
+When in conversation scenario, check project skill dirs for related skills:
+
+- `.claude/skills/` and `.claude/commands/` (Claude Code + Grok Claude-compat)
+- `.grok/skills/` and `.grok/commands/` (Grok-native, if present)
 
 ```
 Related Skills you might want to use:

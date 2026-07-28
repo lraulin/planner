@@ -23,6 +23,24 @@ implemented against the saved spec folder.
 **Clear, durable intent is the scarce asset; code is regenerable.** Specs capture what we
 meant to build and why — not every line of implementation detail.
 
+#### Slash commands (Claude Code + Grok)
+
+Commands live under `.claude/commands/` so both harnesses discover them. Canonical files
+are in `.claude/commands/agent-os/`; **flat symlinks** at `.claude/commands/*.md` exist so
+Grok (and short Claude names) see `/shape-spec` etc. — nested-only paths are easy for
+Claude and easy for Grok to miss.
+
+| Command | Purpose |
+| --- | --- |
+| `/shape-spec` | Plan-mode shaping → `agent-os/specs/...` folder |
+| `/inject-standards` | Pull relevant `agent-os/standards/` into context |
+| `/discover-standards` | Extract patterns into new standards |
+| `/index-standards` | Rebuild `agent-os/standards/index.yml` |
+| `/plan-product` | Mission / roadmap / tech-stack in `agent-os/product/` |
+
+When asking the user structured questions from these flows, use `AskUserQuestion` (Claude)
+or `ask_user_question` (Grok) — same idea, harness-specific tool name.
+
 #### Spec lifecycle
 
 1. **Shape (plan mode)** — `/shape-spec` creates `agent-os/specs/{YYYY-MM-DD-HHMM-slug}/`
