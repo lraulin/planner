@@ -73,18 +73,22 @@ export function Drawer({
 export function DrawerHeader({
   titleId,
   eyebrow,
+  icon,
   title,
   onClose,
 }: {
   titleId: string;
   eyebrow: string;
+  /** The type glyph, shown beside the eyebrow. The same one the outline row draws. */
+  icon?: React.ReactNode;
   title: string;
   onClose: () => void;
 }) {
   return (
     <div className="flex flex-none items-start gap-3 border-b border-rule px-5 py-3">
       <div className="min-w-0 flex-1">
-        <p className="text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
+        <p className="flex items-center gap-1.5 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
+          {icon}
           {eyebrow}
         </p>
         <h2 id={titleId} className="truncate text-[1.0625rem] font-semibold text-ink">

@@ -10,6 +10,7 @@ import {
   parsePriority,
 } from "@/lib/tree/format";
 import { STATE_OPTIONS, TYPE_LABELS } from "@/lib/tree/hierarchy";
+import { TypeIcon } from "@/components/icons/TypeIcon";
 import { GRID_TEMPLATE } from "./OutlineGrid";
 
 const PRIORITY_COLOR: Record<PriorityLetter, string> = {
@@ -20,9 +21,9 @@ const PRIORITY_COLOR: Record<PriorityLetter, string> = {
 };
 
 /**
- * Type is carried by typography rather than an icon column: result areas are set in small
- * caps, and each level below sits a little quieter than the one above. That keeps the row
- * free for content while still reading as a hierarchy.
+ * Type is carried by typography as well as by the glyph: result areas are set in small
+ * caps, and each level below sits a little quieter than the one above. Typography alone
+ * reads as a hierarchy; the glyph is what names the type on a row seen out of context.
  */
 const TYPE_STYLE: Record<OutlineNode["type"], string> = {
   result_area: "text-[0.8125rem] font-semibold uppercase tracking-[0.08em]",
@@ -135,6 +136,13 @@ export function OutlineRow({
         >
           {node.collapsed ? "▶" : "▼"}
         </button>
+
+        {/* The type, at a glance. Sits inside the name cell rather than taking a column of
+            its own, so it costs the grid nothing. */}
+        <TypeIcon
+          type={node.type}
+          className="mr-1.5 h-3.5 w-3.5 flex-none self-center text-ink-faint"
+        />
 
         {editing ? (
           <NameEditor
