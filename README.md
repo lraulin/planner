@@ -8,7 +8,8 @@ arbitrary nesting, ABCD priorities, effort tracking, and a weekly schedule built
 time-blocked "project blocks."
 
 See `agent-os/product/` for the mission, roadmap, and tech stack, and `agent-os/specs/` for
-individual feature specs.
+individual feature specs. Spec workflow (shape → active updates during implement → freeze):
+`agent-os/specs/README.md` and standing rules in `AGENTS.md`.
 
 ## Stack
 
