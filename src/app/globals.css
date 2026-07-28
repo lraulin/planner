@@ -137,8 +137,30 @@ body {
   --fc-event-border-color: #2a5a8a;
   --fc-event-bg-color: #ffffff;
   --fc-event-text-color: var(--ink);
+  --fc-neutral-text-color: var(--ink-muted);
   height: 100%;
   font-size: 0.8125rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  .schedule-calendar {
+    --fc-page-bg-color: var(--surface);
+    --fc-neutral-bg-color: var(--surface-raised);
+    --fc-border-color: var(--rule);
+    --fc-event-text-color: var(--ink);
+    --fc-neutral-text-color: var(--ink-muted);
+  }
+
+  /* Gold headers stay light; force dark ink so day names stay readable. */
+  .schedule-calendar .fc .fc-col-header-cell {
+    color: #1b1d23;
+  }
+
+  /* Appointments stay as light cards on the dark grid. */
+  .schedule-calendar .fc-appointment {
+    --fc-event-bg-color: #ffffff;
+    --fc-event-text-color: #1b1d23;
+  }
 }
 
 .schedule-calendar .fc {
@@ -152,7 +174,7 @@ body {
 .schedule-calendar .fc .fc-col-header-cell {
   background: linear-gradient(to bottom, #f0d9a0, #e8c878);
   font-weight: 600;
-  color: var(--ink);
+  color: #1b1d23;
 }
 
 .schedule-calendar .fc .fc-timegrid-axis,
@@ -165,6 +187,11 @@ body {
   border-width: 1.5px !important;
   border-radius: 2px;
   box-shadow: 0 1px 1px rgb(0 0 0 / 8%);
+  color: #1b1d23 !important;
+}
+
+.schedule-calendar .fc-appointment .fc-event-title {
+  color: #1b1d23 !important;
 }
 
 .schedule-calendar .fc-appointment-done {
@@ -172,10 +199,16 @@ body {
   text-decoration: line-through;
 }
 
+/* Do not fade Time Chart backgrounds — opacity was killing label contrast. */
+.schedule-calendar .fc-bg-event,
 .schedule-calendar .fc-timechart-bg {
-  opacity: 0.85;
+  opacity: 1;
 }
 
-.schedule-calendar .fc-bg-event {
-  opacity: 0.75;
+.schedule-calendar .fc-bg-event .fc-event-title,
+.schedule-calendar .fc-timechart-bg .fc-event-title {
+  font-weight: 600;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  padding: 2px 4px;
 }

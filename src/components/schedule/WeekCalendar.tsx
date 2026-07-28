@@ -15,6 +15,7 @@ import type {
   EventInput,
 } from "@fullcalendar/core";
 import type { Occurrence } from "@/lib/schedule/recurrence";
+import { contrastText } from "@/lib/schedule/geometry";
 
 type BackgroundEvent = {
   id: string;
@@ -63,18 +64,24 @@ export function WeekCalendar({
   }, [occurrences]);
 
   const events: EventInput[] = useMemo(() => {
-    const bg: EventInput[] = backgroundEvents.map((e) => ({
-      id: e.id,
-      title: e.title,
-      start: e.start,
-      end: e.end,
-      display: "background",
-      backgroundColor: e.backgroundColor,
-      borderColor: e.backgroundColor,
-      textColor: e.textColor,
-      editable: false,
-      classNames: ["fc-timechart-bg"],
-    }));
+    const bg: EventInput[] = backgroundEvents.map((e) => {
+      // Prefer luminance over stored foreColor — FC often ignores textColor on bg events,
+      // and seed/user colors can fail in dark chrome.
+      const label = contrastText(e.backgroundColor);
+      return {
+        id: e.id,
+        title: e.title,
+        start: e.start,
+        end: e.end,
+        display: "background" as const,
+        backgroundColor: e.backgroundColor,
+        borderColor: e.backgroundColor,
+        textColor: label,
+        editable: false,
+        classNames: ["fc-timechart-bg"],
+        extendedProps: { labelColor: label },
+      };
+    });
 
     const appts: EventInput[] = occurrences.map((o) => ({
       id: o.occurrenceKey,
@@ -134,6 +141,17 @@ export function WeekCalendar({
         firstDay={0}
         dayHeaderFormat={{ weekday: "long", month: "short", day: "numeric" }}
         events={events}
+        eventDidMount={(info) => {
+          if (info.event.display !== "background") return;
+          const label =
+            (info.event.extendedProps.labelColor as string | undefined) ??
+            info.event.textColor ??
+            contrastText(String(info.event.backgroundColor ?? "#ccc"));
+          info.el.style.color = label;
+          info.el.style.setProperty("--fc-event-text-color", label);
+          const title = info.el.querySelector<HTMLElement>(".fc-event-title");
+          if (title) title.style.color = label;
+        }}
         select={(arg: DateSelectArg) => {
           onSelectRange(arg.start, arg.end);
           arg.view.calendar.unselect();

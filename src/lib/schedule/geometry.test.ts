@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   atMinutes,
+  contrastText,
   fromDateKey,
   minutesOfDay,
   normalizeTimeRange,
@@ -58,5 +59,14 @@ describe("atMinutes / minutesOfDay", () => {
 describe("sortDays", () => {
   it("dedupes and sorts", () => {
     expect(sortDays([5, 1, 1, 3, 9, -1])).toEqual([1, 3, 5]);
+  });
+});
+
+describe("contrastText", () => {
+  it("uses light text on dark fills and dark text on light fills", () => {
+    expect(contrastText("#000080")).toBe("#f5f5f7");
+    expect(contrastText("#90ee90")).toBe("#1b1d23");
+    expect(contrastText("#c8e0f0")).toBe("#1b1d23");
+    expect(contrastText("#fff")).toBe("#1b1d23");
   });
 });

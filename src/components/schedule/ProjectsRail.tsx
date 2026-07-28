@@ -138,11 +138,14 @@ export function ProjectsRail({ nodes }: Props) {
                   data-project-id={p.id}
                   data-project-name={p.name || "Untitled"}
                   data-duration={duration}
-                  className="mb-0.5 flex cursor-grab items-start gap-1 rounded border border-transparent px-1 py-0.5 hover:border-rule hover:bg-surface active:cursor-grabbing"
+                  className="mb-0.5 flex cursor-grab items-center gap-2 rounded border border-transparent px-1 py-0.5 hover:border-rule hover:bg-surface active:cursor-grabbing"
                   title="Drag onto the week to schedule"
                 >
-                  <TypeIcon type={p.type} className="mt-0.5 shrink-0" />
-                  <span className="min-w-0 flex-1 leading-snug text-ink">
+                  <TypeIcon
+                    type={p.type}
+                    className="h-3.5 w-3.5 flex-none text-ink-faint"
+                  />
+                  <span className="min-w-0 flex-1 truncate leading-snug text-ink">
                     {p.name || "Untitled"}
                   </span>
                 </div>

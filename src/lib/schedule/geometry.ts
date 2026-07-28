@@ -79,3 +79,45 @@ export const WEEKDAYS_ONLY = [1, 2, 3, 4, 5] as const;
 export function sortDays(days: number[]): number[] {
   return [...new Set(days.filter((d) => d >= 0 && d <= 6))].sort((a, b) => a - b);
 }
+
+/**
+ * Pick near-white or near-black label text for a CSS color so Time Chart labels stay
+ * readable on arbitrary area fills (and when FullCalendar ignores `textColor`).
+ */
+export function contrastText(cssColor: string): string {
+  const rgb = parseCssColor(cssColor);
+  if (!rgb) return "#1b1d23";
+  // Relative luminance (sRGB), WCAG-ish.
+  const [r, g, b] = rgb.map((c) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  });
+  const L = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return L < 0.45 ? "#f5f5f7" : "#1b1d23";
+}
+
+function parseCssColor(input: string): [number, number, number] | null {
+  const s = input.trim();
+  const hex = s.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (hex) {
+    let h = hex[1];
+    if (h.length === 3) {
+      h = h
+        .split("")
+        .map((c) => c + c)
+        .join("");
+    }
+    return [
+      parseInt(h.slice(0, 2), 16),
+      parseInt(h.slice(2, 4), 16),
+      parseInt(h.slice(4, 6), 16),
+    ];
+  }
+  const rgb = s.match(
+    /^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})(?:\s*,\s*[\d.]+\s*)?\)$/i,
+  );
+  if (rgb) {
+    return [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])];
+  }
+  return null;
+}
