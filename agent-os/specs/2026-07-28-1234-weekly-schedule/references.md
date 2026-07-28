@@ -1,62 +1,64 @@
 # References for Weekly Schedule
 
-## Similar Implementations
+**Status: frozen / complete** (2026-07-28)
 
-### Tab strip (enable Weekly Schedule)
+## As-built code (primary)
 
-- **Location:** `src/components/shell/TabStrip.tsx`
-- **Relevance:** Schedule tab is currently `built: false` with `href: null`. Flip to
-  `/schedule` like Projects/Tasks.
-- **Key patterns:** built tabs use `Link`; unbuilt stay disabled spans.
+| Area | Path |
+| --- | --- |
+| Schedule route | `src/app/schedule/page.tsx` |
+| Time Chart editor route | `src/app/schedule/time-chart/[chartId]/page.tsx` |
+| Server actions | `src/app/schedule/actions.ts` |
+| Schedule shell + toolbar | `src/components/schedule/ScheduleView.tsx` |
+| Week grid (FC) | `src/components/schedule/WeekCalendar.tsx` |
+| Appointment drawer | `src/components/schedule/AppointmentDrawer.tsx` |
+| Time Chart editor view | `src/components/schedule/TimeChartEditorView.tsx` |
+| Time Chart area panel | `src/components/schedule/TimeChartAreaPanel.tsx` |
+| Projects rail | `src/components/schedule/ProjectsRail.tsx` |
+| Mini-month | `src/components/schedule/MiniMonth.tsx` |
+| Domain | `src/lib/schedule/{queries,mutations,recurrence,geometry,checkState,timeChartTemplate}.ts` |
+| Schema | `src/db/schema.ts` — `timeCharts`, `timeChartAreas`, `appointments` |
+| Migrations | `drizzle/0003_complete_black_knight.sql`, `drizzle/0004_appointment_check.sql` |
+| Seed | `src/db/seed.ts` (Ideal Week + sample appointment) |
+| Tab strip | `src/components/shell/TabStrip.tsx` (`schedule` → `/schedule`) |
+| FC theming | `src/app/globals.css` (`.schedule-calendar`, `.time-chart-editor`) |
+
+## Patterns borrowed (pre-existing)
 
 ### Server actions + multi-user seam
 
 - **Location:** `src/app/outline/actions.ts`, `src/lib/auth.ts`
-- **Relevance:** schedule mutations follow the same `run()` + `{ ok, error }` +
-  `revalidatePath("/", "layout")` + `getCurrentUserId()` pattern.
-- **Key patterns:** never accept `userId` from the client; throw → action error string.
+- **Used as:** `run()` + `{ ok, error }` + `revalidatePath("/", "layout")` +
+  `getCurrentUserId()` — never trust client `userId`.
 
-### Detail drawer
+### Detail drawer (appointments only)
 
-- **Location:** `src/components/detail/Drawer.tsx`, `NodeDetailDrawer.tsx`, `fields.tsx`,
-  `ConfirmDialog.tsx`
-- **Relevance:** appointment and Time Chart area forms reuse Drawer, field primitives, and
-  dirty-close confirm.
-- **Key patterns:** `{open && record && <Form />}`; focus trap; Escape.
+- **Location:** `src/components/detail/Drawer.tsx`, `fields.tsx`, `ConfirmDialog.tsx`
+- **Used as:** appointment create/edit; dirty close. Time Chart editor is **not** a drawer.
 
-### Tree / projects list data
+### Outline / projects data
 
-- **Location:** `src/lib/tree/queries.ts` (`loadOutline`), `src/lib/tree/derive.ts`,
-  `src/components/tabs/ProjectsGrid.tsx` (filtering/grouping ideas)
-- **Relevance:** Projects sidebar needs project (and optional task) rows from the outline
-  tree; `blockSizeMinutes` lives on `project_details`.
+- **Location:** `src/lib/tree/queries.ts` (`loadOutline`)
+- **Used as:** Projects rail list; project drag subject + optional task duration.
 
-### Grid tab page shell
+### Page shell
 
 - **Location:** `src/app/projects/page.tsx`
-- **Relevance:** RSC page loads data with `getCurrentUserId()`, renders `TabStrip` + client
-  view. Schedule page should mirror this.
-
-### Schema conventions
-
-- **Location:** `src/db/schema.ts`
-- **Relevance:** every table has `userId` → `users.id` cascade; enums via `pgEnum`;
-  timestamps with timezone.
+- **Used as:** RSC load + `TabStrip` + client view pattern for `/schedule`.
 
 ## Visuals
 
 | File | What it shows |
 | --- | --- |
-| `visuals/WeeklyScheduleSS.png` | Classic Ideal Week: Time Chart blocks + appointments + project blocks |
+| `visuals/WeeklyScheduleSS.png` | Classic Ideal Week: chart + appointments + project blocks |
 | `visuals/Screenshot … 12.02.41 PM.png` | Empty week chrome, toolbar, mini-months, Projects rail |
-| `visuals/Screenshot … 12.07.30 PM.png` | New Time Chart area form |
-| `visuals/Screenshot … 12.08.11 PM.png` | Label color editor |
-| `visuals/Screenshot … 12.13.56 PM.png` | Chart with multi-day Sleep + pink/green areas |
-| `visuals/Screenshot … 12.17.56–12.18.58` | Appointments over chart; appointment form; recurrence; project drag results |
+| `visuals/Screenshot … 12.07–12.13` | Time Chart area form / multi-day Sleep |
+| `visuals/Screenshot … 12.17–12.18` | Appointments, form, recurrence, project drag |
 
-Also on disk (not copied): `screenshots/schedule/`.
+On disk (gitignored): `screenshots/schedule/`.
 
 ## External
 
-- **FullCalendar Standard (MIT):** timeGridWeek, interaction, background events.
-  Docs: https://fullcalendar.io/docs — **do not** use Premium packages.
+- **FullCalendar Standard v6 (MIT):** `@fullcalendar/react`, `core`, `timegrid`,
+  `interaction`, `daygrid`. **Do not** add Premium packages.
+- Docs: https://fullcalendar.io/docs
