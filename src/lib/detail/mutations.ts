@@ -286,6 +286,33 @@ export async function saveNodeDetail(
 }
 
 /**
+ * Inline edit of a goal's Definition or Range from the Goals grid. Same allowlist path as
+ * `saveNodeDetail`, without requiring a full form draft.
+ */
+export async function setGoalFields(
+  userId: string,
+  nodeId: string,
+  fields: { definition?: string; range?: string },
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    const node = await requireNode(tx, userId, nodeId);
+    if (node.type !== "goal") {
+      throw new Error("Definition and Range are only on goals.");
+    }
+    const set = pick(fields, ["definition", "range"] as const);
+    if (!hasValues(set)) return;
+    await tx
+      .insert(goalDetails)
+      .values({ nodeId, ...set })
+      .onConflictDoUpdate({ target: goalDetails.nodeId, set });
+    await tx
+      .update(nodes)
+      .set({ updatedAt: new Date() })
+      .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+  });
+}
+
+/**
  * Whether a picked payload has anything to write.
  *
  * A form that touched no side-table field — or one whose values were all outside the

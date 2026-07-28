@@ -29,7 +29,7 @@ async function run<T>(work: (userId: string) => Promise<T>): Promise<ActionResul
   try {
     const userId = await getCurrentUserId();
     const result = await work(userId);
-    revalidatePath("/outline");
+    revalidatePath("/", "layout");
     return typeof result === "string" ? { ok: true, id: result } : { ok: true };
   } catch (error) {
     return { ok: false, error: message(error) };
@@ -62,6 +62,15 @@ export async function saveNodeDetailAction(
   values: NodeDetailValues,
 ): Promise<ActionResult> {
   return run((userId) => detail.saveNodeDetail(userId, nodeId, values));
+}
+
+/** Goals grid: inline Definition / Range without a full drawer save. */
+export async function setGoalFieldAction(
+  nodeId: string,
+  field: "definition" | "range",
+  value: string,
+): Promise<ActionResult> {
+  return run((userId) => detail.setGoalFields(userId, nodeId, { [field]: value }));
 }
 
 export async function createNodeItemAction(params: {

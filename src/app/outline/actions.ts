@@ -18,7 +18,9 @@ async function run<T>(work: (userId: string) => Promise<T>): Promise<ActionResul
   try {
     const userId = await getCurrentUserId();
     const result = await work(userId);
-    revalidatePath("/outline");
+    // Layout-wide: mutations from /projects, /tasks, etc. must refresh the page the user
+    // is actually on, not only /outline.
+    revalidatePath("/", "layout");
     return typeof result === "string" ? { ok: true, id: result } : { ok: true };
   } catch (error) {
     return {

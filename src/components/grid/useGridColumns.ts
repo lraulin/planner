@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import type { ColumnDef } from "./columns";
 
 type StoredLayout = {
@@ -34,10 +34,24 @@ function writeStored(tabId: string, layout: StoredLayout) {
   }
 }
 
+function resolveOrder(
+  tabId: string,
+  knownIds: Set<string>,
+  validDefault: string[],
+): string[] {
+  const stored = readStored(tabId);
+  if (!stored) return validDefault;
+  const cleaned = stored.order.filter((id) => knownIds.has(id));
+  return cleaned.length > 0 ? cleaned : validDefault;
+}
+
 /**
  * Visible column ids + order for a tab, persisted to `localStorage`. Falls back to the
  * view preset (`defaultOrder`) when nothing is stored or the stored ids no longer match
  * the available set.
+ *
+ * Storage is read through `useSyncExternalStore` so the server and first paint agree on
+ * the preset, then the client adopts any saved layout without an effect.
  */
 export function useGridColumns<TCtx>(
   tabId: string,
@@ -50,25 +64,47 @@ export function useGridColumns<TCtx>(
     return map;
   }, [allColumns]);
 
+  const knownIds = useMemo(() => new Set(byId.keys()), [byId]);
+
   const validDefault = useMemo(
-    () => defaultOrder.filter((id) => byId.has(id)),
-    [defaultOrder, byId],
+    () => defaultOrder.filter((id) => knownIds.has(id)),
+    [defaultOrder, knownIds],
   );
 
-  const [order, setOrder] = useState<string[]>(() => {
-    const stored = readStored(tabId);
-    if (!stored) return validDefault;
-    const cleaned = stored.order.filter((id) => byId.has(id));
-    return cleaned.length > 0 ? cleaned : validDefault;
-  });
+  const defaultKey = validDefault.join("\0");
+  const knownKey = Array.from(knownIds).sort().join("\0");
+
+  const storedKey = useSyncExternalStore(
+    () => () => {},
+    () => resolveOrder(tabId, knownIds, validDefault).join("\0"),
+    () => defaultKey,
+  );
+
+  // Re-read when the available column set or preset changes (view switch).
+  void knownKey;
+
+  const storedOrder = useMemo(
+    () => (storedKey ? storedKey.split("\0").filter(Boolean) : validDefault),
+    [storedKey, validDefault],
+  );
+
+  /** Session overrides after Show Fields edits, keyed by tab id. */
+  const [overrides, setOverrides] = useState<Record<string, string[]>>({});
+  const [revision, setRevision] = useState(0);
+
+  const order = overrides[tabId] ?? storedOrder;
 
   const persist = useCallback(
     (next: string[]) => {
-      setOrder(next);
+      setOverrides((current) => ({ ...current, [tabId]: next }));
       writeStored(tabId, { order: next });
+      setRevision((n) => n + 1);
     },
     [tabId],
   );
+
+  // Touch revision so a write is visible even if overrides already matched.
+  void revision;
 
   const columns = useMemo(
     () => order.map((id) => byId.get(id)).filter(Boolean) as ColumnDef<TCtx>[],
