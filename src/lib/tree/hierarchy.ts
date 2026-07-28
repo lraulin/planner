@@ -42,6 +42,24 @@ export const STATE_LABELS: Record<NodeState, string> = {
   proposed: "Proposed",
 };
 
+/**
+ * The two-letter codes Achieve prints in the State column of its Projects and Tasks grids,
+ * where a full label would cost more width than the column has.
+ *
+ * Distinct from the derived scheduling Status beside it — see `status.ts`.
+ */
+export const STATE_CODES: Record<NodeState, string> = {
+  not_started: "NS",
+  in_progress: "IP",
+  waiting: "W",
+  completed: "C",
+  postponed: "P",
+  delegated: "D",
+  should_delegate: "SD",
+  cancelled: "Cn",
+  proposed: "PR",
+};
+
 /** The same list as `{ value, label }` pairs, for `<select>` and the form fields. */
 export const STATE_OPTIONS: { value: NodeState; label: string }[] = (
   Object.keys(STATE_LABELS) as NodeState[]

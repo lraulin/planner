@@ -23,6 +23,20 @@ export type OutlineRow = {
   contexts: string[] | null;
   color: string | null;
   category: string | null;
+  /**
+   * Scheduling dates, merged across the type-specific tables so the grid has one source
+   * per column: a project's come from `project_details`, a task's from `task_details`,
+   * and every other type has none.
+   */
+  targetStart: Date | null;
+  targetEnd: Date | null;
+  /** Project fields, for the Tasks tab's purpose panel and the Delegation view. */
+  purpose: string;
+  assignedTo: string;
+  /** Goal fields, for the Goals tab's own columns. */
+  definition: string;
+  range: string;
+  isDream: boolean;
 };
 
 /** A row plus everything derived from its position in the tree. */

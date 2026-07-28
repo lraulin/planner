@@ -1,36 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { derive } from "./derive";
 import { formatEffort } from "./format";
-import type { OutlineRow } from "./types";
-
-let counter = 0;
-
-function row(
-  partial: Partial<OutlineRow> & Pick<OutlineRow, "id" | "type">,
-): OutlineRow {
-  return {
-    parentId: null,
-    name: `node-${counter++}`,
-    sortKey: "V",
-    priorityLetter: null,
-    priorityRank: null,
-    state: "not_started",
-    deadline: null,
-    focus: false,
-    collapsed: false,
-    notes: "",
-    completedAt: null,
-    depth: 0,
-    effortMinutes: null,
-    effortLeftMinutes: null,
-    actualEffortMinutes: 0,
-    percentComplete: 0,
-    contexts: [],
-    color: null,
-    category: null,
-    ...partial,
-  };
-}
+import { row } from "./fixtures";
 
 describe("derive — inherited priority (L.A.P.)", () => {
   it("uses the node's own priority when it has one", () => {

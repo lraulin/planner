@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { assertCanNest, canNest, defaultChildType } from "./hierarchy";
+import {
+  assertCanNest,
+  canNest,
+  defaultChildType,
+  STATE_CODES,
+  STATE_LABELS,
+} from "./hierarchy";
+import { nodeStateEnum } from "@/db/schema";
 
 describe("hierarchy", () => {
   it("puts result areas only at the top level", () => {
@@ -56,5 +63,20 @@ describe("hierarchy", () => {
     for (const parent of [null, "result_area", "goal", "project", "task"] as const) {
       expect(canNest(defaultChildType(parent), parent)).toBe(true);
     }
+  });
+});
+
+describe("state vocabulary", () => {
+  // Widening nodeStateEnum must not leave the grid printing an empty cell.
+  it("labels and codes every state", () => {
+    for (const state of nodeStateEnum.enumValues) {
+      expect(STATE_LABELS[state]).toBeTruthy();
+      expect(STATE_CODES[state]).toBeTruthy();
+    }
+  });
+
+  it("keeps the codes distinct", () => {
+    const codes = Object.values(STATE_CODES);
+    expect(new Set(codes).size).toBe(codes.length);
   });
 });
