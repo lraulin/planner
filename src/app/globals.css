@@ -124,3 +124,58 @@ body {
   outline: 2px solid var(--select-edge);
   outline-offset: -2px;
 }
+
+/* ── Weekly Schedule (FullCalendar Standard) ─────────────────────────────── */
+
+.schedule-calendar {
+  --fc-border-color: var(--rule);
+  --fc-page-bg-color: #faf8e8;
+  --fc-neutral-bg-color: var(--surface-raised);
+  --fc-list-event-hover-bg-color: var(--select);
+  --fc-today-bg-color: color-mix(in srgb, var(--select) 35%, transparent);
+  --fc-now-indicator-color: #e67e22;
+  --fc-event-border-color: #2a5a8a;
+  --fc-event-bg-color: #ffffff;
+  --fc-event-text-color: var(--ink);
+  height: 100%;
+  font-size: 0.8125rem;
+}
+
+.schedule-calendar .fc {
+  height: 100%;
+}
+
+.schedule-calendar .fc .fc-timegrid-slot {
+  height: 1.75rem;
+}
+
+.schedule-calendar .fc .fc-col-header-cell {
+  background: linear-gradient(to bottom, #f0d9a0, #e8c878);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.schedule-calendar .fc .fc-timegrid-axis,
+.schedule-calendar .fc .fc-timegrid-slot-label {
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.schedule-calendar .fc-appointment {
+  border-width: 1.5px !important;
+  border-radius: 2px;
+  box-shadow: 0 1px 1px rgb(0 0 0 / 8%);
+}
+
+.schedule-calendar .fc-appointment-done {
+  opacity: 0.65;
+  text-decoration: line-through;
+}
+
+.schedule-calendar .fc-timechart-bg {
+  opacity: 0.85;
+}
+
+.schedule-calendar .fc-bg-event {
+  opacity: 0.75;
+}

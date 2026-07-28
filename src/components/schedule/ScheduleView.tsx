@@ -1,0 +1,341 @@
+"use client";
+
+import { useCallback, useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import type { Appointment, TimeChart, TimeChartArea } from "@/db/schema";
+import type { OutlineNode } from "@/lib/tree/types";
+import type { SchedulePayload } from "@/lib/schedule/queries";
+import type { Occurrence } from "@/lib/schedule/recurrence";
+import { fromDateKey, startOfWeek, toDateKey, weekDays } from "@/lib/schedule/geometry";
+import {
+  createAppointmentAction,
+  createTimeChartAction,
+  deleteAppointmentAction,
+  duplicateAppointmentAction,
+  rescheduleAppointmentAction,
+} from "@/app/schedule/actions";
+import { WeekCalendar } from "./WeekCalendar";
+import { ProjectsRail } from "./ProjectsRail";
+import { AppointmentDrawer } from "./AppointmentDrawer";
+import { TimeChartEditor } from "./TimeChartEditor";
+import { MiniMonth } from "./MiniMonth";
+
+type Props = {
+  initial: SchedulePayload;
+  nodes: OutlineNode[];
+  weekKey: string;
+};
+
+export type DraftAppointment = {
+  id?: string;
+  subject: string;
+  startAt: Date;
+  endAt: Date;
+  projectId?: string | null;
+};
+
+export function ScheduleView({ initial, nodes, weekKey }: Props) {
+  const router = useRouter();
+  const [, startTransition] = useTransition();
+
+  const [charts, setCharts] = useState<TimeChart[]>(initial.charts);
+  const [selectedChartId, setSelectedChartId] = useState<string | null>(
+    initial.selectedChartId,
+  );
+  const [areas, setAreas] = useState<TimeChartArea[]>(initial.areas);
+  const [backgroundEvents, setBackgroundEvents] = useState(initial.backgroundEvents);
+  const [occurrences, setOccurrences] = useState<Occurrence[]>(initial.occurrences);
+  const [masters, setMasters] = useState<Appointment[]>(initial.appointments);
+
+  // Sync when server revalidates (router.refresh). RSC serializes Dates as ISO strings.
+  useEffect(() => {
+    setCharts(initial.charts);
+    setSelectedChartId(initial.selectedChartId);
+    setAreas(initial.areas);
+    setBackgroundEvents(
+      initial.backgroundEvents.map((e) => ({
+        ...e,
+        start: new Date(e.start),
+        end: new Date(e.end),
+      })),
+    );
+    setOccurrences(
+      initial.occurrences.map((o) => ({
+        ...o,
+        startAt: new Date(o.startAt),
+        endAt: new Date(o.endAt),
+      })),
+    );
+    setMasters(
+      initial.appointments.map((a) => ({
+        ...a,
+        startAt: new Date(a.startAt),
+        endAt: new Date(a.endAt),
+        recurrenceUntil: a.recurrenceUntil ? new Date(a.recurrenceUntil) : null,
+        createdAt: new Date(a.createdAt),
+        updatedAt: new Date(a.updatedAt),
+      })),
+    );
+  }, [initial]);
+
+  const weekStart = fromDateKey(weekKey);
+  const days = weekDays(weekStart);
+
+  const [editingAppointment, setEditingAppointment] = useState<
+    Appointment | DraftAppointment | null
+  >(null);
+  const [chartEditorOpen, setChartEditorOpen] = useState(false);
+
+  const navigateWeek = useCallback(
+    (next: Date) => {
+      const key = toDateKey(startOfWeek(next, 0));
+      const chart = selectedChartId ? `&chart=${selectedChartId}` : "";
+      router.push(`/schedule?week=${key}${chart}`);
+    },
+    [router, selectedChartId],
+  );
+
+  const selectChart = useCallback(
+    (id: string) => {
+      setSelectedChartId(id);
+      const chart = id ? `&chart=${id}` : "";
+      router.push(`/schedule?week=${weekKey}${chart}`);
+    },
+    [router, weekKey],
+  );
+
+  const refresh = useCallback(() => {
+    startTransition(() => router.refresh());
+  }, [router]);
+
+  async function handleCreateRange(start: Date, end: Date) {
+    setEditingAppointment({
+      subject: "",
+      startAt: start,
+      endAt: end,
+    });
+  }
+
+  async function handleEventDrop(
+    id: string,
+    start: Date,
+    end: Date,
+    opts: { duplicate: boolean },
+  ) {
+    if (opts.duplicate) {
+      const result = await duplicateAppointmentAction(
+        id,
+        start.toISOString(),
+        end.toISOString(),
+      );
+      if (!result.ok) {
+        alert(result.error);
+        return;
+      }
+    } else {
+      const result = await rescheduleAppointmentAction(
+        id,
+        start.toISOString(),
+        end.toISOString(),
+        true,
+      );
+      if (!result.ok) {
+        alert(result.error);
+        return;
+      }
+    }
+    refresh();
+  }
+
+  async function handleExternalProjectDrop(
+    projectId: string,
+    projectName: string,
+    start: Date,
+    durationMinutes: number,
+  ) {
+    const end = new Date(start.getTime() + durationMinutes * 60_000);
+    const result = await createAppointmentAction({
+      subject: projectName,
+      startAt: start.toISOString(),
+      endAt: end.toISOString(),
+      projectId,
+    });
+    if (!result.ok) {
+      alert(result.error);
+      return;
+    }
+    refresh();
+  }
+
+  function openOccurrence(occ: Occurrence) {
+    const master = masters.find((m) => m.id === occ.id);
+    if (master) {
+      setEditingAppointment(master);
+    } else {
+      setEditingAppointment({
+        id: occ.id,
+        subject: occ.subject,
+        startAt: occ.startAt,
+        endAt: occ.endAt,
+        projectId: occ.projectId,
+      });
+    }
+  }
+
+  async function handleNewChart() {
+    const name = window.prompt("Time Chart name", "New Time Chart");
+    if (name == null) return;
+    const result = await createTimeChartAction(name);
+    if (!result.ok) {
+      alert(result.error);
+      return;
+    }
+    if (result.id) selectChart(result.id);
+    else refresh();
+  }
+
+  async function handleDeleteAppointment(id: string) {
+    const result = await deleteAppointmentAction(id);
+    if (!result.ok) {
+      alert(result.error);
+      return;
+    }
+    setEditingAppointment(null);
+    refresh();
+  }
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col bg-surface">
+      {/* Toolbar — Achieve's Time Chart / Today bar */}
+      <div className="flex flex-none flex-wrap items-center gap-2 border-b border-rule bg-shell px-3 py-1.5 text-[0.8125rem]">
+        <label className="flex items-center gap-1.5 text-ink-muted">
+          Time Chart:
+          <select
+            className="rounded border border-rule bg-surface px-2 py-1 text-ink"
+            value={selectedChartId ?? ""}
+            onChange={(e) => selectChart(e.target.value)}
+          >
+            {charts.length === 0 && <option value="">(none)</option>}
+            {charts.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name || "Untitled"}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          className="rounded border border-rule bg-surface px-2 py-1 text-ink hover:bg-surface-raised disabled:opacity-40"
+          disabled={!selectedChartId}
+          onClick={() => setChartEditorOpen(true)}
+        >
+          Edit Time Chart…
+        </button>
+        <button
+          type="button"
+          className="rounded border border-rule bg-surface px-2 py-1 text-ink hover:bg-surface-raised"
+          onClick={handleNewChart}
+        >
+          New Time Chart…
+        </button>
+        <button
+          type="button"
+          className="rounded border border-rule bg-surface px-2 py-1 text-ink hover:bg-surface-raised"
+          onClick={() => navigateWeek(new Date())}
+        >
+          Today
+        </button>
+        <div className="ml-auto flex items-center gap-1">
+          <button
+            type="button"
+            aria-label="Previous week"
+            className="rounded border border-rule bg-surface px-2 py-1 text-ink hover:bg-surface-raised"
+            onClick={() => {
+              const d = new Date(weekStart);
+              d.setDate(d.getDate() - 7);
+              navigateWeek(d);
+            }}
+          >
+            ‹
+          </button>
+          <span className="min-w-[12rem] text-center tabular text-ink">
+            {days[0].toLocaleDateString(undefined, {
+              month: "short",
+              day: "numeric",
+            })}
+            {" – "}
+            {days[6].toLocaleDateString(undefined, {
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+            })}
+          </span>
+          <button
+            type="button"
+            aria-label="Next week"
+            className="rounded border border-rule bg-surface px-2 py-1 text-ink hover:bg-surface-raised"
+            onClick={() => {
+              const d = new Date(weekStart);
+              d.setDate(d.getDate() + 7);
+              navigateWeek(d);
+            }}
+          >
+            ›
+          </button>
+        </div>
+      </div>
+
+      <div className="flex min-h-0 flex-1">
+        <div className="min-h-0 min-w-0 flex-1">
+          <WeekCalendar
+            weekStart={weekStart}
+            backgroundEvents={backgroundEvents}
+            occurrences={occurrences}
+            onSelectRange={handleCreateRange}
+            onEventClick={openOccurrence}
+            onEventDrop={handleEventDrop}
+            onExternalDrop={handleExternalProjectDrop}
+          />
+        </div>
+
+        <aside className="flex w-56 flex-none flex-col border-l border-rule bg-shell">
+          <div className="border-b border-rule p-2">
+            <MiniMonth
+              month={weekStart}
+              selected={weekStart}
+              onSelectDay={(d) => navigateWeek(d)}
+              onChangeMonth={(d) => navigateWeek(d)}
+            />
+          </div>
+          <ProjectsRail nodes={nodes} />
+        </aside>
+      </div>
+
+      <AppointmentDrawer
+        open={editingAppointment != null}
+        value={editingAppointment}
+        nodes={nodes}
+        onClose={() => setEditingAppointment(null)}
+        onSaved={() => {
+          setEditingAppointment(null);
+          refresh();
+        }}
+        onDelete={handleDeleteAppointment}
+      />
+
+      {selectedChartId && (
+        <TimeChartEditor
+          open={chartEditorOpen}
+          chartId={selectedChartId}
+          chartName={charts.find((c) => c.id === selectedChartId)?.name ?? ""}
+          areas={areas}
+          nodes={nodes}
+          onClose={() => setChartEditorOpen(false)}
+          onChanged={() => {
+            refresh();
+          }}
+        />
+      )}
+    </div>
+  );
+}

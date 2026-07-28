@@ -35,8 +35,10 @@ The core Achieve Planner loop — plan the week, block the time, work the outlin
 
 ### Still in Phase 1
 
-- **Weekly calendar + time blocking.** Week grid; projects/tasks scheduled into blocks;
-  estimated vs actual duration.
+- **Weekly calendar + time blocking.** `specs/2026-07-28-1234-weekly-schedule` — Week grid
+  (FullCalendar Standard), Time Chart background, appointments with recurrence, project
+  drag-to-schedule. Estimated vs actual duration analysis and the guided weekly planning
+  wizard remain separate.
 - **Weekly planning workflow.** Guided weekly review: pick goals, pull tasks from the
   master list, block them onto the week.
 - **Outline drag-to-reorder** (carried from the outline spec).

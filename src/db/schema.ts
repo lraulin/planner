@@ -65,6 +65,30 @@ export const taskConstraintEnum = pgEnum("task_constraint", [
   "must_finish_on",
 ]);
 
+/** Free/busy style for appointments — named for later Google Calendar mapping. */
+export const showAsEnum = pgEnum("show_as", [
+  "busy",
+  "free",
+  "tentative",
+  "out_of_office",
+]);
+
+/** How an appointment repeats. `none` is a single instance. */
+export const recurrenceFrequencyEnum = pgEnum("recurrence_frequency", [
+  "none",
+  "daily",
+  "weekly",
+  "monthly",
+  "yearly",
+]);
+
+/** How a recurring series ends. */
+export const recurrenceEndEnum = pgEnum("recurrence_end", [
+  "never",
+  "count",
+  "until",
+]);
+
 /** Achieve's project Sensitivity field. Carried for parity; nothing keys off it yet. */
 export const sensitivityEnum = pgEnum("sensitivity", [
   "normal",
@@ -432,6 +456,106 @@ export const nodeItems = pgTable(
   ],
 );
 
+/**
+ * A named weekly template (Achieve's "Time Chart") — e.g. "Ideal Week". Areas on the
+ * chart paint the background of the Weekly Schedule; they are not appointments.
+ */
+export const timeCharts = pgTable(
+  "time_charts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("time_charts_user_idx").on(table.userId)],
+);
+
+/**
+ * One block on a Time Chart. `daysOfWeek` is 0=Sunday … 6=Saturday (JS getDay()).
+ * Multi-day is intentional — one row can cover Mon–Fri without Ctrl+drag duplicates.
+ *
+ * Times are minutes from midnight (0–1439 start; duration may span past midnight for
+ * overnight blocks like Sleep).
+ */
+export const timeChartAreas = pgTable(
+  "time_chart_areas",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    timeChartId: uuid("time_chart_id")
+      .notNull()
+      .references(() => timeCharts.id, { onDelete: "cascade" }),
+    name: text("name").notNull().default(""),
+    resultAreaId: uuid("result_area_id").references(() => nodes.id, {
+      onDelete: "set null",
+    }),
+    /** 0=Sun … 6=Sat. Empty array is treated as no days (hidden). */
+    daysOfWeek: smallint("days_of_week").array().notNull().default([]),
+    startMinute: integer("start_minute").notNull().default(0),
+    durationMinutes: integer("duration_minutes").notNull().default(60),
+    labelEnabled: boolean("label_enabled").notNull().default(true),
+    foreColor: text("fore_color").notNull().default("#1b1d23"),
+    backColor: text("back_color").notNull().default("#c8e0f0"),
+    description: text("description").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("time_chart_areas_chart_idx").on(table.userId, table.timeChartId),
+  ],
+);
+
+/**
+ * A real calendar event — free-floating or linked to a project. Recurrence fields are
+ * stored on the series master; occurrences for a visible week are expanded in pure code
+ * rather than materialised as rows.
+ */
+export const appointments = pgTable(
+  "appointments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    subject: text("subject").notNull().default(""),
+    location: text("location").notNull().default(""),
+    startAt: timestamp("start_at", { withTimezone: true }).notNull(),
+    endAt: timestamp("end_at", { withTimezone: true }).notNull(),
+    allDay: boolean("all_day").notNull().default(false),
+    completed: boolean("completed").notNull().default(false),
+    /** Minutes before start; null = no reminder. */
+    reminderMinutes: integer("reminder_minutes"),
+    showAs: showAsEnum("show_as").notNull().default("busy"),
+    priorityLetter: priorityLetterEnum("priority_letter"),
+    priorityRank: smallint("priority_rank"),
+    projectId: uuid("project_id").references(() => nodes.id, { onDelete: "set null" }),
+    notes: text("notes").notNull().default(""),
+    contexts: text("contexts").array().notNull().default([]),
+    private: boolean("private").notNull().default(false),
+    recurrenceFrequency: recurrenceFrequencyEnum("recurrence_frequency")
+      .notNull()
+      .default("none"),
+    recurrenceInterval: integer("recurrence_interval").notNull().default(1),
+    /** For weekly recurrence: 0=Sun … 6=Sat. Null/empty → use start_at's weekday. */
+    recurrenceByWeekday: smallint("recurrence_by_weekday").array(),
+    recurrenceEnd: recurrenceEndEnum("recurrence_end").notNull().default("never"),
+    recurrenceCount: integer("recurrence_count"),
+    recurrenceUntil: timestamp("recurrence_until", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("appointments_user_range_idx").on(table.userId, table.startAt, table.endAt),
+    index("appointments_user_project_idx").on(table.userId, table.projectId),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type Node = typeof nodes.$inferSelect;
 export type NewNode = typeof nodes.$inferInsert;
@@ -441,6 +565,10 @@ export type ProjectDetails = typeof projectDetails.$inferSelect;
 export type GoalDetails = typeof goalDetails.$inferSelect;
 export type NodeItem = typeof nodeItems.$inferSelect;
 export type NewNodeItem = typeof nodeItems.$inferInsert;
+export type TimeChart = typeof timeCharts.$inferSelect;
+export type TimeChartArea = typeof timeChartAreas.$inferSelect;
+export type Appointment = typeof appointments.$inferSelect;
+export type NewAppointment = typeof appointments.$inferInsert;
 export type NodeType = (typeof nodeTypeEnum.enumValues)[number];
 export type PriorityLetter = (typeof priorityLetterEnum.enumValues)[number];
 export type NodeState = (typeof nodeStateEnum.enumValues)[number];
@@ -448,3 +576,6 @@ export type Sensitivity = (typeof sensitivityEnum.enumValues)[number];
 export type NodeItemKind = (typeof nodeItemKindEnum.enumValues)[number];
 export type ProgressReview = (typeof progressReviewEnum.enumValues)[number];
 export type TaskConstraint = (typeof taskConstraintEnum.enumValues)[number];
+export type ShowAs = (typeof showAsEnum.enumValues)[number];
+export type RecurrenceFrequency = (typeof recurrenceFrequencyEnum.enumValues)[number];
+export type RecurrenceEnd = (typeof recurrenceEndEnum.enumValues)[number];

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import type { OutlineNode } from "@/lib/tree/types";
 import type { PriorityLetter } from "@/db/schema";
 import { formatPriority, parsePriority } from "@/lib/tree/format";
-import { WISH_TYPE_CODES, type WishListRow } from "@/lib/detail/wishQueries";
+import { WISH_TYPE_CODES, type WishListRow } from "@/lib/detail/wishTypes";
 import { updateNodeItemAction } from "@/app/outline/detail-actions";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import { ErrorBanner, TabToolbar, ToolbarButton, ToolbarSelect } from "./tabChrome";

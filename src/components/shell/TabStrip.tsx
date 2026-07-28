@@ -10,7 +10,7 @@ const TABS = [
   { id: "tasks", label: "Tasks", href: "/tasks", built: true },
   { id: "goals", label: "Goals", href: "/goals", built: true },
   { id: "wishes", label: "Wish List", href: "/wishes", built: true },
-  { id: "schedule", label: "Weekly Schedule", href: null, built: false },
+  { id: "schedule", label: "Weekly Schedule", href: "/schedule", built: true },
   { id: "notes", label: "Notes", href: null, built: false },
 ] as const;
 
