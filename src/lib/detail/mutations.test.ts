@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/db";
-import { nodes, users } from "@/db/schema";
+import { goalDetails, nodes, users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { createNode } from "@/lib/tree/mutations";
 import {
@@ -54,6 +54,7 @@ afterAll(async () => {
 describeDb("detail mutations", () => {
   let userId: string;
   let areaId: string;
+  let goalId: string;
   let projectId: string;
 
   beforeEach(async () => {
@@ -64,6 +65,12 @@ describeDb("detail mutations", () => {
       type: "result_area",
       name: "Career",
     });
+    goalId = await createNode({
+      userId,
+      parentId: areaId,
+      type: "goal",
+      name: "Run a half marathon",
+    });
     projectId = await createNode({
       userId,
       parentId: areaId,
@@ -71,6 +78,16 @@ describeDb("detail mutations", () => {
       name: "Rebuild the planner",
     });
   });
+
+  /** The core half of a save, for tests that only care about the side table. */
+  const core = {
+    priorityLetter: null,
+    priorityRank: null,
+    state: "not_started" as const,
+    deadline: null,
+    focus: false,
+    notes: "",
+  };
 
   it("saves core fields and the side table together", async () => {
     await saveNodeDetail(userId, areaId, {
@@ -168,6 +185,106 @@ describeDb("detail mutations", () => {
 
     await saveNodeDetail(userId, projectId, { ...base, state: "in_progress" });
     expect(await completedAtOf(projectId)).toBeNull();
+  });
+
+  it("saves goal fields, including the Dream flag", async () => {
+    await saveNodeDetail(userId, goalId, {
+      ...core,
+      name: "Run a half marathon",
+      goal: {
+        isDream: true,
+        range: "1-Year",
+        vision: "Crossing the line still able to walk.",
+        progressReview: "weekly",
+        contexts: ["@outside"],
+      },
+    });
+
+    const detail = await loadNodeDetail(userId, goalId);
+    expect(detail?.goal?.isDream).toBe(true);
+    expect(detail?.goal?.range).toBe("1-Year");
+    expect(detail?.goal?.vision).toBe("Crossing the line still able to walk.");
+    expect(detail?.goal?.progressReview).toBe("weekly");
+    expect(detail?.goal?.contexts).toEqual(["@outside"]);
+  });
+
+  it("saves the wider task fields", async () => {
+    const taskId = await createNode({
+      userId,
+      parentId: projectId,
+      type: "task",
+      name: "Draft the outline",
+    });
+
+    await saveNodeDetail(userId, taskId, {
+      ...core,
+      name: "Draft the outline",
+      // One field from each group the Task form added, so a dropped allowlist entry shows up.
+      task: {
+        milestone: true,
+        constraint: "must_finish_on",
+        wbs: "1.2.3",
+        durationMinutes: 90,
+        costLow: "125.50",
+        company: "ACME",
+      },
+    });
+
+    const detail = await loadNodeDetail(userId, taskId);
+    expect(detail?.task?.milestone).toBe(true);
+    expect(detail?.task?.constraint).toBe("must_finish_on");
+    expect(detail?.task?.wbs).toBe("1.2.3");
+    expect(detail?.task?.durationMinutes).toBe(90);
+    expect(detail?.task?.costLow).toBe("125.50");
+    expect(detail?.task?.company).toBe("ACME");
+  });
+
+  it("accepts one of the states Achieve has that we did not", async () => {
+    await saveNodeDetail(userId, goalId, {
+      ...core,
+      name: "Run a half marathon",
+      state: "should_delegate",
+    });
+
+    expect((await loadNodeDetail(userId, goalId))?.state).toBe("should_delegate");
+  });
+
+  it("writes nothing when a goal is sent another type's side table", async () => {
+    await saveNodeDetail(userId, goalId, {
+      ...core,
+      name: "Run a half marathon",
+      project: { company: "Should not be saved" },
+      task: { wbs: "9.9.9" },
+    });
+
+    const detail = await loadNodeDetail(userId, goalId);
+    expect(detail?.project).toBeNull();
+    expect(detail?.task).toBeNull();
+  });
+
+  /**
+   * The seed inserts nodes straight into the table rather than going through `createNode`,
+   * so its rows have no side-table row to update. The first save has to create one.
+   */
+  it("creates the side table row when a node was inserted without one", async () => {
+    await db.delete(goalDetails).where(eq(goalDetails.nodeId, goalId));
+    expect((await loadNodeDetail(userId, goalId))?.goal).toBeNull();
+
+    await saveNodeDetail(userId, goalId, {
+      ...core,
+      name: "Run a half marathon",
+      goal: { range: "3-Year" },
+    });
+
+    expect((await loadNodeDetail(userId, goalId))?.goal?.range).toBe("3-Year");
+  });
+
+  it("saves a record that touches no side table at all", async () => {
+    // A form where only the name changed sends an empty side table. An empty SQL update is
+    // an error, so this has to be skipped rather than attempted.
+    await saveNodeDetail(userId, goalId, { ...core, name: "Renamed only" });
+
+    expect((await loadNodeDetail(userId, goalId))?.name).toBe("Renamed only");
   });
 
   it("refuses to save a record belonging to another user", async () => {
