@@ -206,7 +206,8 @@ Where the build diverged from this plan. Recorded after the fact, on 2026-07-27.
   while the database holds nothing but sample data; see `README.md`.
 
 - **Drag-and-drop reordering is still deferred**, as scoped. Keyboard (`Alt+↑`/`Alt+↓`) and
-  the toolbar cover reordering.
+  the toolbar cover reordering. _(Superseded — delivered 2026-07-28; see the change section
+  at the end of this file.)_
 
 - **Effort entry was missing and added afterwards.** The plan's Task 5 listed Effort as a
   displayed column and never as an editable one, so the feature shipped with effort
@@ -217,3 +218,31 @@ Where the build diverged from this plan. Recorded after the fact, on 2026-07-27.
   `/agent-os:discover-standards`. Instead, two standards were adapted from Lee's
   `wrcs/reactwrcs` project — see `agent-os/standards/components/`. Discovery against this
   codebase's own conventions is still worth doing later.
+
+## Change: drag-to-reorder (2026-07-28)
+
+Closes the one piece this spec deferred. Small enough to land as a change section rather
+than its own spec folder; the decisions below are the durable part.
+
+**What shipped.** Outline rows are draggable onto and between each other. A drop resolves
+by which third of the target row the pointer is over: the top and bottom thirds insert
+beside it, the middle third drops it in as a child.
+
+**Decisions worth keeping:**
+
+| Decision                                                                                       | Why                                                                                                                                                                                                                                                                                                                   |
+| ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Drop resolution is a pure function (`src/lib/tree/dnd.ts`), not logic inside the drag handlers | The gesture is ambiguous — a line under a row could mean "next sibling", "first child of the row above", or "sibling of an ancestor" — and `LEGAL_PARENTS` rules most readings out on any given drop. One tested function decides, and the indicator can then be drawn at the depth the node will _actually_ land at. |
+| The gap under an **open** parent means "first child", not "next sibling"                       | That gap sits directly above the parent's own children, so the sibling reading contradicts what the user sees. Under a collapsed or childless row the plain reading stands.                                                                                                                                           |
+| An illegal level **snaps out to the nearest ancestor that will have it** rather than refusing  | Dragging a Result Area over a deep task has exactly one legal meaning — the top level — so the drop line jumps there instead of showing a no-drop cursor. Without it, a Result Area could never be dragged at all.                                                                                                    |
+| The middle third falls back to a sibling placement when a row cannot host the node             | Otherwise the centre of most rows is a dead zone. The indicator switches from a ring to a line, so it still tells the truth.                                                                                                                                                                                          |
+| No optimistic patch on drop                                                                    | A move changes depth, sibling order and effort rollups at once. Re-deriving that on the client would duplicate `lib/tree/derive`; the server round-trip `apply` already does is the honest answer.                                                                                                                    |
+| `draggable` is armed on `mousedown`, not left on                                               | Every row carries priority, effort and deadline `<input>`s. A permanently draggable row steals the click-and-drag that selects text inside them.                                                                                                                                                                      |
+| Drag lives in `DataGrid` behind an opt-in `rowDrag` prop                                       | The gesture is generic; the meaning is not. The grid owns zones, hover state and the indicator; the outline owns resolution and the move. Other tabs pass nothing and are unchanged.                                                                                                                                  |
+
+**Also:** dropping into a collapsed row expands it, so the node does not appear to vanish.
+`moveNode` in `src/lib/tree/mutations.ts` already existed for indent/outdent and was reused
+as-is — the only new server surface is `moveNodeAction`.
+
+**Not covered:** multi-select drag, drag between tabs, auto-scroll when dragging past the
+edge of a long outline, and spring-loaded expand on hover.

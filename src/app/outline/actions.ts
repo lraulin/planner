@@ -103,6 +103,19 @@ export async function outdentNodeAction(nodeId: string): Promise<ActionResult> {
   return run((userId) => tree.outdentNode(userId, nodeId));
 }
 
+/**
+ * Reparents and repositions in one call — the drop end of outline drag-and-drop, where the
+ * client has already resolved the gesture into a parent and a position (`lib/tree/dnd`).
+ * The nesting and self-containment checks still run server-side.
+ */
+export async function moveNodeAction(params: {
+  nodeId: string;
+  parentId: string | null;
+  position: Position;
+}): Promise<ActionResult> {
+  return run((userId) => tree.moveNode({ userId, ...params }));
+}
+
 export async function moveNodeVerticallyAction(
   nodeId: string,
   direction: "up" | "down",

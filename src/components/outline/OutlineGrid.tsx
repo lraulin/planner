@@ -5,10 +5,12 @@ import type { NodeType } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { GridRow } from "@/lib/tree/slice";
 import { defaultChildType, TYPE_LABELS } from "@/lib/tree/hierarchy";
+import { resolveDrop } from "@/lib/tree/dnd";
 import {
   createNodeAction,
   deleteNodeAction,
   indentNodeAction,
+  moveNodeAction,
   moveNodeVerticallyAction,
   outdentNodeAction,
   renameNodeAction,
@@ -21,7 +23,11 @@ import {
 } from "@/app/outline/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
-import { DataGrid, buildAncestorPriorities } from "@/components/grid/DataGrid";
+import {
+  DataGrid,
+  buildAncestorPriorities,
+  type RowDrag,
+} from "@/components/grid/DataGrid";
 import { useOptimisticNodes } from "@/components/grid/useOptimisticNodes";
 import { useToday } from "@/components/grid/useToday";
 import { HintBar } from "./HintBar";
@@ -219,6 +225,37 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const suspended = detailId !== null || pendingDelete !== null;
   useOutlineKeyboard({ commands, editingId, suspended });
 
+  /**
+   * Drag-to-move. `resolveDrop` runs against the whole tree rather than the visible rows,
+   * so hovering beside a row still resolves through ancestors that filters have hidden.
+   * Nothing is patched optimistically — a move changes depth, order and rollups at once,
+   * and the server round-trip that `apply` already performs is the honest way to get them.
+   */
+  const rowDrag: RowDrag = useMemo(
+    () => ({
+      resolve: (dragId, targetId, zone) => resolveDrop(dragId, targetId, zone, byId),
+      onDrop: (dragId, targetId, zone) => {
+        const drop = resolveDrop(dragId, targetId, zone, byId);
+        if (!drop) return;
+
+        setSelectedId(dragId);
+        apply(async () => {
+          const result = await moveNodeAction({
+            nodeId: dragId,
+            parentId: drop.parentId,
+            position: drop.position,
+          });
+          // Dropping into a closed row would otherwise read as the node vanishing.
+          if (result.ok && drop.parentId && byId.get(drop.parentId)?.collapsed) {
+            return setCollapsedAction(drop.parentId, false);
+          }
+          return result;
+        });
+      },
+    }),
+    [byId, apply],
+  );
+
   const columnCtx: OutlineColumnCtx = useMemo(
     () => ({
       today,
@@ -302,6 +339,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
           setDetailId(id);
         }}
         ariaLabel="Outline"
+        rowDrag={rowDrag}
         empty={
           <EmptyState
             filtered={nodes.length > 0}

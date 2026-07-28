@@ -17,8 +17,11 @@ The core Achieve Planner loop — plan the week, block the time, work the outlin
 
 - **✅ Project/task outline.** `specs/2026-07-27-1100-scaffold-and-outline-tab`. Result
   Areas → Goals → Projects → Tasks, keyboard-driven inline editing, indent/outdent,
-  reordering, collapse/expand. Drag-to-reorder is still outstanding; keyboard and toolbar
-  cover it for now.
+  reordering, collapse/expand.
+- **✅ Outline drag-to-reorder.** Same spec, "Change: drag-to-reorder (2026-07-28)". Drag
+  rows onto or between each other; drops that a level cannot host snap out to the nearest
+  ancestor that can, and the drop line is drawn at the depth the node will land at. Left
+  out: multi-select drag, auto-scroll at the edges, spring-loaded expand on hover.
 - **✅ Priorities & scheduling fields.** Priority (A/B/C/D + rank), deadline, state, focus,
   effort (with rollups). Effort Left, Actual Effort, and % complete editable in the Task
   form (`specs/2026-07-27-1318-per-type-detail-forms`).
@@ -43,7 +46,6 @@ The core Achieve Planner loop — plan the week, block the time, work the outlin
 
 - **Weekly planning workflow.** Guided weekly review: pick goals, pull tasks from the
   master list, block them onto the week.
-- **Outline drag-to-reorder** (carried from the outline spec).
 - **Light polish on the main grids** if needed after using them day-to-day (scope popover,
   Show Fields selection, Life Plan / Task Chooser only if still wanted).
 

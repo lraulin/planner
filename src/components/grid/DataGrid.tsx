@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { PriorityLetter } from "@/db/schema";
 import type { GridRow } from "@/lib/tree/slice";
+import type { DropZone } from "@/lib/tree/dnd";
 import { TYPE_LABELS } from "@/lib/tree/hierarchy";
 import {
   alignClass,
@@ -14,6 +15,35 @@ import { ColumnHeaderRow } from "./ColumnHeader";
 import { ALL_FILTER, rowPassesFilters, type ColumnFilter } from "./filters";
 
 export type SortState = { columnId: string; direction: "asc" | "desc" } | null;
+
+/**
+ * Opt-in row drag-and-drop. The grid owns the gesture — what counts as a "before" versus an
+ * "inside", which row is lit, when the drop line is drawn — and the host owns the meaning:
+ * `resolve` says whether a hover is legal and at what depth the indicator belongs, `onDrop`
+ * performs the move. Tabs that pass nothing get the previous, undraggable grid.
+ */
+export type RowDrag = {
+  resolve: (
+    dragId: string,
+    targetId: string,
+    zone: DropZone,
+  ) => { depth: number } | null;
+  onDrop: (dragId: string, targetId: string, zone: DropZone) => void;
+};
+
+type DropHint = { targetId: string; zone: DropZone; depth: number };
+
+/** Bindings the grid hands one row so it can take part in a drag. */
+type RowDragBinding = {
+  dragging: boolean;
+  hint: { zone: DropZone; depth: number } | null;
+  onStart: () => void;
+  /** Returns whether the hover is a legal drop, which decides the cursor. */
+  onOver: (zone: DropZone) => boolean;
+  onLeave: () => void;
+  onDrop: (zone: DropZone) => void;
+  onEnd: () => void;
+};
 
 /**
  * Shared data grid: column-driven layout, optional sort and per-column filters, group
@@ -33,6 +63,7 @@ export function DataGrid<TCtx>({
   enableSort = false,
   collapsedGroups,
   onToggleGroup,
+  rowDrag,
 }: {
   rows: GridRow[];
   columns: ColumnDef<TCtx>[];
@@ -47,9 +78,13 @@ export function DataGrid<TCtx>({
   /** Group ids the user has collapsed. Omitted means every group is open. */
   collapsedGroups?: Set<string>;
   onToggleGroup?: (groupId: string) => void;
+  /** Omit to leave rows undraggable, as every tab but the outline does. */
+  rowDrag?: RowDrag;
 }) {
   const [sort, setSort] = useState<SortState>(null);
   const [filters, setFilters] = useState<Record<string, ColumnFilter>>({});
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropHint, setDropHint] = useState<DropHint | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const gridTemplate = buildGridTemplate(columns);
 
@@ -159,6 +194,56 @@ export function DataGrid<TCtx>({
     });
   }
 
+  function endDrag() {
+    setDragId(null);
+    setDropHint(null);
+  }
+
+  /** One row's share of the drag, or nothing when the tab left drag turned off. */
+  function dragBindingFor(rowId: string): RowDragBinding | undefined {
+    if (!rowDrag) return undefined;
+
+    const forget = () =>
+      setDropHint((current) => (current?.targetId === rowId ? null : current));
+
+    return {
+      dragging: dragId === rowId,
+      hint:
+        dropHint?.targetId === rowId
+          ? { zone: dropHint.zone, depth: dropHint.depth }
+          : null,
+      onStart: () => {
+        setDragId(rowId);
+        onSelect(rowId);
+      },
+      onOver: (zone) => {
+        if (!dragId) return false;
+        const resolved = rowDrag.resolve(dragId, rowId, zone);
+        if (!resolved) {
+          forget();
+          return false;
+        }
+        // Re-using the current object when nothing moved keeps a 60 Hz stream of dragover
+        // events from re-rendering the whole grid.
+        setDropHint((current) =>
+          current?.targetId === rowId &&
+          current.zone === zone &&
+          current.depth === resolved.depth
+            ? current
+            : { targetId: rowId, zone, depth: resolved.depth },
+        );
+        return true;
+      },
+      onLeave: forget,
+      onDrop: (zone) => {
+        const id = dragId;
+        endDrag();
+        if (id) rowDrag.onDrop(id, rowId, zone);
+      },
+      onEnd: endDrag,
+    };
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <ColumnHeaderRow
@@ -207,6 +292,7 @@ export function DataGrid<TCtx>({
                   selected={row.id === selectedId}
                   onSelect={() => onSelect(row.id)}
                   onOpenDetail={onOpenDetail ? () => onOpenDetail(row.id) : undefined}
+                  drag={dragBindingFor(row.id)}
                 />
               ),
             )}
@@ -223,6 +309,7 @@ function DataRow<TCtx>({
   selected,
   onSelect,
   onOpenDetail,
+  drag,
 }: {
   row: NodeGridRow;
   columns: ColumnDef<TCtx>[];
@@ -231,8 +318,13 @@ function DataRow<TCtx>({
   selected: boolean;
   onSelect: () => void;
   onOpenDetail?: () => void;
+  drag?: RowDragBinding;
 }) {
   const rowRef = useRef<HTMLDivElement>(null);
+  // `draggable` is armed on mousedown rather than left on: a permanently draggable row
+  // steals the click-and-drag that selects text inside the priority, effort and deadline
+  // inputs sitting in every row.
+  const [armed, setArmed] = useState(false);
   const node = row.node;
 
   useEffect(() => {
@@ -251,9 +343,54 @@ function DataRow<TCtx>({
       aria-label={`${TYPE_LABELS[node.type]}: ${node.name || "Untitled"}`}
       onClick={onSelect}
       onDoubleClick={onOpenDetail}
+      draggable={drag ? armed : undefined}
+      onMouseDown={
+        drag &&
+        ((event) => {
+          const target = event.target as HTMLElement;
+          setArmed(!target.closest("input, select, textarea, button"));
+        })
+      }
+      onDragStart={
+        drag &&
+        ((event) => {
+          // Some drop targets ignore a drag carrying no data at all.
+          event.dataTransfer.setData("text/plain", row.id);
+          event.dataTransfer.effectAllowed = "move";
+          drag.onStart();
+        })
+      }
+      onDragOver={
+        drag &&
+        ((event) => {
+          if (!drag.onOver(dropZoneFor(event))) return;
+          // Only an accepted hover is prevented — refusing lets the browser show the
+          // no-drop cursor and stops the drop event from firing at all.
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+        })
+      }
+      onDragLeave={drag && (() => drag.onLeave())}
+      onDrop={
+        drag &&
+        ((event) => {
+          event.preventDefault();
+          drag.onDrop(dropZoneFor(event));
+          setArmed(false);
+        })
+      }
+      onDragEnd={
+        drag &&
+        (() => {
+          drag.onEnd();
+          setArmed(false);
+        })
+      }
       className={[
-        "grid items-center border-b border-rule/60 px-3 text-[0.875rem]",
+        "relative grid items-center border-b border-rule/60 px-3 text-[0.875rem]",
         selected ? "bg-select" : "hover:bg-surface-raised/60",
+        drag?.dragging ? "opacity-40" : "",
+        drag?.hint?.zone === "inside" ? "ring-1 ring-select-edge ring-inset" : "",
       ].join(" ")}
       style={{
         gridTemplateColumns: gridTemplate,
@@ -270,7 +407,39 @@ function DataRow<TCtx>({
           {column.render(row, columnCtx)}
         </div>
       ))}
+
+      {drag?.hint && drag.hint.zone !== "inside" && (
+        <DropLine zone={drag.hint.zone} depth={drag.hint.depth} />
+      )}
     </div>
+  );
+}
+
+/** Which third of a row the pointer is over. */
+function dropZoneFor(event: React.DragEvent<HTMLDivElement>): DropZone {
+  const rect = event.currentTarget.getBoundingClientRect();
+  const offset = (event.clientY - rect.top) / rect.height;
+  if (offset < 0.33) return "before";
+  if (offset > 0.67) return "after";
+  return "inside";
+}
+
+/**
+ * The insertion line, indented to the depth the node will land at rather than to the depth
+ * of the row under the cursor — so a drop that snaps out to an ancestor's level says so
+ * before the mouse is released.
+ */
+function DropLine({ zone, depth }: { zone: "before" | "after"; depth: number }) {
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute right-0 z-10 h-0.5 bg-select-edge"
+      style={{
+        left: `calc(0.75rem + ${depth} * var(--indent-step))`,
+        top: zone === "before" ? "-1px" : undefined,
+        bottom: zone === "after" ? "-1px" : undefined,
+      }}
+    />
   );
 }
 
