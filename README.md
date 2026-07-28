@@ -20,18 +20,33 @@ Next.js (App Router) · TypeScript · Tailwind · Drizzle ORM · PostgreSQL
 npm install
 cp .env.example .env.local   # then fill in DATABASE_URL
 npm run db:up                # starts Postgres in Docker
-npm run db:push              # applies the schema
+npm run db:migrate           # applies migrations (or db:push while iterating)
 npm run db:seed              # creates the dev user and sample data
-npm run dev
+npm run dev                  # http://localhost:3047
 ```
 
-The app runs at http://localhost:3000.
+**Port 3047** is pinned in `package.json` so this app does not fight other local Next apps
+on 3000 / 3001 / 3002. Override only if needed: `npx next dev -p <port>`.
+
+### Day-to-day (already set up)
+
+```sh
+npm run db:up    # if Postgres isn’t already running
+npm run dev      # http://localhost:3047
+```
+
+Production-style local run (after `npm run build`):
+
+```sh
+npm start        # also http://localhost:3047
+```
 
 ## Scripts
 
 | Script                | Purpose                                  |
 | --------------------- | ---------------------------------------- |
-| `npm run dev`         | Development server                       |
+| `npm run dev`         | Dev server on **http://localhost:3047**  |
+| `npm start`           | Production server on **:3047** (post-build) |
 | `npm run build`       | Production build                         |
 | `npm test`            | Unit tests (Vitest)                      |
 | `npm run typecheck`   | `tsc --noEmit`                           |
