@@ -23,7 +23,6 @@ import {
 import { WeekCalendar } from "./WeekCalendar";
 import { ProjectsRail } from "./ProjectsRail";
 import { AppointmentDrawer } from "./AppointmentDrawer";
-import { TimeChartEditor } from "./TimeChartEditor";
 import { MiniMonth } from "./MiniMonth";
 
 type Props = {
@@ -90,7 +89,13 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
   const [editingAppointment, setEditingAppointment] = useState<
     Appointment | DraftAppointment | null
   >(null);
-  const [chartEditorOpen, setChartEditorOpen] = useState(false);
+
+  function openTimeChartEditor(chartId: string) {
+    const returnTo = encodeURIComponent(
+      `/schedule?week=${weekKey}${chartId ? `&chart=${chartId}` : ""}`,
+    );
+    router.push(`/schedule/time-chart/${chartId}?returnTo=${returnTo}`);
+  }
 
   const navigateWeek = useCallback(
     (next: Date) => {
@@ -213,8 +218,17 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
       alert(result.error);
       return;
     }
-    if (result.id) selectChart(result.id);
-    else refresh();
+    if (result.id) {
+      setSelectedChartId(result.id);
+      openTimeChartEditor(result.id);
+      return;
+    }
+    refresh();
+  }
+
+  function handleEditChart() {
+    if (!selectedChartId) return;
+    openTimeChartEditor(selectedChartId);
   }
 
   async function handleDeleteAppointment(id: string) {
@@ -250,7 +264,7 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
           type="button"
           className="rounded border border-rule bg-surface px-2 py-1 text-ink hover:bg-surface-raised disabled:opacity-40"
           disabled={!selectedChartId}
-          onClick={() => setChartEditorOpen(true)}
+          onClick={handleEditChart}
         >
           Edit Time Chart…
         </button>
@@ -346,20 +360,6 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
         }}
         onDelete={handleDeleteAppointment}
       />
-
-      {selectedChartId && (
-        <TimeChartEditor
-          open={chartEditorOpen}
-          chartId={selectedChartId}
-          chartName={charts.find((c) => c.id === selectedChartId)?.name ?? ""}
-          areas={areas}
-          nodes={nodes}
-          onClose={() => setChartEditorOpen(false)}
-          onChanged={() => {
-            refresh();
-          }}
-        />
-      )}
     </div>
   );
 }

@@ -273,3 +273,22 @@ body {
   line-height: 1.2;
   padding: 2px 4px;
 }
+
+/* Time Chart full-page editor — areas are real events (not background wallpaper). */
+.time-chart-editor .fc-timechart-area {
+  border-width: 1px !important;
+  border-radius: 2px;
+  opacity: 1;
+  cursor: grab;
+}
+
+.time-chart-editor .fc-timechart-area-selected {
+  box-shadow: 0 0 0 2px var(--select-edge);
+  z-index: 5 !important;
+}
+
+.time-chart-editor .fc-event-title {
+  font-weight: 600;
+  font-size: 0.75rem;
+  padding: 2px 4px;
+}
