@@ -226,9 +226,11 @@ export const goalDetails = pgTable("goal_details", {
   // General
   isDream: boolean("is_dream").notNull().default(false),
   /**
-   * Achieve's Range dropdown — the horizon a goal is set against. Free text rather than an
-   * enum: the capture only shows "1-Year", so the full option list is unknown and guessing
-   * one would bake a wrong constraint into a migration.
+   * Achieve's Range dropdown — the horizon a goal is set against, stored as its label
+   * ("Week" through "Lifetime"; the list lives in `GoalForm.tsx`).
+   *
+   * Free text rather than an enum, so adding a horizon is a one-line change to that list
+   * rather than a migration, and a value written before the list was known still loads.
    */
   range: text("range").notNull().default(""),
   plannedStart: timestamp("planned_start", { withTimezone: true }),

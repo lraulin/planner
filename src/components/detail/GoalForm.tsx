@@ -15,6 +15,25 @@ import {
 import type { FormTab } from "./FormTabs";
 import { CoreHeaderFields, type DetailFormProps } from "./formShared";
 
+/**
+ * Achieve's Range dropdown, in Achieve's order — shortest horizon to longest.
+ *
+ * The stored value is the label. The column stays free text (see `schema.ts`), so this list
+ * is what the form offers rather than what the database will accept, and a row written
+ * before the list was known still round-trips.
+ */
+const RANGE_OPTIONS = [
+  "Week",
+  "Month",
+  "Quarter",
+  "Six Months",
+  "1-Year",
+  "3-Years",
+  "5-Years",
+  "10-Years",
+  "Lifetime",
+].map((range) => ({ value: range, label: range }));
+
 const PROGRESS_REVIEW_OPTIONS: { value: ProgressReview; label: string }[] = [
   { value: "none", label: "None" },
   { value: "daily", label: "Daily" },
@@ -30,13 +49,20 @@ const PROGRESS_REVIEW_OPTIONS: { value: ProgressReview; label: string }[] = [
  * sits on this tab beside Range, and the form is otherwise identical. The hierarchy stays
  * four types.
  *
- * Range is a free-text field rather than a dropdown. Only "1-Year" is legible in the
- * reference capture, so the full option list is unknown, and a guessed enum would be a wrong
- * constraint baked into a migration.
+ * Range is a dropdown, as it is in Achieve. The column behind it stays free text, so the
+ * list can grow without a migration.
  */
 export function goalTabs(props: DetailFormProps): FormTab[] {
   const { values, patch, patchGoal, list } = props;
   const goal = values.goal ?? {};
+
+  // A stored value from before the list was known — keep it selectable rather than letting
+  // the select silently drop it on the next save.
+  const range = goal.range ?? "";
+  const rangeOptions =
+    range === "" || RANGE_OPTIONS.some((option) => option.value === range)
+      ? RANGE_OPTIONS
+      : [...RANGE_OPTIONS, { value: range, label: range }];
 
   return [
     {
@@ -47,11 +73,12 @@ export function goalTabs(props: DetailFormProps): FormTab[] {
           <CoreHeaderFields values={values} patch={patch} />
 
           <FieldGrid columns={3}>
-            <TextField
+            <SelectField
               label="Range"
-              value={goal.range ?? ""}
-              onChange={(range) => patchGoal({ range })}
-              placeholder="1-Year"
+              value={range}
+              options={rangeOptions}
+              onChange={(next) => patchGoal({ range: next ?? "" })}
+              allowEmpty
               hint="The horizon this goal is set against."
             />
             <SelectField
