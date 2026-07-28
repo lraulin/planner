@@ -53,8 +53,22 @@ Features that complete or surround the original product, plus making it multi-de
 
 - **Life Plan tab** (if still desired after living with Goals + Result Areas).
 - **Task Chooser** and any remaining Achieve chrome that earns its keep.
-- **Time tracking & reports.** Start/stop timers, actual-vs-estimated, time by
-  project/role.
+- **Pomodoro → time tracking.** Effort, Effort Left, Actual Effort, and % complete
+  already live on tasks (and roll up); what’s missing is a way to *earn* those numbers
+  while working. Stage it rather than jumping to a full timesheet product:
+
+  1. **MVP — Pomodoro on a task or project.** Start a focus timer from the selected
+     outline/grid row (or the open drawer). Configurable work/break lengths; clear
+     “what I’m on” context. On complete (or stop), optionally add elapsed minutes to
+     that node’s **Actual Effort** (and nudge Effort Left / % if we already compute
+     them that way).
+  2. **Next — session log.** Persist started/stopped intervals linked to `node_id`,
+     not only a running total — so a day or week can be reviewed.
+  3. **Long-term — full time tracking & reports.** Start/stop without Pomodoro,
+     actual-vs-estimated analysis, time by project/result area/role, and feed the
+     weekly calendar’s estimated-vs-actual story. Same data model as (2); richer UI
+     and reporting on top.
+
 - **Roles & goals (Covey).** Explicit life roles, balance review in weekly planning —
   partly already modeled as Result Areas; deepen where Achieve or Covey still beats us.
 
@@ -125,8 +139,10 @@ Phase 1 remaining ──► weekly calendar + planning workflow
         │
         ├──► Google Calendar (needs a schedule surface)
         │
-Phase 2 platform ──► auth, export, Alfred capture
+Phase 2 ──► Pomodoro on task/project (writes Actual Effort)
+        │         └──► session log ──► full time reports
         │
+        ├──► auth, export, Alfred capture
         ├──► AI tools/API (useful earlier on single-user + local agent)
         │
 Beyond Achieve (can start MVPs in parallel once Phase 1 core is daily-usable):
@@ -137,7 +153,8 @@ Beyond Achieve (can start MVPs in parallel once Phase 1 core is daily-usable):
 
 AI **tooling for local agents** does not need Bedrock or multi-user first. Fitness and
 finance MVPs should stay separate modules that **link into** nodes/goals rather than
-forking a second hierarchy.
+forking a second hierarchy. Pomodoro can ship before the weekly calendar — it only needs
+a selected task/project — but reports get more useful once schedule and actuals meet.
 
 ---
 
