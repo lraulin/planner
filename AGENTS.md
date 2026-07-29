@@ -13,6 +13,26 @@ Personal project in Lee's personal GitHub (`lraulin/planner`).
   "Generated with Claude Code" line, no references in the body.
 - The default branch is `master`.
 
+### Tests
+
+Full rules: `agent-os/standards/development/testing.md`. The short version, because tests
+are the one gate that cannot be automated into a hook:
+
+- **Put real logic in `src/lib/**`, not in components**, and write a `foo.test.ts` beside
+  it. Pure logic is where the tricky reasoning lives and where a wrong answer looks
+  plausible.
+- **Anything touching the database gets a `*.integration.test.ts`, and it is not done
+  until a second user has tried to read, change, and delete the first user's row and
+  failed at every step.** Every mutation takes a `userId` and must scope by it; a dropped
+  `userId` is invisible when you only ever test with one user.
+- **Do not write React component tests.** There is no setup for them and the bug class
+  they would catch is already covered by the type-aware ESLint rules.
+- A test earns its place if it would **fail on a plausible mistake**. No snapshots, no
+  mocking Drizzle, no tests that restate the implementation.
+- `npm run test:unit` passing does **not** mean the database tests ran — they skip when
+  Postgres is down. Check for the skip warning after changing `mutations.ts` or
+  `queries.ts`.
+
 ### Agent OS & spec-driven development
 
 This repo uses [Agent OS](https://buildermethods.com/agent-os): product docs under

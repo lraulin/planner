@@ -75,6 +75,11 @@ Integration tests **skip loudly** when Postgres is unreachable rather than faili
 stopped container never blocks a commit — see `src/lib/testing/database.ts` for why. An
 unset `DATABASE_URL` still fails, because that means the environment was never set up.
 
+What to test and what to skip is written down in
+`agent-os/standards/development/testing.md`. The short version: pure logic in `src/lib/**`
+and every database mutation (always including a cross-user case), no React component
+tests.
+
 ## Linting
 
 ESLint runs `eslint-config-next` plus **type-aware** rules from `typescript-eslint`
