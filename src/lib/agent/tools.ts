@@ -1,5 +1,5 @@
 import type { NoteFlag } from "@/db/schema";
-import { getCurrentUserId } from "@/lib/auth";
+import { getOwnerUserId } from "@/lib/auth/owner";
 import { createNote, updateNote as updateNoteMutation } from "@/lib/notes/mutations";
 import { loadNotes, loadNotesForNode } from "@/lib/notes/queries";
 import {
@@ -76,9 +76,9 @@ export function isAgentTool(name: string): name is AgentToolName {
   return (AGENT_TOOLS as readonly string[]).includes(name);
 }
 
-/** Resolve the single user the MVP key maps to. */
+/** Resolve the single owner user the MVP Bearer key maps to (no browser session). */
 export async function resolveAgentUserId(): Promise<string> {
-  return getCurrentUserId();
+  return getOwnerUserId();
 }
 
 export async function dispatchAgentTool(

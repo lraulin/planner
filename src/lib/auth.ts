@@ -1,26 +1,26 @@
-import { db } from "@/db";
-import { users } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { headers } from "next/headers";
+import { auth } from "@/lib/auth/server";
 
 /**
- * The single seeded account used until real authentication lands.
+ * Current browser user from the Better Auth session.
  *
- * Every table carries a `user_id` and every query scopes by it, so turning on multi-user
- * support means replacing the body of `getCurrentUserId()` with a session lookup — no
- * schema migration and no changes to callers.
+ * Every table carries a `user_id` and every query scopes by it. Callers (pages, server
+ * actions) keep using this function; identity now comes from the session cookie.
+ *
+ * Machine clients (agent API) must not use this — they resolve the owner via
+ * `getOwnerUserId()` after Bearer-key checks.
  */
-export const DEV_USER_EMAIL = "dev@localhost";
-
 export async function getCurrentUserId(): Promise<string> {
-  const [user] = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.email, DEV_USER_EMAIL))
-    .limit(1);
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
 
-  if (!user) {
-    throw new Error(`Dev user (${DEV_USER_EMAIL}) not found. Run: npm run db:seed`);
+  if (!session?.user?.id) {
+    throw new Error("Unauthorized: no session. Sign in at /login.");
   }
 
-  return user.id;
+  return session.user.id;
 }
+
+/** @deprecated Prefer seedEmail() from `@/lib/auth/owner`. */
+export { LEGACY_DEV_USER_EMAIL as DEV_USER_EMAIL, seedEmail } from "@/lib/auth/owner";

@@ -50,6 +50,13 @@
       "when": 1785318300000,
       "tag": "0006_notes",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1785342518590,
+      "tag": "0007_better_auth",
+      "breakpoints": true
     }
   ]
 }

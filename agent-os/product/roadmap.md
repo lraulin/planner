@@ -111,8 +111,12 @@ Features that complete or surround the original product, plus making it multi-de
 
 ### Platform
 
-- **Multi-user accounts & sync.** Real auth (Better Auth, self-run — see `tech-stack.md`),
-  per-user isolation activated, cross-device sync. Schema is already multi-user-ready.
+- **✅ Multi-user accounts & auth (personal gate).** `specs/2026-07-29-1630-email-password-auth`.
+  Better Auth self-run (email/password, no public signup), session-backed
+  `getCurrentUserId()`, middleware redirects guests to `/login`. Owner provisioned via
+  seed/env. Schema was already multi-user-ready; second-user invite UI and OAuth still
+  open.
+- **Sync / multi-device.** Already implied by web + Neon; polish only if friction appears.
 - **Import/export.** Achieve data import, full export (own-your-data mandate in
   `mission.md`).
 

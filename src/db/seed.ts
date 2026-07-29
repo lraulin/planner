@@ -1,5 +1,8 @@
+import { hashPassword } from "better-auth/crypto";
+import { and, eq } from "drizzle-orm";
 import { db } from "./index";
 import {
+  accounts,
   appointments,
   goalDetails,
   nodes,
@@ -10,17 +13,22 @@ import {
   users,
 } from "./schema";
 import type { NodeType } from "./schema";
-import { DEV_USER_EMAIL } from "@/lib/auth";
+import { LEGACY_DEV_USER_EMAIL, seedEmail } from "@/lib/auth/owner";
 import { parsePriority } from "@/lib/tree/format";
 import { assertCanNest } from "@/lib/tree/hierarchy";
 import { between } from "@/lib/tree/sortKey";
-import { eq } from "drizzle-orm";
 
 /**
- * Seeds the dev user and a sample hierarchy mirroring `screenshots/OutlineTabSS.png`, so a
- * fresh database looks like the reference the outline is built against.
+ * Ensures the owner user + Better Auth credential account, then optionally loads sample
+ * outline data.
  *
- * Destructive: deletes the dev user's existing nodes before inserting.
+ * Env:
+ * - AUTH_SEED_EMAIL (default dev@example.com)
+ * - AUTH_SEED_PASSWORD (default local-only: "password123")
+ * - AUTH_SEED_NAME (default "Dev User")
+ * - SEED_SAMPLE_DATA=0 to only upsert credentials (production password set without wiping data)
+ *
+ * When sample data runs it is destructive for that user's nodes/appointments/time charts.
  */
 
 type Seed = {
@@ -280,36 +288,91 @@ async function insertLevel(
   return count;
 }
 
-async function main() {
+async function ensureOwnerCredentials(): Promise<{ id: string; email: string }> {
+  const email = seedEmail();
+  const name = process.env.AUTH_SEED_NAME?.trim() || "Dev User";
+  const password =
+    process.env.AUTH_SEED_PASSWORD?.trim() ||
+    (process.env.NODE_ENV === "production" ? "" : "password123");
+
+  if (!password) {
+    throw new Error(
+      "AUTH_SEED_PASSWORD is required (no default in production). Set it in the environment.",
+    );
+  }
+  if (password.length < 8) {
+    throw new Error("AUTH_SEED_PASSWORD must be at least 8 characters.");
+  }
+
+  // Keep the same users.id (and all FKs) when upgrading from the pre-auth seed email.
+  if (email !== LEGACY_DEV_USER_EMAIL) {
+    await db
+      .update(users)
+      .set({ email, name, emailVerified: true, updatedAt: new Date() })
+      .where(eq(users.email, LEGACY_DEV_USER_EMAIL));
+  }
+
   const [user] = await db
     .insert(users)
-    .values({ email: DEV_USER_EMAIL, name: "Dev User" })
+    .values({
+      email,
+      name,
+      emailVerified: true,
+    })
     .onConflictDoUpdate({
       target: users.email,
-      set: { updatedAt: new Date() },
+      set: {
+        name,
+        emailVerified: true,
+        updatedAt: new Date(),
+      },
     })
-    .returning({ id: users.id });
+    .returning({ id: users.id, email: users.email });
 
-  console.log(`Dev user: ${DEV_USER_EMAIL} (${user.id})`);
+  const hashed = await hashPassword(password);
+  const existing = await db
+    .select({ id: accounts.id })
+    .from(accounts)
+    .where(and(eq(accounts.userId, user.id), eq(accounts.providerId, "credential")))
+    .limit(1);
 
+  if (existing[0]) {
+    await db
+      .update(accounts)
+      .set({ password: hashed, updatedAt: new Date(), accountId: user.id })
+      .where(eq(accounts.id, existing[0].id));
+  } else {
+    await db.insert(accounts).values({
+      userId: user.id,
+      accountId: user.id,
+      providerId: "credential",
+      password: hashed,
+    });
+  }
+
+  console.log(`Owner user: ${user.email} (${user.id}) — credential password updated.`);
+  return user;
+}
+
+async function seedSampleData(userId: string) {
   // Children cascade, so deleting every node for this user clears the whole tree.
-  await db.delete(nodes).where(eq(nodes.userId, user.id));
-  await db.delete(appointments).where(eq(appointments.userId, user.id));
-  await db.delete(timeCharts).where(eq(timeCharts.userId, user.id));
+  await db.delete(nodes).where(eq(nodes.userId, userId));
+  await db.delete(appointments).where(eq(appointments.userId, userId));
+  await db.delete(timeCharts).where(eq(timeCharts.userId, userId));
 
-  const count = await insertLevel(user.id, null, null, HIERARCHY);
+  const count = await insertLevel(userId, null, null, HIERARCHY);
   console.log(`Seeded ${count} nodes.`);
 
   // Sample Ideal Week Time Chart — multi-day areas demonstrate the improvement over
   // Achieve's per-day Ctrl+drag copies.
   const [chart] = await db
     .insert(timeCharts)
-    .values({ userId: user.id, name: "Ideal Week" })
+    .values({ userId, name: "Ideal Week" })
     .returning();
 
   await db.insert(timeChartAreas).values([
     {
-      userId: user.id,
+      userId,
       timeChartId: chart.id,
       name: "Sleep",
       daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
@@ -320,7 +383,7 @@ async function main() {
       labelEnabled: true,
     },
     {
-      userId: user.id,
+      userId,
       timeChartId: chart.id,
       name: "Work Out",
       daysOfWeek: [1, 2, 3, 4, 5],
@@ -331,7 +394,7 @@ async function main() {
       labelEnabled: true,
     },
     {
-      userId: user.id,
+      userId,
       timeChartId: chart.id,
       name: "Deep Work",
       daysOfWeek: [1, 2, 3, 4, 5],
@@ -348,7 +411,7 @@ async function main() {
   start.setHours(14, 0, 0, 0);
   const end = new Date(start.getTime() + 45 * 60_000);
   await db.insert(appointments).values({
-    userId: user.id,
+    userId,
     subject: "Sample appointment",
     startAt: start,
     endAt: end,
@@ -356,6 +419,17 @@ async function main() {
   });
 
   console.log(`Seeded Time Chart "${chart.name}" + sample appointment.`);
+}
+
+async function main() {
+  const user = await ensureOwnerCredentials();
+
+  const seedSample = process.env.SEED_SAMPLE_DATA !== "0";
+  if (seedSample) {
+    await seedSampleData(user.id);
+  } else {
+    console.log("SEED_SAMPLE_DATA=0 — skipped sample outline/schedule data.");
+  }
 }
 
 main()

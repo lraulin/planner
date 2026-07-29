@@ -29,12 +29,15 @@ in this app’s source tree.
 
 ```sh
 npm install
-cp .env.example .env.local   # then fill in DATABASE_URL
+cp .env.example .env.local   # DATABASE_URL, BETTER_AUTH_SECRET, BETTER_AUTH_URL
 npm run db:up                # starts Postgres in Docker
 npm run db:migrate           # applies migrations (or db:push while iterating)
-npm run db:seed              # creates the dev user and sample data
-npm run dev                  # http://localhost:3047
+npm run db:seed              # owner credentials + sample data (login: see .env.example)
+npm run dev                  # http://localhost:3047 → redirects to /login
 ```
+
+Default local login after seed: email `dev@example.com`, password `password123` (override with
+`AUTH_SEED_EMAIL` / `AUTH_SEED_PASSWORD`). Public sign-up is disabled.
 
 **Port 3047** is pinned in `package.json` so this app does not fight other local Next apps
 on 3000 / 3001 / 3002. Override only if needed: `npx next dev -p <port>`.
@@ -54,26 +57,26 @@ npm start        # also http://localhost:3047
 
 ## Scripts
 
-| Script                     | Purpose                                     |
-| -------------------------- | ------------------------------------------- |
-| `npm run dev`              | Dev server on **http://localhost:3047**     |
-| `npm start`                | Production server on **:3047** (post-build) |
-| `npm run build`            | Production build                            |
-| `npm test`                 | Full suite (Vitest)                         |
-| `npm run test:unit`        | Unit tests only — no database needed        |
-| `npm run test:integration` | Database-backed tests (needs `db:up`)       |
-| `npm run typecheck`        | `tsc --noEmit`                              |
-| `npm run lint`             | ESLint (warnings fail too)                  |
-| `npm run lint:fix`         | ESLint with `--fix`                         |
-| `npm run format`           | Prettier write-all                          |
-| `npm run format:check`     | Prettier check (CI-friendly)                |
-| `npm run db:up`            | Start local Postgres (Docker)               |
-| `npm run db:down`          | Stop local Postgres                         |
-| `npm run db:generate`      | Generate a migration from schema changes    |
-| `npm run db:migrate`       | Apply pending migrations                    |
-| `npm run db:push`          | Push the schema directly (development)      |
-| `npm run db:studio`        | Drizzle Studio                              |
-| `npm run db:seed`          | Seed the dev user and sample hierarchy      |
+| Script                     | Purpose                                                                                 |
+| -------------------------- | --------------------------------------------------------------------------------------- |
+| `npm run dev`              | Dev server on **http://localhost:3047**                                                 |
+| `npm start`                | Production server on **:3047** (post-build)                                             |
+| `npm run build`            | Production build                                                                        |
+| `npm test`                 | Full suite (Vitest)                                                                     |
+| `npm run test:unit`        | Unit tests only — no database needed                                                    |
+| `npm run test:integration` | Database-backed tests (needs `db:up`)                                                   |
+| `npm run typecheck`        | `tsc --noEmit`                                                                          |
+| `npm run lint`             | ESLint (warnings fail too)                                                              |
+| `npm run lint:fix`         | ESLint with `--fix`                                                                     |
+| `npm run format`           | Prettier write-all                                                                      |
+| `npm run format:check`     | Prettier check (CI-friendly)                                                            |
+| `npm run db:up`            | Start local Postgres (Docker)                                                           |
+| `npm run db:down`          | Stop local Postgres                                                                     |
+| `npm run db:generate`      | Generate a migration from schema changes                                                |
+| `npm run db:migrate`       | Apply pending migrations                                                                |
+| `npm run db:push`          | Push the schema directly (development)                                                  |
+| `npm run db:studio`        | Drizzle Studio                                                                          |
+| `npm run db:seed`          | Upsert owner password + optional sample data (`SEED_SAMPLE_DATA=0` to skip sample wipe) |
 
 ## Testing
 
@@ -120,16 +123,8 @@ Nothing here needs remembering — three hooks run the gates for you:
 
 Live at **https://planner-sable-three.vercel.app**, on Vercel Hobby with a Neon database.
 
-> ### ⚠️ The deployed app has no authentication
->
-> `getCurrentUserId()` returns a hardcoded dev user, so **anyone with the URL can read and
-> edit the outline.** Vercel's Hobby plan cannot protect a production domain — Standard
-> Protection covers preview and deployment URLs only; protecting production needs Pro.
->
-> This is accepted while the database holds nothing but sample data. It must be resolved
-> before real planning data goes in. The options, cheapest first: point the project's
-> production branch at a branch you never push and use the protected branch URL with Vercel
-> Authentication; or land Better Auth (Phase 2), which is the actual fix.
+Authentication is **Better Auth** (email/password, no public sign-up). Unauthenticated
+visitors are redirected to `/login`. The agent API uses a separate Bearer key (see above).
 
 Hosting targets the free tiers: Vercel Hobby for the app, Neon for Postgres.
 
@@ -138,24 +133,35 @@ Hosting targets the free tiers: Vercel Hobby for the app, Neon for Postgres.
    pooled endpoint is the one to use.
 2. Import this repository into Vercel. The defaults are correct; no build settings need
    changing.
-3. Set `DATABASE_URL` in the Vercel project's environment variables to the Neon pooled
-   string.
-4. Apply the schema and create the dev user, from your machine, against the Neon database:
+3. Set environment variables in the Vercel project:
+
+   | Variable                | Purpose                                                 |
+   | ----------------------- | ------------------------------------------------------- |
+   | `DATABASE_URL`          | Neon **pooled** string                                  |
+   | `DIRECT_DATABASE_URL`   | Neon **direct** string (migrations on production build) |
+   | `BETTER_AUTH_SECRET`    | `openssl rand -base64 32`                               |
+   | `BETTER_AUTH_URL`       | Production origin, e.g. `https://planner-….vercel.app`  |
+   | `AUTH_SEED_EMAIL`       | Your login email                                        |
+   | `AUTH_SEED_PASSWORD`    | Your login password (used only by seed, not runtime)    |
+   | `PLANNER_AGENT_API_KEY` | Optional; for `/api/agent/*`                            |
+
+4. Production builds run pending migrations when `VERCEL_ENV=production` (see
+   `scripts/migrate-on-deploy.mjs`). After the first auth deploy, set the owner password
+   against Neon **without** wiping data:
 
    ```sh
-   DATABASE_URL="<neon-string>" npm run db:migrate
-   DATABASE_URL="<neon-string>" npm run db:seed   # optional: adds sample data too
+   DATABASE_URL="<neon-string>" \
+   AUTH_SEED_EMAIL="you@example.com" \
+   AUTH_SEED_PASSWORD="your-strong-password" \
+   SEED_SAMPLE_DATA=0 \
+   npm run db:seed
    ```
-
-   Migrations are deliberately not run during the Vercel build — a schema change should be
-   an explicit act, not a side effect of deploying.
 
 Vercel's Hobby tier is free but its terms limit it to non-commercial use. If this ever
 becomes something you sell, hosting has to move.
 
 ## Notes
 
-- **Authentication is not implemented yet.** Every table carries a `user_id` and every query
-  scopes by it, but `getCurrentUserId()` returns a hardcoded dev user. This keeps the app
-  multi-user ready without an auth flow — see `src/lib/auth.ts`.
+- **Auth:** Better Auth email/password; `getCurrentUserId()` reads the session. Agent tools
+  use Bearer `PLANNER_AGENT_API_KEY` → owner user (`src/lib/auth/owner.ts`).
 - `CLAUDE.md` is a symlink to `AGENTS.md`, so all coding agents read the same instructions.

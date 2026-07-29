@@ -24,19 +24,18 @@ Chosen to run at **$0** on free tiers at personal scale, with minimal ops overhe
 
 ## Authentication
 
-Not implemented. Every table carries a `user_id` and every query scopes by it, but
-`getCurrentUserId()` in `src/lib/auth.ts` returns a hardcoded dev user. That one function is
-the seam; turning on real auth needs no schema migration.
+**Better Auth, self-run**, Drizzle adapter, tables in our schema (`users` + `sessions` /
+`accounts` / `verifications`). Email/password only; public sign-up disabled. Owner account
+provisioned by `npm run db:seed` / env credentials.
+
+`getCurrentUserId()` in `src/lib/auth.ts` resolves the Better Auth session. Agent HTTP uses
+Bearer `PLANNER_AGENT_API_KEY` → owner user (`getOwnerUserId`), not a browser cookie.
 
 **Neon Auth was considered and declined** (July 2026). The dashboard option is Managed
 Better Auth, which creates its tables in a vendor-owned `neon_auth` schema you would
 foreign-key against. Identity is what every row in this app points at, so putting it in a
 schema we don't control is the deepest form of the lock-in `mission.md` explicitly exists to
-avoid — the whole project started because Achieve was abandoned. What it manages for us
-(running Better Auth's migrations) is already covered by `db:generate` / `db:migrate`.
-
-**Phase 2 choice: Better Auth, self-run**, with the Drizzle adapter. Same library, tables in
-our own schema under our own migrations, portable to any Postgres.
+avoid — the whole project started because Achieve was abandoned.
 
 ## Other
 

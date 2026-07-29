@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LogoutButton } from "@/components/auth/LogoutButton";
 
 /**
  * The tab strip from Achieve. Built tabs navigate; the rest are shown so the shape of the
@@ -55,6 +56,8 @@ export function TabStrip({ active }: { active: TabId }) {
           );
         })}
       </nav>
+
+      <LogoutButton />
     </header>
   );
 }

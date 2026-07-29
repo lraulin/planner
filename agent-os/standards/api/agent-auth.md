@@ -10,11 +10,11 @@
 
 ## Identity
 
-Until Better Auth lands, a successful key maps to **`getCurrentUserId()`** (the seeded dev
-user). The key is not multi-tenant; it is a single shared secret for personal agent access.
+A successful key maps to the **owner user** via `getOwnerUserId()` / `resolveAgentUserId()`
+(email from `PLANNER_AGENT_USER_EMAIL` or `AUTH_SEED_EMAIL`, default `dev@example.com`).
 
-When real auth lands, keep the same header for machine clients or map the key to a user id
-without changing tool contracts.
+The key is **not** multi-tenant and does **not** use a browser session. Session cookies are
+for humans at `/login`; machine clients keep Bearer auth.
 
 ## Never
 
