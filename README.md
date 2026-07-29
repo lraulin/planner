@@ -62,6 +62,9 @@ npm start        # also http://localhost:3047
 | `npm run db:studio`    | Drizzle Studio                              |
 | `npm run db:seed`      | Seed the dev user and sample hierarchy      |
 
+Prettier also runs automatically on staged files via a **husky + lint-staged**
+pre-commit hook (`npm install` installs the hook through the `prepare` script).
+
 ## Deploying
 
 Live at **https://planner-sable-three.vercel.app**, on Vercel Hobby with a Neon database.
