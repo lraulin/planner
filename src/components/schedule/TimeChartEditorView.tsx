@@ -59,13 +59,18 @@ export function TimeChartEditorView({
   const [error, setError] = useState<string | null>(null);
   const [pendingNameFocus, setPendingNameFocus] = useState(false);
 
-  useEffect(() => {
+  // Sync server props after revalidation. Adjust during render — not in an effect.
+  // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
+  const [prevAreas, setPrevAreas] = useState(initialAreas);
+  if (initialAreas !== prevAreas) {
+    setPrevAreas(initialAreas);
     setAreas(initialAreas);
-  }, [initialAreas]);
-
-  useEffect(() => {
+  }
+  const [prevChartName, setPrevChartName] = useState(chart.name);
+  if (chart.name !== prevChartName) {
+    setPrevChartName(chart.name);
     setChartName(chart.name);
-  }, [chart.name]);
+  }
 
   useEffect(() => {
     if (!pendingNameFocus || !selectedId) return;

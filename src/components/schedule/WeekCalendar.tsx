@@ -1,13 +1,10 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import FullCalendar from "@fullcalendar/react";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import dayGridPlugin from "@fullcalendar/daygrid";
-import interactionPlugin, {
-  type DateClickArg,
-  type EventReceiveArg,
-} from "@fullcalendar/interaction";
+import interactionPlugin, { type EventReceiveArg } from "@fullcalendar/interaction";
 import type {
   DateSelectArg,
   EventClickArg,
@@ -65,9 +62,11 @@ export function WeekCalendar({
   onCycleCheck,
 }: Props) {
   const ctrlDown = useRef(false);
-  // Keep latest callbacks without re-binding eventContent closures only on mount.
+  // Keep latest callback for FullCalendar-held eventContent closures.
   const onCycleCheckRef = useRef(onCycleCheck);
-  onCycleCheckRef.current = onCycleCheck;
+  useEffect(() => {
+    onCycleCheckRef.current = onCycleCheck;
+  }, [onCycleCheck]);
 
   const occByKey = useMemo(() => {
     const m = new Map<string, Occurrence>();
@@ -252,9 +251,6 @@ export function WeekCalendar({
           }
           arg.event.remove();
           onExternalDrop(projectId, projectName, arg.event.start, duration);
-        }}
-        dateClick={(_arg: DateClickArg) => {
-          /* selection handles create */
         }}
       />
     </div>

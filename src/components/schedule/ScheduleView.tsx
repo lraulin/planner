@@ -1,12 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type {
   Appointment,
   AppointmentCheck,
   TimeChart,
-  TimeChartArea,
 } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { SchedulePayload } from "@/lib/schedule/queries";
@@ -39,49 +38,57 @@ export type DraftAppointment = {
   projectId?: string | null;
 };
 
+/** Revive Date fields that RSC may have serialized as ISO strings. */
+function hydratePayload(initial: SchedulePayload) {
+  return {
+    charts: initial.charts,
+    selectedChartId: initial.selectedChartId,
+    backgroundEvents: initial.backgroundEvents.map((e) => ({
+      ...e,
+      start: new Date(e.start),
+      end: new Date(e.end),
+    })),
+    occurrences: initial.occurrences.map((o) => ({
+      ...o,
+      startAt: new Date(o.startAt),
+      endAt: new Date(o.endAt),
+    })),
+    masters: initial.appointments.map((a) => ({
+      ...a,
+      startAt: new Date(a.startAt),
+      endAt: new Date(a.endAt),
+      recurrenceUntil: a.recurrenceUntil ? new Date(a.recurrenceUntil) : null,
+      createdAt: new Date(a.createdAt),
+      updatedAt: new Date(a.updatedAt),
+    })),
+  };
+}
+
 export function ScheduleView({ initial, nodes, weekKey }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
 
-  const [charts, setCharts] = useState<TimeChart[]>(initial.charts);
+  const hydrated = hydratePayload(initial);
+  const [charts, setCharts] = useState<TimeChart[]>(hydrated.charts);
   const [selectedChartId, setSelectedChartId] = useState<string | null>(
-    initial.selectedChartId,
+    hydrated.selectedChartId,
   );
-  const [areas, setAreas] = useState<TimeChartArea[]>(initial.areas);
-  const [backgroundEvents, setBackgroundEvents] = useState(initial.backgroundEvents);
-  const [occurrences, setOccurrences] = useState<Occurrence[]>(initial.occurrences);
-  const [masters, setMasters] = useState<Appointment[]>(initial.appointments);
+  const [backgroundEvents, setBackgroundEvents] = useState(hydrated.backgroundEvents);
+  const [occurrences, setOccurrences] = useState<Occurrence[]>(hydrated.occurrences);
+  const [masters, setMasters] = useState<Appointment[]>(hydrated.masters);
 
-  // Sync when server revalidates (router.refresh). RSC serializes Dates as ISO strings.
-  useEffect(() => {
-    setCharts(initial.charts);
-    setSelectedChartId(initial.selectedChartId);
-    setAreas(initial.areas);
-    setBackgroundEvents(
-      initial.backgroundEvents.map((e) => ({
-        ...e,
-        start: new Date(e.start),
-        end: new Date(e.end),
-      })),
-    );
-    setOccurrences(
-      initial.occurrences.map((o) => ({
-        ...o,
-        startAt: new Date(o.startAt),
-        endAt: new Date(o.endAt),
-      })),
-    );
-    setMasters(
-      initial.appointments.map((a) => ({
-        ...a,
-        startAt: new Date(a.startAt),
-        endAt: new Date(a.endAt),
-        recurrenceUntil: a.recurrenceUntil ? new Date(a.recurrenceUntil) : null,
-        createdAt: new Date(a.createdAt),
-        updatedAt: new Date(a.updatedAt),
-      })),
-    );
-  }, [initial]);
+  // Sync when server revalidates (router.refresh). Adjust during render — not in an effect.
+  // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
+  const [prevInitial, setPrevInitial] = useState(initial);
+  if (initial !== prevInitial) {
+    setPrevInitial(initial);
+    const next = hydratePayload(initial);
+    setCharts(next.charts);
+    setSelectedChartId(next.selectedChartId);
+    setBackgroundEvents(next.backgroundEvents);
+    setOccurrences(next.occurrences);
+    setMasters(next.masters);
+  }
 
   const weekStart = fromDateKey(weekKey);
   const days = weekDays(weekStart);
