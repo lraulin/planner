@@ -3,5 +3,22 @@
     "allow": [
       "Bash(git ls-remote *)"
     ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/lint-file.sh\"",
+            "asyncRewake": true,
+            "timeout": 60,
+            "rewakeMessage": "ESLint failed on a file you just edited:",
+            "rewakeSummary": "ESLint feedback"
+          }
+        ]
+      }
+    ]
   }
 }

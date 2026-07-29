@@ -194,9 +194,17 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
           : null,
     };
 
-    const result = id
-      ? await updateAppointmentAction(id, payload)
-      : await createAppointmentAction(payload);
+    let result;
+    try {
+      result = id
+        ? await updateAppointmentAction(id, payload)
+        : await createAppointmentAction(payload);
+    } catch {
+      // Without this the button stays on "Saving…" forever when the action rejects.
+      setSaving(false);
+      setError("Could not reach the server. Try again.");
+      return;
+    }
 
     setSaving(false);
     if (!result.ok) {
@@ -250,7 +258,7 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
                 type="button"
                 disabled={saving}
                 className="rounded bg-select-edge px-3 py-1 text-[0.8125rem] font-medium text-white disabled:opacity-50"
-                onClick={save}
+                onClick={() => void save()}
               >
                 {saving ? "Saving…" : "Save"}
               </button>

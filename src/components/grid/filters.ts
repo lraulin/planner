@@ -181,13 +181,13 @@ function matchesDeadline(
   // Presets that need a clock: open until hydrated so SSR and client agree.
   if (!today) return true;
 
-  if (id === "past-and-none") return blank || value! < today;
-  if (id === "past") return !blank && value! < today;
+  if (id === "past-and-none") return blank || value < today;
+  if (id === "past") return !blank && value < today;
   if (id === "today") return value === today;
-  if (id === "today-and-past") return !blank && value! <= today;
-  if (id === "today-past-and-none") return blank || value! <= today;
-  if (id === "today-and-future") return !blank && value! >= today;
-  if (id === "today-future-and-none") return blank || value! >= today;
+  if (id === "today-and-past") return !blank && value <= today;
+  if (id === "today-past-and-none") return blank || value <= today;
+  if (id === "today-and-future") return !blank && value >= today;
+  if (id === "today-future-and-none") return blank || value >= today;
 
   if (id === "yesterday") {
     return value === shiftDays(today, -1);
@@ -198,17 +198,17 @@ function matchesDeadline(
   if (id === "last-7-days") {
     if (blank) return false;
     const from = shiftDays(today, -7);
-    return value! >= from && value! < today;
+    return value >= from && value < today;
   }
   if (id === "next-7-days") {
     if (blank) return false;
     const to = shiftDays(today, 7);
-    return value! > today && value! <= to;
+    return value > today && value <= to;
   }
   if (id === "next-14-days") {
     if (blank) return false;
     const to = shiftDays(today, 14);
-    return value! > today && value! <= to;
+    return value > today && value <= to;
   }
 
   return true;

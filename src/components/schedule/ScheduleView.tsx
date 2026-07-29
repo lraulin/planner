@@ -7,6 +7,7 @@ import type { OutlineNode } from "@/lib/tree/types";
 import type { SchedulePayload } from "@/lib/schedule/queries";
 import type { Occurrence } from "@/lib/schedule/recurrence";
 import { fromDateKey, startOfWeek, toDateKey, weekDays } from "@/lib/schedule/geometry";
+import { asyncHandler } from "@/lib/eventHandler";
 import {
   createAppointmentAction,
   createTimeChartAction,
@@ -122,7 +123,7 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
     startTransition(() => router.refresh());
   }, [router]);
 
-  async function handleCreateRange(start: Date, end: Date) {
+  function handleCreateRange(start: Date, end: Date) {
     setEditingAppointment({
       subject: "",
       startAt: start,
@@ -274,7 +275,7 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
         <button
           type="button"
           className="rounded border border-rule bg-surface px-2 py-1 text-ink hover:bg-surface-raised"
-          onClick={handleNewChart}
+          onClick={asyncHandler(handleNewChart, alert)}
         >
           New Time Chart…
         </button>
@@ -333,9 +334,9 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
             occurrences={occurrences}
             onSelectRange={handleCreateRange}
             onEventClick={openOccurrence}
-            onEventDrop={handleEventDrop}
-            onExternalDrop={handleExternalProjectDrop}
-            onCycleCheck={handleCycleCheck}
+            onEventDrop={asyncHandler(handleEventDrop, alert)}
+            onExternalDrop={asyncHandler(handleExternalProjectDrop, alert)}
+            onCycleCheck={asyncHandler(handleCycleCheck, alert)}
           />
         </div>
 
@@ -361,7 +362,7 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
           setEditingAppointment(null);
           refresh();
         }}
-        onDelete={handleDeleteAppointment}
+        onDelete={asyncHandler(handleDeleteAppointment, alert)}
       />
     </div>
   );

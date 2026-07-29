@@ -1,1 +1,7 @@
 npx lint-staged
+
+# Whole-project rather than staged-files-only: type-aware rules and tsc both reason
+# across module boundaries, so an edit to one file can break lint in a file that isn't
+# staged. ~6s combined, which is cheap next to finding it on deploy.
+npm run lint
+npm run typecheck

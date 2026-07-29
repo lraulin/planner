@@ -69,14 +69,23 @@ export function NodeDetailDrawer({
     if (!nodeId) return;
 
     let current = true;
-    loadNodeDetailAction(nodeId).then((result) => {
-      // A second open may have overtaken this one; only the latest may write.
-      if (!current) return;
-      if (!result.ok) setLoaded({ nodeId, detail: null, error: result.error });
-      else if (!result.data)
-        setLoaded({ nodeId, detail: null, error: "That record no longer exists." });
-      else setLoaded({ nodeId, detail: result.data, error: null });
-    });
+    void loadNodeDetailAction(nodeId).then(
+      (result) => {
+        // A second open may have overtaken this one; only the latest may write.
+        if (!current) return;
+        if (!result.ok) setLoaded({ nodeId, detail: null, error: result.error });
+        else if (!result.data)
+          setLoaded({ nodeId, detail: null, error: "That record no longer exists." });
+        else setLoaded({ nodeId, detail: result.data, error: null });
+      },
+      // A rejected action (dropped connection, server crash) would otherwise leave the
+      // drawer stuck on its loading state with nothing to explain why.
+      () => {
+        if (current) {
+          setLoaded({ nodeId, detail: null, error: "Could not load this record." });
+        }
+      },
+    );
 
     return () => {
       current = false;
@@ -174,13 +183,18 @@ function DetailForm({
   }, []);
 
   /** Re-reads the record after a list write, so ids and ordering come from the server. */
-  const refreshItems = useCallback(() => {
-    loadNodeDetailAction(detail.id).then((result) => {
+  const refreshItems = useCallback(async () => {
+    try {
+      const result = await loadNodeDetailAction(detail.id);
       if (result.ok && result.data) {
         setItems(result.data.items);
         onReload(result.data);
       }
-    });
+    } catch {
+      // The write landed; only the re-read failed. Rows on screen may now carry
+      // optimistic ids and stale ordering, so say so rather than looking healthy.
+      setError("Saved, but the list could not be refreshed. Reopen to see it.");
+    }
   }, [detail.id, onReload]);
 
   const runItemAction = useCallback(
@@ -189,7 +203,7 @@ function DetailForm({
       startTransition(async () => {
         const result = await action();
         if (!result.ok) setError(result.error);
-        else refreshItems();
+        else await refreshItems();
       });
     },
     [refreshItems],

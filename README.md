@@ -51,7 +51,8 @@ npm start        # also http://localhost:3047
 | `npm run build`        | Production build                            |
 | `npm test`             | Unit tests (Vitest)                         |
 | `npm run typecheck`    | `tsc --noEmit`                              |
-| `npm run lint`         | ESLint                                      |
+| `npm run lint`         | ESLint (warnings fail too)                  |
+| `npm run lint:fix`     | ESLint with `--fix`                         |
 | `npm run format`       | Prettier write-all                          |
 | `npm run format:check` | Prettier check (CI-friendly)                |
 | `npm run db:up`        | Start local Postgres (Docker)               |
@@ -62,8 +63,24 @@ npm start        # also http://localhost:3047
 | `npm run db:studio`    | Drizzle Studio                              |
 | `npm run db:seed`      | Seed the dev user and sample hierarchy      |
 
-Prettier also runs automatically on staged files via a **husky + lint-staged**
-pre-commit hook (`npm install` installs the hook through the `prepare` script).
+## Linting
+
+ESLint runs `eslint-config-next` plus **type-aware** rules from `typescript-eslint`
+(`no-floating-promises`, `no-misused-promises`, `await-thenable`, `require-await`,
+`no-unnecessary-type-assertion`). Those need type information, so lint is slower than a
+stock Next setup — about 5s for the project — and in exchange it catches the class of bug
+where a rejected server action leaves the UI silently stuck.
+
+`no-unnecessary-condition` is deliberately off; see the comment in `eslint.config.mjs`.
+
+Two things run it for you:
+
+- **Pre-commit** (`.husky/pre-commit`): Prettier on staged files via lint-staged, then
+  `npm run lint` and `npm run typecheck` across the project. `npm install` installs the
+  hook through the `prepare` script.
+- **Agent edits**: `.claude/hooks/lint-file.sh` lints any file an AI agent writes and
+  reports violations back to it. It runs in the background, so a clean edit costs nothing
+  and the agent only hears about files that actually have problems.
 
 ## Deploying
 

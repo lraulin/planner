@@ -27,6 +27,7 @@ import {
   updateTimeChartAreaAction,
 } from "@/app/schedule/actions";
 import { contrastText } from "@/lib/schedule/geometry";
+import { asyncHandler } from "@/lib/eventHandler";
 import {
   expandAreasForTemplate,
   rangeToAreaTiming,
@@ -302,7 +303,7 @@ export function TimeChartEditorView({ chart, initialAreas, nodes, returnTo }: Pr
           className="min-w-[12rem] rounded border border-rule bg-surface px-2 py-1 text-ink"
           value={chartName}
           onChange={(e) => setChartName(e.target.value)}
-          onBlur={saveChartName}
+          onBlur={asyncHandler(saveChartName, setError)}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.currentTarget.blur();
@@ -353,10 +354,10 @@ export function TimeChartEditorView({ chart, initialAreas, nodes, returnTo }: Pr
             firstDay={0}
             dayHeaderFormat={{ weekday: "long" }}
             events={events}
-            select={handleSelectRange}
+            select={asyncHandler(handleSelectRange, setError)}
             eventClick={handleEventClick}
-            eventDrop={handleEventDrop}
-            eventResize={handleEventResize}
+            eventDrop={asyncHandler(handleEventDrop, setError)}
+            eventResize={asyncHandler(handleEventResize, setError)}
             eventDidMount={(info) => {
               const bg = String(info.event.backgroundColor ?? "#ccc");
               const label = contrastText(bg);
@@ -372,8 +373,8 @@ export function TimeChartEditorView({ chart, initialAreas, nodes, returnTo }: Pr
             area={selected}
             nodes={nodes}
             nameInputRef={nameInputRef}
-            onChange={onPanelChange}
-            onDelete={handleDeleteSelected}
+            onChange={asyncHandler(onPanelChange, setError)}
+            onDelete={asyncHandler(handleDeleteSelected, setError)}
           />
         </aside>
       </div>
