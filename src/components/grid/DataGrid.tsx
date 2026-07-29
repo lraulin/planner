@@ -8,7 +8,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { PriorityLetter } from "@/db/schema";
 import type { GridRow } from "@/lib/tree/slice";
 import type { DropZone } from "@/lib/tree/dnd";
 import { TYPE_LABELS } from "@/lib/tree/hierarchy";
@@ -456,7 +455,11 @@ function DataRow<TCtx>({
       ))}
 
       {drag?.hint && drag.hint.zone !== "inside" && (
-        <DropLine zone={drag.hint.zone} depth={drag.hint.depth} />
+        <DropLine
+          zone={drag.hint.zone}
+          depth={drag.hint.depth}
+          nameColumnLeft={nameColumnLeft(columns)}
+        />
       )}
     </div>
   );
@@ -476,18 +479,42 @@ function dropZoneFor(event: React.DragEvent<HTMLDivElement>): DropZone {
  * of the row under the cursor — so a drop that snaps out to an ancestor's level says so
  * before the mouse is released.
  */
-function DropLine({ zone, depth }: { zone: "before" | "after"; depth: number }) {
+function DropLine({
+  zone,
+  depth,
+  nameColumnLeft,
+}: {
+  zone: "before" | "after";
+  depth: number;
+  nameColumnLeft: string;
+}) {
   return (
     <div
       aria-hidden
       className="pointer-events-none absolute right-0 z-10 h-0.5 bg-select-edge"
       style={{
-        left: `calc(0.75rem + ${depth} * var(--indent-step))`,
+        left: `calc(${nameColumnLeft} + ${depth} * var(--indent-step))`,
         top: zone === "before" ? "-1px" : undefined,
         bottom: zone === "after" ? "-1px" : undefined,
       }}
     />
   );
+}
+
+/**
+ * Where the name column starts, as a CSS length: the row's own padding plus every fixed
+ * track before it (priority, and whatever a tab puts ahead of the tree). Indentation lives
+ * in the name cell, so the drop line has to start there too. Any non-fixed track before
+ * the name — none today — gives up and measures from the row edge.
+ */
+function nameColumnLeft(columns: { id: string; width: string }[]): string {
+  const parts = ["0.75rem"];
+  for (const column of columns) {
+    if (column.id === "name") break;
+    if (!/^[\d.]+(rem|px|em)$/.test(column.width)) return "0.75rem";
+    parts.push(column.width, "0.75rem");
+  }
+  return `calc(${parts.join(" + ")})`;
 }
 
 function GroupHeader({
@@ -593,28 +620,28 @@ function compareSort(
   return String(a).localeCompare(String(b), undefined, { numeric: true });
 }
 
-/** Build ancestor priority chains for the name-cell spine. */
-export function buildAncestorPriorities(
-  nodes: {
-    id: string;
-    parentId: string | null;
-    priorityLetter: PriorityLetter | null;
-  }[],
-  byId: Map<string, { parentId: string | null; priorityLetter: PriorityLetter | null }>,
-): Map<string, (PriorityLetter | null)[]> {
-  const chains = new Map<string, (PriorityLetter | null)[]>();
+/**
+ * Depth in the whole tree, keyed by node id, for the name cell's indent rails. Walked from
+ * each node rather than read off `GridRow.depth`, because the tabs that group and filter
+ * rows still want a row indented to where it sits in the outline.
+ */
+export function buildNodeDepths(
+  nodes: { id: string; parentId: string | null }[],
+  byId: Map<string, { parentId: string | null }>,
+): Map<string, number> {
+  const depths = new Map<string, number>();
   for (const node of nodes) {
-    const chain: (PriorityLetter | null)[] = [];
+    let depth = 0;
     let current = node.parentId;
     while (current) {
       const parent = byId.get(current);
       if (!parent) break;
-      chain.unshift(parent.priorityLetter);
+      depth += 1;
       current = parent.parentId;
     }
-    chains.set(node.id, chain);
+    depths.set(node.id, depth);
   }
-  return chains;
+  return depths;
 }
 
 export { ALL_FILTER };

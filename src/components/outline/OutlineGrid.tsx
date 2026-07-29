@@ -24,11 +24,7 @@ import {
 } from "@/app/outline/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
-import {
-  DataGrid,
-  buildAncestorPriorities,
-  type RowDrag,
-} from "@/components/grid/DataGrid";
+import { DataGrid, buildNodeDepths, type RowDrag } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 import { useOptimisticNodes } from "@/components/grid/useOptimisticNodes";
 import { useToday } from "@/components/grid/useToday";
@@ -61,10 +57,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const [focusOnly, setFocusOnly] = useState(false);
   const today = useToday();
 
-  const ancestorPriorities = useMemo(
-    () => buildAncestorPriorities(nodes, byId),
-    [nodes, byId],
-  );
+  const nodeDepths = useMemo(() => buildNodeDepths(nodes, byId), [nodes, byId]);
 
   const visible = useMemo(() => {
     const dropped = new Set<string>();
@@ -371,7 +364,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
       today,
       selectedId,
       editingId,
-      ancestorPriorities,
+      nodeDepths,
       onToggleCollapsed: (node) => toggleCollapsed(node, !node.collapsed),
       onOpenDetail: (node) => {
         setSelectedId(node.id);
@@ -409,7 +402,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         apply(() => setEffortAction(node.id, minutes));
       },
     }),
-    [today, selectedId, editingId, ancestorPriorities, toggleCollapsed, patch, apply],
+    [today, selectedId, editingId, nodeDepths, toggleCollapsed, patch, apply],
   );
 
   const detailNode = detailId ? (byId.get(detailId) ?? null) : null;

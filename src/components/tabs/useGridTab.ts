@@ -13,7 +13,7 @@ import {
 } from "@/app/outline/actions";
 import { useOptimisticNodes } from "@/components/grid/useOptimisticNodes";
 import { useToday } from "@/components/grid/useToday";
-import { buildAncestorPriorities } from "@/components/grid/DataGrid";
+import { buildNodeDepths } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 
 /**
@@ -28,10 +28,7 @@ export function useGridTab(initialNodes: OutlineNode[]) {
   const [detailId, setDetailId] = useState<string | null>(null);
   const today = useToday();
 
-  const ancestorPriorities = useMemo(
-    () => buildAncestorPriorities(nodes, byId),
-    [nodes, byId],
-  );
+  const nodeDepths = useMemo(() => buildNodeDepths(nodes, byId), [nodes, byId]);
 
   const selected = selectedId ? (byId.get(selectedId) ?? null) : null;
   const detailNode = detailId ? (byId.get(detailId) ?? null) : null;
@@ -46,7 +43,7 @@ export function useGridTab(initialNodes: OutlineNode[]) {
       today,
       selectedId,
       editingId,
-      ancestorPriorities,
+      nodeDepths,
       onToggleCollapsed: (node: OutlineNode) => {
         if (!node.hasChildren) return;
         const collapsed = !node.collapsed;
@@ -93,7 +90,7 @@ export function useGridTab(initialNodes: OutlineNode[]) {
         apply(() => setEffortAction(node.id, minutes));
       },
     }),
-    [today, selectedId, editingId, ancestorPriorities, patch, apply, openDetail],
+    [today, selectedId, editingId, nodeDepths, patch, apply, openDetail],
   );
 
   /**
@@ -166,7 +163,7 @@ export function useGridTab(initialNodes: OutlineNode[]) {
     detailNode,
     openDetail,
     cellHandlers,
-    ancestorPriorities,
+    nodeDepths,
     rowMenu,
   };
 }

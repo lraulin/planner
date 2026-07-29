@@ -15,10 +15,18 @@ import type { NodeType } from "@/db/schema";
  *   drops the folder. A folder says "container", and a result area is the more container-
  *   like of the two — what marks a project is that it is planned work with a schedule.
  *
- * They are drawn in `currentColor` and stay monochrome on purpose. Colour in the outline
- * means priority (the spine, the priority cell); a second colour system arguing with it
- * would cost more than the icons are worth.
+ * Each type gets its own hue, which is what actually made Achieve's icons legible: at row
+ * size the silhouettes are four small rings and rectangles, and the colour is what you
+ * recognise before you have read the shape. This costs nothing now that the indent rails
+ * are plain rules — priority is stated once, in the Pri column.
  */
+const TYPE_COLOR: Record<NodeType, string> = {
+  result_area: "text-type-result-area",
+  goal: "text-type-goal",
+  project: "text-type-project",
+  task: "text-type-task",
+};
+
 const PATHS: Record<NodeType, React.ReactNode> = {
   /* A compass: a result area is a direction you hold to, not a thing to finish. */
   result_area: (
@@ -62,9 +70,12 @@ const PATHS: Record<NodeType, React.ReactNode> = {
 export function TypeIcon({
   type,
   className = "",
+  /** Set false where the icon sits on coloured chrome and should inherit its ink. */
+  colored = true,
 }: {
   type: NodeType;
   className?: string;
+  colored?: boolean;
 }) {
   return (
     <svg
@@ -78,7 +89,7 @@ export function TypeIcon({
       // decoration rather than a second announcement.
       aria-hidden
       focusable="false"
-      className={className}
+      className={[colored ? TYPE_COLOR[type] : "", className].join(" ").trim()}
     >
       {PATHS[type]}
     </svg>

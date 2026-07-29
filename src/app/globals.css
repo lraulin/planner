@@ -25,6 +25,16 @@
   --priority-d: #7c7489;
   --priority-none: #c8ccd6;
 
+  /*
+   * One hue per node type, so a column of icons is scannable the way Achieve's painted
+   * icons were. These are chosen to separate from each other rather than to dodge the
+   * priority hues — priority now lives entirely in its own column, two columns away.
+   */
+  --type-result-area: #2f8f6f;
+  --type-goal: #c04a3c;
+  --type-project: #5566cc;
+  --type-task: #b8791a;
+
   --row-height: 1.75rem;
   --indent-step: 0.875rem;
 }
@@ -47,6 +57,11 @@
     --priority-c: #6ba3cd;
     --priority-d: #9b93a9;
     --priority-none: #3d4250;
+
+    --type-result-area: #57bd9a;
+    --type-goal: #f08a7c;
+    --type-project: #93a4f2;
+    --type-task: #e0a83f;
   }
 }
 
@@ -68,6 +83,11 @@
   --color-priority-d: var(--priority-d);
   --color-priority-none: var(--priority-none);
 
+  --color-type-result-area: var(--type-result-area);
+  --color-type-goal: var(--type-goal);
+  --color-type-project: var(--type-project);
+  --color-type-task: var(--type-task);
+
   --font-sans: var(--font-archivo);
   --font-mono: var(--font-plex-mono);
 }
@@ -87,8 +107,10 @@ body {
 }
 
 /*
- * The priority spine. Each level of indentation draws the rail of the ancestor at that
- * level, so the tree's shape and its priority distribution are the same visual.
+ * Indent rails: one hairline per level of nesting, so the tree's shape reads down the
+ * column instead of only left-to-right. They used to carry each ancestor's priority
+ * colour, which duplicated the Pri column and monopolised colour in the row — they are
+ * plain rules now, and colour means type (the icon) or priority (the Pri column).
  */
 .spine {
   width: var(--indent-step);
@@ -102,13 +124,8 @@ body {
   left: 0.3125rem;
   top: 0;
   bottom: 0;
-  width: 2px;
-  background: currentColor;
-  opacity: 0.32;
-}
-
-.spine-own::before {
-  opacity: 1;
+  width: 1px;
+  background: var(--rule-strong);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -13,7 +13,7 @@ export {
   TextCell,
   ReadOnlyCell,
 } from "./cells";
-export { DataGrid, buildAncestorPriorities } from "./DataGrid";
+export { DataGrid, buildNodeDepths } from "./DataGrid";
 export { ColumnHeaderRow } from "./ColumnHeader";
 export { ShowFieldsDialog } from "./ShowFieldsDialog";
 export { useGridColumns } from "./useGridColumns";

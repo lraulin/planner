@@ -36,22 +36,18 @@ const TYPE_STYLE: Record<OutlineNode["type"], string> = {
   task: "text-[0.875rem] font-normal",
 };
 
-function priorityColorVar(letter: PriorityLetter | null): string {
-  return letter ? `var(--priority-${letter.toLowerCase()})` : "var(--priority-none)";
-}
-
 // ---------------------------------------------------------------------------
 // Name
 // ---------------------------------------------------------------------------
 
 /**
- * Name cell: priority spine, expander, type icon, label (or inline editor). The spine is
- * outline-native visual hierarchy; other tabs pass an empty ancestor chain and still get
- * the own-priority rail plus icon + name.
+ * Name cell: indent rails, expander, type icon, label (or inline editor). `depth` is the
+ * node's depth in the whole tree, not in the rows on screen, so a task shown out of
+ * context in the Tasks tab still sits where it belongs under its project.
  */
 export function NameCell({
   node,
-  ancestorPriorities,
+  depth,
   selected,
   editing,
   onToggleCollapsed,
@@ -60,7 +56,7 @@ export function NameCell({
   onCancelEdit,
 }: {
   node: OutlineNode;
-  ancestorPriorities: (PriorityLetter | null)[];
+  depth: number;
   selected: boolean;
   editing: boolean;
   onToggleCollapsed: () => void;
@@ -72,19 +68,9 @@ export function NameCell({
 
   return (
     <div className="flex min-w-0 items-stretch self-stretch">
-      {ancestorPriorities.map((letter, depth) => (
-        <span
-          key={depth}
-          aria-hidden
-          className="spine"
-          style={{ color: priorityColorVar(letter) }}
-        />
+      {Array.from({ length: depth + 1 }, (_, level) => (
+        <span key={level} aria-hidden className="spine" />
       ))}
-      <span
-        aria-hidden
-        className="spine spine-own"
-        style={{ color: priorityColorVar(node.priorityLetter) }}
-      />
 
       <button
         type="button"
@@ -104,7 +90,7 @@ export function NameCell({
 
       <TypeIcon
         type={node.type}
-        className="mr-1.5 h-3.5 w-3.5 flex-none self-center text-ink-faint"
+        className={`mr-1.5 h-3.5 w-3.5 flex-none self-center ${done ? "opacity-45" : ""}`}
       />
 
       {editing ? (

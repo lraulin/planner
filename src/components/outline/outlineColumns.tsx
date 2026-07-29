@@ -22,7 +22,7 @@ export type OutlineColumnCtx = {
   today: string | null;
   selectedId: string | null;
   editingId: string | null;
-  ancestorPriorities: Map<string, (PriorityLetter | null)[]>;
+  nodeDepths: Map<string, number>;
   onToggleCollapsed: (node: OutlineNode) => void;
   onOpenDetail: (node: OutlineNode) => void;
   onFinishEdit: (node: OutlineNode, name: string) => void;
@@ -39,37 +39,20 @@ export type OutlineColumnCtx = {
 };
 
 export const OUTLINE_COLUMN_IDS = [
-  "name",
   "priority",
+  "name",
   "effort",
   "deadline",
   "state",
   "focus",
 ] as const;
 
-/** The outline's fixed column set, expressed as shared `ColumnDef`s. */
+/**
+ * The outline's fixed column set, expressed as shared `ColumnDef`s. Priority leads, as it
+ * does on Projects, Tasks and Goals — and as it did in Achieve, where the narrow columns
+ * sat to the left of the indented tree rather than off past its ragged right edge.
+ */
 export const outlineColumns: ColumnDef<OutlineColumnCtx>[] = [
-  {
-    id: "name",
-    label: "Name",
-    width: "minmax(16rem,1fr)",
-    hideable: false,
-    filterValue: (row) => row.node.name,
-    filterKind: "text",
-    sortValue: (row) => row.node.name.toLowerCase(),
-    render: (row, ctx) => (
-      <NameCell
-        node={row.node}
-        ancestorPriorities={ctx.ancestorPriorities.get(row.node.id) ?? []}
-        selected={row.node.id === ctx.selectedId}
-        editing={row.node.id === ctx.editingId}
-        onToggleCollapsed={() => ctx.onToggleCollapsed(row.node)}
-        onOpenDetail={() => ctx.onOpenDetail(row.node)}
-        onFinishEdit={(name) => ctx.onFinishEdit(row.node, name)}
-        onCancelEdit={ctx.onCancelEdit}
-      />
-    ),
-  },
   {
     id: "priority",
     label: "Pri",
@@ -84,6 +67,27 @@ export const outlineColumns: ColumnDef<OutlineColumnCtx>[] = [
         key={`priority:${formatPriority(row.node.priorityLetter, row.node.priorityRank)}`}
         node={row.node}
         onChange={(letter, rank) => ctx.onPriorityChange(row.node, letter, rank)}
+      />
+    ),
+  },
+  {
+    id: "name",
+    label: "Name",
+    width: "minmax(16rem,1fr)",
+    hideable: false,
+    filterValue: (row) => row.node.name,
+    filterKind: "text",
+    sortValue: (row) => row.node.name.toLowerCase(),
+    render: (row, ctx) => (
+      <NameCell
+        node={row.node}
+        depth={ctx.nodeDepths.get(row.node.id) ?? 0}
+        selected={row.node.id === ctx.selectedId}
+        editing={row.node.id === ctx.editingId}
+        onToggleCollapsed={() => ctx.onToggleCollapsed(row.node)}
+        onOpenDetail={() => ctx.onOpenDetail(row.node)}
+        onFinishEdit={(name) => ctx.onFinishEdit(row.node, name)}
+        onCancelEdit={ctx.onCancelEdit}
       />
     ),
   },

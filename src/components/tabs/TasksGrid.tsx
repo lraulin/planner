@@ -100,7 +100,7 @@ function buildColumns(): ColumnDef<OutlineColumnCtx>[] {
       render: (row, ctx) => (
         <NameCell
           node={row.node}
-          ancestorPriorities={ctx.ancestorPriorities.get(row.node.id) ?? []}
+          depth={ctx.nodeDepths.get(row.node.id) ?? 0}
           selected={row.node.id === ctx.selectedId}
           editing={row.node.id === ctx.editingId}
           onToggleCollapsed={() => ctx.onToggleCollapsed(row.node)}
