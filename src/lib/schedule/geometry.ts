@@ -71,7 +71,15 @@ export function minutesOfDay(date: Date): number {
   return date.getHours() * 60 + date.getMinutes();
 }
 
-export const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+export const WEEKDAY_LABELS = [
+  "Sun",
+  "Mon",
+  "Tue",
+  "Wed",
+  "Thu",
+  "Fri",
+  "Sat",
+] as const;
 
 export const WEEKDAYS = [0, 1, 2, 3, 4, 5, 6] as const;
 export const WEEKDAYS_ONLY = [1, 2, 3, 4, 5] as const;

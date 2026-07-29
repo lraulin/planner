@@ -4,7 +4,7 @@ Durable planning and decision records for significant work. Shaped with `/shape-
 plan mode; implemented with the active folder as the source of agreed intent.
 
 > **Standing rule (also in `AGENTS.md`):** While a feature is active, keep its spec current
-> with *material* refinements from implementation and feedback. Once verified, freeze it.
+> with _material_ refinements from implementation and feedback. Once verified, freeze it.
 > Do not maintain frozen specs as a continuous control plane.
 
 ## Layout
@@ -24,14 +24,14 @@ agent-os/specs/{YYYY-MM-DD-HHMM-feature-slug}/
 shape ──► active (working document) ──► implement + selective updates ──► freeze
 ```
 
-| Phase | Status line | Spec role |
-| --- | --- | --- |
-| Just created / in progress | `**Status: active**` | Working document for the implementation cycle |
-| Done and verified | `**Status: frozen / complete** (YYYY-MM-DD)` | Historical as-built decision record |
+| Phase                      | Status line                                  | Spec role                                     |
+| -------------------------- | -------------------------------------------- | --------------------------------------------- |
+| Just created / in progress | `**Status: active**`                         | Working document for the implementation cycle |
+| Done and verified          | `**Status: frozen / complete** (YYYY-MM-DD)` | Historical as-built decision record           |
 
 ### Active phase — selective updates
 
-When feedback or implementation friction changes the *agreed intent*, update the active
+When feedback or implementation friction changes the _agreed intent_, update the active
 spec in the same cycle as the code.
 
 **Good candidates**
@@ -50,7 +50,7 @@ spec in the same cycle as the code.
 **How to record changes**
 
 1. Update the authoritative sections in `plan.md` (and `shape.md` when scope/decisions
-   drifted) so a cold reader gets the *current* agreed intent.
+   drifted) so a cold reader gets the _current_ agreed intent.
 2. Append a row under **Changes from original plan** — short “what / why” table. That
    preserves the planning-time guess vs as-built path without rewriting history line by
    line.
@@ -74,7 +74,7 @@ Exemplar: [`2026-07-28-1234-weekly-schedule/`](./2026-07-28-1234-weekly-schedule
 ## Why this pattern
 
 - Planning-time specs are almost always slightly wrong once real friction appears.
-- Final code alone rarely preserves *why* choices were made.
+- Final code alone rarely preserves _why_ choices were made.
 - Continuous living-spec maintenance for every past feature is too expensive; freezing
   after the active cycle keeps cost low while retaining the valuable thinking from
   implementation.

@@ -1,11 +1,7 @@
 import { db } from "@/db";
 import { nodeItems, nodes, resultAreaDetails } from "@/db/schema";
 import { and, asc, eq, inArray } from "drizzle-orm";
-import {
-  WISH_KINDS,
-  type WishKind,
-  type WishListRow,
-} from "./wishTypes";
+import { WISH_KINDS, type WishKind, type WishListRow } from "./wishTypes";
 
 export {
   WISH_KINDS,

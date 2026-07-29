@@ -119,7 +119,10 @@ export function ProjectsRail({ nodes }: Props) {
           Sort by Priority
         </label>
       </div>
-      <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto p-1 text-[0.8125rem]">
+      <div
+        ref={listRef}
+        className="min-h-0 flex-1 overflow-y-auto p-1 text-[0.8125rem]"
+      >
         {grouped.map((group) => (
           <div key={group.label ?? "_all"} className="mb-1">
             {group.label && (

@@ -44,22 +44,23 @@ npm start        # also http://localhost:3047
 
 ## Scripts
 
-| Script                | Purpose                                  |
-| --------------------- | ---------------------------------------- |
-| `npm run dev`         | Dev server on **http://localhost:3047**  |
-| `npm start`           | Production server on **:3047** (post-build) |
-| `npm run build`       | Production build                         |
-| `npm test`            | Unit tests (Vitest)                      |
-| `npm run typecheck`   | `tsc --noEmit`                           |
-| `npm run lint`        | ESLint                                   |
-| `npm run format`      | Prettier                                 |
-| `npm run db:up`       | Start local Postgres (Docker)            |
-| `npm run db:down`     | Stop local Postgres                      |
-| `npm run db:generate` | Generate a migration from schema changes |
-| `npm run db:migrate`  | Apply pending migrations                 |
-| `npm run db:push`     | Push the schema directly (development)   |
-| `npm run db:studio`   | Drizzle Studio                           |
-| `npm run db:seed`     | Seed the dev user and sample hierarchy   |
+| Script                 | Purpose                                     |
+| ---------------------- | ------------------------------------------- |
+| `npm run dev`          | Dev server on **http://localhost:3047**     |
+| `npm start`            | Production server on **:3047** (post-build) |
+| `npm run build`        | Production build                            |
+| `npm test`             | Unit tests (Vitest)                         |
+| `npm run typecheck`    | `tsc --noEmit`                              |
+| `npm run lint`         | ESLint                                      |
+| `npm run format`       | Prettier write-all                          |
+| `npm run format:check` | Prettier check (CI-friendly)                |
+| `npm run db:up`        | Start local Postgres (Docker)               |
+| `npm run db:down`      | Stop local Postgres                         |
+| `npm run db:generate`  | Generate a migration from schema changes    |
+| `npm run db:migrate`   | Apply pending migrations                    |
+| `npm run db:push`      | Push the schema directly (development)      |
+| `npm run db:studio`    | Drizzle Studio                              |
+| `npm run db:seed`      | Seed the dev user and sample hierarchy      |
 
 ## Deploying
 

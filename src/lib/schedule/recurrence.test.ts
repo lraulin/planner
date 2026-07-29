@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { expandRecurrence, expandTimeChartAreas, type RecurrenceInput } from "./recurrence";
+import {
+  expandRecurrence,
+  expandTimeChartAreas,
+  type RecurrenceInput,
+} from "./recurrence";
 import { fromDateKey, startOfWeek } from "./geometry";
 
-function master(partial: Partial<RecurrenceInput> & Pick<RecurrenceInput, "startAt" | "endAt">): RecurrenceInput {
+function master(
+  partial: Partial<RecurrenceInput> & Pick<RecurrenceInput, "startAt" | "endAt">,
+): RecurrenceInput {
   return {
     id: "a1",
     subject: "Test",
@@ -28,7 +34,11 @@ describe("expandRecurrence", () => {
     const rangeEnd = new Date(rangeStart);
     rangeEnd.setDate(rangeEnd.getDate() + 7);
 
-    const occ = expandRecurrence(master({ startAt: start, endAt: end }), rangeStart, rangeEnd);
+    const occ = expandRecurrence(
+      master({ startAt: start, endAt: end }),
+      rangeStart,
+      rangeEnd,
+    );
     expect(occ).toHaveLength(1);
     expect(occ[0].subject).toBe("Test");
   });

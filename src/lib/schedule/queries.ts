@@ -31,7 +31,10 @@ export async function listTimeChartAreas(userId: string, timeChartId: string) {
     .select()
     .from(timeChartAreas)
     .where(
-      and(eq(timeChartAreas.userId, userId), eq(timeChartAreas.timeChartId, timeChartId)),
+      and(
+        eq(timeChartAreas.userId, userId),
+        eq(timeChartAreas.timeChartId, timeChartId),
+      ),
     )
     .orderBy(asc(timeChartAreas.startMinute));
 }

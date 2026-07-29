@@ -32,11 +32,7 @@ export default async function SchedulePage({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <TabStrip active="schedule" />
-      <ScheduleView
-        initial={schedule}
-        nodes={nodes}
-        weekKey={toDateKey(weekStart)}
-      />
+      <ScheduleView initial={schedule} nodes={nodes} weekKey={toDateKey(weekStart)} />
     </div>
   );
 }

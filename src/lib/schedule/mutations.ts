@@ -205,11 +205,13 @@ export async function updateAppointment(
     startAt,
     endAt,
   };
-  if (input.subject !== undefined) patch.subject = input.subject.trim() || "Appointment";
+  if (input.subject !== undefined)
+    patch.subject = input.subject.trim() || "Appointment";
   if (input.location !== undefined) patch.location = input.location;
   if (input.allDay !== undefined) patch.allDay = input.allDay;
   if (input.checkState !== undefined) patch.checkState = input.checkState;
-  if (input.reminderMinutes !== undefined) patch.reminderMinutes = input.reminderMinutes;
+  if (input.reminderMinutes !== undefined)
+    patch.reminderMinutes = input.reminderMinutes;
   if (input.showAs !== undefined) patch.showAs = input.showAs;
   if (input.priorityLetter !== undefined) patch.priorityLetter = input.priorityLetter;
   if (input.priorityRank !== undefined) patch.priorityRank = input.priorityRank;
@@ -229,8 +231,10 @@ export async function updateAppointment(
       : null;
   }
   if (input.recurrenceEnd !== undefined) patch.recurrenceEnd = input.recurrenceEnd;
-  if (input.recurrenceCount !== undefined) patch.recurrenceCount = input.recurrenceCount;
-  if (input.recurrenceUntil !== undefined) patch.recurrenceUntil = input.recurrenceUntil;
+  if (input.recurrenceCount !== undefined)
+    patch.recurrenceCount = input.recurrenceCount;
+  if (input.recurrenceUntil !== undefined)
+    patch.recurrenceUntil = input.recurrenceUntil;
 
   const [row] = await db
     .update(appointments)

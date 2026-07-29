@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  checkStateLabel,
-  checkStateMark,
-  nextCheckState,
-} from "./checkState";
+import { checkStateLabel, checkStateMark, nextCheckState } from "./checkState";
 
 describe("nextCheckState", () => {
   it("cycles open → done → missed → open", () => {

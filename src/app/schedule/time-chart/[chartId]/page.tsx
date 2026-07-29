@@ -1,9 +1,6 @@
 import { notFound } from "next/navigation";
 import { getCurrentUserId } from "@/lib/auth";
-import {
-  getTimeChart,
-  listTimeChartAreas,
-} from "@/lib/schedule/queries";
+import { getTimeChart, listTimeChartAreas } from "@/lib/schedule/queries";
 import { loadOutline } from "@/lib/tree/queries";
 import { TabStrip } from "@/components/shell/TabStrip";
 import { TimeChartEditorView } from "@/components/schedule/TimeChartEditorView";

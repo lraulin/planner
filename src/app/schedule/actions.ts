@@ -12,9 +12,7 @@ import type {
 import * as schedule from "@/lib/schedule/mutations";
 import type { AppointmentInput, TimeChartAreaInput } from "@/lib/schedule/mutations";
 
-export type ActionResult =
-  | { ok: true; id?: string }
-  | { ok: false; error: string };
+export type ActionResult = { ok: true; id?: string } | { ok: false; error: string };
 
 async function run<T>(work: (userId: string) => Promise<T>): Promise<ActionResult> {
   try {
@@ -118,7 +116,9 @@ export async function updateAppointmentAction(
   payload: Partial<AppointmentFormPayload>,
 ): Promise<ActionResult> {
   return run(async (userId) => {
-    const input: Partial<AppointmentInput> = { ...payload } as Partial<AppointmentInput>;
+    const input: Partial<AppointmentInput> = {
+      ...payload,
+    } as Partial<AppointmentInput>;
     if (payload.startAt) input.startAt = new Date(payload.startAt);
     if (payload.endAt) input.endAt = new Date(payload.endAt);
     if (payload.recurrenceUntil !== undefined) {

@@ -11,7 +11,13 @@ import type {
 import type { OutlineNode } from "@/lib/tree/types";
 import { Drawer } from "@/components/detail/Drawer";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
-import { FieldGrid, Section, TextField, TextArea, CheckboxField } from "@/components/detail/fields";
+import {
+  FieldGrid,
+  Section,
+  TextField,
+  TextArea,
+  CheckboxField,
+} from "@/components/detail/fields";
 import {
   createAppointmentAction,
   updateAppointmentAction,
@@ -204,7 +210,9 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
   function toggleWeekday(d: number) {
     setDirty(true);
     setRecurrenceByWeekday((prev) =>
-      prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d].sort((a, b) => a - b),
+      prev.includes(d)
+        ? prev.filter((x) => x !== d)
+        : [...prev, d].sort((a, b) => a - b),
     );
   }
 
@@ -213,7 +221,10 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
       <Drawer open onClose={requestClose} labelledBy="appointment-title">
         <div className="flex h-full flex-col">
           <header className="flex items-center justify-between border-b border-rule px-4 py-3">
-            <h2 id="appointment-title" className="text-[0.9375rem] font-semibold text-ink">
+            <h2
+              id="appointment-title"
+              className="text-[0.9375rem] font-semibold text-ink"
+            >
               {id ? "Appointment" : "New Appointment"}
             </h2>
             <div className="flex gap-2">
@@ -382,7 +393,12 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
                 />
               </div>
               <div className="mt-2">
-                <TextArea label="Notes" value={notes} onChange={mark(setNotes)} rows={4} />
+                <TextArea
+                  label="Notes"
+                  value={notes}
+                  onChange={mark(setNotes)}
+                  rows={4}
+                />
               </div>
             </Section>
 

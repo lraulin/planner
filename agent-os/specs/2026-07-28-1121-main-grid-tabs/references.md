@@ -95,27 +95,27 @@
 Screenshots live at `screenshots/main tabs/`, untracked from git by Task 2 of this spec.
 Referenced here by timestamp.
 
-| Screenshot | Shows |
-| --- | --- |
-| `10.44.24` | **Projects tab**, grouped: `Category : Personal (3 items)` → `Result Area : Career (1 item)` → rows. Columns: State, Priorit, Name, Tasks, Effort, Effort Left, Target Start, Deadline, %, Status, L.A.P. |
-| `10.44.37` | **Tasks tab**, Project scope = `Advance Career`, `Group by Area` / `Deferred` / `Project's Purpose` toggles |
-| `10.44.51` | Tasks tab with **Project's Purpose** on — a labelled purpose panel above the grid |
-| `10.45.10` | Achieve's **Select Project** modal: filter box, tree with `<All Projects>` / `<No Project>`, and Show Completed / Group by Result Area / Show Deferred checkboxes. Becomes a popover here. |
-| `10.45.22` | Tasks **View** dropdown: Active Task Status, Active Task Schedule, Active Task Schedule Details, Completed Tasks, All Tasks, All Tasks Schedule, Active Task Template, Active Task Printing |
-| `10.45.37` | Projects **View** dropdown: Active Project Status, Active Project Schedule, Active Project Purpose, Active Project Delegation, Completed Projects, All Projects, Active Project Recurrence, Active Project Printing |
-| `10.45.45` | Projects tab with **Groups off** — flat, row-numbered 1/2/3, both header levels gone at once |
-| `10.46.05` | **Result Area** scope picker: `All Result Areas` over a flat list of areas |
-| `10.46.24` | **Goals tab**: Priority, Title, Definition, Status (`Not Started` — the state, spelled out), Deadline, Range. Grouped by Result Area. |
-| `10.46.28` | Goals **View** dropdown: All Goals, Active Goals, Completed Goals |
-| `10.46.54` | **Wish List tab**: Priority, Type (`W/DH`, `DW/DH`, `W/H`), Title, Description. Result Area scope only — no View dropdown. |
-| `10.46.59` | The **Go** menu — the full tab inventory and its `Ctrl+G,<key>` accelerators |
-| `10.47.16` | The **Actions** menu: Convert to Dream, Convert to Goal, Recurrence, Defer, Reschedule, Schedule Block in Calendar, Link Tasks |
-| `10.55.41` | A **text column filter**: `(All)`, `(Custom)`, `(Blanks)`, `(NonBlanks)`, then the distinct values |
-| `10.55.58` | The **Priority filter's semantic presets**: Only A1, Only Ranked As, Only Unranked As, Only As, Only As & Bs, Only As Bs & Cs, Only Bs, Only Bs & Cs, Only Cs, Only Ds, Ranked, Unranked, Prioritized, Unprioritized, (Custom) |
-| `10.56.50` | A **Status filter** — `(All)`, `(Custom)`, `(Blanks)`, `(NonBlanks)`, then values |
+| Screenshot | Shows                                                                                                                                                                                                                                                                                                      |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `10.44.24` | **Projects tab**, grouped: `Category : Personal (3 items)` → `Result Area : Career (1 item)` → rows. Columns: State, Priorit, Name, Tasks, Effort, Effort Left, Target Start, Deadline, %, Status, L.A.P.                                                                                                  |
+| `10.44.37` | **Tasks tab**, Project scope = `Advance Career`, `Group by Area` / `Deferred` / `Project's Purpose` toggles                                                                                                                                                                                                |
+| `10.44.51` | Tasks tab with **Project's Purpose** on — a labelled purpose panel above the grid                                                                                                                                                                                                                          |
+| `10.45.10` | Achieve's **Select Project** modal: filter box, tree with `<All Projects>` / `<No Project>`, and Show Completed / Group by Result Area / Show Deferred checkboxes. Becomes a popover here.                                                                                                                 |
+| `10.45.22` | Tasks **View** dropdown: Active Task Status, Active Task Schedule, Active Task Schedule Details, Completed Tasks, All Tasks, All Tasks Schedule, Active Task Template, Active Task Printing                                                                                                                |
+| `10.45.37` | Projects **View** dropdown: Active Project Status, Active Project Schedule, Active Project Purpose, Active Project Delegation, Completed Projects, All Projects, Active Project Recurrence, Active Project Printing                                                                                        |
+| `10.45.45` | Projects tab with **Groups off** — flat, row-numbered 1/2/3, both header levels gone at once                                                                                                                                                                                                               |
+| `10.46.05` | **Result Area** scope picker: `All Result Areas` over a flat list of areas                                                                                                                                                                                                                                 |
+| `10.46.24` | **Goals tab**: Priority, Title, Definition, Status (`Not Started` — the state, spelled out), Deadline, Range. Grouped by Result Area.                                                                                                                                                                      |
+| `10.46.28` | Goals **View** dropdown: All Goals, Active Goals, Completed Goals                                                                                                                                                                                                                                          |
+| `10.46.54` | **Wish List tab**: Priority, Type (`W/DH`, `DW/DH`, `W/H`), Title, Description. Result Area scope only — no View dropdown.                                                                                                                                                                                 |
+| `10.46.59` | The **Go** menu — the full tab inventory and its `Ctrl+G,<key>` accelerators                                                                                                                                                                                                                               |
+| `10.47.16` | The **Actions** menu: Convert to Dream, Convert to Goal, Recurrence, Defer, Reschedule, Schedule Block in Calendar, Link Tasks                                                                                                                                                                             |
+| `10.55.41` | A **text column filter**: `(All)`, `(Custom)`, `(Blanks)`, `(NonBlanks)`, then the distinct values                                                                                                                                                                                                         |
+| `10.55.58` | The **Priority filter's semantic presets**: Only A1, Only Ranked As, Only Unranked As, Only As, Only As & Bs, Only As Bs & Cs, Only Bs, Only Bs & Cs, Only Cs, Only Ds, Ranked, Unranked, Prioritized, Unprioritized, (Custom)                                                                             |
+| `10.56.50` | A **Status filter** — `(All)`, `(Custom)`, `(Blanks)`, `(NonBlanks)`, then values                                                                                                                                                                                                                          |
 | `10.57.07` | The **Deadline filter's date presets**: (None), (Has Date), (Past & None), (Past), (Last 7 Days), (Yesterday), (This Week Past & None), (This Week & Past), (Today Past & None), (Today & Past), (Today), (Tomorrow), (Next 7 Days), (Next 14 Days), (Next Month), (Today & Future), (Today Future & None) |
-| `10.59.15` | The **row context menu**: Undo, New Project From Template, View Tasks, Complete Project, Schedule Block in Calendar, Insert ▸, Outline ▸, Actions ▸, Open Selected Items, Copy, Paste, Pickup Row(s), Delete, Customize Current View (`Ctrl+Alt+M`) |
-| `10.59.38` | The **Show Fields** dialog for the Active Project Status view — Available Fields ↔ "Show these fields in this order", Move Up/Down, `Allow column filtering`, Reset Fields. The shown list is the authoritative column set and order for Task 8. |
+| `10.59.15` | The **row context menu**: Undo, New Project From Template, View Tasks, Complete Project, Schedule Block in Calendar, Insert ▸, Outline ▸, Actions ▸, Open Selected Items, Copy, Paste, Pickup Row(s), Delete, Customize Current View (`Ctrl+Alt+M`)                                                        |
+| `10.59.38` | The **Show Fields** dialog for the Active Project Status view — Available Fields ↔ "Show these fields in this order", Move Up/Down, `Allow column filtering`, Reset Fields. The shown list is the authoritative column set and order for Task 8.                                                           |
 
 ### Field vocabulary from the Show Fields dialog
 
@@ -131,13 +131,13 @@ Most map to existing columns in `project_details` / `task_details`; the `User Bo
 
 Achieve renders `nodes.state` as a two-letter code on these grids. Confirmed by Lee:
 
-| Code | State | Code | State |
-| --- | --- | --- | --- |
-| `NS` | Not Started | `P` | Postponed |
-| `IP` | In Progress | `D` | Delegated |
-| `W` | Waiting | `SD` | Should Delegate |
-| `C` | Completed | `PR` | Proposed |
-| `Cn` | Cancelled | | |
+| Code | State       | Code | State           |
+| ---- | ----------- | ---- | --------------- |
+| `NS` | Not Started | `P`  | Postponed       |
+| `IP` | In Progress | `D`  | Delegated       |
+| `W`  | Waiting     | `SD` | Should Delegate |
+| `C`  | Completed   | `PR` | Proposed        |
+| `Cn` | Cancelled   |      |                 |
 
 These are exactly the nine values of `nodeStateEnum`.
 
@@ -145,11 +145,11 @@ These are exactly the nine values of `nodeStateEnum`.
 
 Confirmed by Lee; deadline-driven, most urgent first:
 
-| Status | Condition |
-| --- | --- |
-| Overdue | deadline is in the past |
-| Due Today | deadline is today |
-| Due Tomorrow | deadline is tomorrow |
-| Close to Deadline | within 2 days |
-| Due Soon | within 5 days |
-| On Schedule | anything further out, or no deadline |
+| Status            | Condition                            |
+| ----------------- | ------------------------------------ |
+| Overdue           | deadline is in the past              |
+| Due Today         | deadline is today                    |
+| Due Tomorrow      | deadline is tomorrow                 |
+| Close to Deadline | within 2 days                        |
+| Due Soon          | within 5 days                        |
+| On Schedule       | anything further out, or no deadline |

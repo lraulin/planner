@@ -1,12 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { useRouter } from "next/navigation";
 import FullCalendar from "@fullcalendar/react";
 import timeGridPlugin from "@fullcalendar/timegrid";
-import interactionPlugin, {
-  type EventResizeDoneArg,
-} from "@fullcalendar/interaction";
+import interactionPlugin, { type EventResizeDoneArg } from "@fullcalendar/interaction";
 import type {
   DateSelectArg,
   EventClickArg,
@@ -42,12 +47,7 @@ type Props = {
  * Full-page Time Chart editor (Achieve’s separate window as an in-app view).
  * Template week Sun–Sat, only chart areas — click-drag to create like appointments.
  */
-export function TimeChartEditorView({
-  chart,
-  initialAreas,
-  nodes,
-  returnTo,
-}: Props) {
+export function TimeChartEditorView({ chart, initialAreas, nodes, returnTo }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const nameInputRef = useRef<HTMLInputElement | null>(null);
@@ -230,9 +230,7 @@ export function TimeChartEditorView({
       arg.event.end,
     );
     setAreas((prev) =>
-      prev.map((a) =>
-        a.id === areaId ? { ...a, startMinute, durationMinutes } : a,
-      ),
+      prev.map((a) => (a.id === areaId ? { ...a, startMinute, durationMinutes } : a)),
     );
     const result = await updateTimeChartAreaAction(areaId, {
       startMinute,
@@ -257,9 +255,7 @@ export function TimeChartEditorView({
 
   async function onPanelChange(patch: Partial<TimeChartArea>) {
     if (!selectedId) return;
-    setAreas((prev) =>
-      prev.map((a) => (a.id === selectedId ? { ...a, ...patch } : a)),
-    );
+    setAreas((prev) => prev.map((a) => (a.id === selectedId ? { ...a, ...patch } : a)));
     const input: Parameters<typeof updateTimeChartAreaAction>[1] = {};
     if (patch.name !== undefined) input.name = patch.name;
     if (patch.daysOfWeek !== undefined) input.daysOfWeek = patch.daysOfWeek;

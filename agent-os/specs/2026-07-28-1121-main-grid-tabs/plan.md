@@ -66,11 +66,18 @@ New `src/lib/tree/status.ts`:
 
 ```ts
 export type ScheduleStatus =
-  | "completed" | "overdue" | "due_today" | "due_tomorrow"
-  | "close_to_deadline" | "due_soon" | "on_schedule";
+  | "completed"
+  | "overdue"
+  | "due_today"
+  | "due_tomorrow"
+  | "close_to_deadline"
+  | "due_soon"
+  | "on_schedule";
 
 export function scheduleStatus(
-  deadline: Date | null, today: string, state: NodeState,
+  deadline: Date | null,
+  today: string,
+  state: NodeState,
 ): ScheduleStatus;
 ```
 
@@ -107,21 +114,31 @@ New pure module `src/lib/tree/slice.ts`, tested like `derive.ts`:
 
 ```ts
 export type GridRow =
-  | { kind: "group"; id: string; label: string; count: number; depth: number; collapsed: boolean }
+  | {
+      kind: "group";
+      id: string;
+      label: string;
+      count: number;
+      depth: number;
+      collapsed: boolean;
+    }
   | { kind: "node"; id: string; node: OutlineNode; depth: number; context: RowContext };
 
-export function sliceTree(nodes: OutlineNode[], opts: {
-  keep: (node: OutlineNode) => boolean;
-  groupBy?: ("category" | "resultArea" | "goal")[];
-  scopeId?: string | null;       // subtree root — the Result Area or Project picker
-  includeDeferred: boolean;
-}): GridRow[];
+export function sliceTree(
+  nodes: OutlineNode[],
+  opts: {
+    keep: (node: OutlineNode) => boolean;
+    groupBy?: ("category" | "resultArea" | "goal")[];
+    scopeId?: string | null; // subtree root — the Result Area or Project picker
+    includeDeferred: boolean;
+  },
+): GridRow[];
 ```
 
 Two things it must get right:
 
 1. **Re-based depth.** A project nested under a goal loses its parent from the row set, so
-   `depth` is recomputed as the count of *kept* ancestors — sub-projects and sub-tasks stay
+   `depth` is recomputed as the count of _kept_ ancestors — sub-projects and sub-tasks stay
    indented under their own kind.
 2. **Inherited context.** `RowContext` carries the nearest ancestor result area (name,
    colour) and its `category`, plus the nearest ancestor goal. `category` lives only on
@@ -137,7 +154,7 @@ New `src/components/grid/`, built by extracting from `OutlineGrid.tsx` /
 `OutlineRow.tsx` rather than writing fresh:
 
 - **`columns.ts`** — `ColumnDef<Ctx>`: `{ id, label, width, align, render(row, ctx),
-  sortValue?(row), filterValue?(row), filterKind?: "text" | "priority" | "date" | "enum" }`.
+sortValue?(row), filterValue?(row), filterKind?: "text" | "priority" | "date" | "enum" }`.
   The grid builds its CSS `grid-template-columns` from `width`, replacing the hardcoded
   `GRID_TEMPLATE`.
 - **`cells.tsx`** — `NameCell` (spine + expander + `TypeIcon` + `NameEditor`),

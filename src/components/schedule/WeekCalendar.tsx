@@ -157,9 +157,7 @@ export function WeekCalendar({
         events={events}
         eventContent={(arg) => {
           if (arg.event.display === "background") {
-            return (
-              <div className="fc-event-title fc-sticky">{arg.event.title}</div>
-            );
+            return <div className="fc-event-title fc-sticky">{arg.event.title}</div>;
           }
 
           const state =

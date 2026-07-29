@@ -64,7 +64,7 @@ Features that complete or surround the original product, plus making it multi-de
 - **Life Plan tab** (if still desired after living with Goals + Result Areas).
 - **Task Chooser** and any remaining Achieve chrome that earns its keep.
 - **Pomodoro → time tracking.** Effort, Effort Left, Actual Effort, and % complete
-  already live on tasks (and roll up); what’s missing is a way to *earn* those numbers
+  already live on tasks (and roll up); what’s missing is a way to _earn_ those numbers
   while working. Stage it rather than jumping to a full timesheet product:
 
   1. **MVP — Pomodoro on a task or project.** Start a focus timer from the selected

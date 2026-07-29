@@ -94,11 +94,7 @@ export const recurrenceFrequencyEnum = pgEnum("recurrence_frequency", [
 ]);
 
 /** How a recurring series ends. */
-export const recurrenceEndEnum = pgEnum("recurrence_end", [
-  "never",
-  "count",
-  "until",
-]);
+export const recurrenceEndEnum = pgEnum("recurrence_end", ["never", "count", "until"]);
 
 /** Achieve's project Sensitivity field. Carried for parity; nothing keys off it yet. */
 export const sensitivityEnum = pgEnum("sensitivity", [
@@ -517,9 +513,7 @@ export const timeChartAreas = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [
-    index("time_chart_areas_chart_idx").on(table.userId, table.timeChartId),
-  ],
+  (table) => [index("time_chart_areas_chart_idx").on(table.userId, table.timeChartId)],
 );
 
 /**

@@ -2,11 +2,7 @@
 
 import { useCallback, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import type {
-  Appointment,
-  AppointmentCheck,
-  TimeChart,
-} from "@/db/schema";
+import type { Appointment, AppointmentCheck, TimeChart } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { SchedulePayload } from "@/lib/schedule/queries";
 import type { Occurrence } from "@/lib/schedule/recurrence";

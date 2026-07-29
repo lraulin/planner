@@ -68,10 +68,7 @@ function addYears(date: Date, years: number): Date {
   return addMonths(date, years * 12);
 }
 
-function occurrenceOf(
-  master: RecurrenceInput,
-  start: Date,
-): Occurrence {
+function occurrenceOf(master: RecurrenceInput, start: Date): Occurrence {
   const end = new Date(start.getTime() + durationMs(master.startAt, master.endAt));
   return {
     id: master.id,
@@ -90,11 +87,7 @@ function inWindow(start: Date, end: Date, rangeStart: Date, rangeEnd: Date): boo
   return start < rangeEnd && end > rangeStart;
 }
 
-function pastSeriesEnd(
-  master: RecurrenceInput,
-  start: Date,
-  index: number,
-): boolean {
+function pastSeriesEnd(master: RecurrenceInput, start: Date, index: number): boolean {
   if (master.recurrenceEnd === "count" && master.recurrenceCount != null) {
     return index >= master.recurrenceCount;
   }

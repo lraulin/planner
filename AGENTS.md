@@ -30,13 +30,13 @@ are in `.claude/commands/agent-os/`; **flat symlinks** at `.claude/commands/*.md
 Grok (and short Claude names) see `/shape-spec` etc. — nested-only paths are easy for
 Claude and easy for Grok to miss.
 
-| Command | Purpose |
-| --- | --- |
-| `/shape-spec` | Plan-mode shaping → `agent-os/specs/...` folder |
-| `/inject-standards` | Pull relevant `agent-os/standards/` into context |
-| `/discover-standards` | Extract patterns into new standards |
-| `/index-standards` | Rebuild `agent-os/standards/index.yml` |
-| `/plan-product` | Mission / roadmap / tech-stack in `agent-os/product/` |
+| Command               | Purpose                                               |
+| --------------------- | ----------------------------------------------------- |
+| `/shape-spec`         | Plan-mode shaping → `agent-os/specs/...` folder       |
+| `/inject-standards`   | Pull relevant `agent-os/standards/` into context      |
+| `/discover-standards` | Extract patterns into new standards                   |
+| `/index-standards`    | Rebuild `agent-os/standards/index.yml`                |
+| `/plan-product`       | Mission / roadmap / tech-stack in `agent-os/product/` |
 
 When asking the user structured questions from these flows, use `AskUserQuestion` (Claude)
 or `ask_user_question` (Grok) — same idea, harness-specific tool name.
@@ -46,7 +46,7 @@ or `ask_user_question` (Grok) — same idea, harness-specific tool name.
 1. **Shape (plan mode)** — `/shape-spec` creates `agent-os/specs/{YYYY-MM-DD-HHMM-slug}/`
    with `plan.md`, `shape.md`, `standards.md`, `references.md`, and optional `visuals/`.
    New specs start as **active** working documents.
-2. **Implement** — Execute the plan. Keep the active feature’s spec current with *material*
+2. **Implement** — Execute the plan. Keep the active feature’s spec current with _material_
    refinements that emerge from implementation or user feedback (see below).
 3. **Freeze** — When the feature is done and verified, mark the spec **frozen / complete**.
    It becomes a historical decision record of what was actually built. Future work in the
@@ -81,7 +81,7 @@ canonical “what/why” would otherwise mislead a future reader.
 - Pure code-level refactorings that don’t change behavior or contracts
 
 When freezing: set **Status: frozen / complete** (with date) on the main files, align
-scope/decisions/acceptance criteria with as-built reality, list follow-ups as *new work*
+scope/decisions/acceptance criteria with as-built reality, list follow-ups as _new work_
 (not open edits to the frozen spec), and update `agent-os/product/roadmap.md` if needed.
 
 ## Notes

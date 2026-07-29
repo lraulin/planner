@@ -118,9 +118,7 @@ export function TimeChartAreaPanel({
           <select
             className="rounded border border-rule bg-surface px-2 py-1.5 text-[0.875rem] font-normal normal-case tracking-normal text-ink"
             value={area.resultAreaId ?? ""}
-            onChange={(e) =>
-              onChange({ resultAreaId: e.target.value || null })
-            }
+            onChange={(e) => onChange({ resultAreaId: e.target.value || null })}
           >
             <option value="">(None)</option>
             {resultAreas.map((r) => (
