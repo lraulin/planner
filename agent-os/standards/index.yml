@@ -1,5 +1,3 @@
-# Agent OS Standards Index
-
 components:
   ux-principles:
     description: Core UI/UX philosophy — outline grid + drawer, inline editing for grid columns, avoid modals, tabs for form sections
@@ -9,3 +7,13 @@ components:
 development:
   testing:
     description: What to test and what not to — pure logic and DB mutations yes (always with a cross-user case), React components no; tests as a tripwire against silent breakage rather than a coverage target
+
+api:
+  response-format:
+    description: JSON envelope for HTTP APIs — { ok, data } or { ok, error }
+  error-handling:
+    description: Stable error codes and HTTP status mapping for API failures
+  agent-auth:
+    description: Bearer API key auth for agent routes (PLANNER_AGENT_API_KEY)
+  agent-tools:
+    description: Tool-oriented POST /api/agent/{tool} conventions and design rules

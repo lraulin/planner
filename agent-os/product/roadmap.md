@@ -173,13 +173,16 @@ core loop is already useful.
 
 ### AI integration
 
-- **Near-term:** Tooling / API / instructions so an **agent can operate the planner**
-  (read outline, create/update tasks, report status) — usable from a local coding agent
-  with the repo or a thin HTTP/tool surface.
-- **Medium-term:** Same tools from a hosted assistant when auth and multi-device exist.
+- **✅ Near-term (MVP):** Tooling / API / instructions so an **agent can operate the
+  planner** — `specs/2026-07-29-1500-ai-interoperability`. Bearer-keyed
+  `POST /api/agent/{tool}` for context, outline mutate, notes, light schedule, and
+  weekly-plan tools; thin **`planner-agent`** instruction repo (skills + `call-tool.sh`)
+  for Grok Build / Claude Code. Prefer summary tools over dumping the tree.
+- **Medium-term:** Same tools from a hosted assistant when auth and multi-device exist
+  (map API key → real user after Better Auth).
 - **Long-term:** Possible **custom AI** (e.g. AWS Bedrock) with durable memory, calling
-  those tools to manage the plan. Earlier Bedrock-memory idea stays relevant; prefer
-  tools over “dump the whole tree into the prompt.”
+  those tools to manage the plan. Prefer tools over “dump the whole tree into the
+  prompt.” Optional MCP packaging of the same tools.
 
 ### Financial planning
 
@@ -207,7 +210,7 @@ Phase 2 ──► Pomodoro on task/project (writes Actual Effort)
         │
         ├──► auth, export, Alfred capture
         ├──► attachments: URL links → Drive/Dropbox pickers (no S3)
-        ├──► AI tools/API (useful earlier on single-user + local agent)
+        ├──► AI tools/API ✅ (agent HTTP + planner-agent repo; Bedrock later)
         │
 Beyond Achieve (can start MVPs in parallel once Phase 1 core is daily-usable):
         ├── Fitness log MVP

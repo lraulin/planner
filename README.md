@@ -15,6 +15,16 @@ individual feature specs. Spec workflow (shape → active updates during impleme
 
 Next.js (App Router) · TypeScript · Tailwind · Drizzle ORM · PostgreSQL
 
+## Agent API
+
+External agents (Grok Build, Claude Code) can read/update the plan via tool-shaped HTTP:
+
+`POST /api/agent/{tool}` with `Authorization: Bearer $PLANNER_AGENT_API_KEY`.
+
+See **[docs/agent-api.md](docs/agent-api.md)** for setup and the tool list. Conversation
+prompts and skills live in a separate **`planner-agent`** repo so the agent is not drowned
+in this app’s source tree.
+
 ## Setup
 
 ```sh
