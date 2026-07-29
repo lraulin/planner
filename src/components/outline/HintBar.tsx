@@ -15,6 +15,7 @@ const HINTS: { keys: string[]; label: string }[] = [
   { keys: ["Tab", "⇧Tab"], label: "indent / outdent" },
   { keys: ["⌥↑", "⌥↓"], label: "move row" },
   { keys: ["←", "→"], label: "collapse / expand" },
+  { keys: ["⌘←", "⌘→"], label: "collapse / expand all" },
   { keys: ["Delete"], label: "delete" },
   { keys: ["Drag"], label: "move onto or between rows" },
   { keys: ["Right-click"], label: "row menu" },

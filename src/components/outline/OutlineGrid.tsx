@@ -14,6 +14,7 @@ import {
   moveNodeVerticallyAction,
   outdentNodeAction,
   renameNodeAction,
+  setAllCollapsedAction,
   setCollapsedAction,
   setDeadlineAction,
   setEffortAction,
@@ -194,6 +195,17 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     [patch, apply],
   );
 
+  /** Achieve's Expand All / Collapse All — one write for the whole tree. */
+  const setTreeCollapsed = useCallback(
+    (collapsed: boolean) => {
+      for (const node of nodes) {
+        if (node.hasChildren) patch(node.id, { collapsed });
+      }
+      apply(() => setAllCollapsedAction(collapsed));
+    },
+    [nodes, patch, apply],
+  );
+
   const confirmDelete = useCallback(
     (node: OutlineNode) => {
       const index = visible.findIndex((n) => n.id === node.id);
@@ -232,8 +244,10 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
       ...commandsFor(selected),
       selectUp: () => selectRelative(-1),
       selectDown: () => selectRelative(1),
+      collapseAll: () => setTreeCollapsed(true),
+      expandAll: () => setTreeCollapsed(false),
     }),
-    [commandsFor, selected, selectRelative],
+    [commandsFor, selected, selectRelative, setTreeCollapsed],
   );
 
   const suspended = detailId !== null || pendingDelete !== null;
@@ -545,11 +559,21 @@ function useOutlineKeyboard({
           break;
         case "ArrowLeft":
           event.preventDefault();
-          commands.collapse();
+          if (event.metaKey || event.ctrlKey) {
+            if (typeof commands.collapseAll === "function") commands.collapseAll();
+            else commands.collapse();
+          } else {
+            commands.collapse();
+          }
           break;
         case "ArrowRight":
           event.preventDefault();
-          commands.expand();
+          if (event.metaKey || event.ctrlKey) {
+            if (typeof commands.expandAll === "function") commands.expandAll();
+            else commands.expand();
+          } else {
+            commands.expand();
+          }
           break;
         case "Tab":
           event.preventDefault();
@@ -639,6 +663,12 @@ function FilterBar({
         </Command>
         <Command onClick={commands.remove} disabled={!hasSelection} title="Delete">
           Delete
+        </Command>
+        <Command onClick={commands.expandAll} title="Expand all (⌘→)">
+          Expand all
+        </Command>
+        <Command onClick={commands.collapseAll} title="Collapse all (⌘←)">
+          Collapse all
         </Command>
       </div>
 

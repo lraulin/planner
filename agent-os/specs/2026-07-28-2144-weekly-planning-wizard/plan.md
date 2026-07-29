@@ -1,26 +1,31 @@
 # Weekly Planning Wizard
 
-**Status: active** (2026-07-28)  
+**Status: frozen / complete** (2026-07-28)  
 Spec folder: `agent-os/specs/2026-07-28-2144-weekly-planning-wizard/`
 
+This document is the durable record of **what was built and why**. Future work that
+extends the wizard should open a new delta-spec rather than treating this file as a
+living control plane.
+
 Phase 1's last big item: the guided weekly review that walks Result Areas → Goals → fixed
-commitments → time budget → blocks on the calendar. Shaping notes and the screen-by-screen
-reading of Achieve's wizard live in `shape.md`.
+commitments → time budget → blocks on the calendar. Shaping notes live in `shape.md`.
 
 ---
 
-## Decisions (see `shape.md` for reasoning)
+## Final decisions (as built)
 
-| Decision            | Choice                                                       |
-| ------------------- | ------------------------------------------------------------ |
-| Container           | Full page `/schedule/plan?week=…&step=…`                     |
-| Select Week         | Step 0 on the page, not a modal                              |
-| Resources           | Dropped; one weekly available-time number                    |
-| Focus areas         | Write `nodes.focus`; also recorded on the plan entry         |
-| Goal rewrite        | Per-plan history, never overwrites the goal                  |
-| Commitments         | Per-plan `committed_minutes` per project                     |
-| Collision avoidance | Pure `findFreeSlot`; optionally also avoids Time Chart areas |
-| Auto-scheduler      | Out of scope                                                 |
+| Decision            | Choice                                                            |
+| ------------------- | ----------------------------------------------------------------- |
+| Container           | Full page `/schedule/plan?week=…&step=…`                          |
+| Select Week         | Step 0 on the page, not a modal                                   |
+| Resources           | Dropped; one weekly available-time number                         |
+| Focus areas         | Write `nodes.focus`; also recorded on the plan entry              |
+| Goal rewrite        | Per-plan history, never overwrites the goal                       |
+| Commitments         | Per-plan `committed_minutes` per project                          |
+| Collision avoidance | Pure `findFreeSlot`; also treats Time Chart areas as busy         |
+| Auto-scheduler      | Out of scope                                                      |
+| Mission edit        | Dedicated `saveMissionAction` (not full `saveNodeDetail` payload) |
+| Entry point         | **Plan Week…** on the Weekly Schedule toolbar                     |
 
 ## Data model
 
@@ -78,6 +83,8 @@ Invariants:
 | 4    | Time Budget       | `weekly_plans.available_minutes`, entry `committed_minutes`  |
 | 5    | Schedule Blocks   | appointments with `project_id` (existing mutation)           |
 
+When `review_areas_goals` is false, steps 1–2 are omitted from the step strip.
+
 ## Acceptance criteria
 
 - [x] "Plan Week…" on the Weekly Schedule toolbar opens the wizard for the shown week
@@ -92,8 +99,8 @@ Invariants:
 - [x] Finish marks the plan complete and returns to the Weekly Schedule for that week
 - [x] Pure tests for budget math, block splitting, free-slot search, review selection
 - [x] Integration tests incl. the cross-user case for every plan mutation
-- [ ] `npm test`, `npm run typecheck`, `npm run lint`, `npm run build` all clean
-      (typecheck + unit + lint clean; integration needs Postgres; build not yet run)
+- [x] `npm test`, `npm run typecheck`, `npm run lint`, `npm run build` all clean
+- [x] Browser smoke: Plan Week… → step 0 start → steps 1–5 render (driver + screenshots)
 
 ## Changes from original plan
 
@@ -105,7 +112,15 @@ Invariants:
 | 4   | Step 5 keeps a running **remaining** per project computed from appointments already on the week | Achieve shows "Time Remaining" for the project being dropped. Computing it from real appointments (rather than a counter) means the number survives a reload and manual edits on the calendar. |
 | 5   | Mission save is a small dedicated action, not `saveNodeDetail`                                  | The detail save type requires a full core payload; the wizard only holds the mission field.                                                                                                    |
 
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- Keyboard shortcut to open the wizard (Achieve: Ctrl+Shift+Z, W)
+- Seed data with at least one priority-A goal so step 2 is non-empty in demos
+- Per-area "projects & goals" grid polish (columns matching Achieve)
+- Auto-scheduler / whole-week fill (explicitly out of scope here)
+- Estimated-vs-actual reporting on a completed plan (wants time-tracking track)
+
 ## Status
 
-In progress — data layer, pure/integration tests, page shell, and all six step UIs are in place.
-Browser pass + migration apply + freeze still open.
+**Frozen / complete** (2026-07-28). Verified with unit + integration tests, production build,
+local migration, and browser smoke through all six steps.

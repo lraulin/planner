@@ -269,8 +269,8 @@ export function WeeklyPlanView({ payload, weekKey, step }: Props) {
       <div className="flex flex-none flex-wrap items-center gap-2 border-b border-rule bg-shell px-3 py-2">
         <div className="min-w-0 flex-1">
           <h1 className="text-[0.9375rem] font-medium text-ink">
-            Weekly Planning
-            <span className="ml-2 font-normal text-ink-muted">
+            Weekly Planning{" "}
+            <span className="font-normal text-ink-muted">
               {weekRangeLabel(weekStart)}
             </span>
           </h1>
@@ -309,8 +309,10 @@ export function WeeklyPlanView({ payload, weekKey, step }: Props) {
               }`}
               onClick={() => goToStep(s)}
             >
-              {s === 0 ? "Week" : `Step ${s}`}
-              <span className="ml-1.5 hidden sm:inline">{STEP_LABELS[s]}</span>
+              <span className="tabular">{s === 0 ? "Week" : `Step ${s}`}</span>
+              <span className="ml-1.5 hidden text-ink-muted sm:inline">
+                {STEP_LABELS[s]}
+              </span>
             </button>
           );
         })}

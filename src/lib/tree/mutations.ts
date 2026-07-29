@@ -7,8 +7,9 @@ import {
   taskDetails,
 } from "@/db/schema";
 import type { NodeState, NodeType, PriorityLetter } from "@/db/schema";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { assertCanNest, TYPE_LABELS } from "./hierarchy";
+import { loadOutline } from "./queries";
 import { between } from "./sortKey";
 import type { Position } from "./types";
 
@@ -207,6 +208,54 @@ export async function setCollapsed(
     .update(nodes)
     .set({ collapsed, updatedAt: new Date() })
     .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+}
+
+/**
+ * Expand or collapse every row for a user. Leaf rows carry the flag harmlessly; the grid
+ * only consults it when `hasChildren` is true.
+ *
+ * Achieve's Expand All / Collapse All (To Level 1). Prefer this over N single-row writes
+ * so a large outline does not fan out into N server actions.
+ */
+export async function setAllCollapsed(
+  userId: string,
+  collapsed: boolean,
+): Promise<void> {
+  await db
+    .update(nodes)
+    .set({ collapsed, updatedAt: new Date() })
+    .where(eq(nodes.userId, userId));
+}
+
+/**
+ * Show the outline through a maximum depth (0 = roots only).
+ *
+ * Nodes shallower than `maxDepth` are expanded so their children can appear; nodes at
+ * `maxDepth` are collapsed so deeper descendants hide. Matches Achieve's "Expand to Level N"
+ * where Level 1 is the top row of result areas.
+ */
+export async function expandThroughDepth(
+  userId: string,
+  maxDepth: number,
+): Promise<void> {
+  const depth = Math.max(0, Math.floor(maxDepth));
+  const outline = await loadOutline(userId);
+
+  const expandIds = outline.filter((n) => n.depth < depth).map((n) => n.id);
+  const collapseIds = outline.filter((n) => n.depth >= depth).map((n) => n.id);
+
+  if (expandIds.length > 0) {
+    await db
+      .update(nodes)
+      .set({ collapsed: false, updatedAt: new Date() })
+      .where(and(eq(nodes.userId, userId), inArray(nodes.id, expandIds)));
+  }
+  if (collapseIds.length > 0) {
+    await db
+      .update(nodes)
+      .set({ collapsed: true, updatedAt: new Date() })
+      .where(and(eq(nodes.userId, userId), inArray(nodes.id, collapseIds)));
+  }
 }
 
 /**

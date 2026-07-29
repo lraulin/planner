@@ -79,6 +79,16 @@ export async function setCollapsedAction(
   return run((userId) => tree.setCollapsed(userId, nodeId, collapsed));
 }
 
+export async function setAllCollapsedAction(collapsed: boolean): Promise<ActionResult> {
+  return run((userId) => tree.setAllCollapsed(userId, collapsed));
+}
+
+export async function expandThroughDepthAction(
+  maxDepth: number,
+): Promise<ActionResult> {
+  return run((userId) => tree.expandThroughDepth(userId, maxDepth));
+}
+
 export async function setEffortAction(
   nodeId: string,
   minutes: number | null,

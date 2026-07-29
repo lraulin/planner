@@ -6,11 +6,14 @@ import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import {
   createNode,
   deleteNode,
+  expandThroughDepth,
   indentNode,
   moveNode,
   moveNodeVertically,
   outdentNode,
   renameNode,
+  setAllCollapsed,
+  setCollapsed,
   setEffort,
   setPriority,
 } from "./mutations";
@@ -500,6 +503,91 @@ describeDb("tree mutations", () => {
         position: { at: "last" },
       });
       expect(await outlineOf(userId)).toEqual(["Work", "Home", "  P", "    T"]);
+    });
+  });
+
+  describe("collapse", () => {
+    it("setAllCollapsed collapses every row for the user", async () => {
+      const area = await createNode({
+        userId,
+        parentId: null,
+        type: "result_area",
+        name: "Work",
+      });
+      const project = await createNode({
+        userId,
+        parentId: area,
+        type: "project",
+        name: "P",
+      });
+      await createNode({ userId, parentId: project, type: "task", name: "T" });
+
+      await setAllCollapsed(userId, true);
+      const after = await loadOutline(userId);
+      expect(after.every((n) => n.collapsed)).toBe(true);
+      // Roots still show; children under collapsed parents are hidden.
+      expect(after.filter((n) => !n.hidden).map((n) => n.name)).toEqual(["Work"]);
+
+      await setAllCollapsed(userId, false);
+      const expanded = await loadOutline(userId);
+      expect(expanded.every((n) => !n.collapsed)).toBe(true);
+      expect(expanded.filter((n) => !n.hidden)).toHaveLength(3);
+    });
+
+    it("expandThroughDepth shows only through the given depth", async () => {
+      const area = await createNode({
+        userId,
+        parentId: null,
+        type: "result_area",
+        name: "Work",
+      });
+      const project = await createNode({
+        userId,
+        parentId: area,
+        type: "project",
+        name: "P",
+      });
+      await createNode({ userId, parentId: project, type: "task", name: "T" });
+
+      // Depth 1: expand roots, collapse at depth >= 1 → projects show, tasks hide.
+      await expandThroughDepth(userId, 1);
+      const throughOne = await loadOutline(userId);
+      expect(throughOne.find((n) => n.id === area)?.collapsed).toBe(false);
+      expect(throughOne.find((n) => n.id === project)?.collapsed).toBe(true);
+      expect(throughOne.filter((n) => !n.hidden).map((n) => n.name)).toEqual([
+        "Work",
+        "P",
+      ]);
+    });
+
+    it("setAllCollapsed does not touch another user's tree", async () => {
+      const other = await makeUser();
+      const area = await createNode({
+        userId,
+        parentId: null,
+        type: "result_area",
+        name: "Mine",
+      });
+      await createNode({ userId, parentId: area, type: "project", name: "MP" });
+      const theirs = await createNode({
+        userId: other,
+        parentId: null,
+        type: "result_area",
+        name: "Theirs",
+      });
+      await createNode({
+        userId: other,
+        parentId: theirs,
+        type: "project",
+        name: "TP",
+      });
+      await setCollapsed(other, theirs, false);
+
+      await setAllCollapsed(userId, true);
+
+      const theirTree = await loadOutline(other);
+      expect(theirTree.find((n) => n.id === theirs)?.collapsed).toBe(false);
+      expect(theirTree.filter((n) => !n.hidden)).toHaveLength(2);
     });
   });
 

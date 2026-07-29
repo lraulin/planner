@@ -61,6 +61,11 @@ function hydratePayload(initial: SchedulePayload) {
   };
 }
 
+/** `alert` is a free variable that does not exist under RSC SSR — look it up via window. */
+function reportError(message: string) {
+  if (typeof window !== "undefined") window.alert(message);
+}
+
 export function ScheduleView({ initial, nodes, weekKey }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -141,7 +146,7 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
     );
     const result = await setAppointmentCheckStateAction(id, next);
     if (!result.ok) {
-      alert(result.error);
+      reportError(result.error);
       refresh();
       return;
     }
@@ -161,7 +166,7 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
         end.toISOString(),
       );
       if (!result.ok) {
-        alert(result.error);
+        reportError(result.error);
         return;
       }
     } else {
@@ -172,7 +177,7 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
         true,
       );
       if (!result.ok) {
-        alert(result.error);
+        reportError(result.error);
         return;
       }
     }
@@ -193,7 +198,7 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
       projectId,
     });
     if (!result.ok) {
-      alert(result.error);
+      reportError(result.error);
       return;
     }
     refresh();
@@ -219,7 +224,7 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
     if (name == null) return;
     const result = await createTimeChartAction(name);
     if (!result.ok) {
-      alert(result.error);
+      reportError(result.error);
       return;
     }
     if (result.id) {
@@ -238,7 +243,7 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
   async function handleDeleteAppointment(id: string) {
     const result = await deleteAppointmentAction(id);
     if (!result.ok) {
-      alert(result.error);
+      reportError(result.error);
       return;
     }
     setEditingAppointment(null);
@@ -275,7 +280,7 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
         <button
           type="button"
           className="rounded border border-rule bg-surface px-2 py-1 text-ink hover:bg-surface-raised"
-          onClick={asyncHandler(handleNewChart, alert)}
+          onClick={asyncHandler(handleNewChart, reportError)}
         >
           New Time Chart…
         </button>
@@ -341,9 +346,9 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
             occurrences={occurrences}
             onSelectRange={handleCreateRange}
             onEventClick={openOccurrence}
-            onEventDrop={asyncHandler(handleEventDrop, alert)}
-            onExternalDrop={asyncHandler(handleExternalProjectDrop, alert)}
-            onCycleCheck={asyncHandler(handleCycleCheck, alert)}
+            onEventDrop={asyncHandler(handleEventDrop, reportError)}
+            onExternalDrop={asyncHandler(handleExternalProjectDrop, reportError)}
+            onCycleCheck={asyncHandler(handleCycleCheck, reportError)}
           />
         </div>
 
@@ -369,7 +374,7 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
           setEditingAppointment(null);
           refresh();
         }}
-        onDelete={asyncHandler(handleDeleteAppointment, alert)}
+        onDelete={asyncHandler(handleDeleteAppointment, reportError)}
       />
     </div>
   );

@@ -1,6 +1,7 @@
 import { db } from "./index";
 import {
   appointments,
+  goalDetails,
   nodes,
   resultAreaDetails,
   taskDetails,
@@ -28,6 +29,9 @@ type Seed = {
   priority?: string;
   effort?: number;
   effortLeft?: number;
+  /** Goal-only fields used by the weekly planning wizard demos. */
+  definition?: string;
+  isDream?: boolean;
   children?: Seed[];
 };
 
@@ -37,6 +41,21 @@ const HIERARCHY: Seed[] = [
     type: "result_area",
     priority: "A1",
     children: [
+      {
+        name: "Build a career I am proud of",
+        type: "goal",
+        priority: "A1",
+        isDream: true,
+        definition:
+          "Do work that uses my strengths, pays fairly, and leaves room for family and health.",
+      },
+      {
+        name: "Ship a personal planner people actually use weekly",
+        type: "goal",
+        priority: "A2",
+        definition:
+          "Weekly planning, outline, and schedule stay in daily use for 90 days.",
+      },
       {
         name: "Projects represent the outcomes in your to-do list",
         type: "project",
@@ -243,6 +262,14 @@ async function insertLevel(
 
     if (item.type === "result_area") {
       await db.insert(resultAreaDetails).values({ nodeId: row.id });
+    }
+
+    if (item.type === "goal") {
+      await db.insert(goalDetails).values({
+        nodeId: row.id,
+        definition: item.definition ?? "",
+        isDream: item.isDream ?? false,
+      });
     }
 
     if (item.children?.length) {

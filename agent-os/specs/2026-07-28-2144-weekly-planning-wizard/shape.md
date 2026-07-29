@@ -1,6 +1,6 @@
 # Shaping — Weekly Planning Wizard
 
-**Status: active** (2026-07-28)
+**Status: frozen / complete** (2026-07-28)
 
 ## The problem
 

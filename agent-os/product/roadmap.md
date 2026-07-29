@@ -44,14 +44,23 @@ The core Achieve Planner loop — plan the week, block the time, work the outlin
   (drag-create, multi-day), appointments (full form, recurrence, three-state check),
   project drag-to-schedule, mini-month + projects rail. Deferred out of this slice:
   Google Calendar, appointment-check → Actual Effort, estimated-vs-actual reports, and
-  the guided weekly planning wizard.
+  the guided weekly planning wizard (shipped next — see below).
+- **✅ Weekly planning wizard.** `specs/2026-07-28-2144-weekly-planning-wizard`. Full-page
+  `/schedule/plan` guided loop: select week → result areas (mission + focus) → dreams/goals
+  rewrites → fixed commitments + Time Chart → time budget → drag project blocks with
+  collision avoidance. One plan per user/week; entries hold focus/rewrite/commitments.
+  Entry point: **Plan Week…** on the schedule toolbar. Out of scope: auto-scheduler,
+  resources, estimated-vs-actual on the finished plan.
 
 ### Still in Phase 1
 
-- **Weekly planning workflow.** Guided weekly review: pick goals, pull tasks from the
-  master list, block them onto the week.
 - **Light polish on the main grids** if needed after using them day-to-day (scope popover,
   Show Fields selection, Life Plan / Task Chooser only if still wanted).
+- **Day-to-day friction from living with the MVP** — expand/collapse-all, find-in-outline,
+  quick capture, seed goals for demos — pick off as they annoy.
+
+Phase 1 core loop is now complete enough for daily use. Remaining Phase 1 items are
+polish, not blockers for starting Phase 2 slices.
 
 ---
 
