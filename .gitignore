@@ -11,6 +11,9 @@
 # testing
 /coverage
 
+# Screenshots and scratch output from the run-planner driver.
+/.artifacts
+
 # Achieve Planner reference captures. Kept on disk as the source material for the
 # reimplementation, but out of git — they are large, numerous, and never built against.
 /screenshots
