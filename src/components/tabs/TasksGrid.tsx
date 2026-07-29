@@ -305,6 +305,7 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         onSelect={tab.setSelectedId}
         onOpenDetail={tab.openDetail}
         ariaLabel="Tasks"
+        rowMenu={tab.rowMenu}
         enableFilters
         enableSort
         collapsedGroups={collapsedGroups}

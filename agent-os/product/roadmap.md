@@ -22,6 +22,10 @@ The core Achieve Planner loop — plan the week, block the time, work the outlin
   rows onto or between each other; drops that a level cannot host snap out to the nearest
   ancestor that can, and the drop line is drawn at the depth the node will land at. Left
   out: multi-select drag, auto-scroll at the edges, spring-loaded expand on hover.
+- **✅ Row context menus.** Same spec, "Change: row context menus (2026-07-28)". Right-click
+  a row for the commands that already have shortcuts, each showing its shortcut: the full
+  tree set on the Outline, open/rename on Projects / Tasks / Goals, open owner on Wish
+  List. Left out: Priority/State submenus, multi-select actions, `Shift+F10`.
 - **✅ Priorities & scheduling fields.** Priority (A/B/C/D + rank), deadline, state, focus,
   effort (with rollups). Effort Left, Actual Effort, and % complete editable in the Task
   form (`specs/2026-07-27-1318-per-type-detail-forms`).

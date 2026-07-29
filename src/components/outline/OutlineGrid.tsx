@@ -28,6 +28,7 @@ import {
   buildAncestorPriorities,
   type RowDrag,
 } from "@/components/grid/DataGrid";
+import type { MenuItem } from "@/components/grid/ContextMenu";
 import { useOptimisticNodes } from "@/components/grid/useOptimisticNodes";
 import { useToday } from "@/components/grid/useToday";
 import { HintBar } from "./HintBar";
@@ -117,34 +118,37 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   );
 
   const addSibling = useCallback(
-    (where: "before" | "after") => {
-      if (!selected) return;
-      const parent = selected.parentId ? byId.get(selected.parentId) : null;
+    (node: OutlineNode | null, where: "before" | "after") => {
+      if (!node) return;
+      const parent = node.parentId ? byId.get(node.parentId) : null;
       apply(
         () =>
           createNodeAction({
-            parentId: selected.parentId,
+            parentId: node.parentId,
             type: defaultChildType(parent?.type ?? null),
-            position: { at: where, siblingId: selected.id },
+            position: { at: where, siblingId: node.id },
           }),
         startNaming,
       );
     },
-    [selected, byId, apply, startNaming],
+    [byId, apply, startNaming],
   );
 
-  const addChild = useCallback(() => {
-    if (!selected) return;
-    apply(
-      () =>
-        createNodeAction({
-          parentId: selected.id,
-          type: defaultChildType(selected.type),
-          position: { at: "last" },
-        }),
-      startNaming,
-    );
-  }, [selected, apply, startNaming]);
+  const addChild = useCallback(
+    (node: OutlineNode | null) => {
+      if (!node) return;
+      apply(
+        () =>
+          createNodeAction({
+            parentId: node.id,
+            type: defaultChildType(node.type),
+            position: { at: "last" },
+          }),
+        startNaming,
+      );
+    },
+    [apply, startNaming],
+  );
 
   const addResultArea = useCallback(() => {
     apply(
@@ -200,30 +204,122 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     [visible, apply],
   );
 
+  /**
+   * The tree commands, bound to whichever node they are asked about. The keyboard and
+   * toolbar bind them to the selection; the right-click menu binds them to the row that was
+   * clicked, which is not always the same thing at the moment the menu opens.
+   */
+  const commandsFor = useCallback(
+    (node: OutlineNode | null) => ({
+      addSiblingAfter: () => addSibling(node, "after"),
+      addSiblingBefore: () => addSibling(node, "before"),
+      addChild: () => addChild(node),
+      indent: () => node && apply(() => indentNodeAction(node.id)),
+      outdent: () => node && apply(() => outdentNodeAction(node.id)),
+      moveUp: () => node && apply(() => moveNodeVerticallyAction(node.id, "up")),
+      moveDown: () => node && apply(() => moveNodeVerticallyAction(node.id, "down")),
+      remove: () => node && setPendingDelete(node),
+      rename: () => node && setEditingId(node.id),
+      openDetail: () => node && setDetailId(node.id),
+      collapse: () => node && toggleCollapsed(node, true),
+      expand: () => node && toggleCollapsed(node, false),
+    }),
+    [addSibling, addChild, apply, toggleCollapsed],
+  );
+
   const commands = useMemo(
     () => ({
-      addSiblingAfter: () => addSibling("after"),
-      addSiblingBefore: () => addSibling("before"),
-      addChild,
-      indent: () => selected && apply(() => indentNodeAction(selected.id)),
-      outdent: () => selected && apply(() => outdentNodeAction(selected.id)),
-      moveUp: () =>
-        selected && apply(() => moveNodeVerticallyAction(selected.id, "up")),
-      moveDown: () =>
-        selected && apply(() => moveNodeVerticallyAction(selected.id, "down")),
-      remove: () => selected && setPendingDelete(selected),
-      rename: () => selected && setEditingId(selected.id),
-      openDetail: () => selected && setDetailId(selected.id),
-      collapse: () => selected && toggleCollapsed(selected, true),
-      expand: () => selected && toggleCollapsed(selected, false),
+      ...commandsFor(selected),
       selectUp: () => selectRelative(-1),
       selectDown: () => selectRelative(1),
     }),
-    [addSibling, addChild, selected, apply, toggleCollapsed, selectRelative],
+    [commandsFor, selected, selectRelative],
   );
 
   const suspended = detailId !== null || pendingDelete !== null;
   useOutlineKeyboard({ commands, editingId, suspended });
+
+  /**
+   * Right-click menu. Every entry is a command that also has a shortcut and a toolbar
+   * button — the menu adds discoverability, not capability — and each one is greyed out on
+   * exactly the conditions that would make it fail, so nothing here raises an error banner.
+   */
+  const rowMenu = useCallback(
+    (nodeId: string): MenuItem[] => {
+      const node = byId.get(nodeId);
+      if (!node) return [];
+
+      const command = commandsFor(node);
+      const siblings = nodes.filter((n) => n.parentId === node.parentId);
+      const index = siblings.findIndex((n) => n.id === node.id);
+
+      return [
+        { label: "Open record", shortcut: "Enter", onSelect: command.openDetail },
+        { label: "Rename", shortcut: "F2", onSelect: command.rename },
+        "separator",
+        {
+          label: "Add sibling after",
+          shortcut: "Insert",
+          onSelect: command.addSiblingAfter,
+        },
+        {
+          label: "Add sibling before",
+          shortcut: "⇧Insert",
+          onSelect: command.addSiblingBefore,
+        },
+        { label: "Add child", shortcut: "⌃Insert", onSelect: command.addChild },
+        "separator",
+        {
+          label: "Indent",
+          shortcut: "Tab",
+          // Indenting makes a node the last child of the sibling above it; the first node
+          // at a level has none.
+          disabled: index <= 0,
+          onSelect: command.indent,
+        },
+        {
+          label: "Outdent",
+          shortcut: "⇧Tab",
+          disabled: node.parentId === null,
+          onSelect: command.outdent,
+        },
+        {
+          label: "Move up",
+          shortcut: "⌥↑",
+          disabled: index <= 0,
+          onSelect: command.moveUp,
+        },
+        {
+          label: "Move down",
+          shortcut: "⌥↓",
+          disabled: index === siblings.length - 1,
+          onSelect: command.moveDown,
+        },
+        "separator",
+        node.collapsed
+          ? {
+              label: "Expand",
+              shortcut: "→",
+              disabled: !node.hasChildren,
+              onSelect: command.expand,
+            }
+          : {
+              label: "Collapse",
+              shortcut: "←",
+              disabled: !node.hasChildren,
+              onSelect: command.collapse,
+            },
+        "separator",
+        {
+          label: `Delete ${TYPE_LABELS[node.type].toLowerCase()}`,
+          shortcut: "Delete",
+          destructive: true,
+          onSelect: command.remove,
+        },
+      ];
+    },
+    [byId, nodes, commandsFor],
+  );
 
   /**
    * Drag-to-move. `resolveDrop` runs against the whole tree rather than the visible rows,
@@ -340,6 +436,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         }}
         ariaLabel="Outline"
         rowDrag={rowDrag}
+        rowMenu={rowMenu}
         empty={
           <EmptyState
             filtered={nodes.length > 0}

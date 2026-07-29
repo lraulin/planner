@@ -17,6 +17,7 @@ const HINTS: { keys: string[]; label: string }[] = [
   { keys: ["←", "→"], label: "collapse / expand" },
   { keys: ["Delete"], label: "delete" },
   { keys: ["Drag"], label: "move onto or between rows" },
+  { keys: ["Right-click"], label: "row menu" },
 ];
 
 export function HintBar() {

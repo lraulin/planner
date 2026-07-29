@@ -239,6 +239,7 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         onSelect={tab.setSelectedId}
         onOpenDetail={tab.openDetail}
         ariaLabel="Goals"
+        rowMenu={tab.rowMenu}
         enableFilters
         enableSort
         collapsedGroups={collapsedGroups}

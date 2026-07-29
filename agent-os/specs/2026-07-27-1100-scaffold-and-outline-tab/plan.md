@@ -246,3 +246,46 @@ as-is — the only new server surface is `moveNodeAction`.
 
 **Not covered:** multi-select drag, drag between tabs, auto-scroll when dragging past the
 edge of a long outline, and spring-loaded expand on hover.
+
+## Change: row context menus (2026-07-28)
+
+Right-click menus on grid rows, across the Outline and the list tabs. Recorded here rather
+than in the main-grid-tabs spec because the shared `ContextMenu` and the tree commands both
+live on this side.
+
+**Scope decision: the menu adds discoverability, not capability.** Every entry is a command
+that already has a keyboard shortcut and a toolbar button, and each entry prints its
+shortcut — the menu is also how the keyboard gets taught. Nothing is reachable by mouse
+alone, which `ux-principles.md` requires.
+
+- **Outline** — open, rename, add sibling before/after, add child, indent, outdent, move
+  up/down, collapse/expand, delete. Entries are greyed out on exactly the conditions that
+  would make the command fail (first at its level cannot indent or move up, top level
+  cannot outdent, a childless row cannot collapse), so choosing one never raises an error
+  banner.
+- **Projects / Tasks / Goals** — open and rename only. These tabs are views onto the tree,
+  not the tree, so they carry no restructuring commands.
+- **Wish List** — open owner, its one command. Rows there are `node_items`, so it wires the
+  menu directly rather than through `DataGrid`.
+
+**Decisions worth keeping:**
+
+| Decision                                                           | Why                                                                                                                                                                                                                                                                                      |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Menu items are built when the menu opens, not held in state        | Disabled state has to reflect the tree as it is at that moment, not as it was when the row rendered.                                                                                                                                                                                     |
+| Tree commands were refactored to `commandsFor(node)`               | They were bound to the _selection_. A right-click acts on the row under the cursor, which is not reliably the selection at the moment the menu opens. Keyboard and toolbar now pass the selection into the same function.                                                                |
+| Collapse/expand is deliberately **absent** from the list-tab menus | Those tabs list matching nodes rather than a walkable tree, so collapsing changes nothing on screen — the effect only shows up on the Outline. An entry that appears to do nothing where you clicked it is worse than no entry. (The row expander itself is pre-existing and unchanged.) |
+| Right-click inside a cell editor falls through to the browser      | Cut/copy/paste is the useful menu inside a text field. Same rule the drag-arming check uses.                                                                                                                                                                                             |
+| The menu closes on scroll — but not on the scroll it causes        | Right-clicking selects the row, and a partly-visible row scrolls into view on the frame the menu opens. The scroll listener is registered one frame late so that one is skipped.                                                                                                         |
+
+**Non-obvious constraint, worth remembering.** The menu must swallow keys so `Delete`
+doesn't reach the outline's delete-row shortcut behind it, and `event.stopPropagation()`
+**is not sufficient**. App Router hydrates on `document`, so React's delegated listener and
+the outline's own `document` keydown listener are two listeners on the _same node_, and
+stopping propagation never cancels siblings on the same node. It needs
+`event.nativeEvent.stopImmediatePropagation()`. Any future overlay that listens for keys
+has the same problem — `Drawer` sidesteps it by using the capture phase instead.
+
+**Not covered:** submenus (Achieve has Priority/State ones; those fields are already
+inline-editable columns), multi-select actions, a menu on group headers or on the empty
+area below the rows, and `Shift+F10` / the Menu key as a keyboard route to open it.

@@ -7,6 +7,7 @@ import { formatPriority, parsePriority } from "@/lib/tree/format";
 import { WISH_TYPE_CODES, type WishListRow } from "@/lib/detail/wishTypes";
 import { updateNodeItemAction } from "@/app/outline/detail-actions";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
+import { ContextMenu } from "@/components/grid/ContextMenu";
 import { ErrorBanner, TabToolbar, ToolbarButton, ToolbarSelect } from "./tabChrome";
 
 /**
@@ -26,6 +27,9 @@ export function WishesGrid({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detailNodeId, setDetailNodeId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [menu, setMenu] = useState<{ nodeId: string; x: number; y: number } | null>(
+    null,
+  );
   const [, startTransition] = useTransition();
 
   const rows = useMemo(
@@ -125,6 +129,9 @@ export function WishesGrid({
     setDetailNodeId(selectedWish.nodeId);
   }, [selectedWish]);
 
+  // Stable, so the menu's listener effect does not re-register on every render.
+  const closeMenu = useCallback(() => setMenu(null), []);
+
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (detailNodeId) return;
@@ -212,6 +219,17 @@ export function WishesGrid({
                 aria-selected={selected}
                 onClick={() => setSelectedId(row.id)}
                 onDoubleClick={() => setDetailNodeId(row.nodeId)}
+                onContextMenu={(event) => {
+                  // Leave the browser's cut/copy/paste menu alone inside the editors.
+                  if (
+                    (event.target as HTMLElement).closest("input, select, textarea")
+                  ) {
+                    return;
+                  }
+                  event.preventDefault();
+                  setSelectedId(row.id);
+                  setMenu({ nodeId: row.nodeId, x: event.clientX, y: event.clientY });
+                }}
                 className={[
                   "grid items-center border-b border-rule/60 px-3 text-[0.875rem]",
                   selected ? "bg-select" : "hover:bg-surface-raised/60",
@@ -263,6 +281,23 @@ export function WishesGrid({
           })
         )}
       </div>
+
+      {menu && (
+        // One entry, because opening the owning result area is the only thing this tab
+        // does to a wish that is not an inline cell edit.
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={[
+            {
+              label: "Open owner",
+              shortcut: "Enter",
+              onSelect: () => setDetailNodeId(menu.nodeId),
+            },
+          ]}
+          onClose={closeMenu}
+        />
+      )}
 
       <NodeDetailDrawer node={detailNode} onClose={() => setDetailNodeId(null)} />
     </div>

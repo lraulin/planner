@@ -399,6 +399,7 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
         onSelect={tab.setSelectedId}
         onOpenDetail={tab.openDetail}
         ariaLabel="Projects"
+        rowMenu={tab.rowMenu}
         enableFilters
         enableSort
         collapsedGroups={collapsedGroups}

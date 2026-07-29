@@ -14,6 +14,7 @@ import {
 import { useOptimisticNodes } from "@/components/grid/useOptimisticNodes";
 import { useToday } from "@/components/grid/useToday";
 import { buildAncestorPriorities } from "@/components/grid/DataGrid";
+import type { MenuItem } from "@/components/grid/ContextMenu";
 
 /**
  * Shared selection, drawer, rename, and optimistic cell-write handlers for the node-based
@@ -95,6 +96,28 @@ export function useGridTab(initialNodes: OutlineNode[]) {
     [today, selectedId, editingId, ancestorPriorities, patch, apply, openDetail],
   );
 
+  /**
+   * Right-click menu for the list tabs. Deliberately short: these tabs are views onto the
+   * tree, not the tree itself, so they carry no restructuring commands — the menu offers
+   * exactly what their toolbar and keyboard already do. Restructuring lives on the Outline.
+   *
+   * Collapse/expand is left off on purpose even though the rows have an expander. These
+   * tabs list matching nodes rather than a walkable tree, so collapsing one changes nothing
+   * on screen — the effect only shows up over on the Outline. A menu entry that appears to
+   * do nothing where you clicked it is worse than no entry.
+   */
+  const rowMenu = useCallback(
+    (nodeId: string): MenuItem[] => {
+      if (!byId.has(nodeId)) return [];
+
+      return [
+        { label: "Open record", shortcut: "Enter", onSelect: () => openDetail(nodeId) },
+        { label: "Rename", shortcut: "F2", onSelect: () => setEditingId(nodeId) },
+      ];
+    },
+    [byId, openDetail],
+  );
+
   // Keyboard: Enter opens drawer, F2 renames — same as outline, without tree restructure.
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -144,5 +167,6 @@ export function useGridTab(initialNodes: OutlineNode[]) {
     openDetail,
     cellHandlers,
     ancestorPriorities,
+    rowMenu,
   };
 }

@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import type { PriorityLetter } from "@/db/schema";
 import type { GridRow } from "@/lib/tree/slice";
 import type { DropZone } from "@/lib/tree/dnd";
@@ -12,6 +19,7 @@ import {
   type NodeGridRow,
 } from "./columns";
 import { ColumnHeaderRow } from "./ColumnHeader";
+import { ContextMenu, type MenuItem } from "./ContextMenu";
 import { ALL_FILTER, rowPassesFilters, type ColumnFilter } from "./filters";
 
 export type SortState = { columnId: string; direction: "asc" | "desc" } | null;
@@ -64,6 +72,7 @@ export function DataGrid<TCtx>({
   collapsedGroups,
   onToggleGroup,
   rowDrag,
+  rowMenu,
 }: {
   rows: GridRow[];
   columns: ColumnDef<TCtx>[];
@@ -80,11 +89,20 @@ export function DataGrid<TCtx>({
   onToggleGroup?: (groupId: string) => void;
   /** Omit to leave rows undraggable, as every tab but the outline does. */
   rowDrag?: RowDrag;
+  /**
+   * Right-click menu for a row. Omit to leave the browser's own menu alone. Called each
+   * time the menu opens rather than memoised, so item state is never stale.
+   */
+  rowMenu?: (nodeId: string) => MenuItem[];
 }) {
   const [sort, setSort] = useState<SortState>(null);
   const [filters, setFilters] = useState<Record<string, ColumnFilter>>({});
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropHint, setDropHint] = useState<DropHint | null>(null);
+  const [menu, setMenu] = useState<{ rowId: string; x: number; y: number } | null>(
+    null,
+  );
+  const closeMenu = useCallback(() => setMenu(null), []);
   const gridRef = useRef<HTMLDivElement>(null);
   const gridTemplate = buildGridTemplate(columns);
 
@@ -293,10 +311,28 @@ export function DataGrid<TCtx>({
                   onSelect={() => onSelect(row.id)}
                   onOpenDetail={onOpenDetail ? () => onOpenDetail(row.id) : undefined}
                   drag={dragBindingFor(row.id)}
+                  onContextMenu={
+                    rowMenu &&
+                    ((x, y) => {
+                      onSelect(row.id);
+                      setMenu({ rowId: row.id, x, y });
+                    })
+                  }
                 />
               ),
             )}
       </div>
+
+      {menu && rowMenu && (
+        // Built on open rather than held in state, so an item's enabled/disabled state
+        // reflects the tree as it is now.
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={rowMenu(menu.rowId)}
+          onClose={closeMenu}
+        />
+      )}
     </div>
   );
 }
@@ -310,6 +346,7 @@ function DataRow<TCtx>({
   onSelect,
   onOpenDetail,
   drag,
+  onContextMenu,
 }: {
   row: NodeGridRow;
   columns: ColumnDef<TCtx>[];
@@ -319,6 +356,7 @@ function DataRow<TCtx>({
   onSelect: () => void;
   onOpenDetail?: () => void;
   drag?: RowDragBinding;
+  onContextMenu?: (x: number, y: number) => void;
 }) {
   const rowRef = useRef<HTMLDivElement>(null);
   // `draggable` is armed on mousedown rather than left on: a permanently draggable row
@@ -343,6 +381,15 @@ function DataRow<TCtx>({
       aria-label={`${TYPE_LABELS[node.type]}: ${node.name || "Untitled"}`}
       onClick={onSelect}
       onDoubleClick={onOpenDetail}
+      onContextMenu={
+        onContextMenu &&
+        ((event) => {
+          // Inside a cell's editor the browser's own cut/copy/paste menu is the useful one.
+          if ((event.target as HTMLElement).closest("input, select, textarea")) return;
+          event.preventDefault();
+          onContextMenu(event.clientX, event.clientY);
+        })
+      }
       draggable={drag ? armed : undefined}
       onMouseDown={
         drag &&
