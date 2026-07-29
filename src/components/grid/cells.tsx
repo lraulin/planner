@@ -44,6 +44,9 @@ const TYPE_STYLE: Record<OutlineNode["type"], string> = {
  * Name cell: indent rails, expander, type icon, label (or inline editor). `depth` is the
  * node's depth in the whole tree, not in the rows on screen, so a task shown out of
  * context in the Tasks tab still sits where it belongs under its project.
+ *
+ * One rail per ancestor — a top-level row gets none, since a rail stands for the parent
+ * whose children it runs beside and a result area has no parent to draw.
  */
 export function NameCell({
   node,
@@ -68,7 +71,7 @@ export function NameCell({
 
   return (
     <div className="flex min-w-0 items-stretch self-stretch">
-      {Array.from({ length: depth + 1 }, (_, level) => (
+      {Array.from({ length: depth }, (_, level) => (
         <span key={level} aria-hidden className="spine" />
       ))}
 
