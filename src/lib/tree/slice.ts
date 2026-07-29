@@ -14,7 +14,13 @@ export type RowContext = {
   goalName: string | null;
 };
 
-export type GridRow =
+/**
+ * A row the grid renders. The payload is a type parameter so tabs whose rows are not
+ * `OutlineNode`s — the Notes tab — can reuse `DataGrid` rather than hand-rolling a second
+ * grid the way Wish List had to. It defaults to `OutlineNode`, so the tree tabs write
+ * `GridRow` exactly as before.
+ */
+export type GridRow<T = OutlineNode> =
   | {
       kind: "group";
       id: string;
@@ -26,9 +32,10 @@ export type GridRow =
   | {
       kind: "node";
       id: string;
-      node: OutlineNode;
+      node: T;
       depth: number;
-      context: RowContext;
+      /** Ancestor context, for grouping. Only tree rows carry it. */
+      context?: RowContext;
     };
 
 export type GroupBy = "category" | "resultArea" | "goal";

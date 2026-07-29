@@ -1,4 +1,10 @@
-export type { ColumnDef, ColumnAlign, FilterKind, NodeGridRow } from "./columns";
+export type {
+  ColumnDef,
+  ColumnMeta,
+  ColumnAlign,
+  FilterKind,
+  NodeGridRow,
+} from "./columns";
 export { buildGridTemplate, alignClass } from "./columns";
 export {
   NameCell,

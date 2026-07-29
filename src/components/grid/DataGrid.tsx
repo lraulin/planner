@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import type { OutlineNode } from "@/lib/tree/types";
 import type { GridRow } from "@/lib/tree/slice";
 import type { DropZone } from "@/lib/tree/dnd";
 import { TYPE_LABELS } from "@/lib/tree/hierarchy";
@@ -53,11 +54,31 @@ type RowDragBinding = {
 };
 
 /**
+ * What a row announces to assistive tech and whether it draws as expandable. These are the
+ * only two things the grid needs to know about a row's payload, so they are props rather
+ * than an `OutlineNode` dependency baked into the component. The defaults reproduce the
+ * tree tabs' behaviour, which is why those tabs pass neither.
+ */
+type RowMeta<TRow> = {
+  rowLabel?: (row: NodeGridRow<TRow>) => string;
+  /** `true` expanded, `false` collapsed, `undefined` not expandable. */
+  rowExpansion?: (row: NodeGridRow<TRow>) => boolean | undefined;
+};
+
+function isOutlineNode(node: unknown): node is OutlineNode {
+  return typeof node === "object" && node !== null && "type" in node && "name" in node;
+}
+
+/**
  * Shared data grid: column-driven layout, optional sort and per-column filters, group
  * header rows, selection highlighting. Tree commands and optimistic patching stay in the
  * host tab — this component only renders a prepared `GridRow[]` against `ColumnDef[]`.
+ *
+ * The row payload is a type parameter defaulting to `OutlineNode`, so the Notes tab — whose
+ * rows are notes, not nodes — reuses this grid instead of hand-rolling a second one the way
+ * Wish List had to.
  */
-export function DataGrid<TCtx>({
+export function DataGrid<TCtx, TRow = OutlineNode>({
   rows,
   columns,
   columnCtx,
@@ -72,9 +93,11 @@ export function DataGrid<TCtx>({
   onToggleGroup,
   rowDrag,
   rowMenu,
+  rowLabel,
+  rowExpansion,
 }: {
-  rows: GridRow[];
-  columns: ColumnDef<TCtx>[];
+  rows: GridRow<TRow>[];
+  columns: ColumnDef<TCtx, TRow>[];
   columnCtx: TCtx;
   selectedId: string | null;
   onSelect: (id: string) => void;
@@ -93,7 +116,9 @@ export function DataGrid<TCtx>({
    * time the menu opens rather than memoised, so item state is never stale.
    */
   rowMenu?: (nodeId: string) => MenuItem[];
-}) {
+} & RowMeta<TRow>) {
+  type Row = NodeGridRow<TRow>;
+
   const [sort, setSort] = useState<SortState>(null);
   const [filters, setFilters] = useState<Record<string, ColumnFilter>>({});
   const [dragId, setDragId] = useState<string | null>(null);
@@ -106,13 +131,13 @@ export function DataGrid<TCtx>({
   const gridTemplate = buildGridTemplate(columns);
 
   const kinds = useMemo(() => {
-    const map: Record<string, ColumnDef<TCtx>["filterKind"]> = {};
+    const map: Record<string, ColumnDef<TCtx, TRow>["filterKind"]> = {};
     for (const column of columns) map[column.id] = column.filterKind;
     return map;
   }, [columns]);
 
   const nodeRows = useMemo(
-    () => rows.filter((row): row is NodeGridRow => row.kind === "node"),
+    () => rows.filter((row): row is Row => row.kind === "node"),
     [rows],
   );
 
@@ -172,7 +197,7 @@ export function DataGrid<TCtx>({
       const column = columns.find((entry) => entry.id === sort.columnId);
       if (column?.sortValue) {
         const direction = sort.direction === "asc" ? 1 : -1;
-        const nodes = next.filter((row): row is NodeGridRow => row.kind === "node");
+        const nodes = next.filter((row): row is Row => row.kind === "node");
         const groups = next.filter((row) => row.kind === "group");
         // Sorting flattens group structure for the outline (no groups) and for simple
         // lists; grouped tabs should sort within groups. Keep nodes in group order by
@@ -317,6 +342,8 @@ export function DataGrid<TCtx>({
                       setMenu({ rowId: row.id, x, y });
                     })
                   }
+                  rowLabel={rowLabel}
+                  rowExpansion={rowExpansion}
                 />
               ),
             )}
@@ -336,7 +363,7 @@ export function DataGrid<TCtx>({
   );
 }
 
-function DataRow<TCtx>({
+function DataRow<TCtx, TRow>({
   row,
   columns,
   columnCtx,
@@ -346,9 +373,11 @@ function DataRow<TCtx>({
   onOpenDetail,
   drag,
   onContextMenu,
+  rowLabel,
+  rowExpansion,
 }: {
-  row: NodeGridRow;
-  columns: ColumnDef<TCtx>[];
+  row: NodeGridRow<TRow>;
+  columns: ColumnDef<TCtx, TRow>[];
   columnCtx: TCtx;
   gridTemplate: string;
   selected: boolean;
@@ -356,13 +385,29 @@ function DataRow<TCtx>({
   onOpenDetail?: () => void;
   drag?: RowDragBinding;
   onContextMenu?: (x: number, y: number) => void;
-}) {
+} & RowMeta<TRow>) {
   const rowRef = useRef<HTMLDivElement>(null);
   // `draggable` is armed on mousedown rather than left on: a permanently draggable row
   // steals the click-and-drag that selects text inside the priority, effort and deadline
   // inputs sitting in every row.
   const [armed, setArmed] = useState(false);
   const node = row.node;
+
+  // Falling back to the outline's own labelling keeps the tree tabs from having to pass
+  // these; a tab with a different row type supplies its own.
+  const label = rowLabel
+    ? rowLabel(row)
+    : isOutlineNode(node)
+      ? `${TYPE_LABELS[node.type]}: ${node.name || "Untitled"}`
+      : undefined;
+
+  const expanded = rowExpansion
+    ? rowExpansion(row)
+    : isOutlineNode(node)
+      ? node.hasChildren
+        ? !node.collapsed
+        : undefined
+      : undefined;
 
   useEffect(() => {
     if (selected) {
@@ -376,8 +421,8 @@ function DataRow<TCtx>({
       role="row"
       aria-level={row.depth + 1}
       aria-selected={selected}
-      aria-expanded={node.hasChildren ? !node.collapsed : undefined}
-      aria-label={`${TYPE_LABELS[node.type]}: ${node.name || "Untitled"}`}
+      aria-expanded={expanded}
+      aria-label={label}
       onClick={onSelect}
       onDoubleClick={onOpenDetail}
       onContextMenu={
@@ -561,10 +606,13 @@ function GroupHeader({
   );
 }
 
-function dropEmptyGroups(rows: GridRow[], passIds: Set<string>): GridRow[] {
+function dropEmptyGroups<TRow>(
+  rows: GridRow<TRow>[],
+  passIds: Set<string>,
+): GridRow<TRow>[] {
   // Walk bottom-up: a group stays if any subsequent node before the next same-or-shallower
   // group is still present.
-  const out: GridRow[] = [];
+  const out: GridRow<TRow>[] = [];
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     if (row.kind === "node") {
@@ -585,8 +633,11 @@ function dropEmptyGroups(rows: GridRow[], passIds: Set<string>): GridRow[] {
   return out;
 }
 
-function applyGroupCollapse(rows: GridRow[], collapsed: Set<string>): GridRow[] {
-  const out: GridRow[] = [];
+function applyGroupCollapse<TRow>(
+  rows: GridRow<TRow>[],
+  collapsed: Set<string>,
+): GridRow<TRow>[] {
+  const out: GridRow<TRow>[] = [];
   let hideUntilDepth: number | null = null;
 
   for (const row of rows) {

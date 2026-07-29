@@ -1,8 +1,14 @@
 import type { ReactNode } from "react";
+import type { OutlineNode } from "@/lib/tree/types";
 import type { GridRow } from "@/lib/tree/slice";
 
-/** A data row the grid can render a cell for — group headers never reach `render`. */
-export type NodeGridRow = Extract<GridRow, { kind: "node" }>;
+/**
+ * A data row the grid can render a cell for — group headers never reach `render`.
+ *
+ * Generic in its payload so a tab whose rows are not `OutlineNode`s can still use the
+ * shared grid; defaults to `OutlineNode` so the tree tabs are unaffected.
+ */
+export type NodeGridRow<T = OutlineNode> = Extract<GridRow<T>, { kind: "node" }>;
 
 export type ColumnAlign = "left" | "center" | "right";
 
@@ -16,27 +22,44 @@ export type FilterKind = "text" | "priority" | "date" | "enum";
  * One column of a data grid. The grid builds its CSS `grid-template-columns` from `width`
  * and asks `render` for each visible node row — no hardcoded `GRID_TEMPLATE`.
  */
-export type ColumnDef<TCtx = unknown> = {
+export type ColumnDef<TCtx = unknown, TRow = OutlineNode> = {
   id: string;
   label: string;
   /** A CSS grid track size, e.g. `minmax(16rem,1fr)` or `3rem`. */
   width: string;
   align?: ColumnAlign;
-  render: (row: NodeGridRow, ctx: TCtx) => ReactNode;
+  render: (row: NodeGridRow<TRow>, ctx: TCtx) => ReactNode;
   /** Value used for sort. Missing means the column is not sortable. */
-  sortValue?: (row: NodeGridRow) => string | number | null | undefined;
+  sortValue?: (row: NodeGridRow<TRow>) => string | number | null | undefined;
   /**
    * Canonical string the filter dropdown matches against. Dates are `YYYY-MM-DD`;
    * priorities are `A1` / `A` / `""`. Missing means the column is not filterable.
    */
-  filterValue?: (row: NodeGridRow) => string | null;
+  filterValue?: (row: NodeGridRow<TRow>) => string | null;
   filterKind?: FilterKind;
   /** When false, the Show Fields dialog cannot hide this column. Default true. */
   hideable?: boolean;
 };
 
+/**
+ * The parts of a column that do not depend on the row payload. The header, Show Fields
+ * chooser, and template builder only need these, so they stay row-agnostic instead of
+ * carrying a type parameter they never use.
+ */
+export type ColumnMeta = {
+  id: string;
+  label: string;
+  width: string;
+  align?: ColumnAlign;
+  /** Presence, not shape: the header only asks whether the column can sort or filter. */
+  sortValue?: unknown;
+  filterValue?: unknown;
+  filterKind?: FilterKind;
+  hideable?: boolean;
+};
+
 /** CSS `grid-template-columns` value for the visible set. */
-export function buildGridTemplate(columns: Pick<ColumnDef, "width">[]): string {
+export function buildGridTemplate(columns: Pick<ColumnMeta, "width">[]): string {
   return columns.map((column) => column.width).join(" ");
 }
 

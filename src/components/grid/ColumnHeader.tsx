@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { alignClass, type ColumnDef, type FilterKind } from "./columns";
+import { alignClass, type ColumnMeta, type FilterKind } from "./columns";
 import {
   ALL_FILTER,
   filterOptions,
@@ -13,7 +13,7 @@ import {
  * One header cell: label, optional sort indicator, optional filter funnel that opens the
  * Achieve-style dropdown of presets and distinct values.
  */
-export function ColumnHeaderRow<TCtx>({
+export function ColumnHeaderRow({
   columns,
   gridTemplate,
   sort,
@@ -23,7 +23,9 @@ export function ColumnHeaderRow<TCtx>({
   distinctValues,
   enableFilters = false,
 }: {
-  columns: ColumnDef<TCtx>[];
+  // `ColumnMeta` rather than `ColumnDef`: the header never renders a cell, so it has no
+  // business knowing what a row is.
+  columns: ColumnMeta[];
   gridTemplate: string;
   sort?: { columnId: string; direction: "asc" | "desc" } | null;
   onSort?: (columnId: string) => void;
@@ -67,7 +69,7 @@ export function ColumnHeaderRow<TCtx>({
               {sorted === "asc" ? " ↑" : sorted === "desc" ? " ↓" : ""}
             </button>
 
-            {enableFilters && column.filterValue && onFilterChange && (
+            {enableFilters && Boolean(column.filterValue) && onFilterChange && (
               <FilterButton
                 columnId={column.id}
                 label={column.label}

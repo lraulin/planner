@@ -142,6 +142,23 @@ export const nodeItemKindEnum = pgEnum("node_item_kind", [
   "goal_win",
 ]);
 
+/**
+ * Achieve's colour flag on a note — the "Flag" column and its dropdown. `done` is Achieve's
+ * one non-colour entry; the rest are pure colours with no meaning attached, which is the
+ * point of them.
+ */
+export const noteFlagEnum = pgEnum("note_flag", [
+  "none",
+  "done",
+  "blue",
+  "cyan",
+  "green",
+  "orange",
+  "purple",
+  "red",
+  "yellow",
+]);
+
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull().unique(),
@@ -635,6 +652,54 @@ export const weeklyPlanEntries = pgTable(
   ],
 );
 
+/**
+ * A note. Notes nest under each other but are **not** part of the Result Area → Goal →
+ * Project → Task hierarchy: they carry no priority, effort, or state, so a fifth
+ * `node_type` would have leaked into every keep-filter and rollup in the app for rows that
+ * cannot answer any of those questions. Own table, same lexicographic `sortKey` ordering.
+ *
+ * `body` is markdown source, stored as written. Nothing renders it server-side.
+ *
+ * `nodeId` is the optional link to a record — a note kept against a project. It is
+ * `set null` rather than `cascade`: deleting a project must not silently take the notes
+ * written about it.
+ */
+export const notes = pgTable(
+  "notes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    parentId: uuid("parent_id").references((): AnyPgColumn => notes.id, {
+      onDelete: "cascade",
+    }),
+    sortKey: text("sort_key").notNull(),
+    title: text("title").notNull().default(""),
+    /** Achieve's Subject column — a free-text bucket, defaulting to "General". */
+    subject: text("subject").notNull().default(""),
+    /** Markdown source. */
+    body: text("body").notNull().default(""),
+    /** Achieve's Date column: the date the note is *about*, not when it was written. */
+    noteDate: timestamp("note_date", { withTimezone: true }),
+    flag: noteFlagEnum("flag").notNull().default("none"),
+    contexts: text("contexts").array().notNull().default([]),
+    collapsed: boolean("collapsed").notNull().default(false),
+    nodeId: uuid("node_id").references(() => nodes.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("notes_user_parent_sort_idx").on(table.userId, table.parentId, table.sortKey),
+    index("notes_user_node_idx").on(table.userId, table.nodeId),
+    // Same shape as `nodes_sibling_sort_key_uq`: NULLS NOT DISTINCT so the constraint also
+    // covers root notes, whose parent_id is null.
+    unique("notes_sibling_sort_key_uq")
+      .on(table.userId, table.parentId, table.sortKey)
+      .nullsNotDistinct(),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type Node = typeof nodes.$inferSelect;
 export type NewNode = typeof nodes.$inferInsert;
@@ -661,3 +726,6 @@ export type RecurrenceFrequency = (typeof recurrenceFrequencyEnum.enumValues)[nu
 export type RecurrenceEnd = (typeof recurrenceEndEnum.enumValues)[number];
 export type WeeklyPlan = typeof weeklyPlans.$inferSelect;
 export type WeeklyPlanEntry = typeof weeklyPlanEntries.$inferSelect;
+export type Note = typeof notes.$inferSelect;
+export type NewNote = typeof notes.$inferInsert;
+export type NoteFlag = (typeof noteFlagEnum.enumValues)[number];

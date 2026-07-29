@@ -182,8 +182,8 @@ describe("sliceTree — inherited context", () => {
       includeDeferred: true,
     });
     if (row.kind !== "node") throw new Error("expected node");
-    expect(row.context.goalId).toBe("inner");
-    expect(row.context.goalName).toBe("Inner");
+    expect(row.context?.goalId).toBe("inner");
+    expect(row.context?.goalName).toBe("Inner");
   });
 });
 

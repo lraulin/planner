@@ -2,14 +2,14 @@
 
 import { useEffect, useId, useRef } from "react";
 import { useModalFocus } from "@/components/detail/focus";
-import type { ColumnDef } from "./columns";
+import type { ColumnMeta } from "./columns";
 
 /**
  * Achieve's Show Fields chooser: available fields on the left, shown-in-order on the
  * right, with Move Up/Down and Reset. Layout is a modal because it is a short-lived
  * configuration step (same class as a confirm), not a record editor.
  */
-export function ShowFieldsDialog<TCtx>({
+export function ShowFieldsDialog({
   open,
   allColumns,
   shownIds,
@@ -20,7 +20,7 @@ export function ShowFieldsDialog<TCtx>({
   onClose,
 }: {
   open: boolean;
-  allColumns: ColumnDef<TCtx>[];
+  allColumns: ColumnMeta[];
   shownIds: string[];
   onShow: (id: string) => void;
   onHide: (id: string) => void;
@@ -32,7 +32,7 @@ export function ShowFieldsDialog<TCtx>({
   const titleId = useId();
   const byId = new Map(allColumns.map((column) => [column.id, column]));
   const available = allColumns.filter((column) => !shownIds.includes(column.id));
-  const shown = shownIds.map((id) => byId.get(id)).filter(Boolean) as ColumnDef<TCtx>[];
+  const shown = shownIds.map((id) => byId.get(id)).filter(Boolean) as ColumnMeta[];
 
   useModalFocus(panelRef, open);
 
@@ -125,7 +125,7 @@ export function ShowFieldsDialog<TCtx>({
 const buttonClass =
   "rounded border border-rule px-2 py-1 text-[0.8125rem] leading-none text-ink transition-colors hover:border-rule-strong hover:bg-surface-raised";
 
-function FieldList<TCtx>({
+function FieldList({
   title,
   columns,
   empty,
@@ -134,11 +134,11 @@ function FieldList<TCtx>({
   canHide,
 }: {
   title: string;
-  columns: ColumnDef<TCtx>[];
+  columns: ColumnMeta[];
   empty: string;
   onActivate: (id: string) => void;
   actionLabel: string;
-  canHide?: (column: ColumnDef<TCtx>) => boolean;
+  canHide?: (column: ColumnMeta) => boolean;
 }) {
   return (
     <div className="flex min-h-48 flex-col rounded border border-rule">

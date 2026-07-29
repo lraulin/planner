@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
-import type { ColumnDef } from "./columns";
+import type { ColumnMeta } from "./columns";
 
 type StoredLayout = {
   /** Column ids in display order. Only the ones listed are shown. */
@@ -53,13 +53,13 @@ function resolveOrder(
  * Storage is read through `useSyncExternalStore` so the server and first paint agree on
  * the preset, then the client adopts any saved layout without an effect.
  */
-export function useGridColumns<TCtx>(
+export function useGridColumns<TCol extends ColumnMeta>(
   tabId: string,
-  allColumns: ColumnDef<TCtx>[],
+  allColumns: TCol[],
   defaultOrder: string[],
 ) {
   const byId = useMemo(() => {
-    const map = new Map<string, ColumnDef<TCtx>>();
+    const map = new Map<string, TCol>();
     for (const column of allColumns) map.set(column.id, column);
     return map;
   }, [allColumns]);
@@ -107,7 +107,7 @@ export function useGridColumns<TCtx>(
   void revision;
 
   const columns = useMemo(
-    () => order.map((id) => byId.get(id)).filter(Boolean) as ColumnDef<TCtx>[],
+    () => order.map((id) => byId.get(id)).filter(Boolean) as TCol[],
     [order, byId],
   );
 
