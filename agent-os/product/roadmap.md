@@ -178,11 +178,15 @@ core loop is already useful.
   `POST /api/agent/{tool}` for context, outline mutate, notes, light schedule, and
   weekly-plan tools; thin **`planner-agent`** instruction repo (skills + `call-tool.sh`)
   for Grok Build / Claude Code. Prefer summary tools over dumping the tree.
-- **Medium-term:** Same tools from a hosted assistant when auth and multi-device exist
-  (map API key → real user after Better Auth).
+- **Medium-term — MCP + chat clients:** Package the same agent tools as a **remote MCP
+  server** (thin wrapper over `POST /api/agent/*`, not a second write path) so Grok web
+  (connectors / Bring Your Own MCP), Claude, and other MCP clients can operate the planner
+  without opening a coding-agent workspace. Needs a **public HTTPS endpoint** + auth that
+  works for remote MCP (Bearer / API key at minimum; map to a real user after Better Auth).
+  Skills/prompts from `planner-agent` still apply as system instructions where the client
+  allows them.
 - **Long-term:** Possible **custom AI** (e.g. AWS Bedrock) with durable memory, calling
-  those tools to manage the plan. Prefer tools over “dump the whole tree into the
-  prompt.” Optional MCP packaging of the same tools.
+  those same tools. Prefer tools over “dump the whole tree into the prompt.”
 
 ### Financial planning
 
