@@ -78,9 +78,12 @@ Two things run it for you:
 - **Pre-commit** (`.husky/pre-commit`): Prettier on staged files via lint-staged, then
   `npm run lint` and `npm run typecheck` across the project. `npm install` installs the
   hook through the `prepare` script.
-- **Agent edits**: `.claude/hooks/lint-file.sh` lints any file an AI agent writes and
-  reports violations back to it. It runs in the background, so a clean edit costs nothing
-  and the agent only hears about files that actually have problems.
+- **Agent turns**: `.claude/hooks/lint-changed.sh` is a `Stop` hook — when an AI agent
+  finishes a turn it lints every uncommitted file in one pass and reports violations back
+  for the agent to fix. Turn-end is used rather than per-edit deliberately: it is a
+  natural "I meant to leave it this way" boundary, so the agent is never interrupted over
+  half-finished intermediate state. A turn that changed no code exits in ~0.2s without
+  starting ESLint at all.
 
 ## Deploying
 
