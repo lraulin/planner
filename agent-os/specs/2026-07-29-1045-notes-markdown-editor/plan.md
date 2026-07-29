@@ -1,14 +1,17 @@
 # Notes tab with a markdown editor
 
-**Status: active**
+**Status: frozen / complete** (2026-07-29)
 Spec folder: `agent-os/specs/2026-07-29-1045-notes-markdown-editor/`
+
+This document is the durable record of **what was built and why**. Future work that
+extends notes should open a new delta-spec (or amend with a dated change section)
+rather than treating this file as a living control plane.
 
 ## Context
 
-`Notes` is the last Achieve tab still stubbed out — `src/components/shell/TabStrip.tsx`
-lists it with `built: false`. It is being finished for completeness, and upgraded from
-Achieve's RTF box to a **markdown** editor so the planner is worth using as the single
-place to write things down rather than one more app that almost does it.
+`Notes` was the last Achieve tab still stubbed out. It is finished for completeness, and
+upgraded from Achieve's RTF box to a **markdown** editor so the planner is worth using as
+the single place to write things down rather than one more app that almost does it.
 
 Achieve's Notes tab (`screenshots/notes/`) is a grid of nested notes — Flag, Title,
 Subject, Date, Contexts — plus an always-present panel showing the selected note's text and
@@ -45,21 +48,21 @@ Full reasoning in `shape.md`. In brief:
 
 ## Acceptance criteria
 
-- [ ] Notes tab is reachable at `/notes`; `TabStrip` marks it built.
-- [ ] Create, rename, edit, nest, reorder, and delete notes; deleting prompts first.
-- [ ] Note body is markdown, autosaved, with an Edit/Preview toggle and a save-status line.
+- [x] Notes tab is reachable at `/notes`; `TabStrip` marks it built.
+- [x] Create, rename, edit, nest, reorder, and delete notes; deleting prompts first.
+- [x] Note body is markdown, autosaved, with an Edit/Preview toggle and a save-status line.
       A failed autosave keeps the text on screen and says so.
-- [ ] GFM renders: tables, task lists, strikethrough, fenced code. Raw HTML does not.
-- [ ] Grid shows Flag, Title, Snippet, Subject, Date, Contexts, Linked to; Show Fields
+- [x] GFM renders: tables, task lists, strikethrough, fenced code. Raw HTML does not.
+- [x] Grid shows Flag, Title, Snippet, Subject, Date, Contexts, Linked to; Show Fields
       hides them; column filters and sort work.
-- [ ] `Nested | Flat` and `Sort` are independent, and filtering is independent of both.
-- [ ] Filter dialog searches text across title **and** body, plus Subject and Contexts,
+- [x] `Nested | Flat` and `Sort` are independent, and filtering is independent of both.
+- [x] Filter dialog searches text across title **and** body, plus Subject and Contexts,
       with Match All / Match Any.
-- [ ] A note can be linked to a node; that node's drawer lists its notes and links out.
-- [ ] `/notes?note=<id>` deep-links straight to an open drawer.
-- [ ] Markdown editing is available on the node forms' long-form prose fields.
-- [ ] A second user cannot read, change, or delete the first user's notes.
-- [ ] `npm run typecheck`, `npm run lint`, and `npm test` all green with Postgres up.
+- [x] A note can be linked to a node; that node's drawer lists its notes and links out.
+- [x] `/notes?note=<id>` deep-links straight to an open drawer.
+- [x] Markdown editing is available on the node forms' long-form prose fields.
+- [x] A second user cannot read, change, or delete the first user's notes.
+- [x] `npm run typecheck`, `npm run lint`, and `npm test` all green with Postgres up.
 
 ## Changes from original plan
 
@@ -72,6 +75,8 @@ polish.
 | 2   | Explicitly ruled out surfacing node `notes` as rows in the Notes grid | Also raised during shaping. Delete, rename, metadata, and reordering cannot mean the same thing for both row kinds; see the table in `shape.md`. The underlying want is cross-cutting search.                                                                                                    |
 | 3   | Subject is a combobox, not a plain text field                         | Clarified during implementation: Achieve lets you type a new Subject _or_ pick an existing one, with "General" always offered. Built as a native `<input list>` + `<datalist>` — free text, keyboard-friendly, no dependency. Option list is the distinct subjects in use plus "General".        |
 | 4   | Migration `0006_notes.sql` hand-written rather than generated         | `drizzle-kit generate` cannot run: migrations `0004` and `0005` were hand-written without snapshots, so drizzle's latest snapshot is `0003` and it prompts to re-apply both. Pre-existing drift, not caused here. Followed the established hand-written pattern; snapshot repair is a follow-up. |
+| 5   | Project and Task freeform notes moved onto a shared Notes tab         | Goal and Result Area already had a Notes tab; Project/Task kept freeform notes on General. Reverse-surface work put freeform + linked notes together on one Notes tab for all four types so "notes about this record" is one place.                                                              |
+| 6   | Linked notes loaded with a scoped query inside `loadNodeDetail`       | Plan mentioned `loadNotesForNode` (filter full tree). Direct `notes` select scoped by `(userId, nodeId)` is cheaper per drawer open and still user-scoped.                                                                                                                                       |
 
 ---
 
@@ -246,6 +251,5 @@ Filled at freeze. Expected candidates:
 
 ---
 
-> **Standing rule:** while this spec is **active**, material changes to requirements,
-> design, or scope go into `plan.md` / `shape.md` plus a row in **Changes from original
-> plan**. Skip pure implementation detail. Freeze when verified.
+> Spec is **frozen**. Material follow-ups belong in a new delta-spec or the Follow-ups
+> list above — not as open edits to this folder.

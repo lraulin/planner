@@ -8,6 +8,7 @@ import {
   parseEffort,
   parsePriority,
 } from "@/lib/tree/format";
+import { MarkdownEditor } from "@/components/notes/MarkdownEditor";
 
 /**
  * Form primitives for the detail drawer.
@@ -132,6 +133,7 @@ export function TextArea({
   rows = 5,
   placeholder,
   className,
+  markdown = false,
 }: {
   label: string;
   value: string;
@@ -139,8 +141,29 @@ export function TextArea({
   rows?: number;
   placeholder?: string;
   className?: string;
+  /**
+   * When true, the field becomes a markdown editor with an Edit / Preview toggle.
+   * Persistence stays with the parent form — this is only the editing surface.
+   */
+  markdown?: boolean;
 }) {
   const id = useId();
+
+  // Long-form prose fields (notes, mission, vision, …) get markdown; short fields stay
+  // plain so a one-line "Reason" is not dressed up as a document.
+  if (markdown) {
+    return (
+      <Field label={label} className={className}>
+        <MarkdownEditor
+          value={value}
+          onChange={onChange}
+          rows={rows}
+          ariaLabel={label}
+        />
+      </Field>
+    );
+  }
+
   return (
     <Field label={label} htmlFor={id} className={className}>
       <textarea

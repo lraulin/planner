@@ -11,7 +11,7 @@ const TABS = [
   { id: "goals", label: "Goals", href: "/goals", built: true },
   { id: "wishes", label: "Wish List", href: "/wishes", built: true },
   { id: "schedule", label: "Weekly Schedule", href: "/schedule", built: true },
-  { id: "notes", label: "Notes", href: null, built: false },
+  { id: "notes", label: "Notes", href: "/notes", built: true },
 ] as const;
 
 export type TabId = (typeof TABS)[number]["id"];

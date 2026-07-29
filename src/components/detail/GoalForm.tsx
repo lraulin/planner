@@ -12,6 +12,7 @@ import {
   TextArea,
   TextField,
 } from "./fields";
+import { LinkedNotesPanel } from "@/components/notes/LinkedNotesPanel";
 import type { FormTab } from "./FormTabs";
 import { CoreHeaderFields, type DetailFormProps } from "./formShared";
 
@@ -140,6 +141,7 @@ export function goalTabs(props: DetailFormProps): FormTab[] {
           <TextArea
             label="Definition"
             rows={5}
+            markdown
             value={goal.definition ?? ""}
             onChange={(definition) => patchGoal({ definition })}
             placeholder="What exactly counts as reaching this."
@@ -148,6 +150,7 @@ export function goalTabs(props: DetailFormProps): FormTab[] {
           <TextArea
             label="Purpose"
             rows={5}
+            markdown
             value={goal.purpose ?? ""}
             onChange={(purpose) => patchGoal({ purpose })}
             placeholder="Why it matters that you reach it."
@@ -171,6 +174,7 @@ export function goalTabs(props: DetailFormProps): FormTab[] {
           <TextArea
             label="Vision"
             rows={7}
+            markdown
             value={goal.vision ?? ""}
             onChange={(vision) => patchGoal({ vision })}
             placeholder="What life looks like once this is true."
@@ -225,6 +229,7 @@ export function goalTabs(props: DetailFormProps): FormTab[] {
           <TextArea
             label="Strategy"
             rows={6}
+            markdown
             value={goal.strategy ?? ""}
             onChange={(strategy) => patchGoal({ strategy })}
             placeholder="How you intend to get there."
@@ -285,12 +290,16 @@ export function goalTabs(props: DetailFormProps): FormTab[] {
       id: "notes",
       label: "Notes",
       render: () => (
-        <TextArea
-          label="Notes"
-          rows={16}
-          value={values.notes}
-          onChange={(notes) => patch({ notes })}
-        />
+        <div className="flex flex-col gap-6">
+          <TextArea
+            label="Notes"
+            rows={12}
+            markdown
+            value={values.notes}
+            onChange={(notes) => patch({ notes })}
+          />
+          <LinkedNotesPanel nodeId={props.detail.id} notes={props.detail.linkedNotes} />
+        </div>
       ),
     },
   ];

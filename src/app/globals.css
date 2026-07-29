@@ -309,3 +309,189 @@ body {
   font-size: 0.75rem;
   padding: 2px 4px;
 }
+
+/*
+ * Rendered markdown — note bodies and the markdown-enabled prose fields on the node forms.
+ *
+ * Built from the existing tokens rather than the Tailwind typography plugin, because the
+ * app themes light and dark through `prefers-color-scheme` and the plugin's own colour
+ * scale would fight that.
+ *
+ * The grid is dense and these blocks are not, so the vertical rhythm here is deliberately
+ * looser than anywhere else in the app: this is the one place meant for reading.
+ */
+.md-body {
+  font-size: 0.875rem;
+  line-height: 1.65;
+  color: var(--ink);
+  overflow-wrap: break-word;
+}
+
+.md-body > *:first-child {
+  margin-top: 0;
+}
+
+.md-body > *:last-child {
+  margin-bottom: 0;
+}
+
+.md-body p {
+  margin: 0 0 0.75em;
+}
+
+.md-body h1,
+.md-body h2,
+.md-body h3,
+.md-body h4,
+.md-body h5,
+.md-body h6 {
+  font-weight: 600;
+  line-height: 1.3;
+  margin: 1.4em 0 0.5em;
+  color: var(--ink);
+}
+
+.md-body h1 {
+  font-size: 1.375rem;
+  letter-spacing: -0.01em;
+}
+.md-body h2 {
+  font-size: 1.125rem;
+  letter-spacing: -0.005em;
+}
+.md-body h3 {
+  font-size: 1rem;
+}
+.md-body h4,
+.md-body h5,
+.md-body h6 {
+  font-size: 0.875rem;
+  color: var(--ink-muted);
+}
+
+/* A heading directly under another needs no gap between them. */
+.md-body h1 + h2,
+.md-body h2 + h3,
+.md-body h3 + h4 {
+  margin-top: 0.6em;
+}
+
+.md-body ul,
+.md-body ol {
+  margin: 0 0 0.75em;
+  padding-left: 1.5em;
+}
+
+.md-body ul {
+  list-style: disc;
+}
+.md-body ol {
+  list-style: decimal;
+}
+.md-body ul ul {
+  list-style: circle;
+}
+
+.md-body li {
+  margin: 0.15em 0;
+}
+
+.md-body li > ul,
+.md-body li > ol {
+  margin-bottom: 0;
+}
+
+/* GFM task lists: the bullet would sit beside the checkbox and read as noise. */
+.md-body li:has(> input[type="checkbox"]) {
+  list-style: none;
+  margin-left: -1.25em;
+}
+
+.md-body input[type="checkbox"] {
+  margin-right: 0.5em;
+  accent-color: var(--select-edge);
+  vertical-align: baseline;
+}
+
+.md-body a {
+  color: var(--select-edge);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.md-body strong {
+  font-weight: 600;
+}
+
+.md-body code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8125em;
+  background: var(--surface-raised);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 0.1em 0.35em;
+}
+
+.md-body pre {
+  background: var(--surface-raised);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0.75em 0.9em;
+  margin: 0 0 0.75em;
+  /* Long lines scroll inside the block rather than widening the drawer. */
+  overflow-x: auto;
+}
+
+.md-body pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.md-body blockquote {
+  margin: 0 0 0.75em;
+  padding: 0.1em 0 0.1em 0.9em;
+  border-left: 3px solid var(--rule-strong);
+  color: var(--ink-muted);
+}
+
+.md-body hr {
+  border: none;
+  border-top: 1px solid var(--rule);
+  margin: 1.25em 0;
+}
+
+/* Tables scroll on their own so a wide one never widens the page. */
+.md-body table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 0 0 0.75em;
+  font-size: 0.8125rem;
+}
+
+.md-body th,
+.md-body td {
+  border: 1px solid var(--rule);
+  padding: 0.35em 0.6em;
+  text-align: left;
+}
+
+.md-body th {
+  background: var(--surface-raised);
+  font-weight: 600;
+}
+
+.md-body del {
+  color: var(--ink-faint);
+}
+
+.md-body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 3px;
+}

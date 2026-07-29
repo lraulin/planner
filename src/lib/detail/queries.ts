@@ -3,12 +3,14 @@ import {
   goalDetails,
   nodeItems,
   nodes,
+  notes,
   projectDetails,
   resultAreaDetails,
   taskDetails,
 } from "@/db/schema";
-import { and, asc, eq } from "drizzle-orm";
-import type { NodeDetail } from "./types";
+import { and, asc, desc, eq } from "drizzle-orm";
+import { noteSnippet } from "@/lib/notes/snippet";
+import type { LinkedNoteSummary, NodeDetail } from "./types";
 
 /**
  * Loads one record for its detail form: core fields, the side table for its type, and every
@@ -45,7 +47,7 @@ export async function loadNodeDetail(
 
   // Only one of the four side tables can match, so they are fetched together rather than
   // branching on type and paying an extra round trip for the branch.
-  const [resultArea, goal, project, task, items] = await Promise.all([
+  const [resultArea, goal, project, task, items, linkedNoteRows] = await Promise.all([
     node.type === "result_area"
       ? db
           .select()
@@ -71,7 +73,27 @@ export async function loadNodeDetail(
       .from(nodeItems)
       .where(and(eq(nodeItems.userId, userId), eq(nodeItems.nodeId, nodeId)))
       .orderBy(asc(nodeItems.kind), asc(nodeItems.sortKey)),
+    // Scoped by userId so a guessed node id cannot leak another user's notes.
+    db
+      .select({
+        id: notes.id,
+        title: notes.title,
+        noteDate: notes.noteDate,
+        body: notes.body,
+        updatedAt: notes.updatedAt,
+      })
+      .from(notes)
+      .where(and(eq(notes.userId, userId), eq(notes.nodeId, nodeId)))
+      .orderBy(desc(notes.updatedAt)),
   ]);
+
+  const linkedNotes: LinkedNoteSummary[] = linkedNoteRows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    noteDate: row.noteDate,
+    snippet: noteSnippet(row.body),
+    updatedAt: row.updatedAt,
+  }));
 
   return {
     ...node,
@@ -81,5 +103,6 @@ export async function loadNodeDetail(
     project: project[0] ?? null,
     task: task[0] ?? null,
     items,
+    linkedNotes,
   };
 }

@@ -1,12 +1,12 @@
 # Notes tab with a markdown editor — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-07-29)
 
 ## Scope
 
-The **Notes** tab — the last Achieve tab still stubbed out (`TabStrip.tsx` lists it with
-`built: false`). Built to Achieve's model, with the note body upgraded from Achieve's RTF
-box to **markdown**, so the planner is worth using as a single place to write things down.
+The **Notes** tab — the last Achieve tab that was still stubbed out. Built to Achieve's
+model, with the note body upgraded from Achieve's RTF box to **markdown**, so the planner
+is worth using as a single place to write things down.
 
 In scope:
 

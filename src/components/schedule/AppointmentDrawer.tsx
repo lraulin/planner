@@ -406,6 +406,7 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
                   value={notes}
                   onChange={mark(setNotes)}
                   rows={4}
+                  markdown
                 />
               </div>
             </Section>

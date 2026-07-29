@@ -51,6 +51,13 @@ The core Achieve Planner loop — plan the week, block the time, work the outlin
   collision avoidance. One plan per user/week; entries hold focus/rewrite/commitments.
   Entry point: **Plan Week…** on the schedule toolbar. Out of scope: auto-scheduler,
   resources, estimated-vs-actual on the finished plan.
+- **✅ Notes tab with markdown.** `specs/2026-07-29-1045-notes-markdown-editor`. Nested
+  notes grid (`/notes`) with Flag / Title / Snippet / Subject / Date / Contexts / Linked
+  to; drawer-only editing with autosave; Edit/Preview markdown (`react-markdown` +
+  `remark-gfm`, no raw HTML); Nested|Flat, Sort, and Filter as independent controls;
+  optional link to a node with reverse surface on the node drawer; markdown editor reused
+  on long-form node-form fields. Deferred: always-present preview panel, cross-cutting
+  search, wiki links, attachments, export.
 
 ### Still in Phase 1
 

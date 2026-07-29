@@ -17,6 +17,7 @@ import {
   TextArea,
   TextField,
 } from "./fields";
+import { LinkedNotesPanel } from "@/components/notes/LinkedNotesPanel";
 import type { FormTab } from "./FormTabs";
 import { CoreHeaderFields, type DetailFormProps } from "./formShared";
 
@@ -157,13 +158,6 @@ export function taskTabs(props: DetailFormProps): FormTab[] {
               onChange={(value) => patchTask({ private: value })}
             />
           </Section>
-
-          <TextArea
-            label="Notes"
-            rows={8}
-            value={values.notes}
-            onChange={(notes) => patch({ notes })}
-          />
         </>
       ),
     },
@@ -323,10 +317,28 @@ export function taskTabs(props: DetailFormProps): FormTab[] {
           <TextArea
             label="Description"
             rows={6}
+            markdown
             value={task.description ?? ""}
             onChange={(description) => patchTask({ description })}
           />
         </>
+      ),
+    },
+
+    {
+      id: "notes",
+      label: "Notes",
+      render: () => (
+        <div className="flex flex-col gap-6">
+          <TextArea
+            label="Notes"
+            rows={12}
+            markdown
+            value={values.notes}
+            onChange={(notes) => patch({ notes })}
+          />
+          <LinkedNotesPanel nodeId={props.detail.id} notes={props.detail.linkedNotes} />
+        </div>
       ),
     },
   ];

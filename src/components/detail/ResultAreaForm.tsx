@@ -2,6 +2,7 @@
 
 import { FieldGrid, NumberField, SelectField, TextArea, TextField } from "./fields";
 import { STATE_OPTIONS } from "@/lib/tree/hierarchy";
+import { LinkedNotesPanel } from "@/components/notes/LinkedNotesPanel";
 import type { FormTab } from "./FormTabs";
 import { CoreHeaderFields, type DetailFormProps } from "./formShared";
 
@@ -46,6 +47,7 @@ export function resultAreaTabs(props: DetailFormProps): FormTab[] {
           <TextArea
             label="Description"
             rows={4}
+            markdown
             value={area.description ?? ""}
             onChange={(description) => patchResultArea({ description })}
             placeholder="What this area of your life covers."
@@ -81,6 +83,7 @@ export function resultAreaTabs(props: DetailFormProps): FormTab[] {
           <TextArea
             label="Mission"
             rows={8}
+            markdown
             value={area.mission ?? ""}
             onChange={(mission) => patchResultArea({ mission })}
             placeholder="What you are trying to do in this area, in a sentence or two."
@@ -98,6 +101,7 @@ export function resultAreaTabs(props: DetailFormProps): FormTab[] {
           <TextArea
             label="Ideal outer vision"
             rows={7}
+            markdown
             value={area.idealOuterVision ?? ""}
             onChange={(idealOuterVision) => patchResultArea({ idealOuterVision })}
             placeholder="What this area looks like from the outside when it is going well."
@@ -105,6 +109,7 @@ export function resultAreaTabs(props: DetailFormProps): FormTab[] {
           <TextArea
             label="Ideal inner vision"
             rows={7}
+            markdown
             value={area.idealInnerVision ?? ""}
             onChange={(idealInnerVision) => patchResultArea({ idealInnerVision })}
             placeholder="How it feels from the inside when it is going well."
@@ -163,12 +168,16 @@ export function resultAreaTabs(props: DetailFormProps): FormTab[] {
       id: "notes",
       label: "Notes",
       render: () => (
-        <TextArea
-          label="Notes"
-          rows={16}
-          value={values.notes}
-          onChange={(notes) => patch({ notes })}
-        />
+        <div className="flex flex-col gap-6">
+          <TextArea
+            label="Notes"
+            rows={12}
+            markdown
+            value={values.notes}
+            onChange={(notes) => patch({ notes })}
+          />
+          <LinkedNotesPanel nodeId={props.detail.id} notes={props.detail.linkedNotes} />
+        </div>
       ),
     },
   ];

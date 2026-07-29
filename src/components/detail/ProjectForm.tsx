@@ -16,6 +16,7 @@ import {
   TextField,
 } from "./fields";
 import { STATE_OPTIONS } from "@/lib/tree/hierarchy";
+import { LinkedNotesPanel } from "@/components/notes/LinkedNotesPanel";
 import type { FormTab } from "./FormTabs";
 import { CoreHeaderFields, type DetailFormProps } from "./formShared";
 
@@ -177,13 +178,6 @@ export function projectTabs(props: DetailFormProps): FormTab[] {
               }
             />
           </Section>
-
-          <TextArea
-            label="Project notes"
-            rows={6}
-            value={values.notes}
-            onChange={(notes) => patch({ notes })}
-          />
         </>
       ),
     },
@@ -196,6 +190,7 @@ export function projectTabs(props: DetailFormProps): FormTab[] {
           <TextArea
             label="Purpose"
             rows={5}
+            markdown
             value={project.purpose ?? ""}
             onChange={(purpose) => patchProject({ purpose })}
             placeholder="Why this project exists."
@@ -213,6 +208,7 @@ export function projectTabs(props: DetailFormProps): FormTab[] {
           <TextArea
             label="Ideal vision"
             rows={7}
+            markdown
             value={project.idealVision ?? ""}
             onChange={(idealVision) => patchProject({ idealVision })}
             placeholder="What the best possible outcome looks like."
@@ -220,6 +216,7 @@ export function projectTabs(props: DetailFormProps): FormTab[] {
           <TextArea
             label="Sufficient vision"
             rows={7}
+            markdown
             value={project.sufficientVision ?? ""}
             onChange={(sufficientVision) => patchProject({ sufficientVision })}
             placeholder="What would be good enough to call this done."
@@ -241,6 +238,7 @@ export function projectTabs(props: DetailFormProps): FormTab[] {
           <TextArea
             label="Strategy"
             rows={6}
+            markdown
             value={project.strategy ?? ""}
             onChange={(strategy) => patchProject({ strategy })}
             placeholder="The approach you settled on."
@@ -312,10 +310,28 @@ export function projectTabs(props: DetailFormProps): FormTab[] {
           <TextArea
             label="Description"
             rows={5}
+            markdown
             value={project.description ?? ""}
             onChange={(description) => patchProject({ description })}
           />
         </>
+      ),
+    },
+
+    {
+      id: "notes",
+      label: "Notes",
+      render: () => (
+        <div className="flex flex-col gap-6">
+          <TextArea
+            label="Project notes"
+            rows={12}
+            markdown
+            value={values.notes}
+            onChange={(notes) => patch({ notes })}
+          />
+          <LinkedNotesPanel nodeId={props.detail.id} notes={props.detail.linkedNotes} />
+        </div>
       ),
     },
   ];

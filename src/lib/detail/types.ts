@@ -11,6 +11,18 @@ import type {
 } from "@/db/schema";
 
 /**
+ * One note attached to a record, for the read-only reverse surface on the node drawer.
+ * Snippet is precomputed so the drawer does not re-run markdown stripping on every open.
+ */
+export type LinkedNoteSummary = {
+  id: string;
+  title: string;
+  noteDate: Date | null;
+  snippet: string;
+  updatedAt: Date;
+};
+
+/**
  * A single record with everything its detail form needs: the core fields it shares with
  * every other type, the side table for its own type, and its repeating child lists.
  *
@@ -33,6 +45,8 @@ export type NodeDetail = {
   project: ProjectDetails | null;
   task: TaskDetails | null;
   items: NodeItem[];
+  /** Notes from the notes table linked to this record (not `nodes.notes`). */
+  linkedNotes: LinkedNoteSummary[];
 };
 
 /** The core fields every form edits, whatever the type. */
