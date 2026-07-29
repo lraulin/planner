@@ -4,7 +4,7 @@ import {
   expandTimeChartAreas,
   type RecurrenceInput,
 } from "./recurrence";
-import { fromDateKey, startOfWeek } from "./geometry";
+import { fromDateKey, startOfWeek, toDateKey } from "./geometry";
 
 function master(
   partial: Partial<RecurrenceInput> & Pick<RecurrenceInput, "startAt" | "endAt">,
@@ -85,6 +85,188 @@ describe("expandRecurrence", () => {
       rangeEnd,
     );
     expect(occ).toHaveLength(3);
+  });
+});
+
+/** A 1-hour appointment at 09:00 on the given day key. */
+function at9(key: string): { startAt: Date; endAt: Date } {
+  const startAt = fromDateKey(key);
+  startAt.setHours(9, 0, 0, 0);
+  return { startAt, endAt: new Date(startAt.getTime() + 60 * 60_000) };
+}
+
+/** Half-open window [from, to) covering whole local days. */
+function window(from: string, to: string): [Date, Date] {
+  return [fromDateKey(from), fromDateKey(to)];
+}
+
+const keysOf = (occ: { startAt: Date }[]) => occ.map((o) => toDateKey(o.startAt));
+
+describe("expandRecurrence — daily", () => {
+  it("steps by the interval rather than every day", () => {
+    const occ = expandRecurrence(
+      master({
+        ...at9("2026-03-02"),
+        recurrenceFrequency: "daily",
+        recurrenceInterval: 3,
+      }),
+      ...window("2026-03-01", "2026-03-13"),
+    );
+    expect(keysOf(occ)).toEqual([
+      "2026-03-02",
+      "2026-03-05",
+      "2026-03-08",
+      "2026-03-11",
+    ]);
+  });
+
+  it("treats `until` as inclusive of its calendar day", () => {
+    const occ = expandRecurrence(
+      master({
+        ...at9("2026-03-02"),
+        recurrenceFrequency: "daily",
+        recurrenceEnd: "until",
+        // Midnight on the 4th: the appointment that day is at 09:00, so an exclusive
+        // comparison would drop it. It should be kept.
+        recurrenceUntil: fromDateKey("2026-03-04"),
+      }),
+      ...window("2026-03-01", "2026-03-13"),
+    );
+    expect(keysOf(occ)).toEqual(["2026-03-02", "2026-03-03", "2026-03-04"]);
+  });
+
+  it("clips a series that began long before the window", () => {
+    const occ = expandRecurrence(
+      master({ ...at9("2026-01-01"), recurrenceFrequency: "daily" }),
+      ...window("2026-03-02", "2026-03-05"),
+    );
+    expect(keysOf(occ)).toEqual(["2026-03-02", "2026-03-03", "2026-03-04"]);
+  });
+
+  it("does not resurrect a counted series in a later window", () => {
+    // Three occurrences from Jan 1, viewed in March. The series is long over.
+    const occ = expandRecurrence(
+      master({
+        ...at9("2026-01-01"),
+        recurrenceFrequency: "daily",
+        recurrenceEnd: "count",
+        recurrenceCount: 3,
+      }),
+      ...window("2026-03-01", "2026-03-08"),
+    );
+    expect(occ).toEqual([]);
+  });
+
+  it("keeps local wall-clock time across a DST spring-forward", () => {
+    // US DST begins Sun 2026-03-08. A 09:00 appointment stays at 09:00, even though
+    // the 7th→8th gap is only 23 hours.
+    const occ = expandRecurrence(
+      master({ ...at9("2026-03-06"), recurrenceFrequency: "daily" }),
+      ...window("2026-03-06", "2026-03-11"),
+    );
+    expect(keysOf(occ)).toEqual([
+      "2026-03-06",
+      "2026-03-07",
+      "2026-03-08",
+      "2026-03-09",
+      "2026-03-10",
+    ]);
+    expect(occ.every((o) => o.startAt.getHours() === 9)).toBe(true);
+  });
+});
+
+describe("expandRecurrence — weekly", () => {
+  it("skips weeks when the interval is greater than one", () => {
+    // Biweekly Monday, from Mon 2026-03-02.
+    const occ = expandRecurrence(
+      master({
+        ...at9("2026-03-02"),
+        recurrenceFrequency: "weekly",
+        recurrenceInterval: 2,
+      }),
+      ...window("2026-03-01", "2026-04-12"),
+    );
+    expect(keysOf(occ)).toEqual(["2026-03-02", "2026-03-16", "2026-03-30"]);
+  });
+
+  it("does not resurrect a counted series in a later window", () => {
+    // Weekly Monday from Jan 5, three occurrences: Jan 5, 12, 19. Viewed in March,
+    // the series is long over and nothing should be emitted.
+    const occ = expandRecurrence(
+      master({
+        ...at9("2026-01-05"),
+        recurrenceFrequency: "weekly",
+        recurrenceEnd: "count",
+        recurrenceCount: 3,
+      }),
+      ...window("2026-03-01", "2026-03-29"),
+    );
+    expect(occ).toEqual([]);
+  });
+
+  it("stops at `until` in a later window", () => {
+    const occ = expandRecurrence(
+      master({
+        ...at9("2026-01-05"),
+        recurrenceFrequency: "weekly",
+        recurrenceEnd: "until",
+        recurrenceUntil: fromDateKey("2026-01-19"),
+      }),
+      ...window("2026-03-01", "2026-03-29"),
+    );
+    expect(occ).toEqual([]);
+  });
+});
+
+describe("expandRecurrence — monthly and yearly", () => {
+  it("repeats on the same day each month", () => {
+    const occ = expandRecurrence(
+      master({ ...at9("2026-03-10"), recurrenceFrequency: "monthly" }),
+      ...window("2026-03-01", "2026-06-01"),
+    );
+    expect(keysOf(occ)).toEqual(["2026-03-10", "2026-04-10", "2026-05-10"]);
+  });
+
+  it("clamps a 31st series into short months", () => {
+    const occ = expandRecurrence(
+      master({ ...at9("2026-01-31"), recurrenceFrequency: "monthly" }),
+      ...window("2026-01-01", "2026-05-01"),
+    );
+    // February has no 31st. What matters is that every emitted date is real and
+    // ordered; the exact clamp policy is pinned here so a change is deliberate.
+    expect(keysOf(occ)).toEqual([
+      "2026-01-31",
+      "2026-02-28",
+      "2026-03-28",
+      "2026-04-28",
+    ]);
+  });
+
+  it("repeats annually", () => {
+    const occ = expandRecurrence(
+      master({ ...at9("2024-05-20"), recurrenceFrequency: "yearly" }),
+      ...window("2026-01-01", "2027-01-01"),
+    );
+    expect(keysOf(occ)).toEqual(["2026-05-20"]);
+  });
+
+  it("keeps a Feb 29 series on a real date in common years", () => {
+    const occ = expandRecurrence(
+      master({ ...at9("2024-02-29"), recurrenceFrequency: "yearly" }),
+      ...window("2025-01-01", "2026-01-01"),
+    );
+    expect(keysOf(occ)).toEqual(["2025-02-28"]);
+  });
+});
+
+describe("expandRecurrence — bounds", () => {
+  it("never exceeds maxOccurrences", () => {
+    const occ = expandRecurrence(
+      master({ ...at9("2026-01-01"), recurrenceFrequency: "daily" }),
+      ...window("2026-01-01", "2027-01-01"),
+      10,
+    );
+    expect(occ.length).toBeLessThanOrEqual(10);
   });
 });
 

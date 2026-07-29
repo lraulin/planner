@@ -12,6 +12,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
+    "test:unit": "vitest run --exclude '**/*.integration.test.ts'",
+    "test:integration": "vitest run integration.test",
     "test:watch": "vitest",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",

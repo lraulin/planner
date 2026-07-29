@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/db";
 import { goalDetails, nodes, users } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { createNode } from "@/lib/tree/mutations";
 import {
   createNodeItem,
@@ -18,8 +19,9 @@ import { loadNodeDetail } from "./queries";
  * seeded development data.
  */
 
-const hasDatabase = Boolean(process.env.DATABASE_URL);
-const describeDb = hasDatabase ? describe : describe.skip;
+const dbReachable = await databaseReachable();
+const describeDb = dbReachable ? describe : describe.skip;
+if (!dbReachable) warnDatabaseSkipped("detail mutations");
 
 const createdUserIds: string[] = [];
 

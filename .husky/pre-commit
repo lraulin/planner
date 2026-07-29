@@ -5,3 +5,7 @@ npx lint-staged
 # staged. ~6s combined, which is cheap next to finding it on deploy.
 npm run lint
 npm run typecheck
+
+# Unit tests only — hermetic and ~2s, so committing never depends on Docker being up.
+# The integration tests run on pre-push instead.
+npm run test:unit

@@ -44,24 +44,36 @@ npm start        # also http://localhost:3047
 
 ## Scripts
 
-| Script                 | Purpose                                     |
-| ---------------------- | ------------------------------------------- |
-| `npm run dev`          | Dev server on **http://localhost:3047**     |
-| `npm start`            | Production server on **:3047** (post-build) |
-| `npm run build`        | Production build                            |
-| `npm test`             | Unit tests (Vitest)                         |
-| `npm run typecheck`    | `tsc --noEmit`                              |
-| `npm run lint`         | ESLint (warnings fail too)                  |
-| `npm run lint:fix`     | ESLint with `--fix`                         |
-| `npm run format`       | Prettier write-all                          |
-| `npm run format:check` | Prettier check (CI-friendly)                |
-| `npm run db:up`        | Start local Postgres (Docker)               |
-| `npm run db:down`      | Stop local Postgres                         |
-| `npm run db:generate`  | Generate a migration from schema changes    |
-| `npm run db:migrate`   | Apply pending migrations                    |
-| `npm run db:push`      | Push the schema directly (development)      |
-| `npm run db:studio`    | Drizzle Studio                              |
-| `npm run db:seed`      | Seed the dev user and sample hierarchy      |
+| Script                     | Purpose                                     |
+| -------------------------- | ------------------------------------------- |
+| `npm run dev`              | Dev server on **http://localhost:3047**     |
+| `npm start`                | Production server on **:3047** (post-build) |
+| `npm run build`            | Production build                            |
+| `npm test`                 | Full suite (Vitest)                         |
+| `npm run test:unit`        | Unit tests only — no database needed        |
+| `npm run test:integration` | Database-backed tests (needs `db:up`)       |
+| `npm run typecheck`        | `tsc --noEmit`                              |
+| `npm run lint`             | ESLint (warnings fail too)                  |
+| `npm run lint:fix`         | ESLint with `--fix`                         |
+| `npm run format`           | Prettier write-all                          |
+| `npm run format:check`     | Prettier check (CI-friendly)                |
+| `npm run db:up`            | Start local Postgres (Docker)               |
+| `npm run db:down`          | Stop local Postgres                         |
+| `npm run db:generate`      | Generate a migration from schema changes    |
+| `npm run db:migrate`       | Apply pending migrations                    |
+| `npm run db:push`          | Push the schema directly (development)      |
+| `npm run db:studio`        | Drizzle Studio                              |
+| `npm run db:seed`          | Seed the dev user and sample hierarchy      |
+
+## Testing
+
+Tests split by what they need. Files named `*.integration.test.ts` talk to the local
+Postgres; everything else is pure and hermetic. New database-backed tests should follow
+that naming so they land in the right bucket automatically.
+
+Integration tests **skip loudly** when Postgres is unreachable rather than failing, so a
+stopped container never blocks a commit — see `src/lib/testing/database.ts` for why. An
+unset `DATABASE_URL` still fails, because that means the environment was never set up.
 
 ## Linting
 
@@ -73,11 +85,15 @@ where a rejected server action leaves the UI silently stuck.
 
 `no-unnecessary-condition` is deliberately off; see the comment in `eslint.config.mjs`.
 
-Two things run it for you:
+## Automated checks
+
+Nothing here needs remembering — three hooks run the gates for you:
 
 - **Pre-commit** (`.husky/pre-commit`): Prettier on staged files via lint-staged, then
-  `npm run lint` and `npm run typecheck` across the project. `npm install` installs the
-  hook through the `prepare` script.
+  `npm run lint`, `npm run typecheck`, and `npm run test:unit` across the project.
+  `npm install` installs the hook through the `prepare` script.
+- **Pre-push** (`.husky/pre-push`): the full suite, so nothing reaches `origin` without
+  the database-backed tests having run.
 - **Agent turns**: `.claude/hooks/lint-changed.sh` is a `Stop` hook — when an AI agent
   finishes a turn it lints every uncommitted file in one pass and reports violations back
   for the agent to fix. Turn-end is used rather than per-edit deliberately: it is a

@@ -176,6 +176,17 @@ export function expandRecurrence(
         (rangeStart.getTime() - seriesWeekStart.getTime()) / (7 * MS_DAY),
       );
       weekIndex = Math.floor(weeksBehind / interval) * interval;
+
+      // Carry the occurrence tally across the weeks we just jumped over. Without this,
+      // `index` restarts at 0 inside the window, so an "end after N" series is reborn
+      // every time it is scrolled to — a weekly series with count 3 kept emitting
+      // occurrences years after it ended. The anchor week is partial: weekdays before
+      // the series start never happened and must not be counted.
+      const weeksIterated = weekIndex / interval;
+      const beforeSeriesStart = weekdays.filter(
+        (wd) => wd < master.startAt.getDay(),
+      ).length;
+      index = Math.max(0, weeksIterated * weekdays.length - beforeSeriesStart);
     }
 
     while (out.length < maxOccurrences && weekIndex < maxOccurrences * 2) {
@@ -205,21 +216,9 @@ export function expandRecurrence(
     const step = (d: Date) =>
       freq === "monthly" ? addMonths(d, interval) : addYears(d, interval);
 
-    // Fast-forward roughly.
-    while (start < rangeStart && index < maxOccurrences) {
-      const next = step(start);
-      if (next.getTime() === start.getTime()) break;
-      start = next;
-      index++;
-    }
-    // One step back if we overshot (so we don't miss the first in-window).
-    if (index > 0 && start > rangeStart) {
-      // re-walk from master if small; for safety just continue from here
-    }
-
-    // Safer: restart from master and skip until near window.
-    start = new Date(master.startAt);
-    index = 0;
+    // No fast-forward here, unlike daily and weekly: month lengths vary, so the only
+    // way to land on the right dates is to walk every step from the series start. That
+    // caps reach at `maxOccurrences` steps — about 41 years of monthly recurrence.
     while (index < maxOccurrences) {
       if (pastSeriesEnd(master, start, index)) break;
       if (start >= rangeEnd) break;

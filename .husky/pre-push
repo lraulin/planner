@@ -1,0 +1,7 @@
+# The full suite, including the integration tests that need `npm run db:up`.
+#
+# Push is the right boundary for these: pre-commit stays fast and Docker-independent,
+# but nothing reaches origin without the database-backed mutation tests having run. If
+# Postgres is unreachable they skip loudly rather than failing — see
+# src/lib/testing/database.ts for why that tradeoff is deliberate.
+npm test
