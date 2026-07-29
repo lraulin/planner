@@ -565,6 +565,76 @@ export const appointments = pgTable(
   ],
 );
 
+/**
+ * One run of the weekly planning wizard — Achieve's Weekly Planning Wizard, minus its
+ * per-resource loop (resource pools are out of scope; see the spec).
+ *
+ * There is at most one plan per week, so re-entering the wizard resumes rather than
+ * starting over. `weekStart` is stored already normalized to `weekStartsOn`.
+ */
+export const weeklyPlans = pgTable(
+  "weekly_plans",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Local midnight of the first day of the planned week. */
+    weekStart: timestamp("week_start", { withTimezone: true }).notNull(),
+    /** 0=Sun … 6=Sat. Achieve's "Start week on". */
+    weekStartsOn: smallint("week_starts_on").notNull().default(0),
+    /** Achieve's "Perform Result Area & Goal Review" — whether steps 1–2 are in this run. */
+    reviewAreasGoals: boolean("review_areas_goals").notNull().default(true),
+    /** The week's time budget for project work, in minutes. */
+    availableMinutes: integer("available_minutes"),
+    timeChartId: uuid("time_chart_id").references(() => timeCharts.id, {
+      onDelete: "set null",
+    }),
+    /** Default size of a block dropped in step 5. */
+    blockSizeMinutes: integer("block_size_minutes").notNull().default(90),
+    avoidCollisions: boolean("avoid_collisions").notNull().default(true),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [unique("weekly_plans_user_week_uq").on(table.userId, table.weekStart)],
+);
+
+/**
+ * What one plan decided about one node. A result area row carries `focus`, a goal row a
+ * `rewrite`, a project row `committedMinutes` — one shape rather than a table per step,
+ * the same call the `node_items` table makes.
+ *
+ * Rewrites are deliberately per-plan rather than written back onto the goal: restating a
+ * goal each week is the exercise, and last week's wording is what makes it reviewable.
+ */
+export const weeklyPlanEntries = pgTable(
+  "weekly_plan_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    planId: uuid("plan_id")
+      .notNull()
+      .references(() => weeklyPlans.id, { onDelete: "cascade" }),
+    nodeId: uuid("node_id")
+      .notNull()
+      .references(() => nodes.id, { onDelete: "cascade" }),
+    /** Result area marked a focus area for this week. Mirrors `nodes.focus` at plan time. */
+    focus: boolean("focus").notNull().default(false),
+    reviewed: boolean("reviewed").notNull().default(false),
+    rewrite: text("rewrite").notNull().default(""),
+    committedMinutes: integer("committed_minutes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("weekly_plan_entries_plan_idx").on(table.userId, table.planId),
+    unique("weekly_plan_entries_plan_node_uq").on(table.planId, table.nodeId),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type Node = typeof nodes.$inferSelect;
 export type NewNode = typeof nodes.$inferInsert;
@@ -589,3 +659,5 @@ export type ShowAs = (typeof showAsEnum.enumValues)[number];
 export type AppointmentCheck = (typeof appointmentCheckEnum.enumValues)[number];
 export type RecurrenceFrequency = (typeof recurrenceFrequencyEnum.enumValues)[number];
 export type RecurrenceEnd = (typeof recurrenceEndEnum.enumValues)[number];
+export type WeeklyPlan = typeof weeklyPlans.$inferSelect;
+export type WeeklyPlanEntry = typeof weeklyPlanEntries.$inferSelect;

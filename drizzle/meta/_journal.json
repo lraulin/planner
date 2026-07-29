@@ -36,6 +36,13 @@
       "when": 1785259500000,
       "tag": "0004_appointment_check",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785296640000,
+      "tag": "0005_weekly_plans",
+      "breakpoints": true
     }
   ]
 }

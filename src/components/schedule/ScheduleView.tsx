@@ -286,6 +286,13 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
         >
           Today
         </button>
+        <button
+          type="button"
+          className="rounded border border-select-edge bg-select px-2 py-1 font-medium text-ink hover:opacity-90"
+          onClick={() => router.push(`/schedule/plan?week=${weekKey}&step=0`)}
+        >
+          Plan Week…
+        </button>
         <div className="ml-auto flex items-center gap-1">
           <button
             type="button"
