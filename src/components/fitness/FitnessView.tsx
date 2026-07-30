@@ -58,10 +58,18 @@ export function FitnessView({
   const [seed, setSeed] = useState<string | null>(
     initialSessionDetail ? null : seedExerciseId,
   );
+  /** Stable for the life of one open drawer — must not change when a new session is first persisted. */
+  const [editorInstanceKey, setEditorInstanceKey] = useState(() =>
+    initialSessionDetail
+      ? initialSessionDetail.id
+      : openLog
+        ? `new-${seedExerciseId ?? "blank"}`
+        : "closed",
+  );
   const [pendingDelete, setPendingDelete] = useState<SessionSummary | null>(null);
   const [pendingDeleteExercise, setPendingDeleteExercise] =
     useState<ExerciseSummary | null>(null);
-  const [busy, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
 
   const sessions = initialSessions;
   const exercises = initialExercises;
@@ -69,6 +77,7 @@ export function FitnessView({
   const openNewLog = useCallback((exerciseId: string | null = null) => {
     setEditing(null);
     setSeed(exerciseId);
+    setEditorInstanceKey(`new-${crypto.randomUUID()}`);
     setEditorOpen(true);
     setError(null);
   }, []);
@@ -83,25 +92,61 @@ export function FitnessView({
       }
       setEditing(result.data as SessionDetail);
       setSeed(null);
+      setEditorInstanceKey(sessionId);
       setEditorOpen(true);
     });
   }, []);
 
-  function handleSave(input: SessionInput) {
-    setError(null);
-    startTransition(async () => {
-      const result = editing
-        ? await replaceSessionAction(editing.id, input)
-        : await createSessionAction(input);
+  const handleCreate = useCallback(
+    async (input: SessionInput) => {
+      setError(null);
+      const result = await createSessionAction(input);
       if (!result.ok) {
         setError(result.error);
-        return;
+        return { ok: false as const, error: result.error };
       }
-      setEditorOpen(false);
-      setEditing(null);
+      if (!result.id) {
+        const message = "Session was created without an id.";
+        setError(message);
+        return { ok: false as const, error: message };
+      }
       router.refresh();
-    });
-  }
+      return { ok: true as const, id: result.id };
+    },
+    [router],
+  );
+
+  const handleUpdate = useCallback(
+    async (sessionId: string, input: SessionInput) => {
+      setError(null);
+      const result = await replaceSessionAction(sessionId, input);
+      if (!result.ok) {
+        setError(result.error);
+        return { ok: false as const, error: result.error };
+      }
+      router.refresh();
+      return { ok: true as const };
+    },
+    [router],
+  );
+
+  const handlePersisted = useCallback((sessionId: string) => {
+    // Record the id without remounting the editor (instance key stays fixed).
+    setEditing((current) =>
+      current?.id === sessionId
+        ? current
+        : ({
+            id: sessionId,
+            performedAt: new Date(),
+            title: "",
+            notes: "",
+            durationMinutes: null,
+            exercises: [],
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          } satisfies SessionDetail),
+    );
+  }, []);
 
   function confirmDeleteSession() {
     if (!pendingDelete) return;
@@ -254,7 +299,7 @@ export function FitnessView({
       </div>
 
       <SessionEditor
-        key={`${editing?.id ?? "new"}-${seed ?? ""}-${editorOpen}`}
+        key={`${editorInstanceKey}-${editorOpen}`}
         open={editorOpen}
         onClose={() => {
           setEditorOpen(false);
@@ -263,9 +308,9 @@ export function FitnessView({
         exercises={exercises}
         existing={editing}
         seedExerciseId={seed}
-        onSave={handleSave}
-        busy={busy}
-        error={error}
+        onCreate={handleCreate}
+        onUpdate={handleUpdate}
+        onPersisted={handlePersisted}
       />
 
       <ConfirmDialog

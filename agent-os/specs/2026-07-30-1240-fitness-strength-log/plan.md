@@ -187,6 +187,9 @@ Patterns to mirror: Notes tab (own domain + `TabStrip`), detail drawers, `Confir
 | #   | Change                                                                                      | Why                                                                     |
 | --- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
 | 1   | Migration `0009` applied manually after drizzle-kit reported success without writing tables | Journal `when` for 0009 was earlier than 0008; fixed timestamp ordering |
+| 2   | Session editor **autosaves** (notes-style debounce); Done closes instead of Save/Cancel     | Gym logging is one set at a time — explicit Save-and-close was wrong    |
+| 3   | Per-set delete; **Add set** copies previous set’s reps/weight/unit                          | Straight sets are the default; typo’d sets need a one-click remove      |
+| 4   | New exercise blocks start with one empty set row (not three blanks)                         | Copy-forward makes pre-filling empty rows pointless                     |
 
 ---
 

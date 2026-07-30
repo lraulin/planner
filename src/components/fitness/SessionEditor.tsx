@@ -1,28 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Drawer } from "@/components/detail/Drawer";
+import { useAutosave, type SaveStatus } from "@/components/notes/useAutosave";
+import {
+  draftToSessionInput,
+  emptySet,
+  setFromPrevious,
+  type DraftExercise,
+  type DraftSet,
+  type SessionDraft,
+} from "@/lib/fitness/sessionDraft";
 import type { ExerciseSummary, SessionDetail, SessionInput } from "@/lib/fitness/types";
 
-type DraftSet = { reps: string; weight: string; unit: string };
-type DraftExercise = {
-  key: string;
-  exerciseId: string;
-  exerciseName: string;
-  sets: DraftSet[];
-};
-
-function emptySet(unit = "lb"): DraftSet {
-  return { reps: "", weight: "", unit };
-}
-
-function draftFromDetail(detail: SessionDetail): {
-  performedAt: string;
-  title: string;
-  notes: string;
-  durationMinutes: string;
-  exercises: DraftExercise[];
-} {
+function draftFromDetail(detail: SessionDetail): SessionDraft {
   return {
     performedAt: toLocalInput(detail.performedAt),
     title: detail.title,
@@ -48,15 +39,24 @@ function toLocalInput(date: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function parseLocalInput(value: string): Date {
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return new Date();
-  return d;
+function newExerciseBlock(
+  exerciseId = "",
+  exerciseName = "",
+  unit = "lb",
+): DraftExercise {
+  return {
+    key: crypto.randomUUID(),
+    exerciseId,
+    exerciseName,
+    // One empty row to start — "Add set" copies the previous numbers.
+    sets: [emptySet(unit)],
+  };
 }
 
 /**
- * Fast log / edit drawer for a multi-exercise strength session.
- * Parent owns open state and save/delete; this holds only the draft.
+ * Strength session drawer. Autosaves like notes: there is no Save button to gate
+ * entry between sets. First valid draft creates the session; later edits replace.
+ * Closing flushes any pending debounce.
  */
 export function SessionEditor({
   open,
@@ -64,18 +64,24 @@ export function SessionEditor({
   exercises,
   existing,
   seedExerciseId,
-  onSave,
-  busy,
-  error,
+  onCreate,
+  onUpdate,
+  onPersisted,
 }: {
   open: boolean;
   onClose: () => void;
   exercises: ExerciseSummary[];
   existing: SessionDetail | null;
   seedExerciseId: string | null;
-  onSave: (input: SessionInput) => void;
-  busy: boolean;
-  error: string | null;
+  onCreate: (
+    input: SessionInput,
+  ) => Promise<{ ok: true; id: string } | { ok: false; error: string }>;
+  onUpdate: (
+    sessionId: string,
+    input: SessionInput,
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
+  /** Fired after first create so the parent can track the open session id. */
+  onPersisted?: (sessionId: string) => void;
 }) {
   const seedName = useMemo(() => {
     if (!seedExerciseId) return "";
@@ -84,50 +90,125 @@ export function SessionEditor({
 
   const initial = useMemo(() => {
     if (existing) return draftFromDetail(existing);
-    const seeded: DraftExercise[] = seedExerciseId
-      ? [
-          {
-            key: crypto.randomUUID(),
-            exerciseId: seedExerciseId,
-            exerciseName: seedName,
-            sets: [emptySet(), emptySet(), emptySet()],
-          },
-        ]
-      : [
-          {
-            key: crypto.randomUUID(),
-            exerciseId: "",
-            exerciseName: "",
-            sets: [emptySet(), emptySet(), emptySet()],
-          },
-        ];
+    const seeded = seedExerciseId
+      ? [newExerciseBlock(seedExerciseId, seedName)]
+      : [newExerciseBlock()];
     return {
       performedAt: toLocalInput(new Date()),
       title: "",
       notes: "",
       durationMinutes: "",
       exercises: seeded,
-    };
-    // Re-init when opening a different session or seed — parent remounts via key.
+    } satisfies SessionDraft;
+    // Parent remounts via key when session/seed changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existing?.id, seedExerciseId, open]);
 
-  // Parent remounts this component with a `key` when session/seed changes, so local
-  // state is initialised once from props — no sync effect needed.
   const [performedAt, setPerformedAt] = useState(initial.performedAt);
   const [title, setTitle] = useState(initial.title);
   const [notes, setNotes] = useState(initial.notes);
   const [durationMinutes, setDurationMinutes] = useState(initial.durationMinutes);
   const [blocks, setBlocks] = useState(initial.exercises);
+  /** Session id once created or when editing an existing row. */
+  const sessionIdRef = useRef<string | null>(existing?.id ?? null);
+  const [sessionId, setSessionId] = useState<string | null>(existing?.id ?? null);
+
+  const catalog = useMemo(
+    () => exercises.map((e) => ({ id: e.id, name: e.name })),
+    [exercises],
+  );
+
+  const buildDraft = useCallback((): SessionDraft => {
+    return { performedAt, title, notes, durationMinutes, exercises: blocks };
+  }, [performedAt, title, notes, durationMinutes, blocks]);
+
+  const save = useCallback(
+    async (draft: SessionDraft) => {
+      const input = draftToSessionInput(draft, catalog);
+      if (!input) {
+        // Nothing durable yet — stay idle, don't surface an error.
+        return { ok: true as const };
+      }
+
+      const id = sessionIdRef.current;
+      if (id) {
+        const result = await onUpdate(id, input);
+        return result.ok
+          ? { ok: true as const }
+          : { ok: false as const, error: result.error };
+      }
+
+      const result = await onCreate(input);
+      if (!result.ok) return { ok: false as const, error: result.error };
+
+      sessionIdRef.current = result.id;
+      setSessionId(result.id);
+      onPersisted?.(result.id);
+      return { ok: true as const };
+    },
+    [catalog, onCreate, onUpdate, onPersisted],
+  );
+
+  const { status, schedule, flush, retry } = useAutosave(save);
+
+  const queueSave = useCallback(
+    (next: SessionDraft) => {
+      // Only schedule when there is something to write, or when a session already
+      // exists (so clearing sets eventually fails validation rather than lying about
+      // "saved" on a no-op — draftToSessionInput null short-circuits as ok:true only
+      // before first create).
+      if (sessionIdRef.current || draftToSessionInput(next, catalog)) {
+        schedule(next);
+      }
+    },
+    [catalog, schedule],
+  );
+
+  function patchMeta(partial: Partial<SessionDraft>) {
+    if (partial.performedAt !== undefined) setPerformedAt(partial.performedAt);
+    if (partial.title !== undefined) setTitle(partial.title);
+    if (partial.notes !== undefined) setNotes(partial.notes);
+    if (partial.durationMinutes !== undefined) {
+      setDurationMinutes(partial.durationMinutes);
+    }
+    const next: SessionDraft = {
+      performedAt:
+        partial.performedAt !== undefined ? partial.performedAt : performedAt,
+      title: partial.title !== undefined ? partial.title : title,
+      notes: partial.notes !== undefined ? partial.notes : notes,
+      durationMinutes:
+        partial.durationMinutes !== undefined
+          ? partial.durationMinutes
+          : durationMinutes,
+      exercises: blocks,
+    };
+    queueSave(next);
+  }
+
+  function setBlocksAndSave(
+    updater: DraftExercise[] | ((current: DraftExercise[]) => DraftExercise[]),
+  ) {
+    setBlocks((current) => {
+      const nextBlocks = typeof updater === "function" ? updater(current) : updater;
+      queueSave({
+        performedAt,
+        title,
+        notes,
+        durationMinutes,
+        exercises: nextBlocks,
+      });
+      return nextBlocks;
+    });
+  }
 
   function updateBlock(index: number, patch: Partial<DraftExercise>) {
-    setBlocks((current) =>
+    setBlocksAndSave((current) =>
       current.map((b, i) => (i === index ? { ...b, ...patch } : b)),
     );
   }
 
   function updateSet(blockIndex: number, setIndex: number, patch: Partial<DraftSet>) {
-    setBlocks((current) =>
+    setBlocksAndSave((current) =>
       current.map((b, i) => {
         if (i !== blockIndex) return b;
         return {
@@ -138,72 +219,66 @@ export function SessionEditor({
     );
   }
 
-  function handleSave() {
-    const input: SessionInput = {
-      performedAt: parseLocalInput(performedAt),
-      title,
-      notes,
-      durationMinutes: durationMinutes.trim() === "" ? null : Number(durationMinutes),
-      exercises: blocks.map((b) => {
-        const known = exercises.find(
-          (e) => e.id === b.exerciseId || e.name === b.exerciseName.trim(),
-        );
+  function removeSet(blockIndex: number, setIndex: number) {
+    setBlocksAndSave((current) =>
+      current.map((b, i) => {
+        if (i !== blockIndex) return b;
+        const nextSets = b.sets.filter((_, j) => j !== setIndex);
+        // Keep one empty row so the table never disappears mid-workout.
         return {
-          exerciseId: known?.id || b.exerciseId || undefined,
-          exerciseName: b.exerciseName.trim() || known?.name,
-          sets: b.sets
-            .filter((s) => s.reps.trim() !== "" || s.weight.trim() !== "")
-            .map((s) => ({
-              reps: s.reps.trim() === "" ? null : Number(s.reps),
-              weight: s.weight.trim() === "" ? null : Number(s.weight),
-              unit: s.unit || "lb",
-            })),
+          ...b,
+          sets: nextSets.length > 0 ? nextSets : [emptySet(b.sets[0]?.unit ?? "lb")],
         };
       }),
-    };
-    onSave(input);
+    );
   }
 
+  function addSet(blockIndex: number) {
+    setBlocksAndSave((current) =>
+      current.map((b, i) => {
+        if (i !== blockIndex) return b;
+        const last = b.sets[b.sets.length - 1];
+        return { ...b, sets: [...b.sets, setFromPrevious(last)] };
+      }),
+    );
+  }
+
+  const closeAfterFlush = useCallback(() => {
+    void flush();
+    onClose();
+  }, [flush, onClose]);
+
   return (
-    <Drawer open={open} onClose={onClose} labelledBy="session-editor-title">
+    <Drawer open={open} onClose={closeAfterFlush} labelledBy="session-editor-title">
       <div className="flex h-full flex-col">
-        <header className="flex flex-none items-center justify-between border-b border-rule px-4 py-3">
-          <h2 id="session-editor-title" className="text-sm font-semibold text-ink">
-            {existing ? "Edit session" : "Log session"}
-          </h2>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded border border-rule px-3 py-1 text-[0.8125rem] text-ink-muted hover:text-ink"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={handleSave}
-              className="rounded bg-ink px-3 py-1 text-[0.8125rem] font-medium text-surface disabled:opacity-50"
-            >
-              {busy ? "Saving…" : "Save"}
-            </button>
+        <header className="flex flex-none items-center justify-between gap-3 border-b border-rule px-4 py-3">
+          <div className="min-w-0">
+            <h2 id="session-editor-title" className="text-sm font-semibold text-ink">
+              {sessionId ? "Session" : "Log session"}
+            </h2>
+            <SaveLine
+              status={status}
+              persisted={sessionId !== null}
+              onRetry={() => retry(buildDraft())}
+            />
           </div>
+          <button
+            type="button"
+            onClick={closeAfterFlush}
+            className="rounded bg-ink px-3 py-1 text-[0.8125rem] font-medium text-surface"
+          >
+            Done
+          </button>
         </header>
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
-          {error && (
-            <p className="rounded border border-priority-a/40 bg-priority-a/10 px-3 py-2 text-[0.8125rem] text-priority-a">
-              {error}
-            </p>
-          )}
-
           <div className="grid grid-cols-2 gap-3">
             <label className="flex flex-col gap-1 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
               When
               <input
                 type="datetime-local"
                 value={performedAt}
-                onChange={(e) => setPerformedAt(e.target.value)}
+                onChange={(e) => patchMeta({ performedAt: e.target.value })}
                 className="rounded border border-rule bg-surface px-2 py-1.5 text-[0.875rem] text-ink normal-case tracking-normal"
               />
             </label>
@@ -213,7 +288,7 @@ export function SessionEditor({
                 type="number"
                 min={0}
                 value={durationMinutes}
-                onChange={(e) => setDurationMinutes(e.target.value)}
+                onChange={(e) => patchMeta({ durationMinutes: e.target.value })}
                 className="rounded border border-rule bg-surface px-2 py-1.5 text-[0.875rem] text-ink normal-case tracking-normal"
               />
             </label>
@@ -225,7 +300,7 @@ export function SessionEditor({
               type="text"
               value={title}
               placeholder="Push, Upper, …"
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => patchMeta({ title: e.target.value })}
               className="rounded border border-rule bg-surface px-2 py-1.5 text-[0.875rem] text-ink normal-case tracking-normal"
             />
           </label>
@@ -255,7 +330,9 @@ export function SessionEditor({
                 {blocks.length > 1 && (
                   <button
                     type="button"
-                    onClick={() => setBlocks((c) => c.filter((_, i) => i !== bi))}
+                    onClick={() =>
+                      setBlocksAndSave((c) => c.filter((_, i) => i !== bi))
+                    }
                     className="pb-1.5 text-[0.75rem] text-ink-faint hover:text-priority-a"
                   >
                     Remove
@@ -264,16 +341,17 @@ export function SessionEditor({
               </div>
 
               <div className="space-y-1">
-                <div className="grid grid-cols-[2rem_1fr_1fr_4rem] gap-1 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-faint">
+                <div className="grid grid-cols-[2rem_1fr_1fr_4rem_2rem] gap-1 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-faint">
                   <span>#</span>
                   <span>Reps</span>
                   <span>Weight</span>
                   <span>Unit</span>
+                  <span />
                 </div>
                 {block.sets.map((set, si) => (
                   <div
                     key={si}
-                    className="grid grid-cols-[2rem_1fr_1fr_4rem] items-center gap-1"
+                    className="grid grid-cols-[2rem_1fr_1fr_4rem_2rem] items-center gap-1"
                   >
                     <span className="font-mono text-[0.75rem] text-ink-faint">
                       {si + 1}
@@ -301,17 +379,22 @@ export function SessionEditor({
                       <option value="lb">lb</option>
                       <option value="kg">kg</option>
                     </select>
+                    <button
+                      type="button"
+                      onClick={() => removeSet(bi, si)}
+                      title="Delete set"
+                      aria-label={`Delete set ${si + 1}`}
+                      className="flex h-7 w-7 items-center justify-center rounded text-ink-faint hover:bg-priority-a/10 hover:text-priority-a"
+                    >
+                      ×
+                    </button>
                   </div>
                 ))}
               </div>
 
               <button
                 type="button"
-                onClick={() =>
-                  updateBlock(bi, {
-                    sets: [...block.sets, emptySet(block.sets[0]?.unit ?? "lb")],
-                  })
-                }
+                onClick={() => addSet(bi)}
                 className="mt-2 text-[0.75rem] text-ink-muted hover:text-ink"
               >
                 + Add set
@@ -321,17 +404,7 @@ export function SessionEditor({
 
           <button
             type="button"
-            onClick={() =>
-              setBlocks((c) => [
-                ...c,
-                {
-                  key: crypto.randomUUID(),
-                  exerciseId: "",
-                  exerciseName: "",
-                  sets: [emptySet(), emptySet(), emptySet()],
-                },
-              ])
-            }
+            onClick={() => setBlocksAndSave((c) => [...c, newExerciseBlock()])}
             className="text-[0.8125rem] text-ink-muted hover:text-ink"
           >
             + Add exercise
@@ -341,7 +414,7 @@ export function SessionEditor({
             Notes
             <textarea
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={(e) => patchMeta({ notes: e.target.value })}
               rows={3}
               className="rounded border border-rule bg-surface px-2 py-1.5 text-[0.875rem] text-ink normal-case tracking-normal"
             />
@@ -355,5 +428,45 @@ export function SessionEditor({
         </div>
       </div>
     </Drawer>
+  );
+}
+
+function SaveLine({
+  status,
+  persisted,
+  onRetry,
+}: {
+  status: SaveStatus;
+  persisted: boolean;
+  onRetry: () => void;
+}) {
+  if (status.state === "saving") {
+    return <p className="mt-0.5 text-[0.6875rem] text-ink-faint">Saving…</p>;
+  }
+  if (status.state === "error") {
+    return (
+      <p className="mt-0.5 text-[0.6875rem] text-priority-a">
+        {status.message}{" "}
+        <button
+          type="button"
+          onClick={onRetry}
+          className="underline hover:no-underline"
+        >
+          Retry
+        </button>
+      </p>
+    );
+  }
+  if (status.state === "saved" || persisted) {
+    return (
+      <p className="mt-0.5 text-[0.6875rem] text-ink-faint">
+        {status.state === "saved" ? "Saved" : "Autosaves as you log"}
+      </p>
+    );
+  }
+  return (
+    <p className="mt-0.5 text-[0.6875rem] text-ink-faint">
+      Autosaves once you enter a set
+    </p>
   );
 }
