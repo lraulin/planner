@@ -16,6 +16,9 @@ import { CAPTURE_EVENT } from "./event";
  * This is the first handler that is not owned by the surface it fires on, so it cannot see
  * whether a grid is mid-rename or has a drawer open. It asks the DOM instead: a dialog
  * anywhere means the keystroke belongs to that, not to capture.
+ *
+ * The dialog is unmounted rather than hidden, so Escape discards the draft and the next
+ * open starts clean.
  */
 export function QuickCapture() {
   const [open, setOpen] = useState(false);
@@ -42,5 +45,9 @@ export function QuickCapture() {
     };
   }, []);
 
-  return <QuickCaptureDialog open={open} onClose={close} />;
+  // Closing is the success signal, as everywhere else in the app: a failed capture keeps
+  // the box open with the error, so the box going away means it worked. No toast — this
+  // would be the only one in the app, and a feedback convention should be decided for the
+  // whole app rather than introduced by whichever feature happened to need one first.
+  return open ? <QuickCaptureDialog onClose={close} onCaptured={close} /> : null;
 }

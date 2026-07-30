@@ -24,15 +24,17 @@ import { TYPE_LABELS } from "@/lib/tree/hierarchy";
  * is no record for a drawer to hang off, and the outline behind it is irrelevant to the
  * thought you are trying to offload before you lose it.
  *
- * It stays open after Add so a run of thoughts can go in one after another, which is what
- * Achieve's separate Add / Close buttons were for.
+ * Enter captures and closes: multi-line already covers bulk entry, and per-item detail
+ * belongs in the normal interface rather than in a box you keep reopening. The parent
+ * unmounts this on close, so the draft goes with it.
  */
 export function QuickCaptureDialog({
-  open,
   onClose,
+  onCaptured,
 }: {
-  open: boolean;
   onClose: () => void;
+  /** Called on a successful capture. Closing is the success signal. */
+  onCaptured: (count: number) => void;
 }) {
   const titleId = useId();
   const hintId = useId();
@@ -49,13 +51,11 @@ export function QuickCaptureDialog({
   const [contexts, setContexts] = useState<string[]>([]);
 
   const [targets, setTargets] = useState<CaptureTarget[] | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  // The picker's options are only worth fetching once the box is actually open.
+  // Fetched on open rather than with every page, since most page loads never open this.
   useEffect(() => {
-    if (!open || targets !== null) return;
     let cancelled = false;
 
     void listCaptureTargetsAction()
@@ -69,7 +69,7 @@ export function QuickCaptureDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, targets]);
+  }, []);
 
   function submit() {
     if (!text.trim() || pending) return;
@@ -93,9 +93,7 @@ export function QuickCaptureDialog({
         return;
       }
 
-      setText("");
-      setStatus(`${result.count} ${result.count === 1 ? "item" : "items"} captured`);
-      textareaRef.current?.focus();
+      onCaptured(result.count);
     });
   }
 
@@ -109,7 +107,7 @@ export function QuickCaptureDialog({
   }
 
   return (
-    <ModalShell open={open} onClose={onClose} labelledBy={titleId} width="max-w-2xl">
+    <ModalShell open onClose={onClose} labelledBy={titleId} width="max-w-2xl">
       <div className="border-b border-rule px-5 py-3">
         <h2 id={titleId} className="text-[0.9375rem] font-semibold text-ink">
           Quick capture
@@ -120,10 +118,7 @@ export function QuickCaptureDialog({
         <textarea
           ref={textareaRef}
           value={text}
-          onChange={(event) => {
-            setText(event.target.value);
-            setStatus(null);
-          }}
+          onChange={(event) => setText(event.target.value)}
           onKeyDown={onKeyDown}
           rows={6}
           aria-label="New tasks"
@@ -174,12 +169,8 @@ export function QuickCaptureDialog({
       </div>
 
       <div className="flex items-center justify-between gap-3 border-t border-rule px-5 py-3">
-        <p
-          role="status"
-          aria-live="polite"
-          className={`text-[0.75rem] ${error ? "text-priority-a" : "text-ink-faint"}`}
-        >
-          {error ?? status ?? ""}
+        <p role="status" aria-live="polite" className="text-[0.75rem] text-priority-a">
+          {error ?? ""}
         </p>
 
         <div className="flex gap-2">

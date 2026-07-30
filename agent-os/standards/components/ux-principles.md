@@ -55,16 +55,40 @@ Modals hide context, increase cognitive load, and feel interruptive. Reserve the
 
 - **Destructive confirmations** — "Delete this project and everything under it?"
 - **Critical blocking actions** where the user _must_ decide before continuing
+- **Fast capture** — a transient, keyboard-invoked surface that owns no record
 
 Never use a modal for a standard create/edit flow.
+
+#### The capture exception
+
+Quick capture (`QuickCaptureDialog`) is a modal on what looks like a create flow, and is
+still right. The discriminator is **whether context preservation is wanted**:
+
+|                      | Standard create/edit | Fast capture            |
+| -------------------- | -------------------- | ----------------------- |
+| Purpose              | Full record editing  | Get it out of your head |
+| Context preservation | High                 | **Low, intentionally**  |
+| Bound to a record    | Yes                  | No — nothing exists yet |
+| Bulk / freeform text | No                   | Yes                     |
+| Pattern              | Drawer               | Modal                   |
+
+The rule protects your view of the outline while you work _on_ something in it. During
+capture the outline is irrelevant by definition — the thought arrived from somewhere else,
+and the faster the app gets out of the way the better it has done its job. A drawer would
+also be slower to open, slower to dismiss, and would imply a record relationship that does
+not exist.
+
+**This does not license** a modal for anything with an id: editing a node, a note, or an
+appointment stays in a drawer. If you would return to it and edit it again, it is not
+capture. Keep a capture surface extremely lean, so it reads as a tool rather than a form.
 
 **This is the main place we depart from Achieve Planner.** Achieve opens a modal for
 everything, and routinely opens modals on top of modals. That is the part of its design
 worth leaving behind — the workflow it encodes is excellent; the containers it uses are not.
 
-`ConfirmDialog` in `src/components/detail/` is the component for both permitted cases. It
-serves the outline's delete flow and the drawer's unsaved-changes prompt; use it rather than
-`window.confirm`.
+`ConfirmDialog` in `src/components/detail/` serves the first two cases — the outline's delete
+flow and the drawer's unsaved-changes prompt; use it rather than `window.confirm`. Every
+centered dialog, including those, is built on `ModalShell`. See `modal-pattern.md`.
 
 The stacked-modal rule bites hardest in the repeating lists inside a detail form — Achieve
 opens a second modal to edit an Objective or a Risk. We expand the row in place instead
@@ -135,11 +159,12 @@ the drawer. Never cram them into grid cells.
 
 ## Decision Guide
 
-| Question                                              | If yes →                       | If no →                         |
-| ----------------------------------------------------- | ------------------------------ | ------------------------------- |
-| Is the field already a grid column?                   | Edit inline                    | Drawer                          |
-| Is the value a rollup of descendants?                 | Read-only                      | Editable                        |
-| Are there more than 3–4 fields to edit at once?       | Drawer (not modal, not inline) | Inline is fine                  |
-| Does the form have distinct groups of fields?         | Tabs within the drawer         | A single scrolling pane         |
-| Is this destructive or irreversible?                  | Confirmation dialog            | Just do it, with clear feedback |
-| Does the user need the outline visible while editing? | Drawer                         | Drawer is still fine            |
+| Question                                              | If yes →                       | If no →                                          |
+| ----------------------------------------------------- | ------------------------------ | ------------------------------------------------ |
+| Is the field already a grid column?                   | Edit inline                    | Drawer                                           |
+| Is the value a rollup of descendants?                 | Read-only                      | Editable                                         |
+| Are there more than 3–4 fields to edit at once?       | Drawer (not modal, not inline) | Inline is fine                                   |
+| Does the form have distinct groups of fields?         | Tabs within the drawer         | A single scrolling pane                          |
+| Is this destructive or irreversible?                  | Confirmation dialog            | Just do it, with clear feedback                  |
+| Does it edit a record that already exists?            | Drawer, never a modal          | A modal may be right — see the capture exception |
+| Does the user need the outline visible while editing? | Drawer                         | Drawer is still fine                             |

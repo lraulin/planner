@@ -272,6 +272,20 @@ retrofit the existing three last, in one commit, so a regression is easy to isol
   tree project picker; amending `ux-principles.md` for the third modal case; and
   `drizzle/meta` snapshot repair.
 
+## Change: capture closes on Add (2026-07-30, post-freeze)
+
+Two decisions above are superseded. Recorded here as a dated change rather than edited in
+place, per `agent-os/specs/README.md`.
+
+| Was                                                                                  | Now                                                                | Why                                                                                                                                                                                                                                                  |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| "Dialog lifetime: stays open after Add, textarea clears, reports _3 items captured_" | **Enter captures and closes.** The dialog is unmounted, not hidden | The stay-open design existed to support a burst of separate captures. That need does not survive scrutiny: multi-line already covers bulk in one submit, and per-item detail belongs in the normal interface rather than in a box you keep reopening |
+| Escape left the typed draft in place (an accident of mounting, not a decision)       | **Escape discards.** The parent unmounts the dialog                | Explicit and consistent with `NoteFilterDialog`; a stale draft reappearing days later is worse than retyping a few words                                                                                                                             |
+
+A toast was built for the close case and then removed: it would have been the only one in
+the app, and closing already _is_ the success signal — a failed capture keeps the box open
+with the error. Written up in `agent-os/standards/components/modal-pattern.md`.
+
 ## Follow-ups (new work — not amendments to this frozen spec)
 
 | Follow-up                                  | Note                                                                                                                                                                                                                                                                                                                                                                        |
