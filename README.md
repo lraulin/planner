@@ -31,7 +31,7 @@ in this app’s source tree.
 npm install
 cp .env.example .env.local   # DATABASE_URL, BETTER_AUTH_SECRET, BETTER_AUTH_URL
 npm run db:up                # starts Postgres in Docker
-npm run db:migrate           # applies migrations (or db:push while iterating)
+npm run db:migrate           # applies migrations
 npm run db:seed              # owner credentials + sample data (login: see .env.example)
 npm run dev                  # http://localhost:3047 → redirects to /login
 ```
@@ -72,9 +72,9 @@ npm start        # also http://localhost:3047
 | `npm run format:check`     | Prettier check (CI-friendly)                                                            |
 | `npm run db:up`            | Start local Postgres (Docker)                                                           |
 | `npm run db:down`          | Stop local Postgres                                                                     |
-| `npm run db:generate`      | Generate a migration from schema changes                                                |
+| `npm run db:generate`      | Generate a migration from schema changes — always use this rather than hand-writing SQL |
 | `npm run db:migrate`       | Apply pending migrations                                                                |
-| `npm run db:push`          | Push the schema directly (development)                                                  |
+| `npm run db:push`          | Push the schema with **no migration file** — local scratch only, never Neon             |
 | `npm run db:studio`        | Drizzle Studio                                                                          |
 | `npm run db:seed`          | Upsert owner password + optional sample data (`SEED_SAMPLE_DATA=0` to skip sample wipe) |
 
