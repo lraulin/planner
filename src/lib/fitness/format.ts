@@ -1,7 +1,13 @@
 import type { SetInput, WorkoutSetView } from "./types";
 
+/** Stored as set.unit — no weight column, no "0 lb" shame. */
+export function isBodyweightUnit(unit: string | null | undefined): boolean {
+  const u = (unit ?? "").trim().toLowerCase();
+  return u === "bw" || u === "bodyweight" || u === "body weight";
+}
+
 /**
- * Compact set list for history rows: "3×5 @ 185 lb" or "5, 5, 3 @ 185/185/195 lb".
+ * Compact set list for history rows: "3×5 @ 185 lb", "5, 3 @ 185/195 lb", or "3×8 BW".
  * Pure — easy to get subtly wrong when mixing equal vs varying weights.
  */
 export function formatSetsLabel(
@@ -14,6 +20,22 @@ export function formatSetsLabel(
   const unit = units.length === 1 ? units[0] : null;
 
   const reps = done.map((s) => (s.reps == null ? "?" : String(s.reps)));
+  const allSameReps = reps.every((r) => r === reps[0]);
+
+  // Bodyweight: never show "@ 0 lb" — just reps + BW.
+  if (unit !== null && isBodyweightUnit(unit)) {
+    if (allSameReps && reps[0] !== "?") {
+      return `${done.length}×${reps[0]} BW`;
+    }
+    return `${reps.join(", ")} BW`;
+  }
+  if (done.every((s) => isBodyweightUnit(s.unit))) {
+    if (allSameReps && reps[0] !== "?") {
+      return `${done.length}×${reps[0]} BW`;
+    }
+    return `${reps.join(", ")} BW`;
+  }
+
   const weights = done.map((s) =>
     s.weight == null
       ? null
@@ -21,7 +43,6 @@ export function formatSetsLabel(
         ? String(s.weight)
         : String(s.weight),
   );
-  const allSameReps = reps.every((r) => r === reps[0]);
   const allSameWeight = weights.every((w) => w === weights[0]) && weights[0] !== null;
 
   const weightPart = (() => {
@@ -62,12 +83,21 @@ export function normaliseSetInput(set: SetInput): {
   unit: string;
   completed: boolean;
 } {
+  const unit = (set.unit && String(set.unit).trim()) || "lb";
+  if (isBodyweightUnit(unit)) {
+    return {
+      reps: parseReps(set.reps),
+      weight: null,
+      unit: "bw",
+      completed: set.completed !== false,
+    };
+  }
   const weight = parseWeight(set.weight);
   return {
     reps: parseReps(set.reps),
     // numeric column wants a string for drizzle's numeric type
     weight: weight === null ? null : String(weight),
-    unit: (set.unit && String(set.unit).trim()) || "lb",
+    unit,
     completed: set.completed !== false,
   };
 }

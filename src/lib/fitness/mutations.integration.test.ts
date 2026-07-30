@@ -104,6 +104,30 @@ describeDb("fitness sessions", () => {
     expect(await listExercises(userId)).toHaveLength(1);
   });
 
+  it("stores bodyweight sets as unit bw with null weight", async () => {
+    const sessionId = await createSession(userId, {
+      performedAt: new Date(),
+      exercises: [
+        {
+          exerciseName: "Pull-up",
+          sets: [
+            { reps: 8, weight: null, unit: "bw" },
+            { reps: 6, weight: 0, unit: "bw" },
+          ],
+        },
+      ],
+    });
+
+    const detail = await getSessionDetail(userId, sessionId);
+    expect(detail!.exercises[0].sets).toEqual([
+      expect.objectContaining({ reps: 8, weight: null, unit: "bw" }),
+      expect.objectContaining({ reps: 6, weight: null, unit: "bw" }),
+    ]);
+    const sessions = await listSessions(userId);
+    expect(sessions[0].exerciseLabels[0]).toContain("BW");
+    expect(sessions[0].exerciseLabels[0]).not.toContain("0");
+  });
+
   it("blocks deleting an exercise that has history", async () => {
     const exerciseId = await createExercise(userId, "Deadlift");
     await createSession(userId, {

@@ -29,6 +29,25 @@ describe("formatSetsLabel", () => {
       ]),
     ).toBe("1×5 @ 100 lb");
   });
+
+  it("labels bodyweight sets without a weight", () => {
+    expect(
+      formatSetsLabel([
+        { reps: 8, weight: null, unit: "bw", completed: true },
+        { reps: 8, weight: null, unit: "bw", completed: true },
+        { reps: 8, weight: null, unit: "bw", completed: true },
+      ]),
+    ).toBe("3×8 BW");
+  });
+
+  it("lists varying bodyweight reps", () => {
+    expect(
+      formatSetsLabel([
+        { reps: 10, weight: null, unit: "bw", completed: true },
+        { reps: 8, weight: null, unit: "bw", completed: true },
+      ]),
+    ).toBe("10, 8 BW");
+  });
 });
 
 describe("parseWeight / parseReps", () => {

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyBodyweightMode,
   draftToSessionInput,
+  emptyBodyweightSet,
   emptySet,
   setFromPrevious,
   type SessionDraft,
@@ -9,6 +11,7 @@ import {
 const catalog = [
   { id: "ex-bench", name: "Bench Press" },
   { id: "ex-squat", name: "Squat" },
+  { id: "ex-pullup", name: "Pull-up" },
 ];
 
 function baseDraft(overrides: Partial<SessionDraft> = {}): SessionDraft {
@@ -22,6 +25,7 @@ function baseDraft(overrides: Partial<SessionDraft> = {}): SessionDraft {
         key: "b1",
         exerciseId: "ex-bench",
         exerciseName: "Bench Press",
+        bodyweight: false,
         sets: [
           { reps: "5", weight: "185", unit: "lb" },
           { reps: "5", weight: "185", unit: "lb" },
@@ -46,6 +50,38 @@ describe("setFromPrevious", () => {
   });
 });
 
+describe("applyBodyweightMode", () => {
+  it("clears weights and tags sets as bw", () => {
+    const next = applyBodyweightMode(
+      {
+        key: "b1",
+        exerciseId: "ex-pullup",
+        exerciseName: "Pull-up",
+        bodyweight: false,
+        sets: [{ reps: "8", weight: "0", unit: "lb" }],
+      },
+      true,
+    );
+    expect(next.bodyweight).toBe(true);
+    expect(next.sets[0]).toEqual({ reps: "8", weight: "", unit: "bw" });
+  });
+
+  it("restores lb unit when leaving bodyweight mode", () => {
+    const next = applyBodyweightMode(
+      {
+        key: "b1",
+        exerciseId: "ex-pullup",
+        exerciseName: "Pull-up",
+        bodyweight: true,
+        sets: [emptyBodyweightSet()],
+      },
+      false,
+    );
+    expect(next.bodyweight).toBe(false);
+    expect(next.sets[0].unit).toBe("lb");
+  });
+});
+
 describe("draftToSessionInput", () => {
   it("returns null when nothing is filled in", () => {
     expect(
@@ -56,6 +92,7 @@ describe("draftToSessionInput", () => {
               key: "b1",
               exerciseId: "",
               exerciseName: "",
+              bodyweight: false,
               sets: [emptySet(), emptySet()],
             },
           ],
@@ -73,6 +110,7 @@ describe("draftToSessionInput", () => {
             key: "b1",
             exerciseId: "ex-bench",
             exerciseName: "Bench Press",
+            bodyweight: false,
             sets: [
               { reps: "5", weight: "185", unit: "lb" },
               emptySet("lb"),
@@ -97,12 +135,14 @@ describe("draftToSessionInput", () => {
             key: "b1",
             exerciseId: "ex-bench",
             exerciseName: "Bench Press",
+            bodyweight: false,
             sets: [{ reps: "5", weight: "185", unit: "lb" }],
           },
           {
             key: "b2",
             exerciseId: "ex-squat",
             exerciseName: "Squat",
+            bodyweight: false,
             sets: [emptySet()],
           },
         ],
@@ -121,6 +161,7 @@ describe("draftToSessionInput", () => {
             key: "b1",
             exerciseId: "",
             exerciseName: "  Overhead Press  ",
+            bodyweight: false,
             sets: [{ reps: "8", weight: "95", unit: "lb" }],
           },
         ],
@@ -142,7 +183,51 @@ describe("draftToSessionInput", () => {
               key: "b1",
               exerciseId: "ex-bench",
               exerciseName: "Bench Press",
+              bodyweight: false,
               sets: [emptySet()],
+            },
+          ],
+        }),
+        catalog,
+      ),
+    ).toBeNull();
+  });
+
+  it("saves bodyweight sets with unit bw and null weight", () => {
+    const input = draftToSessionInput(
+      baseDraft({
+        exercises: [
+          {
+            key: "b1",
+            exerciseId: "ex-pullup",
+            exerciseName: "Pull-up",
+            bodyweight: true,
+            sets: [
+              { reps: "8", weight: "", unit: "bw" },
+              { reps: "8", weight: "0", unit: "bw" },
+            ],
+          },
+        ],
+      }),
+      catalog,
+    );
+    expect(input?.exercises[0].sets).toEqual([
+      { reps: 8, weight: null, unit: "bw" },
+      { reps: 8, weight: null, unit: "bw" },
+    ]);
+  });
+
+  it("does not treat empty bodyweight rows as filled", () => {
+    expect(
+      draftToSessionInput(
+        baseDraft({
+          exercises: [
+            {
+              key: "b1",
+              exerciseId: "ex-pullup",
+              exerciseName: "Pull-up",
+              bodyweight: true,
+              sets: [emptyBodyweightSet()],
             },
           ],
         }),

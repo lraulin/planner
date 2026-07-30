@@ -1,17 +1,28 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { loadLatestForExerciseAction } from "@/app/fitness/actions";
 import { Drawer } from "@/components/detail/Drawer";
 import { useAutosave, type SaveStatus } from "@/components/notes/useAutosave";
+import { formatSetsLabel, isBodyweightUnit, parseWeight } from "@/lib/fitness/format";
+import { plateHint } from "@/lib/fitness/plates";
 import {
+  applyBodyweightMode,
   draftToSessionInput,
+  emptyBodyweightSet,
   emptySet,
   setFromPrevious,
   type DraftExercise,
   type DraftSet,
   type SessionDraft,
 } from "@/lib/fitness/sessionDraft";
-import type { ExerciseSummary, SessionDetail, SessionInput } from "@/lib/fitness/types";
+import type {
+  ExerciseHistoryEntry,
+  ExerciseSummary,
+  SessionDetail,
+  SessionInput,
+} from "@/lib/fitness/types";
+import { bumpWeight, weightStep } from "@/lib/fitness/weightStep";
 
 function draftFromDetail(detail: SessionDetail): SessionDraft {
   return {
@@ -20,16 +31,21 @@ function draftFromDetail(detail: SessionDetail): SessionDraft {
     notes: detail.notes,
     durationMinutes:
       detail.durationMinutes == null ? "" : String(detail.durationMinutes),
-    exercises: detail.exercises.map((ex) => ({
-      key: ex.id,
-      exerciseId: ex.exerciseId,
-      exerciseName: ex.exerciseName,
-      sets: ex.sets.map((s) => ({
-        reps: s.reps == null ? "" : String(s.reps),
-        weight: s.weight == null ? "" : String(s.weight),
-        unit: s.unit || "lb",
-      })),
-    })),
+    exercises: detail.exercises.map((ex) => {
+      const bodyweight =
+        ex.sets.length > 0 && ex.sets.every((s) => isBodyweightUnit(s.unit));
+      return {
+        key: ex.id,
+        exerciseId: ex.exerciseId,
+        exerciseName: ex.exerciseName,
+        bodyweight,
+        sets: ex.sets.map((s) => ({
+          reps: s.reps == null ? "" : String(s.reps),
+          weight: s.weight == null ? "" : String(s.weight),
+          unit: bodyweight ? "bw" : s.unit || "lb",
+        })),
+      };
+    }),
   };
 }
 
@@ -48,6 +64,7 @@ function newExerciseBlock(
     key: crypto.randomUUID(),
     exerciseId,
     exerciseName,
+    bodyweight: false,
     // One empty row to start — "Add set" copies the previous numbers.
     sets: [emptySet(unit)],
   };
@@ -153,10 +170,6 @@ export function SessionEditor({
 
   const queueSave = useCallback(
     (next: SessionDraft) => {
-      // Only schedule when there is something to write, or when a session already
-      // exists (so clearing sets eventually fails validation rather than lying about
-      // "saved" on a no-op — draftToSessionInput null short-circuits as ok:true only
-      // before first create).
       if (sessionIdRef.current || draftToSessionInput(next, catalog)) {
         schedule(next);
       }
@@ -224,10 +237,12 @@ export function SessionEditor({
       current.map((b, i) => {
         if (i !== blockIndex) return b;
         const nextSets = b.sets.filter((_, j) => j !== setIndex);
-        // Keep one empty row so the table never disappears mid-workout.
+        const fallback = b.bodyweight
+          ? emptyBodyweightSet()
+          : emptySet(b.sets[0]?.unit ?? "lb");
         return {
           ...b,
-          sets: nextSets.length > 0 ? nextSets : [emptySet(b.sets[0]?.unit ?? "lb")],
+          sets: nextSets.length > 0 ? nextSets : [fallback],
         };
       }),
     );
@@ -238,7 +253,12 @@ export function SessionEditor({
       current.map((b, i) => {
         if (i !== blockIndex) return b;
         const last = b.sets[b.sets.length - 1];
-        return { ...b, sets: [...b.sets, setFromPrevious(last)] };
+        const next = last
+          ? setFromPrevious(last)
+          : b.bodyweight
+            ? emptyBodyweightSet()
+            : emptySet();
+        return { ...b, sets: [...b.sets, next] };
       }),
     );
   }
@@ -307,7 +327,7 @@ export function SessionEditor({
 
           {blocks.map((block, bi) => (
             <div key={block.key} className="rounded border border-rule bg-shell/40 p-3">
-              <div className="mb-2 flex items-end gap-2">
+              <div className="mb-1 flex items-end gap-2">
                 <label className="flex min-w-0 flex-1 flex-col gap-1 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
                   Exercise
                   <input
@@ -340,56 +360,141 @@ export function SessionEditor({
                 )}
               </div>
 
+              <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                <label className="flex items-center gap-1.5 text-[0.75rem] text-ink-muted">
+                  <input
+                    type="checkbox"
+                    checked={block.bodyweight}
+                    onChange={(e) =>
+                      setBlocksAndSave((current) =>
+                        current.map((b, i) =>
+                          i === bi ? applyBodyweightMode(b, e.target.checked) : b,
+                        ),
+                      )
+                    }
+                    className="rounded border-rule"
+                  />
+                  Bodyweight
+                </label>
+                <LastSessionHint
+                  exerciseId={block.exerciseId}
+                  exerciseName={block.exerciseName}
+                  exercises={exercises}
+                  excludeSessionId={sessionId}
+                />
+              </div>
+
               <div className="space-y-1">
-                <div className="grid grid-cols-[2rem_1fr_1fr_4rem_2rem] gap-1 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-faint">
-                  <span>#</span>
-                  <span>Reps</span>
-                  <span>Weight</span>
-                  <span>Unit</span>
-                  <span />
-                </div>
-                {block.sets.map((set, si) => (
-                  <div
-                    key={si}
-                    className="grid grid-cols-[2rem_1fr_1fr_4rem_2rem] items-center gap-1"
-                  >
-                    <span className="font-mono text-[0.75rem] text-ink-faint">
-                      {si + 1}
-                    </span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={set.reps}
-                      onChange={(e) => updateSet(bi, si, { reps: e.target.value })}
-                      className="rounded border border-rule bg-surface px-2 py-1 font-mono text-[0.8125rem] text-ink"
-                    />
-                    <input
-                      type="number"
-                      min={0}
-                      step="any"
-                      value={set.weight}
-                      onChange={(e) => updateSet(bi, si, { weight: e.target.value })}
-                      className="rounded border border-rule bg-surface px-2 py-1 font-mono text-[0.8125rem] text-ink"
-                    />
-                    <select
-                      value={set.unit}
-                      onChange={(e) => updateSet(bi, si, { unit: e.target.value })}
-                      className="rounded border border-rule bg-surface px-1 py-1 text-[0.75rem] text-ink"
-                    >
-                      <option value="lb">lb</option>
-                      <option value="kg">kg</option>
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => removeSet(bi, si)}
-                      title="Delete set"
-                      aria-label={`Delete set ${si + 1}`}
-                      className="flex h-7 w-7 items-center justify-center rounded text-ink-faint hover:bg-priority-a/10 hover:text-priority-a"
-                    >
-                      ×
-                    </button>
+                {block.bodyweight ? (
+                  <div className="grid grid-cols-[2rem_1fr_2rem] gap-1 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-faint">
+                    <span>#</span>
+                    <span>Reps</span>
+                    <span />
                   </div>
-                ))}
+                ) : (
+                  <div className="grid grid-cols-[2rem_minmax(3rem,1fr)_minmax(7rem,1.4fr)_3.5rem_2rem] gap-1 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-faint">
+                    <span>#</span>
+                    <span>Reps</span>
+                    <span>Weight</span>
+                    <span>Unit</span>
+                    <span />
+                  </div>
+                )}
+                {block.sets.map((set, si) =>
+                  block.bodyweight ? (
+                    <div
+                      key={si}
+                      className="grid grid-cols-[2rem_1fr_2rem] items-center gap-1"
+                    >
+                      <span className="font-mono text-[0.75rem] text-ink-faint">
+                        {si + 1}
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={set.reps}
+                        onChange={(e) => updateSet(bi, si, { reps: e.target.value })}
+                        className="rounded border border-rule bg-surface px-2 py-1 font-mono text-[0.8125rem] text-ink"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeSet(bi, si)}
+                        title="Delete set"
+                        className="flex h-7 w-7 items-center justify-center rounded text-ink-faint hover:bg-priority-a/10 hover:text-priority-a"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ) : (
+                    <div key={si} className="space-y-0.5">
+                      <div className="grid grid-cols-[2rem_minmax(3rem,1fr)_minmax(7rem,1.4fr)_3.5rem_2rem] items-center gap-1">
+                        <span className="font-mono text-[0.75rem] text-ink-faint">
+                          {si + 1}
+                        </span>
+                        <input
+                          type="number"
+                          min={0}
+                          value={set.reps}
+                          onChange={(e) => updateSet(bi, si, { reps: e.target.value })}
+                          className="rounded border border-rule bg-surface px-2 py-1 font-mono text-[0.8125rem] text-ink"
+                        />
+                        <div className="flex min-w-0 items-center gap-0.5">
+                          <button
+                            type="button"
+                            title={`−${weightStep(set.unit || "lb")}`}
+                            onClick={() =>
+                              updateSet(bi, si, {
+                                weight: bumpWeight(set.weight, set.unit || "lb", -1),
+                              })
+                            }
+                            className="flex h-7 w-6 shrink-0 items-center justify-center rounded border border-rule bg-surface text-[0.75rem] text-ink-muted hover:text-ink"
+                          >
+                            −
+                          </button>
+                          <input
+                            type="number"
+                            min={0}
+                            step={weightStep(set.unit || "lb")}
+                            value={set.weight}
+                            onChange={(e) =>
+                              updateSet(bi, si, { weight: e.target.value })
+                            }
+                            className="min-w-0 flex-1 rounded border border-rule bg-surface px-1.5 py-1 font-mono text-[0.8125rem] text-ink"
+                          />
+                          <button
+                            type="button"
+                            title={`+${weightStep(set.unit || "lb")}`}
+                            onClick={() =>
+                              updateSet(bi, si, {
+                                weight: bumpWeight(set.weight, set.unit || "lb", 1),
+                              })
+                            }
+                            className="flex h-7 w-6 shrink-0 items-center justify-center rounded border border-rule bg-surface text-[0.75rem] text-ink-muted hover:text-ink"
+                          >
+                            +
+                          </button>
+                        </div>
+                        <select
+                          value={set.unit === "bw" ? "lb" : set.unit}
+                          onChange={(e) => updateSet(bi, si, { unit: e.target.value })}
+                          className="rounded border border-rule bg-surface px-1 py-1 text-[0.75rem] text-ink"
+                        >
+                          <option value="lb">lb</option>
+                          <option value="kg">kg</option>
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => removeSet(bi, si)}
+                          title="Delete set"
+                          className="flex h-7 w-7 items-center justify-center rounded text-ink-faint hover:bg-priority-a/10 hover:text-priority-a"
+                        >
+                          ×
+                        </button>
+                      </div>
+                      <PlateLine weight={set.weight} unit={set.unit || "lb"} />
+                    </div>
+                  ),
+                )}
               </div>
 
               <button
@@ -428,6 +533,74 @@ export function SessionEditor({
         </div>
       </div>
     </Drawer>
+  );
+}
+
+function PlateLine({ weight, unit }: { weight: string; unit: string }) {
+  const hint = plateHint(parseWeight(weight), unit);
+  if (!hint) return null;
+  return <p className="pl-8 font-mono text-[0.6875rem] text-ink-faint">{hint}</p>;
+}
+
+/**
+ * Ghost “last time” line under the exercise header. Resolves catalog id from name
+ * when the user typed a known exercise without selecting it yet.
+ */
+function LastSessionHint({
+  exerciseId,
+  exerciseName,
+  exercises,
+  excludeSessionId,
+}: {
+  exerciseId: string;
+  exerciseName: string;
+  exercises: ExerciseSummary[];
+  excludeSessionId: string | null;
+}) {
+  const resolvedId = useMemo(() => {
+    if (exerciseId) return exerciseId;
+    const name = exerciseName.trim().toLowerCase();
+    if (!name) return "";
+    return exercises.find((e) => e.name.toLowerCase() === name)?.id ?? "";
+  }, [exerciseId, exerciseName, exercises]);
+
+  const [fetched, setFetched] = useState<{
+    exerciseId: string;
+    excludeSessionId: string | null;
+    entry: ExerciseHistoryEntry | null;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!resolvedId) return;
+    let cancelled = false;
+    const exclude = excludeSessionId;
+    void loadLatestForExerciseAction(resolvedId, exclude).then((result) => {
+      if (cancelled || !result.ok) return;
+      setFetched({
+        exerciseId: resolvedId,
+        excludeSessionId: exclude,
+        entry: (result.data as ExerciseHistoryEntry | null) ?? null,
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [resolvedId, excludeSessionId]);
+
+  const latest =
+    resolvedId &&
+    fetched &&
+    fetched.exerciseId === resolvedId &&
+    fetched.excludeSessionId === excludeSessionId
+      ? fetched.entry
+      : null;
+
+  if (!resolvedId || !latest || latest.sets.length === 0) return null;
+
+  return (
+    <p className="font-mono text-[0.75rem] text-ink-faint">
+      Last time: {formatSetsLabel(latest.sets)}
+    </p>
   );
 }
 

@@ -271,11 +271,20 @@ export async function loadExerciseHistory(
   }));
 }
 
-/** Most recent history entry for an exercise — task drawer summary. */
+/**
+ * Most recent history entry for an exercise — task drawer summary and session
+ * editor "last time" ghost. Pass `excludeSessionId` when editing so the open
+ * session never pretends to be last time.
+ */
 export async function loadLatestForExercise(
   userId: string,
   exerciseId: string,
+  options?: { excludeSessionId?: string | null },
 ): Promise<ExerciseHistoryEntry | null> {
   const history = await loadExerciseHistory(userId, exerciseId);
+  const exclude = options?.excludeSessionId;
+  if (exclude) {
+    return history.find((entry) => entry.sessionId !== exclude) ?? null;
+  }
   return history[0] ?? null;
 }

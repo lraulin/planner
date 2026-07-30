@@ -72,6 +72,11 @@ export async function loadExerciseHistoryAction(exerciseId: string) {
   return run((userId) => loadExerciseHistory(userId, exerciseId));
 }
 
-export async function loadLatestForExerciseAction(exerciseId: string) {
-  return run((userId) => loadLatestForExercise(userId, exerciseId));
+export async function loadLatestForExerciseAction(
+  exerciseId: string,
+  excludeSessionId?: string | null,
+) {
+  return run((userId) =>
+    loadLatestForExercise(userId, exerciseId, { excludeSessionId }),
+  );
 }

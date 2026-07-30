@@ -190,6 +190,10 @@ Patterns to mirror: Notes tab (own domain + `TabStrip`), detail drawers, `Confir
 | 2   | Session editor **autosaves** (notes-style debounce); Done closes instead of Save/Cancel     | Gym logging is one set at a time — explicit Save-and-close was wrong    |
 | 3   | Per-set delete; **Add set** copies previous set’s reps/weight/unit                          | Straight sets are the default; typo’d sets need a one-click remove      |
 | 4   | New exercise blocks start with one empty set row (not three blanks)                         | Copy-forward makes pre-filling empty rows pointless                     |
+| 5   | Plate calculator under each weight (US Olympic bar + American plates; metric when unit=kg)  | Load the bar without leaving the log                                    |
+| 6   | “Last time: …” ghost under each exercise (excludes open session)                            | See prior work set without opening history                              |
+| 7   | Bodyweight exercise toggle → unit `bw`, null weight, no weight column                       | Pull-ups etc. without logging 0 lb                                      |
+| 8   | Weight −/+ steppers: 5 lb / 2.5 kg                                                          | Match American plate pairs; kg ~equivalent                              |
 
 ---
 
