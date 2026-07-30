@@ -40,7 +40,7 @@ export async function loadOutline(userId: string): Promise<OutlineNode[]> {
       t.focus, t.collapsed, t.notes, t.is_inbox, t.completed_at, t.depth,
       td.effort_minutes, td.effort_left_minutes, td.actual_effort_minutes,
       td.percent_complete, td.contexts,
-      rad.color, rad.category,
+      rad.color, rad.category, rad.importance,
       -- One column per grid column: a project keeps its dates in project_details and a
       -- task in task_details, and no row is ever both.
       COALESCE(pd.project_start, td.target_start_date) AS target_start,
@@ -81,6 +81,7 @@ export async function loadOutline(userId: string): Promise<OutlineNode[]> {
       contexts: (r.contexts as string[] | null) ?? [],
       color: (r.color as string | null) ?? null,
       category: (r.category as string | null) ?? null,
+      importance: r.importance === null ? null : Number(r.importance),
       targetStart: r.target_start ? new Date(r.target_start as string) : null,
       targetEnd: r.target_end ? new Date(r.target_end as string) : null,
       purpose: (r.purpose as string | null) ?? "",

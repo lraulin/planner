@@ -1,0 +1,245 @@
+import type { ColumnDef } from "@/components/grid/columns";
+import {
+  AbbrStateCell,
+  DeadlineCell,
+  EffortCell,
+  FocusCell,
+  NameCell,
+  PriorityCell,
+  StatusCell,
+} from "@/components/grid/cells";
+import type { OutlineColumnCtx } from "@/components/outline/outlineColumns";
+import { formatEffort, formatPriority } from "@/lib/tree/format";
+import { STATE_CODES } from "@/lib/tree/hierarchy";
+import { scheduleStatus, STATUS_LABELS } from "@/lib/tree/status";
+
+/**
+ * Columns for the Task Chooser, matching Achieve's own set (State / Pri / Name / Effort
+ * Left / Deadline / Status) plus the two this reimplementation adds: the **rank** number
+ * down the left of the screenshot, and the **Score** the ranking is actually built from.
+ *
+ * The row payload stays `OutlineNode`, so every cell is reused from the other grid tabs
+ * unchanged. Rank, score, and the inherited deadline ride along in the column ctx instead.
+ */
+
+/** What the chooser knows about a row that the node itself does not carry. */
+export type ChooserFacts = {
+  rank: number;
+  score: number;
+  effectiveDeadline: Date | null;
+};
+
+export type ChooserColumnCtx = OutlineColumnCtx & {
+  facts: Map<string, ChooserFacts>;
+};
+
+/** Columns shown before anyone touches Show Fields. */
+export const CHOOSER_DEFAULT_ORDER = [
+  "rank",
+  "abbrState",
+  "priority",
+  "name",
+  "effortLeft",
+  "deadline",
+  "status",
+  "score",
+];
+
+export function buildChooserColumns(): ColumnDef<ChooserColumnCtx>[] {
+  return [
+    {
+      id: "rank",
+      label: "#",
+      width: "2.5rem",
+      align: "right",
+      hideable: true,
+      render: (row, ctx) => (
+        <span className="tabular text-[0.75rem] text-ink-faint">
+          {ctx.facts.get(row.node.id)?.rank ?? ""}
+        </span>
+      ),
+    },
+    {
+      id: "abbrState",
+      label: "State",
+      width: "3.5rem",
+      align: "center",
+      filterKind: "enum",
+      filterValue: (row) => STATE_CODES[row.node.state],
+      sortValue: (row) => row.node.state,
+      render: (row, ctx) => (
+        <AbbrStateCell
+          node={row.node}
+          onChange={(state) => ctx.onStateChange(row.node, state)}
+        />
+      ),
+    },
+    {
+      id: "priority",
+      label: "Pri",
+      width: "3rem",
+      align: "center",
+      filterKind: "priority",
+      filterValue: (row) =>
+        formatPriority(row.node.priorityLetter, row.node.priorityRank) || null,
+      sortValue: (row) =>
+        formatPriority(row.node.priorityLetter, row.node.priorityRank),
+      render: (row, ctx) => (
+        <PriorityCell
+          key={`priority:${formatPriority(row.node.priorityLetter, row.node.priorityRank)}`}
+          node={row.node}
+          onChange={(letter, rank) => ctx.onPriorityChange(row.node, letter, rank)}
+        />
+      ),
+    },
+    {
+      // Inherited priority, which is what the score actually reads. Off by default, but
+      // it is the first thing to turn on when a row's position looks wrong.
+      id: "lap",
+      label: "L.A.P.",
+      width: "3.5rem",
+      align: "center",
+      filterKind: "priority",
+      filterValue: (row) =>
+        formatPriority(row.node.lapLetter, row.node.lapRank) || null,
+      sortValue: (row) => formatPriority(row.node.lapLetter, row.node.lapRank),
+      render: (row) => (
+        <span className="tabular text-[0.75rem] text-ink-muted">
+          {formatPriority(row.node.lapLetter, row.node.lapRank)}
+        </span>
+      ),
+    },
+    {
+      id: "focus",
+      label: "Fo",
+      width: "2.5rem",
+      align: "center",
+      filterKind: "enum",
+      filterValue: (row) => (row.node.focus ? "Focus" : "—"),
+      sortValue: (row) => (row.node.focus ? 0 : 1),
+      render: (row, ctx) => (
+        <FocusCell
+          node={row.node}
+          onChange={(focus) => ctx.onFocusChange(row.node, focus)}
+        />
+      ),
+    },
+    {
+      id: "name",
+      label: "Name",
+      width: "minmax(14rem,1.4fr)",
+      hideable: false,
+      filterKind: "text",
+      filterValue: (row) => row.node.name,
+      sortValue: (row) => row.node.name.toLowerCase(),
+      render: (row, ctx) => (
+        <NameCell
+          node={row.node}
+          // The chooser is a flat ranked list, not a tree — nothing is indented.
+          depth={0}
+          selected={row.node.id === ctx.selectedId}
+          editing={row.node.id === ctx.editingId}
+          onToggleCollapsed={() => ctx.onToggleCollapsed(row.node)}
+          onOpenDetail={() => ctx.onOpenDetail(row.node)}
+          onFinishEdit={(name) => ctx.onFinishEdit(row.node, name)}
+          onCancelEdit={ctx.onCancelEdit}
+        />
+      ),
+    },
+    {
+      id: "effort",
+      label: "Effort",
+      width: "4.5rem",
+      align: "right",
+      sortValue: (row) => row.node.effortRollupMinutes ?? -1,
+      render: (row, ctx) => (
+        <EffortCell
+          key={`effort:${formatEffort(row.node.effortMinutes)}`}
+          node={row.node}
+          onChange={(minutes) => ctx.onEffortChange(row.node, minutes)}
+        />
+      ),
+    },
+    {
+      id: "effortLeft",
+      label: "Left",
+      width: "4.5rem",
+      align: "right",
+      sortValue: (row) => row.node.effortLeftRollupMinutes ?? -1,
+      render: (row) => (
+        <EffortCell
+          key={`left:${formatEffort(row.node.effortLeftMinutes)}`}
+          node={row.node}
+          field="effortLeft"
+          onChange={() => {
+            /* effort left is rolled; edits go through the drawer, as on the Tasks tab */
+          }}
+        />
+      ),
+    },
+    {
+      id: "deadline",
+      label: "Deadline",
+      width: "7rem",
+      align: "right",
+      filterKind: "date",
+      filterValue: (row) =>
+        row.node.deadline ? row.node.deadline.toISOString().slice(0, 10) : null,
+      sortValue: (row) =>
+        row.node.deadline ? row.node.deadline.toISOString().slice(0, 10) : null,
+      render: (row, ctx) => (
+        <DeadlineCell
+          node={row.node}
+          today={ctx.today}
+          onChange={(deadline) => ctx.onDeadlineChange(row.node, deadline)}
+        />
+      ),
+    },
+    {
+      // The deadline the *score* uses: the item's own, or the tightest one it inherits.
+      // Off by default — it exists to explain why an undated task is near the top.
+      id: "effectiveDeadline",
+      label: "Due (incl. parents)",
+      width: "8rem",
+      align: "right",
+      // No sortValue/filterValue: this value lives in the ctx, which `ColumnDef` does not
+      // hand to those callbacks. The list is score-ordered anyway.
+      render: (row, ctx) => {
+        const due = ctx.facts.get(row.node.id)?.effectiveDeadline ?? null;
+        if (!due) return null;
+        const value = due.toISOString().slice(0, 10);
+        const inherited = row.node.deadline === null;
+        return (
+          <span
+            title={inherited ? "Inherited from a parent" : undefined}
+            className={`tabular text-[0.75rem] ${inherited ? "text-ink-faint italic" : "text-ink-muted"}`}
+          >
+            {value}
+          </span>
+        );
+      },
+    },
+    {
+      id: "status",
+      label: "Status",
+      width: "7.5rem",
+      filterKind: "enum",
+      filterValue: (row) =>
+        STATUS_LABELS[scheduleStatus(row.node.deadline, null, row.node.state)],
+      render: (row, ctx) => <StatusCell node={row.node} today={ctx.today} />,
+    },
+    {
+      id: "score",
+      label: "Score",
+      width: "4rem",
+      align: "right",
+      // Not sortable for the same reason, and it would be a no-op: the rows arrive in
+      // score order already.
+      render: (row, ctx) => (
+        <span className="tabular text-[0.75rem] text-ink-muted">
+          {ctx.facts.get(row.node.id)?.score ?? ""}
+        </span>
+      ),
+    },
+  ];
+}

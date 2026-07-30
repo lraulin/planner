@@ -26,6 +26,11 @@ export type OutlineRow = {
   color: string | null;
   category: string | null;
   /**
+   * Result-area only: Achieve's 0–100 weighting of this area against the others. Read by
+   * the Task Chooser score, which inherits it from the nearest result-area ancestor.
+   */
+  importance: number | null;
+  /**
    * Scheduling dates, merged across the type-specific tables so the grid has one source
    * per column: a project's come from `project_details`, a task's from `task_details`,
    * and every other type has none.

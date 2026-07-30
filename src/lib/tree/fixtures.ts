@@ -33,6 +33,7 @@ export function row(
     contexts: [],
     color: null,
     category: null,
+    importance: null,
     targetStart: null,
     targetEnd: null,
     purpose: "",

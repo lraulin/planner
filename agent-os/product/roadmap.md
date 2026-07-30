@@ -62,7 +62,8 @@ The core Achieve Planner loop — plan the week, block the time, work the outlin
 ### Still in Phase 1
 
 - **Light polish on the main grids** if needed after using them day-to-day (scope popover,
-  Show Fields selection, Life Plan / Task Chooser only if still wanted).
+  Show Fields selection, Life Plan only if still wanted). Task Chooser is now built — see
+  Phase 2 below.
 - **Day-to-day friction from living with the MVP** — expand/collapse-all, find-in-outline,
   quick capture, seed goals for demos — pick off as they annoy.
 
@@ -78,7 +79,15 @@ Features that complete or surround the original product, plus making it multi-de
 ### Near-term Achieve surfaces
 
 - **Life Plan tab** (if still desired after living with Goals + Result Areas).
-- **Task Chooser** and any remaining Achieve chrome that earns its keep.
+- **✅ Task Chooser.** `specs/2026-07-30-1858-task-chooser`. `/chooser` ranks every leaf
+  task and task-less project by a transparent additive score — inherited priority (L.A.P.)
+  plus deadline proximity, target dates, Focus, and result-area importance — with the Score
+  and rank on screen and every weight tunable per view. Five views (Best Overall, Next
+  Action Only, To-do List, Urgent, Deadlines), Achieve's nine date bands including Group By
+  Deadline, Show More/Less, and the `Project:` breadcrumb. Settings persist per view in
+  `localStorage`. Deferred: Best in Project Block and Best work-related / Best personal
+  (both need machinery that doesn't exist yet), the Parents pane, and task predecessors.
+- Any remaining Achieve chrome that earns its keep.
 - **Pomodoro → time tracking.** Effort, Effort Left, Actual Effort, and % complete
   already live on tasks (and roll up); what’s missing is a way to _earn_ those numbers
   while working. Stage it rather than jumping to a full timesheet product:

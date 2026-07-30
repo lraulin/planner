@@ -1,0 +1,478 @@
+import { describe, expect, it } from "vitest";
+import {
+  applyDateFilter,
+  applyNextActionFilter,
+  buildChooserItems,
+  chooserRows,
+  chooserView,
+  CHOOSER_VIEWS,
+  defaultSettings,
+  isChooserCandidate,
+} from "./views";
+import type { ChooserItem, ChooserSettings, ChooserViewId } from "./types";
+import { derive } from "@/lib/tree/derive";
+import { row } from "@/lib/tree/fixtures";
+import type { OutlineRow } from "@/lib/tree/types";
+
+const TODAY = "2026-07-28";
+
+function dayOut(days: number): Date {
+  return new Date(Date.parse(`${TODAY}T00:00:00Z`) + days * 24 * 60 * 60 * 1000);
+}
+
+function build(
+  rows: OutlineRow[],
+  viewId: ChooserViewId = "best-overall",
+  overrides: Partial<ChooserSettings> = {},
+): ChooserItem[] {
+  return buildChooserItems(derive(rows), {
+    today: TODAY,
+    viewId,
+    settings: { ...defaultSettings(viewId), ...overrides },
+  });
+}
+
+function names(items: ChooserItem[]): string[] {
+  return items.map((item) => item.node.name);
+}
+
+describe("isChooserCandidate", () => {
+  const nodes = derive([
+    row({ id: "area", type: "result_area", name: "Area", sortKey: "a" }),
+    row({ id: "goal", type: "goal", parentId: "area", name: "Goal", sortKey: "a" }),
+    row({
+      id: "parent",
+      type: "project",
+      parentId: "goal",
+      name: "Parent",
+      sortKey: "a",
+    }),
+    row({
+      id: "leaf-task",
+      type: "task",
+      parentId: "parent",
+      name: "Leaf",
+      sortKey: "a",
+    }),
+    row({
+      id: "empty",
+      type: "project",
+      parentId: "goal",
+      name: "Empty",
+      sortKey: "b",
+    }),
+  ]);
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+
+  it("takes leaf tasks and task-less projects only", () => {
+    expect(isChooserCandidate(byId.get("leaf-task")!, false)).toBe(true);
+    expect(isChooserCandidate(byId.get("empty")!, false)).toBe(true);
+    // A project with work under it is not itself a choice — its children are.
+    expect(isChooserCandidate(byId.get("parent")!, false)).toBe(false);
+    expect(isChooserCandidate(byId.get("goal")!, false)).toBe(false);
+    expect(isChooserCandidate(byId.get("area")!, false)).toBe(false);
+  });
+
+  it("drops finished work and hides deferred work unless asked", () => {
+    const [done] = derive([row({ id: "d", type: "task", state: "completed" })]);
+    const [cancelled] = derive([row({ id: "c", type: "task", state: "cancelled" })]);
+    const [deferred] = derive([row({ id: "p", type: "task", state: "postponed" })]);
+
+    expect(isChooserCandidate(done, true)).toBe(false);
+    expect(isChooserCandidate(cancelled, true)).toBe(false);
+    expect(isChooserCandidate(deferred, false)).toBe(false);
+    expect(isChooserCandidate(deferred, true)).toBe(true);
+  });
+
+  it("keeps a zero-effort next-action reminder task", () => {
+    // Manual §7.2.5 — not scheduled, but still something you can pick. Achieve's own
+    // Task Chooser screenshot shows one.
+    const [reminder] = derive([
+      row({ id: "r", type: "task", effortMinutes: 0, effortLeftMinutes: 0 }),
+    ]);
+    expect(isChooserCandidate(reminder, false)).toBe(true);
+  });
+});
+
+describe("buildChooserItems", () => {
+  it("orders by descending score", () => {
+    const items = build([
+      row({ id: "a", type: "task", name: "low", priorityLetter: "C", sortKey: "a" }),
+      row({ id: "b", type: "task", name: "high", priorityLetter: "A", sortKey: "b" }),
+      row({ id: "c", type: "task", name: "mid", priorityLetter: "B", sortKey: "c" }),
+    ]);
+    expect(names(items)).toEqual(["high", "mid", "low"]);
+  });
+
+  it("lifts every task under a project when the project gains a deadline", () => {
+    // The behaviour the whole feature rests on: urgency propagates down the tree.
+    const withoutDeadline = build([
+      row({ id: "p1", type: "project", name: "P1", sortKey: "a" }),
+      row({
+        id: "t1",
+        type: "task",
+        parentId: "p1",
+        name: "urgent-task",
+        sortKey: "a",
+      }),
+      row({ id: "t2", type: "task", name: "loose-task", sortKey: "b" }),
+    ]);
+    expect(names(withoutDeadline)).toEqual(["loose-task", "urgent-task"]);
+
+    const withDeadline = build([
+      row({
+        id: "p1",
+        type: "project",
+        name: "P1",
+        deadline: dayOut(-1),
+        sortKey: "a",
+      }),
+      row({
+        id: "t1",
+        type: "task",
+        parentId: "p1",
+        name: "urgent-task",
+        sortKey: "a",
+      }),
+      row({ id: "t2", type: "task", name: "loose-task", sortKey: "b" }),
+    ]);
+    expect(names(withDeadline)).toEqual(["urgent-task", "loose-task"]);
+  });
+
+  it("carries the ancestor path as a breadcrumb", () => {
+    const items = build([
+      row({ id: "area", type: "result_area", name: "Work", sortKey: "a" }),
+      row({ id: "p", type: "project", parentId: "area", name: "ACME", sortKey: "a" }),
+      row({ id: "t", type: "task", parentId: "p", name: "Call", sortKey: "a" }),
+    ]);
+    expect(items[0].breadcrumb).toEqual(["Work", "ACME"]);
+    expect(items[0].projectId).toBe("p");
+  });
+
+  it("inherits importance from the nearest result area", () => {
+    const important = build([
+      row({ id: "area", type: "result_area", importance: 100, sortKey: "a" }),
+      row({ id: "t", type: "task", parentId: "area", name: "t", sortKey: "a" }),
+    ]);
+    const ignored = build([
+      row({ id: "area", type: "result_area", importance: 0, sortKey: "a" }),
+      row({ id: "t", type: "task", parentId: "area", name: "t", sortKey: "a" }),
+    ]);
+    expect(important[0].score).toBeGreaterThan(ignored[0].score);
+  });
+
+  it("breaks score ties on the tighter deadline, then the name", () => {
+    const items = build([
+      row({ id: "a", type: "task", name: "zeta", sortKey: "a" }),
+      row({ id: "b", type: "task", name: "alpha", sortKey: "b" }),
+    ]);
+    expect(names(items)).toEqual(["alpha", "zeta"]);
+  });
+});
+
+describe("views", () => {
+  it("gives every view a distinct id and a settings default", () => {
+    const ids = CHOOSER_VIEWS.map((view) => view.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const view of CHOOSER_VIEWS) {
+      expect(defaultSettings(view.id).weights).toEqual(view.weights);
+    }
+  });
+
+  it("falls back to Best Overall for an id it does not know", () => {
+    expect(chooserView("nonsense" as ChooserViewId).id).toBe("best-overall");
+  });
+
+  it("Deadlines keeps only work with a deadline in its chain", () => {
+    const items = build(
+      [
+        row({ id: "p", type: "project", name: "P", deadline: dayOut(5), sortKey: "a" }),
+        row({ id: "t1", type: "task", parentId: "p", name: "inherits", sortKey: "a" }),
+        row({ id: "t2", type: "task", name: "no-deadline", sortKey: "b" }),
+        row({ id: "t3", type: "task", name: "own", deadline: dayOut(2), sortKey: "c" }),
+      ],
+      "deadlines",
+    );
+    expect(names(items).sort()).toEqual(["inherits", "own"]);
+  });
+
+  it("Urgent lets a merely-due-soon D outrank a calm A1, where Best Overall does not", () => {
+    // An *overdue* item already outranks a calm A1 under the default weights (see
+    // score.test.ts) — that is deliberate. What separates Urgent is that a deadline still
+    // days away is enough to do it.
+    const rows = [
+      row({
+        id: "a",
+        type: "task",
+        name: "calm-A1",
+        priorityLetter: "A",
+        priorityRank: 1,
+        sortKey: "a",
+      }),
+      row({
+        id: "b",
+        type: "task",
+        name: "due-soon-D",
+        priorityLetter: "D",
+        deadline: dayOut(5),
+        sortKey: "b",
+      }),
+    ];
+    expect(names(build(rows, "best-overall"))[0]).toBe("calm-A1");
+    expect(names(build(rows, "urgent"))[0]).toBe("due-soon-D");
+  });
+
+  it("To-do List keeps only started, focused, or already-due work", () => {
+    const items = build(
+      [
+        row({ id: "a", type: "task", name: "focused", focus: true, sortKey: "a" }),
+        row({
+          id: "b",
+          type: "task",
+          name: "started",
+          state: "in_progress",
+          sortKey: "b",
+        }),
+        row({
+          id: "c",
+          type: "task",
+          name: "due-today",
+          deadline: dayOut(0),
+          sortKey: "c",
+        }),
+        row({
+          id: "d",
+          type: "task",
+          name: "start-reached",
+          targetStart: dayOut(-1),
+          sortKey: "d",
+        }),
+        row({ id: "e", type: "task", name: "someday", sortKey: "e" }),
+        row({
+          id: "f",
+          type: "task",
+          name: "far-off",
+          deadline: dayOut(20),
+          sortKey: "f",
+        }),
+      ],
+      "todo-list",
+    );
+    expect(names(items).sort()).toEqual([
+      "due-today",
+      "focused",
+      "start-reached",
+      "started",
+    ]);
+  });
+});
+
+describe("applyNextActionFilter", () => {
+  const rows = [
+    row({ id: "p", type: "project", name: "P", sortKey: "a" }),
+    // Topmost in the project, but the lower-scoring of the two.
+    row({
+      id: "t1",
+      type: "task",
+      parentId: "p",
+      name: "topmost",
+      priorityLetter: "C",
+      sortKey: "a",
+    }),
+    row({
+      id: "t2",
+      type: "task",
+      parentId: "p",
+      name: "best",
+      priorityLetter: "A",
+      sortKey: "b",
+    }),
+    row({ id: "loose", type: "task", name: "loose", priorityLetter: "B" }),
+  ];
+
+  it("keeps the project's topmost item in priority order", () => {
+    const items = build(rows, "next-action", {
+      onlyNextAction: true,
+      useTaskPriorityOrder: true,
+    });
+    expect(names(items).sort()).toEqual(["loose", "topmost"]);
+  });
+
+  it("keeps the project's highest-scoring item when priority order is off", () => {
+    const items = build(rows, "next-action", {
+      onlyNextAction: true,
+      useTaskPriorityOrder: false,
+    });
+    expect(names(items).sort()).toEqual(["best", "loose"]);
+  });
+
+  it("never drops work that has no project ancestor", () => {
+    // Since the hierarchy relaxation, a task need not live under a project at all;
+    // collapsing per project must not silently swallow loose work.
+    const items = build(rows, "next-action", { onlyNextAction: true });
+    expect(names(items)).toContain("loose");
+  });
+
+  it("leaves one item per project untouched", () => {
+    const items = build(
+      [
+        row({ id: "p1", type: "project", name: "P1", sortKey: "a" }),
+        row({ id: "a", type: "task", parentId: "p1", name: "a", sortKey: "a" }),
+        row({ id: "p2", type: "project", name: "P2", sortKey: "b" }),
+        row({ id: "b", type: "task", parentId: "p2", name: "b", sortKey: "a" }),
+      ],
+      "next-action",
+      { onlyNextAction: true },
+    );
+    expect(names(items).sort()).toEqual(["a", "b"]);
+  });
+
+  it("preserves chooser order", () => {
+    const items = build(rows, "next-action", {
+      onlyNextAction: true,
+      useTaskPriorityOrder: true,
+    });
+    // "loose" is a B, "topmost" is a C — score order, not project order.
+    expect(names(items)).toEqual(["loose", "topmost"]);
+  });
+
+  it("is a no-op on an empty list", () => {
+    expect(applyNextActionFilter([], { useTaskPriorityOrder: true })).toEqual([]);
+  });
+});
+
+describe("applyDateFilter", () => {
+  const items = build([
+    row({ id: "a", type: "task", name: "overdue", deadline: dayOut(-3), sortKey: "a" }),
+    row({ id: "b", type: "task", name: "today", deadline: dayOut(0), sortKey: "b" }),
+    row({
+      id: "c",
+      type: "task",
+      name: "next-week",
+      deadline: dayOut(6),
+      sortKey: "c",
+    }),
+    row({
+      id: "d",
+      type: "task",
+      name: "next-month",
+      deadline: dayOut(25),
+      sortKey: "d",
+    }),
+    row({
+      id: "e",
+      type: "task",
+      name: "slipped",
+      targetEnd: dayOut(-2),
+      sortKey: "e",
+    }),
+    row({
+      id: "f",
+      type: "task",
+      name: "future-start",
+      targetStart: dayOut(40),
+      sortKey: "f",
+    }),
+    row({
+      id: "g",
+      type: "task",
+      name: "in-progress",
+      state: "in_progress",
+      sortKey: "g",
+    }),
+  ]);
+
+  function filtered(filter: Parameters<typeof applyDateFilter>[1]): string[] {
+    return names(applyDateFilter(items, filter, TODAY)).sort();
+  }
+
+  it("passes everything through for None and Group By Deadline", () => {
+    expect(applyDateFilter(items, "none", TODAY)).toHaveLength(items.length);
+    expect(applyDateFilter(items, "group-by-deadline", TODAY)).toHaveLength(
+      items.length,
+    );
+  });
+
+  it("Overdue takes only past deadlines", () => {
+    expect(filtered("overdue")).toEqual(["overdue"]);
+  });
+
+  it("Behind Schedule takes a past deadline or a past target end", () => {
+    expect(filtered("behind")).toEqual(["overdue", "slipped"]);
+  });
+
+  it("Due Soon reaches a week out", () => {
+    expect(filtered("due-soon")).toEqual(["next-week", "overdue", "slipped", "today"]);
+  });
+
+  it("the Next N Days bands widen as N grows", () => {
+    const seven = filtered("next-7");
+    const fourteen = filtered("next-14");
+    const thirty = filtered("next-30");
+
+    expect(seven.length).toBeLessThanOrEqual(fourteen.length);
+    expect(fourteen.length).toBeLessThanOrEqual(thirty.length);
+    // Only the 25-day deadline sits between the 14- and 30-day bands.
+    expect(thirty).toContain("next-month");
+    expect(fourteen).not.toContain("next-month");
+    // A start date 40 days out is outside all three.
+    expect(thirty).not.toContain("future-start");
+  });
+
+  it("Current takes started work and work with no start date established", () => {
+    const current = filtered("current");
+    expect(current).toContain("in-progress");
+    // No target start set at all counts as available now, per the manual.
+    expect(current).toContain("overdue");
+    // A start date still in the future does not.
+    expect(current).not.toContain("future-start");
+  });
+
+  it("never changes a surviving item's score", () => {
+    // The manual is explicit that the date filter is display-only.
+    const before = new Map(items.map((item) => [item.node.id, item.score]));
+    for (const filter of [
+      "current",
+      "overdue",
+      "behind",
+      "due-soon",
+      "next-7",
+    ] as const) {
+      for (const item of applyDateFilter(items, filter, TODAY)) {
+        expect(item.score).toBe(before.get(item.node.id));
+      }
+    }
+  });
+});
+
+describe("chooserRows", () => {
+  const items = build([
+    row({ id: "a", type: "task", name: "overdue", deadline: dayOut(-3), sortKey: "a" }),
+    row({ id: "b", type: "task", name: "today", deadline: dayOut(0), sortKey: "b" }),
+    row({ id: "c", type: "task", name: "later", deadline: dayOut(40), sortKey: "c" }),
+    row({ id: "d", type: "task", name: "undated", sortKey: "d" }),
+  ]);
+
+  it("emits a flat node list when not grouping", () => {
+    const rows = chooserRows(items, "none", TODAY);
+    expect(rows).toHaveLength(items.length);
+    expect(rows.every((r) => r.kind === "node")).toBe(true);
+  });
+
+  it("groups by deadline band, most urgent first, skipping empty bands", () => {
+    const rows = chooserRows(items, "group-by-deadline", TODAY);
+    const groups = rows.filter((r) => r.kind === "group");
+
+    expect(groups.map((g) => (g.kind === "group" ? g.label : ""))).toEqual([
+      "Overdue",
+      "Today",
+      "Later",
+      "No Deadline",
+    ]);
+    // Every item still appears exactly once.
+    expect(rows.filter((r) => r.kind === "node")).toHaveLength(items.length);
+    for (const group of groups) {
+      if (group.kind === "group") expect(group.count).toBe(1);
+    }
+  });
+});
