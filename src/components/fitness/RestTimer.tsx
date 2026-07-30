@@ -112,6 +112,39 @@ export function RestTimer({
     return () => window.clearInterval(id);
   }, [running, endsAt]);
 
+  // Show rest countdown in the browser tab while active (or just finished).
+  const baseTitleRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    if (!running && !finished) {
+      if (baseTitleRef.current !== null) {
+        document.title = baseTitleRef.current;
+        baseTitleRef.current = null;
+      }
+      return;
+    }
+
+    if (baseTitleRef.current === null) {
+      baseTitleRef.current = document.title;
+    }
+
+    const clock = formatRestClock(running ? remaining : 0);
+    document.title = finished
+      ? `Rest done · ${baseTitleRef.current}`
+      : `${clock} rest · ${baseTitleRef.current}`;
+  }, [running, finished, remaining]);
+
+  // Restore the original title if the timer unmounts mid-countdown (drawer close).
+  useEffect(() => {
+    return () => {
+      if (baseTitleRef.current !== null && typeof document !== "undefined") {
+        document.title = baseTitleRef.current;
+        baseTitleRef.current = null;
+      }
+    };
+  }, []);
+
   function pause() {
     if (!running) return;
     setRunning(false);
