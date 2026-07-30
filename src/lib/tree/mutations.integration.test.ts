@@ -500,6 +500,167 @@ describeDb("tree mutations", () => {
       });
       expect(await outlineOf(userId)).toEqual(["Work", "Home", "  P", "    T"]);
     });
+
+    it("inherits category when a result area is nested under another", async () => {
+      const work = await createNode({
+        userId,
+        parentId: null,
+        type: "result_area",
+        name: "Work",
+      });
+      const home = await createNode({
+        userId,
+        parentId: null,
+        type: "result_area",
+        name: "Home",
+      });
+      // Seed categories via move-to-root (same path as drag-to-group).
+      await moveNode({
+        userId,
+        nodeId: work,
+        parentId: null,
+        position: { at: "first" },
+        category: "Career",
+      });
+      await moveNode({
+        userId,
+        nodeId: home,
+        parentId: null,
+        position: { at: "last" },
+        category: "Personal",
+      });
+
+      await moveNode({
+        userId,
+        nodeId: home,
+        parentId: work,
+        position: { at: "last" },
+      });
+
+      const outline = await loadOutline(userId);
+      const homeRow = outline.find((n) => n.id === home);
+      expect(homeRow?.category).toBe("Career");
+      expect(homeRow?.parentId).toBe(work);
+    });
+
+    it("cascades inherited category to nested result areas under the moved node", async () => {
+      const outer = await createNode({
+        userId,
+        parentId: null,
+        type: "result_area",
+        name: "Outer",
+      });
+      const mid = await createNode({
+        userId,
+        parentId: null,
+        type: "result_area",
+        name: "Mid",
+      });
+      const inner = await createNode({
+        userId,
+        parentId: null,
+        type: "result_area",
+        name: "Inner",
+      });
+      await moveNode({
+        userId,
+        nodeId: outer,
+        parentId: null,
+        position: { at: "first" },
+        category: "Work",
+      });
+      // Distinct categories so the cascade is visible.
+      await moveNode({
+        userId,
+        nodeId: mid,
+        parentId: null,
+        position: { at: "last" },
+        category: "Personal",
+      });
+      await moveNode({
+        userId,
+        nodeId: inner,
+        parentId: null,
+        position: { at: "last" },
+        category: "Other",
+      });
+      // Nest Inner under Mid, then Mid under Outer — both steps rewrite stored categories.
+      await moveNode({
+        userId,
+        nodeId: inner,
+        parentId: mid,
+        position: { at: "last" },
+      });
+      expect((await loadOutline(userId)).find((n) => n.id === inner)?.category).toBe(
+        "Personal",
+      );
+
+      await moveNode({
+        userId,
+        nodeId: mid,
+        parentId: outer,
+        position: { at: "last" },
+      });
+
+      const outline = await loadOutline(userId);
+      expect(outline.find((n) => n.id === mid)?.category).toBe("Work");
+      expect(outline.find((n) => n.id === inner)?.category).toBe("Work");
+    });
+
+    it("sets a root result area's category without reparenting", async () => {
+      const area = await createNode({
+        userId,
+        parentId: null,
+        type: "result_area",
+        name: "Loose",
+      });
+      await moveNode({
+        userId,
+        nodeId: area,
+        parentId: null,
+        position: { at: "first" },
+        category: "Health",
+      });
+      expect((await loadOutline(userId)).find((n) => n.id === area)?.category).toBe(
+        "Health",
+      );
+
+      await moveNode({
+        userId,
+        nodeId: area,
+        parentId: null,
+        position: { at: "first" },
+        category: null,
+      });
+      expect(
+        (await loadOutline(userId)).find((n) => n.id === area)?.category,
+      ).toBeNull();
+    });
+
+    it("inherits category when creating a result area under another", async () => {
+      const parent = await createNode({
+        userId,
+        parentId: null,
+        type: "result_area",
+        name: "Parent",
+      });
+      await moveNode({
+        userId,
+        nodeId: parent,
+        parentId: null,
+        position: { at: "first" },
+        category: "Family",
+      });
+      const child = await createNode({
+        userId,
+        parentId: parent,
+        type: "result_area",
+        name: "Child",
+      });
+      expect((await loadOutline(userId)).find((n) => n.id === child)?.category).toBe(
+        "Family",
+      );
+    });
   });
 
   describe("collapse", () => {

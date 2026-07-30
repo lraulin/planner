@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { derive } from "./derive";
 import { row } from "./fixtures";
-import { groupByCategory, sliceTree, type GridRow } from "./slice";
+import {
+  categoryGroupId,
+  categoryLabelFromGroupId,
+  categoryValueFromLabel,
+  groupByCategory,
+  NO_CATEGORY,
+  sliceTree,
+  type GridRow,
+} from "./slice";
 import type { OutlineNode } from "./types";
 
 /** Build a derived tree from plain rows — the same shape every tab hands `sliceTree`. */
@@ -375,5 +383,19 @@ describe("groupByCategory", () => {
     const out = rows(sample);
     const goal = out.find((r) => r.kind === "node" && r.id === "g-work");
     expect(goal?.kind === "node" && goal.depth).toBe(1);
+  });
+});
+
+describe("category group id helpers", () => {
+  it("round-trips labels including the uncategorised sentinel", () => {
+    expect(categoryLabelFromGroupId(categoryGroupId("Work"))).toBe("Work");
+    expect(categoryLabelFromGroupId(categoryGroupId(NO_CATEGORY))).toBe(NO_CATEGORY);
+    expect(categoryLabelFromGroupId("node-123")).toBeNull();
+  });
+
+  it("maps group labels to stored category values", () => {
+    expect(categoryValueFromLabel("Work")).toBe("Work");
+    expect(categoryValueFromLabel(NO_CATEGORY)).toBeNull();
+    expect(categoryValueFromLabel("  ")).toBeNull();
   });
 });

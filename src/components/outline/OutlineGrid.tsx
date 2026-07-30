@@ -3,7 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { NodeType } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
-import { groupByCategory, type GridRow } from "@/lib/tree/slice";
+import {
+  categoryLabelFromGroupId,
+  groupByCategory,
+  type GridRow,
+} from "@/lib/tree/slice";
 import {
   allowedChildKinds,
   defaultChildType,
@@ -12,7 +16,11 @@ import {
   TYPE_LABELS,
   type NodeKind,
 } from "@/lib/tree/hierarchy";
-import { resolveDrop } from "@/lib/tree/dnd";
+import {
+  resolveCategoryGroupDrop,
+  resolveDrop,
+  withRootCategoryFromPlacement,
+} from "@/lib/tree/dnd";
 import {
   createNodeAction,
   deleteNodeAction,
@@ -51,7 +59,8 @@ const ALL_TYPES_SHOWN: TypeFilters = {
 
 /**
  * Outline tab host: tree commands, type filters, drawer, and the shared DataGrid with the
- * outline's column set. Grouping is off — the outline is the tree itself.
+ * outline's column set. Optional "By category" lays group headers over the tree and lets
+ * root result areas change category by drag.
  */
 export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const { nodes, byId, patch, apply, error, setError } =
@@ -370,15 +379,35 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   /**
    * Drag-to-move. `resolveDrop` runs against the whole tree rather than the visible rows,
    * so hovering beside a row still resolves through ancestors that filters have hidden.
+   * With "By category" on, group headers and root-level placements can also reassign a
+   * result area's category (categories live only on result areas; other types inherit
+   * display grouping from their nearest area).
    * Nothing is patched optimistically — a move changes depth, order and rollups at once,
    * and the server round-trip that `apply` already performs is the honest way to get them.
    */
   const rowDrag: RowDrag = useMemo(
     () => ({
-      resolve: (dragId, targetId, zone) => resolveDrop(dragId, targetId, zone, byId),
-      onDrop: (dragId, targetId, zone) => {
+      resolve: (dragId, targetId, zone) => {
+        if (categoryLabelFromGroupId(targetId) !== null) {
+          return byCategory
+            ? resolveCategoryGroupDrop(dragId, targetId, byId, nodes)
+            : null;
+        }
         const drop = resolveDrop(dragId, targetId, zone, byId);
+        if (!drop) return null;
+        return byCategory ? withRootCategoryFromPlacement(drop, dragId, byId) : drop;
+      },
+      onDrop: (dragId, targetId, zone) => {
+        let drop =
+          categoryLabelFromGroupId(targetId) !== null
+            ? byCategory
+              ? resolveCategoryGroupDrop(dragId, targetId, byId, nodes)
+              : null
+            : resolveDrop(dragId, targetId, zone, byId);
         if (!drop) return;
+        if (byCategory && categoryLabelFromGroupId(targetId) === null) {
+          drop = withRootCategoryFromPlacement(drop, dragId, byId);
+        }
 
         setSelectedId(dragId);
         apply(async () => {
@@ -386,6 +415,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
             nodeId: dragId,
             parentId: drop.parentId,
             position: drop.position,
+            category: drop.category,
           });
           // Dropping into a closed row would otherwise read as the node vanishing.
           if (result.ok && drop.parentId && byId.get(drop.parentId)?.collapsed) {
@@ -395,7 +425,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         });
       },
     }),
-    [byId, apply],
+    [byId, byCategory, nodes, apply],
   );
 
   const columnCtx: OutlineColumnCtx = useMemo(

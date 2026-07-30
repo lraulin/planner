@@ -1,6 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { isSelfOrDescendant, resolveDrop, type DropNode } from "./dnd";
+import {
+  isSelfOrDescendant,
+  resolveCategoryGroupDrop,
+  resolveDrop,
+  withRootCategoryFromPlacement,
+  type DropNode,
+} from "./dnd";
 import type { NodeType } from "@/db/schema";
+import { derive } from "./derive";
+import { row } from "./fixtures";
+import { categoryGroupId, NO_CATEGORY } from "./slice";
+import type { OutlineNode } from "./types";
+
+function outlineTree(...rows: Parameters<typeof row>[0][]): OutlineNode[] {
+  return derive(rows.map((r) => row(r)));
+}
 
 /**
  * A small outline used by most cases:
@@ -155,5 +169,117 @@ describe("isSelfOrDescendant", () => {
 
   it("handles the root", () => {
     expect(isSelfOrDescendant(tree(), "area", null)).toBe(false);
+  });
+});
+
+describe("resolveCategoryGroupDrop", () => {
+  const nodes = outlineTree(
+    { id: "work", type: "result_area", name: "Job", category: "Work" },
+    { id: "personal", type: "result_area", name: "Body", category: "Personal" },
+    { id: "loose", type: "result_area", name: "Misc", category: null },
+    { id: "goal", type: "goal", parentId: "work", depth: 1, name: "Ship" },
+  );
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+
+  it("reassigns a root result area and parks it after the last root in that group", () => {
+    expect(
+      resolveCategoryGroupDrop("loose", categoryGroupId("Work"), byId, nodes),
+    ).toEqual({
+      parentId: null,
+      position: { at: "after", siblingId: "work" },
+      depth: 0,
+      category: "Work",
+    });
+  });
+
+  it("clears category when dropping on the uncategorised group", () => {
+    expect(
+      resolveCategoryGroupDrop("work", categoryGroupId(NO_CATEGORY), byId, nodes),
+    ).toEqual({
+      parentId: null,
+      position: { at: "after", siblingId: "loose" },
+      depth: 0,
+      category: null,
+    });
+  });
+
+  it("refuses nested result areas and non-areas", () => {
+    const nested = outlineTree(
+      { id: "outer", type: "result_area", name: "Outer", category: "Work" },
+      {
+        id: "inner",
+        type: "result_area",
+        parentId: "outer",
+        depth: 1,
+        name: "Inner",
+        category: "Work",
+      },
+      { id: "g", type: "goal", parentId: "outer", depth: 1, name: "G" },
+    );
+    const map = new Map(nested.map((n) => [n.id, n]));
+    expect(
+      resolveCategoryGroupDrop("inner", categoryGroupId("Personal"), map, nested),
+    ).toBeNull();
+    expect(
+      resolveCategoryGroupDrop("g", categoryGroupId("Personal"), map, nested),
+    ).toBeNull();
+  });
+
+  it("lands first at the root when the destination group has no other roots", () => {
+    const only = outlineTree({
+      id: "solo",
+      type: "result_area",
+      name: "Solo",
+      category: "Work",
+    });
+    const map = new Map(only.map((n) => [n.id, n]));
+    expect(
+      resolveCategoryGroupDrop("solo", categoryGroupId("Personal"), map, only),
+    ).toEqual({
+      parentId: null,
+      position: { at: "first" },
+      depth: 0,
+      category: "Personal",
+    });
+  });
+});
+
+describe("withRootCategoryFromPlacement", () => {
+  const nodes = outlineTree(
+    { id: "work", type: "result_area", name: "Job", category: "Work" },
+    { id: "personal", type: "result_area", name: "Body", category: "Personal" },
+    { id: "g", type: "goal", parentId: "work", depth: 1, name: "Ship" },
+  );
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+
+  it("copies the sibling's category when a root result area lands beside it", () => {
+    const drop = {
+      parentId: null as string | null,
+      position: { at: "after" as const, siblingId: "personal" },
+      depth: 0,
+    };
+    expect(withRootCategoryFromPlacement(drop, "work", byId)).toEqual({
+      ...drop,
+      category: "Personal",
+    });
+  });
+
+  it("leaves nested placements alone so the server can inherit", () => {
+    const drop = {
+      parentId: "work" as string | null,
+      position: { at: "last" as const },
+      depth: 1,
+    };
+    expect(withRootCategoryFromPlacement(drop, "personal", byId)).toEqual(drop);
+  });
+
+  it("ignores non-result-areas", () => {
+    const drop = {
+      parentId: null as string | null,
+      position: { at: "after" as const, siblingId: "personal" },
+      depth: 0,
+    };
+    // A root goal has no category field; grouping is via its result-area ancestor.
+    expect(withRootCategoryFromPlacement(drop, "g", byId)).toEqual(drop);
   });
 });

@@ -34,7 +34,7 @@ export function resultAreaTabs(props: DetailFormProps): FormTab[] {
               label="Category"
               value={area.category ?? ""}
               onChange={(category) => patchResultArea({ category })}
-              hint="Groups result areas in the outline's category view."
+              hint="Groups this area in the outline's category view. Nested areas inherit their parent's category."
             />
             <SelectField
               label="State"

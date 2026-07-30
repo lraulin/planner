@@ -130,6 +130,8 @@ export async function moveNodeAction(params: {
   nodeId: string;
   parentId: string | null;
   position: Position;
+  /** Result areas only — destination category when dropping into a root-level group. */
+  category?: string | null;
 }): Promise<ActionResult> {
   return run((userId) => tree.moveNode({ userId, ...params }));
 }

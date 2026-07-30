@@ -1,6 +1,7 @@
 import type { NodeType } from "@/db/schema";
 import { canNest } from "./hierarchy";
-import type { Position } from "./types";
+import { categoryLabelFromGroupId, categoryOf, categoryValueFromLabel } from "./slice";
+import type { OutlineNode, Position } from "./types";
 
 /**
  * Where a dragged row lands, given the pointer's position over a target row.
@@ -34,6 +35,12 @@ export type ResolvedDrop = {
   position: Position;
   /** Depth the dragged node will land at — where the drop indicator is drawn. */
   depth: number;
+  /**
+   * Result areas only: stored category to write when the drop lands at the root under a
+   * category group (or next to a root in another group). Omitted means leave as-is;
+   * `null` clears the category.
+   */
+  category?: string | null;
 };
 
 /** True when `nodeId` is `ancestorId` itself or sits somewhere beneath it. */
@@ -114,4 +121,90 @@ export function resolveDrop(
   }
 
   return null;
+}
+
+/**
+ * Drop onto an outline category group header while "By category" is on.
+ *
+ * Only root-level result areas change category this way — nested areas inherit from their
+ * parent result area, and non-areas have no category of their own (they group under a
+ * result area or under "(No Category)").
+ *
+ * Lands at the root after the last current root in that category (or first at root when
+ * the group is empty of roots).
+ */
+export function resolveCategoryGroupDrop(
+  dragId: string,
+  groupId: string,
+  byId: Map<string, OutlineNode>,
+  /** Full outline in tree order — used to find the last root already in the group. */
+  nodes: OutlineNode[],
+): ResolvedDrop | null {
+  const label = categoryLabelFromGroupId(groupId);
+  if (label === null) return null;
+
+  const drag = byId.get(dragId);
+  if (!drag || drag.type !== "result_area" || drag.parentId !== null) return null;
+
+  const category = categoryValueFromLabel(label);
+  const lastRoot = lastRootInCategory(label, nodes, byId, dragId);
+
+  if (lastRoot) {
+    return {
+      parentId: null,
+      position: { at: "after", siblingId: lastRoot.id },
+      depth: 0,
+      category,
+    };
+  }
+
+  return {
+    parentId: null,
+    position: { at: "first" },
+    depth: 0,
+    category,
+  };
+}
+
+/**
+ * When "By category" is on and a result area stays (or becomes) a root, take the category
+ * of the placement's sibling so dragging into another group's rows reassigns the area.
+ * Nested placements leave category to server-side inheritance.
+ */
+export function withRootCategoryFromPlacement(
+  drop: ResolvedDrop,
+  dragId: string,
+  byId: Map<string, OutlineNode>,
+): ResolvedDrop {
+  if (drop.parentId !== null) return drop;
+
+  const drag = byId.get(dragId);
+  if (!drag || drag.type !== "result_area") return drop;
+
+  const siblingId =
+    drop.position.at === "before" || drop.position.at === "after"
+      ? drop.position.siblingId
+      : null;
+  if (!siblingId) return drop;
+
+  const sibling = byId.get(siblingId);
+  if (!sibling) return drop;
+
+  const label = categoryOf(sibling, byId);
+  return { ...drop, category: categoryValueFromLabel(label) };
+}
+
+function lastRootInCategory(
+  label: string,
+  nodes: OutlineNode[],
+  byId: Map<string, OutlineNode>,
+  excludeId: string,
+): OutlineNode | null {
+  let last: OutlineNode | null = null;
+  for (const node of nodes) {
+    if (node.id === excludeId) continue;
+    if (node.parentId !== null) continue;
+    if (categoryOf(node, byId) === label) last = node;
+  }
+  return last;
 }

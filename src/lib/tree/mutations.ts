@@ -147,7 +147,13 @@ export async function createNode(params: {
     if (type === "task") {
       await tx.insert(taskDetails).values({ nodeId: created.id });
     } else if (type === "result_area") {
-      await tx.insert(resultAreaDetails).values({ nodeId: created.id });
+      // Categories live only on result areas. A nested area inherits its parent's so
+      // outline grouping and the detail form stay aligned with Achieve Planner.
+      const category =
+        parentType === "result_area" && parentId
+          ? await resultAreaCategory(tx, userId, parentId)
+          : null;
+      await tx.insert(resultAreaDetails).values({ nodeId: created.id, category });
     } else if (type === "project") {
       await tx.insert(projectDetails).values({ nodeId: created.id });
     } else if (type === "goal") {
@@ -332,8 +338,14 @@ export async function moveNode(params: {
   nodeId: string;
   parentId: string | null;
   position: Position;
+  /**
+   * Result areas only. When the area lands at the root, the Outline's category groups pass
+   * the destination category here (`null` clears it). Nested under another result area, the
+   * parent's category always wins and this is ignored. Omitted leaves the stored value alone.
+   */
+  category?: string | null;
 }): Promise<void> {
-  const { userId, nodeId, parentId, position } = params;
+  const { userId, nodeId, parentId, position, category } = params;
 
   await db.transaction(async (tx) => {
     const node = await requireNode(tx, userId, nodeId);
@@ -351,7 +363,74 @@ export async function moveNode(params: {
       .update(nodes)
       .set({ parentId, sortKey, updatedAt: new Date() })
       .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+
+    if (node.type === "result_area") {
+      if (parentType === "result_area" && parentId) {
+        // Inheritance: nested areas take the parent's category, including descendants so a
+        // later outdent or Projects-tab group does not resurrect a stale value.
+        const inherited = await resultAreaCategory(tx, userId, parentId);
+        await applyCategoryToResultAreaSubtree(tx, userId, nodeId, inherited);
+      } else if (parentId === null && category !== undefined) {
+        await applyCategoryToResultAreaSubtree(tx, userId, nodeId, category);
+      }
+    }
   });
+}
+
+/** Stored category on a result area, or null when missing / blank is not applied. */
+async function resultAreaCategory(
+  tx: Executor,
+  userId: string,
+  nodeId: string,
+): Promise<string | null> {
+  const [row] = await tx
+    .select({ category: resultAreaDetails.category })
+    .from(resultAreaDetails)
+    .innerJoin(nodes, eq(nodes.id, resultAreaDetails.nodeId))
+    .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)))
+    .limit(1);
+  return row?.category ?? null;
+}
+
+/**
+ * Writes `category` on `rootId` (must be a result area) and every result area beneath it.
+ * Other node types do not carry a category column.
+ */
+async function applyCategoryToResultAreaSubtree(
+  tx: Executor,
+  userId: string,
+  rootId: string,
+  category: string | null,
+): Promise<void> {
+  const raIds: string[] = [];
+  const queue = [rootId];
+
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    const [row] = await tx
+      .select({ type: nodes.type })
+      .from(nodes)
+      .where(and(eq(nodes.id, id), eq(nodes.userId, userId)))
+      .limit(1);
+    if (!row) continue;
+    if (row.type === "result_area") raIds.push(id);
+
+    const children = await tx
+      .select({ id: nodes.id })
+      .from(nodes)
+      .where(and(eq(nodes.userId, userId), eq(nodes.parentId, id)));
+    for (const child of children) queue.push(child.id);
+  }
+
+  for (const id of raIds) {
+    await tx
+      .insert(resultAreaDetails)
+      .values({ nodeId: id, category })
+      .onConflictDoUpdate({
+        target: resultAreaDetails.nodeId,
+        set: { category },
+      });
+  }
 }
 
 /** Makes a node the last child of its previous sibling. */

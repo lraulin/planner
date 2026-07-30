@@ -102,7 +102,10 @@ export function sliceTree(nodes: OutlineNode[], opts: SliceOpts): GridRow[] {
 }
 
 /** The label a blank or missing category groups under, in both grouping paths. */
-const NO_CATEGORY = "(No Category)";
+export const NO_CATEGORY = "(No Category)";
+
+/** Prefix for outline category group row ids (`category:Work`, `category:(No Category)`). */
+export const CATEGORY_GROUP_PREFIX = "category:";
 
 /**
  * Category headers over the outline, which needs a different treatment from the list tabs:
@@ -171,13 +174,39 @@ function compareCategories(a: string, b: string): number {
   return a.localeCompare(b, undefined, { numeric: true });
 }
 
-function categoryOf(node: OutlineNode, byId: Map<string, OutlineNode>): string {
+/**
+ * Effective category label for outline grouping: nearest result area at or above `node`
+ * that has a non-blank category, else {@link NO_CATEGORY}. Categories are stored only on
+ * result areas; other types inherit for display via this walk.
+ */
+export function categoryOf(node: OutlineNode, byId: Map<string, OutlineNode>): string {
   let cur: OutlineNode | undefined = node;
   while (cur) {
     if (cur.type === "result_area" && cur.category?.trim()) return cur.category;
     cur = cur.parentId ? byId.get(cur.parentId) : undefined;
   }
   return NO_CATEGORY;
+}
+
+/** Group row id for a category label, matching {@link groupByCategory}. */
+export function categoryGroupId(label: string): string {
+  return `${CATEGORY_GROUP_PREFIX}${label}`;
+}
+
+/** Label from a category group id, or null when the id is not a category group. */
+export function categoryLabelFromGroupId(groupId: string): string | null {
+  if (!groupId.startsWith(CATEGORY_GROUP_PREFIX)) return null;
+  return groupId.slice(CATEGORY_GROUP_PREFIX.length);
+}
+
+/**
+ * Stored category value for a group label: blank/`(No Category)` becomes `null` so the
+ * detail form and DB match "uncategorised".
+ */
+export function categoryValueFromLabel(label: string): string | null {
+  const trimmed = label.trim();
+  if (!trimmed || trimmed === NO_CATEGORY) return null;
+  return trimmed;
 }
 
 function toNodeRow(entry: Prepared): GridRow {

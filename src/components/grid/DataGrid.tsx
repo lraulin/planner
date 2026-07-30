@@ -323,6 +323,9 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
                   columnCount={columns.length}
                   collapsed={collapsedGroups?.has(row.id) ?? false}
                   onToggle={() => onToggleGroup?.(row.id)}
+                  // Groups are drop targets only (never dragged). Outline category headers
+                  // use this so a root result area can change category by landing on a group.
+                  drag={dragBindingFor(row.id)}
                 />
               ) : (
                 <DataRow
@@ -568,19 +571,42 @@ function GroupHeader({
   columnCount,
   collapsed,
   onToggle,
+  drag,
 }: {
   row: Extract<GridRow, { kind: "group" }>;
   gridTemplate: string;
   columnCount: number;
   collapsed: boolean;
   onToggle: () => void;
+  /** Drop target only — group headers are never themselves dragged. */
+  drag?: RowDragBinding;
 }) {
   return (
     <div
       role="row"
       aria-expanded={!collapsed}
       onClick={onToggle}
-      className="grid cursor-pointer items-center border-b border-rule bg-surface-raised/80 px-3 text-[0.8125rem] font-semibold text-ink hover:bg-surface-raised"
+      onDragOver={
+        drag &&
+        ((event) => {
+          // Treat the whole header as "inside" the group — no before/after line on a bar.
+          if (!drag.onOver("inside")) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+        })
+      }
+      onDragLeave={drag && (() => drag.onLeave())}
+      onDrop={
+        drag &&
+        ((event) => {
+          event.preventDefault();
+          drag.onDrop("inside");
+        })
+      }
+      className={[
+        "grid cursor-pointer items-center border-b border-rule bg-surface-raised/80 px-3 text-[0.8125rem] font-semibold text-ink hover:bg-surface-raised",
+        drag?.hint ? "ring-1 ring-select-edge ring-inset" : "",
+      ].join(" ")}
       style={{
         gridTemplateColumns: gridTemplate,
         columnGap: "0.75rem",
