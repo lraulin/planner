@@ -138,8 +138,6 @@ export function SessionEditor({
   const [blocks, setBlocks] = useState(initial.exercises);
   const sessionIdRef = useRef<string | null>(existing?.id ?? null);
   const [sessionId, setSessionId] = useState<string | null>(existing?.id ?? null);
-  const startRestRef = useRef<(() => void) | null>(null);
-
   const [exerciseEditor, setExerciseEditor] = useState<{
     exercise: ExerciseSummary | null;
     blockIndex: number;
@@ -284,7 +282,6 @@ export function SessionEditor({
         };
       }),
     );
-    startRestRef.current?.();
   }
 
   function copyLastSets(blockIndex: number, historySets: WorkoutSetView[]) {
@@ -348,10 +345,6 @@ export function SessionEditor({
     void flush();
     onClose();
   }, [flush, onClose]);
-
-  const registerStartRest = useCallback((start: () => void) => {
-    startRestRef.current = start;
-  }, []);
 
   return (
     <>
@@ -453,7 +446,7 @@ export function SessionEditor({
             </label>
           </div>
 
-          <RestTimer onRegisterStart={registerStartRest} />
+          <RestTimer />
         </div>
       </Drawer>
 
