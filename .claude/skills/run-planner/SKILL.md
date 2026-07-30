@@ -213,6 +213,11 @@ npm run build     # passes; do not run it while `npm run dev` is up (see Gotchas
 - **Form fields have React-generated ids** (`_r_0_`, unstable across renders), and no
   `name` attributes. `label=Priority` is the way in; CSS selectors on drawer inputs will
   rot.
+- **`role="row"` and `aria-label` on grid rows are this driver's only stable handles** —
+  every assertion above reads them. Accessibility is not a goal in this app
+  (`ux-principles.md`), so nobody is keeping them for compliance; they are kept because
+  stripping them would leave no way to find a row. Same for `role="dialog"`, which
+  `isModalOpen()` uses to suppress the `c` shortcut.
 - **`text=` matches substrings, so `text=Save` used to hit "Unsaved changes".** Exact
   matches now win, but when a label legitimately appears twice — a project in the
   schedule rail *and* on the calendar — the last one in document order wins. Scope it:

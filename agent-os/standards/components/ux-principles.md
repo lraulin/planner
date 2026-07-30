@@ -25,7 +25,10 @@ document differs from the original, it is because Achieve Planner's model differ
 - **Keyboard first** — this app replaces a keyboard-driven Windows tool. Anything reachable
   by mouse should be reachable by key, and the primary workflows should be faster by
   keyboard than by mouse.
-- **Accessibility is not optional** — ARIA, keyboard navigation, focus management, contrast.
+- **Accessibility is not a goal here** — one user, no screen reader, not public. Skip ARIA
+  coverage, contrast ratios and screen-reader testing; add them if this is ever released.
+  Keep the handful of roles and labels that are load-bearing for other reasons (see
+  `modal-pattern.md`) — they are wiring, not compliance.
 - **Performance is UX** — slow expand/collapse or heavy re-renders destroy usability in a
   dense grid.
 - **Forgiveness & safety** — let users recover easily; never force inaccurate data entry.

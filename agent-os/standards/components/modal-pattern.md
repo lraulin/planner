@@ -17,15 +17,21 @@ const titleId = useId();
 ```
 
 `ModalShell` supplies the backdrop and click-away, focus-in / Tab-trap / focus-restore
-(`useModalFocus`), the Escape handler, and the ARIA wiring. It renders nothing when `open`
+(`useModalFocus`), the Escape handler, and the `role` wiring. It renders nothing when `open`
 is false. **Padding is yours** — the shell sets no padding so a dialog can have a flush
 header or footer.
 
+Focus handling stays for keyboard reasons, not accessibility ones: it is why Escape returns
+you to the row you opened the dialog from, and why Tab does not wander into the grid behind
+it.
+
 ## Rules
 
-- **`labelledBy` is required** and must point at the dialog's own heading. A dialog with no
-  accessible name is the most common miss.
-- **`role="alertdialog"`** for a destructive confirmation, `"dialog"` for everything else.
+- **The `role` is functional, not decoration.** `"alertdialog"` for a destructive
+  confirmation, `"dialog"` for everything else — and `isModalOpen()` finds a dialog by
+  exactly these, so dropping the role breaks the capture shortcut's guard (below).
+- **`labelledBy` points at the dialog's own heading.** A `useId` and an `id` on the `<h2>`;
+  it keeps every dialog's API uniform for no real cost.
 - **Escape is handled in the capture phase.** A grid's own keydown listener would otherwise
   see it first and cancel an inline edit _behind_ the dialog.
 - **A visible button always accompanies a keyboard shortcut.** Touch has no Enter key, and
