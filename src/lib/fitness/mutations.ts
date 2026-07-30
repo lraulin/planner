@@ -8,6 +8,7 @@ import {
 } from "@/db/schema";
 import { between } from "@/lib/tree/sortKey";
 import { DEFAULT_BAR_WEIGHT_LB, parseBarWeight } from "./bars";
+import { coerceExercisePrefs, normaliseEquipment } from "./equipment";
 import { normaliseSetInput } from "./format";
 import type { ExercisePrefs, SessionExerciseInput, SessionInput } from "./types";
 
@@ -40,54 +41,96 @@ async function requireSession(tx: Executor, userId: string, sessionId: string) {
   return row;
 }
 
-/** Create a catalog exercise. Name is trimmed; empty names are rejected. */
+function prefsToColumns(prefs?: ExercisePrefs) {
+  const coerced = coerceExercisePrefs({
+    equipment: normaliseEquipment(prefs?.equipment),
+    barWeight:
+      prefs?.barWeight !== undefined
+        ? parseBarWeight(prefs.barWeight)
+        : DEFAULT_BAR_WEIGHT_LB,
+    unilateral: prefs?.unilateral ?? false,
+  });
+  return {
+    equipment: coerced.equipment,
+    barWeight: String(coerced.barWeight),
+    unilateral: coerced.unilateral,
+    notes: prefs?.notes,
+  };
+}
+
+/** Create a catalog exercise with equipment config. */
 export async function createExercise(
   userId: string,
   name: string,
-  notes = "",
   prefs?: ExercisePrefs,
 ): Promise<string> {
-  const trimmed = name.trim();
+  const trimmed = (prefs?.name ?? name).trim();
   if (!trimmed) throw new Error("Exercise name is required.");
 
+  const cols = prefsToColumns(prefs);
   const [row] = await db
     .insert(exercises)
     .values({
       userId,
       name: trimmed,
-      notes: prefs?.notes ?? notes,
-      bodyweight: prefs?.bodyweight ?? false,
-      barWeight: String(
-        prefs?.barWeight !== undefined
-          ? parseBarWeight(prefs.barWeight)
-          : DEFAULT_BAR_WEIGHT_LB,
-      ),
+      notes: cols.notes ?? "",
+      equipment: cols.equipment,
+      barWeight: cols.barWeight,
+      unilateral: cols.unilateral,
     })
     .returning({ id: exercises.id });
   return row.id;
 }
 
 /**
- * Persist catalog defaults used by the logger: bodyweight mode and bar for plates.
- * Partial update — only provided keys change.
+ * Full catalog update (name + equipment + bar + unilateral + notes).
+ * Partial keys only when present on prefs.
  */
-export async function updateExercisePrefs(
+export async function updateExercise(
   userId: string,
   exerciseId: string,
   prefs: ExercisePrefs,
 ): Promise<void> {
+  await requireExercise(db, userId, exerciseId);
+
   const patch: {
-    bodyweight?: boolean;
-    barWeight?: string;
+    name?: string;
     notes?: string;
+    equipment?: "barbell" | "dumbbell" | "bodyweight";
+    barWeight?: string;
+    unilateral?: boolean;
     updatedAt: Date;
   } = { updatedAt: new Date() };
 
-  if (prefs.bodyweight !== undefined) patch.bodyweight = prefs.bodyweight;
-  if (prefs.barWeight !== undefined) {
-    patch.barWeight = String(parseBarWeight(prefs.barWeight));
+  if (prefs.name !== undefined) {
+    const trimmed = prefs.name.trim();
+    if (!trimmed) throw new Error("Exercise name is required.");
+    patch.name = trimmed;
   }
   if (prefs.notes !== undefined) patch.notes = prefs.notes;
+
+  if (
+    prefs.equipment !== undefined ||
+    prefs.barWeight !== undefined ||
+    prefs.unilateral !== undefined
+  ) {
+    const [current] = await db
+      .select()
+      .from(exercises)
+      .where(and(eq(exercises.id, exerciseId), eq(exercises.userId, userId)))
+      .limit(1);
+    const coerced = coerceExercisePrefs({
+      equipment: normaliseEquipment(prefs.equipment ?? current.equipment),
+      barWeight: parseBarWeight(
+        prefs.barWeight !== undefined ? prefs.barWeight : current.barWeight,
+      ),
+      unilateral:
+        prefs.unilateral !== undefined ? prefs.unilateral : current.unilateral,
+    });
+    patch.equipment = coerced.equipment;
+    patch.barWeight = String(coerced.barWeight);
+    patch.unilateral = coerced.unilateral;
+  }
 
   const result = await db
     .update(exercises)
@@ -98,15 +141,25 @@ export async function updateExercisePrefs(
   if (result.length === 0) throw new Error("Exercise not found.");
 }
 
+/** @deprecated prefer updateExercise — kept for call sites during transition. */
+export async function updateExercisePrefs(
+  userId: string,
+  exerciseId: string,
+  prefs: ExercisePrefs,
+): Promise<void> {
+  return updateExercise(userId, exerciseId, prefs);
+}
+
 async function resolveExerciseId(
   tx: Executor,
   userId: string,
   block: SessionExerciseInput,
 ): Promise<string> {
-  let exerciseId = block.exerciseId;
-  if (exerciseId) {
-    await requireExercise(tx, userId, exerciseId);
-  } else if (block.exerciseName) {
+  if (block.exerciseId) {
+    await requireExercise(tx, userId, block.exerciseId);
+    return block.exerciseId;
+  }
+  if (block.exerciseName) {
     const name = block.exerciseName.trim();
     if (!name) throw new Error("Exercise name is required.");
     const [existing] = await tx
@@ -114,51 +167,26 @@ async function resolveExerciseId(
       .from(exercises)
       .where(and(eq(exercises.userId, userId), eq(exercises.name, name)))
       .limit(1);
-    if (existing) {
-      exerciseId = existing.id;
-    } else {
-      const [created] = await tx
-        .insert(exercises)
-        .values({
-          userId,
-          name,
-          bodyweight: block.bodyweight ?? false,
-          barWeight: String(
-            block.barWeight !== undefined
-              ? parseBarWeight(block.barWeight)
-              : DEFAULT_BAR_WEIGHT_LB,
-          ),
-        })
-        .returning({ id: exercises.id });
-      exerciseId = created.id;
-    }
-  } else {
-    throw new Error("Each exercise needs an id or a name.");
-  }
+    if (existing) return existing.id;
 
-  // Keep catalog prefs current whenever the log states them.
-  if (block.bodyweight !== undefined || block.barWeight !== undefined) {
-    const patch: {
-      bodyweight?: boolean;
-      barWeight?: string;
-      updatedAt: Date;
-    } = { updatedAt: new Date() };
-    if (block.bodyweight !== undefined) patch.bodyweight = block.bodyweight;
-    if (block.barWeight !== undefined) {
-      patch.barWeight = String(parseBarWeight(block.barWeight));
-    }
-    await tx
-      .update(exercises)
-      .set(patch)
-      .where(and(eq(exercises.id, exerciseId), eq(exercises.userId, userId)));
+    // Last-resort create with defaults — prefer catalog New exercise UI.
+    const [created] = await tx
+      .insert(exercises)
+      .values({
+        userId,
+        name,
+        equipment: "barbell",
+        barWeight: String(DEFAULT_BAR_WEIGHT_LB),
+        unilateral: false,
+      })
+      .returning({ id: exercises.id });
+    return created.id;
   }
-
-  return exerciseId;
+  throw new Error("Each exercise needs an id or a name.");
 }
 
 /**
- * Find an exercise by exact name (case-sensitive match on stored name after trim), or
- * create one. Used by the log flow so typing "Bench Press" just works.
+ * Find an exercise by exact name, or create with default barbell prefs.
  */
 export async function findOrCreateExercise(
   userId: string,
@@ -182,16 +210,7 @@ export async function renameExercise(
   exerciseId: string,
   name: string,
 ): Promise<void> {
-  const trimmed = name.trim();
-  if (!trimmed) throw new Error("Exercise name is required.");
-
-  const result = await db
-    .update(exercises)
-    .set({ name: trimmed, updatedAt: new Date() })
-    .where(and(eq(exercises.id, exerciseId), eq(exercises.userId, userId)))
-    .returning({ id: exercises.id });
-
-  if (result.length === 0) throw new Error("Exercise not found.");
+  return updateExercise(userId, exerciseId, { name });
 }
 
 export async function updateExerciseNotes(
@@ -199,18 +218,11 @@ export async function updateExerciseNotes(
   exerciseId: string,
   notes: string,
 ): Promise<void> {
-  const result = await db
-    .update(exercises)
-    .set({ notes, updatedAt: new Date() })
-    .where(and(eq(exercises.id, exerciseId), eq(exercises.userId, userId)))
-    .returning({ id: exercises.id });
-
-  if (result.length === 0) throw new Error("Exercise not found.");
+  return updateExercise(userId, exerciseId, { notes });
 }
 
 /**
  * Delete a catalog exercise only when it has never been used in a session.
- * History is sacred — used exercises must be renamed, not wiped.
  */
 export async function deleteExercise(
   userId: string,
@@ -240,9 +252,34 @@ export async function deleteExercise(
   });
 }
 
-/**
- * Log a full session in one transaction: catalog resolve, ordered session-exercises, sets.
- */
+async function insertSets(
+  tx: Executor,
+  userId: string,
+  sessionExerciseId: string,
+  rawSets: SessionExerciseInput["sets"],
+) {
+  if (!rawSets.length) {
+    throw new Error("Each exercise needs at least one set.");
+  }
+  let setIndex = 1;
+  for (const raw of rawSets) {
+    const set = normaliseSetInput(raw);
+    await tx.insert(workoutSets).values({
+      userId,
+      sessionExerciseId,
+      setIndex,
+      reps: set.reps,
+      repsLeft: set.repsLeft,
+      repsRight: set.repsRight,
+      weight: set.weight,
+      unit: set.unit,
+      completed: set.completed,
+    });
+    setIndex += 1;
+  }
+}
+
+/** Log a full session in one transaction. */
 export async function createSession(
   userId: string,
   input: SessionInput,
@@ -266,7 +303,6 @@ export async function createSession(
     let prevKey: string | null = null;
     for (const block of input.exercises) {
       const exerciseId = await resolveExerciseId(tx, userId, block);
-
       const sortKey = between(prevKey, null);
       prevKey = sortKey;
 
@@ -281,31 +317,14 @@ export async function createSession(
         })
         .returning({ id: workoutSessionExercises.id });
 
-      if (!block.sets.length) {
-        throw new Error("Each exercise needs at least one set.");
-      }
-
-      let setIndex = 1;
-      for (const raw of block.sets) {
-        const set = normaliseSetInput(raw);
-        await tx.insert(workoutSets).values({
-          userId,
-          sessionExerciseId: sessionExercise.id,
-          setIndex,
-          reps: set.reps,
-          weight: set.weight,
-          unit: set.unit,
-          completed: set.completed,
-        });
-        setIndex += 1;
-      }
+      await insertSets(tx, userId, sessionExercise.id, block.sets);
     }
 
     return session.id;
   });
 }
 
-/** Replace session metadata and rebuild exercises/sets (full rewrite for MVP edits). */
+/** Replace session metadata and rebuild exercises/sets. */
 export async function replaceSession(
   userId: string,
   sessionId: string,
@@ -331,7 +350,6 @@ export async function replaceSession(
         and(eq(workoutSessions.id, sessionId), eq(workoutSessions.userId, userId)),
       );
 
-    // Cascade deletes sets via session_exercises.
     await tx
       .delete(workoutSessionExercises)
       .where(
@@ -344,7 +362,6 @@ export async function replaceSession(
     let prevKey: string | null = null;
     for (const block of input.exercises) {
       const exerciseId = await resolveExerciseId(tx, userId, block);
-
       const sortKey = between(prevKey, null);
       prevKey = sortKey;
 
@@ -359,29 +376,11 @@ export async function replaceSession(
         })
         .returning({ id: workoutSessionExercises.id });
 
-      if (!block.sets.length) {
-        throw new Error("Each exercise needs at least one set.");
-      }
-
-      let setIndex = 1;
-      for (const raw of block.sets) {
-        const set = normaliseSetInput(raw);
-        await tx.insert(workoutSets).values({
-          userId,
-          sessionExerciseId: sessionExercise.id,
-          setIndex,
-          reps: set.reps,
-          weight: set.weight,
-          unit: set.unit,
-          completed: set.completed,
-        });
-        setIndex += 1;
-      }
+      await insertSets(tx, userId, sessionExercise.id, block.sets);
     }
   });
 }
 
-/** Explicit delete only — the "erroneous log" path. Cascades sets. */
 export async function deleteSession(userId: string, sessionId: string): Promise<void> {
   const result = await db
     .delete(workoutSessions)
@@ -391,7 +390,6 @@ export async function deleteSession(userId: string, sessionId: string): Promise<
   if (result.length === 0) throw new Error("Session not found.");
 }
 
-/** True when this exercise appears in any session for the user (used by UI/tests). */
 export async function exerciseHasHistory(
   userId: string,
   exerciseId: string,

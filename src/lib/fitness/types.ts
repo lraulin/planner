@@ -6,28 +6,35 @@
 
 export type WeightUnit = "lb" | "kg";
 
+/** How the lift is loaded — catalog source of truth for the session logger UI. */
+export type ExerciseEquipment = "barbell" | "dumbbell" | "bodyweight";
+
 export type ExerciseSummary = {
   id: string;
   name: string;
   notes: string;
-  /** Catalog default: hide weight and log unit `bw`. */
-  bodyweight: boolean;
-  /** Bar mass in lb for plate calc; `0` = no bar / dumbbells. */
+  equipment: ExerciseEquipment;
+  /** Bar mass in lb when equipment is barbell. */
   barWeight: number;
+  /** Left/right reps when dumbbell or bodyweight. */
+  unilateral: boolean;
   createdAt: Date;
   updatedAt: Date;
 };
 
 export type ExercisePrefs = {
-  bodyweight?: boolean;
-  /** lb; `0` = no plate calculator. */
-  barWeight?: number;
+  name?: string;
   notes?: string;
+  equipment?: ExerciseEquipment;
+  barWeight?: number;
+  unilateral?: boolean;
 };
 
 export type SetInput = {
-  reps: number | null;
-  weight: number | null;
+  reps?: number | null;
+  repsLeft?: number | null;
+  repsRight?: number | null;
+  weight?: number | null;
   unit?: WeightUnit | string;
   completed?: boolean;
 };
@@ -37,13 +44,6 @@ export type SessionExerciseInput = {
   exerciseId?: string;
   exerciseName?: string;
   notes?: string;
-  /**
-   * When set, written back to the catalog exercise so the next log remembers
-   * bodyweight vs weighted and which bar to use for plates.
-   */
-  bodyweight?: boolean;
-  /** Bar mass in lb; `0` = dumbbells / no plates. */
-  barWeight?: number;
   sets: SetInput[];
 };
 
@@ -59,6 +59,8 @@ export type WorkoutSetView = {
   id: string;
   setIndex: number;
   reps: number | null;
+  repsLeft: number | null;
+  repsRight: number | null;
   weight: number | null;
   unit: string;
   completed: boolean;
@@ -68,6 +70,9 @@ export type SessionExerciseView = {
   id: string;
   exerciseId: string;
   exerciseName: string;
+  equipment: ExerciseEquipment;
+  barWeight: number;
+  unilateral: boolean;
   sortKey: string;
   notes: string;
   sets: WorkoutSetView[];

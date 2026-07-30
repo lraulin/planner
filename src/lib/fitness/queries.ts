@@ -7,6 +7,7 @@ import {
   workoutSets,
 } from "@/db/schema";
 import { DEFAULT_BAR_WEIGHT_LB } from "./bars";
+import { normaliseEquipment } from "./equipment";
 import { formatSetsLabel } from "./format";
 import type {
   ExerciseHistoryEntry,
@@ -26,8 +27,9 @@ function mapExercise(row: {
   id: string;
   name: string;
   notes: string;
-  bodyweight: boolean;
+  equipment: string;
   barWeight: string;
+  unilateral: boolean;
   createdAt: Date;
   updatedAt: Date;
 }): ExerciseSummary {
@@ -35,8 +37,9 @@ function mapExercise(row: {
     id: row.id,
     name: row.name,
     notes: row.notes,
-    bodyweight: row.bodyweight,
+    equipment: normaliseEquipment(row.equipment),
     barWeight: weightNumber(row.barWeight) ?? DEFAULT_BAR_WEIGHT_LB,
+    unilateral: row.unilateral,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -46,6 +49,8 @@ function mapSet(row: {
   id: string;
   setIndex: number;
   reps: number | null;
+  repsLeft: number | null;
+  repsRight: number | null;
   weight: string | null;
   unit: string;
   completed: boolean;
@@ -54,6 +59,8 @@ function mapSet(row: {
     id: row.id,
     setIndex: row.setIndex,
     reps: row.reps,
+    repsLeft: row.repsLeft,
+    repsRight: row.repsRight,
     weight: weightNumber(row.weight),
     unit: row.unit,
     completed: row.completed,
@@ -173,6 +180,9 @@ export async function getSessionDetail(
       sortKey: workoutSessionExercises.sortKey,
       notes: workoutSessionExercises.notes,
       exerciseName: exercises.name,
+      equipment: exercises.equipment,
+      barWeight: exercises.barWeight,
+      unilateral: exercises.unilateral,
     })
     .from(workoutSessionExercises)
     .innerJoin(exercises, eq(exercises.id, workoutSessionExercises.exerciseId))
@@ -218,6 +228,9 @@ export async function getSessionDetail(
       id: se.id,
       exerciseId: se.exerciseId,
       exerciseName: se.exerciseName,
+      equipment: normaliseEquipment(se.equipment),
+      barWeight: weightNumber(se.barWeight) ?? DEFAULT_BAR_WEIGHT_LB,
+      unilateral: se.unilateral,
       sortKey: se.sortKey,
       notes: se.notes,
       sets: setsBySe.get(se.id) ?? [],
@@ -280,11 +293,6 @@ export async function loadExerciseHistory(
   }));
 }
 
-/**
- * Most recent history entry for an exercise — task drawer summary and session
- * editor "last time" ghost. Pass `excludeSessionId` when editing so the open
- * session never pretends to be last time.
- */
 export async function loadLatestForExercise(
   userId: string,
   exerciseId: string,

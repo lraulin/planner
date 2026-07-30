@@ -198,6 +198,9 @@ Patterns to mirror: Notes tab (own domain + `TabStrip`), detail drawers, `Confir
 | 10  | “Last time … tap to copy” fills current sets from prior session                             | Start warm-up/work sets from last log                                   |
 | 11  | Sticky rest timer (presets 1–3m, ±15, beep); auto-starts on + Add set                       | Between-set rest without leaving the drawer                             |
 | 12  | Migration `0010` adds exercise bodyweight + bar_weight                                      | Durable prefs                                                           |
+| 13  | Equipment enum (barbell/dumbbell/bodyweight) + unilateral; config drawer separate from log  | Catalog is source of truth; log only selects                            |
+| 14  | `reps_left` / `reps_right` on sets; L/R set grid when unilateral                            | Uneven single-arm / single-leg reps                                     |
+| 15  | Migration `0011` backfills equipment from bodyweight / bar_weight=0                         | Replace bodyweight boolean                                              |
 
 ---
 

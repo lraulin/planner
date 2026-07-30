@@ -11,12 +11,14 @@ import {
 } from "@/app/fitness/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { ErrorBanner, TabToolbar, ToolbarButton } from "@/components/tabs/tabChrome";
+import { formatEquipmentBadge } from "@/lib/fitness/equipment";
 import type {
   ExerciseSummary,
   SessionDetail,
   SessionInput,
   SessionSummary,
 } from "@/lib/fitness/types";
+import { ExerciseEditor } from "./ExerciseEditor";
 import { SessionEditor } from "./SessionEditor";
 
 type Mode = "sessions" | "exercises";
@@ -32,7 +34,8 @@ function formatWhen(date: Date): string {
 }
 
 /**
- * Fitness tab: session history + exercise catalog, with a drawer for logging.
+ * Fitness tab: session history + exercise catalog, with drawers for logging
+ * and configuring exercises.
  */
 export function FitnessView({
   initialSessions,
@@ -45,7 +48,6 @@ export function FitnessView({
   initialExercises: ExerciseSummary[];
   openLog: boolean;
   seedExerciseId: string | null;
-  /** Preloaded session for `?session=` deep link. */
   initialSessionDetail: SessionDetail | null;
 }) {
   const router = useRouter();
@@ -58,7 +60,6 @@ export function FitnessView({
   const [seed, setSeed] = useState<string | null>(
     initialSessionDetail ? null : seedExerciseId,
   );
-  /** Stable for the life of one open drawer — must not change when a new session is first persisted. */
   const [editorInstanceKey, setEditorInstanceKey] = useState(() =>
     initialSessionDetail
       ? initialSessionDetail.id
@@ -69,6 +70,9 @@ export function FitnessView({
   const [pendingDelete, setPendingDelete] = useState<SessionSummary | null>(null);
   const [pendingDeleteExercise, setPendingDeleteExercise] =
     useState<ExerciseSummary | null>(null);
+  const [exerciseEditor, setExerciseEditor] = useState<ExerciseSummary | null | "new">(
+    null,
+  );
   const [, startTransition] = useTransition();
 
   const sessions = initialSessions;
@@ -131,7 +135,6 @@ export function FitnessView({
   );
 
   const handlePersisted = useCallback((sessionId: string) => {
-    // Record the id without remounting the editor (instance key stays fixed).
     setEditing((current) =>
       current?.id === sessionId
         ? current
@@ -205,7 +208,13 @@ export function FitnessView({
             Exercises
           </button>
         </div>
-        <ToolbarButton onClick={() => openNewLog(null)}>Log session</ToolbarButton>
+        {mode === "exercises" ? (
+          <ToolbarButton onClick={() => setExerciseEditor("new")}>
+            New exercise
+          </ToolbarButton>
+        ) : (
+          <ToolbarButton onClick={() => openNewLog(null)}>Log session</ToolbarButton>
+        )}
       </TabToolbar>
 
       {error && !editorOpen && <ErrorBanner message={error} />}
@@ -264,9 +273,9 @@ export function FitnessView({
         ) : exercises.length === 0 ? (
           <EmptyState
             title="No exercises yet"
-            body="Exercises are created automatically when you log a session, or you can start a log and type a new name."
-            actionLabel="Log session"
-            onAction={() => openNewLog(null)}
+            body="Create an exercise and set equipment (barbell, dumbbell, or bodyweight). Then pick it when you log a session."
+            actionLabel="New exercise"
+            onAction={() => setExerciseEditor("new")}
           />
         ) : (
           <ul className="divide-y divide-rule">
@@ -275,15 +284,25 @@ export function FitnessView({
                 key={ex.id}
                 className="flex items-center gap-3 px-4 py-3 hover:bg-shell/50"
               >
-                <div className="min-w-0 flex-1">
+                <button
+                  type="button"
+                  className="min-w-0 flex-1 text-left"
+                  onClick={() => setExerciseEditor(ex)}
+                >
                   <div className="text-[0.875rem] font-medium text-ink">{ex.name}</div>
-                  {ex.notes && (
-                    <div className="truncate text-[0.75rem] text-ink-faint">
-                      {ex.notes}
-                    </div>
-                  )}
-                </div>
+                  <div className="text-[0.75rem] text-ink-faint">
+                    {formatEquipmentBadge(ex.equipment, ex.barWeight, ex.unilateral)}
+                    {ex.notes ? ` · ${ex.notes}` : ""}
+                  </div>
+                </button>
                 <ToolbarButton onClick={() => openNewLog(ex.id)}>Log</ToolbarButton>
+                <button
+                  type="button"
+                  onClick={() => setExerciseEditor(ex)}
+                  className="text-[0.75rem] text-ink-muted hover:text-ink"
+                >
+                  Edit
+                </button>
                 <button
                   type="button"
                   onClick={() => setPendingDeleteExercise(ex)}
@@ -311,6 +330,17 @@ export function FitnessView({
         onCreate={handleCreate}
         onUpdate={handleUpdate}
         onPersisted={handlePersisted}
+        onCatalogChange={() => router.refresh()}
+      />
+
+      <ExerciseEditor
+        open={exerciseEditor !== null}
+        exercise={exerciseEditor === "new" ? null : exerciseEditor}
+        onClose={() => setExerciseEditor(null)}
+        onSaved={() => {
+          setExerciseEditor(null);
+          router.refresh();
+        }}
       />
 
       <ConfirmDialog

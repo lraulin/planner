@@ -32,16 +32,21 @@ async function run<T>(work: (userId: string) => Promise<T>): Promise<ActionResul
   }
 }
 
-export async function createExerciseAction(name: string, notes?: string) {
-  return run((userId) => fitness.createExercise(userId, name, notes));
+export async function createExerciseAction(name: string, prefs?: ExercisePrefs) {
+  return run((userId) => fitness.createExercise(userId, name, prefs));
 }
 
 export async function renameExerciseAction(id: string, name: string) {
   return run((userId) => fitness.renameExercise(userId, id, name));
 }
 
+export async function updateExerciseAction(id: string, prefs: ExercisePrefs) {
+  return run((userId) => fitness.updateExercise(userId, id, prefs));
+}
+
+/** @deprecated use updateExerciseAction */
 export async function updateExercisePrefsAction(id: string, prefs: ExercisePrefs) {
-  return run((userId) => fitness.updateExercisePrefs(userId, id, prefs));
+  return run((userId) => fitness.updateExercise(userId, id, prefs));
 }
 
 export async function deleteExerciseAction(id: string) {

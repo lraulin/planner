@@ -293,6 +293,17 @@ export const nodes = pgTable(
  * domain, not the outline hierarchy — so reorganising or deleting plan tasks never wipes
  * training history. See `workout_sessions` / `workout_sets`.
  */
+/**
+ * How the lift is loaded. Config lives on the catalog exercise; the session log only
+ * selects an exercise and adapts set fields. `barbell` uses `barWeight` for plate math;
+ * `dumbbell` / `bodyweight` may set `unilateral` for left/right reps.
+ */
+export const exerciseEquipmentEnum = pgEnum("exercise_equipment", [
+  "barbell",
+  "dumbbell",
+  "bodyweight",
+]);
+
 export const exercises = pgTable(
   "exercises",
   {
@@ -302,19 +313,18 @@ export const exercises = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     notes: text("notes").notNull().default(""),
+    equipment: exerciseEquipmentEnum("equipment").notNull().default("barbell"),
     /**
-     * Catalog default: log this lift as bodyweight (pull-ups, etc.) — no weight column,
-     * unit `bw`. Session editor seeds the checkbox from this; toggling can write back.
-     */
-    bodyweight: boolean("bodyweight").notNull().default(false),
-    /**
-     * Bar mass in **lb** for the plate calculator (American gear).
-     * `0` = no bar / dumbbells (hide plate math). Default `45` = Olympic.
-     * EZ bar is typically 15; training bars ~35.
+     * Bar mass in **lb** for plate calc when equipment is barbell.
+     * Olympic 45, EZ ~15, training ~35. Ignored for dumbbell/bodyweight.
      */
     barWeight: numeric("bar_weight", { precision: 8, scale: 2 })
       .notNull()
       .default("45"),
+    /**
+     * Each side separately (dumbbell or bodyweight). Sets store reps_left / reps_right.
+     */
+    unilateral: boolean("unilateral").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -921,7 +931,11 @@ export const workoutSets = pgTable(
       .notNull()
       .references(() => workoutSessionExercises.id, { onDelete: "cascade" }),
     setIndex: integer("set_index").notNull(),
+    /** Bilateral reps. Null when the exercise is unilateral (use left/right). */
     reps: integer("reps"),
+    /** Unilateral left / right reps when catalog exercise.unilateral is true. */
+    repsLeft: integer("reps_left"),
+    repsRight: integer("reps_right"),
     weight: numeric("weight", { precision: 10, scale: 2 }),
     unit: text("unit").notNull().default("lb"),
     completed: boolean("completed").notNull().default(true),

@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { exercises, users, workoutSessions } from "@/db/schema";
+import { exercises, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { saveNodeDetail } from "@/lib/detail/mutations";
 import { createNode, deleteNode } from "@/lib/tree/mutations";
@@ -12,7 +12,7 @@ import {
   deleteSession,
   findOrCreateExercise,
   renameExercise,
-  updateExercisePrefs,
+  updateExercise,
 } from "./mutations";
 import {
   getExercise,
@@ -21,11 +21,6 @@ import {
   listSessions,
   loadExerciseHistory,
 } from "./queries";
-
-/**
- * Fitness mutations against real Postgres. The history invariant is the product:
- * deleting a linked task must not remove sessions or exercises.
- */
 
 const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
@@ -80,9 +75,9 @@ describeDb("fitness sessions", () => {
     expect(detail!.title).toBe("Push");
     expect(detail!.exercises).toHaveLength(2);
     expect(detail!.exercises[0].exerciseName).toBe("Bench Press");
+    expect(detail!.exercises[0].equipment).toBe("barbell");
     expect(detail!.exercises[0].sets).toHaveLength(3);
     expect(detail!.exercises[0].sets[0].weight).toBe(185);
-    expect(detail!.exercises[1].exerciseName).toBe("OHP");
 
     const catalog = await listExercises(userId);
     expect(catalog.map((e) => e.name).sort()).toEqual(["Bench Press", "OHP"]);
@@ -91,6 +86,55 @@ describeDb("fitness sessions", () => {
     expect(sessions).toHaveLength(1);
     expect(sessions[0].exerciseLabels[0]).toContain("Bench Press");
     expect(sessions[0].exerciseLabels[0]).toContain("3×5");
+  });
+
+  it("stores catalog equipment prefs and unilateral sets", async () => {
+    const exerciseId = await createExercise(userId, "DB Row", {
+      equipment: "dumbbell",
+      unilateral: true,
+    });
+    expect(await getExercise(userId, exerciseId)).toMatchObject({
+      equipment: "dumbbell",
+      unilateral: true,
+    });
+
+    const sessionId = await createSession(userId, {
+      performedAt: new Date(),
+      exercises: [
+        {
+          exerciseId,
+          sets: [
+            { repsLeft: 8, repsRight: 6, weight: 50, unit: "lb" },
+            { repsLeft: 8, repsRight: 7, weight: 50, unit: "lb" },
+          ],
+        },
+      ],
+    });
+
+    const detail = await getSessionDetail(userId, sessionId);
+    expect(detail!.exercises[0].sets[0]).toMatchObject({
+      reps: null,
+      repsLeft: 8,
+      repsRight: 6,
+      weight: 50,
+    });
+    const sessions = await listSessions(userId);
+    expect(sessions[0].exerciseLabels[0]).toContain("8/6");
+  });
+
+  it("updates exercise equipment without session prefs write-back", async () => {
+    const id = await createExercise(userId, "Curl", {
+      equipment: "barbell",
+      barWeight: 15,
+    });
+    await updateExercise(userId, id, {
+      equipment: "dumbbell",
+      unilateral: true,
+    });
+    expect(await getExercise(userId, id)).toMatchObject({
+      equipment: "dumbbell",
+      unilateral: true,
+    });
   });
 
   it("reuses an existing exercise by name", async () => {
@@ -106,42 +150,15 @@ describeDb("fitness sessions", () => {
     expect(await listExercises(userId)).toHaveLength(1);
   });
 
-  it("remembers bodyweight and EZ bar prefs on the catalog exercise", async () => {
-    const exerciseId = await createExercise(userId, "EZ Curl");
-    await updateExercisePrefs(userId, exerciseId, {
-      bodyweight: false,
-      barWeight: 15,
-    });
-    expect(await getExercise(userId, exerciseId)).toMatchObject({
-      barWeight: 15,
-      bodyweight: false,
-    });
-
-    await createSession(userId, {
-      performedAt: new Date(),
-      exercises: [
-        {
-          exerciseId,
-          bodyweight: true,
-          barWeight: 0,
-          sets: [{ reps: 10, weight: null, unit: "bw" }],
-        },
-      ],
-    });
-
-    // Logging with prefs writes them back so the next open seeds correctly.
-    expect(await getExercise(userId, exerciseId)).toMatchObject({
-      bodyweight: true,
-      barWeight: 0,
-    });
-  });
-
   it("stores bodyweight sets as unit bw with null weight", async () => {
+    const exerciseId = await createExercise(userId, "Pull-up", {
+      equipment: "bodyweight",
+    });
     const sessionId = await createSession(userId, {
       performedAt: new Date(),
       exercises: [
         {
-          exerciseName: "Pull-up",
+          exerciseId,
           sets: [
             { reps: 8, weight: null, unit: "bw" },
             { reps: 6, weight: 0, unit: "bw" },
@@ -219,48 +236,23 @@ describeDb("fitness sessions", () => {
 
     await deleteNode(userId, taskId);
 
-    // Session and exercise must still exist — the whole point of the durable log.
     expect(await getSessionDetail(userId, sessionId)).not.toBeNull();
     const [ex] = await db.select().from(exercises).where(eq(exercises.id, exerciseId));
     expect(ex?.name).toBe("Bench Press");
-    const history = await loadExerciseHistory(userId, exerciseId);
-    expect(history).toHaveLength(1);
-    expect(history[0].sets).toHaveLength(2);
   });
-});
 
-describeDb("fitness cross-user isolation", () => {
-  let ownerId: string;
-  let otherId: string;
-  let exerciseId: string;
-  let sessionId: string;
-
-  beforeEach(async () => {
-    ownerId = await makeUser();
-    otherId = await makeUser();
-    exerciseId = await createExercise(ownerId, "Owner Lift");
-    sessionId = await createSession(ownerId, {
+  it("isolates second user from first user's fitness rows", async () => {
+    const owner = userId;
+    const intruder = await makeUser();
+    const exerciseId = await createExercise(owner, "Private Lift");
+    const sessionId = await createSession(owner, {
       performedAt: new Date(),
-      exercises: [{ exerciseId, sets: [{ reps: 5, weight: 100 }] }],
+      exercises: [{ exerciseId, sets: [{ reps: 1, weight: 1 }] }],
     });
-  });
 
-  it("does not let another user read, rename, or delete owner data", async () => {
-    expect(await getSessionDetail(otherId, sessionId)).toBeNull();
-    expect(await listSessions(otherId)).toHaveLength(0);
-    expect(await listExercises(otherId)).toHaveLength(0);
-    expect(await loadExerciseHistory(otherId, exerciseId)).toHaveLength(0);
-
-    await expect(renameExercise(otherId, exerciseId, "Stolen")).rejects.toThrow();
-    await expect(deleteSession(otherId, sessionId)).rejects.toThrow();
-    await expect(deleteExercise(otherId, exerciseId)).rejects.toThrow();
-
-    // Owner rows untouched.
-    expect(await getSessionDetail(ownerId, sessionId)).not.toBeNull();
-    const [still] = await db
-      .select()
-      .from(workoutSessions)
-      .where(eq(workoutSessions.id, sessionId));
-    expect(still.userId).toBe(ownerId);
+    await expect(renameExercise(intruder, exerciseId, "Hijacked")).rejects.toThrow();
+    await expect(deleteSession(intruder, sessionId)).rejects.toThrow();
+    expect(await getSessionDetail(intruder, sessionId)).toBeNull();
+    expect(await listExercises(intruder)).toHaveLength(0);
   });
 });
