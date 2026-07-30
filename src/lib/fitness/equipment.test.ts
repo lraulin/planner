@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   coerceExercisePrefs,
   formatEquipmentBadge,
+  formatExerciseSelectLabel,
   effectiveUnilateral,
 } from "./equipment";
 
@@ -11,6 +12,20 @@ describe("formatEquipmentBadge", () => {
     expect(formatEquipmentBadge("barbell", 15, false)).toBe("Barbell · EZ 15");
     expect(formatEquipmentBadge("dumbbell", 45, true)).toBe("Dumbbell · L/R");
     expect(formatEquipmentBadge("bodyweight", 45, false)).toBe("Bodyweight");
+  });
+});
+
+describe("formatExerciseSelectLabel", () => {
+  it("puts equipment after the name so variants share a short name", () => {
+    expect(formatExerciseSelectLabel("Curl", "dumbbell", 45, false)).toBe(
+      "Curl · Dumbbell",
+    );
+    expect(formatExerciseSelectLabel("Curl", "barbell", 15, false)).toBe(
+      "Curl · Barbell · EZ 15",
+    );
+    expect(formatExerciseSelectLabel("Pull-up", "bodyweight", 45, false)).toBe(
+      "Pull-up · Bodyweight",
+    );
   });
 });
 

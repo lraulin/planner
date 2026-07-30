@@ -7,6 +7,8 @@ import { useAutosave, type SaveStatus } from "@/components/notes/useAutosave";
 import {
   effectiveUnilateral,
   formatEquipmentBadge,
+  formatExerciseSelectLabel,
+  NEW_EXERCISE_SELECT_VALUE,
   usesPlateCalculator,
   usesWeight,
 } from "@/lib/fitness/equipment";
@@ -304,14 +306,36 @@ export function SessionEditor({
       }
       return [...current, saved];
     });
+    // Close config and land back on the log with this exercise selected on the block.
     if (exerciseEditor) {
       const bi = exerciseEditor.blockIndex;
+      const wasNew = exerciseEditor.exercise === null;
       setBlocksAndSave((current) =>
         current.map((b, i) => {
           if (i !== bi) return b;
+          // New exercise: start clean sets. Edit: keep entered sets, refresh metadata.
+          if (wasNew) {
+            return {
+              ...draftBlockFromCatalog(saved, b.key),
+              sets: [emptySetForExercise(saved)],
+            };
+          }
           return {
-            ...draftBlockFromCatalog(saved, b.key),
-            sets: [emptySetForExercise(saved)],
+            ...b,
+            exerciseId: saved.id,
+            exerciseName: saved.name,
+            equipment: saved.equipment,
+            barWeight: saved.barWeight,
+            unilateral: saved.unilateral,
+            sets: b.sets.map((s) => ({
+              ...s,
+              unit:
+                saved.equipment === "bodyweight"
+                  ? "bw"
+                  : s.unit === "bw"
+                    ? "lb"
+                    : s.unit,
+            })),
           };
         }),
       );
@@ -474,6 +498,16 @@ function ExerciseBlock({
   const showWeight = usesWeight(block.equipment);
   const showPlates = usesPlateCalculator(block.equipment);
 
+  const sortedCatalog = useMemo(
+    () =>
+      [...catalog].sort((a, b) => {
+        const byName = a.name.localeCompare(b.name);
+        if (byName !== 0) return byName;
+        return a.equipment.localeCompare(b.equipment);
+      }),
+    [catalog],
+  );
+
   return (
     <div className="rounded border border-rule bg-shell/40 p-3">
       <div className="mb-1 flex items-end gap-2">
@@ -481,15 +515,28 @@ function ExerciseBlock({
           Exercise
           <select
             value={block.exerciseId}
-            onChange={(e) => onSelect(e.target.value)}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (value === NEW_EXERCISE_SELECT_VALUE) {
+                onNewExercise();
+                return;
+              }
+              onSelect(value);
+            }}
             className="rounded border border-rule bg-surface px-2 py-1.5 text-[0.875rem] text-ink normal-case tracking-normal"
           >
             <option value="">Select exercise…</option>
-            {catalog.map((ex) => (
+            {sortedCatalog.map((ex) => (
               <option key={ex.id} value={ex.id}>
-                {ex.name}
+                {formatExerciseSelectLabel(
+                  ex.name,
+                  ex.equipment,
+                  ex.barWeight,
+                  ex.unilateral,
+                )}
               </option>
             ))}
+            <option value={NEW_EXERCISE_SELECT_VALUE}>Add new exercise…</option>
           </select>
         </label>
         {canRemove && (
@@ -523,22 +570,9 @@ function ExerciseBlock({
             />
           </>
         ) : (
-          <button
-            type="button"
-            onClick={onNewExercise}
-            className="text-ink-muted underline-offset-2 hover:text-ink hover:underline"
-          >
-            New exercise…
-          </button>
-        )}
-        {block.exerciseId && (
-          <button
-            type="button"
-            onClick={onNewExercise}
-            className="text-ink-faint hover:text-ink"
-          >
-            New…
-          </button>
+          <span className="text-ink-faint">
+            Pick an exercise or choose “Add new exercise…”
+          </span>
         )}
       </div>
 

@@ -42,6 +42,28 @@ export function effectiveUnilateral(
   return allowsUnilateral(equipment) && unilateral;
 }
 
+/** Short equipment tag for dropdowns — no need to put "Dumbbell" in the exercise name. */
+export function formatEquipmentShort(
+  equipment: ExerciseEquipment,
+  barWeightLb: number,
+  unilateral: boolean,
+): string {
+  if (equipment === "bodyweight") {
+    return effectiveUnilateral(equipment, unilateral) ? "Bodyweight L/R" : "Bodyweight";
+  }
+  if (equipment === "dumbbell") {
+    return effectiveUnilateral(equipment, unilateral) ? "Dumbbell L/R" : "Dumbbell";
+  }
+  const bar = parseBarWeight(barWeightLb);
+  const preset = BAR_PRESETS.find((p) => p.weight === bar && p.id !== "none");
+  if (preset?.id === "ez") return "Barbell · EZ 15";
+  if (preset?.id === "training") return "Barbell · Training 35";
+  if (preset?.id === "olympic" || bar === DEFAULT_BAR_WEIGHT_LB) {
+    return "Barbell";
+  }
+  return `Barbell · ${bar} lb`;
+}
+
 /**
  * Compact badge for catalog list / session hint.
  * e.g. "Barbell · EZ 15", "Dumbbell · L/R", "Bodyweight".
@@ -67,6 +89,23 @@ export function formatEquipmentBadge(
   if (bar === DEFAULT_BAR_WEIGHT_LB) return "Barbell · Olympic 45";
   return `Barbell · ${bar} lb`;
 }
+
+/**
+ * Option text in the session log select: "Curl · Dumbbell", "Curl · Barbell · EZ 15".
+ * Name stays clean; equipment disambiguates barbell vs dumbbell variants.
+ */
+export function formatExerciseSelectLabel(
+  name: string,
+  equipment: ExerciseEquipment,
+  barWeightLb: number,
+  unilateral: boolean,
+): string {
+  const label = name.trim() || "Untitled";
+  return `${label} · ${formatEquipmentShort(equipment, barWeightLb, unilateral)}`;
+}
+
+/** Sentinel value for the session exercise &lt;select&gt; “Add new…” option. */
+export const NEW_EXERCISE_SELECT_VALUE = "__new_exercise__";
 
 /** Defaults when creating a new catalog exercise. */
 export function defaultExercisePrefs(): {
