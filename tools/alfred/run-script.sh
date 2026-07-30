@@ -1,6 +1,7 @@
 #!/bin/zsh
 # Paste into Alfred "Run Script" (Language: /bin/zsh, input as argv).
 # Expects workflow variables PLANNER_BASE_URL and PLANNER_AGENT_API_KEY.
+# Optional: VERCEL_AUTOMATION_BYPASS_SECRET if the Vercel project has Deployment Protection.
 # Alfred passes the keyword argument as $1.
 
 set -euo pipefail
@@ -42,10 +43,17 @@ else
   body="{\"name\":${name_json}}"
 fi
 
-response=$(curl -sS -w "\n%{http_code}" -X POST "$url" \
-  -H "Authorization: Bearer ${PLANNER_AGENT_API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d "$body") || {
+curl_args=(
+  -sS -w "\n%{http_code}"
+  -X POST "$url"
+  -H "Authorization: Bearer ${PLANNER_AGENT_API_KEY}"
+  -H "Content-Type: application/json"
+)
+if [[ -n "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ]]; then
+  curl_args+=(-H "x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET}")
+fi
+
+response=$(curl "${curl_args[@]}" -d "$body") || {
   echo "error: network failure"
   exit 1
 }

@@ -56,10 +56,19 @@ else
   body="{\"name\":${name_json}}"
 fi
 
-response=$(curl -sS -w "\n%{http_code}" -X POST "$url" \
-  -H "Authorization: Bearer ${PLANNER_AGENT_API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d "$body") || {
+# Optional: Vercel Deployment Protection bypass (same secret as in Project Settings).
+# Without this, production often returns 401 "Protected deployment" before our Bearer auth runs.
+curl_args=(
+  -sS -w "\n%{http_code}"
+  -X POST "$url"
+  -H "Authorization: Bearer ${PLANNER_AGENT_API_KEY}"
+  -H "Content-Type: application/json"
+)
+if [[ -n "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ]]; then
+  curl_args+=(-H "x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET}")
+fi
+
+response=$(curl "${curl_args[@]}" -d "$body") || {
   echo "error: request failed (network)" >&2
   exit 1
 }
