@@ -23,6 +23,7 @@ export function row(
     focus: false,
     collapsed: false,
     notes: "",
+    isInbox: false,
     completedAt: null,
     depth: 0,
     effortMinutes: null,

@@ -110,9 +110,20 @@ export async function createNode(params: {
   parentId: string | null;
   type: NodeType;
   name?: string;
+  /** Body text, so a caller that already has one — quick capture's `##` note — writes once. */
+  notes?: string;
+  isInbox?: boolean;
   position?: Position;
 }): Promise<string> {
-  const { userId, parentId, type, name = "", position = { at: "last" } } = params;
+  const {
+    userId,
+    parentId,
+    type,
+    name = "",
+    notes = "",
+    isInbox = false,
+    position = { at: "last" },
+  } = params;
 
   return db.transaction(async (tx) => {
     const parentType = parentId ? (await requireNode(tx, userId, parentId)).type : null;
@@ -122,7 +133,7 @@ export async function createNode(params: {
 
     const [created] = await tx
       .insert(nodes)
-      .values({ userId, parentId, type, name, sortKey })
+      .values({ userId, parentId, type, name, notes, isInbox, sortKey })
       .returning({ id: nodes.id });
 
     // Detail rows are created up front so later edits are plain updates.

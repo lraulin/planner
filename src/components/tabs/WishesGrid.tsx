@@ -9,6 +9,7 @@ import { updateNodeItemAction } from "@/app/outline/detail-actions";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import { ContextMenu } from "@/components/grid/ContextMenu";
 import { ErrorBanner, TabToolbar, ToolbarButton, ToolbarSelect } from "./tabChrome";
+import { isTypingTarget } from "@/lib/keyboard";
 
 /**
  * Wish List is the only tab whose rows are `node_items`, not `nodes`. It reuses the same
@@ -135,16 +136,7 @@ export function WishesGrid({
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (detailNodeId) return;
-      const target = event.target as HTMLElement | null;
-      if (
-        target &&
-        (target.tagName === "INPUT" ||
-          target.tagName === "SELECT" ||
-          target.tagName === "TEXTAREA" ||
-          target.isContentEditable)
-      ) {
-        return;
-      }
+      if (isTypingTarget(event.target)) return;
       if (event.key === "Enter" && selectedWish) {
         event.preventDefault();
         setDetailNodeId(selectedWish.nodeId);

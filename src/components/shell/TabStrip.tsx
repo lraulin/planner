@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { LogoutButton } from "@/components/auth/LogoutButton";
+import { CaptureButton } from "@/components/capture/CaptureButton";
+import { QuickCapture } from "@/components/capture/QuickCapture";
 
 /**
  * The tab strip from Achieve. Built tabs navigate; the rest are shown so the shape of the
@@ -57,7 +59,15 @@ export function TabStrip({ active }: { active: TabId }) {
         })}
       </nav>
 
-      <LogoutButton />
+      {/* Mounted here rather than in the root layout: every signed-in page renders the tab
+          strip and the login page does not, so this is exactly the right scope for an
+          app-wide shortcut. */}
+      <div className="ml-auto flex items-center gap-3 pb-1.5">
+        <CaptureButton />
+        <LogoutButton />
+      </div>
+
+      <QuickCapture />
     </header>
   );
 }

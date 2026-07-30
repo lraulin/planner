@@ -7,10 +7,10 @@ import type { Position } from "./types";
  *
  * The hard part of tree drag-and-drop is not the gesture — it is that the gesture is
  * ambiguous. A drop line drawn under a row could mean "next sibling", "first child of the
- * row above", or "next sibling of one of its ancestors", and the hierarchy rules
- * (`LEGAL_PARENTS`) rule most of those out on any given drop. This module resolves the
- * ambiguity in one place, as pure data, so the grid can draw an indicator at the depth the
- * node will *actually* land at rather than at the depth the cursor happens to be over.
+ * row above", or "next sibling of one of its ancestors", and the hierarchy rule (`canNest`)
+ * rules some of those out on any given drop. This module resolves the ambiguity in one
+ * place, as pure data, so the grid can draw an indicator at the depth the node will
+ * *actually* land at rather than at the depth the cursor happens to be over.
  *
  * The server validates independently (`moveNode` re-checks nesting and self-containment) —
  * this is for feedback during the drag, not for safety.
@@ -91,8 +91,8 @@ export function resolveDrop(
 
   // Otherwise land beside the target — or, when the target's level will not have it,
   // beside the nearest ancestor whose level will. Dragging a result area over a task deep
-  // in the tree snaps the line all the way out to the top level, which is the only place
-  // a result area can go.
+  // inside a project snaps the line all the way out to the top level, since none of those
+  // levels can host it. The walk always terminates: the top level hosts every type.
   const at = zone === "before" ? "before" : "after";
   let anchor: DropNode | null = target;
 

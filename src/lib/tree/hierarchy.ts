@@ -1,19 +1,19 @@
 import type { NodeState, NodeType } from "@/db/schema";
 
 /**
- * Which parents each node type may sit under. `null` means the root of the outline.
+ * How deep each type sits in the hierarchy. Lower is broader.
  *
- * Each level may nest inside itself without limit — Achieve lets you "use as many levels as
- * you need" — but the levels themselves stay ordered: a Project never contains a Goal.
- *
- * These rules live here rather than in database CHECK constraints so they can be unit
- * tested, and so loosening the hierarchy later does not require a migration.
+ * Result Area → Goal → Project → Task is the shape the app is *for*, but it is a planning
+ * aid, not a filing requirement. There is only one rule: **you cannot go backwards.** A
+ * child may be the same rank as its parent or deeper, never shallower — a Project never
+ * contains a Goal. Each level may nest inside itself without limit, which is how Achieve
+ * puts it: "use as many levels as you need."
  */
-export const LEGAL_PARENTS: Record<NodeType, ReadonlyArray<NodeType | null>> = {
-  result_area: [null],
-  goal: ["result_area", "goal"],
-  project: ["result_area", "goal", "project"],
-  task: ["project", "task"],
+const RANK: Record<NodeType, number> = {
+  result_area: 0,
+  goal: 1,
+  project: 2,
+  task: 3,
 };
 
 /** Display names, used in the UI and in error messages. */
@@ -65,8 +65,20 @@ export const STATE_OPTIONS: { value: NodeState; label: string }[] = (
   Object.keys(STATE_LABELS) as NodeState[]
 ).map((value) => ({ value, label: STATE_LABELS[value] }));
 
+/**
+ * The top level hosts anything.
+ *
+ * Requiring a home for every row is the busywork this app exists to avoid: the hierarchy
+ * earns its keep when you plan top-down, but when you already know the specific thing you
+ * need to do, working out where it belongs can cost more than doing it. Achieve agrees —
+ * its project picker offers `<No Project>`, and its outline puts tasks straight under a
+ * Result Area.
+ *
+ * These rules live here rather than in database CHECK constraints so they can be unit
+ * tested, and so loosening the hierarchy does not require a migration.
+ */
 export function canNest(child: NodeType, parent: NodeType | null): boolean {
-  return LEGAL_PARENTS[child].includes(parent);
+  return parent === null || RANK[child] >= RANK[parent];
 }
 
 /**

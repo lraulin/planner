@@ -16,7 +16,7 @@ export async function loadOutline(userId: string): Promise<OutlineNode[]> {
       SELECT
         n.id, n.parent_id, n.type, n.name, n.sort_key,
         n.priority_letter, n.priority_rank, n.state, n.deadline,
-        n.focus, n.collapsed, n.notes, n.completed_at,
+        n.focus, n.collapsed, n.notes, n.is_inbox, n.completed_at,
         0 AS depth,
         ARRAY[n.sort_key] AS path
       FROM nodes n
@@ -27,7 +27,7 @@ export async function loadOutline(userId: string): Promise<OutlineNode[]> {
       SELECT
         c.id, c.parent_id, c.type, c.name, c.sort_key,
         c.priority_letter, c.priority_rank, c.state, c.deadline,
-        c.focus, c.collapsed, c.notes, c.completed_at,
+        c.focus, c.collapsed, c.notes, c.is_inbox, c.completed_at,
         t.depth + 1,
         t.path || c.sort_key
       FROM nodes c
@@ -37,7 +37,7 @@ export async function loadOutline(userId: string): Promise<OutlineNode[]> {
     SELECT
       t.id, t.parent_id, t.type, t.name, t.sort_key,
       t.priority_letter, t.priority_rank, t.state, t.deadline,
-      t.focus, t.collapsed, t.notes, t.completed_at, t.depth,
+      t.focus, t.collapsed, t.notes, t.is_inbox, t.completed_at, t.depth,
       td.effort_minutes, td.effort_left_minutes, td.actual_effort_minutes,
       td.percent_complete, td.contexts,
       rad.color, rad.category,
@@ -69,6 +69,7 @@ export async function loadOutline(userId: string): Promise<OutlineNode[]> {
       focus: Boolean(r.focus),
       collapsed: Boolean(r.collapsed),
       notes: (r.notes as string) ?? "",
+      isInbox: Boolean(r.is_inbox),
       completedAt: r.completed_at ? new Date(r.completed_at as string) : null,
       depth: Number(r.depth),
       effortMinutes: r.effort_minutes === null ? null : Number(r.effort_minutes),

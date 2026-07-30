@@ -106,8 +106,27 @@ Features that complete or surround the original product, plus making it multi-de
 
 ### Capture & access
 
-- **Quick capture to inbox.** Global shortcut without opening the full app — **Alfred** on
-  macOS first; Raycast later if useful.
+- **✅ In-app inbox & quick entry.** `specs/2026-07-30-1018-inbox-quick-capture`. An
+  **Inbox** project (Achieve's `<Inbox>`, minus `<New Tasks>`) that quick capture drops
+  into, created on first use and identified by a flag so renaming it still works. A capture
+  box on `c` from any tab: multi-line, Enter to add, indentation becomes subtasks, pasted
+  bullets / numbers / checkboxes / quotes / headings are stripped, `##` splits a note off
+  the name, optional Priority / Effort / Deadline / Contexts / Project. Came with a
+  **hierarchy relaxation** — anything may sit at the top level and a child may be the same
+  rank or deeper than its parent, so a quick task never has to be filed to exist.
+
+- **External intake to the inbox.** The above only works with the app open in a browser,
+  which is the half of the capture habit that matters least — the point is getting an idea
+  out of your head wherever you are. Staged:
+
+  1. **Apple Reminders drain.** "Hey Siri, remind me to…" is already the fastest capture
+     path on hand. Apple has no server-side API for Reminders — EventKit is on-device only,
+     and iOS 13's Reminders migration broke the old iCloud CalDAV route — so this cannot be
+     a cron pulling from the cloud. It is a **Shortcut** that reads a dedicated list, POSTs
+     each item to `/api/agent/create_node`, and completes it. Needs a provenance/dedupe
+     column; nothing in the schema records where a row came from.
+  2. **Alfred on macOS.** One task at a time, same endpoint, for typing rather than
+     talking. Raycast later if useful.
 
 ### Platform
 
@@ -216,7 +235,8 @@ Phase 1 remaining ──► weekly planning workflow (+ calendar polish)
 Phase 2 ──► Pomodoro on task/project (writes Actual Effort)
         │         └──► session log ──► full time reports
         │
-        ├──► auth, export, Alfred capture
+        ├──► auth ✅, in-app inbox + quick entry ✅, export
+        │         └──► external intake: Reminders Shortcut, Alfred (needs a dedupe column)
         ├──► attachments: URL links → Drive/Dropbox pickers (no S3)
         ├──► AI tools/API ✅ (agent HTTP + planner-agent repo; Bedrock later)
         │

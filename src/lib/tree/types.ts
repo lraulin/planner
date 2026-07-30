@@ -14,6 +14,8 @@ export type OutlineRow = {
   focus: boolean;
   collapsed: boolean;
   notes: string;
+  /** True for the one project quick capture drops into. See `src/lib/capture/`. */
+  isInbox: boolean;
   completedAt: Date | null;
   depth: number;
   effortMinutes: number | null;

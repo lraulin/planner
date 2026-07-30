@@ -66,17 +66,29 @@ describeDb("tree mutations", () => {
     expect(await outlineOf(userId)).toEqual(["Work"]);
   });
 
-  it("rejects a type that cannot sit at the top level", async () => {
-    await expect(
-      createNode({ userId, parentId: null, type: "task", name: "Nope" }),
-    ).rejects.toThrow("A Task cannot go under the top level.");
+  // Capturing an idea must never require deciding where it lives first, so the top level
+  // hosts every type.
+  it("creates a task at the top level", async () => {
+    await createNode({ userId, parentId: null, type: "task", name: "Loose end" });
+    expect(await outlineOf(userId)).toEqual(["Loose end"]);
   });
 
-  it("rejects a type that cannot sit under the given parent", async () => {
-    const area = await createNode({ userId, parentId: null, type: "result_area" });
+  it("creates a task directly under a result area", async () => {
+    const area = await createNode({
+      userId,
+      parentId: null,
+      type: "result_area",
+      name: "Health",
+    });
+    await createNode({ userId, parentId: area, type: "task", name: "Get meds" });
+    expect(await outlineOf(userId)).toEqual(["Health", "  Get meds"]);
+  });
+
+  it("rejects a nesting that goes backwards", async () => {
+    const task = await createNode({ userId, parentId: null, type: "task", name: "T" });
     await expect(
-      createNode({ userId, parentId: area, type: "task", name: "Nope" }),
-    ).rejects.toThrow("A Task cannot go under a Result Area.");
+      createNode({ userId, parentId: task, type: "goal", name: "Nope" }),
+    ).rejects.toThrow("A Goal cannot go under a Task.");
   });
 
   it("appends new siblings in creation order", async () => {
@@ -299,37 +311,19 @@ describeDb("tree mutations", () => {
     });
 
     it("refuses when the result would be an illegal nesting", async () => {
-      const area = await createNode({
+      // Two roots, a task then a goal. Indenting the goal would put it under the task,
+      // which is the one thing still forbidden: going backwards.
+      await createNode({ userId, parentId: null, type: "task", name: "T" });
+      const goal = await createNode({
         userId,
         parentId: null,
-        type: "result_area",
-        name: "Work",
+        type: "goal",
+        name: "G",
       });
-      const project = await createNode({
-        userId,
-        parentId: area,
-        type: "project",
-        name: "P",
-      });
-      const task = await createNode({
-        userId,
-        parentId: project,
-        type: "task",
-        name: "T",
-      });
-      // Outdent the task so it becomes a sibling of the project, then try to indent it
-      // under a Result Area sibling instead.
-      await outdentNode(userId, task).catch(() => undefined);
 
-      const second = await createNode({
-        userId,
-        parentId: null,
-        type: "result_area",
-        name: "Home",
-      });
-      await expect(
-        moveNode({ userId, nodeId: task, parentId: second, position: { at: "last" } }),
-      ).rejects.toThrow("A Task cannot go under a Result Area.");
+      await expect(indentNode(userId, goal)).rejects.toThrow(
+        "A Goal cannot go under a Task.",
+      );
     });
   });
 
@@ -366,7 +360,11 @@ describeDb("tree mutations", () => {
       );
     });
 
-    it("refuses when the result would be an illegal nesting", async () => {
+    // Outdent can no longer produce an illegal nesting at all: a node's rank is always at
+    // least its parent's, and its parent's at least the grandparent's, so moving up one
+    // level is never backwards. `moveNode` keeps its guard as a backstop, but nothing in
+    // this direction can trigger it — so the case to pin is that the move now succeeds.
+    it("lands a task beside the project it came from, under the result area", async () => {
       const area = await createNode({
         userId,
         parentId: null,
@@ -386,10 +384,8 @@ describeDb("tree mutations", () => {
         name: "T",
       });
 
-      // Outdenting the task would place it directly under the Result Area.
-      await expect(outdentNode(userId, task)).rejects.toThrow(
-        "A Task cannot go under a Result Area.",
-      );
+      await outdentNode(userId, task);
+      expect(await outlineOf(userId)).toEqual(["Work", "  P", "  T"]);
     });
   });
 

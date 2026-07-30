@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
-import { useModalFocus } from "@/components/detail/focus";
+import { useId, useState } from "react";
+import { ModalShell } from "@/components/detail/ModalShell";
 import { EMPTY_NOTE_FILTER, type MatchMode, type NoteFilter } from "@/lib/notes/filter";
 
 /**
@@ -55,43 +55,16 @@ function NoteFilterDialogBody({
   onApply: (filter: NoteFilter) => void;
   onClose: () => void;
 }) {
-  const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const [draft, setDraft] = useState<NoteFilter>(filter);
-
-  useModalFocus(panelRef, true);
-
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-        onClose();
-      }
-    }
-    document.addEventListener("keydown", onKeyDown, true);
-    return () => document.removeEventListener("keydown", onKeyDown, true);
-  }, [onClose]);
 
   const patch = (changes: Partial<NoteFilter>) =>
     setDraft((current) => ({ ...current, ...changes }));
 
+  // `open` is hardcoded because the wrapper above unmounts this body when it closes.
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div
-        onClick={onClose}
-        aria-hidden
-        className="absolute inset-0 bg-[color-mix(in_srgb,var(--ink)_25%,transparent)]"
-      />
-
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        tabIndex={-1}
-        className="relative flex w-full max-w-[34rem] flex-col gap-4 rounded border border-rule-strong bg-surface p-5 shadow-2xl outline-none"
-      >
+    <ModalShell open onClose={onClose} labelledBy={titleId} width="max-w-[34rem]">
+      <div className="flex flex-col gap-4 p-5">
         <h2 id={titleId} className="text-[0.9375rem] font-semibold text-ink">
           Filter notes
         </h2>
@@ -199,7 +172,7 @@ function NoteFilterDialogBody({
           </button>
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useId, useRef } from "react";
-import { useModalFocus } from "./focus";
+import { useId } from "react";
+import { ModalShell } from "./ModalShell";
 
 /**
  * A real confirmation dialog, replacing `window.confirm`.
@@ -31,46 +31,19 @@ export function ConfirmDialog({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
-  const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const messageId = useId();
 
-  useModalFocus(panelRef, open);
-
-  useEffect(() => {
-    if (!open) return;
-
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-        onCancel();
-      }
-    }
-
-    document.addEventListener("keydown", onKeyDown, true);
-    return () => document.removeEventListener("keydown", onKeyDown, true);
-  }, [open, onCancel]);
-
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div
-        onClick={onCancel}
-        aria-hidden
-        className="absolute inset-0 bg-[color-mix(in_srgb,var(--ink)_28%,transparent)]"
-      />
-
-      <div
-        ref={panelRef}
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        aria-describedby={messageId}
-        tabIndex={-1}
-        className="relative w-full max-w-sm rounded-lg border border-rule-strong bg-surface p-5 shadow-2xl outline-none"
-      >
+    <ModalShell
+      open={open}
+      onClose={onCancel}
+      labelledBy={titleId}
+      describedBy={messageId}
+      role="alertdialog"
+      width="max-w-sm"
+    >
+      <div className="p-5">
         <h2 id={titleId} className="text-[0.9375rem] font-semibold text-ink">
           {title}
         </h2>
@@ -104,6 +77,6 @@ export function ConfirmDialog({
           </button>
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }

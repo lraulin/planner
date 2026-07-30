@@ -8,46 +8,51 @@ import {
 } from "./hierarchy";
 import { nodeStateEnum } from "@/db/schema";
 
+const ALL_TYPES = ["result_area", "goal", "project", "task"] as const;
+
 describe("hierarchy", () => {
-  it("puts result areas only at the top level", () => {
-    expect(canNest("result_area", null)).toBe(true);
-    expect(canNest("result_area", "result_area")).toBe(false);
-    expect(canNest("result_area", "project")).toBe(false);
+  // Capturing an idea must never require deciding where it lives first, so nothing is
+  // homeless-illegal. A task at the top level is a legitimate resting state, not a
+  // half-filed mistake.
+  it("hosts every type at the top level", () => {
+    for (const type of ALL_TYPES) {
+      expect(canNest(type, null)).toBe(true);
+    }
   });
 
   it("lets every type nest inside itself", () => {
+    expect(canNest("result_area", "result_area")).toBe(true);
     expect(canNest("goal", "goal")).toBe(true);
     expect(canNest("project", "project")).toBe(true);
     expect(canNest("task", "task")).toBe(true);
   });
 
-  it("keeps the levels ordered", () => {
+  it("lets a type sit under any broader type", () => {
+    expect(canNest("goal", "result_area")).toBe(true);
     expect(canNest("project", "result_area")).toBe(true);
     expect(canNest("project", "goal")).toBe(true);
+    expect(canNest("task", "result_area")).toBe(true);
+    expect(canNest("task", "goal")).toBe(true);
     expect(canNest("task", "project")).toBe(true);
+  });
 
+  // The one rule: you cannot go backwards. Flipping the rank comparison would pass every
+  // test above, so these are the ones that pin it.
+  it("refuses to go backwards", () => {
+    expect(canNest("result_area", "goal")).toBe(false);
+    expect(canNest("result_area", "project")).toBe(false);
+    expect(canNest("result_area", "task")).toBe(false);
     expect(canNest("goal", "project")).toBe(false);
     expect(canNest("goal", "task")).toBe(false);
     expect(canNest("project", "task")).toBe(false);
   });
 
-  it("keeps tasks out of the top level and off result areas", () => {
-    expect(canNest("task", null)).toBe(false);
-    expect(canNest("task", "result_area")).toBe(false);
-    expect(canNest("task", "goal")).toBe(false);
-  });
-
-  it("keeps goals and projects off the top level", () => {
-    expect(canNest("goal", null)).toBe(false);
-    expect(canNest("project", null)).toBe(false);
-  });
-
   it("names both types when rejecting a nesting", () => {
-    expect(() => assertCanNest("task", "result_area")).toThrow(
-      "A Task cannot go under a Result Area.",
+    expect(() => assertCanNest("goal", "task")).toThrow(
+      "A Goal cannot go under a Task.",
     );
-    expect(() => assertCanNest("goal", null)).toThrow(
-      "A Goal cannot go under the top level.",
+    expect(() => assertCanNest("result_area", "project")).toThrow(
+      "A Result Area cannot go under a Project.",
     );
   });
 
@@ -60,7 +65,7 @@ describe("hierarchy", () => {
   });
 
   it("only suggests child types that are actually legal", () => {
-    for (const parent of [null, "result_area", "goal", "project", "task"] as const) {
+    for (const parent of [null, ...ALL_TYPES] as const) {
       expect(canNest(defaultChildType(parent), parent)).toBe(true);
     }
   });

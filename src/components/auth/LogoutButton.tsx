@@ -26,7 +26,7 @@ export function LogoutButton() {
         void onClick();
       }}
       disabled={pending}
-      className="ml-auto pb-2 text-[0.75rem] text-ink-muted hover:text-ink disabled:opacity-50"
+      className="text-[0.75rem] text-ink-muted hover:text-ink disabled:opacity-50"
     >
       {pending ? "…" : "Sign out"}
     </button>

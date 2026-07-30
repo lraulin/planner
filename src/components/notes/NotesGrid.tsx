@@ -43,6 +43,7 @@ import {
 import { notesColumns, NOTES_COLUMN_IDS, type NotesColumnCtx } from "./notesColumns";
 import { NoteFilterDialog } from "./NoteFilterDialog";
 import { NoteDrawer } from "./NoteDrawer";
+import { isTypingTarget } from "@/lib/keyboard";
 
 /**
  * The Notes tab.
@@ -287,16 +288,7 @@ export function NotesGrid({
     function onKeyDown(event: KeyboardEvent) {
       if (drawerId || editingId || filterOpen || fieldsOpen || pendingDelete) return;
 
-      const target = event.target as HTMLElement | null;
-      if (
-        target &&
-        (target.tagName === "INPUT" ||
-          target.tagName === "SELECT" ||
-          target.tagName === "TEXTAREA" ||
-          target.isContentEditable)
-      ) {
-        return;
-      }
+      if (isTypingTarget(event.target)) return;
 
       if (event.key === "Insert") {
         event.preventDefault();

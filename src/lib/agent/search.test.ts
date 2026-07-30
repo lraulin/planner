@@ -1,36 +1,15 @@
 import { describe, expect, it } from "vitest";
+import { row } from "@/lib/tree/fixtures";
 import type { OutlineNode } from "@/lib/tree/types";
 import { filterOutline } from "./search";
 
+/** The shared row builder plus the derived fields, so widening `OutlineRow` stays a
+ * one-file change. `filterOutline` reads none of the derived values. */
 function node(
   partial: Partial<OutlineNode> & Pick<OutlineNode, "id" | "type" | "name">,
 ): OutlineNode {
   return {
-    parentId: null,
-    sortKey: "a0",
-    priorityLetter: null,
-    priorityRank: null,
-    state: "not_started",
-    deadline: null,
-    focus: false,
-    collapsed: false,
-    notes: "",
-    completedAt: null,
-    depth: 0,
-    effortMinutes: null,
-    effortLeftMinutes: null,
-    actualEffortMinutes: null,
-    percentComplete: null,
-    contexts: [],
-    color: null,
-    category: null,
-    targetStart: null,
-    targetEnd: null,
-    purpose: "",
-    assignedTo: "",
-    definition: "",
-    range: "",
-    isDream: false,
+    ...row(partial),
     lapLetter: null,
     lapRank: null,
     effortRollupMinutes: null,

@@ -81,12 +81,13 @@ describe("resolveDrop", () => {
   });
 
   it("snaps out to the nearest ancestor whose level will have the node", () => {
-    // A result area can only live at the top, so hovering beside a deep task resolves all
-    // the way out to the task's root ancestor.
+    // Nothing between a task and the top can host a result area, so hovering beside a deep
+    // task climbs to the first level that can. That is the *enclosing result area*, not the
+    // root: result areas nest inside each other, so `area` will have it as a sub-area.
     expect(resolveDrop("area2", "t1", "after", tree())).toEqual({
-      parentId: null,
-      position: { at: "after", siblingId: "area" },
-      depth: 0,
+      parentId: "area",
+      position: { at: "after", siblingId: "goal" },
+      depth: 1,
     });
 
     // A goal cannot sit beside a task under a project, but can sit beside that project
@@ -114,10 +115,25 @@ describe("resolveDrop", () => {
     expect(resolveDrop("area", "t2", "before", tree())).toBeNull();
   });
 
-  it("refuses a drop with no legal level anywhere up the chain", () => {
-    // A task has nowhere to go beside a top-level result area — tasks never sit at the root.
-    expect(resolveDrop("t1", "area", "before", tree())).toBeNull();
-    expect(resolveDrop("t1", "area", "inside", tree())).toBeNull();
+  // The ancestor walk used to be able to run out of levels and give up. It cannot any more:
+  // the top level hosts every type, so the climb always terminates somewhere legal. A drop
+  // is now refused only for self-containment or an unknown id — never for "nowhere to put
+  // it". A regression here would show up as dead zones on rows during a drag.
+  it("always finds a landing spot for a legal pair", () => {
+    // A task beside a top-level result area lands at the root, where it is now welcome.
+    expect(resolveDrop("t1", "area", "before", tree())).toEqual({
+      parentId: null,
+      position: { at: "before", siblingId: "area" },
+      depth: 0,
+    });
+
+    // And dropped onto that result area, it becomes its child directly — no intervening
+    // project required.
+    expect(resolveDrop("t1", "area", "inside", tree())).toEqual({
+      parentId: "area",
+      position: { at: "last" },
+      depth: 1,
+    });
   });
 
   it("returns null for unknown ids", () => {

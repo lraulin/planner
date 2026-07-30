@@ -235,17 +235,15 @@ async function getNode(userId: string, args: Record<string, unknown>) {
 async function createNodeTool(userId: string, args: Record<string, unknown>) {
   const type = parseNodeType(args.type, "type");
   const name = optionalString(args, "name") ?? "";
+  // Omitting parentId means the top level, which now hosts every type — an agent capturing
+  // a task it has not placed yet should not have to invent a parent for it. `createNode`
+  // still rejects a nesting that goes backwards, so the rule lives in one place.
   let parentId: string | null = null;
   if ("parentId" in args) {
     if (args.parentId !== null && typeof args.parentId !== "string") {
       throw new AgentError("validation", "parentId must be a string or null");
     }
     parentId = args.parentId;
-  } else if (type !== "result_area") {
-    throw new AgentError(
-      "validation",
-      "parentId is required unless type is result_area",
-    );
   }
 
   const id = await createNode({ userId, parentId, type, name });

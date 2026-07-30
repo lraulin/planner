@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useId, useRef } from "react";
-import { useModalFocus } from "@/components/detail/focus";
+import { useId } from "react";
+import { ModalShell } from "@/components/detail/ModalShell";
 import type { ColumnMeta } from "./columns";
 
 /**
@@ -28,45 +28,14 @@ export function ShowFieldsDialog({
   onReset: () => void;
   onClose: () => void;
 }) {
-  const panelRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const byId = new Map(allColumns.map((column) => [column.id, column]));
   const available = allColumns.filter((column) => !shownIds.includes(column.id));
   const shown = shownIds.map((id) => byId.get(id)).filter(Boolean) as ColumnMeta[];
 
-  useModalFocus(panelRef, open);
-
-  useEffect(() => {
-    if (!open) return;
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-        onClose();
-      }
-    }
-    document.addEventListener("keydown", onKeyDown, true);
-    return () => document.removeEventListener("keydown", onKeyDown, true);
-  }, [open, onClose]);
-
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div
-        onClick={onClose}
-        aria-hidden
-        className="absolute inset-0 bg-[color-mix(in_srgb,var(--ink)_28%,transparent)]"
-      />
-
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        tabIndex={-1}
-        className="relative flex w-full max-w-lg flex-col gap-4 rounded-lg border border-rule-strong bg-surface p-5 shadow-2xl outline-none"
-      >
+    <ModalShell open={open} onClose={onClose} labelledBy={titleId}>
+      <div className="flex flex-col gap-4 p-5">
         <h2 id={titleId} className="text-[0.9375rem] font-semibold text-ink">
           Show Fields
         </h2>
@@ -118,7 +87,7 @@ export function ShowFieldsDialog({
           </button>
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }
 

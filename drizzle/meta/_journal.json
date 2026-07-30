@@ -57,6 +57,13 @@
       "when": 1785342518590,
       "tag": "0007_better_auth",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1785432000000,
+      "tag": "0008_inbox",
+      "breakpoints": true
     }
   ]
 }

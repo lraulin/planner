@@ -72,6 +72,18 @@ export type NodeDetailValues = CoreValues & {
   task?: Partial<Omit<TaskDetails, "nodeId">>;
 };
 
+/**
+ * The same save with every core field optional, for callers that mean "change these and
+ * leave the rest" — quick capture applying its defaults, for instance.
+ *
+ * `saveNodeDetail` has always written only the keys it was given, so this is the shape it
+ * actually accepts. The drawer keeps the stricter `NodeDetailValues`: its forms are
+ * expected to send a complete record, and a missing field there is a bug worth a type
+ * error rather than a silently unchanged column.
+ */
+export type NodeDetailPatch = Partial<CoreValues> &
+  Pick<NodeDetailValues, "resultArea" | "goal" | "project" | "task">;
+
 /** The editable columns of a repeating list row. */
 export type NodeItemValues = Partial<
   Omit<

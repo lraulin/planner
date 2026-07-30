@@ -15,6 +15,7 @@ import { useOptimisticNodes } from "@/components/grid/useOptimisticNodes";
 import { useToday } from "@/components/grid/useToday";
 import { buildNodeDepths } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";
+import { isTypingTarget } from "@/lib/keyboard";
 
 /**
  * Shared selection, drawer, rename, and optimistic cell-write handlers for the node-based
@@ -119,16 +120,7 @@ export function useGridTab(initialNodes: OutlineNode[]) {
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (detailId || editingId) return;
-      const target = event.target as HTMLElement | null;
-      if (
-        target &&
-        (target.tagName === "INPUT" ||
-          target.tagName === "SELECT" ||
-          target.tagName === "TEXTAREA" ||
-          target.isContentEditable)
-      ) {
-        return;
-      }
+      if (isTypingTarget(event.target)) return;
       if (!selectedId) return;
 
       if (event.key === "Enter") {

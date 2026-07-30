@@ -10,7 +10,7 @@ import {
 import type { NodeItemKind } from "@/db/schema";
 import { and, asc, eq } from "drizzle-orm";
 import { between } from "@/lib/tree/sortKey";
-import type { ItemPosition, NodeDetailValues, NodeItemValues } from "./types";
+import type { ItemPosition, NodeDetailPatch, NodeItemValues } from "./types";
 
 /**
  * Writes for the detail forms. Like `src/lib/tree/mutations.ts`, every function takes a
@@ -225,7 +225,7 @@ async function requireItem(tx: Executor, userId: string, itemId: string) {
 export async function saveNodeDetail(
   userId: string,
   nodeId: string,
-  values: NodeDetailValues,
+  values: NodeDetailPatch,
 ): Promise<void> {
   await db.transaction(async (tx) => {
     const node = await requireNode(tx, userId, nodeId);

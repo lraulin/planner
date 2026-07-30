@@ -12,6 +12,8 @@
  * never to a wrong note.
  */
 
+import { stripLeadingMarkers } from "@/lib/text/markers";
+
 const DEFAULT_LENGTH = 120;
 
 /** Lines that are structure rather than prose, once list/quote markers are stripped. */
@@ -46,24 +48,6 @@ function stripInline(text: string): string {
       // Leftover escapes.
       .replace(/\\([\\`*_{}[\]()#+\-.!>])/g, "$1")
   );
-}
-
-function stripLeadingMarkers(line: string): string {
-  let text = line;
-  let previous: string;
-
-  // Markers nest — "> - [ ] thing" is a quoted, checked list item — so peel until stable.
-  do {
-    previous = text;
-    text = text
-      .replace(/^\s*>\s?/, "")
-      .replace(/^\s*(?:[-*+]|\d+[.)])\s+/, "")
-      .replace(/^\s*#{1,6}\s+/, "")
-      // Task-list boxes, once the bullet in front of them is gone.
-      .replace(/^\[[ xX]\]\s*/, "");
-  } while (text !== previous);
-
-  return text;
 }
 
 /**

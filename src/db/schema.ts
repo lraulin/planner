@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -9,6 +10,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
@@ -257,6 +259,15 @@ export const nodes = pgTable(
     focus: boolean("focus").notNull().default(false),
     collapsed: boolean("collapsed").notNull().default(false),
     notes: text("notes").notNull().default(""),
+    /**
+     * Marks the one project that quick capture drops into — Achieve's `<Inbox>`.
+     *
+     * A flag rather than a well-known name, because the Inbox is an ordinary project in
+     * every other respect: rename it, reprioritise it, complete it, and it keeps working.
+     * It can also be deleted, which is how you reset its fields; the next capture makes a
+     * fresh one.
+     */
+    isInbox: boolean("is_inbox").notNull().default(false),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -269,6 +280,11 @@ export const nodes = pgTable(
     unique("nodes_sibling_sort_key_uq")
       .on(table.userId, table.parentId, table.sortKey)
       .nullsNotDistinct(),
+    // At most one inbox per user, enforced by the database rather than by whoever
+    // remembers to check first.
+    uniqueIndex("nodes_one_inbox_per_user_uq")
+      .on(table.userId)
+      .where(sql`${table.isInbox}`),
   ],
 );
 

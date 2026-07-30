@@ -313,7 +313,19 @@ async function pressKey(name) {
   const parts = name.split("+");
   const base = parts.pop();
   const modifiers = parts.reduce((acc, p) => acc | (mods[p] ?? 0), 0);
-  const k = KEYS[base];
+  // Single characters are synthesized rather than listed: the app has bare-letter
+  // shortcuts (`c` opens quick capture), and `type` uses Input.insertText, which fires no
+  // keydown for a handler to see.
+  const k =
+    KEYS[base] ??
+    (base.length === 1
+      ? {
+          code: `Key${base.toUpperCase()}`,
+          key: base,
+          vk: base.toUpperCase().charCodeAt(0),
+          text: base,
+        }
+      : null);
   if (!k) throw new Error(`unknown key: ${base} (known: ${Object.keys(KEYS).join(", ")})`);
   const common = {
     key: k.key,

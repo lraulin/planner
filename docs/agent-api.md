@@ -48,19 +48,19 @@ Codes: `unauthorized` (401), `validation` (400), `not_found` (404), `conflict` (
 
 ## Tools
 
-| Tool                                                                 | Purpose                                                             |
-| -------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `health`                                                             | Liveness + tool list                                                |
-| `get_context`                                                        | Focus, top open A/B work, this week’s plan glance                   |
-| `search_nodes`                                                       | Filter outline (`type`, `state`, `focus`, `query`, `parentId`, …)   |
-| `get_node`                                                           | One node by id                                                      |
-| `create_node`                                                        | Create under `parentId` (`type`, `name`, optional priority/state/…) |
-| `update_node`                                                        | Patch name/state/priority/deadline/focus/effort                     |
-| `create_note` / `update_note` / `list_notes`                         | Capture markdown notes                                              |
-| `get_week`                                                           | Week schedule + plan summary                                        |
-| `create_appointment` / `update_appointment` / `delete_appointment`   | Light calendar writes                                               |
-| `ensure_weekly_plan` / `update_weekly_plan` / `load_weekly_plan`     | Weekly plan read/write                                              |
-| `upsert_plan_entry` / `set_focus_area` / `set_weekly_plan_completed` | Wizard-equivalent steps                                             |
+| Tool                                                                 | Purpose                                                                                                     |
+| -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `health`                                                             | Liveness + tool list                                                                                        |
+| `get_context`                                                        | Focus, top open A/B work, this week’s plan glance                                                           |
+| `search_nodes`                                                       | Filter outline (`type`, `state`, `focus`, `query`, `parentId`, …)                                           |
+| `get_node`                                                           | One node by id                                                                                              |
+| `create_node`                                                        | Create under `parentId`, or at the top level when it is omitted (`type`, `name`, optional priority/state/…) |
+| `update_node`                                                        | Patch name/state/priority/deadline/focus/effort                                                             |
+| `create_note` / `update_note` / `list_notes`                         | Capture markdown notes                                                                                      |
+| `get_week`                                                           | Week schedule + plan summary                                                                                |
+| `create_appointment` / `update_appointment` / `delete_appointment`   | Light calendar writes                                                                                       |
+| `ensure_weekly_plan` / `update_weekly_plan` / `load_weekly_plan`     | Weekly plan read/write                                                                                      |
+| `upsert_plan_entry` / `set_focus_area` / `set_weekly_plan_completed` | Wizard-equivalent steps                                                                                     |
 
 ### Example
 

@@ -83,6 +83,37 @@ describeDb("agent tools", () => {
     expect(done.node.state).toBe("completed");
   });
 
+  // An agent capturing something it has not placed yet should not have to invent a parent
+  // for it, so omitting parentId means the top level rather than a validation error.
+  it("creates a task at the top level when no parent is given", async () => {
+    const created = (await dispatchAgentTool(
+      "create_node",
+      { type: "task", name: "Unfiled" },
+      userId,
+    )) as { node: { id: string; parentId: string | null; type: string } };
+
+    expect(created.node.parentId).toBeNull();
+    expect(created.node.type).toBe("task");
+  });
+
+  it("still refuses a nesting that goes backwards", async () => {
+    const task = await createNode({
+      userId,
+      parentId: null,
+      type: "task",
+      name: "Loose",
+    });
+
+    // `validation`, not `internal`: an agent can only correct itself if the 400 says what
+    // was wrong. `toAgentError` classifies this by message, so it is worth pinning.
+    await expect(
+      dispatchAgentTool("create_node", { type: "goal", parentId: task }, userId),
+    ).rejects.toMatchObject({
+      code: "validation",
+      message: "A Goal cannot go under a Task.",
+    });
+  });
+
   it("does not let one user read or change another user's node", async () => {
     const area = await createNode({
       userId,

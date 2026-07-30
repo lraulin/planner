@@ -30,6 +30,7 @@ import { useOptimisticNodes } from "@/components/grid/useOptimisticNodes";
 import { useToday } from "@/components/grid/useToday";
 import { HintBar } from "./HintBar";
 import { outlineColumns, type OutlineColumnCtx } from "./outlineColumns";
+import { isTypingTarget } from "@/lib/keyboard";
 
 type TypeFilters = Record<NodeType, boolean>;
 
@@ -518,16 +519,7 @@ function useOutlineKeyboard({
     function onKeyDown(event: KeyboardEvent) {
       if (editingId || suspended) return;
 
-      const target = event.target as HTMLElement | null;
-      if (
-        target &&
-        (target.tagName === "INPUT" ||
-          target.tagName === "SELECT" ||
-          target.tagName === "TEXTAREA" ||
-          target.isContentEditable)
-      ) {
-        return;
-      }
+      if (isTypingTarget(event.target)) return;
 
       const insert = event.key === "Insert" || (event.key === "Enter" && event.metaKey);
 
