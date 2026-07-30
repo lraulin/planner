@@ -1,34 +1,17 @@
-import { redirect } from "next/navigation";
 import { getCurrentUserId } from "@/lib/auth";
 import { listExercises, listSessions } from "@/lib/fitness/queries";
-import { fitnessLogPath, fitnessSessionPath } from "@/lib/fitness/routes";
 import { FitnessView } from "@/components/fitness/FitnessView";
 
 export const dynamic = "force-dynamic";
 
-type SearchParams = Promise<{
-  log?: string;
-  exercise?: string;
-  session?: string;
-}>;
+type SearchParams = Promise<{ exercise?: string }>;
 
-/**
- * Sessions list. Legacy query deep-links redirect to the path-based routes.
- */
-export default async function FitnessSessionsPage({
+export default async function FitnessLogPage({
   searchParams,
 }: {
   searchParams: SearchParams;
 }) {
   const params = await searchParams;
-
-  if (params.session) {
-    redirect(fitnessSessionPath(params.session));
-  }
-  if (params.log === "1" || params.log === "true") {
-    redirect(fitnessLogPath(params.exercise ?? null));
-  }
-
   const userId = await getCurrentUserId();
   const [sessions, exercises] = await Promise.all([
     listSessions(userId),
@@ -40,8 +23,8 @@ export default async function FitnessSessionsPage({
       mode="sessions"
       initialSessions={sessions}
       initialExercises={exercises}
-      openLog={false}
-      seedExerciseId={null}
+      openLog
+      seedExerciseId={params.exercise ?? null}
       initialSessionDetail={null}
       openExerciseId={null}
     />

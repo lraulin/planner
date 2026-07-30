@@ -99,7 +99,7 @@ export function TaskFitnessPanel({
             </div>
           )}
           <Link
-            href={`/fitness?log=1&exercise=${exerciseId}`}
+            href={`/fitness/log?exercise=${exerciseId}`}
             className="mt-2 inline-block text-[0.8125rem] font-medium text-ink underline-offset-2 hover:underline"
           >
             Log workout →

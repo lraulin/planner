@@ -20,6 +20,7 @@ async function run<T>(work: (userId: string) => Promise<T>): Promise<ActionResul
     const userId = await getCurrentUserId();
     const result = await work(userId);
     revalidatePath("/fitness");
+    revalidatePath("/fitness", "layout");
     revalidatePath("/", "layout");
     if (typeof result === "string") return { ok: true, id: result };
     if (result === undefined || result === null) return { ok: true };

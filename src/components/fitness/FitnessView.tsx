@@ -6,12 +6,19 @@ import {
   createSessionAction,
   deleteExerciseAction,
   deleteSessionAction,
-  getSessionDetailAction,
   replaceSessionAction,
 } from "@/app/fitness/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { ErrorBanner, TabToolbar, ToolbarButton } from "@/components/tabs/tabChrome";
 import { formatEquipmentBadge } from "@/lib/fitness/equipment";
+import {
+  fitnessExerciseEditPath,
+  fitnessExerciseNewPath,
+  fitnessExercisesPath,
+  fitnessLogPath,
+  fitnessSessionPath,
+  fitnessSessionsPath,
+} from "@/lib/fitness/routes";
 import type {
   ExerciseSummary,
   SessionDetail,
@@ -34,72 +41,95 @@ function formatWhen(date: Date): string {
 }
 
 /**
- * Fitness tab: session history + exercise catalog, with drawers for logging
- * and configuring exercises.
+ * Fitness tab: session history + exercise catalog. View state is driven by the URL
+ * so reload keeps you on sessions / exercises / log / open editor.
  */
 export function FitnessView({
+  mode,
   initialSessions,
   initialExercises,
   openLog,
   seedExerciseId,
   initialSessionDetail,
+  openExerciseId,
 }: {
+  mode: Mode;
   initialSessions: SessionSummary[];
   initialExercises: ExerciseSummary[];
   openLog: boolean;
   seedExerciseId: string | null;
   initialSessionDetail: SessionDetail | null;
+  /** null = closed; `"new"` or exercise id = open catalog editor */
+  openExerciseId: string | null;
 }) {
   const router = useRouter();
-  const [mode, setMode] = useState<Mode>("sessions");
   const [error, setError] = useState<string | null>(null);
-  const [editorOpen, setEditorOpen] = useState(
-    openLog || initialSessionDetail !== null,
-  );
-  const [editing, setEditing] = useState<SessionDetail | null>(initialSessionDetail);
-  const [seed, setSeed] = useState<string | null>(
-    initialSessionDetail ? null : seedExerciseId,
-  );
-  const [editorInstanceKey, setEditorInstanceKey] = useState(() =>
-    initialSessionDetail
-      ? initialSessionDetail.id
-      : openLog
-        ? `new-${seedExerciseId ?? "blank"}`
-        : "closed",
-  );
+  const editorOpen = openLog || initialSessionDetail !== null;
+  const editing = initialSessionDetail;
+  const seed = initialSessionDetail ? null : seedExerciseId;
+  const editorInstanceKey = initialSessionDetail
+    ? initialSessionDetail.id
+    : openLog
+      ? `new-${seedExerciseId ?? "blank"}`
+      : "closed";
+
   const [pendingDelete, setPendingDelete] = useState<SessionSummary | null>(null);
   const [pendingDeleteExercise, setPendingDeleteExercise] =
     useState<ExerciseSummary | null>(null);
-  const [exerciseEditor, setExerciseEditor] = useState<ExerciseSummary | null | "new">(
-    null,
-  );
   const [, startTransition] = useTransition();
 
   const sessions = initialSessions;
   const exercises = initialExercises;
 
-  const openNewLog = useCallback((exerciseId: string | null = null) => {
-    setEditing(null);
-    setSeed(exerciseId);
-    setEditorInstanceKey(`new-${crypto.randomUUID()}`);
-    setEditorOpen(true);
-    setError(null);
-  }, []);
+  const exerciseEditorTarget: ExerciseSummary | null | "new" =
+    openExerciseId === null
+      ? null
+      : openExerciseId === "new"
+        ? "new"
+        : (exercises.find((e) => e.id === openExerciseId) ?? null);
 
-  const openExisting = useCallback((sessionId: string) => {
-    setError(null);
-    startTransition(async () => {
-      const result = await getSessionDetailAction(sessionId);
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-      setEditing(result.data as SessionDetail);
-      setSeed(null);
-      setEditorInstanceKey(sessionId);
-      setEditorOpen(true);
-    });
-  }, []);
+  const goSessions = useCallback(() => {
+    router.push(fitnessSessionsPath());
+  }, [router]);
+
+  const goExercises = useCallback(() => {
+    router.push(fitnessExercisesPath());
+  }, [router]);
+
+  const openNewLog = useCallback(
+    (exerciseId: string | null = null) => {
+      setError(null);
+      router.push(fitnessLogPath(exerciseId));
+    },
+    [router],
+  );
+
+  const openExisting = useCallback(
+    (sessionId: string) => {
+      setError(null);
+      router.push(fitnessSessionPath(sessionId));
+    },
+    [router],
+  );
+
+  const closeSessionEditor = useCallback(() => {
+    router.push(fitnessSessionsPath());
+  }, [router]);
+
+  const openNewExercise = useCallback(() => {
+    router.push(fitnessExerciseNewPath());
+  }, [router]);
+
+  const openEditExercise = useCallback(
+    (exercise: ExerciseSummary) => {
+      router.push(fitnessExerciseEditPath(exercise.id));
+    },
+    [router],
+  );
+
+  const closeExerciseEditor = useCallback(() => {
+    router.push(fitnessExercisesPath());
+  }, [router]);
 
   const handleCreate = useCallback(
     async (input: SessionInput) => {
@@ -114,6 +144,8 @@ export function FitnessView({
         setError(message);
         return { ok: false as const, error: message };
       }
+      // Pin the URL to this session so reload keeps the open log.
+      router.replace(fitnessSessionPath(result.id));
       router.refresh();
       return { ok: true as const, id: result.id };
     },
@@ -134,22 +166,13 @@ export function FitnessView({
     [router],
   );
 
-  const handlePersisted = useCallback((sessionId: string) => {
-    setEditing((current) =>
-      current?.id === sessionId
-        ? current
-        : ({
-            id: sessionId,
-            performedAt: new Date(),
-            title: "",
-            notes: "",
-            durationMinutes: null,
-            exercises: [],
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          } satisfies SessionDetail),
-    );
-  }, []);
+  const handlePersisted = useCallback(
+    (sessionId: string) => {
+      // First autosave of a new log: move /fitness/log → /fitness/sessions/:id
+      router.replace(fitnessSessionPath(sessionId));
+    },
+    [router],
+  );
 
   function confirmDeleteSession() {
     if (!pendingDelete) return;
@@ -162,8 +185,7 @@ export function FitnessView({
         return;
       }
       if (editing?.id === id) {
-        setEditorOpen(false);
-        setEditing(null);
+        router.push(fitnessSessionsPath());
       }
       router.refresh();
     });
@@ -179,6 +201,9 @@ export function FitnessView({
         setError(result.error);
         return;
       }
+      if (openExerciseId === id) {
+        router.push(fitnessExercisesPath());
+      }
       router.refresh();
     });
   }
@@ -189,7 +214,7 @@ export function FitnessView({
         <div className="flex items-center gap-1 rounded border border-rule p-0.5">
           <button
             type="button"
-            onClick={() => setMode("sessions")}
+            onClick={goSessions}
             className={`rounded px-2.5 py-1 text-[0.8125rem] ${
               mode === "sessions" ? "bg-surface font-medium text-ink" : "text-ink-muted"
             }`}
@@ -198,7 +223,7 @@ export function FitnessView({
           </button>
           <button
             type="button"
-            onClick={() => setMode("exercises")}
+            onClick={goExercises}
             className={`rounded px-2.5 py-1 text-[0.8125rem] ${
               mode === "exercises"
                 ? "bg-surface font-medium text-ink"
@@ -209,9 +234,7 @@ export function FitnessView({
           </button>
         </div>
         {mode === "exercises" ? (
-          <ToolbarButton onClick={() => setExerciseEditor("new")}>
-            New exercise
-          </ToolbarButton>
+          <ToolbarButton onClick={openNewExercise}>New exercise</ToolbarButton>
         ) : (
           <ToolbarButton onClick={() => openNewLog(null)}>Log session</ToolbarButton>
         )}
@@ -275,7 +298,7 @@ export function FitnessView({
             title="No exercises yet"
             body="Create an exercise and set equipment (barbell, dumbbell, or bodyweight). Then pick it when you log a session."
             actionLabel="New exercise"
-            onAction={() => setExerciseEditor("new")}
+            onAction={openNewExercise}
           />
         ) : (
           <ul className="divide-y divide-rule">
@@ -287,7 +310,7 @@ export function FitnessView({
                 <button
                   type="button"
                   className="min-w-0 flex-1 text-left"
-                  onClick={() => setExerciseEditor(ex)}
+                  onClick={() => openEditExercise(ex)}
                 >
                   <div className="text-[0.875rem] font-medium text-ink">{ex.name}</div>
                   <div className="text-[0.75rem] text-ink-faint">
@@ -298,7 +321,7 @@ export function FitnessView({
                 <ToolbarButton onClick={() => openNewLog(ex.id)}>Log</ToolbarButton>
                 <button
                   type="button"
-                  onClick={() => setExerciseEditor(ex)}
+                  onClick={() => openEditExercise(ex)}
                   className="text-[0.75rem] text-ink-muted hover:text-ink"
                 >
                   Edit
@@ -318,12 +341,9 @@ export function FitnessView({
       </div>
 
       <SessionEditor
-        key={`${editorInstanceKey}-${editorOpen}`}
+        key={editorInstanceKey}
         open={editorOpen}
-        onClose={() => {
-          setEditorOpen(false);
-          setEditing(null);
-        }}
+        onClose={closeSessionEditor}
         exercises={exercises}
         existing={editing}
         seedExerciseId={seed}
@@ -334,11 +354,15 @@ export function FitnessView({
       />
 
       <ExerciseEditor
-        open={exerciseEditor !== null}
-        exercise={exerciseEditor === "new" ? null : exerciseEditor}
-        onClose={() => setExerciseEditor(null)}
+        open={exerciseEditorTarget !== null || openExerciseId === "new"}
+        exercise={
+          exerciseEditorTarget === "new" || openExerciseId === "new"
+            ? null
+            : exerciseEditorTarget
+        }
+        onClose={closeExerciseEditor}
         onSaved={() => {
-          setExerciseEditor(null);
+          router.push(fitnessExercisesPath());
           router.refresh();
         }}
       />
