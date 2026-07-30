@@ -25,6 +25,50 @@ export const TYPE_LABELS: Record<NodeType, string> = {
 };
 
 /**
+ * What the UI calls a row, which is one more thing than the database stores: a **Dream is a
+ * Goal with `isDream` set** (see `schema.ts`), sharing the Goal form, the Goals tab and the
+ * Goal rank in the hierarchy. It differs only in what it means — a goal you want but have
+ * not committed to a date for — and Achieve still lists it beside Goal when you create an
+ * item, because that is the moment the distinction is worth making.
+ *
+ * So the picker, the icon and the labels speak in kinds; everything below this line —
+ * `canNest`, the tree mutations, the schema — stays in the four types.
+ */
+export type NodeKind = NodeType | "dream";
+
+/** Every kind, broadest first, which is also the order the new-child picker lists them. */
+export const NODE_KINDS: NodeKind[] = [
+  "result_area",
+  "goal",
+  "dream",
+  "project",
+  "task",
+];
+
+export const KIND_LABELS: Record<NodeKind, string> = { ...TYPE_LABELS, dream: "Dream" };
+
+/** One line each, for the picker — what you would be choosing, not what it is called. */
+export const KIND_HINTS: Record<NodeKind, string> = {
+  result_area: "A major dimension of your life; the roles everything else hangs from.",
+  goal: "An outcome you are committed to, with a horizon and a deadline.",
+  dream: "A goal you want but have not committed to a date for.",
+  project: "Work with a schedule, broken into tasks.",
+  task: "One thing you do and check off.",
+};
+
+/** The row a kind creates. Dream is the only kind that is not its own type. */
+export function nodeFromKind(kind: NodeKind): { type: NodeType; isDream: boolean } {
+  return kind === "dream"
+    ? { type: "goal", isDream: true }
+    : { type: kind, isDream: false };
+}
+
+/** The kind an existing row reads as. Only a goal can be a dream. */
+export function kindOfNode(node: { type: NodeType; isDream?: boolean }): NodeKind {
+  return node.type === "goal" && node.isDream ? "dream" : node.type;
+}
+
+/**
  * Display names for the work states, in the order Achieve lists them.
  *
  * One definition rather than one per surface: the outline column, its row editor, and the
@@ -104,4 +148,15 @@ export function defaultChildType(parent: NodeType | null): NodeType {
     case "task":
       return "task";
   }
+}
+
+/**
+ * The kinds you may create under `parent`, broadest first — everything `canNest` allows,
+ * with Dream sitting beside Goal.
+ *
+ * Derived from `canNest` rather than listed per parent, so loosening the nesting rule
+ * widens the picker in the same edit.
+ */
+export function allowedChildKinds(parent: NodeType | null): NodeKind[] {
+  return NODE_KINDS.filter((kind) => canNest(nodeFromKind(kind).type, parent));
 }

@@ -10,10 +10,11 @@ import {
   parsePriority,
 } from "@/lib/tree/format";
 import {
+  KIND_LABELS,
+  kindOfNode,
   STATE_CODES,
   STATE_LABELS,
   STATE_OPTIONS,
-  TYPE_LABELS,
 } from "@/lib/tree/hierarchy";
 import { scheduleStatus, STATUS_LABELS } from "@/lib/tree/status";
 import { TypeIcon } from "@/components/icons/TypeIcon";
@@ -68,6 +69,8 @@ export function NameCell({
   onCancelEdit: () => void;
 }) {
   const done = node.state === "completed" || node.state === "cancelled";
+  // A dream is typographically a goal — it differs only in its glyph and what it is called.
+  const kind = kindOfNode(node);
 
   return (
     <div className="flex min-w-0 items-stretch self-stretch">
@@ -92,7 +95,7 @@ export function NameCell({
       </button>
 
       <TypeIcon
-        type={node.type}
+        kind={kind}
         className={`mr-1.5 h-3.5 w-3.5 flex-none self-center ${done ? "opacity-45" : ""}`}
       />
 
@@ -111,7 +114,7 @@ export function NameCell({
             node.name ? "" : "text-ink-faint italic",
           ].join(" ")}
         >
-          {node.name || `New ${TYPE_LABELS[node.type].toLowerCase()}`}
+          {node.name || `New ${KIND_LABELS[kind].toLowerCase()}`}
         </span>
       )}
 
@@ -128,7 +131,7 @@ export function NameCell({
             event.stopPropagation();
             onOpenDetail();
           }}
-          aria-label={`Open ${TYPE_LABELS[node.type].toLowerCase()}`}
+          aria-label={`Open ${KIND_LABELS[kind].toLowerCase()}`}
           title="Open record (Enter)"
           tabIndex={-1}
           className="ml-2 flex-none self-center rounded px-1 text-[0.6875rem] leading-none text-ink-muted hover:bg-surface hover:text-ink"

@@ -9,7 +9,7 @@ import type {
   ResultAreaDetails,
   TaskDetails,
 } from "@/db/schema";
-import { TYPE_LABELS } from "@/lib/tree/hierarchy";
+import { KIND_LABELS, kindOfNode } from "@/lib/tree/hierarchy";
 import { TypeIcon } from "@/components/icons/TypeIcon";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { NodeDetail, NodeDetailValues, NodeItemValues } from "@/lib/detail/types";
@@ -102,8 +102,8 @@ export function NodeDetailDrawer({
         <>
           <DrawerHeader
             titleId={titleId}
-            eyebrow={TYPE_LABELS[node.type]}
-            icon={<TypeIcon type={node.type} className="h-3.5 w-3.5" />}
+            eyebrow={KIND_LABELS[kindOfNode(node)]}
+            icon={<TypeIcon kind={kindOfNode(node)} className="h-3.5 w-3.5" />}
             title={node.name}
             onClose={onClose}
           />

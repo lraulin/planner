@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { derive } from "./derive";
 import { row } from "./fixtures";
-import { sliceTree, type GridRow } from "./slice";
+import { groupByCategory, sliceTree, type GridRow } from "./slice";
 import type { OutlineNode } from "./types";
 
 /** Build a derived tree from plain rows — the same shape every tab hands `sliceTree`. */
@@ -282,5 +282,98 @@ describe("sliceTree — group headers", () => {
     for (const g of groups(rows)) {
       expect(g.collapsed).toBe(false);
     }
+  });
+});
+
+describe("groupByCategory", () => {
+  /** The outline hands this the rows it is already showing, plus a map of the whole tree. */
+  function rows(nodes: OutlineNode[], visible = nodes) {
+    return groupByCategory(visible, new Map(nodes.map((n) => [n.id, n])));
+  }
+
+  const sample = tree(
+    { id: "ra-work", type: "result_area", name: "Job", category: "Work" },
+    { id: "g-work", type: "goal", parentId: "ra-work", depth: 1, name: "Ship" },
+    { id: "ra-health", type: "result_area", name: "Body", category: "Personal" },
+    { id: "g-health", type: "goal", parentId: "ra-health", depth: 1, name: "Fit" },
+    { id: "ra-misc", type: "result_area", name: "Loose", category: null },
+    { id: "p-misc", type: "project", parentId: "ra-misc", depth: 1, name: "Chores" },
+  );
+
+  it("orders named categories alphabetically and leaves uncategorised last", () => {
+    expect(groups(rows(sample)).map((g) => g.label)).toEqual([
+      "Personal",
+      "Work",
+      "(No Category)",
+    ]);
+  });
+
+  it("moves each top-level subtree whole, keeping tree order inside a category", () => {
+    // Two Work areas appear in tree order under one header — not interleaved by node type.
+    const withTwoWork = tree(
+      { id: "ra-a", type: "result_area", name: "A", category: "Work" },
+      { id: "g-a", type: "goal", parentId: "ra-a", depth: 1 },
+      { id: "ra-b", type: "result_area", name: "B", category: "Personal" },
+      { id: "g-b", type: "goal", parentId: "ra-b", depth: 1 },
+      { id: "ra-c", type: "result_area", name: "C", category: "Work" },
+      { id: "g-c", type: "goal", parentId: "ra-c", depth: 1 },
+    );
+
+    expect(nodeIds(rows(withTwoWork))).toEqual([
+      "ra-b",
+      "g-b",
+      "ra-a",
+      "g-a",
+      "ra-c",
+      "g-c",
+    ]);
+  });
+
+  it("counts every node under a category header, not just the roots", () => {
+    expect(groups(rows(sample)).map((g) => [g.label, g.count])).toEqual([
+      ["Personal", 2],
+      ["Work", 2],
+      ["(No Category)", 2],
+    ]);
+  });
+
+  // Nested result areas keep their parent's category for the block. Splitting on the nested
+  // area's own category would hide a row under a header its parent has moved away from.
+  it("does not split a block when a nested result area has another category", () => {
+    const nested = tree(
+      { id: "ra-outer", type: "result_area", name: "Outer", category: "Work" },
+      {
+        id: "ra-inner",
+        type: "result_area",
+        parentId: "ra-outer",
+        depth: 1,
+        name: "Inner",
+        category: "Personal",
+      },
+      { id: "g-inner", type: "goal", parentId: "ra-inner", depth: 2 },
+    );
+
+    const out = rows(nested);
+    expect(groups(out).map((g) => g.label)).toEqual(["Work"]);
+    expect(nodeIds(out)).toEqual(["ra-outer", "ra-inner", "g-inner"]);
+  });
+
+  it("still reads category from an ancestor filtered out of the visible list", () => {
+    const nodes = tree(
+      { id: "ra", type: "result_area", name: "Health", category: "Personal" },
+      { id: "g", type: "goal", parentId: "ra", depth: 1, name: "Fit" },
+    );
+    // Outline filters can hide the result area while still showing its goal.
+    const visible = nodes.filter((n) => n.id === "g");
+    const out = rows(nodes, visible);
+
+    expect(groups(out).map((g) => g.label)).toEqual(["Personal"]);
+    expect(nodeIds(out)).toEqual(["g"]);
+  });
+
+  it("preserves each node's tree depth rather than re-basing under the header", () => {
+    const out = rows(sample);
+    const goal = out.find((r) => r.kind === "node" && r.id === "g-work");
+    expect(goal?.kind === "node" && goal.depth).toBe(1);
   });
 });

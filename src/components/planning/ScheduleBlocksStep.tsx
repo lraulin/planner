@@ -377,7 +377,7 @@ export function ScheduleBlocksStep({
                       }
                     }}
                   >
-                    <TypeIcon type="project" className="mt-0.5 shrink-0" />
+                    <TypeIcon kind="project" className="mt-0.5 shrink-0" />
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-ink">{p.name || "Untitled"}</div>
                       <div className="tabular text-[0.75rem] text-ink-faint">

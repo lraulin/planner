@@ -34,6 +34,8 @@
   --type-goal: #c04a3c;
   --type-project: #5566cc;
   --type-task: #b8791a;
+  /* A dream is a goal, but it gets the star's yellow — see `TypeIcon.tsx`. */
+  --type-dream: #caa400;
 
   --row-height: 1.75rem;
   --indent-step: 0.875rem;
@@ -62,6 +64,7 @@
     --type-goal: #f08a7c;
     --type-project: #93a4f2;
     --type-task: #e0a83f;
+    --type-dream: #f2d24a;
   }
 }
 
@@ -87,6 +90,7 @@
   --color-type-goal: var(--type-goal);
   --color-type-project: var(--type-project);
   --color-type-task: var(--type-task);
+  --color-type-dream: var(--type-dream);
 
   --font-sans: var(--font-archivo);
   --font-mono: var(--font-plex-mono);

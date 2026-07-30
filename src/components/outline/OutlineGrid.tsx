@@ -3,8 +3,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { NodeType } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
-import type { GridRow } from "@/lib/tree/slice";
-import { defaultChildType, TYPE_LABELS } from "@/lib/tree/hierarchy";
+import { groupByCategory, type GridRow } from "@/lib/tree/slice";
+import {
+  allowedChildKinds,
+  defaultChildType,
+  KIND_LABELS,
+  kindOfNode,
+  TYPE_LABELS,
+  type NodeKind,
+} from "@/lib/tree/hierarchy";
 import { resolveDrop } from "@/lib/tree/dnd";
 import {
   createNodeAction,
@@ -29,6 +36,7 @@ import type { MenuItem } from "@/components/grid/ContextMenu";
 import { useOptimisticNodes } from "@/components/grid/useOptimisticNodes";
 import { useToday } from "@/components/grid/useToday";
 import { HintBar } from "./HintBar";
+import { NewChildDialog } from "./NewChildDialog";
 import { outlineColumns, type OutlineColumnCtx } from "./outlineColumns";
 import { isTypingTarget } from "@/lib/keyboard";
 
@@ -54,8 +62,12 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<OutlineNode | null>(null);
+  /** The row a new child is being added to, while its kind is being chosen. */
+  const [pendingChildOf, setPendingChildOf] = useState<OutlineNode | null>(null);
   const [filters, setFilters] = useState<TypeFilters>(ALL_TYPES_SHOWN);
   const [focusOnly, setFocusOnly] = useState(false);
+  const [byCategory, setByCategory] = useState(false);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const today = useToday();
 
   const nodeDepths = useMemo(() => buildNodeDepths(nodes, byId), [nodes, byId]);
@@ -73,25 +85,38 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     });
   }, [nodes, filters, focusOnly]);
 
-  /** The outline is a flat list of node rows — no group headers, depth from the tree. */
+  /**
+   * The outline is the tree itself, so its rows are a flat list at tree depth. By Category
+   * lays headers over that without disturbing it — see `groupByCategory`.
+   */
   const gridRows: GridRow[] = useMemo(
     () =>
-      visible.map((node) => ({
-        kind: "node" as const,
-        id: node.id,
-        node,
-        depth: node.depth,
-        context: {
-          resultAreaId: null,
-          resultAreaName: null,
-          resultAreaColor: null,
-          category: null,
-          goalId: null,
-          goalName: null,
-        },
-      })),
-    [visible],
+      byCategory
+        ? groupByCategory(visible, byId)
+        : visible.map((node) => ({
+            kind: "node" as const,
+            id: node.id,
+            node,
+            depth: node.depth,
+          })),
+    [visible, byCategory, byId],
   );
+
+  /**
+   * The rows the arrow keys walk: what is on screen, in screen order. Grouping puts rows
+   * in category order rather than tree order, and a collapsed category takes its rows off
+   * screen entirely — either way `visible` is no longer what ↑/↓ should step through.
+   */
+  const navigable = useMemo(() => {
+    if (!byCategory) return visible;
+    const out: OutlineNode[] = [];
+    let insideCollapsed = false;
+    for (const row of gridRows) {
+      if (row.kind === "group") insideCollapsed = collapsedGroups.has(row.id);
+      else if (!insideCollapsed) out.push(row.node);
+    }
+    return out;
+  }, [byCategory, visible, gridRows, collapsedGroups]);
 
   const selected = selectedId ? (byId.get(selectedId) ?? null) : null;
 
@@ -103,41 +128,27 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
 
   const selectRelative = useCallback(
     (delta: number) => {
-      if (visible.length === 0) return;
-      const index = visible.findIndex((n) => n.id === selectedId);
+      if (navigable.length === 0) return;
+      const index = navigable.findIndex((n) => n.id === selectedId);
       const next =
-        index === -1 ? 0 : Math.min(Math.max(index + delta, 0), visible.length - 1);
-      setSelectedId(visible[next].id);
+        index === -1 ? 0 : Math.min(Math.max(index + delta, 0), navigable.length - 1);
+      setSelectedId(navigable[next].id);
     },
-    [visible, selectedId],
+    [navigable, selectedId],
   );
 
   const addSibling = useCallback(
     (node: OutlineNode | null, where: "before" | "after") => {
       if (!node) return;
-      const parent = node.parentId ? byId.get(node.parentId) : null;
       apply(
         () =>
           createNodeAction({
             parentId: node.parentId,
-            type: defaultChildType(parent?.type ?? null),
+            // A sibling matches what it sits beside, dream and all: you are continuing a
+            // list, so there is nothing to ask. (This used to be the parent's default
+            // child type, which meant a sibling of a goal came back a project.)
+            kind: kindOfNode(node),
             position: { at: where, siblingId: node.id },
-          }),
-        startNaming,
-      );
-    },
-    [byId, apply, startNaming],
-  );
-
-  const addChild = useCallback(
-    (node: OutlineNode | null) => {
-      if (!node) return;
-      apply(
-        () =>
-          createNodeAction({
-            parentId: node.id,
-            type: defaultChildType(node.type),
-            position: { at: "last" },
           }),
         startNaming,
       );
@@ -145,12 +156,37 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     [apply, startNaming],
   );
 
+  const addChildOfKind = useCallback(
+    (parentId: string, kind: NodeKind) => {
+      apply(
+        () => createNodeAction({ parentId, kind, position: { at: "last" } }),
+        startNaming,
+      );
+    },
+    [apply, startNaming],
+  );
+
+  /**
+   * Adding a child asks what kind it should be, unless the hierarchy leaves only one
+   * answer — under a task, everything below is a task, and a dialog with one button is a
+   * dialog that should not have opened.
+   */
+  const addChild = useCallback(
+    (node: OutlineNode | null) => {
+      if (!node) return;
+      const kinds = allowedChildKinds(node.type);
+      if (kinds.length === 1) addChildOfKind(node.id, kinds[0]);
+      else setPendingChildOf(node);
+    },
+    [addChildOfKind],
+  );
+
   const addResultArea = useCallback(() => {
     apply(
       () =>
         createNodeAction({
           parentId: null,
-          type: "result_area",
+          kind: "result_area",
           position: { at: "last" },
         }),
       startNaming,
@@ -173,7 +209,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
       () =>
         createNodeAction({
           parentId: host.id,
-          type: "goal",
+          kind: "goal",
           position: { at: "last" },
         }),
       startNaming,
@@ -202,12 +238,13 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
 
   const confirmDelete = useCallback(
     (node: OutlineNode) => {
-      const index = visible.findIndex((n) => n.id === node.id);
-      const nextSelection = visible[index + 1]?.id ?? visible[index - 1]?.id ?? null;
+      const index = navigable.findIndex((n) => n.id === node.id);
+      const nextSelection =
+        navigable[index + 1]?.id ?? navigable[index - 1]?.id ?? null;
       setSelectedId(nextSelection);
       apply(() => deleteNodeAction(node.id));
     },
-    [visible, apply],
+    [navigable, apply],
   );
 
   /**
@@ -244,7 +281,8 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     [commandsFor, selected, selectRelative, setTreeCollapsed],
   );
 
-  const suspended = detailId !== null || pendingDelete !== null;
+  const suspended =
+    detailId !== null || pendingDelete !== null || pendingChildOf !== null;
   useOutlineKeyboard({ commands, editingId, suspended });
 
   /**
@@ -319,7 +357,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
             },
         "separator",
         {
-          label: `Delete ${TYPE_LABELS[node.type].toLowerCase()}`,
+          label: `Delete ${KIND_LABELS[kindOfNode(node)].toLowerCase()}`,
           shortcut: "Delete",
           destructive: true,
           onSelect: command.remove,
@@ -417,6 +455,8 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         }
         focusOnly={focusOnly}
         onToggleFocusOnly={() => setFocusOnly((v) => !v)}
+        byCategory={byCategory}
+        onToggleByCategory={() => setByCategory((v) => !v)}
         commands={commands}
         onAddResultArea={addResultArea}
         onAddGoal={addGoal}
@@ -445,6 +485,15 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         ariaLabel="Outline"
         rowDrag={rowDrag}
         rowMenu={rowMenu}
+        collapsedGroups={collapsedGroups}
+        onToggleGroup={(id) =>
+          setCollapsedGroups((current) => {
+            const next = new Set(current);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+          })
+        }
         empty={
           <EmptyState
             filtered={nodes.length > 0}
@@ -461,9 +510,24 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
 
       <NodeDetailDrawer node={detailNode} onClose={() => setDetailId(null)} />
 
+      {pendingChildOf && (
+        <NewChildDialog
+          open
+          parentName={pendingChildOf.name}
+          kinds={allowedChildKinds(pendingChildOf.type)}
+          defaultKind={defaultChildType(pendingChildOf.type)}
+          onPick={(kind) => {
+            const parent = pendingChildOf;
+            setPendingChildOf(null);
+            addChildOfKind(parent.id, kind);
+          }}
+          onCancel={() => setPendingChildOf(null)}
+        />
+      )}
+
       <ConfirmDialog
         open={pendingDelete !== null}
-        title={`Delete this ${pendingDelete ? TYPE_LABELS[pendingDelete.type].toLowerCase() : "row"}?`}
+        title={`Delete this ${pendingDelete ? KIND_LABELS[kindOfNode(pendingDelete)].toLowerCase() : "row"}?`}
         message={deleteMessage(pendingDelete)}
         confirmLabel="Delete"
         destructive
@@ -492,7 +556,7 @@ function nearestGoalHost(
 
 function deleteMessage(node: OutlineNode | null): string {
   if (!node) return "";
-  const label = node.name || `This ${TYPE_LABELS[node.type].toLowerCase()}`;
+  const label = node.name || `This ${KIND_LABELS[kindOfNode(node)].toLowerCase()}`;
   return node.hasChildren
     ? `${label} and all ${node.childCount} items under it will be deleted. This cannot be undone.`
     : `${label} will be deleted. This cannot be undone.`;
@@ -591,6 +655,8 @@ function FilterBar({
   onToggleType,
   focusOnly,
   onToggleFocusOnly,
+  byCategory,
+  onToggleByCategory,
   commands,
   onAddResultArea,
   onAddGoal,
@@ -600,6 +666,8 @@ function FilterBar({
   onToggleType: (type: NodeType) => void;
   focusOnly: boolean;
   onToggleFocusOnly: () => void;
+  byCategory: boolean;
+  onToggleByCategory: () => void;
   commands: Record<string, () => void>;
   onAddResultArea: () => void;
   onAddGoal: () => void;
@@ -667,6 +735,11 @@ function FilterBar({
           />
         ))}
         <Toggle checked={focusOnly} onChange={onToggleFocusOnly} label="Focus only" />
+        <Toggle
+          checked={byCategory}
+          onChange={onToggleByCategory}
+          label="By category"
+        />
       </div>
     </div>
   );

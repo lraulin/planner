@@ -101,6 +101,85 @@ export function sliceTree(nodes: OutlineNode[], opts: SliceOpts): GridRow[] {
   return emitGrouped(kept, groupBy);
 }
 
+/** The label a blank or missing category groups under, in both grouping paths. */
+const NO_CATEGORY = "(No Category)";
+
+/**
+ * Category headers over the outline, which needs a different treatment from the list tabs:
+ * there, grouping *is* the arrangement, so `sliceTree` can emit a header wherever the key
+ * changes. Here the tree is the arrangement and grouping is laid over it, so subtrees have
+ * to be gathered under one header each rather than fragmented wherever tree order happens
+ * to alternate.
+ *
+ * So each top-level subtree is moved whole, ordered by category (named ones first,
+ * alphabetically; uncategorised last) and otherwise keeping tree order. A subtree takes the
+ * category of the nearest result area at or above its root — categories live on result
+ * areas — and a nested result area of another category does *not* split the block it sits
+ * in, because a row is easier to find under the area it belongs to than under a header its
+ * parent has moved away from.
+ *
+ * `visible` is the rows the outline is already showing, in tree order; `byId` covers the
+ * whole tree, so an ancestor hidden by a filter still supplies its category.
+ */
+export function groupByCategory(
+  visible: OutlineNode[],
+  byId: Map<string, OutlineNode>,
+): GridRow[] {
+  const shown = new Set(visible.map((node) => node.id));
+
+  type Block = { label: string; nodes: OutlineNode[] };
+  const blocks: Block[] = [];
+
+  for (const node of visible) {
+    const isRoot = node.parentId === null || !shown.has(node.parentId);
+    if (isRoot || blocks.length === 0) {
+      blocks.push({ label: categoryOf(node, byId), nodes: [] });
+    }
+    blocks[blocks.length - 1].nodes.push(node);
+  }
+
+  const order = [...new Set(blocks.map((block) => block.label))].sort(
+    compareCategories,
+  );
+
+  const out: GridRow[] = [];
+  for (const label of order) {
+    const inGroup = blocks.filter((block) => block.label === label);
+    out.push({
+      kind: "group",
+      id: `category:${label}`,
+      label,
+      count: inGroup.reduce((total, block) => total + block.nodes.length, 0),
+      depth: 0,
+      collapsed: false,
+    });
+    for (const block of inGroup) {
+      for (const node of block.nodes) {
+        out.push({ kind: "node", id: node.id, node, depth: node.depth });
+      }
+    }
+  }
+
+  return out;
+}
+
+/** Uncategorised sits last; everything else is alphabetical. */
+function compareCategories(a: string, b: string): number {
+  if (a === b) return 0;
+  if (a === NO_CATEGORY) return 1;
+  if (b === NO_CATEGORY) return -1;
+  return a.localeCompare(b, undefined, { numeric: true });
+}
+
+function categoryOf(node: OutlineNode, byId: Map<string, OutlineNode>): string {
+  let cur: OutlineNode | undefined = node;
+  while (cur) {
+    if (cur.type === "result_area" && cur.category?.trim()) return cur.category;
+    cur = cur.parentId ? byId.get(cur.parentId) : undefined;
+  }
+  return NO_CATEGORY;
+}
+
 function toNodeRow(entry: Prepared): GridRow {
   return {
     kind: "node",
@@ -186,7 +265,7 @@ function groupKey(dim: GroupBy, context: RowContext): { key: string; label: stri
     case "category":
       return {
         key: context.category ?? "",
-        label: context.category?.trim() ? context.category : "(No Category)",
+        label: context.category?.trim() ? context.category : NO_CATEGORY,
       };
     case "resultArea":
       return {

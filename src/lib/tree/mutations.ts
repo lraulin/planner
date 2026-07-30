@@ -113,6 +113,12 @@ export async function createNode(params: {
   /** Body text, so a caller that already has one — quick capture's `##` note — writes once. */
   notes?: string;
   isInbox?: boolean;
+  /**
+   * Goals only — a Dream is a Goal with this set (see `schema.ts`), and it is settable at
+   * creation because the picker asks which one you meant before the row exists. Ignored
+   * for every other type, which has nowhere to store it.
+   */
+  isDream?: boolean;
   position?: Position;
 }): Promise<string> {
   const {
@@ -122,6 +128,7 @@ export async function createNode(params: {
     name = "",
     notes = "",
     isInbox = false,
+    isDream = false,
     position = { at: "last" },
   } = params;
 
@@ -144,7 +151,7 @@ export async function createNode(params: {
     } else if (type === "project") {
       await tx.insert(projectDetails).values({ nodeId: created.id });
     } else if (type === "goal") {
-      await tx.insert(goalDetails).values({ nodeId: created.id });
+      await tx.insert(goalDetails).values({ nodeId: created.id, isDream });
     }
 
     return created.id;

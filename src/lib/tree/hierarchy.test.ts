@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  allowedChildKinds,
   assertCanNest,
   canNest,
   defaultChildType,
+  KIND_HINTS,
+  KIND_LABELS,
+  kindOfNode,
+  nodeFromKind,
+  NODE_KINDS,
   STATE_CODES,
   STATE_LABELS,
 } from "./hierarchy";
@@ -68,6 +74,85 @@ describe("hierarchy", () => {
     for (const parent of [null, ...ALL_TYPES] as const) {
       expect(canNest(defaultChildType(parent), parent)).toBe(true);
     }
+  });
+});
+
+describe("kinds", () => {
+  // The whole point of the kind layer: Dream is the one thing the UI offers that the
+  // database does not have. Reading it back as a plain goal would lose the star.
+  it("stores a dream as a goal with the flag, and reads it back as a dream", () => {
+    expect(nodeFromKind("dream")).toEqual({ type: "goal", isDream: true });
+    expect(kindOfNode({ type: "goal", isDream: true })).toBe("dream");
+    expect(kindOfNode({ type: "goal", isDream: false })).toBe("goal");
+  });
+
+  it("round-trips every kind through the row it creates", () => {
+    for (const kind of NODE_KINDS) {
+      expect(kindOfNode(nodeFromKind(kind))).toBe(kind);
+    }
+  });
+
+  // A stray flag on a project must not turn its icon into a star.
+  it("only lets a goal be a dream", () => {
+    expect(kindOfNode({ type: "project", isDream: true })).toBe("project");
+    expect(kindOfNode({ type: "task", isDream: true })).toBe("task");
+  });
+
+  it("names and describes every kind", () => {
+    for (const kind of NODE_KINDS) {
+      expect(KIND_LABELS[kind]).toBeTruthy();
+      expect(KIND_HINTS[kind]).toBeTruthy();
+    }
+  });
+});
+
+describe("allowedChildKinds", () => {
+  it("offers nothing the hierarchy would reject", () => {
+    for (const parent of [null, ...ALL_TYPES] as const) {
+      for (const kind of allowedChildKinds(parent)) {
+        expect(canNest(nodeFromKind(kind).type, parent)).toBe(true);
+      }
+    }
+  });
+
+  it("always includes the default, so the picker has something to preselect", () => {
+    for (const parent of [null, ...ALL_TYPES] as const) {
+      expect(allowedChildKinds(parent)).toContain(defaultChildType(parent));
+    }
+  });
+
+  it("offers a dream wherever it offers a goal", () => {
+    for (const parent of [null, ...ALL_TYPES] as const) {
+      const kinds = allowedChildKinds(parent);
+      expect(kinds.includes("dream")).toBe(kinds.includes("goal"));
+    }
+  });
+
+  // The outline skips the dialog on a single answer, so this is what keeps a task's child
+  // a one-keystroke action rather than a modal with one button.
+  it("leaves exactly one answer under a task", () => {
+    expect(allowedChildKinds("task")).toEqual(["task"]);
+  });
+
+  it("narrows as the parent gets deeper", () => {
+    expect(allowedChildKinds(null)).toEqual([
+      "result_area",
+      "goal",
+      "dream",
+      "project",
+      "task",
+    ]);
+    // A result area may nest under another result area (same rank), so it stays in the
+    // picker — dropping it would force a detour through the top level to add a peer area.
+    expect(allowedChildKinds("result_area")).toEqual([
+      "result_area",
+      "goal",
+      "dream",
+      "project",
+      "task",
+    ]);
+    expect(allowedChildKinds("goal")).toEqual(["goal", "dream", "project", "task"]);
+    expect(allowedChildKinds("project")).toEqual(["project", "task"]);
   });
 });
 

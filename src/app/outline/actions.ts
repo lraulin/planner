@@ -2,8 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { getCurrentUserId } from "@/lib/auth";
-import type { NodeState, NodeType, PriorityLetter } from "@/db/schema";
+import type { NodeState, PriorityLetter } from "@/db/schema";
 import type { Position } from "@/lib/tree/types";
+import { nodeFromKind, type NodeKind } from "@/lib/tree/hierarchy";
 import * as tree from "@/lib/tree/mutations";
 
 /**
@@ -30,13 +31,20 @@ async function run<T>(work: (userId: string) => Promise<T>): Promise<ActionResul
   }
 }
 
+/**
+ * Creates a row from the kind the user picked. Dream is a kind and not a type, so this is
+ * where it becomes a goal with the box ticked — the one translation between what the UI
+ * offers and what the tree stores.
+ */
 export async function createNodeAction(params: {
   parentId: string | null;
-  type: NodeType;
+  kind: NodeKind;
   name?: string;
   position?: Position;
 }): Promise<ActionResult> {
-  return run((userId) => tree.createNode({ userId, ...params }));
+  const { kind, ...rest } = params;
+  const { type, isDream } = nodeFromKind(kind);
+  return run((userId) => tree.createNode({ userId, type, isDream, ...rest }));
 }
 
 export async function renameNodeAction(

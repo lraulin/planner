@@ -1,7 +1,7 @@
-import type { NodeType } from "@/db/schema";
+import type { NodeKind } from "@/lib/tree/hierarchy";
 
 /**
- * One glyph per node type, carrying the same idea as Achieve's icon column without its
+ * One glyph per node kind, carrying the same idea as Achieve's icon column without its
  * Windows-XP gloss: Achieve draws a checked globe for a result area, a folder-and-clock
  * stack for a project, and a clipboard with a red tick for a task. These are the same
  * concepts as line art — a compass, a target, a scheduled plan, a clipboard — at a single
@@ -15,19 +15,24 @@ import type { NodeType } from "@/db/schema";
  *   drops the folder. A folder says "container", and a result area is the more container-
  *   like of the two — what marks a project is that it is planned work with a schedule.
  *
- * Each type gets its own hue, which is what actually made Achieve's icons legible: at row
+ * The fifth glyph is the one the database does not have: a Dream is a Goal with a box
+ * ticked, and everywhere else it behaves as one, but a yellow star is what makes it findable
+ * in a column of targets. It is the reason the icon takes a kind rather than a type.
+ *
+ * Each kind gets its own hue, which is what actually made Achieve's icons legible: at row
  * size the silhouettes are four small rings and rectangles, and the colour is what you
  * recognise before you have read the shape. This costs nothing now that the indent rails
  * are plain rules — priority is stated once, in the Pri column.
  */
-const TYPE_COLOR: Record<NodeType, string> = {
+const KIND_COLOR: Record<NodeKind, string> = {
   result_area: "text-type-result-area",
   goal: "text-type-goal",
+  dream: "text-type-dream",
   project: "text-type-project",
   task: "text-type-task",
 };
 
-const PATHS: Record<NodeType, React.ReactNode> = {
+const PATHS: Record<NodeKind, React.ReactNode> = {
   /* A compass: a result area is a direction you hold to, not a thing to finish. */
   result_area: (
     <>
@@ -43,6 +48,11 @@ const PATHS: Record<NodeType, React.ReactNode> = {
       <circle cx="12" cy="12" r="3.75" />
       <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
     </>
+  ),
+
+  /* A star: the one you wish for. Same weight as the rest; the hue does the shouting. */
+  dream: (
+    <path d="M12 3.6l2.58 5.23 5.77.84-4.17 4.07.98 5.75L12 16.77l-5.16 2.72.98-5.75-4.17-4.07 5.77-.84z" />
   ),
 
   /* A plan with a schedule on it: a project is work that runs against time. */
@@ -68,12 +78,12 @@ const PATHS: Record<NodeType, React.ReactNode> = {
 };
 
 export function TypeIcon({
-  type,
+  kind,
   className = "",
   /** Set false where the icon sits on coloured chrome and should inherit its ink. */
   colored = true,
 }: {
-  type: NodeType;
+  kind: NodeKind;
   className?: string;
   colored?: boolean;
 }) {
@@ -89,9 +99,9 @@ export function TypeIcon({
       // decoration rather than a second announcement.
       aria-hidden
       focusable="false"
-      className={[colored ? TYPE_COLOR[type] : "", className].join(" ").trim()}
+      className={[colored ? KIND_COLOR[kind] : "", className].join(" ").trim()}
     >
-      {PATHS[type]}
+      {PATHS[kind]}
     </svg>
   );
 }

@@ -144,7 +144,7 @@ export function ProjectsRail({ nodes }: Props) {
                   className="mb-0.5 flex cursor-grab items-center gap-2 rounded border border-transparent px-1 py-0.5 hover:border-rule hover:bg-surface active:cursor-grabbing"
                   title="Drag onto the week to schedule"
                 >
-                  <TypeIcon type={p.type} className="h-3.5 w-3.5 flex-none" />
+                  <TypeIcon kind={p.type} className="h-3.5 w-3.5 flex-none" />
                   <span className="min-w-0 flex-1 truncate leading-snug text-ink">
                     {p.name || "Untitled"}
                   </span>
