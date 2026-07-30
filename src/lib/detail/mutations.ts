@@ -142,6 +142,7 @@ const TASK_KEYS = [
   "company",
   "mileage",
   "description",
+  "exerciseId",
 ] as const;
 
 const ITEM_KEYS = [

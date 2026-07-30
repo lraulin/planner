@@ -18,6 +18,7 @@ import {
   TextField,
 } from "./fields";
 import { LinkedNotesPanel } from "@/components/notes/LinkedNotesPanel";
+import { TaskFitnessPanel } from "@/components/fitness/TaskFitnessPanel";
 import type { FormTab } from "./FormTabs";
 import { CoreHeaderFields, type DetailFormProps } from "./formShared";
 
@@ -70,6 +71,11 @@ export function taskTabs(props: DetailFormProps): FormTab[] {
               className="self-end pb-2"
             />
           </FieldGrid>
+
+          <TaskFitnessPanel
+            exerciseId={task.exerciseId ?? null}
+            onChange={(exerciseId) => patchTask({ exerciseId })}
+          />
 
           <Section title="Dates">
             <FieldGrid columns={3}>

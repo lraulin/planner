@@ -64,6 +64,13 @@
       "when": 1785432000000,
       "tag": "0008_inbox",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1785433000000,
+      "tag": "0009_acoustic_richard_fisk",
+      "breakpoints": true
     }
   ]
 }

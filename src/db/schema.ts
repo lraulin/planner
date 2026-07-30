@@ -289,6 +289,26 @@ export const nodes = pgTable(
 );
 
 /**
+ * A lift in the user's exercise catalog (Bench Press, Squat, …). Belongs to the Fitness
+ * domain, not the outline hierarchy — so reorganising or deleting plan tasks never wipes
+ * training history. See `workout_sessions` / `workout_sets`.
+ */
+export const exercises = pgTable(
+  "exercises",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    notes: text("notes").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("exercises_user_name_idx").on(table.userId, table.name)],
+);
+
+/**
  * Task-only fields. Durations are stored in minutes; the UI renders them Achieve-style
  * ("45 min", "2 h", "3:45 h", "3 d"). Parent rows display the rollup of their descendants,
  * computed at read time rather than stored.
@@ -337,6 +357,15 @@ export const taskDetails = pgTable("task_details", {
   company: text("company").notNull().default(""),
   mileage: text("mileage").notNull().default(""),
   description: text("description").notNull().default(""),
+  /**
+   * Optional link to a Fitness catalog exercise. Makes this task a **plan reminder** for
+   * that lift (e.g. "Bench Press" under a Strength project). History lives on
+   * `workout_sessions` / sets, not on the task — so deleting or cancelling the task never
+   * erases what you lifted. `set null` if the exercise is removed.
+   */
+  exerciseId: uuid("exercise_id").references(() => exercises.id, {
+    onDelete: "set null",
+  }),
 });
 
 /**
@@ -807,3 +836,94 @@ export type WeeklyPlanEntry = typeof weeklyPlanEntries.$inferSelect;
 export type Note = typeof notes.$inferSelect;
 export type NewNote = typeof notes.$inferInsert;
 export type NoteFlag = (typeof noteFlagEnum.enumValues)[number];
+
+/**
+ * One gym visit (or one intentional log entry). Stands alone: no required FK to the
+ * outline. Deleting a task/project/goal never touches these rows.
+ */
+export const workoutSessions = pgTable(
+  "workout_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** When the training happened (user-chosen; not necessarily createdAt). */
+    performedAt: timestamp("performed_at", { withTimezone: true }).notNull(),
+    title: text("title").notNull().default(""),
+    notes: text("notes").notNull().default(""),
+    durationMinutes: integer("duration_minutes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("workout_sessions_user_performed_idx").on(table.userId, table.performedAt),
+  ],
+);
+
+/**
+ * An exercise performed inside a session, in order. Cascades with the session only —
+ * never with outline nodes. The catalog row (`exercises`) is restricted so deleting a
+ * used exercise cannot silently orphan or wipe set history.
+ */
+export const workoutSessionExercises = pgTable(
+  "workout_session_exercises",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => workoutSessions.id, { onDelete: "cascade" }),
+    exerciseId: uuid("exercise_id")
+      .notNull()
+      .references(() => exercises.id, { onDelete: "restrict" }),
+    /** Lexicographic sibling order within the session (same idea as outline sort keys). */
+    sortKey: text("sort_key").notNull(),
+    notes: text("notes").notNull().default(""),
+  },
+  (table) => [
+    index("workout_session_exercises_session_idx").on(
+      table.userId,
+      table.sessionId,
+      table.sortKey,
+    ),
+    index("workout_session_exercises_exercise_idx").on(table.userId, table.exerciseId),
+  ],
+);
+
+/**
+ * One set under a session-exercise: reps × weight. Cascades only when that session
+ * (or the session-exercise row) is deleted — the intentional "erroneous log" path.
+ */
+export const workoutSets = pgTable(
+  "workout_sets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    sessionExerciseId: uuid("session_exercise_id")
+      .notNull()
+      .references(() => workoutSessionExercises.id, { onDelete: "cascade" }),
+    setIndex: integer("set_index").notNull(),
+    reps: integer("reps"),
+    weight: numeric("weight", { precision: 10, scale: 2 }),
+    unit: text("unit").notNull().default("lb"),
+    completed: boolean("completed").notNull().default(true),
+  },
+  (table) => [
+    index("workout_sets_session_exercise_idx").on(
+      table.userId,
+      table.sessionExerciseId,
+      table.setIndex,
+    ),
+  ],
+);
+
+export type Exercise = typeof exercises.$inferSelect;
+export type NewExercise = typeof exercises.$inferInsert;
+export type WorkoutSession = typeof workoutSessions.$inferSelect;
+export type WorkoutSessionExercise = typeof workoutSessionExercises.$inferSelect;
+export type WorkoutSet = typeof workoutSets.$inferSelect;

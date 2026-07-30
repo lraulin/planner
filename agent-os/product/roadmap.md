@@ -189,10 +189,13 @@ core loop is already useful.
 
 ### Fitness tracker
 
-- **Short-term MVP:** Record sets/reps and runs (simple log, no platform integrations).
-- **Medium-term:** Link workouts and habits to **Goals** / Result Areas (progress that
-  shows up in the same system that plans the week).
-- **Long-term:** Optional **Apple Health** (or similar) import — read-only first.
+- **✅ Short-term MVP (strength log):** `specs/2026-07-30-1240-fitness-strength-log`.
+  Exercise catalog + multi-exercise sessions with ordered sets (reps × weight); Fitness
+  tab; optional task ↔ exercise link for outline reminders. History is a separate domain
+  (notes-style durability) so deleting a plan task never wipes the log. Out: cardio/runs,
+  routines, recurrence, Health import.
+- **Medium-term:** Deeper Goal / Result Area progress surfaces; routines/templates.
+- **Long-term:** Optional **Apple Health** (or similar) import — read-only first; cardio.
 
 ### AI integration
 
