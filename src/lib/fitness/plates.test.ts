@@ -34,6 +34,19 @@ describe("calculatePlates (American lb)", () => {
     expect(calculatePlates(0, "lb")).toBeNull();
     expect(calculatePlates(-10, "lb")).toBeNull();
   });
+
+  it("uses a 15 lb EZ bar when configured", () => {
+    // 65 total = 15 bar + 25 per side
+    const load = calculatePlates(65, "lb", 15);
+    expect(load!.bar).toBe(15);
+    expect(load!.perSide).toEqual([25]);
+    expect(formatPlateLoad(load)).toBe("25 per side");
+  });
+
+  it("skips plate math when bar weight is 0 (dumbbells)", () => {
+    expect(calculatePlates(50, "lb", 0)).toBeNull();
+    expect(plateHint(50, "lb", 0)).toBeNull();
+  });
 });
 
 describe("plateHint", () => {

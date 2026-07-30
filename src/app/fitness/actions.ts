@@ -10,7 +10,7 @@ import {
   loadExerciseHistory,
   loadLatestForExercise,
 } from "@/lib/fitness/queries";
-import type { SessionInput } from "@/lib/fitness/types";
+import type { ExercisePrefs, SessionInput } from "@/lib/fitness/types";
 
 export type ActionResult =
   { ok: true; id?: string; data?: unknown } | { ok: false; error: string };
@@ -38,6 +38,10 @@ export async function createExerciseAction(name: string, notes?: string) {
 
 export async function renameExerciseAction(id: string, name: string) {
   return run((userId) => fitness.renameExercise(userId, id, name));
+}
+
+export async function updateExercisePrefsAction(id: string, prefs: ExercisePrefs) {
+  return run((userId) => fitness.updateExercisePrefs(userId, id, prefs));
 }
 
 export async function deleteExerciseAction(id: string) {

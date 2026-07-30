@@ -7,8 +7,9 @@ import {
   workoutSets,
 } from "@/db/schema";
 import { between } from "@/lib/tree/sortKey";
+import { DEFAULT_BAR_WEIGHT_LB, parseBarWeight } from "./bars";
 import { normaliseSetInput } from "./format";
-import type { SessionInput } from "./types";
+import type { ExercisePrefs, SessionExerciseInput, SessionInput } from "./types";
 
 /**
  * Every mutation takes a `userId` and scopes on it. History rows never cascade from the
@@ -44,15 +45,115 @@ export async function createExercise(
   userId: string,
   name: string,
   notes = "",
+  prefs?: ExercisePrefs,
 ): Promise<string> {
   const trimmed = name.trim();
   if (!trimmed) throw new Error("Exercise name is required.");
 
   const [row] = await db
     .insert(exercises)
-    .values({ userId, name: trimmed, notes })
+    .values({
+      userId,
+      name: trimmed,
+      notes: prefs?.notes ?? notes,
+      bodyweight: prefs?.bodyweight ?? false,
+      barWeight: String(
+        prefs?.barWeight !== undefined
+          ? parseBarWeight(prefs.barWeight)
+          : DEFAULT_BAR_WEIGHT_LB,
+      ),
+    })
     .returning({ id: exercises.id });
   return row.id;
+}
+
+/**
+ * Persist catalog defaults used by the logger: bodyweight mode and bar for plates.
+ * Partial update — only provided keys change.
+ */
+export async function updateExercisePrefs(
+  userId: string,
+  exerciseId: string,
+  prefs: ExercisePrefs,
+): Promise<void> {
+  const patch: {
+    bodyweight?: boolean;
+    barWeight?: string;
+    notes?: string;
+    updatedAt: Date;
+  } = { updatedAt: new Date() };
+
+  if (prefs.bodyweight !== undefined) patch.bodyweight = prefs.bodyweight;
+  if (prefs.barWeight !== undefined) {
+    patch.barWeight = String(parseBarWeight(prefs.barWeight));
+  }
+  if (prefs.notes !== undefined) patch.notes = prefs.notes;
+
+  const result = await db
+    .update(exercises)
+    .set(patch)
+    .where(and(eq(exercises.id, exerciseId), eq(exercises.userId, userId)))
+    .returning({ id: exercises.id });
+
+  if (result.length === 0) throw new Error("Exercise not found.");
+}
+
+async function resolveExerciseId(
+  tx: Executor,
+  userId: string,
+  block: SessionExerciseInput,
+): Promise<string> {
+  let exerciseId = block.exerciseId;
+  if (exerciseId) {
+    await requireExercise(tx, userId, exerciseId);
+  } else if (block.exerciseName) {
+    const name = block.exerciseName.trim();
+    if (!name) throw new Error("Exercise name is required.");
+    const [existing] = await tx
+      .select({ id: exercises.id })
+      .from(exercises)
+      .where(and(eq(exercises.userId, userId), eq(exercises.name, name)))
+      .limit(1);
+    if (existing) {
+      exerciseId = existing.id;
+    } else {
+      const [created] = await tx
+        .insert(exercises)
+        .values({
+          userId,
+          name,
+          bodyweight: block.bodyweight ?? false,
+          barWeight: String(
+            block.barWeight !== undefined
+              ? parseBarWeight(block.barWeight)
+              : DEFAULT_BAR_WEIGHT_LB,
+          ),
+        })
+        .returning({ id: exercises.id });
+      exerciseId = created.id;
+    }
+  } else {
+    throw new Error("Each exercise needs an id or a name.");
+  }
+
+  // Keep catalog prefs current whenever the log states them.
+  if (block.bodyweight !== undefined || block.barWeight !== undefined) {
+    const patch: {
+      bodyweight?: boolean;
+      barWeight?: string;
+      updatedAt: Date;
+    } = { updatedAt: new Date() };
+    if (block.bodyweight !== undefined) patch.bodyweight = block.bodyweight;
+    if (block.barWeight !== undefined) {
+      patch.barWeight = String(parseBarWeight(block.barWeight));
+    }
+    await tx
+      .update(exercises)
+      .set(patch)
+      .where(and(eq(exercises.id, exerciseId), eq(exercises.userId, userId)));
+  }
+
+  return exerciseId;
 }
 
 /**
@@ -164,30 +265,7 @@ export async function createSession(
 
     let prevKey: string | null = null;
     for (const block of input.exercises) {
-      let exerciseId = block.exerciseId;
-      if (exerciseId) {
-        await requireExercise(tx, userId, exerciseId);
-      } else if (block.exerciseName) {
-        // Inline find-or-create inside the same tx.
-        const name = block.exerciseName.trim();
-        if (!name) throw new Error("Exercise name is required.");
-        const [existing] = await tx
-          .select({ id: exercises.id })
-          .from(exercises)
-          .where(and(eq(exercises.userId, userId), eq(exercises.name, name)))
-          .limit(1);
-        if (existing) {
-          exerciseId = existing.id;
-        } else {
-          const [created] = await tx
-            .insert(exercises)
-            .values({ userId, name })
-            .returning({ id: exercises.id });
-          exerciseId = created.id;
-        }
-      } else {
-        throw new Error("Each exercise needs an id or a name.");
-      }
+      const exerciseId = await resolveExerciseId(tx, userId, block);
 
       const sortKey = between(prevKey, null);
       prevKey = sortKey;
@@ -265,29 +343,7 @@ export async function replaceSession(
 
     let prevKey: string | null = null;
     for (const block of input.exercises) {
-      let exerciseId = block.exerciseId;
-      if (exerciseId) {
-        await requireExercise(tx, userId, exerciseId);
-      } else if (block.exerciseName) {
-        const name = block.exerciseName.trim();
-        if (!name) throw new Error("Exercise name is required.");
-        const [existing] = await tx
-          .select({ id: exercises.id })
-          .from(exercises)
-          .where(and(eq(exercises.userId, userId), eq(exercises.name, name)))
-          .limit(1);
-        if (existing) {
-          exerciseId = existing.id;
-        } else {
-          const [created] = await tx
-            .insert(exercises)
-            .values({ userId, name })
-            .returning({ id: exercises.id });
-          exerciseId = created.id;
-        }
-      } else {
-        throw new Error("Each exercise needs an id or a name.");
-      }
+      const exerciseId = await resolveExerciseId(tx, userId, block);
 
       const sortKey = between(prevKey, null);
       prevKey = sortKey;

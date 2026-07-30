@@ -194,6 +194,10 @@ Patterns to mirror: Notes tab (own domain + `TabStrip`), detail drawers, `Confir
 | 6   | “Last time: …” ghost under each exercise (excludes open session)                            | See prior work set without opening history                              |
 | 7   | Bodyweight exercise toggle → unit `bw`, null weight, no weight column                       | Pull-ups etc. without logging 0 lb                                      |
 | 8   | Weight −/+ steppers: 5 lb / 2.5 kg                                                          | Match American plate pairs; kg ~equivalent                              |
+| 9   | Catalog prefs: `bodyweight` + `barWeight` (lb); EZ 15, Olympic 45, training 35, 0=no bar    | Remember pull-ups vs curls / bar for plate math                         |
+| 10  | “Last time … tap to copy” fills current sets from prior session                             | Start warm-up/work sets from last log                                   |
+| 11  | Sticky rest timer (presets 1–3m, ±15, beep); auto-starts on + Add set                       | Between-set rest without leaving the drawer                             |
+| 12  | Migration `0010` adds exercise bodyweight + bar_weight                                      | Durable prefs                                                           |
 
 ---
 

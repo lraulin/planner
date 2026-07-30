@@ -302,6 +302,19 @@ export const exercises = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     notes: text("notes").notNull().default(""),
+    /**
+     * Catalog default: log this lift as bodyweight (pull-ups, etc.) — no weight column,
+     * unit `bw`. Session editor seeds the checkbox from this; toggling can write back.
+     */
+    bodyweight: boolean("bodyweight").notNull().default(false),
+    /**
+     * Bar mass in **lb** for the plate calculator (American gear).
+     * `0` = no bar / dumbbells (hide plate math). Default `45` = Olympic.
+     * EZ bar is typically 15; training bars ~35.
+     */
+    barWeight: numeric("bar_weight", { precision: 8, scale: 2 })
+      .notNull()
+      .default("45"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

@@ -1,7 +1,10 @@
 /**
  * Barbell plate math for logging. Defaults are US gym gear (Olympic bar + American
  * plates in lb) because that's what Lee has. kg uses a metric set when unit is kg.
+ * Bar mass is configurable (Olympic 45, EZ 15, training 35, or none).
  */
+
+import { barWeightInUnit, DEFAULT_BAR_WEIGHT_LB } from "./bars";
 
 /** Standard American iron, largest first. */
 export const AMERICAN_PLATES_LB = [45, 35, 25, 10, 5, 2.5] as const;
@@ -28,30 +31,31 @@ export type PlateLoad = {
 
 function platesForUnit(unit: string): {
   plates: readonly number[];
-  bar: number;
   unit: string;
 } {
   if (unit === "kg") {
-    return { plates: METRIC_PLATES_KG, bar: OLYMPIC_BAR_KG, unit: "kg" };
+    return { plates: METRIC_PLATES_KG, unit: "kg" };
   }
-  return { plates: AMERICAN_PLATES_LB, bar: OLYMPIC_BAR_LB, unit: "lb" };
+  return { plates: AMERICAN_PLATES_LB, unit: "lb" };
 }
 
 /**
- * Greedy load for an Olympic bar: split remaining weight evenly across two sides,
- * pick largest plates that fit each side.
+ * Greedy load: split remaining weight evenly across two sides after removing bar.
  *
- * Returns null when total is at or under bar weight, or input is not a usable number.
+ * `barWeightLb` is catalog bar mass in lb (`0` = no plate calc — dumbbells).
+ * When `barWeight` is passed it overrides and is already in the set's unit.
  */
 export function calculatePlates(
   totalWeight: number,
   unit = "lb",
-  barWeight?: number,
+  barWeightLb: number = DEFAULT_BAR_WEIGHT_LB,
 ): PlateLoad | null {
   if (!Number.isFinite(totalWeight) || totalWeight <= 0) return null;
+  // No bar / dumbbells — plate math doesn't apply.
+  if (barWeightLb <= 0) return null;
 
   const kit = platesForUnit(unit);
-  const bar = barWeight ?? kit.bar;
+  const bar = barWeightInUnit(barWeightLb, kit.unit);
   if (totalWeight <= bar) {
     return {
       perSide: [],
@@ -98,7 +102,7 @@ function collapseCounts(perSide: number[]): PlateCount[] {
 
 /**
  * Human plate string: "2×45 + 10 + 5 per side" or "bar only (45 lb)".
- * Empty when there's nothing useful to show (no weight / under bar with no remainder).
+ * Empty when there's nothing useful to show.
  */
 export function formatPlateLoad(load: PlateLoad | null): string | null {
   if (!load) return null;
@@ -124,11 +128,12 @@ function formatPlate(n: number): string {
   return Number.isInteger(n) ? String(n) : String(n);
 }
 
-/** Convenience: total → display string, or null. */
+/** Convenience: total + bar → display string, or null. */
 export function plateHint(
   totalWeight: number | null | undefined,
   unit: string,
+  barWeightLb: number = DEFAULT_BAR_WEIGHT_LB,
 ): string | null {
   if (totalWeight == null || !Number.isFinite(totalWeight)) return null;
-  return formatPlateLoad(calculatePlates(totalWeight, unit));
+  return formatPlateLoad(calculatePlates(totalWeight, unit, barWeightLb));
 }

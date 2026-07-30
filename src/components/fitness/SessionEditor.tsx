@@ -4,6 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { loadLatestForExerciseAction } from "@/app/fitness/actions";
 import { Drawer } from "@/components/detail/Drawer";
 import { useAutosave, type SaveStatus } from "@/components/notes/useAutosave";
+import {
+  BAR_PRESETS,
+  barPresetId,
+  DEFAULT_BAR_WEIGHT_LB,
+  parseBarWeight,
+} from "@/lib/fitness/bars";
 import { formatSetsLabel, isBodyweightUnit, parseWeight } from "@/lib/fitness/format";
 import { plateHint } from "@/lib/fitness/plates";
 import {
@@ -12,6 +18,7 @@ import {
   emptyBodyweightSet,
   emptySet,
   setFromPrevious,
+  setsFromHistory,
   type DraftExercise,
   type DraftSet,
   type SessionDraft,
@@ -21,10 +28,15 @@ import type {
   ExerciseSummary,
   SessionDetail,
   SessionInput,
+  WorkoutSetView,
 } from "@/lib/fitness/types";
 import { bumpWeight, weightStep } from "@/lib/fitness/weightStep";
+import { RestTimer } from "./RestTimer";
 
-function draftFromDetail(detail: SessionDetail): SessionDraft {
+function draftFromDetail(
+  detail: SessionDetail,
+  catalog: ExerciseSummary[],
+): SessionDraft {
   return {
     performedAt: toLocalInput(detail.performedAt),
     title: detail.title,
@@ -32,13 +44,16 @@ function draftFromDetail(detail: SessionDetail): SessionDraft {
     durationMinutes:
       detail.durationMinutes == null ? "" : String(detail.durationMinutes),
     exercises: detail.exercises.map((ex) => {
+      const catalogEx = catalog.find((c) => c.id === ex.exerciseId);
       const bodyweight =
-        ex.sets.length > 0 && ex.sets.every((s) => isBodyweightUnit(s.unit));
+        catalogEx?.bodyweight ||
+        (ex.sets.length > 0 && ex.sets.every((s) => isBodyweightUnit(s.unit)));
       return {
         key: ex.id,
         exerciseId: ex.exerciseId,
         exerciseName: ex.exerciseName,
         bodyweight,
+        barWeight: catalogEx?.barWeight ?? DEFAULT_BAR_WEIGHT_LB,
         sets: ex.sets.map((s) => ({
           reps: s.reps == null ? "" : String(s.reps),
           weight: s.weight == null ? "" : String(s.weight),
@@ -56,17 +71,24 @@ function toLocalInput(date: Date): string {
 }
 
 function newExerciseBlock(
+  catalog: ExerciseSummary[],
   exerciseId = "",
   exerciseName = "",
-  unit = "lb",
 ): DraftExercise {
+  const known = exerciseId
+    ? catalog.find((e) => e.id === exerciseId)
+    : exerciseName
+      ? catalog.find((e) => e.name.toLowerCase() === exerciseName.toLowerCase())
+      : undefined;
+  const bodyweight = known?.bodyweight ?? false;
+  const barWeight = known?.barWeight ?? DEFAULT_BAR_WEIGHT_LB;
   return {
     key: crypto.randomUUID(),
-    exerciseId,
-    exerciseName,
-    bodyweight: false,
-    // One empty row to start — "Add set" copies the previous numbers.
-    sets: [emptySet(unit)],
+    exerciseId: known?.id ?? exerciseId,
+    exerciseName: known?.name ?? exerciseName,
+    bodyweight,
+    barWeight,
+    sets: [bodyweight ? emptyBodyweightSet() : emptySet("lb")],
   };
 }
 
@@ -97,7 +119,6 @@ export function SessionEditor({
     sessionId: string,
     input: SessionInput,
   ) => Promise<{ ok: true } | { ok: false; error: string }>;
-  /** Fired after first create so the parent can track the open session id. */
   onPersisted?: (sessionId: string) => void;
 }) {
   const seedName = useMemo(() => {
@@ -106,10 +127,10 @@ export function SessionEditor({
   }, [exercises, seedExerciseId]);
 
   const initial = useMemo(() => {
-    if (existing) return draftFromDetail(existing);
+    if (existing) return draftFromDetail(existing, exercises);
     const seeded = seedExerciseId
-      ? [newExerciseBlock(seedExerciseId, seedName)]
-      : [newExerciseBlock()];
+      ? [newExerciseBlock(exercises, seedExerciseId, seedName)]
+      : [newExerciseBlock(exercises)];
     return {
       performedAt: toLocalInput(new Date()),
       title: "",
@@ -126,9 +147,9 @@ export function SessionEditor({
   const [notes, setNotes] = useState(initial.notes);
   const [durationMinutes, setDurationMinutes] = useState(initial.durationMinutes);
   const [blocks, setBlocks] = useState(initial.exercises);
-  /** Session id once created or when editing an existing row. */
   const sessionIdRef = useRef<string | null>(existing?.id ?? null);
   const [sessionId, setSessionId] = useState<string | null>(existing?.id ?? null);
+  const startRestRef = useRef<(() => void) | null>(null);
 
   const catalog = useMemo(
     () => exercises.map((e) => ({ id: e.id, name: e.name })),
@@ -143,7 +164,6 @@ export function SessionEditor({
     async (draft: SessionDraft) => {
       const input = draftToSessionInput(draft, catalog);
       if (!input) {
-        // Nothing durable yet — stay idle, don't surface an error.
         return { ok: true as const };
       }
 
@@ -261,12 +281,57 @@ export function SessionEditor({
         return { ...b, sets: [...b.sets, next] };
       }),
     );
+    // Between sets is when you rest — kick the timer when adding the next set.
+    startRestRef.current?.();
+  }
+
+  function applyCatalogMatch(blockIndex: number, name: string) {
+    const match = exercises.find((ex) => ex.name.toLowerCase() === name.toLowerCase());
+    if (!match) {
+      updateBlock(blockIndex, {
+        exerciseName: name,
+        exerciseId: "",
+      });
+      return;
+    }
+    setBlocksAndSave((current) =>
+      current.map((b, i) => {
+        if (i !== blockIndex) return b;
+        let next: DraftExercise = {
+          ...b,
+          exerciseName: name,
+          exerciseId: match.id,
+          bodyweight: match.bodyweight,
+          barWeight: match.barWeight,
+        };
+        if (match.bodyweight !== b.bodyweight) {
+          next = applyBodyweightMode(next, match.bodyweight);
+        }
+        return next;
+      }),
+    );
+  }
+
+  function copyLastSets(blockIndex: number, historySets: WorkoutSetView[]) {
+    setBlocksAndSave((current) =>
+      current.map((b, i) => {
+        if (i !== blockIndex) return b;
+        return {
+          ...b,
+          sets: setsFromHistory(historySets, b.bodyweight),
+        };
+      }),
+    );
   }
 
   const closeAfterFlush = useCallback(() => {
     void flush();
     onClose();
   }, [flush, onClose]);
+
+  const registerStartRest = useCallback((start: () => void) => {
+    startRestRef.current = start;
+  }, []);
 
   return (
     <Drawer open={open} onClose={closeAfterFlush} labelledBy="session-editor-title">
@@ -333,16 +398,7 @@ export function SessionEditor({
                   <input
                     list="fitness-exercise-catalog"
                     value={block.exerciseName}
-                    onChange={(e) => {
-                      const name = e.target.value;
-                      const match = exercises.find(
-                        (ex) => ex.name.toLowerCase() === name.toLowerCase(),
-                      );
-                      updateBlock(bi, {
-                        exerciseName: name,
-                        exerciseId: match?.id ?? "",
-                      });
-                    }}
+                    onChange={(e) => applyCatalogMatch(bi, e.target.value)}
                     placeholder="Bench Press"
                     className="rounded border border-rule bg-surface px-2 py-1.5 text-[0.875rem] text-ink normal-case tracking-normal"
                   />
@@ -376,11 +432,20 @@ export function SessionEditor({
                   />
                   Bodyweight
                 </label>
+
+                {!block.bodyweight && (
+                  <BarSelect
+                    barWeight={block.barWeight}
+                    onChange={(barWeight) => updateBlock(bi, { barWeight })}
+                  />
+                )}
+
                 <LastSessionHint
                   exerciseId={block.exerciseId}
                   exerciseName={block.exerciseName}
                   exercises={exercises}
                   excludeSessionId={sessionId}
+                  onCopy={(sets) => copyLastSets(bi, sets)}
                 />
               </div>
 
@@ -491,7 +556,11 @@ export function SessionEditor({
                           ×
                         </button>
                       </div>
-                      <PlateLine weight={set.weight} unit={set.unit || "lb"} />
+                      <PlateLine
+                        weight={set.weight}
+                        unit={set.unit || "lb"}
+                        barWeightLb={block.barWeight}
+                      />
                     </div>
                   ),
                 )}
@@ -509,7 +578,7 @@ export function SessionEditor({
 
           <button
             type="button"
-            onClick={() => setBlocksAndSave((c) => [...c, newExerciseBlock()])}
+            onClick={() => setBlocksAndSave((c) => [...c, newExerciseBlock(exercises)])}
             className="text-[0.8125rem] text-ink-muted hover:text-ink"
           >
             + Add exercise
@@ -531,31 +600,79 @@ export function SessionEditor({
             ))}
           </datalist>
         </div>
+
+        <RestTimer onRegisterStart={registerStartRest} />
       </div>
     </Drawer>
   );
 }
 
-function PlateLine({ weight, unit }: { weight: string; unit: string }) {
-  const hint = plateHint(parseWeight(weight), unit);
+function BarSelect({
+  barWeight,
+  onChange,
+}: {
+  barWeight: number;
+  onChange: (barWeight: number) => void;
+}) {
+  const preset = barPresetId(barWeight);
+  const selectValue = preset === "custom" ? "custom" : String(barWeight);
+
+  return (
+    <label className="flex items-center gap-1.5 text-[0.75rem] text-ink-muted">
+      Bar
+      <select
+        value={selectValue}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (v === "custom") {
+            const raw = window.prompt("Bar weight (lb)", String(barWeight));
+            if (raw == null) return;
+            onChange(parseBarWeight(raw));
+            return;
+          }
+          onChange(parseBarWeight(v));
+        }}
+        className="rounded border border-rule bg-surface px-1.5 py-0.5 text-[0.75rem] text-ink normal-case"
+      >
+        {BAR_PRESETS.map((p) => (
+          <option key={p.id} value={String(p.weight)}>
+            {p.label}
+          </option>
+        ))}
+        <option value="custom">
+          Custom{preset === "custom" ? ` (${barWeight} lb)` : "…"}
+        </option>
+      </select>
+    </label>
+  );
+}
+
+function PlateLine({
+  weight,
+  unit,
+  barWeightLb,
+}: {
+  weight: string;
+  unit: string;
+  barWeightLb: number;
+}) {
+  const hint = plateHint(parseWeight(weight), unit, barWeightLb);
   if (!hint) return null;
   return <p className="pl-8 font-mono text-[0.6875rem] text-ink-faint">{hint}</p>;
 }
 
-/**
- * Ghost “last time” line under the exercise header. Resolves catalog id from name
- * when the user typed a known exercise without selecting it yet.
- */
 function LastSessionHint({
   exerciseId,
   exerciseName,
   exercises,
   excludeSessionId,
+  onCopy,
 }: {
   exerciseId: string;
   exerciseName: string;
   exercises: ExerciseSummary[];
   excludeSessionId: string | null;
+  onCopy: (sets: WorkoutSetView[]) => void;
 }) {
   const resolvedId = useMemo(() => {
     if (exerciseId) return exerciseId;
@@ -598,9 +715,14 @@ function LastSessionHint({
   if (!resolvedId || !latest || latest.sets.length === 0) return null;
 
   return (
-    <p className="font-mono text-[0.75rem] text-ink-faint">
-      Last time: {formatSetsLabel(latest.sets)}
-    </p>
+    <button
+      type="button"
+      onClick={() => onCopy(latest.sets)}
+      title="Copy last session’s sets into this exercise"
+      className="font-mono text-[0.75rem] text-ink-faint underline-offset-2 hover:text-ink hover:underline"
+    >
+      Last time: {formatSetsLabel(latest.sets)} · tap to copy
+    </button>
   );
 }
 

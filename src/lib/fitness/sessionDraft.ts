@@ -1,5 +1,6 @@
+import { DEFAULT_BAR_WEIGHT_LB, parseBarWeight } from "./bars";
 import { isBodyweightUnit } from "./format";
-import type { SessionInput } from "./types";
+import type { SessionInput, WorkoutSetView } from "./types";
 
 /**
  * Client draft shapes for the session editor. Pure conversion lives here so
@@ -14,6 +15,8 @@ export type DraftExercise = {
   exerciseName: string;
   /** When true, sets store unit `bw` and hide weight — no zero-lb shame. */
   bodyweight: boolean;
+  /** Bar mass in lb for plate calc; `0` = dumbbells / no plates. */
+  barWeight: number;
   sets: DraftSet[];
 };
 
@@ -70,6 +73,36 @@ export function applyBodyweightMode(
   };
 }
 
+/**
+ * Copy prior session sets into the draft (click “Last time”).
+ * Always yields at least one row so the table stays usable.
+ */
+export function setsFromHistory(
+  historySets: Array<Pick<WorkoutSetView, "reps" | "weight" | "unit">>,
+  bodyweight: boolean,
+): DraftSet[] {
+  if (historySets.length === 0) {
+    return [bodyweight ? emptyBodyweightSet() : emptySet()];
+  }
+
+  if (bodyweight) {
+    return historySets.map((s) => ({
+      reps: s.reps == null ? "" : String(s.reps),
+      weight: "",
+      unit: "bw",
+    }));
+  }
+
+  return historySets.map((s) => {
+    const unit = isBodyweightUnit(s.unit) ? "lb" : s.unit || "lb";
+    return {
+      reps: s.reps == null ? "" : String(s.reps),
+      weight: s.weight == null ? "" : String(s.weight),
+      unit,
+    };
+  });
+}
+
 function parseLocalInput(value: string): Date {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return new Date();
@@ -87,6 +120,7 @@ function setIsFilled(set: DraftSet, bodyweight: boolean): boolean {
  * Build a `SessionInput` ready for create/replace, or `null` if there is nothing
  * worth writing yet (no named exercise with at least one filled set).
  * Empty set rows and empty exercise blocks are dropped.
+ * Bodyweight + bar prefs ride along so the catalog stays in sync.
  */
 export function draftToSessionInput(
   draft: SessionDraft,
@@ -97,6 +131,7 @@ export function draftToSessionInput(
       const name = block.exerciseName.trim();
       const known = catalog.find((e) => e.id === block.exerciseId || e.name === name);
       const bodyweight = block.bodyweight;
+      const barWeight = parseBarWeight(block.barWeight);
 
       const sets = block.sets
         .filter((s) => setIsFilled(s, bodyweight))
@@ -121,6 +156,8 @@ export function draftToSessionInput(
       return {
         exerciseId: known?.id || block.exerciseId || undefined,
         exerciseName: name || known?.name,
+        bodyweight,
+        barWeight,
         sets,
       };
     })
@@ -137,3 +174,5 @@ export function draftToSessionInput(
     exercises,
   };
 }
+
+export { DEFAULT_BAR_WEIGHT_LB };

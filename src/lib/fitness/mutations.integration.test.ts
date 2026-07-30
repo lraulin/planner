@@ -12,8 +12,10 @@ import {
   deleteSession,
   findOrCreateExercise,
   renameExercise,
+  updateExercisePrefs,
 } from "./mutations";
 import {
+  getExercise,
   getSessionDetail,
   listExercises,
   listSessions,
@@ -102,6 +104,36 @@ describeDb("fitness sessions", () => {
     });
 
     expect(await listExercises(userId)).toHaveLength(1);
+  });
+
+  it("remembers bodyweight and EZ bar prefs on the catalog exercise", async () => {
+    const exerciseId = await createExercise(userId, "EZ Curl");
+    await updateExercisePrefs(userId, exerciseId, {
+      bodyweight: false,
+      barWeight: 15,
+    });
+    expect(await getExercise(userId, exerciseId)).toMatchObject({
+      barWeight: 15,
+      bodyweight: false,
+    });
+
+    await createSession(userId, {
+      performedAt: new Date(),
+      exercises: [
+        {
+          exerciseId,
+          bodyweight: true,
+          barWeight: 0,
+          sets: [{ reps: 10, weight: null, unit: "bw" }],
+        },
+      ],
+    });
+
+    // Logging with prefs writes them back so the next open seeds correctly.
+    expect(await getExercise(userId, exerciseId)).toMatchObject({
+      bodyweight: true,
+      barWeight: 0,
+    });
   });
 
   it("stores bodyweight sets as unit bw with null weight", async () => {

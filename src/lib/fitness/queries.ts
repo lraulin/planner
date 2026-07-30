@@ -6,6 +6,7 @@ import {
   workoutSessions,
   workoutSets,
 } from "@/db/schema";
+import { DEFAULT_BAR_WEIGHT_LB } from "./bars";
 import { formatSetsLabel } from "./format";
 import type {
   ExerciseHistoryEntry,
@@ -19,6 +20,26 @@ function weightNumber(raw: string | null): number | null {
   if (raw === null || raw === undefined || raw === "") return null;
   const n = Number(raw);
   return Number.isFinite(n) ? n : null;
+}
+
+function mapExercise(row: {
+  id: string;
+  name: string;
+  notes: string;
+  bodyweight: boolean;
+  barWeight: string;
+  createdAt: Date;
+  updatedAt: Date;
+}): ExerciseSummary {
+  return {
+    id: row.id,
+    name: row.name,
+    notes: row.notes,
+    bodyweight: row.bodyweight,
+    barWeight: weightNumber(row.barWeight) ?? DEFAULT_BAR_WEIGHT_LB,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
 }
 
 function mapSet(row: {
@@ -46,13 +67,7 @@ export async function listExercises(userId: string): Promise<ExerciseSummary[]> 
     .where(eq(exercises.userId, userId))
     .orderBy(asc(exercises.name));
 
-  return rows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    notes: r.notes,
-    createdAt: r.createdAt,
-    updatedAt: r.updatedAt,
-  }));
+  return rows.map(mapExercise);
 }
 
 export async function getExercise(
@@ -65,13 +80,7 @@ export async function getExercise(
     .where(and(eq(exercises.id, exerciseId), eq(exercises.userId, userId)))
     .limit(1);
   if (!row) return null;
-  return {
-    id: row.id,
-    name: row.name,
-    notes: row.notes,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-  };
+  return mapExercise(row);
 }
 
 export async function listSessions(userId: string): Promise<SessionSummary[]> {

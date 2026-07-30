@@ -10,8 +10,19 @@ export type ExerciseSummary = {
   id: string;
   name: string;
   notes: string;
+  /** Catalog default: hide weight and log unit `bw`. */
+  bodyweight: boolean;
+  /** Bar mass in lb for plate calc; `0` = no bar / dumbbells. */
+  barWeight: number;
   createdAt: Date;
   updatedAt: Date;
+};
+
+export type ExercisePrefs = {
+  bodyweight?: boolean;
+  /** lb; `0` = no plate calculator. */
+  barWeight?: number;
+  notes?: string;
 };
 
 export type SetInput = {
@@ -26,6 +37,13 @@ export type SessionExerciseInput = {
   exerciseId?: string;
   exerciseName?: string;
   notes?: string;
+  /**
+   * When set, written back to the catalog exercise so the next log remembers
+   * bodyweight vs weighted and which bar to use for plates.
+   */
+  bodyweight?: boolean;
+  /** Bar mass in lb; `0` = dumbbells / no plates. */
+  barWeight?: number;
   sets: SetInput[];
 };
 
