@@ -1,5 +1,6 @@
 import { getSessionCookie } from "better-auth/cookies";
 import { type NextRequest, NextResponse } from "next/server";
+import { devAuthBypassEnabled } from "@/lib/auth/dev-bypass";
 
 /**
  * Cookie presence gate for HTML routes. Full session validation happens in
@@ -13,6 +14,10 @@ import { type NextRequest, NextResponse } from "next/server";
  */
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // Local development with AUTH_DEV_BYPASS: nothing to redirect to, since
+  // `getCurrentUserId()` resolves the owner without a session.
+  if (devAuthBypassEnabled()) return NextResponse.next();
 
   if (
     pathname.startsWith("/login") ||
