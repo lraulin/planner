@@ -21,6 +21,7 @@ import {
 } from "@/lib/schedule/mutations";
 import { loadSchedule } from "@/lib/schedule/queries";
 import { startOfWeek, toDateKey } from "@/lib/schedule/geometry";
+import { captureItems } from "@/lib/capture/mutations";
 import {
   createNode,
   renameNode,
@@ -54,6 +55,7 @@ export const AGENT_TOOLS = [
   "search_nodes",
   "get_node",
   "create_node",
+  "capture",
   "update_node",
   "create_note",
   "update_note",
@@ -104,6 +106,8 @@ export async function dispatchAgentTool(
         return await getNode(uid, args);
       case "create_node":
         return await createNodeTool(uid, args);
+      case "capture":
+        return await captureTool(uid, args);
       case "update_node":
         return await updateNodeTool(uid, args);
       case "create_note":
@@ -271,6 +275,38 @@ async function createNodeTool(userId: string, args: Record<string, unknown>) {
   }
 
   return getNode(userId, { id });
+}
+
+/**
+ * GTD capture into the Inbox — same path as the in-app `c` box for a single item.
+ *
+ * Distinct from `create_node` without parentId, which creates a root-level task. Root is a
+ * legitimate resting place ("I know what this is"); the Inbox is for unprocessed ideas.
+ * External clients (Alfred) must not invent that distinction themselves.
+ */
+async function captureTool(userId: string, args: Record<string, unknown>) {
+  // requireString rejects missing/blank; trim so padded names do not land with spaces.
+  const name = requireString(args, "name").trim();
+  const note = optionalString(args, "note")?.trim() ?? "";
+
+  const { createdIds, parentId } = await captureItems({
+    userId,
+    items: [{ name, depth: 0, note }],
+  });
+
+  const id = createdIds[0];
+  if (!id) {
+    throw new AgentError("internal", "capture produced no node");
+  }
+
+  const result = (await getNode(userId, { id })) as {
+    node: { id: string; parentId: string | null; name: string; type: string };
+  };
+  return {
+    node: result.node,
+    parentId,
+    createdIds,
+  };
 }
 
 async function updateNodeTool(userId: string, args: Record<string, unknown>) {

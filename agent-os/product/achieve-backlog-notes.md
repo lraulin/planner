@@ -18,14 +18,14 @@ shaping a spec.
 
 ## High-value candidates (align with roadmap)
 
-| Idea                                | Why it earns a slot                                                | Roadmap home                    |
-| ----------------------------------- | ------------------------------------------------------------------ | ------------------------------- |
-| **Quick Task Entry / capture**      | Global “dump a thought” without full outline focus                 | Phase 2 Alfred + in-app capture |
-| **Task Chooser / Next Action list** | Cross-project top actions — the “what do I do now” surface         | Phase 2 Task Chooser            |
-| **Pomodoro → Actual Effort**        | Manual effort fields exist; no way to earn them while working      | Phase 2 Pomodoro track          |
-| **Google Calendar sync**            | Achieve Tools menu; our calendar is local-only                     | Phase 2 Google track            |
-| **Real multi-user auth**            | Schema is ready; `getCurrentUserId` is still a hard-coded dev user | Phase 2 Better Auth             |
-| **Import/export**                   | Own-your-data mandate; Achieve has Outlook import                  | Phase 2                         |
+| Idea                                | Why it earns a slot                                                | Roadmap home                             |
+| ----------------------------------- | ------------------------------------------------------------------ | ---------------------------------------- |
+| **Quick Task Entry / capture**      | Global “dump a thought” without full outline focus                 | ✅ In-app + Alfred; Reminders still open |
+| **Task Chooser / Next Action list** | Cross-project top actions — the “what do I do now” surface         | Phase 2 Task Chooser                     |
+| **Pomodoro → Actual Effort**        | Manual effort fields exist; no way to earn them while working      | Phase 2 Pomodoro track                   |
+| **Google Calendar sync**            | Achieve Tools menu; our calendar is local-only                     | Phase 2 Google track                     |
+| **Real multi-user auth**            | Schema is ready; `getCurrentUserId` is still a hard-coded dev user | Phase 2 Better Auth                      |
+| **Import/export**                   | Own-your-data mandate; Achieve has Outlook import                  | Phase 2                                  |
 
 ## Outline polish (small, no new product line)
 

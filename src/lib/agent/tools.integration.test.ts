@@ -4,6 +4,7 @@ import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { createNode } from "@/lib/tree/mutations";
+import { loadOutline } from "@/lib/tree/queries";
 import { AgentError } from "./errors";
 import { dispatchAgentTool } from "./tools";
 
@@ -94,6 +95,59 @@ describeDb("agent tools", () => {
 
     expect(created.node.parentId).toBeNull();
     expect(created.node.type).toBe("task");
+  });
+
+  // Root create_node is not capture. Capture must land under the Inbox project so
+  // unprocessed ideas stay distinct from deliberately unfiled top-level work.
+  it("capture puts a task under the inbox, not at the root", async () => {
+    const captured = (await dispatchAgentTool(
+      "capture",
+      { name: "Call the dentist" },
+      userId,
+    )) as {
+      node: { id: string; parentId: string | null; name: string; type: string };
+      parentId: string;
+      createdIds: string[];
+    };
+
+    expect(captured.node.name).toBe("Call the dentist");
+    expect(captured.node.type).toBe("task");
+    expect(captured.node.parentId).toBe(captured.parentId);
+    expect(captured.createdIds).toEqual([captured.node.id]);
+
+    const inbox = (await dispatchAgentTool(
+      "get_node",
+      { id: captured.parentId },
+      userId,
+    )) as { node: { type: string; parentId: string | null } };
+    expect(inbox.node.type).toBe("project");
+    expect(inbox.node.parentId).toBeNull();
+
+    // Confirm the flag path, not only the name — rename would still be the inbox.
+    const outline = await loadOutline(userId);
+    const inboxRow = outline.find((n) => n.id === captured.parentId);
+    expect(inboxRow?.isInbox).toBe(true);
+  });
+
+  it("capture rejects a blank name", async () => {
+    await expect(
+      dispatchAgentTool("capture", { name: "   " }, userId),
+    ).rejects.toMatchObject({
+      code: "validation",
+      message: "name is required",
+    });
+  });
+
+  it("does not let one user read another user's captured task", async () => {
+    const captured = (await dispatchAgentTool(
+      "capture",
+      { name: "Private idea" },
+      userId,
+    )) as { node: { id: string } };
+
+    await expect(
+      dispatchAgentTool("get_node", { id: captured.node.id }, otherId),
+    ).rejects.toBeInstanceOf(AgentError);
   });
 
   it("still refuses a nesting that goes backwards", async () => {

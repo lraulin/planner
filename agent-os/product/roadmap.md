@@ -115,18 +115,19 @@ Features that complete or surround the original product, plus making it multi-de
   **hierarchy relaxation** — anything may sit at the top level and a child may be the same
   rank or deeper than its parent, so a quick task never has to be filed to exist.
 
-- **External intake to the inbox.** The above only works with the app open in a browser,
-  which is the half of the capture habit that matters least — the point is getting an idea
-  out of your head wherever you are. Staged:
+- **✅ Alfred on macOS (inbox capture).** `specs/2026-07-30-1323-alfred-inbox-capture`.
+  Agent tool `POST /api/agent/capture` writes one task into the Inbox via `ensureInbox` /
+  `captureItems` (not root-level `create_node`). Alfred workflow sources under
+  `tools/alfred/` (keyword e.g. `pin`, Bearer key + base URL as workflow variables).
+  Raycast later if useful.
 
-  1. **Apple Reminders drain.** "Hey Siri, remind me to…" is already the fastest capture
-     path on hand. Apple has no server-side API for Reminders — EventKit is on-device only,
-     and iOS 13's Reminders migration broke the old iCloud CalDAV route — so this cannot be
-     a cron pulling from the cloud. It is a **Shortcut** that reads a dedicated list, POSTs
-     each item to `/api/agent/create_node`, and completes it. Needs a provenance/dedupe
-     column; nothing in the schema records where a row came from.
-  2. **Alfred on macOS.** One task at a time, same endpoint, for typing rather than
-     talking. Raycast later if useful.
+- **External intake remaining — Apple Reminders drain.** The in-app box and Alfred only
+  cover typing with the Mac (or browser) at hand. "Hey Siri, remind me to…" is still the
+  fastest path on phone. Apple has no server-side API for Reminders — EventKit is on-device
+  only, and iOS 13's Reminders migration broke the old iCloud CalDAV route — so this cannot
+  be a cron pulling from the cloud. It is a **Shortcut** that reads a dedicated list, POSTs
+  each item to `/api/agent/capture`, and completes it. Needs a provenance/dedupe column;
+  nothing in the schema records where a row came from.
 
 ### Platform
 
@@ -238,8 +239,8 @@ Phase 1 remaining ──► weekly planning workflow (+ calendar polish)
 Phase 2 ──► Pomodoro on task/project (writes Actual Effort)
         │         └──► session log ──► full time reports
         │
-        ├──► auth ✅, in-app inbox + quick entry ✅, export
-        │         └──► external intake: Reminders Shortcut, Alfred (needs a dedupe column)
+        ├──► auth ✅, in-app inbox + quick entry ✅, Alfred capture ✅, export
+        │         └──► external intake remaining: Reminders Shortcut (needs a dedupe column)
         ├──► attachments: URL links → Drive/Dropbox pickers (no S3)
         ├──► AI tools/API ✅ (agent HTTP + planner-agent repo; Bedrock later)
         │
