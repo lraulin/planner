@@ -35,7 +35,12 @@ it.
 - **Escape is handled in the capture phase.** A grid's own keydown listener would otherwise
   see it first and cancel an inline edit _behind_ the dialog.
 - **A visible button always accompanies a keyboard shortcut.** Touch has no Enter key, and
-  a gesture nobody can see is not a discoverable action.
+  a gesture nobody can see is not a discoverable action. `responsive.md` generalises this to
+  hover, right-click and double-click as well.
+- **Below `md`, `ModalShell` renders a bottom sheet** — anchored to the bottom edge, rounded
+  top corners, `max-h-[85dvh]` with its own internal scroll, padded with `.pb-safe`. This is
+  handled once in the shell, so every dialog gets it; a dialog that needs to opt out is a
+  dialog worth reconsidering.
 
 ## Unmount a dialog that holds a draft
 

@@ -30,6 +30,9 @@ A drawer is a client component holding its own form state, rendered from the pag
 - **Width**: full-width on small screens, capped around `720px` on desktop
   (`w-full sm:w-[90%] md:max-w-[45rem]`).
 - **Position below the app chrome** — the tab strip stays visible and clickable.
+- **Below `md` the drawer is a full-screen sheet**, entering from the bottom rather than the
+  right, at `100dvh`. There is no visible backdrop and no chrome behind it to preserve; the
+  header carries a tap-sized close button. See `responsive.md`.
 - **Escape closes**, a backdrop click closes, and focus is trapped inside while open. Return
   focus to the row that opened it. If the form is dirty, both paths go through the same
   unsaved-changes prompt as Cancel — never bypass it.
@@ -74,6 +77,15 @@ footer buttons — layout, hierarchy, and shortcuts live there so every form mat
 
 Sticky at the bottom of the drawer (`flex-none` under a scrolling body). Both Save
 buttons disable while a write is in flight.
+
+Below `md` the **same three buttons** restack — Save & Close full-width on top, Save and Cancel
+beneath — and the footer pads with `.pb-safe` so it clears the home indicator. The arrangement
+changes; the button set does not. Do not drop a button on the phone to save room.
+
+```
+[      Save & Close      ]
+[  Save  ]      [ Cancel ]
+```
 
 ```tsx
 const result = await saveNodeAction(values);

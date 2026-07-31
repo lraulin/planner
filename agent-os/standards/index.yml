@@ -9,6 +9,8 @@ components:
     description: Right-sliding drawer for full-record editing — DrawerFooter Cancel|Save|Save & Close (or autosave for notes), sticky footer, unsaved-changes on leave, server actions
   modal-pattern:
     description: Build every centered dialog on ModalShell — roles, focus, capture-phase Escape, and choosing whether closing discards or preserves the draft
+  responsive:
+    description: Adaptive layout below the md breakpoint — list + full-screen sheet instead of grid + drawer, 44px tap targets, the 16px input rule that stops iOS zoom, safe areas and dvh, tap/long-press replacing double-click/right-click, drag disabled on touch
 
 development:
   testing:

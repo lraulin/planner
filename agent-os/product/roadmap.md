@@ -187,6 +187,13 @@ Features that complete or surround the original product, plus making it multi-de
   seed/env. Schema was already multi-user-ready; second-user invite UI and OAuth still
   open.
 - **Sync / multi-device.** Already implied by web + Neon; polish only if friction appears.
+- **Responsive / mobile (iPhone-first).** `specs/2026-07-31-1938-responsive-mobile`. The app is
+  installable as a PWA but was built as a desktop instrument — a 13px, 28px-row grid driven by
+  hover, right-click, double-click and drag. Below `md` it becomes a different layout over the
+  same data: bottom nav, card lists, full-screen sheets, tap and long-press. Day, Quick Capture,
+  the list tabs and Notes get first-class phone treatment; Outline, Weekly Schedule, Task
+  Chooser and the planning surfaces degrade gracefully rather than being redesigned. Desktop
+  layout and density are unchanged. Codified as `standards/components/responsive.md`.
 - **Import/export.** Achieve data import, full export (own-your-data mandate in
   `mission.md`).
 

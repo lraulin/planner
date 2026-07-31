@@ -22,13 +22,19 @@ document differs from the original, it is because Achieve Planner's model differ
   by accident.
 - **Progressive disclosure** — show only what's needed now; hide complexity until relevant.
 - **Immediate, clear feedback** for every action.
-- **Keyboard first** — this app replaces a keyboard-driven Windows tool. Anything reachable
-  by mouse should be reachable by key, and the primary workflows should be faster by
-  keyboard than by mouse.
+- **Keyboard first on desktop, touch-complete on phone** — this app replaces a keyboard-driven
+  Windows tool. At `md` and above, anything reachable by mouse should be reachable by key, and
+  the primary workflows should be faster by keyboard than by mouse. Below `md` that inverts:
+  every action must have a visible, tappable path, because there is no keyboard, no hover and
+  no right button. Neither half is optional — a shortcut with no button fails on the phone, and
+  a button with no shortcut fails at the desk. See `responsive.md`.
 - **Accessibility is not a goal here** — one user, no screen reader, not public. Skip ARIA
   coverage, contrast ratios and screen-reader testing; add them if this is ever released.
   Keep the handful of roles and labels that are load-bearing for other reasons (see
   `modal-pattern.md`) — they are wiring, not compliance.
+  **Hit-target size and touch-reachability are not covered by this exemption.** A 44px tap
+  target and a tappable path to every command are usability for the one user we have, on the
+  phone he actually owns — not compliance for a hypothetical audience.
 - **Performance is UX** — slow expand/collapse or heavy re-renders destroy usability in a
   dense grid.
 - **Forgiveness & safety** — let users recover easily; never force inaccurate data entry.
@@ -42,6 +48,12 @@ The **outline grid + right-sliding drawer** is the standard pattern for list + f
 
 - **Grid** for scanning, filtering, reordering, and fast inline edits
 - **Drawer** for the full record — the grid stays visible, preserving context
+
+Below `md` this becomes **list + full-screen sheet**. Context preservation is the principle the
+drawer serves, and on a 390px screen it is unaffordable — there is no room to keep the grid
+visible and still show a form worth filling in. The compact layout gives up that principle
+knowingly, in the one place where the alternative is worse. Everything else on this page still
+applies. See `responsive.md`.
 
 ### Inline editing for grid-visible fields
 
@@ -131,6 +143,11 @@ The bindings, which every view must match:
 Both also appear as toolbar buttons, and the selected row carries a small open-record
 affordance — a gesture nobody can see is not a discoverable action.
 
+Below `md`, **single tap** opens the record and **long press** opens the row menu. Double-click
+and right-click do not exist on touch, so these are translations of the same bindings rather
+than a second set to learn. `F2` has no compact equivalent — inline rename happens in the
+sheet. See `responsive.md`.
+
 ## Forms & Validation
 
 ### Minimise required fields
@@ -186,14 +203,16 @@ sub-editors may treat Save as done (Cancel + Save only). Details live in
 
 ## Decision Guide
 
-| Question                                              | If yes →                       | If no →                                          |
-| ----------------------------------------------------- | ------------------------------ | ------------------------------------------------ |
-| Is the field already a grid column?                   | Edit inline                    | Drawer                                           |
-| Is the value a rollup of descendants?                 | Read-only                      | Editable                                         |
-| Are there more than 3–4 fields to edit at once?       | Drawer (not modal, not inline) | Inline is fine                                   |
-| Does the form have distinct groups of fields?         | Tabs within the drawer         | A single scrolling pane                          |
-| Is this destructive or irreversible?                  | Confirmation dialog            | Just do it, with clear feedback                  |
-| Does it edit a record that already exists?            | Drawer, never a modal          | A modal may be right — see the capture exception |
-| Does the user need the outline visible while editing? | Drawer                         | Drawer is still fine                             |
-| Is this long-form writing with little to validate?    | Autosave drawer                | Explicit Save / Save & Close footer              |
-| Is this a short nested "return a value" editor?       | Save may close (exception)     | Save stays open; Save & Close finishes           |
+| Question                                                                         | If yes →                                    | If no →                                          |
+| -------------------------------------------------------------------------------- | ------------------------------------------- | ------------------------------------------------ |
+| Is the field already a grid column?                                              | Edit inline                                 | Drawer                                           |
+| Is the value a rollup of descendants?                                            | Read-only                                   | Editable                                         |
+| Are there more than 3–4 fields to edit at once?                                  | Drawer (not modal, not inline)              | Inline is fine                                   |
+| Does the form have distinct groups of fields?                                    | Tabs within the drawer                      | A single scrolling pane                          |
+| Is this destructive or irreversible?                                             | Confirmation dialog                         | Just do it, with clear feedback                  |
+| Does it edit a record that already exists?                                       | Drawer, never a modal                       | A modal may be right — see the capture exception |
+| Does the user need the outline visible while editing?                            | Drawer                                      | Drawer is still fine                             |
+| Is this long-form writing with little to validate?                               | Autosave drawer                             | Explicit Save / Save & Close footer              |
+| Is this a short nested "return a value" editor?                                  | Save may close (exception)                  | Save stays open; Save & Close finishes           |
+| Is the viewport below `md`?                                                      | List + full-screen sheet                    | Grid + right drawer                              |
+| Is the action only reachable by hover / right-click / double-click / a shortcut? | It is broken on touch — add a tappable path | Ship it                                          |
