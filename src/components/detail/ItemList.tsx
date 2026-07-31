@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { NodeItem, NodeItemKind } from "@/db/schema";
 import { formatPriority } from "@/lib/tree/format";
 import type { NodeItemValues } from "@/lib/detail/types";
+import { normalizeHttpUrl } from "@/lib/url/pageTitle";
 import {
   CheckboxField,
   DateField,
@@ -100,9 +101,19 @@ export function ItemList({
                       key={column}
                       className={`${columnClass(column)} truncate ${
                         column === "priority" ? "tabular" : ""
-                      } ${summaryOf(item, column) ? "text-ink" : "text-ink-faint"}`}
+                      } ${
+                        column === "url"
+                          ? ""
+                          : summaryOf(item, column)
+                            ? "text-ink"
+                            : "text-ink-faint"
+                      }`}
                     >
-                      {summaryOf(item, column) || "—"}
+                      {column === "url" ? (
+                        <UrlCell value={summaryOf(item, column)} />
+                      ) : (
+                        summaryOf(item, column) || "—"
+                      )}
                     </span>
                   ))}
 
@@ -192,6 +203,30 @@ function summaryOf(item: NodeItem, column: ItemColumnKey): string {
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (value instanceof Date) return value.toISOString().slice(0, 10);
   return String(value);
+}
+
+/** Attachment URL column: clickable when it is a real http(s) link. */
+function UrlCell({ value }: { value: string }) {
+  if (!value) return <span className="text-ink-faint">—</span>;
+
+  const href = normalizeHttpUrl(value);
+  if (!href) {
+    return <span className="text-ink">{value}</span>;
+  }
+
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={value}
+      onClick={(event) => event.stopPropagation()}
+      onDoubleClick={(event) => event.stopPropagation()}
+      className="block truncate text-[var(--select-edge)] underline-offset-2 hover:underline"
+    >
+      {value}
+    </a>
+  );
 }
 
 function RowButton({

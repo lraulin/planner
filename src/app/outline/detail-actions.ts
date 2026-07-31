@@ -95,8 +95,14 @@ export async function updateNodeItemAction(
 ): Promise<ActionResult> {
   return run(async (userId) => {
     await detail.updateNodeItem(userId, itemId, values);
-    // Pasting a link into an attachment URL field fills a blank name from the page title.
-    if (typeof values.url === "string" && values.url.trim()) {
+    // Fill a blank attachment name from the page title when a URL is set or the name
+    // is cleared (so a bad autofill can be fixed by clearing Name without re-pasting).
+    const urlSet = typeof values.url === "string" && values.url.trim().length > 0;
+    const titleCleared =
+      "title" in values &&
+      typeof values.title === "string" &&
+      values.title.trim().length === 0;
+    if (urlSet || titleCleared) {
       await detail.autofillAttachmentTitleFromUrl(userId, itemId);
     }
   });

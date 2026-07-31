@@ -52,14 +52,21 @@ export function shouldAutofillAttachmentTitle(params: {
 
 /**
  * Pull a display title from an HTML document.
- * Prefers Open Graph / Twitter cards over `<title>` so share-friendly names win.
+ *
+ * Prefers the document `<title>` (what the browser tab shows) over Open Graph /
+ * Twitter cards. Sites often put a path slug or marketing short name in og:title —
+ * AWS cert pages are a concrete example: og is `certified-developer-associate`
+ * while the tab is `AWS Certified Developer - Associate`.
  */
 export function extractPageTitle(html: string): string | null {
+  const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  if (match?.[1] !== undefined) {
+    const fromTitle = cleanTitle(match[1]);
+    if (fromTitle) return fromTitle;
+  }
+
   const fromMeta = metaContent(html, "og:title") ?? metaContent(html, "twitter:title");
   if (fromMeta) return cleanTitle(fromMeta);
-
-  const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-  if (match?.[1] !== undefined) return cleanTitle(match[1]);
 
   return null;
 }

@@ -77,29 +77,34 @@ describe("shouldAutofillAttachmentTitle", () => {
 });
 
 describe("extractPageTitle", () => {
-  it("prefers og:title over the document title", () => {
+  it("prefers the document title (browser tab) over og:title", () => {
+    // AWS cert pages put a path slug in og:title and the real name in <title>.
     const html = `
       <html><head>
-        <title>Browser tab</title>
-        <meta property="og:title" content="Share title" />
+        <title>AWS Certified Developer - Associate</title>
+        <meta property="og:title" content="certified-developer-associate" />
       </head></html>
     `;
-    expect(extractPageTitle(html)).toBe("Share title");
+    expect(extractPageTitle(html)).toBe("AWS Certified Developer - Associate");
   });
 
-  it("accepts content-before-property meta order", () => {
-    const html = `<meta content="Card title" property="og:title" />`;
+  it("falls back to og:title when the document title is empty", () => {
+    const html = `
+      <title>   </title>
+      <meta content="Card title" property="og:title" />
+    `;
     expect(extractPageTitle(html)).toBe("Card title");
   });
 
-  it("falls back to twitter:title then <title>", () => {
+  it("falls back to twitter:title when neither title nor og is usable", () => {
     expect(
       extractPageTitle(`
         <meta name="twitter:title" content="Tweet title" />
-        <title>Tab</title>
       `),
     ).toBe("Tweet title");
+  });
 
+  it("uses a lone document title", () => {
     expect(extractPageTitle(`<title>  Just a tab  </title>`)).toBe("Just a tab");
   });
 
