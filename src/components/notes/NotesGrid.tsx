@@ -514,6 +514,12 @@ export function NotesGrid({
         >
           Clear Filters
         </ToolbarButton>
+        <ToolbarButton
+          onClick={gridState.reset}
+          title="Clear filters, sort, column layout and collapsed groups for this view"
+        >
+          Reset this grid
+        </ToolbarButton>
       </TabToolbar>
 
       {error && <ErrorBanner message={error} />}
@@ -573,6 +579,7 @@ export function NotesGrid({
         onHide={hide}
         onMove={move}
         onReset={gridState.resetColumns}
+        onResetGrid={gridState.reset}
         onClose={() => setFieldsOpen(false)}
       />
 

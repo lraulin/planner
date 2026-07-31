@@ -8,6 +8,10 @@ import type { ColumnMeta } from "./columns";
  * Achieve's Show Fields chooser: available fields on the left, shown-in-order on the
  * right, with Move Up/Down and Reset. Layout is a modal because it is a short-lived
  * configuration step (same class as a confirm), not a record editor.
+ *
+ * **Reset Fields** restores only the column set / order / widths. **Reset this grid**
+ * (optional) forgets filters, sort, group collapse and the column layout together — the
+ * whole `grid:{tabId}` scope.
  */
 export function ShowFieldsDialog({
   open,
@@ -17,6 +21,7 @@ export function ShowFieldsDialog({
   onHide,
   onMove,
   onReset,
+  onResetGrid,
   onClose,
 }: {
   open: boolean;
@@ -25,7 +30,10 @@ export function ShowFieldsDialog({
   onShow: (id: string) => void;
   onHide: (id: string) => void;
   onMove: (id: string, direction: "up" | "down") => void;
+  /** Column layout only — the view's preset order and default widths. */
   onReset: () => void;
+  /** Whole grid scope: columns, filters, sort, collapsed groups. */
+  onResetGrid?: () => void;
   onClose: () => void;
 }) {
   const titleId = useId();
@@ -58,7 +66,7 @@ export function ShowFieldsDialog({
           />
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => {
@@ -82,6 +90,16 @@ export function ShowFieldsDialog({
           <button type="button" onClick={onReset} className={buttonClass}>
             Reset Fields
           </button>
+          {onResetGrid && (
+            <button
+              type="button"
+              onClick={onResetGrid}
+              title="Clear filters, sort, column layout and collapsed groups for this view"
+              className={buttonClass}
+            >
+              Reset this grid
+            </button>
+          )}
           <button type="button" onClick={onClose} className={`${buttonClass} ml-auto`}>
             Close
           </button>

@@ -231,6 +231,12 @@ export function WishesGrid({
         >
           Clear Filters
         </ToolbarButton>
+        <ToolbarButton
+          onClick={gridState.reset}
+          title="Clear filters, sort, column layout and collapsed groups for this view"
+        >
+          Reset this grid
+        </ToolbarButton>
         <ToolbarButton onClick={openOwner} disabled={!selectedWish} title="Enter">
           Open owner
         </ToolbarButton>
@@ -279,6 +285,7 @@ export function WishesGrid({
         onHide={gridState.hide}
         onMove={gridState.move}
         onReset={gridState.resetColumns}
+        onResetGrid={gridState.reset}
         onClose={() => setShowFields(false)}
       />
     </div>

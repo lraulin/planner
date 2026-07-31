@@ -196,6 +196,16 @@ export function DailyItemsGrid({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex flex-none items-center justify-end gap-2 border-b border-rule px-3 py-1">
+        <button
+          type="button"
+          onClick={gridState.reset}
+          title="Clear sort, column widths and collapsed groups for this day list"
+          className="rounded border border-rule px-2 py-0.5 text-[0.75rem] text-ink-muted transition-colors hover:border-rule-strong hover:bg-surface-raised hover:text-ink"
+        >
+          Reset this grid
+        </button>
+      </div>
       {gridState.sort && (
         <SortChip
           sort={gridState.sort}

@@ -67,6 +67,12 @@ export function TabStrip({ active }: { active: TabId }) {
           app-wide shortcut. */}
       <div className="ml-auto flex items-center gap-3 pb-1.5">
         <CaptureButton />
+        <Link
+          href="/settings"
+          className="text-[0.8125rem] text-ink-muted hover:text-ink"
+        >
+          Settings
+        </Link>
         <LogoutButton />
       </div>
 

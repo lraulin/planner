@@ -218,6 +218,12 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
           Clear Filters
         </ToolbarButton>
         <ToolbarButton
+          onClick={gridState.reset}
+          title="Clear filters, sort, column layout and collapsed groups for this view"
+        >
+          Reset this grid
+        </ToolbarButton>
+        <ToolbarButton
           onClick={() => tab.selectedId && tab.setEditingId(tab.selectedId)}
           disabled={!tab.selectedId}
           title="F2"
@@ -285,6 +291,7 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         onHide={gridState.hide}
         onMove={gridState.move}
         onReset={gridState.resetColumns}
+        onResetGrid={gridState.reset}
         onClose={() => setShowFields(false)}
       />
     </div>

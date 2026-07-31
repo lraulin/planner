@@ -538,6 +538,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         onAddResultArea={addResultArea}
         onAddGoal={addGoal}
         hasSelection={selected !== null}
+        onResetGrid={gridState.reset}
       />
 
       {error && (
@@ -748,6 +749,7 @@ function FilterBar({
   onAddResultArea,
   onAddGoal,
   hasSelection,
+  onResetGrid,
 }: {
   filters: OutlineFilters["types"];
   onToggleType: (type: NodeType) => void;
@@ -759,6 +761,7 @@ function FilterBar({
   onAddResultArea: () => void;
   onAddGoal: () => void;
   hasSelection: boolean;
+  onResetGrid: () => void;
 }) {
   return (
     <div className="flex flex-none flex-wrap items-center gap-x-4 gap-y-2 border-b border-rule px-3 py-2">
@@ -809,6 +812,12 @@ function FilterBar({
         </Command>
         <Command onClick={commands.collapseAll} title="Collapse all (⌘←)">
           Collapse all
+        </Command>
+        <Command
+          onClick={onResetGrid}
+          title="Clear filters, sort, column layout and collapsed groups"
+        >
+          Reset this grid
         </Command>
       </div>
 
