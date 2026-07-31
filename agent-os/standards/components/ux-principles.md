@@ -149,19 +149,26 @@ abandonment — people frequently know a task exists before they know how long i
 For forms with many fields, conditional sections, or dropdowns needing room to expand, use
 the drawer. Never cram them into grid cells.
 
-### Save stays open; close is separate
+### Save stays open; leave is separate
 
 A drawer is a workspace, not a one-shot dialog. For structured record forms (node detail,
-appointments) without autosave, commit and leave are independent:
+appointments) without autosave, commit and leave are independent. Use the shared
+`DrawerFooter` — never invent a different button set:
 
-- **Save** commits and **stays open**, with clear "Saved" / "Unsaved changes" feedback.
-- **Save & close** commits then leaves (⌘/Ctrl+Enter); failed saves stay open.
-- **Close** (or Escape) leaves the drawer; if dirty, confirm discard.
+```
+[ Cancel ]                          [ Save ]   [ Save & Close ]
+```
+
+- **Save** (outlined) commits and **stays open**, with "Saved" / "Unsaved changes" feedback
+  (⌘/Ctrl+S).
+- **Save & Close** (solid primary, rightmost) commits then leaves (⌘/Ctrl+Enter); failed
+  saves stay open.
+- **Cancel** (ghost, left) / header × / Escape leave the drawer; if dirty, confirm discard.
 
 Do not make a single Save that always closes — that forces reopen thrashing across tabs.
-Do not ship only stay-open Save either: finishing an edit then becomes Save + Close every
+Do not ship only stay-open Save either: finishing an edit then becomes Save + Cancel every
 time. Document-like surfaces (notes, session log) **autosave** instead; short nested
-sub-editors may treat Save as done. Details and the decision table live in
+sub-editors may treat Save as done (Cancel + Save only). Details live in
 `drawer-pattern.md`.
 
 ### Inline validation
@@ -188,5 +195,5 @@ sub-editors may treat Save as done. Details and the decision table live in
 | Is this destructive or irreversible?                  | Confirmation dialog            | Just do it, with clear feedback                  |
 | Does it edit a record that already exists?            | Drawer, never a modal          | A modal may be right — see the capture exception |
 | Does the user need the outline visible while editing? | Drawer                         | Drawer is still fine                             |
-| Is this long-form writing with little to validate?    | Autosave drawer                | Explicit Save that stays open                    |
-| Is this a short nested "return a value" editor?       | Save may close (exception)     | Save stays open                                  |
+| Is this long-form writing with little to validate?    | Autosave drawer                | Explicit Save / Save & Close footer              |
+| Is this a short nested "return a value" editor?       | Save may close (exception)     | Save stays open; Save & Close finishes           |

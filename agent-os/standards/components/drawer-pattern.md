@@ -32,7 +32,7 @@ A drawer is a client component holding its own form state, rendered from the pag
 - **Position below the app chrome** — the tab strip stays visible and clickable.
 - **Escape closes**, a backdrop click closes, and focus is trapped inside while open. Return
   focus to the row that opened it. If the form is dirty, both paths go through the same
-  unsaved-changes prompt as the Close button — never bypass it.
+  unsaved-changes prompt as Cancel — never bypass it.
 - **Respect `prefers-reduced-motion`** — the slide transition is already disabled globally
   in `globals.css`, so don't reintroduce it inline.
 
@@ -53,11 +53,27 @@ case under `ux-principles.md`, so a dialog is appropriate here.
 ### Explicit Save stays open (default for structured records)
 
 Node detail forms, appointments, and any multi-field record with a draft use **Save that
-does not close**. Close is a separate action.
+does not close**. Leaving is a separate action (Cancel / × / Escape).
 
 Why: a drawer is a workspace, not a one-shot dialog. People edit across tabs, checkpoint
 mid-way, then keep going. Tying commit to leave forces either reopen thrashing or living
 under a permanent "Unsaved changes" banner.
+
+**Always use `DrawerFooter`** (`src/components/detail/Drawer.tsx`). Do not hand-roll
+footer buttons — layout, hierarchy, and shortcuts live there so every form matches.
+
+```
+[ Cancel ]                          [ Save ]   [ Save & Close ]
+```
+
+| Control          | Style                    | Behaviour                                    |
+| ---------------- | ------------------------ | -------------------------------------------- |
+| **Cancel**       | Ghost / text, left       | Leave. If dirty → discard confirmation.      |
+| **Save**         | Outlined secondary       | Persist, stay open, show **Saved**.          |
+| **Save & Close** | Solid primary, rightmost | Persist then leave. Failed write stays open. |
+
+Sticky at the bottom of the drawer (`flex-none` under a scrolling body). Both Save
+buttons disable while a write is in flight.
 
 ```tsx
 const result = await saveNodeAction(values);
@@ -73,16 +89,25 @@ setJustSaved(true); // footer shows "Saved"; clear when the next edit dirties th
 
 Rules for this model:
 
-- **Save** persists, clears dirty, shows brief **Saved** feedback, **stays open** (primary).
-- **Save & close** persists then leaves — sugar for the done path, not a substitute for
-  stay-open Save. Bind ⌘/Ctrl+Enter to it. Failed writes still stay open with the error.
-- **Close** / Escape / backdrop leave the surface. If dirty, prompt to discard.
+- **Save** persists, clears dirty, shows brief **Saved** feedback, **stays open**.
+- **Save & Close** persists then leaves — the finishing action, not a substitute for
+  stay-open Save. Failed writes still stay open with the error.
+- **Cancel** / header × / Escape / backdrop leave the surface. If dirty, prompt to discard
+  — every leave path must share the same dirty-aware handler.
 - Never close a drawer over a failed save — the user's input disappears with it.
 - On **create**, promote the draft to the new id in local state so the next Save is an
   update, then stay open. `onSaved` (if the parent needs one) means **refresh background
   data**, not **close the drawer**.
 
-Footer status (mutually exclusive, right-aligned):
+Keyboard (wired in `DrawerFooter` / `Drawer`):
+
+| Shortcut     | Action                     |
+| ------------ | -------------------------- |
+| ⌘/Ctrl+S     | Save (progress, stay open) |
+| ⌘/Ctrl+Enter | Save & Close               |
+| Escape       | Cancel (with dirty check)  |
+
+Footer status (mutually exclusive, next to Cancel):
 
 | State                         | Label             |
 | ----------------------------- | ----------------- |

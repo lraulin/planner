@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import type {
   Appointment,
   AppointmentCheck,
@@ -9,7 +9,7 @@ import type {
   ShowAs,
 } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
-import { Drawer } from "@/components/detail/Drawer";
+import { Drawer, DrawerFooter, DrawerHeader } from "@/components/detail/Drawer";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import {
   FieldGrid,
@@ -38,7 +38,7 @@ type Props = {
   onClose: () => void;
   /**
    * Refresh background schedule data after a successful write. Does **not** close the
-   * drawer — Save stays open (`drawer-pattern.md`).
+   * drawer — stay-open Save (`drawer-pattern.md`). Save & Close closes after success.
    */
   onSaved: () => void;
   onDelete: (id: string) => void;
@@ -233,32 +233,6 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
     if (options?.close) onClose();
   }
 
-  // Always call the latest save (form state changes every keystroke); do not re-bind the
-  // listener for each field edit.
-  const saveRef = useRef(save);
-  const savingRef = useRef(saving);
-  useEffect(() => {
-    saveRef.current = save;
-    savingRef.current = saving;
-  });
-
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return;
-      const target = event.target;
-      if (
-        target instanceof HTMLTextAreaElement ||
-        (target instanceof HTMLElement && target.isContentEditable)
-      ) {
-        return;
-      }
-      event.preventDefault();
-      if (!savingRef.current) void saveRef.current({ close: true });
-    }
-    document.addEventListener("keydown", onKeyDown, true);
-    return () => document.removeEventListener("keydown", onKeyDown, true);
-  }, []);
-
   function toggleWeekday(d: number) {
     markDirty();
     setRecurrenceByWeekday((prev) =>
@@ -268,24 +242,16 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
     );
   }
 
-  const status = dirty ? "Unsaved changes" : justSaved && !saving ? "Saved" : null;
-
   return (
     <>
       <Drawer open onClose={requestClose} labelledBy="appointment-title">
         <div className="flex h-full flex-col">
-          <header className="flex items-center justify-between gap-3 border-b border-rule px-4 py-3">
-            <div className="min-w-0">
-              <h2
-                id="appointment-title"
-                className="text-[0.9375rem] font-semibold text-ink"
-              >
-                {persistedId ? "Appointment" : "New Appointment"}
-              </h2>
-              {status && <p className="text-[0.75rem] text-ink-muted">{status}</p>}
-            </div>
-            <div className="flex flex-none flex-wrap gap-2">
-              {persistedId && (
+          <DrawerHeader
+            titleId="appointment-title"
+            title={persistedId ? "Appointment" : "New Appointment"}
+            onClose={requestClose}
+            actions={
+              persistedId ? (
                 <button
                   type="button"
                   className="rounded border border-rule px-2 py-1 text-[0.8125rem] text-priority-a hover:bg-surface-raised"
@@ -297,41 +263,11 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
                 >
                   Delete
                 </button>
-              )}
-              <button
-                type="button"
-                disabled={saving}
-                className="rounded bg-select-edge px-3 py-1 text-[0.8125rem] font-medium text-white disabled:opacity-50"
-                onClick={() => void save()}
-              >
-                {saving ? "Saving…" : "Save"}
-              </button>
-              <button
-                type="button"
-                disabled={saving}
-                title="⌘/Ctrl+Enter"
-                className="rounded border border-rule px-2 py-1 text-[0.8125rem] text-ink hover:bg-surface-raised disabled:opacity-50"
-                onClick={() => void save({ close: true })}
-              >
-                Save & close
-              </button>
-              <button
-                type="button"
-                className="rounded border border-rule px-2 py-1 text-[0.8125rem] text-ink hover:bg-surface-raised"
-                onClick={requestClose}
-              >
-                Close
-              </button>
-            </div>
-          </header>
+              ) : undefined
+            }
+          />
 
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
-            {error && (
-              <p className="rounded border border-priority-a/40 bg-priority-a/10 px-2 py-1.5 text-[0.8125rem] text-priority-a">
-                {error}
-              </p>
-            )}
-
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
             <Section title="General">
               <div className="space-y-3">
                 <TextField
@@ -587,6 +523,16 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
               )}
             </Section>
           </div>
+
+          <DrawerFooter
+            onSave={() => void save()}
+            onSaveAndClose={() => void save({ close: true })}
+            onClose={requestClose}
+            saving={saving}
+            dirty={dirty}
+            justSaved={justSaved}
+            error={error}
+          />
         </div>
       </Drawer>
 

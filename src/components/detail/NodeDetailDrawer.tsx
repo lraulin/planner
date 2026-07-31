@@ -60,7 +60,7 @@ const DRAWER_CODEC: SettingCodec<DrawerSettings> = {
  *
  * - **Scalar fields** are held as a draft and written on Save, so an abandoned edit is
  *   genuinely abandoned and closing a dirty form can ask first. Save stays open; Save &
- *   close leaves after a successful write; Close alone discards when dirty
+ *   Close leaves after a successful write; Cancel alone discards when dirty
  *   (`drawer-pattern.md`).
  * - **Repeating list rows** write straight through, the way the outline grid's inline cells
  *   already do. They are separate records, not fields of this one, and holding a dozen
@@ -120,7 +120,7 @@ export function NodeDetailDrawer({
   const loadError = current?.error ?? null;
 
   // DetailForm installs a dirty-aware handler while mounted so Escape / backdrop / header
-  // all share the footer Close path (`drawer-pattern.md`).
+  // all share the footer Cancel path (`drawer-pattern.md`).
   const formCloseRef = useRef<(() => void) | null>(null);
   const requestClose = useCallback(() => {
     if (formCloseRef.current) formCloseRef.current();
@@ -366,7 +366,7 @@ function DetailForm({
 
       setDirty(false);
       setJustSaved(true);
-      // Save stays open by default; Save & close leaves only after a successful write
+      // Save stays open by default; Save & Close leaves only after a successful write
       // (`drawer-pattern.md`).
       if (options?.close) onClose();
     });

@@ -60,9 +60,9 @@ draft of its own, like `ConfirmDialog`.
 A failed submit **keeps the dialog open** and renders the error inline; a successful one
 closes it. The dialog disappearing is what tells the user it worked.
 
-**Drawers are different.** Structured record drawers keep Save and Close separate — Save
-stays open and shows "Saved"; only Close leaves. Both surfaces still obey "never close over
-a failed save." See `drawer-pattern.md`.
+**Drawers are different.** Structured record drawers keep Save and leave separate — Save
+stays open and shows "Saved"; Cancel / × leaves. Save & Close is the finishing commit.
+Both surfaces still obey "never close over a failed save." See `drawer-pattern.md`.
 
 Do not add a toast on top of that. There are none in the app, and a feedback convention
 should be chosen for the whole app rather than introduced by whichever feature happened to

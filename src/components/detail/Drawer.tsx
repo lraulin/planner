@@ -76,25 +76,32 @@ export function DrawerHeader({
   icon,
   title,
   onClose,
+  actions,
 }: {
   titleId: string;
-  eyebrow: string;
+  eyebrow?: string;
   /** The type glyph, shown beside the eyebrow. The same one the outline row draws. */
   icon?: React.ReactNode;
   title: string;
   onClose: () => void;
+  /** Optional controls before the × (e.g. Delete). */
+  actions?: React.ReactNode;
 }) {
   return (
     <div className="flex flex-none items-start gap-3 border-b border-rule px-5 py-3">
       <div className="min-w-0 flex-1">
-        <p className="flex items-center gap-1.5 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
-          {icon}
-          {eyebrow}
-        </p>
+        {eyebrow != null && eyebrow !== "" && (
+          <p className="flex items-center gap-1.5 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
+            {icon}
+            {eyebrow}
+          </p>
+        )}
         <h2 id={titleId} className="truncate text-[1.0625rem] font-semibold text-ink">
           {title || "Untitled"}
         </h2>
       </div>
+
+      {actions}
 
       <button
         type="button"
@@ -109,16 +116,19 @@ export function DrawerHeader({
 }
 
 /**
- * The drawer's footer. Save stays enabled unless a save is already in flight — blocking
- * errors surface on the attempt rather than by disabling the button, per `ux-principles.md`.
+ * Sticky drawer footer for explicit-save forms (`drawer-pattern.md`).
  *
- * Explicit-save drawers need two commit paths (`drawer-pattern.md`):
- * - **Save** — persists, stays open, shows "Saved" (primary; checkpoint mid-edit).
- * - **Save & close** — persists then leaves (sugar for the done path; ⌘/Ctrl+Enter).
- * Close alone is the discard/leave path and prompts when dirty.
+ * Layout (LTR):
+ *   [ Cancel ]                          [ Save ]  [ Save & Close ]
  *
- * `justSaved` is set by the form after a successful stay-open Save and cleared when the
- * next edit dirties the draft.
+ * - **Cancel** (left, ghost) — leave; parent prompts when dirty.
+ * - **Save** (right, outlined) — persist and stay open; shows "Saved".
+ * - **Save & Close** (rightmost, solid primary) — persist then leave.
+ *
+ * Shortcuts: ⌘/Ctrl+S → Save · ⌘/Ctrl+Enter → Save & Close · Esc → Cancel
+ * (Esc is handled by `Drawer`, which must call the same dirty-aware close path).
+ *
+ * `justSaved` is set after a successful stay-open Save and cleared on the next edit.
  */
 export function DrawerFooter({
   onSave,
@@ -132,6 +142,7 @@ export function DrawerFooter({
   onSave: () => void;
   /** Persist then leave on success. Failed saves must stay open with the error. */
   onSaveAndClose: () => void;
+  /** Leave / discard path (same as header × and Escape). */
   onClose: () => void;
   saving: boolean;
   dirty: boolean;
@@ -143,21 +154,31 @@ export function DrawerFooter({
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return;
-      // Don't steal Enter from a textarea / contenteditable that is mid-edit.
+      const mod = event.metaKey || event.ctrlKey;
+      if (!mod) return;
+
+      // Don't steal shortcuts from a textarea / contenteditable mid-edit — except ⌘S,
+      // which should always mean "save progress" rather than the browser's Save Page.
       const target = event.target;
-      if (
+      const inText =
         target instanceof HTMLTextAreaElement ||
-        (target instanceof HTMLElement && target.isContentEditable)
-      ) {
+        (target instanceof HTMLElement && target.isContentEditable);
+
+      if (event.key === "s" || event.key === "S") {
+        event.preventDefault();
+        if (!saving) onSave();
         return;
       }
-      event.preventDefault();
-      if (!saving) onSaveAndClose();
+
+      if (event.key === "Enter") {
+        if (inText) return;
+        event.preventDefault();
+        if (!saving) onSaveAndClose();
+      }
     }
     document.addEventListener("keydown", onKeyDown, true);
     return () => document.removeEventListener("keydown", onKeyDown, true);
-  }, [onSaveAndClose, saving]);
+  }, [onSave, onSaveAndClose, saving]);
 
   return (
     <div className="flex-none border-t border-rule">
@@ -173,34 +194,37 @@ export function DrawerFooter({
       <div className="flex flex-wrap items-center gap-2 px-5 py-3">
         <button
           type="button"
-          onClick={onSave}
-          disabled={saving}
-          className="rounded border border-select-edge bg-select px-3 py-1.5 text-[0.8125rem] font-medium text-ink transition-colors hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {saving ? "Saving…" : "Save"}
-        </button>
-
-        <button
-          type="button"
-          onClick={onSaveAndClose}
-          disabled={saving}
-          title="⌘/Ctrl+Enter"
-          className="rounded border border-rule px-3 py-1.5 text-[0.8125rem] text-ink transition-colors hover:border-rule-strong hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          Save & close
-        </button>
-
-        <button
-          type="button"
           onClick={onClose}
-          className="rounded border border-rule px-3 py-1.5 text-[0.8125rem] text-ink transition-colors hover:border-rule-strong hover:bg-surface-raised"
+          className="rounded px-3 py-1.5 text-[0.8125rem] text-ink-muted transition-colors hover:bg-surface-raised hover:text-ink"
         >
-          Close
+          Cancel
         </button>
 
         {status && (
-          <span className="ml-auto text-[0.75rem] text-ink-muted">{status}</span>
+          <span className="text-[0.75rem] text-ink-muted sm:ml-1">{status}</span>
         )}
+
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={saving}
+            title="⌘/Ctrl+S"
+            className="rounded border border-rule px-3 py-1.5 text-[0.8125rem] text-ink transition-colors hover:border-rule-strong hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {saving ? "Saving…" : "Save"}
+          </button>
+
+          <button
+            type="button"
+            onClick={onSaveAndClose}
+            disabled={saving}
+            title="⌘/Ctrl+Enter"
+            className="rounded border border-select-edge bg-select px-3 py-1.5 text-[0.8125rem] font-medium text-ink transition-colors hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Save & Close
+          </button>
+        </div>
       </div>
     </div>
   );
