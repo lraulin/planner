@@ -21,6 +21,13 @@ import {
   saveNodeDetailAction,
   updateNodeItemAction,
 } from "@/app/outline/detail-actions";
+import { useSetting, type SettingCodec } from "@/components/settings/SettingsProvider";
+import {
+  parseDrawerSettings,
+  serializeDrawerSettings,
+  type DrawerSettings,
+} from "@/lib/settings/drawer";
+import { DRAWER_SCOPE } from "@/lib/settings/scopes";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Drawer, DrawerFooter, DrawerHeader } from "./Drawer";
 import { FormTabs } from "./FormTabs";
@@ -31,6 +38,11 @@ import { projectTabs } from "./ProjectForm";
 import { resultAreaTabs } from "./ResultAreaForm";
 import { taskTabs } from "./TaskForm";
 import type { DetailFormProps } from "./formShared";
+
+const DRAWER_CODEC: SettingCodec<DrawerSettings> = {
+  parse: parseDrawerSettings,
+  serialize: serializeDrawerSettings,
+};
 
 /**
  * The detail drawer: fetches one record, hands it to the form for its type, and saves.
@@ -144,7 +156,10 @@ function DetailForm({
 }) {
   const [values, setValues] = useState<NodeDetailValues>(() => initialValues(detail));
   const [items, setItems] = useState<NodeItem[]>(detail.items);
-  const [activeTab, setActiveTab] = useState("general");
+  const { value: drawerSettings, patch: patchDrawer } = useSetting(
+    DRAWER_SCOPE,
+    DRAWER_CODEC,
+  );
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmingClose, setConfirmingClose] = useState(false);
@@ -276,6 +291,23 @@ function DetailForm({
         return taskTabs(formProps);
     }
   }, [detail.type, formProps]);
+
+  // Prefer the last tab this type was left on, but only if that form still has it —
+  // a renamed tab should fall back to General rather than leave the drawer blank.
+  const tabIds = useMemo(() => tabs.map((tab) => tab.id), [tabs]);
+  const storedTab = drawerSettings.tabByType[detail.type];
+  const activeTab =
+    storedTab && tabIds.includes(storedTab) ? storedTab : (tabIds[0] ?? "general");
+
+  const setActiveTab = useCallback(
+    (tabId: string) => {
+      patchDrawer((current) => ({
+        ...current,
+        tabByType: { ...current.tabByType, [detail.type]: tabId },
+      }));
+    },
+    [patchDrawer, detail.type],
+  );
 
   function save() {
     setError(null);

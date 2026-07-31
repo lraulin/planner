@@ -4,6 +4,8 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import type { NodeState, PriorityLetter } from "@/db/schema";
 import { DataGrid, type RowDrag } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";
+import { SortChip, sortColumnLabel } from "@/components/grid/SortChip";
+import { useGridState } from "@/components/grid/useGridState";
 import type { GridRow } from "@/lib/tree/slice";
 import {
   DAY_LETTERS,
@@ -15,6 +17,8 @@ import {
 } from "@/lib/day/priority";
 import type { DailyItemView } from "@/lib/day/types";
 import { DAY_COLUMNS, type DayColumnCtx } from "./dayColumns";
+
+const DAY_COLUMN_IDS = DAY_COLUMNS.map((column) => column.id);
 
 /**
  * A day's task list.
@@ -97,6 +101,7 @@ export function DailyItemsGrid({
   const [draft, setDraft] = useState("");
   const draftRef = useRef<HTMLInputElement>(null);
 
+  const gridState = useGridState("day", DAY_COLUMNS, DAY_COLUMN_IDS);
   const rows = useMemo(() => buildRows(items), [items]);
 
   const onAssignPriority = useCallback(
@@ -130,17 +135,23 @@ export function DailyItemsGrid({
     [items],
   );
 
-  const rowDrag: RowDrag = useMemo(
-    () => ({
+  /**
+   * Day priority is ranked by drag. A header sort is a non-destructive view of the same
+   * list — stand drag down while it is active so a drop cannot write ranks the user cannot
+   * see under the sorted order.
+   */
+  const rowDrag: RowDrag | undefined = useMemo(() => {
+    if (gridState.sort) return undefined;
+
+    return {
       resolve: (dragId, targetId, zone) =>
         planFor(dragId, targetId, zone).length > 0 ? { depth: 0 } : null,
       onDrop: (dragId, targetId, zone) => {
         setSelectedId(dragId);
         onApplyPriorities(planFor(dragId, targetId, zone));
       },
-    }),
-    [planFor, onApplyPriorities],
-  );
+    };
+  }, [gridState.sort, planFor, onApplyPriorities]);
 
   const rowMenu = useCallback(
     (itemId: string): MenuItem[] => {
@@ -185,10 +196,17 @@ export function DailyItemsGrid({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {gridState.sort && (
+        <SortChip
+          sort={gridState.sort}
+          columnLabel={sortColumnLabel(gridState.sort, DAY_COLUMNS)}
+          onClear={gridState.clearSort}
+        />
+      )}
       <div className="min-h-0 flex-1 overflow-auto">
         <DataGrid<DayColumnCtx, DailyItemView>
           rows={rows}
-          columns={DAY_COLUMNS}
+          columns={gridState.columns}
           columnCtx={columnCtx}
           selectedId={selectedId}
           onSelect={setSelectedId}
@@ -196,6 +214,16 @@ export function DailyItemsGrid({
           rowDrag={rowDrag}
           rowMenu={rowMenu}
           rowLabel={(row) => row.node.title}
+          enableSort
+          sort={gridState.sort}
+          onSortChange={gridState.toggleSort}
+          filters={gridState.filters}
+          onFilterChange={gridState.setFilter}
+          widths={gridState.widths}
+          onResizeColumn={gridState.setWidth}
+          onResetColumnWidth={gridState.clearWidth}
+          collapsedGroups={gridState.collapsedGroups}
+          onToggleGroup={gridState.toggleGroup}
           empty={<p className="p-4 text-[0.8125rem] text-ink-faint">{emptyHint}</p>}
         />
       </div>

@@ -31,20 +31,33 @@ import {
   updateNoteAction,
 } from "@/app/notes/actions";
 import { DataGrid, type RowDrag } from "@/components/grid/DataGrid";
+import { SortChip, sortColumnLabel } from "@/components/grid/SortChip";
 import { useGridState } from "@/components/grid/useGridState";
 import { ShowFieldsDialog } from "@/components/grid/ShowFieldsDialog";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import type { MenuItem } from "@/components/grid/ContextMenu";
+import { useSetting, type SettingCodec } from "@/components/settings/SettingsProvider";
 import {
   ErrorBanner,
   TabToolbar,
   ToolbarButton,
   ToolbarSelect,
 } from "@/components/tabs/tabChrome";
+import {
+  parseNotesView,
+  serializeNotesView,
+  type NotesViewSettings,
+} from "@/lib/settings/notes";
+import { NOTES_FILTER_SCOPE } from "@/lib/settings/scopes";
 import { notesColumns, NOTES_COLUMN_IDS, type NotesColumnCtx } from "./notesColumns";
 import { NoteFilterDialog } from "./NoteFilterDialog";
 import { NoteDrawer } from "./NoteDrawer";
 import { isTypingTarget } from "@/lib/keyboard";
+
+const NOTES_VIEW_CODEC: SettingCodec<NotesViewSettings> = {
+  parse: parseNotesView,
+  serialize: serializeNotesView,
+};
 
 /**
  * The Notes tab.
@@ -66,9 +79,23 @@ export function NotesGrid({
   initialNoteId?: string | null;
 }) {
   const [patches, setPatches] = useState<Record<string, Partial<NoteNode>>>({});
-  const [mode, setMode] = useState<NotesMode>("nested");
-  const [sort, setSort] = useState<NotesSort>("manual");
-  const [filter, setFilter] = useState<NoteFilter>(EMPTY_NOTE_FILTER);
+  const { value: view, patch: patchView } = useSetting(
+    NOTES_FILTER_SCOPE,
+    NOTES_VIEW_CODEC,
+  );
+  const { mode, sort, filter } = view;
+  const setMode = useCallback(
+    (next: NotesMode) => patchView((current) => ({ ...current, mode: next })),
+    [patchView],
+  );
+  const setSort = useCallback(
+    (next: NotesSort) => patchView((current) => ({ ...current, sort: next })),
+    [patchView],
+  );
+  const setFilter = useCallback(
+    (next: NoteFilter) => patchView((current) => ({ ...current, filter: next })),
+    [patchView],
+  );
   const [filterOpen, setFilterOpen] = useState(false);
   const [fieldsOpen, setFieldsOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(initialNoteId ?? null);
@@ -201,8 +228,9 @@ export function NotesGrid({
    *
    * Turned off entirely unless the rows on screen are the stored tree: dragging a row into
    * a position within a sorted or flattened list would write an order nothing displays.
+   * A column header sort (gridState.sort) is the same rule — the chip is the way back.
    */
-  const canReorder = mode === "nested" && sort === "manual";
+  const canReorder = mode === "nested" && sort === "manual" && gridState.sort === null;
 
   const rowDrag: RowDrag | undefined = useMemo(() => {
     if (!canReorder) return undefined;
@@ -458,6 +486,14 @@ export function NotesGrid({
       </TabToolbar>
 
       {error && <ErrorBanner message={error} />}
+
+      {gridState.sort && (
+        <SortChip
+          sort={gridState.sort}
+          columnLabel={sortColumnLabel(gridState.sort, notesColumns)}
+          onClear={gridState.clearSort}
+        />
+      )}
 
       <DataGrid
         rows={rows}

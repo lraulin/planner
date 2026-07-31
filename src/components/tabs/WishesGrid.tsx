@@ -1,19 +1,30 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
-import type { OutlineNode } from "@/lib/tree/types";
 import type { PriorityLetter } from "@/db/schema";
-import { formatPriority, parsePriority } from "@/lib/tree/format";
-import { WISH_TYPE_CODES, type WishListRow } from "@/lib/detail/wishTypes";
+import type { OutlineNode } from "@/lib/tree/types";
+import type { GridRow } from "@/lib/tree/slice";
+import type { WishListRow } from "@/lib/detail/wishTypes";
 import { updateNodeItemAction } from "@/app/outline/detail-actions";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
-import { ContextMenu } from "@/components/grid/ContextMenu";
+import { DataGrid } from "@/components/grid/DataGrid";
+import type { MenuItem } from "@/components/grid/ContextMenu";
+import { ShowFieldsDialog } from "@/components/grid/ShowFieldsDialog";
+import { useGridState } from "@/components/grid/useGridState";
 import { ErrorBanner, TabToolbar, ToolbarButton, ToolbarSelect } from "./tabChrome";
 import { isTypingTarget } from "@/lib/keyboard";
+import {
+  wishesColumns,
+  WISHES_COLUMN_IDS,
+  type WishesColumnCtx,
+} from "./wishesColumns";
 
 /**
- * Wish List is the only tab whose rows are `node_items`, not `nodes`. It reuses the same
- * toolbar/drawer chrome but not DataGrid's OutlineNode column model.
+ * Wish List tab.
+ *
+ * Rows are `node_items`, not `nodes` — the only grid whose payload is not an OutlineNode.
+ * It still goes through DataGrid the way Notes does, so column filters, sort, widths and
+ * group collapse share the same persistence rail as every other tab.
  */
 export function WishesGrid({
   initialWishes,
@@ -27,11 +38,11 @@ export function WishesGrid({
   const [scopeId, setScopeId] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detailNodeId, setDetailNodeId] = useState<string | null>(null);
+  const [showFields, setShowFields] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [menu, setMenu] = useState<{ nodeId: string; x: number; y: number } | null>(
-    null,
-  );
   const [, startTransition] = useTransition();
+
+  const gridState = useGridState("wishes", wishesColumns, [...WISHES_COLUMN_IDS]);
 
   const rows = useMemo(
     () =>
@@ -59,12 +70,12 @@ export function WishesGrid({
     );
   }, [initialWishes]);
 
-  const visible = useMemo(() => {
+  const gridRows: GridRow<WishListRow>[] = useMemo(() => {
     const filtered = scopeId
       ? rows.filter((row) => row.resultAreaId === scopeId)
       : rows;
 
-    // Group by result area: emit header markers as synthetic rows.
+    // Group by result area. Same shape DataGrid already understands for Projects/Goals.
     type Display =
       | { kind: "group"; id: string; label: string; count: number }
       | { kind: "wish"; row: WishListRow };
@@ -97,7 +108,25 @@ export function WishesGrid({
       out.push({ kind: "wish", row });
     }
     flushCount(out.length);
-    return out;
+
+    return out.map((entry): GridRow<WishListRow> => {
+      if (entry.kind === "group") {
+        return {
+          kind: "group",
+          id: entry.id,
+          label: entry.label,
+          count: entry.count,
+          depth: 0,
+          collapsed: false,
+        };
+      }
+      return {
+        kind: "node",
+        id: entry.row.id,
+        node: entry.row,
+        depth: 0,
+      };
+    });
   }, [rows, scopeId]);
 
   const patchRow = useCallback((id: string, changes: Partial<WishListRow>) => {
@@ -130,8 +159,43 @@ export function WishesGrid({
     setDetailNodeId(selectedWish.nodeId);
   }, [selectedWish]);
 
-  // Stable, so the menu's listener effect does not re-register on every render.
-  const closeMenu = useCallback(() => setMenu(null), []);
+  const columnCtx: WishesColumnCtx = useMemo(
+    () => ({
+      onPriorityChange: (row, letter: PriorityLetter | null, rank: number | null) => {
+        patchRow(row.id, { priorityLetter: letter, priorityRank: rank });
+        apply(() =>
+          updateNodeItemAction(row.id, {
+            priorityLetter: letter,
+            priorityRank: rank,
+          }),
+        );
+      },
+      onTitleChange: (row, title) => {
+        patchRow(row.id, { title });
+        apply(() => updateNodeItemAction(row.id, { title }));
+      },
+      onDescriptionChange: (row, description) => {
+        patchRow(row.id, { description });
+        apply(() => updateNodeItemAction(row.id, { description }));
+      },
+    }),
+    [patchRow, apply],
+  );
+
+  const rowMenu = useCallback(
+    (wishId: string): MenuItem[] => {
+      const wish = rows.find((row) => row.id === wishId);
+      if (!wish) return [];
+      return [
+        {
+          label: "Open owner",
+          shortcut: "Enter",
+          onSelect: () => setDetailNodeId(wish.nodeId),
+        },
+      ];
+    },
+    [rows],
+  );
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -155,6 +219,14 @@ export function WishesGrid({
           onChange={setScopeId}
           options={[{ value: "", label: "All Result Areas" }, ...resultAreas]}
         />
+        <ToolbarButton onClick={() => setShowFields(true)}>Show Fields</ToolbarButton>
+        <ToolbarButton
+          onClick={gridState.clearFilters}
+          disabled={!gridState.filtersActive}
+          title="Clear every column filter on this view"
+        >
+          Clear Filters
+        </ToolbarButton>
         <ToolbarButton onClick={openOwner} disabled={!selectedWish} title="Enter">
           Open owner
         </ToolbarButton>
@@ -162,249 +234,49 @@ export function WishesGrid({
 
       {error && <ErrorBanner message={error} />}
 
-      <div
-        className="grid flex-none items-center border-b border-rule-strong bg-surface-raised px-3 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted"
-        style={{
-          gridTemplateColumns: "3rem 4rem minmax(12rem,1fr) minmax(12rem,1.2fr)",
-          columnGap: "0.75rem",
-          height: "var(--row-height)",
+      <DataGrid<WishesColumnCtx, WishListRow>
+        rows={gridRows}
+        columns={gridState.columns}
+        columnCtx={columnCtx}
+        selectedId={selectedId}
+        onSelect={setSelectedId}
+        onOpenDetail={(id) => {
+          const wish = rows.find((row) => row.id === id);
+          if (wish) setDetailNodeId(wish.nodeId);
         }}
-      >
-        <span className="text-center">Pri</span>
-        <span>Type</span>
-        <span>Title</span>
-        <span>Description</span>
-      </div>
-
-      <div
-        role="grid"
-        aria-label="Wish List"
-        className="min-h-0 flex-1 overflow-auto outline-none"
-      >
-        {visible.length === 0 ? (
+        ariaLabel="Wish List"
+        rowMenu={rowMenu}
+        rowLabel={(row) => row.node.title || "Untitled wish"}
+        enableFilters
+        enableSort
+        sort={gridState.sort}
+        onSortChange={gridState.toggleSort}
+        filters={gridState.filters}
+        onFilterChange={gridState.setFilter}
+        widths={gridState.widths}
+        onResizeColumn={gridState.setWidth}
+        onResetColumnWidth={gridState.clearWidth}
+        collapsedGroups={gridState.collapsedGroups}
+        onToggleGroup={gridState.toggleGroup}
+        empty={
           <div className="flex h-full items-center justify-center p-8 text-[0.9375rem] text-ink-muted">
             No wishes yet. Add them on a Result Area&apos;s Wishes tab.
           </div>
-        ) : (
-          visible.map((entry) => {
-            if (entry.kind === "group") {
-              return (
-                <div
-                  key={entry.id}
-                  className="flex items-center gap-2 border-b border-rule bg-surface-raised/80 px-3 text-[0.8125rem] font-semibold text-ink"
-                  style={{ height: "var(--row-height)" }}
-                >
-                  <span className="truncate">{entry.label}</span>
-                  <span className="tabular text-[0.75rem] font-normal text-ink-faint">
-                    ({entry.count})
-                  </span>
-                </div>
-              );
-            }
-
-            const row = entry.row;
-            const selected = row.id === selectedId;
-            return (
-              <div
-                key={row.id}
-                role="row"
-                aria-selected={selected}
-                onClick={() => setSelectedId(row.id)}
-                onDoubleClick={() => setDetailNodeId(row.nodeId)}
-                onContextMenu={(event) => {
-                  // Leave the browser's cut/copy/paste menu alone inside the editors.
-                  if (
-                    (event.target as HTMLElement).closest("input, select, textarea")
-                  ) {
-                    return;
-                  }
-                  event.preventDefault();
-                  setSelectedId(row.id);
-                  setMenu({ nodeId: row.nodeId, x: event.clientX, y: event.clientY });
-                }}
-                className={[
-                  "grid items-center border-b border-rule/60 px-3 text-[0.875rem]",
-                  selected ? "bg-select" : "hover:bg-surface-raised/60",
-                ].join(" ")}
-                style={{
-                  gridTemplateColumns:
-                    "3rem 4rem minmax(12rem,1fr) minmax(12rem,1.2fr)",
-                  columnGap: "0.75rem",
-                  height: "var(--row-height)",
-                }}
-              >
-                <WishPriorityCell
-                  letter={row.priorityLetter}
-                  rank={row.priorityRank}
-                  onChange={(letter, rank) => {
-                    patchRow(row.id, {
-                      priorityLetter: letter,
-                      priorityRank: rank,
-                    });
-                    apply(() =>
-                      updateNodeItemAction(row.id, {
-                        priorityLetter: letter,
-                        priorityRank: rank,
-                      }),
-                    );
-                  }}
-                />
-                <span className="text-[0.75rem] font-medium text-ink-muted">
-                  {WISH_TYPE_CODES[row.kind]}
-                </span>
-                <WishTextCell
-                  value={row.title}
-                  ariaLabel="Title"
-                  onChange={(title) => {
-                    patchRow(row.id, { title });
-                    apply(() => updateNodeItemAction(row.id, { title }));
-                  }}
-                />
-                <WishTextCell
-                  value={row.description}
-                  ariaLabel="Description"
-                  onChange={(description) => {
-                    patchRow(row.id, { description });
-                    apply(() => updateNodeItemAction(row.id, { description }));
-                  }}
-                />
-              </div>
-            );
-          })
-        )}
-      </div>
-
-      {menu && (
-        // One entry, because opening the owning result area is the only thing this tab
-        // does to a wish that is not an inline cell edit.
-        <ContextMenu
-          x={menu.x}
-          y={menu.y}
-          items={[
-            {
-              label: "Open owner",
-              shortcut: "Enter",
-              onSelect: () => setDetailNodeId(menu.nodeId),
-            },
-          ]}
-          onClose={closeMenu}
-        />
-      )}
+        }
+      />
 
       <NodeDetailDrawer node={detailNode} onClose={() => setDetailNodeId(null)} />
+
+      <ShowFieldsDialog
+        open={showFields}
+        allColumns={wishesColumns}
+        shownIds={gridState.order}
+        onShow={gridState.show}
+        onHide={gridState.hide}
+        onMove={gridState.move}
+        onReset={gridState.resetColumns}
+        onClose={() => setShowFields(false)}
+      />
     </div>
-  );
-}
-
-function WishPriorityCell({
-  letter,
-  rank,
-  onChange,
-}: {
-  letter: PriorityLetter | null;
-  rank: number | null;
-  onChange: (letter: PriorityLetter | null, rank: number | null) => void;
-}) {
-  const current = formatPriority(letter, rank);
-  const [value, setValue] = useState(current);
-  const [invalid, setInvalid] = useState(false);
-
-  function commit() {
-    const parsed = parsePriority(value);
-    if (!parsed) {
-      setInvalid(true);
-      setValue(current);
-      return;
-    }
-    setInvalid(false);
-    onChange(parsed.letter, parsed.rank);
-  }
-
-  return (
-    <input
-      value={value}
-      onClick={(event) => event.stopPropagation()}
-      onChange={(event) => {
-        setInvalid(false);
-        setValue(event.target.value);
-      }}
-      onBlur={commit}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") {
-          event.preventDefault();
-          commit();
-          event.currentTarget.blur();
-        } else if (event.key === "Escape") {
-          event.preventDefault();
-          setValue(current);
-          setInvalid(false);
-          event.currentTarget.blur();
-        }
-      }}
-      aria-label="Priority"
-      aria-invalid={invalid}
-      placeholder="—"
-      maxLength={3}
-      className={[
-        "tabular w-full border-none bg-transparent text-center text-[0.8125rem] font-medium uppercase outline-none placeholder:text-ink-faint/50",
-        invalid ? "text-priority-a" : "text-ink-muted",
-      ].join(" ")}
-    />
-  );
-}
-
-function WishTextCell({
-  value,
-  ariaLabel,
-  onChange,
-}: {
-  value: string;
-  ariaLabel: string;
-  onChange: (next: string) => void;
-}) {
-  // Keyed on the stored value so a server refresh remounts with the new text.
-  return (
-    <WishTextCellInner
-      key={value}
-      value={value}
-      ariaLabel={ariaLabel}
-      onChange={onChange}
-    />
-  );
-}
-
-function WishTextCellInner({
-  value,
-  ariaLabel,
-  onChange,
-}: {
-  value: string;
-  ariaLabel: string;
-  onChange: (next: string) => void;
-}) {
-  const [draft, setDraft] = useState(value);
-
-  return (
-    <input
-      value={draft}
-      onClick={(event) => event.stopPropagation()}
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={() => {
-        const next = draft.trim();
-        if (next !== value) onChange(next);
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") {
-          event.preventDefault();
-          event.currentTarget.blur();
-        } else if (event.key === "Escape") {
-          event.preventDefault();
-          setDraft(value);
-          event.currentTarget.blur();
-        }
-      }}
-      aria-label={ariaLabel}
-      className="w-full truncate border-none bg-transparent text-[0.8125rem] text-ink outline-none"
-    />
   );
 }

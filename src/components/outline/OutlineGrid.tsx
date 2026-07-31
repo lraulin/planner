@@ -41,20 +41,29 @@ import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import { DataGrid, buildNodeDepths, type RowDrag } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";
+import { SortChip, sortColumnLabel } from "@/components/grid/SortChip";
+import { useGridState } from "@/components/grid/useGridState";
 import { useOptimisticNodes } from "@/components/grid/useOptimisticNodes";
 import { useToday } from "@/components/grid/useToday";
+import { useSetting, type SettingCodec } from "@/components/settings/SettingsProvider";
+import {
+  parseOutlineFilters,
+  serializeOutlineFilters,
+  type OutlineFilters,
+} from "@/lib/settings/outline";
+import { OUTLINE_FILTERS_SCOPE } from "@/lib/settings/scopes";
 import { HintBar } from "./HintBar";
 import { NewChildDialog } from "./NewChildDialog";
-import { outlineColumns, type OutlineColumnCtx } from "./outlineColumns";
+import {
+  outlineColumns,
+  OUTLINE_COLUMN_IDS,
+  type OutlineColumnCtx,
+} from "./outlineColumns";
 import { isTypingTarget } from "@/lib/keyboard";
 
-type TypeFilters = Record<NodeType, boolean>;
-
-const ALL_TYPES_SHOWN: TypeFilters = {
-  result_area: true,
-  goal: true,
-  project: true,
-  task: true,
+const OUTLINE_FILTERS_CODEC: SettingCodec<OutlineFilters> = {
+  parse: parseOutlineFilters,
+  serialize: serializeOutlineFilters,
 };
 
 /**
@@ -73,11 +82,17 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const [pendingDelete, setPendingDelete] = useState<OutlineNode | null>(null);
   /** The row a new child is being added to, while its kind is being chosen. */
   const [pendingChildOf, setPendingChildOf] = useState<OutlineNode | null>(null);
-  const [filters, setFilters] = useState<TypeFilters>(ALL_TYPES_SHOWN);
-  const [focusOnly, setFocusOnly] = useState(false);
   const [byCategory, setByCategory] = useState(false);
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const today = useToday();
+
+  const {
+    value: typeFilters,
+    patch: patchTypeFilters,
+    reset: resetTypeFilters,
+  } = useSetting(OUTLINE_FILTERS_SCOPE, OUTLINE_FILTERS_CODEC);
+  const { types: filters, focusOnly } = typeFilters;
+
+  const gridState = useGridState("outline", outlineColumns, [...OUTLINE_COLUMN_IDS]);
 
   const nodeDepths = useMemo(() => buildNodeDepths(nodes, byId), [nodes, byId]);
 
@@ -121,11 +136,11 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     const out: OutlineNode[] = [];
     let insideCollapsed = false;
     for (const row of gridRows) {
-      if (row.kind === "group") insideCollapsed = collapsedGroups.has(row.id);
+      if (row.kind === "group") insideCollapsed = gridState.collapsedGroups.has(row.id);
       else if (!insideCollapsed) out.push(row.node);
     }
     return out;
-  }, [byCategory, visible, gridRows, collapsedGroups]);
+  }, [byCategory, visible, gridRows, gridState.collapsedGroups]);
 
   const selected = selectedId ? (byId.get(selectedId) ?? null) : null;
 
@@ -385,8 +400,15 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
    * Nothing is patched optimistically — a move changes depth, order and rollups at once,
    * and the server round-trip that `apply` already performs is the honest way to get them.
    */
-  const rowDrag: RowDrag = useMemo(
-    () => ({
+  /**
+   * Drag is the hand-built tree order. While a header sort is active the rows on screen
+   * are not that order, so dragging would write a sortKey the user cannot see. Stand down
+   * entirely and let the SortChip clear the way back.
+   */
+  const rowDrag: RowDrag | undefined = useMemo(() => {
+    if (gridState.sort) return undefined;
+
+    return {
       resolve: (dragId, targetId, zone) => {
         if (categoryLabelFromGroupId(targetId) !== null) {
           return byCategory
@@ -424,9 +446,8 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
           return result;
         });
       },
-    }),
-    [byId, byCategory, nodes, apply],
-  );
+    };
+  }, [byId, byCategory, nodes, apply, gridState.sort]);
 
   const columnCtx: OutlineColumnCtx = useMemo(
     () => ({
@@ -481,10 +502,18 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
       <FilterBar
         filters={filters}
         onToggleType={(type) =>
-          setFilters((current) => ({ ...current, [type]: !current[type] }))
+          patchTypeFilters((current) => ({
+            ...current,
+            types: { ...current.types, [type]: !current.types[type] },
+          }))
         }
         focusOnly={focusOnly}
-        onToggleFocusOnly={() => setFocusOnly((v) => !v)}
+        onToggleFocusOnly={() =>
+          patchTypeFilters((current) => ({
+            ...current,
+            focusOnly: !current.focusOnly,
+          }))
+        }
         byCategory={byCategory}
         onToggleByCategory={() => setByCategory((v) => !v)}
         commands={commands}
@@ -502,9 +531,17 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         </p>
       )}
 
+      {gridState.sort && (
+        <SortChip
+          sort={gridState.sort}
+          columnLabel={sortColumnLabel(gridState.sort, outlineColumns)}
+          onClear={gridState.clearSort}
+        />
+      )}
+
       <DataGrid
         rows={gridRows}
-        columns={outlineColumns}
+        columns={gridState.columns}
         columnCtx={columnCtx}
         selectedId={selectedId}
         onSelect={setSelectedId}
@@ -515,22 +552,24 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         ariaLabel="Outline"
         rowDrag={rowDrag}
         rowMenu={rowMenu}
-        collapsedGroups={collapsedGroups}
-        onToggleGroup={(id) =>
-          setCollapsedGroups((current) => {
-            const next = new Set(current);
-            if (next.has(id)) next.delete(id);
-            else next.add(id);
-            return next;
-          })
-        }
+        enableFilters
+        enableSort
+        sort={gridState.sort}
+        onSortChange={gridState.toggleSort}
+        filters={gridState.filters}
+        onFilterChange={gridState.setFilter}
+        widths={gridState.widths}
+        onResizeColumn={gridState.setWidth}
+        onResetColumnWidth={gridState.clearWidth}
+        collapsedGroups={gridState.collapsedGroups}
+        onToggleGroup={gridState.toggleGroup}
         empty={
           <EmptyState
             filtered={nodes.length > 0}
             onAddResultArea={addResultArea}
             onClearFilters={() => {
-              setFilters(ALL_TYPES_SHOWN);
-              setFocusOnly(false);
+              resetTypeFilters();
+              gridState.clearFilters();
             }}
           />
         }
@@ -692,7 +731,7 @@ function FilterBar({
   onAddGoal,
   hasSelection,
 }: {
-  filters: TypeFilters;
+  filters: OutlineFilters["types"];
   onToggleType: (type: NodeType) => void;
   focusOnly: boolean;
   onToggleFocusOnly: () => void;

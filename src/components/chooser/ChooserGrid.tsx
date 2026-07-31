@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { DataGrid, type RowDrag } from "@/components/grid/DataGrid";
 import { ShowFieldsDialog } from "@/components/grid/ShowFieldsDialog";
+import { SortChip, sortColumnLabel } from "@/components/grid/SortChip";
 import { useGridState, useTabView } from "@/components/grid/useGridState";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import {
@@ -197,8 +198,13 @@ export function ChooserGrid({
 
   const { setSelectedId } = tab;
 
+  /**
+   * TC Priority is ranked by drag. While a header sort is active the on-screen order is
+   * not the ranking, so dragging would write ranks the user cannot see — stand down and
+   * show the SortChip instead.
+   */
   const rowDrag: RowDrag | undefined = useMemo(() => {
-    if (!view.tcPriority) return undefined;
+    if (!view.tcPriority || gridState.sort) return undefined;
 
     return {
       resolve: (dragId, targetId, zone) =>
@@ -208,7 +214,7 @@ export function ChooserGrid({
         applyTcPlan(planTcFor(dragId, targetId, zone));
       },
     };
-  }, [view.tcPriority, planTcFor, setSelectedId, applyTcPlan]);
+  }, [view.tcPriority, gridState.sort, planTcFor, setSelectedId, applyTcPlan]);
 
   /** The `Project:` line under the toolbar — the selected row's ancestor path. */
   const breadcrumb = useMemo(() => {
@@ -320,6 +326,14 @@ export function ChooserGrid({
 
       {tab.error && <ErrorBanner message={tab.error} />}
 
+      {gridState.sort && (
+        <SortChip
+          sort={gridState.sort}
+          columnLabel={sortColumnLabel(gridState.sort, allColumns)}
+          onClear={gridState.clearSort}
+        />
+      )}
+
       <DataGrid
         rows={rows}
         columns={gridState.columns}
@@ -331,6 +345,9 @@ export function ChooserGrid({
         rowMenu={tab.rowMenu}
         rowDrag={rowDrag}
         enableFilters={advancedFilters}
+        enableSort
+        sort={gridState.sort}
+        onSortChange={gridState.toggleSort}
         filters={gridState.filters}
         onFilterChange={gridState.setFilter}
         widths={gridState.widths}
