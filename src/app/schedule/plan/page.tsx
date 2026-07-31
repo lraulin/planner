@@ -1,7 +1,7 @@
 import { getCurrentUserId } from "@/lib/auth";
 import { loadWeeklyPlanPayload } from "@/lib/planning/queries";
 import { fromDateKey, startOfWeek, toDateKey } from "@/lib/schedule/geometry";
-import { TabStrip } from "@/components/shell/TabStrip";
+import { AppShell } from "@/components/shell/AppShell";
 import { WeeklyPlanView } from "@/components/planning/WeeklyPlanView";
 
 export const dynamic = "force-dynamic";
@@ -24,13 +24,12 @@ export default async function WeeklyPlanPage({
   const payload = await loadWeeklyPlanPayload(userId, { weekStart, weekStartsOn });
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <TabStrip active="schedule" />
+    <AppShell active="schedule">
       <WeeklyPlanView
         payload={payload}
         weekKey={toDateKey(weekStart)}
         step={Number.isInteger(step) && step >= 0 && step <= 5 ? step : 0}
       />
-    </div>
+    </AppShell>
   );
 }

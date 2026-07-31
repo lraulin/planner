@@ -1,7 +1,7 @@
 import { getCurrentUserId } from "@/lib/auth";
 import { loadSchedule } from "@/lib/schedule/queries";
 import { loadOutline } from "@/lib/tree/queries";
-import { TabStrip } from "@/components/shell/TabStrip";
+import { AppShell } from "@/components/shell/AppShell";
 import { ScheduleView } from "@/components/schedule/ScheduleView";
 import { fromDateKey, startOfWeek, toDateKey } from "@/lib/schedule/geometry";
 
@@ -30,9 +30,8 @@ export default async function SchedulePage({
   ]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <TabStrip active="schedule" />
+    <AppShell active="schedule">
       <ScheduleView initial={schedule} nodes={nodes} weekKey={toDateKey(weekStart)} />
-    </div>
+    </AppShell>
   );
 }

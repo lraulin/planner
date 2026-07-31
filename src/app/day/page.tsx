@@ -2,7 +2,7 @@ import { getCurrentUserId } from "@/lib/auth";
 import { loadDay } from "@/lib/day/queries";
 import { loadSchedule } from "@/lib/schedule/queries";
 import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
-import { TabStrip } from "@/components/shell/TabStrip";
+import { AppShell } from "@/components/shell/AppShell";
 import { DayView } from "@/components/day/DayView";
 
 export const dynamic = "force-dynamic";
@@ -39,9 +39,8 @@ export default async function DayPage({
     }));
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <TabStrip active="day" />
+    <AppShell active="day">
       <DayView initial={payload} today={today} appointments={appointments} />
-    </div>
+    </AppShell>
   );
 }

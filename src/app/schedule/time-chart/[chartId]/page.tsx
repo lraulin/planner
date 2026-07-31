@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { getCurrentUserId } from "@/lib/auth";
 import { getTimeChart, listTimeChartAreas } from "@/lib/schedule/queries";
 import { loadOutline } from "@/lib/tree/queries";
-import { TabStrip } from "@/components/shell/TabStrip";
+import { AppShell } from "@/components/shell/AppShell";
 import { TimeChartEditorView } from "@/components/schedule/TimeChartEditorView";
 
 export const dynamic = "force-dynamic";
@@ -30,14 +30,13 @@ export default async function TimeChartEditorPage({
   ]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <TabStrip active="schedule" />
+    <AppShell active="schedule">
       <TimeChartEditorView
         chart={chart}
         initialAreas={areas}
         nodes={nodes}
         returnTo={returnTo}
       />
-    </div>
+    </AppShell>
   );
 }

@@ -147,12 +147,34 @@ async function launch() {
   await send("Page.enable");
   await send("Runtime.enable");
   await send("Network.enable");
+  await applyViewport(process.env.PLANNER_VIEWPORT ?? "1600x1000");
+}
+
+/**
+ * `1600x1000` (desktop) or `390x844` (iPhone 12 — the device the responsive work targets).
+ * Anything 767px or narrower turns on touch emulation as well, so `md`-and-below layouts are
+ * exercised the way a phone would: no hover, real touch events, and a mobile viewport.
+ */
+async function applyViewport(spec) {
+  const [w, h] = String(spec)
+    .toLowerCase()
+    .split("x")
+    .map((n) => parseInt(n, 10));
+  if (!w || !h) throw new Error(`bad viewport "${spec}" — expected e.g. 390x844`);
+
+  const mobile = w < 768;
   await send("Emulation.setDeviceMetricsOverride", {
-    width: 1600,
-    height: 1000,
-    deviceScaleFactor: 1,
-    mobile: false,
+    width: w,
+    height: h,
+    deviceScaleFactor: mobile ? 3 : 1,
+    mobile,
   });
+  // maxTouchPoints must stay in 1..16 even when disabling, or CDP rejects the call.
+  await send("Emulation.setTouchEmulationEnabled", {
+    enabled: mobile,
+    maxTouchPoints: 5,
+  });
+  return `${w}x${h}${mobile ? " (touch)" : ""}`;
 }
 
 async function shutdown(code) {
@@ -367,6 +389,18 @@ const COMMANDS = {
     console.log(`  → ${url}  "${await evaluate("document.title")}"`);
   },
 
+  async viewport(rest) {
+    console.log(`  → viewport ${await applyViewport(rest)}`);
+  },
+
+  async scheme(rest) {
+    const value = (rest || "light").trim();
+    await send("Emulation.setEmulatedMedia", {
+      features: [{ name: "prefers-color-scheme", value }],
+    });
+    console.log(`  → prefers-color-scheme: ${value}`);
+  },
+
   async shot(rest) {
     mkdirSync(OUT, { recursive: true });
     const name = (rest || `shot-${++shotCount}`).replace(/[^\w.-]+/g, "_");
@@ -575,6 +609,9 @@ const HELP = `planner driver — commands (one per line on stdin, or one per arg
 
   goto <path|url>          navigate (path is joined to ${BASE})
   shot <name>              PNG into ${OUT}
+  viewport <w>x<h>         resize; below 768 wide also turns on touch emulation
+                           (390x844 = iPhone 12). Also settable via PLANNER_VIEWPORT.
+  scheme light|dark        emulate prefers-color-scheme
   click <sel>              real mouse click at element centre
   dblclick <sel>           double click (opens the detail drawer on grid rows)
   rightclick <sel>         context menu

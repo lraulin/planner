@@ -2,7 +2,7 @@ import { getCurrentUserId } from "@/lib/auth";
 import { loadWeek } from "@/lib/day/queries";
 import { loadOutline } from "@/lib/tree/queries";
 import { fromDateKey, startOfWeek, toDateKey } from "@/lib/schedule/geometry";
-import { TabStrip } from "@/components/shell/TabStrip";
+import { AppShell } from "@/components/shell/AppShell";
 import { WeekPlanView } from "@/components/day/WeekPlanView";
 
 export const dynamic = "force-dynamic";
@@ -33,9 +33,8 @@ export default async function WeekPlanPage({
   ]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <TabStrip active="day" />
+    <AppShell active="day">
       <WeekPlanView initial={payload} nodes={nodes} today={toDateKey(new Date())} />
-    </div>
+    </AppShell>
   );
 }

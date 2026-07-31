@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { getCurrentUserId } from "@/lib/auth";
 import { loadOutline } from "@/lib/tree/queries";
-import { TabStrip } from "@/components/shell/TabStrip";
+import { AppShell } from "@/components/shell/AppShell";
 import { GoalsGrid } from "@/components/tabs/GoalsGrid";
 
 export const dynamic = "force-dynamic";
@@ -11,11 +11,10 @@ export default async function GoalsPage() {
   const nodes = await loadOutline(userId);
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <TabStrip active="goals" />
+    <AppShell active="goals">
       <Suspense fallback={<div className="min-h-0 flex-1" />}>
         <GoalsGrid initialNodes={nodes} />
       </Suspense>
-    </div>
+    </AppShell>
   );
 }

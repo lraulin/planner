@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { getCurrentUserId } from "@/lib/auth";
 import { plannedNodeIds } from "@/lib/day/queries";
 import { loadOutline } from "@/lib/tree/queries";
-import { TabStrip } from "@/components/shell/TabStrip";
+import { AppShell } from "@/components/shell/AppShell";
 import { ChooserGrid } from "@/components/chooser/ChooserGrid";
 
 export const dynamic = "force-dynamic";
@@ -15,11 +15,10 @@ export default async function ChooserPage() {
   ]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <TabStrip active="chooser" />
+    <AppShell active="chooser">
       <Suspense fallback={<div className="min-h-0 flex-1" />}>
         <ChooserGrid initialNodes={nodes} plannedNodeIds={[...planned]} />
       </Suspense>
-    </div>
+    </AppShell>
   );
 }

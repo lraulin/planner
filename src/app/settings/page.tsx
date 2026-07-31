@@ -11,7 +11,9 @@ export const dynamic = "force-dynamic";
 export default function SettingsRoute() {
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface">
-      <header className="flex flex-none items-center gap-4 border-b border-rule bg-shell px-4 py-2.5">
+      {/* Reached from the More sheet on a phone, so it carries its own notch inset — there
+          is no MobileHeader above it. "Back to app" is the way out; no bottom nav here. */}
+      <header className="pt-safe flex flex-none flex-wrap items-center gap-x-4 gap-y-1 border-b border-rule bg-shell px-4 py-2.5">
         <Link
           href="/outline"
           className="text-[0.8125rem] font-semibold tracking-tight text-ink-muted hover:text-ink"
