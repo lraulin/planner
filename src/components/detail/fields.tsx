@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { PriorityLetter } from "@/db/schema";
 import {
   formatEffort,
@@ -200,6 +200,13 @@ export function DraftTextField({
 }) {
   const id = useId();
   const [text, setText] = useState(value);
+  const focusedRef = useRef(false);
+
+  // Accept external updates while idle (e.g. attachment title autofill after a URL save).
+  // While focused, keep the in-progress edit — don't clobber keystrokes.
+  useEffect(() => {
+    if (!focusedRef.current) setText(value);
+  }, [value]);
 
   return (
     <Field label={label} htmlFor={id} className={className}>
@@ -207,7 +214,13 @@ export function DraftTextField({
         id={id}
         value={text}
         onChange={(event) => setText(event.target.value)}
-        onBlur={() => text !== value && onCommit(text)}
+        onFocus={() => {
+          focusedRef.current = true;
+        }}
+        onBlur={() => {
+          focusedRef.current = false;
+          if (text !== value) onCommit(text);
+        }}
         placeholder={placeholder}
         className={INPUT_CLASS}
       />
@@ -230,6 +243,11 @@ export function DraftTextArea({
 }) {
   const id = useId();
   const [text, setText] = useState(value);
+  const focusedRef = useRef(false);
+
+  useEffect(() => {
+    if (!focusedRef.current) setText(value);
+  }, [value]);
 
   return (
     <Field label={label} htmlFor={id} className={className}>
@@ -238,7 +256,13 @@ export function DraftTextArea({
         value={text}
         rows={rows}
         onChange={(event) => setText(event.target.value)}
-        onBlur={() => text !== value && onCommit(text)}
+        onFocus={() => {
+          focusedRef.current = true;
+        }}
+        onBlur={() => {
+          focusedRef.current = false;
+          if (text !== value) onCommit(text);
+        }}
         className={`${INPUT_CLASS} resize-y leading-relaxed`}
       />
     </Field>
