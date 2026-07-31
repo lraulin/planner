@@ -45,8 +45,9 @@ export function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * All paths except Next static assets and the favicon.
+     * All paths except Next static assets, favicon, and PWA install assets
+     * (manifest + icons must load without a session so Chrome can install).
      */
-    "/((?!_next/static|_next/image|favicon.ico).*)",
+    "/((?!_next/static|_next/image|favicon.ico|icons/|manifest\\.webmanifest|sw\\.js).*)",
   ],
 };

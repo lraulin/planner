@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Archivo, IBM_Plex_Mono } from "next/font/google";
 import { SettingsProvider } from "@/components/settings/SettingsProvider";
 import { loadSettingsForSession } from "@/lib/settings/session";
@@ -22,6 +22,30 @@ const plexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "Planner",
   description: "Personal time management, in the spirit of Achieve Planner",
+  applicationName: "Planner",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Planner",
+  },
+  formatDetection: {
+    telephone: false,
+  },
+  icons: {
+    icon: [
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180" }],
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#fafafb" },
+    { media: "(prefers-color-scheme: dark)", color: "#1b1d23" },
+  ],
+  colorScheme: "light dark",
 };
 
 /**
