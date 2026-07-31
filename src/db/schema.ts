@@ -4,6 +4,7 @@ import {
   date,
   index,
   integer,
+  jsonb,
   numeric,
   pgEnum,
   pgTable,
@@ -1173,6 +1174,42 @@ export const dailyItems = pgTable(
   ],
 );
 
+/**
+ * Per-user UI preferences: column layout, filters, sort, sub-view, group collapse, Task
+ * Chooser weights. One row per **scope** (`grid:tasks`, `chooser:tc-priority`, …) rather
+ * than one blob per user, so a write touches a single row, two open tabs cannot clobber
+ * each other through read-modify-write, and one view can be reset without disturbing the
+ * rest.
+ *
+ * This supersedes the `localStorage`-only decision in the frozen `main-grid-tabs` and
+ * `task-chooser` specs. What changed is the scope: once *all* view state persists, losing
+ * it on a new browser stopped being a fair trade. See
+ * `agent-os/specs/2026-07-31-1520-persistent-ui-state/`.
+ *
+ * `value` is an untyped blob on purpose — each scope owns its own shape and its own
+ * defensive parser under `src/lib/settings/`. Nothing here is authoritative data; a
+ * corrupt row degrades to defaults rather than to an error.
+ */
+export const userSettings = pgTable(
+  "user_settings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** `grid:{tabId}`, `chooser:{viewId}`, `outline:filters`, `notes:filter`, `drawer`. */
+    scope: text("scope").notNull(),
+    /** Scope-specific payload, always carrying a `v` for future migrations. */
+    value: jsonb("value").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("user_settings_user_idx").on(table.userId),
+    unique("user_settings_scope_uq").on(table.userId, table.scope),
+  ],
+);
+
 export type DailyItem = typeof dailyItems.$inferSelect;
 export type NewDailyItem = typeof dailyItems.$inferInsert;
 export type WorkoutSet = typeof workoutSets.$inferSelect;
+export type UserSetting = typeof userSettings.$inferSelect;

@@ -1,0 +1,91 @@
+/**
+ * Scope ids for `user_settings` rows, and the rules for what counts as one.
+ *
+ * A scope is `{kind}` or `{kind}:{key}`. Keeping the id parseable — rather than an opaque
+ * string chosen at each call site — is what lets the reset page label rows it has never
+ * heard of, and what lets a write reject junk before it reaches the table.
+ */
+
+/** Bumped only when a payload shape changes in a way defaults cannot absorb. */
+export const SETTINGS_VERSION = 1;
+
+export const SCOPE_KINDS = ["grid", "chooser", "outline", "notes", "drawer"] as const;
+export type ScopeKind = (typeof SCOPE_KINDS)[number];
+
+/** Kinds that take a key (`grid:tasks`); the rest are singletons (`drawer`). */
+const KEYED: ReadonlySet<ScopeKind> = new Set<ScopeKind>([
+  "grid",
+  "chooser",
+  "outline",
+  "notes",
+]);
+
+/**
+ * Keys are ours, not the user's — tab ids and view ids from module constants. The pattern
+ * is deliberately narrow so a scope can never carry a separator, whitespace, or anything
+ * that would make `parseScope` ambiguous.
+ */
+const KEY_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
+export type ParsedScope = { kind: ScopeKind; key: string | null };
+
+function isKind(value: string): value is ScopeKind {
+  return (SCOPE_KINDS as readonly string[]).includes(value);
+}
+
+/** `null` for anything that is not a scope this app writes. */
+export function parseScope(scope: string): ParsedScope | null {
+  const separator = scope.indexOf(":");
+  const kind = separator === -1 ? scope : scope.slice(0, separator);
+  const key = separator === -1 ? null : scope.slice(separator + 1);
+
+  if (!isKind(kind)) return null;
+  if (KEYED.has(kind)) {
+    if (key === null || !KEY_PATTERN.test(key)) return null;
+  } else if (key !== null) {
+    return null;
+  }
+
+  return { kind, key };
+}
+
+export function isValidScope(scope: string): boolean {
+  return parseScope(scope) !== null;
+}
+
+export function gridScope(tabId: string): string {
+  return `grid:${tabId}`;
+}
+
+export function chooserScope(viewId: string): string {
+  return `chooser:${viewId}`;
+}
+
+export const OUTLINE_FILTERS_SCOPE = "outline:filters";
+export const NOTES_FILTER_SCOPE = "notes:filter";
+export const DRAWER_SCOPE = "drawer";
+
+const KIND_LABELS: Record<ScopeKind, string> = {
+  grid: "Grid",
+  chooser: "Task Chooser",
+  outline: "Outline",
+  notes: "Notes",
+  drawer: "Detail drawer",
+};
+
+/** Turn a key into something a person reads: `tc-priority` → `Tc priority`. */
+function humanizeKey(key: string): string {
+  const spaced = key.replace(/-/g, " ");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/**
+ * A label for the reset page. Falls back to the raw scope rather than hiding a row it
+ * cannot name — an unresettable orphan row is worse than an ugly label.
+ */
+export function describeScope(scope: string): string {
+  const parsed = parseScope(scope);
+  if (!parsed) return scope;
+  if (parsed.key === null) return KIND_LABELS[parsed.kind];
+  return `${KIND_LABELS[parsed.kind]} — ${humanizeKey(parsed.key)}`;
+}
