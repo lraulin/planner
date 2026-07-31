@@ -7,7 +7,7 @@ import { formatPriority } from "@/lib/tree/format";
 import { STATE_LABELS } from "@/lib/tree/hierarchy";
 import type { ColumnDef } from "@/components/grid/columns";
 import { DataGrid } from "@/components/grid/DataGrid";
-import { useGridColumns } from "@/components/grid/useGridColumns";
+import { useGridState, useTabView } from "@/components/grid/useGridState";
 import { ShowFieldsDialog } from "@/components/grid/ShowFieldsDialog";
 import {
   DeadlineCell,
@@ -22,7 +22,9 @@ import { ErrorBanner, TabToolbar, ToolbarButton, ToolbarSelect } from "./tabChro
 import { useGridTab } from "./useGridTab";
 import type { OutlineColumnCtx } from "@/components/outline/outlineColumns";
 
-type ViewId = "all" | "active" | "completed";
+const VIEW_IDS = ["all", "active", "completed"] as const;
+
+type ViewId = (typeof VIEW_IDS)[number];
 
 const VIEWS: { id: ViewId; label: string }[] = [
   { id: "all", label: "All Goals" },
@@ -150,10 +152,9 @@ function buildColumns(): ColumnDef<GoalsCtx>[] {
 
 export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const tab = useGridTab(initialNodes);
-  const [view, setView] = useState<ViewId>("all");
+  const [view, setView] = useTabView("goals", VIEW_IDS, "all");
   const [scopeId, setScopeId] = useState<string>("");
   const [showFields, setShowFields] = useState(false);
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   const resultAreas = useMemo(
     () => tab.nodes.filter((n) => n.type === "result_area"),
@@ -161,7 +162,7 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   );
 
   const allColumns = useMemo(() => buildColumns(), []);
-  const columnState = useGridColumns(`goals:${view}`, allColumns, DEFAULT_ORDER);
+  const gridState = useGridState(`goals.${view}`, allColumns, DEFAULT_ORDER);
 
   const rows: GridRow[] = useMemo(
     () =>
@@ -233,7 +234,7 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
 
       <DataGrid
         rows={rows}
-        columns={columnState.columns}
+        columns={gridState.columns}
         columnCtx={columnCtx}
         selectedId={tab.selectedId}
         onSelect={tab.setSelectedId}
@@ -242,15 +243,8 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         rowMenu={tab.rowMenu}
         enableFilters
         enableSort
-        collapsedGroups={collapsedGroups}
-        onToggleGroup={(id) =>
-          setCollapsedGroups((current) => {
-            const next = new Set(current);
-            if (next.has(id)) next.delete(id);
-            else next.add(id);
-            return next;
-          })
-        }
+        collapsedGroups={gridState.collapsedGroups}
+        onToggleGroup={gridState.toggleGroup}
         empty={
           <div className="flex h-full items-center justify-center p-8 text-[0.9375rem] text-ink-muted">
             No goals match this view.
@@ -263,11 +257,11 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
       <ShowFieldsDialog
         open={showFields}
         allColumns={allColumns}
-        shownIds={columnState.order}
-        onShow={columnState.show}
-        onHide={columnState.hide}
-        onMove={columnState.move}
-        onReset={columnState.reset}
+        shownIds={gridState.order}
+        onShow={gridState.show}
+        onHide={gridState.hide}
+        onMove={gridState.move}
+        onReset={gridState.resetColumns}
         onClose={() => setShowFields(false)}
       />
     </div>

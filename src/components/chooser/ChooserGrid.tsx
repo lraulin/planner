@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { DataGrid, type RowDrag } from "@/components/grid/DataGrid";
 import { ShowFieldsDialog } from "@/components/grid/ShowFieldsDialog";
-import { useGridColumns } from "@/components/grid/useGridColumns";
+import { useGridState, useTabView } from "@/components/grid/useGridState";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import {
   ErrorBanner,
@@ -19,6 +19,7 @@ import {
   chooserRows,
   chooserView,
   CHOOSER_VIEWS,
+  CHOOSER_VIEW_IDS,
   DATE_FILTERS,
   TC_UNRANKED_GROUP_ID,
   tcLetterFromGroupId,
@@ -68,20 +69,19 @@ export function ChooserGrid({
   plannedNodeIds?: string[];
 }) {
   const tab = useGridTab(initialNodes);
-  const [viewId, setViewId] = useState<ChooserViewId>("best-overall");
+  const [viewId, setViewId] = useTabView("chooser", CHOOSER_VIEW_IDS, "best-overall");
   const [dateFilter, setDateFilter] = useState<ChooserDateFilter>("none");
   const [limit, setLimit] = useState(INITIAL_LIMIT);
   const [advancedFilters, setAdvancedFilters] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showFields, setShowFields] = useState(false);
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   const { settings, update, reset } = useChooserSettings(viewId);
   const view = chooserView(viewId);
 
   const allColumns = useMemo(() => buildChooserColumns(), []);
-  const columnState = useGridColumns(
-    `chooser:${viewId}`,
+  const gridState = useGridState(
+    `chooser.${viewId}`,
     allColumns,
     view.tcPriority ? CHOOSER_TODO_ORDER : CHOOSER_DEFAULT_ORDER,
   );
@@ -315,7 +315,7 @@ export function ChooserGrid({
 
       <DataGrid
         rows={rows}
-        columns={columnState.columns}
+        columns={gridState.columns}
         columnCtx={columnCtx}
         selectedId={tab.selectedId}
         onSelect={tab.setSelectedId}
@@ -324,15 +324,8 @@ export function ChooserGrid({
         rowMenu={tab.rowMenu}
         rowDrag={rowDrag}
         enableFilters={advancedFilters}
-        collapsedGroups={collapsedGroups}
-        onToggleGroup={(id) =>
-          setCollapsedGroups((current) => {
-            const next = new Set(current);
-            if (next.has(id)) next.delete(id);
-            else next.add(id);
-            return next;
-          })
-        }
+        collapsedGroups={gridState.collapsedGroups}
+        onToggleGroup={gridState.toggleGroup}
         empty={
           <div className="flex h-full items-center justify-center p-8 text-[0.9375rem] text-ink-muted">
             Nothing to choose from in this view.
@@ -356,11 +349,11 @@ export function ChooserGrid({
       <ShowFieldsDialog
         open={showFields}
         allColumns={allColumns}
-        shownIds={columnState.order}
-        onShow={columnState.show}
-        onHide={columnState.hide}
-        onMove={columnState.move}
-        onReset={columnState.reset}
+        shownIds={gridState.order}
+        onShow={gridState.show}
+        onHide={gridState.hide}
+        onMove={gridState.move}
+        onReset={gridState.resetColumns}
         onClose={() => setShowFields(false)}
       />
     </div>

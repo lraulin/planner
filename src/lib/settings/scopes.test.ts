@@ -40,9 +40,16 @@ describe("parseScope", () => {
     expect(parseScope("drawer:tasks")).toBeNull();
   });
 
+  it("accepts a tab.view key, which is how per-view layouts are scoped", () => {
+    expect(parseScope(gridScope("projects.active-status"))).toEqual({
+      kind: "grid",
+      key: "projects.active-status",
+    });
+  });
+
   it("rejects keys that would make the id ambiguous or unbounded", () => {
-    // A second separator, whitespace, or uppercase means someone is constructing scopes
-    // by hand rather than from the builders — reject rather than store a lookalike.
+    // A second `:`, whitespace, or uppercase means someone is constructing scopes by hand
+    // rather than from the builders — reject rather than store a lookalike.
     expect(parseScope("grid:tasks:extra")).toBeNull();
     expect(parseScope("grid:my tasks")).toBeNull();
     expect(parseScope("grid:Tasks")).toBeNull();
@@ -62,6 +69,12 @@ describe("describeScope", () => {
       "Task Chooser — Tc priority",
     );
     expect(describeScope(DRAWER_SCOPE)).toBe("Detail drawer");
+  });
+
+  it("reads a tab.view key as two parts", () => {
+    expect(describeScope(gridScope("projects.active-status"))).toBe(
+      "Grid — Projects / Active status",
+    );
   });
 
   it("falls back to the raw scope rather than hiding a row it cannot name", () => {

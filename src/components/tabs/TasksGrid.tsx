@@ -8,7 +8,7 @@ import { STATE_CODES } from "@/lib/tree/hierarchy";
 import { scheduleStatus, STATUS_LABELS } from "@/lib/tree/status";
 import type { ColumnDef } from "@/components/grid/columns";
 import { DataGrid } from "@/components/grid/DataGrid";
-import { useGridColumns } from "@/components/grid/useGridColumns";
+import { useGridState, useTabView } from "@/components/grid/useGridState";
 import { ShowFieldsDialog } from "@/components/grid/ShowFieldsDialog";
 import {
   AbbrStateCell,
@@ -30,7 +30,9 @@ import {
 import { useGridTab } from "./useGridTab";
 import type { OutlineColumnCtx } from "@/components/outline/outlineColumns";
 
-type ViewId = "active-status" | "active-schedule" | "completed" | "all";
+const VIEW_IDS = ["active-status", "active-schedule", "completed", "all"] as const;
+
+type ViewId = (typeof VIEW_IDS)[number];
 
 const VIEWS: { id: ViewId; label: string }[] = [
   { id: "active-status", label: "Active Task Status" },
@@ -201,13 +203,12 @@ function buildColumns(): ColumnDef<OutlineColumnCtx>[] {
 
 export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const tab = useGridTab(initialNodes);
-  const [view, setView] = useState<ViewId>("active-status");
+  const [view, setView] = useTabView("tasks", VIEW_IDS, "active-status");
   const [scopeId, setScopeId] = useState<string>("");
   const [groupByArea, setGroupByArea] = useState(false);
   const [includeDeferred, setIncludeDeferred] = useState(false);
   const [showPurpose, setShowPurpose] = useState(false);
   const [showFields, setShowFields] = useState(false);
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   const projects = useMemo(
     () => tab.nodes.filter((n) => n.type === "project"),
@@ -215,7 +216,7 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   );
 
   const allColumns = useMemo(() => buildColumns(), []);
-  const columnState = useGridColumns(`tasks:${view}`, allColumns, DEFAULT_ORDER);
+  const gridState = useGridState(`tasks.${view}`, allColumns, DEFAULT_ORDER);
 
   const purposeText = useMemo(() => {
     if (!showPurpose || !scopeId) return null;
@@ -319,7 +320,7 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
 
       <DataGrid
         rows={rows}
-        columns={columnState.columns}
+        columns={gridState.columns}
         columnCtx={tab.cellHandlers}
         selectedId={tab.selectedId}
         onSelect={tab.setSelectedId}
@@ -328,15 +329,8 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         rowMenu={tab.rowMenu}
         enableFilters
         enableSort
-        collapsedGroups={collapsedGroups}
-        onToggleGroup={(id) =>
-          setCollapsedGroups((current) => {
-            const next = new Set(current);
-            if (next.has(id)) next.delete(id);
-            else next.add(id);
-            return next;
-          })
-        }
+        collapsedGroups={gridState.collapsedGroups}
+        onToggleGroup={gridState.toggleGroup}
         empty={
           <div className="flex h-full items-center justify-center p-8 text-[0.9375rem] text-ink-muted">
             No tasks match this view.
@@ -349,11 +343,11 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
       <ShowFieldsDialog
         open={showFields}
         allColumns={allColumns}
-        shownIds={columnState.order}
-        onShow={columnState.show}
-        onHide={columnState.hide}
-        onMove={columnState.move}
-        onReset={columnState.reset}
+        shownIds={gridState.order}
+        onShow={gridState.show}
+        onHide={gridState.hide}
+        onMove={gridState.move}
+        onReset={gridState.resetColumns}
         onClose={() => setShowFields(false)}
       />
     </div>

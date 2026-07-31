@@ -31,7 +31,7 @@ import {
   updateNoteAction,
 } from "@/app/notes/actions";
 import { DataGrid, type RowDrag } from "@/components/grid/DataGrid";
-import { useGridColumns } from "@/components/grid/useGridColumns";
+import { useGridState } from "@/components/grid/useGridState";
 import { ShowFieldsDialog } from "@/components/grid/ShowFieldsDialog";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import type { MenuItem } from "@/components/grid/ContextMenu";
@@ -191,9 +191,8 @@ export function NotesGrid({
     [selectedId, editingId, patch, apply, openDetail],
   );
 
-  const { columns, show, hide, move, reset } = useGridColumns("notes", notesColumns, [
-    ...NOTES_COLUMN_IDS,
-  ]);
+  const gridState = useGridState("notes", notesColumns, [...NOTES_COLUMN_IDS]);
+  const { columns, show, hide, move } = gridState;
 
   /**
    * Drag-to-reorder. Unlike the outline there are no nesting rules to enforce — any note
@@ -492,7 +491,7 @@ export function NotesGrid({
         onShow={show}
         onHide={hide}
         onMove={move}
-        onReset={reset}
+        onReset={gridState.resetColumns}
         onClose={() => setFieldsOpen(false)}
       />
 

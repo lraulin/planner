@@ -22,10 +22,14 @@ const KEYED: ReadonlySet<ScopeKind> = new Set<ScopeKind>([
 
 /**
  * Keys are ours, not the user's — tab ids and view ids from module constants. The pattern
- * is deliberately narrow so a scope can never carry a separator, whitespace, or anything
- * that would make `parseScope` ambiguous.
+ * is deliberately narrow so a scope can never carry whitespace, a second `:`, or anything
+ * else that would make `parseScope` ambiguous.
+ *
+ * A `.` separates a tab from its view (`projects.active-status`), because column layout and
+ * filters are per view: the Tasks tab's four views show different columns, and one stored
+ * layout across all of them would fight whichever view you were not looking at.
  */
-const KEY_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const KEY_PATTERN = /^[a-z0-9][a-z0-9.-]{0,63}$/;
 
 export type ParsedScope = { kind: ScopeKind; key: string | null };
 
@@ -73,10 +77,15 @@ const KIND_LABELS: Record<ScopeKind, string> = {
   drawer: "Detail drawer",
 };
 
-/** Turn a key into something a person reads: `tc-priority` → `Tc priority`. */
+/** `projects.active-status` → `Projects / Active status`. */
 function humanizeKey(key: string): string {
-  const spaced = key.replace(/-/g, " ");
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+  return key
+    .split(".")
+    .map((part) => {
+      const spaced = part.replace(/-/g, " ");
+      return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+    })
+    .join(" / ");
 }
 
 /**

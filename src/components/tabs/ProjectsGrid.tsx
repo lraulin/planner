@@ -8,7 +8,7 @@ import { STATE_CODES } from "@/lib/tree/hierarchy";
 import { scheduleStatus, STATUS_LABELS } from "@/lib/tree/status";
 import type { ColumnDef } from "@/components/grid/columns";
 import { DataGrid } from "@/components/grid/DataGrid";
-import { useGridColumns } from "@/components/grid/useGridColumns";
+import { useGridState, useTabView } from "@/components/grid/useGridState";
 import { ShowFieldsDialog } from "@/components/grid/ShowFieldsDialog";
 import {
   AbbrStateCell,
@@ -31,13 +31,16 @@ import {
 import { useGridTab } from "./useGridTab";
 import type { OutlineColumnCtx } from "@/components/outline/outlineColumns";
 
-type ViewId =
-  | "active-status"
-  | "active-schedule"
-  | "active-purpose"
-  | "active-delegation"
-  | "completed"
-  | "all";
+const VIEW_IDS = [
+  "active-status",
+  "active-schedule",
+  "active-purpose",
+  "active-delegation",
+  "completed",
+  "all",
+] as const;
+
+type ViewId = (typeof VIEW_IDS)[number];
 
 const VIEWS: { id: ViewId; label: string }[] = [
   { id: "active-status", label: "Active Project Status" },
@@ -297,13 +300,12 @@ function viewOrder(view: ViewId): string[] {
 
 export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const tab = useGridTab(initialNodes);
-  const [view, setView] = useState<ViewId>("active-status");
+  const [view, setView] = useTabView("projects", VIEW_IDS, "active-status");
   const [scopeId, setScopeId] = useState<string>("");
   const [groups, setGroups] = useState(true);
   const [includeGoals, setIncludeGoals] = useState(false);
   const [includeDeferred, setIncludeDeferred] = useState(false);
   const [showFields, setShowFields] = useState(false);
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   const resultAreas = useMemo(
     () => tab.nodes.filter((n) => n.type === "result_area"),
@@ -312,10 +314,10 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
 
   const allColumns = useMemo(() => buildColumns(tab.nodes), [tab.nodes]);
   const defaultOrder = useMemo(() => viewOrder(view), [view]);
-  const columnState = useGridColumns(`projects:${view}`, allColumns, defaultOrder);
+  const gridState = useGridState(`projects.${view}`, allColumns, defaultOrder);
 
   // When the view changes, reset to that view's preset (still overridable via Show Fields).
-  const columns = columnState.columns;
+  const columns = gridState.columns;
 
   const rows: GridRow[] = useMemo(() => {
     const groupBy: GroupBy[] = groups ? ["category", "resultArea"] : [];
@@ -402,15 +404,8 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
         rowMenu={tab.rowMenu}
         enableFilters
         enableSort
-        collapsedGroups={collapsedGroups}
-        onToggleGroup={(id) =>
-          setCollapsedGroups((current) => {
-            const next = new Set(current);
-            if (next.has(id)) next.delete(id);
-            else next.add(id);
-            return next;
-          })
-        }
+        collapsedGroups={gridState.collapsedGroups}
+        onToggleGroup={gridState.toggleGroup}
         empty={
           <div className="flex h-full items-center justify-center p-8 text-[0.9375rem] text-ink-muted">
             No projects match this view.
@@ -423,12 +418,12 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
       <ShowFieldsDialog
         open={showFields}
         allColumns={allColumns}
-        shownIds={columnState.order}
-        onShow={columnState.show}
-        onHide={columnState.hide}
-        onMove={columnState.move}
+        shownIds={gridState.order}
+        onShow={gridState.show}
+        onHide={gridState.hide}
+        onMove={gridState.move}
         onReset={() => {
-          columnState.setOrder(viewOrder(view));
+          gridState.setOrder(viewOrder(view));
         }}
         onClose={() => setShowFields(false)}
       />
