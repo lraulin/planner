@@ -213,6 +213,7 @@ The 16px rule is the single highest-impact line in the change.
 
 ## Changes from original plan
 
-| Change       | Why |
-| ------------ | --- |
-| _(none yet)_ |     |
+| Change                                                                                                                          | Why                                                                                                                                                                                                        |
+| ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Phase 1 dropped the planned `--space-*` scale and the "stronger `:focus-visible` ring"                                          | A token scale nothing consumes is dead CSS, and re-tuning the focus ring risks a desktop regression for no mobile gain. The desktop polish that survived is `--elev-1` (used by pinned chrome and sheets). |
+| Phase 1 added `-webkit-tap-highlight-color: transparent` and a `.md-body` bump to 16px below `md`, neither of which was planned | Both are real touch polish found while writing the compact block: the grey tap flash reads as a rendering fault, and 14px prose is a desktop compromise on the one surface meant for reading.              |

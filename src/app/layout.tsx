@@ -46,6 +46,12 @@ export const viewport: Viewport = {
     { media: "(prefers-color-scheme: dark)", color: "#1b1d23" },
   ],
   colorScheme: "light dark",
+  // Draw under the notch and the home indicator, and pay for it with env(safe-area-inset-*)
+  // where chrome is pinned to an edge — see the .pt-safe / .pb-safe utilities in globals.css.
+  viewportFit: "cover",
+  // Shrink the layout viewport when the soft keyboard opens, so a sticky drawer footer stays
+  // above it instead of being covered by it.
+  interactiveWidget: "resizes-content",
 };
 
 /**

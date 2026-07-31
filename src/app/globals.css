@@ -39,6 +39,16 @@
 
   --row-height: 1.75rem;
   --indent-step: 0.875rem;
+
+  /*
+   * Apple's minimum comfortable touch target. Compact layouts size against this token rather
+   * than each picking their own height — the desktop 28px row, 16px chevron and 10px filter
+   * funnel are correct at a mouse and unusable at a fingertip.
+   */
+  --tap-target: 2.75rem;
+
+  /* The only elevation in the app: pinned chrome and sheets lifting off the shell. */
+  --elev-1: 0 -1px 3px rgb(0 0 0 / 8%);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -65,6 +75,8 @@
     --type-project: #93a4f2;
     --type-task: #e0a83f;
     --type-dream: #f2d24a;
+
+    --elev-1: 0 -1px 3px rgb(0 0 0 / 40%);
   }
 }
 
@@ -94,6 +106,9 @@
 
   --font-sans: var(--font-archivo);
   --font-mono: var(--font-plex-mono);
+
+  /* Gives `h-tap`, `min-h-tap`, `min-w-tap`, `p-tap` — see --tap-target above. */
+  --spacing-tap: var(--tap-target);
 }
 
 body {
@@ -102,6 +117,71 @@ body {
   font-family: var(--font-archivo), system-ui, sans-serif;
   /* The grid is the scroll container; the page itself never scrolls. */
   overflow: hidden;
+  /* A list that scrolls to its end must not rubber-band the whole shell with it. */
+  overscroll-behavior: none;
+  /* Without this iOS inflates text when the phone turns landscape. */
+  -webkit-text-size-adjust: 100%;
+}
+
+/* ── Compact (touch) layout ──────────────────────────────────────────────────
+ *
+ * One breakpoint carries the adaptive layout: below 48rem is the phone and iPad portrait,
+ * at and above it is the desktop instrument. Full rules in
+ * `agent-os/standards/components/responsive.md`; `useIsCompact()` reads the same line in JS.
+ *
+ * These rules sit outside `@layer`, so they beat Tailwind's layered utilities regardless of
+ * specificity — which is how `html { height: 100dvh }` overrides the `h-full` on <html>.
+ */
+
+/*
+ * Safe-area padding for chrome pinned to a viewport edge. These set padding outright, so put
+ * them on the *outer* element and keep your own padding on an inner one:
+ *
+ *   <nav className="pb-safe"><div className="flex px-2 py-1">…</div></nav>
+ */
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.px-safe {
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+@media (max-width: 47.999rem) {
+  /*
+   * The single most consequential rule in the mobile work. iOS Safari zooms the viewport when
+   * a control smaller than 16px takes focus and does not zoom back out on blur — and every
+   * editable thing in this app is 13px. One tap on a cell editor would otherwise leave the
+   * rest of the session scrolled sideways.
+   */
+  input,
+  select,
+  textarea {
+    font-size: 1rem;
+  }
+
+  /*
+   * `vh` resolves against the *large* viewport on iOS, so a full-height shell sits partly
+   * under Safari's toolbars. `dvh` tracks them as they collapse.
+   */
+  html {
+    height: 100dvh;
+  }
+
+  /* The grey tap flash reads as a rendering fault next to real pressed states. */
+  body {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* This is the one surface meant for reading; 14px is a desktop compromise. */
+  .md-body {
+    font-size: 1rem;
+  }
 }
 
 /* Data columns align on the digit, so priorities and durations read as a column. */
