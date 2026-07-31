@@ -28,7 +28,7 @@ export async function captureAction(input: {
     const items = parseCapture(input.text);
     if (items.length === 0) return { ok: false, error: "Nothing to capture." };
 
-    const { createdIds } = await captureItems({
+    const { nodeIds } = await captureItems({
       userId,
       items,
       parentId: input.parentId ?? null,
@@ -36,7 +36,7 @@ export async function captureAction(input: {
     });
 
     revalidatePath("/", "layout");
-    return { ok: true, count: createdIds.length };
+    return { ok: true, count: nodeIds.length };
   } catch (error) {
     return {
       ok: false,

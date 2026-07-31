@@ -285,6 +285,26 @@ export const nodes = pgTable(
      * fresh one.
      */
     isInbox: boolean("is_inbox").notNull().default(false),
+    /**
+     * Where this row came from, when it came from outside the app — `"apple_reminders"`
+     * for the Shortcut drain. Null on everything a person made here by hand, which is
+     * most rows.
+     *
+     * Deliberately a generic pair rather than an `apple_reminder_id`: the server has no
+     * business knowing what Apple Reminders is, and the next source (Raycast, an email
+     * drop, a watch) reuses this without a migration.
+     */
+    externalSource: text("external_source"),
+    /**
+     * The source's own id for this item, opaque to us. The Reminders Shortcut builds
+     * `"<creation date>|<name>"` because the Shortcuts actions do not reliably expose a
+     * stable identifier; if a later iOS does, it swaps in with no change here.
+     *
+     * Its whole job is making an interrupted import safe to re-run. A drain that POSTs
+     * successfully and then fails to mark the reminder complete would otherwise duplicate
+     * every item on the next run — see `nodes_external_ref_uq`.
+     */
+    externalId: text("external_id"),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -302,6 +322,15 @@ export const nodes = pgTable(
     uniqueIndex("nodes_one_inbox_per_user_uq")
       .on(table.userId)
       .where(sql`${table.isInbox}`),
+    // One row per external item, per user. Scoped by user so two people draining the same
+    // shared reminder each get their own node, and partial so the ordinary rows — every
+    // one of which has a null external_id — are not all fighting over one key.
+    //
+    // Capture checks for an existing row before inserting; this index is what makes that
+    // check trustworthy rather than a race waiting to happen.
+    uniqueIndex("nodes_external_ref_uq")
+      .on(table.userId, table.externalSource, table.externalId)
+      .where(sql`${table.externalId} is not null`),
   ],
 );
 
@@ -860,6 +889,21 @@ export type TimeChart = typeof timeCharts.$inferSelect;
 export type TimeChartArea = typeof timeChartAreas.$inferSelect;
 export type Appointment = typeof appointments.$inferSelect;
 export type NewAppointment = typeof appointments.$inferInsert;
+/**
+ * A row's origin outside this app — see `nodes.externalSource` / `nodes.externalId`.
+ *
+ * The two travel together on purpose. `nodes_external_ref_uq` indexes both columns, and
+ * Postgres counts null sources as distinct from one another, so an id arriving without a
+ * source would silently opt out of the uniqueness that makes re-importing safe. Passing
+ * one object makes that unrepresentable instead of merely discouraged.
+ */
+export type ExternalRef = {
+  /** The system it came from, e.g. `"apple_reminders"`. */
+  source: string;
+  /** That system's id for the item. Opaque here — never parsed, only compared. */
+  id: string;
+};
+
 export type NodeType = (typeof nodeTypeEnum.enumValues)[number];
 export type PriorityLetter = (typeof priorityLetterEnum.enumValues)[number];
 export type NodeState = (typeof nodeStateEnum.enumValues)[number];

@@ -32,6 +32,7 @@ import {
   setState,
 } from "@/lib/tree/mutations";
 import { loadOutline } from "@/lib/tree/queries";
+import { parseCaptureArgs } from "./captureArgs";
 import { AgentError, toAgentError } from "./errors";
 import {
   asObject,
@@ -278,23 +279,31 @@ async function createNodeTool(userId: string, args: Record<string, unknown>) {
 }
 
 /**
- * GTD capture into the Inbox — same path as the in-app `c` box for a single item.
+ * GTD capture into the Inbox — same path as the in-app `c` box.
  *
  * Distinct from `create_node` without parentId, which creates a root-level task. Root is a
  * legitimate resting place ("I know what this is"); the Inbox is for unprocessed ideas.
- * External clients (Alfred) must not invent that distinction themselves.
+ * External clients (Alfred, the Reminders Shortcut) must not invent that distinction
+ * themselves.
+ *
+ * Takes one item or a batch — see `parseCaptureArgs`. Items carrying an `externalId` are
+ * created at most once ever, which is what makes a half-finished import safe to re-run.
  */
 async function captureTool(userId: string, args: Record<string, unknown>) {
-  // requireString rejects missing/blank; trim so padded names do not land with spaces.
-  const name = requireString(args, "name").trim();
-  const note = optionalString(args, "note")?.trim() ?? "";
+  const { items, single } = parseCaptureArgs(args);
 
-  const { createdIds, parentId } = await captureItems({
-    userId,
-    items: [{ name, depth: 0, note }],
-  });
+  const { results, nodeIds, parentId } = await captureItems({ userId, items });
 
-  const id = createdIds[0];
+  if (!single) {
+    return {
+      parentId,
+      created: results.filter((r) => r.created).length,
+      skipped: results.filter((r) => !r.created).length,
+      results,
+    };
+  }
+
+  const id = nodeIds[0];
   if (!id) {
     throw new AgentError("internal", "capture produced no node");
   }
@@ -305,7 +314,9 @@ async function captureTool(userId: string, args: Record<string, unknown>) {
   return {
     node: result.node,
     parentId,
-    createdIds,
+    created: results[0].created,
+    // Kept under its original name: Alfred's success path reads this field.
+    createdIds: nodeIds,
   };
 }
 

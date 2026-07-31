@@ -1,3 +1,4 @@
+import type { ExternalRef } from "@/db/schema";
 import { indentColumns, splitIndent, stripLeadingMarkers } from "@/lib/text/markers";
 
 /**
@@ -14,13 +15,27 @@ import { indentColumns, splitIndent, stripLeadingMarkers } from "@/lib/text/mark
  * (`[ ]`, `[x]`), quoted replies (`>`), and headings (`#`).
  */
 
-/** One line of the box, resolved into a node to create. */
+/**
+ * One item to create — a line of the box, or one entry of a programmatic batch.
+ *
+ * `parseCapture` only ever fills the first three fields; the rest exist for callers that
+ * did not come from a textarea, such as the Apple Reminders drain, which already knows a
+ * due date and the reminder's identity before anything is typed.
+ */
 export type CapturedItem = {
   /** 0 for a top-level item; each level of indentation adds one. */
   depth: number;
   name: string;
   /** Achieve's `##` note, or `""`. */
   note: string;
+  /** Per-item deadline, beating any `CaptureDefaults.deadline`. Never set by parsing. */
+  deadline?: Date | null;
+  /**
+   * Where this item came from, if it was imported. Its presence makes the capture
+   * idempotent: an item whose ref is already on a node is skipped rather than duplicated.
+   * Never set by parsing.
+   */
+  external?: ExternalRef;
 };
 
 /** Achieve's separator between a task's name and its note. */

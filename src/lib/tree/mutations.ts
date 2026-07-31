@@ -6,7 +6,7 @@ import {
   resultAreaDetails,
   taskDetails,
 } from "@/db/schema";
-import type { NodeState, NodeType, PriorityLetter } from "@/db/schema";
+import type { ExternalRef, NodeState, NodeType, PriorityLetter } from "@/db/schema";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { assertCanNest, TYPE_LABELS } from "./hierarchy";
 import { loadOutline } from "./queries";
@@ -119,6 +119,13 @@ export async function createNode(params: {
    * for every other type, which has nowhere to store it.
    */
   isDream?: boolean;
+  /**
+   * Provenance, for rows imported from outside the app. One object rather than two loose
+   * strings so an id can never arrive without the source that qualifies it — the unique
+   * index in `schema.ts` treats a null source as distinct, so that pairing is an
+   * invariant the type system should be keeping, not a convention.
+   */
+  external?: ExternalRef;
   position?: Position;
 }): Promise<string> {
   const {
@@ -129,6 +136,7 @@ export async function createNode(params: {
     notes = "",
     isInbox = false,
     isDream = false,
+    external,
     position = { at: "last" },
   } = params;
 
@@ -140,7 +148,17 @@ export async function createNode(params: {
 
     const [created] = await tx
       .insert(nodes)
-      .values({ userId, parentId, type, name, notes, isInbox, sortKey })
+      .values({
+        userId,
+        parentId,
+        type,
+        name,
+        notes,
+        isInbox,
+        sortKey,
+        externalSource: external?.source ?? null,
+        externalId: external?.id ?? null,
+      })
       .returning({ id: nodes.id });
 
     // Detail rows are created up front so later edits are plain updates.

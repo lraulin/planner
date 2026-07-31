@@ -130,13 +130,16 @@ Features that complete or surround the original product, plus making it multi-de
   `tools/alfred/` (keyword e.g. `pin`, Bearer key + base URL as workflow variables).
   Raycast later if useful.
 
-- **External intake remaining — Apple Reminders drain.** The in-app box and Alfred only
-  cover typing with the Mac (or browser) at hand. "Hey Siri, remind me to…" is still the
-  fastest path on phone. Apple has no server-side API for Reminders — EventKit is on-device
-  only, and iOS 13's Reminders migration broke the old iCloud CalDAV route — so this cannot
-  be a cron pulling from the cloud. It is a **Shortcut** that reads a dedicated list, POSTs
-  each item to `/api/agent/capture`, and completes it. Needs a provenance/dedupe column;
-  nothing in the schema records where a row came from.
+- **✅ Apple Reminders drain.** `specs/2026-07-30-2126-apple-reminders-drain`. "Hey Siri,
+  remind me to…" now reaches the planner. Apple has no server-side API for Reminders —
+  EventKit is on-device only, and iOS 13's Reminders migration broke the old iCloud CalDAV
+  route — so this is a **Shortcut**, not a cron: it reads incomplete reminders from the
+  **default** list (where Siri writes), POSTs them as one batch to `/api/agent/capture`
+  with name, notes and due date, then marks each complete. Sources under `tools/shortcuts/`.
+  Came with the **provenance columns** the schema was missing — `external_source` /
+  `external_id` on `nodes`, unique per user — which make the drain idempotent: a run that
+  POSTs successfully and then dies before completing the reminders is fixed by running it
+  again, not by deleting duplicates by hand.
 
 ### Platform
 
@@ -249,7 +252,7 @@ Phase 2 ──► Pomodoro on task/project (writes Actual Effort)
         │         └──► session log ──► full time reports
         │
         ├──► auth ✅, in-app inbox + quick entry ✅, Alfred capture ✅, export
-        │         └──► external intake remaining: Reminders Shortcut (needs a dedupe column)
+        │         └──► external intake complete: Reminders drain ✅ (provenance columns)
         ├──► attachments: URL links → Drive/Dropbox pickers (no S3)
         ├──► AI tools/API ✅ (agent HTTP + planner-agent repo; Bedrock later)
         │

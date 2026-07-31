@@ -4,10 +4,10 @@ import { nodes, users } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { loadNodeDetail } from "@/lib/detail/queries";
-import { createNode, deleteNode, setState } from "@/lib/tree/mutations";
+import { createNode, deleteNode, renameNode, setState } from "@/lib/tree/mutations";
 import { loadOutline } from "@/lib/tree/queries";
 import { captureItems, ensureInbox, INBOX_NAME } from "./mutations";
-import { parseCapture } from "./parse";
+import { parseCapture, type CapturedItem } from "./parse";
 
 /**
  * Integration tests against the local Postgres (`npm run db:up`). Each test works under its
@@ -133,18 +133,18 @@ describeDb("captureItems", () => {
   });
 
   it("puts captured lines in the inbox as tasks", async () => {
-    const { createdIds } = await captureItems({
+    const { nodeIds } = await captureItems({
       userId,
       items: parseCapture("Call the dentist\nRenew registration"),
     });
 
-    expect(createdIds).toHaveLength(2);
+    expect(nodeIds).toHaveLength(2);
     expect(await outlineOf(userId)).toEqual([
       INBOX_NAME,
       "  Call the dentist",
       "  Renew registration",
     ]);
-    expect((await nodeById(userId, createdIds[0])).type).toBe("task");
+    expect((await nodeById(userId, nodeIds[0])).type).toBe("task");
   });
 
   it("builds the subtree the indentation asked for", async () => {
@@ -182,12 +182,12 @@ describeDb("captureItems", () => {
   });
 
   it("stores the ## note on the task", async () => {
-    const { createdIds } = await captureItems({
+    const { nodeIds } = await captureItems({
       userId,
       items: parseCapture("Renew registration ## expires end of month"),
     });
 
-    expect((await nodeById(userId, createdIds[0])).notes).toBe("expires end of month");
+    expect((await nodeById(userId, nodeIds[0])).notes).toBe("expires end of month");
   });
 
   it("captures into a chosen project instead, leaving the inbox uncreated", async () => {
@@ -220,7 +220,7 @@ describeDb("captureItems", () => {
 
   it("applies the same defaults to every captured item", async () => {
     const deadline = new Date("2026-08-15T12:00:00.000Z");
-    const { createdIds } = await captureItems({
+    const { nodeIds } = await captureItems({
       userId,
       items: parseCapture("One\n  Two"),
       defaults: {
@@ -232,7 +232,7 @@ describeDb("captureItems", () => {
       },
     });
 
-    for (const id of createdIds) {
+    for (const id of nodeIds) {
       const node = await nodeById(userId, id);
       expect(node.priorityLetter).toBe("A");
       expect(node.priorityRank).toBe(2);
@@ -245,10 +245,175 @@ describeDb("captureItems", () => {
   });
 
   it("does nothing for empty input but still resolves the inbox", async () => {
-    const { createdIds, parentId } = await captureItems({ userId, items: [] });
+    const { nodeIds, parentId } = await captureItems({ userId, items: [] });
 
-    expect(createdIds).toEqual([]);
+    expect(nodeIds).toEqual([]);
     expect((await nodeById(userId, parentId)).isInbox).toBe(true);
+  });
+
+  it("applies a per-item deadline, beating the batch default", async () => {
+    const perItem = new Date("2026-04-15T00:00:00Z");
+    const fallback = new Date("2026-12-31T00:00:00Z");
+
+    const { nodeIds } = await captureItems({
+      userId,
+      items: [
+        { depth: 0, name: "Taxes", note: "", deadline: perItem },
+        { depth: 0, name: "Something else", note: "" },
+      ],
+      defaults: { deadline: fallback },
+    });
+
+    expect((await nodeById(userId, nodeIds[0])).deadline).toEqual(perItem);
+    // The default is what the caller meant for items that did not say — not an override.
+    expect((await nodeById(userId, nodeIds[1])).deadline).toEqual(fallback);
+  });
+});
+
+/**
+ * The dedupe contract. An importer POSTs a batch, then marks the source items handled; if
+ * it dies between those two steps its only recovery is to send the batch again, so sending
+ * it again has to be free.
+ */
+describeDb("captureItems with external refs", () => {
+  let userId: string;
+  beforeEach(async () => {
+    userId = await makeUser();
+  });
+
+  const reminder = (name: string, id: string): CapturedItem => ({
+    depth: 0,
+    name,
+    note: "",
+    external: { source: "apple_reminders", id },
+  });
+
+  it("stores the provenance pair on the node", async () => {
+    const { nodeIds } = await captureItems({
+      userId,
+      items: [reminder("Call the dentist", "2026-07-30T09:14:22Z|Call the dentist")],
+    });
+
+    const node = await nodeById(userId, nodeIds[0]);
+    expect(node.externalSource).toBe("apple_reminders");
+    expect(node.externalId).toBe("2026-07-30T09:14:22Z|Call the dentist");
+  });
+
+  it("leaves both columns null for ordinary typed capture", async () => {
+    const { nodeIds } = await captureItems({ userId, items: parseCapture("Typed") });
+
+    const node = await nodeById(userId, nodeIds[0]);
+    expect(node.externalSource).toBeNull();
+    expect(node.externalId).toBeNull();
+  });
+
+  // The headline case: the whole reason the column exists.
+  it("creates one node when the same batch is sent twice", async () => {
+    const items = [reminder("Call the dentist", "r1"), reminder("Buy milk", "r2")];
+
+    const first = await captureItems({ userId, items });
+    const second = await captureItems({ userId, items });
+
+    expect(first.results.map((r) => r.created)).toEqual([true, true]);
+    expect(second.results.map((r) => r.created)).toEqual([false, false]);
+    expect(second.nodeIds).toEqual(first.nodeIds);
+    expect(await outlineOf(userId)).toEqual([
+      INBOX_NAME,
+      "  Call the dentist",
+      "  Buy milk",
+    ]);
+  });
+
+  it("creates only the new items when a batch overlaps an earlier one", async () => {
+    await captureItems({ userId, items: [reminder("Old", "r1")] });
+
+    const { results } = await captureItems({
+      userId,
+      items: [reminder("Old", "r1"), reminder("New", "r2")],
+    });
+
+    expect(results.map((r) => r.created)).toEqual([false, true]);
+    expect(await outlineOf(userId)).toEqual([INBOX_NAME, "  Old", "  New"]);
+  });
+
+  it("echoes the externalId back so a caller can match results to what it sent", async () => {
+    const { results } = await captureItems({
+      userId,
+      items: [reminder("One", "r1"), reminder("Two", "r2")],
+    });
+
+    expect(results.map((r) => r.externalId)).toEqual(["r1", "r2"]);
+  });
+
+  // A retry must not undo triage. By the time an importer re-sends, the node may have been
+  // renamed, filed under a project and half-finished.
+  it("does not touch a node that already exists for the ref", async () => {
+    const { nodeIds } = await captureItems({
+      userId,
+      items: [reminder("Call the dentist", "r1")],
+    });
+    await renameNode(userId, nodeIds[0], "Call Dr Chen about the crown");
+    await setState(userId, nodeIds[0], "in_progress");
+
+    await captureItems({ userId, items: [reminder("Call the dentist", "r1")] });
+
+    const node = await nodeById(userId, nodeIds[0]);
+    expect(node.name).toBe("Call Dr Chen about the crown");
+    expect(node.state).toBe("in_progress");
+  });
+
+  // Two different sources may legitimately use the same id — both halves have to match.
+  it("treats the same id under a different source as a different item", async () => {
+    await captureItems({ userId, items: [reminder("From Reminders", "shared-id")] });
+
+    const { results } = await captureItems({
+      userId,
+      items: [
+        {
+          depth: 0,
+          name: "From Raycast",
+          note: "",
+          external: { source: "raycast", id: "shared-id" },
+        },
+      ],
+    });
+
+    expect(results[0].created).toBe(true);
+    expect(await outlineOf(userId)).toEqual([
+      INBOX_NAME,
+      "  From Reminders",
+      "  From Raycast",
+    ]);
+  });
+
+  // A batch item can be deduped and still be somebody's parent; the depth bookkeeping has
+  // to keep its slot rather than reparenting the child onto whatever came before.
+  it("keeps a subtask under its parent when the parent was deduped", async () => {
+    await captureItems({ userId, items: [reminder("Plan the trip", "r1")] });
+
+    await captureItems({
+      userId,
+      items: [
+        reminder("Plan the trip", "r1"),
+        { depth: 1, name: "Book flights", note: "" },
+      ],
+    });
+
+    expect(await outlineOf(userId)).toEqual([
+      INBOX_NAME,
+      "  Plan the trip",
+      "    Book flights",
+    ]);
+  });
+
+  it("still creates the node after the earlier one was deleted", async () => {
+    const first = await captureItems({ userId, items: [reminder("Gone", "r1")] });
+    await deleteNode(userId, first.nodeIds[0]);
+
+    const second = await captureItems({ userId, items: [reminder("Gone", "r1")] });
+
+    expect(second.results[0].created).toBe(true);
+    expect(await outlineOf(userId)).toEqual([INBOX_NAME, "  Gone"]);
   });
 });
 
@@ -318,13 +483,65 @@ describeDb("capture user isolation", () => {
 
   it("does not let one user delete another's captured item", async () => {
     const other = await makeUser();
-    const { createdIds } = await captureItems({
+    const { nodeIds } = await captureItems({
       userId: other,
       items: parseCapture("Theirs"),
     });
 
-    await deleteNode(userId, createdIds[0]);
+    await deleteNode(userId, nodeIds[0]);
 
+    expect(await outlineOf(other)).toEqual([INBOX_NAME, "  Theirs"]);
+  });
+
+  // The mistake this catches: dropping `user_id` from the external-ref lookup. With one
+  // user in the test database that reads perfectly; with two, my drain starts silently
+  // skipping items because someone else already imported a reminder with that id.
+  it("lets two users hold the same externalId independently", async () => {
+    const other = await makeUser();
+    const ref = { source: "apple_reminders", id: "shared-id" };
+
+    const mine = await captureItems({
+      userId,
+      items: [{ depth: 0, name: "Mine", note: "", external: ref }],
+    });
+    const theirs = await captureItems({
+      userId: other,
+      items: [{ depth: 0, name: "Theirs", note: "", external: ref }],
+    });
+
+    expect(mine.results[0].created).toBe(true);
+    // Not skipped as a duplicate of mine, and not written into my tree.
+    expect(theirs.results[0].created).toBe(true);
+    expect(theirs.nodeIds[0]).not.toBe(mine.nodeIds[0]);
+    expect((await nodeById(other, theirs.nodeIds[0])).userId).toBe(other);
+
+    expect(await outlineOf(userId)).toEqual([INBOX_NAME, "  Mine"]);
+    expect(await outlineOf(other)).toEqual([INBOX_NAME, "  Theirs"]);
+  });
+
+  it("does not let one user read or change another's imported node", async () => {
+    const other = await makeUser();
+    const { nodeIds } = await captureItems({
+      userId: other,
+      items: [
+        {
+          depth: 0,
+          name: "Theirs",
+          note: "",
+          external: { source: "apple_reminders", id: "r1" },
+        },
+      ],
+    });
+    const theirNode = nodeIds[0];
+
+    expect(await nodeById(userId, theirNode)).toBeUndefined();
+    await renameNode(userId, theirNode, "Hijacked");
+    await setState(userId, theirNode, "cancelled");
+    await deleteNode(userId, theirNode);
+
+    const node = await nodeById(other, theirNode);
+    expect(node.name).toBe("Theirs");
+    expect(node.state).toBe("not_started");
     expect(await outlineOf(other)).toEqual([INBOX_NAME, "  Theirs"]);
   });
 });
