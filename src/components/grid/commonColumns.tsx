@@ -36,7 +36,6 @@ export type OutlineColumnCtx = {
   today: string | null;
   selectedId: string | null;
   editingId: string | null;
-  nodeDepths: Map<string, number>;
   onToggleCollapsed: (node: OutlineNode) => void;
   onOpenDetail: (node: OutlineNode) => void;
   onFinishEdit: (node: OutlineNode, name: string) => void;
@@ -127,9 +126,10 @@ export function percentColumn(): ColumnDef<OutlineColumnCtx> {
 /**
  * The name cell, with inline rename and the expander.
  *
- * Two things vary. The outline gives the tree more room than the list tabs do, and the
- * Chooser renders flat — its rows are ranked across projects, so an indent inherited from
- * the outline would suggest a nesting that the ordering does not follow.
+ * Indent comes from `row.depth` — the outline sets that to tree depth; Projects / Tasks /
+ * Goals get the re-based depth from `sliceTree` (only kept ancestors, so a project under a
+ * filtered-out goal sits at 0 and only real subprojects indent). The Chooser passes
+ * `flat: true` because its ranking is cross-project and must not imply nesting.
  */
 export function nameColumn(
   options: { width?: string; flat?: boolean } = {},
@@ -147,7 +147,7 @@ export function nameColumn(
     render: (row, ctx) => (
       <NameCell
         node={row.node}
-        depth={flat ? 0 : (ctx.nodeDepths.get(row.node.id) ?? 0)}
+        depth={flat ? 0 : row.depth}
         selected={row.node.id === ctx.selectedId}
         editing={row.node.id === ctx.editingId}
         onToggleCollapsed={() => ctx.onToggleCollapsed(row.node)}

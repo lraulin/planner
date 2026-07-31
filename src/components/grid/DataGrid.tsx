@@ -726,28 +726,4 @@ function applyGroupCollapse<TRow>(
   return out;
 }
 
-/**
- * Depth in the whole tree, keyed by node id, for the name cell's indent rails. Walked from
- * each node rather than read off `GridRow.depth`, because the tabs that group and filter
- * rows still want a row indented to where it sits in the outline.
- */
-export function buildNodeDepths(
-  nodes: { id: string; parentId: string | null }[],
-  byId: Map<string, { parentId: string | null }>,
-): Map<string, number> {
-  const depths = new Map<string, number>();
-  for (const node of nodes) {
-    let depth = 0;
-    let current = node.parentId;
-    while (current) {
-      const parent = byId.get(current);
-      if (!parent) break;
-      depth += 1;
-      current = parent.parentId;
-    }
-    depths.set(node.id, depth);
-  }
-  return depths;
-}
-
 export { ALL_FILTER };

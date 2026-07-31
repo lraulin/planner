@@ -42,12 +42,11 @@ const TYPE_STYLE: Record<OutlineNode["type"], string> = {
 // ---------------------------------------------------------------------------
 
 /**
- * Name cell: indent rails, expander, type icon, label (or inline editor). `depth` is the
- * node's depth in the whole tree, not in the rows on screen, so a task shown out of
- * context in the Tasks tab still sits where it belongs under its project.
+ * Name cell: indent rails, expander, type icon, label (or inline editor).
  *
- * One rail per ancestor — a top-level row gets none, since a rail stands for the parent
- * whose children it runs beside and a result area has no parent to draw.
+ * `depth` is how deep this row sits among the rows the host is showing — full tree depth
+ * on the Outline, re-based depth (only kept ancestors) on Projects / Tasks / Goals. One
+ * rail per level; a top-level row gets none.
  */
 export function NameCell({
   node,

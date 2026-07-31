@@ -19,7 +19,7 @@ export {
   TextCell,
   ReadOnlyCell,
 } from "./cells";
-export { DataGrid, buildNodeDepths } from "./DataGrid";
+export { DataGrid } from "./DataGrid";
 export { ColumnHeaderRow } from "./ColumnHeader";
 export { ShowFieldsDialog } from "./ShowFieldsDialog";
 export { useGridState, useTabView } from "./useGridState";

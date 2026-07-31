@@ -13,7 +13,6 @@ import {
 } from "@/app/outline/actions";
 import { useOptimisticNodes } from "@/components/grid/useOptimisticNodes";
 import { useToday } from "@/components/grid/useToday";
-import { buildNodeDepths } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { isTypingTarget } from "@/lib/keyboard";
@@ -42,8 +41,6 @@ export function useGridTab(initialNodes: OutlineNode[]) {
     if (detailId) setSelectedId(detailId);
   }
 
-  const nodeDepths = useMemo(() => buildNodeDepths(nodes, byId), [nodes, byId]);
-
   const selected = selectedId ? (byId.get(selectedId) ?? null) : null;
   const detailNode = detailId ? (byId.get(detailId) ?? null) : null;
 
@@ -60,7 +57,6 @@ export function useGridTab(initialNodes: OutlineNode[]) {
       today,
       selectedId,
       editingId,
-      nodeDepths,
       onToggleCollapsed: (node: OutlineNode) => {
         if (!node.hasChildren) return;
         const collapsed = !node.collapsed;
@@ -107,7 +103,7 @@ export function useGridTab(initialNodes: OutlineNode[]) {
         apply(() => setEffortAction(node.id, minutes));
       },
     }),
-    [today, selectedId, editingId, nodeDepths, patch, apply, openDetail],
+    [today, selectedId, editingId, patch, apply, openDetail],
   );
 
   /**
@@ -171,7 +167,6 @@ export function useGridTab(initialNodes: OutlineNode[]) {
     detailNode,
     openDetail,
     cellHandlers,
-    nodeDepths,
     rowMenu,
   };
 }
