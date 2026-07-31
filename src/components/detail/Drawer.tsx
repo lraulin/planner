@@ -112,12 +112,17 @@ export function DrawerHeader({
  * The drawer's footer. Save stays enabled unless a save is already in flight — blocking
  * errors surface on the attempt rather than by disabling the button, per `ux-principles.md`.
  *
- * Save **stays open** (`drawer-pattern.md`): success clears dirty and shows "Saved"; Close
- * is the only leave path. `justSaved` is set by the form after a successful write and
- * cleared when the next edit dirties the draft.
+ * Explicit-save drawers need two commit paths (`drawer-pattern.md`):
+ * - **Save** — persists, stays open, shows "Saved" (primary; checkpoint mid-edit).
+ * - **Save & close** — persists then leaves (sugar for the done path; ⌘/Ctrl+Enter).
+ * Close alone is the discard/leave path and prompts when dirty.
+ *
+ * `justSaved` is set by the form after a successful stay-open Save and cleared when the
+ * next edit dirties the draft.
  */
 export function DrawerFooter({
   onSave,
+  onSaveAndClose,
   onClose,
   saving,
   dirty,
@@ -125,6 +130,8 @@ export function DrawerFooter({
   error,
 }: {
   onSave: () => void;
+  /** Persist then leave on success. Failed saves must stay open with the error. */
+  onSaveAndClose: () => void;
   onClose: () => void;
   saving: boolean;
   dirty: boolean;
@@ -133,6 +140,24 @@ export function DrawerFooter({
   error: string | null;
 }) {
   const status = dirty ? "Unsaved changes" : justSaved && !saving ? "Saved" : null;
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return;
+      // Don't steal Enter from a textarea / contenteditable that is mid-edit.
+      const target = event.target;
+      if (
+        target instanceof HTMLTextAreaElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      ) {
+        return;
+      }
+      event.preventDefault();
+      if (!saving) onSaveAndClose();
+    }
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, [onSaveAndClose, saving]);
 
   return (
     <div className="flex-none border-t border-rule">
@@ -145,7 +170,7 @@ export function DrawerFooter({
         </p>
       )}
 
-      <div className="flex items-center gap-2 px-5 py-3">
+      <div className="flex flex-wrap items-center gap-2 px-5 py-3">
         <button
           type="button"
           onClick={onSave}
@@ -153,6 +178,16 @@ export function DrawerFooter({
           className="rounded border border-select-edge bg-select px-3 py-1.5 text-[0.8125rem] font-medium text-ink transition-colors hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {saving ? "Saving…" : "Save"}
+        </button>
+
+        <button
+          type="button"
+          onClick={onSaveAndClose}
+          disabled={saving}
+          title="⌘/Ctrl+Enter"
+          className="rounded border border-rule px-3 py-1.5 text-[0.8125rem] text-ink transition-colors hover:border-rule-strong hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Save & close
         </button>
 
         <button

@@ -73,10 +73,11 @@ setJustSaved(true); // footer shows "Saved"; clear when the next edit dirties th
 
 Rules for this model:
 
-- **Save** persists, clears dirty, shows brief **Saved** feedback, **stays open**.
+- **Save** persists, clears dirty, shows brief **Saved** feedback, **stays open** (primary).
+- **Save & close** persists then leaves — sugar for the done path, not a substitute for
+  stay-open Save. Bind ⌘/Ctrl+Enter to it. Failed writes still stay open with the error.
 - **Close** / Escape / backdrop leave the surface. If dirty, prompt to discard.
 - Never close a drawer over a failed save — the user's input disappears with it.
-- Optional **Save & close** (or ⌘/Ctrl+Enter) is fine as sugar; it is not the primary button.
 - On **create**, promote the draft to the new id in local state so the next Save is an
   update, then stay open. `onSaved` (if the parent needs one) means **refresh background
   data**, not **close the drawer**.

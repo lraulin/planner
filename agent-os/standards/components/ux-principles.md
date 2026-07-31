@@ -152,13 +152,15 @@ the drawer. Never cram them into grid cells.
 ### Save stays open; close is separate
 
 A drawer is a workspace, not a one-shot dialog. For structured record forms (node detail,
-appointments):
+appointments) without autosave, commit and leave are independent:
 
 - **Save** commits and **stays open**, with clear "Saved" / "Unsaved changes" feedback.
+- **Save & close** commits then leaves (⌘/Ctrl+Enter); failed saves stay open.
 - **Close** (or Escape) leaves the drawer; if dirty, confirm discard.
 
-Do not make Save the only way to commit also close the drawer — that forces reopen thrashing
-across tabs. Document-like surfaces (notes, session log) **autosave** instead; short nested
+Do not make a single Save that always closes — that forces reopen thrashing across tabs.
+Do not ship only stay-open Save either: finishing an edit then becomes Save + Close every
+time. Document-like surfaces (notes, session log) **autosave** instead; short nested
 sub-editors may treat Save as done. Details and the decision table live in
 `drawer-pattern.md`.
 

@@ -59,8 +59,9 @@ const DRAWER_CODEC: SettingCodec<DrawerSettings> = {
  * Two things save on different schedules, deliberately:
  *
  * - **Scalar fields** are held as a draft and written on Save, so an abandoned edit is
- *   genuinely abandoned and closing a dirty form can ask first. Save stays open; Close is
- *   separate (`drawer-pattern.md`).
+ *   genuinely abandoned and closing a dirty form can ask first. Save stays open; Save &
+ *   close leaves after a successful write; Close alone discards when dirty
+ *   (`drawer-pattern.md`).
  * - **Repeating list rows** write straight through, the way the outline grid's inline cells
  *   already do. They are separate records, not fields of this one, and holding a dozen
  *   pending inserts in the client to reconcile on Save would buy nothing.
@@ -352,13 +353,12 @@ function DetailForm({
     [patchDrawer, detail.type],
   );
 
-  function save() {
+  function save(options?: { close?: boolean }) {
     setError(null);
     startTransition(async () => {
       const result = await saveNodeDetailAction(detail.id, values);
 
       // Order matters: never close over a failed save — keep the input and let them fix it.
-      // On success, stay open: Save and Close are separate (`drawer-pattern.md`).
       if (!result.ok) {
         setError(result.error);
         return;
@@ -366,6 +366,9 @@ function DetailForm({
 
       setDirty(false);
       setJustSaved(true);
+      // Save stays open by default; Save & close leaves only after a successful write
+      // (`drawer-pattern.md`).
+      if (options?.close) onClose();
     });
   }
 
@@ -386,7 +389,8 @@ function DetailForm({
       <FormTabs tabs={tabs} active={activeTab} onSelect={setActiveTab} />
 
       <DrawerFooter
-        onSave={save}
+        onSave={() => save()}
+        onSaveAndClose={() => save({ close: true })}
         onClose={requestClose}
         saving={busy}
         dirty={dirty}

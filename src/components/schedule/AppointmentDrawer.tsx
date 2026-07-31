@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   Appointment,
   AppointmentCheck,
@@ -168,7 +168,7 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
     else onClose();
   }
 
-  async function save() {
+  async function save(options?: { close?: boolean }) {
     setSaving(true);
     setError(null);
     const startAt = new Date(startLocal);
@@ -227,9 +227,37 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
     if (!persistedId && result.id) setPersistedId(result.id);
     setDirty(false);
     setJustSaved(true);
-    // Refresh the grid/calendar behind the drawer; do not close.
+    // Refresh the grid/calendar behind the drawer. Close only when asked — Save stays
+    // open by default (`drawer-pattern.md`).
     onSaved();
+    if (options?.close) onClose();
   }
+
+  // Always call the latest save (form state changes every keystroke); do not re-bind the
+  // listener for each field edit.
+  const saveRef = useRef(save);
+  const savingRef = useRef(saving);
+  useEffect(() => {
+    saveRef.current = save;
+    savingRef.current = saving;
+  });
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return;
+      const target = event.target;
+      if (
+        target instanceof HTMLTextAreaElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      ) {
+        return;
+      }
+      event.preventDefault();
+      if (!savingRef.current) void saveRef.current({ close: true });
+    }
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, []);
 
   function toggleWeekday(d: number) {
     markDirty();
@@ -256,7 +284,7 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
               </h2>
               {status && <p className="text-[0.75rem] text-ink-muted">{status}</p>}
             </div>
-            <div className="flex flex-none gap-2">
+            <div className="flex flex-none flex-wrap gap-2">
               {persistedId && (
                 <button
                   type="button"
@@ -272,18 +300,27 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
               )}
               <button
                 type="button"
-                className="rounded border border-rule px-2 py-1 text-[0.8125rem] text-ink hover:bg-surface-raised"
-                onClick={requestClose}
-              >
-                Close
-              </button>
-              <button
-                type="button"
                 disabled={saving}
                 className="rounded bg-select-edge px-3 py-1 text-[0.8125rem] font-medium text-white disabled:opacity-50"
                 onClick={() => void save()}
               >
                 {saving ? "Saving…" : "Save"}
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                title="⌘/Ctrl+Enter"
+                className="rounded border border-rule px-2 py-1 text-[0.8125rem] text-ink hover:bg-surface-raised disabled:opacity-50"
+                onClick={() => void save({ close: true })}
+              >
+                Save & close
+              </button>
+              <button
+                type="button"
+                className="rounded border border-rule px-2 py-1 text-[0.8125rem] text-ink hover:bg-surface-raised"
+                onClick={requestClose}
+              >
+                Close
               </button>
             </div>
           </header>
