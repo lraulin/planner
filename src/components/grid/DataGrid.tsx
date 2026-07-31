@@ -20,7 +20,13 @@ import {
 } from "./columns";
 import { ColumnHeaderRow } from "./ColumnHeader";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
-import { ALL_FILTER, rowPassesFilters, type ColumnFilter } from "./filters";
+import {
+  ALL_FILTER,
+  filterActive,
+  rowPassesFilters,
+  type ColumnFilter,
+} from "./filters";
+import { sortRowsWithinGroups } from "@/lib/grid/sortRows";
 
 export type SortState = { columnId: string; direction: "asc" | "desc" } | null;
 
@@ -89,6 +95,10 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   empty,
   enableFilters = false,
   enableSort = false,
+  sort: controlledSort,
+  onSortChange,
+  filters: controlledFilters,
+  onFilterChange,
   collapsedGroups,
   onToggleGroup,
   rowDrag,
@@ -106,6 +116,15 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   empty?: ReactNode;
   enableFilters?: boolean;
   enableSort?: boolean;
+  /**
+   * Sort and filters are controlled when a host passes them, which is what lets a tab
+   * persist them. Omitting both keeps the grid's own state, so a tab can adopt one at a
+   * time — and so a grid with nothing to remember does not need a store.
+   */
+  sort?: SortState;
+  onSortChange?: (columnId: string) => void;
+  filters?: Record<string, ColumnFilter>;
+  onFilterChange?: (columnId: string, filter: ColumnFilter) => void;
   /** Group ids the user has collapsed. Omitted means every group is open. */
   collapsedGroups?: Set<string>;
   onToggleGroup?: (groupId: string) => void;
@@ -119,8 +138,11 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
 } & RowMeta<TRow>) {
   type Row = NodeGridRow<TRow>;
 
-  const [sort, setSort] = useState<SortState>(null);
-  const [filters, setFilters] = useState<Record<string, ColumnFilter>>({});
+  const [ownSort, setOwnSort] = useState<SortState>(null);
+  const [ownFilters, setOwnFilters] = useState<Record<string, ColumnFilter>>({});
+  const sort = controlledSort !== undefined ? controlledSort : ownSort;
+  const filters = controlledFilters ?? ownFilters;
+
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropHint, setDropHint] = useState<DropHint | null>(null);
   const [menu, setMenu] = useState<{ rowId: string; x: number; y: number } | null>(
@@ -165,29 +187,30 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
         ? ((columnCtx as { today: string | null }).today ?? null)
         : null;
 
-  const filteredRows = useMemo(() => {
-    const active = Object.values(filters).some((filter) => filter.id !== "all");
-    if (!active && !sort) return rows;
+  const anyFilterActive = useMemo(
+    () => Object.values(filters).some(filterActive),
+    [filters],
+  );
 
-    // Filter node rows; drop group headers whose section ends up empty.
-    const passIds = new Set<string>();
-    for (const row of nodeRows) {
-      const values: Record<string, string | null> = {};
-      for (const column of columns) {
-        if (column.filterValue) values[column.id] = column.filterValue(row);
+  const displayRows = useMemo(() => {
+    let next = rows;
+
+    if (anyFilterActive) {
+      // Filter node rows; drop group headers whose section ends up empty.
+      const passIds = new Set<string>();
+      for (const row of nodeRows) {
+        const values: Record<string, string | null> = {};
+        for (const column of columns) {
+          if (column.filterValue) values[column.id] = column.filterValue(row);
+        }
+        if (rowPassesFilters(values, filters, kinds, today)) passIds.add(row.id);
       }
-      if (rowPassesFilters(values, filters, kinds, today)) {
-        passIds.add(row.id);
-      }
+
+      next = dropEmptyGroups(
+        next.filter((row) => row.kind !== "node" || passIds.has(row.id)),
+        passIds,
+      );
     }
-
-    let next = rows.filter((row) => {
-      if (row.kind === "node") return passIds.has(row.id);
-      return true;
-    });
-
-    // Collapse groups whose filtered children are all gone.
-    next = dropEmptyGroups(next, passIds);
 
     if (collapsedGroups && collapsedGroups.size > 0) {
       next = applyGroupCollapse(next, collapsedGroups);
@@ -195,46 +218,55 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
 
     if (sort) {
       const column = columns.find((entry) => entry.id === sort.columnId);
+      // Sorting happens within each group segment, so a grouped tab reorders its rows
+      // rather than silently ignoring the click. See `@/lib/grid/sortRows`.
       if (column?.sortValue) {
-        const direction = sort.direction === "asc" ? 1 : -1;
-        const nodes = next.filter((row): row is Row => row.kind === "node");
-        const groups = next.filter((row) => row.kind === "group");
-        // Sorting flattens group structure for the outline (no groups) and for simple
-        // lists; grouped tabs should sort within groups. Keep nodes in group order by
-        // sorting only when there are no group headers.
-        if (groups.length === 0) {
-          nodes.sort(
-            (a, b) =>
-              compareSort(column.sortValue!(a), column.sortValue!(b)) * direction,
-          );
-          next = nodes;
-        }
+        const sortValue = column.sortValue;
+        next = sortRowsWithinGroups(next, (row) => sortValue(row), sort.direction);
       }
     }
 
     return next;
-  }, [rows, nodeRows, columns, filters, kinds, today, sort, collapsedGroups]);
+  }, [
+    rows,
+    nodeRows,
+    columns,
+    filters,
+    anyFilterActive,
+    kinds,
+    today,
+    sort,
+    collapsedGroups,
+  ]);
 
-  // When filters/sort are off, still honour group collapse.
-  const displayRows = useMemo(() => {
-    if (Object.values(filters).some((filter) => filter.id !== "all") || sort) {
-      return filteredRows;
-    }
-    if (collapsedGroups && collapsedGroups.size > 0) {
-      return applyGroupCollapse(rows, collapsedGroups);
-    }
-    return rows;
-  }, [rows, filteredRows, filters, sort, collapsedGroups]);
-
-  function handleSort(columnId: string) {
-    setSort((current) => {
-      if (!current || current.columnId !== columnId) {
-        return { columnId, direction: "asc" };
+  const handleSort = useCallback(
+    (columnId: string) => {
+      if (onSortChange) {
+        onSortChange(columnId);
+        return;
       }
-      if (current.direction === "asc") return { columnId, direction: "desc" };
-      return null;
-    });
-  }
+      // Achieve's header cycle: unsorted -> ascending -> descending -> unsorted.
+      setOwnSort((current) => {
+        if (!current || current.columnId !== columnId) {
+          return { columnId, direction: "asc" };
+        }
+        if (current.direction === "asc") return { columnId, direction: "desc" };
+        return null;
+      });
+    },
+    [onSortChange],
+  );
+
+  const handleFilterChange = useCallback(
+    (columnId: string, filter: ColumnFilter) => {
+      if (onFilterChange) {
+        onFilterChange(columnId, filter);
+        return;
+      }
+      setOwnFilters((current) => ({ ...current, [columnId]: filter }));
+    },
+    [onFilterChange],
+  );
 
   function endDrag() {
     setDragId(null);
@@ -294,9 +326,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
         sort={enableSort ? sort : null}
         onSort={enableSort ? handleSort : undefined}
         filters={filters}
-        onFilterChange={(columnId, filter) =>
-          setFilters((current) => ({ ...current, [columnId]: filter }))
-        }
+        onFilterChange={handleFilterChange}
         distinctValues={distinctValues}
         enableFilters={enableFilters}
       />
@@ -684,17 +714,6 @@ function applyGroupCollapse<TRow>(
     }
   }
   return out;
-}
-
-function compareSort(
-  a: string | number | null | undefined,
-  b: string | number | null | undefined,
-): number {
-  if (a == null && b == null) return 0;
-  if (a == null) return 1;
-  if (b == null) return -1;
-  if (typeof a === "number" && typeof b === "number") return a - b;
-  return String(a).localeCompare(String(b), undefined, { numeric: true });
 }
 
 /**

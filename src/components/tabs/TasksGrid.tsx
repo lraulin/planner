@@ -288,6 +288,13 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         />
         <ToolbarButton onClick={() => setShowFields(true)}>Show Fields</ToolbarButton>
         <ToolbarButton
+          onClick={gridState.clearFilters}
+          disabled={!gridState.filtersActive}
+          title="Clear every column filter on this view"
+        >
+          Clear Filters
+        </ToolbarButton>
+        <ToolbarButton
           onClick={() => tab.selectedId && tab.setEditingId(tab.selectedId)}
           disabled={!tab.selectedId}
           title="F2"
@@ -329,6 +336,10 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         rowMenu={tab.rowMenu}
         enableFilters
         enableSort
+        sort={gridState.sort}
+        onSortChange={gridState.toggleSort}
+        filters={gridState.filters}
+        onFilterChange={gridState.setFilter}
         collapsedGroups={gridState.collapsedGroups}
         onToggleGroup={gridState.toggleGroup}
         empty={

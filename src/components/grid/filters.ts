@@ -8,12 +8,23 @@ import type { FilterKind } from "./columns";
  * the grid never reimplements "is this A or B?" in JSX.
  */
 
-export type ColumnFilter = {
-  /** Preset id, a distinct value, or `all`. */
-  id: string;
-};
+/**
+ * The option ids selected for one column, OR'd together — Achieve offers one choice per
+ * column, but "show me A1 *and* B1" is the question people actually ask of a priority
+ * column, and there is no reason a preset cannot sit alongside two literal values.
+ *
+ * Empty means unfiltered, and so does a selection containing `all`: the dropdown's "(All)"
+ * entry and "nothing ticked" are the same state, and treating them differently would leave
+ * an empty grid with no visible reason for it.
+ */
+export type ColumnFilter = string[];
 
-export const ALL_FILTER: ColumnFilter = { id: "all" };
+export const ALL_FILTER: ColumnFilter = [];
+
+/** Whether this column is narrowing anything. */
+export function filterActive(filter: ColumnFilter): boolean {
+  return filter.length > 0 && !filter.includes("all");
+}
 
 export type FilterOption = {
   id: string;
@@ -86,7 +97,8 @@ export function filterOptions(
 }
 
 /**
- * Whether a cell's filter value passes the active filter.
+ * Whether a cell's filter value passes the column's selection. Any selected option
+ * matching is enough.
  *
  * `today` is `YYYY-MM-DD` (or null before hydration). Date presets that need a clock treat
  * an unknown today as "match everything", so the server and first paint do not disagree.
@@ -97,9 +109,16 @@ export function matchesFilter(
   kind: FilterKind | undefined,
   today: string | null,
 ): boolean {
-  const id = filter.id;
-  if (id === "all") return true;
+  if (!filterActive(filter)) return true;
+  return filter.some((id) => matchesOption(value, id, kind, today));
+}
 
+function matchesOption(
+  value: string | null,
+  id: string,
+  kind: FilterKind | undefined,
+  today: string | null,
+): boolean {
   if (id === "blanks") return value === null || value === "";
   if (id === "nonblanks") return value !== null && value !== "";
 
@@ -231,7 +250,7 @@ export function rowPassesFilters(
   today: string | null,
 ): boolean {
   for (const [columnId, filter] of Object.entries(filters)) {
-    if (filter.id === "all") continue;
+    if (!filterActive(filter)) continue;
     if (!matchesFilter(values[columnId] ?? null, filter, kinds[columnId], today)) {
       return false;
     }

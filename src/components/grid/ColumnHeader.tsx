@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { alignClass, type ColumnMeta, type FilterKind } from "./columns";
 import {
   ALL_FILTER,
+  filterActive,
   filterOptions,
   type ColumnFilter,
   type FilterOption,
@@ -47,7 +48,7 @@ export function ColumnHeaderRow({
       {columns.map((column) => {
         const sorted = sort?.columnId === column.id ? sort.direction : null;
         const filter = filters?.[column.id] ?? ALL_FILTER;
-        const filterActive = filter.id !== "all";
+        const active = filterActive(filter);
 
         return (
           <div
@@ -75,7 +76,7 @@ export function ColumnHeaderRow({
                 label={column.label}
                 kind={column.filterKind}
                 filter={filter}
-                active={filterActive}
+                active={active}
                 options={filterOptions(
                   column.filterKind,
                   distinctValues?.[column.id] ?? [],
@@ -151,10 +152,13 @@ function FilterButton({
         <ul
           id={listId}
           role="listbox"
+          aria-multiselectable
           className="absolute top-full left-0 z-40 mt-1 max-h-64 min-w-[12rem] overflow-auto rounded border border-rule-strong bg-surface py-1 shadow-lg"
         >
           {options.map((option) => {
-            const selected = filter.id === option.id;
+            const isAll = option.id === "all";
+            const selected = isAll ? !active : filter.includes(option.id);
+
             return (
               <li key={option.id}>
                 <button
@@ -162,17 +166,29 @@ function FilterButton({
                   role="option"
                   aria-selected={selected}
                   onClick={() => {
-                    onChange({ id: option.id });
-                    setOpen(false);
+                    // "(All)" is the way back to unfiltered, so it closes; ticking values
+                    // keeps the list open, because picking several is the whole point.
+                    if (isAll) {
+                      onChange(ALL_FILTER);
+                      setOpen(false);
+                      return;
+                    }
+                    onChange(toggleOption(filter, option.id));
                   }}
                   className={[
-                    "flex w-full px-3 py-1 text-left text-[0.8125rem] normal-case tracking-normal",
+                    "flex w-full items-center gap-2 px-3 py-1 text-left text-[0.8125rem] normal-case tracking-normal",
                     selected
                       ? "bg-select font-medium text-ink"
                       : "text-ink hover:bg-surface-raised",
                   ].join(" ")}
                 >
-                  {option.label}
+                  <span
+                    aria-hidden
+                    className="w-3 flex-none text-[0.6875rem] text-ink-muted"
+                  >
+                    {selected ? "✓" : ""}
+                  </span>
+                  <span className="min-w-0 truncate">{option.label}</span>
                 </button>
               </li>
             );
@@ -181,4 +197,16 @@ function FilterButton({
       )}
     </div>
   );
+}
+
+/**
+ * Add or remove one option. Unticking the last one lands on `ALL_FILTER` rather than an
+ * empty selection, so "nothing ticked" and "(All)" stay the same state — an empty grid
+ * whose filter button looks inactive would be unexplainable.
+ */
+function toggleOption(filter: ColumnFilter, id: string): ColumnFilter {
+  const next = filter.includes(id)
+    ? filter.filter((entry) => entry !== id)
+    : [...filter.filter((entry) => entry !== "all"), id];
+  return next.length === 0 ? ALL_FILTER : next;
 }

@@ -448,6 +448,13 @@ export function NotesGrid({
           Collapse all
         </ToolbarButton>
         <ToolbarButton onClick={() => setFieldsOpen(true)}>Show Fields…</ToolbarButton>
+        <ToolbarButton
+          onClick={gridState.clearFilters}
+          disabled={!gridState.filtersActive}
+          title="Clear every column filter on this view"
+        >
+          Clear Filters
+        </ToolbarButton>
       </TabToolbar>
 
       {error && <ErrorBanner message={error} />}
@@ -462,6 +469,10 @@ export function NotesGrid({
         ariaLabel="Notes"
         enableFilters
         enableSort
+        sort={gridState.sort}
+        onSortChange={gridState.toggleSort}
+        filters={gridState.filters}
+        onFilterChange={gridState.setFilter}
         rowDrag={rowDrag}
         rowMenu={rowMenu}
         rowLabel={(row) => `Note: ${row.node.title || "Untitled"}`}
