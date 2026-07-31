@@ -11,6 +11,7 @@ import type { NodeItemKind } from "@/db/schema";
 import { and, asc, eq } from "drizzle-orm";
 import { applyStateTransition } from "@/lib/tree/mutations";
 import { between } from "@/lib/tree/sortKey";
+import { fetchPageTitle, shouldAutofillAttachmentTitle } from "@/lib/url/pageTitle";
 import type { ItemPosition, NodeDetailPatch, NodeItemValues } from "./types";
 
 /**
@@ -414,6 +415,48 @@ export async function updateNodeItem(
       updatedAt: new Date(),
     })
     .where(and(eq(nodeItems.id, itemId), eq(nodeItems.userId, userId)));
+}
+
+/**
+ * If this row is an attachment with a web URL and a blank name, fetch the page title
+ * and write it. Never throws: a failed fetch leaves the row as-is with the URL saved.
+ *
+ * Call after a URL write (create or update). Scoped by `userId` like every other mutation.
+ */
+export async function autofillAttachmentTitleFromUrl(
+  userId: string,
+  itemId: string,
+): Promise<string | null> {
+  const [item] = await db
+    .select({
+      kind: nodeItems.kind,
+      title: nodeItems.title,
+      url: nodeItems.url,
+    })
+    .from(nodeItems)
+    .where(and(eq(nodeItems.id, itemId), eq(nodeItems.userId, userId)))
+    .limit(1);
+
+  if (!item) return null;
+  if (
+    !shouldAutofillAttachmentTitle({
+      kind: item.kind,
+      title: item.title,
+      url: item.url,
+    })
+  ) {
+    return null;
+  }
+
+  const title = await fetchPageTitle(item.url);
+  if (!title) return null;
+
+  await db
+    .update(nodeItems)
+    .set({ title, updatedAt: new Date() })
+    .where(and(eq(nodeItems.id, itemId), eq(nodeItems.userId, userId)));
+
+  return title;
 }
 
 export async function deleteNodeItem(userId: string, itemId: string): Promise<void> {

@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { createNode } from "@/lib/tree/mutations";
 import {
+  autofillAttachmentTitleFromUrl,
   createNodeItem,
   deleteNodeItem,
   moveNodeItem,
@@ -439,6 +440,36 @@ describeDb("detail mutations", () => {
       await deleteNodeItem(otherUserId, id);
 
       expect(await titlesOf("risk")).toEqual(["Mine"]);
+    });
+
+    it("does not overwrite an attachment name that is already set", async () => {
+      const id = await createNodeItem({
+        userId,
+        nodeId: projectId,
+        kind: "attachment",
+        values: { title: "Keep me", url: "https://example.com" },
+      });
+
+      // Would hit the network if it tried to fill; a non-null return is the bug.
+      expect(await autofillAttachmentTitleFromUrl(userId, id)).toBeNull();
+
+      const detail = await loadNodeDetail(userId, projectId);
+      expect(detail?.items.find((item) => item.id === id)?.title).toBe("Keep me");
+    });
+
+    it("will not autofill another user's attachment", async () => {
+      const otherUserId = await makeUser();
+      const id = await createNodeItem({
+        userId,
+        nodeId: projectId,
+        kind: "attachment",
+        values: { title: "", url: "https://example.com" },
+      });
+
+      expect(await autofillAttachmentTitleFromUrl(otherUserId, id)).toBeNull();
+
+      const detail = await loadNodeDetail(userId, projectId);
+      expect(detail?.items.find((item) => item.id === id)?.title).toBe("");
     });
   });
 });

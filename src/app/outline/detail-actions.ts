@@ -79,14 +79,27 @@ export async function createNodeItemAction(params: {
   values?: NodeItemValues;
   position?: ItemPosition;
 }): Promise<ActionResult> {
-  return run((userId) => detail.createNodeItem({ userId, ...params }));
+  return run(async (userId) => {
+    const id = await detail.createNodeItem({ userId, ...params });
+    // Attachment created with a URL and no name: fill the name from the page.
+    if (typeof params.values?.url === "string" && params.values.url.trim()) {
+      await detail.autofillAttachmentTitleFromUrl(userId, id);
+    }
+    return id;
+  });
 }
 
 export async function updateNodeItemAction(
   itemId: string,
   values: NodeItemValues,
 ): Promise<ActionResult> {
-  return run((userId) => detail.updateNodeItem(userId, itemId, values));
+  return run(async (userId) => {
+    await detail.updateNodeItem(userId, itemId, values);
+    // Pasting a link into an attachment URL field fills a blank name from the page title.
+    if (typeof values.url === "string" && values.url.trim()) {
+      await detail.autofillAttachmentTitleFromUrl(userId, itemId);
+    }
+  });
 }
 
 export async function deleteNodeItemAction(itemId: string): Promise<ActionResult> {
