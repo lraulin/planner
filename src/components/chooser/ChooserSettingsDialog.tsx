@@ -2,6 +2,7 @@
 
 import { useId } from "react";
 import { ModalShell } from "@/components/detail/ModalShell";
+import { STATE_OPTIONS } from "@/lib/tree/hierarchy";
 import type { ChooserWeights } from "@/lib/chooser/score";
 import type { ChooserSettings } from "@/lib/chooser/types";
 import type { ChooserView } from "@/lib/chooser/views";
@@ -112,12 +113,34 @@ export function ChooserSettingsDialog({
                 disabled={!settings.onlyNextAction}
                 onChange={(useTaskPriorityOrder) => onChange({ useTaskPriorityOrder })}
               />
-              <Toggle
-                label="Include deferred (postponed) items"
-                checked={settings.includeDeferred}
-                onChange={(includeDeferred) => onChange({ includeDeferred })}
-              />
             </div>
+          </fieldset>
+
+          <fieldset className="mb-5">
+            <legend className="mb-2 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
+              Show these states
+            </legend>
+            <div className="grid grid-cols-3 gap-x-4 gap-y-1.5">
+              {STATE_OPTIONS.map((option) => (
+                <Toggle
+                  key={option.value}
+                  label={option.label}
+                  checked={settings.states.includes(option.value)}
+                  onChange={(on) =>
+                    onChange({
+                      states: on
+                        ? [...settings.states, option.value]
+                        : settings.states.filter((state) => state !== option.value),
+                    })
+                  }
+                />
+              ))}
+            </div>
+            {settings.states.length === 0 && (
+              <p className="mt-2 text-[0.75rem] text-priority-a">
+                No states are ticked, so this view will always be empty.
+              </p>
+            )}
           </fieldset>
 
           {WEIGHT_GROUPS.map((group) => (

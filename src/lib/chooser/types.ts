@@ -1,3 +1,4 @@
+import type { NodeState } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { ChooserWeights } from "./score";
 
@@ -30,8 +31,19 @@ export type ChooserSettings = {
    * (checked) or its highest-scoring one (unchecked).
    */
   useTaskPriorityOrder: boolean;
-  /** Achieve's Deferred toggle: include `postponed` items. */
-  includeDeferred: boolean;
+  /**
+   * Which work states appear, per view.
+   *
+   * Replaces what began as a single `includeDeferred` flag. Two overlapping mechanisms —
+   * a hard-coded "never show completed or cancelled" plus one toggle for postponed —
+   * meant the answer to "why is this row missing?" lived in two places and only one of
+   * them was adjustable. One list settles it: what is ticked is what you see.
+   *
+   * `completed` and `cancelled` are off by default in every view. They are still *offered*
+   * rather than forbidden, because a hidden rule you cannot inspect is worse than a
+   * checkbox you will not tick.
+   */
+  states: NodeState[];
 };
 
 /** One scored candidate, with the ancestor facts gathered on the way. */

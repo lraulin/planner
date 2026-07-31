@@ -494,3 +494,42 @@ export async function moveNodeVertically(
     },
   });
 }
+
+/**
+ * Write a batch of Task Chooser priorities in one transaction.
+ *
+ * Batched because a single drag renumbers a whole letter group: applying those one at a
+ * time would leave the ranking briefly duplicated or gapped, and a failure halfway would
+ * leave it that way for good.
+ *
+ * The plan comes from `src/lib/chooser/tcPriority.ts`, which owns the dense-rank rules.
+ * This function only persists — it does not re-derive positions, so the pure logic stays
+ * the single place the ordering is decided.
+ *
+ * Every statement is scoped by `userId`, so a plan naming another user's node writes
+ * nothing rather than reaching across the fence.
+ */
+export async function setTcPriorities(
+  userId: string,
+  assignments: {
+    nodeId: string;
+    letter: PriorityLetter | null;
+    rank: number | null;
+  }[],
+): Promise<void> {
+  if (assignments.length === 0) return;
+
+  await db.transaction(async (tx) => {
+    for (const assignment of assignments) {
+      await tx
+        .update(nodes)
+        .set({
+          tcPriorityLetter: assignment.letter,
+          // A rank without a letter would be unorderable, so it never survives alone.
+          tcPriorityRank: assignment.letter === null ? null : assignment.rank,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(nodes.id, assignment.nodeId), eq(nodes.userId, userId)));
+    }
+  });
+}

@@ -18,6 +18,8 @@ export function row(
     sortKey: "V",
     priorityLetter: null,
     priorityRank: null,
+    tcPriorityLetter: null,
+    tcPriorityRank: null,
     state: "not_started",
     deadline: null,
     focus: false,

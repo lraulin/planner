@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { DataGrid } from "@/components/grid/DataGrid";
+import { useCallback, useMemo, useState } from "react";
+import { DataGrid, type RowDrag } from "@/components/grid/DataGrid";
 import { ShowFieldsDialog } from "@/components/grid/ShowFieldsDialog";
 import { useGridColumns } from "@/components/grid/useGridColumns";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
@@ -20,12 +20,25 @@ import {
   chooserView,
   CHOOSER_VIEWS,
   DATE_FILTERS,
+  TC_UNRANKED_GROUP_ID,
+  tcLetterFromGroupId,
 } from "@/lib/chooser/views";
+import {
+  planTcAssign,
+  planTcClear,
+  planTcDrop,
+  planTcDropOnLetter,
+  TC_LETTERS,
+  type TcAssignment,
+} from "@/lib/chooser/tcPriority";
 import type { ChooserDateFilter, ChooserViewId } from "@/lib/chooser/types";
+import type { PriorityLetter } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
+import { setTcPrioritiesAction } from "@/app/outline/actions";
 import {
   buildChooserColumns,
   CHOOSER_DEFAULT_ORDER,
+  CHOOSER_TODO_ORDER,
   type ChooserColumnCtx,
   type ChooserFacts,
 } from "./chooserColumns";
@@ -63,7 +76,7 @@ export function ChooserGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const columnState = useGridColumns(
     `chooser:${viewId}`,
     allColumns,
-    CHOOSER_DEFAULT_ORDER,
+    view.tcPriority ? CHOOSER_TODO_ORDER : CHOOSER_DEFAULT_ORDER,
   );
 
   /**
@@ -103,14 +116,89 @@ export function ChooserGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   }, [matching]);
 
   const rows = useMemo(
-    () => chooserRows(visible, dateFilter, today),
-    [visible, dateFilter, today],
+    () => chooserRows(visible, dateFilter, today, view.tcPriority),
+    [visible, dateFilter, today, view.tcPriority],
+  );
+
+  /**
+   * Apply a ranking plan: patch every affected row optimistically, then persist the batch.
+   *
+   * All of them, not just the dragged one — a drop renumbers a whole letter, and patching
+   * only the row under the cursor would show it landing while its neighbours kept their
+   * old numbers until the server round-trip returned.
+   */
+  const applyTcPlan = useCallback(
+    (assignments: TcAssignment[]) => {
+      if (assignments.length === 0) return;
+      for (const assignment of assignments) {
+        tab.patch(assignment.nodeId, {
+          tcPriorityLetter: assignment.letter,
+          tcPriorityRank: assignment.rank,
+        });
+      }
+      tab.apply(() => setTcPrioritiesAction(assignments));
+    },
+    [tab],
+  );
+
+  const onTcAssign = useCallback(
+    (node: OutlineNode, letter: PriorityLetter | null, rank: number | null) => {
+      applyTcPlan(
+        letter === null
+          ? planTcClear(tab.nodes, node.id)
+          : planTcAssign(tab.nodes, node.id, letter, rank),
+      );
+    },
+    [applyTcPlan, tab.nodes],
   );
 
   const columnCtx: ChooserColumnCtx = useMemo(
-    () => ({ ...tab.cellHandlers, facts }),
-    [tab.cellHandlers, facts],
+    () => ({ ...tab.cellHandlers, facts, onTcAssign }),
+    [tab.cellHandlers, facts, onTcAssign],
   );
+
+  /**
+   * Drag-to-rank, active only in a TC-priority view.
+   *
+   * Plans are computed against `tab.nodes` — the whole outline — rather than the visible
+   * rows, so a date filter or a Show Less cannot cause a renumber that forgets the items
+   * it is hiding.
+   */
+  const planTcFor = useCallback(
+    (dragId: string, targetId: string, zone: string): TcAssignment[] => {
+      if (targetId === TC_UNRANKED_GROUP_ID) return planTcClear(tab.nodes, dragId);
+
+      const letter = tcLetterFromGroupId(targetId);
+      if (letter !== null) {
+        if (!(TC_LETTERS as string[]).includes(letter)) return [];
+        return planTcDropOnLetter(tab.nodes, dragId, letter as PriorityLetter);
+      }
+
+      // "inside" has no meaning in a flat list; treat it as landing after the row.
+      return planTcDrop(
+        tab.nodes,
+        dragId,
+        targetId,
+        zone === "before" ? "before" : "after",
+      );
+    },
+    [tab.nodes],
+  );
+
+  const { setSelectedId } = tab;
+
+  const rowDrag: RowDrag | undefined = useMemo(() => {
+    if (!view.tcPriority) return undefined;
+
+    return {
+      resolve: (dragId, targetId, zone) =>
+        planTcFor(dragId, targetId, zone).length > 0 ? { depth: 0 } : null,
+      onDrop: (dragId, targetId, zone) => {
+        setSelectedId(dragId);
+        applyTcPlan(planTcFor(dragId, targetId, zone));
+      },
+    };
+  }, [view.tcPriority, planTcFor, setSelectedId, applyTcPlan]);
 
   /** The `Project:` line under the toolbar — the selected row's ancestor path. */
   const breadcrumb = useMemo(() => {
@@ -170,9 +258,17 @@ export function ChooserGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
           onChange={() => setAdvancedFilters((v) => !v)}
           label="Advanced Filters"
         />
+        {/* Achieve's Deferred toggle, kept as a shortcut into the state list rather than
+            a second mechanism beside it. */}
         <ToolbarToggle
-          checked={settings.includeDeferred}
-          onChange={() => update({ includeDeferred: !settings.includeDeferred })}
+          checked={settings.states.includes("postponed")}
+          onChange={() =>
+            update({
+              states: settings.states.includes("postponed")
+                ? settings.states.filter((state) => state !== "postponed")
+                : [...settings.states, "postponed"],
+            })
+          }
           label="Deferred"
         />
         <ToolbarButton onClick={() => setShowFields(true)}>Show Fields</ToolbarButton>
@@ -216,6 +312,7 @@ export function ChooserGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         onOpenDetail={tab.openDetail}
         ariaLabel="Task Chooser"
         rowMenu={tab.rowMenu}
+        rowDrag={rowDrag}
         enableFilters={advancedFilters}
         collapsedGroups={collapsedGroups}
         onToggleGroup={(id) =>

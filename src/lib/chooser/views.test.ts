@@ -8,8 +8,10 @@ import {
   CHOOSER_VIEWS,
   defaultSettings,
   isChooserCandidate,
+  DEFAULT_STATES,
 } from "./views";
 import type { ChooserItem, ChooserSettings, ChooserViewId } from "./types";
+import { nodeStateEnum } from "@/db/schema";
 import { derive } from "@/lib/tree/derive";
 import { row } from "@/lib/tree/fixtures";
 import type { OutlineRow } from "@/lib/tree/types";
@@ -65,12 +67,12 @@ describe("isChooserCandidate", () => {
   const byId = new Map(nodes.map((node) => [node.id, node]));
 
   it("takes leaf tasks and task-less projects only", () => {
-    expect(isChooserCandidate(byId.get("leaf-task")!, false)).toBe(true);
-    expect(isChooserCandidate(byId.get("empty")!, false)).toBe(true);
+    expect(isChooserCandidate(byId.get("leaf-task")!, DEFAULT_STATES)).toBe(true);
+    expect(isChooserCandidate(byId.get("empty")!, DEFAULT_STATES)).toBe(true);
     // A project with work under it is not itself a choice — its children are.
-    expect(isChooserCandidate(byId.get("parent")!, false)).toBe(false);
-    expect(isChooserCandidate(byId.get("goal")!, false)).toBe(false);
-    expect(isChooserCandidate(byId.get("area")!, false)).toBe(false);
+    expect(isChooserCandidate(byId.get("parent")!, DEFAULT_STATES)).toBe(false);
+    expect(isChooserCandidate(byId.get("goal")!, DEFAULT_STATES)).toBe(false);
+    expect(isChooserCandidate(byId.get("area")!, DEFAULT_STATES)).toBe(false);
   });
 
   it("drops finished work and hides deferred work unless asked", () => {
@@ -78,10 +80,10 @@ describe("isChooserCandidate", () => {
     const [cancelled] = derive([row({ id: "c", type: "task", state: "cancelled" })]);
     const [deferred] = derive([row({ id: "p", type: "task", state: "postponed" })]);
 
-    expect(isChooserCandidate(done, true)).toBe(false);
-    expect(isChooserCandidate(cancelled, true)).toBe(false);
-    expect(isChooserCandidate(deferred, false)).toBe(false);
-    expect(isChooserCandidate(deferred, true)).toBe(true);
+    expect(isChooserCandidate(done, DEFAULT_STATES)).toBe(false);
+    expect(isChooserCandidate(cancelled, DEFAULT_STATES)).toBe(false);
+    expect(isChooserCandidate(deferred, DEFAULT_STATES)).toBe(false);
+    expect(isChooserCandidate(deferred, [...DEFAULT_STATES, "postponed"])).toBe(true);
   });
 
   it("keeps a zero-effort next-action reminder task", () => {
@@ -90,7 +92,7 @@ describe("isChooserCandidate", () => {
     const [reminder] = derive([
       row({ id: "r", type: "task", effortMinutes: 0, effortLeftMinutes: 0 }),
     ]);
-    expect(isChooserCandidate(reminder, false)).toBe(true);
+    expect(isChooserCandidate(reminder, DEFAULT_STATES)).toBe(true);
   });
 });
 
@@ -222,7 +224,9 @@ describe("views", () => {
     expect(names(build(rows, "urgent"))[0]).toBe("due-soon-D");
   });
 
-  it("To-do List keeps only started, focused, or already-due work", () => {
+  it("To-do List shows everything available, since it is where you rank it", () => {
+    // Deliberately unfiltered beyond state: you cannot drag a task into your A list if
+    // the view hides it until it is already urgent.
     const items = build(
       [
         row({ id: "a", type: "task", name: "focused", focus: true, sortKey: "a" }),
@@ -232,20 +236,6 @@ describe("views", () => {
           name: "started",
           state: "in_progress",
           sortKey: "b",
-        }),
-        row({
-          id: "c",
-          type: "task",
-          name: "due-today",
-          deadline: dayOut(0),
-          sortKey: "c",
-        }),
-        row({
-          id: "d",
-          type: "task",
-          name: "start-reached",
-          targetStart: dayOut(-1),
-          sortKey: "d",
         }),
         row({ id: "e", type: "task", name: "someday", sortKey: "e" }),
         row({
@@ -258,12 +248,7 @@ describe("views", () => {
       ],
       "todo-list",
     );
-    expect(names(items).sort()).toEqual([
-      "due-today",
-      "focused",
-      "start-reached",
-      "started",
-    ]);
+    expect(names(items).sort()).toEqual(["far-off", "focused", "someday", "started"]);
   });
 });
 
@@ -473,6 +458,223 @@ describe("chooserRows", () => {
     expect(rows.filter((r) => r.kind === "node")).toHaveLength(items.length);
     for (const group of groups) {
       if (group.kind === "group") expect(group.count).toBe(1);
+    }
+  });
+});
+
+describe("To-do List — TC priority ordering", () => {
+  /** Focused so every row survives the view's keep-filter; TC order is what's under test. */
+  function todo(partial: Omit<Parameters<typeof row>[0], "type">) {
+    return row({ ...partial, type: "task", focus: true });
+  }
+
+  it("puts hand-ranked work first, in the order it was ranked", () => {
+    const items = build(
+      [
+        todo({ id: "a", name: "third", tcPriorityLetter: "B", tcPriorityRank: 1 }),
+        todo({ id: "b", name: "first", tcPriorityLetter: "A", tcPriorityRank: 1 }),
+        todo({ id: "c", name: "second", tcPriorityLetter: "A", tcPriorityRank: 2 }),
+      ],
+      "todo-list",
+    );
+    expect(names(items)).toEqual(["first", "second", "third"]);
+  });
+
+  it("ignores the score among ranked items — the order is what you dragged", () => {
+    // The whole point: a D you ranked A1 stays above an A1 you never ranked.
+    const items = build(
+      [
+        todo({
+          id: "a",
+          name: "hand-ranked-D",
+          priorityLetter: "D",
+          tcPriorityLetter: "A",
+          tcPriorityRank: 1,
+        }),
+        todo({
+          id: "b",
+          name: "unranked-A1",
+          priorityLetter: "A",
+          priorityRank: 1,
+          tcPriorityLetter: "B",
+          tcPriorityRank: 1,
+        }),
+      ],
+      "todo-list",
+    );
+    expect(names(items)).toEqual(["hand-ranked-D", "unranked-A1"]);
+  });
+
+  it("sinks unranked work below every ranked item, ordered by score among itself", () => {
+    const items = build(
+      [
+        todo({ id: "a", name: "unranked-low", priorityLetter: "C" }),
+        todo({ id: "b", name: "ranked", tcPriorityLetter: "D", tcPriorityRank: 1 }),
+        todo({ id: "c", name: "unranked-high", priorityLetter: "A", priorityRank: 1 }),
+      ],
+      "todo-list",
+    );
+    // The D you ranked beats both, then the untriaged tail falls back to score order.
+    expect(names(items)).toEqual(["ranked", "unranked-high", "unranked-low"]);
+  });
+
+  it("leaves the score views ordering by score, not TC priority", () => {
+    const rows = [
+      row({
+        id: "a",
+        type: "task",
+        name: "tc-ranked-D",
+        priorityLetter: "D",
+        tcPriorityLetter: "A",
+        tcPriorityRank: 1,
+        sortKey: "a",
+      }),
+      row({
+        id: "b",
+        type: "task",
+        name: "plain-A1",
+        priorityLetter: "A",
+        priorityRank: 1,
+        sortKey: "b",
+      }),
+    ];
+    expect(names(build(rows, "best-overall"))).toEqual(["plain-A1", "tc-ranked-D"]);
+  });
+});
+
+describe("chooserRows — TC letter grouping", () => {
+  const items = build(
+    [
+      row({
+        id: "a",
+        type: "task",
+        name: "a1",
+        focus: true,
+        tcPriorityLetter: "A",
+        tcPriorityRank: 1,
+        sortKey: "a",
+      }),
+      row({
+        id: "b",
+        type: "task",
+        name: "c1",
+        focus: true,
+        tcPriorityLetter: "C",
+        tcPriorityRank: 1,
+        sortKey: "b",
+      }),
+      row({ id: "c", type: "task", name: "loose", focus: true, sortKey: "c" }),
+    ],
+    "todo-list",
+  );
+
+  function groupLabels(rows: ReturnType<typeof chooserRows>): string[] {
+    return rows.flatMap((r) => (r.kind === "group" ? [r.label] : []));
+  }
+
+  it("emits a header for every letter, including empty ones", () => {
+    // The empty header is the drop target that creates the first item in a letter —
+    // hiding it would make "drag it to B" impossible exactly when B is empty.
+    const rows = chooserRows(items, "none", TODAY, true);
+    expect(groupLabels(rows)).toEqual(["A", "B", "C", "D", "Unranked"]);
+  });
+
+  it("counts each letter and files every item exactly once", () => {
+    const rows = chooserRows(items, "none", TODAY, true);
+    const counts = Object.fromEntries(
+      rows.flatMap((r) => (r.kind === "group" ? [[r.label, r.count]] : [])),
+    );
+    expect(counts).toEqual({ A: 1, B: 0, C: 1, D: 0, Unranked: 1 });
+    expect(rows.filter((r) => r.kind === "node")).toHaveLength(3);
+  });
+
+  it("omits the Unranked header when everything is ranked", () => {
+    const allRanked = build(
+      [
+        row({
+          id: "a",
+          type: "task",
+          name: "a1",
+          focus: true,
+          tcPriorityLetter: "A",
+          tcPriorityRank: 1,
+        }),
+      ],
+      "todo-list",
+    );
+    expect(groupLabels(chooserRows(allRanked, "none", TODAY, true))).toEqual([
+      "A",
+      "B",
+      "C",
+      "D",
+    ]);
+  });
+
+  it("lets an explicit Group By Deadline win over letter grouping", () => {
+    // Two sets of headers at once would be nonsense, and the user reached for that
+    // control on purpose.
+    const rows = chooserRows(items, "group-by-deadline", TODAY, true);
+    expect(groupLabels(rows)).toEqual(["No Deadline"]);
+  });
+
+  it("stays flat when the view does not use TC priority", () => {
+    const rows = chooserRows(items, "none", TODAY, false);
+    expect(rows.every((r) => r.kind === "node")).toBe(true);
+  });
+});
+
+describe("state filtering", () => {
+  const everyState = nodeStateEnum.enumValues;
+
+  it("hides completed and cancelled work by default in every view", () => {
+    // The guarantee: you never have to configure your way out of seeing finished work.
+    for (const view of CHOOSER_VIEWS) {
+      expect(defaultSettings(view.id).states).not.toContain("completed");
+      expect(defaultSettings(view.id).states).not.toContain("cancelled");
+      expect(defaultSettings(view.id).states).not.toContain("postponed");
+    }
+  });
+
+  it("shows only what is ticked", () => {
+    const rows = everyState.map((state, index) =>
+      row({ id: state, type: "task", name: state, state, sortKey: `s${index}` }),
+    );
+
+    const onlyStarted = build(rows, "best-overall", { states: ["in_progress"] });
+    expect(names(onlyStarted)).toEqual(["in_progress"]);
+
+    const two = build(rows, "best-overall", { states: ["not_started", "waiting"] });
+    expect(names(two).sort()).toEqual(["not_started", "waiting"]);
+  });
+
+  it("can be configured to show completed work, rather than forbidding it", () => {
+    // Off by default, but inspectable and reachable — a hidden rule you cannot see is
+    // worse than a checkbox you will not tick.
+    const rows = [row({ id: "c", type: "task", name: "done", state: "completed" })];
+    expect(names(build(rows, "best-overall"))).toEqual([]);
+    expect(names(build(rows, "best-overall", { states: ["completed"] }))).toEqual([
+      "done",
+    ]);
+  });
+
+  it("empties the view when nothing is ticked", () => {
+    const rows = [row({ id: "a", type: "task", name: "a", sortKey: "a" })];
+    expect(build(rows, "best-overall", { states: [] })).toEqual([]);
+  });
+
+  it("limits the To-do List to work that is actionable by you now", () => {
+    // Waiting / delegated / should-delegate are blocked on somebody else, and proposed is
+    // not committed to — none belong on the list you work down today.
+    expect(defaultSettings("todo-list").states).toEqual(["not_started", "in_progress"]);
+    for (const blocked of ["waiting", "delegated", "should_delegate", "proposed"]) {
+      expect(defaultSettings("todo-list").states).not.toContain(blocked);
+    }
+  });
+
+  it("leaves the other views showing delegated and proposed work", () => {
+    for (const id of ["best-overall", "next-action", "urgent", "deadlines"] as const) {
+      expect(defaultSettings(id).states).toContain("waiting");
+      expect(defaultSettings(id).states).toContain("proposed");
     }
   });
 });

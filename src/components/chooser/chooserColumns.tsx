@@ -9,7 +9,10 @@ import {
   StatusCell,
 } from "@/components/grid/cells";
 import type { OutlineColumnCtx } from "@/components/outline/outlineColumns";
+import type { PriorityLetter } from "@/db/schema";
+import type { OutlineNode } from "@/lib/tree/types";
 import { formatEffort, formatPriority } from "@/lib/tree/format";
+import { TcPriorityCell } from "./TcPriorityCell";
 import { STATE_CODES } from "@/lib/tree/hierarchy";
 import { scheduleStatus, STATUS_LABELS } from "@/lib/tree/status";
 
@@ -31,6 +34,11 @@ export type ChooserFacts = {
 
 export type ChooserColumnCtx = OutlineColumnCtx & {
   facts: Map<string, ChooserFacts>;
+  onTcAssign: (
+    node: OutlineNode,
+    letter: PriorityLetter | null,
+    rank: number | null,
+  ) => void;
 };
 
 /** Columns shown before anyone touches Show Fields. */
@@ -43,6 +51,23 @@ export const CHOOSER_DEFAULT_ORDER = [
   "deadline",
   "status",
   "score",
+];
+
+/**
+ * The To-do List's preset: **TC Priority replaces Pri**, and Score goes away.
+ *
+ * Both omissions are the point. This view is ordered by hand, so showing a score the
+ * ordering ignores would invite you to wonder why row 3 outranks row 2; and the outline's
+ * sibling-relative Pri is a different question from "what am I doing next", which is the
+ * one this list answers.
+ */
+export const CHOOSER_TODO_ORDER = [
+  "tcPriority",
+  "abbrState",
+  "name",
+  "effortLeft",
+  "deadline",
+  "status",
 ];
 
 export function buildChooserColumns(): ColumnDef<ChooserColumnCtx>[] {
@@ -89,6 +114,27 @@ export function buildChooserColumns(): ColumnDef<ChooserColumnCtx>[] {
           key={`priority:${formatPriority(row.node.priorityLetter, row.node.priorityRank)}`}
           node={row.node}
           onChange={(letter, rank) => ctx.onPriorityChange(row.node, letter, rank)}
+        />
+      ),
+    },
+    {
+      // The flat cross-project ranking. Default column of the To-do List, available
+      // anywhere else via Show Fields — it is a real field on the task, not a view's
+      // private state.
+      id: "tcPriority",
+      label: "TC Pri",
+      width: "3.5rem",
+      align: "center",
+      filterKind: "priority",
+      filterValue: (row) =>
+        formatPriority(row.node.tcPriorityLetter, row.node.tcPriorityRank) || null,
+      sortValue: (row) =>
+        formatPriority(row.node.tcPriorityLetter, row.node.tcPriorityRank),
+      render: (row, ctx) => (
+        <TcPriorityCell
+          key={`tc:${formatPriority(row.node.tcPriorityLetter, row.node.tcPriorityRank)}`}
+          node={row.node}
+          onAssign={(letter, rank) => ctx.onTcAssign(row.node, letter, rank)}
         />
       ),
     },

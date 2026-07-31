@@ -253,6 +253,23 @@ export const nodes = pgTable(
     sortKey: text("sort_key").notNull(),
     priorityLetter: priorityLetterEnum("priority_letter"),
     priorityRank: smallint("priority_rank"),
+    /**
+     * Achieve's **Task Chooser priority** — a second, independent ABCD+rank that orders
+     * every currently-available task against every other one, the way Franklin Covey's
+     * single flat daily list does.
+     *
+     * Deliberately *not* `priority_letter`. That one is relative to a node's siblings
+     * ("the second most important task in this project"); this one is relative to
+     * everything you could work on right now ("the second most important thing today"),
+     * and the two answers routinely differ. Sharing a column would mean dragging a row in
+     * the Task Chooser silently rewrote the outline's sibling ordering.
+     *
+     * Ranks are dense (1..n within a letter) and maintained by the chooser, not typed
+     * free-hand — see `src/lib/chooser/tcPriority.ts`. Null letter means unranked, which
+     * is the normal state for a task nobody has triaged yet.
+     */
+    tcPriorityLetter: priorityLetterEnum("tc_priority_letter"),
+    tcPriorityRank: smallint("tc_priority_rank"),
     state: nodeStateEnum("state").notNull().default("not_started"),
     deadline: timestamp("deadline", { withTimezone: true }),
     /** Achieve's "Fo" column — a flag used to filter the outline down to current focus. */

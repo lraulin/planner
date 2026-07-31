@@ -15,7 +15,9 @@ export async function loadOutline(userId: string): Promise<OutlineNode[]> {
     WITH RECURSIVE tree AS (
       SELECT
         n.id, n.parent_id, n.type, n.name, n.sort_key,
-        n.priority_letter, n.priority_rank, n.state, n.deadline,
+        n.priority_letter, n.priority_rank,
+        n.tc_priority_letter, n.tc_priority_rank,
+        n.state, n.deadline,
         n.focus, n.collapsed, n.notes, n.is_inbox, n.completed_at,
         0 AS depth,
         ARRAY[n.sort_key] AS path
@@ -26,7 +28,9 @@ export async function loadOutline(userId: string): Promise<OutlineNode[]> {
 
       SELECT
         c.id, c.parent_id, c.type, c.name, c.sort_key,
-        c.priority_letter, c.priority_rank, c.state, c.deadline,
+        c.priority_letter, c.priority_rank,
+        c.tc_priority_letter, c.tc_priority_rank,
+        c.state, c.deadline,
         c.focus, c.collapsed, c.notes, c.is_inbox, c.completed_at,
         t.depth + 1,
         t.path || c.sort_key
@@ -36,7 +40,9 @@ export async function loadOutline(userId: string): Promise<OutlineNode[]> {
     )
     SELECT
       t.id, t.parent_id, t.type, t.name, t.sort_key,
-      t.priority_letter, t.priority_rank, t.state, t.deadline,
+      t.priority_letter, t.priority_rank,
+      t.tc_priority_letter, t.tc_priority_rank,
+      t.state, t.deadline,
       t.focus, t.collapsed, t.notes, t.is_inbox, t.completed_at, t.depth,
       td.effort_minutes, td.effort_left_minutes, td.actual_effort_minutes,
       td.percent_complete, td.contexts,
@@ -64,6 +70,9 @@ export async function loadOutline(userId: string): Promise<OutlineNode[]> {
       sortKey: r.sort_key as string,
       priorityLetter: (r.priority_letter as OutlineRow["priorityLetter"]) ?? null,
       priorityRank: r.priority_rank === null ? null : Number(r.priority_rank),
+      tcPriorityLetter:
+        (r.tc_priority_letter as OutlineRow["tcPriorityLetter"]) ?? null,
+      tcPriorityRank: r.tc_priority_rank === null ? null : Number(r.tc_priority_rank),
       state: r.state as OutlineRow["state"],
       deadline: r.deadline ? new Date(r.deadline as string) : null,
       focus: Boolean(r.focus),

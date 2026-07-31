@@ -142,3 +142,21 @@ export async function moveNodeVerticallyAction(
 ): Promise<ActionResult> {
   return run((userId) => tree.moveNodeVertically(userId, nodeId, direction));
 }
+
+/**
+ * Write a whole Task Chooser reordering at once.
+ *
+ * One batch rather than one call per row: a single drag renumbers a letter group, and
+ * splitting it would leave the ranking briefly duplicated on screen and permanently
+ * duplicated if one call failed. The plan is computed client-side by
+ * `src/lib/chooser/tcPriority.ts`; this only persists it.
+ */
+export async function setTcPrioritiesAction(
+  assignments: {
+    nodeId: string;
+    letter: PriorityLetter | null;
+    rank: number | null;
+  }[],
+): Promise<ActionResult> {
+  return run((userId) => tree.setTcPriorities(userId, assignments));
+}

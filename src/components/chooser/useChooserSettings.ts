@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { nodeStateEnum, type NodeState } from "@/db/schema";
 import { DEFAULT_WEIGHTS, type ChooserWeights } from "@/lib/chooser/score";
 import type { ChooserSettings, ChooserViewId } from "@/lib/chooser/types";
 import { defaultSettings } from "@/lib/chooser/views";
@@ -17,6 +18,8 @@ import { defaultSettings } from "@/lib/chooser/views";
  * view defaults, and the client adopts what is stored without an effect (and so without a
  * flash of the wrong ordering).
  */
+
+const ALL_STATES: readonly NodeState[] = nodeStateEnum.enumValues;
 
 function storageKey(viewId: ChooserViewId): string {
   return `planner.chooser.settings.${viewId}`;
@@ -78,12 +81,29 @@ function parseSettings(raw: string | null, viewId: ChooserViewId): ChooserSettin
     weights,
     onlyNextAction: bool(stored.onlyNextAction, base.onlyNextAction),
     useTaskPriorityOrder: bool(stored.useTaskPriorityOrder, base.useTaskPriorityOrder),
-    includeDeferred: bool(stored.includeDeferred, base.includeDeferred),
+    states: states(stored.states, base.states),
   };
 }
 
 function bool(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
+}
+
+/**
+ * A stored state list is trusted only for values that are still real states, so renaming
+ * or dropping one in the schema degrades to "that state is not shown" rather than to a
+ * filter that silently matches nothing.
+ *
+ * An explicitly empty list is honoured — "show me nothing" is a legal, if odd, choice, and
+ * quietly overriding it would make the checkboxes lie.
+ */
+function states(value: unknown, fallback: NodeState[]): NodeState[] {
+  if (!Array.isArray(value)) return fallback;
+  const valid = value.filter(
+    (entry): entry is NodeState =>
+      typeof entry === "string" && (ALL_STATES as string[]).includes(entry),
+  );
+  return [...new Set(valid)];
 }
 
 export function useChooserSettings(viewId: ChooserViewId) {

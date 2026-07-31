@@ -168,6 +168,26 @@ function buildColumns(): ColumnDef<OutlineColumnCtx>[] {
       render: (row) => <PercentCell node={row.node} />,
     },
     {
+      // The Task Chooser's flat cross-project ranking. Off by default — it belongs to the
+      // chooser — but it is a real field on the task, so it is available here too, where
+      // triage already happens. Read-only: assigning a rank means placing it among all the
+      // others, which is the chooser's job.
+      id: "tcPriority",
+      label: "TC Pri",
+      width: "3.5rem",
+      align: "center",
+      filterKind: "priority",
+      filterValue: (row) =>
+        formatPriority(row.node.tcPriorityLetter, row.node.tcPriorityRank) || null,
+      sortValue: (row) =>
+        formatPriority(row.node.tcPriorityLetter, row.node.tcPriorityRank),
+      render: (row) => (
+        <span className="tabular text-[0.8125rem] font-medium text-ink-muted">
+          {formatPriority(row.node.tcPriorityLetter, row.node.tcPriorityRank)}
+        </span>
+      ),
+    },
+    {
       id: "status",
       label: "Status",
       width: "7.5rem",

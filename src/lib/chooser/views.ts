@@ -1,7 +1,9 @@
+import type { NodeState } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { GridRow } from "@/lib/tree/slice";
 import { dayString, daysBetween, effectiveDeadline } from "./dates";
 import { DEFAULT_WEIGHTS, scoreItem, type ChooserWeights } from "./score";
+import { compareTcPriority, TC_LETTERS } from "./tcPriority";
 import type {
   ChooserDateFilter,
   ChooserItem,
@@ -65,11 +67,47 @@ export type ChooserView = {
   /** Settings this view starts from before anything is stored. */
   defaults: Pick<ChooserSettings, "onlyNextAction" | "useTaskPriorityOrder">;
   keep: ViewKeep | null;
+  /** Work states this view shows before anything is stored. */
+  states: NodeState[];
   /** Shown under the Settings heading, so the view's intent is written down somewhere. */
   description: string;
+  /**
+   * Order by the hand-maintained **TC Priority** instead of by score, group the rows under
+   * their letter, and show the TC Priority column in place of the outline's Pri.
+   *
+   * This is what makes the To-do List a Covey-style list rather than another ranked query:
+   * the order is what you dragged it to, and a shifting deadline does not rearrange it.
+   * Score still orders the items you have not ranked yet, which sit below the ranked ones.
+   */
+  tcPriority: boolean;
 };
 
 const NO_NEXT_ACTION = { onlyNextAction: false, useTaskPriorityOrder: false } as const;
+
+/**
+ * States a chooser view shows by default: everything that is still live work.
+ *
+ * `completed` and `cancelled` are out — a list of what to do next has no business
+ * offering things that are finished or abandoned. `postponed` is out too, which is what
+ * Achieve's Deferred toggle turns back on. All three remain tickable in Settings.
+ */
+export const DEFAULT_STATES: NodeState[] = [
+  "not_started",
+  "in_progress",
+  "waiting",
+  "delegated",
+  "should_delegate",
+  "proposed",
+];
+
+/**
+ * The To-do List is narrower still: only work that is genuinely actionable **by you, now**.
+ *
+ * `waiting`, `delegated`, and `should_delegate` are all blocked on somebody else, and
+ * `proposed` is not committed to yet — none of them belong on the list you work down
+ * today. Ticking them back on is one checkbox away.
+ */
+export const TODO_STATES: NodeState[] = ["not_started", "in_progress"];
 
 export const CHOOSER_VIEWS: ChooserView[] = [
   {
@@ -78,6 +116,8 @@ export const CHOOSER_VIEWS: ChooserView[] = [
     weights: DEFAULT_WEIGHTS,
     defaults: NO_NEXT_ACTION,
     keep: null,
+    tcPriority: false,
+    states: DEFAULT_STATES,
     description: "Best tasks across all your projects, regardless of result area.",
   },
   {
@@ -86,25 +126,30 @@ export const CHOOSER_VIEWS: ChooserView[] = [
     weights: DEFAULT_WEIGHTS,
     defaults: { onlyNextAction: true, useTaskPriorityOrder: true },
     keep: null,
+    tcPriority: false,
+    states: DEFAULT_STATES,
     description: "One item per project — the next thing that project needs.",
   },
   {
     id: "todo-list",
     label: "To-do List",
-    // Today's list: what is already underway, already focused, or already due.
+    // Weights only order the untriaged tail; the ranked part is ordered by hand.
     weights: { ...DEFAULT_WEIGHTS, focusBonus: 35, targetStartReached: 25 },
     defaults: NO_NEXT_ACTION,
-    keep: (item, today) => {
-      if (item.node.focus) return true;
-      if (item.node.state === "in_progress" || item.node.state === "should_delegate") {
-        return true;
-      }
-      const start = daysOut(item.node.targetStart, today);
-      if (start !== null && start <= 0) return true;
-      const deadline = daysOut(item.effectiveDeadline, today);
-      return deadline !== null && deadline <= 1;
-    },
-    description: "A prioritised list for today: started, focused, or already due.",
+    /**
+     * No extra filter: this view shows **everything currently available**, because it is
+     * where you rank it. An earlier draft narrowed it to focused / started / already-due
+     * work, which was self-defeating once ranking arrived — you cannot drag a task into
+     * your A list if the list refuses to show it until it is already urgent.
+     *
+     * Narrowing is the state filter's job now, and it defaults to Not Started + In
+     * Progress, which is the honest definition of "available".
+     */
+    keep: null,
+    tcPriority: true,
+    states: TODO_STATES,
+    description:
+      "Your hand-ranked list for today. Drag rows to reorder; unranked work sits below, by score.",
   },
   {
     id: "urgent",
@@ -121,6 +166,8 @@ export const CHOOSER_VIEWS: ChooserView[] = [
     },
     defaults: NO_NEXT_ACTION,
     keep: null,
+    tcPriority: false,
+    states: DEFAULT_STATES,
     description:
       "Dates outweigh priority — what is on fire, whatever letter it carries.",
   },
@@ -142,6 +189,8 @@ export const CHOOSER_VIEWS: ChooserView[] = [
     },
     defaults: NO_NEXT_ACTION,
     keep: (item) => item.effectiveDeadline !== null,
+    tcPriority: false,
+    states: DEFAULT_STATES,
     description: "Only work with a deadline, ordered by how close that deadline is.",
   },
 ];
@@ -156,7 +205,7 @@ export function defaultSettings(id: ChooserViewId): ChooserSettings {
     weights: view.weights,
     onlyNextAction: view.defaults.onlyNextAction,
     useTaskPriorityOrder: view.defaults.useTaskPriorityOrder,
-    includeDeferred: false,
+    states: view.states,
   };
 }
 
@@ -168,12 +217,8 @@ export function defaultSettings(id: ChooserViewId): ChooserSettings {
  * real choices. Zero-effort "next action reminder" tasks (§7.2.5) stay in: they are
  * visible in Achieve's own screenshot, and a reminder is still a thing you can pick.
  */
-export function isChooserCandidate(
-  node: OutlineNode,
-  includeDeferred: boolean,
-): boolean {
-  if (node.state === "completed" || node.state === "cancelled") return false;
-  if (!includeDeferred && node.state === "postponed") return false;
+export function isChooserCandidate(node: OutlineNode, states: NodeState[]): boolean {
+  if (!states.includes(node.state)) return false;
   if (node.type === "task") return !node.hasChildren;
   if (node.type === "project") return !node.hasChildren;
   return false;
@@ -203,7 +248,7 @@ export function buildChooserItems(
   const items: ChooserItem[] = [];
 
   nodes.forEach((node, order) => {
-    if (!isChooserCandidate(node, settings.includeDeferred)) return;
+    if (!isChooserCandidate(node, settings.states)) return;
     if (!inScope(node, opts.scopeId ?? null, byId)) return;
 
     const ancestry = ancestryOf(node, byId);
@@ -232,7 +277,7 @@ export function buildChooserItems(
     items.push(item);
   });
 
-  items.sort(compareItems);
+  items.sort(view.tcPriority ? compareByTcThenScore : compareItems);
 
   return settings.onlyNextAction ? applyNextActionFilter(items, settings) : items;
 }
@@ -245,6 +290,18 @@ function compareItems(a: ChooserItem, b: ChooserItem): number {
   if (aDue !== bDue) return aDue - bDue;
 
   return a.node.name.localeCompare(b.node.name, undefined, { numeric: true });
+}
+
+/**
+ * Hand-ranked first, in the order you put them; everything else below, by score.
+ *
+ * `compareTcPriority` already sinks unranked items and ties them with each other, so
+ * falling through to the score comparison orders exactly the untriaged tail — and a task
+ * captured five minutes ago shows up there rather than vanishing.
+ */
+function compareByTcThenScore(a: ChooserItem, b: ChooserItem): number {
+  const byTc = compareTcPriority(a.node, b.node);
+  return byTc !== 0 ? byTc : compareItems(a, b);
 }
 
 function inScope(
@@ -416,7 +473,15 @@ export function chooserRows(
   items: ChooserItem[],
   filter: ChooserDateFilter,
   today: string | null,
+  /** True in a TC-priority view: group under the letter headers you drag rows onto. */
+  groupByTcLetter = false,
 ): GridRow[] {
+  // An explicit Group By Deadline wins over the view's own grouping — the user reached for
+  // that control on purpose, and two sets of headers at once would be nonsense.
+  if (groupByTcLetter && filter !== "group-by-deadline") {
+    return tcLetterRows(items);
+  }
+
   if (filter !== "group-by-deadline") {
     return items.map((item) => ({
       kind: "node",
@@ -443,6 +508,62 @@ export function chooserRows(
       collapsed: false,
     });
     for (const item of inBand) {
+      rows.push({ kind: "node", id: item.node.id, node: item.node, depth: 0 });
+    }
+  }
+
+  return rows;
+}
+
+/** Group-row id for a TC priority letter, e.g. `tc:A`. Parsed back by the grid's drop handler. */
+export function tcLetterGroupId(letter: string): string {
+  return `tc:${letter}`;
+}
+
+/** The letter a `tc:` group id names, or null when the id is not one. */
+export function tcLetterFromGroupId(groupId: string): string | null {
+  return groupId.startsWith("tc:") ? groupId.slice(3) : null;
+}
+
+/** Group id for the unranked tail. Dropping here removes an item from the ranking. */
+export const TC_UNRANKED_GROUP_ID = "tc:unranked";
+
+/**
+ * Rows for a TC-priority view: one header per letter, then the unranked tail.
+ *
+ * **Every letter gets a header, even an empty one.** That is not cosmetic — the header is
+ * the drop target that puts the first item into a letter, so hiding empty ones would make
+ * "drag it to A" impossible exactly when A is empty, which is the first thing anyone does.
+ */
+function tcLetterRows(items: ChooserItem[]): GridRow[] {
+  const rows: GridRow[] = [];
+
+  for (const letter of TC_LETTERS) {
+    const inLetter = items.filter((item) => item.node.tcPriorityLetter === letter);
+    rows.push({
+      kind: "group",
+      id: tcLetterGroupId(letter),
+      label: letter,
+      count: inLetter.length,
+      depth: 0,
+      collapsed: false,
+    });
+    for (const item of inLetter) {
+      rows.push({ kind: "node", id: item.node.id, node: item.node, depth: 0 });
+    }
+  }
+
+  const unranked = items.filter((item) => item.node.tcPriorityLetter === null);
+  if (unranked.length > 0) {
+    rows.push({
+      kind: "group",
+      id: TC_UNRANKED_GROUP_ID,
+      label: "Unranked",
+      count: unranked.length,
+      depth: 0,
+      collapsed: false,
+    });
+    for (const item of unranked) {
       rows.push({ kind: "node", id: item.node.id, node: item.node, depth: 0 });
     }
   }

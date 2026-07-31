@@ -9,6 +9,12 @@ export type OutlineRow = {
   sortKey: string;
   priorityLetter: PriorityLetter | null;
   priorityRank: number | null;
+  /**
+   * Task Chooser priority — the flat cross-project ranking, independent of the
+   * sibling-relative `priorityLetter`. See `nodes.tcPriorityLetter` in the schema.
+   */
+  tcPriorityLetter: PriorityLetter | null;
+  tcPriorityRank: number | null;
   state: NodeState;
   deadline: Date | null;
   focus: boolean;
