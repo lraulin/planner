@@ -126,9 +126,9 @@ export function percentColumn(): ColumnDef<OutlineColumnCtx> {
 /**
  * The name cell, with inline rename and the expander.
  *
- * Indent comes from `row.depth` — the outline sets that to tree depth; Projects / Tasks /
- * Goals get the re-based depth from `sliceTree` (only kept ancestors, so a project under a
- * filtered-out goal sits at 0 and only real subprojects indent). The Chooser passes
+ * Indent comes from `row.depth`. On the Outline that is full tree depth. On Projects and
+ * Tasks, `sliceTree` re-bases it onto kept ancestors only — so a project under a filtered-
+ * out goal sits at 0, and only real subprojects / subtasks indent. The Chooser passes
  * `flat: true` because its ranking is cross-project and must not imply nesting.
  */
 export function nameColumn(

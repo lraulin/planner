@@ -74,7 +74,7 @@ function buildColumns(): ColumnDef<GoalsCtx>[] {
       render: (row, ctx) => (
         <NameCell
           node={row.node}
-          depth={row.depth}
+          depth={row.node.depth}
           selected={row.node.id === ctx.selectedId}
           editing={row.node.id === ctx.editingId}
           onToggleCollapsed={() => ctx.onToggleCollapsed(row.node)}

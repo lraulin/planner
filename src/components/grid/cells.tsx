@@ -44,9 +44,9 @@ const TYPE_STYLE: Record<OutlineNode["type"], string> = {
 /**
  * Name cell: indent rails, expander, type icon, label (or inline editor).
  *
- * `depth` is how deep this row sits among the rows the host is showing — full tree depth
- * on the Outline, re-based depth (only kept ancestors) on Projects / Tasks / Goals. One
- * rail per level; a top-level row gets none.
+ * `depth` is supplied by the host: full tree depth on the Outline, re-based list depth on
+ * Projects / Tasks (only kept same-type ancestors). One rail per level; top-level rows
+ * get none.
  */
 export function NameCell({
   node,
