@@ -113,6 +113,12 @@ export function ChooserSettingsDialog({
                 disabled={!settings.onlyNextAction}
                 onChange={(useTaskPriorityOrder) => onChange({ useTaskPriorityOrder })}
               />
+              <Toggle
+                label="Hide tasks already planned for a day"
+                hint="Once you decide when to do something, it leaves the master list."
+                checked={settings.hidePlanned}
+                onChange={(hidePlanned) => onChange({ hidePlanned })}
+              />
             </div>
           </fieldset>
 

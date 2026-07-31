@@ -59,7 +59,14 @@ import { useChooserSettings } from "./useChooserSettings";
 const PAGE_STEP = 10;
 const INITIAL_LIMIT = 20;
 
-export function ChooserGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
+export function ChooserGrid({
+  initialNodes,
+  plannedNodeIds,
+}: {
+  initialNodes: OutlineNode[];
+  /** Tasks already sitting on a day in the Day tab; see `settings.hidePlanned`. */
+  plannedNodeIds?: string[];
+}) {
   const tab = useGridTab(initialNodes);
   const [viewId, setViewId] = useState<ChooserViewId>("best-overall");
   const [dateFilter, setDateFilter] = useState<ChooserDateFilter>("none");
@@ -86,14 +93,17 @@ export function ChooserGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
    */
   const today = tab.today;
 
+  const planned = useMemo(() => new Set(plannedNodeIds ?? []), [plannedNodeIds]);
+
   const scored = useMemo(
     () =>
       buildChooserItems(tab.nodes, {
         today,
         viewId,
         settings,
+        plannedNodeIds: planned,
       }),
-    [tab.nodes, today, viewId, settings],
+    [tab.nodes, today, viewId, settings, planned],
   );
 
   const matching = useMemo(

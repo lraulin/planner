@@ -47,6 +47,15 @@ export type NodeDetail = {
   items: NodeItem[];
   /** Notes from the notes table linked to this record (not `nodes.notes`). */
   linkedNotes: LinkedNoteSummary[];
+  /**
+   * The day this task currently sits on in the Day tab, `YYYY-MM-DD`, or null.
+   *
+   * Read-only here and deliberately outside `NodeDetailValues`: it lives in `daily_items`,
+   * not on the node, and the field writes immediately rather than on drawer save. Planning
+   * a day is a separate act from editing the task record — and it is emphatically not a
+   * deadline, which is the whole reason it is not just another date column.
+   */
+  plannedDay: string | null;
 };
 
 /** The core fields every form edits, whatever the type. */

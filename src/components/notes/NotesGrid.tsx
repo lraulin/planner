@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import type { NoteFlag } from "@/db/schema";
+import { JOURNAL_SUBJECT } from "@/lib/day/types";
 import type { NoteNode, NotePosition } from "@/lib/notes/types";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { GridRow } from "@/lib/tree/slice";
@@ -402,6 +403,22 @@ export function NotesGrid({
             Clear filter
           </ToolbarButton>
         )}
+
+        {/* Journal entries are ordinary notes filed under one subject, so browsing them is
+            the subject filter you can already set by hand — this is the one-click path to
+            it, not a second notes system. */}
+        <ToolbarButton
+          onClick={() =>
+            setFilter({
+              ...EMPTY_NOTE_FILTER,
+              subjects: [JOURNAL_SUBJECT],
+              subjectMode: "any",
+            })
+          }
+          title="Show the Day tab's daily notes"
+        >
+          Journal
+        </ToolbarButton>
 
         <span className="h-4 w-px bg-rule" aria-hidden />
 

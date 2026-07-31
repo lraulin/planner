@@ -82,6 +82,7 @@ function parseSettings(raw: string | null, viewId: ChooserViewId): ChooserSettin
     onlyNextAction: bool(stored.onlyNextAction, base.onlyNextAction),
     useTaskPriorityOrder: bool(stored.useTaskPriorityOrder, base.useTaskPriorityOrder),
     states: states(stored.states, base.states),
+    hidePlanned: bool(stored.hidePlanned, base.hidePlanned),
   };
 }
 

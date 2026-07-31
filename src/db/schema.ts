@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  date,
   index,
   integer,
   numeric,
@@ -1091,4 +1092,87 @@ export type Exercise = typeof exercises.$inferSelect;
 export type NewExercise = typeof exercises.$inferInsert;
 export type WorkoutSession = typeof workoutSessions.$inferSelect;
 export type WorkoutSessionExercise = typeof workoutSessionExercises.$inferSelect;
+
+/**
+ * One line on one day's task list — the Franklin Covey daily list, beside Achieve's own
+ * planning. A row here says "I intend to do this on this day". It is **never a deadline**:
+ * nothing on a daily list can go overdue, which is the same line the recurrence work drew
+ * with `taskDetails.deferredDate` (see the comment there).
+ *
+ * `nodeId` is nullable, and that is the point. Null means a line jotted straight onto the
+ * day — "check oil" — with no parent, no result area, and nothing to triage. Set means a
+ * task pulled off the Task Chooser's master list. Both render as the same row, so the
+ * habit of writing down today's work never has to pause to classify anything.
+ *
+ * `title` is always stored: for a jotted line it *is* the item, and for a node-backed one
+ * it is a snapshot, so deleting the task later leaves an honest record of the day rather
+ * than a blank row. Display prefers the node's live name whenever the node still exists.
+ *
+ * `day` is a real `date`, not a timestamp — a calendar day has no time component, and
+ * storing one would let a server in UTC shift Lee's Tuesday into Monday. `YYYY-MM-DD`
+ * strings are already the convention for day comparison across the app
+ * (`src/lib/chooser/dates.ts`, `src/lib/tree/status.ts`).
+ */
+export const dailyItems = pgTable(
+  "daily_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** The day this line sits on, `YYYY-MM-DD`. */
+    day: date("day", { mode: "string" }).notNull(),
+    /** The task this line stands for, when it came from the outline. Null when jotted. */
+    nodeId: uuid("node_id").references(() => nodes.id, { onDelete: "set null" }),
+    title: text("title").notNull().default(""),
+    /**
+     * The day's own ABC ranking, which answers a different question than either the
+     * outline's sibling-relative priority or the chooser's global TC Priority: what is
+     * *essential* today (A), what is *important* (B), what is *optional* (C).
+     */
+    priorityLetter: priorityLetterEnum("priority_letter"),
+    priorityRank: smallint("priority_rank"),
+    /** Lexicographic order within the day — same fractional indexing as nodes and notes. */
+    sortKey: text("sort_key").notNull(),
+    /**
+     * Achieve's work state, reused so the existing state cell renders these rows with no
+     * new vocabulary. It also covers most of Franklin Covey's status marks: In Process →
+     * `in_progress`, Delegated → `delegated`, Deleted → `cancelled`.
+     */
+    state: nodeStateEnum("state").notNull().default("not_started"),
+    /**
+     * When this line was checked off. **This — not `nodes.state` — decides whether the
+     * item was done on this day.** It cannot be derived, because completing a recurring
+     * task resets its node to `not_started` (see `applyStateTransition` in
+     * `src/lib/tree/mutations.ts`); the day's record has to survive that reset.
+     */
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    /**
+     * Franklin Covey's "forwarded" mark: the later day this line was carried to. Set
+     * instead of moving the row, so the original day keeps showing what was intended and
+     * what actually happened rather than quietly rewriting history.
+     */
+    forwardedTo: date("forwarded_to", { mode: "string" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("daily_items_user_day_sort_idx").on(table.userId, table.day, table.sortKey),
+    unique("daily_items_day_sort_key_uq").on(table.userId, table.day, table.sortKey),
+    /**
+     * A task sits on at most one *open* day. That is what makes "Plan for day" on the task
+     * form a single well-defined value, and what makes dragging a task to another day a
+     * move rather than a duplicate. Completed and forwarded rows fall out of the index, so
+     * a task's history across many days is unconstrained.
+     */
+    uniqueIndex("daily_items_open_node_uq")
+      .on(table.userId, table.nodeId)
+      .where(
+        sql`${table.nodeId} is not null and ${table.completedAt} is null and ${table.forwardedTo} is null`,
+      ),
+  ],
+);
+
+export type DailyItem = typeof dailyItems.$inferSelect;
+export type NewDailyItem = typeof dailyItems.$inferInsert;
 export type WorkoutSet = typeof workoutSets.$inferSelect;

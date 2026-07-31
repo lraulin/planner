@@ -17,6 +17,7 @@ import {
   TextArea,
   TextField,
 } from "./fields";
+import { PlanForDayField } from "./PlanForDayField";
 import { LinkedNotesPanel } from "@/components/notes/LinkedNotesPanel";
 import { TaskFitnessPanel } from "@/components/fitness/TaskFitnessPanel";
 import type { FormTab } from "./FormTabs";
@@ -65,7 +66,7 @@ const CONSTRAINT_OPTIONS: { value: TaskConstraint; label: string }[] = [
  * cell does — its children's totals are what anyone reading the row actually wants.
  */
 export function taskTabs(props: DetailFormProps): FormTab[] {
-  const { node, values, patch, patchTask, list } = props;
+  const { detail, node, values, patch, patchTask, list } = props;
   const task = values.task ?? {};
   const rollsUp = node.hasChildren;
 
@@ -120,6 +121,10 @@ export function taskTabs(props: DetailFormProps): FormTab[] {
                 value={task.deferredDate ?? null}
                 onChange={(deferredDate) => patchTask({ deferredDate })}
               />
+              {/* Sits with the dates because that is where you look for it, but it is not
+                  one of them: it writes to `daily_items`, saves on change, and can never
+                  make anything overdue. */}
+              <PlanForDayField nodeId={node.id} plannedDay={detail.plannedDay} />
               <EffortField
                 label="Lead time"
                 value={task.leadTimeMinutes ?? null}

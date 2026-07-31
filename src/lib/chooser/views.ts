@@ -207,6 +207,9 @@ export function defaultSettings(id: ChooserViewId): ChooserSettings {
     onlyNextAction: view.defaults.onlyNextAction,
     useTaskPriorityOrder: view.defaults.useTaskPriorityOrder,
     states: view.states,
+    // The To-do List *is* the master list, so planning something takes it off. The scoring
+    // views are answering a different question and keep showing everything.
+    hidePlanned: id === "todo-list",
   };
 }
 
@@ -250,6 +253,12 @@ export function buildChooserItems(
     settings: ChooserSettings;
     /** Subtree to restrict to, from a scope picker. `null` is the whole tree. */
     scopeId?: string | null;
+    /**
+     * Tasks currently on an open day in the Day tab. Read by `settings.hidePlanned`.
+     * Omitted means nothing is planned, which is what every caller that does not know
+     * about the Day tab should see.
+     */
+    plannedNodeIds?: Set<string>;
   },
 ): ChooserItem[] {
   const byId = new Map(nodes.map((node) => [node.id, node]));
@@ -261,6 +270,7 @@ export function buildChooserItems(
   nodes.forEach((node, order) => {
     if (!isChooserCandidate(node, settings.states, today)) return;
     if (!inScope(node, opts.scopeId ?? null, byId)) return;
+    if (settings.hidePlanned && opts.plannedNodeIds?.has(node.id)) return;
 
     const ancestry = ancestryOf(node, byId);
     const item: ChooserItem = {

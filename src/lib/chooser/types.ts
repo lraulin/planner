@@ -44,6 +44,18 @@ export type ChooserSettings = {
    * checkbox you will not tick.
    */
   states: NodeState[];
+  /**
+   * Hide tasks already sitting on an open day in the Day tab.
+   *
+   * Franklin Covey's master list works this way: once you decide *when* you are doing
+   * something, it leaves the list of things still to be decided about. On by default for
+   * the To-do List, which is the master list, and off everywhere else — Best Overall is
+   * asking "what is the best use of my time right now", and the answer may well be the
+   * thing you already planned for today.
+   *
+   * Purely a display filter. It changes nothing about the task and never touches the score.
+   */
+  hidePlanned: boolean;
 };
 
 /** One scored candidate, with the ancestor facts gathered on the way. */

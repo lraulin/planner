@@ -97,6 +97,19 @@ Features that complete or surround the original product, plus making it multi-de
   duplicate rows in the outline. This is what keeps **Overdue** meaning something.
   Deferred: recurrence on projects, date-based patterns, end conditions, Skip Recurrence,
   and any UI over the completion log.
+- **✅ The Day tab.** `specs/2026-07-31-1245-day-tab`. A Franklin Covey daily list beside
+  Achieve's weekly planning: `/day` is the paper day page (appointments | task list |
+  journal), where you jot what you are doing today, rank it A/B/C, and check it off —
+  **without** first deciding what result area or project a ten-minute errand belongs to.
+  Jotted lines are their own rows (`daily_items`), so the outline and Inbox stay clean, with
+  Promote to task… as the escape hatch. Tasks come in from the week grid (`/day/week`, master
+  list plus seven day columns) or from **Plan for day** on the record itself, and completing
+  one completes the real task, recurrence and all. Planning something takes it off the Task
+  Chooser's To-do List — Covey's master list — and only that view. A day assignment is
+  **never a deadline**: unfinished lines carry forward with a **→ forwarded** mark on the day
+  they left, and nothing on a daily list can read as Overdue. This is what replaces the old
+  "Today Project" workaround, which bent three Achieve concepts to fake a daily ABC list.
+  Deferred: Big Rocks, a weekly-wizard step, an auto-forward toggle, agent API tools.
 - Any remaining Achieve chrome that earns its keep.
 - **Pomodoro → time tracking.** Effort, Effort Left, Actual Effort, and % complete
   already live on tasks (and roll up); what’s missing is a way to _earn_ those numbers

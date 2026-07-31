@@ -13,6 +13,7 @@ const TABS = [
   { id: "tasks", label: "Tasks", href: "/tasks", built: true },
   { id: "goals", label: "Goals", href: "/goals", built: true },
   { id: "wishes", label: "Wish List", href: "/wishes", built: true },
+  { id: "day", label: "Day", href: "/day", built: true },
   { id: "schedule", label: "Weekly Schedule", href: "/schedule", built: true },
   { id: "notes", label: "Notes", href: "/notes", built: true },
   { id: "chooser", label: "Task Chooser", href: "/chooser", built: true },
