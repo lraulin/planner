@@ -15,29 +15,45 @@ import { useOptimisticNodes } from "@/components/grid/useOptimisticNodes";
 import { useToday } from "@/components/grid/useToday";
 import { buildNodeDepths } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";
+import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { isTypingTarget } from "@/lib/keyboard";
 
 /**
  * Shared selection, drawer, rename, and optimistic cell-write handlers for the node-based
  * grid tabs (Projects, Tasks, Goals). Wish List has its own path over `node_items`.
+ *
+ * The open drawer is owned by `?detail=` so reload and shared links reopen it, and so the
+ * browser Back button closes it.
  */
 export function useGridTab(initialNodes: OutlineNode[]) {
   const { nodes, byId, patch, apply, error, setError } =
     useOptimisticNodes(initialNodes);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const { detail: detailId, setDetail: setDetailId } = useViewStateUrl();
+  const [selectedId, setSelectedId] = useState<string | null>(detailId);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [detailId, setDetailId] = useState<string | null>(null);
   const today = useToday();
+
+  // Back / forward and deep-links change `?detail=`. Sync the row highlight during render
+  // (same idiom as DayView re-syncing server props) so the open drawer always has a
+  // selected owner without an effect-driven cascade.
+  const [seenDetailId, setSeenDetailId] = useState(detailId);
+  if (detailId !== seenDetailId) {
+    setSeenDetailId(detailId);
+    if (detailId) setSelectedId(detailId);
+  }
 
   const nodeDepths = useMemo(() => buildNodeDepths(nodes, byId), [nodes, byId]);
 
   const selected = selectedId ? (byId.get(selectedId) ?? null) : null;
   const detailNode = detailId ? (byId.get(detailId) ?? null) : null;
 
-  const openDetail = useCallback((id: string) => {
-    setSelectedId(id);
-    setDetailId(id);
-  }, []);
+  const openDetail = useCallback(
+    (id: string) => {
+      setSelectedId(id);
+      setDetailId(id);
+    },
+    [setDetailId],
+  );
 
   const cellHandlers = useMemo(
     () => ({
@@ -125,7 +141,7 @@ export function useGridTab(initialNodes: OutlineNode[]) {
 
       if (event.key === "Enter") {
         event.preventDefault();
-        setDetailId(selectedId);
+        openDetail(selectedId);
       } else if (event.key === "F2") {
         event.preventDefault();
         setEditingId(selectedId);
@@ -135,7 +151,7 @@ export function useGridTab(initialNodes: OutlineNode[]) {
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [detailId, editingId, selectedId]);
+  }, [detailId, editingId, selectedId, openDetail]);
 
   return {
     nodes,

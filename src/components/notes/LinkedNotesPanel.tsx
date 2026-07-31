@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import type { LinkedNoteSummary } from "@/lib/detail/types";
+import { notesPath } from "@/lib/url/viewState";
 import { createNoteAction } from "@/app/notes/actions";
 
 /**
@@ -36,7 +37,7 @@ export function LinkedNotesPanel({
         return;
       }
       if (result.id) {
-        router.push(`/notes?note=${result.id}`);
+        router.push(notesPath(result.id));
       }
     });
   }
@@ -72,7 +73,7 @@ export function LinkedNotesPanel({
           {notes.map((note) => (
             <li key={note.id}>
               <Link
-                href={`/notes?note=${note.id}`}
+                href={notesPath(note.id)}
                 className="flex flex-col gap-0.5 px-3 py-2 hover:bg-surface-raised"
               >
                 <span className="text-[0.875rem] font-medium text-ink">

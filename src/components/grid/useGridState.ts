@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo } from "react";
 import { useSetting, type SettingCodec } from "@/components/settings/SettingsProvider";
+import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import {
   DEFAULT_GRID_SETTINGS,
   hasActiveFilters,
@@ -41,6 +42,10 @@ export type GridState = ReturnType<typeof useGridState>;
  * keyed by view (`grid:tasks.active-status`) — the Tasks views show different columns, and
  * one shared layout would fight whichever view you were not looking at. So the tab scope
  * (`grid:tasks`) holds which view you are on, and each view scope holds how it looks.
+ *
+ * `?view=` overrides the store when present and legal; the store supplies the default when
+ * the param is absent. Changing the view writes both (replace in history, so flipping
+ * views does not spam Back).
  */
 export function useTabView<T extends string>(
   tabId: string,
@@ -48,17 +53,26 @@ export function useTabView<T extends string>(
   fallback: T,
 ) {
   const { value, patch } = useSetting(gridScope(tabId), CODEC);
+  const { view: urlView, setView: setUrlView } = useViewStateUrl();
 
   // A view removed since the preference was written falls back rather than rendering a
-  // tab with no rows and no explanation.
-  const view =
+  // tab with no rows and no explanation. URL wins when it names a still-legal view.
+  const stored =
     value.view !== null && (allowed as readonly string[]).includes(value.view)
       ? (value.view as T)
       : fallback;
 
+  const view =
+    urlView !== null && (allowed as readonly string[]).includes(urlView)
+      ? (urlView as T)
+      : stored;
+
   const setView = useCallback(
-    (next: T) => patch((current) => ({ ...current, view: next })),
-    [patch],
+    (next: T) => {
+      patch((current) => ({ ...current, view: next }));
+      setUrlView(next);
+    },
+    [patch, setUrlView],
   );
 
   return [view, setView] as const;

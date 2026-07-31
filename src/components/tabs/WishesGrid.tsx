@@ -11,6 +11,7 @@ import { DataGrid } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 import { ShowFieldsDialog } from "@/components/grid/ShowFieldsDialog";
 import { useGridState } from "@/components/grid/useGridState";
+import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { ErrorBanner, TabToolbar, ToolbarButton, ToolbarSelect } from "./tabChrome";
 import { isTypingTarget } from "@/lib/keyboard";
 import {
@@ -25,6 +26,9 @@ import {
  * Rows are `node_items`, not `nodes` — the only grid whose payload is not an OutlineNode.
  * It still goes through DataGrid the way Notes does, so column filters, sort, widths and
  * group collapse share the same persistence rail as every other tab.
+ *
+ * `?detail=` opens the **owning** result area / node, not the wish item itself — wishes
+ * have no standalone detail form.
  */
 export function WishesGrid({
   initialWishes,
@@ -37,7 +41,7 @@ export function WishesGrid({
   const [patches, setPatches] = useState<Record<string, Partial<WishListRow>>>({});
   const [scopeId, setScopeId] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [detailNodeId, setDetailNodeId] = useState<string | null>(null);
+  const { detail: detailNodeId, setDetail: setDetailNodeId } = useViewStateUrl();
   const [showFields, setShowFields] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
@@ -157,7 +161,7 @@ export function WishesGrid({
   const openOwner = useCallback(() => {
     if (!selectedWish) return;
     setDetailNodeId(selectedWish.nodeId);
-  }, [selectedWish]);
+  }, [selectedWish, setDetailNodeId]);
 
   const columnCtx: WishesColumnCtx = useMemo(
     () => ({
@@ -194,7 +198,7 @@ export function WishesGrid({
         },
       ];
     },
-    [rows],
+    [rows, setDetailNodeId],
   );
 
   useEffect(() => {
@@ -208,7 +212,7 @@ export function WishesGrid({
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [detailNodeId, selectedWish]);
+  }, [detailNodeId, selectedWish, setDetailNodeId]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">

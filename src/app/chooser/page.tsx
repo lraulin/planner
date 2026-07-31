@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { getCurrentUserId } from "@/lib/auth";
 import { plannedNodeIds } from "@/lib/day/queries";
 import { loadOutline } from "@/lib/tree/queries";
@@ -16,7 +17,9 @@ export default async function ChooserPage() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <TabStrip active="chooser" />
-      <ChooserGrid initialNodes={nodes} plannedNodeIds={[...planned]} />
+      <Suspense fallback={<div className="min-h-0 flex-1" />}>
+        <ChooserGrid initialNodes={nodes} plannedNodeIds={[...planned]} />
+      </Suspense>
     </div>
   );
 }

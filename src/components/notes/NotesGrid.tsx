@@ -49,6 +49,7 @@ import {
   type NotesViewSettings,
 } from "@/lib/settings/notes";
 import { NOTES_FILTER_SCOPE } from "@/lib/settings/scopes";
+import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { notesColumns, NOTES_COLUMN_IDS, type NotesColumnCtx } from "./notesColumns";
 import { NoteFilterDialog } from "./NoteFilterDialog";
 import { NoteDrawer } from "./NoteDrawer";
@@ -58,6 +59,8 @@ const NOTES_VIEW_CODEC: SettingCodec<NotesViewSettings> = {
   parse: parseNotesView,
   serialize: serializeNotesView,
 };
+
+const NOTES_MODES: readonly NotesMode[] = ["nested", "flat"];
 
 /**
  * The Notes tab.
@@ -70,23 +73,34 @@ const NOTES_VIEW_CODEC: SettingCodec<NotesViewSettings> = {
 export function NotesGrid({
   initialNotes,
   nodes,
-  initialNoteId,
 }: {
   initialNotes: NoteNode[];
   /** Records a note can be linked to. */
   nodes: OutlineNode[];
-  /** From `?note=<id>` — opens the drawer straight onto that note. */
-  initialNoteId?: string | null;
 }) {
   const [patches, setPatches] = useState<Record<string, Partial<NoteNode>>>({});
+  const {
+    note: urlNoteId,
+    setNote: setUrlNoteId,
+    view: urlView,
+    setView: setUrlView,
+  } = useViewStateUrl();
   const { value: view, patch: patchView } = useSetting(
     NOTES_FILTER_SCOPE,
     NOTES_VIEW_CODEC,
   );
-  const { mode, sort, filter } = view;
+  const { sort, filter } = view;
+  // `?view=` overrides stored mode when it is nested|flat; the store is the default.
+  const mode: NotesMode =
+    urlView !== null && (NOTES_MODES as readonly string[]).includes(urlView)
+      ? (urlView as NotesMode)
+      : view.mode;
   const setMode = useCallback(
-    (next: NotesMode) => patchView((current) => ({ ...current, mode: next })),
-    [patchView],
+    (next: NotesMode) => {
+      patchView((current) => ({ ...current, mode: next }));
+      setUrlView(next);
+    },
+    [patchView, setUrlView],
   );
   const setSort = useCallback(
     (next: NotesSort) => patchView((current) => ({ ...current, sort: next })),
@@ -98,12 +112,15 @@ export function NotesGrid({
   );
   const [filterOpen, setFilterOpen] = useState(false);
   const [fieldsOpen, setFieldsOpen] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(initialNoteId ?? null);
+  const [selectedId, setSelectedId] = useState<string | null>(urlNoteId);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [drawerId, setDrawerId] = useState<string | null>(initialNoteId ?? null);
   const [pendingDelete, setPendingDelete] = useState<NoteNode | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+
+  // Drawer id is the URL. Unknown ids stay in the bar but open nothing, so a stale
+  // bookmark does not crash the tab — it just looks empty until the user closes it.
+  const drawerId = urlNoteId;
 
   const notes = useMemo(
     () =>
@@ -155,10 +172,24 @@ export function NotesGrid({
   const selected = selectedId ? (byId.get(selectedId) ?? null) : null;
   const drawerNote = drawerId ? (byId.get(drawerId) ?? null) : null;
 
-  const openDetail = useCallback((id: string) => {
-    setSelectedId(id);
-    setDrawerId(id);
-  }, []);
+  // Back / forward and deep-links change `?note=`. Sync selection during render.
+  const [seenNoteId, setSeenNoteId] = useState(urlNoteId);
+  if (urlNoteId !== seenNoteId) {
+    setSeenNoteId(urlNoteId);
+    if (urlNoteId) setSelectedId(urlNoteId);
+  }
+
+  const openDetail = useCallback(
+    (id: string) => {
+      setSelectedId(id);
+      setUrlNoteId(id);
+    },
+    [setUrlNoteId],
+  );
+
+  const closeDetail = useCallback(() => {
+    setUrlNoteId(null);
+  }, [setUrlNoteId]);
 
   const addNote = useCallback(
     (where: "sibling" | "child") => {
@@ -184,11 +215,11 @@ export function NotesGrid({
         // own, and the reason you made one is to write in it.
         if (result.id) {
           setSelectedId(result.id);
-          setDrawerId(result.id);
+          setUrlNoteId(result.id);
         }
       });
     },
-    [selected],
+    [selected, setUrlNoteId],
   );
 
   const columnCtx: NotesColumnCtx = useMemo(
@@ -549,7 +580,7 @@ export function NotesGrid({
         note={drawerNote}
         nodes={nodes}
         subjects={subjects}
-        onClose={() => setDrawerId(null)}
+        onClose={closeDetail}
       />
 
       <ConfirmDialog

@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { getCurrentUserId } from "@/lib/auth";
 import { loadOutline } from "@/lib/tree/queries";
 import { TabStrip } from "@/components/shell/TabStrip";
@@ -12,7 +13,9 @@ export default async function ProjectsPage() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <TabStrip active="projects" />
-      <ProjectsGrid initialNodes={nodes} />
+      <Suspense fallback={<div className="min-h-0 flex-1" />}>
+        <ProjectsGrid initialNodes={nodes} />
+      </Suspense>
     </div>
   );
 }

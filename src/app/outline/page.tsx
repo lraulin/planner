@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { getCurrentUserId } from "@/lib/auth";
 import { loadOutline } from "@/lib/tree/queries";
 import { OutlineGrid } from "@/components/outline/OutlineGrid";
@@ -12,7 +13,9 @@ export default async function OutlinePage() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <TabStrip active="outline" />
-      <OutlineGrid initialNodes={nodes} />
+      <Suspense fallback={<div className="min-h-0 flex-1" />}>
+        <OutlineGrid initialNodes={nodes} />
+      </Suspense>
     </div>
   );
 }

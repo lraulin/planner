@@ -46,6 +46,7 @@ import { useGridState } from "@/components/grid/useGridState";
 import { useOptimisticNodes } from "@/components/grid/useOptimisticNodes";
 import { useToday } from "@/components/grid/useToday";
 import { useSetting, type SettingCodec } from "@/components/settings/SettingsProvider";
+import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import {
   parseOutlineFilters,
   serializeOutlineFilters,
@@ -74,11 +75,11 @@ const OUTLINE_FILTERS_CODEC: SettingCodec<OutlineFilters> = {
 export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const { nodes, byId, patch, apply, error, setError } =
     useOptimisticNodes(initialNodes);
+  const { detail: detailId, setDetail: setDetailId } = useViewStateUrl();
   const [selectedId, setSelectedId] = useState<string | null>(
-    initialNodes[0]?.id ?? null,
+    detailId ?? initialNodes[0]?.id ?? null,
   );
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [detailId, setDetailId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<OutlineNode | null>(null);
   /** The row a new child is being added to, while its kind is being chosen. */
   const [pendingChildOf, setPendingChildOf] = useState<OutlineNode | null>(null);
@@ -93,6 +94,14 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const { types: filters, focusOnly } = typeFilters;
 
   const gridState = useGridState("outline", outlineColumns, [...OUTLINE_COLUMN_IDS]);
+
+  // Back / forward and deep-links change `?detail=`. Sync selection during render so the
+  // open drawer always has a selected owner without an effect-driven cascade.
+  const [seenDetailId, setSeenDetailId] = useState(detailId);
+  if (detailId !== seenDetailId) {
+    setSeenDetailId(detailId);
+    if (detailId) setSelectedId(detailId);
+  }
 
   const nodeDepths = useMemo(() => buildNodeDepths(nodes, byId), [nodes, byId]);
 
@@ -291,7 +300,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
       collapse: () => node && toggleCollapsed(node, true),
       expand: () => node && toggleCollapsed(node, false),
     }),
-    [addSibling, addChild, apply, toggleCollapsed],
+    [addSibling, addChild, apply, toggleCollapsed, setDetailId],
   );
 
   const commands = useMemo(
@@ -492,7 +501,16 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         apply(() => setEffortAction(node.id, minutes));
       },
     }),
-    [today, selectedId, editingId, nodeDepths, toggleCollapsed, patch, apply],
+    [
+      today,
+      selectedId,
+      editingId,
+      nodeDepths,
+      toggleCollapsed,
+      patch,
+      apply,
+      setDetailId,
+    ],
   );
 
   const detailNode = detailId ? (byId.get(detailId) ?? null) : null;
