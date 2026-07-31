@@ -39,16 +39,24 @@ export const UNIVERSAL_OPTIONS: FilterOption[] = [
 ];
 
 /**
- * Priority presets from screenshot 10.55.58. Values are the strings `formatPriority`
- * produces (`A1`, `A`, `B2`, …) or `""` / null for unset.
+ * Priority presets from screenshot 10.55.58, plus the "up to letter + unprioritized"
+ * bands that keep blanks visible so you can still assign them. Values are the strings
+ * `formatPriority` produces (`A1`, `A`, `B2`, …) or `""` / null for unset.
+ *
+ * Achieve's "Only As / Only As & Bs / …" hide blanks. The `*-and-unprioritized` variants
+ * are the daily-use pattern: drop letters already decided (often D) without hiding work
+ * that still needs a letter.
  */
 export const PRIORITY_PRESETS: FilterOption[] = [
   { id: "only-a1", label: "Only A1" },
   { id: "only-ranked-as", label: "Only Ranked As" },
   { id: "only-unranked-as", label: "Only Unranked As" },
   { id: "only-as", label: "Only As" },
+  { id: "as-and-unprioritized", label: "As & Unprioritized" },
   { id: "only-as-bs", label: "Only As & Bs" },
+  { id: "as-bs-and-unprioritized", label: "As Bs & Unprioritized" },
   { id: "only-as-bs-cs", label: "Only As Bs & Cs" },
+  { id: "as-bs-cs-and-unprioritized", label: "As Bs Cs & Unprioritized" },
   { id: "only-bs", label: "Only Bs" },
   { id: "only-bs-cs", label: "Only Bs & Cs" },
   { id: "only-cs", label: "Only Cs" },
@@ -155,10 +163,17 @@ function matchesPriority(value: string | null, id: string): boolean {
       return raw === "A";
     case "only-as":
       return letter === "A";
+    case "as-and-unprioritized":
+      return letter === "A" || !prioritized;
     case "only-as-bs":
       return letter === "A" || letter === "B";
+    case "as-bs-and-unprioritized":
+      return letter === "A" || letter === "B" || !prioritized;
     case "only-as-bs-cs":
       return letter === "A" || letter === "B" || letter === "C";
+    case "as-bs-cs-and-unprioritized":
+      // Exclude Ds only — the usual daily cut once something is marked irrelevant.
+      return letter === "A" || letter === "B" || letter === "C" || !prioritized;
     case "only-bs":
       return letter === "B";
     case "only-bs-cs":

@@ -70,6 +70,28 @@ describe("matchesFilter — priority presets", () => {
     expect(p("unprioritized", "")).toBe(true);
     expect(p("unprioritized", "A")).toBe(false);
   });
+
+  it("keeps unprioritized rows in the 'up to letter' bands", () => {
+    // Daily pattern: hide letters already decided (often D) without burying blanks that
+    // still need a priority assigned.
+    expect(p("as-and-unprioritized", "A1")).toBe(true);
+    expect(p("as-and-unprioritized", "A")).toBe(true);
+    expect(p("as-and-unprioritized", null)).toBe(true);
+    expect(p("as-and-unprioritized", "")).toBe(true);
+    expect(p("as-and-unprioritized", "B")).toBe(false);
+    expect(p("as-and-unprioritized", "D")).toBe(false);
+
+    expect(p("as-bs-and-unprioritized", "B2")).toBe(true);
+    expect(p("as-bs-and-unprioritized", null)).toBe(true);
+    expect(p("as-bs-and-unprioritized", "C")).toBe(false);
+    expect(p("as-bs-and-unprioritized", "D")).toBe(false);
+
+    expect(p("as-bs-cs-and-unprioritized", "C1")).toBe(true);
+    expect(p("as-bs-cs-and-unprioritized", null)).toBe(true);
+    expect(p("as-bs-cs-and-unprioritized", "D")).toBe(false);
+    // Contrast: Achieve's "Only As Bs & Cs" drops blanks.
+    expect(p("only-as-bs-cs", null)).toBe(false);
+  });
 });
 
 describe("matchesFilter — deadline presets", () => {
