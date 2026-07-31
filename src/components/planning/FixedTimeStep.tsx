@@ -223,7 +223,6 @@ export function FixedTimeStep({
         nodes={nodes}
         onClose={() => setEditing(null)}
         onSaved={() => {
-          setEditing(null);
           onScheduleChange();
         }}
         onDelete={asyncHandler(handleDelete, onError)}

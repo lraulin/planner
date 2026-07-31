@@ -6,7 +6,7 @@ components:
   ux-principles:
     description: Core UI/UX philosophy — outline grid + drawer, inline editing for grid columns, modals only for confirmations, blocking decisions and fast capture, tabs for form sections
   drawer-pattern:
-    description: Right-sliding drawer for full-record editing, with server actions and unsaved-changes handling
+    description: Right-sliding drawer for full-record editing — Save stays open (or autosave for notes), unsaved-changes on close, server actions
   modal-pattern:
     description: Build every centered dialog on ModalShell — roles, focus, capture-phase Escape, and choosing whether closing discards or preserves the draft
 

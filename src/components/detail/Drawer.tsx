@@ -111,20 +111,29 @@ export function DrawerHeader({
 /**
  * The drawer's footer. Save stays enabled unless a save is already in flight — blocking
  * errors surface on the attempt rather than by disabling the button, per `ux-principles.md`.
+ *
+ * Save **stays open** (`drawer-pattern.md`): success clears dirty and shows "Saved"; Close
+ * is the only leave path. `justSaved` is set by the form after a successful write and
+ * cleared when the next edit dirties the draft.
  */
 export function DrawerFooter({
   onSave,
   onClose,
   saving,
   dirty,
+  justSaved,
   error,
 }: {
   onSave: () => void;
   onClose: () => void;
   saving: boolean;
   dirty: boolean;
+  /** True after a successful Save while the form is still clean. */
+  justSaved?: boolean;
   error: string | null;
 }) {
+  const status = dirty ? "Unsaved changes" : justSaved && !saving ? "Saved" : null;
+
   return (
     <div className="flex-none border-t border-rule">
       {error && (
@@ -154,8 +163,8 @@ export function DrawerFooter({
           Close
         </button>
 
-        {dirty && (
-          <span className="ml-auto text-[0.75rem] text-ink-muted">Unsaved changes</span>
+        {status && (
+          <span className="ml-auto text-[0.75rem] text-ink-muted">{status}</span>
         )}
       </div>
     </div>

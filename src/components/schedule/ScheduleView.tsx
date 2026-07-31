@@ -371,7 +371,6 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
         nodes={nodes}
         onClose={() => setEditingAppointment(null)}
         onSaved={() => {
-          setEditingAppointment(null);
           refresh();
         }}
         onDelete={asyncHandler(handleDeleteAppointment, reportError)}

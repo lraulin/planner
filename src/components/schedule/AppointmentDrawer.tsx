@@ -36,6 +36,10 @@ type Props = {
   value: Appointment | DraftAppointment | null;
   nodes: OutlineNode[];
   onClose: () => void;
+  /**
+   * Refresh background schedule data after a successful write. Does **not** close the
+   * drawer — Save stays open (`drawer-pattern.md`).
+   */
   onSaved: () => void;
   onDelete: (id: string) => void;
 };
@@ -96,7 +100,10 @@ type FormProps = {
 
 function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps) {
   const full = isFullAppointment(value);
-  const id = "id" in value ? value.id : undefined;
+  // After the first successful create, subsequent Saves update rather than re-create.
+  const [persistedId, setPersistedId] = useState<string | undefined>(
+    "id" in value ? value.id : undefined,
+  );
 
   const [subject, setSubject] = useState(value.subject ?? "");
   const [location, setLocation] = useState(full ? value.location : "");
@@ -137,16 +144,22 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
       : "",
   );
   const [dirty, setDirty] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const projects = nodes.filter((n) => n.type === "project" && !n.hidden);
 
+  function markDirty() {
+    setDirty(true);
+    setJustSaved(false);
+  }
+
   function mark<T>(setter: (v: T) => void) {
     return (v: T) => {
       setter(v);
-      setDirty(true);
+      markDirty();
     };
   }
 
@@ -196,8 +209,8 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
 
     let result;
     try {
-      result = id
-        ? await updateAppointmentAction(id, payload)
+      result = persistedId
+        ? await updateAppointmentAction(persistedId, payload)
         : await createAppointmentAction(payload);
     } catch {
       // Without this the button stays on "Saving…" forever when the action rejects.
@@ -211,12 +224,15 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
       setError(result.error);
       return;
     }
+    if (!persistedId && result.id) setPersistedId(result.id);
     setDirty(false);
+    setJustSaved(true);
+    // Refresh the grid/calendar behind the drawer; do not close.
     onSaved();
   }
 
   function toggleWeekday(d: number) {
-    setDirty(true);
+    markDirty();
     setRecurrenceByWeekday((prev) =>
       prev.includes(d)
         ? prev.filter((x) => x !== d)
@@ -224,24 +240,31 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
     );
   }
 
+  const status = dirty ? "Unsaved changes" : justSaved && !saving ? "Saved" : null;
+
   return (
     <>
       <Drawer open onClose={requestClose} labelledBy="appointment-title">
         <div className="flex h-full flex-col">
-          <header className="flex items-center justify-between border-b border-rule px-4 py-3">
-            <h2
-              id="appointment-title"
-              className="text-[0.9375rem] font-semibold text-ink"
-            >
-              {id ? "Appointment" : "New Appointment"}
-            </h2>
-            <div className="flex gap-2">
-              {id && (
+          <header className="flex items-center justify-between gap-3 border-b border-rule px-4 py-3">
+            <div className="min-w-0">
+              <h2
+                id="appointment-title"
+                className="text-[0.9375rem] font-semibold text-ink"
+              >
+                {persistedId ? "Appointment" : "New Appointment"}
+              </h2>
+              {status && <p className="text-[0.75rem] text-ink-muted">{status}</p>}
+            </div>
+            <div className="flex flex-none gap-2">
+              {persistedId && (
                 <button
                   type="button"
                   className="rounded border border-rule px-2 py-1 text-[0.8125rem] text-priority-a hover:bg-surface-raised"
                   onClick={() => {
-                    if (window.confirm("Delete this appointment?")) onDelete(id);
+                    if (window.confirm("Delete this appointment?")) {
+                      onDelete(persistedId);
+                    }
                   }}
                 >
                   Delete
@@ -252,7 +275,7 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
                 className="rounded border border-rule px-2 py-1 text-[0.8125rem] text-ink hover:bg-surface-raised"
                 onClick={requestClose}
               >
-                Cancel
+                Close
               </button>
               <button
                 type="button"
@@ -294,7 +317,7 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
                     value={startLocal}
                     onChange={(e) => {
                       setStartLocal(e.target.value);
-                      setDirty(true);
+                      markDirty();
                     }}
                   />
                 </label>
@@ -306,7 +329,7 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
                     value={endLocal}
                     onChange={(e) => {
                       setEndLocal(e.target.value);
-                      setDirty(true);
+                      markDirty();
                     }}
                   />
                 </label>
@@ -325,7 +348,7 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
                     className="inline-flex h-5 w-5 items-center justify-center rounded border border-rule bg-surface text-[0.75rem] font-semibold leading-none text-ink hover:border-select-edge"
                     onClick={() => {
                       setCheckState(nextCheckState(checkState));
-                      setDirty(true);
+                      markDirty();
                     }}
                   >
                     {checkStateMark(checkState)}
@@ -354,7 +377,7 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
                     placeholder="None"
                     onChange={(e) => {
                       setReminderMinutes(e.target.value);
-                      setDirty(true);
+                      markDirty();
                     }}
                   />
                 </label>
@@ -365,7 +388,7 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
                     value={showAs}
                     onChange={(e) => {
                       setShowAs(e.target.value as ShowAs);
-                      setDirty(true);
+                      markDirty();
                     }}
                   >
                     <option value="busy">Busy</option>
@@ -382,7 +405,7 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
                   value={projectId}
                   onChange={(e) => {
                     setProjectId(e.target.value);
-                    setDirty(true);
+                    markDirty();
                   }}
                 >
                   <option value="">(None)</option>
@@ -420,7 +443,7 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
                     value={recurrenceFrequency}
                     onChange={(e) => {
                       setRecurrenceFrequency(e.target.value as RecurrenceFrequency);
-                      setDirty(true);
+                      markDirty();
                     }}
                   >
                     <option value="none">None</option>
@@ -440,7 +463,7 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
                       value={recurrenceInterval}
                       onChange={(e) => {
                         setRecurrenceInterval(Math.max(1, Number(e.target.value) || 1));
-                        setDirty(true);
+                        markDirty();
                       }}
                     />
                   </label>
@@ -474,7 +497,7 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
                       checked={recurrenceEnd === "never"}
                       onChange={() => {
                         setRecurrenceEnd("never");
-                        setDirty(true);
+                        markDirty();
                       }}
                     />
                     No end date
@@ -486,7 +509,7 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
                       checked={recurrenceEnd === "count"}
                       onChange={() => {
                         setRecurrenceEnd("count");
-                        setDirty(true);
+                        markDirty();
                       }}
                     />
                     End after
@@ -497,7 +520,7 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
                       value={recurrenceCount}
                       onChange={(e) => {
                         setRecurrenceCount(Math.max(1, Number(e.target.value) || 1));
-                        setDirty(true);
+                        markDirty();
                       }}
                     />
                     occurrences
@@ -509,7 +532,7 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
                       checked={recurrenceEnd === "until"}
                       onChange={() => {
                         setRecurrenceEnd("until");
-                        setDirty(true);
+                        markDirty();
                       }}
                     />
                     End by
@@ -519,7 +542,7 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
                       value={recurrenceUntil}
                       onChange={(e) => {
                         setRecurrenceUntil(e.target.value);
-                        setDirty(true);
+                        markDirty();
                       }}
                     />
                   </label>

@@ -404,7 +404,6 @@ export function ScheduleBlocksStep({
         nodes={ctx.nodes}
         onClose={() => setEditing(null)}
         onSaved={() => {
-          setEditing(null);
           onScheduleChange();
         }}
         onDelete={asyncHandler(handleDelete, onError)}

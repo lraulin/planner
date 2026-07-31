@@ -149,6 +149,19 @@ abandonment — people frequently know a task exists before they know how long i
 For forms with many fields, conditional sections, or dropdowns needing room to expand, use
 the drawer. Never cram them into grid cells.
 
+### Save stays open; close is separate
+
+A drawer is a workspace, not a one-shot dialog. For structured record forms (node detail,
+appointments):
+
+- **Save** commits and **stays open**, with clear "Saved" / "Unsaved changes" feedback.
+- **Close** (or Escape) leaves the drawer; if dirty, confirm discard.
+
+Do not make Save the only way to commit also close the drawer — that forces reopen thrashing
+across tabs. Document-like surfaces (notes, session log) **autosave** instead; short nested
+sub-editors may treat Save as done. Details and the decision table live in
+`drawer-pattern.md`.
+
 ### Inline validation
 
 - Validate **on blur**, not while typing.
@@ -159,6 +172,8 @@ the drawer. Never cram them into grid cells.
   attempt rather than disabling the button.
 - Unparseable input in a grid cell **reverts to the stored value and flags the cell** rather
   than saving something wrong or silently clearing it.
+  Validation here is light by design (see partial saves); it is still not a reason to close
+  on Save — stay open so a rare failure can be fixed in place.
 
 ## Decision Guide
 
@@ -171,3 +186,5 @@ the drawer. Never cram them into grid cells.
 | Is this destructive or irreversible?                  | Confirmation dialog            | Just do it, with clear feedback                  |
 | Does it edit a record that already exists?            | Drawer, never a modal          | A modal may be right — see the capture exception |
 | Does the user need the outline visible while editing? | Drawer                         | Drawer is still fine                             |
+| Is this long-form writing with little to validate?    | Autosave drawer                | Explicit Save that stays open                    |
+| Is this a short nested "return a value" editor?       | Save may close (exception)     | Save stays open                                  |

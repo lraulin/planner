@@ -15,8 +15,8 @@ applies here. This project is Tailwind, React Server Components, and server acti
 A drawer is a client component holding its own form state, rendered from the page shell:
 
 ```tsx
-<Drawer open={open} onClose={close} labelledBy="node-form-title">
-  {open && node && <NodeForm node={node} onSaved={close} />}
+<Drawer open={open} onClose={requestClose} labelledBy="node-form-title">
+  {open && node && <NodeForm node={node} onClose={requestClose} />}
 </Drawer>
 ```
 
@@ -31,7 +31,8 @@ A drawer is a client component holding its own form state, rendered from the pag
   (`w-full sm:w-[90%] md:max-w-[45rem]`).
 - **Position below the app chrome** — the tab strip stays visible and clickable.
 - **Escape closes**, a backdrop click closes, and focus is trapped inside while open. Return
-  focus to the row that opened it.
+  focus to the row that opened it. If the form is dirty, both paths go through the same
+  unsaved-changes prompt as the Close button — never bypass it.
 - **Respect `prefers-reduced-motion`** — the slide transition is already disabled globally
   in `globals.css`, so don't reintroduce it inline.
 
@@ -47,11 +48,16 @@ A drawer is a client component holding its own form state, rendered from the pag
 If the form is dirty, closing prompts for confirmation. This is a destructive-confirmation
 case under `ux-principles.md`, so a dialog is appropriate here.
 
-## Saving
+## Saving — two models, pick by content
 
-Drawer forms submit through **server actions**, following the pattern already established in
-`src/app/outline/actions.ts`: the action returns `{ ok: false, error }` rather than throwing,
-so a rejected save renders inline instead of crashing the view.
+### Explicit Save stays open (default for structured records)
+
+Node detail forms, appointments, and any multi-field record with a draft use **Save that
+does not close**. Close is a separate action.
+
+Why: a drawer is a workspace, not a one-shot dialog. People edit across tabs, checkpoint
+mid-way, then keep going. Tying commit to leave forces either reopen thrashing or living
+under a permanent "Unsaved changes" banner.
 
 ```tsx
 const result = await saveNodeAction(values);
@@ -59,14 +65,62 @@ if (!result.ok) {
   setError(result.error); // check the error first
   return; // and stay open so the user can fix it
 }
-close(); // revalidatePath already refreshed the outline
+setDirty(false);
+setJustSaved(true); // footer shows "Saved"; clear when the next edit dirties the form
+// do NOT close — the user closes when they are done
+// revalidatePath already refreshed the grid behind the drawer
 ```
 
-Order matters: check the error, then close. Never close a drawer over a failed save — the
-user's input disappears with it.
+Rules for this model:
+
+- **Save** persists, clears dirty, shows brief **Saved** feedback, **stays open**.
+- **Close** / Escape / backdrop leave the surface. If dirty, prompt to discard.
+- Never close a drawer over a failed save — the user's input disappears with it.
+- Optional **Save & close** (or ⌘/Ctrl+Enter) is fine as sugar; it is not the primary button.
+- On **create**, promote the draft to the new id in local state so the next Save is an
+  update, then stay open. `onSaved` (if the parent needs one) means **refresh background
+  data**, not **close the drawer**.
+
+Footer status (mutually exclusive, right-aligned):
+
+| State                         | Label             |
+| ----------------------------- | ----------------- |
+| Dirty                         | Unsaved changes   |
+| Clean after a successful Save | Saved             |
+| Saving in flight              | (button: Saving…) |
+
+### Autosave (document-like surfaces)
+
+Use when there is nothing meaningful to validate on commit and sessions are long writing
+rather than form fill:
+
+- Notes drawer
+- Fitness session log
+- Daily notes pane
+
+There is no Save button and no discard prompt. Debounced writes + a status line
+("Saves as you type" / "Saved · 2s ago" / Retry on failure). A failed autosave keeps the
+text on screen and the drawer open.
+
+Do **not** add a Save button to an autosave drawer for consistency with node forms —
+match the task, not the chrome.
+
+### Short sub-editors (exception)
+
+A nested, single-purpose editor whose only next step is "return the result and leave"
+(e.g. create/edit exercise from the session log) may treat **Save as done** and close on
+success. That is a return value hand-off, not a multi-tab record workspace. Prefer this
+only when staying open would strand the user with nothing useful to do next.
+
+## Server actions
+
+Drawer forms submit through **server actions**, following the pattern already established in
+`src/app/outline/actions.ts`: the action returns `{ ok: false, error }` rather than throwing,
+so a rejected save renders inline instead of crashing the view.
 
 `revalidatePath` in the action refreshes the outline, so there is no separate refresh call
-to make.
+to make from the form for grid data. Parents that hold client-side schedule state still
+need an `onSaved` refresh callback — that callback must **not** close the drawer.
 
 ## Tabs inside the drawer
 

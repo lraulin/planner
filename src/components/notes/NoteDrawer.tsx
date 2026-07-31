@@ -15,14 +15,12 @@ import { FLAG_LABELS, FlagSwatch } from "./flags";
 /**
  * The full note record, in the same right-sliding drawer every other tab uses.
  *
- * The one departure from `drawer-pattern.md` is deliberate and documented in `shape.md`:
- * this form **autosaves** instead of gating on a Save button, and so has no
+ * Autosave model from `drawer-pattern.md` (document-like surfaces): no Save button and no
  * unsaved-changes dialog. A note has nothing to validate — no cross-field constraints and
  * no content a server can reject — so a Save button would gate nothing and the dirty
  * prompt would be pure friction while writing.
  *
- * What the standard's rule about never closing over a failed save becomes here: a failed
- * autosave keeps the text on screen, keeps the drawer open, and offers Retry.
+ * A failed autosave keeps the text on screen, keeps the drawer open, and offers Retry.
  */
 export function NoteDrawer({
   note,

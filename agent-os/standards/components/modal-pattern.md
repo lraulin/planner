@@ -55,11 +55,14 @@ avoids the bug it replaces: reseeding state from props inside an effect.
 Passing `open` down and letting `ModalShell` unrender is right only for a dialog with no
 draft of its own, like `ConfirmDialog`.
 
-## Closing is the success signal
+## Closing is the success signal (modals only)
 
 A failed submit **keeps the dialog open** and renders the error inline; a successful one
-closes it. So the dialog disappearing is what tells the user it worked — the same rule
-`drawer-pattern.md` states as "never close a drawer over a failed save".
+closes it. The dialog disappearing is what tells the user it worked.
+
+**Drawers are different.** Structured record drawers keep Save and Close separate — Save
+stays open and shows "Saved"; only Close leaves. Both surfaces still obey "never close over
+a failed save." See `drawer-pattern.md`.
 
 Do not add a toast on top of that. There are none in the app, and a feedback convention
 should be chosen for the whole app rather than introduced by whichever feature happened to

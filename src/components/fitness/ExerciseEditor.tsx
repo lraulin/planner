@@ -96,6 +96,10 @@ function ExerciseForm({
     });
   }
 
+  /**
+   * Save closes on success: this is a short nested sub-editor whose next step is to return
+   * the exercise to the session log (`drawer-pattern.md` short-sub-editor exception).
+   */
   function handleSave() {
     setError(null);
     const name = draft.name.trim();

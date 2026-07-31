@@ -1,6 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+  type MutableRefObject,
+} from "react";
 import type {
   GoalDetails,
   NodeItem,
@@ -50,13 +59,14 @@ const DRAWER_CODEC: SettingCodec<DrawerSettings> = {
  * Two things save on different schedules, deliberately:
  *
  * - **Scalar fields** are held as a draft and written on Save, so an abandoned edit is
- *   genuinely abandoned and closing a dirty form can ask first.
+ *   genuinely abandoned and closing a dirty form can ask first. Save stays open; Close is
+ *   separate (`drawer-pattern.md`).
  * - **Repeating list rows** write straight through, the way the outline grid's inline cells
  *   already do. They are separate records, not fields of this one, and holding a dozen
  *   pending inserts in the client to reconcile on Save would buy nothing.
  *
- * Per `drawer-pattern.md`, the form is guarded on having a record to edit, and keyed on the
- * node id so switching rows resets the draft rather than carrying it across.
+ * The form is guarded on having a record to edit, and keyed on the node id so switching
+ * rows resets the draft rather than carrying it across.
  */
 export function NodeDetailDrawer({
   node,
@@ -108,8 +118,16 @@ export function NodeDetailDrawer({
   const detail = current?.detail ?? null;
   const loadError = current?.error ?? null;
 
+  // DetailForm installs a dirty-aware handler while mounted so Escape / backdrop / header
+  // all share the footer Close path (`drawer-pattern.md`).
+  const formCloseRef = useRef<(() => void) | null>(null);
+  const requestClose = useCallback(() => {
+    if (formCloseRef.current) formCloseRef.current();
+    else onClose();
+  }, [onClose]);
+
   return (
-    <Drawer open={node !== null} onClose={onClose} labelledBy={titleId}>
+    <Drawer open={node !== null} onClose={requestClose} labelledBy={titleId}>
       {node && (
         <>
           <DrawerHeader
@@ -117,7 +135,7 @@ export function NodeDetailDrawer({
             eyebrow={KIND_LABELS[kindOfNode(node)]}
             icon={<TypeIcon kind={kindOfNode(node)} className="h-3.5 w-3.5" />}
             title={node.name}
-            onClose={onClose}
+            onClose={requestClose}
           />
 
           {loadError ? (
@@ -135,6 +153,7 @@ export function NodeDetailDrawer({
                 setLoaded({ nodeId: next.id, detail: next, error: null })
               }
               onClose={onClose}
+              formCloseRef={formCloseRef}
             />
           )}
         </>
@@ -148,11 +167,14 @@ function DetailForm({
   detail,
   onReload,
   onClose,
+  formCloseRef,
 }: {
   node: OutlineNode;
   detail: NodeDetail;
   onReload: (detail: NodeDetail) => void;
   onClose: () => void;
+  /** Parent chrome calls this while the form is mounted. */
+  formCloseRef: MutableRefObject<(() => void) | null>;
 }) {
   const [values, setValues] = useState<NodeDetailValues>(() => initialValues(detail));
   const [items, setItems] = useState<NodeItem[]>(detail.items);
@@ -161,41 +183,62 @@ function DetailForm({
     DRAWER_CODEC,
   );
   const [dirty, setDirty] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmingClose, setConfirmingClose] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<NodeItem | null>(null);
   const [busy, startTransition] = useTransition();
 
-  const patch = useCallback((changes: Partial<NodeDetailValues>) => {
+  const markDirty = useCallback(() => {
     setDirty(true);
-    setValues((current) => ({ ...current, ...changes }));
+    setJustSaved(false);
   }, []);
 
-  const patchResultArea = useCallback((changes: Partial<ResultAreaDetails>) => {
-    setDirty(true);
-    setValues((current) => ({
-      ...current,
-      resultArea: { ...current.resultArea, ...changes },
-    }));
-  }, []);
+  const patch = useCallback(
+    (changes: Partial<NodeDetailValues>) => {
+      markDirty();
+      setValues((current) => ({ ...current, ...changes }));
+    },
+    [markDirty],
+  );
 
-  const patchGoal = useCallback((changes: Partial<GoalDetails>) => {
-    setDirty(true);
-    setValues((current) => ({ ...current, goal: { ...current.goal, ...changes } }));
-  }, []);
+  const patchResultArea = useCallback(
+    (changes: Partial<ResultAreaDetails>) => {
+      markDirty();
+      setValues((current) => ({
+        ...current,
+        resultArea: { ...current.resultArea, ...changes },
+      }));
+    },
+    [markDirty],
+  );
 
-  const patchProject = useCallback((changes: Partial<ProjectDetails>) => {
-    setDirty(true);
-    setValues((current) => ({
-      ...current,
-      project: { ...current.project, ...changes },
-    }));
-  }, []);
+  const patchGoal = useCallback(
+    (changes: Partial<GoalDetails>) => {
+      markDirty();
+      setValues((current) => ({ ...current, goal: { ...current.goal, ...changes } }));
+    },
+    [markDirty],
+  );
 
-  const patchTask = useCallback((changes: Partial<TaskDetails>) => {
-    setDirty(true);
-    setValues((current) => ({ ...current, task: { ...current.task, ...changes } }));
-  }, []);
+  const patchProject = useCallback(
+    (changes: Partial<ProjectDetails>) => {
+      markDirty();
+      setValues((current) => ({
+        ...current,
+        project: { ...current.project, ...changes },
+      }));
+    },
+    [markDirty],
+  );
+
+  const patchTask = useCallback(
+    (changes: Partial<TaskDetails>) => {
+      markDirty();
+      setValues((current) => ({ ...current, task: { ...current.task, ...changes } }));
+    },
+    [markDirty],
+  );
 
   /** Re-reads the record after a list write, so ids and ordering come from the server. */
   const refreshItems = useCallback(async () => {
@@ -314,22 +357,29 @@ function DetailForm({
     startTransition(async () => {
       const result = await saveNodeDetailAction(detail.id, values);
 
-      // Order matters: a drawer that closes over a failed save takes the user's input with
-      // it. Check the error, keep the drawer open, and let them fix it.
+      // Order matters: never close over a failed save — keep the input and let them fix it.
+      // On success, stay open: Save and Close are separate (`drawer-pattern.md`).
       if (!result.ok) {
         setError(result.error);
         return;
       }
 
       setDirty(false);
-      onClose();
+      setJustSaved(true);
     });
   }
 
-  function requestClose() {
+  const requestClose = useCallback(() => {
     if (dirty) setConfirmingClose(true);
     else onClose();
-  }
+  }, [dirty, onClose]);
+
+  useEffect(() => {
+    formCloseRef.current = requestClose;
+    return () => {
+      formCloseRef.current = null;
+    };
+  }, [formCloseRef, requestClose]);
 
   return (
     <>
@@ -340,6 +390,7 @@ function DetailForm({
         onClose={requestClose}
         saving={busy}
         dirty={dirty}
+        justSaved={justSaved}
         error={error}
       />
 
