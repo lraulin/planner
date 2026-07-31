@@ -1,6 +1,6 @@
 # Standards for Persistent UI State + Unified Grid Controls
 
-**Status: active**
+**Status: frozen / complete** (2026-07-31)
 
 The following standards apply to this work. Each section inlines the full text of the
 standard as it stood when this spec was shaped, under a note on why it applies here.

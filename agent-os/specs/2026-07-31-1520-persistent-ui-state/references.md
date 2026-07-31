@@ -1,6 +1,6 @@
 # References for Persistent UI State + Unified Grid Controls
 
-**Status: active**
+**Status: frozen / complete** (2026-07-31)
 
 ## Patterns to borrow
 

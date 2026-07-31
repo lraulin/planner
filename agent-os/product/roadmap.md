@@ -38,7 +38,9 @@ The core Achieve Planner loop — plan the week, block the time, work the outlin
   **Wish List** — with scope pickers, built-in Views, grouping, column filters, and Show
   Fields. Outline migrated onto the same grid. Known polish (not blockers for “spec done”):
   Project scope is a select rather than a filtered tree popover; Show Fields move
-  up/down is coarse; screenshot walkthrough and a few open questions in the plan remain.
+  up/down is coarse. **Column layout originally used `localStorage` with an explicit "no
+  user-settings table" decision — superseded by** `specs/2026-07-31-1520-persistent-ui-state`
+  (see Phase 1 Delivered below).
 - **✅ Weekly calendar + time blocking.** `specs/2026-07-28-1234-weekly-schedule`. Week
   grid (FullCalendar Standard), Time Chart background + full-page template editor
   (drag-create, multi-day), appointments (full form, recurrence, three-state check),
@@ -58,17 +60,28 @@ The core Achieve Planner loop — plan the week, block the time, work the outlin
   optional link to a node with reverse surface on the node drawer; markdown editor reused
   on long-form node-form fields. Deferred: always-present preview panel, cross-cutting
   search, wiki links, attachments, export.
+- **✅ Persistent UI state + unified grid controls.**
+  `specs/2026-07-31-1520-persistent-ui-state`. View state (filters, sort, column set /
+  order / widths, group collapse, sub-view, Outline type filters, Notes mode/filter,
+  Chooser weights, drawer form tab) lives in Postgres `user_settings` with a
+  `localStorage` write queue — superseding the main-grid-tabs and Task Chooser
+  "no user-settings table" / pure-`localStorage` decisions. Wish List runs on `DataGrid`;
+  multi-select column filters; sort works under grouping; manual-order grids show a
+  clearable sort chip and disable drag; drawers/sub-views are URL-backed (`?detail=`,
+  `?note=`, `?view=`); per-grid reset and `/settings` "Reset everything". Delivers the
+  Phase 1 "light polish on the main grids" line for persistence and uniformity.
 
 ### Still in Phase 1
 
-- **Light polish on the main grids** if needed after using them day-to-day (scope popover,
-  Show Fields selection, Life Plan only if still wanted). Task Chooser is now built — see
-  Phase 2 below.
+- **Residual grid chrome polish** if needed after daily use (Project scope as a filtered
+  tree popover rather than a select; finer Show Fields multi-select / multi-move; Life Plan
+  only if still wanted). Persistence and control uniformity shipped above.
 - **Day-to-day friction from living with the MVP** — expand/collapse-all, find-in-outline,
-  quick capture, seed goals for demos — pick off as they annoy.
+  seed goals for demos — pick off as they annoy. (Quick capture already shipped in Phase 2
+  capture track.)
 
-Phase 1 core loop is now complete enough for daily use. Remaining Phase 1 items are
-polish, not blockers for starting Phase 2 slices.
+Phase 1 core loop is complete enough for daily use. Remaining Phase 1 items are residual
+chrome polish, not blockers for Phase 2 slices.
 
 ---
 
@@ -84,9 +97,11 @@ Features that complete or surround the original product, plus making it multi-de
   plus deadline proximity, target dates, Focus, and result-area importance — with the Score
   and rank on screen and every weight tunable per view. Five views (Best Overall, Next
   Action Only, To-do List, Urgent, Deadlines), Achieve's nine date bands including Group By
-  Deadline, Show More/Less, and the `Project:` breadcrumb. Settings persist per view in
-  `localStorage`. Deferred: Best in Project Block and Best work-related / Best personal
-  (both need machinery that doesn't exist yet), the Parents pane, and task predecessors.
+  Deadline, Show More/Less, and the `Project:` breadcrumb. Settings originally persisted
+  per view in `localStorage`; moved onto `user_settings` by
+  `specs/2026-07-31-1520-persistent-ui-state`. Deferred: Best in Project Block and Best
+  work-related / Best personal (both need machinery that doesn't exist yet), the Parents
+  pane, and task predecessors.
 - **✅ Repeating routine tasks.** `specs/2026-07-31-0834-task-recurrence`. Achieve's
   regeneration-based recurrence (§3.9.1) for tasks — "repeats every N days/weeks/months/
   years after each completion" — implemented as **deferral, never as a deadline**. A
