@@ -61,12 +61,36 @@ describe("scheduleStatus", () => {
       expect(statusIn(-1, state)).toBe("overdue");
     }
   });
+
+  it("reports a task waiting on its deferred date as deferred", () => {
+    expect(scheduleStatus(null, TODAY, "not_started", deadline(3))).toBe("deferred");
+  });
+
+  it("stops being deferred once the date arrives, and never escalates", () => {
+    // A repeating routine has no deadline by design, so once it comes back it is simply
+    // on schedule. It can never age into Overdue — that is the point of the whole model.
+    expect(scheduleStatus(null, TODAY, "not_started", deadline(0))).toBe("on_schedule");
+    expect(scheduleStatus(null, TODAY, "not_started", deadline(-30))).toBe(
+      "on_schedule",
+    );
+  });
+
+  it("lets finished work outrank a pending deferral", () => {
+    expect(scheduleStatus(null, TODAY, "completed", deadline(3))).toBe("completed");
+  });
+
+  it("prefers deferred over a deadline band, since it is not available to work on", () => {
+    expect(scheduleStatus(deadline(-1), TODAY, "not_started", deadline(3))).toBe(
+      "deferred",
+    );
+  });
 });
 
 describe("STATUS_LABELS", () => {
   it("labels every status", () => {
     const statuses: ScheduleStatus[] = [
       "completed",
+      "deferred",
       "overdue",
       "due_today",
       "due_tomorrow",

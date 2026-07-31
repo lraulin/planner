@@ -9,6 +9,7 @@ import type {
   RecurrenceEnd,
   RecurrenceFrequency,
 } from "@/db/schema";
+import { addDays, addMonths, addYears } from "@/lib/dateMath";
 import { toDateKey } from "./geometry";
 
 export type Occurrence = {
@@ -45,27 +46,6 @@ const MS_DAY = 24 * 60 * 60 * 1000;
 
 function durationMs(start: Date, end: Date): number {
   return Math.max(0, end.getTime() - start.getTime());
-}
-
-function addDays(date: Date, days: number): Date {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  return d;
-}
-
-function addMonths(date: Date, months: number): Date {
-  const d = new Date(date);
-  const day = d.getDate();
-  d.setMonth(d.getMonth() + months);
-  // Clamp end-of-month overflow (Jan 31 + 1 month → Mar 3 → last day of Feb).
-  if (d.getDate() !== day) {
-    d.setDate(0);
-  }
-  return d;
-}
-
-function addYears(date: Date, years: number): Date {
-  return addMonths(date, years * 12);
 }
 
 function occurrenceOf(master: RecurrenceInput, start: Date): Occurrence {

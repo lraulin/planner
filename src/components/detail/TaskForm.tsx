@@ -1,6 +1,6 @@
 "use client";
 
-import type { TaskConstraint } from "@/db/schema";
+import type { RecurrenceFrequency, TaskConstraint } from "@/db/schema";
 import { formatEffort } from "@/lib/tree/format";
 import { STATE_OPTIONS } from "@/lib/tree/hierarchy";
 import {
@@ -21,6 +21,27 @@ import { LinkedNotesPanel } from "@/components/notes/LinkedNotesPanel";
 import { TaskFitnessPanel } from "@/components/fitness/TaskFitnessPanel";
 import type { FormTab } from "./FormTabs";
 import { CoreHeaderFields, type DetailFormProps } from "./formShared";
+
+/**
+ * Achieve's regeneration-based recurrence (manual §3.9.1), read as "every N {unit} after
+ * each completion". `none` is the default: the task does not repeat.
+ */
+const REPEATS_OPTIONS: { value: RecurrenceFrequency; label: string }[] = [
+  { value: "none", label: "Never" },
+  { value: "daily", label: "Daily" },
+  { value: "weekly", label: "Weekly" },
+  { value: "monthly", label: "Monthly" },
+  { value: "yearly", label: "Yearly" },
+];
+
+/** Unit shown after the interval, so "Every 2" reads as "Every 2 weeks". */
+const INTERVAL_SUFFIX: Record<RecurrenceFrequency, string> = {
+  none: "",
+  daily: "days",
+  weekly: "weeks",
+  monthly: "months",
+  yearly: "years",
+};
 
 const CONSTRAINT_OPTIONS: { value: TaskConstraint; label: string }[] = [
   { value: "as_soon_as_possible", label: "As soon as possible" },
@@ -111,6 +132,33 @@ export function taskTabs(props: DetailFormProps): FormTab[] {
                   patchTask({ deadlineLeadTimeMinutes })
                 }
               />
+            </FieldGrid>
+          </Section>
+
+          <Section title="Recurrence">
+            <FieldGrid columns={3}>
+              <SelectField
+                label="Repeats"
+                value={task.recurrenceFrequency ?? "none"}
+                options={REPEATS_OPTIONS}
+                onChange={(recurrenceFrequency) =>
+                  patchTask({ recurrenceFrequency: recurrenceFrequency ?? "none" })
+                }
+                hint="Completing a repeating task starts it over instead of finishing it."
+              />
+              {(task.recurrenceFrequency ?? "none") !== "none" && (
+                <NumberField
+                  label="Every"
+                  value={task.recurrenceInterval ?? 1}
+                  onChange={(recurrenceInterval) =>
+                    patchTask({ recurrenceInterval: recurrenceInterval ?? 1 })
+                  }
+                  min={1}
+                  max={999}
+                  suffix={INTERVAL_SUFFIX[task.recurrenceFrequency ?? "none"]}
+                  hint="Counted from each completion, not from the last due date."
+                />
+              )}
             </FieldGrid>
           </Section>
 

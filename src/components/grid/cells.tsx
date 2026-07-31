@@ -450,7 +450,7 @@ export function StatusCell({
   node: OutlineNode;
   today: string | null;
 }) {
-  const status = scheduleStatus(node.deadline, today, node.state);
+  const status = scheduleStatus(node.deadline, today, node.state, node.deferredDate);
   return (
     <span className="truncate text-[0.75rem] text-ink-muted">
       {STATUS_LABELS[status]}

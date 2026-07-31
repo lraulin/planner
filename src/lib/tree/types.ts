@@ -1,4 +1,9 @@
-import type { NodeState, NodeType, PriorityLetter } from "@/db/schema";
+import type {
+  NodeState,
+  NodeType,
+  PriorityLetter,
+  RecurrenceFrequency,
+} from "@/db/schema";
 
 /** One row as loaded from the database, before derived values are computed. */
 export type OutlineRow = {
@@ -43,6 +48,19 @@ export type OutlineRow = {
    */
   targetStart: Date | null;
   targetEnd: Date | null;
+  /**
+   * Task only: hidden from the Task Chooser until this date. Null on every other type, and
+   * on tasks that are simply available.
+   */
+  deferredDate: Date | null;
+  /**
+   * Task only: how the task repeats after each completion. `none` — the default and the
+   * value every non-task row reports — means it does not.
+   *
+   * Recurrence drives `deferredDate`, never `deadline`. See `taskDetails` in the schema.
+   */
+  recurrenceFrequency: RecurrenceFrequency;
+  recurrenceInterval: number;
   /** Project fields, for the Tasks tab's purpose panel and the Delegation view. */
   purpose: string;
   assignedTo: string;

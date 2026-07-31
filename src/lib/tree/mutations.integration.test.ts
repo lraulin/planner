@@ -1,8 +1,10 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/db";
-import { users } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { taskCompletions, taskDetails, users } from "@/db/schema";
+import type { RecurrenceFrequency } from "@/db/schema";
+import { and, eq } from "drizzle-orm";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { saveNodeDetail } from "@/lib/detail/mutations";
 import {
   createNode,
   deleteNode,
@@ -16,6 +18,7 @@ import {
   setCollapsed,
   setEffort,
   setPriority,
+  setState,
 } from "./mutations";
 import { loadOutline } from "./queries";
 
@@ -748,6 +751,198 @@ describeDb("tree mutations", () => {
     });
   });
 
+  /**
+   * Completing a **recurring** task cycles it instead of finishing it. The behaviour has to
+   * be identical from both write paths — the grids go through `setState`, the detail
+   * drawer's State dropdown goes through `saveNodeDetail` — which is why `saveNodeDetail`
+   * is exercised here, beside the helper both of them share.
+   */
+  describe("recurrence", () => {
+    /** A task that repeats, with the fields a completion is supposed to reset. */
+    async function recurringTask(opts?: {
+      frequency?: RecurrenceFrequency;
+      interval?: number;
+      owner?: string;
+    }) {
+      const owner = opts?.owner ?? userId;
+      const id = await createNode({
+        userId: owner,
+        parentId: null,
+        type: "task",
+        name: "Water the plants",
+      });
+      await db
+        .update(taskDetails)
+        .set({
+          recurrenceFrequency: opts?.frequency ?? "daily",
+          recurrenceInterval: opts?.interval ?? 1,
+          effortMinutes: 30,
+          effortLeftMinutes: 5,
+          percentComplete: 80,
+          actualEffortMinutes: 25,
+          actualStartDate: new Date(),
+        })
+        .where(eq(taskDetails.nodeId, id));
+      return id;
+    }
+
+    async function taskRow(nodeId: string) {
+      const [detail] = await db
+        .select()
+        .from(taskDetails)
+        .where(eq(taskDetails.nodeId, nodeId));
+      return detail;
+    }
+
+    async function completionsOf(owner: string, nodeId: string) {
+      return db
+        .select()
+        .from(taskCompletions)
+        .where(
+          and(eq(taskCompletions.userId, owner), eq(taskCompletions.nodeId, nodeId)),
+        );
+    }
+
+    /** Local `YYYY-MM-DD`, so a DST boundary cannot shift the assertion by a day. */
+    function localKey(date: Date): string {
+      const pad = (n: number) => String(n).padStart(2, "0");
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+    }
+
+    function daysFromToday(days: number): string {
+      const d = new Date();
+      d.setDate(d.getDate() + days);
+      return localKey(d);
+    }
+
+    it("comes back Not Started instead of staying completed", async () => {
+      const task = await recurringTask();
+      await setState(userId, task, "completed");
+
+      const [node] = await loadOutline(userId);
+      expect(node.state).toBe("not_started");
+      expect(node.completedAt).toBeNull();
+    });
+
+    it("defers itself by the interval, measured from the completion", async () => {
+      const task = await recurringTask({ frequency: "weekly", interval: 2 });
+      await setState(userId, task, "completed");
+
+      const detail = await taskRow(task);
+      expect(localKey(detail.deferredDate!)).toBe(daysFromToday(14));
+    });
+
+    it("never acquires a deadline — the entire point of the feature", async () => {
+      const task = await recurringTask();
+      await setState(userId, task, "completed");
+
+      const [node] = await loadOutline(userId);
+      expect(node.deadline).toBeNull();
+    });
+
+    it("records each completion, so the history survives the reset", async () => {
+      const task = await recurringTask();
+      await setState(userId, task, "completed");
+      await setState(userId, task, "completed");
+
+      expect(await completionsOf(userId, task)).toHaveLength(2);
+      // `dateCompleted` is the last one; `task_completions` is all of them.
+      expect((await taskRow(task)).dateCompleted).not.toBeNull();
+    });
+
+    it("resets progress so the next cycle starts from zero", async () => {
+      const task = await recurringTask();
+      await setState(userId, task, "completed");
+
+      const detail = await taskRow(task);
+      expect(detail.percentComplete).toBe(0);
+      expect(detail.actualEffortMinutes).toBe(0);
+      expect(detail.actualStartDate).toBeNull();
+      // Work left starts over at the full estimate, not at the 5 minutes that were left.
+      expect(detail.effortLeftMinutes).toBe(30);
+    });
+
+    it("un-completes completed children but leaves cancelled and in-progress work", async () => {
+      const parent = await recurringTask({ frequency: "weekly", interval: 1 });
+      const done = await createNode({
+        userId,
+        parentId: parent,
+        type: "task",
+        name: "Done",
+      });
+      const cancelled = await createNode({
+        userId,
+        parentId: parent,
+        type: "task",
+        name: "Cancelled",
+      });
+      const started = await createNode({
+        userId,
+        parentId: parent,
+        type: "task",
+        name: "Started",
+      });
+      await setState(userId, done, "completed");
+      await setState(userId, cancelled, "cancelled");
+      await setState(userId, started, "in_progress");
+
+      await setState(userId, parent, "completed");
+
+      const byId = new Map((await loadOutline(userId)).map((n) => [n.id, n]));
+      // Achieve §3.9.4 is specific that it is the *completed* children that come back.
+      expect(byId.get(done)!.state).toBe("not_started");
+      // Resetting these would resurrect work deliberately killed, or discard progress.
+      expect(byId.get(cancelled)!.state).toBe("cancelled");
+      expect(byId.get(started)!.state).toBe("in_progress");
+    });
+
+    it("still just completes a task that does not repeat", async () => {
+      const task = await recurringTask({ frequency: "none" });
+      await setState(userId, task, "completed");
+
+      const [node] = await loadOutline(userId);
+      expect(node.state).toBe("completed");
+      expect(node.completedAt).not.toBeNull();
+      expect(await completionsOf(userId, task)).toHaveLength(0);
+      expect((await taskRow(task)).deferredDate).toBeNull();
+    });
+
+    it("clears the stamp when a completed task is reopened", async () => {
+      const task = await recurringTask({ frequency: "none" });
+      await setState(userId, task, "completed");
+      await setState(userId, task, "in_progress");
+
+      const [node] = await loadOutline(userId);
+      expect(node.completedAt).toBeNull();
+    });
+
+    it("cycles identically when the drawer completes it", async () => {
+      // The path most likely to be missed: `saveNodeDetail` writes state without going
+      // anywhere near `setState`, and used to stamp `completedAt` on its own.
+      const task = await recurringTask({ frequency: "daily", interval: 3 });
+      await saveNodeDetail(userId, task, { state: "completed" });
+
+      const [node] = await loadOutline(userId);
+      expect(node.state).toBe("not_started");
+      expect(localKey((await taskRow(task)).deferredDate!)).toBe(daysFromToday(3));
+      expect(await completionsOf(userId, task)).toHaveLength(1);
+    });
+
+    it("is not undone by progress values submitted in the same drawer save", async () => {
+      // The form posts its whole draft at once. A 100% / completed submit must not leave
+      // the regenerated task looking already finished.
+      const task = await recurringTask();
+      await saveNodeDetail(userId, task, {
+        state: "completed",
+        task: { percentComplete: 100, dateCompleted: null },
+      });
+
+      const detail = await taskRow(task);
+      expect(detail.percentComplete).toBe(0);
+      expect(detail.deferredDate).not.toBeNull();
+    });
+  });
+
   describe("user isolation", () => {
     it("does not load another user's nodes", async () => {
       const other = await makeUser();
@@ -807,6 +1002,89 @@ describeDb("tree mutations", () => {
       await expect(
         moveNode({ userId, nodeId: mine, parentId: theirs, position: { at: "last" } }),
       ).rejects.toThrow("Node not found");
+    });
+
+    it("does not complete or cycle another user's recurring task", async () => {
+      const other = await makeUser();
+      const theirs = await createNode({
+        userId: other,
+        parentId: null,
+        type: "task",
+        name: "Theirs",
+      });
+      await db
+        .update(taskDetails)
+        .set({ recurrenceFrequency: "daily", recurrenceInterval: 1 })
+        .where(eq(taskDetails.nodeId, theirs));
+
+      await setState(userId, theirs, "completed");
+
+      const [node] = await loadOutline(other);
+      expect(node.state).toBe("not_started");
+      const [detail] = await db
+        .select()
+        .from(taskDetails)
+        .where(eq(taskDetails.nodeId, theirs));
+      expect(detail.deferredDate).toBeNull();
+      expect(
+        await db
+          .select()
+          .from(taskCompletions)
+          .where(eq(taskCompletions.nodeId, theirs)),
+      ).toHaveLength(0);
+    });
+
+    it("does not let the drawer path reach another user's task", async () => {
+      const other = await makeUser();
+      const theirs = await createNode({
+        userId: other,
+        parentId: null,
+        type: "task",
+        name: "Theirs",
+      });
+
+      await expect(
+        saveNodeDetail(userId, theirs, { state: "completed" }),
+      ).rejects.toThrow("Node not found");
+    });
+
+    it("scopes the completion log to its owner", async () => {
+      const other = await makeUser();
+      const mine = await createNode({
+        userId,
+        parentId: null,
+        type: "task",
+        name: "Mine",
+      });
+      await db
+        .update(taskDetails)
+        .set({ recurrenceFrequency: "daily", recurrenceInterval: 1 })
+        .where(eq(taskDetails.nodeId, mine));
+      await setState(userId, mine, "completed");
+
+      // The other user can neither see the row nor delete it by guessing the node id.
+      expect(
+        await db
+          .select()
+          .from(taskCompletions)
+          .where(
+            and(eq(taskCompletions.userId, other), eq(taskCompletions.nodeId, mine)),
+          ),
+      ).toHaveLength(0);
+
+      await db
+        .delete(taskCompletions)
+        .where(
+          and(eq(taskCompletions.userId, other), eq(taskCompletions.nodeId, mine)),
+        );
+      expect(
+        await db
+          .select()
+          .from(taskCompletions)
+          .where(
+            and(eq(taskCompletions.userId, userId), eq(taskCompletions.nodeId, mine)),
+          ),
+      ).toHaveLength(1);
     });
   });
 });

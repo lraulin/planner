@@ -87,6 +87,16 @@ Features that complete or surround the original product, plus making it multi-de
   Deadline, Show More/Less, and the `Project:` breadcrumb. Settings persist per view in
   `localStorage`. Deferred: Best in Project Block and Best work-related / Best personal
   (both need machinery that doesn't exist yet), the Parents pane, and task predecessors.
+- **✅ Repeating routine tasks.** `specs/2026-07-31-0834-task-recurrence`. Achieve's
+  regeneration-based recurrence (§3.9.1) for tasks — "repeats every N days/weeks/months/
+  years after each completion" — implemented as **deferral, never as a deadline**. A
+  routine has no deadline, so it can never read as Overdue; completing it cycles the same
+  row (Not Started, progress reset, completed children un-completed) and pushes
+  `deferred_date` out, which drops it from the Task Chooser until it is due again. Each
+  completion is logged to `task_completions`, so history survives without a year of
+  duplicate rows in the outline. This is what keeps **Overdue** meaning something.
+  Deferred: recurrence on projects, date-based patterns, end conditions, Skip Recurrence,
+  and any UI over the completion log.
 - Any remaining Achieve chrome that earns its keep.
 - **Pomodoro → time tracking.** Effort, Effort Left, Actual Effort, and % complete
   already live on tasks (and roll up); what’s missing is a way to _earn_ those numbers
@@ -274,6 +284,7 @@ want real auth (and ideally share Google OAuth with Calendar).
 ## Out of roadmap (for now)
 
 - Marketing / legal distinctiveness from Achieve (see `mission.md`) — personal use first.
-- Achieve recurrence, printing views, custom filter builder, Views/Filters sidebar —
-  called out as out of scope in the main-grid-tabs shape unless we reopen them.
+- Printing views, custom filter builder, Views/Filters sidebar — called out as out of scope
+  in the main-grid-tabs shape unless we reopen them. (Achieve **task recurrence** was
+  reopened and shipped — see "Repeating routine tasks" above.)
 - Neon Auth / vendor-owned identity schema — declined; see `tech-stack.md`.

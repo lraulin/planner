@@ -4,10 +4,18 @@ import {
   nodes,
   projectDetails,
   resultAreaDetails,
+  taskCompletions,
   taskDetails,
 } from "@/db/schema";
-import type { ExternalRef, NodeState, NodeType, PriorityLetter } from "@/db/schema";
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import type {
+  ExternalRef,
+  NodeState,
+  NodeType,
+  PriorityLetter,
+  RecurrenceFrequency,
+} from "@/db/schema";
+import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { nextDue } from "@/lib/recurrence/nextDue";
 import { assertCanNest, TYPE_LABELS } from "./hierarchy";
 import { loadOutline } from "./queries";
 import { between } from "./sortKey";
@@ -215,19 +223,167 @@ export async function setPriority(
     .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
 }
 
+/**
+ * Node ids at or beneath `rootId`, breadth-first. Root included.
+ *
+ * One query per level rather than per node — a recurring checklist is shallow and wide,
+ * which is the shape this is walked in.
+ */
+async function subtreeIds(
+  tx: Executor,
+  userId: string,
+  rootId: string,
+): Promise<string[]> {
+  const ids = [rootId];
+  let frontier = [rootId];
+
+  while (frontier.length > 0) {
+    const children = await tx
+      .select({ id: nodes.id })
+      .from(nodes)
+      .where(and(eq(nodes.userId, userId), inArray(nodes.parentId, frontier)));
+
+    frontier = children.map((c) => c.id);
+    ids.push(...frontier);
+  }
+
+  return ids;
+}
+
+/**
+ * The recurrence settings on a node, when it is a task that repeats.
+ *
+ * Returns null for everything else — a project, a goal, a task with recurrence off — which
+ * is the overwhelmingly common case and the one that must stay on the plain path.
+ */
+async function recurrenceOf(
+  tx: Executor,
+  userId: string,
+  nodeId: string,
+): Promise<{ frequency: RecurrenceFrequency; interval: number } | null> {
+  const [row] = await tx
+    .select({
+      frequency: taskDetails.recurrenceFrequency,
+      interval: taskDetails.recurrenceInterval,
+    })
+    .from(taskDetails)
+    .innerJoin(nodes, eq(nodes.id, taskDetails.nodeId))
+    .where(
+      and(
+        eq(nodes.id, nodeId),
+        eq(nodes.userId, userId),
+        eq(nodes.type, "task"),
+        ne(taskDetails.recurrenceFrequency, "none"),
+      ),
+    )
+    .limit(1);
+
+  return row ?? null;
+}
+
+/**
+ * Move a node to `state`, handling the one case that is not a plain column write:
+ * **completing a recurring task**, which cycles the task instead of finishing it.
+ *
+ * This exists as a shared helper because node state has two independent writers — the
+ * grids and the outline go through `setState`, while the detail drawer's State dropdown
+ * goes through `saveNodeDetail` — and both already had their own copy of the "stamp
+ * `completedAt`" rule. Recurrence has to fire from both, so it lives here and is called
+ * from each rather than being written twice and drifting.
+ *
+ * Completing a recurring task, in one transaction:
+ *
+ * 1. logs the completion to `task_completions` — the row is about to stop looking
+ *    completed, and this is the only record that it ever was;
+ * 2. pushes `deferredDate` to `nextDue(...)` and stamps `dateCompleted`, so the task drops
+ *    out of the Task Chooser until it is due again;
+ * 3. un-completes the task and any **completed** descendants, resetting their progress.
+ *
+ * Step 3 follows Achieve §3.9/§3.9.4, which is specific that it is the *completed* child
+ * items that get un-completed. Descendants that are cancelled or in progress are left
+ * alone: resetting those would resurrect work that was deliberately killed, or silently
+ * discard progress on work that is under way.
+ *
+ * Takes an executor so callers can compose it into their own transaction.
+ */
+export async function applyStateTransition(
+  tx: Executor,
+  userId: string,
+  nodeId: string,
+  state: NodeState,
+): Promise<void> {
+  const now = new Date();
+
+  if (state !== "completed") {
+    await tx
+      .update(nodes)
+      .set({ state, completedAt: null, updatedAt: now })
+      .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+    return;
+  }
+
+  const recurrence = await recurrenceOf(tx, userId, nodeId);
+
+  if (!recurrence) {
+    await tx
+      .update(nodes)
+      .set({ state, completedAt: now, updatedAt: now })
+      .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+    return;
+  }
+
+  await tx.insert(taskCompletions).values({ userId, nodeId, completedAt: now });
+
+  const ids = await subtreeIds(tx, userId, nodeId);
+  // Descendants that were finished; the recurring task itself is handled separately below,
+  // since it is being completed right now and so is not yet in this set.
+  const finished = await tx
+    .select({ id: nodes.id })
+    .from(nodes)
+    .where(
+      and(
+        eq(nodes.userId, userId),
+        inArray(nodes.id, ids),
+        eq(nodes.state, "completed"),
+      ),
+    );
+
+  const resetIds = [nodeId, ...finished.map((n) => n.id)];
+
+  await tx
+    .update(nodes)
+    .set({ state: "not_started", completedAt: null, updatedAt: now })
+    .where(and(eq(nodes.userId, userId), inArray(nodes.id, resetIds)));
+
+  await tx
+    .update(taskDetails)
+    .set({
+      percentComplete: 0,
+      actualEffortMinutes: 0,
+      actualStartDate: null,
+      dateCompleted: null,
+      // Work left starts over at the full estimate. Null estimate stays null.
+      effortLeftMinutes: sql`${taskDetails.effortMinutes}`,
+    })
+    .where(inArray(taskDetails.nodeId, resetIds));
+
+  // Last, so it survives the blanket reset above: on the recurring task itself,
+  // `dateCompleted` means "last completed" and the defer date is what hides it.
+  await tx
+    .update(taskDetails)
+    .set({
+      dateCompleted: now,
+      deferredDate: nextDue(now, recurrence.frequency, recurrence.interval),
+    })
+    .where(eq(taskDetails.nodeId, nodeId));
+}
+
 export async function setState(
   userId: string,
   nodeId: string,
   state: NodeState,
 ): Promise<void> {
-  await db
-    .update(nodes)
-    .set({
-      state,
-      completedAt: state === "completed" ? new Date() : null,
-      updatedAt: new Date(),
-    })
-    .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+  await db.transaction((tx) => applyStateTransition(tx, userId, nodeId, state));
 }
 
 export async function setFocus(

@@ -86,6 +86,26 @@ describe("isChooserCandidate", () => {
     expect(isChooserCandidate(deferred, [...DEFAULT_STATES, "postponed"])).toBe(true);
   });
 
+  it("hides a task deferred to a future date, and offers it once due", () => {
+    // How a repeating routine stays off the list between cycles without pretending to
+    // have a deadline. Applies to a hand-set Deferred until date too.
+    const deferredRow = (key: string) =>
+      derive([
+        row({ id: "t", type: "task", deferredDate: new Date(`${key}T00:00:00Z`) }),
+      ])[0];
+
+    expect(
+      isChooserCandidate(deferredRow("2026-03-09"), DEFAULT_STATES, "2026-03-08"),
+    ).toBe(false);
+    // Due today counts as due — not hidden for the rest of the day it came back.
+    expect(
+      isChooserCandidate(deferredRow("2026-03-08"), DEFAULT_STATES, "2026-03-08"),
+    ).toBe(true);
+    expect(
+      isChooserCandidate(deferredRow("2026-03-01"), DEFAULT_STATES, "2026-03-08"),
+    ).toBe(true);
+  });
+
   it("keeps a zero-effort next-action reminder task", () => {
     // Manual §7.2.5 — not scheduled, but still something you can pick. Achieve's own
     // Task Chooser screenshot shows one.

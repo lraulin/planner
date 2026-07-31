@@ -1,6 +1,7 @@
 import type { NodeState } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { GridRow } from "@/lib/tree/slice";
+import { isDeferred } from "@/lib/recurrence/nextDue";
 import { dayString, daysBetween, effectiveDeadline } from "./dates";
 import { DEFAULT_WEIGHTS, scoreItem, type ChooserWeights } from "./score";
 import { compareTcPriority, TC_LETTERS } from "./tcPriority";
@@ -216,9 +217,19 @@ export function defaultSettings(id: ChooserViewId): ChooserSettings {
  * project qualifies only when nothing hangs off it, since otherwise its children are the
  * real choices. Zero-effort "next action reminder" tasks (§7.2.5) stay in: they are
  * visible in Achieve's own screenshot, and a reminder is still a thing you can pick.
+ *
+ * A task **deferred to a future date** is also out — that is the whole meaning of the
+ * field, and it is how a repeating routine stays off this list between cycles without
+ * pretending to have a deadline. The rule applies to any deferred task, not just
+ * recurring ones, so setting Deferred until by hand finally does something.
  */
-export function isChooserCandidate(node: OutlineNode, states: NodeState[]): boolean {
+export function isChooserCandidate(
+  node: OutlineNode,
+  states: NodeState[],
+  today: string | null = null,
+): boolean {
   if (!states.includes(node.state)) return false;
+  if (isDeferred(node.deferredDate, today)) return false;
   if (node.type === "task") return !node.hasChildren;
   if (node.type === "project") return !node.hasChildren;
   return false;
@@ -248,7 +259,7 @@ export function buildChooserItems(
   const items: ChooserItem[] = [];
 
   nodes.forEach((node, order) => {
-    if (!isChooserCandidate(node, settings.states)) return;
+    if (!isChooserCandidate(node, settings.states, today)) return;
     if (!inScope(node, opts.scopeId ?? null, byId)) return;
 
     const ancestry = ancestryOf(node, byId);

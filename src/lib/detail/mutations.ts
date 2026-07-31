@@ -9,6 +9,7 @@ import {
 } from "@/db/schema";
 import type { NodeItemKind } from "@/db/schema";
 import { and, asc, eq } from "drizzle-orm";
+import { applyStateTransition } from "@/lib/tree/mutations";
 import { between } from "@/lib/tree/sortKey";
 import type { ItemPosition, NodeDetailPatch, NodeItemValues } from "./types";
 
@@ -121,6 +122,8 @@ const TASK_KEYS = [
   "targetStartDate",
   "targetEndDate",
   "deferredDate",
+  "recurrenceFrequency",
+  "recurrenceInterval",
   "leadTimeMinutes",
   "deadlineLeadTimeMinutes",
   "source",
@@ -241,11 +244,6 @@ export async function saveNodeDetail(
         ...("priorityLetter" in core && core.priorityLetter === null
           ? { priorityRank: null }
           : {}),
-        // The outline colours completed rows from this timestamp, so it has to follow the
-        // state whichever surface changed it.
-        ...("state" in core
-          ? { completedAt: core.state === "completed" ? new Date() : null }
-          : {}),
         updatedAt: new Date(),
       })
       .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
@@ -282,6 +280,15 @@ export async function saveNodeDetail(
           .values({ nodeId, ...set })
           .onConflictDoUpdate({ target: taskDetails.nodeId, set });
       }
+    }
+
+    // Last, deliberately. The state write above set the column; this stamps `completedAt`
+    // to match — and, for a recurring task, cycles it instead: logs the completion, pushes
+    // the defer date out, and un-completes the subtree. That reset has to land *after* the
+    // side-table write, or the form's own `percentComplete` / `dateCompleted` draft values
+    // would overwrite it and the task would come back already finished.
+    if ("state" in core && core.state !== undefined) {
+      await applyStateTransition(tx, userId, nodeId, core.state);
     }
   });
 }

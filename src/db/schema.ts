@@ -397,7 +397,14 @@ export const taskDetails = pgTable("task_details", {
   // General
   targetStartDate: timestamp("target_start_date", { withTimezone: true }),
   targetEndDate: timestamp("target_end_date", { withTimezone: true }),
-  /** When a task is pushed out of view until a date, without losing its deadline. */
+  /**
+   * When a task is pushed out of view until a date, without losing its deadline.
+   *
+   * Read by the Task Chooser (`isChooserCandidate`) and by the derived Status column: a
+   * task whose deferred date is still in the future is not offered as something to do
+   * now. Set by hand, or moved forward automatically each time a **recurring** task is
+   * completed — see `recurrenceFrequency` below.
+   */
   deferredDate: timestamp("deferred_date", { withTimezone: true }),
   leadTimeMinutes: integer("lead_time_minutes"),
   /** Slack Achieve leaves between finishing and the deadline. */
@@ -406,11 +413,42 @@ export const taskDetails = pgTable("task_details", {
   place: text("place").notNull().default(""),
   reminderAt: timestamp("reminder_at", { withTimezone: true }),
   private: boolean("private").notNull().default(false),
+  // Recurrence
+  /**
+   * Achieve's **regeneration-based** recurrence (manual §3.9.1): "regenerate new item N
+   * week(s) after each instance is completed". Read together with `recurrenceInterval` as
+   * "every {interval} {frequency}, measured from each completion" — so this column names
+   * the *unit*, not a calendar pattern, and `none` means the task does not repeat.
+   *
+   * Reuses `recurrence_frequency`, the enum `appointments` already uses, even though the
+   * two features are unrelated: an appointment expands one stored master into many
+   * calendar occurrences, while a recurring task is a single row that defers itself. The
+   * shared enum is a convenience — do not unify the code behind them.
+   *
+   * **Recurrence never sets a deadline.** It moves `deferredDate` and nothing else. A
+   * deadline is an external constraint (taxes, bills); "play with the cats daily" is not
+   * one, and modelling routines as deadlines fills Overdue with work that was never
+   * urgent, which is what makes Overdue worth reading. See the spec at
+   * `agent-os/specs/2026-07-31-0834-task-recurrence/`.
+   */
+  recurrenceFrequency: recurrenceFrequencyEnum("recurrence_frequency")
+    .notNull()
+    .default("none"),
+  /**
+   * How many `recurrenceFrequency` units between completions. Anchored to the completion
+   * rather than to the previous due date on purpose: finish a fortnightly chore on day 18
+   * and the next one is due 14 days from *then*, with no accumulating debt.
+   */
+  recurrenceInterval: integer("recurrence_interval").notNull().default(1),
   // Schedule
   effortDriven: boolean("effort_driven").notNull().default(true),
   /** A zero-duration marker rather than a piece of work. */
   milestone: boolean("milestone").notNull().default(false),
   actualStartDate: timestamp("actual_start_date", { withTimezone: true }),
+  /**
+   * When this task was completed. For a **recurring** task, which never stays completed,
+   * this is the *last* completion — the full history is in `task_completions`.
+   */
   dateCompleted: timestamp("date_completed", { withTimezone: true }),
   /** Wall-clock span the work is spread over, as distinct from effort spent inside it. */
   durationMinutes: integer("duration_minutes"),
@@ -436,6 +474,40 @@ export const taskDetails = pgTable("task_details", {
     onDelete: "set null",
   }),
 });
+
+/**
+ * One completion of a **recurring** task.
+ *
+ * A recurring task never stays completed — ticking it resets the same row to Not Started
+ * and pushes its `deferredDate` out (see `taskDetails.recurrenceFrequency`), so `nodes`
+ * holds no record that it was ever done. This table is that record: it answers "how
+ * consistent have I been" and "when did I last do X" without leaving a year's worth of
+ * completed duplicates in the outline, which is the reason we regenerate in place rather
+ * than copying the node the way Achieve does.
+ *
+ * Append-only, and written in the same transaction as the reset. Nothing reads it yet.
+ */
+export const taskCompletions = pgTable(
+  "task_completions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    nodeId: uuid("node_id")
+      .notNull()
+      .references(() => nodes.id, { onDelete: "cascade" }),
+    completedAt: timestamp("completed_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("task_completions_user_node_idx").on(
+      table.userId,
+      table.nodeId,
+      table.completedAt,
+    ),
+  ],
+);
 
 /**
  * Goal-only fields, backing the twelve tabs of Achieve's Goal form.
@@ -513,7 +585,11 @@ export const resultAreaDetails = pgTable("result_area_details", {
  *
  * Effort, % complete, and the subproject/task counts are absent on purpose: they are
  * rollups of the subtree, computed at read time in `src/lib/tree/derive.ts` and rendered
- * read-only. Recurrence, templates, labels, and resource pools are out of scope.
+ * read-only. Templates, labels, and resource pools are out of scope.
+ *
+ * Recurrence is **tasks-only** for now — it lives on `task_details` because it drives
+ * `deferredDate`, which projects do not have. Extending it here means moving both columns
+ * up onto `nodes`.
  */
 export const projectDetails = pgTable("project_details", {
   nodeId: uuid("node_id")
@@ -915,6 +991,7 @@ export type ShowAs = (typeof showAsEnum.enumValues)[number];
 export type AppointmentCheck = (typeof appointmentCheckEnum.enumValues)[number];
 export type RecurrenceFrequency = (typeof recurrenceFrequencyEnum.enumValues)[number];
 export type RecurrenceEnd = (typeof recurrenceEndEnum.enumValues)[number];
+export type TaskCompletion = typeof taskCompletions.$inferSelect;
 export type WeeklyPlan = typeof weeklyPlans.$inferSelect;
 export type WeeklyPlanEntry = typeof weeklyPlanEntries.$inferSelect;
 export type Note = typeof notes.$inferSelect;
