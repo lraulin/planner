@@ -473,6 +473,9 @@ export function NotesGrid({
         onSortChange={gridState.toggleSort}
         filters={gridState.filters}
         onFilterChange={gridState.setFilter}
+        widths={gridState.widths}
+        onResizeColumn={gridState.setWidth}
+        onResetColumnWidth={gridState.clearWidth}
         rowDrag={rowDrag}
         rowMenu={rowMenu}
         rowLabel={(row) => `Note: ${row.node.title || "Untitled"}`}

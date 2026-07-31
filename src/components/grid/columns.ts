@@ -58,9 +58,24 @@ export type ColumnMeta = {
   hideable?: boolean;
 };
 
-/** CSS `grid-template-columns` value for the visible set. */
-export function buildGridTemplate(columns: Pick<ColumnMeta, "width">[]): string {
-  return columns.map((column) => column.width).join(" ");
+/**
+ * CSS `grid-template-columns` value for the visible set.
+ *
+ * A stored override wins over the column's declared track. Overrides are pixel numbers
+ * rather than free-text CSS: they come from a drag, and from a settings blob anyone can
+ * edit in devtools, so the one thing they must not be able to do is inject a track
+ * expression into the layout.
+ */
+export function buildGridTemplate(
+  columns: Pick<ColumnMeta, "id" | "width">[],
+  widths?: Record<string, number>,
+): string {
+  return columns
+    .map((column) => {
+      const override = widths?.[column.id];
+      return override === undefined ? column.width : `${override}px`;
+    })
+    .join(" ");
 }
 
 export function alignClass(align: ColumnAlign | undefined): string {

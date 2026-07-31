@@ -99,6 +99,9 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   onSortChange,
   filters: controlledFilters,
   onFilterChange,
+  widths,
+  onResizeColumn,
+  onResetColumnWidth,
   collapsedGroups,
   onToggleGroup,
   rowDrag,
@@ -125,6 +128,11 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   onSortChange?: (columnId: string) => void;
   filters?: Record<string, ColumnFilter>;
   onFilterChange?: (columnId: string, filter: ColumnFilter) => void;
+  /** Column id to pixel width, overriding each column's declared track. */
+  widths?: Record<string, number>;
+  /** Omit to leave columns unresizable, as a grid with nowhere to store widths should. */
+  onResizeColumn?: (columnId: string, width: number) => void;
+  onResetColumnWidth?: (columnId: string) => void;
   /** Group ids the user has collapsed. Omitted means every group is open. */
   collapsedGroups?: Set<string>;
   onToggleGroup?: (groupId: string) => void;
@@ -150,7 +158,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   );
   const closeMenu = useCallback(() => setMenu(null), []);
   const gridRef = useRef<HTMLDivElement>(null);
-  const gridTemplate = buildGridTemplate(columns);
+  const gridTemplate = buildGridTemplate(columns, widths);
 
   const kinds = useMemo(() => {
     const map: Record<string, ColumnDef<TCtx, TRow>["filterKind"]> = {};
@@ -328,6 +336,8 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
         filters={filters}
         onFilterChange={handleFilterChange}
         distinctValues={distinctValues}
+        onResize={onResizeColumn}
+        onResetWidth={onResetColumnWidth}
         enableFilters={enableFilters}
       />
 

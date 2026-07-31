@@ -4,22 +4,19 @@ import { useMemo, useState } from "react";
 import type { OutlineNode } from "@/lib/tree/types";
 import { sliceTree, type GroupBy, type GridRow } from "@/lib/tree/slice";
 import { formatEffort, formatPriority } from "@/lib/tree/format";
-import { STATE_CODES } from "@/lib/tree/hierarchy";
 import { scheduleStatus, STATUS_LABELS } from "@/lib/tree/status";
 import type { ColumnDef } from "@/components/grid/columns";
 import { DataGrid } from "@/components/grid/DataGrid";
 import { useGridState, useTabView } from "@/components/grid/useGridState";
 import { ShowFieldsDialog } from "@/components/grid/ShowFieldsDialog";
 import {
-  AbbrStateCell,
-  DeadlineCell,
-  EffortCell,
-  NameCell,
-  PercentCell,
-  PriorityCell,
-  ReadOnlyCell,
-  StatusCell,
-} from "@/components/grid/cells";
+  abbrStateColumn,
+  deadlineColumn,
+  nameColumn,
+  percentColumn,
+  priorityColumn,
+} from "@/components/grid/commonColumns";
+import { EffortCell, ReadOnlyCell, StatusCell } from "@/components/grid/cells";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import {
   ErrorBanner,
@@ -93,60 +90,9 @@ function taskRatio(projectId: string, nodes: OutlineNode[]): string {
 
 function buildColumns(allNodes: OutlineNode[]): ColumnDef<OutlineColumnCtx>[] {
   return [
-    {
-      id: "abbrState",
-      label: "State",
-      width: "3.5rem",
-      align: "center",
-      filterKind: "enum",
-      filterValue: (row) => STATE_CODES[row.node.state],
-      sortValue: (row) => row.node.state,
-      render: (row, ctx) => (
-        <AbbrStateCell
-          node={row.node}
-          onChange={(state) => ctx.onStateChange(row.node, state)}
-        />
-      ),
-    },
-    {
-      id: "priority",
-      label: "Pri",
-      width: "3rem",
-      align: "center",
-      filterKind: "priority",
-      filterValue: (row) =>
-        formatPriority(row.node.priorityLetter, row.node.priorityRank) || null,
-      sortValue: (row) =>
-        formatPriority(row.node.priorityLetter, row.node.priorityRank),
-      render: (row, ctx) => (
-        <PriorityCell
-          key={`priority:${formatPriority(row.node.priorityLetter, row.node.priorityRank)}`}
-          node={row.node}
-          onChange={(letter, rank) => ctx.onPriorityChange(row.node, letter, rank)}
-        />
-      ),
-    },
-    {
-      id: "name",
-      label: "Name",
-      width: "minmax(14rem,1.4fr)",
-      hideable: false,
-      filterKind: "text",
-      filterValue: (row) => row.node.name,
-      sortValue: (row) => row.node.name.toLowerCase(),
-      render: (row, ctx) => (
-        <NameCell
-          node={row.node}
-          depth={ctx.nodeDepths.get(row.node.id) ?? 0}
-          selected={row.node.id === ctx.selectedId}
-          editing={row.node.id === ctx.editingId}
-          onToggleCollapsed={() => ctx.onToggleCollapsed(row.node)}
-          onOpenDetail={() => ctx.onOpenDetail(row.node)}
-          onFinishEdit={(name) => ctx.onFinishEdit(row.node, name)}
-          onCancelEdit={ctx.onCancelEdit}
-        />
-      ),
-    },
+    abbrStateColumn(),
+    priorityColumn(),
+    nameColumn(),
     {
       id: "tasks",
       label: "Tasks",
@@ -205,32 +151,8 @@ function buildColumns(allNodes: OutlineNode[]): ColumnDef<OutlineColumnCtx>[] {
         />
       ),
     },
-    {
-      id: "deadline",
-      label: "Deadline",
-      width: "7rem",
-      align: "right",
-      filterKind: "date",
-      filterValue: (row) =>
-        row.node.deadline ? row.node.deadline.toISOString().slice(0, 10) : null,
-      sortValue: (row) =>
-        row.node.deadline ? row.node.deadline.toISOString().slice(0, 10) : null,
-      render: (row, ctx) => (
-        <DeadlineCell
-          node={row.node}
-          today={ctx.today}
-          onChange={(deadline) => ctx.onDeadlineChange(row.node, deadline)}
-        />
-      ),
-    },
-    {
-      id: "percent",
-      label: "%",
-      width: "3rem",
-      align: "right",
-      sortValue: (row) => row.node.percentCompleteRollup,
-      render: (row) => <PercentCell node={row.node} />,
-    },
+    deadlineColumn(),
+    percentColumn(),
     {
       id: "status",
       label: "Status",
@@ -415,6 +337,9 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
         onSortChange={gridState.toggleSort}
         filters={gridState.filters}
         onFilterChange={gridState.setFilter}
+        widths={gridState.widths}
+        onResizeColumn={gridState.setWidth}
+        onResetColumnWidth={gridState.clearWidth}
         collapsedGroups={gridState.collapsedGroups}
         onToggleGroup={gridState.toggleGroup}
         empty={

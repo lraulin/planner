@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
+import { MAX_COLUMN_WIDTH, MIN_COLUMN_WIDTH } from "@/lib/settings/grid";
 import { alignClass, type ColumnMeta, type FilterKind } from "./columns";
 import {
   ALL_FILTER,
@@ -23,6 +30,8 @@ export function ColumnHeaderRow({
   onFilterChange,
   distinctValues,
   enableFilters = false,
+  onResize,
+  onResetWidth,
 }: {
   // `ColumnMeta` rather than `ColumnDef`: the header never renders a cell, so it has no
   // business knowing what a row is.
@@ -35,6 +44,9 @@ export function ColumnHeaderRow({
   /** Distinct filter values per column id, from the unfiltered row set. */
   distinctValues?: Record<string, string[]>;
   enableFilters?: boolean;
+  /** Omit to leave columns unresizable, as a grid with nowhere to store widths should. */
+  onResize?: (columnId: string, width: number) => void;
+  onResetWidth?: (columnId: string) => void;
 }) {
   return (
     <div
@@ -82,6 +94,14 @@ export function ColumnHeaderRow({
                   distinctValues?.[column.id] ?? [],
                 )}
                 onChange={(next) => onFilterChange(column.id, next)}
+              />
+            )}
+
+            {onResize && (
+              <ResizeHandle
+                label={column.label}
+                onResize={(width) => onResize(column.id, width)}
+                onReset={() => onResetWidth?.(column.id)}
               />
             )}
           </div>
@@ -209,4 +229,61 @@ function toggleOption(filter: ColumnFilter, id: string): ColumnFilter {
     ? filter.filter((entry) => entry !== id)
     : [...filter.filter((entry) => entry !== "all"), id];
   return next.length === 0 ? ALL_FILTER : next;
+}
+
+/**
+ * Drag the right edge of a header cell to set that column's width.
+ *
+ * The width is measured from the header cell's own box rather than tracked as a delta, so
+ * a drag that outruns the pointer — or starts on a column whose track is a `fr` unit —
+ * still lands on the width actually on screen. Double-click clears the override and hands
+ * the column back to its declared track, which is the only way back from a `fr` column
+ * pinned to a fixed pixel width.
+ */
+function ResizeHandle({
+  label,
+  onResize,
+  onReset,
+}: {
+  label: string;
+  onResize: (width: number) => void;
+  onReset: () => void;
+}) {
+  const ref = useRef<HTMLButtonElement>(null);
+
+  function beginResize(event: ReactPointerEvent<HTMLButtonElement>) {
+    const cell = ref.current?.parentElement;
+    if (!cell) return;
+
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = cell.getBoundingClientRect().width;
+
+    function onMove(move: PointerEvent) {
+      onResize(clampWidth(Math.round(startWidth + (move.clientX - startX))));
+    }
+    function onUp() {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+    }
+
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+  }
+
+  return (
+    <button
+      ref={ref}
+      type="button"
+      aria-label={`Resize ${label}`}
+      title="Drag to resize, double-click to reset"
+      onPointerDown={beginResize}
+      onDoubleClick={onReset}
+      className="ml-auto h-4 w-1 flex-none cursor-col-resize rounded-full bg-transparent hover:bg-rule-strong"
+    />
+  );
+}
+
+function clampWidth(width: number): number {
+  return Math.min(MAX_COLUMN_WIDTH, Math.max(MIN_COLUMN_WIDTH, width));
 }

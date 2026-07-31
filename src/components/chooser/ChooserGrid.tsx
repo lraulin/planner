@@ -333,6 +333,9 @@ export function ChooserGrid({
         enableFilters={advancedFilters}
         filters={gridState.filters}
         onFilterChange={gridState.setFilter}
+        widths={gridState.widths}
+        onResizeColumn={gridState.setWidth}
+        onResetColumnWidth={gridState.clearWidth}
         collapsedGroups={gridState.collapsedGroups}
         onToggleGroup={gridState.toggleGroup}
         empty={

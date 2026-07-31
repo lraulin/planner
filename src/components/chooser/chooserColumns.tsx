@@ -1,20 +1,17 @@
 import type { ColumnDef } from "@/components/grid/columns";
-import {
-  AbbrStateCell,
-  DeadlineCell,
-  EffortCell,
-  FocusCell,
-  NameCell,
-  PriorityCell,
-  StatusCell,
-} from "@/components/grid/cells";
+import { EffortCell, FocusCell, StatusCell } from "@/components/grid/cells";
 import type { OutlineColumnCtx } from "@/components/outline/outlineColumns";
 import type { PriorityLetter } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
 import { formatEffort, formatPriority } from "@/lib/tree/format";
 import { TcPriorityCell } from "./TcPriorityCell";
-import { STATE_CODES } from "@/lib/tree/hierarchy";
 import { scheduleStatus, STATUS_LABELS } from "@/lib/tree/status";
+import {
+  abbrStateColumn,
+  deadlineColumn,
+  nameColumn,
+  priorityColumn,
+} from "@/components/grid/commonColumns";
 
 /**
  * Columns for the Task Chooser, matching Achieve's own set (State / Pri / Name / Effort
@@ -84,39 +81,8 @@ export function buildChooserColumns(): ColumnDef<ChooserColumnCtx>[] {
         </span>
       ),
     },
-    {
-      id: "abbrState",
-      label: "State",
-      width: "3.5rem",
-      align: "center",
-      filterKind: "enum",
-      filterValue: (row) => STATE_CODES[row.node.state],
-      sortValue: (row) => row.node.state,
-      render: (row, ctx) => (
-        <AbbrStateCell
-          node={row.node}
-          onChange={(state) => ctx.onStateChange(row.node, state)}
-        />
-      ),
-    },
-    {
-      id: "priority",
-      label: "Pri",
-      width: "3rem",
-      align: "center",
-      filterKind: "priority",
-      filterValue: (row) =>
-        formatPriority(row.node.priorityLetter, row.node.priorityRank) || null,
-      sortValue: (row) =>
-        formatPriority(row.node.priorityLetter, row.node.priorityRank),
-      render: (row, ctx) => (
-        <PriorityCell
-          key={`priority:${formatPriority(row.node.priorityLetter, row.node.priorityRank)}`}
-          node={row.node}
-          onChange={(letter, rank) => ctx.onPriorityChange(row.node, letter, rank)}
-        />
-      ),
-    },
+    abbrStateColumn(),
+    priorityColumn(),
     {
       // The flat cross-project ranking. Default column of the To-do List, available
       // anywhere else via Show Fields — it is a real field on the task, not a view's
@@ -170,28 +136,7 @@ export function buildChooserColumns(): ColumnDef<ChooserColumnCtx>[] {
         />
       ),
     },
-    {
-      id: "name",
-      label: "Name",
-      width: "minmax(14rem,1.4fr)",
-      hideable: false,
-      filterKind: "text",
-      filterValue: (row) => row.node.name,
-      sortValue: (row) => row.node.name.toLowerCase(),
-      render: (row, ctx) => (
-        <NameCell
-          node={row.node}
-          // The chooser is a flat ranked list, not a tree — nothing is indented.
-          depth={0}
-          selected={row.node.id === ctx.selectedId}
-          editing={row.node.id === ctx.editingId}
-          onToggleCollapsed={() => ctx.onToggleCollapsed(row.node)}
-          onOpenDetail={() => ctx.onOpenDetail(row.node)}
-          onFinishEdit={(name) => ctx.onFinishEdit(row.node, name)}
-          onCancelEdit={ctx.onCancelEdit}
-        />
-      ),
-    },
+    nameColumn({ flat: true }),
     {
       id: "effort",
       label: "Effort",
@@ -223,24 +168,7 @@ export function buildChooserColumns(): ColumnDef<ChooserColumnCtx>[] {
         />
       ),
     },
-    {
-      id: "deadline",
-      label: "Deadline",
-      width: "7rem",
-      align: "right",
-      filterKind: "date",
-      filterValue: (row) =>
-        row.node.deadline ? row.node.deadline.toISOString().slice(0, 10) : null,
-      sortValue: (row) =>
-        row.node.deadline ? row.node.deadline.toISOString().slice(0, 10) : null,
-      render: (row, ctx) => (
-        <DeadlineCell
-          node={row.node}
-          today={ctx.today}
-          onChange={(deadline) => ctx.onDeadlineChange(row.node, deadline)}
-        />
-      ),
-    },
+    deadlineColumn(),
     {
       // The deadline the *score* uses: the item's own, or the tightest one it inherits.
       // Off by default — it exists to explain why an undated task is near the top.
