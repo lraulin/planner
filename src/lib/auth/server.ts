@@ -5,8 +5,49 @@ import { db } from "@/db";
 import * as schema from "@/db/schema";
 
 /**
+ * Google Calendar sync needs read/write on events plus the calendar list to populate the
+ * picker. `calendar.events` alone cannot enumerate calendars, hence the readonly scope
+ * alongside it.
+ */
+const GOOGLE_SCOPES = [
+  "https://www.googleapis.com/auth/calendar.events",
+  "https://www.googleapis.com/auth/calendar.readonly",
+];
+
+/**
+ * Google is configured only when both halves of the credential are present, so a checkout
+ * without them boots normally with the Connect button reporting itself unavailable —
+ * rather than Better Auth throwing at import time.
+ */
+const googleProvider =
+  process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+    ? {
+        google: {
+          clientId: process.env.GOOGLE_CLIENT_ID,
+          clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+          scope: GOOGLE_SCOPES,
+          /**
+           * Both of these are load-bearing. Without `accessType: "offline"` Google returns
+           * no refresh token at all, and sync dies silently about an hour after linking —
+           * the failure looks like "it worked yesterday" rather than like a config error.
+           * `prompt: "consent"` forces the refresh token to be re-issued on a re-link,
+           * which Google otherwise only sends on the *first* consent for an account.
+           */
+          accessType: "offline" as const,
+          prompt: "consent" as const,
+        },
+      }
+    : undefined;
+
+export const googleConfigured = Boolean(googleProvider);
+
+/**
  * Self-run Better Auth. Tables live in our schema (see `users`, `sessions`, `accounts`,
  * `verifications`). Sign-up is disabled — the owner account is provisioned by seed/env.
+ *
+ * Google is here for **linking a calendar to an existing account**, not for signing in.
+ * `disableSignUp` stays on, so connecting Google to the owner account grants calendar
+ * access without opening a second way to create accounts.
  */
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
@@ -23,6 +64,7 @@ export const auth = betterAuth({
     disableSignUp: true,
     minPasswordLength: 8,
   },
+  ...(googleProvider ? { socialProviders: googleProvider } : {}),
   user: {
     modelName: "user",
   },
@@ -31,6 +73,15 @@ export const auth = betterAuth({
   },
   account: {
     modelName: "account",
+    /**
+     * Link Google onto the existing email/password account when the addresses match,
+     * instead of minting a second user. `disableSignUp` would block that second user
+     * anyway, so without this the connect flow simply fails.
+     */
+    accountLinking: {
+      enabled: true,
+      trustedProviders: ["google"],
+    },
   },
   verification: {
     modelName: "verification",
