@@ -17,9 +17,12 @@ import { saveJournalAction } from "@/app/day/actions";
 export function DailyNotesPane({
   day,
   initialBody,
+  className = "flex",
 }: {
   day: string;
   initialBody: string;
+  /** How `DayView` shows or hides this pane below `md` — `flex` or `hidden`. */
+  className?: string;
 }) {
   const [body, setBody] = useState(initialBody);
 
@@ -32,7 +35,8 @@ export function DailyNotesPane({
   return (
     <section
       aria-label="Daily notes"
-      className="flex min-h-0 w-80 flex-none flex-col border-l border-rule"
+      // See `AppointmentsPane` — full width below `md`, a fixed rail above it.
+      className={`min-h-0 w-full flex-none flex-col border-rule md:flex md:w-80 md:border-l ${className}`}
     >
       <header className="flex flex-none items-baseline justify-between border-b border-rule px-3 py-1.5">
         <h2 className="text-[0.75rem] font-semibold tracking-wide text-ink-muted uppercase">

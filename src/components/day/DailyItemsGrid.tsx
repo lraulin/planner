@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import type { NodeState, PriorityLetter } from "@/db/schema";
 import { DataGrid, type RowDrag } from "@/components/grid/DataGrid";
+import type { RowSwipe } from "@/components/grid/CompactRow";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 import { SortChip, sortColumnLabel } from "@/components/grid/SortChip";
 import { useGridState } from "@/components/grid/useGridState";
@@ -174,6 +175,16 @@ export function DailyItemsGrid({
               },
             ]),
         { label: "Move to tomorrow", onSelect: () => onMoveToDay(itemId, tomorrow) },
+        // Ranking is a drag on desktop and drag is off on touch, so the same moves have to
+        // exist as named commands or A/B/C/D is unreachable from a phone entirely.
+        ...DAY_LETTERS.map((letter) => ({
+          label: `Rank ${letter}`,
+          onSelect: () => onApplyPriorities(planDayDropOnLetter(items, itemId, letter)),
+        })),
+        {
+          label: "Clear rank",
+          onSelect: () => onApplyPriorities(planDayClear(items, itemId)),
+        },
         {
           label: "Mark in progress",
           onSelect: () => onSetState(itemId, "in_progress"),
@@ -183,7 +194,39 @@ export function DailyItemsGrid({
         { label: "Remove from this day", onSelect: () => onDelete(itemId) },
       ];
     },
-    [items, onPromote, onMoveToDay, onSetState, onDelete],
+    [items, onPromote, onMoveToDay, onSetState, onDelete, onApplyPriorities],
+  );
+
+  /**
+   * The two things done to a day item most often, and both reversible — swipe right ticks it
+   * off, swipe left pushes it to tomorrow. `responsive.md` keeps anything without a way back
+   * off a gesture, which is why "Remove from this day" stays in the long-press menu.
+   */
+  const rowSwipe = useCallback(
+    (itemId: string): RowSwipe => {
+      const item = items.find((entry) => entry.id === itemId);
+      if (!item) return {};
+
+      const tomorrow = (() => {
+        const next = new Date(`${item.day}T00:00:00Z`);
+        next.setUTCDate(next.getUTCDate() + 1);
+        return next.toISOString().slice(0, 10);
+      })();
+
+      const done = item.state === "completed";
+
+      return {
+        right: {
+          label: done ? "Reopen" : "Complete",
+          run: () => onToggleComplete(itemId, !done),
+        },
+        left: {
+          label: "Tomorrow",
+          run: () => onMoveToDay(itemId, tomorrow),
+        },
+      };
+    },
+    [items, onToggleComplete, onMoveToDay],
   );
 
   function commitDraft() {
@@ -196,7 +239,9 @@ export function DailyItemsGrid({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex flex-none items-center justify-end gap-2 border-b border-rule px-3 py-1">
+      {/* Hidden below `md`: it resets column widths and sort, neither of which a compact
+          row has. A whole bar for a control with nothing to do is not worth 32px there. */}
+      <div className="hidden flex-none items-center justify-end gap-2 border-b border-rule px-3 py-1 md:flex">
         <button
           type="button"
           onClick={gridState.reset}
@@ -223,6 +268,7 @@ export function DailyItemsGrid({
           ariaLabel="Today's task list"
           rowDrag={rowDrag}
           rowMenu={rowMenu}
+          rowSwipe={rowSwipe}
           rowLabel={(row) => row.node.title}
           enableSort
           sort={gridState.sort}
@@ -258,7 +304,11 @@ export function DailyItemsGrid({
           onBlur={commitDraft}
           placeholder="What are you doing today?"
           aria-label="Add an item to this day"
-          className="w-full border-none bg-transparent text-[0.8125rem] text-ink outline-none placeholder:text-ink-faint/70"
+          // `enterkeyhint` turns the soft keyboard's return key into "done", which is what
+          // Enter does here. There is no separate Add button because the row commits on blur
+          // too, so tapping anywhere else also files the line.
+          enterKeyHint="done"
+          className="min-h-tap w-full border-none bg-transparent text-[0.8125rem] text-ink outline-none placeholder:text-ink-faint/70 md:min-h-0"
         />
       </div>
     </div>

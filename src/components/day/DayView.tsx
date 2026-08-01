@@ -28,7 +28,18 @@ import { DayHeader } from "./DayHeader";
  * Writes are optimistic then reconciled by `router.refresh()`, the same idiom the Schedule
  * and Notes tabs use — a check box that waits for a round trip before it ticks makes the
  * list feel like a form rather than a page you are working from.
+ *
+ * Three panes side by side above `md`; one at a time below it, chosen with `PaneSwitch`.
+ * The list is the default because it is the reason to open this tab on a phone.
  */
+
+type DayPane = "appointments" | "list" | "journal";
+
+const PANES: { id: DayPane; label: string }[] = [
+  { id: "appointments", label: "Appointments" },
+  { id: "list", label: "List" },
+  { id: "journal", label: "Journal" },
+];
 export function DayView({
   initial,
   today,
@@ -41,6 +52,10 @@ export function DayView({
   const router = useRouter();
   const [items, setItems] = useState<DailyItemView[]>(initial.items);
   const [error, setError] = useState<string | null>(null);
+  const [pane, setPane] = useState<DayPane>("list");
+
+  /** Below `md` only the active pane is shown; above it all three always are. */
+  const paneClass = (id: DayPane) => (id === pane ? "flex" : "hidden md:flex");
 
   // Re-sync when the server sends a new day (navigation or refresh) rather than in an
   // effect — the compare-props idiom `ScheduleView` and `WeeklyPlanView` already use.
@@ -150,10 +165,16 @@ export function DayView({
       <DayHeader day={initial.day} today={today} mode="day" />
       {error && <ErrorBanner message={error} />}
 
-      <div className="flex min-h-0 flex-1">
-        <AppointmentsPane appointments={appointments} weekKey={initial.day} />
+      <PaneSwitch active={pane} onSelect={setPane} />
 
-        <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1">
+        <AppointmentsPane
+          appointments={appointments}
+          weekKey={initial.day}
+          className={paneClass("appointments")}
+        />
+
+        <div className={`min-h-0 flex-1 flex-col ${paneClass("list")}`}>
           <DailyItemsGrid
             items={items}
             onCreate={onCreate}
@@ -172,8 +193,48 @@ export function DayView({
           key={initial.day}
           day={initial.day}
           initialBody={initial.journal?.body ?? ""}
+          className={paneClass("journal")}
         />
       </div>
+    </div>
+  );
+}
+
+/**
+ * Three panes will not sit side by side on a 390px screen, so below `md` the Day tab shows
+ * one at a time and this switches between them.
+ *
+ * All three stay mounted and are shown or hidden with CSS rather than branching on
+ * `useIsCompact()`: the hook's server snapshot is `false`, so a JS branch would render the
+ * three-pane desktop layout on the server and visibly swap it on hydration. It also keeps
+ * the journal's autosave draft alive while you look at the list.
+ */
+function PaneSwitch({
+  active,
+  onSelect,
+}: {
+  active: DayPane;
+  onSelect: (pane: DayPane) => void;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label="Day pane"
+      className="flex flex-none gap-px border-b border-rule px-3 py-1.5 md:hidden"
+    >
+      {PANES.map((option) => (
+        <button
+          key={option.id}
+          type="button"
+          onClick={() => onSelect(option.id)}
+          aria-pressed={active === option.id}
+          className={`min-h-tap flex-1 rounded text-[0.8125rem] transition-colors ${
+            active === option.id ? "bg-select font-medium text-ink" : "text-ink-muted"
+          }`}
+        >
+          {option.label}
+        </button>
+      ))}
     </div>
   );
 }

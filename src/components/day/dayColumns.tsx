@@ -112,6 +112,10 @@ export const DAY_COLUMNS: ColumnDef<DayColumnCtx, DailyItemView>[] = [
     width: "2rem",
     align: "center",
     hideable: false,
+    // The one column that stays a live control in a compact row. Ticking things off is the
+    // reason to open this tab on a phone, and swipe-to-complete is a gesture — `responsive.md`
+    // does not let a gesture be the only way to do anything.
+    compact: "leading",
     render: (row, ctx) => <CheckCell item={row.node} ctx={ctx} />,
   },
   {
@@ -132,6 +136,12 @@ export const DAY_COLUMNS: ColumnDef<DayColumnCtx, DailyItemView>[] = [
       row.node.priorityLetter
         ? `${row.node.priorityLetter}${row.node.priorityRank ?? 0}`
         : "~",
+    // This column has no filter to borrow text from, and without it a compact row loses both
+    // its priority chip and its accent bar — the rank would only exist in the group header.
+    compactText: (row) =>
+      row.node.priorityLetter
+        ? `${row.node.priorityLetter}${row.node.priorityRank ?? ""}`
+        : null,
   },
   {
     id: "title",

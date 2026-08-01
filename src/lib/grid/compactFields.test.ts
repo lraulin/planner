@@ -89,10 +89,42 @@ describe("resolveCompactFields", () => {
 
   it("handles an empty column set", () => {
     expect(resolveCompactFields([])).toEqual({
+      leading: null,
       primary: null,
       accent: null,
       meta: [],
     });
+  });
+
+  it("only takes a leading column when one asks for it", () => {
+    // No id-based default: a control appearing in a compact row by accident is worse than
+    // one that is missing.
+    expect(resolveCompactFields(cols("check", "title")).leading).toBeNull();
+
+    const result = resolveCompactFields(
+      cols({ id: "check", compact: "leading" }, "priority", "title", "state"),
+    );
+    expect(result.leading?.id).toBe("check");
+    expect(result.primary?.id).toBe("title");
+    expect(result.accent?.id).toBe("priority");
+    expect(ids(result.meta)).toEqual(["state"]);
+  });
+
+  it("does not also emit the leading column as a meta chip", () => {
+    const result = resolveCompactFields(
+      cols({ id: "check", compact: "leading" }, "a", "b"),
+    );
+
+    expect(ids(result.meta)).toEqual(["b"]);
+    expect(result.primary?.id).toBe("a");
+  });
+
+  it("does not let the leading column become the fallback primary", () => {
+    const result = resolveCompactFields(
+      cols({ id: "check", compact: "leading" }, "score"),
+    );
+
+    expect(result.primary?.id).toBe("score");
   });
 
   it("prefers name over title when a grid has both", () => {

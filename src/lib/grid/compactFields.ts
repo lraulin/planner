@@ -11,7 +11,12 @@
  * only shows up as "why is the title missing on my phone".
  */
 
-export type CompactRole = "primary" | "accent" | "meta" | "hidden";
+/**
+ * `leading` is the one role that renders a real, interactive cell rather than text — a Day
+ * item's check box, for instance. It is opt-in only, with no id-based default, because a
+ * control that appears in a compact row by accident is worse than one that is missing.
+ */
+export type CompactRole = "leading" | "primary" | "accent" | "meta" | "hidden";
 
 /** Columns whose id means "this is the row's title", in preference order. */
 const PRIMARY_IDS = ["name", "title", "subject"];
@@ -25,6 +30,7 @@ export const DEFAULT_MAX_META = 3;
 export type CompactColumn = { id: string; compact?: CompactRole };
 
 export type CompactFields<C> = {
+  leading: C | null;
   primary: C | null;
   accent: C | null;
   meta: C[];
@@ -62,18 +68,28 @@ export function resolveCompactFields<C extends CompactColumn>(
     return null;
   };
 
+  const leading = declared("leading");
   let primary = declared("primary") ?? byId(PRIMARY_IDS);
   const accent = declared("accent") ?? byId(ACCENT_IDS);
 
-  // No title column of any recognisable name: take the first thing that is not the accent
-  // and not explicitly excluded, so the row still says what it is.
+  // No title column of any recognisable name: take the first thing that is not already
+  // spoken for and not explicitly excluded, so the row still says what it is.
   primary ??=
-    columns.find((column) => column.compact !== "hidden" && column.id !== accent?.id) ??
-    null;
+    columns.find(
+      (column) =>
+        column.compact !== "hidden" &&
+        column.id !== accent?.id &&
+        column.id !== leading?.id,
+    ) ?? null;
 
   const meta: C[] = [];
   for (const column of columns) {
-    if (column.id === primary?.id || column.id === accent?.id) continue;
+    if (
+      column.id === primary?.id ||
+      column.id === accent?.id ||
+      column.id === leading?.id
+    )
+      continue;
     if (column.compact === "hidden") continue;
     // A second column explicitly marked `primary` or `accent` lost the slot above; it falls
     // through to meta rather than disappearing.
@@ -81,5 +97,5 @@ export function resolveCompactFields<C extends CompactColumn>(
     meta.push(column);
   }
 
-  return { primary, accent, meta };
+  return { leading, primary, accent, meta };
 }

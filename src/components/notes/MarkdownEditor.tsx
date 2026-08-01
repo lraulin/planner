@@ -118,7 +118,7 @@ export function MarkdownEditor({
               aria-selected={mode === option}
               onClick={() => setMode(option)}
               className={[
-                "px-2.5 py-1 text-[0.75rem] leading-none capitalize transition-colors",
+                "min-h-tap px-3 text-[0.75rem] leading-none capitalize transition-colors md:min-h-0 md:px-2.5 md:py-1",
                 mode === option
                   ? "bg-select font-medium text-ink"
                   : "text-ink-muted hover:bg-surface-raised hover:text-ink",

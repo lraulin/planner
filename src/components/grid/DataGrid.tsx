@@ -29,7 +29,7 @@ import {
 import { sortRowsWithinGroups } from "@/lib/grid/sortRows";
 import { resolveCompactFields } from "@/lib/grid/compactFields";
 import { useIsCompact } from "@/components/shell/useIsCompact";
-import { CompactRow } from "./CompactRow";
+import { CompactRow, type RowSwipe } from "./CompactRow";
 
 export type SortState = { columnId: string; direction: "asc" | "desc" } | null;
 
@@ -135,6 +135,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   onToggleGroup,
   rowDrag,
   rowMenu,
+  rowSwipe,
   rowLabel,
   rowExpansion,
 }: {
@@ -172,6 +173,11 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
    * time the menu opens rather than memoised, so item state is never stale.
    */
   rowMenu?: (nodeId: string) => MenuItem[];
+  /**
+   * Swipe actions for a compact row. Ignored above `md`, where there is no gesture to make.
+   * Reversible actions only — `responsive.md` keeps anything without a way back off a swipe.
+   */
+  rowSwipe?: (nodeId: string) => RowSwipe;
 } & RowMeta<TRow>) {
   type Row = NodeGridRow<TRow>;
 
@@ -443,6 +449,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
                       setMenu({ rowId: row.id, x, y });
                     })
                   }
+                  swipe={rowSwipe?.(row.id)}
                   label={rowLabelFor(row, rowLabel)}
                   expanded={rowExpansionFor(row, rowExpansion)}
                 />

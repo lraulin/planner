@@ -8,6 +8,7 @@ import {
   type CaptureTarget,
 } from "@/app/capture/actions";
 import { ModalShell } from "@/components/detail/ModalShell";
+import { useIsCompact } from "@/components/shell/useIsCompact";
 import {
   ContextsField,
   DateField,
@@ -39,6 +40,7 @@ export function QuickCaptureDialog({
   const titleId = useId();
   const hintId = useId();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const compact = useIsCompact();
 
   const [text, setText] = useState("");
   const [parentId, setParentId] = useState("");
@@ -100,6 +102,11 @@ export function QuickCaptureDialog({
   function onKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
     // The chat convention, and the reason the "enter multiple tasks" checkbox is gone:
     // multi-line is always available, so there is nothing to toggle.
+    //
+    // Except on a soft keyboard, which has no Shift+Enter — Enter-submits would make the
+    // second line of a multi-line capture unreachable. Below `md` return means return, and
+    // the Add button is the way in. `modal-pattern.md` already required that button to exist.
+    if (compact) return;
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       submit();
@@ -128,10 +135,12 @@ export function QuickCaptureDialog({
         />
 
         <p id={hintId} className="mt-1.5 text-[0.75rem] leading-relaxed text-ink-faint">
-          <kbd className="font-medium">Enter</kbd> to add,{" "}
-          <kbd className="font-medium">Shift+Enter</kbd> for a new line. Indent a line
-          to make it a subtask. Add a note with <code>##</code> — “Buy milk ## whole,
-          not 2%”.
+          <span className="hidden md:inline">
+            <kbd className="font-medium">Enter</kbd> to add,{" "}
+            <kbd className="font-medium">Shift+Enter</kbd> for a new line.{" "}
+          </span>
+          Indent a line to make it a subtask. Add a note with <code>##</code> — “Buy
+          milk ## whole, not 2%”.
         </p>
 
         <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
@@ -156,7 +165,7 @@ export function QuickCaptureDialog({
           <select
             value={parentId}
             onChange={(event) => setParentId(event.target.value)}
-            className="w-full rounded border border-rule bg-surface px-2 py-1 text-[0.8125rem] text-ink outline-none focus:border-rule-strong"
+            className="min-h-tap w-full rounded border border-rule bg-surface px-2 py-1 text-[0.8125rem] text-ink outline-none focus:border-rule-strong md:min-h-0"
           >
             <option value="">Inbox</option>
             {(targets ?? []).map((target) => (
@@ -177,7 +186,7 @@ export function QuickCaptureDialog({
           <button
             type="button"
             onClick={onClose}
-            className="rounded border border-rule px-3 py-1.5 text-[0.8125rem] text-ink transition-colors hover:border-rule-strong hover:bg-surface-raised"
+            className="min-h-tap rounded border border-rule px-3 py-1.5 text-[0.8125rem] text-ink transition-colors hover:border-rule-strong hover:bg-surface-raised md:min-h-0"
           >
             Close
           </button>
@@ -185,7 +194,7 @@ export function QuickCaptureDialog({
             type="button"
             onClick={submit}
             disabled={pending || text.trim() === ""}
-            className="rounded border border-select-edge bg-select px-3 py-1.5 text-[0.8125rem] font-medium text-ink transition-colors hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-40"
+            className="min-h-tap rounded border border-select-edge bg-select px-4 py-1.5 text-[0.8125rem] font-medium text-ink transition-colors hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-40 md:min-h-0 md:px-3"
           >
             {pending ? "Adding…" : "Add"}
           </button>

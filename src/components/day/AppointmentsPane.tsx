@@ -30,14 +30,19 @@ function timeLabel(date: Date): string {
 export function AppointmentsPane({
   appointments,
   weekKey,
+  className = "flex",
 }: {
   appointments: DayAppointment[];
   weekKey: string;
+  /** How `DayView` shows or hides this pane below `md` — `flex` or `hidden`. */
+  className?: string;
 }) {
   return (
     <section
       aria-label="Appointments"
-      className="flex min-h-0 w-56 flex-none flex-col border-r border-rule"
+      // Full width below `md`, where `DayView` shows one pane at a time; a fixed 224px rail
+      // above it. The divider only makes sense when there is something beside it.
+      className={`min-h-0 w-full flex-none flex-col border-rule md:flex md:w-56 md:border-r ${className}`}
     >
       <header className="flex flex-none items-baseline justify-between border-b border-rule px-3 py-1.5">
         <h2 className="text-[0.75rem] font-semibold tracking-wide text-ink-muted uppercase">
