@@ -1,5 +1,5 @@
 import type { NoteFlag } from "@/db/schema";
-import { getOwnerUserId } from "@/lib/auth/owner";
+import { getAgentUserId } from "@/lib/auth/identity";
 import { createNote, updateNote as updateNoteMutation } from "@/lib/notes/mutations";
 import { loadNotes, loadNotesForNode } from "@/lib/notes/queries";
 import {
@@ -79,9 +79,14 @@ export function isAgentTool(name: string): name is AgentToolName {
   return (AGENT_TOOLS as readonly string[]).includes(name);
 }
 
-/** Resolve the single owner user the MVP Bearer key maps to (no browser session). */
+/**
+ * Resolve the account the Bearer key maps to (no browser session).
+ *
+ * Still one key per deployment mapping to one configured account — `PLANNER_AGENT_USER_EMAIL`,
+ * required in production. Per-user keys are the seam this function would grow into.
+ */
 export async function resolveAgentUserId(): Promise<string> {
-  return getOwnerUserId();
+  return getAgentUserId();
 }
 
 export async function dispatchAgentTool(

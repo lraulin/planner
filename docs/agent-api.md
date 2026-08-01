@@ -19,7 +19,17 @@ Standards: `agent-os/standards/api/`.
    PLANNER_AGENT_API_KEY=…
    ```
 
-3. Call tools against the running app (`npm run dev` → `http://localhost:3047`).
+3. Say which account the key acts as:
+
+   ```env
+   PLANNER_AGENT_USER_EMAIL=you@example.com
+   ```
+
+   **Required in production** — an unset value makes agent requests fail rather than guess
+   an account. Locally it falls back to the dev/test account (`AUTH_DEV_USER_EMAIL`,
+   default `test@example.com`), so a local agent never writes to a real account by accident.
+
+4. Call tools against the running app (`npm run dev` → `http://localhost:3047`).
 
 ## Call shape
 

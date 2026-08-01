@@ -25,11 +25,20 @@ Chosen to run at **$0** on free tiers at personal scale, with minimal ops overhe
 ## Authentication
 
 **Better Auth, self-run**, Drizzle adapter, tables in our schema (`users` + `sessions` /
-`accounts` / `verifications`). Email/password only; public sign-up disabled. Owner account
-provisioned by `npm run db:seed` / env credentials.
+`accounts` / `verifications`). Email/password only; public sign-up disabled. Accounts are
+provisioned out of band by `npm run user:create` (create, update, or rename in place);
+`npm run db:seed` provisions only the local test account and refuses to run in production.
 
-`getCurrentUserId()` in `src/lib/auth.ts` resolves the Better Auth session. Agent HTTP uses
-Bearer `PLANNER_AGENT_API_KEY` → owner user (`getOwnerUserId`), not a browser cookie.
+Three identities are resolved separately in `src/lib/auth/identity.ts`, because collapsing
+them once meant an unauthenticated local app writing to a real Google Calendar:
+
+| Identity        | Resolver                                 | Source                                                 |
+| --------------- | ---------------------------------------- | ------------------------------------------------------ |
+| Session user    | `getCurrentUserId()` (`src/lib/auth.ts`) | Better Auth session cookie                             |
+| Dev-bypass user | `getDevUserId()`                         | `AUTH_DEV_USER_EMAIL`, default `test@example.com`      |
+| Agent user      | `getAgentUserId()`                       | `PLANNER_AGENT_USER_EMAIL`, **required in production** |
+
+Agent HTTP uses Bearer `PLANNER_AGENT_API_KEY` → agent user, not a browser cookie.
 
 **Neon Auth was considered and declined** (July 2026). The dashboard option is Managed
 Better Auth, which creates its tables in a vendor-owned `neon_auth` schema you would

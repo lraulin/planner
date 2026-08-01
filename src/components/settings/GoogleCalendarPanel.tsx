@@ -3,7 +3,9 @@
 import { useId, useState, useTransition } from "react";
 import type { GoogleCalendarLink } from "@/db/schema";
 import { linkSocial } from "@/lib/auth/client";
+import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import {
+  disconnectGoogleAction,
   refreshGoogleCalendarsAction,
   setCalendarSyncEnabledAction,
 } from "@/app/settings/actions";
@@ -24,6 +26,7 @@ type Props = {
 export function GoogleCalendarPanel({ configured, linked, calendars }: Props) {
   const headingId = useId();
   const [error, setError] = useState<string | null>(null);
+  const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
   const [pending, startTransition] = useTransition();
 
   const connect = () => {
@@ -52,6 +55,15 @@ export function GoogleCalendarPanel({ configured, linked, calendars }: Props) {
     setError(null);
     startTransition(async () => {
       const result = await refreshGoogleCalendarsAction();
+      if (!result.ok) setError(result.error);
+    });
+  };
+
+  const disconnect = () => {
+    setError(null);
+    setConfirmingDisconnect(false);
+    startTransition(async () => {
+      const result = await disconnectGoogleAction();
       if (!result.ok) setError(result.error);
     });
   };
@@ -181,8 +193,33 @@ export function GoogleCalendarPanel({ configured, linked, calendars }: Props) {
               ))}
             </ul>
           )}
+
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-rule px-4 py-2.5">
+            <p className="text-[0.8125rem] text-ink-muted">
+              Disconnecting removes the connection and every mirrored event from the
+              planner. Your Google calendar is not changed.
+            </p>
+            <button
+              type="button"
+              onClick={() => setConfirmingDisconnect(true)}
+              disabled={pending}
+              className="flex-none rounded border border-rule px-2.5 py-1 text-[0.8125rem] text-priority-a transition-colors hover:border-priority-a disabled:opacity-40"
+            >
+              Disconnect
+            </button>
+          </div>
         </>
       )}
+
+      <ConfirmDialog
+        open={confirmingDisconnect}
+        title="Disconnect Google Calendar?"
+        message="Every event mirrored from Google will be removed from the planner, along with your calendar list. Nothing in Google Calendar itself is deleted, and you can reconnect at any time."
+        confirmLabel="Disconnect"
+        destructive
+        onConfirm={disconnect}
+        onCancel={() => setConfirmingDisconnect(false)}
+      />
     </section>
   );
 }

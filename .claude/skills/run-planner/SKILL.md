@@ -234,6 +234,12 @@ npm run build     # passes; do not run it while `npm run dev` is up (see Gotchas
   matches now win, but when a label legitimately appears twice — a project in the
   schedule rail *and* on the calendar — the last one in document order wins. Scope it:
   `.fc-timegrid-body >> text=Someday/Maybe`.
+- **The browser driver runs as the dev/test account, not a real one.** `AUTH_DEV_BYPASS`
+  skips the login screen and serves requests as `AUTH_DEV_USER_EMAIL` (default
+  `test@example.com`) — see `src/lib/auth/identity.ts`. That account is deliberately not
+  linked to Google, because sync is bidirectional: clicking around the schedule while signed
+  in as a **real** account edits a real calendar. If you need to work on Google sync, sign in
+  as that account on purpose and know what you are touching.
 - **`npm run db:seed` deletes the dev user's nodes, appointments and time charts** before
   inserting (`src/db/seed.ts`). Never run it to "refresh" a database someone is using.
   To exercise it safely, point it at a scratch database:

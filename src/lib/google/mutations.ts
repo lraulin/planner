@@ -1,6 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { appointments, googleCalendarLinks } from "@/db/schema";
+import { accounts, appointments, googleCalendarLinks } from "@/db/schema";
 import type { GoogleCalendarListEntry } from "./client";
 
 /**
@@ -145,4 +145,39 @@ export async function markCalendarsSynced(
 /** Forget every calendar for this user — used when Google is disconnected. */
 export async function clearCalendarLinks(userId: string): Promise<void> {
   await db.delete(googleCalendarLinks).where(eq(googleCalendarLinks.userId, userId));
+}
+
+/**
+ * Detach this account from Google entirely: the OAuth grant, the calendar list, and the
+ * mirror.
+ *
+ * The inverse of `linkSocial` in the settings panel, and the reason it exists is that
+ * without it there was no way to *stop* an account from reaching a real calendar short of
+ * hand-written SQL. Sync is bidirectional, so "which account is linked" is a data-safety
+ * question, not a preference.
+ *
+ * **Mirrored appointments are deleted, not orphaned.** Nulling their `external_*` columns
+ * would leave a frozen copy of a calendar that no longer syncs, and re-linking later would
+ * insert every event again — the partial unique index is on
+ * `(user_id, external_source, external_id)`, so rows with the source cleared no longer
+ * collide with their own re-import. Deleting is what makes re-linking idempotent. Those
+ * events still exist in Google, which is their source of truth; appointments that only ever
+ * existed here carry no `external_source` and stay.
+ *
+ * Deleting the `accounts` row drops our stored tokens; it does **not** revoke the grant at
+ * Google. That is deliberate — the OAuth client is shared with production, so revoking to
+ * tidy up one environment would break the other.
+ */
+export async function disconnectGoogle(userId: string): Promise<void> {
+  await db
+    .delete(appointments)
+    .where(
+      and(eq(appointments.userId, userId), eq(appointments.externalSource, "google")),
+    );
+
+  await clearCalendarLinks(userId);
+
+  await db
+    .delete(accounts)
+    .where(and(eq(accounts.userId, userId), eq(accounts.providerId, "google")));
 }

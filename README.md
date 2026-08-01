@@ -32,12 +32,24 @@ npm install
 cp .env.example .env.local   # DATABASE_URL, BETTER_AUTH_SECRET, BETTER_AUTH_URL
 npm run db:up                # starts Postgres in Docker
 npm run db:migrate           # applies migrations
-npm run db:seed              # owner credentials + sample data (login: see .env.example)
+npm run db:seed              # local test account + sample data
 npm run dev                  # http://localhost:3047 → redirects to /login
 ```
 
-Default local login after seed: email `dev@example.com`, password `password123` (override with
-`AUTH_SEED_EMAIL` / `AUTH_SEED_PASSWORD`). Public sign-up is disabled.
+Default local login after seed: email `test@example.com`, password `password123` (override
+with `AUTH_DEV_USER_EMAIL` / `AUTH_DEV_USER_PASSWORD`). Public sign-up is disabled.
+
+`db:seed` provisions **only the local test account**, and refuses to run in production. Real
+accounts — yours, or a second person's — are created with:
+
+```sh
+npm run user:create -- --email you@example.com --password 'a-strong-password'
+```
+
+Keep local development on the test account. It is not just about the local database, which
+is sample data anyway: the account you are signed in as is the one whose **Google Calendar**
+the app reads and writes, and sync is bidirectional. See
+`agent-os/specs/2026-08-01-1042-multi-user-accounts/`.
 
 **Port 3047** is pinned in `package.json` so this app does not fight other local Next apps
 on 3000 / 3001 / 3002. Override only if needed: `npx next dev -p <port>`.
@@ -57,26 +69,27 @@ npm start        # also http://localhost:3047
 
 ## Scripts
 
-| Script                     | Purpose                                                                                 |
-| -------------------------- | --------------------------------------------------------------------------------------- |
-| `npm run dev`              | Dev server on **http://localhost:3047**                                                 |
-| `npm start`                | Production server on **:3047** (post-build)                                             |
-| `npm run build`            | Production build                                                                        |
-| `npm test`                 | Full suite (Vitest)                                                                     |
-| `npm run test:unit`        | Unit tests only — no database needed                                                    |
-| `npm run test:integration` | Database-backed tests (needs `db:up`)                                                   |
-| `npm run typecheck`        | `tsc --noEmit`                                                                          |
-| `npm run lint`             | ESLint (warnings fail too)                                                              |
-| `npm run lint:fix`         | ESLint with `--fix`                                                                     |
-| `npm run format`           | Prettier write-all                                                                      |
-| `npm run format:check`     | Prettier check (CI-friendly)                                                            |
-| `npm run db:up`            | Start local Postgres (Docker)                                                           |
-| `npm run db:down`          | Stop local Postgres                                                                     |
-| `npm run db:generate`      | Generate a migration from schema changes — always use this rather than hand-writing SQL |
-| `npm run db:migrate`       | Apply pending migrations                                                                |
-| `npm run db:push`          | Push the schema with **no migration file** — local scratch only, never Neon             |
-| `npm run db:studio`        | Drizzle Studio                                                                          |
-| `npm run db:seed`          | Upsert owner password + optional sample data (`SEED_SAMPLE_DATA=0` to skip sample wipe) |
+| Script                     | Purpose                                                                                         |
+| -------------------------- | ----------------------------------------------------------------------------------------------- |
+| `npm run dev`              | Dev server on **http://localhost:3047**                                                         |
+| `npm start`                | Production server on **:3047** (post-build)                                                     |
+| `npm run build`            | Production build                                                                                |
+| `npm test`                 | Full suite (Vitest)                                                                             |
+| `npm run test:unit`        | Unit tests only — no database needed                                                            |
+| `npm run test:integration` | Database-backed tests (needs `db:up`)                                                           |
+| `npm run typecheck`        | `tsc --noEmit`                                                                                  |
+| `npm run lint`             | ESLint (warnings fail too)                                                                      |
+| `npm run lint:fix`         | ESLint with `--fix`                                                                             |
+| `npm run format`           | Prettier write-all                                                                              |
+| `npm run format:check`     | Prettier check (CI-friendly)                                                                    |
+| `npm run db:up`            | Start local Postgres (Docker)                                                                   |
+| `npm run db:down`          | Stop local Postgres                                                                             |
+| `npm run db:generate`      | Generate a migration from schema changes — always use this rather than hand-writing SQL         |
+| `npm run db:migrate`       | Apply pending migrations                                                                        |
+| `npm run db:push`          | Push the schema with **no migration file** — local scratch only, never Neon                     |
+| `npm run db:studio`        | Drizzle Studio                                                                                  |
+| `npm run db:seed`          | Local test account + sample data (`SEED_SAMPLE_DATA=0` to skip the wipe). Refuses in production |
+| `npm run user:create`      | Create, update, or rename an account — `-- --email … --password … [--rename-from …]`            |
 
 ## Testing
 
@@ -135,33 +148,35 @@ Hosting targets the free tiers: Vercel Hobby for the app, Neon for Postgres.
    changing.
 3. Set environment variables in the Vercel project:
 
-   | Variable                | Purpose                                                 |
-   | ----------------------- | ------------------------------------------------------- |
-   | `DATABASE_URL`          | Neon **pooled** string                                  |
-   | `DIRECT_DATABASE_URL`   | Neon **direct** string (migrations on production build) |
-   | `BETTER_AUTH_SECRET`    | `openssl rand -base64 32`                               |
-   | `BETTER_AUTH_URL`       | Production origin, e.g. `https://planner-….vercel.app`  |
-   | `AUTH_SEED_EMAIL`       | Your login email                                        |
-   | `AUTH_SEED_PASSWORD`    | Your login password (used only by seed, not runtime)    |
-   | `PLANNER_AGENT_API_KEY` | Optional; for `/api/agent/*`                            |
+   | Variable                   | Purpose                                                                |
+   | -------------------------- | ---------------------------------------------------------------------- |
+   | `DATABASE_URL`             | Neon **pooled** string                                                 |
+   | `DIRECT_DATABASE_URL`      | Neon **direct** string (migrations on production build)                |
+   | `BETTER_AUTH_SECRET`       | `openssl rand -base64 32`                                              |
+   | `BETTER_AUTH_URL`          | Production origin, e.g. `https://planner-….vercel.app`                 |
+   | `PLANNER_AGENT_API_KEY`    | Optional; for `/api/agent/*`                                           |
+   | `PLANNER_AGENT_USER_EMAIL` | Account the agent key acts as. **Required** — no default in production |
 
 4. Production builds run pending migrations when `VERCEL_ENV=production` (see
-   `scripts/migrate-on-deploy.mjs`). After the first auth deploy, set the owner password
-   against Neon **without** wiping data:
+   `scripts/migrate-on-deploy.mjs`). Create or update your account against Neon — this
+   touches only the identity rows and never your data:
 
    ```sh
    DATABASE_URL="<neon-string>" \
-   AUTH_SEED_EMAIL="you@example.com" \
-   AUTH_SEED_PASSWORD="your-strong-password" \
-   SEED_SAMPLE_DATA=0 \
-   npm run db:seed
+   npm run user:create -- --email you@example.com --password 'your-strong-password'
    ```
+
+   To change the address on an existing account without losing anything it owns, add
+   `--rename-from old@example.com`. The row keeps its `users.id`, so every node, note,
+   appointment and linked Google account comes with it.
 
 Vercel's Hobby tier is free but its terms limit it to non-commercial use. If this ever
 becomes something you sell, hosting has to move.
 
 ## Notes
 
-- **Auth:** Better Auth email/password; `getCurrentUserId()` reads the session. Agent tools
-  use Bearer `PLANNER_AGENT_API_KEY` → owner user (`src/lib/auth/owner.ts`).
+- **Auth:** Better Auth email/password; `getCurrentUserId()` reads the session. Three
+  identities are resolved separately in `src/lib/auth/identity.ts` — the session user, the
+  dev-bypass user (`AUTH_DEV_USER_EMAIL`), and the account agent tools act as
+  (`PLANNER_AGENT_USER_EMAIL`, Bearer `PLANNER_AGENT_API_KEY`).
 - `CLAUDE.md` is a symlink to `AGENTS.md`, so all coding agents read the same instructions.

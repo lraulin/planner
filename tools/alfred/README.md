@@ -143,7 +143,8 @@ and look under **Inbox**.
 
 - Do **not** put the API key or bypass secret in a committed workflow export.
 - Prefer workflow variables over hardcoding; check **Don’t Export** on both secrets.
-- The agent key maps to the single owner user (see `docs/agent-api.md`). The bypass
+- The agent key maps to one account — whichever `PLANNER_AGENT_USER_EMAIL` names on the
+  deployment being called (see `docs/agent-api.md`). The bypass
   secret is equally sensitive — anyone with it can hit the protected deployment.
 
 ## Troubleshooting

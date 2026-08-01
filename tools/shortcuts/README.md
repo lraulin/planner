@@ -185,7 +185,9 @@ setup** for the full detail.
 
 ## Security
 
-- The API key maps to the single owner user (see `docs/agent-api.md`).
+- The API key maps to one account — whichever `PLANNER_AGENT_USER_EMAIL` names on the
+  deployment being called (see `docs/agent-api.md`). Point the Shortcut at production, not a
+  local server, unless you mean to capture into the test account.
 - Keep the key and bypass secret in the Shortcut's own text actions. If you share the
   Shortcut — including via iCloud link — **the secrets go with it**. Clear them first.
 

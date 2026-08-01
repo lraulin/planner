@@ -22,6 +22,7 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx --env-file=.env.local src/db/seed.ts",
+    "user:create": "tsx --env-file=.env.local src/db/create-user.ts",
     "prepare": "husky"
   },
   "dependencies": {

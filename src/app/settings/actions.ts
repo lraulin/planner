@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUserId } from "@/lib/auth";
 import * as settings from "@/lib/settings/mutations";
-import { setCalendarSyncEnabled } from "@/lib/google/mutations";
+import { disconnectGoogle, setCalendarSyncEnabled } from "@/lib/google/mutations";
 import { refreshCalendarsFromGoogle } from "@/lib/google/sync";
 
 /**
@@ -68,6 +68,24 @@ export async function refreshGoogleCalendarsAction(): Promise<ActionResult> {
       ok: false,
       error:
         error instanceof Error ? error.message : "Could not reach Google Calendar.",
+    };
+  }
+}
+
+/**
+ * Detach the signed-in account from Google. Revalidates the whole layout because it empties
+ * the schedule of every mirrored event, not just the settings panel.
+ */
+export async function disconnectGoogleAction(): Promise<ActionResult> {
+  try {
+    const userId = await getCurrentUserId();
+    await disconnectGoogle(userId);
+    revalidatePath("/", "layout");
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Could not disconnect Google.",
     };
   }
 }

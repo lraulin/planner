@@ -1,17 +1,19 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { appointments, users } from "@/db/schema";
+import { accounts, appointments, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import type { GoogleCalendarListEntry } from "./client";
 import {
   clearCalendarLinks,
+  disconnectGoogle,
   markCalendarsSynced,
   refreshCalendarLinks,
   setCalendarSyncEnabled,
 } from "./mutations";
 import {
   enabledCalendarLinks,
+  isGoogleLinked,
   listCalendarLinks,
   pushTargetCalendarId,
   syncIsStale,
@@ -43,6 +45,48 @@ async function makeUser(): Promise<string> {
 
 function entry(over: Partial<GoogleCalendarListEntry> = {}): GoogleCalendarListEntry {
   return { id: "personal@example.com", summary: "Personal", ...over };
+}
+
+/** Stand in for a completed OAuth link — the row Better Auth would have written. */
+async function linkGoogle(userId: string): Promise<void> {
+  await db.insert(accounts).values({
+    userId,
+    accountId: `google-${crypto.randomUUID()}`,
+    providerId: "google",
+    accessToken: "token",
+  });
+}
+
+/**
+ * An appointment on the calendar. Passing `externalId` makes it a mirrored Google event;
+ * omitting it makes it one that only ever existed in the planner.
+ */
+async function makeAppointment(
+  userId: string,
+  options: { externalId?: string; calendarId?: string } = {},
+): Promise<void> {
+  const start = new Date("2026-08-03T14:00:00Z");
+  await db.insert(appointments).values({
+    userId,
+    subject: options.externalId ? "Mirrored" : "Local only",
+    startAt: start,
+    endAt: new Date(start.getTime() + 30 * 60_000),
+    ...(options.externalId
+      ? {
+          externalSource: "google",
+          externalId: options.externalId,
+          externalCalendarId: options.calendarId ?? "owner@x",
+        }
+      : {}),
+  });
+}
+
+async function appointmentSubjects(userId: string): Promise<string[]> {
+  const rows = await db
+    .select({ subject: appointments.subject })
+    .from(appointments)
+    .where(eq(appointments.userId, userId));
+  return rows.map((r) => r.subject).sort();
 }
 
 afterAll(async () => {
@@ -236,6 +280,40 @@ describeDb("syncIsStale", () => {
   });
 });
 
+describeDb("disconnectGoogle", () => {
+  it("removes the link, the calendar list, and the mirror", async () => {
+    const userId = await makeUser();
+    await linkGoogle(userId);
+    await refreshCalendarLinks(userId, [entry({ id: "owner@x", primary: true })]);
+    await makeAppointment(userId, { externalId: "event-1" });
+
+    await disconnectGoogle(userId);
+
+    expect(await isGoogleLinked(userId)).toBe(false);
+    expect(await listCalendarLinks(userId)).toEqual([]);
+    expect(await appointmentSubjects(userId)).toEqual([]);
+  });
+
+  it("keeps appointments that only ever existed in the planner", async () => {
+    // Google-origin rows still exist in Google and come back on a re-link. A row that was
+    // never pushed anywhere exists nowhere else, so deleting it would lose it outright.
+    const userId = await makeUser();
+    await linkGoogle(userId);
+    await makeAppointment(userId, { externalId: "event-1" });
+    await makeAppointment(userId);
+
+    await disconnectGoogle(userId);
+
+    expect(await appointmentSubjects(userId)).toEqual(["Local only"]);
+  });
+
+  it("is safe to run on an account that was never linked", async () => {
+    const userId = await makeUser();
+    await expect(disconnectGoogle(userId)).resolves.toBeUndefined();
+    expect(await isGoogleLinked(userId)).toBe(false);
+  });
+});
+
 describeDb("cross-user isolation", () => {
   it("does not let one user read, change, or delete another's calendar links", async () => {
     const ownerId = await makeUser();
@@ -264,6 +342,21 @@ describeDb("cross-user isolation", () => {
     expect(ownerLinks).toHaveLength(1);
     expect(ownerLinks[0].syncEnabled).toBe(true);
     expect(ownerLinks[0].lastSyncedAt).toBeNull();
+  });
+
+  it("does not let disconnecting one account touch another's", async () => {
+    const ownerId = await makeUser();
+    const intruderId = await makeUser();
+
+    await linkGoogle(ownerId);
+    await refreshCalendarLinks(ownerId, [entry({ id: "owner@x", primary: true })]);
+    await makeAppointment(ownerId, { externalId: "owner-event" });
+
+    await disconnectGoogle(intruderId);
+
+    expect(await isGoogleLinked(ownerId)).toBe(true);
+    expect(await listCalendarLinks(ownerId)).toHaveLength(1);
+    expect(await appointmentSubjects(ownerId)).toEqual(["Mirrored"]);
   });
 
   it("keeps two users' identical calendar ids apart", async () => {
