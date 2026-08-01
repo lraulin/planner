@@ -171,6 +171,10 @@ export async function syncWindowIfStale(
   userId: string,
   window: MirrorWindow,
 ): Promise<SyncStatus> {
+  // "Off" and "fresh" are different answers and the UI treats them differently: off hides
+  // the Refresh button entirely, fresh leaves it available. Checking staleness first would
+  // report an unconfigured install as merely fresh, and offer a button that can only fail.
+  if ((await enabledCalendarLinks(userId)).length === 0) return { state: "off" };
   if (!(await syncIsStale(userId, SYNC_MAX_AGE_MS))) return { state: "skipped" };
   return syncWindow(userId, window);
 }
