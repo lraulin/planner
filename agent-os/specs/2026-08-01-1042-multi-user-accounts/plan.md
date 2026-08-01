@@ -141,6 +141,39 @@ integration suites. The disconnect was exercised through the real UI — 11 mirr
 appointments and both calendar links removed, the one planner-native appointment kept, the
 `google` row in `accounts` gone. Screenshots in `.artifacts/planner-shots/` (`01`–`05`).
 
+### Remaining: the production rename (run by hand)
+
+The spec stays **active** until this is done. Nothing is broken meanwhile —
+`PLANNER_AGENT_USER_EMAIL` is already set in production, so the new fail-closed check
+passes and the deployed app keeps working as `dev@example.com`.
+
+```sh
+# 1. Confirm what production actually has, before changing anything.
+vercel env pull --environment=production .env.production.local
+grep -E '^(PLANNER_AGENT_USER_EMAIL|DIRECT_DATABASE_URL)=' .env.production.local
+DIRECT="$(grep '^DIRECT_DATABASE_URL=' .env.production.local | cut -d= -f2- | tr -d '"')"
+psql "$DIRECT" -c 'select id, email, name from users;'
+
+# 2. Rename in place. Read the password rather than typing it into shell history.
+read -rs USER_PASSWORD && export USER_PASSWORD
+DATABASE_URL="$DIRECT" npm run user:create -- \
+  --email leeraulin@gmail.com --rename-from dev@example.com --name "Lee"
+unset USER_PASSWORD
+
+# 3. Repoint the agent identity — in BOTH environments, since previews share the database.
+for env in production preview; do
+  vercel env rm PLANNER_AGENT_USER_EMAIL "$env" --yes
+  echo "leeraulin@gmail.com" | vercel env add PLANNER_AGENT_USER_EMAIL "$env"
+done
+vercel --prod          # env changes only take effect on a new deployment
+
+rm .env.production.local
+```
+
+Then verify: sign in at the production URL as `leeraulin@gmail.com`; the outline still shows
+your data (same `users.id`); Settings still reports Google as linked; an agent call with the
+production Bearer key returns your tree.
+
 ---
 
 ## Changes from original plan

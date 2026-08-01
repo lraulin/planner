@@ -183,9 +183,15 @@ Features that complete or surround the original product, plus making it multi-de
 
 - **✅ Multi-user accounts & auth (personal gate).** `specs/2026-07-29-1630-email-password-auth`.
   Better Auth self-run (email/password, no public signup), session-backed
-  `getCurrentUserId()`, middleware redirects guests to `/login`. Owner provisioned via
-  seed/env. Schema was already multi-user-ready; second-user invite UI and OAuth still
-  open.
+  `getCurrentUserId()`, middleware redirects guests to `/login`. Schema was already
+  multi-user-ready.
+- **✅ Real multiple accounts, and a test identity that is not one.**
+  `specs/2026-08-01-1042-multi-user-accounts`. `npm run user:create` provisions, updates, or
+  renames an account in place, so a second person is one command rather than a schema
+  question. Session / dev-bypass / agent identities resolve separately — they were one
+  function, which is how the local app ended up writing to a real Google Calendar with
+  nobody signed in. Settings gained **Disconnect Google** and shows which account it is
+  serving. Invite UI and per-user agent API keys still open.
 - **Sync / multi-device.** Already implied by web + Neon; polish only if friction appears.
 - **Responsive / mobile (iPhone-first).** `specs/2026-07-31-1938-responsive-mobile`. The app is
   installable as a PWA but was built as a desktop instrument — a 13px, 28px-row grid driven by
