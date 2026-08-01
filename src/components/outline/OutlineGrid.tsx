@@ -752,8 +752,11 @@ function FilterBar({
   onResetGrid: () => void;
 }) {
   return (
-    <div className="flex flex-none flex-wrap items-center gap-x-4 gap-y-2 border-b border-rule px-3 py-2">
-      <div className="flex items-center gap-1">
+    // Scrolls sideways below `md` rather than wrapping into three rows, matching
+    // `TabToolbar`. The buttons stay — several of them are the only tappable path to a
+    // keyboard-only command.
+    <div className="flex flex-none flex-nowrap items-center gap-x-4 gap-y-2 overflow-x-auto border-b border-rule px-3 py-2 md:flex-wrap md:overflow-x-visible">
+      <div className="flex flex-none items-center gap-1">
         <Command onClick={onAddResultArea}>New result area</Command>
         <Command onClick={onAddGoal} disabled={!hasSelection}>
           New goal
@@ -766,9 +769,9 @@ function FilterBar({
         </Command>
       </div>
 
-      <span className="h-4 w-px bg-rule" aria-hidden />
+      <span className="h-4 w-px flex-none bg-rule" aria-hidden />
 
-      <div className="flex items-center gap-1">
+      <div className="flex flex-none items-center gap-1">
         <Command onClick={commands.openDetail} disabled={!hasSelection} title="Enter">
           Open
         </Command>
@@ -777,9 +780,9 @@ function FilterBar({
         </Command>
       </div>
 
-      <span className="h-4 w-px bg-rule" aria-hidden />
+      <span className="h-4 w-px flex-none bg-rule" aria-hidden />
 
-      <div className="flex items-center gap-1">
+      <div className="flex flex-none items-center gap-1">
         <Command onClick={commands.outdent} disabled={!hasSelection} title="Shift+Tab">
           ←
         </Command>
@@ -846,7 +849,7 @@ function Command({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className="rounded border border-rule px-2 py-1 text-[0.8125rem] leading-none text-ink transition-colors hover:border-rule-strong hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+      className="min-h-tap flex-none rounded border border-rule px-2 py-1 text-[0.8125rem] leading-none whitespace-nowrap text-ink transition-colors hover:border-rule-strong hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent md:min-h-0"
     >
       {children}
     </button>

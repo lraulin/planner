@@ -34,6 +34,8 @@ import {
   TIME_CHART_TEMPLATE_WEEK_START,
   weekdayOfTemplateDate,
 } from "@/lib/schedule/timeChartTemplate";
+import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
+import { WideSurface } from "@/components/shell/WideSurface";
 import { TimeChartAreaPanel } from "./TimeChartAreaPanel";
 
 type Props = {
@@ -276,9 +278,16 @@ export function TimeChartEditorView({ chart, initialAreas, nodes, returnTo }: Pr
     startTransition(() => router.refresh());
   }
 
+  /**
+   * `modal-pattern.md` requires every dialog to be a `ModalShell`, and this was the last
+   * `window.confirm` in the app. It also blocks the whole page on a phone in a way the
+   * in-app dialog does not.
+   */
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
   async function handleDeleteSelected() {
+    setConfirmingDelete(false);
     if (!selectedId) return;
-    if (!window.confirm("Delete this Time Chart area?")) return;
     const result = await deleteTimeChartAreaAction(selectedId);
     if (!result.ok) {
       setError(result.error);
@@ -329,7 +338,10 @@ export function TimeChartEditorView({ chart, initialAreas, nodes, returnTo }: Pr
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1">
+      <WideSurface
+        note="The Time Chart editor is a drag surface built for a mouse — scroll sideways to reach the area panel."
+        minWidthClass="max-md:min-w-[56rem]"
+      >
         <div className="schedule-calendar time-chart-editor min-h-0 min-w-0 flex-1">
           <FullCalendar
             ref={calendarRef}
@@ -374,10 +386,20 @@ export function TimeChartEditorView({ chart, initialAreas, nodes, returnTo }: Pr
             nodes={nodes}
             nameInputRef={nameInputRef}
             onChange={asyncHandler(onPanelChange, setError)}
-            onDelete={asyncHandler(handleDeleteSelected, setError)}
+            onDelete={() => setConfirmingDelete(true)}
           />
         </aside>
-      </div>
+      </WideSurface>
+
+      <ConfirmDialog
+        open={confirmingDelete}
+        title="Delete area?"
+        message="This removes the area from the Time Chart. Appointments already scheduled against it are not affected."
+        confirmLabel="Delete"
+        destructive
+        onConfirm={asyncHandler(handleDeleteSelected, setError)}
+        onCancel={() => setConfirmingDelete(false)}
+      />
     </div>
   );
 }

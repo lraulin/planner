@@ -2,6 +2,7 @@
 
 import { useCallback, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { useIsCompact } from "@/components/shell/useIsCompact";
 import type { Appointment, AppointmentCheck, TimeChart } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { SchedulePayload } from "@/lib/schedule/queries";
@@ -114,6 +115,35 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
     },
     [router, selectedChartId],
   );
+
+  const compact = useIsCompact();
+  /**
+   * Which day the compact layout shows, as an index into the week already loaded. The week
+   * stays in the URL — this only picks a column out of it — so stepping past either end
+   * navigates to the neighbouring week and lands on its far day.
+   */
+  const [dayOffset, setDayOffset] = useState(() => {
+    // Open on today when the loaded week contains it — landing on Sunday because that is
+    // where the week starts is technically correct and never what you wanted.
+    const todayKey = toDateKey(new Date());
+    const index = weekDays(fromDateKey(weekKey)).findIndex(
+      (day) => toDateKey(day) === todayKey,
+    );
+    return index === -1 ? 0 : index;
+  });
+  const compactDay = days[dayOffset] ?? days[0];
+
+  function stepDay(delta: number) {
+    const next = dayOffset + delta;
+    if (next >= 0 && next <= 6) {
+      setDayOffset(next);
+      return;
+    }
+    const target = new Date(weekStart);
+    target.setDate(target.getDate() + next);
+    setDayOffset(next < 0 ? 6 : 0);
+    navigateWeek(target);
+  }
 
   const selectChart = useCallback(
     (id: string) => {
@@ -253,7 +283,9 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
       {/* Toolbar — Achieve's Time Chart / Today bar */}
-      <div className="flex flex-none flex-wrap items-center gap-2 border-b border-rule bg-shell px-3 py-1.5 text-[0.8125rem]">
+      {/* Scrolls sideways below `md` rather than wrapping into three rows, the same trade
+          `TabToolbar` makes. */}
+      <div className="flex flex-none flex-nowrap items-center gap-2 overflow-x-auto border-b border-rule bg-shell px-3 py-1.5 text-[0.8125rem] md:flex-wrap md:overflow-x-visible">
         <label className="flex items-center gap-1.5 text-ink-muted">
           Time Chart:
           <select
@@ -298,7 +330,38 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
         >
           Plan Week…
         </button>
-        <div className="ml-auto flex items-center gap-1">
+        {/*
+         * A day pager below `md`, stepping across week boundaries by navigating the week and
+         * landing on the right end of it. The week pager beside it is hidden there — a
+         * seven-column grid on a phone is not something to page through.
+         */}
+        <div className="ml-auto flex items-center gap-1 md:hidden">
+          <button
+            type="button"
+            aria-label="Previous day"
+            className="min-h-tap rounded border border-rule bg-surface px-3 text-ink"
+            onClick={() => stepDay(-1)}
+          >
+            ‹
+          </button>
+          <span className="tabular min-w-[8rem] text-center text-ink">
+            {compactDay.toLocaleDateString(undefined, {
+              weekday: "short",
+              month: "short",
+              day: "numeric",
+            })}
+          </span>
+          <button
+            type="button"
+            aria-label="Next day"
+            className="min-h-tap rounded border border-rule bg-surface px-3 text-ink"
+            onClick={() => stepDay(1)}
+          >
+            ›
+          </button>
+        </div>
+
+        <div className="ml-auto hidden items-center gap-1 md:flex">
           <button
             type="button"
             aria-label="Previous week"
@@ -342,6 +405,7 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
         <div className="min-h-0 min-w-0 flex-1">
           <WeekCalendar
             weekStart={weekStart}
+            singleDay={compact ? compactDay : undefined}
             backgroundEvents={backgroundEvents}
             occurrences={occurrences}
             onSelectRange={handleCreateRange}
@@ -352,7 +416,9 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
           />
         </div>
 
-        <aside className="flex w-56 flex-none flex-col border-l border-rule bg-shell">
+        {/* The mini-month and the drag-a-project-onto-the-week rail are both mouse surfaces,
+            and neither fits beside a day column. */}
+        <aside className="hidden w-56 flex-none flex-col border-l border-rule bg-shell md:flex">
           <div className="border-b border-rule p-2">
             <MiniMonth
               month={weekStart}

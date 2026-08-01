@@ -293,8 +293,9 @@ export function WeeklyPlanView({ payload, weekKey, step }: Props) {
         )}
       </div>
 
-      {/* Step strip */}
-      <div className="flex flex-none flex-wrap items-center gap-1 border-b border-rule bg-shell px-3 py-1.5">
+      {/* Step strip — scrolls rather than wrapping below `md`, so the seven steps stay on
+          one line and the wizard's content keeps the height. */}
+      <div className="flex flex-none flex-nowrap items-center gap-1 overflow-x-auto border-b border-rule bg-shell px-3 py-1.5 md:flex-wrap md:overflow-x-visible">
         {activeSteps.map((s) => {
           const active = s === clampedStep;
           return (
@@ -302,7 +303,7 @@ export function WeeklyPlanView({ payload, weekKey, step }: Props) {
               key={s}
               type="button"
               disabled={s > 0 && !plan}
-              className={`rounded px-2.5 py-1 text-[0.8125rem] ${
+              className={`min-h-tap flex-none rounded px-2.5 py-1 text-[0.8125rem] whitespace-nowrap md:min-h-0 ${
                 active
                   ? "bg-select font-medium text-ink ring-1 ring-select-edge"
                   : "text-ink-muted hover:bg-surface-raised hover:text-ink disabled:opacity-40"

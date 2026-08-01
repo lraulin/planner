@@ -32,6 +32,8 @@ type BackgroundEvent = {
 
 type Props = {
   weekStart: Date;
+  /** Set to render a single day instead of the week — the compact layout. */
+  singleDay?: Date;
   backgroundEvents: BackgroundEvent[];
   occurrences: Occurrence[];
   onSelectRange: (start: Date, end: Date) => void;
@@ -53,6 +55,7 @@ type Props = {
 
 export function WeekCalendar({
   weekStart,
+  singleDay,
   backgroundEvents,
   occurrences,
   onSelectRange,
@@ -131,11 +134,16 @@ export function WeekCalendar({
         if (e.key === "Control" || e.key === "Meta") ctrlDown.current = false;
       }}
     >
+      {/*
+       * `singleDay` switches to a one-day column below `md`. Seven days × 24 hours at 390px
+       * is 55px per day — not a calendar, a texture. The key carries the view so a change of
+       * breakpoint remounts rather than leaving FullCalendar on the old one.
+       */}
       <FullCalendar
-        key={weekStart.toISOString()}
+        key={`${singleDay ? "day" : "week"}:${(singleDay ?? weekStart).toISOString()}`}
         plugins={[timeGridPlugin, dayGridPlugin, interactionPlugin]}
-        initialView="timeGridWeek"
-        initialDate={weekStart}
+        initialView={singleDay ? "timeGridDay" : "timeGridWeek"}
+        initialDate={singleDay ?? weekStart}
         headerToolbar={false}
         height="100%"
         allDaySlot

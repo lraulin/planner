@@ -13,6 +13,7 @@ import {
   planNodeForDayAction,
   type ActionResult,
 } from "@/app/day/actions";
+import { WideSurface } from "@/components/shell/WideSurface";
 import { DayHeader } from "./DayHeader";
 
 /**
@@ -102,7 +103,10 @@ export function WeekPlanView({
       <DayHeader day={initial.weekStart} today={today} mode="week" />
       {error && <ErrorBanner message={error} />}
 
-      <div className="flex min-h-0 flex-1">
+      <WideSurface
+        note="The week board is built to be seen whole — scroll sideways, or use the Day tab on a phone."
+        minWidthClass="max-md:min-w-[64rem]"
+      >
         {/* Master task list */}
         <section
           aria-label="Master task list"
@@ -195,7 +199,7 @@ export function WeekPlanView({
             </section>
           ))}
         </div>
-      </div>
+      </WideSurface>
     </div>
   );
 }

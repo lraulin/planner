@@ -23,7 +23,9 @@ const HINTS: { keys: string[]; label: string }[] = [
 
 export function HintBar() {
   return (
-    <footer className="flex flex-none flex-wrap items-center gap-x-4 gap-y-1 border-t border-rule bg-surface-raised px-3 py-1.5 text-[0.6875rem] text-ink-muted">
+    // Hidden below `md`: it is a reference for keys, drag and right-click, none of which a
+    // phone has, and it was costing 180px of a 844px screen to say so.
+    <footer className="hidden flex-none flex-wrap items-center gap-x-4 gap-y-1 border-t border-rule bg-surface-raised px-3 py-1.5 text-[0.6875rem] text-ink-muted md:flex">
       {HINTS.map((hint) => (
         <span key={hint.label} className="flex items-center gap-1">
           {hint.keys.map((key, index) => (
