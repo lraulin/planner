@@ -120,6 +120,13 @@
       "when": 1785522010667,
       "tag": "0016_fast_ma_gnuci",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1785550950513,
+      "tag": "0017_blushing_goblin_queen",
+      "breakpoints": true
     }
   ]
 }

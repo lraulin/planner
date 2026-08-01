@@ -1,0 +1,233 @@
+import { describe, expect, it } from "vitest";
+import type { GoogleEvent } from "./mapping";
+import {
+  planMirror,
+  type LocalMirrorRow,
+  type MirrorWindow,
+  type RemoteEvent,
+} from "./mirror";
+
+const CAL = "cal@example.com";
+const OTHER_CAL = "work@example.com";
+
+/** Mon 2026-07-27 → Mon 2026-08-03, the shape `loadSchedule` syncs. */
+const window: MirrorWindow = {
+  start: new Date(2026, 6, 27),
+  end: new Date(2026, 7, 3),
+};
+
+function remoteEvent(over: Partial<GoogleEvent> = {}, calendarId = CAL): RemoteEvent {
+  return {
+    calendarId,
+    event: {
+      id: "evt1",
+      etag: '"v1"',
+      summary: "Standup",
+      start: { dateTime: new Date(2026, 6, 28, 9, 0).toISOString() },
+      end: { dateTime: new Date(2026, 6, 28, 9, 15).toISOString() },
+      ...over,
+    },
+  };
+}
+
+function localRow(over: Partial<LocalMirrorRow> = {}): LocalMirrorRow {
+  return {
+    id: "row1",
+    externalSource: "google",
+    externalId: "evt1",
+    externalCalendarId: CAL,
+    externalEtag: '"v1"',
+    startAt: new Date(2026, 6, 28, 9, 0),
+    endAt: new Date(2026, 6, 28, 9, 15),
+    ...over,
+  };
+}
+
+describe("planMirror — pulling", () => {
+  it("inserts an event we have never seen", () => {
+    const plan = planMirror([], [remoteEvent()], window, [CAL]);
+    expect(plan.toInsert).toHaveLength(1);
+    expect(plan.toInsert[0].externalId).toBe("evt1");
+    expect(plan.toUpdate).toEqual([]);
+    expect(plan.toDelete).toEqual([]);
+  });
+
+  it("updates a row whose etag moved", () => {
+    const plan = planMirror(
+      [localRow({ externalEtag: '"v1"' })],
+      [remoteEvent({ etag: '"v2"', summary: "Standup (moved)" })],
+      window,
+      [CAL],
+    );
+    expect(plan.toUpdate).toHaveLength(1);
+    expect(plan.toUpdate[0].id).toBe("row1");
+    expect(plan.toUpdate[0].fields.subject).toBe("Standup (moved)");
+    expect(plan.toInsert).toEqual([]);
+  });
+
+  it("skips the write entirely when the etag is unchanged", () => {
+    const plan = planMirror([localRow()], [remoteEvent()], window, [CAL]);
+    expect(plan.toUpdate).toEqual([]);
+    expect(plan.toInsert).toEqual([]);
+    expect(plan.toDelete).toEqual([]);
+  });
+
+  it("updates when the local row has no etag to compare", () => {
+    const plan = planMirror(
+      [localRow({ externalEtag: null })],
+      [remoteEvent()],
+      window,
+      [CAL],
+    );
+    expect(plan.toUpdate).toHaveLength(1);
+  });
+
+  it("counts unmappable events instead of applying them", () => {
+    const plan = planMirror(
+      [],
+      [
+        remoteEvent({ status: "cancelled" }),
+        remoteEvent({ id: "evt2", start: undefined }),
+      ],
+      window,
+      [CAL],
+    );
+    expect(plan.skipped).toBe(2);
+    expect(plan.toInsert).toEqual([]);
+  });
+
+  it("queues one write when Google lists the same id twice", () => {
+    const plan = planMirror([], [remoteEvent(), remoteEvent()], window, [CAL]);
+    expect(plan.toInsert).toHaveLength(1);
+  });
+
+  it("treats each instance of a recurring series as its own row", () => {
+    const plan = planMirror(
+      [],
+      [
+        remoteEvent({ id: "evt1_20260728T090000Z", recurringEventId: "evt1" }),
+        remoteEvent({ id: "evt1_20260729T090000Z", recurringEventId: "evt1" }),
+      ],
+      window,
+      [CAL],
+    );
+    expect(plan.toInsert).toHaveLength(2);
+    expect(plan.toInsert.map((f) => f.externalSeriesId)).toEqual(["evt1", "evt1"]);
+  });
+});
+
+describe("planMirror — the deletion sweep", () => {
+  it("deletes a google row Google no longer lists", () => {
+    const plan = planMirror([localRow()], [], window, [CAL]);
+    expect(plan.toDelete).toEqual(["row1"]);
+  });
+
+  it("never deletes a local-only row, whatever Google says", () => {
+    // The row a user made here before linking Google, or one whose push failed. Google was
+    // never asked about it and has no opinion; reaping it would be data loss.
+    const plan = planMirror(
+      [localRow({ externalSource: null, externalId: null, externalCalendarId: null })],
+      [],
+      window,
+      [CAL],
+    );
+    expect(plan.toDelete).toEqual([]);
+  });
+
+  it("never deletes a row outside the synced window", () => {
+    // We asked Google about one week. Its silence about last month is not evidence.
+    const plan = planMirror(
+      [
+        localRow({
+          id: "old",
+          startAt: new Date(2026, 5, 1, 9, 0),
+          endAt: new Date(2026, 5, 1, 10, 0),
+        }),
+      ],
+      [],
+      window,
+      [CAL],
+    );
+    expect(plan.toDelete).toEqual([]);
+  });
+
+  it("keeps a row that merely overlaps the window edge", () => {
+    const plan = planMirror(
+      [
+        localRow({
+          id: "straddler",
+          startAt: new Date(2026, 6, 26, 23, 0),
+          endAt: new Date(2026, 6, 27, 1, 0),
+        }),
+      ],
+      [],
+      window,
+      [CAL],
+    );
+    // It does overlap, so it is in scope and Google's silence does mean deleted.
+    expect(plan.toDelete).toEqual(["straddler"]);
+  });
+
+  it("never deletes rows from a calendar this pass did not read", () => {
+    // The failure that motivates the predicate: two calendars enabled, one request throws.
+    // The caller passes only the calendar that answered, and the other is left alone.
+    const plan = planMirror(
+      [
+        localRow({ id: "a", externalId: "a1" }),
+        localRow({ id: "b", externalId: "b1", externalCalendarId: OTHER_CAL }),
+      ],
+      [],
+      window,
+      [CAL],
+    );
+    expect(plan.toDelete).toEqual(["a"]);
+  });
+
+  it("never deletes a row with no calendar recorded", () => {
+    const plan = planMirror([localRow({ externalCalendarId: null })], [], window, [
+      CAL,
+    ]);
+    expect(plan.toDelete).toEqual([]);
+  });
+
+  it("keeps a row Google still lists", () => {
+    const plan = planMirror([localRow()], [remoteEvent()], window, [CAL]);
+    expect(plan.toDelete).toEqual([]);
+  });
+
+  it("deletes a row whose event was cancelled in Google", () => {
+    // Cancelled events map to null, so they are never "seen" — the sweep reaps them.
+    const plan = planMirror(
+      [localRow()],
+      [remoteEvent({ status: "cancelled" })],
+      window,
+      [CAL],
+    );
+    expect(plan.toDelete).toEqual(["row1"]);
+  });
+
+  it("handles insert, update and delete together in one pass", () => {
+    const plan = planMirror(
+      [
+        localRow({ id: "keep", externalId: "keep1", externalEtag: '"old"' }),
+        localRow({ id: "gone", externalId: "gone1" }),
+      ],
+      [
+        remoteEvent({ id: "keep1", etag: '"new"' }),
+        remoteEvent({ id: "fresh1", etag: '"n"' }),
+      ],
+      window,
+      [CAL],
+    );
+    expect(plan.toUpdate.map((u) => u.id)).toEqual(["keep"]);
+    expect(plan.toInsert.map((f) => f.externalId)).toEqual(["fresh1"]);
+    expect(plan.toDelete).toEqual(["gone"]);
+  });
+
+  it("plans nothing at all when a fetch returns nothing and no calendar is claimed", () => {
+    // Total failure path: the caller reports zero successful calendars, so the sweep is
+    // inert even though `remote` is empty and every row looks unseen.
+    const plan = planMirror([localRow()], [], window, []);
+    expect(plan).toEqual({ toInsert: [], toUpdate: [], toDelete: [], skipped: 0 });
+  });
+});

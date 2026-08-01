@@ -827,12 +827,83 @@ export const appointments = pgTable(
     recurrenceEnd: recurrenceEndEnum("recurrence_end").notNull().default("never"),
     recurrenceCount: integer("recurrence_count"),
     recurrenceUntil: timestamp("recurrence_until", { withTimezone: true }),
+    /**
+     * Where this row came from — `"google"` for anything mirrored from Google Calendar.
+     * Null means the row only ever existed here, which after the sync work is either a
+     * pre-Google leftover or a row whose write to Google failed.
+     *
+     * Google is the source of truth for the columns above `checkState`; the columns below
+     * it (`checkState`, `priority*`, `contexts`, `private`, `projectId`) are ours and the
+     * mirror never writes them. See `agent-os/specs/2026-07-31-2046-google-calendar-sync/`.
+     */
+    externalSource: text("external_source"),
+    /**
+     * Google's event id. For a recurring series this is the *instance* id
+     * (`{eventId}_{timestamp}`), because we ask Google to expand series for us and store
+     * one row per occurrence rather than a master plus a recurrence rule.
+     *
+     * Instance ids are stable, which is what lets our local-only annotations survive a
+     * re-sync of a recurring event.
+     */
+    externalId: text("external_id"),
+    /**
+     * Google's `recurringEventId` — the series this instance belongs to, null for one-offs.
+     * We never edit a series here (there is no local master to edit); this exists so the UI
+     * can mark an event as recurring and link out to Google to change the series.
+     */
+    externalSeriesId: text("external_series_id"),
+    /** Which Google calendar the event lives on; needed to address it for patch/delete. */
+    externalCalendarId: text("external_calendar_id"),
+    /** Google's `etag`, so an unchanged event can skip a write. */
+    externalEtag: text("external_etag"),
+    /** Google's `updated` timestamp, kept for debugging a stale mirror. */
+    externalUpdatedAt: timestamp("external_updated_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index("appointments_user_range_idx").on(table.userId, table.startAt, table.endAt),
     index("appointments_user_project_idx").on(table.userId, table.projectId),
+    // One row per Google event, per user — the same shape as `nodes_external_ref_uq`.
+    // Partial so the rows with no external id (local-only) are not all fighting over one
+    // key. This is what makes the mirror's upsert idempotent rather than a race.
+    uniqueIndex("appointments_external_ref_uq")
+      .on(table.userId, table.externalSource, table.externalId)
+      .where(sql`${table.externalId} is not null`),
+  ],
+);
+
+/**
+ * A Google calendar this user has connected, and whether it is mirrored into
+ * `appointments`. Rows are refreshed from Google's `calendarList` when the settings panel
+ * is opened; `syncEnabled` is the user's choice and survives that refresh.
+ *
+ * Sync state rather than UI preference, so a table rather than `user_settings`:
+ * `lastSyncedAt` drives the staleness throttle that decides whether loading `/schedule`
+ * should hit Google at all.
+ */
+export const googleCalendarLinks = pgTable(
+  "google_calendar_links",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Google's calendar id — an email-shaped string, or `"primary"`'s resolved id. */
+    calendarId: text("calendar_id").notNull(),
+    summary: text("summary").notNull().default(""),
+    /** Google's colour for the calendar, used to tint its events in the week grid. */
+    backgroundColor: text("background_color").notNull().default(""),
+    /** Whether events from this calendar are mirrored. Off by default for noisy ones. */
+    syncEnabled: boolean("sync_enabled").notNull().default(false),
+    /** Google's own `primary` flag — where appointments created here are written. */
+    isPrimary: boolean("is_primary").notNull().default(false),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("google_calendar_links_user_cal_uq").on(table.userId, table.calendarId),
   ],
 );
 
@@ -967,6 +1038,8 @@ export type TimeChart = typeof timeCharts.$inferSelect;
 export type TimeChartArea = typeof timeChartAreas.$inferSelect;
 export type Appointment = typeof appointments.$inferSelect;
 export type NewAppointment = typeof appointments.$inferInsert;
+export type GoogleCalendarLink = typeof googleCalendarLinks.$inferSelect;
+export type NewGoogleCalendarLink = typeof googleCalendarLinks.$inferInsert;
 /**
  * A row's origin outside this app — see `nodes.externalSource` / `nodes.externalId`.
  *
