@@ -341,9 +341,9 @@ describeDb("completing from the day page", () => {
     expect(rows.find((r) => r.day === tomorrowKey())!.completedAt).toBeNull();
   });
 
-  it("does not plant a second day row when the task is completed elsewhere", async () => {
-    // Ticking it in the outline leaves the day line open — it is still what you planned
-    // for today — and a second open row would collide with the one-open-day-per-task index.
+  it("does the same when the recurring task is completed from the outline", async () => {
+    // Completing a task means the same thing wherever you do it. Ticking it in the outline
+    // checks off its day line and opens tomorrow's, exactly as the day page would.
     const nodeId = await makeTask(userId, "Brush teeth");
     await saveNodeDetail(userId, nodeId, {
       task: { recurrenceFrequency: "daily", recurrenceInterval: 1 },
@@ -356,25 +356,76 @@ describeDb("completing from the day page", () => {
       .select()
       .from(dailyItems)
       .where(and(eq(dailyItems.userId, userId), eq(dailyItems.nodeId, nodeId)));
-    expect(rows).toHaveLength(1);
-    expect(rows[0].completedAt).toBeNull();
+    expect(rows).toHaveLength(2);
+    expect(rows.find((r) => r.day === todayKey())!.completedAt).not.toBeNull();
+    expect(rows.find((r) => r.day === tomorrowKey())!.completedAt).toBeNull();
   });
 
-  it("leaves a non-recurring task on the day it was done", async () => {
+  it("checks off the day line for a plain task completed in the outline", async () => {
+    // No next occurrence to open, but the day page must not go on claiming it is unfinished.
     const nodeId = await makeTask(userId, "One-off");
     await planNodeForDay(userId, nodeId, todayKey());
-    const [item] = await db
-      .select()
-      .from(dailyItems)
-      .where(and(eq(dailyItems.userId, userId), eq(dailyItems.nodeId, nodeId)));
 
-    await setDailyItemState(userId, item.id, "completed");
+    await setState(userId, nodeId, "completed");
 
     const rows = await db
       .select()
       .from(dailyItems)
       .where(and(eq(dailyItems.userId, userId), eq(dailyItems.nodeId, nodeId)));
     expect(rows).toHaveLength(1);
+    expect(rows[0].completedAt).not.toBeNull();
+    expect(rows[0].state).toBe("completed");
+  });
+
+  it("un-checks the day line when the task is reopened the same day", async () => {
+    // The mis-click case. Correcting today is fair; rewriting an older day is not.
+    const nodeId = await makeTask(userId, "One-off");
+    await planNodeForDay(userId, nodeId, todayKey());
+    await setState(userId, nodeId, "completed");
+
+    await setState(userId, nodeId, "in_progress");
+
+    const rows = await db
+      .select()
+      .from(dailyItems)
+      .where(and(eq(dailyItems.userId, userId), eq(dailyItems.nodeId, nodeId)));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].completedAt).toBeNull();
+  });
+
+  it("leaves a cycled routine's completed line alone when the task is reopened", async () => {
+    // It really was done that day, and the next occurrence's line is already open — which
+    // is also what stops this from colliding with the one-open-day-per-task index.
+    const nodeId = await makeTask(userId, "Brush teeth");
+    await saveNodeDetail(userId, nodeId, {
+      task: { recurrenceFrequency: "daily", recurrenceInterval: 1 },
+    });
+    await planNodeForDay(userId, nodeId, todayKey());
+    await setState(userId, nodeId, "completed");
+
+    await setState(userId, nodeId, "in_progress");
+
+    const rows = await db
+      .select()
+      .from(dailyItems)
+      .where(and(eq(dailyItems.userId, userId), eq(dailyItems.nodeId, nodeId)));
+    expect(rows.find((r) => r.day === todayKey())!.completedAt).not.toBeNull();
+    expect(rows.find((r) => r.day === tomorrowKey())!.completedAt).toBeNull();
+  });
+
+  it("leaves a task that was never planned for a day off the day list entirely", async () => {
+    const nodeId = await makeTask(userId, "Never planned");
+    await saveNodeDetail(userId, nodeId, {
+      task: { recurrenceFrequency: "daily", recurrenceInterval: 1 },
+    });
+
+    await setState(userId, nodeId, "completed");
+
+    const rows = await db
+      .select()
+      .from(dailyItems)
+      .where(and(eq(dailyItems.userId, userId), eq(dailyItems.nodeId, nodeId)));
+    expect(rows).toHaveLength(0);
   });
 
   it("carries a state like delegated through to the task", async () => {

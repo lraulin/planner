@@ -374,7 +374,12 @@ function seriesEnds(
  *    completed, and this is the only record that it ever was;
  * 2. moves the whole date set on, so the task drops out of the Task Chooser until it is
  *    due again, and stamps `dateCompleted` as "last completed";
- * 3. resets the task and **every** descendant to Not Started, clearing their progress.
+ * 3. resets the task and **every** descendant to Not Started, clearing their progress;
+ * 4. checks off the task's line on the Day page and opens one on its next due day.
+ *
+ * Step 4 runs for ordinary tasks too, minus the second half. Completing a task means the
+ * same thing wherever you do it, so the day line follows from any surface — the day page
+ * itself just gets there first.
  *
  * Step 3 is Achieve §3.9: the new instance is a copy whose child items are all initialized
  * back to Not Started. Subtasks under a repeating task are a checklist of steps toward it —
@@ -399,6 +404,7 @@ export async function applyStateTransition(
       .update(nodes)
       .set({ state, completedAt: null, updatedAt: now })
       .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+    await reopenDayLine(tx, userId, nodeId, now);
     return;
   }
 
@@ -413,6 +419,7 @@ export async function applyStateTransition(
 
   if (!recurrence) {
     await finish();
+    await syncDayLineOnCompletion(tx, userId, nodeId, now, null);
     return;
   }
 
@@ -436,6 +443,9 @@ export async function applyStateTransition(
       .update(taskDetails)
       .set({ dateCompleted: now })
       .where(eq(taskDetails.nodeId, nodeId));
+    // No next occurrence to plant — the series is over — but the day line still gets
+    // checked off, exactly as it would for any other task being finished.
+    await syncDayLineOnCompletion(tx, userId, nodeId, now, null);
     return;
   }
 
@@ -496,32 +506,35 @@ export async function applyStateTransition(
     })
     .where(eq(taskDetails.nodeId, nodeId));
 
-  await planNextOccurrenceOnDay(tx, userId, nodeId, now, next!);
+  await syncDayLineOnCompletion(tx, userId, nodeId, now, next);
 }
 
 /**
- * Carry a repeating task onto the day list for its next occurrence.
+ * Keep the Day page's line for a task in step with the task itself.
  *
- * The Day page is Franklin Covey's paper day, so the line you ticked has to stay ticked
- * where you ticked it — that is what `daily_items.completedAt` is for, and why it survives
- * the node reset. But a daily routine that vanishes from every future day is not a routine.
- * So the completed line stays crossed off on today, and an open one appears on the day it
- * is next due.
+ * Completing a task means the same thing wherever you do it, so the day line that stands
+ * for it is checked off whether you ticked it on the day page, in the outline, in a grid
+ * or from the drawer. Only the *route* differs: from the day page,
+ * `setDailyItemState` has already stamped the row before this runs, and finds nothing
+ * left to do.
  *
- * Only for a task that was actually **checked off on a day page**: a completed row for
- * today and no open row anywhere. Completing the same task from the outline while its day
- * line is still open leaves that line alone — it is still what you planned for today, and
- * planting a second open row would collide with the one-open-day-per-task index anyway.
+ * Then, for a repeating task, an open line appears on the day it is next due — because the
+ * completed one stays crossed off where it was (that is what `daily_items.completedAt` is
+ * for, and why it survives the node reset), and a daily routine that vanishes from every
+ * future day is not a routine.
+ *
+ * Returns nothing; a task that was never on a day list is left alone entirely.
  */
-async function planNextOccurrenceOnDay(
+async function syncDayLineOnCompletion(
   tx: Executor,
   userId: string,
   nodeId: string,
   completedAt: Date,
-  next: Date,
+  next: Date | null,
 ): Promise<void> {
   const rows = await tx
     .select({
+      id: dailyItems.id,
       day: dailyItems.day,
       completedAt: dailyItems.completedAt,
       forwardedTo: dailyItems.forwardedTo,
@@ -531,11 +544,26 @@ async function planNextOccurrenceOnDay(
     .where(and(eq(dailyItems.userId, userId), eq(dailyItems.nodeId, nodeId)));
 
   const today = toDateKey(completedAt);
-  const open = rows.some((r) => r.completedAt === null && r.forwardedTo === null);
-  const doneToday = rows.find((r) => r.day === today && r.completedAt !== null);
-  if (open || !doneToday) return;
+  const open = rows.find((r) => r.completedAt === null && r.forwardedTo === null);
 
-  const day = toDateKey(next);
+  if (open) {
+    await tx
+      .update(dailyItems)
+      .set({ state: "completed", completedAt, updatedAt: completedAt })
+      .where(eq(dailyItems.id, open.id));
+  }
+
+  // Was this task on someone's day list for today? Either the line just checked off above,
+  // or one the day page had already stamped on its way here. Judged by when it was
+  // completed rather than which day it sits on, so ticking Monday's forgotten line today
+  // still counts.
+  const planned =
+    open ?? rows.find((r) => r.completedAt && toDateKey(r.completedAt) === today);
+  if (!planned || !next) return;
+
+  // A missed occurrence lands in the past, where a new line would never be seen. Put it on
+  // today instead: it is due, and today is when you can act on it.
+  const day = toDateKey(next) < today ? today : toDateKey(next);
   const [last] = await tx
     .select({ sortKey: dailyItems.sortKey })
     .from(dailyItems)
@@ -553,9 +581,51 @@ async function planNextOccurrenceOnDay(
       // The ABC letter is the day's own ranking, and a routine's is stable — it was an A
       // yesterday because it is an A every day. The rank within the letter is not carried:
       // where it sits among tomorrow's other work is tomorrow's question.
-      priorityLetter: doneToday.priorityLetter,
+      priorityLetter: planned.priorityLetter,
     })
     .onConflictDoNothing();
+}
+
+/**
+ * Un-check the day line when a task is moved back out of `completed`.
+ *
+ * Same principle in reverse: reopening a task in the outline should not leave the day page
+ * insisting it was finished. Deliberately narrow, though — only a line completed **today**,
+ * and only when the task has no open line elsewhere.
+ *
+ * Both guards earn their place. The day page is a record of what happened on a day, not a
+ * live view of the task (the same reason `forwardedTo` marks a line rather than moving it),
+ * so correcting a mis-click is fair game and rewriting last Tuesday is not. And a repeating
+ * task that has already cycled *has* an open line — on its next due day — so this leaves
+ * its completed one alone, which is right: that occurrence really was done.
+ */
+async function reopenDayLine(
+  tx: Executor,
+  userId: string,
+  nodeId: string,
+  now: Date,
+): Promise<void> {
+  const rows = await tx
+    .select({
+      id: dailyItems.id,
+      completedAt: dailyItems.completedAt,
+      forwardedTo: dailyItems.forwardedTo,
+    })
+    .from(dailyItems)
+    .where(and(eq(dailyItems.userId, userId), eq(dailyItems.nodeId, nodeId)));
+
+  if (rows.some((r) => r.completedAt === null && r.forwardedTo === null)) return;
+
+  const today = toDateKey(now);
+  const doneToday = rows.find(
+    (r) => r.completedAt && toDateKey(r.completedAt) === today,
+  );
+  if (!doneToday) return;
+
+  await tx
+    .update(dailyItems)
+    .set({ state: "not_started", completedAt: null, updatedAt: now })
+    .where(eq(dailyItems.id, doneToday.id));
 }
 
 export async function setState(
