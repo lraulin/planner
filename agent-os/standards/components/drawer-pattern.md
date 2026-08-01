@@ -30,9 +30,11 @@ A drawer is a client component holding its own form state, rendered from the pag
 - **Width**: full-width on small screens, capped around `720px` on desktop
   (`w-full sm:w-[90%] md:max-w-[45rem]`).
 - **Position below the app chrome** — the tab strip stays visible and clickable.
-- **Below `md` the drawer is a full-screen sheet**, entering from the bottom rather than the
-  right, at `100dvh`. There is no visible backdrop and no chrome behind it to preserve; the
-  header carries a tap-sized close button. See `responsive.md`.
+- **Below `md` the drawer is a full-screen sheet** at `100dvh` (not `100%` — a fixed parent
+  resolves against iOS's large viewport and puts the footer under Safari's toolbar). There is
+  no visible backdrop and no chrome behind it to preserve; the header carries the notch inset
+  and a tap-sized close button. No slide-in — motion is disabled globally, so "sheet" here
+  describes the shape, not an animation. See `responsive.md`.
 - **Escape closes**, a backdrop click closes, and focus is trapped inside while open. Return
   focus to the row that opened it. If the form is dirty, both paths go through the same
   unsaved-changes prompt as Cancel — never bypass it.

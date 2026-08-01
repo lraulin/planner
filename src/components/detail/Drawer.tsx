@@ -10,6 +10,12 @@ import { useModalFocus } from "./focus";
  * modal — so the backdrop is a light scrim rather than a blackout, and the panel starts
  * below the app chrome so the tab strip stays clickable.
  *
+ * Below `md` it is a **full-screen sheet** instead — no scrim, no chrome behind it. Context
+ * preservation is what the side drawer buys, and at 390px it is unaffordable: there is no
+ * arrangement that keeps a grid legible behind a form worth filling in. `ux-principles.md`
+ * and `drawer-pattern.md` both say so out loud rather than leaving the code to contradict
+ * them.
+ *
  * No transition is declared here: `globals.css` already disables motion for anyone who asks
  * for reduced motion, and reintroducing one inline would step around that.
  */
@@ -61,7 +67,9 @@ export function Drawer({
         aria-modal="true"
         aria-labelledby={labelledBy}
         tabIndex={-1}
-        className="relative flex h-full w-full flex-col border-l border-rule-strong bg-surface shadow-2xl outline-none sm:w-[90%] md:max-w-[45rem]"
+        // `h-dvh` below `md`, not `h-full`: the fixed parent resolves against iOS's large
+        // viewport, so `h-full` puts the footer under Safari's toolbar.
+        className="relative flex h-dvh w-full flex-col border-l border-rule-strong bg-surface shadow-2xl outline-none sm:w-[90%] md:h-full md:max-w-[45rem]"
       >
         {children}
       </div>
@@ -88,7 +96,9 @@ export function DrawerHeader({
   actions?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-none items-start gap-3 border-b border-rule px-5 py-3">
+    // The sheet covers the whole screen below `md`, so this header is what sits under the
+    // notch — nothing above it is carrying that inset.
+    <div className="pt-safe flex flex-none items-start gap-3 border-b border-rule px-5 py-3">
       <div className="min-w-0 flex-1">
         {eyebrow != null && eyebrow !== "" && (
           <p className="flex items-center gap-1.5 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
@@ -107,7 +117,7 @@ export function DrawerHeader({
         type="button"
         onClick={onClose}
         aria-label="Close"
-        className="-mr-1 flex h-7 w-7 flex-none items-center justify-center rounded text-[1.125rem] leading-none text-ink-muted transition-colors hover:bg-surface-raised hover:text-ink"
+        className="-mr-1 flex h-tap w-tap flex-none items-center justify-center rounded text-[1.25rem] leading-none text-ink-muted transition-colors hover:bg-surface-raised hover:text-ink md:h-7 md:w-7 md:text-[1.125rem]"
       >
         ×
       </button>
@@ -124,6 +134,11 @@ export function DrawerHeader({
  * - **Cancel** (left, ghost) — leave; parent prompts when dirty.
  * - **Save** (right, outlined) — persist and stay open; shows "Saved".
  * - **Save & Close** (rightmost, solid primary) — persist then leave.
+ *
+ * Below `md` the same three buttons restack — Save & Close full width on top, Save and Cancel
+ * beneath — and the whole footer pads with `.pb-safe` to clear the home indicator. The
+ * arrangement changes; the set does not. `drawer-pattern.md` is explicit that dropping a
+ * button to save room on a phone is not an option.
  *
  * Shortcuts: ⌘/Ctrl+S → Save · ⌘/Ctrl+Enter → Save & Close · Esc → Cancel
  * (Esc is handled by `Drawer`, which must call the same dirty-aware close path).
@@ -181,7 +196,7 @@ export function DrawerFooter({
   }, [onSave, onSaveAndClose, saving]);
 
   return (
-    <div className="flex-none border-t border-rule">
+    <div className="pb-safe flex-none border-t border-rule bg-surface">
       {error && (
         <p
           role="alert"
@@ -191,26 +206,37 @@ export function DrawerFooter({
         </p>
       )}
 
-      <div className="flex flex-wrap items-center gap-2 px-5 py-3">
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded px-3 py-1.5 text-[0.8125rem] text-ink-muted transition-colors hover:bg-surface-raised hover:text-ink"
-        >
-          Cancel
-        </button>
+      {/*
+       * Two groups, reversed below `md`: the save pair lands on top where a thumb reaches it,
+       * with Cancel and the status line underneath. Above `md` it is the original single row —
+       * Cancel left, saves right.
+       *
+       * `flex-col-reverse` rather than two copies of Save: rendering the button twice and
+       * hiding one per breakpoint would put two identical controls in the tree and in every
+       * query written against it.
+       */}
+      <div className="flex flex-col-reverse gap-2 px-5 py-3 md:flex-row md:flex-wrap md:items-center">
+        <div className="flex min-h-tap items-center gap-2 md:min-h-0">
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-h-tap rounded px-3 py-1.5 text-[0.8125rem] text-ink-muted transition-colors hover:bg-surface-raised hover:text-ink md:min-h-0"
+          >
+            Cancel
+          </button>
 
-        {status && (
-          <span className="text-[0.75rem] text-ink-muted sm:ml-1">{status}</span>
-        )}
+          {status && (
+            <span className="text-[0.75rem] text-ink-muted sm:ml-1">{status}</span>
+          )}
+        </div>
 
-        <div className="ml-auto flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2 md:ml-auto">
           <button
             type="button"
             onClick={onSave}
             disabled={saving}
             title="⌘/Ctrl+S"
-            className="rounded border border-rule px-3 py-1.5 text-[0.8125rem] text-ink transition-colors hover:border-rule-strong hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-50"
+            className="min-h-tap flex-1 rounded border border-rule px-3 py-1.5 text-[0.8125rem] text-ink transition-colors hover:border-rule-strong hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-50 md:min-h-0 md:flex-none"
           >
             {saving ? "Saving…" : "Save"}
           </button>
@@ -220,7 +246,7 @@ export function DrawerFooter({
             onClick={onSaveAndClose}
             disabled={saving}
             title="⌘/Ctrl+Enter"
-            className="rounded border border-select-edge bg-select px-3 py-1.5 text-[0.8125rem] font-medium text-ink transition-colors hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+            className="min-h-tap flex-1 rounded border border-select-edge bg-select px-3 py-1.5 text-[0.8125rem] font-medium text-ink transition-colors hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50 md:min-h-0 md:flex-none"
           >
             Save & Close
           </button>

@@ -86,7 +86,8 @@ export function ItemList({
                 {columnLabel(config, column)}
               </span>
             ))}
-            <span className="w-16 flex-none" />
+            {/* Spacer matching the row-controls column. */}
+            <span className="w-24 flex-none md:w-16" />
           </div>
 
           <ul>
@@ -95,6 +96,14 @@ export function ItemList({
                 <div
                   className="flex items-center gap-3 px-3 py-1.5 text-[0.8125rem] hover:bg-surface-raised/60"
                   onDoubleClick={() => setOpenId(openId === item.id ? null : item.id)}
+                  // Single tap expands too, matching "tap opens the record" everywhere else.
+                  // The ▼ button below is still the discoverable affordance; this just makes
+                  // the whole row a target rather than a 32px glyph at the far right.
+                  onClick={(event) => {
+                    if ((event.target as HTMLElement).closest("button, a, input"))
+                      return;
+                    setOpenId(openId === item.id ? null : item.id);
+                  }}
                 >
                   {config.columns.map((column) => (
                     <span
@@ -117,7 +126,7 @@ export function ItemList({
                     </span>
                   ))}
 
-                  <span className="flex w-16 flex-none justify-end gap-0.5">
+                  <span className="flex flex-none justify-end gap-0.5 md:w-16">
                     <RowButton
                       label="Move up"
                       onClick={() => onMove(item.id, "up")}
@@ -249,7 +258,9 @@ function RowButton({
       disabled={disabled}
       aria-label={label}
       aria-expanded={expanded}
-      className="flex h-5 w-5 items-center justify-center rounded text-[0.625rem] text-ink-faint transition-colors hover:bg-surface-raised hover:text-ink disabled:opacity-25 disabled:hover:bg-transparent"
+      // 20px is right beside a mouse and unhittable with a thumb. Height is what a list row
+      // gives away cheapest, so the touch target grows vertically and stays narrow.
+      className="flex h-tap w-8 items-center justify-center rounded text-[0.75rem] text-ink-faint transition-colors hover:bg-surface-raised hover:text-ink disabled:opacity-25 disabled:hover:bg-transparent md:h-5 md:w-5 md:text-[0.625rem]"
     >
       {children}
     </button>

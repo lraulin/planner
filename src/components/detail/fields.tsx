@@ -25,8 +25,11 @@ import { MarkdownEditor } from "@/components/notes/MarkdownEditor";
  * a form that refuses a partial save produces junk data and abandonment.
  */
 
+// `min-h-tap` below `md` only: on a phone this is the surface where all the real editing
+// happens, so every control is a full-size target. The 16px font that stops iOS zooming on
+// focus is applied globally in `globals.css`, not here.
 const INPUT_CLASS =
-  "w-full rounded border border-rule bg-surface px-2 py-1.5 text-[0.875rem] text-ink outline-none transition-colors focus:border-select-edge disabled:text-ink-muted";
+  "min-h-tap w-full rounded border border-rule bg-surface px-2 py-1.5 text-[0.875rem] text-ink outline-none transition-colors focus:border-select-edge disabled:text-ink-muted md:min-h-0";
 
 const INVALID_CLASS = "border-priority-a text-priority-a";
 
