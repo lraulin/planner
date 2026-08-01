@@ -74,13 +74,23 @@ export const auth = betterAuth({
   account: {
     modelName: "account",
     /**
-     * Link Google onto the existing email/password account when the addresses match,
-     * instead of minting a second user. `disableSignUp` would block that second user
-     * anyway, so without this the connect flow simply fails.
+     * Link Google onto the existing account instead of minting a second user.
+     * `disableSignUp` would block that second user anyway, so without this the connect
+     * flow simply fails.
+     *
+     * `allowDifferentEmails` is required, not optional tidying: the owner account is
+     * provisioned from `AUTH_SEED_EMAIL` (locally `dev@example.com`), which will never
+     * match a real Google address. Without it, linking dies with `email_doesn't_match`.
+     *
+     * Safe here because linking is only ever reached from `linkSocial` by an
+     * already-authenticated user deliberately connecting their own calendar — this is a
+     * personal single-owner app, so there is no second account to be confused with. It
+     * would be the wrong setting for an app with public sign-up.
      */
     accountLinking: {
       enabled: true,
       trustedProviders: ["google"],
+      allowDifferentEmails: true,
     },
   },
   verification: {

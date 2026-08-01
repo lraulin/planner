@@ -1,6 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { googleCalendarLinks } from "@/db/schema";
+import { appointments, googleCalendarLinks } from "@/db/schema";
 import type { GoogleCalendarListEntry } from "./client";
 
 /**
@@ -78,6 +78,18 @@ export async function refreshCalendarLinks(
   }
 }
 
+/**
+ * Turn one calendar's mirroring on or off.
+ *
+ * Disabling also **drops that calendar's mirrored rows**. The sweep in `planMirror` can
+ * never do this itself: it only reaps rows on calendars it actually fetched, and a disabled
+ * calendar is by definition not fetched — so without this its events would sit in the week
+ * grid forever, unreachable by any later sync. Unticking a calendar has to mean it
+ * disappears, not that it freezes.
+ *
+ * Only google-origin rows for that calendar go; planner-native appointments carry no
+ * `externalCalendarId` and are untouched.
+ */
 export async function setCalendarSyncEnabled(
   userId: string,
   calendarId: string,
@@ -85,7 +97,11 @@ export async function setCalendarSyncEnabled(
 ): Promise<void> {
   const [row] = await db
     .update(googleCalendarLinks)
-    .set({ syncEnabled: enabled, updatedAt: new Date() })
+    .set({
+      syncEnabled: enabled,
+      updatedAt: new Date(),
+      ...(enabled ? {} : { lastSyncedAt: null }),
+    })
     .where(
       and(
         eq(googleCalendarLinks.userId, userId),
@@ -94,6 +110,18 @@ export async function setCalendarSyncEnabled(
     )
     .returning({ id: googleCalendarLinks.id });
   if (!row) throw new Error("Calendar not found.");
+
+  if (!enabled) {
+    await db
+      .delete(appointments)
+      .where(
+        and(
+          eq(appointments.userId, userId),
+          eq(appointments.externalSource, "google"),
+          eq(appointments.externalCalendarId, calendarId),
+        ),
+      );
+  }
 }
 
 /** Stamp the calendars a sync pass actually read, which drives the staleness throttle. */

@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { appointments, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import type { GoogleCalendarListEntry } from "./client";
 import {
@@ -113,6 +113,84 @@ describeDb("refreshCalendarLinks", () => {
     await refreshCalendarLinks(userId, [entry()]);
     await refreshCalendarLinks(userId, [entry()]);
     expect(await listCalendarLinks(userId)).toHaveLength(1);
+  });
+});
+
+describeDb("disabling a calendar", () => {
+  /** A mirrored row as the sync would have written it. */
+  async function mirrorRow(userId: string, calendarId: string, externalId: string) {
+    const [row] = await db
+      .insert(appointments)
+      .values({
+        userId,
+        subject: `Event ${externalId}`,
+        startAt: new Date(2026, 6, 28, 9, 0),
+        endAt: new Date(2026, 6, 28, 10, 0),
+        externalSource: "google",
+        externalId,
+        externalCalendarId: calendarId,
+      })
+      .returning();
+    return row;
+  }
+
+  it("removes that calendar's mirrored events", async () => {
+    // The sweep in planMirror cannot do this: it only reaps calendars it fetched, and a
+    // disabled calendar is never fetched. Without this the events would linger forever.
+    const userId = await makeUser();
+    await refreshCalendarLinks(userId, [
+      entry({ id: "a@x", primary: true }),
+      entry({ id: "b@x", summary: "Work" }),
+    ]);
+    await setCalendarSyncEnabled(userId, "b@x", true);
+    await mirrorRow(userId, "a@x", "keep1");
+    await mirrorRow(userId, "b@x", "drop1");
+
+    await setCalendarSyncEnabled(userId, "b@x", false);
+
+    const left = await db
+      .select()
+      .from(appointments)
+      .where(eq(appointments.userId, userId));
+    expect(left.map((r) => r.externalId)).toEqual(["keep1"]);
+  });
+
+  it("leaves planner-native appointments alone", async () => {
+    const userId = await makeUser();
+    await refreshCalendarLinks(userId, [entry({ id: "a@x", primary: true })]);
+    await db.insert(appointments).values({
+      userId,
+      subject: "Mine",
+      startAt: new Date(2026, 6, 28, 9, 0),
+      endAt: new Date(2026, 6, 28, 10, 0),
+    });
+
+    await setCalendarSyncEnabled(userId, "a@x", false);
+
+    const left = await db
+      .select()
+      .from(appointments)
+      .where(eq(appointments.userId, userId));
+    expect(left.map((r) => r.subject)).toEqual(["Mine"]);
+  });
+
+  it("does not delete another user's events for the same calendar id", async () => {
+    // A shared calendar has the same id for both people; the delete must still be scoped.
+    const ownerId = await makeUser();
+    const otherId = await makeUser();
+    for (const id of [ownerId, otherId]) {
+      await refreshCalendarLinks(id, [entry({ id: "shared@x", primary: true })]);
+    }
+    await mirrorRow(ownerId, "shared@x", "owner1");
+    await mirrorRow(otherId, "shared@x", "other1");
+
+    await setCalendarSyncEnabled(ownerId, "shared@x", false);
+
+    const otherLeft = await db
+      .select()
+      .from(appointments)
+      .where(eq(appointments.userId, otherId));
+    expect(otherLeft.map((r) => r.externalId)).toEqual(["other1"]);
   });
 });
 

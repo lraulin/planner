@@ -229,13 +229,29 @@ export function buildRecurrenceRule(fields: RecurrenceFields): string[] | undefi
   return [`RRULE:${parts.join(";")}`];
 }
 
+/** The machine's IANA zone — this is a single-user app running in its owner's timezone. */
+export function localTimeZone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+}
+
 /**
  * Write one Google time. All-day uses `toDateKey` for the same local-midnight reason as
  * `readEventTime`; our `endAt` is already the exclusive midnight the week grid expects,
  * which is also what Google's exclusive `end.date` means, so it passes straight through.
+ *
+ * `timeZone` is always sent, and is **required** for recurring events: Google rejects an
+ * RRULE whose start carries only a UTC offset with "Missing time zone definition for start
+ * time", because expanding a rule across DST needs a named zone, not a fixed offset. Sending
+ * it unconditionally keeps one code path instead of a rule that only bites on recurrence.
  */
-export function writeEventTime(at: Date, allDay: boolean): GoogleEventTime {
-  return allDay ? { date: toDateKey(at) } : { dateTime: at.toISOString() };
+export function writeEventTime(
+  at: Date,
+  allDay: boolean,
+  timeZone: string = localTimeZone(),
+): GoogleEventTime {
+  return allDay
+    ? { date: toDateKey(at), timeZone }
+    : { dateTime: at.toISOString(), timeZone };
 }
 
 /** Build the Google write body for an appointment. */
@@ -256,6 +272,7 @@ export function appointmentToGoogleEvent(
     | "recurrenceCount"
     | "recurrenceUntil"
   >,
+  timeZone: string = localTimeZone(),
 ): GoogleEventWrite {
   const { transparency, eventType } = showAsToGoogle(appointment.showAs);
 
@@ -263,8 +280,8 @@ export function appointmentToGoogleEvent(
     summary: appointment.subject,
     location: appointment.location,
     description: appointment.notes,
-    start: writeEventTime(appointment.startAt, appointment.allDay),
-    end: writeEventTime(appointment.endAt, appointment.allDay),
+    start: writeEventTime(appointment.startAt, appointment.allDay, timeZone),
+    end: writeEventTime(appointment.endAt, appointment.allDay, timeZone),
     transparency,
     eventType,
     recurrence: buildRecurrenceRule({

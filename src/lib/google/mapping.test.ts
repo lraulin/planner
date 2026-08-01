@@ -82,14 +82,31 @@ describe("readEventTime", () => {
 describe("writeEventTime", () => {
   it("writes an all-day date back as the same calendar day it was read from", () => {
     const at = readEventTime({ date: "2026-07-27" });
-    expect(writeEventTime(at!, true)).toEqual({ date: "2026-07-27" });
+    expect(writeEventTime(at!, true, "America/New_York")).toEqual({
+      date: "2026-07-27",
+      timeZone: "America/New_York",
+    });
   });
 
   it("passes the exclusive end through unchanged", () => {
     // Google's end.date is exclusive and so is ours, so a one-day event is 27th → 28th
     // both ways. Adjusting on either side would shift the event by a day.
     const end = readEventTime({ date: "2026-07-28" });
-    expect(writeEventTime(end!, true)).toEqual({ date: "2026-07-28" });
+    expect(writeEventTime(end!, true, "UTC").date).toBe("2026-07-28");
+  });
+
+  it("always names a timezone, which recurring events require", () => {
+    // Regression: Google rejected a recurring create with "Missing time zone definition
+    // for start time". A UTC offset is not enough — expanding an RRULE across a DST
+    // boundary needs a named zone. Caught only against the real API, never by a unit test
+    // of our own shapes, so it is pinned here now that we know.
+    expect(writeEventTime(new Date(), false, "America/New_York").timeZone).toBe(
+      "America/New_York",
+    );
+    expect(writeEventTime(new Date(), true, "America/New_York").timeZone).toBe(
+      "America/New_York",
+    );
+    expect(writeEventTime(new Date(), false).timeZone).toBeTruthy();
   });
 });
 
@@ -284,12 +301,12 @@ describe("appointmentToGoogleEvent", () => {
   };
 
   it("builds the full write body including the RRULE", () => {
-    expect(appointmentToGoogleEvent(appointment)).toEqual({
+    expect(appointmentToGoogleEvent(appointment, "America/New_York")).toEqual({
       summary: "Deep work",
       location: "",
       description: "focus block",
-      start: { dateTime: "2026-07-27T14:00:00.000Z" },
-      end: { dateTime: "2026-07-27T16:00:00.000Z" },
+      start: { dateTime: "2026-07-27T14:00:00.000Z", timeZone: "America/New_York" },
+      end: { dateTime: "2026-07-27T16:00:00.000Z", timeZone: "America/New_York" },
       transparency: "opaque",
       eventType: "default",
       recurrence: ["RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE;COUNT=10"],
@@ -312,7 +329,7 @@ describe("appointmentToGoogleEvent", () => {
       endAt: new Date(2026, 6, 28),
       recurrenceFrequency: "none",
     });
-    expect(body.start).toEqual({ date: "2026-07-27" });
-    expect(body.end).toEqual({ date: "2026-07-28" });
+    expect(body.start.date).toBe("2026-07-27");
+    expect(body.end.date).toBe("2026-07-28");
   });
 });

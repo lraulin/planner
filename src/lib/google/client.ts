@@ -25,9 +25,15 @@ export class GoogleNotLinkedError extends Error {
   }
 }
 
-/** The event is gone on Google's side — a delete that already happened elsewhere. */
+/**
+ * Google returned 404/410 — the addressed thing is gone. Usually an event someone already
+ * deleted elsewhere, which `deleteEvent` tolerates; but the same status also means "no such
+ * calendar", so the default wording stays resource-neutral. A banner reading "this event no
+ * longer exists" when the real problem is a missing calendar sends you looking in the wrong
+ * place.
+ */
 export class GoogleEventGoneError extends Error {
-  constructor(message = "This event no longer exists in Google Calendar.") {
+  constructor(message = "That Google Calendar item no longer exists.") {
     super(message);
     this.name = "GoogleEventGoneError";
   }
@@ -107,7 +113,14 @@ async function googleFetch(
     );
   }
   if (response.status === 404 || response.status === 410) {
-    throw new GoogleEventGoneError();
+    // Name the calendar when the path identifies one, so a disabled or deleted calendar
+    // reads as itself rather than as a mystery.
+    const calendar = /\/calendars\/([^/?]+)/.exec(path)?.[1];
+    throw new GoogleEventGoneError(
+      calendar
+        ? `Google Calendar "${decodeURIComponent(calendar)}" or the requested event no longer exists.`
+        : undefined,
+    );
   }
   throw new GoogleApiError(
     response.status,
