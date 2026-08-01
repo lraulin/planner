@@ -147,27 +147,39 @@ The spec stays **active** until this is done. Nothing is broken meanwhile —
 `PLANNER_AGENT_USER_EMAIL` is already set in production, so the new fail-closed check
 passes and the deployed app keeps working as `dev@example.com`.
 
+**The connection string must come from the Neon console, not from Vercel.**
+`vercel env pull` writes the literal placeholder `[SENSITIVE]` for these variables rather
+than their values, and feeding that to `postgres()` fails with `ERR_INVALID_URL` —
+confusingly, _after_ the command looks like it worked. Neon dashboard → the `planner`
+project → Connection Details → copy the string. Pooled or direct both work here; this is
+plain DML, and only migrations care about the distinction.
+
+`psql` is not installed on this machine and does not need to be — the `planner-postgres`
+container has it and can reach Neon.
+
 ```sh
-# 1. Confirm what production actually has, before changing anything.
-vercel env pull --environment=production .env.production.local
-grep -E '^(PLANNER_AGENT_USER_EMAIL|DIRECT_DATABASE_URL)=' .env.production.local
-DIRECT="$(grep '^DIRECT_DATABASE_URL=' .env.production.local | cut -d= -f2- | tr -d '"')"
-psql "$DIRECT" -c 'select id, email, name from users;'
+# 1. Paste the Neon connection string (read -rs keeps it out of shell history).
+read -rs NEON_URL && export NEON_URL
 
-# 2. Rename in place. Read the password rather than typing it into shell history.
+# 2. Confirm what production actually holds, before changing anything.
+docker exec planner-postgres psql "$NEON_URL" -c 'select id, email, name from users;'
+
+# 3. Rename in place. Same trick for the password.
 read -rs USER_PASSWORD && export USER_PASSWORD
-DATABASE_URL="$DIRECT" npm run user:create -- \
+DATABASE_URL="$NEON_URL" npm run user:create -- \
   --email leeraulin@gmail.com --rename-from dev@example.com --name "Lee"
-unset USER_PASSWORD
 
-# 3. Repoint the agent identity — in BOTH environments, since previews share the database.
+# 4. Repoint the agent identity — in BOTH environments, since previews share the database.
 for env in production preview; do
   vercel env rm PLANNER_AGENT_USER_EMAIL "$env" --yes
   echo "leeraulin@gmail.com" | vercel env add PLANNER_AGENT_USER_EMAIL "$env"
 done
-vercel --prod          # env changes only take effect on a new deployment
 
-rm .env.production.local
+# 5. Redeploy — env changes only take effect on a new deployment.
+vercel --prod
+
+unset USER_PASSWORD NEON_URL
+rm -f .env.production.local
 ```
 
 Then verify: sign in at the production URL as `leeraulin@gmail.com`; the outline still shows
