@@ -134,7 +134,10 @@ Nothing here needs remembering — three hooks run the gates for you:
 
 ## Deploying
 
-Live at **https://planner-sable-three.vercel.app**, on Vercel Hobby with a Neon database.
+Live at **https://planner-lee-5344.vercel.app**, on Vercel Hobby with a Neon database.
+Vercel also aliases `planner-sable-three.vercel.app` to the same deployment, but
+`BETTER_AUTH_URL` names the first one, and **that is the origin that matters** — see the
+Google callback note below.
 
 Authentication is **Better Auth** (email/password, no public sign-up). Unauthenticated
 visitors are redirected to `/login`. The agent API uses a separate Bearer key (see above).
@@ -156,6 +159,24 @@ Hosting targets the free tiers: Vercel Hobby for the app, Neon for Postgres.
    | `BETTER_AUTH_URL`          | Production origin, e.g. `https://planner-….vercel.app`                 |
    | `PLANNER_AGENT_API_KEY`    | Optional; for `/api/agent/*`                                           |
    | `PLANNER_AGENT_USER_EMAIL` | Account the agent key acts as. **Required** — no default in production |
+   | `GOOGLE_CLIENT_ID`         | Optional; Google Calendar sync                                         |
+   | `GOOGLE_CLIENT_SECRET`     | Optional; Google Calendar sync                                         |
+
+   **The Google callback must match `BETTER_AUTH_URL`, not the URL you browse.** No
+   `redirectURI` is set on the provider (`src/lib/auth/server.ts`), so Better Auth builds
+   `${BETTER_AUTH_URL}/api/auth/callback/google` — and a Vercel project usually answers on
+   several hostnames, only one of which is in that variable. Registering the wrong one
+   fails at the very last step with `Error 400: redirect_uri_mismatch`, after everything
+   else looks configured. Ask the deployment what it actually sends rather than guessing:
+
+   ```sh
+   curl -s -X POST https://YOUR-APP/api/auth/sign-in/social \
+     -H 'Content-Type: application/json' \
+     -d '{"provider":"google","callbackURL":"/settings"}' | grep -o 'redirect_uri[^&]*'
+   ```
+
+   Put exactly that (URL-decoded) into Google Cloud Console → Credentials → your OAuth
+   client → Authorised redirect URIs, alongside `http://localhost:3047/api/auth/callback/google`.
 
 4. Production builds run pending migrations when `VERCEL_ENV=production` (see
    `scripts/migrate-on-deploy.mjs`). Create or update your account against Neon — this
