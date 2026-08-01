@@ -2,7 +2,7 @@
 
 import { useId, useState, useTransition } from "react";
 import type { GoogleCalendarLink } from "@/db/schema";
-import { signIn } from "@/lib/auth/client";
+import { linkSocial } from "@/lib/auth/client";
 import {
   refreshGoogleCalendarsAction,
   setCalendarSyncEnabledAction,
@@ -28,9 +28,24 @@ export function GoogleCalendarPanel({ configured, linked, calendars }: Props) {
 
   const connect = () => {
     setError(null);
-    // Better Auth's own redirect flow; the callback lands back on /settings where the
-    // calendar list is fetched.
-    void signIn.social({ provider: "google", callbackURL: "/settings" });
+    /**
+     * `linkSocial`, not `signIn.social`. Signing in would authenticate you *as* the Google
+     * account and only attach to this one if the email happened to match — with
+     * `disableSignUp` on, a mismatch fails outright. Linking says what is actually meant:
+     * hang this calendar off the account already signed in.
+     *
+     * It needs a real session, so `AUTH_DEV_BYPASS` is not enough — sign in at /login
+     * first. That is a better failure than silently linking the wrong account.
+     */
+    startTransition(async () => {
+      const result = await linkSocial({ provider: "google", callbackURL: "/settings" });
+      if (result.error) {
+        setError(
+          result.error.message ??
+            "Could not start the Google connection. Sign in at /login first if you are on the dev auth bypass.",
+        );
+      }
+    });
   };
 
   const refresh = () => {
