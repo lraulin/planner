@@ -1,5 +1,41 @@
 import { describe, expect, it } from "vitest";
-import { formatEffort, formatPriority, parseEffort, parsePriority } from "./format";
+import {
+  formatCompactDate,
+  formatEffort,
+  formatPriority,
+  parseEffort,
+  parsePriority,
+} from "./format";
+
+describe("formatCompactDate", () => {
+  it("formats a calendar day without a year", () => {
+    expect(formatCompactDate("2026-09-12")).toBe("12 Sep");
+    expect(formatCompactDate("2026-01-01")).toBe("1 Jan");
+    expect(formatCompactDate("2026-12-31")).toBe("31 Dec");
+  });
+
+  it("adds a two-digit year only when it is not the current one", () => {
+    expect(formatCompactDate("2026-09-12", 2026)).toBe("12 Sep");
+    expect(formatCompactDate("2027-09-12", 2026)).toBe("12 Sep 27");
+    expect(formatCompactDate("2025-03-04", 2026)).toBe("4 Mar 25");
+  });
+
+  it("reads the string as written, with no timezone shift", () => {
+    // The bug this guards: parsing into a Date and formatting locally turns a UTC midnight
+    // deadline into the previous day for anyone west of Greenwich.
+    expect(formatCompactDate("2026-01-01")).toBe("1 Jan");
+    expect(formatCompactDate("2026-06-30")).toBe("30 Jun");
+  });
+
+  it("returns empty for anything it cannot read", () => {
+    expect(formatCompactDate(null)).toBe("");
+    expect(formatCompactDate(undefined)).toBe("");
+    expect(formatCompactDate("")).toBe("");
+    expect(formatCompactDate("not-a-date")).toBe("");
+    expect(formatCompactDate("2026-09-12T00:00:00Z")).toBe("");
+    expect(formatCompactDate("2026-13-01")).toBe("");
+  });
+});
 
 describe("formatEffort", () => {
   it("formats the way Achieve does", () => {

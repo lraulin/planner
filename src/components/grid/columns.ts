@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { GridRow } from "@/lib/tree/slice";
+import type { CompactRole } from "@/lib/grid/compactFields";
 
 /**
  * A data row the grid can render a cell for — group headers never reach `render`.
@@ -39,6 +40,20 @@ export type ColumnDef<TCtx = unknown, TRow = OutlineNode> = {
   filterKind?: FilterKind;
   /** When false, the Show Fields dialog cannot hide this column. Default true. */
   hideable?: boolean;
+  /**
+   * What this column becomes on a phone, where a row has three slots and not thirteen.
+   * Omitted means "let `resolveCompactFields` decide" — see `src/lib/grid/compactFields.ts`.
+   */
+  compact?: CompactRole;
+  /**
+   * Read-only text for the compact row's meta line. Falls back to `filterValue`, which is
+   * already a canonical string for most columns; declare this where that string is ugly
+   * (an ISO date) or missing entirely (effort has no filter).
+   *
+   * Read-only on purpose: below `md` a tap opens the record sheet, so the meta line is for
+   * scanning. Inline editing stays the desktop story.
+   */
+  compactText?: (row: NodeGridRow<TRow>) => string | null;
 };
 
 /**

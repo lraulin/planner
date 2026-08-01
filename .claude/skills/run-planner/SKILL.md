@@ -66,6 +66,8 @@ step passing only means the click landed, not that the page looks right.
 | --- | --- |
 | `goto <path>` | joined to `$PLANNER_URL` (default `http://localhost:3047`) |
 | `shot <name>` | PNG into `.artifacts/planner-shots/` |
+| `viewport <w>x<h>` | resize; **below 768 wide also turns on touch emulation**. `390x844` is the iPhone 12. Also settable up front via `PLANNER_VIEWPORT`. |
+| `scheme light\|dark` | emulate `prefers-color-scheme` |
 | `click` / `dblclick` / `rightclick <sel>` | real mouse events; `dblclick` a grid row opens its detail drawer |
 | `drag <src> \| <dst> [\| before\|inside\|after]` | HTML5 drag — **outline row reorder** |
 | `pdrag <src> \| <dst>` | pointer drag — **schedule rail → calendar** |
@@ -204,6 +206,16 @@ npm run build     # passes; do not run it while `npm run dev` is up (see Gotchas
 - **Rows only become draggable on mousedown** (so text selection inside row inputs still
   works). The driver pauses 150ms after pressing to let React re-render; a faster
   press-then-move starts no drag at all.
+- **Touch emulation kills HTML5 drag, and turning it back off does not revive it.** Calling
+  `Emulation.setTouchEmulationEnabled` after the page has loaded — even with
+  `enabled: false` — leaves `drag` failing with "no drag started". `applyViewport` therefore
+  only toggles it when the value actually changes. If you add a step that touches the
+  Emulation domain, re-check `drag` at 1280x800 afterwards; this failed silently once and
+  looked like a regression in the grid.
+- **Below 768px wide the grids render as compact card rows, not a column grid.** `role="row"`
+  still works, but there are no `role="gridcell"` children and no column header, so a
+  selector written against the desktop layout finds nothing at `390x844`. Tap (`click`)
+  opens the drawer there; `dblclick` is the desktop trigger.
 - **`window.confirm()` freezes everything.** Deleting an appointment
   (`AppointmentDrawer`) or a Time Chart area (`TimeChartEditorView`) opens a native
   dialog; while it is up, every CDP call times out (`CDP timeout:

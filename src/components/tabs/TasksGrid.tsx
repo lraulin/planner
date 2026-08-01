@@ -65,6 +65,9 @@ function buildColumns(): ColumnDef<OutlineColumnCtx>[] {
       width: "4.5rem",
       align: "right",
       sortValue: (row) => row.node.effortRollupMinutes ?? -1,
+      // This column has no filter to borrow text from, and "how long is it" is one of the
+      // three things worth a chip on a phone.
+      compactText: (row) => formatEffort(row.node.effortRollupMinutes) || null,
       render: (row, ctx) => (
         <EffortCell
           key={`effort:${formatEffort(row.node.effortMinutes)}`}
@@ -79,6 +82,8 @@ function buildColumns(): ColumnDef<OutlineColumnCtx>[] {
       width: "4.5rem",
       align: "right",
       sortValue: (row) => row.node.effortLeftRollupMinutes ?? -1,
+      // Reads as a second effort chip with no label to tell them apart.
+      compact: "hidden",
       render: (row) => (
         <EffortCell
           key={`left:${formatEffort(row.node.effortLeftMinutes)}`}
@@ -119,6 +124,8 @@ function buildColumns(): ColumnDef<OutlineColumnCtx>[] {
       filterKind: "enum",
       filterValue: (row) =>
         STATUS_LABELS[scheduleStatus(row.node.deadline, null, row.node.state)],
+      // Derived from the state and deadline chips already on the line.
+      compact: "hidden",
       render: (row, ctx) => <StatusCell node={row.node} today={ctx.today} />,
     },
   ];

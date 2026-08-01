@@ -125,6 +125,8 @@ function buildColumns(allNodes: OutlineNode[]): ColumnDef<OutlineColumnCtx>[] {
       width: "4.5rem",
       align: "right",
       sortValue: (row) => row.node.effortLeftRollupMinutes ?? -1,
+      // Reads as a second effort chip with no label to tell them apart.
+      compact: "hidden",
       render: (row) => (
         <ReadOnlyCell
           value={formatEffort(row.node.effortLeftRollupMinutes)}
@@ -137,6 +139,9 @@ function buildColumns(allNodes: OutlineNode[]): ColumnDef<OutlineColumnCtx>[] {
       label: "Start",
       width: "7rem",
       align: "right",
+      // Two bare dates on one line with nothing to say which is which; the deadline is the
+      // one that matters at a glance.
+      compact: "hidden",
       filterKind: "date",
       filterValue: (row) =>
         row.node.targetStart ? row.node.targetStart.toISOString().slice(0, 10) : null,
@@ -158,6 +163,8 @@ function buildColumns(allNodes: OutlineNode[]): ColumnDef<OutlineColumnCtx>[] {
       label: "Status",
       width: "7.5rem",
       filterKind: "enum",
+      // Derived from the state and deadline chips already on the line.
+      compact: "hidden",
       filterValue: (row) =>
         STATUS_LABELS[scheduleStatus(row.node.deadline, null, row.node.state)],
       sortValue: (row) => scheduleStatus(row.node.deadline, null, row.node.state),

@@ -9,6 +9,48 @@ import type { PriorityLetter } from "@/db/schema";
 /** Achieve counts a day as a working day, not 24 hours. */
 const MINUTES_PER_DAY = 8 * 60;
 
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+/**
+ * A date short enough for a compact row's meta line: "12 Sep", or "12 Sep 27" once the year
+ * stops being obvious.
+ *
+ * Takes the `YYYY-MM-DD` string the grid already carries rather than a `Date`, deliberately.
+ * Deadlines are calendar days, and every existing call site reads them as
+ * `deadline.toISOString().slice(0, 10)` — parsing that back into a `Date` to format it would
+ * reintroduce the local-midnight-versus-UTC bug that convention exists to avoid.
+ */
+export function formatCompactDate(
+  iso: string | null | undefined,
+  currentYear?: number,
+): string {
+  if (!iso) return "";
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!match) return "";
+
+  const [, year, month, day] = match;
+  const label = MONTHS[Number(month) - 1];
+  if (!label) return "";
+
+  const shortDay = String(Number(day));
+  return currentYear !== undefined && Number(year) !== currentYear
+    ? `${shortDay} ${label} ${year.slice(2)}`
+    : `${shortDay} ${label}`;
+}
+
 /** Formats minutes the way Achieve does: "45 min", "2 h", "3:45 h", "3 d". */
 export function formatEffort(minutes: number | null): string {
   if (minutes === null || minutes === 0) return "";

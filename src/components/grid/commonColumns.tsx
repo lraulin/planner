@@ -2,7 +2,7 @@
 
 import type { NodeState, PriorityLetter } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
-import { formatPriority } from "@/lib/tree/format";
+import { formatCompactDate, formatPriority } from "@/lib/tree/format";
 import { STATE_CODES } from "@/lib/tree/hierarchy";
 import type { ColumnDef } from "./columns";
 import {
@@ -83,6 +83,13 @@ export function deadlineColumn(): ColumnDef<OutlineColumnCtx> {
       row.node.deadline ? row.node.deadline.toISOString().slice(0, 10) : null,
     sortValue: (row) =>
       row.node.deadline ? row.node.deadline.toISOString().slice(0, 10) : null,
+    // The filter's ISO string is the wrong shape for a meta chip; "12 Sep" is the same
+    // information in a third of the width.
+    compactText: (row) =>
+      formatCompactDate(
+        row.node.deadline?.toISOString().slice(0, 10),
+        new Date().getFullYear(),
+      ),
     render: (row, ctx) => (
       <DeadlineCell
         node={row.node}
@@ -119,6 +126,9 @@ export function percentColumn(): ColumnDef<OutlineColumnCtx> {
     width: "3rem",
     align: "right",
     sortValue: (row) => row.node.percentCompleteRollup,
+    // 0% on every untouched row would be noise; only progress is worth a chip.
+    compactText: (row) =>
+      row.node.percentCompleteRollup > 0 ? `${row.node.percentCompleteRollup}%` : null,
     render: (row) => <PercentCell node={row.node} />,
   };
 }

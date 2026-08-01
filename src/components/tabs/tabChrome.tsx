@@ -2,9 +2,16 @@
 
 /** Shared toolbar chrome for the Projects / Tasks / Goals / Wish List tabs. */
 
+/**
+ * Below `md` the toolbar stops wrapping and scrolls sideways instead.
+ *
+ * Wrapping was costing four rows and a fifth of a 390px screen before a single task was
+ * visible. One row that pans is the trade `responsive.md` asks for: wide content scrolls
+ * inside its own container rather than eating the view.
+ */
 export function TabToolbar({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-none flex-wrap items-center gap-x-4 gap-y-2 border-b border-rule px-3 py-2">
+    <div className="flex flex-none flex-nowrap items-center gap-x-4 gap-y-2 overflow-x-auto border-b border-rule px-3 py-2 md:flex-wrap md:overflow-x-visible">
       {children}
     </div>
   );
@@ -22,12 +29,12 @@ export function ToolbarSelect({
   options: { value: string; label: string }[];
 }) {
   return (
-    <label className="flex items-center gap-1.5 text-[0.8125rem] text-ink-muted">
-      <span className="text-ink-faint">{label}</span>
+    <label className="flex flex-none items-center gap-1.5 text-[0.8125rem] text-ink-muted">
+      <span className="whitespace-nowrap text-ink-faint">{label}</span>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="rounded border border-rule bg-surface px-2 py-1 text-ink outline-none focus:border-select-edge"
+        className="min-h-tap rounded border border-rule bg-surface px-2 py-1 text-ink outline-none focus:border-select-edge md:min-h-0"
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -49,12 +56,12 @@ export function ToolbarToggle({
   label: string;
 }) {
   return (
-    <label className="flex cursor-pointer select-none items-center gap-1.5 text-[0.8125rem] text-ink-muted">
+    <label className="flex min-h-tap flex-none cursor-pointer items-center gap-1.5 whitespace-nowrap text-[0.8125rem] select-none text-ink-muted md:min-h-0">
       <input
         type="checkbox"
         checked={checked}
         onChange={onChange}
-        className="h-3.5 w-3.5 accent-[var(--select-edge)]"
+        className="h-5 w-5 accent-[var(--select-edge)] md:h-3.5 md:w-3.5"
       />
       {label}
     </label>
@@ -78,7 +85,7 @@ export function ToolbarButton({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className="rounded border border-rule px-2 py-1 text-[0.8125rem] leading-none text-ink transition-colors hover:border-rule-strong hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+      className="min-h-tap flex-none rounded border border-rule px-2 py-1 text-[0.8125rem] leading-none whitespace-nowrap text-ink transition-colors hover:border-rule-strong hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent md:min-h-0"
     >
       {children}
     </button>

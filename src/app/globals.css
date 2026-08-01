@@ -49,6 +49,14 @@
 
   /* The only elevation in the app: pinned chrome and sheets lifting off the shell. */
   --elev-1: 0 -1px 3px rgb(0 0 0 / 8%);
+
+  /*
+   * The name cell's gutter before its text: the expander (`ml-0.5 w-4 mr-1`) plus the type
+   * icon (`w-3.5 mr-1.5`). A compact row's meta line pads by this so both lines of the card
+   * start at the same place — see `CompactRow`. Kept here because the two live in different
+   * files and would otherwise drift apart silently.
+   */
+  --name-gutter: 2.625rem;
 }
 
 @media (prefers-color-scheme: dark) {

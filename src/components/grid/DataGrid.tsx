@@ -27,6 +27,9 @@ import {
   type ColumnFilter,
 } from "./filters";
 import { sortRowsWithinGroups } from "@/lib/grid/sortRows";
+import { resolveCompactFields } from "@/lib/grid/compactFields";
+import { useIsCompact } from "@/components/shell/useIsCompact";
+import { CompactRow } from "./CompactRow";
 
 export type SortState = { columnId: string; direction: "asc" | "desc" } | null;
 
@@ -73,6 +76,32 @@ type RowMeta<TRow> = {
 
 function isOutlineNode(node: unknown): node is OutlineNode {
   return typeof node === "object" && node !== null && "type" in node && "name" in node;
+}
+
+/**
+ * Falling back to the outline's own labelling keeps the tree tabs from having to pass these;
+ * a tab with a different row type supplies its own. Shared by the desktop row and the compact
+ * one so the two cannot describe the same row differently.
+ */
+function rowLabelFor<TRow>(
+  row: NodeGridRow<TRow>,
+  rowLabel: RowMeta<TRow>["rowLabel"],
+): string | undefined {
+  if (rowLabel) return rowLabel(row);
+  const node = row.node;
+  return isOutlineNode(node)
+    ? `${TYPE_LABELS[node.type]}: ${node.name || "Untitled"}`
+    : undefined;
+}
+
+function rowExpansionFor<TRow>(
+  row: NodeGridRow<TRow>,
+  rowExpansion: RowMeta<TRow>["rowExpansion"],
+): boolean | undefined {
+  if (rowExpansion) return rowExpansion(row);
+  const node = row.node;
+  if (!isOutlineNode(node)) return undefined;
+  return node.hasChildren ? !node.collapsed : undefined;
 }
 
 /**
@@ -159,6 +188,26 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   const closeMenu = useCallback(() => setMenu(null), []);
   const gridRef = useRef<HTMLDivElement>(null);
   const gridTemplate = buildGridTemplate(columns, widths);
+
+  const compact = useIsCompact();
+
+  /**
+   * Which columns survive to a phone row. Filtered to the ones that can actually produce
+   * compact text before the meta cap applies, so a column with nothing to show does not
+   * spend one of the three slots on a blank chip.
+   */
+  const compactFields = useMemo(
+    () =>
+      resolveCompactFields(
+        columns.filter(
+          (column) =>
+            column.compact !== undefined ||
+            column.compactText !== undefined ||
+            column.filterValue !== undefined,
+        ),
+      ),
+    [columns],
+  );
 
   const kinds = useMemo(() => {
     const map: Record<string, ColumnDef<TCtx, TRow>["filterKind"]> = {};
@@ -284,6 +333,11 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   /** One row's share of the drag, or nothing when the tab left drag turned off. */
   function dragBindingFor(rowId: string): RowDragBinding | undefined {
     if (!rowDrag) return undefined;
+    // Drag is off below `md`, deliberately. `draggable` is armed on `onMouseDown` so a
+    // permanently draggable row does not steal text selection inside cell editors, and
+    // `onMouseDown` does not reliably precede a touch drag — the mechanism is mouse-shaped
+    // by construction. Reordering lives in the long-press menu instead (`responsive.md`).
+    if (compact) return undefined;
 
     const forget = () =>
       setDropHint((current) => (current?.targetId === rowId ? null : current));
@@ -328,18 +382,23 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <ColumnHeaderRow
-        columns={columns}
-        gridTemplate={gridTemplate}
-        sort={enableSort ? sort : null}
-        onSort={enableSort ? handleSort : undefined}
-        filters={filters}
-        onFilterChange={handleFilterChange}
-        distinctValues={distinctValues}
-        onResize={onResizeColumn}
-        onResetWidth={onResetColumnWidth}
-        enableFilters={enableFilters}
-      />
+      {/* No column header on a phone: there are no columns to head, and sort, filter and
+          resize are all mouse-shaped controls at 10px. Sorting stays reachable from the
+          view's own toolbar. */}
+      {!compact && (
+        <ColumnHeaderRow
+          columns={columns}
+          gridTemplate={gridTemplate}
+          sort={enableSort ? sort : null}
+          onSort={enableSort ? handleSort : undefined}
+          filters={filters}
+          onFilterChange={handleFilterChange}
+          distinctValues={distinctValues}
+          onResize={onResizeColumn}
+          onResetWidth={onResetColumnWidth}
+          enableFilters={enableFilters}
+        />
+      )}
 
       <div
         ref={gridRef}
@@ -366,6 +425,26 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
                   // Groups are drop targets only (never dragged). Outline category headers
                   // use this so a root result area can change category by landing on a group.
                   drag={dragBindingFor(row.id)}
+                  compact={compact}
+                />
+              ) : compact ? (
+                <CompactRow
+                  key={row.id}
+                  row={row}
+                  columnCtx={columnCtx}
+                  fields={compactFields}
+                  selected={row.id === selectedId}
+                  onSelect={() => onSelect(row.id)}
+                  onOpenDetail={onOpenDetail ? () => onOpenDetail(row.id) : undefined}
+                  onLongPress={
+                    rowMenu &&
+                    ((x, y) => {
+                      onSelect(row.id);
+                      setMenu({ rowId: row.id, x, y });
+                    })
+                  }
+                  label={rowLabelFor(row, rowLabel)}
+                  expanded={rowExpansionFor(row, rowExpansion)}
                 />
               ) : (
                 <DataRow
@@ -434,23 +513,9 @@ function DataRow<TCtx, TRow>({
   // steals the click-and-drag that selects text inside the priority, effort and deadline
   // inputs sitting in every row.
   const [armed, setArmed] = useState(false);
-  const node = row.node;
 
-  // Falling back to the outline's own labelling keeps the tree tabs from having to pass
-  // these; a tab with a different row type supplies its own.
-  const label = rowLabel
-    ? rowLabel(row)
-    : isOutlineNode(node)
-      ? `${TYPE_LABELS[node.type]}: ${node.name || "Untitled"}`
-      : undefined;
-
-  const expanded = rowExpansion
-    ? rowExpansion(row)
-    : isOutlineNode(node)
-      ? node.hasChildren
-        ? !node.collapsed
-        : undefined
-      : undefined;
+  const label = rowLabelFor(row, rowLabel);
+  const expanded = rowExpansionFor(row, rowExpansion);
 
   useEffect(() => {
     if (selected) {
@@ -612,6 +677,7 @@ function GroupHeader({
   collapsed,
   onToggle,
   drag,
+  compact,
 }: {
   row: Extract<GridRow, { kind: "group" }>;
   gridTemplate: string;
@@ -620,6 +686,7 @@ function GroupHeader({
   onToggle: () => void;
   /** Drop target only — group headers are never themselves dragged. */
   drag?: RowDragBinding;
+  compact: boolean;
 }) {
   return (
     <div
@@ -645,17 +712,24 @@ function GroupHeader({
       }
       className={[
         "grid cursor-pointer items-center border-b border-rule bg-surface-raised/80 px-3 text-[0.8125rem] font-semibold text-ink hover:bg-surface-raised",
+        // A compact header is a sticky section label, not a row in a template: it keeps its
+        // place while the list under it scrolls, and it is tall enough to tap.
+        compact ? "sticky top-0 z-10 min-h-9 py-1.5 text-[0.8125rem]" : "",
         drag?.hint ? "ring-1 ring-select-edge ring-inset" : "",
       ].join(" ")}
-      style={{
-        gridTemplateColumns: gridTemplate,
-        columnGap: "0.75rem",
-        height: "var(--row-height)",
-      }}
+      style={
+        compact
+          ? undefined
+          : {
+              gridTemplateColumns: gridTemplate,
+              columnGap: "0.75rem",
+              height: "var(--row-height)",
+            }
+      }
     >
       <div
         className="flex min-w-0 items-center gap-1.5"
-        style={{ gridColumn: `1 / span ${columnCount}` }}
+        style={compact ? undefined : { gridColumn: `1 / span ${columnCount}` }}
       >
         <span
           className="text-[0.625rem] text-ink-faint"

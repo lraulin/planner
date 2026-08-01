@@ -155,6 +155,8 @@ async function launch() {
  * Anything 767px or narrower turns on touch emulation as well, so `md`-and-below layouts are
  * exercised the way a phone would: no hover, real touch events, and a mobile viewport.
  */
+let touchEmulated = false;
+
 async function applyViewport(spec) {
   const [w, h] = String(spec)
     .toLowerCase()
@@ -169,11 +171,17 @@ async function applyViewport(spec) {
     deviceScaleFactor: mobile ? 3 : 1,
     mobile,
   });
-  // maxTouchPoints must stay in 1..16 even when disabling, or CDP rejects the call.
-  await send("Emulation.setTouchEmulationEnabled", {
-    enabled: mobile,
-    maxTouchPoints: 5,
-  });
+  // Only toggled when it actually changes: `setTouchEmulationEnabled` re-points Chrome's
+  // input pipeline, and calling it — even with `enabled: false` — after the page has loaded
+  // leaves HTML5 drag-and-drop dead, so `drag` fails with "no drag started". maxTouchPoints
+  // must stay in 1..16 even when disabling, or CDP rejects the call outright.
+  if (mobile !== touchEmulated) {
+    await send("Emulation.setTouchEmulationEnabled", {
+      enabled: mobile,
+      maxTouchPoints: 5,
+    });
+    touchEmulated = mobile;
+  }
   return `${w}x${h}${mobile ? " (touch)" : ""}`;
 }
 
