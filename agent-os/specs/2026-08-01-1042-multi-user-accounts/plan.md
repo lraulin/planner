@@ -1,12 +1,16 @@
 # Multi-user accounts + a separate local test identity
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-01)  
 Spec folder: `agent-os/specs/2026-08-01-1042-multi-user-accounts/`
 
 Delta on the frozen `agent-os/specs/2026-07-29-1630-email-password-auth/`, which built
 Better Auth email/password sign-in for a **single provisioned owner** and listed
 "second user via seed/script" as a follow-up. That folder stays frozen; this one owns
 account provisioning and the separation of identities.
+
+This document is now the durable record of **what was built and why**, verified locally and
+against the live deployment on 2026-08-01. Further work opens a new delta-spec rather than
+editing this one.
 
 ---
 
@@ -133,19 +137,21 @@ rows still exist in Google, which is their source of truth.
 - [x] Settings shows which account is signed in, marked when it is the dev-bypass account
 - [x] Local: the app runs as `test@example.com`, Google reads as not connected, `google_calendar_links` is empty
 - [x] Local agent Bearer calls resolve to the test account
-- [ ] Production: sign-in works as `leeraulin@gmail.com`, data is unchanged, Google is still linked
+- [x] Production: sign-in works as `leeraulin@gmail.com`, data is unchanged, Google is linked
 - [x] Integration tests prove a second user cannot read, change, or delete the first's rows through the new code paths
 
-Local verification, 2026-08-01: 1046 tests across 69 files pass with **no** skipped
+Local verification, 2026-08-01: 1050 tests across 70 files pass with **no** skipped
 integration suites. The disconnect was exercised through the real UI — 11 mirrored
 appointments and both calendar links removed, the one planner-native appointment kept, the
 `google` row in `accounts` gone. Screenshots in `.artifacts/planner-shots/` (`01`–`05`).
 
-### Remaining: the production rename (run by hand)
+Production verification, 2026-08-01: signed in as `leeraulin@gmail.com` with the outline
+intact, Google Calendar linked and showing in `/schedule`.
 
-The spec stays **active** until this is done. Nothing is broken meanwhile —
-`PLANNER_AGENT_USER_EMAIL` is already set in production, so the new fail-closed check
-passes and the deployed app keeps working as `dev@example.com`.
+### The production cutover (historical — run by hand on 2026-08-01)
+
+Kept because every line of it was learned the hard way, and the next person to provision an
+account against production will hit the same four traps.
 
 **The connection string must come from the Neon console, not from Vercel.** These are Vercel
 **sensitive** environment variables — write-only by design — so `vercel env pull` writes the
@@ -191,12 +197,32 @@ Then verify: sign in at the production URL as `leeraulin@gmail.com`; the outline
 your data (same `users.id`); Settings reports Google as linked; an agent call with the
 production Bearer key returns your tree.
 
-**What production actually turned out to hold (2026-08-01):** the account was _already_
+**What production actually turned out to hold:** the account was _already_
 `leeraulin@gmail.com` (`de3a32c2-…`, name "Dev User") — only the local database ever used
 `dev@example.com`. So no rename happened: `--rename-from` found nothing, converged to an
 update, and set the name and password on the existing row. That is the designed behaviour
 for a rename that has already happened, and it is why the flag is safe to re-run. The
 production `users.id` differs from the local one, as separate databases should.
+
+**Four traps this run walked into**, all now defended in code or documentation:
+
+1. `vercel env pull` returns `[SENSITIVE]` placeholders for sensitive variables, and the
+   failure surfaces as `ERR_INVALID_URL` from `postgres()` long after the pull "succeeded".
+2. A multi-line `for` loop pasted into zsh mangles, and mangles _asymmetrically_ — the
+   `vercel env rm` succeeded with an empty target while the `add` errored on argument
+   count, deleting `PLANNER_AGENT_USER_EMAIL` from both environments. Combined with the new
+   fail-closed check, that took the production agent API down until it was restored. The
+   recipe above is now one command per line.
+3. `read -rs` inside a pasted block consumes the _next line of the paste buffer_ as its
+   input, so the production password silently became a fragment of the command. It reported
+   success, because that fragment is a valid password. Run the `read` on its own.
+4. `BETTER_AUTH_URL` — not the hostname you browse — decides the Google callback, and this
+   project answers on two Vercel hostnames. See the README's deploy section for the `curl`
+   that asks the deployment which `redirect_uri` it actually sends.
+
+Trap 2 is the one worth remembering: fail-closed behaviour converts a _config_ mistake into
+an _outage_, which is the right trade only if the mistake is loud. It was not — the deploy
+succeeded and the app looked fine.
 
 ---
 
@@ -213,18 +239,21 @@ polish.
 | 4   | **Added** `getCurrentAccount()` (id + email + `viaDevBypass`) to `src/lib/auth.ts`.                                                                                                                                           | The Settings display needs the address _and_ whether anyone actually signed in. "Signed in as X" is reassuring and false under the bypass, which is the precise failure this spec is about.                                                                                                                                                          |
 | 5   | **Reversed** the local cutover order: rename first, disconnect second.                                                                                                                                                        | With the bypass pointed at a `test@example.com` that did not exist yet, every page threw and the app could not be driven at all. Disconnecting under the bypass turned out to be fine — only `linkSocial` needs a real session.                                                                                                                      |
 | 6   | **Widened** the doc updates beyond `.env.example` and `README.md` to `docs/agent-api.md`, `tools/alfred/README.md`, `tools/shortcuts/README.md`, `agent-os/product/tech-stack.md`, and `.claude/skills/run-planner/SKILL.md`. | All of them documented "the single owner user" as the identity model. A standard or skill left describing the old resolution is how the collapse gets rebuilt later.                                                                                                                                                                                 |
+| 7   | **Added** `describeDatabaseUrl()` and a `Database: <host>/<name>` banner to `user:create` and `db:seed`.                                                                                                                      | Found by running the real thing: which database these scripts write to is set by an environment variable and is otherwise invisible, so a forgotten `DATABASE_URL=` prefix resets the _local_ test account's password while looking like it worked.                                                                                                  |
+| 8   | **Recorded** that production needed no rename at all — it was already `leeraulin@gmail.com`.                                                                                                                                  | Only the local database ever used `dev@example.com`. `--rename-from` converged to an update, which is the designed behaviour and the reason the flag is safe to re-run.                                                                                                                                                                              |
+| 9   | **Documented** the `BETTER_AUTH_URL` → Google callback relationship in `README.md`, with the Google env vars it was missing.                                                                                                  | A Vercel project answers on several hostnames and only the one in `BETTER_AUTH_URL` is the callback origin. Guessing from the hostname cost a round of `redirect_uri_mismatch`; the README now shows how to ask the deployment instead.                                                                                                              |
 
 ---
 
-## Tasks
+## Tasks (historical — all done)
 
 1. **Save spec documentation** — this folder.
 2. **Split the identity seam into three** — `owner.ts` → `identity.ts`; add `devUserEmail()`
    / `getDevUserId()`; `ownerEmail()` → `agentUserEmail()` (throws in production);
    `getOwnerUserId()` → `getAgentUserId()`; delete `LEGACY_DEV_USER_EMAIL`, `seedEmail()`,
    and the deprecated re-export in `src/lib/auth.ts`. Repoint the bypass and the agent
-   dispatcher. Warn when the dev and agent users collapse to the same address. Unit tests
-   beside the module. Update `agent-os/standards/api/agent-auth.md`.
+   dispatcher. Unit tests beside the module. Update `agent-os/standards/api/agent-auth.md`.
+   (The planned collision warning was dropped — see change 1.)
 3. **`npm run user:create`** — `upsertUser({ email, password, name, renameFrom })` in
    `src/lib/auth/provision.ts`, extracted from `ensureOwnerCredentials()`; non-interactive
    CLI wrapper in `src/db/create-user.ts`; `provision.integration.test.ts` with the
@@ -239,6 +268,25 @@ polish.
 8. **Rename the production owner** — Vercel env, then `user:create --rename-from` over the
    Neon direct connection, then verify.
 9. **Verify, freeze spec, update roadmap.**
+
+---
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- **Per-user agent API keys.** `resolveAgentUserId()` is the seam; today one key per
+  deployment maps to one configured account. Carried over from the auth spec, and now the
+  only remaining reason the agent surface is not genuinely multi-user.
+- **Invite-code sign-up**, if a second person ever wants to provision themselves rather than
+  ask for a command to be run.
+- **Password-change UI.** Rotating a password currently means running `user:create` against
+  the production database, which is heavier than it should be for a routine act — and the
+  4 traps above are the cost of doing it by hand.
+- **Reconsider the dev bypass now that a test identity exists.** Its whole justification was
+  a cold browser profile; with `test@example.com` real and signable, the driver could sign in
+  instead, and the bypass could go. Not urgent — repointing it removed the danger.
+- **A canonical production origin.** The project answers on at least two Vercel hostnames and
+  only `BETTER_AUTH_URL` decides which one auth belongs to. Picking one and redirecting the
+  rest would remove a class of confusion.
 
 ---
 

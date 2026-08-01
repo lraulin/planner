@@ -1,6 +1,6 @@
 # References for Multi-user accounts + a separate local test identity
 
-**Status: active**
+**Status: frozen / complete** (2026-08-01)
 
 ## Prior specs
 
