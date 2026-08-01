@@ -941,6 +941,35 @@ describeDb("tree mutations", () => {
       expect(detail.percentComplete).toBe(0);
       expect(detail.deferredDate).not.toBeNull();
     });
+
+    it("does not re-stamp completedAt when a completed task is saved again", async () => {
+      // `state` rides along on every drawer save whether or not it was touched. Re-running
+      // the transition would move the completion timestamp each time the notes were edited.
+      const task = await recurringTask({ frequency: "none" });
+      await setState(userId, task, "completed");
+      const [before] = await loadOutline(userId);
+
+      await saveNodeDetail(userId, task, { state: "completed", notes: "later" });
+
+      const [after] = await loadOutline(userId);
+      expect(after.completedAt).toEqual(before.completedAt);
+    });
+
+    it("does not cycle when recurrence is switched on for an already-completed task", async () => {
+      // Complete it while it is a plain task, then open the drawer and set Repeats. The
+      // draft still carries `state: "completed"`, which must not read as a fresh completion.
+      const task = await recurringTask({ frequency: "none" });
+      await setState(userId, task, "completed");
+      await saveNodeDetail(userId, task, {
+        state: "completed",
+        task: { recurrenceFrequency: "daily", recurrenceInterval: 1 },
+      });
+
+      const [node] = await loadOutline(userId);
+      expect(node.state).toBe("completed");
+      expect(await completionsOf(userId, task)).toHaveLength(0);
+      expect((await taskRow(task)).deferredDate).toBeNull();
+    });
   });
 
   describe("user isolation", () => {

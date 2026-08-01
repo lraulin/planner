@@ -256,6 +256,23 @@ function DetailForm({
     }
   }, [detail.id, onReload]);
 
+  /**
+   * Re-seeds the whole draft from the server, not just the lists. Used after a save, where
+   * the server may have changed more than it was asked to.
+   */
+  const reseed = useCallback(async () => {
+    try {
+      const result = await loadNodeDetailAction(detail.id);
+      if (result.ok && result.data) {
+        setValues(initialValues(result.data));
+        setItems(result.data.items);
+        onReload(result.data);
+      }
+    } catch {
+      setError("Saved, but the record could not be re-read. Reopen to see it.");
+    }
+  }, [detail.id, onReload]);
+
   const runItemAction = useCallback(
     (action: () => Promise<{ ok: true } | { ok: false; error: string }>) => {
       setError(null);
@@ -368,7 +385,17 @@ function DetailForm({
       setJustSaved(true);
       // Save stays open by default; Save & Close leaves only after a successful write
       // (`drawer-pattern.md`).
-      if (options?.close) onClose();
+      if (options?.close) {
+        onClose();
+        return;
+      }
+
+      // Re-read, because a save is not always a no-op on the server. Completing a repeating
+      // task cycles it — the row comes back Not Started with its dates pushed out — and this
+      // draft was seeded once, behind a `key` that does not change. Without the re-read the
+      // State select goes on reading "Completed" while the grid behind the drawer reads
+      // "Not Started", and pressing Save again cycles the task a second time.
+      await reseed();
     });
   }
 

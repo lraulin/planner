@@ -196,7 +196,7 @@ const ITEM_KEYS = [
 
 async function requireNode(tx: Executor, userId: string, nodeId: string) {
   const [node] = await tx
-    .select({ id: nodes.id, type: nodes.type })
+    .select({ id: nodes.id, type: nodes.type, state: nodes.state })
     .from(nodes)
     .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)))
     .limit(1);
@@ -287,8 +287,16 @@ export async function saveNodeDetail(
     // to match — and, for a recurring task, cycles it instead: logs the completion, pushes
     // the defer date out, and un-completes the subtree. That reset has to land *after* the
     // side-table write, or the form's own `percentComplete` / `dateCompleted` draft values
-    // would overwrite it and the task would come back already finished.
-    if ("state" in core && core.state !== undefined) {
+    // would overwrite it and the task would come back already finished. It also has to land
+    // after the `nodes` update above, which writes the draft's own copy of the dates the
+    // transition is about to move.
+    //
+    // Only on an actual change of state. The drawer posts its whole draft, so `state` is
+    // present on every save whether or not it was touched, and cycling is not idempotent:
+    // re-saving a completed repeating task would log a second completion and push its dates
+    // out another full interval. Setting Repeats on a task that was already completed would
+    // do the same without the State dropdown ever being opened.
+    if ("state" in core && core.state !== undefined && core.state !== node.state) {
       await applyStateTransition(tx, userId, nodeId, core.state);
     }
   });
