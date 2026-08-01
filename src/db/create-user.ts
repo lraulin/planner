@@ -1,4 +1,5 @@
 import { upsertUser } from "@/lib/auth/provision";
+import { describeDatabaseUrl } from "@/lib/db/target";
 import { seedSampleData } from "./sample-data";
 
 /**
@@ -72,6 +73,11 @@ async function main() {
       "--sample-data deletes this user's nodes, appointments and time charts. Refusing against a production database; pass --force if that is really what you want.",
     );
   }
+
+  // Which database this is landing in is set by an environment variable and is otherwise
+  // invisible. A forgotten `DATABASE_URL=` prefix quietly writes to the local Postgres
+  // instead of production, and succeeds.
+  console.log(`Database: ${describeDatabaseUrl(process.env.DATABASE_URL)}`);
 
   const result = await upsertUser({
     email,

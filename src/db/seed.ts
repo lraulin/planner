@@ -1,5 +1,6 @@
 import { devUserEmail } from "@/lib/auth/identity";
 import { upsertUser } from "@/lib/auth/provision";
+import { describeDatabaseUrl } from "@/lib/db/target";
 import { seedSampleData } from "./sample-data";
 
 /**
@@ -28,6 +29,8 @@ async function main() {
       "db:seed is a local test bootstrap and is destructive. To provision or rotate a real account, use: npm run user:create -- --email <address> --password <secret>",
     );
   }
+
+  console.log(`Database: ${describeDatabaseUrl(process.env.DATABASE_URL)}`);
 
   const email = devUserEmail();
   const user = await upsertUser({
