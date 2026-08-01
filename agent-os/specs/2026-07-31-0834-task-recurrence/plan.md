@@ -1,7 +1,17 @@
 # Repeating routine tasks (deferral-based recurrence)
 
-**Status: active**
+**Status: frozen / complete** (2026-08-01)
 Spec folder: `agent-os/specs/2026-07-31-0834-task-recurrence/`
+
+> **Superseded in part** by `agent-os/specs/2026-08-01-1900-recurrence-ap-parity/`, which
+> added Achieve's date-based patterns and end conditions (both listed as follow-ups below)
+> and **narrowed one decision**: recurrence still never _creates_ a deadline, but it now
+> advances one you set yourself, along with every other date the task already had. Where
+> this file says "recurrence drives `deferred_date` only", read the delta spec.
+>
+> Read this folder as the durable record of what the first slice was for. The
+> Overdue-signal argument in Context is unchanged and is still the reason the feature
+> exists.
 
 ## Context
 

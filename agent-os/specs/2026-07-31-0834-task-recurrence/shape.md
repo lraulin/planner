@@ -1,6 +1,6 @@
 # Shaping — Repeating routine tasks
 
-**Status: active**
+**Status: frozen / complete** (2026-08-01)
 
 ## The ask
 

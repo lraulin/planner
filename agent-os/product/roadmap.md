@@ -110,8 +110,19 @@ Features that complete or surround the original product, plus making it multi-de
   `deferred_date` out, which drops it from the Task Chooser until it is due again. Each
   completion is logged to `task_completions`, so history survives without a year of
   duplicate rows in the outline. This is what keeps **Overdue** meaning something.
-  Deferred: recurrence on projects, date-based patterns, end conditions, Skip Recurrence,
-  and any UI over the completion log.
+- **✅ Achieve-parity recurrence.** `specs/2026-08-01-1900-recurrence-ap-parity`. The other
+  half of §3.9: **date patterns** beside regeneration, on every frequency. A date pattern
+  follows a fixed calendar — every two weeks on a Friday lands on the Friday whenever you
+  finished the last one, so finishing next week's report on Wednesday buys you until the
+  week after, and missing one still leaves you owing it. Regeneration is measured from the
+  completion, for the habits where catching up is meaningless. Every weekday, every weekend,
+  chosen days of the week, day D of the month, the first-through-last weekday of a month or
+  a year, a date each year, and the Range box (end never / after N / on a date). Completing
+  a repeating task now moves its **whole** date set — start, end, deadline, reminder — by
+  the same number of days, so a start-to-deadline window survives the cycle. Recurrence
+  still never _creates_ a deadline; it only advances one you set, which is what preserves
+  the Overdue rule above. Deferred: recurrence on projects, Skip Recurrence, Lead Time →
+  Target Start, the Day tab's next occurrence, and any UI over the completion log.
 - **✅ The Day tab.** `specs/2026-07-31-1245-day-tab`. A Franklin Covey daily list beside
   Achieve's weekly planning: `/day` is the paper day page (appointments | task list |
   journal), where you jot what you are doing today, rank it A/B/C, and check it off —
