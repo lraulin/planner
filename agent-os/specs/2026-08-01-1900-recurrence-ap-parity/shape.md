@@ -84,6 +84,24 @@ Then every date the task already had shifts by that many days. Nothing that was 
 written, which is what keeps a deadline-free routine deadline-free — the reason the whole
 feature exists, unchanged from the first slice.
 
+## Added after first use
+
+Three things Lee asked for once the core was working, all following from the same reading
+of what a repeating task _is_:
+
+- **The whole checklist resets.** Subtasks under a repeating task are the steps for doing
+  it, not progress through one instance of it. "Regardless of what I did last week, I'm
+  going to have to do all that again to mow the lawn next week." Cancelled steps come back
+  because cancelling one meant "not needed that time" — a step that never belongs on the
+  list gets deleted. In-progress ones come back because "if progress did carry over, it
+  wouldn't recur — after completing it, it would stay completed."
+- **Skip Recurrence** (§3.9.4): move on without doing this one. Nothing logged, nothing
+  reset, no count spent.
+- **The Day page carries it forward.** "On completion a daily task should then appear in
+  the next day uncompleted, but still appear completed/crossed off in the current day."
+  Only when it was checked off _on a day page_, and only when no open line for it exists —
+  the one-open-day-per-task index would refuse a second.
+
 ## Risks accepted
 
 - **A missed occurrence steps on by one period and can come back overdue.** That is Lee's
@@ -93,3 +111,9 @@ feature exists, unchanged from the first slice.
   deadline" rule is enforced in the completion path and in the editor, not just stated.
 - **`deferred` still masks `overdue` in `scheduleStatus`.** A scheduled task that is past
   its deadline and still deferred reads Deferred. Correct here, and unchanged.
+- **Date patterns may see little use.** Lee, reasoning it through after the fact: the
+  trigger for the next occurrence is completing the previous one either way, so a missed
+  report and this week's are never both on screen — "if they really are separate
+  independent assignments, you'd probably want to create actual separate tasks for them
+  […] it seems I have much less use for it than regenerate after completion." Built as
+  asked, and worth revisiting only if daily use turns up a need.

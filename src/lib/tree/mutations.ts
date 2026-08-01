@@ -1,5 +1,6 @@
 import { db } from "@/db";
 import {
+  dailyItems,
   goalDetails,
   nodes,
   projectDetails,
@@ -12,6 +13,7 @@ import { and, asc, count, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { addDays, daysBetween, startOfDay } from "@/lib/dateMath";
 import { nextDue } from "@/lib/recurrence/nextDue";
 import { nextOccurrence } from "@/lib/recurrence/pattern";
+import { toDateKey } from "@/lib/schedule/geometry";
 import { assertCanNest, TYPE_LABELS } from "./hierarchy";
 import { loadOutline } from "./queries";
 import { between } from "./sortKey";
@@ -370,14 +372,17 @@ function seriesEnds(
  *
  * 1. logs the completion to `task_completions` — the row is about to stop looking
  *    completed, and this is the only record that it ever was;
- * 2. pushes `deferredDate` to `nextDue(...)` and stamps `dateCompleted`, so the task drops
- *    out of the Task Chooser until it is due again;
- * 3. un-completes the task and any **completed** descendants, resetting their progress.
+ * 2. moves the whole date set on, so the task drops out of the Task Chooser until it is
+ *    due again, and stamps `dateCompleted` as "last completed";
+ * 3. resets the task and **every** descendant to Not Started, clearing their progress.
  *
- * Step 3 follows Achieve §3.9/§3.9.4, which is specific that it is the *completed* child
- * items that get un-completed. Descendants that are cancelled or in progress are left
- * alone: resetting those would resurrect work that was deliberately killed, or silently
- * discard progress on work that is under way.
+ * Step 3 is Achieve §3.9: the new instance is a copy whose child items are all initialized
+ * back to Not Started. Subtasks under a repeating task are a checklist of steps toward it —
+ * get the keys, unlock the shed, fill the mower — and none of them carry over to next
+ * week's mow. Cancelled steps come back too: cancelling one means "not needed this time",
+ * and a step that never belongs on the list is deleted rather than cancelled. So does an
+ * in-progress one, because part-done work on one instance is not part-done work on the
+ * next; if progress did carry over, the task would not be recurring at all.
  *
  * Takes an executor so callers can compose it into their own transaction.
  */
@@ -434,21 +439,10 @@ export async function applyStateTransition(
     return;
   }
 
-  const ids = await subtreeIds(tx, userId, nodeId);
-  // Descendants that were finished; the recurring task itself is handled separately below,
-  // since it is being completed right now and so is not yet in this set.
-  const finished = await tx
-    .select({ id: nodes.id })
-    .from(nodes)
-    .where(
-      and(
-        eq(nodes.userId, userId),
-        inArray(nodes.id, ids),
-        eq(nodes.state, "completed"),
-      ),
-    );
-
-  const resetIds = [nodeId, ...finished.map((n) => n.id)];
+  // The whole subtree, whatever state each step was left in — see the note above the
+  // function. A checklist under a repeating task describes how to do it, not how far
+  // through one instance of it you got.
+  const resetIds = await subtreeIds(tx, userId, nodeId);
 
   await tx
     .update(nodes)
@@ -501,6 +495,67 @@ export async function applyStateTransition(
       deferredDate: move(recurrence.deferredDate) ?? next,
     })
     .where(eq(taskDetails.nodeId, nodeId));
+
+  await planNextOccurrenceOnDay(tx, userId, nodeId, now, next!);
+}
+
+/**
+ * Carry a repeating task onto the day list for its next occurrence.
+ *
+ * The Day page is Franklin Covey's paper day, so the line you ticked has to stay ticked
+ * where you ticked it — that is what `daily_items.completedAt` is for, and why it survives
+ * the node reset. But a daily routine that vanishes from every future day is not a routine.
+ * So the completed line stays crossed off on today, and an open one appears on the day it
+ * is next due.
+ *
+ * Only for a task that was actually **checked off on a day page**: a completed row for
+ * today and no open row anywhere. Completing the same task from the outline while its day
+ * line is still open leaves that line alone — it is still what you planned for today, and
+ * planting a second open row would collide with the one-open-day-per-task index anyway.
+ */
+async function planNextOccurrenceOnDay(
+  tx: Executor,
+  userId: string,
+  nodeId: string,
+  completedAt: Date,
+  next: Date,
+): Promise<void> {
+  const rows = await tx
+    .select({
+      day: dailyItems.day,
+      completedAt: dailyItems.completedAt,
+      forwardedTo: dailyItems.forwardedTo,
+      priorityLetter: dailyItems.priorityLetter,
+    })
+    .from(dailyItems)
+    .where(and(eq(dailyItems.userId, userId), eq(dailyItems.nodeId, nodeId)));
+
+  const today = toDateKey(completedAt);
+  const open = rows.some((r) => r.completedAt === null && r.forwardedTo === null);
+  const doneToday = rows.find((r) => r.day === today && r.completedAt !== null);
+  if (open || !doneToday) return;
+
+  const day = toDateKey(next);
+  const [last] = await tx
+    .select({ sortKey: dailyItems.sortKey })
+    .from(dailyItems)
+    .where(and(eq(dailyItems.userId, userId), eq(dailyItems.day, day)))
+    .orderBy(sql`${dailyItems.sortKey} desc`)
+    .limit(1);
+
+  await tx
+    .insert(dailyItems)
+    .values({
+      userId,
+      nodeId,
+      day,
+      sortKey: between(last?.sortKey ?? null, null),
+      // The ABC letter is the day's own ranking, and a routine's is stable — it was an A
+      // yesterday because it is an A every day. The rank within the letter is not carried:
+      // where it sits among tomorrow's other work is tomorrow's question.
+      priorityLetter: doneToday.priorityLetter,
+    })
+    .onConflictDoNothing();
 }
 
 export async function setState(
@@ -509,6 +564,61 @@ export async function setState(
   state: NodeState,
 ): Promise<void> {
   await db.transaction((tx) => applyStateTransition(tx, userId, nodeId, state));
+}
+
+/**
+ * Achieve's **Skip Recurrence** (§3.9.4): move a repeating task on to its next occurrence
+ * without doing this one.
+ *
+ * The point is that skipping is not completing. Nothing is written to `task_completions`,
+ * so the history stays honest and an "end after N occurrences" series is not spent; the
+ * subtree is left exactly as it is, since none of it happened; and `dateCompleted` is not
+ * touched, so "last completed" still means the last time it was actually done. All that
+ * moves is the dates — which is the whole of it, and is why this shares `nextAnchor` with
+ * the completion path rather than reimplementing the rule.
+ *
+ * A series that has run out cannot be skipped: there is nowhere to skip to.
+ */
+export async function skipRecurrence(userId: string, nodeId: string): Promise<void> {
+  await db.transaction(async (tx) => {
+    const recurrence = await recurrenceOf(tx, userId, nodeId);
+    if (!recurrence) throw new Error("That task does not repeat.");
+
+    const now = new Date();
+    const anchor = anchorOf(recurrence);
+    const next = nextAnchor(recurrence, anchor, now);
+
+    // Skipping cannot exhaust an "end after N" series, because it never counted toward
+    // one. Only an unsatisfiable pattern, or an `until` date the next occurrence is past,
+    // leaves nowhere to go.
+    const pastEnd =
+      recurrence.end === "until" &&
+      recurrence.endUntil != null &&
+      next != null &&
+      startOfDay(next) > startOfDay(recurrence.endUntil);
+
+    if (!next || pastEnd) {
+      throw new Error("This series has no occurrences left to skip to.");
+    }
+
+    const shift = anchor ? daysBetween(anchor, next) : 0;
+    const move = (date: Date | null) => (date ? addDays(date, shift) : null);
+
+    await tx
+      .update(nodes)
+      .set({ deadline: move(recurrence.deadline), updatedAt: now })
+      .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+
+    await tx
+      .update(taskDetails)
+      .set({
+        targetStartDate: move(recurrence.targetStartDate),
+        targetEndDate: move(recurrence.targetEndDate),
+        reminderAt: move(recurrence.reminderAt),
+        deferredDate: move(recurrence.deferredDate) ?? next,
+      })
+      .where(eq(taskDetails.nodeId, nodeId));
+  });
 }
 
 export async function setFocus(

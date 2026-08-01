@@ -285,6 +285,23 @@ function DetailForm({
     [refreshItems],
   );
 
+  /**
+   * For commands that write on their own rather than through the draft. Unlike
+   * `runItemAction` this re-seeds the whole form, because such a command can change fields
+   * the user is looking at — Skip Recurrence moves every date on the General tab.
+   */
+  const runAction = useCallback(
+    (action: () => Promise<{ ok: true } | { ok: false; error: string }>) => {
+      setError(null);
+      startTransition(async () => {
+        const result = await action();
+        if (!result.ok) setError(result.error);
+        else await reseed();
+      });
+    },
+    [reseed],
+  );
+
   const list = useCallback(
     (kind: NodeItemKind) => (
       <ItemList
@@ -324,6 +341,7 @@ function DetailForm({
       patchProject,
       patchTask,
       list,
+      runAction,
       busy,
     }),
     [
@@ -336,6 +354,7 @@ function DetailForm({
       patchProject,
       patchTask,
       list,
+      runAction,
       busy,
     ],
   );

@@ -157,11 +157,14 @@ export function RecurrenceFields({
   task,
   deadline,
   patchTask,
+  onSkip,
 }: {
   task: Task;
   /** Lives on `nodes`, but it is the first choice of anchor, so the preview needs it. */
   deadline: Date | null;
   patchTask: (changes: Task) => void;
+  /** Achieve's Skip Recurrence. Saves and re-reads on its own — it is not part of the draft. */
+  onSkip: () => void;
 }) {
   const frequency = task.recurrenceFrequency ?? "none";
   const mode = task.recurrenceMode ?? "scheduled";
@@ -373,6 +376,7 @@ export function RecurrenceFields({
           summary={describeRule(rule, mode)}
           lastCompleted={task.dateCompleted ?? null}
           next={next}
+          onSkip={onSkip}
         />
       )}
     </Section>
@@ -431,20 +435,40 @@ function RulePreview({
   summary,
   lastCompleted,
   next,
+  onSkip,
 }: {
   summary: string;
   lastCompleted: Date | null;
   next: Date | null;
+  onSkip: () => void;
 }) {
   return (
-    <dl className="grid grid-cols-1 gap-x-4 gap-y-1 rounded border border-rule bg-surface-raised px-3 py-2 text-[0.8125rem] sm:grid-cols-3">
-      <Fact term="Rule" value={summary} />
-      <Fact
-        term="Last completed"
-        value={lastCompleted ? dateText(lastCompleted) : "Never"}
-      />
-      <Fact term="Next occurrence" value={next ? dateText(next) : "Series has ended"} />
-    </dl>
+    <div className="flex flex-col gap-2 rounded border border-rule bg-surface-raised px-3 py-2">
+      <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-[0.8125rem] sm:grid-cols-3">
+        <Fact term="Rule" value={summary} />
+        <Fact
+          term="Last completed"
+          value={lastCompleted ? dateText(lastCompleted) : "Never"}
+        />
+        <Fact
+          term="Next occurrence"
+          value={next ? dateText(next) : "Series has ended"}
+        />
+      </dl>
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={onSkip}
+          disabled={!next}
+          className="min-h-tap rounded border border-rule px-2 text-[0.8125rem] text-ink-muted transition-colors hover:text-ink disabled:opacity-50 md:min-h-0 md:py-1"
+        >
+          Skip this occurrence
+        </button>
+        <p className="text-[0.75rem] text-ink-faint">
+          Moves the dates on without doing it. Nothing is logged as completed.
+        </p>
+      </div>
+    </div>
   );
 }
 

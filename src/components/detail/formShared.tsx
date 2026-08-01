@@ -33,6 +33,13 @@ export type DetailFormProps = {
   patchTask: (changes: Partial<TaskDetails>) => void;
   /** Renders a fully wired repeating list for one kind. */
   list: (kind: NodeItemKind) => React.ReactNode;
+  /**
+   * Runs a server action that writes on its own and re-reads the record afterwards, for
+   * the few commands that are not part of the draft — Skip Recurrence, so far.
+   */
+  runAction: (
+    action: () => Promise<{ ok: true } | { ok: false; error: string }>,
+  ) => void;
   busy: boolean;
 };
 

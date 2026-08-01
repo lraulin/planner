@@ -19,6 +19,7 @@ import {
   setEffort,
   setPriority,
   setState,
+  skipRecurrence,
 } from "./mutations";
 import { loadOutline } from "./queries";
 
@@ -862,7 +863,7 @@ describeDb("tree mutations", () => {
       expect(detail.effortLeftMinutes).toBe(30);
     });
 
-    it("un-completes completed children but leaves cancelled and in-progress work", async () => {
+    it("puts the whole checklist back to Not Started, whatever state each step was in", async () => {
       const parent = await recurringTask({ frequency: "weekly", interval: 1 });
       const done = await createNode({
         userId,
@@ -889,11 +890,14 @@ describeDb("tree mutations", () => {
       await setState(userId, parent, "completed");
 
       const byId = new Map((await loadOutline(userId)).map((n) => [n.id, n]));
-      // Achieve §3.9.4 is specific that it is the *completed* children that come back.
+      // Achieve §3.9: the new instance's child items are all initialized to Not Started.
+      // Subtasks under a repeating task are the steps for doing it — get the keys, unlock
+      // the shed — and none of them carry over to next week's mow. A cancelled step meant
+      // "not needed that time"; an in-progress one cannot be half-done on an instance that
+      // has not started, or the task would never have needed to recur.
       expect(byId.get(done)!.state).toBe("not_started");
-      // Resetting these would resurrect work deliberately killed, or discard progress.
-      expect(byId.get(cancelled)!.state).toBe("cancelled");
-      expect(byId.get(started)!.state).toBe("in_progress");
+      expect(byId.get(cancelled)!.state).toBe("not_started");
+      expect(byId.get(started)!.state).toBe("not_started");
     });
 
     it("still just completes a task that does not repeat", async () => {
@@ -1118,6 +1122,53 @@ describeDb("tree mutations", () => {
         await setState(userId, task, "completed");
 
         expect((await loadOutline(userId))[0].state).toBe("completed");
+      });
+
+      it("skips an occurrence without doing it", async () => {
+        // Skipping moves the dates and nothing else: no completion logged, so an
+        // "end after N" series is not spent and "last completed" still means last done.
+        const task = await ruleTask(
+          {
+            recurrenceFrequency: "weekly",
+            recurrencePattern: "by_weekday",
+            recurrenceByWeekday: [5],
+            deferredDate: day("2026-08-07"),
+          },
+          { deadline: day("2026-08-07") },
+        );
+
+        await skipRecurrence(userId, task);
+
+        const detail = await taskRow(task);
+        const [node] = await loadOutline(userId);
+        expect(localKey(node.deadline!)).toBe("2026-08-14");
+        expect(localKey(detail.deferredDate!)).toBe("2026-08-14");
+        expect(node.state).toBe("not_started");
+        expect(detail.dateCompleted).toBeNull();
+        expect(await completionsOf(userId, task)).toHaveLength(0);
+      });
+
+      it("leaves the checklist alone when an occurrence is skipped", async () => {
+        // None of it happened, so there is nothing to reset — unlike a completion, which
+        // starts the next instance's checklist over.
+        const task = await ruleTask({ recurrenceFrequency: "daily" });
+        const step = await createNode({
+          userId,
+          parentId: task,
+          type: "task",
+          name: "Step",
+        });
+        await setState(userId, step, "in_progress");
+
+        await skipRecurrence(userId, task);
+
+        const byId = new Map((await loadOutline(userId)).map((n) => [n.id, n]));
+        expect(byId.get(step)!.state).toBe("in_progress");
+      });
+
+      it("refuses to skip a task that does not repeat", async () => {
+        const task = await ruleTask({ recurrenceFrequency: "none" });
+        await expect(skipRecurrence(userId, task)).rejects.toThrow("does not repeat");
       });
 
       it("refuses a regenerating task with a calendar pattern", async () => {

@@ -90,8 +90,6 @@ drawer that a completion did something.
 - Recurrence on projects (needs the columns moved from `task_details` to `nodes`)
 - **Lead Time driving the new Target Start Date** from the new deadline (§3.9.5). Shifting
   every date by one delta already preserves whatever gap the task had.
-- **Skip Recurrence** (§3.9.4) — advance the dates without logging a completion. Cheap now
-  that the engine exists; deliberately not bundled.
 - Migrating `AppointmentDrawer` onto the new editor, or the appointment expander onto the
   new engine. See "Two engines" below.
 - Any UI over the completion log.
@@ -107,6 +105,8 @@ drawer that a completion did something.
 | Eleven columns + 3 checks | `src/db/schema.ts`, `drizzle/0018_mighty_toro.sql`                       |
 | The editor                | `src/components/detail/RecurrenceFields.tsx`                             |
 | The repeating-row glyph   | `NameCell` in `src/components/grid/cells.tsx`                            |
+| Skip Recurrence           | `skipRecurrence` in `src/lib/tree/mutations.ts`, button in the drawer    |
+| Day-list carry-forward    | `planNextOccurrenceOnDay` in `src/lib/tree/mutations.ts`                 |
 
 `recurrence_pattern` defaults to `interval`, which is exactly the old behaviour, so the
 migration is pure `ADD COLUMN` with no data migration.
@@ -145,26 +145,38 @@ All verified against the running app and the real database on 2026-08-01.
 - [x] Weekday buttons measure 44px+ on a 390px viewport
 - [x] A second user cannot complete, read or delete the first user's recurring task or its
       completion rows
-- [x] `test:unit` (767), `test:integration`, `typecheck`, `lint` all pass
+- [x] **Skip this occurrence** moved the deadline and defer date on a week, logged no
+      completion, left `date_completed` alone and left an in-progress subtask alone
+- [x] **A daily task checked off on the Day page** stayed crossed off there and appeared
+      open on tomorrow's page, carrying its A ranking — two `daily_items` rows, one
+      completed and one open
+- [x] Completing the same task from the outline leaves its open day line alone, rather than
+      colliding with the one-open-day-per-task index
+- [x] The whole checklist under a repeating task comes back Not Started, whatever state
+      each step was left in
+- [x] `test:unit`, `test:integration`, `typecheck`, `lint`, `build` all pass (1097 tests)
 
 ## Changes from the original plan
 
-| #   | Change                                                                                                                                            | Why                                                                                                                                                                                                                                                                  |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | The reported bug was **real**, not only an invisibility problem. The plan hedged that all three completion paths might work.                      | The drawer's missing re-read plus the unconditional state transition are a genuine defect, and the second half corrupts the completion log. Fixed in its own commit first.                                                                                           |
-| 2   | **`deferred_date` is shifted when set, created when not** — the plan said "always set to `next`".                                                 | A defer date a few days before a deadline is a deliberate head start; overwriting it with the deadline would delete that lead every cycle.                                                                                                                           |
-| 3   | **`recurrenceInterval` was dropped from `OutlineRow`**, and the new pattern columns were never added to it.                                       | They are loaded for every row on every outline render and read by nothing — `TaskForm` reads `detail.task`. Only `recurrenceFrequency` earns its place, for the glyph.                                                                                               |
-| 4   | **A missing `recurrence_count` means "no end", not "end now"** — and the editor seeds the count when the condition is chosen.                     | `?? 1` would have finished the task on its very first completion. Found by driving the real UI, not by a test.                                                                                                                                                       |
-| 5   | **The `useToday` / `isDeferred` UTC-vs-local split was left alone.**                                                                              | It is pre-existing and pervasive — `DateField`, every grid column and `status.ts` all render UTC day keys — and it happens to agree with local days in Lee's timezone. Rewriting the convention is a separate change with a much wider blast radius. See Follow-ups. |
-| 6   | **Achieve's "all child items initialized to Not Started" was not adopted.** Only _completed_ descendants un-complete, as the frozen spec decided. | Resetting cancelled or in-progress children would resurrect deliberately killed work or discard progress under way. Unchanged from the previous slice; noted here because the manual excerpt Lee sent says otherwise.                                                |
+| #   | Change                                                                                                                        | Why                                                                                                                                                                                                                                                                                                                                                                                                      |
+| --- | ----------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | The reported bug was **real**, not only an invisibility problem. The plan hedged that all three completion paths might work.  | The drawer's missing re-read plus the unconditional state transition are a genuine defect, and the second half corrupts the completion log. Fixed in its own commit first.                                                                                                                                                                                                                               |
+| 2   | **`deferred_date` is shifted when set, created when not** — the plan said "always set to `next`".                             | A defer date a few days before a deadline is a deliberate head start; overwriting it with the deadline would delete that lead every cycle.                                                                                                                                                                                                                                                               |
+| 3   | **`recurrenceInterval` was dropped from `OutlineRow`**, and the new pattern columns were never added to it.                   | They are loaded for every row on every outline render and read by nothing — `TaskForm` reads `detail.task`. Only `recurrenceFrequency` earns its place, for the glyph.                                                                                                                                                                                                                                   |
+| 4   | **A missing `recurrence_count` means "no end", not "end now"** — and the editor seeds the count when the condition is chosen. | `?? 1` would have finished the task on its very first completion. Found by driving the real UI, not by a test.                                                                                                                                                                                                                                                                                           |
+| 5   | **The `useToday` / `isDeferred` UTC-vs-local split was left alone.**                                                          | It is pre-existing and pervasive — `DateField`, every grid column and `status.ts` all render UTC day keys — and it happens to agree with local days in Lee's timezone. Rewriting the convention is a separate change with a much wider blast radius. See Follow-ups.                                                                                                                                     |
+| 6   | **The whole subtree resets to Not Started**, reversing the frozen spec's "only completed children come back".                 | Lee's call, and the manual's: subtasks under a repeating task are the steps for doing it — get the keys, unlock the shed, fill the mower — and none carry over to next week's mow. A cancelled step meant "not needed that time"; a step that never belongs is deleted instead. An in-progress step cannot be half-done on an instance that has not started, or the task would not have needed to recur. |
+| 7   | **Skip Recurrence and the Day-list carry-forward were added**, both out of scope when the plan was written.                   | Both turned out small once the engine existed, and both were asked for. Skip shares `nextAnchor` with the completion path rather than reimplementing the rule.                                                                                                                                                                                                                                           |
 
 ## Follow-ups (new work — not amendments to this spec)
 
-- **Skip Recurrence** (§3.9.4): advance the dates without logging a completion. Small now.
 - **Lead Time → Target Start** (§3.9.5).
-- **The Day tab and the next occurrence.** `daily_items` keeps its own state, so a repeating
-  task planned for today stays ticked there and nothing plants a row on its next occurrence
-  day. Any fix must respect the "one open day per task" invariant in `openRowForNode`.
+- **Skip on the grids.** Skip Recurrence is a drawer button; it has no context-menu or
+  keyboard path yet.
+- **Standard (date-pattern) recurrence may not earn its keep.** Lee's own read after
+  building it: "if they really are separate independent assignments, you'd probably want to
+  create actual separate tasks for them […] it seems I have much less use for it than
+  regenerate after completion." Revisit only if daily use turns up a need.
 - **A shared `RecurrenceFields` for appointments**, which would need their schema widened.
 - **The UTC/local day-key convention**, one decision applied everywhere at once.
 - **Recurrence on projects**, and a surface for the completion log.

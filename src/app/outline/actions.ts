@@ -73,6 +73,14 @@ export async function setStateAction(
   return run((userId) => tree.setState(userId, nodeId, state));
 }
 
+/**
+ * Achieve's Skip Recurrence: advance a repeating task to its next occurrence without
+ * completing this one. Nothing is logged and nothing is reset — see `skipRecurrence`.
+ */
+export async function skipRecurrenceAction(nodeId: string): Promise<ActionResult> {
+  return run((userId) => tree.skipRecurrence(userId, nodeId));
+}
+
 export async function setFocusAction(
   nodeId: string,
   focus: boolean,

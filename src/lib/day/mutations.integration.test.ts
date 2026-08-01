@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { dailyItems, nodes, taskDetails, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
-import { createNode } from "@/lib/tree/mutations";
+import { createNode, setState } from "@/lib/tree/mutations";
 import { saveNodeDetail } from "@/lib/detail/mutations";
 import {
   createDailyItem,
@@ -62,6 +62,20 @@ async function itemById(itemId: string) {
 const MON = "2026-07-27";
 const TUE = "2026-07-28";
 const WED = "2026-07-29";
+
+/**
+ * Recurrence works from the clock, not from the fixed days above, so the carry-forward
+ * tests have to ask for today and tomorrow rather than pinning a date.
+ */
+function dayKey(offset = 0): string {
+  const d = new Date();
+  d.setDate(d.getDate() + offset);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+const todayKey = () => dayKey(0);
+const tomorrowKey = () => dayKey(1);
 
 afterAll(async () => {
   for (const userId of createdUserIds) {
@@ -299,6 +313,68 @@ describeDb("completing from the day page", () => {
 
     const day = await loadDay(userId, MON, WED);
     expect(day.items[0].completedAt).not.toBeNull();
+  });
+
+  it("carries a checked-off recurring task onto the day it is next due", async () => {
+    // Franklin Covey's paper day: the line stays crossed off where you crossed it off, and
+    // an open one appears on the next due date. Without the second half a daily routine
+    // disappears from the day page after the first time you do it.
+    const nodeId = await makeTask(userId, "Brush teeth");
+    await saveNodeDetail(userId, nodeId, {
+      task: { recurrenceFrequency: "daily", recurrenceInterval: 1 },
+    });
+    const today = todayKey();
+    await planNodeForDay(userId, nodeId, today);
+    const [item] = await db
+      .select()
+      .from(dailyItems)
+      .where(and(eq(dailyItems.userId, userId), eq(dailyItems.nodeId, nodeId)));
+
+    await setDailyItemState(userId, item.id, "completed");
+
+    const rows = await db
+      .select()
+      .from(dailyItems)
+      .where(and(eq(dailyItems.userId, userId), eq(dailyItems.nodeId, nodeId)));
+    expect(rows).toHaveLength(2);
+    expect(rows.find((r) => r.day === today)!.completedAt).not.toBeNull();
+    expect(rows.find((r) => r.day === tomorrowKey())!.completedAt).toBeNull();
+  });
+
+  it("does not plant a second day row when the task is completed elsewhere", async () => {
+    // Ticking it in the outline leaves the day line open — it is still what you planned
+    // for today — and a second open row would collide with the one-open-day-per-task index.
+    const nodeId = await makeTask(userId, "Brush teeth");
+    await saveNodeDetail(userId, nodeId, {
+      task: { recurrenceFrequency: "daily", recurrenceInterval: 1 },
+    });
+    await planNodeForDay(userId, nodeId, todayKey());
+
+    await setState(userId, nodeId, "completed");
+
+    const rows = await db
+      .select()
+      .from(dailyItems)
+      .where(and(eq(dailyItems.userId, userId), eq(dailyItems.nodeId, nodeId)));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].completedAt).toBeNull();
+  });
+
+  it("leaves a non-recurring task on the day it was done", async () => {
+    const nodeId = await makeTask(userId, "One-off");
+    await planNodeForDay(userId, nodeId, todayKey());
+    const [item] = await db
+      .select()
+      .from(dailyItems)
+      .where(and(eq(dailyItems.userId, userId), eq(dailyItems.nodeId, nodeId)));
+
+    await setDailyItemState(userId, item.id, "completed");
+
+    const rows = await db
+      .select()
+      .from(dailyItems)
+      .where(and(eq(dailyItems.userId, userId), eq(dailyItems.nodeId, nodeId)));
+    expect(rows).toHaveLength(1);
   });
 
   it("carries a state like delegated through to the task", async () => {

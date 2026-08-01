@@ -19,6 +19,7 @@ import {
 } from "./fields";
 import { PlanForDayField } from "./PlanForDayField";
 import { RecurrenceFields } from "./RecurrenceFields";
+import { skipRecurrenceAction } from "@/app/outline/actions";
 import { LinkedNotesPanel } from "@/components/notes/LinkedNotesPanel";
 import { TaskFitnessPanel } from "@/components/fitness/TaskFitnessPanel";
 import type { FormTab } from "./FormTabs";
@@ -46,7 +47,7 @@ const CONSTRAINT_OPTIONS: { value: TaskConstraint; label: string }[] = [
  * cell does — its children's totals are what anyone reading the row actually wants.
  */
 export function taskTabs(props: DetailFormProps): FormTab[] {
-  const { detail, node, values, patch, patchTask, list } = props;
+  const { detail, node, values, patch, patchTask, list, runAction } = props;
   const task = values.task ?? {};
   const rollsUp = node.hasChildren;
 
@@ -124,6 +125,7 @@ export function taskTabs(props: DetailFormProps): FormTab[] {
             task={task}
             deadline={values.deadline}
             patchTask={patchTask}
+            onSkip={() => runAction(() => skipRecurrenceAction(node.id))}
           />
 
           <Section title="Progress">
