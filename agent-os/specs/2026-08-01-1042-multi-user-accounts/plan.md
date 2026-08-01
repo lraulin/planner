@@ -147,12 +147,12 @@ The spec stays **active** until this is done. Nothing is broken meanwhile —
 `PLANNER_AGENT_USER_EMAIL` is already set in production, so the new fail-closed check
 passes and the deployed app keeps working as `dev@example.com`.
 
-**The connection string must come from the Neon console, not from Vercel.**
-`vercel env pull` writes the literal placeholder `[SENSITIVE]` for these variables rather
-than their values, and feeding that to `postgres()` fails with `ERR_INVALID_URL` —
-confusingly, _after_ the command looks like it worked. Neon dashboard → the `planner`
-project → Connection Details → copy the string. Pooled or direct both work here; this is
-plain DML, and only migrations care about the distinction.
+**The connection string must come from the Neon console, not from Vercel.** These are Vercel
+**sensitive** environment variables — write-only by design — so `vercel env pull` writes the
+literal placeholder `[SENSITIVE]` in place of every value. Feeding that to `postgres()`
+fails with `ERR_INVALID_URL`, confusingly _after_ the pull looks like it worked. Neon
+dashboard → the `planner` project → Connection Details → copy the string. Pooled or direct
+both work here; this is plain DML, and only migrations care about the distinction.
 
 `psql` is not installed on this machine and does not need to be — the `planner-postgres`
 container has it and can reach Neon.
@@ -170,10 +170,15 @@ DATABASE_URL="$NEON_URL" npm run user:create -- \
   --email leeraulin@gmail.com --rename-from dev@example.com --name "Lee"
 
 # 4. Repoint the agent identity — in BOTH environments, since previews share the database.
-for env in production preview; do
-  vercel env rm PLANNER_AGENT_USER_EMAIL "$env" --yes
-  echo "leeraulin@gmail.com" | vercel env add PLANNER_AGENT_USER_EMAIL "$env"
-done
+#    One line each, never a for-loop: pasting a multi-line loop into zsh mangles it, and the
+#    failure mode is asymmetric — the `rm` succeeds with an empty target while the `add`
+#    errors out, leaving the variable deleted. In production that is a fail-closed throw in
+#    `agentUserEmail()`, i.e. every agent call down until it is restored.
+vercel env rm PLANNER_AGENT_USER_EMAIL production --yes
+vercel env rm PLANNER_AGENT_USER_EMAIL preview --yes
+printf 'leeraulin@gmail.com' | vercel env add PLANNER_AGENT_USER_EMAIL production
+printf 'leeraulin@gmail.com' | vercel env add PLANNER_AGENT_USER_EMAIL preview
+vercel env ls | grep AGENT_USER   # confirm both rows came back before deploying
 
 # 5. Redeploy — env changes only take effect on a new deployment.
 vercel --prod
@@ -183,8 +188,15 @@ rm -f .env.production.local
 ```
 
 Then verify: sign in at the production URL as `leeraulin@gmail.com`; the outline still shows
-your data (same `users.id`); Settings still reports Google as linked; an agent call with the
+your data (same `users.id`); Settings reports Google as linked; an agent call with the
 production Bearer key returns your tree.
+
+**What production actually turned out to hold (2026-08-01):** the account was _already_
+`leeraulin@gmail.com` (`de3a32c2-…`, name "Dev User") — only the local database ever used
+`dev@example.com`. So no rename happened: `--rename-from` found nothing, converged to an
+update, and set the name and password on the existing row. That is the designed behaviour
+for a rename that has already happened, and it is why the flag is safe to re-run. The
+production `users.id` differs from the local one, as separate databases should.
 
 ---
 
