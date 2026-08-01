@@ -303,6 +303,15 @@ body {
   color: #1b1d23 !important;
 }
 
+/*
+ * A Google event carries its source calendar's colour as a thick left edge. The border
+ * colour is set per-event in WeekCalendar; this is only the shape of the cue, so two
+ * calendars read as different at a glance and neither is mistaken for a planner block.
+ */
+.schedule-calendar .fc-appointment-google {
+  border-left-width: 4px !important;
+}
+
 .schedule-calendar .fc-appointment-done {
   opacity: 0.75;
 }

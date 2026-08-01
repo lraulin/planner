@@ -1,9 +1,10 @@
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
   appointments,
   timeChartAreas,
   timeCharts,
+  type Appointment,
   type AppointmentCheck,
   type NewAppointment,
   type PriorityLetter,
@@ -11,7 +12,48 @@ import {
   type RecurrenceFrequency,
   type ShowAs,
 } from "@/db/schema";
-import { sortDays } from "./geometry";
+import { syncWindow } from "@/lib/google/sync";
+import {
+  pushCreate,
+  pushDelete,
+  pushUpdate,
+  type PushableAppointment,
+} from "@/lib/google/writeThrough";
+import { sortDays, startOfWeek } from "./geometry";
+
+/** The week containing `at`, the unit `loadSchedule` mirrors. */
+function weekWindowAround(at: Date) {
+  const start = startOfWeek(at, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 7);
+  return { start, end };
+}
+
+/**
+ * The Google-owned view of a row, for building a write body. Merges a patch over the
+ * stored row so a partial update still sends a complete, consistent event.
+ */
+function pushableFrom(
+  row: Appointment,
+  patch: Record<string, unknown> = {},
+): PushableAppointment {
+  const merged = { ...row, ...patch };
+  return {
+    subject: merged.subject,
+    location: merged.location,
+    notes: merged.notes,
+    startAt: merged.startAt,
+    endAt: merged.endAt,
+    allDay: merged.allDay,
+    showAs: merged.showAs,
+    recurrenceFrequency: merged.recurrenceFrequency,
+    recurrenceInterval: merged.recurrenceInterval,
+    recurrenceByWeekday: merged.recurrenceByWeekday,
+    recurrenceEnd: merged.recurrenceEnd,
+    recurrenceCount: merged.recurrenceCount,
+    recurrenceUntil: merged.recurrenceUntil,
+  };
+}
 
 export async function createTimeChart(userId: string, name: string) {
   const [row] = await db
@@ -152,7 +194,16 @@ function assertRange(startAt: Date, endAt: Date) {
   }
 }
 
-export async function createAppointment(userId: string, input: AppointmentInput) {
+/**
+ * Returns the created row, or **null** when a recurring appointment was posted to Google
+ * but its instances have not been mirrored back yet. The null is explicit in the signature
+ * on purpose: array destructuring below would otherwise type the lookup as non-null and
+ * hide the case from every caller.
+ */
+export async function createAppointment(
+  userId: string,
+  input: AppointmentInput,
+): Promise<Appointment | null> {
   assertRange(input.startAt, input.endAt);
   const values: NewAppointment = {
     userId,
@@ -180,7 +231,37 @@ export async function createAppointment(userId: string, input: AppointmentInput)
     recurrenceUntil: input.recurrenceUntil ?? null,
   };
 
-  const [row] = await db.insert(appointments).values(values).returning();
+  // Write through to Google before storing anything, so a rejected event never leaves a
+  // local row claiming to exist on a calendar it does not. A no-op when Google is not set
+  // up, which is what keeps the planner usable as a purely local calendar.
+  const pushed = await pushCreate(userId, values as PushableAppointment);
+
+  if (pushed.pushed && pushed.recurring) {
+    // The series lives in Google and only its instances live here. Pull the window around
+    // the start so the first occurrences arrive as ordinary rows, then hand back the one
+    // the user just created.
+    const window = weekWindowAround(values.startAt);
+    await syncWindow(userId, window);
+    const [instance] = await db
+      .select()
+      .from(appointments)
+      .where(
+        and(
+          eq(appointments.userId, userId),
+          eq(appointments.externalSeriesId, pushed.seriesId),
+        ),
+      )
+      .orderBy(asc(appointments.startAt))
+      .limit(1);
+    // The series exists in Google either way; a mirror that could not run yet just means
+    // the rows appear on the next refresh.
+    return instance ?? null;
+  }
+
+  const [row] = await db
+    .insert(appointments)
+    .values(pushed.pushed ? { ...values, ...pushed.stamp } : values)
+    .returning();
   return row;
 }
 
@@ -236,6 +317,11 @@ export async function updateAppointment(
   if (input.recurrenceUntil !== undefined)
     patch.recurrenceUntil = input.recurrenceUntil;
 
+  // Push before writing locally: if Google rejects the change, the mutation throws and the
+  // stored row still matches what Google holds.
+  const stamp = await pushUpdate(userId, existing, pushableFrom(existing, patch));
+  if (stamp) Object.assign(patch, stamp);
+
   const [row] = await db
     .update(appointments)
     .set(patch)
@@ -245,6 +331,17 @@ export async function updateAppointment(
 }
 
 export async function deleteAppointment(userId: string, id: string) {
+  const [existing] = await db
+    .select()
+    .from(appointments)
+    .where(and(eq(appointments.id, id), eq(appointments.userId, userId)))
+    .limit(1);
+  if (!existing) throw new Error("Appointment not found.");
+
+  // Google first. A failure here leaves the row in place, which is recoverable; deleting
+  // locally first would strand an event in Google with nothing left here naming it.
+  await pushDelete(userId, existing);
+
   const deleted = await db
     .delete(appointments)
     .where(and(eq(appointments.id, id), eq(appointments.userId, userId)))
@@ -252,6 +349,10 @@ export async function deleteAppointment(userId: string, id: string) {
   if (deleted.length === 0) throw new Error("Appointment not found.");
 }
 
+/**
+ * Purely local — the three-state check is a planner annotation Google has no field for, so
+ * ticking one off never touches the network. See the field-ownership table in the spec.
+ */
 export async function setAppointmentCheckState(
   userId: string,
   id: string,
@@ -287,6 +388,19 @@ export async function rescheduleAppointment(
     patch.recurrenceUntil = null;
     patch.recurrenceByWeekday = null;
   }
+
+  const [existing] = await db
+    .select()
+    .from(appointments)
+    .where(and(eq(appointments.id, id), eq(appointments.userId, userId)))
+    .limit(1);
+  if (!existing) throw new Error("Appointment not found.");
+
+  // Dragging a Google event in the week grid moves it in Google. For an instance of a
+  // series this moves that occurrence only, which is what Google's own UI does too.
+  const stamp = await pushUpdate(userId, existing, pushableFrom(existing, patch));
+  if (stamp) Object.assign(patch, stamp);
+
   const [row] = await db
     .update(appointments)
     .set(patch)

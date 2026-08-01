@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useIsCompact } from "@/components/shell/useIsCompact";
 import type { Appointment, AppointmentCheck, TimeChart } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
-import type { SchedulePayload } from "@/lib/schedule/queries";
+import type { SchedulePayload, ScheduleOccurrence } from "@/lib/schedule/queries";
 import type { Occurrence } from "@/lib/schedule/recurrence";
 import { fromDateKey, startOfWeek, toDateKey, weekDays } from "@/lib/schedule/geometry";
 import { asyncHandler } from "@/lib/eventHandler";
@@ -16,6 +16,7 @@ import {
   duplicateAppointmentAction,
   rescheduleAppointmentAction,
   setAppointmentCheckStateAction,
+  syncGoogleAction,
 } from "@/app/schedule/actions";
 import { WeekCalendar } from "./WeekCalendar";
 import { ProjectsRail } from "./ProjectsRail";
@@ -77,7 +78,9 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
     hydrated.selectedChartId,
   );
   const [backgroundEvents, setBackgroundEvents] = useState(hydrated.backgroundEvents);
-  const [occurrences, setOccurrences] = useState<Occurrence[]>(hydrated.occurrences);
+  const [occurrences, setOccurrences] = useState<ScheduleOccurrence[]>(
+    hydrated.occurrences,
+  );
   const [masters, setMasters] = useState<Appointment[]>(hydrated.masters);
 
   // Sync when server revalidates (router.refresh). Adjust during render — not in an effect.
@@ -99,6 +102,30 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
   const [editingAppointment, setEditingAppointment] = useState<
     Appointment | DraftAppointment | null
   >(null);
+
+  const [syncing, setSyncing] = useState(false);
+  /**
+   * Sync trouble reported by the server render, dismissible once seen. `loadSchedule`
+   * never throws on a Google failure — the week still loads from what was already
+   * mirrored — so this banner is the only signal that the data may be behind.
+   */
+  const [syncError, setSyncError] = useState<string | null>(
+    initial.sync.state === "failed" || initial.sync.state === "not_linked"
+      ? initial.sync.message
+      : null,
+  );
+
+  async function handleSyncGoogle() {
+    setSyncing(true);
+    setSyncError(null);
+    try {
+      const result = await syncGoogleAction(weekKey);
+      if (!result.ok) setSyncError(result.error);
+      else router.refresh();
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   function openTimeChartEditor(chartId: string) {
     const returnTo = encodeURIComponent(
@@ -282,6 +309,25 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
+      {/* The week below is still fully usable — it just may be behind Google. Saying so
+          beats both a silent stale view and an error page. */}
+      {syncError && (
+        <div
+          role="status"
+          className="flex flex-none items-center gap-3 border-b border-rule bg-priority-a/10 px-3 py-1.5 text-[0.8125rem] text-priority-a"
+        >
+          <span className="min-w-0 flex-1">
+            Google Calendar sync failed — showing the last synced copy. {syncError}
+          </span>
+          <button
+            type="button"
+            onClick={() => setSyncError(null)}
+            className="flex-none rounded border border-priority-a/40 px-2 py-0.5 text-[0.75rem] hover:bg-priority-a/10"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
       {/* Toolbar — Achieve's Time Chart / Today bar */}
       {/* Scrolls sideways below `md` rather than wrapping into three rows, the same trade
           `TabToolbar` makes. */}
@@ -330,6 +376,18 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
         >
           Plan Week…
         </button>
+        {/* Only meaningful once a Google calendar is being mirrored — "off" means none is. */}
+        {initial.sync.state !== "off" && (
+          <button
+            type="button"
+            className="rounded border border-rule bg-surface px-2 py-1 text-ink hover:bg-surface-raised disabled:opacity-40"
+            disabled={syncing}
+            title="Pull the latest from Google Calendar"
+            onClick={asyncHandler(handleSyncGoogle, reportError)}
+          >
+            {syncing ? "Syncing…" : "⟳ Refresh"}
+          </button>
+        )}
         {/*
          * A day pager below `md`, stepping across week boundaries by navigating the week and
          * landing on the right end of it. The week pager beside it is hidden there — a

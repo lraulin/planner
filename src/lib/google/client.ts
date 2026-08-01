@@ -52,9 +52,18 @@ export class GoogleApiError extends Error {
  */
 export async function getGoogleAccessToken(userId: string): Promise<string> {
   try {
+    // `headers()` throws outside a request scope (a script, a test). The user is already
+    // identified by `userId`, so an absent header bag is not a problem worth failing on.
+    let requestHeaders: Headers | undefined;
+    try {
+      requestHeaders = await headers();
+    } catch {
+      requestHeaders = undefined;
+    }
+
     const result = await auth.api.getAccessToken({
       body: { providerId: "google", userId },
-      headers: await headers(),
+      ...(requestHeaders ? { headers: requestHeaders } : {}),
     });
     if (!result?.accessToken) throw new GoogleNotLinkedError();
     return result.accessToken;

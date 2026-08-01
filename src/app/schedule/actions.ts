@@ -11,6 +11,8 @@ import type {
 } from "@/db/schema";
 import * as schedule from "@/lib/schedule/mutations";
 import type { AppointmentInput, TimeChartAreaInput } from "@/lib/schedule/mutations";
+import { startOfWeek } from "@/lib/schedule/geometry";
+import { syncWindow } from "@/lib/google/sync";
 
 export type ActionResult = { ok: true; id?: string } | { ok: false; error: string };
 
@@ -180,5 +182,25 @@ export async function duplicateAppointmentAction(
       private: existing.private,
       recurrenceFrequency: "none",
     });
+  });
+}
+
+// ── Google Calendar ──────────────────────────────────────────────────────────
+
+/**
+ * Force a mirror pass for one week, bypassing the staleness throttle. This is the ⟳
+ * Refresh button; the automatic pull happens inside `loadSchedule`.
+ */
+export async function syncGoogleAction(weekStartIso: string): Promise<ActionResult> {
+  return run(async (userId) => {
+    const start = startOfWeek(new Date(weekStartIso), 0);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 7);
+    const status = await syncWindow(userId, { start, end });
+    // The mirror reports failure rather than throwing, so surface it as an action error —
+    // otherwise a refresh that reached nothing would look like it succeeded.
+    if (status.state === "failed" || status.state === "not_linked") {
+      throw new Error(status.message);
+    }
   });
 }

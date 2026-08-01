@@ -53,6 +53,21 @@ async function makeUser(): Promise<string> {
   return user.id;
 }
 
+/**
+ * `createAppointment` returns null only when a recurring create is waiting on a mirror
+ * pass, which cannot happen here — no Google account is linked in tests, so the write-
+ * through path is inert. Narrowing once keeps the assertions below free of `!` noise.
+ */
+async function makeAppointment(
+  userId: string,
+  input: Parameters<typeof createAppointment>[1],
+) {
+  const row = await createAppointment(userId, input);
+  if (!row)
+    throw new Error("createAppointment returned null with no Google account linked");
+  return row;
+}
+
 /** A 1-hour appointment on the given day at 09:00 local. */
 function hourAt(key: string) {
   const startAt = fromDateKey(key);
@@ -222,7 +237,7 @@ describeDb("appointments", () => {
   });
 
   it("applies defaults on create", async () => {
-    const appt = await createAppointment(userId, {
+    const appt = await makeAppointment(userId, {
       subject: "Standup",
       ...hourAt("2026-03-02"),
     });
@@ -235,7 +250,7 @@ describeDb("appointments", () => {
   });
 
   it("names an unnamed appointment rather than storing an empty subject", async () => {
-    const appt = await createAppointment(userId, {
+    const appt = await makeAppointment(userId, {
       subject: "   ",
       ...hourAt("2026-03-02"),
     });
@@ -268,7 +283,7 @@ describeDb("appointments", () => {
   });
 
   it("normalises recurrence input", async () => {
-    const appt = await createAppointment(userId, {
+    const appt = await makeAppointment(userId, {
       subject: "Weekly",
       ...hourAt("2026-03-02"),
       recurrenceFrequency: "weekly",
@@ -280,7 +295,7 @@ describeDb("appointments", () => {
   });
 
   it("leaves unmentioned fields alone on a partial update", async () => {
-    const appt = await createAppointment(userId, {
+    const appt = await makeAppointment(userId, {
       subject: "Standup",
       location: "Room 1",
       notes: "keep me",
@@ -294,7 +309,7 @@ describeDb("appointments", () => {
   });
 
   it("validates the range against existing values on a partial update", async () => {
-    const appt = await createAppointment(userId, {
+    const appt = await makeAppointment(userId, {
       subject: "Standup",
       ...hourAt("2026-03-02"),
     });
@@ -307,7 +322,7 @@ describeDb("appointments", () => {
   });
 
   it("cycles the check state", async () => {
-    const appt = await createAppointment(userId, {
+    const appt = await makeAppointment(userId, {
       subject: "Standup",
       ...hourAt("2026-03-02"),
     });
@@ -316,7 +331,7 @@ describeDb("appointments", () => {
   });
 
   it("drops recurrence when a series occurrence is dragged", async () => {
-    const appt = await createAppointment(userId, {
+    const appt = await makeAppointment(userId, {
       subject: "Weekly",
       ...hourAt("2026-03-02"),
       recurrenceFrequency: "weekly",
@@ -338,7 +353,7 @@ describeDb("appointments", () => {
   });
 
   it("keeps recurrence when rescheduling without the flag", async () => {
-    const appt = await createAppointment(userId, {
+    const appt = await makeAppointment(userId, {
       subject: "Weekly",
       ...hourAt("2026-03-02"),
       recurrenceFrequency: "weekly",
@@ -355,7 +370,7 @@ describeDb("appointments", () => {
 
   it("does not let one user read, change, or delete another's appointment", async () => {
     const intruderId = await makeUser();
-    const appt = await createAppointment(userId, {
+    const appt = await makeAppointment(userId, {
       subject: "Private",
       ...hourAt("2026-03-02"),
     });

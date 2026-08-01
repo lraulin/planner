@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { SettingsPage } from "@/components/settings/SettingsPage";
+import { GoogleCalendarPanel } from "@/components/settings/GoogleCalendarPanel";
 import { LogoutButton } from "@/components/auth/LogoutButton";
+import { getCurrentUserId } from "@/lib/auth";
+import { googleConfigured } from "@/lib/auth/server";
+import { isGoogleLinked, listCalendarLinks } from "@/lib/google/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +12,13 @@ export const dynamic = "force-dynamic";
  * Preference reset surface. Not a main tab — reached from the shell's Settings link —
  * so it uses a slim header rather than the full TabStrip.
  */
-export default function SettingsRoute() {
+export default async function SettingsRoute() {
+  const userId = await getCurrentUserId();
+  const [linked, calendars] = await Promise.all([
+    isGoogleLinked(userId),
+    listCalendarLinks(userId),
+  ]);
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface">
       {/* Reached from the More sheet on a phone, so it carries its own notch inset — there
@@ -32,7 +42,16 @@ export default function SettingsRoute() {
           <LogoutButton />
         </div>
       </header>
-      <SettingsPage />
+      <div className="flex-1 overflow-auto">
+        <SettingsPage />
+        <div className="mx-auto w-full max-w-2xl px-6 pb-8">
+          <GoogleCalendarPanel
+            configured={googleConfigured}
+            linked={linked}
+            calendars={calendars}
+          />
+        </div>
+      </div>
     </div>
   );
 }

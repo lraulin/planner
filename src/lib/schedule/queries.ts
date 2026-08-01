@@ -1,6 +1,8 @@
 import { and, asc, eq, gte, lt, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { appointments, timeChartAreas, timeCharts } from "@/db/schema";
+import { syncWindow, syncWindowIfStale, type SyncStatus } from "@/lib/google/sync";
+import { listCalendarLinks } from "@/lib/google/queries";
 import {
   appointmentToRecurrenceInput,
   expandRecurrence,
@@ -81,14 +83,22 @@ export async function getAppointment(userId: string, id: string) {
   return row ?? null;
 }
 
+/**
+ * An occurrence plus the colour of the Google calendar it came from — null for a
+ * planner-native appointment, which is exactly the distinction the week grid draws.
+ */
+export type ScheduleOccurrence = Occurrence & { calendarColor: string | null };
+
 export type SchedulePayload = {
   charts: Awaited<ReturnType<typeof listTimeCharts>>;
   selectedChartId: string | null;
   areas: Awaited<ReturnType<typeof listTimeChartAreas>>;
   backgroundEvents: ReturnType<typeof expandTimeChartAreas>;
   appointments: Awaited<ReturnType<typeof listAppointmentsInRange>>;
-  occurrences: Occurrence[];
+  occurrences: ScheduleOccurrence[];
   weekStart: string; // ISO date key
+  /** Outcome of the Google mirror pass for this week; drives the toolbar banner. */
+  sync: SyncStatus;
 };
 
 export async function loadSchedule(
@@ -97,12 +107,32 @@ export async function loadSchedule(
     weekStart?: Date;
     timeChartId?: string | null;
     weekStartsOn?: number;
+    /** Force a Google pull even if the window is still fresh — the ⟳ Refresh path. */
+    forceSync?: boolean;
   } = {},
 ): Promise<SchedulePayload> {
   const weekStartsOn = options.weekStartsOn ?? 0;
   const weekStart = startOfWeek(options.weekStart ?? new Date(), weekStartsOn);
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekEnd.getDate() + 7);
+
+  /**
+   * Mirror Google before reading, and never let it take the page down: a revoked token or
+   * a Google outage degrades to "the schedule you already had, plus a banner". Throwing
+   * here would turn a third-party hiccup into a 500 on the most-used route in the app.
+   */
+  let sync: SyncStatus = { state: "off" };
+  try {
+    const window = { start: weekStart, end: weekEnd };
+    sync = options.forceSync
+      ? await syncWindow(userId, window)
+      : await syncWindowIfStale(userId, window);
+  } catch (error) {
+    sync = {
+      state: "failed",
+      message: error instanceof Error ? error.message : "Google Calendar sync failed.",
+    };
+  }
 
   const charts = await listTimeCharts(userId);
   let selectedChartId = options.timeChartId ?? charts[0]?.id ?? null;
@@ -129,9 +159,33 @@ export async function loadSchedule(
   );
 
   const appts = await listAppointmentsInRange(userId, weekStart, weekEnd);
-  const occurrences = appts.flatMap((a) =>
-    expandRecurrence(appointmentToRecurrenceInput(a), weekStart, weekEnd),
+
+  /**
+   * Tint each Google event with its source calendar's colour, so "Work" and "Personal" are
+   * distinguishable at a glance and both are distinguishable from a planner appointment.
+   * Resolved here rather than inside `expandRecurrence`, which stays free of display
+   * concerns.
+   */
+  const colorByCalendarId = new Map(
+    (await listCalendarLinks(userId)).map((link) => [
+      link.calendarId,
+      link.backgroundColor,
+    ]),
   );
+  const colorByAppointmentId = new Map(
+    appts.map((a) => [
+      a.id,
+      a.externalCalendarId
+        ? (colorByCalendarId.get(a.externalCalendarId) ?? null)
+        : null,
+    ]),
+  );
+
+  const occurrences: ScheduleOccurrence[] = appts
+    .flatMap((a) =>
+      expandRecurrence(appointmentToRecurrenceInput(a), weekStart, weekEnd),
+    )
+    .map((o) => ({ ...o, calendarColor: colorByAppointmentId.get(o.id) ?? null }));
 
   return {
     charts,
@@ -141,5 +195,6 @@ export async function loadSchedule(
     appointments: appts,
     occurrences,
     weekStart: weekStart.toISOString(),
+    sync,
   };
 }

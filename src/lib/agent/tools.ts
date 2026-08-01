@@ -504,6 +504,15 @@ async function createAppointmentTool(userId: string, args: Record<string, unknow
   };
 
   const row = await createAppointment(userId, input);
+  // Null only happens for a recurring create whose instances have not mirrored back yet,
+  // and this tool takes no recurrence arguments — so reaching here means something changed
+  // upstream and the caller should hear about it rather than get a half-built payload.
+  if (!row) {
+    throw new AgentError(
+      "internal",
+      "Appointment was created but could not be read back",
+    );
+  }
   return {
     appointment: {
       id: row.id,

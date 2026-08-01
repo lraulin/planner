@@ -13,6 +13,7 @@ import type {
 } from "@fullcalendar/core";
 import type { AppointmentCheck } from "@/db/schema";
 import type { Occurrence } from "@/lib/schedule/recurrence";
+import type { ScheduleOccurrence } from "@/lib/schedule/queries";
 import { contrastText } from "@/lib/schedule/geometry";
 import {
   checkStateLabel,
@@ -35,7 +36,7 @@ type Props = {
   /** Set to render a single day instead of the week — the compact layout. */
   singleDay?: Date;
   backgroundEvents: BackgroundEvent[];
-  occurrences: Occurrence[];
+  occurrences: ScheduleOccurrence[];
   onSelectRange: (start: Date, end: Date) => void;
   onEventClick: (occ: Occurrence) => void;
   onEventDrop: (
@@ -72,7 +73,7 @@ export function WeekCalendar({
   }, [onCycleCheck]);
 
   const occByKey = useMemo(() => {
-    const m = new Map<string, Occurrence>();
+    const m = new Map<string, ScheduleOccurrence>();
     for (const o of occurrences) m.set(o.occurrenceKey, o);
     return m;
   }, [occurrences]);
@@ -97,6 +98,12 @@ export function WeekCalendar({
 
     const appts: EventInput[] = occurrences.map((o) => {
       const doneOrMissed = o.checkState !== "open";
+      // A Google event wears its source calendar's colour on the left edge, so two
+      // calendars are told apart from each other and both from a planner appointment.
+      // Missed still wins — that is a state you need to notice.
+      const googleColor = o.calendarColor || null;
+      const borderColor =
+        o.checkState === "missed" ? "#a05050" : (googleColor ?? "#2a5a8a");
       return {
         id: o.occurrenceKey,
         title: o.subject || "(no subject)",
@@ -104,19 +111,21 @@ export function WeekCalendar({
         end: o.endAt,
         allDay: o.allDay,
         backgroundColor: doneOrMissed ? "#e8e8e8" : "#ffffff",
-        borderColor: o.checkState === "missed" ? "#a05050" : "#2a5a8a",
+        borderColor,
         textColor: "#1b1d23",
         classNames: [
           "fc-appointment",
           o.checkState === "done" ? "fc-appointment-done" : "",
           o.checkState === "missed" ? "fc-appointment-missed" : "",
           o.projectId ? "fc-appointment-project" : "",
+          googleColor ? "fc-appointment-google" : "",
         ].filter(Boolean),
         extendedProps: {
           appointmentId: o.id,
           projectId: o.projectId,
           isRecurring: o.isRecurring,
           checkState: o.checkState,
+          fromGoogle: Boolean(googleColor),
         },
       };
     });
