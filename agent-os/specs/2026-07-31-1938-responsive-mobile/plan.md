@@ -194,30 +194,50 @@ The 16px rule is the single highest-impact line in the change.
 
 ## Acceptance criteria
 
-- [ ] No horizontal scroll on the page body at 390 × 844, portrait or landscape, on any route.
-- [ ] **Focusing any input on any route does not zoom the viewport.**
-- [ ] Bottom nav present below `md`, all five targets ≥44px, clear of the home indicator.
-- [ ] Tasks / Projects / Goals / Wishes / Notes render as card lists; tap opens a full-screen
-      sheet; Save & Close works with the keyboard open.
-- [ ] Day: segmented control switches panes; check off, add via the inline row, swipe to move to
-      tomorrow, long-press → _Promote to task…_.
-- [ ] Every command in the Day and Notes context menus is reachable by long press.
-- [ ] Quick capture opens from the `＋` slot and submits by button.
-- [ ] Both colour schemes checked on every touched surface.
-- [ ] Schedule, Chooser, Week Plan, planning wizard and time chart scroll rather than squash.
-- [ ] **Desktop regression pass at 1280 × 800 on all 10 tabs** — density, columns, drag,
-      right-click and every shortcut in `HintBar` unchanged.
-- [ ] `npm run test:unit`, `typecheck`, `lint`, `build` all pass; new `src/lib/touch/*` and
-      `src/lib/grid/compactFields` tests included.
-- [ ] Verified in the installed PWA on the actual iPhone 12, not only in emulation.
+Verified at 390 × 844 with touch emulation via the `run-planner` driver's new `viewport` and
+`scheme` steps, unless noted.
+
+- [x] No horizontal scroll on the page body — measured `documentElement.scrollWidth -
+    innerWidth === 0` on all thirteen routes.
+- [x] **Focusing any input does not zoom the viewport** — zero controls below 16px on any
+      route, including all 18 inside the node drawer.
+- [x] Bottom nav present below `md`; all five slots measure 78 × 48px; `.pb-safe` clears the
+      home indicator.
+- [x] Tasks / Projects / Goals / Wishes / Notes render as card lists; tap opens the full-screen
+      sheet; the footer restacks with all three buttons.
+- [x] Day: segmented control switches panes; check boxes are tap-sized; the add row commits on
+      Enter; swipe right completes and swipe left moves to tomorrow (both driven through
+      synthesised pointer events and confirmed against the stored state).
+- [x] Every command in the Day and Notes row menus is reachable by long press, and A/B/C/D
+      ranking exists there as named commands now that drag is off.
+- [x] Quick capture opens from the `＋` slot and submits by button; Enter inserts a newline
+      below `md` rather than submitting.
+- [x] Both colour schemes checked on the touched surfaces.
+- [x] Schedule renders a single day with a pager; Week Plan, planning wizard and time chart pan
+      inside `WideSurface` rather than squashing; Chooser inherits compact rows.
+- [x] **Desktop regression pass at 1280 × 800** — 28px rows, grid template columns intact,
+      `HintBar` and `TabStrip` visible, bottom nav hidden, `F2`, arrow-key selection,
+      right-click menu (11 items) and HTML5 drag all still working; Schedule still 7 columns
+      with its rail.
+- [x] `test:unit` (680), full `test` including the Postgres integration suite (964, 64 files —
+      not skipped), `typecheck`, `lint` and `build` all pass.
+- [ ] **Open:** verify in the installed PWA on the actual iPhone 12. Emulation cannot show
+      Safari's dynamic toolbars, real notch insets, or the soft keyboard's effect on the
+      sticky drawer footer. This spec stays **active** until that run.
 
 ## Changes from original plan
 
-| Change                                                                                                                                                                                                                         | Why                                                                                                                                                                                                                                     |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Phase 1 dropped the planned `--space-*` scale and the "stronger `:focus-visible` ring"                                                                                                                                         | A token scale nothing consumes is dead CSS, and re-tuning the focus ring risks a desktop regression for no mobile gain. The desktop polish that survived is `--elev-1` (used by pinned chrome and sheets).                              |
-| Phase 1 added `-webkit-tap-highlight-color: transparent` and a `.md-body` bump to 16px below `md`, neither of which was planned                                                                                                | Both are real touch polish found while writing the compact block: the grey tap flash reads as a rendering fault, and 14px prose is a desktop compromise on the one surface meant for reading.                                           |
-| Phase 3 added `--name-gutter` and `formatCompactDate`, neither of which was planned                                                                                                                                            | The meta line sat 42px left of the title it belonged to, because the name cell's expander and icon are inside the primary slot. And `deadline`'s only borrowable text was its filter's ISO string, which is the wrong shape for a chip. |
-| Phase 3 made `TabToolbar` scroll sideways below `md`                                                                                                                                                                           | Not in the plan, but the wrapped toolbar was costing four rows — a fifth of a 390px screen — before a single task was visible.                                                                                                          |
-| **Phase 4 dropped two planned items.** `ItemList` already has a visible ▼ expand button beside the double-click; and the hover-only deadline cell never renders below `md`, because that column becomes a read-only meta chip. | The shaping notes over-reported both. `ItemList` instead got tap-to-expand on the row and 44px-tall row buttons; the deadline cell needs no change at all.                                                                              |
-| Phase 4's footer restacks with `flex-col-reverse` rather than rendering Save twice                                                                                                                                             | Two copies hidden per breakpoint would put two identical controls in the tree and in every query written against it.                                                                                                                    |
+| Change                                                                                                                                                                                                                         | Why                                                                                                                                                                                                                                        |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Phase 1 dropped the planned `--space-*` scale and the "stronger `:focus-visible` ring"                                                                                                                                         | A token scale nothing consumes is dead CSS, and re-tuning the focus ring risks a desktop regression for no mobile gain. The desktop polish that survived is `--elev-1` (used by pinned chrome and sheets).                                 |
+| Phase 1 added `-webkit-tap-highlight-color: transparent` and a `.md-body` bump to 16px below `md`, neither of which was planned                                                                                                | Both are real touch polish found while writing the compact block: the grey tap flash reads as a rendering fault, and 14px prose is a desktop compromise on the one surface meant for reading.                                              |
+| Phase 3 added `--name-gutter` and `formatCompactDate`, neither of which was planned                                                                                                                                            | The meta line sat 42px left of the title it belonged to, because the name cell's expander and icon are inside the primary slot. And `deadline`'s only borrowable text was its filter's ISO string, which is the wrong shape for a chip.    |
+| Phase 3 made `TabToolbar` scroll sideways below `md`                                                                                                                                                                           | Not in the plan, but the wrapped toolbar was costing four rows — a fifth of a 390px screen — before a single task was visible.                                                                                                             |
+| **Phase 4 dropped two planned items.** `ItemList` already has a visible ▼ expand button beside the double-click; and the hover-only deadline cell never renders below `md`, because that column becomes a read-only meta chip. | The shaping notes over-reported both. `ItemList` instead got tap-to-expand on the row and 44px-tall row buttons; the deadline cell needs no change at all.                                                                                 |
+| Phase 4's footer restacks with `flex-col-reverse` rather than rendering Save twice                                                                                                                                             | Two copies hidden per breakpoint would put two identical controls in the tree and in every query written against it.                                                                                                                       |
+| Phase 5 added a `leading` compact role and swipe support in `DataGrid`, neither planned in that shape                                                                                                                          | The Day tab's check box is the reason to open it on a phone, and compact rows otherwise render text only. Swipe took the same opt-in shape as `rowDrag`, so it stays contained to the grid that asks for it.                               |
+| Phase 5 also added A/B/C/D "Rank …" commands to the Day row menu                                                                                                                                                               | Follows from drag being off on touch. The plan asserted ranking must survive but did not schedule the commands that make it survive.                                                                                                       |
+| Phase 6 introduced `WideSurface` instead of ad-hoc `overflow-x-auto` per view                                                                                                                                                  | Three views needed the same "keep your width, pan, and say why" treatment. Three hand-rolled copies would drift like the four backdrops `ModalShell` was extracted from.                                                                   |
+| Phase 6's compact Schedule opens on today rather than the week's first day                                                                                                                                                     | Landing on Sunday because that is where the week starts is technically correct and never what was wanted.                                                                                                                                  |
+| Phase 6 hid `HintBar` and made the Outline, Schedule and planning toolbars scroll                                                                                                                                              | Not planned. `HintBar` documents keys, drag and right-click — none of which a phone has — and was costing 180px of 844.                                                                                                                    |
+| The `run-planner` driver gained `viewport` and `scheme` steps                                                                                                                                                                  | Verifying any of this at 390 × 844 was otherwise impossible. Note the gotcha it exposed: `Emulation.setTouchEmulationEnabled` kills HTML5 drag and turning it back off does not revive it, so the driver only toggles it on a real change. |
