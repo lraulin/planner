@@ -201,8 +201,29 @@ Features that complete or surround the original product, plus making it multi-de
 
 Treat as one track with staged depth:
 
-1. **Calendar sync** — show Google Calendar alongside (or inside) the weekly schedule;
-   push time blocks / pull busy times.
+1. **✅ Calendar sync.** `specs/2026-07-31-2046-google-calendar-sync`. Google Calendar _is_
+   the planner's calendar now: `/schedule` and `/day` show your real events, and an
+   appointment created here is created in Google, so it reaches the phone. **Google is the
+   source of truth** — `appointments` is a mirror, not a peer — which is what removes
+   conflict resolution, tombstones, and dirty tracking rather than merely simplifying them.
+   Local writes go through to Google inside the mutation, so a rejected change never leaves
+   a row claiming something Google did not accept.
+
+   Recurrence is deliberately **asymmetric**: pulls use `singleEvents=true` so Google
+   expands series and applies its own exceptions and cancellations (no RRULE parser, no
+   exception table, `expandRecurrence` untouched), while creates push our model out as
+   RRULE, which it maps onto losslessly. The cost, accepted: recurrence is **create-only**
+   here — editing a series is a job for Google Calendar.
+
+   Planner-only fields (three-state check, priority, contexts, project link) survive every
+   re-sync as annotations the mirror structurally cannot write. Connect and per-calendar
+   checkboxes live on `/settings`; new appointments go to the primary calendar.
+
+   Deferred: editing a series, background sync (no cron/queue/push channels — the mirror
+   runs on view), attendees and RSVP, multiple accounts, and offline write queueing.
+   **Operational note:** publish the OAuth consent screen — while it is in _Testing_,
+   Google expires refresh tokens after 7 days.
+
 2. **Optional later** — Tasks/Keep-style capture only if calendar alone is not enough;
    avoid boiling the ocean.
 

@@ -1,6 +1,6 @@
 # Standards for Google Calendar Sync
 
-**Status: active**
+**Status: frozen / complete** (2026-08-01)
 
 Four standards apply. The two that bind hardest are `development/testing` (the mirror sweep
 deletes rows, so its logic must be pure and tested) and `database/migrations` (the schema

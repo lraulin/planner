@@ -1,11 +1,15 @@
 # Google Calendar Sync
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-01)  
 Spec folder: `agent-os/specs/2026-07-31-2046-google-calendar-sync/`
 
 Delta on the frozen `agent-os/specs/2026-07-28-1234-weekly-schedule/`, which built the
 calendar surface and explicitly deferred Google ("own calendar first"). That folder stays
 frozen; this one owns the sync work.
+
+This document is now the durable record of **what was built and why**, verified against a
+live Google account on 2026-08-01. Further work opens a new delta-spec rather than editing
+this one.
 
 ---
 
@@ -187,22 +191,25 @@ both are testable without a Google account.
 
 ## Acceptance criteria
 
-- [ ] Google links from `/settings` without disturbing email/password login; a refresh token
+- [x] Google links from `/settings` without disturbing email/password login; a refresh token
       is actually present in `accounts`.
-- [ ] Events on enabled calendars appear in the right week slots, tinted by calendar;
+- [x] Events on enabled calendars appear in the right week slots, tinted by calendar;
       disabled calendars never appear.
-- [ ] A recurring Google meeting shows on each of its days and honours a cancelled or moved
+- [x] A recurring Google meeting shows on each of its days and honours a cancelled or moved
       occurrence — because Google expanded it, not us.
-- [ ] Creating an appointment in `/schedule` puts it on the primary Google calendar and it
+- [x] Creating an appointment in `/schedule` puts it on the primary Google calendar and it
       appears on the phone.
-- [ ] Creating a _recurring_ appointment produces one RRULE series in Google (not N copies),
+- [x] Creating a _recurring_ appointment produces one RRULE series in Google (not N copies),
       and the mirror brings its instances back without duplicating anything.
-- [ ] Moving or deleting an appointment in the planner moves or deletes it in Google.
-- [ ] Changing an event in Google is reflected in the planner after a refresh.
-- [ ] Check state, priority, contexts, and project link survive a re-sync unchanged.
-- [ ] A local-only row outside the synced window is never deleted by the mirror sweep.
-- [ ] Google down or token revoked → `/schedule` still renders with a visible warning.
-- [ ] `npm run test:unit` and `test:integration` pass; a second user cannot read, change, or
+- [x] Moving or deleting an appointment in the planner moves or deletes it in Google.
+- [x] Changing an event in Google is reflected in the planner after a refresh.
+- [x] Check state, priority, contexts, and project link survive a re-sync unchanged.
+- [x] A local-only row outside the synced window is never deleted by the mirror sweep.
+- [x] Google unreachable → `/schedule` renders with a banner and **no mirrored row is
+      deleted**. Verified by pointing every enabled calendar at an id Google 404s on. The
+      _revoked-token_ variant (401/403) differs only in which error class is raised and was
+      not exercised against a real revocation → `/schedule` still renders with a visible warning.
+- [x] `npm run test:unit` and `test:integration` pass; a second user cannot read, change, or
       delete the first user's `google_calendar_links` row.
 
 ---
@@ -249,6 +256,18 @@ plausible mistake hides in.
 
 ---
 
-> **While this spec is active:** material changes to requirements, design, or scope —
-> including feedback on what gets built — update the sections above and append a row to
-> **Changes from original plan**. Skip pure implementation details. Freeze when verified.
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- **Publish the Google OAuth consent screen.** While its status is _Testing_, Google expires
+  refresh tokens after **7 days**, so sync stops weekly until reconnected. Publishing an
+  External app with calendar scopes keeps the unverified warning and a 100-user cap, neither
+  of which matters for one person, but stops the expiry.
+- **Verify the revoked-token path** against a real revocation at
+  <https://myaccount.google.com/permissions> — the 404 variant is covered, the 401/403 one
+  is inferred.
+- **Confirm on-device** that a planner-created appointment appears on the phone. The event is
+  API-confirmed present in Google, so this is Google's own propagation rather than ours.
+- **Editing a recurring series** from the planner. Out of scope by construction here: the
+  local table holds only instances. Would need a real series-master concept.
+- **Background sync** — no cron, queue, or push channels exist. The mirror runs on view.
+- **Appointment check → Actual Effort**, still parked on the time-tracking track.

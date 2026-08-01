@@ -1,6 +1,6 @@
 # References for Google Calendar Sync
 
-**Status: active**
+**Status: frozen / complete** (2026-08-01)
 
 ## Prior specs
 

@@ -1,6 +1,6 @@
 # Google Calendar Sync — Shaping Notes
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-01)  
 Authoritative detail: `plan.md` (including **Changes from original plan**).
 
 ## Scope
