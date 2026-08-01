@@ -11,6 +11,35 @@
  * same clamping rules; keeping one copy is what stops the two from drifting apart.
  */
 
+/**
+ * Local midnight on the same calendar day.
+ *
+ * The date fields on a record hold a timestamp but only ever have their date half edited,
+ * and `DateField` writes local midnight (`new Date("2026-08-07T00:00:00")`). Anything that
+ * computes a new date for one of those fields should land on local midnight too, or a date
+ * derived from `new Date()` carries an 18:32 that nothing shows and that makes every
+ * comparison depend on the time of day it was created.
+ */
+export function startOfDay(date: Date): Date {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+/** Whole calendar days from `from` to `to`, ignoring the time of day. Negative if earlier. */
+export function daysBetween(from: Date, to: Date): number {
+  const MS_PER_DAY = 24 * 60 * 60 * 1000;
+  const a = startOfDay(from);
+  const b = startOfDay(to);
+  // Round, because a DST boundary inside the span makes the raw difference 23 or 25 hours.
+  return Math.round((b.getTime() - a.getTime()) / MS_PER_DAY);
+}
+
+/** Days in a month. `month` is 1–12. */
+export function daysInMonth(year: number, month: number): number {
+  return new Date(year, month, 0).getDate();
+}
+
 export function addDays(date: Date, days: number): Date {
   const d = new Date(date);
   d.setDate(d.getDate() + days);

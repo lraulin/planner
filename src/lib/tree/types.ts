@@ -54,13 +54,14 @@ export type OutlineRow = {
    */
   deferredDate: Date | null;
   /**
-   * Task only: how the task repeats after each completion. `none` — the default and the
-   * value every non-task row reports — means it does not.
+   * Task only: how often the task repeats. `none` — the default and the value every
+   * non-task row reports — means it does not.
    *
-   * Recurrence drives `deferredDate`, never `deadline`. See `taskDetails` in the schema.
+   * Carried on the outline row only so a repeating row can be marked as one; the rule
+   * itself lives on the detail record. The rest of the recurrence columns are deliberately
+   * *not* here — the outline loads every row on every render, and nothing on it reads them.
    */
   recurrenceFrequency: RecurrenceFrequency;
-  recurrenceInterval: number;
   /** Project fields, for the Tasks tab's purpose panel and the Delegation view. */
   purpose: string;
   assignedTo: string;

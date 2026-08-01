@@ -117,6 +117,19 @@ export function NameCell({
         </span>
       )}
 
+      {/* Without this a repeating row is unreadable on the Outline, which has no Status
+          column: ticking one un-ticks it a moment later and moves dates you cannot see,
+          which looks like the app refusing the click rather than like a cycle. */}
+      {node.recurrenceFrequency !== "none" && (
+        <span
+          aria-label="Repeats"
+          title="Repeats — completing it starts the next occurrence"
+          className="ml-1.5 flex-none self-center text-[0.6875rem] text-ink-faint"
+        >
+          ↻
+        </span>
+      )}
+
       {node.collapsed && node.hasChildren && (
         <span className="tabular ml-2 flex-none self-center text-[0.6875rem] text-ink-faint">
           {node.childCount}

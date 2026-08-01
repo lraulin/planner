@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   date,
   index,
   integer,
@@ -99,6 +100,47 @@ export const recurrenceFrequencyEnum = pgEnum("recurrence_frequency", [
 
 /** How a recurring series ends. */
 export const recurrenceEndEnum = pgEnum("recurrence_end", ["never", "count", "until"]);
+
+/**
+ * Achieve's two ways of repeating a task (manual §3.9), offered on every frequency.
+ *
+ * - `scheduled` — a fixed calendar series. The next occurrence is measured from **this
+ *   occurrence's own dates**, so completing next week's report on Wednesday buys you until
+ *   the week after, and missing one still leaves you owing it.
+ * - `regenerate` — measured from **the completion**. Brushing your teeth twice today still
+ *   leaves you brushing them tomorrow; mow the lawn on day 1 and the next one is day 8.
+ *
+ * In Achieve's dialog the Regenerate radio sits alongside the pattern radios and excludes
+ * them, which is why `regenerate` always implies `recurrencePattern = "interval"` — a
+ * regenerating task has no stable series start for a weekday pattern to hang off.
+ */
+export const recurrenceModeEnum = pgEnum("recurrence_mode", [
+  "scheduled",
+  "regenerate",
+]);
+
+/**
+ * Which calendar pattern a `scheduled` task follows, within its frequency.
+ *
+ * `interval` is the default and means "step from the anchor by {interval} {frequency}",
+ * which is exactly what task recurrence did before patterns existed — so every existing
+ * row keeps its behaviour without a data migration.
+ *
+ * | frequency | patterns |
+ * | --- | --- |
+ * | daily | `interval` · `weekday` (Mon–Fri) · `weekend` (Sat–Sun) |
+ * | weekly | `interval` · `by_weekday` (every N weeks on the ticked days) |
+ * | monthly | `interval` · `by_month_day` (day D) · `by_ordinal` (the first…last {weekday}) |
+ * | yearly | `interval` · `by_month_day` ({month} {day}) · `by_ordinal` |
+ */
+export const recurrencePatternEnum = pgEnum("recurrence_pattern", [
+  "interval",
+  "weekday",
+  "weekend",
+  "by_weekday",
+  "by_month_day",
+  "by_ordinal",
+]);
 
 /** Achieve's project Sensitivity field. Carried for parity; nothing keys off it yet. */
 export const sensitivityEnum = pgEnum("sensitivity", [
@@ -384,110 +426,164 @@ export const exercises = pgTable(
  * ("45 min", "2 h", "3:45 h", "3 d"). Parent rows display the rollup of their descendants,
  * computed at read time rather than stored.
  */
-export const taskDetails = pgTable("task_details", {
-  nodeId: uuid("node_id")
-    .primaryKey()
-    .references(() => nodes.id, { onDelete: "cascade" }),
-  /** Expected effort to complete. */
-  effortMinutes: integer("effort_minutes"),
-  /** Work still needed. Falls as work is done, but may rise if the estimate was low. */
-  effortLeftMinutes: integer("effort_left_minutes"),
-  /** Work actually spent so far. */
-  actualEffortMinutes: integer("actual_effort_minutes").notNull().default(0),
-  percentComplete: smallint("percent_complete").notNull().default(0),
-  contexts: text("contexts").array().notNull().default([]),
-  // General
-  targetStartDate: timestamp("target_start_date", { withTimezone: true }),
-  targetEndDate: timestamp("target_end_date", { withTimezone: true }),
-  /**
-   * When a task is pushed out of view until a date, without losing its deadline.
-   *
-   * Read by the Task Chooser (`isChooserCandidate`) and by the derived Status column: a
-   * task whose deferred date is still in the future is not offered as something to do
-   * now. Set by hand, or moved forward automatically each time a **recurring** task is
-   * completed — see `recurrenceFrequency` below.
-   */
-  deferredDate: timestamp("deferred_date", { withTimezone: true }),
-  leadTimeMinutes: integer("lead_time_minutes"),
-  /** Slack Achieve leaves between finishing and the deadline. */
-  deadlineLeadTimeMinutes: integer("deadline_lead_time_minutes"),
-  source: text("source").notNull().default(""),
-  place: text("place").notNull().default(""),
-  reminderAt: timestamp("reminder_at", { withTimezone: true }),
-  private: boolean("private").notNull().default(false),
-  // Recurrence
-  /**
-   * Achieve's **regeneration-based** recurrence (manual §3.9.1): "regenerate new item N
-   * week(s) after each instance is completed". Read together with `recurrenceInterval` as
-   * "every {interval} {frequency}, measured from each completion" — so this column names
-   * the *unit*, not a calendar pattern, and `none` means the task does not repeat.
-   *
-   * Reuses `recurrence_frequency`, the enum `appointments` already uses, even though the
-   * two features are unrelated: an appointment expands one stored master into many
-   * calendar occurrences, while a recurring task is a single row that defers itself. The
-   * shared enum is a convenience — do not unify the code behind them.
-   *
-   * **Recurrence never sets a deadline.** It moves `deferredDate` and nothing else. A
-   * deadline is an external constraint (taxes, bills); "play with the cats daily" is not
-   * one, and modelling routines as deadlines fills Overdue with work that was never
-   * urgent, which is what makes Overdue worth reading. See the spec at
-   * `agent-os/specs/2026-07-31-0834-task-recurrence/`.
-   */
-  recurrenceFrequency: recurrenceFrequencyEnum("recurrence_frequency")
-    .notNull()
-    .default("none"),
-  /**
-   * How many `recurrenceFrequency` units between completions. Anchored to the completion
-   * rather than to the previous due date on purpose: finish a fortnightly chore on day 18
-   * and the next one is due 14 days from *then*, with no accumulating debt.
-   */
-  recurrenceInterval: integer("recurrence_interval").notNull().default(1),
-  // Schedule
-  effortDriven: boolean("effort_driven").notNull().default(true),
-  /** A zero-duration marker rather than a piece of work. */
-  milestone: boolean("milestone").notNull().default(false),
-  actualStartDate: timestamp("actual_start_date", { withTimezone: true }),
-  /**
-   * When this task was completed. For a **recurring** task, which never stays completed,
-   * this is the *last* completion — the full history is in `task_completions`.
-   */
-  dateCompleted: timestamp("date_completed", { withTimezone: true }),
-  /** Wall-clock span the work is spread over, as distinct from effort spent inside it. */
-  durationMinutes: integer("duration_minutes"),
-  constraint: taskConstraintEnum("constraint").notNull().default("as_soon_as_possible"),
-  constraintDate: timestamp("constraint_date", { withTimezone: true }),
-  /** Work-breakdown-structure code, e.g. "1.2.3". */
-  wbs: text("wbs").notNull().default(""),
-  costLow: numeric("cost_low", { precision: 12, scale: 2 }),
-  costHigh: numeric("cost_high", { precision: 12, scale: 2 }),
-  actualCost: numeric("actual_cost", { precision: 12, scale: 2 }),
-  // Details
-  billingInformation: text("billing_information").notNull().default(""),
-  company: text("company").notNull().default(""),
-  mileage: text("mileage").notNull().default(""),
-  description: text("description").notNull().default(""),
-  /**
-   * Optional link to a Fitness catalog exercise. Makes this task a **plan reminder** for
-   * that lift (e.g. "Bench Press" under a Strength project). History lives on
-   * `workout_sessions` / sets, not on the task — so deleting or cancelling the task never
-   * erases what you lifted. `set null` if the exercise is removed.
-   */
-  exerciseId: uuid("exercise_id").references(() => exercises.id, {
-    onDelete: "set null",
-  }),
-});
+export const taskDetails = pgTable(
+  "task_details",
+  {
+    nodeId: uuid("node_id")
+      .primaryKey()
+      .references(() => nodes.id, { onDelete: "cascade" }),
+    /** Expected effort to complete. */
+    effortMinutes: integer("effort_minutes"),
+    /** Work still needed. Falls as work is done, but may rise if the estimate was low. */
+    effortLeftMinutes: integer("effort_left_minutes"),
+    /** Work actually spent so far. */
+    actualEffortMinutes: integer("actual_effort_minutes").notNull().default(0),
+    percentComplete: smallint("percent_complete").notNull().default(0),
+    contexts: text("contexts").array().notNull().default([]),
+    // General
+    targetStartDate: timestamp("target_start_date", { withTimezone: true }),
+    targetEndDate: timestamp("target_end_date", { withTimezone: true }),
+    /**
+     * When a task is pushed out of view until a date, without losing its deadline.
+     *
+     * Read by the Task Chooser (`isChooserCandidate`) and by the derived Status column: a
+     * task whose deferred date is still in the future is not offered as something to do
+     * now. Set by hand, or moved forward automatically each time a **recurring** task is
+     * completed — see `recurrenceFrequency` below.
+     *
+     * A completing recurrence always writes this column, whichever date the pattern is
+     * anchored on, because it is the only thing that takes a finished routine out of the
+     * Chooser. Without it a deadline-anchored routine could be ticked twice in one day.
+     */
+    deferredDate: timestamp("deferred_date", { withTimezone: true }),
+    leadTimeMinutes: integer("lead_time_minutes"),
+    /** Slack Achieve leaves between finishing and the deadline. */
+    deadlineLeadTimeMinutes: integer("deadline_lead_time_minutes"),
+    source: text("source").notNull().default(""),
+    place: text("place").notNull().default(""),
+    reminderAt: timestamp("reminder_at", { withTimezone: true }),
+    private: boolean("private").notNull().default(false),
+    // Recurrence
+    /**
+     * How often this task repeats, and whether it repeats at all — `none` means it does not.
+     * Read with `recurrenceInterval`, `recurrenceMode` and `recurrencePattern` as one rule;
+     * `src/lib/recurrence/pattern.ts` is where that rule turns into dates.
+     *
+     * Reuses `recurrence_frequency`, the enum `appointments` already uses, even though the
+     * two features are unrelated: an appointment expands one stored master into many
+     * calendar occurrences, while a recurring task is a single row that moves its own dates.
+     * The shared enum is a convenience — do not unify the code behind them.
+     *
+     * **Recurrence never _creates_ a deadline; it only moves one you set yourself.** A
+     * deadline is an external constraint (taxes, bills); "play with the cats daily" is not
+     * one, and modelling routines as deadlines fills Overdue with work that was never
+     * urgent, which is what makes Overdue worth reading. A repeating task with no deadline
+     * moves only its defer date and can never become Overdue — the load-bearing rule of
+     * `agent-os/specs/2026-07-31-0834-task-recurrence/`, still true.
+     */
+    recurrenceFrequency: recurrenceFrequencyEnum("recurrence_frequency")
+      .notNull()
+      .default("none"),
+    /** How many `recurrenceFrequency` units per step. Floored to 1 by the engine. */
+    recurrenceInterval: integer("recurrence_interval").notNull().default(1),
+    /** Fixed calendar series, or measured from each completion. See `recurrenceModeEnum`. */
+    recurrenceMode: recurrenceModeEnum("recurrence_mode")
+      .notNull()
+      .default("scheduled"),
+    /** The calendar pattern within the frequency. See `recurrencePatternEnum`. */
+    recurrencePattern: recurrencePatternEnum("recurrence_pattern")
+      .notNull()
+      .default("interval"),
+    /** Weekly `by_weekday`: which days, 0 = Sunday. Matches `appointments.recurrenceByWeekday`. */
+    recurrenceByWeekday: smallint("recurrence_by_weekday").array(),
+    /** `by_month_day`: day of the month, 1–31, clamped to the last day of a short month. */
+    recurrenceMonthDay: smallint("recurrence_month_day"),
+    /** `by_ordinal`: 1–4 for first…fourth, or -1 for last. Achieve's "fifth" does not exist. */
+    recurrenceOrdinal: smallint("recurrence_ordinal"),
+    /** `by_ordinal`: which weekday, 0 = Sunday. */
+    recurrenceWeekday: smallint("recurrence_weekday"),
+    /** Yearly patterns: which month, 1–12. */
+    recurrenceMonth: smallint("recurrence_month"),
+    /** How the series ends. `count` is measured against `task_completions`, not a loop index. */
+    recurrenceEnd: recurrenceEndEnum("recurrence_end").notNull().default("never"),
+    recurrenceCount: integer("recurrence_count"),
+    recurrenceUntil: timestamp("recurrence_until", { withTimezone: true }),
+    // Schedule
+    effortDriven: boolean("effort_driven").notNull().default(true),
+    /** A zero-duration marker rather than a piece of work. */
+    milestone: boolean("milestone").notNull().default(false),
+    actualStartDate: timestamp("actual_start_date", { withTimezone: true }),
+    /**
+     * When this task was completed. For a **recurring** task, which never stays completed,
+     * this is the *last* completion — the full history is in `task_completions`.
+     */
+    dateCompleted: timestamp("date_completed", { withTimezone: true }),
+    /** Wall-clock span the work is spread over, as distinct from effort spent inside it. */
+    durationMinutes: integer("duration_minutes"),
+    constraint: taskConstraintEnum("constraint")
+      .notNull()
+      .default("as_soon_as_possible"),
+    constraintDate: timestamp("constraint_date", { withTimezone: true }),
+    /** Work-breakdown-structure code, e.g. "1.2.3". */
+    wbs: text("wbs").notNull().default(""),
+    costLow: numeric("cost_low", { precision: 12, scale: 2 }),
+    costHigh: numeric("cost_high", { precision: 12, scale: 2 }),
+    actualCost: numeric("actual_cost", { precision: 12, scale: 2 }),
+    // Details
+    billingInformation: text("billing_information").notNull().default(""),
+    company: text("company").notNull().default(""),
+    mileage: text("mileage").notNull().default(""),
+    description: text("description").notNull().default(""),
+    /**
+     * Optional link to a Fitness catalog exercise. Makes this task a **plan reminder** for
+     * that lift (e.g. "Bench Press" under a Strength project). History lives on
+     * `workout_sessions` / sets, not on the task — so deleting or cancelling the task never
+     * erases what you lifted. `set null` if the exercise is removed.
+     */
+    exerciseId: uuid("exercise_id").references(() => exercises.id, {
+      onDelete: "set null",
+    }),
+  },
+  // The recurrence combinations the engine cannot make sense of, refused by the database
+  // and not only by the form. `src/lib/recurrence/pattern.ts` is pure and is fed straight
+  // from these columns, so an impossible row is a silent wrong answer — and rows arrive
+  // from the agent API and from hand-run SQL, not only from the drawer.
+  () => [
+    // A regenerating task is measured from its completion, so it has no stable series start
+    // for a weekday or day-of-month pattern to hang off. Achieve says the same thing by
+    // making Regenerate a radio *alongside* the patterns rather than a checkbox beside them.
+    check(
+      "task_details_regenerate_is_interval",
+      sql`recurrence_mode <> 'regenerate' OR recurrence_pattern = 'interval'`,
+    ),
+    // First…fourth, or last. Achieve's own dialog offers a "fifth" most months do not have.
+    check(
+      "task_details_ordinal_range",
+      sql`recurrence_ordinal IS NULL OR recurrence_ordinal IN (1, 2, 3, 4, -1)`,
+    ),
+    // "Every 2 weekdays" has no agreed meaning; Achieve reads these as "every weekday".
+    check(
+      "task_details_weekday_interval_one",
+      sql`recurrence_pattern NOT IN ('weekday', 'weekend') OR recurrence_interval = 1`,
+    ),
+  ],
+);
 
 /**
  * One completion of a **recurring** task.
  *
- * A recurring task never stays completed — ticking it resets the same row to Not Started
- * and pushes its `deferredDate` out (see `taskDetails.recurrenceFrequency`), so `nodes`
- * holds no record that it was ever done. This table is that record: it answers "how
- * consistent have I been" and "when did I last do X" without leaving a year's worth of
- * completed duplicates in the outline, which is the reason we regenerate in place rather
- * than copying the node the way Achieve does.
+ * A recurring task normally never stays completed — ticking it resets the same row to Not
+ * Started and moves its dates on (see `taskDetails.recurrenceFrequency`), so `nodes` holds
+ * no record that it was ever done. This table is that record: it answers "how consistent
+ * have I been" and "when did I last do X" without leaving a year's worth of completed
+ * duplicates in the outline, which is the reason we cycle one row in place rather than
+ * copying the node the way Achieve does.
  *
- * Append-only, and written in the same transaction as the reset. Nothing reads it yet.
+ * It is also the **occurrence counter** for `recurrenceEnd = "count"`: rows here are what
+ * "end after N occurrences" is measured against, which is why a phantom completion is a
+ * correctness problem and not just noise.
+ *
+ * Append-only, and written in the same transaction as the reset.
  */
 export const taskCompletions = pgTable(
   "task_completions",
@@ -1066,6 +1162,8 @@ export type ShowAs = (typeof showAsEnum.enumValues)[number];
 export type AppointmentCheck = (typeof appointmentCheckEnum.enumValues)[number];
 export type RecurrenceFrequency = (typeof recurrenceFrequencyEnum.enumValues)[number];
 export type RecurrenceEnd = (typeof recurrenceEndEnum.enumValues)[number];
+export type RecurrenceMode = (typeof recurrenceModeEnum.enumValues)[number];
+export type RecurrencePattern = (typeof recurrencePatternEnum.enumValues)[number];
 export type TaskCompletion = typeof taskCompletions.$inferSelect;
 export type WeeklyPlan = typeof weeklyPlans.$inferSelect;
 export type WeeklyPlanEntry = typeof weeklyPlanEntries.$inferSelect;

@@ -114,7 +114,15 @@ const GOAL_KEYS = [
   "scorecard",
 ] as const;
 
-const TASK_KEYS = [
+/**
+ * Exported only so a test can assert it covers every column on `task_details`.
+ *
+ * This allowlist is a silent-failure machine: `NodeDetailValues["task"]` is derived from
+ * the Drizzle schema, so a column added to the table and to the form but forgotten here
+ * typechecks perfectly and is dropped on the way to the database. Nothing else about
+ * adding a task field will tell you.
+ */
+export const TASK_KEYS = [
   "effortMinutes",
   "effortLeftMinutes",
   "actualEffortMinutes",
@@ -125,6 +133,16 @@ const TASK_KEYS = [
   "deferredDate",
   "recurrenceFrequency",
   "recurrenceInterval",
+  "recurrenceMode",
+  "recurrencePattern",
+  "recurrenceByWeekday",
+  "recurrenceMonthDay",
+  "recurrenceOrdinal",
+  "recurrenceWeekday",
+  "recurrenceMonth",
+  "recurrenceEnd",
+  "recurrenceCount",
+  "recurrenceUntil",
   "leadTimeMinutes",
   "deadlineLeadTimeMinutes",
   "source",

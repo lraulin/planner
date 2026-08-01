@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/db";
-import { taskCompletions, taskDetails, users } from "@/db/schema";
+import { nodes, taskCompletions, taskDetails, users } from "@/db/schema";
 import type { RecurrenceFrequency } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
@@ -953,6 +953,185 @@ describeDb("tree mutations", () => {
 
       const [after] = await loadOutline(userId);
       expect(after.completedAt).toEqual(before.completedAt);
+    });
+
+    /**
+     * The half this slice added: a repeating task moves its **whole** date set, and the two
+     * modes differ in what they measure from.
+     */
+    describe("patterns and modes", () => {
+      /** Local midnight, the same thing `DateField` writes. */
+      function day(iso: string): Date {
+        return new Date(`${iso}T00:00:00`);
+      }
+
+      async function ruleTask(
+        set: Partial<typeof taskDetails.$inferInsert>,
+        core?: { deadline?: Date },
+      ) {
+        const id = await createNode({
+          userId,
+          parentId: null,
+          type: "task",
+          name: "Weekly report",
+        });
+        await db.update(taskDetails).set(set).where(eq(taskDetails.nodeId, id));
+        if (core?.deadline) {
+          await db
+            .update(nodes)
+            .set({ deadline: core.deadline })
+            .where(eq(nodes.id, id));
+        }
+        return id;
+      }
+
+      it("moves every set date by the same number of days, and leaves nulls null", async () => {
+        // Start Mon, deadline Fri, no target end. A week on, the four-day window survives
+        // and the empty field is still empty.
+        const task = await ruleTask(
+          {
+            recurrenceFrequency: "weekly",
+            recurrenceInterval: 1,
+            recurrencePattern: "by_weekday",
+            recurrenceByWeekday: [5],
+            targetStartDate: day("2026-08-03"),
+            deferredDate: day("2026-08-03"),
+          },
+          { deadline: day("2026-08-07") },
+        );
+
+        await setState(userId, task, "completed");
+
+        const detail = await taskRow(task);
+        const [node] = await loadOutline(userId);
+        expect(localKey(node.deadline!)).toBe("2026-08-14");
+        expect(localKey(detail.targetStartDate!)).toBe("2026-08-10");
+        expect(localKey(detail.deferredDate!)).toBe("2026-08-10");
+        expect(detail.targetEndDate).toBeNull();
+      });
+
+      it("steps a scheduled task from its own dates, not from the completion", async () => {
+        // The school report: finish next Friday's early and you are free until the one
+        // after. Measuring from today would give the wrong Friday every time.
+        const task = await ruleTask(
+          {
+            recurrenceFrequency: "weekly",
+            recurrencePattern: "by_weekday",
+            recurrenceByWeekday: [5],
+          },
+          { deadline: day("2026-08-07") },
+        );
+
+        await setState(userId, task, "completed");
+
+        const [node] = await loadOutline(userId);
+        expect(localKey(node.deadline!)).toBe("2026-08-14");
+      });
+
+      it("steps a regenerating task from the completion, not from its dates", async () => {
+        // Mowing the lawn: whenever you actually do it, the next one is seven days later.
+        // The stale date from months ago must not be what it steps from.
+        const task = await ruleTask({
+          recurrenceFrequency: "weekly",
+          recurrenceMode: "regenerate",
+          deferredDate: day("2026-01-01"),
+        });
+
+        await setState(userId, task, "completed");
+
+        expect(localKey((await taskRow(task)).deferredDate!)).toBe(daysFromToday(7));
+      });
+
+      it("leaves a missed occurrence still overdue instead of catching it up", async () => {
+        // Achieve's rule, and the point of having two modes: you owed last week's report
+        // and you still owe this week's. One completion steps you on by one period.
+        const task = await ruleTask(
+          {
+            recurrenceFrequency: "weekly",
+            recurrencePattern: "by_weekday",
+            recurrenceByWeekday: [5],
+          },
+          { deadline: day("2026-01-02") },
+        );
+
+        await setState(userId, task, "completed");
+
+        const [node] = await loadOutline(userId);
+        expect(localKey(node.deadline!)).toBe("2026-01-09");
+        expect(node.deadline!.getTime()).toBeLessThan(Date.now());
+      });
+
+      it("gives a dateless routine a defer date and still no deadline", async () => {
+        const task = await ruleTask({
+          recurrenceFrequency: "daily",
+          recurrenceMode: "regenerate",
+        });
+
+        await setState(userId, task, "completed");
+
+        const [node] = await loadOutline(userId);
+        expect(node.deadline).toBeNull();
+        expect(localKey((await taskRow(task)).deferredDate!)).toBe(daysFromToday(1));
+      });
+
+      it("follows a monthly ordinal pattern", async () => {
+        // The last Saturday of the month. August 2026 has five; September has four.
+        const task = await ruleTask({
+          recurrenceFrequency: "monthly",
+          recurrencePattern: "by_ordinal",
+          recurrenceOrdinal: -1,
+          recurrenceWeekday: 6,
+          deferredDate: day("2026-08-29"),
+        });
+
+        await setState(userId, task, "completed");
+
+        expect(localKey((await taskRow(task)).deferredDate!)).toBe("2026-09-26");
+      });
+
+      it("finishes for real on the last occurrence of a counted series", async () => {
+        // Two occurrences: the first cycles, the second ends it. This is the only path on
+        // which a repeating task stays completed.
+        const task = await ruleTask({
+          recurrenceFrequency: "daily",
+          recurrenceEnd: "count",
+          recurrenceCount: 2,
+        });
+
+        await setState(userId, task, "completed");
+        expect((await loadOutline(userId))[0].state).toBe("not_started");
+
+        await setState(userId, task, "completed");
+        const [node] = await loadOutline(userId);
+        expect(node.state).toBe("completed");
+        expect(node.completedAt).not.toBeNull();
+        expect(await completionsOf(userId, task)).toHaveLength(2);
+      });
+
+      it("finishes for real once the until date has passed", async () => {
+        const task = await ruleTask({
+          recurrenceFrequency: "daily",
+          recurrenceEnd: "until",
+          recurrenceUntil: day("2026-01-01"),
+        });
+
+        await setState(userId, task, "completed");
+
+        expect((await loadOutline(userId))[0].state).toBe("completed");
+      });
+
+      it("refuses a regenerating task with a calendar pattern", async () => {
+        // Enforced by the database, not only by the form: a regenerating task has no
+        // stable series start for a weekday pattern to hang off.
+        const task = await ruleTask({ recurrenceFrequency: "weekly" });
+
+        await expect(
+          db
+            .update(taskDetails)
+            .set({ recurrenceMode: "regenerate", recurrencePattern: "by_weekday" })
+            .where(eq(taskDetails.nodeId, task)),
+        ).rejects.toThrow();
+      });
     });
 
     it("does not cycle when recurrence is switched on for an already-completed task", async () => {

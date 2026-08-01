@@ -7,15 +7,11 @@ import {
   taskCompletions,
   taskDetails,
 } from "@/db/schema";
-import type {
-  ExternalRef,
-  NodeState,
-  NodeType,
-  PriorityLetter,
-  RecurrenceFrequency,
-} from "@/db/schema";
-import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import type { ExternalRef, NodeState, NodeType, PriorityLetter } from "@/db/schema";
+import { and, asc, count, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { addDays, daysBetween, startOfDay } from "@/lib/dateMath";
 import { nextDue } from "@/lib/recurrence/nextDue";
+import { nextOccurrence } from "@/lib/recurrence/pattern";
 import { assertCanNest, TYPE_LABELS } from "./hierarchy";
 import { loadOutline } from "./queries";
 import { between } from "./sortKey";
@@ -251,20 +247,32 @@ async function subtreeIds(
 }
 
 /**
- * The recurrence settings on a node, when it is a task that repeats.
+ * Everything the completion path needs about a repeating task: its rule, the dates the
+ * rule moves, and how the series ends.
  *
  * Returns null for everything else — a project, a goal, a task with recurrence off — which
  * is the overwhelmingly common case and the one that must stay on the plain path.
  */
-async function recurrenceOf(
-  tx: Executor,
-  userId: string,
-  nodeId: string,
-): Promise<{ frequency: RecurrenceFrequency; interval: number } | null> {
+async function recurrenceOf(tx: Executor, userId: string, nodeId: string) {
   const [row] = await tx
     .select({
       frequency: taskDetails.recurrenceFrequency,
       interval: taskDetails.recurrenceInterval,
+      mode: taskDetails.recurrenceMode,
+      pattern: taskDetails.recurrencePattern,
+      byWeekday: taskDetails.recurrenceByWeekday,
+      monthDay: taskDetails.recurrenceMonthDay,
+      ordinal: taskDetails.recurrenceOrdinal,
+      weekday: taskDetails.recurrenceWeekday,
+      month: taskDetails.recurrenceMonth,
+      end: taskDetails.recurrenceEnd,
+      endCount: taskDetails.recurrenceCount,
+      endUntil: taskDetails.recurrenceUntil,
+      deadline: nodes.deadline,
+      deferredDate: taskDetails.deferredDate,
+      targetStartDate: taskDetails.targetStartDate,
+      targetEndDate: taskDetails.targetEndDate,
+      reminderAt: taskDetails.reminderAt,
     })
     .from(taskDetails)
     .innerJoin(nodes, eq(nodes.id, taskDetails.nodeId))
@@ -279,6 +287,73 @@ async function recurrenceOf(
     .limit(1);
 
   return row ?? null;
+}
+
+type Recurrence = NonNullable<Awaited<ReturnType<typeof recurrenceOf>>>;
+
+/**
+ * The date the pattern is *about*: the deadline if there is one, else the deferred date,
+ * else the target start.
+ *
+ * A deadline is the date a repeating task is named for — "the report is due every Friday"
+ * means Friday is the deadline, not the day you start. Only when there is no deadline does
+ * the defer date take over as the thing the schedule moves, and it is what a routine with
+ * no dates at all ends up using.
+ */
+function anchorOf(r: Recurrence): Date | null {
+  return r.deadline ?? r.deferredDate ?? r.targetStartDate;
+}
+
+/**
+ * Where the whole date set moves to, or null when the series has run out.
+ *
+ * The two modes differ only in what they measure from, and that difference is the feature:
+ * `scheduled` steps on from this occurrence's own anchor, so completing early buys time and
+ * completing late still leaves you owing the one you missed; `regenerate` steps on from the
+ * completion, so no amount of brushing your teeth today changes tomorrow.
+ */
+function nextAnchor(
+  r: Recurrence,
+  anchor: Date | null,
+  completedAt: Date,
+): Date | null {
+  if (r.mode === "regenerate") return nextDue(completedAt, r.frequency, r.interval);
+
+  return nextOccurrence(
+    {
+      frequency: r.frequency,
+      interval: r.interval,
+      pattern: r.pattern,
+      byWeekday: r.byWeekday,
+      monthDay: r.monthDay,
+      ordinal: r.ordinal,
+      weekday: r.weekday,
+      month: r.month,
+    },
+    // With no dates at all there is nothing to step on from, so the completion stands in.
+    // That is the "brush teeth" case: it acquires a defer date and nothing else.
+    anchor ?? completedAt,
+  );
+}
+
+/**
+ * Whether this completion is the series' last, so the task finishes for real instead of
+ * cycling. `completionsSoFar` excludes the completion being recorded right now.
+ */
+function seriesEnds(
+  r: Recurrence,
+  next: Date | null,
+  completionsSoFar: number,
+): boolean {
+  if (!next) return true;
+  // A missing count is "ends after N times" with no N, which is not an instruction to
+  // stop — reading it as 1 would silently finish the task on its very first completion.
+  if (r.end === "count" && r.endCount != null) {
+    return completionsSoFar + 1 >= r.endCount;
+  }
+  // Inclusive of the until date's own day, matching how appointment recurrence reads it.
+  if (r.end === "until" && r.endUntil) return startOfDay(next) > startOfDay(r.endUntil);
+  return false;
 }
 
 /**
@@ -324,15 +399,40 @@ export async function applyStateTransition(
 
   const recurrence = await recurrenceOf(tx, userId, nodeId);
 
-  if (!recurrence) {
+  async function finish() {
     await tx
       .update(nodes)
       .set({ state, completedAt: now, updatedAt: now })
       .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+  }
+
+  if (!recurrence) {
+    await finish();
     return;
   }
 
+  const anchor = anchorOf(recurrence);
+  const next = nextAnchor(recurrence, anchor, now);
+
+  // Counted before the insert below, or "end after N occurrences" is off by one.
+  const [{ value: completionsSoFar }] = await tx
+    .select({ value: count() })
+    .from(taskCompletions)
+    .where(and(eq(taskCompletions.userId, userId), eq(taskCompletions.nodeId, nodeId)));
+
   await tx.insert(taskCompletions).values({ userId, nodeId, completedAt: now });
+
+  // The one path on which a repeating task stays completed: its series is over. Its dates
+  // are left where they are, so the record reads as the last occurrence rather than as one
+  // that never happened.
+  if (seriesEnds(recurrence, next, completionsSoFar)) {
+    await finish();
+    await tx
+      .update(taskDetails)
+      .set({ dateCompleted: now })
+      .where(eq(taskDetails.nodeId, nodeId));
+    return;
+  }
 
   const ids = await subtreeIds(tx, userId, nodeId);
   // Descendants that were finished; the recurring task itself is handled separately below,
@@ -368,12 +468,37 @@ export async function applyStateTransition(
     .where(inArray(taskDetails.nodeId, resetIds));
 
   // Last, so it survives the blanket reset above: on the recurring task itself,
-  // `dateCompleted` means "last completed" and the defer date is what hides it.
+  // `dateCompleted` means "last completed", and the whole date set moves together.
+  //
+  // Every date the task already had shifts by the same number of days, so a task that
+  // starts Monday and is due Friday keeps its four-day window instead of collapsing onto
+  // one day. Dates that were null stay null — in particular a routine with no deadline
+  // never acquires one, which is what keeps it out of Overdue.
+  //
+  // Whole days applied with `addDays`, never a millisecond offset: an ordinal or weekday
+  // step is not a constant length, and a span crossing a daylight-saving boundary would
+  // otherwise drag every other date's time of day with it.
+  const shift = anchor ? daysBetween(anchor, next!) : 0;
+  const move = (date: Date | null) => (date ? addDays(date, shift) : null);
+
+  await tx
+    .update(nodes)
+    .set({ deadline: move(recurrence.deadline), updatedAt: now })
+    .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+
   await tx
     .update(taskDetails)
     .set({
       dateCompleted: now,
-      deferredDate: nextDue(now, recurrence.frequency, recurrence.interval),
+      targetStartDate: move(recurrence.targetStartDate),
+      targetEndDate: move(recurrence.targetEndDate),
+      reminderAt: move(recurrence.reminderAt),
+      // Shifted like the rest when it was set — a defer date a few days before a deadline
+      // is a deliberate head start and has to survive the cycle. When it was *not* set it
+      // is created, because it is the only thing that takes a finished routine out of the
+      // Task Chooser: a deadline-anchored task without one could be ticked again the same
+      // day, inflating the completion log that "end after N occurrences" counts against.
+      deferredDate: move(recurrence.deferredDate) ?? next,
     })
     .where(eq(taskDetails.nodeId, nodeId));
 }

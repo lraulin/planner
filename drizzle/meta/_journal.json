@@ -127,6 +127,13 @@
       "when": 1785550950513,
       "tag": "0017_blushing_goblin_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1785623723222,
+      "tag": "0018_mighty_toro",
+      "breakpoints": true
     }
   ]
 }

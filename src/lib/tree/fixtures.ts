@@ -40,7 +40,6 @@ export function row(
     targetEnd: null,
     deferredDate: null,
     recurrenceFrequency: "none",
-    recurrenceInterval: 1,
     purpose: "",
     assignedTo: "",
     definition: "",

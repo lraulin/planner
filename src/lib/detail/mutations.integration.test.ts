@@ -1,10 +1,12 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/db";
-import { goalDetails, nodes, users } from "@/db/schema";
+import { goalDetails, nodes, taskDetails, users } from "@/db/schema";
+import { getTableColumns } from "drizzle-orm";
 import { eq } from "drizzle-orm";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { createNode } from "@/lib/tree/mutations";
 import {
+  TASK_KEYS,
   autofillAttachmentTitleFromUrl,
   createNodeItem,
   deleteNodeItem,
@@ -52,6 +54,24 @@ afterAll(async () => {
   for (const id of createdUserIds) {
     await db.delete(users).where(eq(users.id, id));
   }
+});
+
+/**
+ * Not a database test, but it lives here because it is about the same failure the rest of
+ * this file exists to catch: a value that looks saved and is not.
+ *
+ * `pick(values.task, TASK_KEYS)` is the only gate between a task field and the database,
+ * and it is a hand-written list. A column added to the schema and to the form but left out
+ * of it typechecks perfectly and is silently dropped — which is exactly how a recurrence
+ * setting could look like it persisted for one render and then be gone.
+ */
+describe("TASK_KEYS", () => {
+  it("covers every column on task_details", () => {
+    const columns = Object.keys(getTableColumns(taskDetails)).filter(
+      (name) => name !== "nodeId",
+    );
+    expect([...TASK_KEYS].sort()).toEqual(columns.sort());
+  });
 });
 
 describeDb("detail mutations", () => {
