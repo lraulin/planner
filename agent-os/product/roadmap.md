@@ -95,8 +95,8 @@ Features that complete or surround the original product, plus making it multi-de
 - **✅ Metrics tab + import/export.** `specs/2026-08-02-0912-metrics-tab`. First-class
   `metrics` / `metric_entries` (optional goal owner, history survives goal delete). Metrics
   tab lists all metrics with Group by Owner and an SVG performance graph; Metric form
-  (General + Tracking) with tracking grid and CSV export; Goal form Metrics section uses the
-  same store. ACHXML import/export of `Metrics` + `MetricTracking`.
+  (General + Tracking) with tracking grid and CSV export/import; Goal form Metrics section
+  uses the same store. ACHXML import/export of `Metrics` + `MetricTracking`.
 - **✅ Metric types (Instance / Cumulative / Total).**
   `specs/2026-08-02-1336-metric-types`. Type select on Tracking; Last Value and the
   performance graph interpret entries by type (latest absolute vs sum / running sum).

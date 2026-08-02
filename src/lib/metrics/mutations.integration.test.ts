@@ -9,6 +9,7 @@ import {
   createMetricEntry,
   deleteMetric,
   deleteMetricEntry,
+  importMetricEntries,
   updateMetric,
   updateMetricEntry,
 } from "./mutations";
@@ -151,10 +152,35 @@ describeDb("metrics mutations", () => {
       /not found/i,
     );
     await expect(deleteMetricEntry(otherId, entryId)).rejects.toThrow(/not found/i);
+    await expect(
+      importMetricEntries(otherId, id, [{ entryDate: "2025-02-01", value: 2 }]),
+    ).rejects.toThrow(/not found/i);
 
     const still = await getMetricDetail(userId, id);
     expect(still!.title).toBe("Private");
     expect(still!.entries[0].value).toBe(1);
+  });
+
+  it("imports entries and skips date+value duplicates on re-import", async () => {
+    const id = await createMetric(userId, { title: "Dante weight" });
+    const first = await importMetricEntries(userId, id, [
+      { entryDate: "2025-10-29", value: 93 },
+      { entryDate: "2025-09-16", value: 94.7 },
+      { entryDate: "2025-09-02", value: 93.5 },
+    ]);
+    expect(first.created).toBe(3);
+    expect(first.skipped).toBe(0);
+
+    const second = await importMetricEntries(userId, id, [
+      { entryDate: "2025-10-29", value: 93 },
+      { entryDate: "2025-01-14", value: 63.4 },
+    ]);
+    expect(second.created).toBe(1);
+    expect(second.skipped).toBe(1);
+
+    const detail = await getMetricDetail(userId, id);
+    expect(detail!.entries).toHaveLength(4);
+    expect(detail!.lastValue).toBe(93);
   });
 
   it("rejects a non-goal owner", async () => {

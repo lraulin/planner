@@ -3,7 +3,9 @@ import {
   displayEntryType,
   entriesToClipboardTsv,
   entriesToCsv,
+  parseEntriesCsv,
   pickEntriesInOrder,
+  splitCsvLine,
 } from "./csv";
 
 describe("entriesToCsv", () => {
@@ -113,5 +115,72 @@ describe("pickEntriesInOrder", () => {
 describe("displayEntryType", () => {
   it("labels new_total", () => {
     expect(displayEntryType("new_total")).toBe("New Total");
+  });
+});
+
+describe("splitCsvLine", () => {
+  it("splits plain and quoted fields", () => {
+    expect(splitCsvLine("a,b,c")).toEqual(["a", "b", "c"]);
+    expect(splitCsvLine('a,"b,c",d')).toEqual(["a", "b,c", "d"]);
+    expect(splitCsvLine('"say ""hi""",1')).toEqual(['say "hi"', "1"]);
+  });
+});
+
+describe("parseEntriesCsv", () => {
+  it("round-trips export shape newest-first", () => {
+    const csv = entriesToCsv([
+      {
+        id: "a",
+        entryDate: "2025-01-05",
+        entryType: "new_total",
+        target: 80,
+        value: 95,
+      },
+      {
+        id: "b",
+        entryDate: "2025-02-01",
+        entryType: "new_total",
+        target: null,
+        value: 91,
+      },
+    ]);
+    const { entries, errors } = parseEntriesCsv(csv);
+    expect(errors).toEqual([]);
+    expect(entries).toEqual([
+      {
+        entryDate: "2025-02-01",
+        entryType: "new_total",
+        target: null,
+        value: 91,
+      },
+      {
+        entryDate: "2025-01-05",
+        entryType: "new_total",
+        target: 80,
+        value: 95,
+      },
+    ]);
+  });
+
+  it("strips trailing lb and reports bad dates", () => {
+    const { entries, errors } = parseEntriesCsv(
+      "Date,Type,Target,Value\n2025-10-29,New Total,,93 lb\nbad-date,New Total,,1\n",
+    );
+    expect(entries).toEqual([
+      {
+        entryDate: "2025-10-29",
+        entryType: "new_total",
+        target: null,
+        value: 93,
+      },
+    ]);
+    expect(errors).toHaveLength(1);
+    expect(errors[0].row).toBe(3);
+  });
+
+  it("requires Date and Value headers", () => {
+    const { entries, errors } = parseEntriesCsv("Foo,Bar\n1,2\n");
+    expect(entries).toEqual([]);
+    expect(errors[0]?.message).toMatch(/Date/);
   });
 });

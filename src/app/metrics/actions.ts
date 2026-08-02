@@ -7,8 +7,10 @@ import {
   createMetricEntry,
   deleteMetric,
   deleteMetricEntry,
+  importMetricEntries,
   updateMetric,
   updateMetricEntry,
+  type ImportMetricEntriesResult,
 } from "@/lib/metrics/mutations";
 import type { MetricEntryInput, MetricInput } from "@/lib/metrics/types";
 import {
@@ -21,6 +23,9 @@ import type { MetricDetail, MetricListRow } from "@/lib/metrics/types";
 export type ActionResult =
   | { ok: true; id?: string; data?: MetricDetail | MetricListRow[] }
   | { ok: false; error: string };
+
+export type ImportActionResult =
+  { ok: true; data: ImportMetricEntriesResult } | { ok: false; error: string };
 
 async function run<T>(work: (userId: string) => Promise<T>): Promise<ActionResult> {
   try {
@@ -78,6 +83,33 @@ export async function createMetricEntryAction(
   input: MetricEntryInput,
 ): Promise<ActionResult> {
   return run((userId) => createMetricEntry(userId, metricId, input));
+}
+
+/**
+ * Bulk-import parsed tracking rows. Client parses CSV via `parseEntriesCsv`.
+ * Idempotent for identical date+value pairs already on the metric.
+ */
+export async function importMetricEntriesAction(
+  metricId: string,
+  entries: MetricEntryInput[],
+): Promise<ImportActionResult> {
+  try {
+    const userId = await getCurrentUserId();
+    if (entries.length === 0) {
+      throw new Error("No tracking rows to import.");
+    }
+    if (entries.length > 5000) {
+      throw new Error("Too many rows (max 5000 per import).");
+    }
+    const data = await importMetricEntries(userId, metricId, entries);
+    revalidatePath("/", "layout");
+    return { ok: true, data };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Something went wrong.",
+    };
+  }
 }
 
 export async function updateMetricEntryAction(

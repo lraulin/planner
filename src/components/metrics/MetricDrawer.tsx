@@ -5,8 +5,10 @@ import {
   useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
   useTransition,
+  type ChangeEvent as ReactChangeEvent,
   type FocusEvent as ReactFocusEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
@@ -16,6 +18,7 @@ import {
   deleteMetricAction,
   deleteMetricEntryAction,
   getMetricDetailAction,
+  importMetricEntriesAction,
   updateMetricAction,
   updateMetricEntryAction,
 } from "@/app/metrics/actions";
@@ -26,6 +29,7 @@ import {
   displayEntryType,
   entriesToClipboardTsv,
   entriesToCsv,
+  parseEntriesCsv,
   pickEntriesInOrder,
 } from "@/lib/metrics/csv";
 import {
@@ -142,6 +146,7 @@ function MetricForm({
   const [draft, setDraft] = useState(() => toDraft(initial));
   const [tab, setTab] = useState<"general" | "tracking">("general");
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
@@ -151,6 +156,7 @@ function MetricForm({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [selectionAnchor, setSelectionAnchor] = useState<string | null>(null);
   const [showFields, setShowFields] = useState(false);
+  const csvImportRef = useRef<HTMLInputElement>(null);
   /**
    * While focus is inside the tracking table, keep this id order so a date/value
    * commit cannot re-sort the row out from under the user (ux-principles).
@@ -368,6 +374,55 @@ function MetricForm({
     URL.revokeObjectURL(url);
   };
 
+  const importCsv = (event: ReactChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    // Allow re-selecting the same file later.
+    event.target.value = "";
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = typeof reader.result === "string" ? reader.result : "";
+      const parsed = parseEntriesCsv(text);
+      if (parsed.entries.length === 0) {
+        const first = parsed.errors[0];
+        setStatus(null);
+        setError(
+          first?.message ??
+            "No tracking rows found. Expected columns Date and Value (YYYY-MM-DD).",
+        );
+        return;
+      }
+
+      startTransition(async () => {
+        const result = await importMetricEntriesAction(detail.id, parsed.entries);
+        if (!result.ok) {
+          setStatus(null);
+          setError(result.error);
+          return;
+        }
+        const created = result.data.created;
+        const skipped = result.data.skipped;
+        const parts = [`Imported ${created}`];
+        if (skipped > 0) parts.push(`skipped ${skipped} duplicate`);
+        if (parsed.errors.length > 0) {
+          parts.push(`${parsed.errors.length} invalid row(s) ignored`);
+        }
+        setError(null);
+        setStatus(parts.join("; ") + ".");
+        setJustSaved(true);
+        window.setTimeout(() => setJustSaved(false), 2000);
+        reloadDetail();
+        onChanged(detail.id);
+      });
+    };
+    reader.onerror = () => {
+      setStatus(null);
+      setError("Could not read the CSV file.");
+    };
+    reader.readAsText(file);
+  };
+
   const removeMetric = () => {
     if (!window.confirm("Delete this metric and all tracking values?")) return;
     startTransition(async () => {
@@ -427,6 +482,11 @@ function MetricForm({
         {error && (
           <p className="mb-3 rounded border border-danger/40 bg-danger/10 px-3 py-2 text-[0.8125rem] text-danger">
             {error}
+          </p>
+        )}
+        {status && !error && (
+          <p className="mb-3 rounded border border-rule bg-surface-raised px-3 py-2 text-[0.8125rem] text-ink-muted">
+            {status}
           </p>
         )}
 
@@ -588,6 +648,21 @@ function MetricForm({
                 >
                   CSV Export…
                 </button>
+                <button
+                  type="button"
+                  onClick={() => csvImportRef.current?.click()}
+                  disabled={busy}
+                  className="rounded border border-rule px-2 py-1 text-[0.75rem] text-ink-muted hover:bg-surface-raised"
+                >
+                  CSV Import…
+                </button>
+                <input
+                  ref={csvImportRef}
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="hidden"
+                  onChange={importCsv}
+                />
                 <button
                   type="button"
                   onClick={addEntry}

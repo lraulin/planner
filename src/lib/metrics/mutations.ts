@@ -200,6 +200,84 @@ export async function createMetricEntry(
   });
 }
 
+export type ImportMetricEntriesResult = {
+  created: number;
+  skipped: number;
+  createdIds: string[];
+};
+
+/**
+ * Bulk-import tracking rows (CSV import path). Skips a row when an entry with the
+ * same `entryDate` and `value` already exists for this metric — re-importing the
+ * same file is safe. Same-date different values still insert (two readings that day).
+ */
+export async function importMetricEntries(
+  userId: string,
+  metricId: string,
+  inputs: readonly MetricEntryInput[],
+): Promise<ImportMetricEntriesResult> {
+  return db.transaction(async (tx) => {
+    await requireMetric(tx, userId, metricId);
+
+    for (const input of inputs) {
+      if (!isDateKey(input.entryDate)) {
+        throw new Error("entryDate must be YYYY-MM-DD.");
+      }
+      if (!Number.isFinite(input.value)) {
+        throw new Error("Value must be a finite number.");
+      }
+    }
+
+    const existing = await tx
+      .select({
+        entryDate: metricEntries.entryDate,
+        value: metricEntries.value,
+      })
+      .from(metricEntries)
+      .where(
+        and(eq(metricEntries.userId, userId), eq(metricEntries.metricId, metricId)),
+      );
+
+    const seen = new Set(
+      existing.map((e) => `${e.entryDate}\0${parseNumeric(e.value) ?? 0}`),
+    );
+
+    const createdIds: string[] = [];
+    let skipped = 0;
+
+    for (const input of inputs) {
+      const key = `${input.entryDate}\0${input.value}`;
+      if (seen.has(key)) {
+        skipped += 1;
+        continue;
+      }
+      seen.add(key);
+
+      const [row] = await tx
+        .insert(metricEntries)
+        .values({
+          userId,
+          metricId,
+          entryDate: input.entryDate,
+          entryType: input.entryType ?? "new_total",
+          target: numericString(input.target),
+          value: numericString(input.value)!,
+        })
+        .returning({ id: metricEntries.id });
+      createdIds.push(row.id);
+    }
+
+    if (createdIds.length > 0) {
+      await tx
+        .update(metrics)
+        .set({ updatedAt: new Date() })
+        .where(and(eq(metrics.id, metricId), eq(metrics.userId, userId)));
+    }
+
+    return { created: createdIds.length, skipped, createdIds };
+  });
+}
+
 export async function updateMetricEntry(
   userId: string,
   entryId: string,
