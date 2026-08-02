@@ -27,7 +27,7 @@
 
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { dailyItems, nodes, taskDetails } from "@/db/schema";
+import { dailyItems, nodes } from "@/db/schema";
 import { toDateKey } from "@/lib/schedule/geometry";
 import { between } from "@/lib/tree/sortKey";
 
@@ -61,19 +61,12 @@ export async function syncDayLineToTargetStart(
 ): Promise<void> {
   const [task] = await tx
     .select({
-      targetStartDate: taskDetails.targetStartDate,
+      targetStartDate: nodes.targetStartDate,
       name: nodes.name,
       state: nodes.state,
     })
-    .from(taskDetails)
-    .innerJoin(nodes, eq(nodes.id, taskDetails.nodeId))
-    .where(
-      and(
-        eq(taskDetails.nodeId, nodeId),
-        eq(nodes.userId, userId),
-        eq(nodes.type, "task"),
-      ),
-    )
+    .from(nodes)
+    .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId), eq(nodes.type, "task")))
     .limit(1);
 
   // Not a task, so it has no target start date to follow.
@@ -154,10 +147,28 @@ export async function setDayPlan(
 ): Promise<void> {
   const date = day ? new Date(`${day}T00:00:00`) : null;
 
+  if (day) {
+    // `nodes_start_not_before_deferred` would reject this write, and a raw constraint error
+    // is not something to show a person who just dragged a card. Refusing is the right
+    // answer rather than clearing the shelf for them: dropping a task on a day says when you
+    // mean to do it, not that you have changed your mind about hiding it until February.
+    const [row] = await tx
+      .select({ deferredDate: nodes.deferredDate, name: nodes.name })
+      .from(nodes)
+      .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)))
+      .limit(1);
+
+    if (row?.deferredDate && toDateKey(row.deferredDate) > day) {
+      throw new Error(
+        `"${row.name}" is deferred until ${toDateKey(row.deferredDate)}, so it cannot be planned for ${day}.`,
+      );
+    }
+  }
+
   await tx
-    .update(taskDetails)
-    .set({ targetStartDate: date, targetEndDate: date })
-    .where(eq(taskDetails.nodeId, nodeId));
+    .update(nodes)
+    .set({ targetStartDate: date, targetEndDate: date, updatedAt: new Date() })
+    .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
 
   await syncDayLineToTargetStart(tx, userId, nodeId);
 }

@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { dailyItems, nodes, taskDetails, users } from "@/db/schema";
+import { dailyItems, nodes, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { toDateKey } from "@/lib/schedule/geometry";
 import { createNode, setState } from "@/lib/tree/mutations";
@@ -306,10 +306,7 @@ describeDb("completing from the day page", () => {
     const [task] = await db.select().from(nodes).where(eq(nodes.id, nodeId));
     expect(task.state).toBe("not_started");
 
-    const [details] = await db
-      .select()
-      .from(taskDetails)
-      .where(eq(taskDetails.nodeId, nodeId));
+    const [details] = await db.select().from(nodes).where(eq(nodes.id, nodeId));
     expect(details.deferredDate).not.toBeNull();
 
     const day = await loadDay(userId, MON, WED);
@@ -459,10 +456,7 @@ describeDb("completing from the day page", () => {
 
     await planNodeForDay(userId, nodeId, WED);
 
-    const [detail] = await db
-      .select()
-      .from(taskDetails)
-      .where(eq(taskDetails.nodeId, nodeId));
+    const [detail] = await db.select().from(nodes).where(eq(nodes.id, nodeId));
     expect(toDateKey(detail.targetStartDate!)).toBe(WED);
     expect(toDateKey(detail.targetEndDate!)).toBe(WED);
   });
@@ -484,16 +478,11 @@ describeDb("completing from the day page", () => {
     // Overwriting a target end that was set on purpose would be presumptuous.
     const nodeId = await makeTask(userId, "Spans a few days");
     await saveNodeDetail(userId, nodeId, {
-      task: {
-        targetStartDate: new Date(`${MON}T00:00:00`),
-        targetEndDate: new Date(`${WED}T00:00:00`),
-      },
+      targetStartDate: new Date(`${MON}T00:00:00`),
+      targetEndDate: new Date(`${WED}T00:00:00`),
     });
 
-    const [detail] = await db
-      .select()
-      .from(taskDetails)
-      .where(eq(taskDetails.nodeId, nodeId));
+    const [detail] = await db.select().from(nodes).where(eq(nodes.id, nodeId));
     expect(toDateKey(detail.targetEndDate!)).toBe(WED);
     expect(await plannedDayForNode(userId, nodeId)).toBe(MON);
   });
@@ -504,7 +493,7 @@ describeDb("completing from the day page", () => {
     const nodeId = await makeTask(userId, "Starts Wednesday");
 
     await saveNodeDetail(userId, nodeId, {
-      task: { targetStartDate: new Date(`${WED}T00:00:00`) },
+      targetStartDate: new Date(`${WED}T00:00:00`),
     });
 
     const rows = await db
@@ -519,15 +508,15 @@ describeDb("completing from the day page", () => {
   it("moves the day line when the target start date changes, and removes it when cleared", async () => {
     const nodeId = await makeTask(userId, "Moves around");
     await saveNodeDetail(userId, nodeId, {
-      task: { targetStartDate: new Date(`${MON}T00:00:00`) },
+      targetStartDate: new Date(`${MON}T00:00:00`),
     });
 
     await saveNodeDetail(userId, nodeId, {
-      task: { targetStartDate: new Date(`${WED}T00:00:00`) },
+      targetStartDate: new Date(`${WED}T00:00:00`),
     });
     expect(await plannedDayForNode(userId, nodeId)).toBe(WED);
 
-    await saveNodeDetail(userId, nodeId, { task: { targetStartDate: null } });
+    await saveNodeDetail(userId, nodeId, { targetStartDate: null });
     expect(await plannedDayForNode(userId, nodeId)).toBeNull();
   });
 
@@ -542,10 +531,7 @@ describeDb("completing from the day page", () => {
 
     await moveDailyItemToDay(userId, item.id, WED);
 
-    const [detail] = await db
-      .select()
-      .from(taskDetails)
-      .where(eq(taskDetails.nodeId, nodeId));
+    const [detail] = await db.select().from(nodes).where(eq(nodes.id, nodeId));
     expect(toDateKey(detail.targetStartDate!)).toBe(WED);
   });
 

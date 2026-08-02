@@ -38,6 +38,9 @@ export type NodeDetail = {
   priorityRank: number | null;
   state: NodeState;
   deadline: Date | null;
+  targetStartDate: Date | null;
+  targetEndDate: Date | null;
+  deferredDate: Date | null;
   focus: boolean;
   notes: string;
   resultArea: ResultAreaDetails | null;
@@ -58,13 +61,22 @@ export type NodeDetail = {
   plannedDay: string | null;
 };
 
-/** The core fields every form edits, whatever the type. */
+/**
+ * The core fields every form edits, whatever the type.
+ *
+ * The three scheduling dates are here rather than on the per-type halves because they live
+ * on `nodes` — a project shelves and plans exactly as a task does, and the database enforces
+ * the rule between the start and the deferred date, which it could not do across tables.
+ */
 export type CoreValues = {
   name: string;
   priorityLetter: PriorityLetter | null;
   priorityRank: number | null;
   state: NodeState;
   deadline: Date | null;
+  targetStartDate: Date | null;
+  targetEndDate: Date | null;
+  deferredDate: Date | null;
   focus: boolean;
   notes: string;
 };

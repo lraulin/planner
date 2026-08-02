@@ -48,6 +48,10 @@ const CORE_KEYS = [
   "priorityRank",
   "state",
   "deadline",
+  // On `nodes` since the date model was unified, so every type can carry them.
+  "targetStartDate",
+  "targetEndDate",
+  "deferredDate",
   "focus",
   "notes",
 ] as const;
@@ -68,8 +72,6 @@ const RESULT_AREA_KEYS = [
 ] as const;
 
 const PROJECT_KEYS = [
-  "projectStart",
-  "targetEnd",
   "effortDriven",
   "onlyShowNextTask",
   "leadTimeMinutes",
@@ -129,9 +131,6 @@ export const TASK_KEYS = [
   "actualEffortMinutes",
   "percentComplete",
   "contexts",
-  "targetStartDate",
-  "targetEndDate",
-  "deferredDate",
   "recurrenceFrequency",
   "recurrenceInterval",
   "recurrenceMode",

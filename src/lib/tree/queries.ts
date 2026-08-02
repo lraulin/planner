@@ -18,6 +18,7 @@ export async function loadOutline(userId: string): Promise<OutlineNode[]> {
         n.priority_letter, n.priority_rank,
         n.tc_priority_letter, n.tc_priority_rank,
         n.state, n.deadline,
+        n.target_start_date, n.target_end_date, n.deferred_date,
         n.focus, n.collapsed, n.notes, n.is_inbox, n.completed_at,
         0 AS depth,
         ARRAY[n.sort_key] AS path
@@ -31,6 +32,7 @@ export async function loadOutline(userId: string): Promise<OutlineNode[]> {
         c.priority_letter, c.priority_rank,
         c.tc_priority_letter, c.tc_priority_rank,
         c.state, c.deadline,
+        c.target_start_date, c.target_end_date, c.deferred_date,
         c.focus, c.collapsed, c.notes, c.is_inbox, c.completed_at,
         t.depth + 1,
         t.path || c.sort_key
@@ -46,12 +48,9 @@ export async function loadOutline(userId: string): Promise<OutlineNode[]> {
       t.focus, t.collapsed, t.notes, t.is_inbox, t.completed_at, t.depth,
       td.effort_minutes, td.effort_left_minutes, td.actual_effort_minutes,
       td.percent_complete, td.contexts,
-      td.deferred_date, td.recurrence_frequency,
+      td.recurrence_frequency,
       rad.color, rad.category, rad.importance,
-      -- One column per grid column: a project keeps its dates in project_details and a
-      -- task in task_details, and no row is ever both.
-      COALESCE(pd.project_start, td.target_start_date) AS target_start,
-      COALESCE(pd.target_end, td.target_end_date) AS target_end,
+      t.deferred_date, t.target_start_date AS target_start, t.target_end_date AS target_end,
       pd.purpose, pd.assigned_to,
       gd.definition, gd.range, gd.is_dream
     FROM tree t

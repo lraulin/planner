@@ -156,12 +156,16 @@ function defaultsFor(pattern: RecurrencePattern, anchor: Date): Task {
 export function RecurrenceFields({
   task,
   deadline,
+  deferredDate,
+  targetStartDate,
   patchTask,
   onSkip,
 }: {
   task: Task;
-  /** Lives on `nodes`, but it is the first choice of anchor, so the preview needs it. */
+  /** All three live on `nodes`, and all three are anchor candidates, so the preview needs them. */
   deadline: Date | null;
+  deferredDate: Date | null;
+  targetStartDate: Date | null;
   patchTask: (changes: Task) => void;
   /** Achieve's Skip Recurrence. Saves and re-reads on its own — it is not part of the draft. */
   onSkip: () => void;
@@ -174,7 +178,7 @@ export function RecurrenceFields({
 
   // The same precedence `applyStateTransition` uses, so the preview cannot disagree with
   // what completing the task will actually do.
-  const anchor = deadline ?? task.deferredDate ?? task.targetStartDate ?? new Date();
+  const anchor = deadline ?? deferredDate ?? targetStartDate ?? new Date();
 
   const next =
     frequency === "none"

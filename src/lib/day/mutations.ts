@@ -4,7 +4,6 @@ import {
   dailyItems,
   nodes,
   notes,
-  taskDetails,
   type NodeState,
   type PriorityLetter,
 } from "@/db/schema";
@@ -238,9 +237,9 @@ async function moveItemToDay(
   if (item.nodeId && item.completedAt === null && item.forwardedTo === null) {
     const date = new Date(`${day}T00:00:00`);
     await tx
-      .update(taskDetails)
-      .set({ targetStartDate: date, targetEndDate: date })
-      .where(eq(taskDetails.nodeId, item.nodeId));
+      .update(nodes)
+      .set({ targetStartDate: date, targetEndDate: date, updatedAt: new Date() })
+      .where(and(eq(nodes.id, item.nodeId), eq(nodes.userId, userId)));
   }
 }
 
@@ -323,9 +322,9 @@ export async function promoteToTask(userId: string, itemId: string): Promise<str
   // ends, because a line on a day page is work you mean to start and finish that day.
   const date = new Date(`${item.day}T00:00:00`);
   await db
-    .update(taskDetails)
-    .set({ targetStartDate: date, targetEndDate: date })
-    .where(eq(taskDetails.nodeId, nodeId));
+    .update(nodes)
+    .set({ targetStartDate: date, targetEndDate: date, updatedAt: new Date() })
+    .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
 
   return nodeId;
 }
@@ -394,12 +393,22 @@ export async function forwardOpenItems(
       // with it — the one place a start date you sailed past gets bumped, which is how a
       // task you meant to begin on Tuesday is still in front of you on Thursday rather
       // than stranded on Tuesday's page.
+      // Not for a node that is shelved past today: bumping its start to today would put a
+      // plan before its availability, which `nodes_start_not_before_deferred` rejects — and
+      // this runs unattended, so a rejection here would take the whole forward down with it.
+      // Compared as UTC calendar days, matching `isDeferred`.
       if (row.nodeId) {
         const date = new Date(`${today}T00:00:00`);
         await tx
-          .update(taskDetails)
-          .set({ targetStartDate: date, targetEndDate: date })
-          .where(eq(taskDetails.nodeId, row.nodeId));
+          .update(nodes)
+          .set({ targetStartDate: date, targetEndDate: date, updatedAt: new Date() })
+          .where(
+            and(
+              eq(nodes.id, row.nodeId),
+              eq(nodes.userId, userId),
+              sql`(${nodes.deferredDate} is null or (${nodes.deferredDate} at time zone 'UTC')::date <= ${today}::date)`,
+            ),
+          );
       }
 
       sortKey = between(sortKey, null);

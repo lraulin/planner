@@ -87,14 +87,14 @@ export function taskTabs(props: DetailFormProps): FormTab[] {
                   and the outline end up disagreeing. See `src/lib/day/sync.ts`. */}
               <DateField
                 label="Target start"
-                value={task.targetStartDate ?? null}
-                onChange={(targetStartDate) => patchTask({ targetStartDate })}
+                value={values.targetStartDate}
+                onChange={(targetStartDate) => patch({ targetStartDate })}
                 hint="Also puts the task on that day's list. Not a deadline — it carries forward."
               />
               <DateField
                 label="Target end"
-                value={task.targetEndDate ?? null}
-                onChange={(targetEndDate) => patchTask({ targetEndDate })}
+                value={values.targetEndDate}
+                onChange={(targetEndDate) => patch({ targetEndDate })}
               />
               <DateField
                 label="Deadline"
@@ -103,8 +103,9 @@ export function taskTabs(props: DetailFormProps): FormTab[] {
               />
               <DateField
                 label="Deferred until"
-                value={task.deferredDate ?? null}
-                onChange={(deferredDate) => patchTask({ deferredDate })}
+                value={values.deferredDate}
+                onChange={(deferredDate) => patch({ deferredDate })}
+                hint="Postpones it until this date. Leave empty and set State to Postponed to shelve it indefinitely."
               />
               <EffortField
                 label="Lead time"
@@ -124,6 +125,8 @@ export function taskTabs(props: DetailFormProps): FormTab[] {
           <RecurrenceFields
             task={task}
             deadline={values.deadline}
+            deferredDate={values.deferredDate}
+            targetStartDate={values.targetStartDate}
             patchTask={patchTask}
             onSkip={() => runAction(() => skipRecurrenceAction(node.id))}
           />

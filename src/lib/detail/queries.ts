@@ -37,6 +37,9 @@ export async function loadNodeDetail(
       priorityRank: nodes.priorityRank,
       state: nodes.state,
       deadline: nodes.deadline,
+      targetStartDate: nodes.targetStartDate,
+      targetEndDate: nodes.targetEndDate,
+      deferredDate: nodes.deferredDate,
       focus: nodes.focus,
       notes: nodes.notes,
     })

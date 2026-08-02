@@ -54,19 +54,27 @@ export function projectTabs(props: DetailFormProps): FormTab[] {
           <Section title="Schedule">
             <FieldGrid columns={3}>
               <DateField
-                label="Project start"
-                value={project.projectStart ?? null}
-                onChange={(projectStart) => patchProject({ projectStart })}
+                label="Target start"
+                value={values.targetStartDate}
+                onChange={(targetStartDate) => patch({ targetStartDate })}
               />
               <DateField
                 label="Target end"
-                value={project.targetEnd ?? null}
-                onChange={(targetEnd) => patchProject({ targetEnd })}
+                value={values.targetEndDate}
+                onChange={(targetEndDate) => patch({ targetEndDate })}
               />
               <DateField
                 label="Deadline"
                 value={values.deadline}
                 onChange={(deadline) => patch({ deadline })}
+              />
+              {/* A project is the thing you most often want off your plate for months —
+                  taxes, an election — while still being able to see it exists. */}
+              <DateField
+                label="Deferred until"
+                value={values.deferredDate}
+                onChange={(deferredDate) => patch({ deferredDate })}
+                hint="Postpones this and everything under it. Leave empty and set State to Postponed to shelve it indefinitely."
               />
             </FieldGrid>
           </Section>

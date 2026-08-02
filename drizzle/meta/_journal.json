@@ -134,6 +134,13 @@
       "when": 1785623723222,
       "tag": "0018_mighty_toro",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1785637657958,
+      "tag": "0019_giant_pride",
+      "breakpoints": true
     }
   ]
 }

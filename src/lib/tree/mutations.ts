@@ -272,9 +272,9 @@ async function recurrenceOf(tx: Executor, userId: string, nodeId: string) {
       endCount: taskDetails.recurrenceCount,
       endUntil: taskDetails.recurrenceUntil,
       deadline: nodes.deadline,
-      deferredDate: taskDetails.deferredDate,
-      targetStartDate: taskDetails.targetStartDate,
-      targetEndDate: taskDetails.targetEndDate,
+      deferredDate: nodes.deferredDate,
+      targetStartDate: nodes.targetStartDate,
+      targetEndDate: nodes.targetEndDate,
       reminderAt: taskDetails.reminderAt,
     })
     .from(taskDetails)
@@ -363,12 +363,22 @@ function nextAnchor(
 function moveDates(r: Recurrence, shift: number, next: Date) {
   const move = (date: Date | null) => (date ? addDays(date, shift) : null);
 
+  const deferredDate = move(r.deferredDate) ?? next;
+  const targetStartDate = move(r.targetStartDate) ?? next;
+
   return {
-    deadline: move(r.deadline),
-    task: {
-      targetStartDate: move(r.targetStartDate) ?? next,
-      deferredDate: move(r.deferredDate) ?? next,
+    // All four live on `nodes` now, so they land in one write.
+    node: {
+      deadline: move(r.deadline),
+      // A task deferred past its own deadline is odd but legal, and on a deadline-anchored
+      // series it is the one shape that could push a *created* start date behind the defer
+      // date and trip `nodes_start_not_before_deferred` — on an unattended completion, at
+      // that. Availability wins: you cannot begin before the task comes back.
+      targetStartDate: targetStartDate < deferredDate ? deferredDate : targetStartDate,
+      deferredDate,
       targetEndDate: move(r.targetEndDate),
+    },
+    task: {
       reminderAt: move(r.reminderAt),
     },
   };
@@ -523,7 +533,7 @@ export async function applyStateTransition(
 
   await tx
     .update(nodes)
-    .set({ deadline: dates.deadline, updatedAt: now })
+    .set({ ...dates.node, updatedAt: now })
     .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
 
   await tx
@@ -661,10 +671,29 @@ async function reopenDayLine(
   // The line is open again on today, so the task's target start date has to say today —
   // that column is what decides which day a task sits on, and reopening something you
   // finished this morning is a statement that you are still doing it today.
+  //
+  // Which also un-shelves it. A routine ticked this morning was deferred to its next
+  // occurrence on the way out; saying you are still doing it today contradicts that, and
+  // leaving the shelf in place would both hide it from the Chooser and put a plan before
+  // its availability, which the constraint rejects. Only a *future* shelf is cleared — a
+  // date already past is inert and is left as the record of the last cycle.
+  const startOfToday = startOfDay(now);
+  const [node] = await tx
+    .select({ deferredDate: nodes.deferredDate })
+    .from(nodes)
+    .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)))
+    .limit(1);
+
   await tx
-    .update(taskDetails)
-    .set({ targetStartDate: startOfDay(now) })
-    .where(eq(taskDetails.nodeId, nodeId));
+    .update(nodes)
+    .set({
+      targetStartDate: startOfToday,
+      ...(node?.deferredDate && node.deferredDate > startOfToday
+        ? { deferredDate: null }
+        : {}),
+      updatedAt: now,
+    })
+    .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
 }
 
 export async function setState(
@@ -716,10 +745,14 @@ export async function skipRecurrence(userId: string, nodeId: string): Promise<vo
 
     await tx
       .update(nodes)
-      .set({ deadline: dates.deadline, updatedAt: now })
+      .set({ ...dates.node, updatedAt: now })
       .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
 
     await tx.update(taskDetails).set(dates.task).where(eq(taskDetails.nodeId, nodeId));
+
+    // Skipping moves the target start, so the open day line follows it — the same rule a
+    // completion goes through. Without this the line stays on the day you skipped.
+    await syncDayLineToTargetStart(tx, userId, nodeId);
   });
 }
 

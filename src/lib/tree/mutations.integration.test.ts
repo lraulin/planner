@@ -795,6 +795,12 @@ describeDb("tree mutations", () => {
       return detail;
     }
 
+    /** The scheduling dates live on `nodes`, so the shelf and the plan are read from here. */
+    async function nodeRow(nodeId: string) {
+      const [node] = await db.select().from(nodes).where(eq(nodes.id, nodeId));
+      return node;
+    }
+
     async function completionsOf(owner: string, nodeId: string) {
       return db
         .select()
@@ -829,7 +835,7 @@ describeDb("tree mutations", () => {
       const task = await recurringTask({ frequency: "weekly", interval: 2 });
       await setState(userId, task, "completed");
 
-      const detail = await taskRow(task);
+      const detail = await nodeRow(task);
       expect(localKey(detail.deferredDate!)).toBe(daysFromToday(14));
     });
 
@@ -908,7 +914,7 @@ describeDb("tree mutations", () => {
       expect(node.state).toBe("completed");
       expect(node.completedAt).not.toBeNull();
       expect(await completionsOf(userId, task)).toHaveLength(0);
-      expect((await taskRow(task)).deferredDate).toBeNull();
+      expect((await nodeRow(task)).deferredDate).toBeNull();
     });
 
     it("clears the stamp when a completed task is reopened", async () => {
@@ -928,7 +934,7 @@ describeDb("tree mutations", () => {
 
       const [node] = await loadOutline(userId);
       expect(node.state).toBe("not_started");
-      expect(localKey((await taskRow(task)).deferredDate!)).toBe(daysFromToday(3));
+      expect(localKey((await nodeRow(task)).deferredDate!)).toBe(daysFromToday(3));
       expect(await completionsOf(userId, task)).toHaveLength(1);
     });
 
@@ -943,7 +949,7 @@ describeDb("tree mutations", () => {
 
       const detail = await taskRow(task);
       expect(detail.percentComplete).toBe(0);
-      expect(detail.deferredDate).not.toBeNull();
+      expect((await nodeRow(task)).deferredDate).not.toBeNull();
     });
 
     it("does not re-stamp completedAt when a completed task is saved again", async () => {
@@ -969,9 +975,13 @@ describeDb("tree mutations", () => {
         return new Date(`${iso}T00:00:00`);
       }
 
+      /**
+       * `set` is the recurrence rule, which lives on `task_details`. `core` is the dates it
+       * is anchored on, which live on `nodes` — deadline, target start and the shelf.
+       */
       async function ruleTask(
         set: Partial<typeof taskDetails.$inferInsert>,
-        core?: { deadline?: Date },
+        core?: Partial<typeof nodes.$inferInsert>,
       ) {
         const id = await createNode({
           userId,
@@ -980,11 +990,8 @@ describeDb("tree mutations", () => {
           name: "Weekly report",
         });
         await db.update(taskDetails).set(set).where(eq(taskDetails.nodeId, id));
-        if (core?.deadline) {
-          await db
-            .update(nodes)
-            .set({ deadline: core.deadline })
-            .where(eq(nodes.id, id));
+        if (core) {
+          await db.update(nodes).set(core).where(eq(nodes.id, id));
         }
         return id;
       }
@@ -998,15 +1005,17 @@ describeDb("tree mutations", () => {
             recurrenceInterval: 1,
             recurrencePattern: "by_weekday",
             recurrenceByWeekday: [5],
+          },
+          {
+            deadline: day("2026-08-07"),
             targetStartDate: day("2026-08-03"),
             deferredDate: day("2026-08-03"),
           },
-          { deadline: day("2026-08-07") },
         );
 
         await setState(userId, task, "completed");
 
-        const detail = await taskRow(task);
+        const detail = await nodeRow(task);
         const [node] = await loadOutline(userId);
         expect(localKey(node.deadline!)).toBe("2026-08-14");
         expect(localKey(detail.targetStartDate!)).toBe("2026-08-10");
@@ -1035,15 +1044,17 @@ describeDb("tree mutations", () => {
       it("steps a regenerating task from the completion, not from its dates", async () => {
         // Mowing the lawn: whenever you actually do it, the next one is seven days later.
         // The stale date from months ago must not be what it steps from.
-        const task = await ruleTask({
-          recurrenceFrequency: "weekly",
-          recurrenceMode: "regenerate",
-          deferredDate: day("2026-01-01"),
-        });
+        const task = await ruleTask(
+          {
+            recurrenceFrequency: "weekly",
+            recurrenceMode: "regenerate",
+          },
+          { deferredDate: day("2026-01-01") },
+        );
 
         await setState(userId, task, "completed");
 
-        expect(localKey((await taskRow(task)).deferredDate!)).toBe(daysFromToday(7));
+        expect(localKey((await nodeRow(task)).deferredDate!)).toBe(daysFromToday(7));
       });
 
       it("leaves a missed occurrence still overdue instead of catching it up", async () => {
@@ -1080,12 +1091,13 @@ describeDb("tree mutations", () => {
         await setState(userId, task, "completed");
 
         const [node] = await loadOutline(userId);
-        const detail = await taskRow(task);
+        const detail = await nodeRow(task);
         expect(node.deadline).toBeNull();
         expect(localKey(detail.deferredDate!)).toBe(daysFromToday(1));
         expect(localKey(detail.targetStartDate!)).toBe(daysFromToday(1));
         expect(detail.targetEndDate).toBeNull();
-        expect(detail.reminderAt).toBeNull();
+        // Still on `task_details`: a reminder is a task's own alarm, not a scheduling date.
+        expect((await taskRow(task)).reminderAt).toBeNull();
       });
 
       it("creates the same dates when an occurrence is skipped", async () => {
@@ -1096,7 +1108,7 @@ describeDb("tree mutations", () => {
         await skipRecurrence(userId, task);
 
         const [node] = await loadOutline(userId);
-        const detail = await taskRow(task);
+        const detail = await nodeRow(task);
         expect(node.deadline).toBeNull();
         expect(localKey(detail.deferredDate!)).toBe(daysFromToday(1));
         expect(localKey(detail.targetStartDate!)).toBe(daysFromToday(1));
@@ -1104,17 +1116,19 @@ describeDb("tree mutations", () => {
 
       it("follows a monthly ordinal pattern", async () => {
         // The last Saturday of the month. August 2026 has five; September has four.
-        const task = await ruleTask({
-          recurrenceFrequency: "monthly",
-          recurrencePattern: "by_ordinal",
-          recurrenceOrdinal: -1,
-          recurrenceWeekday: 6,
-          deferredDate: day("2026-08-29"),
-        });
+        const task = await ruleTask(
+          {
+            recurrenceFrequency: "monthly",
+            recurrencePattern: "by_ordinal",
+            recurrenceOrdinal: -1,
+            recurrenceWeekday: 6,
+          },
+          { deferredDate: day("2026-08-29") },
+        );
 
         await setState(userId, task, "completed");
 
-        expect(localKey((await taskRow(task)).deferredDate!)).toBe("2026-09-26");
+        expect(localKey((await nodeRow(task)).deferredDate!)).toBe("2026-09-26");
       });
 
       it("finishes for real on the last occurrence of a counted series", async () => {
@@ -1156,19 +1170,18 @@ describeDb("tree mutations", () => {
             recurrenceFrequency: "weekly",
             recurrencePattern: "by_weekday",
             recurrenceByWeekday: [5],
-            deferredDate: day("2026-08-07"),
           },
-          { deadline: day("2026-08-07") },
+          { deadline: day("2026-08-07"), deferredDate: day("2026-08-07") },
         );
 
         await skipRecurrence(userId, task);
 
-        const detail = await taskRow(task);
+        const detail = await nodeRow(task);
         const [node] = await loadOutline(userId);
         expect(localKey(node.deadline!)).toBe("2026-08-14");
         expect(localKey(detail.deferredDate!)).toBe("2026-08-14");
         expect(node.state).toBe("not_started");
-        expect(detail.dateCompleted).toBeNull();
+        expect((await taskRow(task)).dateCompleted).toBeNull();
         expect(await completionsOf(userId, task)).toHaveLength(0);
       });
 
@@ -1222,7 +1235,7 @@ describeDb("tree mutations", () => {
       const [node] = await loadOutline(userId);
       expect(node.state).toBe("completed");
       expect(await completionsOf(userId, task)).toHaveLength(0);
-      expect((await taskRow(task)).deferredDate).toBeNull();
+      expect((await nodeRow(task)).deferredDate).toBeNull();
     });
   });
 
@@ -1304,10 +1317,7 @@ describeDb("tree mutations", () => {
 
       const [node] = await loadOutline(other);
       expect(node.state).toBe("not_started");
-      const [detail] = await db
-        .select()
-        .from(taskDetails)
-        .where(eq(taskDetails.nodeId, theirs));
+      const [detail] = await db.select().from(nodes).where(eq(nodes.id, theirs));
       expect(detail.deferredDate).toBeNull();
       expect(
         await db

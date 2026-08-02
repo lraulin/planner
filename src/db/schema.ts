@@ -316,6 +316,41 @@ export const nodes = pgTable(
     tcPriorityRank: smallint("tc_priority_rank"),
     state: nodeStateEnum("state").notNull().default("not_started"),
     deadline: timestamp("deadline", { withTimezone: true }),
+    /**
+     * The day you intend to do this — **the day plan**, and the single source of truth for
+     * which day a task sits on. `src/lib/day/sync.ts` keeps exactly one open `daily_items`
+     * line on this date and nowhere else decides it.
+     *
+     * Not a scheduler output. Achieve's Target Start Date began as one — the date its
+     * effort-based engine predicted work would begin — and we have deliberately promoted it
+     * to a user input. **If the effort-based scheduler is ever built it must write its own
+     * `scheduled_start` / `scheduled_end` and never this column**, or a recompute would
+     * silently rewrite the day pages. See `agent-os/standards/product/date-model.md`.
+     */
+    targetStartDate: timestamp("target_start_date", { withTimezone: true }),
+    /** The far end of the planned window. A day-page gesture sets it equal to the start. */
+    targetEndDate: timestamp("target_end_date", { withTimezone: true }),
+    /**
+     * When a `postponed` node comes back on its own — **the expiry of the shelf, not a
+     * second hiding mechanism**.
+     *
+     * Null while postponed means shelved indefinitely, which is Achieve's Postponed (P) and
+     * the reason the state exists as well as the date. A date means it stops being
+     * postponed when that day arrives; expiry is derived at read time (`src/lib/tree/
+     * shelving.ts`), so nothing has to sweep and no clock lives in the database.
+     *
+     * Set by hand, or moved forward automatically each time a **recurring** task is
+     * completed — see `taskDetails.recurrenceFrequency`. A completing recurrence always
+     * writes this column, whichever date the pattern is anchored on, because it is the only
+     * thing that takes a finished routine out of the Chooser. Without it a deadline-anchored
+     * routine could be ticked twice in one day. That is also why a routine reads "P" between
+     * cycles: the date implies the state.
+     *
+     * A shelf and a plan are not in conflict — "back on my radar in February, I intend to
+     * start in March, due in April" is the expected shape, which is what the CHECK below
+     * permits and why it only forbids the reverse.
+     */
+    deferredDate: timestamp("deferred_date", { withTimezone: true }),
     /** Achieve's "Fo" column — a flag used to filter the outline down to current focus. */
     focus: boolean("focus").notNull().default(false),
     collapsed: boolean("collapsed").notNull().default(false),
@@ -375,6 +410,18 @@ export const nodes = pgTable(
     uniqueIndex("nodes_external_ref_uq")
       .on(table.userId, table.externalSource, table.externalId)
       .where(sql`${table.externalId} is not null`),
+    // A plan may not precede availability: you cannot intend to start something on a day
+    // before it comes back onto your radar. Equality is legal and is the *normal* case —
+    // recurrence sets both to the same date on every cycle. The reverse ordering is the
+    // useful one and is deliberately allowed: defer to February, plan for March.
+    //
+    // This is the reason all four dates live on `nodes` rather than in the detail tables. A
+    // CHECK cannot span tables, and while `target_start_date` sat on `task_details` and
+    // `deferred_date` beside it, projects could not be shelved at all.
+    check(
+      "nodes_start_not_before_deferred",
+      sql`${table.targetStartDate} is null or ${table.deferredDate} is null or ${table.targetStartDate} >= ${table.deferredDate}`,
+    ),
   ],
 );
 
@@ -440,22 +487,9 @@ export const taskDetails = pgTable(
     actualEffortMinutes: integer("actual_effort_minutes").notNull().default(0),
     percentComplete: smallint("percent_complete").notNull().default(0),
     contexts: text("contexts").array().notNull().default([]),
-    // General
-    targetStartDate: timestamp("target_start_date", { withTimezone: true }),
-    targetEndDate: timestamp("target_end_date", { withTimezone: true }),
-    /**
-     * When a task is pushed out of view until a date, without losing its deadline.
-     *
-     * Read by the Task Chooser (`isChooserCandidate`) and by the derived Status column: a
-     * task whose deferred date is still in the future is not offered as something to do
-     * now. Set by hand, or moved forward automatically each time a **recurring** task is
-     * completed — see `recurrenceFrequency` below.
-     *
-     * A completing recurrence always writes this column, whichever date the pattern is
-     * anchored on, because it is the only thing that takes a finished routine out of the
-     * Chooser. Without it a deadline-anchored routine could be ticked twice in one day.
-     */
-    deferredDate: timestamp("deferred_date", { withTimezone: true }),
+    // General. Target start, target end and the deferred date used to live here; they are on
+    // `nodes` now, so a project can carry them too and the database can enforce the rule
+    // between them. See the comments there.
     leadTimeMinutes: integer("lead_time_minutes"),
     /** Slack Achieve leaves between finishing and the deadline. */
     deadlineLeadTimeMinutes: integer("deadline_lead_time_minutes"),
@@ -685,17 +719,19 @@ export const resultAreaDetails = pgTable("result_area_details", {
  * rollups of the subtree, computed at read time in `src/lib/tree/derive.ts` and rendered
  * read-only. Templates, labels, and resource pools are out of scope.
  *
- * Recurrence is **tasks-only** for now — it lives on `task_details` because it drives
- * `deferredDate`, which projects do not have. Extending it here means moving both columns
- * up onto `nodes`.
+ * Recurrence is **tasks-only** for now — it lives on `task_details` for want of a reason to
+ * move it, not for want of a `deferredDate`, which projects now have. The blocker this
+ * comment used to record is gone; extending recurrence here is its own piece of work.
+ *
+ * `project_start` and `target_end` used to live here and were `COALESCE`d with the task
+ * columns on every read. They are `nodes.targetStartDate` / `nodes.targetEndDate` now — one
+ * field per node, as the outline always presented them.
  */
 export const projectDetails = pgTable("project_details", {
   nodeId: uuid("node_id")
     .primaryKey()
     .references(() => nodes.id, { onDelete: "cascade" }),
   // General — scheduling. The weekly calendar will read these; nothing does yet.
-  projectStart: timestamp("project_start", { withTimezone: true }),
-  targetEnd: timestamp("target_end", { withTimezone: true }),
   /** When set, the schedule stretches to fit the effort rather than the calendar. */
   effortDriven: boolean("effort_driven").notNull().default(true),
   onlyShowNextTask: boolean("only_show_next_task").notNull().default(false),

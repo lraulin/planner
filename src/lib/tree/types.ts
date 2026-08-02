@@ -41,16 +41,15 @@ export type OutlineRow = {
    * the Task Chooser score, which inherits it from the nearest result-area ancestor.
    */
   importance: number | null;
-  /**
-   * Scheduling dates, merged across the type-specific tables so the grid has one source
-   * per column: a project's come from `project_details`, a task's from `task_details`,
-   * and every other type has none.
-   */
+  /** Scheduling dates. On `nodes`, so any type can carry them. */
   targetStart: Date | null;
   targetEnd: Date | null;
   /**
-   * Task only: hidden from the Task Chooser until this date. Null on every other type, and
-   * on tasks that are simply available.
+   * When a `postponed` node comes back on its own — the expiry of the shelf, not a second
+   * hiding mechanism. Null on a node that is not shelved, and on one shelved indefinitely.
+   *
+   * Read `effectivePostponedUntil` on the derived node rather than this: shelving is
+   * inherited, so a row with no date of its own may still be shelved by an ancestor.
    */
   deferredDate: Date | null;
   /**
