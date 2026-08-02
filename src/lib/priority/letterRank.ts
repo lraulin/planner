@@ -92,83 +92,139 @@ export function letterRankEngine<T extends { id: string }>(
     return renumber(itemsInLetter(items, source, moved.id), source);
   }
 
-  /** Drop out of the ranking, closing the gap left behind. */
-  function planClear(items: T[], id: string): LetterAssignment[] {
-    const item = items.find((entry) => entry.id === id);
-    if (!item) return [];
+  /** Drop out of the ranking, closing the gap left behind. Accepts one id or a block. */
+  function planClear(items: T[], id: string | readonly string[]): LetterAssignment[] {
+    const ids = Array.isArray(id) ? [...id] : [id];
+    if (ids.length === 0) return [];
 
-    const letter = read(item).letter;
-    if (letter === null) return [];
+    const dragSet = new Set(ids);
+    const out: LetterAssignment[] = [];
+    const sources = new Set<PriorityLetter>();
 
-    return [
-      { id, letter: null, rank: null },
-      ...renumber(itemsInLetter(items, letter, id), letter),
-    ];
+    for (const dragId of ids) {
+      const item = items.find((entry) => entry.id === dragId);
+      if (!item) continue;
+      const letter = read(item).letter;
+      if (letter === null) continue;
+      sources.add(letter);
+      out.push({ id: dragId, letter: null, rank: null });
+    }
+
+    for (const letter of sources) {
+      out.push(
+        ...renumber(
+          items
+            .filter((item) => read(item).letter === letter && !dragSet.has(item.id))
+            .sort((a, b) => (read(a).rank ?? 0) - (read(b).rank ?? 0)),
+          letter,
+        ),
+      );
+    }
+    return out;
   }
 
   /**
-   * Move `dragId` to sit `zone` of `targetId`, renumbering both the letter it leaves and
-   * the letter it joins.
+   * Move one or more items as a contiguous block to sit `zone` of `targetId`.
    *
-   * Dropping onto a row in a different letter changes the item's letter — that is how you
-   * demote an A2 to a B. Dropping onto an **unranked** row unranks the dragged item, which
-   * is the drag equivalent of clearing the cell.
+   * Display order of `dragIds` is preserved in the landing letter. Dropping onto a member
+   * of the drag set is a no-op. Dropping onto an **unranked** row unranks every dragged
+   * item.
    *
-   * Returns every assignment to persist, or `[]` when the drop is a no-op.
+   * Single-id calls keep the historical behaviour; multi is the multi-drag path.
    */
   function planDrop(
     items: T[],
-    dragId: string,
+    dragId: string | readonly string[],
     targetId: string,
     zone: LetterDropZone,
   ): LetterAssignment[] {
-    if (dragId === targetId) return [];
+    const dragIds = Array.isArray(dragId) ? [...dragId] : [dragId];
+    if (dragIds.length === 0) return [];
+    if (dragIds.includes(targetId)) return [];
 
-    const dragged = items.find((item) => item.id === dragId);
+    const dragSet = new Set(dragIds);
+    const dragged = dragIds
+      .map((id) => items.find((item) => item.id === id))
+      .filter((item): item is T => item != null);
+    if (dragged.length !== dragIds.length) return [];
+
     const target = items.find((item) => item.id === targetId);
-    if (!dragged || !target) return [];
+    if (!target) return [];
 
     const destination = read(target).letter;
+    if (destination === null) return planClear(items, dragIds);
 
-    // Dropped among the unranked: leave the ranking entirely.
-    if (destination === null) return planClear(items, dragId);
-
-    const members = itemsInLetter(items, destination, dragId);
+    const members = items
+      .filter((item) => read(item).letter === destination && !dragSet.has(item.id))
+      .sort((a, b) => (read(a).rank ?? 0) - (read(b).rank ?? 0));
     const targetIndex = members.findIndex((item) => item.id === targetId);
     if (targetIndex === -1) return [];
 
     const insertAt = zone === "before" ? targetIndex : targetIndex + 1;
-    members.splice(insertAt, 0, dragged);
+    members.splice(insertAt, 0, ...dragged);
 
     return [
       ...renumber(members, destination),
-      ...compactSourceLetter(items, dragged, destination),
+      ...compactSources(items, dragged, destination, dragSet),
     ];
   }
 
   /**
-   * Drop onto a letter's group header: the item becomes that letter's **rank 1** and
-   * everything below shifts down.
-   *
-   * The header sits above the group's rows, so "on the header" reads as "above them all".
-   * It is also the only way to reach an empty letter, which is exactly the case the user
-   * hits first: drag onto A when nothing is an A, and it becomes A1.
+   * Drop onto a letter's group header: the dragged items become that letter's top ranks
+   * (in drag order) and everything below shifts down.
    */
   function planDropOnLetter(
     items: T[],
-    dragId: string,
+    dragId: string | readonly string[],
     letter: PriorityLetter,
   ): LetterAssignment[] {
-    const dragged = items.find((item) => item.id === dragId);
-    if (!dragged) return [];
+    const dragIds = Array.isArray(dragId) ? [...dragId] : [dragId];
+    if (dragIds.length === 0) return [];
 
-    const members = itemsInLetter(items, letter, dragId);
-    members.unshift(dragged);
+    const dragSet = new Set(dragIds);
+    const dragged = dragIds
+      .map((id) => items.find((item) => item.id === id))
+      .filter((item): item is T => item != null);
+    if (dragged.length !== dragIds.length) return [];
+
+    const members = items
+      .filter((item) => read(item).letter === letter && !dragSet.has(item.id))
+      .sort((a, b) => (read(a).rank ?? 0) - (read(b).rank ?? 0));
+    members.unshift(...dragged);
 
     return [
       ...renumber(members, letter),
-      ...compactSourceLetter(items, dragged, letter),
+      ...compactSources(items, dragged, letter, dragSet),
     ];
+  }
+
+  /**
+   * Close gaps in every letter a moved block left, once per letter — multi-drag must not
+   * renumber the same source letter once per item.
+   */
+  function compactSources(
+    items: T[],
+    dragged: T[],
+    destination: PriorityLetter,
+    dragSet: Set<string>,
+  ): LetterAssignment[] {
+    const sources = new Set<PriorityLetter>();
+    for (const item of dragged) {
+      const source = read(item).letter;
+      if (source !== null && source !== destination) sources.add(source);
+    }
+    const out: LetterAssignment[] = [];
+    for (const source of sources) {
+      out.push(
+        ...renumber(
+          items
+            .filter((item) => read(item).letter === source && !dragSet.has(item.id))
+            .sort((a, b) => (read(a).rank ?? 0) - (read(b).rank ?? 0)),
+          source,
+        ),
+      );
+    }
+    return out;
   }
 
   /**

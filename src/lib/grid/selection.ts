@@ -137,6 +137,29 @@ export function moveSelection(
   return selectOnly(nextId);
 }
 
+/**
+ * Ids that should actually move when a multi-selection is dragged.
+ *
+ * If both a parent and a child are selected, the child rides along with the parent — moving
+ * it separately would try to place it relative to a target that is also moving. Display
+ * order is preserved so a block of siblings lands as a block.
+ */
+export function selectionMoveRoots(
+  selectedIds: ReadonlySet<string>,
+  orderedIds: readonly string[],
+  parentIdOf: (id: string) => string | null,
+): string[] {
+  return orderedIds.filter((id) => {
+    if (!selectedIds.has(id)) return false;
+    let parent = parentIdOf(id);
+    while (parent !== null) {
+      if (selectedIds.has(parent)) return false;
+      parent = parentIdOf(parent);
+    }
+    return true;
+  });
+}
+
 /** Drop ids that no longer appear in the ordered list (filtered out, deleted, …). */
 export function pruneSelection(
   orderedIds: readonly string[],

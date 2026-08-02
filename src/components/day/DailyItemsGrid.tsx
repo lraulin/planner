@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { NodeState, PriorityLetter } from "@/db/schema";
 import { DataGrid, type RowDrag } from "@/components/grid/DataGrid";
 import type { RowSwipe } from "@/components/grid/CompactRow";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 import { SortChip, sortColumnLabel } from "@/components/grid/SortChip";
 import { useGridState } from "@/components/grid/useGridState";
+import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import type { GridRow } from "@/lib/tree/slice";
 import {
   DAY_LETTERS,
@@ -17,6 +18,8 @@ import {
   type DayAssignment,
 } from "@/lib/day/priority";
 import type { DailyItemView } from "@/lib/day/types";
+import { copyAsText, writeClipboardText } from "@/lib/tree/copyAsText";
+import { isTypingTarget } from "@/lib/keyboard";
 import { DAY_COLUMNS, type DayColumnCtx } from "./dayColumns";
 
 const DAY_COLUMN_IDS = DAY_COLUMNS.map((column) => column.id);
@@ -98,12 +101,17 @@ export function DailyItemsGrid({
   onMoveToDay: (itemId: string, day: string) => void;
   emptyHint: string;
 }) {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const draftRef = useRef<HTMLInputElement>(null);
 
   const gridState = useGridState("day", DAY_COLUMNS, DAY_COLUMN_IDS);
   const rows = useMemo(() => buildRows(items), [items]);
+  const orderedIds = useMemo(
+    () => rows.flatMap((row) => (row.kind === "node" ? [row.id] : [])),
+    [rows],
+  );
+  const multi = useMultiSelect(orderedIds, null);
+  const { selectedId, selectedIds, select, selectOne, move } = multi;
 
   const onAssignPriority = useCallback(
     (itemId: string, letter: PriorityLetter | null, rank: number | null) => {
@@ -119,16 +127,16 @@ export function DailyItemsGrid({
 
   /** Plans are computed against the whole day, not the visible rows. */
   const planFor = useCallback(
-    (dragId: string, targetId: string, zone: string): DayAssignment[] => {
-      if (targetId === UNRANKED_GROUP) return planDayClear(items, dragId);
+    (dragIds: readonly string[], targetId: string, zone: string): DayAssignment[] => {
+      if (targetId === UNRANKED_GROUP) return planDayClear(items, dragIds);
 
       const letter = letterFromGroup(targetId);
-      if (letter !== null) return planDayDropOnLetter(items, dragId, letter);
+      if (letter !== null) return planDayDropOnLetter(items, dragIds, letter);
 
       // "inside" has no meaning in a flat list; treat it as landing after the row.
       return planDayDrop(
         items,
-        dragId,
+        dragIds,
         targetId,
         zone === "before" ? "before" : "after",
       );
@@ -145,19 +153,34 @@ export function DailyItemsGrid({
     if (gridState.sort) return undefined;
 
     return {
-      resolve: (dragId, targetId, zone) =>
-        planFor(dragId, targetId, zone).length > 0 ? { depth: 0 } : null,
-      onDrop: (dragId, targetId, zone) => {
-        setSelectedId(dragId);
-        onApplyPriorities(planFor(dragId, targetId, zone));
+      resolve: (dragIds, targetId, zone) =>
+        planFor(dragIds, targetId, zone).length > 0 ? { depth: 0 } : null,
+      onDrop: (dragIds, targetId, zone) => {
+        if (dragIds[0]) selectOne(dragIds[0]);
+        onApplyPriorities(planFor(dragIds, targetId, zone));
       },
     };
-  }, [gridState.sort, planFor, onApplyPriorities]);
+  }, [gridState.sort, planFor, onApplyPriorities, selectOne]);
+
+  const copySelectionAsText = useCallback(() => {
+    const text = copyAsText(
+      orderedIds
+        .map((id) => items.find((item) => item.id === id))
+        .filter((item): item is DailyItemView => item != null)
+        .map((item) => ({ id: item.id, name: item.title, depth: 0 })),
+      selectedIds,
+    );
+    void writeClipboardText(text);
+  }, [orderedIds, items, selectedIds]);
 
   const rowMenu = useCallback(
     (itemId: string): MenuItem[] => {
       const item = items.find((entry) => entry.id === itemId);
       if (!item) return [];
+      const multiCount = selectedIds.has(itemId) ? selectedIds.size : 1;
+      const block = selectedIds.has(itemId)
+        ? orderedIds.filter((id) => selectedIds.has(id))
+        : [itemId];
 
       const tomorrow = (() => {
         const next = new Date(`${item.day}T00:00:00Z`);
@@ -166,6 +189,11 @@ export function DailyItemsGrid({
       })();
 
       return [
+        {
+          label: multiCount > 1 ? `Copy as text (${multiCount})` : "Copy as text",
+          shortcut: "⌘C",
+          onSelect: copySelectionAsText,
+        },
         ...(item.nodeId
           ? []
           : [
@@ -178,12 +206,12 @@ export function DailyItemsGrid({
         // Ranking is a drag on desktop and drag is off on touch, so the same moves have to
         // exist as named commands or A/B/C/D is unreachable from a phone entirely.
         ...DAY_LETTERS.map((letter) => ({
-          label: `Rank ${letter}`,
-          onSelect: () => onApplyPriorities(planDayDropOnLetter(items, itemId, letter)),
+          label: multiCount > 1 ? `Rank ${letter} (${multiCount})` : `Rank ${letter}`,
+          onSelect: () => onApplyPriorities(planDayDropOnLetter(items, block, letter)),
         })),
         {
-          label: "Clear rank",
-          onSelect: () => onApplyPriorities(planDayClear(items, itemId)),
+          label: multiCount > 1 ? `Clear rank (${multiCount})` : "Clear rank",
+          onSelect: () => onApplyPriorities(planDayClear(items, block)),
         },
         {
           label: "Mark in progress",
@@ -194,8 +222,45 @@ export function DailyItemsGrid({
         { label: "Remove from this day", onSelect: () => onDelete(itemId) },
       ];
     },
-    [items, onPromote, onMoveToDay, onSetState, onDelete, onApplyPriorities],
+    [
+      items,
+      orderedIds,
+      selectedIds,
+      onPromote,
+      onMoveToDay,
+      onSetState,
+      onDelete,
+      onApplyPriorities,
+      copySelectionAsText,
+    ],
   );
+
+  // ⌘C / Shift+arrows when the day list has focus and no field is editing.
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (isTypingTarget(event.target)) return;
+      if (!selectedId) return;
+
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        !event.altKey &&
+        (event.key === "c" || event.key === "C")
+      ) {
+        event.preventDefault();
+        copySelectionAsText();
+        return;
+      }
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        move(1, event.shiftKey);
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        move(-1, event.shiftKey);
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [selectedId, copySelectionAsText, move]);
 
   /**
    * The two things done to a day item most often, and both reversible — swipe right ticks it
@@ -264,12 +329,14 @@ export function DailyItemsGrid({
           columns={gridState.columns}
           columnCtx={columnCtx}
           selectedId={selectedId}
-          onSelect={setSelectedId}
+          selectedIds={selectedIds}
+          onSelect={select}
           ariaLabel="Today's task list"
           rowDrag={rowDrag}
           rowMenu={rowMenu}
           rowSwipe={rowSwipe}
           rowLabel={(row) => row.node.title}
+          rowNumbers
           enableSort
           sort={gridState.sort}
           onSortChange={gridState.toggleSort}

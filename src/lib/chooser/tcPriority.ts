@@ -64,12 +64,13 @@ export function itemsInLetter(
 }
 
 /**
- * Move `dragId` to sit `zone` of `targetId`, renumbering both the letter it leaves and the
- * letter it joins. Dropping onto an unranked row unranks the dragged node.
+ * Move one or more nodes to sit `zone` of `targetId`, renumbering both the letter they
+ * leave and the letter they join. Multi-drag passes a block; dropping onto an unranked
+ * row unranks every dragged node.
  */
 export function planTcDrop(
   nodes: Ranked[],
-  dragId: string,
+  dragId: string | readonly string[],
   targetId: string,
   zone: TcDropZone,
 ): TcAssignment[] {
@@ -77,12 +78,12 @@ export function planTcDrop(
 }
 
 /**
- * Drop onto a letter's group header: the node becomes that letter's **rank 1** and
+ * Drop onto a letter's group header: the node(s) become that letter's top ranks and
  * everything below shifts down. The only way to reach an empty letter.
  */
 export function planTcDropOnLetter(
   nodes: Ranked[],
-  dragId: string,
+  dragId: string | readonly string[],
   letter: PriorityLetter,
 ): TcAssignment[] {
   return toTc(engine.planDropOnLetter(nodes, dragId, letter));
@@ -98,7 +99,10 @@ export function planTcAssign(
   return toTc(engine.planAssign(nodes, nodeId, letter, rank));
 }
 
-/** Drop out of the ranking, closing the gap left behind. */
-export function planTcClear(nodes: Ranked[], nodeId: string): TcAssignment[] {
+/** Drop out of the ranking, closing the gap left behind. Multi-drag passes a block. */
+export function planTcClear(
+  nodes: Ranked[],
+  nodeId: string | readonly string[],
+): TcAssignment[] {
   return toTc(engine.planClear(nodes, nodeId));
 }

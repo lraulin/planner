@@ -187,19 +187,19 @@ export function ChooserGrid({
    * it is hiding.
    */
   const planTcFor = useCallback(
-    (dragId: string, targetId: string, zone: string): TcAssignment[] => {
-      if (targetId === TC_UNRANKED_GROUP_ID) return planTcClear(tab.nodes, dragId);
+    (dragIds: readonly string[], targetId: string, zone: string): TcAssignment[] => {
+      if (targetId === TC_UNRANKED_GROUP_ID) return planTcClear(tab.nodes, dragIds);
 
       const letter = tcLetterFromGroupId(targetId);
       if (letter !== null) {
         if (!(TC_LETTERS as string[]).includes(letter)) return [];
-        return planTcDropOnLetter(tab.nodes, dragId, letter as PriorityLetter);
+        return planTcDropOnLetter(tab.nodes, dragIds, letter as PriorityLetter);
       }
 
       // "inside" has no meaning in a flat list; treat it as landing after the row.
       return planTcDrop(
         tab.nodes,
-        dragId,
+        dragIds,
         targetId,
         zone === "before" ? "before" : "after",
       );
@@ -207,7 +207,7 @@ export function ChooserGrid({
     [tab.nodes],
   );
 
-  const { setSelectedId } = tab;
+  const { selectOne } = tab;
 
   /**
    * TC Priority is ranked by drag. While a header sort is active the on-screen order is
@@ -218,14 +218,14 @@ export function ChooserGrid({
     if (!view.tcPriority || gridState.sort) return undefined;
 
     return {
-      resolve: (dragId, targetId, zone) =>
-        planTcFor(dragId, targetId, zone).length > 0 ? { depth: 0 } : null,
-      onDrop: (dragId, targetId, zone) => {
-        setSelectedId(dragId);
-        applyTcPlan(planTcFor(dragId, targetId, zone));
+      resolve: (dragIds, targetId, zone) =>
+        planTcFor(dragIds, targetId, zone).length > 0 ? { depth: 0 } : null,
+      onDrop: (dragIds, targetId, zone) => {
+        if (dragIds[0]) selectOne(dragIds[0]);
+        applyTcPlan(planTcFor(dragIds, targetId, zone));
       },
     };
-  }, [view.tcPriority, gridState.sort, planTcFor, setSelectedId, applyTcPlan]);
+  }, [view.tcPriority, gridState.sort, planTcFor, selectOne, applyTcPlan]);
 
   /** The `Project:` line under the toolbar — the selected row's ancestor path. */
   const breadcrumb = useMemo(() => {
@@ -362,6 +362,7 @@ export function ChooserGrid({
         ariaLabel="Task Chooser"
         rowMenu={tab.rowMenu}
         rowDrag={rowDrag}
+        rowNumbers
         enableFilters={advancedFilters}
         enableSort
         sort={gridState.sort}

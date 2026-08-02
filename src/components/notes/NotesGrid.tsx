@@ -33,6 +33,7 @@ import {
 import { DataGrid, type RowDrag } from "@/components/grid/DataGrid";
 import { SortChip, sortColumnLabel } from "@/components/grid/SortChip";
 import { useGridState } from "@/components/grid/useGridState";
+import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { ShowFieldsDialog } from "@/components/grid/ShowFieldsDialog";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import type { MenuItem } from "@/components/grid/ContextMenu";
@@ -49,6 +50,8 @@ import {
   type NotesViewSettings,
 } from "@/lib/settings/notes";
 import { NOTES_FILTER_SCOPE } from "@/lib/settings/scopes";
+import { selectionMoveRoots } from "@/lib/grid/selection";
+import { copyAsText, writeClipboardText } from "@/lib/tree/copyAsText";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { notesColumns, NOTES_COLUMN_IDS, type NotesColumnCtx } from "./notesColumns";
 import { NoteFilterDialog } from "./NoteFilterDialog";
@@ -112,7 +115,6 @@ export function NotesGrid({
   );
   const [filterOpen, setFilterOpen] = useState(false);
   const [fieldsOpen, setFieldsOpen] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(urlNoteId);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<NoteNode | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -169,6 +171,10 @@ export function NotesGrid({
     }));
   }, [notes, mode, sort, filter]);
 
+  const orderedIds = useMemo(() => rows.map((row) => row.id), [rows]);
+  const multi = useMultiSelect(orderedIds, urlNoteId);
+  const { selectedId, selectedIds, select, selectOne, move: moveSelection } = multi;
+
   const selected = selectedId ? (byId.get(selectedId) ?? null) : null;
   const drawerNote = drawerId ? (byId.get(drawerId) ?? null) : null;
 
@@ -176,16 +182,32 @@ export function NotesGrid({
   const [seenNoteId, setSeenNoteId] = useState(urlNoteId);
   if (urlNoteId !== seenNoteId) {
     setSeenNoteId(urlNoteId);
-    if (urlNoteId) setSelectedId(urlNoteId);
+    if (urlNoteId) selectOne(urlNoteId);
   }
 
   const openDetail = useCallback(
     (id: string) => {
-      setSelectedId(id);
+      selectOne(id);
       setUrlNoteId(id);
     },
-    [setUrlNoteId],
+    [setUrlNoteId, selectOne],
   );
+
+  const copySelectionAsText = useCallback(() => {
+    const text = copyAsText(
+      rows
+        .filter(
+          (row): row is Extract<typeof row, { kind: "node" }> => row.kind === "node",
+        )
+        .map((row) => ({
+          id: row.id,
+          name: row.node.title,
+          depth: row.depth,
+        })),
+      selectedIds,
+    );
+    void writeClipboardText(text);
+  }, [rows, selectedIds]);
 
   const closeDetail = useCallback(() => {
     setUrlNoteId(null);
@@ -214,12 +236,12 @@ export function NotesGrid({
         // Open the new note straight away: a note with no body is not worth a row on its
         // own, and the reason you made one is to write in it.
         if (result.id) {
-          setSelectedId(result.id);
+          selectOne(result.id);
           setUrlNoteId(result.id);
         }
       });
     },
-    [selected, setUrlNoteId],
+    [selected, setUrlNoteId, selectOne],
   );
 
   const columnCtx: NotesColumnCtx = useMemo(
@@ -275,10 +297,21 @@ export function NotesGrid({
       return false;
     };
 
+    const rootsOf = (dragIds: readonly string[]) =>
+      selectionMoveRoots(
+        new Set(dragIds),
+        dragIds,
+        (id) => byId.get(id)?.parentId ?? null,
+      );
+
     return {
-      resolve: (dragId, targetId, zone) => {
-        if (dragId === targetId) return null;
-        if (isInSubtree(dragId, targetId)) return null;
+      resolve: (dragIds, targetId, zone) => {
+        const roots = rootsOf(dragIds);
+        if (roots.length === 0) return null;
+        if (dragIds.includes(targetId)) return null;
+        for (const root of roots) {
+          if (isInSubtree(root, targetId)) return null;
+        }
 
         const target = byId.get(targetId);
         if (!target) return null;
@@ -286,34 +319,62 @@ export function NotesGrid({
         const depth = zone === "inside" ? target.depth + 1 : target.depth;
         return { depth };
       },
-      onDrop: (dragId, targetId, zone) => {
+      onDrop: (dragIds, targetId, zone) => {
+        const roots = rootsOf(dragIds);
+        if (roots.length === 0) return;
+        if (dragIds.includes(targetId)) return;
+
         const target = byId.get(targetId);
         if (!target) return;
 
-        const params =
-          zone === "inside"
-            ? { parentId: targetId, position: { at: "last" as const } }
-            : {
-                parentId: target.parentId,
-                position: {
-                  at: zone === "before" ? ("before" as const) : ("after" as const),
-                  siblingId: targetId,
-                } as NotePosition,
-              };
-
-        apply(() => moveNoteAction({ noteId: dragId, ...params }));
+        selectOne(roots[0]);
+        apply(async () => {
+          let previousId: string | null = null;
+          let lastResult: { ok: true } | { ok: false; error: string } = { ok: true };
+          for (const noteId of roots) {
+            const params =
+              previousId === null
+                ? zone === "inside"
+                  ? { parentId: targetId, position: { at: "last" as const } }
+                  : {
+                      parentId: target.parentId,
+                      position: {
+                        at:
+                          zone === "before" ? ("before" as const) : ("after" as const),
+                        siblingId: targetId,
+                      } as NotePosition,
+                    }
+                : {
+                    parentId: zone === "inside" ? targetId : target.parentId,
+                    position: {
+                      at: "after" as const,
+                      siblingId: previousId,
+                    } as NotePosition,
+                  };
+            lastResult = await moveNoteAction({ noteId, ...params });
+            if (!lastResult.ok) return lastResult;
+            previousId = noteId;
+          }
+          return lastResult;
+        });
       },
     };
-  }, [canReorder, byId, apply]);
+  }, [canReorder, byId, apply, selectOne]);
 
   const rowMenu = useCallback(
     (noteId: string): MenuItem[] => {
       const note = byId.get(noteId);
       if (!note) return [];
+      const multiCount = selectedIds.has(noteId) ? selectedIds.size : 1;
 
       return [
         { label: "Open note", shortcut: "Enter", onSelect: () => openDetail(noteId) },
         { label: "Rename", shortcut: "F2", onSelect: () => setEditingId(noteId) },
+        {
+          label: multiCount > 1 ? `Copy as text (${multiCount})` : "Copy as text",
+          shortcut: "⌘C",
+          onSelect: copySelectionAsText,
+        },
         {
           label: "New note after",
           shortcut: "Insert",
@@ -339,7 +400,7 @@ export function NotesGrid({
         { label: "Delete", shortcut: "Delete", onSelect: () => setPendingDelete(note) },
       ];
     },
-    [byId, openDetail, addNote, apply, canReorder],
+    [byId, openDetail, addNote, apply, canReorder, selectedIds, copySelectionAsText],
   );
 
   // Keyboard, matching Achieve's own hint bar and the bindings every other tab uses.
@@ -352,6 +413,16 @@ export function NotesGrid({
       if (event.key === "Insert") {
         event.preventDefault();
         addNote(event.ctrlKey || event.metaKey ? "child" : "sibling");
+        return;
+      }
+
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        !event.altKey &&
+        (event.key === "c" || event.key === "C")
+      ) {
+        event.preventDefault();
+        copySelectionAsText();
         return;
       }
 
@@ -383,8 +454,6 @@ export function NotesGrid({
         }
         case "ArrowUp":
         case "ArrowDown": {
-          const index = rows.findIndex((row) => row.id === selected.id);
-          if (index === -1) return;
           event.preventDefault();
 
           if (event.altKey) {
@@ -398,8 +467,7 @@ export function NotesGrid({
             return;
           }
 
-          const next = rows[index + (event.key === "ArrowUp" ? -1 : 1)];
-          if (next) setSelectedId(next.id);
+          moveSelection(event.key === "ArrowUp" ? -1 : 1, event.shiftKey);
           break;
         }
       }
@@ -414,11 +482,12 @@ export function NotesGrid({
     fieldsOpen,
     pendingDelete,
     selected,
-    rows,
     addNote,
     openDetail,
     apply,
     canReorder,
+    moveSelection,
+    copySelectionAsText,
   ]);
 
   const filterActive = !isEmptyNoteFilter(filter);
@@ -537,7 +606,8 @@ export function NotesGrid({
         columns={columns}
         columnCtx={columnCtx}
         selectedId={selectedId}
-        onSelect={setSelectedId}
+        selectedIds={selectedIds}
+        onSelect={select}
         onOpenDetail={openDetail}
         ariaLabel="Notes"
         enableFilters
@@ -551,6 +621,7 @@ export function NotesGrid({
         onResetColumnWidth={gridState.clearWidth}
         rowDrag={rowDrag}
         rowMenu={rowMenu}
+        rowNumbers
         rowLabel={(row) => `Note: ${row.node.title || "Untitled"}`}
         rowExpansion={(row) => (row.node.hasChildren ? !row.node.collapsed : undefined)}
         empty={
@@ -600,7 +671,7 @@ export function NotesGrid({
           const target = pendingDelete;
           setPendingDelete(null);
           if (!target) return;
-          if (selectedId === target.id) setSelectedId(null);
+          if (selectedId === target.id) selectOne(null);
           apply(() => deleteNoteAction(target.id));
         }}
         onCancel={() => setPendingDelete(null)}

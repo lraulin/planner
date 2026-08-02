@@ -51,20 +51,20 @@ export function itemsInDayLetter(
   return engine.itemsInLetter(items, letter, excludeId);
 }
 
-/** Move `dragId` to sit `zone` of `targetId`. Dropping onto an unranked row unranks it. */
+/** Move one or more rows to sit `zone` of `targetId`. Multi-drag passes a block. */
 export function planDayDrop(
   items: Ranked[],
-  dragId: string,
+  dragId: string | readonly string[],
   targetId: string,
   zone: DayDropZone,
 ): DayAssignment[] {
   return engine.planDrop(items, dragId, targetId, zone);
 }
 
-/** Drop onto a letter header: the row becomes that letter's rank 1. */
+/** Drop onto a letter header: the row(s) become that letter's top ranks. */
 export function planDayDropOnLetter(
   items: Ranked[],
-  dragId: string,
+  dragId: string | readonly string[],
   letter: PriorityLetter,
 ): DayAssignment[] {
   return engine.planDropOnLetter(items, dragId, letter);
@@ -80,8 +80,11 @@ export function planDayAssign(
   return engine.planAssign(items, id, letter, rank);
 }
 
-/** Drop out of the ranking, closing the gap left behind. */
-export function planDayClear(items: Ranked[], id: string): DayAssignment[] {
+/** Drop out of the ranking, closing the gap left behind. Multi-drag passes a block. */
+export function planDayClear(
+  items: Ranked[],
+  id: string | readonly string[],
+): DayAssignment[] {
   return engine.planClear(items, id);
 }
 

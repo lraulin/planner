@@ -42,14 +42,18 @@ export type GridSelectMods = SelectMods;
  * "inside", which row is lit, when the drop line is drawn — and the host owns the meaning:
  * `resolve` says whether a hover is legal and at what depth the indicator belongs, `onDrop`
  * performs the move. Tabs that pass nothing get the previous, undraggable grid.
+ *
+ * `dragIds` is the block being moved: a single id for a plain drag, or the multi-selection
+ * in display order when the primary row was already selected. Hosts that care about tree
+ * ancestry collapse that set to move-roots before writing.
  */
 export type RowDrag = {
   resolve: (
-    dragId: string,
+    dragIds: readonly string[],
     targetId: string,
     zone: DropZone,
   ) => { depth: number } | null;
-  onDrop: (dragId: string, targetId: string, zone: DropZone) => void;
+  onDrop: (dragIds: readonly string[], targetId: string, zone: DropZone) => void;
 };
 
 type DropHint = { targetId: string; zone: DropZone; depth: number };
@@ -58,6 +62,8 @@ type DropHint = { targetId: string; zone: DropZone; depth: number };
 type RowDragBinding = {
   dragging: boolean;
   hint: { zone: DropZone; depth: number } | null;
+  /** Drag starts only from the row handle — cells stay free for edit and pickers. */
+  onHandleMouseDown: () => void;
   onStart: () => void;
   /** Returns whether the hover is a legal drop, which decides the cursor. */
   onOver: (zone: DropZone) => boolean;
@@ -65,6 +71,10 @@ type RowDragBinding = {
   onDrop: (zone: DropZone) => void;
   onEnd: () => void;
 };
+
+/** Left gutter width: wide enough for a 3-digit row number, narrow without one. */
+const HANDLE_WIDTH_NUMBERED = "2rem";
+const HANDLE_WIDTH_PLAIN = "1.25rem";
 
 /**
  * What a row announces to assistive tech and whether it draws as expandable. These are the
@@ -143,6 +153,11 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   rowSwipe,
   rowLabel,
   rowExpansion,
+  /**
+   * Show 1-based row numbers in the left handle. Outline leaves this off (Achieve did);
+   * list tabs turn it on so the gutter doubles as a rank index.
+   */
+  rowNumbers = false,
 }: {
   rows: GridRow<TRow>[];
   columns: ColumnDef<TCtx, TRow>[];
@@ -160,6 +175,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   empty?: ReactNode;
   enableFilters?: boolean;
   enableSort?: boolean;
+  rowNumbers?: boolean;
   /**
    * Sort and filters are controlled when a host passes them, which is what lets a tab
    * persist them. Omitting both keeps the grid's own state, so a tab can adopt one at a
@@ -197,14 +213,18 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   const sort = controlledSort !== undefined ? controlledSort : ownSort;
   const filters = controlledFilters ?? ownFilters;
 
-  const [dragId, setDragId] = useState<string | null>(null);
+  const [dragIds, setDragIds] = useState<readonly string[] | null>(null);
   const [dropHint, setDropHint] = useState<DropHint | null>(null);
   const [menu, setMenu] = useState<{ rowId: string; x: number; y: number } | null>(
     null,
   );
   const closeMenu = useCallback(() => setMenu(null), []);
   const gridRef = useRef<HTMLDivElement>(null);
-  const gridTemplate = buildGridTemplate(columns, widths);
+  const handleWidth = rowNumbers ? HANDLE_WIDTH_NUMBERED : HANDLE_WIDTH_PLAIN;
+  // Handle is grid chrome, not a host column — Show Fields cannot hide it, and widths
+  // never apply to it. Prepended on desktop only; compact rows have no gutter.
+  const bodyTemplate = buildGridTemplate(columns, widths);
+  const gridTemplate = `${handleWidth} ${bodyTemplate}`;
 
   const compact = useIsCompact();
 
@@ -343,36 +363,60 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   );
 
   function endDrag() {
-    setDragId(null);
+    setDragIds(null);
     setDropHint(null);
   }
 
+  /**
+   * Which ids travel with a drag starting on `primaryId`. If the row is already in a
+   * multi-selection, the whole selection moves (display order). Otherwise just that row —
+   * and the selection collapses to it so the user sees what will move.
+   */
+  function dragIdsFor(primaryId: string, nodeOrder: readonly string[]): string[] {
+    if (selectedIds && selectedIds.has(primaryId) && selectedIds.size > 1) {
+      return nodeOrder.filter((id) => selectedIds.has(id));
+    }
+    return [primaryId];
+  }
+
   /** One row's share of the drag, or nothing when the tab left drag turned off. */
-  function dragBindingFor(rowId: string): RowDragBinding | undefined {
+  function dragBindingFor(
+    rowId: string,
+    nodeOrder: readonly string[],
+  ): RowDragBinding | undefined {
     if (!rowDrag) return undefined;
-    // Drag is off below `md`, deliberately. `draggable` is armed on `onMouseDown` so a
-    // permanently draggable row does not steal text selection inside cell editors, and
-    // `onMouseDown` does not reliably precede a touch drag — the mechanism is mouse-shaped
-    // by construction. Reordering lives in the long-press menu instead (`responsive.md`).
+    // Drag is off below `md`, deliberately. The handle is mouse-shaped; reordering on a
+    // phone lives in the long-press menu instead (`responsive.md`).
     if (compact) return undefined;
 
     const forget = () =>
       setDropHint((current) => (current?.targetId === rowId ? null : current));
 
+    const activeDrag = dragIds;
+    const isDragging =
+      activeDrag !== null && (activeDrag.includes(rowId) || activeDrag[0] === rowId);
+
     return {
-      dragging: dragId === rowId,
+      dragging: isDragging,
       hint:
         dropHint?.targetId === rowId
           ? { zone: dropHint.zone, depth: dropHint.depth }
           : null,
+      onHandleMouseDown: () => {
+        // Selection for multi-drag is decided at mousedown on the handle, before dragstart,
+        // so a plain click-to-select on an unselected handle still works as single-drag.
+        if (!selectedIds?.has(rowId)) onSelect(rowId);
+      },
       onStart: () => {
-        setDragId(rowId);
-        // A drag always acts on the dragged row as a single selection; multi-drag is out.
-        onSelect(rowId);
+        const ids = dragIdsFor(rowId, nodeOrder);
+        setDragIds(ids);
+        if (ids.length === 1 && (!selectedIds || !selectedIds.has(rowId))) {
+          onSelect(rowId);
+        }
       },
       onOver: (zone) => {
-        if (!dragId) return false;
-        const resolved = rowDrag.resolve(dragId, rowId, zone);
+        if (!activeDrag || activeDrag.length === 0) return false;
+        const resolved = rowDrag.resolve(activeDrag, rowId, zone);
         if (!resolved) {
           forget();
           return false;
@@ -390,9 +434,9 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
       },
       onLeave: forget,
       onDrop: (zone) => {
-        const id = dragId;
+        const ids = activeDrag;
         endDrag();
-        if (id) rowDrag.onDrop(id, rowId, zone);
+        if (ids && ids.length > 0) rowDrag.onDrop(ids, rowId, zone);
       },
       onEnd: endDrag,
     };
@@ -415,6 +459,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
           onResize={onResizeColumn}
           onResetWidth={onResetColumnWidth}
           enableFilters={enableFilters}
+          leadingGutter
         />
       )}
 
@@ -431,73 +476,91 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
                 Nothing to show.
               </div>
             ))
-          : displayRows.map((row) => {
-              const isSelected = selectedIds
-                ? selectedIds.has(row.id)
-                : row.id === selectedId;
-              // Only the focus row scrolls into view — multi-select must not jump the
-              // viewport to every newly-lit row as the range grows.
-              const isFocus = row.id === selectedId;
+          : (() => {
+              // 1-based index among node rows only — group headers do not consume a number.
+              let rowNumber = 0;
+              const nodeOrder = displayRows
+                .filter((r): r is NodeGridRow<TRow> => r.kind === "node")
+                .map((r) => r.id);
 
-              return row.kind === "group" ? (
-                <GroupHeader
-                  key={row.id}
-                  row={row}
-                  gridTemplate={gridTemplate}
-                  columnCount={columns.length}
-                  collapsed={collapsedGroups?.has(row.id) ?? false}
-                  onToggle={() => onToggleGroup?.(row.id)}
-                  // Groups are drop targets only (never dragged). Outline category headers
-                  // use this so a root result area can change category by landing on a group.
-                  drag={dragBindingFor(row.id)}
-                  compact={compact}
-                />
-              ) : compact ? (
-                <CompactRow
-                  key={row.id}
-                  row={row}
-                  columnCtx={columnCtx}
-                  fields={compactFields}
-                  selected={isSelected}
-                  onSelect={() => onSelect(row.id)}
-                  onOpenDetail={onOpenDetail ? () => onOpenDetail(row.id) : undefined}
-                  onLongPress={
-                    rowMenu &&
-                    ((x, y) => {
-                      // Right-click / long-press on an already-selected row keeps the multi
-                      // selection so "Copy as text" can act on all of them.
-                      if (!selectedIds?.has(row.id)) onSelect(row.id);
-                      setMenu({ rowId: row.id, x, y });
-                    })
-                  }
-                  swipe={rowSwipe?.(row.id)}
-                  label={rowLabelFor(row, rowLabel)}
-                  expanded={rowExpansionFor(row, rowExpansion)}
-                />
-              ) : (
-                <DataRow
-                  key={row.id}
-                  row={row}
-                  columns={columns}
-                  columnCtx={columnCtx}
-                  gridTemplate={gridTemplate}
-                  selected={isSelected}
-                  focused={isFocus}
-                  onSelect={(mods) => onSelect(row.id, mods)}
-                  onOpenDetail={onOpenDetail ? () => onOpenDetail(row.id) : undefined}
-                  drag={dragBindingFor(row.id)}
-                  onContextMenu={
-                    rowMenu &&
-                    ((x, y) => {
-                      if (!selectedIds?.has(row.id)) onSelect(row.id);
-                      setMenu({ rowId: row.id, x, y });
-                    })
-                  }
-                  rowLabel={rowLabel}
-                  rowExpansion={rowExpansion}
-                />
-              );
-            })}
+              return displayRows.map((row) => {
+                const isSelected = selectedIds
+                  ? selectedIds.has(row.id)
+                  : row.id === selectedId;
+                // Only the focus row scrolls into view — multi-select must not jump the
+                // viewport to every newly-lit row as the range grows.
+                const isFocus = row.id === selectedId;
+
+                if (row.kind === "group") {
+                  return (
+                    <GroupHeader
+                      key={row.id}
+                      row={row}
+                      gridTemplate={gridTemplate}
+                      // +1 for the handle track so the header still spans the full row.
+                      columnCount={columns.length + 1}
+                      collapsed={collapsedGroups?.has(row.id) ?? false}
+                      onToggle={() => onToggleGroup?.(row.id)}
+                      // Groups are drop targets only (never dragged). Outline category headers
+                      // use this so a root result area can change category by landing on a group.
+                      drag={dragBindingFor(row.id, nodeOrder)}
+                      compact={compact}
+                    />
+                  );
+                }
+
+                rowNumber += 1;
+                const number = rowNumber;
+
+                return compact ? (
+                  <CompactRow
+                    key={row.id}
+                    row={row}
+                    columnCtx={columnCtx}
+                    fields={compactFields}
+                    selected={isSelected}
+                    onSelect={() => onSelect(row.id)}
+                    onOpenDetail={onOpenDetail ? () => onOpenDetail(row.id) : undefined}
+                    onLongPress={
+                      rowMenu &&
+                      ((x, y) => {
+                        // Right-click / long-press on an already-selected row keeps the multi
+                        // selection so "Copy as text" can act on all of them.
+                        if (!selectedIds?.has(row.id)) onSelect(row.id);
+                        setMenu({ rowId: row.id, x, y });
+                      })
+                    }
+                    swipe={rowSwipe?.(row.id)}
+                    label={rowLabelFor(row, rowLabel)}
+                    expanded={rowExpansionFor(row, rowExpansion)}
+                  />
+                ) : (
+                  <DataRow
+                    key={row.id}
+                    row={row}
+                    columns={columns}
+                    columnCtx={columnCtx}
+                    gridTemplate={gridTemplate}
+                    handleWidth={handleWidth}
+                    selected={isSelected}
+                    focused={isFocus}
+                    rowNumber={rowNumbers ? number : null}
+                    onSelect={(mods) => onSelect(row.id, mods)}
+                    onOpenDetail={onOpenDetail ? () => onOpenDetail(row.id) : undefined}
+                    drag={dragBindingFor(row.id, nodeOrder)}
+                    onContextMenu={
+                      rowMenu &&
+                      ((x, y) => {
+                        if (!selectedIds?.has(row.id)) onSelect(row.id);
+                        setMenu({ rowId: row.id, x, y });
+                      })
+                    }
+                    rowLabel={rowLabel}
+                    rowExpansion={rowExpansion}
+                  />
+                );
+              });
+            })()}
       </div>
 
       {menu && rowMenu && (
@@ -519,8 +582,10 @@ function DataRow<TCtx, TRow>({
   columns,
   columnCtx,
   gridTemplate,
+  handleWidth,
   selected,
   focused = selected,
+  rowNumber,
   onSelect,
   onOpenDetail,
   drag,
@@ -532,18 +597,20 @@ function DataRow<TCtx, TRow>({
   columns: ColumnDef<TCtx, TRow>[];
   columnCtx: TCtx;
   gridTemplate: string;
+  handleWidth: string;
   selected: boolean;
   /** Keyboard-focus row — the one that scrolls into view. Defaults to `selected`. */
   focused?: boolean;
+  /** 1-based index when the host asked for numbers; null otherwise. */
+  rowNumber: number | null;
   onSelect: (mods?: GridSelectMods) => void;
   onOpenDetail?: () => void;
   drag?: RowDragBinding;
   onContextMenu?: (x: number, y: number) => void;
 } & RowMeta<TRow>) {
   const rowRef = useRef<HTMLDivElement>(null);
-  // `draggable` is armed on mousedown rather than left on: a permanently draggable row
-  // steals the click-and-drag that selects text inside the priority, effort and deadline
-  // inputs sitting in every row.
+  // Drag is armed only from the handle — a permanently draggable row steals click-and-drag
+  // text selection inside priority, effort and deadline inputs.
   const [armed, setArmed] = useState(false);
 
   const label = rowLabelFor(row, rowLabel);
@@ -564,9 +631,11 @@ function DataRow<TCtx, TRow>({
       aria-expanded={expanded}
       aria-label={label}
       onClick={(event) => {
-        // Cell editors and expanders handle their own clicks; let them bubble for a plain
-        // select, but never treat a click inside an input as a multi-select gesture.
-        if ((event.target as HTMLElement).closest("input, select, textarea")) {
+        // The handle owns its own click. Cell editors and expanders handle theirs.
+        if ((event.target as HTMLElement).closest("[data-row-handle]")) return;
+        if ((event.target as HTMLElement).closest("input, select, textarea, button")) {
+          // Still mark the row selected when focusing a cell control, but without multi
+          // modifiers — a click on a date picker should not toggle ⌘-selection.
           onSelect();
           return;
         }
@@ -586,13 +655,6 @@ function DataRow<TCtx, TRow>({
         })
       }
       draggable={drag ? armed : undefined}
-      onMouseDown={
-        drag &&
-        ((event) => {
-          const target = event.target as HTMLElement;
-          setArmed(!target.closest("input, select, textarea, button"));
-        })
-      }
       onDragStart={
         drag &&
         ((event) => {
@@ -629,7 +691,7 @@ function DataRow<TCtx, TRow>({
         })
       }
       className={[
-        "relative grid items-center border-b border-rule/60 px-3 text-[0.875rem]",
+        "relative grid items-center border-b border-rule/60 pr-3 text-[0.875rem]",
         selected ? "bg-select" : "hover:bg-surface-raised/60",
         drag?.dragging ? "opacity-40" : "",
         drag?.hint?.zone === "inside" ? "ring-1 ring-select-edge ring-inset" : "",
@@ -640,6 +702,22 @@ function DataRow<TCtx, TRow>({
         height: "var(--row-height)",
       }}
     >
+      <RowHandle
+        number={rowNumber}
+        selected={selected}
+        draggable={Boolean(drag)}
+        onSelect={onSelect}
+        onArmDrag={
+          drag
+            ? () => {
+                drag.onHandleMouseDown();
+                setArmed(true);
+              }
+            : undefined
+        }
+        onDisarmDrag={() => setArmed(false)}
+      />
+
       {columns.map((column) => (
         <div
           key={column.id}
@@ -654,9 +732,63 @@ function DataRow<TCtx, TRow>({
         <DropLine
           zone={drag.hint.zone}
           depth={drag.hint.depth}
-          nameColumnLeft={nameColumnLeft(columns)}
+          nameColumnLeft={nameColumnLeft(columns, handleWidth)}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * Left gutter shared by every desktop row: select (with multi modifiers) and drag handle.
+ * Numbered on list tabs, blank on the Outline — same box, different chrome.
+ */
+function RowHandle({
+  number,
+  selected,
+  draggable,
+  onSelect,
+  onArmDrag,
+  onDisarmDrag,
+}: {
+  number: number | null;
+  selected: boolean;
+  draggable: boolean;
+  onSelect: (mods?: GridSelectMods) => void;
+  onArmDrag?: () => void;
+  onDisarmDrag?: () => void;
+}) {
+  return (
+    <div
+      data-row-handle
+      role="gridcell"
+      aria-label={number !== null ? `Row ${number}` : "Row handle"}
+      title={draggable ? "Drag to reorder · click to select" : "Click to select"}
+      onClick={(event) => {
+        event.stopPropagation();
+        onSelect({
+          extend: event.shiftKey,
+          toggle: event.metaKey || event.ctrlKey,
+        });
+      }}
+      onMouseDown={
+        onArmDrag &&
+        ((event) => {
+          // Only left button starts a drag. Shift/⌘ clicks are pure selection.
+          if (event.button !== 0) return;
+          if (event.shiftKey || event.metaKey || event.ctrlKey) return;
+          onArmDrag();
+        })
+      }
+      onMouseUp={onDisarmDrag}
+      onMouseLeave={onDisarmDrag}
+      className={[
+        "flex h-full cursor-default select-none items-center justify-center self-stretch border-r border-rule/50 text-[0.6875rem] tabular-nums text-ink-faint",
+        draggable ? "cursor-grab active:cursor-grabbing" : "",
+        selected ? "bg-select-edge/10 text-ink-muted" : "hover:bg-surface-raised",
+      ].join(" ")}
+    >
+      {number !== null ? number : ""}
     </div>
   );
 }
@@ -698,16 +830,21 @@ function DropLine({
 }
 
 /**
- * Where the name column starts, as a CSS length: the row's own padding plus every fixed
- * track before it (priority, and whatever a tab puts ahead of the tree). Indentation lives
- * in the name cell, so the drop line has to start there too. Any non-fixed track before
- * the name — none today — gives up and measures from the row edge.
+ * Where the name column starts, as a CSS length: the handle track (always present on
+ * desktop), then every fixed track before the name. Indentation lives in the name cell, so
+ * the drop line has to start there too. Any non-fixed track before the name gives up and
+ * measures from the row edge.
  */
-function nameColumnLeft(columns: { id: string; width: string }[]): string {
-  const parts = ["0.75rem"];
+function nameColumnLeft(
+  columns: { id: string; width: string }[],
+  handleWidth: string,
+): string {
+  const parts = [handleWidth, "0.75rem"];
   for (const column of columns) {
     if (column.id === "name") break;
-    if (!/^[\d.]+(rem|px|em)$/.test(column.width)) return "0.75rem";
+    if (!/^[\d.]+(rem|px|em)$/.test(column.width)) {
+      return `calc(${handleWidth} + 0.75rem)`;
+    }
     parts.push(column.width, "0.75rem");
   }
   return `calc(${parts.join(" + ")})`;

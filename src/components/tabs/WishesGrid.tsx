@@ -11,7 +11,9 @@ import { DataGrid } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 import { ShowFieldsDialog } from "@/components/grid/ShowFieldsDialog";
 import { useGridState } from "@/components/grid/useGridState";
+import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
+import { copyAsText, writeClipboardText } from "@/lib/tree/copyAsText";
 import { ErrorBanner, TabToolbar, ToolbarButton, ToolbarSelect } from "./tabChrome";
 import { isTypingTarget } from "@/lib/keyboard";
 import {
@@ -40,7 +42,6 @@ export function WishesGrid({
   /** Optimistic patches on top of the server list — same idea as the node grids. */
   const [patches, setPatches] = useState<Record<string, Partial<WishListRow>>>({});
   const [scopeId, setScopeId] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const { detail: detailNodeId, setDetail: setDetailNodeId } = useViewStateUrl();
   const [showFields, setShowFields] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -133,6 +134,13 @@ export function WishesGrid({
     });
   }, [rows, scopeId]);
 
+  const orderedIds = useMemo(
+    () => gridRows.flatMap((row) => (row.kind === "node" ? [row.id] : [])),
+    [gridRows],
+  );
+  const multi = useMultiSelect(orderedIds, null);
+  const { selectedId, selectedIds, select, move } = multi;
+
   const patchRow = useCallback((id: string, changes: Partial<WishListRow>) => {
     setPatches((current) => ({
       ...current,
@@ -186,33 +194,65 @@ export function WishesGrid({
     [patchRow, apply],
   );
 
+  const copySelectionAsText = useCallback(() => {
+    const text = copyAsText(
+      orderedIds
+        .map((id) => rows.find((row) => row.id === id))
+        .filter((row): row is WishListRow => row != null)
+        .map((row) => ({ id: row.id, name: row.title, depth: 0 })),
+      selectedIds,
+    );
+    void writeClipboardText(text);
+  }, [orderedIds, rows, selectedIds]);
+
   const rowMenu = useCallback(
     (wishId: string): MenuItem[] => {
       const wish = rows.find((row) => row.id === wishId);
       if (!wish) return [];
+      const multiCount = selectedIds.has(wishId) ? selectedIds.size : 1;
       return [
         {
           label: "Open owner",
           shortcut: "Enter",
           onSelect: () => setDetailNodeId(wish.nodeId),
         },
+        {
+          label: multiCount > 1 ? `Copy as text (${multiCount})` : "Copy as text",
+          shortcut: "⌘C",
+          onSelect: copySelectionAsText,
+        },
       ];
     },
-    [rows, setDetailNodeId],
+    [rows, setDetailNodeId, selectedIds, copySelectionAsText],
   );
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (detailNodeId) return;
       if (isTypingTarget(event.target)) return;
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        !event.altKey &&
+        (event.key === "c" || event.key === "C")
+      ) {
+        event.preventDefault();
+        copySelectionAsText();
+        return;
+      }
       if (event.key === "Enter" && selectedWish) {
         event.preventDefault();
         setDetailNodeId(selectedWish.nodeId);
+      } else if (event.key === "ArrowDown") {
+        event.preventDefault();
+        move(1, event.shiftKey);
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        move(-1, event.shiftKey);
       }
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [detailNodeId, selectedWish, setDetailNodeId]);
+  }, [detailNodeId, selectedWish, setDetailNodeId, copySelectionAsText, move]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
@@ -249,13 +289,15 @@ export function WishesGrid({
         columns={gridState.columns}
         columnCtx={columnCtx}
         selectedId={selectedId}
-        onSelect={setSelectedId}
+        selectedIds={selectedIds}
+        onSelect={select}
         onOpenDetail={(id) => {
           const wish = rows.find((row) => row.id === id);
           if (wish) setDetailNodeId(wish.nodeId);
         }}
         ariaLabel="Wish List"
         rowMenu={rowMenu}
+        rowNumbers
         rowLabel={(row) => row.node.title || "Untitled wish"}
         enableFilters
         enableSort

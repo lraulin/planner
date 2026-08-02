@@ -5,6 +5,7 @@ import {
   pruneSelection,
   rangeIds,
   selectOnly,
+  selectionMoveRoots,
 } from "./selection";
 
 const ORDER = ["a", "b", "c", "d", "e"];
@@ -85,5 +86,43 @@ describe("selectOnly", () => {
   it("clears when given null", () => {
     expect([...selectOnly(null).selectedIds]).toEqual([]);
     expect(selectOnly(null).focusId).toBeNull();
+  });
+});
+
+describe("selectionMoveRoots", () => {
+  // a
+  //   b
+  //     c
+  //   d
+  // e
+  const parentOf: Record<string, string | null> = {
+    a: null,
+    b: "a",
+    c: "b",
+    d: "a",
+    e: null,
+  };
+  const order = ["a", "b", "c", "d", "e"];
+  const parentIdOf = (id: string) => parentOf[id] ?? null;
+
+  it("keeps every selected id when none is an ancestor of another", () => {
+    expect(selectionMoveRoots(new Set(["b", "e"]), order, parentIdOf)).toEqual([
+      "b",
+      "e",
+    ]);
+  });
+
+  it("drops a child when its ancestor is also selected", () => {
+    expect(
+      selectionMoveRoots(new Set(["a", "b", "c", "d"]), order, parentIdOf),
+    ).toEqual(["a"]);
+  });
+
+  it("preserves display order among roots", () => {
+    expect(selectionMoveRoots(new Set(["e", "d", "b"]), order, parentIdOf)).toEqual([
+      "b",
+      "d",
+      "e",
+    ]);
   });
 });

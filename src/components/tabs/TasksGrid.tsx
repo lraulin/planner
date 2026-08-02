@@ -288,6 +288,7 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         onSelect={tab.select}
         onOpenDetail={tab.openDetail}
         ariaLabel="Tasks"
+        rowNumbers
         rowMenu={tab.rowMenu}
         enableFilters
         enableSort

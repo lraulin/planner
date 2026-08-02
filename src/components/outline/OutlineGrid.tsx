@@ -54,6 +54,7 @@ import {
   type OutlineFilters,
 } from "@/lib/settings/outline";
 import { OUTLINE_FILTERS_SCOPE } from "@/lib/settings/scopes";
+import { selectionMoveRoots } from "@/lib/grid/selection";
 import { copyAsText, writeClipboardText } from "@/lib/tree/copyAsText";
 import { HintBar } from "./HintBar";
 import { NewChildDialog } from "./NewChildDialog";
@@ -432,42 +433,79 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const rowDrag: RowDrag | undefined = useMemo(() => {
     if (gridState.sort) return undefined;
 
+    const rootsOf = (dragIds: readonly string[]) =>
+      selectionMoveRoots(
+        new Set(dragIds),
+        dragIds,
+        (id) => byId.get(id)?.parentId ?? null,
+      );
+
     return {
-      resolve: (dragId, targetId, zone) => {
+      resolve: (dragIds, targetId, zone) => {
+        const roots = rootsOf(dragIds);
+        if (roots.length === 0) return null;
+        // Multi-drag cannot land on a member of the block.
+        if (dragIds.includes(targetId)) return null;
+
+        const primary = roots[0];
         if (categoryLabelFromGroupId(targetId) !== null) {
           return byCategory
-            ? resolveCategoryGroupDrop(dragId, targetId, byId, nodes)
+            ? resolveCategoryGroupDrop(primary, targetId, byId, nodes)
             : null;
         }
-        const drop = resolveDrop(dragId, targetId, zone, byId);
+        const drop = resolveDrop(primary, targetId, zone, byId);
         if (!drop) return null;
-        return byCategory ? withRootCategoryFromPlacement(drop, dragId, byId) : drop;
+        return byCategory ? withRootCategoryFromPlacement(drop, primary, byId) : drop;
       },
-      onDrop: (dragId, targetId, zone) => {
+      onDrop: (dragIds, targetId, zone) => {
+        const roots = rootsOf(dragIds);
+        if (roots.length === 0) return;
+        if (dragIds.includes(targetId)) return;
+
+        const primary = roots[0];
         let drop =
           categoryLabelFromGroupId(targetId) !== null
             ? byCategory
-              ? resolveCategoryGroupDrop(dragId, targetId, byId, nodes)
+              ? resolveCategoryGroupDrop(primary, targetId, byId, nodes)
               : null
-            : resolveDrop(dragId, targetId, zone, byId);
+            : resolveDrop(primary, targetId, zone, byId);
         if (!drop) return;
         if (byCategory && categoryLabelFromGroupId(targetId) === null) {
-          drop = withRootCategoryFromPlacement(drop, dragId, byId);
+          drop = withRootCategoryFromPlacement(drop, primary, byId);
         }
 
-        selectOne(dragId);
+        selectOne(primary);
+        const placement = drop;
         apply(async () => {
-          const result = await moveNodeAction({
-            nodeId: dragId,
-            parentId: drop.parentId,
-            position: drop.position,
-            category: drop.category,
-          });
-          // Dropping into a closed row would otherwise read as the node vanishing.
-          if (result.ok && drop.parentId && byId.get(drop.parentId)?.collapsed) {
-            return setCollapsedAction(drop.parentId, false);
+          // Move the block as consecutive siblings: first to the resolved placement, each
+          // later root after the previous. Children of a selected parent ride along with it
+          // (they never appear in `roots`).
+          let previousId: string | null = null;
+          let lastResult: { ok: true } | { ok: false; error: string } = { ok: true };
+          for (const nodeId of roots) {
+            const position =
+              previousId === null
+                ? placement.position
+                : { at: "after" as const, siblingId: previousId };
+            lastResult = await moveNodeAction({
+              nodeId,
+              parentId: placement.parentId,
+              position,
+              // Category only applies to the first root landing at the root level.
+              category: previousId === null ? placement.category : undefined,
+            });
+            if (!lastResult.ok) return lastResult;
+            previousId = nodeId;
           }
-          return result;
+          // Dropping into a closed row would otherwise read as the node vanishing.
+          if (
+            lastResult.ok &&
+            placement.parentId &&
+            byId.get(placement.parentId)?.collapsed
+          ) {
+            return setCollapsedAction(placement.parentId, false);
+          }
+          return lastResult;
         });
       },
     };

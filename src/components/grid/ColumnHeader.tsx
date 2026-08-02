@@ -32,6 +32,7 @@ export function ColumnHeaderRow({
   enableFilters = false,
   onResize,
   onResetWidth,
+  leadingGutter = false,
 }: {
   // `ColumnMeta` rather than `ColumnDef`: the header never renders a cell, so it has no
   // business knowing what a row is.
@@ -47,16 +48,24 @@ export function ColumnHeaderRow({
   /** Omit to leave columns unresizable, as a grid with nowhere to store widths should. */
   onResize?: (columnId: string, width: number) => void;
   onResetWidth?: (columnId: string) => void;
+  /**
+   * Blank cell matching the row handle track. The handle is grid chrome, not a column, so
+   * it never gets a header label or a filter.
+   */
+  leadingGutter?: boolean;
 }) {
   return (
     <div
-      className="grid flex-none items-center border-b border-rule-strong bg-surface-raised px-3 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted"
+      className="grid flex-none items-center border-b border-rule-strong bg-surface-raised pr-3 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted"
       style={{
         gridTemplateColumns: gridTemplate,
         columnGap: "0.75rem",
         height: "var(--row-height)",
       }}
     >
+      {leadingGutter && (
+        <div aria-hidden className="h-full self-stretch border-r border-rule/50" />
+      )}
       {columns.map((column) => {
         const sorted = sort?.columnId === column.id ? sort.direction : null;
         const filter = filters?.[column.id] ?? ALL_FILTER;
