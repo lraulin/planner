@@ -4,7 +4,17 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { nodes, resultAreaDetails, taskDetails, users } from "@/db/schema";
+import {
+  appointments,
+  nodeItems,
+  nodes,
+  notes,
+  resultAreaDetails,
+  taskDetails,
+  timeChartAreas,
+  timeCharts,
+  users,
+} from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { loadOutline } from "@/lib/tree/queries";
 import { importAchieveXml, writeMappedOutline } from "./import";
@@ -221,6 +231,115 @@ describeDb("importAchieveXml", () => {
     const namesA = outline.map((n) => n.name).sort();
     const namesB = (await loadOutline(userB)).map((n) => n.name).sort();
     expect(namesB).toEqual(namesA);
+  });
+
+  it("imports appointments, time charts, wishes, and notes", async () => {
+    const xml = `<?xml version="1.0"?>
+<AchieveDB>
+  <ResultAreas>
+    <ResultAreaId>aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa</ResultAreaId>
+    <Name>Work</Name>
+    <Priority>5000</Priority>
+    <__ORDINAL__>0</__ORDINAL__>
+  </ResultAreas>
+  <Projects>
+    <ProjectId>bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb</ProjectId>
+    <ResultAreaId>aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa</ResultAreaId>
+    <Name>Gym proj</Name>
+    <Priority>1</Priority>
+    <__ORDINAL__>0</__ORDINAL__>
+  </Projects>
+  <Appointments>
+    <AppointmentId>ap111111-1111-1111-1111-111111111111</AppointmentId>
+    <Subject>Gym</Subject>
+    <StartDateTime>2011-06-07T21:30:00+09:00</StartDateTime>
+    <EndDateTime>2011-06-07T22:15:00+09:00</EndDateTime>
+    <IsAllDayEvent>false</IsAllDayEvent>
+    <ShowTimeAs>1</ShowTimeAs>
+    <CompletionState>0</CompletionState>
+    <ProjectId>bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb</ProjectId>
+    <Priority>100000</Priority>
+  </Appointments>
+  <TimeCharts>
+    <TimeChartId>tc111111-1111-1111-1111-111111111111</TimeChartId>
+    <Name>Ideal</Name>
+  </TimeCharts>
+  <TimeChartAreas>
+    <TimeChartAreaId>ta111111-1111-1111-1111-111111111111</TimeChartAreaId>
+    <TimeChartId>tc111111-1111-1111-1111-111111111111</TimeChartId>
+    <Text>Deep work</Text>
+    <StartTime>2011-06-07T09:00:00+09:00</StartTime>
+    <Duration>PT2H</Duration>
+    <Weekday>1</Weekday>
+    <ResultAreaId>aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa</ResultAreaId>
+  </TimeChartAreas>
+  <TimeChartAreas>
+    <TimeChartAreaId>ta222222-2222-2222-2222-222222222222</TimeChartAreaId>
+    <TimeChartId>tc111111-1111-1111-1111-111111111111</TimeChartId>
+    <Text>Deep work</Text>
+    <StartTime>2011-06-07T09:00:00+09:00</StartTime>
+    <Duration>PT2H</Duration>
+    <Weekday>3</Weekday>
+    <ResultAreaId>aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa</ResultAreaId>
+  </TimeChartAreas>
+  <Wishes>
+    <WishId>ww111111-1111-1111-1111-111111111111</WishId>
+    <Title>SSD</Title>
+    <Type>0</Type>
+    <Priority>2500</Priority>
+    <ResultAreaId>aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa</ResultAreaId>
+    <__ORDINAL__>0</__ORDINAL__>
+  </Wishes>
+  <NoteItems>
+    <NoteItemId>nn111111-1111-1111-1111-111111111111</NoteItemId>
+    <Title>Life Plan</Title>
+    <Subject>General</Subject>
+    <NoteText>Hello notes</NoteText>
+    <Flag>0</Flag>
+    <Expanded>true</Expanded>
+    <__ORDINAL__>0</__ORDINAL__>
+  </NoteItems>
+</AchieveDB>`;
+
+    const result = await importAchieveXml({ userId, xml, mode: "replace" });
+    expect(result.extras.appointments).toBe(1);
+    expect(result.extras.timeCharts).toBe(1);
+    expect(result.extras.timeChartAreas).toBe(1); // Mon+Wed collapsed
+    expect(result.extras.wishes).toBe(1);
+    expect(result.extras.notes).toBe(1);
+
+    const appts = await db
+      .select()
+      .from(appointments)
+      .where(eq(appointments.userId, userId));
+    expect(appts).toHaveLength(1);
+    expect(appts[0]?.subject).toBe("Gym");
+    expect(appts[0]?.externalSource).toBe("achieve");
+
+    const charts = await db
+      .select()
+      .from(timeCharts)
+      .where(eq(timeCharts.userId, userId));
+    expect(charts[0]?.name).toBe("Ideal");
+    const areas = await db
+      .select()
+      .from(timeChartAreas)
+      .where(eq(timeChartAreas.userId, userId));
+    expect(areas).toHaveLength(1);
+    expect(areas[0]?.daysOfWeek.sort()).toEqual([1, 3]);
+    expect(areas[0]?.durationMinutes).toBe(120);
+
+    const wishes = await db
+      .select()
+      .from(nodeItems)
+      .where(eq(nodeItems.userId, userId));
+    expect(wishes).toHaveLength(1);
+    expect(wishes[0]?.title).toBe("SSD");
+    expect(wishes[0]?.kind).toBe("wish_want_dont_have");
+
+    const noteRows = await db.select().from(notes).where(eq(notes.userId, userId));
+    expect(noteRows).toHaveLength(1);
+    expect(noteRows[0]?.body).toBe("Hello notes");
   });
 
   it("imports a goal and reparents its linked project underneath", async () => {

@@ -1,15 +1,21 @@
 import { db } from "@/db";
 import {
+  appointments,
   goalDetails,
+  nodeItems,
   nodes,
+  notes,
   projectDetails,
   resultAreaDetails,
   taskDetails,
+  timeChartAreas,
+  timeCharts,
 } from "@/db/schema";
 import type { NodeType } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { assertCanNest } from "@/lib/tree/hierarchy";
 import { between } from "@/lib/tree/sortKey";
+import { mapExtras, type AchExtrasMap } from "./mapExtras";
 import { mapOutline } from "./mapOutline";
 import { parseAchXml } from "./parseXml";
 import type { AchMappedNode, AchOutlineMap } from "./types";
@@ -19,26 +25,27 @@ export const ACHIEVE_EXTERNAL_SOURCE = "achieve";
 
 export type ImportMode = "merge" | "replace";
 
+export type ImportExtraCounts = {
+  appointments: number;
+  timeCharts: number;
+  timeChartAreas: number;
+  wishes: number;
+  notes: number;
+};
+
 export type ImportResult = {
   created: number;
   counts: Record<NodeType, number>;
+  extras: ImportExtraCounts;
   warnings: string[];
   skippedTables: string[];
 };
 
 /**
- * Parse Achieve Full XML and write the outline core into the user's tree:
- * result areas, goals/dreams, projects, and tasks.
+ * Parse Achieve Full XML and write outline + calendar/wish/notes extras.
  *
- * - **replace** — deletes this user's entire outline first (cascades details).
- * - **merge** — appends; parents that are not in the file become roots (with a warning).
- *
- * Each imported row keeps Achieve's GUID as `externalId` with source `"achieve"`, so a
- * later pass can recognise what came from AP. Import does not update existing rows by
- * GUID yet — re-importing the same file in merge mode will duplicate.
- *
- * Goals that carry only a `ProjectId` association are placed under that project's result
- * area, then the project is reparented under the goal so our hierarchy matches the link.
+ * - **replace** — deletes this user's outline nodes, appointments, time charts, and notes.
+ * - **merge** — appends; may duplicate if the same file is imported twice.
  */
 export async function importAchieveXml(params: {
   userId: string;
@@ -46,8 +53,10 @@ export async function importAchieveXml(params: {
   mode: ImportMode;
 }): Promise<ImportResult> {
   const { userId, xml, mode } = params;
-  const mapped = mapOutline(parseAchXml(xml));
-  return writeMappedOutline({ userId, mapped, mode });
+  const doc = parseAchXml(xml);
+  const mapped = mapOutline(doc);
+  const extras = mapExtras(doc);
+  return writeMappedImport({ userId, mapped, extras, mode });
 }
 
 /** Insert an already-mapped outline (tests can build one without XML). */
@@ -56,11 +65,30 @@ export async function writeMappedOutline(params: {
   mapped: AchOutlineMap;
   mode: ImportMode;
 }): Promise<ImportResult> {
-  const { userId, mapped, mode } = params;
-  const warnings = [...mapped.warnings];
+  return writeMappedImport({
+    userId: params.userId,
+    mapped: params.mapped,
+    extras: emptyExtras(),
+    mode: params.mode,
+  });
+}
+
+export async function writeMappedImport(params: {
+  userId: string;
+  mapped: AchOutlineMap;
+  extras: AchExtrasMap;
+  mode: ImportMode;
+}): Promise<ImportResult> {
+  const { userId, mapped, extras, mode } = params;
+  const warnings = [...mapped.warnings, ...extras.warnings];
 
   return db.transaction(async (tx) => {
     if (mode === "replace") {
+      // Order: areas → charts; notes; appointments; nodes last (children cascade).
+      await tx.delete(timeChartAreas).where(eq(timeChartAreas.userId, userId));
+      await tx.delete(timeCharts).where(eq(timeCharts.userId, userId));
+      await tx.delete(notes).where(eq(notes.userId, userId));
+      await tx.delete(appointments).where(eq(appointments.userId, userId));
       await tx.delete(nodes).where(eq(nodes.userId, userId));
     }
 
@@ -72,7 +100,6 @@ export async function writeMappedOutline(params: {
 
     const remaining = [...mapped.nodes];
     let created = 0;
-    // sortKey cursor per resolved parent (our uuid or null)
     const lastKeyByParent = new Map<string | null, string | null>();
 
     while (remaining.length > 0) {
@@ -83,7 +110,6 @@ export async function writeMappedOutline(params: {
         if (!n.parentAchId || idByAch.has(n.parentAchId)) {
           batch.push(n);
         } else if (!typeByAch.has(n.parentAchId)) {
-          // Parent is outside this file (partial export). Import at root.
           warnings.push(
             `${n.type} "${n.name}" parent ${n.parentAchId} not in file; imported at root`,
           );
@@ -94,7 +120,6 @@ export async function writeMappedOutline(params: {
       }
 
       if (batch.length === 0) {
-        // Cycle or bug — force remaining at root rather than hang.
         for (const n of rest) {
           warnings.push(
             `${n.type} "${n.name}" could not resolve parent; imported at root`,
@@ -131,8 +156,6 @@ export async function writeMappedOutline(params: {
         const sortKey = between(prevKey, null);
         lastKeyByParent.set(parentId, sortKey);
 
-        // Our CHECK forbids target start before deferred. AP can carry both without that
-        // rule — drop the deferred date rather than fail the whole import.
         let deferredDate = n.deferredDate;
         if (
           deferredDate &&
@@ -238,7 +261,6 @@ export async function writeMappedOutline(params: {
       remaining.push(...rest);
     }
 
-    // Goals that Achieve only linked via ProjectId: hang the project under the goal.
     for (const n of mapped.nodes) {
       if (n.type !== "goal" || !n.linkedProjectAchId) continue;
       const goalId = idByAch.get(n.achId);
@@ -255,11 +277,184 @@ export async function writeMappedOutline(params: {
         .where(and(eq(nodes.id, projectId), eq(nodes.userId, userId)));
     }
 
+    const extraCounts = await writeExtras(tx, userId, idByAch, extras, warnings);
+
     return {
       created,
       counts: mapped.counts,
+      extras: extraCounts,
       warnings,
       skippedTables: mapped.skippedTables,
     };
   });
+}
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function writeExtras(
+  tx: Tx,
+  userId: string,
+  idByAch: Map<string, string>,
+  extras: AchExtrasMap,
+  warnings: string[],
+): Promise<ImportExtraCounts> {
+  let appointmentsN = 0;
+  let timeChartsN = 0;
+  let timeChartAreasN = 0;
+  let wishesN = 0;
+  let notesN = 0;
+
+  // Wishes without ResultAreaId hang off the first imported result area.
+  const [anyRa] = await tx
+    .select({ id: nodes.id })
+    .from(nodes)
+    .where(and(eq(nodes.userId, userId), eq(nodes.type, "result_area")))
+    .limit(1);
+  const wishHostFallback = anyRa?.id ?? null;
+
+  for (const a of extras.appointments) {
+    const projectId = a.projectAchId ? (idByAch.get(a.projectAchId) ?? null) : null;
+    await tx.insert(appointments).values({
+      userId,
+      subject: a.subject,
+      location: a.location,
+      startAt: a.startAt,
+      endAt: a.endAt,
+      allDay: a.allDay,
+      checkState: a.checkState,
+      reminderMinutes: a.reminderMinutes,
+      showAs: a.showAs,
+      priorityLetter: a.priority.letter,
+      priorityRank: a.priority.rank,
+      projectId,
+      notes: a.notes,
+      private: a.private,
+      externalSource: ACHIEVE_EXTERNAL_SOURCE,
+      externalId: a.achId,
+    });
+    appointmentsN++;
+  }
+
+  for (const chart of extras.timeCharts) {
+    const [created] = await tx
+      .insert(timeCharts)
+      .values({ userId, name: chart.name || "Time Chart" })
+      .returning({ id: timeCharts.id });
+    timeChartsN++;
+
+    for (const area of chart.areas) {
+      const resultAreaId = area.resultAreaAchId
+        ? (idByAch.get(area.resultAreaAchId) ?? null)
+        : null;
+      await tx.insert(timeChartAreas).values({
+        userId,
+        timeChartId: created.id,
+        name: area.name,
+        resultAreaId,
+        daysOfWeek: area.daysOfWeek,
+        startMinute: area.startMinute,
+        durationMinutes: area.durationMinutes,
+        labelEnabled: true,
+        foreColor: area.foreColor,
+        backColor: area.backColor,
+        description: area.description,
+      });
+      timeChartAreasN++;
+    }
+  }
+
+  // Wishes: sort keys per (host, kind)
+  const wishKey = new Map<string, string | null>();
+  const sortedWishes = [...extras.wishes].sort((a, b) => a.ordinal - b.ordinal);
+  for (const w of sortedWishes) {
+    let hostId = w.resultAreaAchId ? idByAch.get(w.resultAreaAchId) : undefined;
+    if (!hostId) hostId = wishHostFallback ?? undefined;
+    if (!hostId) {
+      warnings.push(`Wish "${w.title}" has no result area to attach to; skipped`);
+      continue;
+    }
+    const keyId = `${hostId}:${w.kind}`;
+    const prev = wishKey.get(keyId) ?? null;
+    const sortKey = between(prev, null);
+    wishKey.set(keyId, sortKey);
+    await tx.insert(nodeItems).values({
+      userId,
+      nodeId: hostId,
+      kind: w.kind,
+      sortKey,
+      title: w.title,
+      description: w.description,
+      purpose: w.purpose,
+      priorityLetter: w.priority.letter,
+      priorityRank: w.priority.rank,
+    });
+    wishesN++;
+  }
+
+  // Notes with parent links
+  const noteIdByAch = new Map<string, string>();
+  const remainingNotes = [...extras.notes];
+  const lastNoteKey = new Map<string | null, string | null>();
+
+  while (remainingNotes.length > 0) {
+    const batch = [];
+    const rest = [];
+    for (const n of remainingNotes) {
+      if (!n.parentAchId || noteIdByAch.has(n.parentAchId)) batch.push(n);
+      else if (!extras.notes.some((x) => x.achId === n.parentAchId)) {
+        warnings.push(`Note "${n.title}" parent missing; imported at root`);
+        batch.push({ ...n, parentAchId: null });
+      } else rest.push(n);
+    }
+    if (batch.length === 0) {
+      for (const n of rest) {
+        warnings.push(`Note "${n.title}" could not resolve parent; imported at root`);
+        batch.push({ ...n, parentAchId: null });
+      }
+      rest.length = 0;
+    }
+    batch.sort((a, b) => a.ordinal - b.ordinal);
+    for (const n of batch) {
+      const parentId = n.parentAchId ? (noteIdByAch.get(n.parentAchId) ?? null) : null;
+      const prev = lastNoteKey.get(parentId) ?? null;
+      const sortKey = between(prev, null);
+      lastNoteKey.set(parentId, sortKey);
+      const [row] = await tx
+        .insert(notes)
+        .values({
+          userId,
+          parentId,
+          sortKey,
+          title: n.title,
+          subject: n.subject,
+          body: n.body,
+          noteDate: n.noteDate,
+          flag: n.flag,
+          collapsed: n.collapsed,
+        })
+        .returning({ id: notes.id });
+      noteIdByAch.set(n.achId, row.id);
+      notesN++;
+    }
+    remainingNotes.length = 0;
+    remainingNotes.push(...rest);
+  }
+
+  return {
+    appointments: appointmentsN,
+    timeCharts: timeChartsN,
+    timeChartAreas: timeChartAreasN,
+    wishes: wishesN,
+    notes: notesN,
+  };
+}
+
+function emptyExtras(): AchExtrasMap {
+  return {
+    appointments: [],
+    timeCharts: [],
+    wishes: [],
+    notes: [],
+    warnings: [],
+  };
 }

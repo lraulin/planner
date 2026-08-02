@@ -59,10 +59,10 @@ describe("mapOutline", () => {
   it("lists non-outline tables as skipped without warning when known", () => {
     const xml = `<?xml version="1.0"?>
 <AchieveDB>
-  <Appointments>
-    <AppointmentId>aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee</AppointmentId>
-    <Subject>Gym</Subject>
-  </Appointments>
+  <Contacts>
+    <ContactId>aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee</ContactId>
+    <FirstName>Ada</FirstName>
+  </Contacts>
   <ResultAreas>
     <ResultAreaId>11111111-2222-3333-4444-555555555555</ResultAreaId>
     <Name>Home</Name>
@@ -71,8 +71,8 @@ describe("mapOutline", () => {
   </ResultAreas>
 </AchieveDB>`;
     const mapped = mapOutline(parseAchXml(xml));
-    expect(mapped.skippedTables).toContain("Appointments");
-    expect(mapped.warnings.filter((w) => w.includes("Appointments"))).toHaveLength(0);
+    expect(mapped.skippedTables).toContain("Contacts");
+    expect(mapped.warnings.filter((w) => w.includes("Contacts"))).toHaveLength(0);
     expect(mapped.counts.result_area).toBe(1);
   });
 

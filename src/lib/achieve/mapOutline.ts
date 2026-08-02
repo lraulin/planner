@@ -9,6 +9,7 @@ import {
   decodeStatus,
   intField,
 } from "./encodings";
+import { EXTRAS_TABLES } from "./mapExtras";
 import { tableRows } from "./parseXml";
 import { rtfToPlainText } from "./rtf";
 import type { AchDocument, AchMappedNode, AchOutlineMap, AchRow } from "./types";
@@ -22,14 +23,10 @@ import type { AchDocument, AchMappedNode, AchOutlineMap, AchRow } from "./types"
  * Tier C (UI chrome / sync): form layouts, record views, Outlook SyncItems, ActiveSync.
  */
 const KNOWN_SKIP = new Set([
-  // Calendar
+  // Calendar (extras pass handles Appointments / TimeCharts; recurrence detail is best-effort)
   "AppointmentRecurrence",
   "AppointmentRecurrenceDeletions",
-  "Appointments",
-  "TimeCharts",
-  "TimeChartAreas",
-  // Wish list + goal sub-grids
-  "Wishes",
+  // Wish list + goal sub-grids (Wishes handled in extras)
   "GoalObstacles",
   "GoalResources",
   "GoalTeam",
@@ -62,8 +59,7 @@ const KNOWN_SKIP = new Set([
   "TaskWorkResources",
   "TaskContacts",
   "TaskAttachments",
-  // Notes / files
-  "NoteItems",
+  // Files
   "FileItems",
   // Contacts
   "Contacts",
@@ -74,8 +70,7 @@ const KNOWN_SKIP = new Set([
   "ContactImportantDates",
   "ContactDiscussions",
   "ContactHistory",
-  // Labels / metrics / resources
-  "LabelData",
+  // Labels (colour lookup used by extras; not imported as entities)
   "Labels",
   "Metrics",
   "MetricTracking",
@@ -99,6 +94,7 @@ const KNOWN_SKIP = new Set([
   "SyncItems",
 ]);
 
+/** Outline node tables — everything else is either extras or KNOWN_SKIP. */
 const OUTLINE_TABLES = new Set([
   "ResultAreaCategories",
   "ResultAreas",
@@ -384,7 +380,7 @@ export function mapOutline(doc: AchDocument): AchOutlineMap {
   }
 
   const skippedTables = Object.keys(doc.tables)
-    .filter((t) => !OUTLINE_TABLES.has(t))
+    .filter((t) => !OUTLINE_TABLES.has(t) && !EXTRAS_TABLES.has(t))
     .sort();
 
   for (const t of skippedTables) {

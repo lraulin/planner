@@ -13,6 +13,13 @@ type ImportOk = {
     goal?: number;
     omitted?: number;
   };
+  extras?: {
+    appointments?: number;
+    timeCharts?: number;
+    timeChartAreas?: number;
+    wishes?: number;
+    notes?: number;
+  };
   warnings: string[];
   skippedTables: string[];
   message?: string;
@@ -155,8 +162,8 @@ export function AchieveTransferPanel() {
           Import a Full XML export from Achieve Planner (File → Full XML export /{" "}
           <span className="font-mono text-[0.8125rem]">.achxml</span>
           ), or export this account&apos;s outline as XML Achieve can Load from XML.
-          Transfers result areas, goals/dreams, projects, and tasks. Appointments,
-          wishes, notes, and other tables are still skipped (listed after import).
+          Transfers result areas, goals/dreams, projects, tasks, appointments, time
+          charts, wishes, and notes. Other tables are listed as skipped after import.
         </p>
 
         <div className="flex flex-wrap items-end gap-3">
@@ -202,7 +209,8 @@ export function AchieveTransferPanel() {
           />
           {mode === "replace" && (
             <p className="mt-2 text-[0.8125rem] text-ink-faint">
-              Replace deletes every outline row for this account before importing.
+              Replace deletes this account&apos;s outline, appointments, time charts,
+              and notes before importing.
             </p>
           )}
         </div>
@@ -220,7 +228,17 @@ export function AchieveTransferPanel() {
           <div className="rounded border border-rule bg-surface-raised px-3 py-2 text-[0.8125rem] text-ink">
             <p className="font-medium">
               {result.message ??
-                `Imported ${result.created} rows (${result.counts.result_area ?? 0} areas, ${result.counts.goal ?? 0} goals, ${result.counts.project ?? 0} projects, ${result.counts.task ?? 0} tasks).`}
+                [
+                  `Imported ${result.created} outline rows (${result.counts.result_area ?? 0} areas, ${result.counts.goal ?? 0} goals, ${result.counts.project ?? 0} projects, ${result.counts.task ?? 0} tasks)`,
+                  result.extras &&
+                  (result.extras.appointments ||
+                    result.extras.timeCharts ||
+                    result.extras.wishes ||
+                    result.extras.notes)
+                    ? ` + ${result.extras.appointments ?? 0} appts, ${result.extras.timeCharts ?? 0} time charts (${result.extras.timeChartAreas ?? 0} areas), ${result.extras.wishes ?? 0} wishes, ${result.extras.notes ?? 0} notes`
+                    : "",
+                  ".",
+                ].join("")}
             </p>
             {result.warnings.length > 0 && (
               <details className="mt-2">

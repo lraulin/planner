@@ -22,7 +22,15 @@ export {
   importAchieveXml,
   writeMappedOutline,
 } from "./import";
-export type { ImportMode, ImportResult } from "./import";
+export type { ImportExtraCounts, ImportMode, ImportResult } from "./import";
+export {
+  decodeCheckState,
+  decodeNoteFlag,
+  decodeShowAs,
+  mapExtras,
+  parseIsoDurationMinutes,
+} from "./mapExtras";
+export type { AchExtrasMap } from "./mapExtras";
 export { mapOutline } from "./mapOutline";
 export { parseAchXml, stripSchema, tableRows } from "./parseXml";
 export { rtfToPlainText } from "./rtf";

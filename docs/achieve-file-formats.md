@@ -220,13 +220,13 @@ Things the DataSet makes obvious that we already align with or should keep in mi
 After a real import, the UI lists tables present in the file but not yet mapped. Use that
 list (and the tiers below) as a backlog, not a promise.
 
-| Tier         | Tables                                                                               | Why it matters                                                            |
-| ------------ | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
-| **Done**     | ResultAreaCategories, ResultAreas, Dreams, Goals, Projects, Tasks                    | Outline core                                                              |
-| **A — next** | Appointments + AppointmentRecurrence; TimeCharts + TimeChartAreas; Wishes; NoteItems | Calendar + wish list + notes are daily surfaces we already have partially |
-| **A**        | ProjectObjectives/Risks/… child grids; GoalSteps/Actions/…                           | Detail-form child lists → `node_items`                                    |
-| **B**        | Metrics + MetricTracking; Labels; Contacts (+ address/email/…)                       | Valuable but separate product lines                                       |
-| **C**        | FormLayouts, RecordView*, SyncItems, ActiveSync*, Users, Images, Resources*          | UI chrome / Outlook — low priority for our web app                        |
+| Tier         | Tables                                                                                   | Why it matters                           |
+| ------------ | ---------------------------------------------------------------------------------------- | ---------------------------------------- |
+| **Done**     | ResultAreaCategories, ResultAreas, Dreams, Goals, Projects, Tasks                        | Outline core                             |
+| **Done**     | Appointments; TimeCharts + TimeChartAreas; Wishes; NoteItems; LabelData colours          | Calendar, ideal week, wish list, notes   |
+| **A — next** | AppointmentRecurrence (full rule decode); ProjectObjectives/Risks/…; GoalSteps/Actions/… | Series masters + detail-form child lists |
+| **B**        | Metrics + MetricTracking; Labels; Contacts                                               | Separate product lines                   |
+| **C**        | FormLayouts, RecordView*, SyncItems, ActiveSync*, Users, Images, Resources*              | UI chrome / Outlook                      |
 
 ### Goal import notes
 
@@ -236,10 +236,19 @@ list (and the tiers below) as a backlog, not a promise.
 - Empty `Title` is common; we fall back to `Definition`, then “(Untitled goal)”.
 - Dreams import as goals with `isDream`.
 
+### Extras import notes
+
+- **Time chart areas:** one AP row per weekday → merged into multi-day `daysOfWeek` when
+  name/time/duration match. Wall-clock start from the ISO string (not local TZ conversion).
+- **Appointments:** check state, free/busy, project link, reminders. Recurring series land
+  as the stored instance dates for now (rule table not fully decoded).
+- **Wishes:** `node_items` on the result area (or first RA if unassigned).
+- **Notes:** separate `notes` table; RTF stripped.
+
 ## What we intentionally skip (for now)
 
 - Writing native `.ach`
 - ACX branch format (until we have a sample)
-- Tier A–C tables above
+- Remaining Tier A–C tables above
 - Perfect RTF and `BinRecurrenceData` fidelity
 - Smart merge by Achieve GUID (re-import in merge mode currently duplicates)

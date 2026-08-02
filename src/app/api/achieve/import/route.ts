@@ -63,6 +63,7 @@ export async function POST(request: Request) {
       ok: true,
       created: result.created,
       counts: result.counts,
+      extras: result.extras,
       warnings,
       skippedTables: result.skippedTables,
     });
