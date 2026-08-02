@@ -1,7 +1,7 @@
 import { aliasedTable, and, asc, eq, gte, isNull, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { dailyItems, nodes, notes } from "@/db/schema";
-import { shiftDateKey, toDateKey } from "@/lib/schedule/geometry";
+import { localDateKey, shiftDateKey } from "@/lib/schedule/geometry";
 import { forwardOpenItems } from "./mutations";
 import { sortDayItems } from "./priority";
 import {
@@ -78,7 +78,7 @@ function toView(row: ItemRow): DailyItemView {
 export async function loadDay(
   userId: string,
   day: string,
-  today: string = toDateKey(new Date()),
+  today: string = localDateKey(new Date()),
 ): Promise<DayPayload> {
   if (day === today) {
     await forwardOpenItems(userId, today);

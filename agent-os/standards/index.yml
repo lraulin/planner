@@ -16,7 +16,7 @@ development:
   testing:
     description: What to test and what not to — pure logic and DB mutations yes (always with a cross-user case), React components no; tests as a tripwire against silent breakage rather than a coverage target
   dates:
-    description: Calendar day vs instant — toDateKey/fromDateKey only for Date↔YYYY-MM-DD, local midnight for plan/record dates, no toISOString day keys, DateField and record-date rules
+    description: Calendar day vs instant — UTC noon encoding (fromDateKey/toDateKey/asCalendarDay), localDateKey for wall-clock today, never startOfDay on calendar fields (Aug 1→Jul 31 regression)
 
 product:
   date-model:

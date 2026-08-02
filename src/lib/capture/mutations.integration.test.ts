@@ -4,6 +4,7 @@ import { nodes, users } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { loadNodeDetail } from "@/lib/detail/queries";
+import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { createNode, deleteNode, renameNode, setState } from "@/lib/tree/mutations";
 import { loadOutline } from "@/lib/tree/queries";
 import { captureItems, ensureInbox, INBOX_NAME } from "./mutations";
@@ -252,8 +253,8 @@ describeDb("captureItems", () => {
   });
 
   it("applies a per-item deadline, beating the batch default", async () => {
-    const perItem = new Date("2026-04-15T00:00:00Z");
-    const fallback = new Date("2026-12-31T00:00:00Z");
+    const perItem = fromDateKey("2026-04-15");
+    const fallback = fromDateKey("2026-12-31");
 
     const { nodeIds } = await captureItems({
       userId,
@@ -264,9 +265,14 @@ describeDb("captureItems", () => {
       defaults: { deadline: fallback },
     });
 
-    expect((await nodeById(userId, nodeIds[0])).deadline).toEqual(perItem);
+    // Calendar days are stored as UTC noon; compare keys, not exact instants.
+    expect(toDateKey((await nodeById(userId, nodeIds[0])).deadline!)).toBe(
+      "2026-04-15",
+    );
     // The default is what the caller meant for items that did not say — not an override.
-    expect((await nodeById(userId, nodeIds[1])).deadline).toEqual(fallback);
+    expect(toDateKey((await nodeById(userId, nodeIds[1])).deadline!)).toBe(
+      "2026-12-31",
+    );
   });
 });
 

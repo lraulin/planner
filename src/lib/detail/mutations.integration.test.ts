@@ -209,6 +209,56 @@ describeDb("detail mutations", () => {
       expect(dates.dateCompleted?.getUTCHours()).toBe(12);
     });
 
+    it("keeps Date completed on the day picked when regenerating (not the previous day)", async () => {
+      // Lee 2026-08: target start/end = 1st, regenerate weekly, complete on the 1st → postponed
+      // with targets on the 8th (good) but date completed flipped to the 31st (UTC startOfDay).
+      const id = await task("Mow lawn");
+      await saveNodeDetail(userId, id, {
+        ...core,
+        name: "Mow lawn",
+        targetStartDate: fromDateKey("2026-08-01"),
+        targetEndDate: fromDateKey("2026-08-01"),
+        task: {
+          recurrenceFrequency: "weekly",
+          recurrenceMode: "regenerate",
+          recurrenceInterval: 1,
+        },
+      });
+
+      await saveNodeDetail(userId, id, {
+        ...core,
+        name: "Mow lawn",
+        targetStartDate: fromDateKey("2026-08-01"),
+        targetEndDate: fromDateKey("2026-08-01"),
+        task: {
+          recurrenceFrequency: "weekly",
+          recurrenceMode: "regenerate",
+          recurrenceInterval: 1,
+          dateCompleted: fromDateKey("2026-08-01"),
+        },
+      });
+
+      const [row] = await db
+        .select({
+          state: nodes.state,
+          deferredDate: nodes.deferredDate,
+          targetStartDate: nodes.targetStartDate,
+          targetEndDate: nodes.targetEndDate,
+          dateCompleted: taskDetails.dateCompleted,
+        })
+        .from(nodes)
+        .innerJoin(taskDetails, eq(taskDetails.nodeId, nodes.id))
+        .where(eq(nodes.id, id))
+        .limit(1);
+
+      expect(row.state).toBe("postponed");
+      expect(toDateKey(row.dateCompleted!)).toBe("2026-08-01");
+      expect(toDateKey(row.deferredDate!)).toBe("2026-08-08");
+      expect(toDateKey(row.targetStartDate!)).toBe("2026-08-08");
+      expect(toDateKey(row.targetEndDate!)).toBe("2026-08-08");
+      expect(toDateKey(row.dateCompleted!)).not.toBe("2026-07-31");
+    });
+
     it("completes again via Date completed after a prior cycle", async () => {
       // The bug this exists for: after the first cycle, dateCompleted still holds "last
       // completed", so treating only empty→filled as a completion left the second finish

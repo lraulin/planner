@@ -18,9 +18,10 @@ plans: when work really began, and when it was finished. They are deliberately e
 late tick-off can be backdated (a project finished years ago should not claim "completed
 today"), and they couple to state in both directions (below).
 
-They are **calendar days in local time**, stored as local midnight — never a wall-clock
-instant, and **never in the future**. The picker enforces `max=today`; the server clamps.
-A future start or completion is not a correction, it is a mistake.
+They are **calendar days**, stored as **UTC noon** of the intended `YYYY-MM-DD` (not local
+midnight, not a wall-clock instant), and **never in the future**. The picker enforces
+`max=today` (`localDateKey`); the server clamps. A future start or completion is not a
+correction, it is a mistake. Encoding mechanics: `development/dates.md`.
 
 On a **recurring** task, `date_completed` means **last completed** (full history is in
 `task_completions`). Changing that field to a different calendar day logs the next finish
@@ -107,8 +108,8 @@ An explicit State dropdown wins over anything implied by a date.
 and steps a series from _that_ day, not from now. Recurrence leaves the routine `postponed`
 until its next occurrence — the deferred date it just acquired _is_ that shelf's expiry.
 
-**Local calendar days, not UTC keys.** Mechanics (`toDateKey`, DateField, clamping, tests)
-live in `agent-os/standards/development/dates.md`. This file is only _what the dates mean_.
+Mechanics (UTC noon encoding, `toDateKey` / `localDateKey`, clamping, tests) live in
+`agent-os/standards/development/dates.md`. This file is only _what the dates mean_.
 
 See `src/lib/detail/stateFromDates.ts`.
 

@@ -1,7 +1,12 @@
 import { getCurrentUserId } from "@/lib/auth";
 import { loadWeek } from "@/lib/day/queries";
 import { loadOutline } from "@/lib/tree/queries";
-import { fromDateKey, startOfWeek, toDateKey } from "@/lib/schedule/geometry";
+import {
+  fromDateKey,
+  localDateKey,
+  startOfWeek,
+  toDateKey,
+} from "@/lib/schedule/geometry";
 import { AppShell } from "@/components/shell/AppShell";
 import { WeekPlanView } from "@/components/day/WeekPlanView";
 
@@ -34,7 +39,7 @@ export default async function WeekPlanPage({
 
   return (
     <AppShell active="day">
-      <WeekPlanView initial={payload} nodes={nodes} today={toDateKey(new Date())} />
+      <WeekPlanView initial={payload} nodes={nodes} today={localDateKey(new Date())} />
     </AppShell>
   );
 }

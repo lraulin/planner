@@ -1,3 +1,5 @@
+import { localDateKey as wallClockDay } from "@/lib/schedule/geometry";
+
 /** Parse a DB `numeric` string (or number) into a finite number, else null. */
 export function parseNumeric(raw: string | number | null | undefined): number | null {
   if (raw === null || raw === undefined || raw === "") return null;
@@ -17,10 +19,7 @@ export function formatMetricNumber(n: number | null | undefined): string {
 
 /** `YYYY-MM-DD` today in local calendar (for default entry date). */
 export function localDateKey(d: Date = new Date()): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  return wallClockDay(d);
 }
 
 /** True when s looks like `YYYY-MM-DD`. */

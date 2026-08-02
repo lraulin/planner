@@ -7,7 +7,13 @@ import type { Appointment, AppointmentCheck, TimeChart } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { SchedulePayload, ScheduleOccurrence } from "@/lib/schedule/queries";
 import type { Occurrence } from "@/lib/schedule/recurrence";
-import { fromDateKey, startOfWeek, toDateKey, weekDays } from "@/lib/schedule/geometry";
+import {
+  fromDateKey,
+  localDateKey,
+  startOfWeek,
+  toDateKey,
+  weekDays,
+} from "@/lib/schedule/geometry";
 import { asyncHandler } from "@/lib/eventHandler";
 import {
   createAppointmentAction,
@@ -152,7 +158,7 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
   const [dayOffset, setDayOffset] = useState(() => {
     // Open on today when the loaded week contains it — landing on Sunday because that is
     // where the week starts is technically correct and never what you wanted.
-    const todayKey = toDateKey(new Date());
+    const todayKey = localDateKey(new Date());
     const index = weekDays(fromDateKey(weekKey)).findIndex(
       (day) => toDateKey(day) === todayKey,
     );

@@ -1,7 +1,7 @@
 import { getCurrentUserId } from "@/lib/auth";
 import { loadDay } from "@/lib/day/queries";
 import { loadSchedule } from "@/lib/schedule/queries";
-import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
+import { fromDateKey, localDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { AppShell } from "@/components/shell/AppShell";
 import { DayView } from "@/components/day/DayView";
 
@@ -17,7 +17,7 @@ export default async function DayPage({
   const params = await searchParams;
   const userId = await getCurrentUserId();
 
-  const today = toDateKey(new Date());
+  const today = localDateKey(new Date());
   const day = params.date ?? today;
 
   // The schedule query works a week at a time; the day's appointments are filtered out of

@@ -12,52 +12,63 @@ helpers in `src/lib/schedule/geometry.ts` and `src/lib/dateMath.ts`.
 
 ## Two kinds of value
 
-| Kind             | Means                      | Examples                                                                                                             | Store / compare as                                             |
-| ---------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| **Calendar day** | A date with no time of day | deadline, deferred, target start/end, actual start, date completed, day page `day`                                   | **UTC noon** of that day in `timestamptz`; key via `toDateKey` |
-| **Instant**      | A real moment in time      | `created_at`, `updated_at`, `nodes.completed_at`, `task_completions.completed_at`, appointment `start_at` / `end_at` | `timestamptz`; compare as instants                             |
+| Kind             | Means                      | Examples                                                                                                            | Store / compare as                                             |
+| ---------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| **Calendar day** | A date with no time of day | deadline, deferred, target start/end, actual start, date completed, day page `day`, note date, all-day Google dates | **UTC noon** of that day in `timestamptz`; key via `toDateKey` |
+| **Instant**      | A real moment in time      | `created_at`, `updated_at`, `nodes.completed_at`, `task_completions.completed_at`, timed appointments               | `timestamptz`; compare as instants                             |
 
 Never use one kind’s helpers for the other.
 
 ## Why UTC noon (not local midnight)
 
-The browser and the server almost always disagree on “local”:
+**Regression this encoding exists to prevent (Lee, 2026-08):** set Date completed to
+**Aug 1** → save → field showed **Jul 31**. Target start/deferred correctly went to Aug 8.
 
-- Laptop in US Eastern picks **Aug 1** → old code stored local midnight → `2026-08-01T04:00:00Z`
-- Server in **UTC** ran `startOfDay` → `2026-08-01T00:00:00Z`
-- Laptop `toDateKey` with local getters → **Jul 31**
+What happened:
 
-So calendar days are encoded as **UTC noon of the intended `YYYY-MM-DD`**. Then
-`toDateKey` (UTC date components) returns the same key on every machine.
+1. Browser in US Eastern stored **local midnight** Aug 1 → `2026-08-01T04:00:00.000Z`
+2. Server process in **UTC** ran `startOfDay` → `2026-08-01T00:00:00.000Z`
+3. Browser read with **local** getters → evening of **Jul 31**
 
-“Is it still Tuesday **for me**?” is different — that uses **`localDateKey`** / `useToday`.
+So calendar days are encoded as **UTC noon of the intended `YYYY-MM-DD`**. Then `toDateKey`
+(UTC date components) returns the same key on every machine. Do **not** “fix” with
+`startOfDay` on the server — that is process-local and reintroduces the bug.
+
+“Is it still Tuesday **for me**?” is different — that uses **`localDateKey`** / `useToday`
+(wall clock of an instant).
 
 ## Core rules
 
 1. **Postgres timestamps are timezone-aware** (`timestamptz`).
-2. **Calendar fields: `fromDateKey` / `toDateKey` / `asCalendarDay` only.**
-3. **Never `new Date("YYYY-MM-DD")`** (UTC midnight) and never process-local
+2. **Every calendar-field write** goes through `fromDateKey` / `asCalendarDay` / `recordDate`
+   (detail) — never raw `startOfDay`, never process-local midnight.
+3. **Every calendar-field read** for display/compare uses `toDateKey` (UTC components of the
+   stored encoding).
+4. **Never `new Date("YYYY-MM-DD")`** (UTC midnight) and never process-local
    `new Date(y, m - 1, d)` in shared server/client code.
-4. **Never `date.toISOString().slice(0, 10)` ad hoc** — call `toDateKey` (UTC day of a
-   calendar encoding) or `localDateKey` (wall clock of an instant).
-5. **Bare `YYYY-MM-DD` strings** (day page URLs, day keys) are labels; shift with
+5. **Never `date.toISOString().slice(0, 10)` ad hoc** — call `toDateKey` or `localDateKey`.
+6. **Bare `YYYY-MM-DD` strings** (day page URLs, day keys) are labels; shift with
    `shiftDateKey` / `daysBetweenKeys`.
-6. **Instants stay instants** until display.
-7. **No business rule may depend on the server’s `TZ`.** Pass `today: string | null` into
+7. **Instants stay instants** until display (`completedAt` history vs `dateCompleted` day).
+8. **No business rule may depend on the server’s `TZ`.** Pass `today: string | null` into
    pure helpers. UI “today” is `localDateKey` on the client.
 
 ## Canonical helpers
 
-| Need                           | Use                                                             |
-| ------------------------------ | --------------------------------------------------------------- |
-| Stored calendar Date → day key | `toDateKey` (UTC components)                                    |
-| Day key → stored Date          | `fromDateKey` (UTC noon)                                        |
-| Normalize any Date → calendar  | `asCalendarDay`                                                 |
-| Wall-clock day of an instant   | `localDateKey`                                                  |
-| “Today” in the UI              | `useToday()` → `localDateKey(new Date())` or `null`             |
-| Add days/months/years          | `addDays` / … then `asCalendarDay` when writing calendar fields |
-| Whole days between keys        | `daysBetweenKeys`                                               |
-| Date input                     | `DateField` — `toDateKey` display, `fromDateKey` write          |
+| Need                           | Use                                                    |
+| ------------------------------ | ------------------------------------------------------ |
+| Stored calendar Date → day key | `toDateKey` (UTC components)                           |
+| Day key → stored Date          | `fromDateKey` (UTC noon)                               |
+| Normalize any Date → calendar  | `asCalendarDay` (= `fromDateKey(toDateKey(…))`)        |
+| Wall-clock day of an instant   | `localDateKey`                                         |
+| “Today” in the UI              | `useToday()` → `localDateKey(new Date())` or `null`    |
+| Add days then store calendar   | `asCalendarDay(addDays(…))` (see recurrence)           |
+| Whole days between keys        | `daysBetweenKeys`                                      |
+| Date input                     | `DateField` — `toDateKey` display, `fromDateKey` write |
+
+`startOfDay` / `addDays` in `dateMath.ts` are **local wall-clock** helpers for appointment
+_times_ and intermediate math. After stepping a **calendar** field, re-encode with
+`asCalendarDay` before writing.
 
 ## Database
 
@@ -70,38 +81,51 @@ So calendar days are encoded as **UTC noon of the intended `YYYY-MM-DD`**. Then
 ## Forms and detail drawer
 
 - `DateField` shows `toDateKey(value)` and writes `fromDateKey(picked)`.
-- **Record** fields: `max={localDateKey(new Date())}`; server re-encodes with `asCalendarDay`
-  / `recordDate`.
+- Plan dates on `nodes` (deadline, deferred, target start/end) are re-encoded with
+  `asCalendarDay` on save.
+- **Record** fields: `max={localDateKey(new Date())}`; server uses `recordDate`.
 - Completing a task stamps `date_completed` with `asCalendarDay(at)`, not `startOfDay(at)`.
+  Recurrence moves plan dates with `asCalendarDay` after `addDays`.
 
 ## Display and grids
 
 - Grid date columns: `toDateKey(date)`.
-- Overdue / “today” comparisons: day key of the field vs `useToday()` (`localDateKey`).
+- Overdue / “today” comparisons: field’s `toDateKey` vs `useToday()` (`localDateKey`).
 - Compact labels: `formatCompactDate(toDateKey(date))`.
 
-## Testing
+## Testing (required regressions)
 
-- Calendar fixtures: `fromDateKey("2026-03-08")`, assert with `toDateKey`.
-- Do not assert `getHours() === 0` on calendar fields (they are UTC noon).
-- Pure helpers take `today: string` — no hidden `new Date()` for business rules.
+Calendar fixtures: `fromDateKey("2026-08-01")`. Assert with `toDateKey`. Do **not** assert
+`getHours() === 0` (values are UTC noon).
+
+Must keep green:
+
+1. **Round-trip:** `toDateKey(fromDateKey(k)) === k` for several keys.
+2. **Aug 1 / Jul 31:** encoding survives “server UTC + client Eastern” story (see
+   `geometry.test.ts` and detail mutation integration tests).
+3. **Complete-via-date + regenerate:** complete on day D → `dateCompleted` key is D, deferred
+   / target start are D+interval (not D−1).
+4. **No re-cycle** when the same calendar day is re-saved on a recurring task.
 
 ## Common pitfalls
 
-| Pitfall                                         | Why it hurts               | Do instead                    |
-| ----------------------------------------------- | -------------------------- | ----------------------------- |
-| `startOfDay` on the server for date completed   | Server TZ rewrites the day | `asCalendarDay(at)`           |
-| Local midnight encoding                         | Client TZ ≠ server TZ      | `fromDateKey` (UTC noon)      |
-| `toDateKey` via local getters for stored fields | Jul 31 / Aug 2 off-by-one  | UTC `toDateKey`               |
-| `localDateKey` for stored deadlines             | Wrong near zone boundaries | `toDateKey`                   |
-| `toDateKey(new Date())` for picker max          | UTC “today” on the server  | `localDateKey` in the browser |
+| Pitfall                                             | Why it hurts                                | Do instead                           |
+| --------------------------------------------------- | ------------------------------------------- | ------------------------------------ |
+| `startOfDay` on calendar fields on the server       | Server TZ rewrites the day (Aug 1 → Jul 31) | `asCalendarDay` / `fromDateKey`      |
+| Local midnight encoding                             | Client TZ ≠ server TZ                       | `fromDateKey` (UTC noon)             |
+| Local getters for stored field keys                 | Off-by-one after evening / SSR              | `toDateKey` (UTC)                    |
+| `localDateKey` for stored deadlines                 | Wrong near zone boundaries                  | `toDateKey`                          |
+| `toDateKey(new Date())` for picker max / “today” UI | UTC “today” on the server                   | `localDateKey` / `useToday`          |
+| Asserting `getHours() === 0` on calendar fields     | Fails; stored as UTC noon                   | `toDateKey` / `getUTCHours() === 12` |
 
 ## Where things live
 
-| Concern                      | Location                                   |
-| ---------------------------- | ------------------------------------------ |
-| Day keys, week geometry      | `src/lib/schedule/geometry.ts`             |
-| Calendar arithmetic on Dates | `src/lib/dateMath.ts`                      |
-| DateField                    | `src/components/detail/fields.tsx`         |
-| Today hook                   | `src/components/grid/useToday.ts`          |
-| Domain meanings              | `agent-os/standards/product/date-model.md` |
+| Concern                       | Location                                            |
+| ----------------------------- | --------------------------------------------------- |
+| Day keys, calendar encoding   | `src/lib/schedule/geometry.ts`                      |
+| Local wall-clock arithmetic   | `src/lib/dateMath.ts`                               |
+| DateField                     | `src/components/detail/fields.tsx`                  |
+| Today hook                    | `src/components/grid/useToday.ts`                   |
+| Detail save / record dates    | `src/lib/detail/mutations.ts`                       |
+| Completion + recurrence moves | `src/lib/tree/mutations.ts`, `src/lib/recurrence/*` |
+| Domain meanings               | `agent-os/standards/product/date-model.md`          |

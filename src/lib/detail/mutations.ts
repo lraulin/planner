@@ -14,7 +14,12 @@ import {
   syncDayLineToTargetStart,
 } from "@/lib/day/sync";
 import { applyStateTransition } from "@/lib/tree/mutations";
-import { fromDateKey, localDateKey, toDateKey } from "@/lib/schedule/geometry";
+import {
+  asCalendarDay,
+  fromDateKey,
+  localDateKey,
+  toDateKey,
+} from "@/lib/schedule/geometry";
 import { stateFromDates } from "./stateFromDates";
 import { between } from "@/lib/tree/sortKey";
 import { fetchPageTitle, shouldAutofillAttachmentTitle } from "@/lib/url/pageTitle";
@@ -365,7 +370,8 @@ export async function saveNodeDetail(
         : undefined;
 
     const core = pick(values, CORE_KEYS);
-    // Same boundary coercion as the task side table: core dates ride the same draft.
+    // Plan/shelf dates are calendar days: coerce the wire value then force UTC-noon encoding
+    // so a UTC server never rewrites the day the picker chose.
     for (const key of [
       "deadline",
       "targetStartDate",
@@ -374,7 +380,7 @@ export async function saveNodeDetail(
     ] as const) {
       if (key in core && core[key] != null) {
         const parsed = asDate(core[key]);
-        if (parsed) (core as Record<string, unknown>)[key] = parsed;
+        if (parsed) (core as Record<string, unknown>)[key] = asCalendarDay(parsed);
       }
     }
 
@@ -403,7 +409,7 @@ export async function saveNodeDetail(
         core.state === "postponed" &&
         core.deferredDate === undefined &&
         node.deferredDate &&
-        toDateKey(node.deferredDate) <= toDateKey(new Date())
+        toDateKey(node.deferredDate) <= localDateKey(new Date())
           ? { deferredDate: null }
           : {}),
         // A rank without a letter is meaningless, so clear it alongside — matching
@@ -488,7 +494,7 @@ export async function saveNodeDetail(
       completedAt,
       deferredUntil: changedTo(node.deferredDate, core.deferredDate),
       startedAt: newlySet(before?.actualStartDate, startedRaw),
-      today: toDateKey(new Date()),
+      today: localDateKey(new Date()),
     });
 
     // Last, deliberately. The state write above set the column; this stamps `completedAt`

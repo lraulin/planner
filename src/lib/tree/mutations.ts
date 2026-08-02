@@ -10,7 +10,7 @@ import {
 } from "@/db/schema";
 import type { ExternalRef, NodeState, NodeType, PriorityLetter } from "@/db/schema";
 import { and, asc, count, eq, inArray, isNull, ne, sql } from "drizzle-orm";
-import { addDays, daysBetween, startOfDay } from "@/lib/dateMath";
+import { addDays, daysBetween } from "@/lib/dateMath";
 import { nextDue } from "@/lib/recurrence/nextDue";
 import { nextOccurrence } from "@/lib/recurrence/pattern";
 import { asCalendarDay, toDateKey } from "@/lib/schedule/geometry";
@@ -365,10 +365,13 @@ function nextAnchor(
  * you had planned moves, a day you had not is not chosen for you.
  */
 function moveDates(r: Recurrence, shift: number, next: Date) {
-  const move = (date: Date | null) => (date ? addDays(date, shift) : null);
+  // Calendar columns must leave as UTC noon, not process-local midnight after addDays.
+  const move = (date: Date | null) =>
+    date ? asCalendarDay(addDays(date, shift)) : null;
+  const nextDay = asCalendarDay(next);
 
-  const deferredDate = move(r.deferredDate) ?? next;
-  const targetStartDate = move(r.targetStartDate) ?? next;
+  const deferredDate = move(r.deferredDate) ?? nextDay;
+  const targetStartDate = move(r.targetStartDate) ?? nextDay;
 
   return {
     // All four live on `nodes` now, so they land in one write.
@@ -383,6 +386,7 @@ function moveDates(r: Recurrence, shift: number, next: Date) {
       targetEndDate: move(r.targetEndDate),
     },
     task: {
+      // Reminder is an instant-ish nudge; still normalize so a bare date does not drift.
       reminderAt: move(r.reminderAt),
     },
   };
@@ -404,7 +408,9 @@ function seriesEnds(
     return completionsSoFar + 1 >= r.endCount;
   }
   // Inclusive of the until date's own day, matching how appointment recurrence reads it.
-  if (r.end === "until" && r.endUntil) return startOfDay(next) > startOfDay(r.endUntil);
+  if (r.end === "until" && r.endUntil) {
+    return toDateKey(next) > toDateKey(r.endUntil);
+  }
   return false;
 }
 
@@ -712,7 +718,7 @@ async function reopenDayLine(
   // leaving the shelf in place would both hide it from the Chooser and put a plan before
   // its availability, which the constraint rejects. Only a *future* shelf is cleared — a
   // date already past is inert and is left as the record of the last cycle.
-  const startOfToday = startOfDay(now);
+  const startOfToday = asCalendarDay(now);
   const [node] = await tx
     .select({ deferredDate: nodes.deferredDate })
     .from(nodes)
@@ -768,7 +774,7 @@ export async function skipRecurrence(userId: string, nodeId: string): Promise<vo
       recurrence.end === "until" &&
       recurrence.endUntil != null &&
       next != null &&
-      startOfDay(next) > startOfDay(recurrence.endUntil);
+      toDateKey(next) > toDateKey(recurrence.endUntil);
 
     if (!next || pastEnd) {
       throw new Error("This series has no occurrences left to skip to.");

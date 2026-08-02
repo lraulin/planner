@@ -1,6 +1,6 @@
 "use client";
 
-import { toDateKey } from "@/lib/schedule/geometry";
+import { localDateKey, toDateKey } from "@/lib/schedule/geometry";
 
 type Props = {
   month: Date;
@@ -16,7 +16,7 @@ export function MiniMonth({ month, selected, onSelectDay, onChangeMonth }: Props
   const startPad = first.getDay();
   const daysInMonth = new Date(year, mon + 1, 0).getDate();
   const selectedKey = toDateKey(selected);
-  const todayKey = toDateKey(new Date());
+  const todayKey = localDateKey(new Date());
 
   const cells: Array<{ day: number | null; date: Date | null }> = [];
   for (let i = 0; i < startPad; i++) cells.push({ day: null, date: null });

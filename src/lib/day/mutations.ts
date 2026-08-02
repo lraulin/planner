@@ -8,7 +8,7 @@ import {
   type PriorityLetter,
 } from "@/db/schema";
 import { ensureInbox } from "@/lib/capture/mutations";
-import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
+import { fromDateKey, localDateKey } from "@/lib/schedule/geometry";
 import { applyStateTransition, createNode } from "@/lib/tree/mutations";
 import { between } from "@/lib/tree/sortKey";
 import { itemsToForward } from "./forward";
@@ -343,7 +343,7 @@ export async function promoteToTask(userId: string, itemId: string): Promise<str
  */
 export async function forwardOpenItems(
   userId: string,
-  today: string = toDateKey(new Date()),
+  today: string = localDateKey(new Date()),
 ): Promise<number> {
   const candidates = await db
     .select({

@@ -15,13 +15,11 @@
  */
 
 /**
- * Local midnight on the same calendar day.
+ * Local midnight on the same **process-local** calendar day.
  *
- * The date fields on a record hold a timestamp but only ever have their date half edited,
- * and `DateField` writes local midnight (`new Date("2026-08-07T00:00:00")`). Anything that
- * computes a new date for one of those fields should land on local midnight too, or a date
- * derived from `new Date()` carries an 18:32 that nothing shows and that makes every
- * comparison depend on the time of day it was created.
+ * Use for wall-clock appointment math and intermediate arithmetic. **Do not** use this to
+ * stamp plan/record calendar fields — that is `asCalendarDay` / `fromDateKey` (UTC noon).
+ * Server `startOfDay` on a client local-midnight stamp is how Aug 1 became Jul 31.
  */
 export function startOfDay(date: Date): Date {
   const d = new Date(date);

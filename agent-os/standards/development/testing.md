@@ -55,9 +55,9 @@ chart"` survives a rewrite. `"calls db.update with the right args"` does not.
 
 1. Put the real logic in `src/lib/**`, not in the component.
 2. Write the pure tests alongside it. If the logic branches on dates, include a DST or
-   month-boundary case. Calendar fixtures use **local midnight**
-   (`fromDateKey("2026-03-08")` or `new Date(2026, 2, 8)`), never
-   `new Date("2026-03-08")` / UTC-only keys — see `development/dates.md`.
+   month-boundary case. Calendar fixtures use **`fromDateKey("2026-08-01")`** and assert
+   with **`toDateKey`** — never `new Date("2026-08-01")`, never `getHours() === 0` (stored
+   as UTC noon). Keep the Aug 1→Jul 31 regression covered — see `development/dates.md`.
 3. If it touches the database, add an `*.integration.test.ts` — including the cross-user
    case.
 4. Run `npm test`. The pre-commit hook runs the unit tests and pre-push runs everything,

@@ -71,11 +71,25 @@ describe("toDateKey / fromDateKey", () => {
   });
 
   it("keeps the same key on either side of the Atlantic", () => {
-    // The bug: client local midnight Aug 1 EDT is 04:00Z; server startOfDay in UTC
-    // rewrote it to 00:00Z, and local getters on the laptop showed Jul 31.
+    // Lee 2026-08: complete on Aug 1 → date completed showed Jul 31 after save.
+    // Client local midnight Aug 1 EDT is 04:00Z; server startOfDay in UTC rewrote it to
+    // 00:00Z; local getters on the laptop showed Jul 31. UTC-noon encoding prevents that.
     const fromClientPicker = fromDateKey("2026-08-01");
     expect(toDateKey(fromClientPicker)).toBe("2026-08-01");
     expect(toDateKey(asCalendarDay(fromClientPicker))).toBe("2026-08-01");
+  });
+
+  it("does not rewrite Aug 1 into Jul 31 the way startOfDay on a UTC server did", () => {
+    // Simulate the old client stamp: local midnight of Aug 1 in a western zone is after
+    // 00:00Z on Aug 1. asCalendarDay must still report Aug 1, not fall back a day.
+    const clientLocalMidnight = new Date(Date.UTC(2026, 7, 1, 4, 0, 0)); // 00:00 EDT
+    expect(toDateKey(asCalendarDay(clientLocalMidnight))).toBe("2026-08-01");
+    // Server UTC startOfDay of that instant would be 00:00Z Aug 1 — local display Jul 31.
+    const brokenServerStartOfDay = new Date(Date.UTC(2026, 7, 1, 0, 0, 0));
+    expect(localDateKey(brokenServerStartOfDay)).not.toBe("2026-08-01"); // often Jul 31 in US
+    expect(toDateKey(asCalendarDay(clientLocalMidnight))).not.toBe(
+      localDateKey(brokenServerStartOfDay),
+    );
   });
 
   it("localDateKey follows the wall clock for instants", () => {
