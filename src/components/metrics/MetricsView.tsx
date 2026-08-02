@@ -362,6 +362,7 @@ export function MetricsView({
             units={chartSource?.units ?? selected.units}
             entries={chartSource?.entries ?? []}
             objectiveTarget={chartSource?.objectiveTarget ?? selected.objectiveTarget}
+            metricType={chartSource?.metricType ?? selected.metricType}
             showLegend={showLegend}
             showObjective={showObjective}
           />

@@ -94,6 +94,13 @@ export type ExportResult = {
 
 const EXPORT_TYPES = new Set<NodeType>(["result_area", "goal", "project", "task"]);
 
+/** Provisional ACHXML Metrics.Type ints: 0 total / 1 instance / 2 cumulative. */
+function encodeMetricType(metricType: string): string {
+  if (metricType === "instance") return "1";
+  if (metricType === "cumulative") return "2";
+  return "0";
+}
+
 /**
  * Build Achieve Full XML for the outline core (categories, RAs, goals, projects, tasks).
  *
@@ -397,7 +404,7 @@ export function buildAchieveXml(
         Priority: String(
           encodePriority({ letter: m.priorityLetter, rank: m.priorityRank }),
         ),
-        Type: m.metricType === "total" ? "0" : m.metricType,
+        Type: encodeMetricType(m.metricType),
         ObjectiveTarget:
           m.objectiveTarget === null || m.objectiveTarget === undefined
             ? undefined

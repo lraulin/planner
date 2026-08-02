@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { chartPoints, latestEntry, seriesPolyline, yDomain } from "./derive";
+import {
+  chartPoints,
+  displayValue,
+  latestEntry,
+  normalizeMetricType,
+  seriesPolyline,
+  yDomain,
+} from "./derive";
 
 describe("latestEntry", () => {
   it("returns null for empty", () => {
@@ -16,6 +23,51 @@ describe("latestEntry", () => {
   });
 });
 
+describe("normalizeMetricType", () => {
+  it("accepts the three codes case-insensitively", () => {
+    expect(normalizeMetricType("instance")).toBe("instance");
+    expect(normalizeMetricType("Cumulative")).toBe("cumulative");
+    expect(normalizeMetricType("TOTAL")).toBe("total");
+  });
+
+  it("defaults unknown and empty to total", () => {
+    expect(normalizeMetricType(null)).toBe("total");
+    expect(normalizeMetricType("")).toBe("total");
+    expect(normalizeMetricType("bogus")).toBe("total");
+  });
+});
+
+describe("displayValue", () => {
+  const series = [
+    { id: "a", entryDate: "2025-01-01", value: 10 },
+    { id: "b", entryDate: "2025-02-01", value: 20 },
+    { id: "c", entryDate: "2025-03-01", value: 5 },
+  ];
+
+  it("returns null for empty", () => {
+    expect(displayValue([], "cumulative")).toBeNull();
+  });
+
+  it("instance and total use latest entry only", () => {
+    expect(displayValue(series, "instance")).toEqual({
+      entryDate: "2025-03-01",
+      value: 5,
+    });
+    expect(displayValue(series, "total")).toEqual({
+      entryDate: "2025-03-01",
+      value: 5,
+    });
+  });
+
+  it("cumulative sums all values; date is still the latest entry", () => {
+    // 10+20+5 = 35 — tripwire if someone uses latest only for cumulative.
+    expect(displayValue(series, "cumulative")).toEqual({
+      entryDate: "2025-03-01",
+      value: 35,
+    });
+  });
+});
+
 describe("chartPoints", () => {
   it("sorts chronologically and falls back to objective target", () => {
     const pts = chartPoints(
@@ -24,10 +76,38 @@ describe("chartPoints", () => {
         { entryDate: "2025-01-01", value: 95, target: 80 },
       ],
       80,
+      "total",
     );
     expect(pts.map((p) => p.date)).toEqual(["2025-01-01", "2025-02-01"]);
+    expect(pts[0].value).toBe(95);
+    expect(pts[1].value).toBe(90);
     expect(pts[0].target).toBe(80);
     expect(pts[1].target).toBe(80);
+  });
+
+  it("cumulative charts a running sum", () => {
+    const pts = chartPoints(
+      [
+        { entryDate: "2025-01-01", value: 10, target: null },
+        { entryDate: "2025-02-01", value: 20, target: null },
+        { entryDate: "2025-03-01", value: 5, target: null },
+      ],
+      100,
+      "cumulative",
+    );
+    expect(pts.map((p) => p.value)).toEqual([10, 30, 35]);
+  });
+
+  it("instance does not sum", () => {
+    const pts = chartPoints(
+      [
+        { entryDate: "2025-01-01", value: 10, target: null },
+        { entryDate: "2025-02-01", value: 20, target: null },
+      ],
+      null,
+      "instance",
+    );
+    expect(pts.map((p) => p.value)).toEqual([10, 20]);
   });
 });
 

@@ -1,8 +1,9 @@
-import type { MetricChartPoint, MetricEntryView } from "./types";
+import type { MetricChartPoint, MetricEntryView, MetricType } from "./types";
+import { METRIC_TYPES } from "./types";
 
 /**
- * Pick the latest entry by entryDate (lexicographic YYYY-MM-DD), then updated order via
- * array order (caller should pass date-desc or we sort).
+ * Pick the latest entry by entryDate (lexicographic YYYY-MM-DD), then higher id
+ * on a tie.
  */
 export function latestEntry(
   entries: ReadonlyArray<Pick<MetricEntryView, "entryDate" | "value" | "id">>,
@@ -21,12 +22,60 @@ export function latestEntry(
   return { entryDate: best.entryDate, value: best.value };
 }
 
-/** Chart series: chronological actual values with optional per-entry target. */
+/** Coerce free-text / import noise to a known MetricType; unknown → total. */
+export function normalizeMetricType(raw: string | null | undefined): MetricType {
+  if (raw === null || raw === undefined || raw === "") return "total";
+  const s = raw.trim().toLowerCase();
+  if ((METRIC_TYPES as readonly string[]).includes(s)) return s as MetricType;
+  return "total";
+}
+
+/** True when `raw` is one of the three codes (case-sensitive canonical form). */
+export function isMetricType(raw: string): raw is MetricType {
+  return (METRIC_TYPES as readonly string[]).includes(raw);
+}
+
+/**
+ * Last Value / Current Total for the metric type.
+ * - instance / total: latest entry by date
+ * - cumulative: sum of all entry values; date is still the latest entry date
+ */
+export function displayValue(
+  entries: ReadonlyArray<Pick<MetricEntryView, "entryDate" | "value" | "id">>,
+  metricType: MetricType,
+): { entryDate: string; value: number } | null {
+  if (entries.length === 0) return null;
+  if (metricType === "cumulative") {
+    const latest = latestEntry(entries);
+    if (!latest) return null;
+    let sum = 0;
+    for (const e of entries) sum += e.value;
+    return { entryDate: latest.entryDate, value: sum };
+  }
+  return latestEntry(entries);
+}
+
+/**
+ * Chart series: chronological actual values with optional per-entry target.
+ * Cumulative plots a running sum; instance/total plot raw entry values.
+ */
 export function chartPoints(
   entries: ReadonlyArray<Pick<MetricEntryView, "entryDate" | "value" | "target">>,
   objectiveTarget: number | null,
+  metricType: MetricType = "total",
 ): MetricChartPoint[] {
   const sorted = [...entries].sort((a, b) => a.entryDate.localeCompare(b.entryDate));
+  if (metricType === "cumulative") {
+    let run = 0;
+    return sorted.map((e) => {
+      run += e.value;
+      return {
+        date: e.entryDate,
+        value: run,
+        target: e.target ?? objectiveTarget,
+      };
+    });
+  }
   return sorted.map((e) => ({
     date: e.entryDate,
     value: e.value,

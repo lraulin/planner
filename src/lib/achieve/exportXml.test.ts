@@ -146,10 +146,38 @@ describe("buildAchieveXml", () => {
     );
     expect(xml).toContain("<Metrics>");
     expect(xml).toContain("Waist Width");
+    expect(xml).toContain("<Type>0</Type>");
     expect(xml).toContain("<MetricTracking>");
     expect(xml).toContain("<Value>95</Value>");
     expect(counts.metric).toBe(1);
     expect(counts.metric_entry).toBe(1);
+  });
+
+  it("encodes cumulative metric type as 2", () => {
+    const { xml } = buildAchieveXml(
+      [],
+      [
+        {
+          id: "m2",
+          ownerNodeId: null,
+          title: "Pages",
+          category: "Writing",
+          question: "How many pages?",
+          description: "",
+          reason: "",
+          units: "",
+          active: true,
+          priorityLetter: null,
+          priorityRank: null,
+          metricType: "cumulative",
+          objectiveTarget: null,
+          sortKey: "a0",
+          entries: [],
+        },
+      ],
+    );
+    expect(xml).toContain("Pages");
+    expect(xml).toMatch(/<Metrics>[\s\S]*<Type>2<\/Type>/);
   });
 
   it("escapes XML special characters in names", () => {

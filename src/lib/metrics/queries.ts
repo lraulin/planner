@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { metricEntries, metrics, nodes } from "@/db/schema";
-import { latestEntry } from "./derive";
+import { displayValue, normalizeMetricType } from "./derive";
 import { parseNumeric } from "./parse";
 import type { MetricDetail, MetricEntryView, MetricListRow } from "./types";
 
@@ -77,7 +77,8 @@ export async function listMetrics(userId: string): Promise<MetricListRow[]> {
   }
 
   return rows.map((r) => {
-    const latest = latestEntry(byMetric.get(r.id) ?? []);
+    const metricType = normalizeMetricType(r.metricType);
+    const shown = displayValue(byMetric.get(r.id) ?? [], metricType);
     return {
       id: r.id,
       ownerNodeId: r.ownerNodeId,
@@ -89,11 +90,11 @@ export async function listMetrics(userId: string): Promise<MetricListRow[]> {
       active: r.active,
       priorityLetter: r.priorityLetter,
       priorityRank: r.priorityRank,
-      metricType: r.metricType,
+      metricType,
       objectiveTarget: parseNumeric(r.objectiveTarget),
       sortKey: r.sortKey,
-      lastValue: latest?.value ?? null,
-      lastDate: latest?.entryDate ?? null,
+      lastValue: shown?.value ?? null,
+      lastDate: shown?.entryDate ?? null,
     };
   });
 }
@@ -150,7 +151,8 @@ export async function getMetricDetail(
     .orderBy(desc(metricEntries.entryDate), desc(metricEntries.id));
 
   const entries = entryRows.map(mapEntry);
-  const latest = latestEntry(entries);
+  const metricType = normalizeMetricType(row.metricType);
+  const shown = displayValue(entries, metricType);
 
   return {
     id: row.id,
@@ -165,11 +167,11 @@ export async function getMetricDetail(
     active: row.active,
     priorityLetter: row.priorityLetter,
     priorityRank: row.priorityRank,
-    metricType: row.metricType,
+    metricType,
     objectiveTarget: parseNumeric(row.objectiveTarget),
     sortKey: row.sortKey,
     entries,
-    lastValue: latest?.value ?? null,
-    lastDate: latest?.entryDate ?? null,
+    lastValue: shown?.value ?? null,
+    lastDate: shown?.entryDate ?? null,
   };
 }

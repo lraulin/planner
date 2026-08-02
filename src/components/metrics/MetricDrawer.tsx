@@ -13,11 +13,18 @@ import {
 import { Drawer, DrawerFooter, DrawerHeader } from "@/components/detail/Drawer";
 import { entriesToCsv } from "@/lib/metrics/csv";
 import { formatMetricNumber, localDateKey } from "@/lib/metrics/parse";
-import type { MetricDetail, MetricEntryView } from "@/lib/metrics/types";
+import type { MetricDetail, MetricEntryView, MetricType } from "@/lib/metrics/types";
+import { METRIC_TYPE_LABELS, METRIC_TYPES } from "@/lib/metrics/types";
 import type { OutlineNode } from "@/lib/tree/types";
 
 const inputClass =
   "w-full rounded border border-rule bg-surface px-2 py-1.5 text-[0.875rem] text-ink outline-none focus:border-select-edge";
+
+const TYPE_HELP: Record<MetricType, string> = {
+  instance: "Each entry is a separate reading (e.g. weight, score).",
+  cumulative: "Entries add up as contributions (e.g. pages, dollars).",
+  total: "Each entry is the current total or measurement.",
+};
 
 type Draft = {
   title: string;
@@ -29,6 +36,7 @@ type Draft = {
   active: boolean;
   priorityLetter: PriorityLetter | "";
   priorityRank: string;
+  metricType: MetricType;
   objectiveTarget: string;
   ownerNodeId: string;
 };
@@ -44,6 +52,7 @@ function toDraft(m: MetricDetail): Draft {
     active: m.active,
     priorityLetter: m.priorityLetter ?? "",
     priorityRank: m.priorityRank != null ? String(m.priorityRank) : "",
+    metricType: m.metricType,
     objectiveTarget:
       m.objectiveTarget != null ? formatMetricNumber(m.objectiveTarget) : "",
     ownerNodeId: m.ownerNodeId ?? "",
@@ -145,6 +154,7 @@ function MetricForm({
         draft.priorityLetter === "" || rank === null || !Number.isFinite(rank)
           ? null
           : rank,
+      metricType: draft.metricType,
       objectiveTarget: target === null || !Number.isFinite(target) ? null : target,
       ownerNodeId: draft.ownerNodeId === "" ? null : draft.ownerNodeId,
     });
@@ -370,7 +380,22 @@ function MetricForm({
             </label>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Type">
-                <input value="Total" readOnly className={`${inputClass} opacity-80`} />
+                <select
+                  value={draft.metricType}
+                  onChange={(e) =>
+                    patchDraft({ metricType: e.target.value as MetricType })
+                  }
+                  className={inputClass}
+                >
+                  {METRIC_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {METRIC_TYPE_LABELS[t]}
+                    </option>
+                  ))}
+                </select>
+                <span className="mt-0.5 text-[0.6875rem] leading-snug text-ink-faint">
+                  {TYPE_HELP[draft.metricType]}
+                </span>
               </Field>
               <Field label="Units">
                 <input

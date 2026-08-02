@@ -395,7 +395,7 @@ function mapMetrics(doc: AchDocument, warnings: string[]): MappedMetric[] {
       units: row.Units ?? row.Unit ?? "",
       active: boolField(row, "Active", true),
       priority: decodePriority(intField(row, "Priority")),
-      metricType: decodeMetricType(intField(row, "Type") ?? row.MetricType),
+      metricType: decodeMetricType(intField(row, "Type") ?? row.Type ?? row.MetricType),
       objectiveTarget: parseLooseNumber(targetRaw),
       ordinal: intField(row, "__ORDINAL__") ?? 0,
     });
@@ -447,16 +447,24 @@ function parseEntryDateKey(text: string | null | undefined): string | null {
   return `${y}-${mo}-${day}`;
 }
 
+/**
+ * Achieve Metrics.Type → our metricType.
+ * Integer map is provisional (0 total / 1 instance / 2 cumulative) until a
+ * multi-type AP dump is inspected; labels always accepted.
+ */
 function decodeMetricType(raw: number | string | null | undefined): string {
   if (raw === null || raw === undefined || raw === "") return "total";
   if (typeof raw === "string") {
     const s = raw.trim().toLowerCase();
     if (s === "total" || s === "0") return "total";
-    return s || "total";
+    if (s === "instance" || s === "1") return "instance";
+    if (s === "cumulative" || s === "2") return "cumulative";
+    return "total";
   }
-  // 0 = Total in Achieve (observed convention for similar type enums).
   if (raw === 0) return "total";
-  return String(raw);
+  if (raw === 1) return "instance";
+  if (raw === 2) return "cumulative";
+  return "total";
 }
 
 function decodeMetricEntryType(raw: number | string | null | undefined): string {

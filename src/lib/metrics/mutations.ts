@@ -3,8 +3,17 @@ import { db } from "@/db";
 import { metricEntries, metrics, nodes } from "@/db/schema";
 import type { PriorityLetter } from "@/db/schema";
 import { between } from "@/lib/tree/sortKey";
+import { isMetricType } from "./derive";
 import { isDateKey, parseNumeric } from "./parse";
-import type { MetricEntryInput, MetricInput } from "./types";
+import type { MetricEntryInput, MetricInput, MetricType } from "./types";
+
+function requireMetricType(raw: string | undefined, fallback: MetricType): MetricType {
+  if (raw === undefined) return fallback;
+  if (!isMetricType(raw)) {
+    throw new Error('Metric type must be "instance", "cumulative", or "total".');
+  }
+  return raw;
+}
 
 /**
  * Metrics domain writes. Every function takes `userId` and scopes on it.
@@ -90,7 +99,7 @@ export async function createMetric(
         priorityLetter: input.priorityLetter ?? null,
         priorityRank:
           input.priorityLetter === null ? null : (input.priorityRank ?? null),
-        metricType: input.metricType ?? "total",
+        metricType: requireMetricType(input.metricType, "total"),
         objectiveTarget: numericString(input.objectiveTarget),
         sortKey,
       })
@@ -124,7 +133,9 @@ export async function updateMetric(
     if (input.reason !== undefined) patch.reason = input.reason;
     if (input.units !== undefined) patch.units = input.units;
     if (input.active !== undefined) patch.active = input.active;
-    if (input.metricType !== undefined) patch.metricType = input.metricType;
+    if (input.metricType !== undefined) {
+      patch.metricType = requireMetricType(input.metricType, "total");
+    }
     if (input.priorityLetter !== undefined) {
       patch.priorityLetter = input.priorityLetter;
       if (input.priorityLetter === null) patch.priorityRank = null;

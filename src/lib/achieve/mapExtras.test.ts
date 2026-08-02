@@ -174,4 +174,24 @@ describe("mapExtras", () => {
       entryType: "new_total",
     });
   });
+
+  it("decodes instance and cumulative metric types (int and label)", () => {
+    const xml = `<?xml version="1.0"?>
+<AchieveDB>
+  <Metrics>
+    <MetricId>aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa</MetricId>
+    <Title>Pages</Title>
+    <Type>2</Type>
+  </Metrics>
+  <Metrics>
+    <MetricId>bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb</MetricId>
+    <Title>Weight</Title>
+    <Type>Instance</Type>
+  </Metrics>
+</AchieveDB>`;
+    const extras = mapExtras(parseAchXml(xml));
+    expect(extras.metrics).toHaveLength(2);
+    expect(extras.metrics[0].metricType).toBe("cumulative");
+    expect(extras.metrics[1].metricType).toBe("instance");
+  });
 });

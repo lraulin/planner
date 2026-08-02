@@ -3,11 +3,12 @@
 import { useMemo } from "react";
 import { chartPoints, seriesPolyline, yDomain } from "@/lib/metrics/derive";
 import { formatMetricNumber } from "@/lib/metrics/parse";
-import type { MetricEntryView } from "@/lib/metrics/types";
+import type { MetricEntryView, MetricType } from "@/lib/metrics/types";
 
 /**
  * Actual vs objective performance graph — pure SVG, no chart library.
  * Mirrors Achieve's split-view graph under the Metrics list.
+ * Cumulative metrics plot a running sum; instance/total plot raw values.
  */
 export function MetricChart({
   title,
@@ -15,6 +16,7 @@ export function MetricChart({
   units,
   entries,
   objectiveTarget,
+  metricType = "total",
   showLegend = true,
   showObjective = true,
 }: {
@@ -23,6 +25,7 @@ export function MetricChart({
   units: string;
   entries: MetricEntryView[];
   objectiveTarget: number | null;
+  metricType?: MetricType;
   showLegend?: boolean;
   showObjective?: boolean;
 }) {
@@ -31,8 +34,8 @@ export function MetricChart({
   const padding = 28;
 
   const points = useMemo(
-    () => chartPoints(entries, objectiveTarget),
-    [entries, objectiveTarget],
+    () => chartPoints(entries, objectiveTarget, metricType),
+    [entries, objectiveTarget, metricType],
   );
 
   const values = points.map((p) => p.value);

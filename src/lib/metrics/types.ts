@@ -1,5 +1,24 @@
 import type { PriorityLetter } from "@/db/schema";
 
+/**
+ * How entry values are interpreted for Last Value and the performance graph.
+ * Matches Achieve Planner's metric Type (storage is always the number typed;
+ * aggregation is read-time).
+ */
+export type MetricType = "instance" | "cumulative" | "total";
+
+export const METRIC_TYPES: readonly MetricType[] = [
+  "instance",
+  "cumulative",
+  "total",
+] as const;
+
+export const METRIC_TYPE_LABELS: Record<MetricType, string> = {
+  instance: "Instance",
+  cumulative: "Cumulative",
+  total: "Total",
+};
+
 /** List row for the Metrics tab (and goal-scoped lists). */
 export type MetricListRow = {
   id: string;
@@ -12,13 +31,16 @@ export type MetricListRow = {
   active: boolean;
   priorityLetter: PriorityLetter | null;
   priorityRank: number | null;
-  metricType: string;
+  metricType: MetricType;
   /** Objective target as a number when set. */
   objectiveTarget: number | null;
   sortKey: string;
-  /** Latest entry value by date. */
+  /**
+   * Displayed progress: latest entry for instance/total, sum of entries for
+   * cumulative.
+   */
   lastValue: number | null;
-  /** `YYYY-MM-DD` of the latest entry. */
+  /** `YYYY-MM-DD` of the latest entry (by date), when any. */
   lastDate: string | null;
 };
 
@@ -44,7 +66,7 @@ export type MetricDetail = {
   active: boolean;
   priorityLetter: PriorityLetter | null;
   priorityRank: number | null;
-  metricType: string;
+  metricType: MetricType;
   objectiveTarget: number | null;
   sortKey: string;
   entries: MetricEntryView[];
@@ -62,7 +84,7 @@ export type MetricInput = {
   active?: boolean;
   priorityLetter?: PriorityLetter | null;
   priorityRank?: number | null;
-  metricType?: string;
+  metricType?: MetricType;
   /** Pass `null` to clear. */
   objectiveTarget?: number | null;
   /** Pass `null` to make standalone. */
