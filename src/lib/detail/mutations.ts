@@ -14,7 +14,8 @@ import {
   syncDayLineToTargetStart,
 } from "@/lib/day/sync";
 import { applyStateTransition } from "@/lib/tree/mutations";
-import { toDateKey } from "@/lib/schedule/geometry";
+import { startOfDay } from "@/lib/dateMath";
+import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { stateFromDates } from "./stateFromDates";
 import { between } from "@/lib/tree/sortKey";
 import { fetchPageTitle, shouldAutofillAttachmentTitle } from "@/lib/url/pageTitle";
@@ -39,11 +40,31 @@ type Executor = Db | Tx;
  * Flight usually preserves Dates; a plain ISO string still has to work, and an unparseable
  * value must not reach the completion path as an Invalid Date (which can write a shelved
  * row with a null deferred date).
+ *
+ * A bare `YYYY-MM-DD` is local midnight via `fromDateKey` — `new Date("2026-08-01")` is UTC
+ * midnight, which is the previous evening in the Americas and the wrong calendar day.
  */
 function asDate(value: Date | string | null | undefined): Date | null {
   if (value == null) return null;
-  const d = value instanceof Date ? value : new Date(value);
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return fromDateKey(value);
+  const d = new Date(value);
   return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * Actual start and Date completed are **records**, not plans. Normalize to local midnight
+ * and refuse a future day by clamping to today — the picker already blocks future days, and
+ * a hand-rolled request must not invent history that has not happened.
+ */
+function recordDate(value: Date | string | null | undefined): Date | null {
+  const parsed = asDate(value);
+  if (!parsed) return null;
+  const day = startOfDay(parsed);
+  const today = startOfDay(new Date());
+  return day.getTime() > today.getTime() ? today : day;
 }
 
 /**
@@ -85,7 +106,9 @@ function completedDateSet(
   before: Date | null | undefined,
   next: Date | string | null | undefined,
 ): Date | null {
-  const parsed = asDate(next === undefined ? undefined : next);
+  // `undefined` means the field was not in the save; `null` means cleared.
+  if (next === undefined) return null;
+  const parsed = recordDate(next);
   if (parsed === null) return null;
   if (before && toDateKey(before) === toDateKey(parsed)) return null;
   return parsed;
@@ -420,16 +443,17 @@ export async function saveNodeDetail(
       // Date columns must be real Dates for drizzle; coerce anything that arrived as an
       // ISO string across the server-action boundary so a completion-by-date save cannot
       // fail the side-table write and leave the transition un-run.
-      for (const key of [
-        "actualStartDate",
-        "dateCompleted",
-        "reminderAt",
-        "constraintDate",
-        "recurrenceUntil",
-      ] as const) {
+      for (const key of ["reminderAt", "constraintDate", "recurrenceUntil"] as const) {
         if (key in set && set[key] != null) {
           const parsed = asDate(set[key]);
           if (parsed) (set as Record<string, unknown>)[key] = parsed;
+        }
+      }
+      // Record dates: local midnight, never in the future.
+      for (const key of ["actualStartDate", "dateCompleted"] as const) {
+        if (key in set) {
+          (set as Record<string, unknown>)[key] =
+            set[key] == null ? null : recordDate(set[key]);
         }
       }
       if (hasValues(set)) {
@@ -452,11 +476,17 @@ export async function saveNodeDetail(
       before?.dateCompleted,
       values.task?.dateCompleted,
     );
+    // Started on is empty→filled only (unlike Date completed, which is "last completed"
+    // on a routine and must re-fire). Still a record date: local midnight, not future.
+    const startedRaw =
+      values.task?.actualStartDate === undefined
+        ? undefined
+        : recordDate(values.task.actualStartDate);
     const implied = stateFromDates({
       current: node.state,
       completedAt,
       deferredUntil: changedTo(node.deferredDate, core.deferredDate),
-      startedAt: newlySet(before?.actualStartDate, values.task?.actualStartDate),
+      startedAt: newlySet(before?.actualStartDate, startedRaw),
       today: toDateKey(new Date()),
     });
 
@@ -485,7 +515,7 @@ export async function saveNodeDetail(
             state: core.state,
             at:
               core.state === "completed"
-                ? (asDate(values.task?.dateCompleted) ?? completedAt)
+                ? (recordDate(values.task?.dateCompleted) ?? completedAt)
                 : null,
           }
         : null;

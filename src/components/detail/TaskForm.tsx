@@ -1,6 +1,7 @@
 "use client";
 
 import type { TaskConstraint } from "@/db/schema";
+import { toDateKey } from "@/lib/schedule/geometry";
 import { formatEffort } from "@/lib/tree/format";
 import { STATE_OPTIONS } from "@/lib/tree/hierarchy";
 import {
@@ -23,6 +24,11 @@ import { LinkedNotesPanel } from "@/components/notes/LinkedNotesPanel";
 import { TaskFitnessPanel } from "@/components/fitness/TaskFitnessPanel";
 import type { FormTab } from "./FormTabs";
 import { CoreHeaderFields, type DetailFormProps } from "./formShared";
+
+/** Local today for `max` on record dates — re-read each render so midnight is not sticky. */
+function todayKey() {
+  return toDateKey(new Date());
+}
 
 const CONSTRAINT_OPTIONS: { value: TaskConstraint; label: string }[] = [
   { value: "as_soon_as_possible", label: "As soon as possible" },
@@ -254,11 +260,17 @@ export function taskTabs(props: DetailFormProps): FormTab[] {
                 label="Actual start"
                 value={task.actualStartDate ?? null}
                 onChange={(actualStartDate) => patchTask({ actualStartDate })}
+                // Record of when work really began — not a plan. A future start is not a
+                // correction, it is a mistake; the picker and the server both refuse it.
+                max={todayKey()}
+                hint="When you actually began. Leave empty until you have; cannot be in the future."
               />
               <DateField
                 label="Date completed"
                 value={task.dateCompleted ?? null}
                 onChange={(dateCompleted) => patchTask({ dateCompleted })}
+                max={todayKey()}
+                hint="When you finished. Backdate freely; a future day is not allowed. On a repeating task this is last completed — change the day to log the next finish."
               />
             </FieldGrid>
           </Section>

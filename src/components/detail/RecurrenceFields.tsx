@@ -9,6 +9,7 @@ import type {
 } from "@/db/schema";
 import { describeRule, nextOccurrence } from "@/lib/recurrence/pattern";
 import { nextDue } from "@/lib/recurrence/nextDue";
+import { toDateKey } from "@/lib/schedule/geometry";
 import { DateField, FieldGrid, NumberField, Section, SelectField } from "./fields";
 
 /**
@@ -498,5 +499,5 @@ function Fact({ term, value }: { term: string; value: string }) {
 
 /** Matches how `DateField` renders a stored date, so the two never disagree on screen. */
 function dateText(date: Date): string {
-  return date.toISOString().slice(0, 10);
+  return toDateKey(date);
 }

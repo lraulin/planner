@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { fromDateKey } from "@/lib/schedule/geometry";
 import { stateFromDates } from "./stateFromDates";
 
 const TODAY = "2026-03-08";
 
+/** Local midnight — same as DateField and record dates. */
 function at(key: string): Date {
-  return new Date(`${key}T00:00:00Z`);
+  return fromDateKey(key);
 }
 
 /** No date changed — the shape every save that touched something else arrives in. */

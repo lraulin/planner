@@ -390,6 +390,8 @@ export function DateField({
   onChange,
   hint,
   className,
+  max,
+  min,
 }: {
   label: string;
   /** Stored as a timestamp; only the date half is edited. */
@@ -397,9 +399,21 @@ export function DateField({
   onChange: (value: Date | null) => void;
   hint?: string;
   className?: string;
+  /**
+   * Inclusive latest day the picker allows (`YYYY-MM-DD`). Use for record dates that
+   * cannot be in the future — Actual start, Date completed.
+   */
+  max?: string;
+  /** Inclusive earliest day (`YYYY-MM-DD`). */
+  min?: string;
 }) {
   const id = useId();
-  const text = value ? value.toISOString().slice(0, 10) : "";
+  // Local calendar day, not UTC. `toISOString().slice(0, 10)` shifts the day after evening
+  // in the Americas (a completion at 20:00 Eastern shows as tomorrow) and the other way in
+  // Asia for local-midnight stamps. Matches `toDateKey` / `fromDateKey` and DateField write.
+  const text = value
+    ? `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`
+    : "";
 
   return (
     <Field label={label} htmlFor={id} hint={hint} className={className}>
@@ -407,11 +421,17 @@ export function DateField({
         id={id}
         type="date"
         value={text}
-        onChange={(event) =>
-          onChange(
-            event.target.value ? new Date(`${event.target.value}T00:00:00`) : null,
-          )
-        }
+        max={max}
+        min={min}
+        onChange={(event) => {
+          if (!event.target.value) {
+            onChange(null);
+            return;
+          }
+          // Local midnight for the chosen day — never `new Date("YYYY-MM-DD")`, which is UTC.
+          const [y, m, d] = event.target.value.split("-").map(Number);
+          onChange(new Date(y, m - 1, d));
+        }}
         className={`tabular ${INPUT_CLASS}`}
       />
     </Field>

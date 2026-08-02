@@ -20,6 +20,7 @@
 
 import type { RecurrenceFrequency } from "@/db/schema";
 import { addDays, addMonths, addYears, startOfDay } from "@/lib/dateMath";
+import { toDateKey } from "@/lib/schedule/geometry";
 
 /**
  * The next deferred-until date for a task completed at `completedAt`, or null when the
@@ -43,10 +44,9 @@ export function nextDue(
 
   const n = Math.max(1, Math.floor(interval));
   // Local midnight, matching `nextOccurrence` and what `DateField` writes. Keeping the
-  // time you happened to tick it at is not merely untidy: these dates are compared as
-  // **UTC** calendar days by `isDeferred` and `useToday`, so a routine finished at 20:00
-  // Eastern would come back with a defer date whose UTC day is the day *after* the one it
-  // is meant to be due, and would stay hidden for most of it.
+  // time you happened to tick it at is not merely untidy: every comparison is a **local**
+  // calendar day (`toDateKey` / `isDeferred` / `useToday`), and the form shows the local
+  // day — so the engine lands on the same midnight the picker would write.
   const from = startOfDay(completedAt);
 
   switch (frequency) {
@@ -75,5 +75,8 @@ export function nextDue(
  */
 export function isDeferred(deferredDate: Date | null, today: string | null): boolean {
   if (!deferredDate || !today) return false;
-  return deferredDate.toISOString().slice(0, 10) > today;
+  // Local calendar day — same key space as `toDateKey` / DateField / `useToday`. UTC day
+  // keys made a local-midnight deferral in Asia look a day early, and a late-evening stamp
+  // in the Americas look a day late.
+  return toDateKey(deferredDate) > today;
 }

@@ -1,4 +1,5 @@
 import type { NodeState } from "@/db/schema";
+import { toDateKey } from "@/lib/schedule/geometry";
 
 /**
  * One concept for "not on my plate right now", replacing two that used to disagree.
@@ -63,8 +64,9 @@ export function shelfHolds(shelf: Shelf | null, today: string | null): boolean {
   if (!shelf) return false;
   if (shelf.until === null) return true;
   if (!today) return true;
-  // Calendar days, matching `isDeferred`: a shelf expiring today is already open all day.
-  return shelf.until.toISOString().slice(0, 10) > today;
+  // Local calendar days, matching `isDeferred` / `toDateKey`: a shelf expiring today is
+  // already open all day.
+  return toDateKey(shelf.until) > today;
 }
 
 /**

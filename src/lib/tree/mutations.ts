@@ -472,11 +472,20 @@ export async function applyStateTransition(
 
   const recurrence = await recurrenceOf(tx, userId, nodeId);
 
+  // Date completed is a calendar day on the form, not an instant. Stamp local midnight so
+  // the field never displays as "tomorrow" after evening in the Americas (UTC day shift).
+  // `nodes.completedAt` and `task_completions.completedAt` keep the true instant for history.
+  const completedDay = startOfDay(now);
+
   async function finish() {
     await tx
       .update(nodes)
       .set({ state, completedAt: now, updatedAt: now })
       .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+    await tx
+      .update(taskDetails)
+      .set({ dateCompleted: completedDay })
+      .where(eq(taskDetails.nodeId, nodeId));
   }
 
   if (!recurrence) {
@@ -501,10 +510,6 @@ export async function applyStateTransition(
   // that never happened.
   if (seriesEnds(recurrence, next, completionsSoFar)) {
     await finish();
-    await tx
-      .update(taskDetails)
-      .set({ dateCompleted: now })
-      .where(eq(taskDetails.nodeId, nodeId));
     // The series is over, so nothing follows it onto a future day — but the day line still
     // gets checked off, exactly as it would for any other task being finished.
     await syncDayLineOnCompletion(tx, userId, nodeId, now);
@@ -568,7 +573,7 @@ export async function applyStateTransition(
 
   await tx
     .update(taskDetails)
-    .set({ dateCompleted: now, ...dates.task })
+    .set({ dateCompleted: completedDay, ...dates.task })
     .where(eq(taskDetails.nodeId, nodeId));
 
   await syncDayLineOnCompletion(tx, userId, nodeId, now);

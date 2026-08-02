@@ -11,8 +11,10 @@ import {
 
 const TODAY = "2026-03-08";
 
+/** Local midnight — same key space as `toDateKey` / DateField. */
 function at(key: string): Date {
-  return new Date(`${key}T00:00:00Z`);
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(y, m - 1, d);
 }
 
 function shelf(until: string | null, sourceId = "n"): Shelf {

@@ -1,4 +1,5 @@
 import type { NodeState } from "@/db/schema";
+import { toDateKey } from "@/lib/schedule/geometry";
 
 /**
  * The state a date edit implies.
@@ -47,10 +48,11 @@ export function stateFromDates(opts: {
   }
 
   // A date already gone by is not a shelf — it is the residue of one that has expired, and
-  // re-shelving on it would hide nothing while making the State column lie.
+  // re-shelving on it would hide nothing while making the State column lie. Compared as a
+  // local calendar day (not UTC), matching `toDateKey` and DateField.
   if (
     deferredUntil &&
-    (!today || deferredUntil.toISOString().slice(0, 10) > today) &&
+    (!today || toDateKey(deferredUntil) > today) &&
     current !== "completed" &&
     current !== "cancelled" &&
     current !== "postponed"

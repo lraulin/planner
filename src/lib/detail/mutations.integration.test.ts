@@ -181,13 +181,15 @@ describeDb("detail mutations", () => {
       await saveNodeDetail(userId, id, {
         ...core,
         name: "Weekly review",
-        task: { dateCompleted: new Date("2026-03-01T10:00:00Z") },
+        task: { dateCompleted: new Date(2026, 2, 1) },
       });
 
       const row = await stateOf(id);
       // A repeating task does not stay completed; it comes back shelved until next time.
       expect(row?.state).toBe("postponed");
-      expect(row?.deferredDate?.toISOString().slice(0, 10)).toBe("2026-03-08");
+      expect(row?.deferredDate?.getFullYear()).toBe(2026);
+      expect(row?.deferredDate?.getMonth()).toBe(2);
+      expect(row?.deferredDate?.getDate()).toBe(8);
       // Target start is created with the deferred date — the next occurrence has a plan.
       const [dates] = await db
         .select({
@@ -198,8 +200,11 @@ describeDb("detail mutations", () => {
         .innerJoin(taskDetails, eq(taskDetails.nodeId, nodes.id))
         .where(eq(nodes.id, id))
         .limit(1);
-      expect(dates.targetStartDate?.toISOString().slice(0, 10)).toBe("2026-03-08");
-      expect(dates.dateCompleted?.toISOString().slice(0, 10)).toBe("2026-03-01");
+      expect(dates.targetStartDate?.getDate()).toBe(8);
+      expect(dates.dateCompleted?.getFullYear()).toBe(2026);
+      expect(dates.dateCompleted?.getMonth()).toBe(2);
+      expect(dates.dateCompleted?.getDate()).toBe(1);
+      expect(dates.dateCompleted?.getHours()).toBe(0);
     });
 
     it("completes again via Date completed after a prior cycle", async () => {
@@ -239,13 +244,15 @@ describeDb("detail mutations", () => {
           recurrenceFrequency: "weekly",
           recurrenceMode: "regenerate",
           recurrenceInterval: 1,
-          dateCompleted: new Date("2026-08-01T00:00:00"),
+          dateCompleted: new Date(2026, 7, 1),
         },
       });
 
       const afterSecond = await stateOf(id);
       expect(afterSecond?.state).toBe("postponed");
-      expect(afterSecond?.deferredDate?.toISOString().slice(0, 10)).toBe("2026-08-08");
+      expect(afterSecond?.deferredDate?.getFullYear()).toBe(2026);
+      expect(afterSecond?.deferredDate?.getMonth()).toBe(7);
+      expect(afterSecond?.deferredDate?.getDate()).toBe(8);
 
       const [dates] = await db
         .select({
@@ -256,8 +263,9 @@ describeDb("detail mutations", () => {
         .innerJoin(taskDetails, eq(taskDetails.nodeId, nodes.id))
         .where(eq(nodes.id, id))
         .limit(1);
-      expect(dates.targetStartDate?.toISOString().slice(0, 10)).toBe("2026-08-08");
-      expect(dates.dateCompleted?.toISOString().slice(0, 10)).toBe("2026-08-01");
+      expect(dates.targetStartDate?.getDate()).toBe(8);
+      expect(dates.dateCompleted?.getMonth()).toBe(7);
+      expect(dates.dateCompleted?.getDate()).toBe(1);
     });
 
     it("does not re-cycle when Date completed is re-saved on the same day", async () => {
@@ -271,10 +279,10 @@ describeDb("detail mutations", () => {
       await saveNodeDetail(userId, id, {
         ...core,
         name: "Mow lawn",
-        task: { dateCompleted: new Date("2026-03-01T10:00:00Z") },
+        task: { dateCompleted: new Date(2026, 2, 1) },
       });
       const mid = await stateOf(id);
-      expect(mid?.deferredDate?.toISOString().slice(0, 10)).toBe("2026-03-08");
+      expect(mid?.deferredDate?.getDate()).toBe(8);
 
       await saveNodeDetail(userId, id, {
         ...core,
@@ -286,13 +294,13 @@ describeDb("detail mutations", () => {
         task: {
           recurrenceFrequency: "weekly",
           recurrenceMode: "regenerate",
-          dateCompleted: new Date("2026-03-01T00:00:00"),
+          dateCompleted: new Date(2026, 2, 1),
         },
       });
 
       const again = await stateOf(id);
       expect(again?.state).toBe("postponed");
-      expect(again?.deferredDate?.toISOString().slice(0, 10)).toBe("2026-03-08");
+      expect(again?.deferredDate?.getDate()).toBe(8);
     });
 
     it("completes a one-off at the date given", async () => {
@@ -300,12 +308,45 @@ describeDb("detail mutations", () => {
       await saveNodeDetail(userId, id, {
         ...core,
         name: "Filed the return",
-        task: { dateCompleted: new Date("2026-02-03T10:00:00Z") },
+        // Local midnight — same as DateField. A UTC-only stamp can land on the wrong local day.
+        task: { dateCompleted: new Date(2026, 1, 3) },
       });
 
       const row = await stateOf(id);
       expect(row?.state).toBe("completed");
-      expect((await completedAtOf(id))?.toISOString().slice(0, 10)).toBe("2026-02-03");
+      const [detail] = await db
+        .select({ dateCompleted: taskDetails.dateCompleted })
+        .from(taskDetails)
+        .where(eq(taskDetails.nodeId, id))
+        .limit(1);
+      expect(detail.dateCompleted?.getFullYear()).toBe(2026);
+      expect(detail.dateCompleted?.getMonth()).toBe(1);
+      expect(detail.dateCompleted?.getDate()).toBe(3);
+      expect(detail.dateCompleted?.getHours()).toBe(0);
+    });
+
+    it("clamps a future Date completed to today", async () => {
+      // Record dates are not plans. A future completion is not a correction.
+      const id = await task("Time travel");
+      const future = new Date();
+      future.setDate(future.getDate() + 14);
+      future.setHours(0, 0, 0, 0);
+
+      await saveNodeDetail(userId, id, {
+        ...core,
+        name: "Time travel",
+        task: { dateCompleted: future },
+      });
+
+      const [detail] = await db
+        .select({ dateCompleted: taskDetails.dateCompleted })
+        .from(taskDetails)
+        .where(eq(taskDetails.nodeId, id))
+        .limit(1);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      expect(detail.dateCompleted?.getTime()).toBe(today.getTime());
+      expect((await stateOf(id))?.state).toBe("completed");
     });
 
     it("does not re-fire on a save that touched nothing", async () => {

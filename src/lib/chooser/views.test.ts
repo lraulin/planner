@@ -22,6 +22,12 @@ function dayOut(days: number): Date {
   return new Date(Date.parse(`${TODAY}T00:00:00Z`) + days * 24 * 60 * 60 * 1000);
 }
 
+/** Local midnight for a `YYYY-MM-DD` — same key space as `toDateKey` / shelving. */
+function localDay(key: string): Date {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
 function build(
   rows: OutlineRow[],
   viewId: ChooserViewId = "best-overall",
@@ -95,7 +101,7 @@ describe("isChooserCandidate", () => {
           id: "t",
           type: "task",
           state: "postponed",
-          deferredDate: new Date(`${key}T00:00:00Z`),
+          deferredDate: localDay(key),
         }),
       ])[0];
 
@@ -121,9 +127,7 @@ describe("isChooserCandidate", () => {
           id: "p",
           type: "project",
           state: "postponed",
-          deferredDate: opts.parentUntil
-            ? new Date(`${opts.parentUntil}T00:00:00Z`)
-            : null,
+          deferredDate: opts.parentUntil ? localDay(opts.parentUntil) : null,
         }),
         row({
           id: "t",
@@ -131,9 +135,7 @@ describe("isChooserCandidate", () => {
           parentId: "p",
           depth: 1,
           state: opts.childUntil ? "postponed" : "not_started",
-          deferredDate: opts.childUntil
-            ? new Date(`${opts.childUntil}T00:00:00Z`)
-            : null,
+          deferredDate: opts.childUntil ? localDay(opts.childUntil) : null,
         }),
       ]);
 

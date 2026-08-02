@@ -48,10 +48,9 @@ describe("nextDue", () => {
   });
 
   it("returns local midnight rather than the time it was ticked at", () => {
-    // Not tidiness. These dates are compared as **UTC** calendar days by `isDeferred` and
-    // `useToday`, so a routine finished at 20:00 Eastern and left at 20:00 would carry a
-    // defer date whose UTC day is the day after the one it is due, and stay hidden through
-    // most of it. Local midnight in a western zone lands on the intended UTC day.
+    // Not tidiness. These dates are compared as **local** calendar days by `isDeferred` and
+    // `useToday` / `toDateKey`. Leaving a 20:00 stamp would still work under local keys, but
+    // the form and every other date field store local midnight, so the engine does too.
     const next = nextDue(at(2026, 8, 1, 20), "daily", 1)!;
     expect(localKey(next)).toBe("2026-08-02");
     expect(next.getHours()).toBe(0);
@@ -66,26 +65,29 @@ describe("nextDue", () => {
 });
 
 describe("isDeferred", () => {
-  /** UTC midnight, matching how the app derives day keys (`useToday`). */
-  const utc = (key: string) => new Date(`${key}T00:00:00Z`);
+  /** Local midnight, matching DateField / `toDateKey` / `useToday`. */
+  const day = (key: string) => {
+    const [y, m, d] = key.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  };
 
   it("is available on the day it is due, not only the day after", () => {
     // The boundary that matters: `deferredDate > new Date()` reads as correct and hides a
     // routine for most of the day it was actually due.
-    expect(isDeferred(utc("2026-03-08"), "2026-03-08")).toBe(false);
+    expect(isDeferred(day("2026-03-08"), "2026-03-08")).toBe(false);
   });
 
   it("is deferred while the date is still in the future", () => {
-    expect(isDeferred(utc("2026-03-09"), "2026-03-08")).toBe(true);
+    expect(isDeferred(day("2026-03-09"), "2026-03-08")).toBe(true);
   });
 
   it("is available once the date has passed", () => {
-    expect(isDeferred(utc("2026-03-01"), "2026-03-08")).toBe(false);
+    expect(isDeferred(day("2026-03-01"), "2026-03-08")).toBe(false);
   });
 
   it("ignores the time of day on the stored timestamp", () => {
-    // Deferred to 17:00 today; still available at 09:00 today.
-    expect(isDeferred(new Date("2026-03-08T17:00:00Z"), "2026-03-08")).toBe(false);
+    // Deferred to 17:00 today; still available at 09:00 today (local).
+    expect(isDeferred(new Date(2026, 2, 8, 17, 0, 0), "2026-03-08")).toBe(false);
   });
 
   it("treats a task with no deferred date as available", () => {
@@ -93,6 +95,6 @@ describe("isDeferred", () => {
   });
 
   it("defers nothing when today is unknown, so server and client agree", () => {
-    expect(isDeferred(utc("2099-01-01"), null)).toBe(false);
+    expect(isDeferred(day("2099-01-01"), null)).toBe(false);
   });
 });

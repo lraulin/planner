@@ -15,7 +15,16 @@ pinned here.
 
 `actual_start_date` and `date_completed` live on `task_details`. They are **records**, not
 plans: when work really began, and when it was finished. They are deliberately editable so a
-late tick-off can be backdated, and they couple to state in both directions (below).
+late tick-off can be backdated (a project finished years ago should not claim "completed
+today"), and they couple to state in both directions (below).
+
+They are **calendar days in local time**, stored as local midnight — never a wall-clock
+instant, and **never in the future**. The picker enforces `max=today`; the server clamps.
+A future start or completion is not a correction, it is a mistake.
+
+On a **recurring** task, `date_completed` means **last completed** (full history is in
+`task_completions`). Changing that field to a different calendar day logs the next finish
+and steps the series — the same as setting State to Completed.
 
 ## One shelving concept
 
@@ -78,14 +87,18 @@ the constraint would reject.
 
 ## State and dates couple both ways
 
-Setting a date implies a state, when the date is **newly** set (the drawer posts its whole
-draft every save):
+Setting a date implies a state (the drawer posts its whole draft every save; only a real
+change speaks):
 
-| Date newly set                     | Implied state            |
-| ---------------------------------- | ------------------------ |
-| `date_completed`                   | completed (at that date) |
-| future `deferred_date`             | postponed                |
-| `actual_start_date` on not-started | in_progress              |
+| Date change                                      | Implied state            |
+| ------------------------------------------------ | ------------------------ |
+| `date_completed` set or moved to a different day | completed (at that date) |
+| future `deferred_date`                           | postponed                |
+| `actual_start_date` filled on not-started        | in_progress              |
+
+`date_completed` is not empty→filled only: after a recurrence cycle it already holds last
+completed, so the next finish typed into that field must re-fire. Compared as calendar days
+so a no-op re-save does not cycle again.
 
 Precedence when one save touches more than one: **finished beats shelved beats started**.
 An explicit State dropdown wins over anything implied by a date.
@@ -93,6 +106,10 @@ An explicit State dropdown wins over anything implied by a date.
 `applyStateTransition` takes an explicit instant so a backdated completion writes history
 and steps a series from _that_ day, not from now. Recurrence leaves the routine `postponed`
 until its next occurrence — the deferred date it just acquired _is_ that shelf's expiry.
+
+**Local calendar days, not UTC keys.** `toDateKey`, DateField display/write, `useToday`,
+`isDeferred`, and shelving all use the reader's local day. `toISOString().slice(0, 10)`
+shifts the day after evening in the Americas and is not used for these fields.
 
 See `src/lib/detail/stateFromDates.ts`.
 
