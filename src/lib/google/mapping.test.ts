@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { toDateKey } from "@/lib/schedule/geometry";
 import {
   appointmentToGoogleEvent,
   buildRecurrenceRule,
@@ -56,15 +57,13 @@ describe("weekday codes", () => {
 
 describe("readEventTime", () => {
   // The bug this guards: `new Date("2026-07-27")` parses as UTC midnight, which is
-  // 2026-07-26 19:00 in New York — an all-day event rendering a day early. Going through
-  // fromDateKey keeps it local midnight regardless of the machine's zone.
-  it("reads an all-day date as local midnight, not UTC midnight", () => {
+  // 2026-07-26 evening in New York — an all-day event rendering a day early. fromDateKey
+  // stores UTC noon so toDateKey is stable on every machine.
+  it("reads an all-day date as a stable calendar day, not UTC midnight", () => {
     const at = readEventTime({ date: "2026-07-27" });
     expect(at).not.toBeNull();
-    expect(at?.getFullYear()).toBe(2026);
-    expect(at?.getMonth()).toBe(6);
-    expect(at?.getDate()).toBe(27);
-    expect(at?.getHours()).toBe(0);
+    expect(toDateKey(at!)).toBe("2026-07-27");
+    expect(at?.getUTCHours()).toBe(12);
   });
 
   it("reads a timed event from RFC3339", () => {

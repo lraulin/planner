@@ -1,7 +1,7 @@
 "use client";
 
 import type { TaskConstraint } from "@/db/schema";
-import { toDateKey } from "@/lib/schedule/geometry";
+import { localDateKey } from "@/lib/schedule/geometry";
 import { formatEffort } from "@/lib/tree/format";
 import { STATE_OPTIONS } from "@/lib/tree/hierarchy";
 import {
@@ -27,7 +27,7 @@ import { CoreHeaderFields, type DetailFormProps } from "./formShared";
 
 /** Local today for `max` on record dates — re-read each render so midnight is not sticky. */
 function todayKey() {
-  return toDateKey(new Date());
+  return localDateKey(new Date());
 }
 
 const CONSTRAINT_OPTIONS: { value: TaskConstraint; label: string }[] = [

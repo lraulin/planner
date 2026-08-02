@@ -14,8 +14,7 @@ import {
   syncDayLineToTargetStart,
 } from "@/lib/day/sync";
 import { applyStateTransition } from "@/lib/tree/mutations";
-import { startOfDay } from "@/lib/dateMath";
-import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
+import { fromDateKey, localDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { stateFromDates } from "./stateFromDates";
 import { between } from "@/lib/tree/sortKey";
 import { fetchPageTitle, shouldAutofillAttachmentTitle } from "@/lib/url/pageTitle";
@@ -55,16 +54,18 @@ function asDate(value: Date | string | null | undefined): Date | null {
 }
 
 /**
- * Actual start and Date completed are **records**, not plans. Normalize to local midnight
- * and refuse a future day by clamping to today — the picker already blocks future days, and
- * a hand-rolled request must not invent history that has not happened.
+ * Actual start and Date completed are **records**, not plans. Normalize to the UTC-noon
+ * calendar-day encoding and refuse a future day by clamping to **today's local key** when
+ * the process has a meaningful local zone (the browser); on a UTC server the clamp uses the
+ * UTC day of `now`, which is good enough because the picker already enforces max=today.
  */
 function recordDate(value: Date | string | null | undefined): Date | null {
   const parsed = asDate(value);
   if (!parsed) return null;
-  const day = startOfDay(parsed);
-  const today = startOfDay(new Date());
-  return day.getTime() > today.getTime() ? today : day;
+  const key = toDateKey(parsed);
+  // Prefer local "today" so a laptop in the Americas does not clamp with UTC's tomorrow.
+  const today = localDateKey(new Date());
+  return fromDateKey(key > today ? today : key);
 }
 
 /**

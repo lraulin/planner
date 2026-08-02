@@ -1,23 +1,23 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { toDateKey } from "@/lib/schedule/geometry";
+import { localDateKey } from "@/lib/schedule/geometry";
 
 /**
- * Today's date as `YYYY-MM-DD` (local calendar day), or null on the server / before hydration.
+ * Today's date as `YYYY-MM-DD` (**local** wall-clock day), or null on the server / before
+ * hydration.
  *
  * "Overdue" and schedule status depend on the reader's clock. Reading it through an
  * external store keeps the server and first client render agreeing on null, so nothing
  * flashes the wrong colour during hydration.
  *
- * Local, not UTC: after evening in the Americas, `toISOString().slice(0, 10)` is already
- * tomorrow while the user is still on today — which made deferred shelves and completed
- * dates look like they sat in the future.
+ * Uses `localDateKey`, not `toDateKey`: the latter is for stored calendar fields (UTC noon
+ * encoding). "Is it still Tuesday for me?" is always the browser's local day.
  */
 export function useToday(): string | null {
   return useSyncExternalStore(
     () => () => {},
-    () => toDateKey(new Date()),
+    () => localDateKey(new Date()),
     () => null,
   );
 }

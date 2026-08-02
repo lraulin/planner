@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  asCalendarDay,
   atMinutes,
   contrastText,
   daysBetweenKeys,
   fromDateKey,
+  localDateKey,
   minutesOfDay,
   normalizeTimeRange,
   shiftDateKey,
@@ -59,19 +61,26 @@ describe("atMinutes / minutesOfDay", () => {
 });
 
 describe("toDateKey / fromDateKey", () => {
-  it("round-trips a local calendar day", () => {
+  it("round-trips a calendar day as UTC noon", () => {
     const d = fromDateKey("2026-03-08");
-    expect(d.getFullYear()).toBe(2026);
-    expect(d.getMonth()).toBe(2);
-    expect(d.getDate()).toBe(8);
-    expect(d.getHours()).toBe(0);
+    expect(d.getUTCFullYear()).toBe(2026);
+    expect(d.getUTCMonth()).toBe(2);
+    expect(d.getUTCDate()).toBe(8);
+    expect(d.getUTCHours()).toBe(12);
     expect(toDateKey(d)).toBe("2026-03-08");
   });
 
-  it("uses the local day of an evening stamp, not the UTC day", () => {
-    // 20:00 Eastern on 1 Aug is already 2 Aug UTC — toISOString would lie.
+  it("keeps the same key on either side of the Atlantic", () => {
+    // The bug: client local midnight Aug 1 EDT is 04:00Z; server startOfDay in UTC
+    // rewrote it to 00:00Z, and local getters on the laptop showed Jul 31.
+    const fromClientPicker = fromDateKey("2026-08-01");
+    expect(toDateKey(fromClientPicker)).toBe("2026-08-01");
+    expect(toDateKey(asCalendarDay(fromClientPicker))).toBe("2026-08-01");
+  });
+
+  it("localDateKey follows the wall clock for instants", () => {
     const evening = new Date(2026, 7, 1, 20, 0, 0);
-    expect(toDateKey(evening)).toBe("2026-08-01");
+    expect(localDateKey(evening)).toBe("2026-08-01");
   });
 });
 

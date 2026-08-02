@@ -114,10 +114,9 @@ export function showAsToGoogle(showAs: ShowAs): {
 }
 
 /**
- * Read one Google time. All-day dates go through `fromDateKey` so `"2026-07-27"` becomes
- * local midnight — `new Date("2026-07-27")` would parse as **UTC** midnight and render a
- * day early anywhere west of Greenwich, which is the whole bug class this feature could
- * have shipped invisibly.
+ * Read one Google time. All-day dates go through `fromDateKey` (UTC noon of that day) so
+ * `"2026-07-27"` is not `new Date("2026-07-27")` (UTC midnight), which renders a day early
+ * in the Americas. See `agent-os/standards/development/dates.md`.
  */
 export function readEventTime(time: GoogleEventTime | undefined): Date | null {
   if (!time) return null;

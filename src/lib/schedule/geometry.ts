@@ -21,28 +21,52 @@ export function normalizeTimeRange(
 }
 
 /**
- * Local calendar day as `YYYY-MM-DD`.
+ * Calendar-day key (`YYYY-MM-DD`) for a **stored plan/record date**.
  *
- * The only Date → day-key conversion for plan/record/shelf fields. Do not use
- * `date.toISOString().slice(0, 10)` — that is the UTC day. See
- * `agent-os/standards/development/dates.md`.
+ * Calendar fields are encoded as **UTC noon** of the intended day (`fromDateKey`), so this
+ * reads **UTC** date components — not the process-local day. That is what stops a save on a
+ * UTC server from turning "Aug 1" (client local midnight) into "Jul 31" after `startOfDay`.
+ *
+ * For "what day is it on the user's wall clock right now?" use `localDateKey`.
+ * See `agent-os/standards/development/dates.md`.
  */
 export function toDateKey(date: Date): string {
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(date.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * Encode a `YYYY-MM-DD` calendar day for storage / wire.
+ *
+ * Uses **UTC noon** of that day (not local midnight, not UTC midnight). Local midnight is
+ * a different instant on the server than on the laptop; UTC midnight displays as the
+ * previous evening in the Americas. Noon UTC keeps the same `toDateKey` on every machine.
+ *
+ * Never `new Date("YYYY-MM-DD")` (UTC midnight) and never `new Date(y, m - 1, d)` in shared
+ * code (process-local midnight).
+ */
+export function fromDateKey(key: string): Date {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+}
+
+/**
+ * Local wall-clock calendar day of an **instant** (completion time, "now").
+ *
+ * Only for user-facing "today" and max-date on pickers — not for reading stored plan dates.
+ */
+export function localDateKey(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
 }
 
-/**
- * Parse `YYYY-MM-DD` as local midnight.
- *
- * Never `new Date("YYYY-MM-DD")` — that is UTC midnight and shifts the local day in the
- * Americas.
- */
-export function fromDateKey(key: string): Date {
-  const [y, m, d] = key.split("-").map(Number);
-  return new Date(y, m - 1, d);
+/** Normalize any Date to the stored encoding of its calendar day (`fromDateKey(toDateKey)`). */
+export function asCalendarDay(date: Date): Date {
+  return fromDateKey(toDateKey(date));
 }
 
 /**

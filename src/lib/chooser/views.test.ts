@@ -12,22 +12,21 @@ import {
 } from "./views";
 import type { ChooserItem, ChooserSettings, ChooserViewId } from "./types";
 import { nodeStateEnum } from "@/db/schema";
+import { fromDateKey, shiftDateKey } from "@/lib/schedule/geometry";
 import { derive } from "@/lib/tree/derive";
 import { row } from "@/lib/tree/fixtures";
 import type { OutlineRow } from "@/lib/tree/types";
 
 const TODAY = "2026-07-28";
 
-/** Local midnight `days` from TODAY — same shape DateField / toDateKey use. */
+/** Calendar day `days` from TODAY — UTC-noon encoding. */
 function dayOut(days: number): Date {
-  const [y, m, d] = TODAY.split("-").map(Number);
-  return new Date(y, m - 1, d + days);
+  return fromDateKey(shiftDateKey(TODAY, days));
 }
 
-/** Local midnight for a `YYYY-MM-DD` — same key space as `toDateKey` / shelving. */
+/** Stored calendar day for a `YYYY-MM-DD` key. */
 function localDay(key: string): Date {
-  const [y, m, d] = key.split("-").map(Number);
-  return new Date(y, m - 1, d);
+  return fromDateKey(key);
 }
 
 function build(

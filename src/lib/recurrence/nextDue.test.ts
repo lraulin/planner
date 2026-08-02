@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
+import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { isDeferred, nextDue } from "./nextDue";
 
-/** A local-time date, so the DST cases below mean what they say. */
+/** A wall-clock local date (simulates an instant of completion). */
 function at(year: number, month: number, day: number, hour = 9): Date {
   return new Date(year, month - 1, day, hour, 0, 0, 0);
 }
 
-/** Local `YYYY-MM-DD`, for asserting on a returned Date without timezone noise. */
-function localKey(date: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+/** Calendar-day key of a stored date. */
+function key(date: Date): string {
+  return toDateKey(date);
 }
 
 describe("nextDue", () => {
@@ -18,58 +18,53 @@ describe("nextDue", () => {
   });
 
   it("steps by the interval rather than by one unit", () => {
-    expect(localKey(nextDue(at(2026, 3, 3), "daily", 3)!)).toBe("2026-03-06");
-    expect(localKey(nextDue(at(2026, 3, 3), "weekly", 2)!)).toBe("2026-03-17");
-    expect(localKey(nextDue(at(2026, 3, 3), "monthly", 3)!)).toBe("2026-06-03");
-    expect(localKey(nextDue(at(2026, 3, 3), "yearly", 2)!)).toBe("2028-03-03");
+    expect(key(nextDue(at(2026, 3, 3), "daily", 3)!)).toBe("2026-03-06");
+    expect(key(nextDue(at(2026, 3, 3), "weekly", 2)!)).toBe("2026-03-17");
+    expect(key(nextDue(at(2026, 3, 3), "monthly", 3)!)).toBe("2026-06-03");
+    expect(key(nextDue(at(2026, 3, 3), "yearly", 2)!)).toBe("2028-03-03");
   });
 
   it("measures from the completion, so falling behind does not create a backlog", () => {
     // Fortnightly chore, completed four days late. The next one is due 14 days from the
     // completion (Mar 21), not 14 days from when it was "supposed" to be done (Mar 17).
-    expect(localKey(nextDue(at(2026, 3, 7), "weekly", 2)!)).toBe("2026-03-21");
+    expect(key(nextDue(at(2026, 3, 7), "weekly", 2)!)).toBe("2026-03-21");
   });
 
   it("clamps into a short month instead of overflowing into the next one", () => {
     // Jan 31 + 1 month is the end of February, not March 3.
-    expect(localKey(nextDue(at(2026, 1, 31), "monthly", 1)!)).toBe("2026-02-28");
-    expect(localKey(nextDue(at(2028, 1, 31), "monthly", 1)!)).toBe("2028-02-29");
+    expect(key(nextDue(at(2026, 1, 31), "monthly", 1)!)).toBe("2026-02-28");
+    expect(key(nextDue(at(2028, 1, 31), "monthly", 1)!)).toBe("2028-02-29");
   });
 
   it("keeps a Feb 29 yearly series on a real date in common years", () => {
-    expect(localKey(nextDue(at(2028, 2, 29), "yearly", 1)!)).toBe("2029-02-28");
+    expect(key(nextDue(at(2028, 2, 29), "yearly", 1)!)).toBe("2029-02-28");
   });
 
   it("lands on the next local day across a DST spring-forward", () => {
     // US DST begins 2026-03-08. Adding 86_400_000 ms to a 09:00 completion would give
     // 10:00 on the 8th; going through the local setters gives the right calendar day.
     const next = nextDue(at(2026, 3, 7, 9), "daily", 1)!;
-    expect(localKey(next)).toBe("2026-03-08");
+    expect(key(next)).toBe("2026-03-08");
   });
 
-  it("returns local midnight rather than the time it was ticked at", () => {
-    // Not tidiness. These dates are compared as **local** calendar days by `isDeferred` and
-    // `useToday` / `toDateKey`. Leaving a 20:00 stamp would still work under local keys, but
-    // the form and every other date field store local midnight, so the engine does too.
-    const next = nextDue(at(2026, 8, 1, 20), "daily", 1)!;
-    expect(localKey(next)).toBe("2026-08-02");
-    expect(next.getHours()).toBe(0);
-    expect(next.getMinutes()).toBe(0);
+  it("returns a calendar-day encoding rather than the time it was ticked at", () => {
+    // Completion stamped as a calendar day (what DateField / asCalendarDay write).
+    const next = nextDue(fromDateKey("2026-08-01"), "daily", 1)!;
+    expect(key(next)).toBe("2026-08-02");
+    expect(next.getUTCHours()).toBe(12);
+    expect(next.getUTCMinutes()).toBe(0);
   });
 
   it("floors a zero or negative interval to 1 rather than repeating instantly", () => {
     // An empty number field mid-edit must not be able to produce "due again immediately".
-    expect(localKey(nextDue(at(2026, 3, 3), "daily", 0)!)).toBe("2026-03-04");
-    expect(localKey(nextDue(at(2026, 3, 3), "daily", -5)!)).toBe("2026-03-04");
+    expect(key(nextDue(at(2026, 3, 3), "daily", 0)!)).toBe("2026-03-04");
+    expect(key(nextDue(at(2026, 3, 3), "daily", -5)!)).toBe("2026-03-04");
   });
 });
 
 describe("isDeferred", () => {
-  /** Local midnight, matching DateField / `toDateKey` / `useToday`. */
-  const day = (key: string) => {
-    const [y, m, d] = key.split("-").map(Number);
-    return new Date(y, m - 1, d);
-  };
+  /** Stored calendar day (UTC noon), matching DateField / `fromDateKey`. */
+  const day = (k: string) => fromDateKey(k);
 
   it("is available on the day it is due, not only the day after", () => {
     // The boundary that matters: `deferredDate > new Date()` reads as correct and hides a

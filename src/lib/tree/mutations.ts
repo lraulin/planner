@@ -13,7 +13,7 @@ import { and, asc, count, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { addDays, daysBetween, startOfDay } from "@/lib/dateMath";
 import { nextDue } from "@/lib/recurrence/nextDue";
 import { nextOccurrence } from "@/lib/recurrence/pattern";
-import { toDateKey } from "@/lib/schedule/geometry";
+import { asCalendarDay, toDateKey } from "@/lib/schedule/geometry";
 import {
   clearConflictingDescendantPlans,
   syncDayLineToTargetStart,
@@ -472,10 +472,10 @@ export async function applyStateTransition(
 
   const recurrence = await recurrenceOf(tx, userId, nodeId);
 
-  // Date completed is a calendar day on the form, not an instant. Stamp local midnight so
-  // the field never displays as "tomorrow" after evening in the Americas (UTC day shift).
-  // `nodes.completedAt` and `task_completions.completedAt` keep the true instant for history.
-  const completedDay = startOfDay(now);
+  // Date completed is a calendar day, not an instant. Encode as UTC noon of that day so a
+  // UTC server and a US laptop agree on "the 1st" (local midnight + startOfDay on the
+  // server was rewriting Aug 1 into Jul 31). Instants stay on `completedAt` columns.
+  const completedDay = asCalendarDay(now);
 
   async function finish() {
     await tx

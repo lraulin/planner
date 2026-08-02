@@ -9,6 +9,7 @@ import {
   type ChooserWeights,
   type ScoreFacts,
 } from "./score";
+import { fromDateKey, shiftDateKey } from "@/lib/schedule/geometry";
 import { effectiveDeadline } from "./dates";
 import { derive } from "@/lib/tree/derive";
 import { row } from "@/lib/tree/fixtures";
@@ -17,10 +18,9 @@ import type { OutlineNode } from "@/lib/tree/types";
 const TODAY = "2026-07-28";
 const W = DEFAULT_WEIGHTS;
 
-/** Local midnight `days` from TODAY — same shape DateField / toDateKey use. */
+/** Calendar day `days` from TODAY — UTC-noon encoding. */
 function dayOut(days: number): Date {
-  const [y, m, d] = TODAY.split("-").map(Number);
-  return new Date(y, m - 1, d + days);
+  return fromDateKey(shiftDateKey(TODAY, days));
 }
 
 function facts(partial: Partial<ScoreFacts> = {}): ScoreFacts {
@@ -82,9 +82,9 @@ describe("deadlineScore", () => {
   });
 
   it("treats a deadline as a calendar day, not an instant", () => {
-    // Late in the day on the deadline is still due today, not overdue.
+    // Stored as UTC noon; any time-of-day on that UTC day is still "today".
     const [y, m, d] = TODAY.split("-").map(Number);
-    expect(deadlineScore(new Date(y, m - 1, d, 23, 30, 0), TODAY, W)).toBe(
+    expect(deadlineScore(new Date(Date.UTC(y, m - 1, d, 23, 30, 0)), TODAY, W)).toBe(
       W.deadlineToday,
     );
   });

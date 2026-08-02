@@ -19,8 +19,8 @@
  */
 
 import type { RecurrenceFrequency } from "@/db/schema";
-import { addDays, addMonths, addYears, startOfDay } from "@/lib/dateMath";
-import { toDateKey } from "@/lib/schedule/geometry";
+import { addDays, addMonths, addYears } from "@/lib/dateMath";
+import { asCalendarDay, toDateKey } from "@/lib/schedule/geometry";
 
 /**
  * The next deferred-until date for a task completed at `completedAt`, or null when the
@@ -43,21 +43,19 @@ export function nextDue(
   if (frequency === "none") return null;
 
   const n = Math.max(1, Math.floor(interval));
-  // Local midnight, matching `nextOccurrence` and what `DateField` writes. Keeping the
-  // time you happened to tick it at is not merely untidy: every comparison is a **local**
-  // calendar day (`toDateKey` / `isDeferred` / `useToday`), and the form shows the local
-  // day — so the engine lands on the same midnight the picker would write.
-  const from = startOfDay(completedAt);
+  // Calendar-day encoding (UTC noon), not process-local midnight — the completion may be
+  // stamped on a UTC server while the form runs in the Americas.
+  const from = asCalendarDay(completedAt);
 
   switch (frequency) {
     case "daily":
-      return addDays(from, n);
+      return asCalendarDay(addDays(from, n));
     case "weekly":
-      return addDays(from, n * 7);
+      return asCalendarDay(addDays(from, n * 7));
     case "monthly":
-      return addMonths(from, n);
+      return asCalendarDay(addMonths(from, n));
     case "yearly":
-      return addYears(from, n);
+      return asCalendarDay(addYears(from, n));
   }
 }
 

@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { nodeStateEnum, type NodeState } from "@/db/schema";
+import { fromDateKey, shiftDateKey } from "@/lib/schedule/geometry";
 import { scheduleStatus, STATUS_LABELS, type ScheduleStatus } from "./status";
 import type { Shelf } from "./shelving";
-import { nodeStateEnum, type NodeState } from "@/db/schema";
 
 const TODAY = "2026-07-28";
 
-/** Local midnight `days` from TODAY — same shape DateField / toDateKey use. */
+/** Calendar day `days` from TODAY — UTC-noon encoding. */
 function deadline(days: number): Date {
-  const [y, m, d] = TODAY.split("-").map(Number);
-  return new Date(y, m - 1, d + days);
+  return fromDateKey(shiftDateKey(TODAY, days));
 }
 
 function statusIn(days: number, state: NodeState = "not_started"): ScheduleStatus {
@@ -43,9 +43,9 @@ describe("scheduleStatus", () => {
   });
 
   it("treats a deadline as a calendar day, not an instant", () => {
-    // Late in the day on the deadline is Due Today, not Overdue.
+    // Stored as UTC noon; any time-of-day on that UTC day is still Due Today.
     const [y, m, d] = TODAY.split("-").map(Number);
-    const lateToday = new Date(y, m - 1, d, 23, 30, 0);
+    const lateToday = new Date(Date.UTC(y, m - 1, d, 23, 30, 0));
     expect(scheduleStatus(lateToday, TODAY, "not_started")).toBe("due_today");
   });
 
