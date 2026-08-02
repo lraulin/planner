@@ -6,8 +6,40 @@ import {
   normalizeMetricType,
   seriesPolyline,
   shouldShowEntryTargetColumn,
+  sortEntriesByDate,
   yDomain,
 } from "./derive";
+
+describe("sortEntriesByDate", () => {
+  const rows = [
+    { id: "a", entryDate: "2025-01-01" },
+    { id: "c", entryDate: "2025-03-01" },
+    { id: "b", entryDate: "2025-02-01" },
+  ];
+
+  it("defaults to newest first", () => {
+    expect(sortEntriesByDate(rows).map((r) => r.id)).toEqual(["c", "b", "a"]);
+  });
+
+  it("sorts oldest first when ascending", () => {
+    expect(sortEntriesByDate(rows, "asc").map((r) => r.id)).toEqual(["a", "b", "c"]);
+  });
+
+  it("does not mutate the input", () => {
+    const copy = [...rows];
+    sortEntriesByDate(rows, "asc");
+    expect(rows).toEqual(copy);
+  });
+
+  it("breaks same-day ties by id in the same direction", () => {
+    const sameDay = [
+      { id: "z", entryDate: "2025-06-01" },
+      { id: "a", entryDate: "2025-06-01" },
+    ];
+    expect(sortEntriesByDate(sameDay, "asc").map((r) => r.id)).toEqual(["a", "z"]);
+    expect(sortEntriesByDate(sameDay, "desc").map((r) => r.id)).toEqual(["z", "a"]);
+  });
+});
 
 describe("shouldShowEntryTargetColumn", () => {
   it("hides when no objective and no entry targets", () => {

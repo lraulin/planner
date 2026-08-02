@@ -1,6 +1,14 @@
 "use client";
 
-import { useId, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+  useTransition,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import type { PriorityLetter } from "@/db/schema";
 import {
   createMetricEntryAction,
@@ -11,8 +19,17 @@ import {
   updateMetricEntryAction,
 } from "@/app/metrics/actions";
 import { Drawer, DrawerFooter, DrawerHeader } from "@/components/detail/Drawer";
-import { entriesToCsv } from "@/lib/metrics/csv";
-import { shouldShowEntryTargetColumn } from "@/lib/metrics/derive";
+import {
+  entriesToClipboardTsv,
+  entriesToCsv,
+  pickEntriesInOrder,
+} from "@/lib/metrics/csv";
+import {
+  shouldShowEntryTargetColumn,
+  sortEntriesByDate,
+  type EntryDateSort,
+} from "@/lib/metrics/derive";
+import { isTypingTarget } from "@/lib/keyboard";
 import {
   formatMetricNumber,
   localDateKey,
@@ -20,6 +37,7 @@ import {
 } from "@/lib/metrics/parse";
 import type { MetricDetail, MetricEntryView, MetricType } from "@/lib/metrics/types";
 import { METRIC_TYPE_LABELS, METRIC_TYPES } from "@/lib/metrics/types";
+import { writeClipboardText } from "@/lib/tree/copyAsText";
 import type { OutlineNode } from "@/lib/tree/types";
 
 const inputClass =
@@ -118,6 +136,10 @@ function MetricForm({
   const [dirty, setDirty] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
   const [busy, startTransition] = useTransition();
+  /** Newest first by default (matches Achieve and the list Last Value feel). */
+  const [dateSort, setDateSort] = useState<EntryDateSort>("desc");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [selectionAnchor, setSelectionAnchor] = useState<string | null>(null);
 
   // No metric objective (and no imported per-entry targets) → hide Target column.
   // Objective alone is enough for the graph; per-row target is the exception.
@@ -133,6 +155,61 @@ function MetricForm({
       : detail.objectiveTarget != null
         ? formatMetricNumber(detail.objectiveTarget)
         : "—";
+
+  const sortedEntries = useMemo(
+    () => sortEntriesByDate(detail.entries, dateSort),
+    [detail.entries, dateSort],
+  );
+
+  const toggleDateSort = () => {
+    setDateSort((d) => (d === "desc" ? "asc" : "desc"));
+  };
+
+  const selectEntryRow = useCallback(
+    (entryId: string, event: ReactMouseEvent) => {
+      setSelectedIds((prev) => {
+        if (event.shiftKey && selectionAnchor) {
+          const ids = sortedEntries.map((e) => e.id);
+          const a = ids.indexOf(selectionAnchor);
+          const b = ids.indexOf(entryId);
+          if (a >= 0 && b >= 0) {
+            const [lo, hi] = a < b ? [a, b] : [b, a];
+            return new Set(ids.slice(lo, hi + 1));
+          }
+        }
+        if (event.metaKey || event.ctrlKey) {
+          const next = new Set(prev);
+          if (next.has(entryId)) next.delete(entryId);
+          else next.add(entryId);
+          return next;
+        }
+        return new Set([entryId]);
+      });
+      if (!event.shiftKey) setSelectionAnchor(entryId);
+    },
+    [selectionAnchor, sortedEntries],
+  );
+
+  const copySelectedEntries = useCallback(async () => {
+    const rows = pickEntriesInOrder(sortedEntries, selectedIds);
+    if (rows.length === 0) return;
+    const text = entriesToClipboardTsv(rows, { includeTarget: showTargetColumn });
+    await writeClipboardText(text);
+  }, [sortedEntries, selectedIds, showTargetColumn]);
+
+  useEffect(() => {
+    if (tab !== "tracking") return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (isTypingTarget(event.target)) return;
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "c") {
+        if (selectedIds.size === 0) return;
+        event.preventDefault();
+        void copySelectedEntries();
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [tab, selectedIds, copySelectedEntries]);
 
   const reloadDetail = () => {
     startTransition(async () => {
@@ -445,6 +522,15 @@ function MetricForm({
             <div className="mt-2 flex items-center justify-between">
               <h3 className="text-[0.8125rem] font-medium text-ink">Tracking values</h3>
               <div className="flex gap-2">
+                {selectedIds.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => void copySelectedEntries()}
+                    className="rounded border border-rule px-2 py-1 text-[0.75rem] text-ink-muted hover:bg-surface-raised"
+                  >
+                    Copy{selectedIds.size > 1 ? ` (${selectedIds.size})` : ""}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={exportCsv}
@@ -467,7 +553,23 @@ function MetricForm({
               <table className="w-full min-w-[20rem] text-left text-[0.8125rem]">
                 <thead className="bg-surface-raised text-ink-muted">
                   <tr>
-                    <th className="px-2 py-1.5 font-medium">Date</th>
+                    <th className="px-2 py-1.5 font-medium">
+                      <button
+                        type="button"
+                        onClick={toggleDateSort}
+                        className="inline-flex items-center gap-0.5 uppercase tracking-wider hover:text-ink"
+                        title={
+                          dateSort === "desc"
+                            ? "Newest first — click for oldest first"
+                            : "Oldest first — click for newest first"
+                        }
+                      >
+                        Date
+                        <span aria-hidden className="font-normal">
+                          {dateSort === "desc" ? " ↓" : " ↑"}
+                        </span>
+                      </button>
+                    </th>
                     <th className="px-2 py-1.5 font-medium">Type</th>
                     {showTargetColumn && (
                       <th className="px-2 py-1.5 font-medium">Target</th>
@@ -477,7 +579,7 @@ function MetricForm({
                   </tr>
                 </thead>
                 <tbody>
-                  {detail.entries.length === 0 && (
+                  {sortedEntries.length === 0 && (
                     <tr>
                       <td
                         colSpan={targetColSpan}
@@ -487,64 +589,93 @@ function MetricForm({
                       </td>
                     </tr>
                   )}
-                  {detail.entries.map((entry) => (
-                    <tr key={entry.id} className="border-t border-rule">
-                      <td className="px-1 py-0.5">
-                        <input
-                          type="date"
-                          value={entry.entryDate}
-                          onChange={(e) =>
-                            updateEntry(entry, { entryDate: e.target.value })
+                  {sortedEntries.map((entry) => {
+                    const selected = selectedIds.has(entry.id);
+                    return (
+                      <tr
+                        key={entry.id}
+                        className={[
+                          "border-t border-rule",
+                          selected ? "bg-select" : "hover:bg-surface-raised/60",
+                        ].join(" ")}
+                        onClick={(e) => {
+                          // Inputs/buttons handle their own interaction; row click selects.
+                          if ((e.target as HTMLElement).closest("input, button")) {
+                            return;
                           }
-                          className="w-full rounded border border-transparent bg-transparent px-1 py-1 hover:border-rule focus:border-select-edge"
-                        />
-                      </td>
-                      <td className="px-2 py-1 text-ink-muted">New Total</td>
-                      {showTargetColumn && (
+                          selectEntryRow(entry.id, e);
+                        }}
+                      >
+                        <td className="px-1 py-0.5">
+                          <input
+                            type="date"
+                            value={entry.entryDate}
+                            onChange={(e) =>
+                              updateEntry(entry, { entryDate: e.target.value })
+                            }
+                            onFocus={() => {
+                              setSelectedIds(new Set([entry.id]));
+                              setSelectionAnchor(entry.id);
+                            }}
+                            className="w-full rounded border border-transparent bg-transparent px-1 py-1 hover:border-rule focus:border-select-edge"
+                          />
+                        </td>
+                        <td className="px-2 py-1 text-ink-muted">New Total</td>
+                        {showTargetColumn && (
+                          <td className="px-1 py-0.5">
+                            <MetricDecimalCell
+                              committed={entry.target}
+                              allowEmpty
+                              placeholder={objectivePlaceholder}
+                              onCommit={(n) => {
+                                if (n === entry.target) return;
+                                if (n === null && entry.target === null) return;
+                                updateEntry(entry, { target: n });
+                              }}
+                              onFocus={() => {
+                                setSelectedIds(new Set([entry.id]));
+                                setSelectionAnchor(entry.id);
+                              }}
+                            />
+                          </td>
+                        )}
                         <td className="px-1 py-0.5">
                           <MetricDecimalCell
-                            committed={entry.target}
-                            allowEmpty
-                            placeholder={objectivePlaceholder}
+                            committed={entry.value}
+                            allowEmpty={false}
                             onCommit={(n) => {
-                              if (n === entry.target) return;
-                              if (n === null && entry.target === null) return;
-                              updateEntry(entry, { target: n });
+                              if (n === null || n === entry.value) return;
+                              updateEntry(entry, { value: n });
+                            }}
+                            onFocus={() => {
+                              setSelectedIds(new Set([entry.id]));
+                              setSelectionAnchor(entry.id);
                             }}
                           />
                         </td>
-                      )}
-                      <td className="px-1 py-0.5">
-                        <MetricDecimalCell
-                          committed={entry.value}
-                          allowEmpty={false}
-                          onCommit={(n) => {
-                            if (n === null || n === entry.value) return;
-                            updateEntry(entry, { value: n });
-                          }}
-                        />
-                      </td>
-                      <td className="px-1">
-                        <button
-                          type="button"
-                          onClick={() => removeEntry(entry.id)}
-                          className="text-ink-faint hover:text-danger"
-                          aria-label="Delete entry"
-                        >
-                          ×
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                        <td className="px-1">
+                          <button
+                            type="button"
+                            onClick={() => removeEntry(entry.id)}
+                            className="text-ink-faint hover:text-danger"
+                            aria-label="Delete entry"
+                          >
+                            ×
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
-            {showTargetColumn && (
-              <p className="text-[0.6875rem] text-ink-faint">
-                Leave Target blank to use the metric objective on the graph. Override a
-                row only if that day’s target differed.
-              </p>
-            )}
+            <p className="text-[0.6875rem] text-ink-faint">
+              Click Date to sort. Click a row to select; Shift-click for a range,
+              ⌘-click to multi-select; ⌘C copies selected values.
+              {showTargetColumn
+                ? " Leave Target blank to use the metric objective on the graph."
+                : ""}
+            </p>
             <p className="text-[0.75rem] text-ink-muted">
               Current / last value:{" "}
               <span className="font-medium text-ink">
@@ -578,11 +709,13 @@ function MetricDecimalCell({
   onCommit,
   allowEmpty,
   placeholder,
+  onFocus,
 }: {
   committed: number | null;
   onCommit: (n: number | null) => void;
   allowEmpty: boolean;
   placeholder?: string;
+  onFocus?: () => void;
 }) {
   const display = committed != null ? formatMetricNumber(committed) : "";
   const [draft, setDraft] = useState<string | null>(null);
@@ -603,6 +736,7 @@ function MetricDecimalCell({
       value={text}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={finish}
+      onFocus={onFocus}
       onKeyDown={(e) => {
         if (e.key === "Enter") {
           e.preventDefault();

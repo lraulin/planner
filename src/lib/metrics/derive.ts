@@ -1,6 +1,25 @@
 import type { MetricChartPoint, MetricEntryView, MetricType } from "./types";
 import { METRIC_TYPES } from "./types";
 
+/** Date column sort on the tracking grid (default newest-first, like Achieve). */
+export type EntryDateSort = "asc" | "desc";
+
+/**
+ * Sort tracking entries by entryDate, then id for a stable same-day order.
+ * Pure — does not mutate the input.
+ */
+export function sortEntriesByDate<T extends { entryDate: string; id: string }>(
+  entries: ReadonlyArray<T>,
+  direction: EntryDateSort = "desc",
+): T[] {
+  const dir = direction === "asc" ? 1 : -1;
+  return [...entries].sort((a, b) => {
+    const byDate = a.entryDate.localeCompare(b.entryDate);
+    if (byDate !== 0) return byDate * dir;
+    return a.id.localeCompare(b.id) * dir;
+  });
+}
+
 /**
  * Whether the tracking grid should show a Target column.
  * Hidden when the metric has no objective and no entry carries its own target
