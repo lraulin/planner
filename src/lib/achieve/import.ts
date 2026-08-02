@@ -14,7 +14,7 @@ import {
   timeCharts,
 } from "@/db/schema";
 import type { NodeType } from "@/db/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { assertCanNest } from "@/lib/tree/hierarchy";
 import { between } from "@/lib/tree/sortKey";
 import { mapExtras, type AchExtrasMap } from "./mapExtras";
@@ -49,7 +49,9 @@ export type ImportResult = {
  * Parse Achieve Full XML and write outline + calendar/wish/notes extras.
  *
  * - **replace** — deletes this user's outline nodes, appointments, time charts, and notes.
- * - **merge** — appends; may duplicate if the same file is imported twice.
+ * - **merge** — appends after existing siblings (sort keys continue past what is already
+ *   there). May duplicate if the same file is imported twice; external Achieve GUIDs are
+ *   not stored on merge so `*_external_ref_uq` does not block a second append.
  */
 export async function importAchieveXml(params: {
   userId: string;
@@ -85,6 +87,9 @@ export async function writeMappedImport(params: {
 }): Promise<ImportResult> {
   const { userId, mapped, extras, mode } = params;
   const warnings = [...mapped.warnings, ...extras.warnings];
+  // Merge appends; keep Achieve source for provenance but omit stable GUIDs so a second
+  // merge of the same file is not rejected by external_ref unique indexes.
+  const storeExternalId = mode === "replace";
 
   return db.transaction(async (tx) => {
     if (mode === "replace") {
@@ -106,7 +111,9 @@ export async function writeMappedImport(params: {
 
     const remaining = [...mapped.nodes];
     let created = 0;
-    const lastKeyByParent = new Map<string | null, string | null>();
+    // After replace this is empty; on merge it continues past existing siblings so we do
+    // not re-emit "V" (first()) and trip nodes_sibling_sort_key_uq.
+    const lastKeyByParent = await maxSortKeyByParent(tx, nodes, userId);
 
     while (remaining.length > 0) {
       const batch: AchMappedNode[] = [];
@@ -196,7 +203,7 @@ export async function writeMappedImport(params: {
             deferredDate,
             completedAt: n.completedAt,
             externalSource: ACHIEVE_EXTERNAL_SOURCE,
-            externalId: n.achId,
+            externalId: storeExternalId ? n.achId : null,
           })
           .returning({ id: nodes.id });
 
@@ -283,7 +290,14 @@ export async function writeMappedImport(params: {
         .where(and(eq(nodes.id, projectId), eq(nodes.userId, userId)));
     }
 
-    const extraCounts = await writeExtras(tx, userId, idByAch, extras, warnings);
+    const extraCounts = await writeExtras(
+      tx,
+      userId,
+      idByAch,
+      extras,
+      warnings,
+      storeExternalId,
+    );
 
     return {
       created,
@@ -297,12 +311,35 @@ export async function writeMappedImport(params: {
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
+/** Max existing sort key per parent so merge continues after current siblings. */
+async function maxSortKeyByParent(
+  tx: Tx,
+  table: typeof nodes | typeof notes,
+  userId: string,
+): Promise<Map<string | null, string | null>> {
+  const rows = await tx
+    .select({
+      parentId: table.parentId,
+      sortKey: sql<string>`max(${table.sortKey})`.mapWith(String),
+    })
+    .from(table)
+    .where(eq(table.userId, userId))
+    .groupBy(table.parentId);
+
+  const map = new Map<string | null, string | null>();
+  for (const row of rows) {
+    if (row.sortKey) map.set(row.parentId, row.sortKey);
+  }
+  return map;
+}
+
 async function writeExtras(
   tx: Tx,
   userId: string,
   idByAch: Map<string, string>,
   extras: AchExtrasMap,
   warnings: string[],
+  storeExternalId: boolean,
 ): Promise<ImportExtraCounts> {
   let appointmentsN = 0;
   let timeChartsN = 0;
@@ -338,7 +375,7 @@ async function writeExtras(
       notes: a.notes,
       private: a.private,
       externalSource: ACHIEVE_EXTERNAL_SOURCE,
-      externalId: a.achId,
+      externalId: storeExternalId ? a.achId : null,
     });
     appointmentsN++;
   }
@@ -371,8 +408,21 @@ async function writeExtras(
     }
   }
 
-  // Wishes: sort keys per (host, kind)
+  // Wishes: sort keys per (host, kind), continuing past any already on the host.
   const wishKey = new Map<string, string | null>();
+  const existingWishKeys = await tx
+    .select({
+      nodeId: nodeItems.nodeId,
+      kind: nodeItems.kind,
+      sortKey: sql<string>`max(${nodeItems.sortKey})`.mapWith(String),
+    })
+    .from(nodeItems)
+    .where(eq(nodeItems.userId, userId))
+    .groupBy(nodeItems.nodeId, nodeItems.kind);
+  for (const row of existingWishKeys) {
+    if (row.sortKey) wishKey.set(`${row.nodeId}:${row.kind}`, row.sortKey);
+  }
+
   const sortedWishes = [...extras.wishes].sort((a, b) => a.ordinal - b.ordinal);
   for (const w of sortedWishes) {
     let hostId = w.resultAreaAchId ? idByAch.get(w.resultAreaAchId) : undefined;
@@ -402,7 +452,7 @@ async function writeExtras(
   // Notes with parent links
   const noteIdByAch = new Map<string, string>();
   const remainingNotes = [...extras.notes];
-  const lastNoteKey = new Map<string | null, string | null>();
+  const lastNoteKey = await maxSortKeyByParent(tx, notes, userId);
 
   while (remainingNotes.length > 0) {
     const batch = [];
@@ -450,7 +500,13 @@ async function writeExtras(
 
   // Metrics (optional goal owner via Achieve GUID → our node id)
   const metricIdByAch = new Map<string, string>();
-  let metricSortPrev: string | null = null;
+  const [lastMetric] = await tx
+    .select({ sortKey: metrics.sortKey })
+    .from(metrics)
+    .where(eq(metrics.userId, userId))
+    .orderBy(sql`${metrics.sortKey} desc`)
+    .limit(1);
+  let metricSortPrev: string | null = lastMetric?.sortKey ?? null;
   const sortedMetrics = [...extras.metrics].sort((a, b) => a.ordinal - b.ordinal);
   for (const m of sortedMetrics) {
     const ownerNodeId = m.ownerAchId ? (idByAch.get(m.ownerAchId) ?? null) : null;
@@ -482,7 +538,7 @@ async function writeExtras(
             : String(m.objectiveTarget),
         sortKey,
         externalSource: ACHIEVE_EXTERNAL_SOURCE,
-        externalId: m.achId,
+        externalId: storeExternalId ? m.achId : null,
       })
       .returning({ id: metrics.id });
     metricIdByAch.set(m.achId, row.id);
@@ -505,7 +561,7 @@ async function writeExtras(
       target: e.target === null || e.target === undefined ? null : String(e.target),
       value: String(e.value),
       externalSource: ACHIEVE_EXTERNAL_SOURCE,
-      externalId: e.achId,
+      externalId: storeExternalId ? e.achId : null,
     });
     metricEntriesN++;
   }

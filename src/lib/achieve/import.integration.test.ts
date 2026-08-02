@@ -102,6 +102,66 @@ describeDb("importAchieveXml", () => {
     expect(outline.map((n) => n.name)).toEqual(["Only Area"]);
   });
 
+  it("merge appends after an existing outline without sort-key collisions", async () => {
+    // Seed a root the way createNode would (first key is "V") so a naive merge that
+    // restarts at first() would hit nodes_sibling_sort_key_uq.
+    const [existing] = await db
+      .insert(nodes)
+      .values({
+        userId,
+        type: "result_area",
+        name: "Existing Area",
+        sortKey: "V",
+      })
+      .returning({ id: nodes.id });
+    await db.insert(resultAreaDetails).values({ nodeId: existing.id });
+
+    const tiny = `<?xml version="1.0"?>
+<AchieveDB>
+  <ResultAreas>
+    <ResultAreaId>bbbbbbbb-bbbb-cccc-dddd-eeeeeeeeeeee</ResultAreaId>
+    <Name>Career</Name>
+    <Priority>5000</Priority>
+    <__ORDINAL__>0</__ORDINAL__>
+  </ResultAreas>
+</AchieveDB>`;
+
+    const result = await importAchieveXml({ userId, xml: tiny, mode: "merge" });
+    expect(result.created).toBe(1);
+
+    const outline = await loadOutline(userId);
+    expect(outline.map((n) => n.name).sort()).toEqual(["Career", "Existing Area"]);
+
+    const roots = outline.filter((n) => n.parentId === null);
+    const keys = roots.map((n) => n.sortKey);
+    expect(new Set(keys).size).toBe(keys.length);
+    const career = roots.find((n) => n.name === "Career");
+    expect(career).toBeTruthy();
+    expect(career && career.sortKey > "V").toBe(true);
+
+    const [careerRow] = await db
+      .select({
+        externalSource: nodes.externalSource,
+        externalId: nodes.externalId,
+      })
+      .from(nodes)
+      .where(and(eq(nodes.userId, userId), eq(nodes.name, "Career")))
+      .limit(1);
+    expect(careerRow.externalSource).toBe("achieve");
+    // Merge omits stable GUIDs so a later re-append is not blocked by external_ref_uq.
+    expect(careerRow.externalId).toBeNull();
+  });
+
+  it("merge of the same file twice duplicates nodes rather than failing", async () => {
+    await importAchieveXml({ userId, xml: fixture, mode: "replace" });
+    const afterReplace = (await loadOutline(userId)).length;
+    expect(afterReplace).toBeGreaterThan(0);
+
+    const second = await importAchieveXml({ userId, xml: fixture, mode: "merge" });
+    expect(second.created).toBe(afterReplace);
+    expect((await loadOutline(userId)).length).toBe(afterReplace * 2);
+  });
+
   it("does not let user B see user A's imported rows", async () => {
     const userA = userId;
     const userB = await makeUser();
