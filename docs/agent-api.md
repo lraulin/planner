@@ -72,6 +72,9 @@ Codes: `unauthorized` (401), `validation` (400), `not_found` (404), `conflict` (
 | `create_appointment` / `update_appointment` / `delete_appointment`   | Light calendar writes                                                                                       |
 | `ensure_weekly_plan` / `update_weekly_plan` / `load_weekly_plan`     | Weekly plan read/write                                                                                      |
 | `upsert_plan_entry` / `set_focus_area` / `set_weekly_plan_completed` | Wizard-equivalent steps                                                                                     |
+| `list_metrics` / `get_metric`                                        | List metrics (filter by owner/query/active) or load one with recent entries                                 |
+| `create_metric` / `update_metric`                                    | Define or patch a metric (title, units, type, target, optional goal owner)                                  |
+| `log_metric_entry` / `update_metric_entry`                           | Record or correct a tracking value (`entryDate` defaults to today as `YYYY-MM-DD`)                          |
 
 ### Example
 
@@ -157,6 +160,29 @@ from dying in between: it just sends the batch again. `externalId` requires
 id would write a row now and a duplicate row next run, so it is rejected.
 
 Ids are opaque — never parsed, only compared. Two users may hold the same id independently.
+
+### Metrics
+
+List and read first so you have a `metricId`. Log a reading with `log_metric_entry`
+(`value` required; `entryDate` as `YYYY-MM-DD`, defaults to today). Create a definition
+with `create_metric` when none exists.
+
+```sh
+curl -sS -X POST "http://localhost:3047/api/agent/create_metric" \
+  -H "Authorization: Bearer $PLANNER_AGENT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Body weight","units":"lb","metricType":"instance","objectiveTarget":175}'
+```
+
+```sh
+curl -sS -X POST "http://localhost:3047/api/agent/log_metric_entry" \
+  -H "Authorization: Bearer $PLANNER_AGENT_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"metricId":"…","value":182.5,"entryDate":"2026-08-02","target":175}'
+```
+
+`metricType` is `instance` | `cumulative` | `total` (default `total`). Optional
+`ownerNodeId` must be a goal. Second-user isolation matches the rest of the agent API.
 
 ## Agent instructions repo
 

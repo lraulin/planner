@@ -100,9 +100,10 @@ Features that complete or surround the original product, plus making it multi-de
 - **✅ Metric types (Instance / Cumulative / Total).**
   `specs/2026-08-02-1336-metric-types`. Type select on Tracking; Last Value and the
   performance graph interpret entries by type (latest absolute vs sum / running sum).
-  ACHXML maps type codes. Deferred still: auto-target, day contribution targets,
-  auto-increase, metric recurrence/reminders (Status On Schedule / Overdue), graph
-  zoom/print, agent tools.
+  ACHXML maps type codes. Agent tools: `list_metrics` / `get_metric` / `create_metric` /
+  `update_metric` / `log_metric_entry` / `update_metric_entry` on `POST /api/agent/*`.
+  Deferred still: auto-target, day contribution targets, auto-increase, metric
+  recurrence/reminders (Status On Schedule / Overdue), graph zoom/print.
 - **✅ Task Chooser.** `specs/2026-07-30-1858-task-chooser`. `/chooser` ranks every leaf
   task and task-less project by a transparent additive score — inherited priority (L.A.P.)
   plus deadline proximity, target dates, Focus, and result-area importance — with the Score
@@ -317,9 +318,10 @@ core loop is already useful.
 
 - **✅ Near-term (MVP):** Tooling / API / instructions so an **agent can operate the
   planner** — `specs/2026-07-29-1500-ai-interoperability`. Bearer-keyed
-  `POST /api/agent/{tool}` for context, outline mutate, notes, light schedule, and
-  weekly-plan tools; thin **`planner-agent`** instruction repo (skills + `call-tool.sh`)
-  for Grok Build / Claude Code. Prefer summary tools over dumping the tree.
+  `POST /api/agent/{tool}` for context, outline mutate, notes, light schedule,
+  weekly-plan tools, and metrics (list/get/create/update + log entry); thin
+  **`planner-agent`** instruction repo (skills + `call-tool.sh`) for Grok Build /
+  Claude Code. Prefer summary tools over dumping the tree.
 - **Medium-term — MCP + chat clients:** Package the same agent tools as a **remote MCP
   server** (thin wrapper over `POST /api/agent/*`, not a second write path) so Grok web
   (connectors / Bring Your Own MCP), Claude, and other MCP clients can operate the planner

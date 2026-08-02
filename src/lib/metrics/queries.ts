@@ -108,6 +108,27 @@ export async function listMetricsForOwner(
   return all.filter((m) => m.ownerNodeId === ownerNodeId);
 }
 
+/** One tracking entry by id, scoped to the user. */
+export async function getMetricEntry(
+  userId: string,
+  entryId: string,
+): Promise<MetricEntryView | null> {
+  const [row] = await db
+    .select({
+      id: metricEntries.id,
+      metricId: metricEntries.metricId,
+      entryDate: metricEntries.entryDate,
+      entryType: metricEntries.entryType,
+      target: metricEntries.target,
+      value: metricEntries.value,
+    })
+    .from(metricEntries)
+    .where(and(eq(metricEntries.id, entryId), eq(metricEntries.userId, userId)))
+    .limit(1);
+  if (!row) return null;
+  return mapEntry(row);
+}
+
 export async function getMetricDetail(
   userId: string,
   metricId: string,

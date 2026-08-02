@@ -117,3 +117,74 @@ Returns: compact plan + result areas + goals + projects + entries + schedule gla
 ## set_weekly_plan_completed
 
 Args: `{ id, completed: boolean }`
+
+## list_metrics
+
+Args:
+
+```ts
+{
+  ownerNodeId?: string | null; // filter to goal owner (null = standalone only)
+  query?: string;              // case-insensitive match on title/category/question/units/owner
+  activeOnly?: boolean;        // default false
+  limit?: number;              // default 50, max 200
+}
+```
+
+Returns: `{ metrics: MetricListSummary[] }` (id, title, units, metricType, lastValue, lastDate, owner…)
+
+## get_metric
+
+Args: `{ id: string, entryLimit?: number }` (default 30, max 200)  
+Returns: `{ metric }` with recent `entries[]` and `entryCount`
+
+## create_metric
+
+Args:
+
+```ts
+{
+  title?: string;
+  category?: string;
+  question?: string;
+  description?: string;
+  reason?: string;
+  units?: string;
+  active?: boolean;
+  metricType?: "instance" | "cumulative" | "total";
+  priorityLetter?: "A"|"B"|"C"|"D"|null;
+  priorityRank?: number | null;
+  objectiveTarget?: number | null;
+  ownerNodeId?: string | null; // goal id, or null for standalone
+}
+```
+
+Returns: `{ metric }` (same shape as `get_metric`)
+
+## update_metric
+
+Args: `{ id: string, …partial create fields }`  
+Returns: `{ metric }`
+
+## log_metric_entry
+
+Record a tracking value (main “save a reading” tool).
+
+Args:
+
+```ts
+{
+  metricId: string;
+  value: number;
+  entryDate?: string; // YYYY-MM-DD; defaults to today (local)
+  target?: number | null;
+  entryType?: string; // default new_total
+}
+```
+
+Returns: `{ entryId, entryDate, value, metric }`
+
+## update_metric_entry
+
+Args: `{ id: string, entryDate?, value?, target?, entryType? }`  
+Returns: `{ entry, metric }`

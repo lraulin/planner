@@ -342,4 +342,139 @@ describeDb("agent tools", () => {
       code: "not_found",
     });
   });
+
+  it("creates a metric, logs an entry, and lists it", async () => {
+    const area = await createNode({
+      userId,
+      parentId: null,
+      type: "result_area",
+      name: "Health",
+    });
+    const goal = await createNode({
+      userId,
+      parentId: area,
+      type: "goal",
+      name: "Fitness",
+    });
+
+    const created = (await dispatchAgentTool(
+      "create_metric",
+      {
+        title: "Body weight",
+        units: "lb",
+        metricType: "instance",
+        objectiveTarget: 175,
+        ownerNodeId: goal,
+      },
+      userId,
+    )) as {
+      metric: {
+        id: string;
+        title: string;
+        lastValue: number | null;
+        ownerNodeId: string | null;
+      };
+    };
+
+    expect(created.metric.title).toBe("Body weight");
+    expect(created.metric.ownerNodeId).toBe(goal);
+    expect(created.metric.lastValue).toBeNull();
+
+    const logged = (await dispatchAgentTool(
+      "log_metric_entry",
+      {
+        metricId: created.metric.id,
+        value: 182.5,
+        entryDate: "2026-08-02",
+        target: 175,
+      },
+      userId,
+    )) as {
+      entryId: string;
+      entryDate: string;
+      value: number;
+      metric: {
+        lastValue: number | null;
+        lastDate: string | null;
+        entries: { value: number }[];
+      };
+    };
+
+    expect(logged.entryDate).toBe("2026-08-02");
+    expect(logged.value).toBe(182.5);
+    expect(logged.metric.lastValue).toBe(182.5);
+    expect(logged.metric.lastDate).toBe("2026-08-02");
+    expect(logged.metric.entries[0]?.value).toBe(182.5);
+
+    const listed = (await dispatchAgentTool(
+      "list_metrics",
+      { query: "weight" },
+      userId,
+    )) as { metrics: { id: string; lastValue: number | null }[] };
+    expect(listed.metrics.map((m) => m.id)).toContain(created.metric.id);
+    expect(listed.metrics.find((m) => m.id === created.metric.id)?.lastValue).toBe(
+      182.5,
+    );
+
+    const patched = (await dispatchAgentTool(
+      "update_metric_entry",
+      { id: logged.entryId, value: 181 },
+      userId,
+    )) as { entry: { value: number }; metric: { lastValue: number | null } };
+    expect(patched.entry.value).toBe(181);
+    expect(patched.metric.lastValue).toBe(181);
+  });
+
+  it("isolates metrics from a second user", async () => {
+    const created = (await dispatchAgentTool(
+      "create_metric",
+      { title: "Private metric" },
+      userId,
+    )) as { metric: { id: string } };
+
+    await expect(
+      dispatchAgentTool("get_metric", { id: created.metric.id }, otherId),
+    ).rejects.toMatchObject({ code: "not_found" });
+
+    await expect(
+      dispatchAgentTool(
+        "log_metric_entry",
+        { metricId: created.metric.id, value: 1, entryDate: "2026-08-02" },
+        otherId,
+      ),
+    ).rejects.toMatchObject({ code: "not_found" });
+
+    await expect(
+      dispatchAgentTool(
+        "update_metric",
+        { id: created.metric.id, title: "Hijacked" },
+        otherId,
+      ),
+    ).rejects.toMatchObject({ code: "not_found" });
+
+    const otherList = (await dispatchAgentTool("list_metrics", {}, otherId)) as {
+      metrics: { id: string }[];
+    };
+    expect(otherList.metrics.map((m) => m.id)).not.toContain(created.metric.id);
+  });
+
+  it("rejects invalid metric log payloads as validation", async () => {
+    const created = (await dispatchAgentTool(
+      "create_metric",
+      { title: "Mood" },
+      userId,
+    )) as { metric: { id: string } };
+
+    await expect(
+      dispatchAgentTool(
+        "log_metric_entry",
+        { metricId: created.metric.id, value: 5, entryDate: "not-a-date" },
+        userId,
+      ),
+    ).rejects.toMatchObject({ code: "validation" });
+
+    await expect(
+      dispatchAgentTool("log_metric_entry", { metricId: created.metric.id }, userId),
+    ).rejects.toMatchObject({ code: "validation" });
+  });
 });

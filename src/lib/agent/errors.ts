@@ -44,7 +44,9 @@ export function toAgentError(err: unknown): AgentError {
     lower.includes("note not found") ||
     lower.includes("appointment not found") ||
     lower.includes("weekly plan not found") ||
-    lower.includes("time chart not found")
+    lower.includes("time chart not found") ||
+    lower.includes("metric not found") ||
+    lower.includes("metric entry not found")
   ) {
     return new AgentError("not_found", message);
   }
@@ -55,7 +57,10 @@ export function toAgentError(err: unknown): AgentError {
     lower.includes("cannot be moved") ||
     lower.includes("effort is only tracked") ||
     lower.includes("sibling") ||
-    lower.includes("required")
+    lower.includes("required") ||
+    lower.includes("must be") ||
+    lower.includes("finite number") ||
+    lower.includes("yyyy-mm-dd")
   ) {
     return new AgentError("validation", message);
   }
