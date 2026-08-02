@@ -115,6 +115,69 @@ describe("mapOutline", () => {
     expect(goal?.parentAchId).toBe("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
   });
 
+  it("falls back goal name to linked project Name when Title and Definition are empty", () => {
+    // Real Achieve dumps almost never set Goals.Title; the linked project carries the label.
+    const xml = `<?xml version="1.0"?>
+<AchieveDB>
+  <ResultAreas>
+    <ResultAreaId>aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa</ResultAreaId>
+    <Name>Career</Name>
+    <Priority>2500</Priority>
+    <__ORDINAL__>0</__ORDINAL__>
+  </ResultAreas>
+  <Projects>
+    <ProjectId>bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb</ProjectId>
+    <ResultAreaId>aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa</ResultAreaId>
+    <Name>Learn Python</Name>
+    <Priority>1</Priority>
+    <__ORDINAL__>0</__ORDINAL__>
+  </Projects>
+  <Goals>
+    <GoalId>cccccccc-cccc-cccc-cccc-cccccccccccc</GoalId>
+    <ProjectId>bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb</ProjectId>
+    <Priority>100000</Priority>
+    <ProgressReviewSchedule>0</ProgressReviewSchedule>
+    <Scorecard>false</Scorecard>
+    <IsCompleted>false</IsCompleted>
+    <Status>0</Status>
+    <__ORDINAL__>0</__ORDINAL__>
+  </Goals>
+</AchieveDB>`;
+    const mapped = mapOutline(parseAchXml(xml));
+    const goal = mapped.nodes.find((n) => n.type === "goal");
+    expect(goal?.name).toBe("Learn Python");
+    expect(goal?.linkedProjectAchId).toBe("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+  });
+
+  it("prefers Title over Definition over linked project Name for goals", () => {
+    const xml = `<?xml version="1.0"?>
+<AchieveDB>
+  <ResultAreas>
+    <ResultAreaId>aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa</ResultAreaId>
+    <Name>Career</Name>
+    <Priority>2500</Priority>
+    <__ORDINAL__>0</__ORDINAL__>
+  </ResultAreas>
+  <Projects>
+    <ProjectId>bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb</ProjectId>
+    <ResultAreaId>aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa</ResultAreaId>
+    <Name>Project Label</Name>
+    <Priority>1</Priority>
+    <__ORDINAL__>0</__ORDINAL__>
+  </Projects>
+  <Goals>
+    <GoalId>cccccccc-cccc-cccc-cccc-cccccccccccc</GoalId>
+    <ProjectId>bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb</ProjectId>
+    <Title>Explicit Title</Title>
+    <Definition>Definition text</Definition>
+    <Priority>100000</Priority>
+    <__ORDINAL__>0</__ORDINAL__>
+  </Goals>
+</AchieveDB>`;
+    const mapped = mapOutline(parseAchXml(xml));
+    expect(mapped.nodes.find((n) => n.type === "goal")?.name).toBe("Explicit Title");
+  });
+
   it("imports a task that only has ResultAreaId", () => {
     const xml = `<?xml version="1.0"?>
 <AchieveDB>

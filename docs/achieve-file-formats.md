@@ -234,7 +234,9 @@ list (and the tiers below) as a backlog, not a promise.
 - Achieve often links a goal to a **project** via `ProjectId` without nesting either under
   the other. We place the goal under the project’s result area, then **reparent the project
   under the goal** so our RA → goal → project shape holds.
-- Empty `Title` is common; we fall back to `Definition`, then “(Untitled goal)”.
+- Empty `Title` is common (often never written in Full XML). Name resolution order:
+  `Title` → `Definition` → linked project `Name` (`ProjectId`) → “(Untitled goal)”.
+  In real dumps the project name is usually the only populated label.
 - Dreams import as goals with `isDream`.
 
 ### Extras import notes

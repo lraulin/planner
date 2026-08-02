@@ -162,12 +162,18 @@ export function mapOutline(doc: AchDocument): AchOutlineMap {
     );
   }
 
-  // Project → ResultArea for goals that only carry ProjectId.
+  // Project → ResultArea / Name for goals that only carry ProjectId.
+  // Real Achieve dumps almost never fill Goals.Title; the linked project's Name is what
+  // the user sees as the goal title in AP (and is our best import label).
   const projectResultArea = new Map<string, string>();
+  const projectName = new Map<string, string>();
   for (const row of tableRows(doc, "Projects")) {
     const pid = row.ProjectId;
+    if (!pid) continue;
     const ra = emptyToNull(row.ResultAreaId);
-    if (pid && ra) projectResultArea.set(pid, ra);
+    if (ra) projectResultArea.set(pid, ra);
+    const pname = (row.Name ?? "").trim();
+    if (pname) projectName.set(pid, pname);
   }
 
   // Dreams first so goals can parent under them by DreamId.
@@ -233,7 +239,10 @@ export function mapOutline(doc: AchDocument): AchOutlineMap {
       (linkedProject ? (projectResultArea.get(linkedProject) ?? null) : null);
 
     const name =
-      (row.Title ?? "").trim() || (row.Definition ?? "").trim() || "(Untitled goal)";
+      (row.Title ?? "").trim() ||
+      (row.Definition ?? "").trim() ||
+      (linkedProject ? (projectName.get(linkedProject) ?? "") : "") ||
+      "(Untitled goal)";
 
     nodes.push(
       baseNode({
