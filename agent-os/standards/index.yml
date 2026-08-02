@@ -16,6 +16,10 @@ development:
   testing:
     description: What to test and what not to — pure logic and DB mutations yes (always with a cross-user case), React components no; tests as a tripwire against silent breakage rather than a coverage target
 
+product:
+  date-model:
+    description: The four dates on nodes, one shelving concept (postponed + deferred expiry), inheritance, plan-before-availability CHECK, day-line shelf rule, and state↔date coupling
+
 api:
   response-format:
     description: JSON envelope for HTTP APIs — { ok, data } or { ok, error }

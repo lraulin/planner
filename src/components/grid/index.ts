@@ -22,7 +22,7 @@ export {
 export { DataGrid } from "./DataGrid";
 export { ColumnHeaderRow } from "./ColumnHeader";
 export { ShowFieldsDialog } from "./ShowFieldsDialog";
-export { useGridState, useTabView } from "./useGridState";
+export { useGridState, useIncludeDeferred, useTabView } from "./useGridState";
 export { useOptimisticNodes } from "./useOptimisticNodes";
 export { useToday } from "./useToday";
 export {

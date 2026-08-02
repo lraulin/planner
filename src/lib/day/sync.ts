@@ -14,8 +14,15 @@
  *
  * The invariant, maintained here and nowhere else:
  *
- * > A task with a target start date has exactly one open day line, on that date.
- * > A task without one has none.
+ * > A task with a target start date has exactly one open day line, on that date — unless
+ * > that day still falls inside an active shelf (own or inherited). Then it has none.
+ * > A task without a target start has none.
+ *
+ * The shelf rule is deliberately **narrow**: suppress only while the planned day is still
+ * inside the shelf, not whenever the node is postponed. Suppressing on postponement alone
+ * would break "come back on Feb 15, plan for Mar 15" — expiry is derived rather than swept,
+ * so nothing would write on Feb 16 to create the line. An indefinite shelf swallows every
+ * day (its only exit is a state change, always a write).
  *
  * Completed and forwarded rows are untouched — they are history, and history does not move
  * when you change your plans.
@@ -25,15 +32,48 @@
  * wants to be on a day should have a task under it that says what you are actually doing.
  */
 
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { dailyItems, nodes } from "@/db/schema";
 import { toDateKey } from "@/lib/schedule/geometry";
+import { laterShelf, ownShelf, shelfHolds, type Shelf } from "@/lib/tree/shelving";
 import { between } from "@/lib/tree/sortKey";
 
 type Db = typeof db;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 type Executor = Db | Tx;
+
+/**
+ * The effective shelf on a node: its own, combined with every ancestor's, latest wins.
+ * Mirror of the memoized walk in `derive.ts`, for the single-node path mutations take.
+ */
+export async function effectiveShelfOf(
+  tx: Executor,
+  userId: string,
+  nodeId: string,
+): Promise<Shelf | null> {
+  let shelf: Shelf | null = null;
+  let currentId: string | null = nodeId;
+
+  while (currentId) {
+    const [row] = await tx
+      .select({
+        id: nodes.id,
+        parentId: nodes.parentId,
+        state: nodes.state,
+        deferredDate: nodes.deferredDate,
+      })
+      .from(nodes)
+      .where(and(eq(nodes.id, currentId), eq(nodes.userId, userId)))
+      .limit(1);
+
+    if (!row) break;
+    shelf = laterShelf(shelf, ownShelf(row));
+    currentId = row.parentId;
+  }
+
+  return shelf;
+}
 
 /** A sort key placing a new row at the end of `day`. */
 async function endOfDay(tx: Executor, userId: string, day: string): Promise<string> {
@@ -86,10 +126,19 @@ export async function syncDayLineToTargetStart(
     .limit(1);
 
   // A finished task does not belong on a list of things to do, whatever date it carries.
-  const wanted =
+  let wanted: string | null =
     task.state === "completed" || task.state === "cancelled"
       ? null
-      : task.targetStartDate && toDateKey(task.targetStartDate);
+      : task.targetStartDate
+        ? toDateKey(task.targetStartDate)
+        : null;
+
+  // No open line while the day it would sit on is still inside a shelf (own or inherited).
+  // `shelfHolds` with the planned day as "today" is exactly that comparison.
+  if (wanted) {
+    const shelf = await effectiveShelfOf(tx, userId, nodeId);
+    if (shelfHolds(shelf, wanted)) wanted = null;
+  }
 
   if (!wanted) {
     if (open) {
@@ -125,6 +174,100 @@ export async function syncDayLineToTargetStart(
     title: task.name,
     sortKey: await endOfDay(tx, userId, wanted),
   });
+}
+
+/**
+ * After a node is shelved: clear descendant plans that fall *inside* the shelf, and re-sync
+ * their day lines so they disappear.
+ *
+ * Shelving clears conflicting plans; it does not push them. A task planned for Tuesday and
+ * then shelved (via its parent) to November is not *planned for November*. Descendants
+ * planned *after* a dated shelf are left alone — a shelf and a later plan are compatible.
+ * An indefinite shelf has no "after", so every descendant plan goes.
+ *
+ * The node itself is not cleared: "come back on Feb 15; plan for Mar 15" is a coherent setup
+ * on one row, and the CHECK already permits it.
+ */
+export async function clearConflictingDescendantPlans(
+  tx: Executor,
+  userId: string,
+  nodeId: string,
+): Promise<void> {
+  const [shelfNode] = await tx
+    .select({
+      state: nodes.state,
+      deferredDate: nodes.deferredDate,
+    })
+    .from(nodes)
+    .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)))
+    .limit(1);
+
+  // Only a postponed row shelves anything. A deferred date on any other state is residue.
+  if (!shelfNode || shelfNode.state !== "postponed") return;
+
+  const untilKey = shelfNode.deferredDate ? toDateKey(shelfNode.deferredDate) : null;
+
+  // Breadth-first descendants, excluding the shelved node itself.
+  const toClear: string[] = [];
+  let frontier = [nodeId];
+
+  while (frontier.length > 0) {
+    const children = await tx
+      .select({
+        id: nodes.id,
+        targetStartDate: nodes.targetStartDate,
+      })
+      .from(nodes)
+      .where(and(eq(nodes.userId, userId), inArray(nodes.parentId, frontier)));
+
+    frontier = children.map((c) => c.id);
+    for (const child of children) {
+      if (!child.targetStartDate) continue;
+      const startKey = toDateKey(child.targetStartDate);
+      // Indefinite (untilKey null) clears every plan; a date clears only those before it.
+      if (untilKey === null || startKey < untilKey) {
+        toClear.push(child.id);
+      }
+    }
+  }
+
+  if (toClear.length === 0) return;
+
+  await tx
+    .update(nodes)
+    .set({
+      targetStartDate: null,
+      targetEndDate: null,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(nodes.userId, userId), inArray(nodes.id, toClear)));
+
+  for (const id of toClear) {
+    await syncDayLineToTargetStart(tx, userId, id);
+  }
+}
+
+/** Re-sync every task under (and including) `rootId` — used after re-parenting into a shelf. */
+export async function syncDayLinesInSubtree(
+  tx: Executor,
+  userId: string,
+  rootId: string,
+): Promise<void> {
+  const ids = [rootId];
+  let frontier = [rootId];
+
+  while (frontier.length > 0) {
+    const children = await tx
+      .select({ id: nodes.id })
+      .from(nodes)
+      .where(and(eq(nodes.userId, userId), inArray(nodes.parentId, frontier)));
+    frontier = children.map((c) => c.id);
+    ids.push(...frontier);
+  }
+
+  for (const id of ids) {
+    await syncDayLineToTargetStart(tx, userId, id);
+  }
 }
 
 /**

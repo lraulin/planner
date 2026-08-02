@@ -14,7 +14,11 @@ import { addDays, daysBetween, startOfDay } from "@/lib/dateMath";
 import { nextDue } from "@/lib/recurrence/nextDue";
 import { nextOccurrence } from "@/lib/recurrence/pattern";
 import { toDateKey } from "@/lib/schedule/geometry";
-import { syncDayLineToTargetStart } from "@/lib/day/sync";
+import {
+  clearConflictingDescendantPlans,
+  syncDayLineToTargetStart,
+  syncDayLinesInSubtree,
+} from "@/lib/day/sync";
 import { assertCanNest, TYPE_LABELS } from "./hierarchy";
 import { loadOutline } from "./queries";
 import { between } from "./sortKey";
@@ -457,6 +461,12 @@ export async function applyStateTransition(
       .set({ state, completedAt: null, updatedAt: now })
       .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
     await reopenDayLine(tx, userId, nodeId, now);
+    // Shelving clears descendant plans that fall inside the shelf and drops their day lines.
+    // Re-syncing this node itself covers the indefinite case (no open line whatever its plan).
+    if (state === "postponed") {
+      await clearConflictingDescendantPlans(tx, userId, nodeId);
+      await syncDayLineToTargetStart(tx, userId, nodeId);
+    }
     return;
   }
 
@@ -551,6 +561,10 @@ export async function applyStateTransition(
       updatedAt: now,
     })
     .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+
+  // A dated shelf on the routine itself rarely conflicts with its children's plans (they
+  // were just reset), but the rule is the same as any other shelve.
+  await clearConflictingDescendantPlans(tx, userId, nodeId);
 
   await tx
     .update(taskDetails)
@@ -764,6 +778,8 @@ export async function skipRecurrence(userId: string, nodeId: string): Promise<vo
       .set({ ...dates.node, state: "postponed", updatedAt: now })
       .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
 
+    await clearConflictingDescendantPlans(tx, userId, nodeId);
+
     await tx.update(taskDetails).set(dates.task).where(eq(taskDetails.nodeId, nodeId));
 
     // Skipping moves the target start, so the open day line follows it — the same rule a
@@ -934,6 +950,11 @@ export async function moveNode(params: {
         await applyCategoryToResultAreaSubtree(tx, userId, nodeId, category);
       }
     }
+
+    // Re-parenting under a shelved project (or out of one) can change whether a plan's day
+    // still falls inside an active shelf. Day lines follow the effective shelf, not only the
+    // row's own dates — so re-sync the whole moved subtree.
+    await syncDayLinesInSubtree(tx, userId, nodeId);
   });
 }
 

@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { dailyItems, nodes, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { toDateKey } from "@/lib/schedule/geometry";
-import { createNode, setState } from "@/lib/tree/mutations";
+import { createNode, moveNode, setState } from "@/lib/tree/mutations";
 import { saveNodeDetail } from "@/lib/detail/mutations";
 import {
   createDailyItem,
@@ -720,6 +720,166 @@ describeDb("week view and journal", () => {
 
     expect((await loadDay(userId, MON, WED)).journal?.body).toBe("Monday");
     expect((await loadDay(userId, TUE, WED)).journal?.body).toBe("Tuesday");
+  });
+});
+
+/**
+ * Shelving and day lines. The deferred-date model makes postponement and deferral one
+ * concept; these pin the day-page consequences that are easy to get subtly wrong.
+ */
+describeDb("shelving and day lines", () => {
+  let userId: string;
+
+  beforeEach(async () => {
+    userId = await makeUser();
+  });
+
+  it("keeps a later plan while deferred earlier — the shelf does not swallow it", async () => {
+    // The case that forbids "postponed ⇒ no day line". Expiry is derived, so nothing writes
+    // on the morning the shelf ends; the later plan's line has to exist the whole time.
+    // Local midnights, matching how `setDayPlan` writes dates. Both dates must be in the
+    // future — a deferred date already past shelves nothing.
+    const nodeId = await makeTask(userId, "Pay the estimated tax");
+    await saveNodeDetail(userId, nodeId, {
+      deferredDate: new Date("2026-10-15T00:00:00"),
+      targetStartDate: new Date("2026-11-15T00:00:00"),
+    });
+
+    expect(await plannedDayForNode(userId, nodeId)).toBe("2026-11-15");
+    const [row] = await db.select().from(nodes).where(eq(nodes.id, nodeId));
+    expect(row.state).toBe("postponed");
+  });
+
+  it("suppresses every open day line under an indefinite shelf", async () => {
+    const nodeId = await makeTask(userId, "Someday maybe");
+    await planNodeForDay(userId, nodeId, MON);
+    expect(await plannedDayForNode(userId, nodeId)).toBe(MON);
+
+    await setState(userId, nodeId, "postponed");
+
+    expect(await plannedDayForNode(userId, nodeId)).toBeNull();
+    // The plan itself stays: un-shelving should be able to put the line back.
+    const [row] = await db.select().from(nodes).where(eq(nodes.id, nodeId));
+    expect(row.targetStartDate).not.toBeNull();
+  });
+
+  it("clears descendant plans that fall inside a dated shelf, leaves later ones alone", async () => {
+    const projectId = await createNode({
+      userId,
+      parentId: null,
+      type: "project",
+      name: "Pay Taxes",
+    });
+    const early = await createNode({
+      userId,
+      parentId: projectId,
+      type: "task",
+      name: "Gather receipts",
+    });
+    const late = await createNode({
+      userId,
+      parentId: projectId,
+      type: "task",
+      name: "File in September",
+    });
+    // MON is 2026-07-27; shelf through mid-August clears it, leaves September alone.
+    await planNodeForDay(userId, early, MON);
+    await planNodeForDay(userId, late, "2026-09-15");
+
+    await saveNodeDetail(userId, projectId, {
+      name: "Pay Taxes",
+      deferredDate: new Date("2026-08-15T00:00:00"),
+    });
+
+    expect(await plannedDayForNode(userId, early)).toBeNull();
+    const [earlyRow] = await db.select().from(nodes).where(eq(nodes.id, early));
+    expect(earlyRow.targetStartDate).toBeNull();
+
+    expect(await plannedDayForNode(userId, late)).toBe("2026-09-15");
+    const [lateRow] = await db.select().from(nodes).where(eq(nodes.id, late));
+    expect(toDateKey(lateRow.targetStartDate!)).toBe("2026-09-15");
+  });
+
+  it("hides a task's day line when it is re-parented under a shelved project", async () => {
+    const shelved = await createNode({
+      userId,
+      parentId: null,
+      type: "project",
+      name: "Someday",
+    });
+    await setState(userId, shelved, "postponed");
+
+    const open = await createNode({
+      userId,
+      parentId: null,
+      type: "project",
+      name: "Active",
+    });
+    const task = await createNode({
+      userId,
+      parentId: open,
+      type: "task",
+      name: "Do the thing",
+    });
+    await planNodeForDay(userId, task, MON);
+    expect(await plannedDayForNode(userId, task)).toBe(MON);
+
+    await moveNode({
+      userId,
+      nodeId: task,
+      parentId: shelved,
+      position: { at: "last" },
+    });
+
+    expect(await plannedDayForNode(userId, task)).toBeNull();
+  });
+
+  it("does not forward a line whose task is still under a shelf", async () => {
+    // Indefinite shelf with a stale open line left behind (the shape re-parenting or a
+    // missed sync can leave). The unattended forward must not re-plan it for today.
+    const nodeId = await makeTask(userId, "Wait until next month");
+    await setState(userId, nodeId, "postponed");
+    await db.insert(dailyItems).values({
+      userId,
+      nodeId,
+      day: MON,
+      title: "Wait until next month",
+      sortKey: "a0",
+    });
+
+    expect(await forwardOpenItems(userId, WED)).toBe(0);
+    const [item] = await db
+      .select()
+      .from(dailyItems)
+      .where(and(eq(dailyItems.userId, userId), eq(dailyItems.nodeId, nodeId)));
+    expect(item.forwardedTo).toBeNull();
+    expect(item.day).toBe(MON);
+  });
+
+  it("scopes shelving cleanup by user", async () => {
+    const intruder = await makeUser();
+    const projectId = await createNode({
+      userId,
+      parentId: null,
+      type: "project",
+      name: "Mine",
+    });
+    const task = await createNode({
+      userId,
+      parentId: projectId,
+      type: "task",
+      name: "Child",
+    });
+    await planNodeForDay(userId, task, MON);
+
+    await expect(
+      saveNodeDetail(intruder, projectId, {
+        name: "Stolen",
+        deferredDate: new Date("2027-01-01T00:00:00Z"),
+      }),
+    ).rejects.toThrow();
+
+    expect(await plannedDayForNode(userId, task)).toBe(MON);
   });
 });
 

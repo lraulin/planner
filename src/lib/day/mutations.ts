@@ -12,7 +12,8 @@ import { toDateKey } from "@/lib/schedule/geometry";
 import { applyStateTransition, createNode } from "@/lib/tree/mutations";
 import { between } from "@/lib/tree/sortKey";
 import { itemsToForward } from "./forward";
-import { setDayPlan } from "./sync";
+import { effectiveShelfOf, setDayPlan } from "./sync";
+import { shelfHolds } from "@/lib/tree/shelving";
 import { JOURNAL_SUBJECT } from "./types";
 import type { DayAssignment } from "./priority";
 
@@ -370,10 +371,26 @@ export async function forwardOpenItems(
 
   const rows = candidates.filter((row) => moving.has(row.id));
 
+  let moved = 0;
+
   await db.transaction(async (tx) => {
+    // Drop anything whose effective shelf still holds today — own shelf or an ancestor's.
+    // Forwarding would re-plan it for today, which both hides nothing (still shelved) and
+    // can trip `nodes_start_not_before_deferred` when the shelf is dated past today. This
+    // runs unattended, so a rejection here would take the whole forward down with it.
+    const rowsToMove: typeof rows = [];
+    for (const row of rows) {
+      if (row.nodeId) {
+        const shelf = await effectiveShelfOf(tx, userId, row.nodeId);
+        if (shelfHolds(shelf, today)) continue;
+      }
+      rowsToMove.push(row);
+    }
+    if (rowsToMove.length === 0) return;
+
     let sortKey = await endOfDay(tx, userId, today);
 
-    for (const row of rows) {
+    for (const row of rowsToMove) {
       await tx
         .update(dailyItems)
         .set({ forwardedTo: today, updatedAt: new Date() })
@@ -393,29 +410,23 @@ export async function forwardOpenItems(
       // with it — the one place a start date you sailed past gets bumped, which is how a
       // task you meant to begin on Tuesday is still in front of you on Thursday rather
       // than stranded on Tuesday's page.
-      // Not for a node that is shelved past today: bumping its start to today would put a
-      // plan before its availability, which `nodes_start_not_before_deferred` rejects — and
-      // this runs unattended, so a rejection here would take the whole forward down with it.
-      // Compared as UTC calendar days, matching `isDeferred`.
       if (row.nodeId) {
         const date = new Date(`${today}T00:00:00`);
         await tx
           .update(nodes)
           .set({ targetStartDate: date, targetEndDate: date, updatedAt: new Date() })
-          .where(
-            and(
-              eq(nodes.id, row.nodeId),
-              eq(nodes.userId, userId),
-              sql`(${nodes.deferredDate} is null or (${nodes.deferredDate} at time zone 'UTC')::date <= ${today}::date)`,
-            ),
-          );
+          .where(and(eq(nodes.id, row.nodeId), eq(nodes.userId, userId)));
       }
 
       sortKey = between(sortKey, null);
     }
+
+    moved = rowsToMove.length;
   });
 
-  return rows.length;
+  // Shelved rows stay on their old day until the shelf expires (and a later open of the
+  // day page re-runs the forward).
+  return moved;
 }
 
 /**

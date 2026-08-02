@@ -7,7 +7,11 @@ import { formatEffort, formatPriority } from "@/lib/tree/format";
 import { scheduleStatus, STATUS_LABELS } from "@/lib/tree/status";
 import type { ColumnDef } from "@/components/grid/columns";
 import { DataGrid } from "@/components/grid/DataGrid";
-import { useGridState, useTabView } from "@/components/grid/useGridState";
+import {
+  useGridState,
+  useIncludeDeferred,
+  useTabView,
+} from "@/components/grid/useGridState";
 import { ShowFieldsDialog } from "@/components/grid/ShowFieldsDialog";
 import {
   abbrStateColumn,
@@ -239,7 +243,7 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
   const [scopeId, setScopeId] = useState<string>("");
   const [groups, setGroups] = useState(true);
   const [includeGoals, setIncludeGoals] = useState(false);
-  const [includeDeferred, setIncludeDeferred] = useState(false);
+  const [includeDeferred, setIncludeDeferred] = useIncludeDeferred("projects");
   const [showFields, setShowFields] = useState(false);
 
   const resultAreas = useMemo(
@@ -310,8 +314,8 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
         />
         <ToolbarToggle
           checked={includeDeferred}
-          onChange={() => setIncludeDeferred((v) => !v)}
-          label="Deferred"
+          onChange={() => setIncludeDeferred(!includeDeferred)}
+          label="Postponed"
         />
         <ToolbarButton onClick={() => setShowFields(true)}>Show Fields</ToolbarButton>
         <ToolbarButton

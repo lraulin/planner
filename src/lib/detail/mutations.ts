@@ -9,7 +9,10 @@ import {
 } from "@/db/schema";
 import type { NodeItemKind } from "@/db/schema";
 import { and, asc, eq } from "drizzle-orm";
-import { syncDayLineToTargetStart } from "@/lib/day/sync";
+import {
+  clearConflictingDescendantPlans,
+  syncDayLineToTargetStart,
+} from "@/lib/day/sync";
 import { applyStateTransition } from "@/lib/tree/mutations";
 import { toDateKey } from "@/lib/schedule/geometry";
 import { stateFromDates } from "./stateFromDates";
@@ -237,6 +240,7 @@ async function requireNode(tx: Executor, userId: string, nodeId: string) {
       type: nodes.type,
       state: nodes.state,
       deferredDate: nodes.deferredDate,
+      targetStartDate: nodes.targetStartDate,
     })
     .from(nodes)
     .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)))
@@ -296,10 +300,25 @@ export async function saveNodeDetail(
         : undefined;
 
     const core = pick(values, CORE_KEYS);
+
+    // A plan may not precede availability (`nodes_start_not_before_deferred`). Setting a
+    // deferred date past an existing target start would trip the constraint; clear the plan
+    // rather than fail the save — same principle as clearing conflicting descendant plans.
+    // A plan *after* the shelf is left alone: "come back Feb 15, start Mar 15" is legal.
+    const nextDeferred =
+      core.deferredDate !== undefined ? core.deferredDate : node.deferredDate;
+    const nextStart =
+      core.targetStartDate !== undefined ? core.targetStartDate : node.targetStartDate;
+    const planPrecedesShelf =
+      nextDeferred != null &&
+      nextStart != null &&
+      toDateKey(nextStart) < toDateKey(nextDeferred);
+
     await tx
       .update(nodes)
       .set({
         ...core,
+        ...(planPrecedesShelf ? { targetStartDate: null, targetEndDate: null } : {}),
         // Shelving something whose deferred date has already gone by would un-shelve it the
         // instant it was shelved, since expiry is derived. Choosing Postponed by hand means
         // an indefinite shelf, so the stale date goes.
@@ -397,11 +416,26 @@ export async function saveNodeDetail(
       );
     }
 
+    // A deferred-date change on a row that is (or just became) postponed may newly conflict
+    // with descendant plans. `applyStateTransition` already cleans up when the *state*
+    // flips to postponed; this covers moving the date on an already-shelved node, and the
+    // pure date→state path above where the transition ran without an explicit state write
+    // having cleared descendants under the *new* date yet (transition does, but only after
+    // the state column is postponed — which it is by then).
+    const becameOrStayedShelved =
+      transition?.state === "postponed" ||
+      ("state" in core && core.state === "postponed") ||
+      (node.state === "postponed" && core.deferredDate !== undefined);
+    if (becameOrStayedShelved) {
+      await clearConflictingDescendantPlans(tx, userId, nodeId);
+    }
+
     // Last of all, and after the transition, which may have moved the date itself. Target
     // start is where a task says which day it belongs on, so its day line follows — see
     // `src/lib/day/sync.ts`. Cheap and idempotent, so it runs on any task save rather than
-    // trying to work out whether this particular one touched the date.
-    if (node.type === "task") {
+    // trying to work out whether this particular one touched the date. Also re-syncs when a
+    // project shelves and the cleanup above cleared child plans.
+    if (node.type === "task" || becameOrStayedShelved) {
       await syncDayLineToTargetStart(tx, userId, nodeId);
     }
   });

@@ -78,6 +78,24 @@ export function useTabView<T extends string>(
   return [view, setView] as const;
 }
 
+/**
+ * Whether postponed rows show in a Tasks/Projects-style grid. Lives on the **tab** scope
+ * (`grid:tasks`), not the per-view scope — one toggle covers every sub-view, and it must
+ * survive a reload. Defaults to showing (see `DEFAULT_GRID_SETTINGS.includeDeferred`).
+ */
+export function useIncludeDeferred(tabId: string) {
+  const { value, patch } = useSetting(gridScope(tabId), CODEC);
+
+  const setIncludeDeferred = useCallback(
+    (next: boolean) => {
+      patch((current) => ({ ...current, includeDeferred: next }));
+    },
+    [patch],
+  );
+
+  return [value.includeDeferred, setIncludeDeferred] as const;
+}
+
 export function useGridState<TCol extends ColumnMeta>(
   tabId: string,
   allColumns: TCol[],

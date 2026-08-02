@@ -136,6 +136,14 @@ Features that complete or surround the original product, plus making it multi-de
   they left, and nothing on a daily list can read as Overdue. This is what replaces the old
   "Today Project" workaround, which bent three Achieve concepts to fake a daily ABC list.
   Deferred: Big Rocks, a weekly-wizard step, an auto-forward toggle, agent API tools.
+- **✅ Deferred-date model.** `specs/2026-08-01-2145-deferred-date-model`. One shelving
+  concept: `postponed` is the state, `deferred_date` is its optional expiry — replacing two
+  overlapping hide rules that disagreed. Scheduling dates (`target_start`, `target_end`,
+  `deferred`) live on `nodes` so projects can be shelved; a CHECK forbids a plan before
+  availability; shelving inherits down the tree at read time; day lines suppress only while
+  the planned day falls inside the shelf; state and dates couple both ways (including
+  backdated completions). Grids' "Postponed" toggle defaults to showing and is persisted.
+  Follow-ups: grid states-list like the Chooser; project recurrence.
 - Any remaining Achieve chrome that earns its keep.
 - **Pomodoro → time tracking.** Effort, Effort Left, Actual Effort, and % complete
   already live on tasks (and roll up); what’s missing is a way to _earn_ those numbers

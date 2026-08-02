@@ -7,7 +7,11 @@ import { formatEffort, formatPriority } from "@/lib/tree/format";
 import { scheduleStatus, STATUS_LABELS } from "@/lib/tree/status";
 import type { ColumnDef } from "@/components/grid/columns";
 import { DataGrid } from "@/components/grid/DataGrid";
-import { useGridState, useTabView } from "@/components/grid/useGridState";
+import {
+  useGridState,
+  useIncludeDeferred,
+  useTabView,
+} from "@/components/grid/useGridState";
 import { ShowFieldsDialog } from "@/components/grid/ShowFieldsDialog";
 import {
   abbrStateColumn,
@@ -138,7 +142,7 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const [view, setView] = useTabView("tasks", VIEW_IDS, "active-status");
   const [scopeId, setScopeId] = useState<string>("");
   const [groupByArea, setGroupByArea] = useState(false);
-  const [includeDeferred, setIncludeDeferred] = useState(false);
+  const [includeDeferred, setIncludeDeferred] = useIncludeDeferred("tasks");
   const [showPurpose, setShowPurpose] = useState(false);
   const [showFields, setShowFields] = useState(false);
 
@@ -211,8 +215,8 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         />
         <ToolbarToggle
           checked={includeDeferred}
-          onChange={() => setIncludeDeferred((v) => !v)}
-          label="Deferred"
+          onChange={() => setIncludeDeferred(!includeDeferred)}
+          label="Postponed"
         />
         <ToolbarToggle
           checked={showPurpose}

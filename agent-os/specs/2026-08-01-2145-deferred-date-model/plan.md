@@ -1,6 +1,6 @@
 # The deferred-date model
 
-**Status: active**
+**Status: frozen / complete (2026-08-01)**
 Spec folder: `agent-os/specs/2026-08-01-2145-deferred-date-model/`
 Delta on: `agent-os/specs/2026-08-01-2030-start-date-is-the-plan/` (frozen),
 `agent-os/specs/2026-07-31-0834-task-recurrence/` (frozen)
@@ -114,36 +114,42 @@ td.target_start_date)`, queries.ts:53), so storage comes to match the read model
 
 ## Acceptance criteria
 
-- [ ] A project can be postponed, with or without a date; it and its whole subtree leave the
+- [x] A project can be postponed, with or without a date; it and its whole subtree leave the
       Chooser, including a task-less project that was previously unfilterable.
-- [ ] A postponed node whose deferred date has passed reads as not-started everywhere, with no
+- [x] A postponed node whose deferred date has passed reads as not-started everywhere, with no
       background job having run.
-- [ ] Clearing a deferred date leaves the node postponed; changing the state un-shelves it.
-- [ ] A child shelved further out than its shelved parent keeps its own later date; an
+- [x] Clearing a deferred date leaves the node postponed; changing the state un-shelves it.
+- [x] A child shelved further out than its shelved parent keeps its own later date; an
       indefinitely-postponed ancestor outranks any dated descendant.
-- [ ] A completed task under a postponed project still reads completed.
-- [ ] Setting an actual start date on a not-started task sets it in progress; setting a
+- [x] A completed task under a postponed project still reads completed.
+- [x] Setting an actual start date on a not-started task sets it in progress; setting a
       completed date completes it and writes history at _that_ date, not now.
-- [ ] The database rejects a target start before the deferred date on the same row.
-- [ ] Shelving a project clears the target start of descendants planned before the date and
+- [x] The database rejects a target start before the deferred date on the same row.
+- [x] Shelving a project clears the target start of descendants planned before the date and
       their open day lines disappear; descendants planned after it are untouched.
-- [ ] A node deferred to Feb, planned for Mar and due Apr keeps its Mar day line throughout,
-      and that line is still there after the shelf expires with nothing having written to it.
-- [ ] An indefinitely-postponed node has no open day line whatever its target start; the line
+- [x] A node deferred earlier, planned later keeps its day line throughout (narrow shelf
+      rule on `syncDayLineToTargetStart`), with nothing needing to write when the shelf ends.
+- [x] An indefinitely-postponed node has no open day line whatever its target start; the line
       returns when its state changes.
-- [ ] Re-parenting a task under a shelved project leaves it with no open day line while the
+- [x] Re-parenting a task under a shelved project leaves it with no open day line while the
       day it would sit on falls inside the shelf.
-- [ ] The grids' "Show deferred" toggle survives a reload and defaults to showing.
-- [ ] A second user cannot read, change or delete the first user's states or dates.
+- [x] The grids' "Postponed" toggle survives a reload and defaults to showing.
+- [x] A second user cannot read, change or delete the first user's states or dates.
+
+### Follow-ups (new work, not open edits to this frozen spec)
+
+- Replace the grids' `includeDeferred` boolean with the Chooser's states list.
+- Project recurrence (unblocked by moving `deferred_date` onto `nodes`).
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure code
 polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                              | Why                                                                                           |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| 1   | Setting a deferred date past an existing own target start **clears the plan** on the detail save path rather than failing the CHECK | Same principle as descendant cleanup; a raw constraint error is not something to show on Save |
+| 2   | Grids' toggle relabelled **Postponed** (not Deferred) and defaults to **showing**                                                   | One concept; default-hidden would empty Tasks of every routine between cycles                 |
 
 ## Task 1: Save spec documentation
 

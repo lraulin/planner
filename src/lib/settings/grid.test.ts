@@ -29,9 +29,18 @@ describe("parseGridSettings", () => {
       sort: { columnId: "deadline", direction: "desc" as const },
       collapsedGroups: ["area:health"],
       view: "active-status",
+      includeDeferred: false,
     };
 
     expect(parseGridSettings(serializeGridSettings(settings))).toEqual(settings);
+  });
+
+  it("defaults includeDeferred to showing when absent", () => {
+    // Old blobs, and any tab that never toggled it, must show postponed rows. Defaulting
+    // to hidden would make every routine vanish from Tasks the moment it was ticked.
+    expect(parseGridSettings({}).includeDeferred).toBe(true);
+    expect(parseGridSettings({ includeDeferred: "nope" }).includeDeferred).toBe(true);
+    expect(parseGridSettings({ includeDeferred: false }).includeDeferred).toBe(false);
   });
 
   it("distinguishes an absent column order from an empty one", () => {

@@ -33,6 +33,12 @@ export type GridSettings = {
   collapsedGroups: string[];
   /** Sub-view / scope picker selection, or null to follow the tab's default. */
   view: string | null;
+  /**
+   * Whether postponed / deferred rows appear in the Tasks and Projects grids.
+   * Defaults to **showing** them: the hidden set now includes every routine between
+   * cycles, so default-hidden would make a task vanish the moment you tick it.
+   */
+  includeDeferred: boolean;
 };
 
 export const DEFAULT_GRID_SETTINGS: GridSettings = {
@@ -42,6 +48,7 @@ export const DEFAULT_GRID_SETTINGS: GridSettings = {
   sort: null,
   collapsedGroups: [],
   view: null,
+  includeDeferred: true,
 };
 
 /**
@@ -72,6 +79,10 @@ export function parseGridSettings(value: unknown): GridSettings {
     sort: parseSort(record.sort),
     collapsedGroups: asStringArray(record.collapsedGroups, []),
     view: typeof record.view === "string" ? record.view : null,
+    // Absent or garbage → show. Hiding is the deliberate choice; an old blob without the
+    // field must not suddenly empty the grid of every routine between cycles.
+    includeDeferred:
+      typeof record.includeDeferred === "boolean" ? record.includeDeferred : true,
   };
 }
 
