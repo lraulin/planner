@@ -80,7 +80,7 @@ export function ChooserGrid({
   const { settings, update, reset } = useChooserSettings(viewId);
   const view = chooserView(viewId);
 
-  const allColumns = useMemo(() => buildChooserColumns(), []);
+  const allColumns = useMemo(() => buildChooserColumns(tab.today), [tab.today]);
   const gridState = useGridState(
     `chooser.${viewId}`,
     allColumns,

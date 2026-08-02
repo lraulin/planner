@@ -4,6 +4,7 @@ import type {
   PriorityLetter,
   RecurrenceFrequency,
 } from "@/db/schema";
+import type { Shelf } from "./shelving";
 
 /** One row as loaded from the database, before derived values are computed. */
 export type OutlineRow = {
@@ -89,6 +90,14 @@ export type OutlineNode = OutlineRow & {
   hasChildren: boolean;
   /** True when an ancestor is collapsed, so the row should not render. */
   hidden: boolean;
+  /**
+   * The shelf holding this row, its own or inherited from an ancestor — see
+   * `src/lib/tree/shelving.ts`. Null when nothing shelves it.
+   *
+   * Not yet expired: whether the shelf still holds is a question about *today*, which the
+   * reader supplies. Use `shelfHolds` / `effectiveState` rather than reading it raw.
+   */
+  shelf: Shelf | null;
 };
 
 /** Where a node goes among its new siblings. */

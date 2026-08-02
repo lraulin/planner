@@ -44,6 +44,7 @@ describe("sliceTree — keep and scope", () => {
     const rows = sliceTree(sample, {
       keep: projectsOnly,
       includeDeferred: true,
+      today: null,
     });
     expect(nodeIds(rows)).toEqual(["p1", "p1a", "p2"]);
   });
@@ -53,6 +54,7 @@ describe("sliceTree — keep and scope", () => {
       keep: projectsOnly,
       scopeId: "ra1",
       includeDeferred: true,
+      today: null,
     });
     expect(nodeIds(rows)).toEqual(["p1", "p1a"]);
   });
@@ -62,6 +64,7 @@ describe("sliceTree — keep and scope", () => {
       keep: tasksOnly,
       scopeId: "p1",
       includeDeferred: true,
+      today: null,
     });
     expect(nodeIds(rows)).toEqual(["t1"]);
   });
@@ -80,11 +83,23 @@ describe("sliceTree — keep and scope", () => {
     );
 
     expect(
-      nodeIds(sliceTree(withDeferred, { keep: projectsOnly, includeDeferred: false })),
+      nodeIds(
+        sliceTree(withDeferred, {
+          keep: projectsOnly,
+          includeDeferred: false,
+          today: null,
+        }),
+      ),
     ).toEqual(["active"]);
 
     expect(
-      nodeIds(sliceTree(withDeferred, { keep: projectsOnly, includeDeferred: true })),
+      nodeIds(
+        sliceTree(withDeferred, {
+          keep: projectsOnly,
+          includeDeferred: true,
+          today: null,
+        }),
+      ),
     ).toEqual(["active", "parked"]);
   });
 });
@@ -100,6 +115,7 @@ describe("sliceTree — re-based depth", () => {
     const rows = sliceTree(nodes, {
       keep: projectsOnly,
       includeDeferred: true,
+      today: null,
     });
 
     expect(rows).toHaveLength(1);
@@ -117,6 +133,7 @@ describe("sliceTree — re-based depth", () => {
     const rows = sliceTree(nodes, {
       keep: projectsOnly,
       includeDeferred: true,
+      today: null,
     });
 
     expect(rows.map((r) => (r.kind === "node" ? [r.id, r.depth] : null))).toEqual([
@@ -136,6 +153,7 @@ describe("sliceTree — re-based depth", () => {
     const rows = sliceTree(nodes, {
       keep: projectsAndGoals,
       includeDeferred: true,
+      today: null,
     });
 
     expect(rows.map((r) => (r.kind === "node" ? [r.id, r.depth] : null))).toEqual([
@@ -163,6 +181,7 @@ describe("sliceTree — inherited context", () => {
     const [row] = sliceTree(nodes, {
       keep: projectsOnly,
       includeDeferred: true,
+      today: null,
     });
 
     expect(row.kind).toBe("node");
@@ -188,6 +207,7 @@ describe("sliceTree — inherited context", () => {
     const [row] = sliceTree(nodes, {
       keep: projectsOnly,
       includeDeferred: true,
+      today: null,
     });
     if (row.kind !== "node") throw new Error("expected node");
     expect(row.context?.goalId).toBe("inner");
@@ -226,6 +246,7 @@ describe("sliceTree — group headers", () => {
       keep: projectsOnly,
       groupBy: ["category", "resultArea"],
       includeDeferred: true,
+      today: null,
     });
 
     expect(groups(rows).map((g) => [g.label, g.count, g.depth])).toEqual([
@@ -257,6 +278,7 @@ describe("sliceTree — group headers", () => {
       keep: (n) => n.type === "goal",
       groupBy: ["resultArea"],
       includeDeferred: true,
+      today: null,
     });
 
     expect(groups(rows).map((g) => [g.label, g.count])).toEqual([
@@ -275,6 +297,7 @@ describe("sliceTree — group headers", () => {
       keep: projectsOnly,
       groupBy: ["category"],
       includeDeferred: true,
+      today: null,
     });
 
     expect(groups(rows)[0].label).toBe("(No Category)");
@@ -286,6 +309,7 @@ describe("sliceTree — group headers", () => {
       keep: projectsOnly,
       groupBy: ["category"],
       includeDeferred: true,
+      today: null,
     });
     for (const g of groups(rows)) {
       expect(g.collapsed).toBe(false);

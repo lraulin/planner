@@ -1,7 +1,7 @@
 import type { NodeState } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { GridRow } from "@/lib/tree/slice";
-import { isDeferred } from "@/lib/recurrence/nextDue";
+import { effectiveState } from "@/lib/tree/shelving";
 import { dayString, daysBetween, effectiveDeadline } from "./dates";
 import { DEFAULT_WEIGHTS, scoreItem, type ChooserWeights } from "./score";
 import { compareTcPriority, TC_LETTERS } from "./tcPriority";
@@ -226,18 +226,19 @@ export function defaultSettings(id: ChooserViewId): ChooserSettings {
  * real choices. Zero-effort "next action reminder" tasks (§7.2.5) stay in: they are
  * visible in Achieve's own screenshot, and a reminder is still a thing you can pick.
  *
- * A task **deferred to a future date** is also out — that is the whole meaning of the
- * field, and it is how a repeating routine stays off this list between cycles without
- * pretending to have a deadline. The rule applies to any deferred task, not just
- * recurring ones, so setting Deferred until by hand finally does something.
+ * **Shelved work is out**, and there is now one rule for it rather than two. The states list
+ * already decided what you see, and `postponed` is off by default in every view; feeding it
+ * the *effective* state means a deferred date, an indefinite shelf, and a shelf inherited
+ * from an ancestor all take the same route. That last one is why a task-less "Pay Taxes"
+ * project can finally be got rid of until February, and it is how a repeating routine stays
+ * off this list between cycles without pretending to have a deadline.
  */
 export function isChooserCandidate(
   node: OutlineNode,
   states: NodeState[],
   today: string | null = null,
 ): boolean {
-  if (!states.includes(node.state)) return false;
-  if (isDeferred(node.deferredDate, today)) return false;
+  if (!states.includes(effectiveState(node.state, node.shelf, today))) return false;
   if (node.type === "task") return !node.hasChildren;
   if (node.type === "project") return !node.hasChildren;
   return false;

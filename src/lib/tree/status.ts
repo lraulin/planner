@@ -1,5 +1,5 @@
 import type { NodeState } from "@/db/schema";
-import { isDeferred } from "@/lib/recurrence/nextDue";
+import { effectiveState, type Shelf } from "./shelving";
 
 /**
  * Achieve's derived scheduling status — the "Status" column on the Projects and Tasks
@@ -43,20 +43,20 @@ const DUE_SOON_DAYS = 5;
  * Returns `on_schedule` when today is unknown (server render, before hydration), so the
  * column renders the same on both sides and nothing flashes during hydration.
  *
- * `deferredUntil` is the task's deferred date, if it has one. A task waiting on that date
- * reads **Deferred** — and once the date passes it goes back to being judged on its
- * deadline alone. It never escalates on its own: a repeating routine has no deadline by
- * design, so it can never become Overdue, which is the point of the deferral model. See
- * `src/lib/recurrence/nextDue.ts`.
+ * `shelf` is what is holding the row off your plate, its own or an ancestor's — see
+ * `src/lib/tree/shelving.ts`. While it holds, the row reads **Deferred**; once it expires
+ * the row goes back to being judged on its deadline alone, with nothing having written to
+ * it. It never escalates on its own: a repeating routine has no deadline by design, so it
+ * can never become Overdue, which is the point of the model.
  */
 export function scheduleStatus(
   deadline: Date | null,
   today: string | null,
   state: NodeState,
-  deferredUntil: Date | null = null,
+  shelf: Shelf | null = null,
 ): ScheduleStatus {
   if (state === "completed" || state === "cancelled") return "completed";
-  if (isDeferred(deferredUntil, today)) return "deferred";
+  if (effectiveState(state, shelf, today) === "postponed") return "deferred";
   if (!deadline || !today) return "on_schedule";
 
   const due = deadline.toISOString().slice(0, 10);

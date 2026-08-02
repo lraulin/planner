@@ -54,7 +54,7 @@ function isActive(node: OutlineNode): boolean {
   return node.state !== "completed" && node.state !== "cancelled";
 }
 
-function buildColumns(): ColumnDef<OutlineColumnCtx>[] {
+function buildColumns(today: string | null): ColumnDef<OutlineColumnCtx>[] {
   return [
     abbrStateColumn(),
     priorityColumn(),
@@ -123,7 +123,9 @@ function buildColumns(): ColumnDef<OutlineColumnCtx>[] {
       width: "7.5rem",
       filterKind: "enum",
       filterValue: (row) =>
-        STATUS_LABELS[scheduleStatus(row.node.deadline, null, row.node.state)],
+        STATUS_LABELS[
+          scheduleStatus(row.node.deadline, today, row.node.state, row.node.shelf)
+        ],
       // Derived from the state and deadline chips already on the line.
       compact: "hidden",
       render: (row, ctx) => <StatusCell node={row.node} today={ctx.today} />,
@@ -145,7 +147,7 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     [tab.nodes],
   );
 
-  const allColumns = useMemo(() => buildColumns(), []);
+  const allColumns = useMemo(() => buildColumns(tab.today), [tab.today]);
   const gridState = useGridState(`tasks.${view}`, allColumns, DEFAULT_ORDER);
 
   const purposeText = useMemo(() => {
@@ -167,6 +169,7 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
       // Empty scope = all; special "__none__" = tasks with no project ancestor.
       scopeId: scopeId && scopeId !== "__none__" ? scopeId : null,
       includeDeferred,
+      today: tab.today,
     }).filter((row) => {
       if (scopeId !== "__none__" || row.kind !== "node") return true;
       // No project in the ancestor chain.
@@ -177,7 +180,7 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
       }
       return true;
     });
-  }, [tab.nodes, tab.byId, view, groupByArea, includeDeferred, scopeId]);
+  }, [tab.nodes, tab.byId, tab.today, view, groupByArea, includeDeferred, scopeId]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">

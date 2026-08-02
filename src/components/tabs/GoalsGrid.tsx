@@ -176,8 +176,9 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         groupBy: ["resultArea"],
         scopeId: scopeId || null,
         includeDeferred: true,
+        today: tab.today,
       }),
-    [tab.nodes, view, scopeId],
+    [tab.nodes, tab.today, view, scopeId],
   );
 
   const columnCtx: GoalsCtx = useMemo(

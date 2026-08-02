@@ -1,3 +1,4 @@
+import { shelfHolds } from "./shelving";
 import type { OutlineNode } from "./types";
 
 /**
@@ -53,8 +54,16 @@ export type SliceOpts = {
    * itself is included when it passes `keep`.
    */
   scopeId?: string | null;
-  /** When false, `postponed` nodes are dropped — Achieve's Deferred toggle off. */
+  /**
+   * When false, shelved nodes are dropped — Achieve's Deferred toggle off.
+   *
+   * Shelved by the one rule in `src/lib/tree/shelving.ts`, so this now also drops a node
+   * waiting on a deferred date and a node under a deferred ancestor, neither of which the
+   * old `state === "postponed"` test could see.
+   */
   includeDeferred: boolean;
+  /** For deciding whether a dated shelf has expired. Null treats none as expired. */
+  today: string | null;
 };
 
 type Prepared = {
@@ -78,7 +87,7 @@ export function sliceTree(nodes: OutlineNode[], opts: SliceOpts): GridRow[] {
   const kept: Prepared[] = [];
 
   for (const node of nodes) {
-    if (!opts.includeDeferred && node.state === "postponed") continue;
+    if (!opts.includeDeferred && shelfHolds(node.shelf, opts.today)) continue;
     if (!inScope(node, opts.scopeId, byId)) continue;
     if (!opts.keep(node)) continue;
     kept.push({

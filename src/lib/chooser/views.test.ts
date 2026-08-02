@@ -86,24 +86,95 @@ describe("isChooserCandidate", () => {
     expect(isChooserCandidate(deferred, [...DEFAULT_STATES, "postponed"])).toBe(true);
   });
 
-  it("hides a task deferred to a future date, and offers it once due", () => {
-    // How a repeating routine stays off the list between cycles without pretending to
-    // have a deadline. Applies to a hand-set Deferred until date too.
-    const deferredRow = (key: string) =>
+  it("hides a task shelved to a future date, and offers it once the shelf expires", () => {
+    // How a repeating routine stays off the list between cycles without pretending to have
+    // a deadline. The date is the *expiry* of the postponed state, so the state carries it.
+    const shelvedRow = (key: string) =>
       derive([
-        row({ id: "t", type: "task", deferredDate: new Date(`${key}T00:00:00Z`) }),
+        row({
+          id: "t",
+          type: "task",
+          state: "postponed",
+          deferredDate: new Date(`${key}T00:00:00Z`),
+        }),
       ])[0];
 
     expect(
-      isChooserCandidate(deferredRow("2026-03-09"), DEFAULT_STATES, "2026-03-08"),
+      isChooserCandidate(shelvedRow("2026-03-09"), DEFAULT_STATES, "2026-03-08"),
     ).toBe(false);
-    // Due today counts as due — not hidden for the rest of the day it came back.
+    // Due today counts as due — not hidden for the rest of the day it came back. Note that
+    // nothing wrote to the row to expire it; the state is derived on read.
     expect(
-      isChooserCandidate(deferredRow("2026-03-08"), DEFAULT_STATES, "2026-03-08"),
+      isChooserCandidate(shelvedRow("2026-03-08"), DEFAULT_STATES, "2026-03-08"),
     ).toBe(true);
     expect(
-      isChooserCandidate(deferredRow("2026-03-01"), DEFAULT_STATES, "2026-03-08"),
+      isChooserCandidate(shelvedRow("2026-03-01"), DEFAULT_STATES, "2026-03-08"),
     ).toBe(true);
+  });
+
+  it("shelves a whole subtree from an ancestor, latest date winning", () => {
+    // The case that started this: "Pay Taxes" is a project known a year out. Deferring it
+    // has to take its tasks with it, and a task shelved further out keeps its own date.
+    const tree = (opts: { parentUntil: string | null; childUntil?: string }) =>
+      derive([
+        row({
+          id: "p",
+          type: "project",
+          state: "postponed",
+          deferredDate: opts.parentUntil
+            ? new Date(`${opts.parentUntil}T00:00:00Z`)
+            : null,
+        }),
+        row({
+          id: "t",
+          type: "task",
+          parentId: "p",
+          depth: 1,
+          state: opts.childUntil ? "postponed" : "not_started",
+          deferredDate: opts.childUntil
+            ? new Date(`${opts.childUntil}T00:00:00Z`)
+            : null,
+        }),
+      ]);
+
+    const child = (nodes: ReturnType<typeof derive>) =>
+      nodes.find((n) => n.id === "t")!;
+
+    // Inherited: the task carries no date of its own.
+    expect(
+      isChooserCandidate(
+        child(tree({ parentUntil: "2027-02-15" })),
+        DEFAULT_STATES,
+        "2026-03-08",
+      ),
+    ).toBe(false);
+
+    // The parent's shelf has expired, so the task is available again.
+    expect(
+      isChooserCandidate(
+        child(tree({ parentUntil: "2026-03-01" })),
+        DEFAULT_STATES,
+        "2026-03-08",
+      ),
+    ).toBe(true);
+
+    // The child is shelved further out than its parent — its own date wins.
+    expect(
+      isChooserCandidate(
+        child(tree({ parentUntil: "2026-03-01", childUntil: "2027-01-01" })),
+        DEFAULT_STATES,
+        "2026-03-08",
+      ),
+    ).toBe(false);
+
+    // An indefinite shelf up the chain outranks any dated one below it.
+    expect(
+      isChooserCandidate(
+        child(tree({ parentUntil: null, childUntil: "2026-03-01" })),
+        DEFAULT_STATES,
+        "2026-03-08",
+      ),
+    ).toBe(false);
   });
 
   it("keeps a zero-effort next-action reminder task", () => {

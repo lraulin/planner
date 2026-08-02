@@ -19,6 +19,7 @@ function node(
     childCount: 0,
     hasChildren: false,
     hidden: false,
+    shelf: null,
     ...partial,
   };
 }

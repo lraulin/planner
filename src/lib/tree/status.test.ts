@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { scheduleStatus, STATUS_LABELS, type ScheduleStatus } from "./status";
+import type { Shelf } from "./shelving";
 import { nodeStateEnum, type NodeState } from "@/db/schema";
 
 const TODAY = "2026-07-28";
@@ -11,6 +12,11 @@ function deadline(days: number): Date {
 
 function statusIn(days: number, state: NodeState = "not_started"): ScheduleStatus {
   return scheduleStatus(deadline(days), TODAY, state);
+}
+
+/** A shelf expiring `days` out from TODAY. `null` days is an indefinite one. */
+function shelf(days: number | null): Shelf {
+  return { until: days === null ? null : deadline(days), sourceId: "n1" };
 }
 
 describe("scheduleStatus", () => {
@@ -63,24 +69,22 @@ describe("scheduleStatus", () => {
   });
 
   it("reports a task waiting on its deferred date as deferred", () => {
-    expect(scheduleStatus(null, TODAY, "not_started", deadline(3))).toBe("deferred");
+    expect(scheduleStatus(null, TODAY, "not_started", shelf(3))).toBe("deferred");
   });
 
   it("stops being deferred once the date arrives, and never escalates", () => {
     // A repeating routine has no deadline by design, so once it comes back it is simply
     // on schedule. It can never age into Overdue — that is the point of the whole model.
-    expect(scheduleStatus(null, TODAY, "not_started", deadline(0))).toBe("on_schedule");
-    expect(scheduleStatus(null, TODAY, "not_started", deadline(-30))).toBe(
-      "on_schedule",
-    );
+    expect(scheduleStatus(null, TODAY, "not_started", shelf(0))).toBe("on_schedule");
+    expect(scheduleStatus(null, TODAY, "not_started", shelf(-30))).toBe("on_schedule");
   });
 
   it("lets finished work outrank a pending deferral", () => {
-    expect(scheduleStatus(null, TODAY, "completed", deadline(3))).toBe("completed");
+    expect(scheduleStatus(null, TODAY, "completed", shelf(3))).toBe("completed");
   });
 
   it("prefers deferred over a deadline band, since it is not available to work on", () => {
-    expect(scheduleStatus(deadline(-1), TODAY, "not_started", deadline(3))).toBe(
+    expect(scheduleStatus(deadline(-1), TODAY, "not_started", shelf(3))).toBe(
       "deferred",
     );
   });

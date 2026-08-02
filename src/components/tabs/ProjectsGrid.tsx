@@ -88,7 +88,10 @@ function taskRatio(projectId: string, nodes: OutlineNode[]): string {
   return `${active}/${total}`;
 }
 
-function buildColumns(allNodes: OutlineNode[]): ColumnDef<OutlineColumnCtx>[] {
+function buildColumns(
+  allNodes: OutlineNode[],
+  today: string | null,
+): ColumnDef<OutlineColumnCtx>[] {
   return [
     abbrStateColumn(),
     priorityColumn(),
@@ -166,8 +169,11 @@ function buildColumns(allNodes: OutlineNode[]): ColumnDef<OutlineColumnCtx>[] {
       // Derived from the state and deadline chips already on the line.
       compact: "hidden",
       filterValue: (row) =>
-        STATUS_LABELS[scheduleStatus(row.node.deadline, null, row.node.state)],
-      sortValue: (row) => scheduleStatus(row.node.deadline, null, row.node.state),
+        STATUS_LABELS[
+          scheduleStatus(row.node.deadline, today, row.node.state, row.node.shelf)
+        ],
+      sortValue: (row) =>
+        scheduleStatus(row.node.deadline, today, row.node.state, row.node.shelf),
       render: (row, ctx) => <StatusCell node={row.node} today={ctx.today} />,
     },
     {
@@ -241,7 +247,10 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
     [tab.nodes],
   );
 
-  const allColumns = useMemo(() => buildColumns(tab.nodes), [tab.nodes]);
+  const allColumns = useMemo(
+    () => buildColumns(tab.nodes, tab.today),
+    [tab.nodes, tab.today],
+  );
   const defaultOrder = useMemo(() => viewOrder(view), [view]);
   const gridState = useGridState(`projects.${view}`, allColumns, defaultOrder);
 
@@ -267,8 +276,9 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
       groupBy,
       scopeId: scopeId || null,
       includeDeferred,
+      today: tab.today,
     });
-  }, [tab.nodes, view, groups, includeGoals, includeDeferred, scopeId]);
+  }, [tab.nodes, tab.today, view, groups, includeGoals, includeDeferred, scopeId]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">

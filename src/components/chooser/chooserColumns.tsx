@@ -67,7 +67,9 @@ export const CHOOSER_TODO_ORDER = [
   "status",
 ];
 
-export function buildChooserColumns(): ColumnDef<ChooserColumnCtx>[] {
+export function buildChooserColumns(
+  today: string | null,
+): ColumnDef<ChooserColumnCtx>[] {
   return [
     {
       id: "rank",
@@ -199,7 +201,9 @@ export function buildChooserColumns(): ColumnDef<ChooserColumnCtx>[] {
       width: "7.5rem",
       filterKind: "enum",
       filterValue: (row) =>
-        STATUS_LABELS[scheduleStatus(row.node.deadline, null, row.node.state)],
+        STATUS_LABELS[
+          scheduleStatus(row.node.deadline, today, row.node.state, row.node.shelf)
+        ],
       render: (row, ctx) => <StatusCell node={row.node} today={ctx.today} />,
     },
     {

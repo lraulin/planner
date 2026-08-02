@@ -1,3 +1,4 @@
+import { laterShelf, ownShelf, type Shelf } from "./shelving";
 import type { OutlineNode, OutlineRow } from "./types";
 
 /**
@@ -45,6 +46,26 @@ export function derive(rows: OutlineRow[]): OutlineNode[] {
           : { letter: null, rank: null };
 
     lapCache.set(id, result);
+    return result;
+  }
+
+  // Inherited shelving, the same walk as `lapFor` and for the same reason: deferring a
+  // project takes its subtree with it, and the shelf is *inherited* rather than copied onto
+  // the children — copying breaks on re-parenting, cannot be undone, and would drift as each
+  // child's own recurrence rewrote its `deferred_date`. Latest wins, indefinite beats any
+  // date; expiry is applied by the reader, which is why no `today` is needed here.
+  const shelfCache = new Map<string, Shelf | null>();
+
+  function shelfFor(id: string): Shelf | null {
+    const cached = shelfCache.get(id);
+    if (cached !== undefined) return cached;
+
+    const row = byId.get(id)!;
+    const inherited =
+      row.parentId && byId.has(row.parentId) ? shelfFor(row.parentId) : null;
+    const result = laterShelf(ownShelf(row), inherited);
+
+    shelfCache.set(id, result);
     return result;
   }
 
@@ -120,6 +141,7 @@ export function derive(rows: OutlineRow[]): OutlineNode[] {
       childCount: children.length,
       hasChildren: children.length > 0,
       hidden: parentHidden,
+      shelf: shelfFor(row.id),
     };
   });
 }
