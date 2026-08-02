@@ -994,6 +994,10 @@ async function applyCategoryToResultAreaSubtree(
   rootId: string,
   category: string | null,
 ): Promise<void> {
+  // Same trim rule as the detail form: blank means uncategorised, no leading/trailing
+  // space that would fork an otherwise identical group label.
+  const normalized =
+    category === null || category.trim() === "" ? null : category.trim();
   const raIds: string[] = [];
   const queue = [rootId];
 
@@ -1017,10 +1021,10 @@ async function applyCategoryToResultAreaSubtree(
   for (const id of raIds) {
     await tx
       .insert(resultAreaDetails)
-      .values({ nodeId: id, category })
+      .values({ nodeId: id, category: normalized })
       .onConflictDoUpdate({
         target: resultAreaDetails.nodeId,
-        set: { category },
+        set: { category: normalized },
       });
   }
 }

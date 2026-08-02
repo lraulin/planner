@@ -317,7 +317,11 @@ export function WishesGrid({
         }
       />
 
-      <NodeDetailDrawer node={detailNode} onClose={() => setDetailNodeId(null)} />
+      <NodeDetailDrawer
+        node={detailNode}
+        nodes={initialNodes}
+        onClose={() => setDetailNodeId(null)}
+      />
 
       <ShowFieldsDialog
         open={showFields}

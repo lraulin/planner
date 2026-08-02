@@ -187,14 +187,36 @@ function compareCategories(a: string, b: string): number {
  * Effective category label for outline grouping: nearest result area at or above `node`
  * that has a non-blank category, else {@link NO_CATEGORY}. Categories are stored only on
  * result areas; other types inherit for display via this walk.
+ *
+ * The label is always trimmed so `"Personal "` and `"Personal"` group together.
  */
 export function categoryOf(node: OutlineNode, byId: Map<string, OutlineNode>): string {
   let cur: OutlineNode | undefined = node;
   while (cur) {
-    if (cur.type === "result_area" && cur.category?.trim()) return cur.category;
+    const trimmed = cur.type === "result_area" ? cur.category?.trim() : undefined;
+    if (trimmed) return trimmed;
     cur = cur.parentId ? byId.get(cur.parentId) : undefined;
   }
   return NO_CATEGORY;
+}
+
+/** Default result-area categories offered in the form combobox. */
+export const DEFAULT_CATEGORIES = ["Personal", "Work"] as const;
+
+/**
+ * Distinct category names for the Result Area form combobox: defaults plus every non-blank
+ * category already used on a result area, sorted alphabetically.
+ */
+export function categoryOptions(nodes: readonly OutlineNode[]): string[] {
+  const seen = new Set<string>(DEFAULT_CATEGORIES);
+  for (const node of nodes) {
+    if (node.type !== "result_area") continue;
+    const trimmed = node.category?.trim();
+    if (trimmed) seen.add(trimmed);
+  }
+  return Array.from(seen).sort((a, b) =>
+    a.localeCompare(b, undefined, { numeric: true }),
+  );
 }
 
 /** Group row id for a category label, matching {@link groupByCategory}. */
@@ -279,7 +301,9 @@ function contextFor(node: OutlineNode, byId: Map<string, OutlineNode>): RowConte
       resultAreaId = cur.id;
       resultAreaName = cur.name;
       resultAreaColor = cur.color;
-      category = cur.category;
+      // Trim so whitespace-only variants of the same name group under one header.
+      const trimmed = cur.category?.trim();
+      category = trimmed ? trimmed : null;
     }
     if (cur.type === "goal" && goalId === null) {
       goalId = cur.id;
@@ -300,11 +324,15 @@ function contextFor(node: OutlineNode, byId: Map<string, OutlineNode>): RowConte
 
 function groupKey(dim: GroupBy, context: RowContext): { key: string; label: string } {
   switch (dim) {
-    case "category":
+    case "category": {
+      // Key and label both use the trimmed value so accidental trailing spaces cannot
+      // open a second "Personal" header that looks identical.
+      const trimmed = context.category?.trim() ?? "";
       return {
-        key: context.category ?? "",
-        label: context.category?.trim() ? context.category : NO_CATEGORY,
+        key: trimmed,
+        label: trimmed || NO_CATEGORY,
       };
+    }
     case "resultArea":
       return {
         key: context.resultAreaId ?? "",
@@ -319,11 +347,60 @@ function groupKey(dim: GroupBy, context: RowContext): { key: string; label: stri
 }
 
 /**
- * Nested group headers around the kept nodes, preserving the input (DFS) order within
- * each group. Counts are the number of node rows under a header, including those nested
- * under deeper group levels.
+ * Gather items under each group key so a category that appears twice in tree order
+ * (Personal → Work → Personal) still produces a single Personal header.
+ *
+ * Category groups sort alphabetically with uncategorised last — same rule as
+ * {@link groupByCategory}. Other dimensions keep first-seen order so result areas stay
+ * in outline order under their category. Within a leaf group, DFS order is preserved.
+ */
+function gatherByGroupKeys(kept: Prepared[], groupBy: GroupBy[]): Prepared[] {
+  if (groupBy.length === 0 || kept.length === 0) return kept;
+
+  function partition(items: Prepared[], level: number): Prepared[] {
+    if (level >= groupBy.length || items.length <= 1) return items;
+
+    const dim = groupBy[level];
+    const buckets = new Map<string, Prepared[]>();
+    const order: string[] = [];
+
+    for (const item of items) {
+      const { key } = groupKey(dim, item.context);
+      const bucket = buckets.get(key);
+      if (bucket) {
+        bucket.push(item);
+      } else {
+        buckets.set(key, [item]);
+        order.push(key);
+      }
+    }
+
+    if (dim === "category") {
+      order.sort((a, b) => {
+        const labelA = groupKey(dim, buckets.get(a)![0].context).label;
+        const labelB = groupKey(dim, buckets.get(b)![0].context).label;
+        return compareCategories(labelA, labelB);
+      });
+    }
+
+    const out: Prepared[] = [];
+    for (const key of order) {
+      out.push(...partition(buckets.get(key)!, level + 1));
+    }
+    return out;
+  }
+
+  return partition(kept, 0);
+}
+
+/**
+ * Nested group headers around the kept nodes. Items are gathered under each group key
+ * first (see {@link gatherByGroupKeys}), then headers are emitted as the key path changes.
+ * Counts are the number of node rows under a header, including those nested under deeper
+ * group levels.
  */
 function emitGrouped(kept: Prepared[], groupBy: GroupBy[]): GridRow[] {
+  const ordered = gatherByGroupKeys(kept, groupBy);
   const out: GridRow[] = [];
 
   type Frame = {
@@ -349,7 +426,7 @@ function emitGrouped(kept: Prepared[], groupBy: GroupBy[]): GridRow[] {
     for (const frame of stack) frame.count += 1;
   }
 
-  for (const entry of kept) {
+  for (const entry of ordered) {
     for (let level = 0; level < groupBy.length; level++) {
       const dim = groupBy[level];
       const { key, label } = groupKey(dim, entry.context);

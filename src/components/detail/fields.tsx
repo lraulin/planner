@@ -174,6 +174,48 @@ export function TextField({
   );
 }
 
+/**
+ * Free text with a suggestion list — native `<datalist>`, same pattern as the Notes
+ * subject field. Pick an existing option or type a new one; no extra dependency.
+ */
+export function ComboboxField({
+  label,
+  value,
+  onChange,
+  options,
+  placeholder,
+  hint,
+  className,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: readonly string[];
+  placeholder?: string;
+  hint?: string;
+  className?: string;
+}) {
+  const id = useId();
+  const listId = useId();
+  return (
+    <Field label={label} htmlFor={id} hint={hint} className={className}>
+      <input
+        id={id}
+        value={value}
+        list={listId}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className={INPUT_CLASS}
+      />
+      <datalist id={listId}>
+        {options.map((option) => (
+          <option key={option} value={option} />
+        ))}
+      </datalist>
+    </Field>
+  );
+}
+
 export function TextArea({
   label,
   value,

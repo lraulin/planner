@@ -47,6 +47,7 @@ import { projectTabs } from "./ProjectForm";
 import { resultAreaTabs } from "./ResultAreaForm";
 import { taskTabs } from "./TaskForm";
 import type { DetailFormProps } from "./formShared";
+import { categoryOptions } from "@/lib/tree/slice";
 
 const DRAWER_CODEC: SettingCodec<DrawerSettings> = {
   parse: parseDrawerSettings,
@@ -71,10 +72,16 @@ const DRAWER_CODEC: SettingCodec<DrawerSettings> = {
  */
 export function NodeDetailDrawer({
   node,
+  nodes = [],
   onClose,
 }: {
   /** The row the drawer is open on, or null when it is closed. */
   node: OutlineNode | null;
+  /**
+   * Full outline (or a rich enough subset) so the Result Area form can offer existing
+   * categories in its combobox. Optional — defaults still cover Personal / Work.
+   */
+  nodes?: OutlineNode[];
   onClose: () => void;
 }) {
   const titleId = useId();
@@ -117,6 +124,7 @@ export function NodeDetailDrawer({
 
   const current = loaded?.nodeId === nodeId ? loaded : null;
   const detail = current?.detail ?? null;
+  const categories = useMemo(() => categoryOptions(nodes), [nodes]);
   const loadError = current?.error ?? null;
 
   // DetailForm installs a dirty-aware handler while mounted so Escape / backdrop / header
@@ -150,6 +158,7 @@ export function NodeDetailDrawer({
               key={detail.id}
               node={node}
               detail={detail}
+              categories={categories}
               onReload={(next) =>
                 setLoaded({ nodeId: next.id, detail: next, error: null })
               }
@@ -166,12 +175,14 @@ export function NodeDetailDrawer({
 function DetailForm({
   node,
   detail,
+  categories,
   onReload,
   onClose,
   formCloseRef,
 }: {
   node: OutlineNode;
   detail: NodeDetail;
+  categories: string[];
   onReload: (detail: NodeDetail) => void;
   onClose: () => void;
   /** Parent chrome calls this while the form is mounted. */
@@ -343,6 +354,7 @@ function DetailForm({
       list,
       runAction,
       busy,
+      categories,
     }),
     [
       detail,
@@ -356,6 +368,7 @@ function DetailForm({
       list,
       runAction,
       busy,
+      categories,
     ],
   );
 

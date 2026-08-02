@@ -285,7 +285,11 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         }
       />
 
-      <NodeDetailDrawer node={tab.detailNode} onClose={() => tab.setDetailId(null)} />
+      <NodeDetailDrawer
+        node={tab.detailNode}
+        nodes={tab.nodes}
+        onClose={() => tab.setDetailId(null)}
+      />
 
       <ShowFieldsDialog
         open={showFields}

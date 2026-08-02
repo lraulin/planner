@@ -649,7 +649,11 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
 
       <HintBar />
 
-      <NodeDetailDrawer node={detailNode} onClose={() => setDetailId(null)} />
+      <NodeDetailDrawer
+        node={detailNode}
+        nodes={nodes}
+        onClose={() => setDetailId(null)}
+      />
 
       {pendingChildOf && (
         <NewChildDialog

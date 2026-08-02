@@ -423,6 +423,12 @@ export async function saveNodeDetail(
 
     if (node.type === "result_area") {
       const set = pick(values.resultArea, RESULT_AREA_KEYS);
+      // Blank / whitespace-only category means uncategorised; trim so "Personal " cannot
+      // open a second group that looks identical to Personal.
+      if ("category" in set && typeof set.category === "string") {
+        const trimmed = set.category.trim();
+        set.category = trimmed === "" ? null : trimmed;
+      }
       if (hasValues(set)) {
         await tx
           .insert(resultAreaDetails)

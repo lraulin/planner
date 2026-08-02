@@ -1,7 +1,8 @@
 "use client";
 
-import { FieldGrid, NumberField, SelectField, TextArea, TextField } from "./fields";
+import { ComboboxField, FieldGrid, NumberField, SelectField, TextArea } from "./fields";
 import { STATE_OPTIONS } from "@/lib/tree/hierarchy";
+import { DEFAULT_CATEGORIES } from "@/lib/tree/slice";
 import { LinkedNotesPanel } from "@/components/notes/LinkedNotesPanel";
 import type { FormTab } from "./FormTabs";
 import { CoreHeaderFields, type DetailFormProps } from "./formShared";
@@ -18,8 +19,11 @@ import { CoreHeaderFields, type DetailFormProps } from "./formShared";
  * result-area-specific notes column.
  */
 export function resultAreaTabs(props: DetailFormProps): FormTab[] {
-  const { values, patch, patchResultArea, list } = props;
+  const { values, patch, patchResultArea, list, categories } = props;
   const area = values.resultArea ?? {};
+  // Always surface Personal / Work even when the outline context is empty (e.g. a lone
+  // open from a tab that did not pass nodes).
+  const categoryChoices = categories.length > 0 ? categories : [...DEFAULT_CATEGORIES];
 
   return [
     {
@@ -30,11 +34,13 @@ export function resultAreaTabs(props: DetailFormProps): FormTab[] {
           <CoreHeaderFields values={values} patch={patch} />
 
           <FieldGrid>
-            <TextField
+            <ComboboxField
               label="Category"
               value={area.category ?? ""}
               onChange={(category) => patchResultArea({ category })}
-              hint="Groups this area in the outline's category view. Nested areas inherit their parent's category."
+              options={categoryChoices}
+              placeholder="Personal or Work"
+              hint="Personal or Work by default — type another name to add one. Groups this area in the outline's category view. Nested areas inherit their parent's category."
             />
             <SelectField
               label="State"

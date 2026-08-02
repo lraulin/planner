@@ -41,6 +41,11 @@ export type DetailFormProps = {
     action: () => Promise<{ ok: true } | { ok: false; error: string }>,
   ) => void;
   busy: boolean;
+  /**
+   * Category names for the Result Area combobox (defaults plus any already in use).
+   * Empty when the drawer has no outline context; the form still offers Personal / Work.
+   */
+  categories: string[];
 };
 
 /**

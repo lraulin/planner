@@ -4,7 +4,9 @@ import { row } from "./fixtures";
 import {
   categoryGroupId,
   categoryLabelFromGroupId,
+  categoryOptions,
   categoryValueFromLabel,
+  DEFAULT_CATEGORIES,
   groupByCategory,
   NO_CATEGORY,
   sliceTree,
@@ -265,6 +267,82 @@ describe("sliceTree — group headers", () => {
     ).toEqual(["p-gym", "p-run", "p-budget", "p-ship"]);
   });
 
+  it("gathers interleaved categories under one header each", () => {
+    // Real outline order often puts Work in the middle of Personal areas. Grouping must
+    // still produce a single Personal header, not Personal / Work / Personal again.
+    const interleaved = tree(
+      {
+        id: "ra-fin",
+        type: "result_area",
+        name: "Financial",
+        category: "Personal",
+      },
+      { id: "p-fin", type: "project", parentId: "ra-fin", depth: 1 },
+      {
+        id: "ra-job",
+        type: "result_area",
+        name: "Job",
+        category: "Work",
+      },
+      { id: "p-job", type: "project", parentId: "ra-job", depth: 1 },
+      {
+        id: "ra-health",
+        type: "result_area",
+        name: "Health",
+        category: "Personal",
+      },
+      { id: "p-health", type: "project", parentId: "ra-health", depth: 1 },
+    );
+
+    const rows = sliceTree(interleaved, {
+      keep: projectsOnly,
+      groupBy: ["category", "resultArea"],
+      includeDeferred: true,
+      today: null,
+    });
+
+    expect(groups(rows).map((g) => [g.label, g.count, g.depth])).toEqual([
+      ["Personal", 2, 0],
+      ["Financial", 1, 1],
+      ["Health", 1, 1],
+      ["Work", 1, 0],
+      ["Job", 1, 1],
+    ]);
+    expect(
+      rows
+        .filter((r) => r.kind === "node")
+        .map((r) => (r.kind === "node" ? r.id : null)),
+    ).toEqual(["p-fin", "p-health", "p-job"]);
+  });
+
+  it("merges categories that differ only by surrounding whitespace", () => {
+    const spaced = tree(
+      {
+        id: "ra-a",
+        type: "result_area",
+        name: "A",
+        category: "Personal",
+      },
+      { id: "p-a", type: "project", parentId: "ra-a", depth: 1 },
+      {
+        id: "ra-b",
+        type: "result_area",
+        name: "B",
+        category: " Personal ",
+      },
+      { id: "p-b", type: "project", parentId: "ra-b", depth: 1 },
+    );
+
+    const rows = sliceTree(spaced, {
+      keep: projectsOnly,
+      groupBy: ["category"],
+      includeDeferred: true,
+      today: null,
+    });
+
+    expect(groups(rows).map((g) => [g.label, g.count])).toEqual([["Personal", 2]]);
+  });
+
   it("groups by result area alone for the Goals tab shape", () => {
     const nodes = tree(
       { id: "ra1", type: "result_area", name: "Health" },
@@ -421,5 +499,21 @@ describe("category group id helpers", () => {
     expect(categoryValueFromLabel("Work")).toBe("Work");
     expect(categoryValueFromLabel(NO_CATEGORY)).toBeNull();
     expect(categoryValueFromLabel("  ")).toBeNull();
+  });
+});
+
+describe("categoryOptions", () => {
+  it("always offers the Personal and Work defaults", () => {
+    expect(categoryOptions([])).toEqual([...DEFAULT_CATEGORIES].sort());
+  });
+
+  it("includes custom categories already on result areas, trimmed and unique", () => {
+    const nodes = tree(
+      { id: "a", type: "result_area", name: "A", category: "Personal" },
+      { id: "b", type: "result_area", name: "B", category: " Family " },
+      { id: "c", type: "result_area", name: "C", category: "Family" },
+      { id: "p", type: "project", parentId: "a", depth: 1 },
+    );
+    expect(categoryOptions(nodes)).toEqual(["Family", "Personal", "Work"]);
   });
 });
