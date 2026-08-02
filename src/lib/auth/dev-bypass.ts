@@ -14,7 +14,7 @@
  *    misspelled value leaves the bypass off.
  *
  * When on, `getCurrentUserId()` resolves to the owner account instead of throwing, and the
- * middleware stops redirecting to `/login`. Signing in normally still works.
+ * proxy stops redirecting to `/login`. Signing in normally still works.
  */
 export function devAuthBypassEnabled(): boolean {
   if (process.env.NODE_ENV === "production") return false;

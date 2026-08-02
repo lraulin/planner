@@ -4,7 +4,7 @@ import { devAuthBypassEnabled } from "@/lib/auth/dev-bypass";
 
 /**
  * Cookie presence gate for HTML routes. Full session validation happens in
- * `getCurrentUserId()` / Better Auth handlers — middleware only redirects guests away
+ * `getCurrentUserId()` / Better Auth handlers — proxy only redirects guests away
  * from the app chrome.
  *
  * Allowed without a session cookie:
@@ -12,7 +12,7 @@ import { devAuthBypassEnabled } from "@/lib/auth/dev-bypass";
  * - `/api/auth/*` (Better Auth)
  * - `/api/agent/*` (Bearer key checked in the route handler)
  */
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Local development with AUTH_DEV_BYPASS: nothing to redirect to, since
