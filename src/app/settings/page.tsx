@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { SettingsPage } from "@/components/settings/SettingsPage";
 import { GoogleCalendarPanel } from "@/components/settings/GoogleCalendarPanel";
+import { AchieveTransferPanel } from "@/components/settings/AchieveTransferPanel";
 import { LogoutButton } from "@/components/auth/LogoutButton";
 import { getCurrentAccount } from "@/lib/auth";
 import { googleConfigured } from "@/lib/auth/server";
@@ -63,6 +64,7 @@ export default async function SettingsRoute() {
             linked={linked}
             calendars={calendars}
           />
+          <AchieveTransferPanel />
         </div>
       </div>
     </div>

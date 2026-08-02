@@ -56,6 +56,21 @@ export type AchMappedNode = {
   importance: number | null;
   /** Achieve category name for a result area, when we resolved it. */
   categoryName: string | null;
+  /** Result-area Mission / Vision / SWOT prose (empty when not present). */
+  mission: string;
+  importanceReason: string;
+  idealOuterVision: string;
+  idealInnerVision: string;
+  strengths: string;
+  weaknesses: string;
+  opportunities: string;
+  threats: string;
+  /** Project strategy field. */
+  strategy: string;
+  /** Project block size / time-per-week when present (minutes). */
+  blockSizeMinutes: number | null;
+  timePerWeekMinutes: number | null;
+  onlyShowNextTask: boolean;
 };
 
 export type AchOutlineMap = {

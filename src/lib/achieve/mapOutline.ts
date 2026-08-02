@@ -139,6 +139,14 @@ export function mapOutline(doc: AchDocument): AchOutlineMap {
         description: row.Description ?? "",
         purpose: "",
         place: "",
+        mission: row.MissionStatement ?? "",
+        importanceReason: row.ImportanceReason ?? "",
+        idealOuterVision: row.IdealVisionOuterExperience ?? "",
+        idealInnerVision: row.IdealVisionInnerExperience ?? "",
+        strengths: row.Strengths ?? "",
+        weaknesses: row.Weaknesses ?? "",
+        opportunities: row.Opportunities ?? "",
+        threats: row.Threats ?? "",
       }),
     );
   }
@@ -177,6 +185,14 @@ export function mapOutline(doc: AchDocument): AchOutlineMap {
         description: row.Description ?? "",
         purpose: row.Purpose ?? "",
         place: row.Place ?? "",
+        strategy: row.Strategy ?? "",
+        blockSizeMinutes: intField(row, "ProjectBlockSize"),
+        // DefaultTimePerWeek is minutes when non-negative; -1 means unset in AP.
+        timePerWeekMinutes: (() => {
+          const v = intField(row, "DefaultTimePerWeek");
+          return v !== null && v >= 0 ? v : null;
+        })(),
+        onlyShowNextTask: (intField(row, "ShowOnlyNextTaskInChooser") ?? 0) !== 0,
         targetEndField: "TargetEndDate",
       }),
     );
@@ -292,6 +308,18 @@ function baseNode(args: {
   description: string;
   purpose: string;
   place: string;
+  mission?: string;
+  importanceReason?: string;
+  idealOuterVision?: string;
+  idealInnerVision?: string;
+  strengths?: string;
+  weaknesses?: string;
+  opportunities?: string;
+  threats?: string;
+  strategy?: string;
+  blockSizeMinutes?: number | null;
+  timePerWeekMinutes?: number | null;
+  onlyShowNextTask?: boolean;
   deadlineField?: string;
   targetStartField?: string;
   targetEndField?: string;
@@ -350,5 +378,17 @@ function baseNode(args: {
     purpose: args.purpose,
     importance: args.importance,
     categoryName: args.categoryName,
+    mission: args.mission ?? "",
+    importanceReason: args.importanceReason ?? "",
+    idealOuterVision: args.idealOuterVision ?? "",
+    idealInnerVision: args.idealInnerVision ?? "",
+    strengths: args.strengths ?? "",
+    weaknesses: args.weaknesses ?? "",
+    opportunities: args.opportunities ?? "",
+    threats: args.threats ?? "",
+    strategy: args.strategy ?? "",
+    blockSizeMinutes: args.blockSizeMinutes ?? null,
+    timePerWeekMinutes: args.timePerWeekMinutes ?? null,
+    onlyShowNextTask: args.onlyShowNextTask ?? false,
   };
 }

@@ -167,9 +167,58 @@ then document root element and table set here.
 Code lives under `src/lib/achieve/` (pure parse + map). Database write is a separate
 mutation layer and is not required for the encodings/parser tripwires.
 
+## Planner import / export (implemented)
+
+| Action     | Where                            | What                                                                                                                      |
+| ---------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| **Import** | Settings → Achieve Planner (XML) | Full XML → outline (RA / projects / tasks). Modes: **Replace** (wipe this account’s outline first) or **Merge** (append). |
+| **Export** | Same panel                       | Outline → `.achxml` download (same tables). Goals are omitted; descendants reparent to the nearest exported ancestor.     |
+
+Code:
+
+- `src/lib/achieve/parseXml.ts` / `mapOutline.ts` / `encodings.ts` — pure parse + map
+- `src/lib/achieve/import.ts` — DB write (`userId`-scoped; `externalSource = "achieve"`)
+- `src/lib/achieve/exportXml.ts` / `exportLoad.ts` — XML build from `loadOutline`
+- Settings UI: `AchieveTransferPanel`
+
+**On the PC:** Achieve → Full XML export → save under Dropbox → Settings → Import on the Mac.
+
+**Round-trip note:** We export without the huge embedded XSD. AP’s Load from XML usually infers schema from data rows for this subset; if a build is picky, open once in AP and re-save.
+
+## Design clues from the format (useful for us)
+
+Things the DataSet makes obvious that we already align with or should keep in mind:
+
+1. **Separate outline priority vs Task Chooser priority** — `Priority` and `TCPriority` are independent ints on the same row. We model that as `priorityLetter` vs `tcPriorityLetter`. Don’t merge them.
+
+2. **State is user-set; schedule status is derived** — `Status` / `IsCompleted` live on the record; AP also has a derived “On Schedule / Need to Start” column that is _not_ this field. Keep that split.
+
+3. **Percent complete is fine-grained** — 0–10000 (hundredths of a percent). We store 0–100; import rounds.
+
+4. **Effort is three-valued on tasks** — Low / Best / High estimates plus Effort Left and Actual. We only keep a single expected effort (prefer Best, else Low) plus left/actual. Three-point estimates are a possible later enhancement if planning math needs them.
+
+5. **Project “Show only next task in chooser”** — `ShowOnlyNextTaskInChooser` maps to our `onlyShowNextTask`. AP treats the outline as a plan and the chooser as a work queue; leaf-gating is intentional.
+
+6. **Default time per week / project block size** — calendar planning inputs on the project, not computed. We already have columns; import fills them when present.
+
+7. **Result-area Importance (0–100) + reason** — feeds Task Chooser scoring in AP. We store `importance` and `reason`; keep them for score parity.
+
+8. **Mission / Vision / SWOT on result areas** — first-class prose columns in the dump, not freeform notes. We already have matching detail fields; import fills them from Full XML.
+
+9. **Recurrence blob is opaque** — `BinRecurrenceData` is base64 binary, not XML fields. Appointment recurrence is a _separate_ table (`AppointmentRecurrence` with Pattern/Period/Data1/Data2). Task recurrence ≠ appointment recurrence in storage; our split (task recurrence on `task_details`, appointment series on `appointments`) matches that philosophy.
+
+10. **`__ORDINAL__` is sibling order** — not a global rank. We use fractional `sortKey` for the same job.
+
+11. **Focus flag** — boolean on projects/tasks for “current focus” filtering. We have `focus`; import/export it.
+
+12. **Categories are light** — `ResultAreaCategories` is just name + WorkRelated. We store category as text on the result area; good enough until we need a global category list.
+
 ## What we intentionally skip (for now)
 
 - Writing native `.ach`
+- ACX branch format (until we have a sample)
+- Goals / Wishes / Dreams / Appointments / TimeCharts / Notes / Contacts import
 - Contacts, File Organizer, Resources, Outlook `SyncItems`
 - Form layouts, view customizations, binary `Preferences`
 - Perfect RTF and `BinRecurrenceData` fidelity
+- Smart merge by Achieve GUID (re-import in merge mode currently duplicates)
