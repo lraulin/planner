@@ -247,11 +247,12 @@ export function AchieveTransferPanel() {
                   {result.warnings.length === 1 ? "" : "s"}
                 </summary>
                 <ul className="mt-1 list-inside list-disc text-ink-faint">
-                  {result.warnings.slice(0, 20).map((w) => (
-                    <li key={w}>{w}</li>
+                  {result.warnings.slice(0, 20).map((w, i) => (
+                    // Warnings often repeat the same text (same rule on many rows).
+                    <li key={`${i}-${w.slice(0, 48)}`}>{w}</li>
                   ))}
                   {result.warnings.length > 20 && (
-                    <li>…and {result.warnings.length - 20} more</li>
+                    <li key="more">…and {result.warnings.length - 20} more</li>
                   )}
                 </ul>
               </details>

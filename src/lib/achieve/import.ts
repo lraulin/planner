@@ -176,7 +176,7 @@ export async function writeMappedImport(params: {
           n.targetStart.getTime() < deferredDate.getTime()
         ) {
           warnings.push(
-            `"${n.name}": deferred date after target start; deferred cleared on import`,
+            `"${n.name}" (${n.achId.slice(0, 8)}): deferred date after target start; deferred cleared on import`,
           );
           deferredDate = null;
         }
