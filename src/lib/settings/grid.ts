@@ -1,4 +1,9 @@
 import {
+  filterActive,
+  parseColumnFilter,
+  type ColumnFilter,
+} from "@/lib/grid/customFilter";
+import {
   asClampedNumber,
   asMap,
   asOneOf,
@@ -27,8 +32,11 @@ export type GridSettings = {
   order: string[] | null;
   /** Column id → pixel width, overriding the column's declared track. */
   widths: Record<string, number>;
-  /** Column id → selected filter option ids, OR'd together. */
-  filters: Record<string, string[]>;
+  /**
+   * Column id → checklist option ids (`mode: "options"`) or a multi-condition custom
+   * filter (`mode: "custom"`). The two modes are mutually exclusive per column.
+   */
+  filters: Record<string, ColumnFilter>;
   sort: GridSort | null;
   collapsedGroups: string[];
   /** Sub-view / scope picker selection, or null to follow the tab's default. */
@@ -78,9 +86,7 @@ export function parseGridSettings(value: unknown): GridSettings {
         ? asClampedNumber(entry, MIN_COLUMN_WIDTH, MIN_COLUMN_WIDTH, MAX_COLUMN_WIDTH)
         : null,
     ),
-    filters: asMap(record.filters, (entry) =>
-      Array.isArray(entry) ? asStringArray(entry, []) : null,
-    ),
+    filters: asMap(record.filters, (entry) => parseColumnFilter(entry)),
     sort: parseSort(record.sort),
     collapsedGroups: asStringArray(record.collapsedGroups, []),
     view: typeof record.view === "string" ? record.view : null,
@@ -106,6 +112,6 @@ export function serializeGridSettings(settings: GridSettings): unknown {
 }
 
 /** Whether any column filter is actually narrowing the rows. */
-export function hasActiveFilters(filters: Record<string, string[]>): boolean {
-  return Object.values(filters).some((ids) => ids.length > 0 && !ids.includes("all"));
+export function hasActiveFilters(filters: Record<string, ColumnFilter>): boolean {
+  return Object.values(filters).some(filterActive);
 }

@@ -373,7 +373,8 @@ want real auth (and ideally share Google OAuth with Calendar).
 ## Out of roadmap (for now)
 
 - Marketing / legal distinctiveness from Achieve (see `mission.md`) — personal use first.
-- Printing views, custom filter builder, Views/Filters sidebar — called out as out of scope
-  in the main-grid-tabs shape unless we reopen them. (Achieve **task recurrence** was
-  reopened and shipped — see "Repeating routine tasks" above.)
+- Printing views and Views/Filters sidebar — called out as out of scope in the
+  main-grid-tabs shape unless we reopen them. (**Custom column filter builder** reopened
+  and shipping in `specs/2026-08-02-1208-custom-column-filters`. Achieve **task recurrence**
+  was reopened and shipped earlier — see "Repeating routine tasks" above.)
 - Neon Auth / vendor-owned identity schema — declined; see `tech-stack.md`.

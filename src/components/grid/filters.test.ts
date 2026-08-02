@@ -4,6 +4,7 @@ import {
   filterActive,
   filterOptions,
   matchesFilter,
+  optionsFilter,
   rowPassesFilters,
   shiftDays,
   type ColumnFilter,
@@ -18,23 +19,25 @@ describe("matchesFilter — universal", () => {
   });
 
   it("handles blanks and non-blanks", () => {
-    expect(matchesFilter(null, ["blanks"], "text", TODAY)).toBe(true);
-    expect(matchesFilter("", ["blanks"], "text", TODAY)).toBe(true);
-    expect(matchesFilter("x", ["blanks"], "text", TODAY)).toBe(false);
+    expect(matchesFilter(null, optionsFilter(["blanks"]), "text", TODAY)).toBe(true);
+    expect(matchesFilter("", optionsFilter(["blanks"]), "text", TODAY)).toBe(true);
+    expect(matchesFilter("x", optionsFilter(["blanks"]), "text", TODAY)).toBe(false);
 
-    expect(matchesFilter("x", ["nonblanks"], "text", TODAY)).toBe(true);
-    expect(matchesFilter(null, ["nonblanks"], "text", TODAY)).toBe(false);
+    expect(matchesFilter("x", optionsFilter(["nonblanks"]), "text", TODAY)).toBe(true);
+    expect(matchesFilter(null, optionsFilter(["nonblanks"]), "text", TODAY)).toBe(
+      false,
+    );
   });
 
   it("matches a distinct value option", () => {
-    expect(matchesFilter("NS", ["value:NS"], "enum", TODAY)).toBe(true);
-    expect(matchesFilter("IP", ["value:NS"], "enum", TODAY)).toBe(false);
+    expect(matchesFilter("NS", optionsFilter(["value:NS"]), "enum", TODAY)).toBe(true);
+    expect(matchesFilter("IP", optionsFilter(["value:NS"]), "enum", TODAY)).toBe(false);
   });
 });
 
 describe("matchesFilter — priority presets", () => {
   const p = (id: string, value: string | null) =>
-    matchesFilter(value, [id], "priority", TODAY);
+    matchesFilter(value, optionsFilter([id]), "priority", TODAY);
 
   it("isolates A1, ranked As, and bare As", () => {
     expect(p("only-a1", "A1")).toBe(true);
@@ -96,7 +99,7 @@ describe("matchesFilter — priority presets", () => {
 
 describe("matchesFilter — deadline presets", () => {
   const d = (id: string, value: string | null) =>
-    matchesFilter(value, [id], "date", TODAY);
+    matchesFilter(value, optionsFilter([id]), "date", TODAY);
 
   it("handles none / has-date / past bands", () => {
     expect(d("none", null)).toBe(true);
@@ -128,43 +131,50 @@ describe("matchesFilter — deadline presets", () => {
   });
 
   it("does not hide date-filtered rows before hydration", () => {
-    expect(matchesFilter("2020-01-01", ["past"], "date", null)).toBe(true);
+    expect(matchesFilter("2020-01-01", optionsFilter(["past"]), "date", null)).toBe(
+      true,
+    );
   });
 });
 
 describe("multi-select selections", () => {
   it("passes a row matching any selected option", () => {
     // The point of multi-select: "A1 or B1", which one choice per column cannot express.
-    expect(matchesFilter("A1", ["only-a1", "value:B1"], "priority", TODAY)).toBe(true);
-    expect(matchesFilter("B1", ["only-a1", "value:B1"], "priority", TODAY)).toBe(true);
-    expect(matchesFilter("C1", ["only-a1", "value:B1"], "priority", TODAY)).toBe(false);
+    const sel = optionsFilter(["only-a1", "value:B1"]);
+    expect(matchesFilter("A1", sel, "priority", TODAY)).toBe(true);
+    expect(matchesFilter("B1", sel, "priority", TODAY)).toBe(true);
+    expect(matchesFilter("C1", sel, "priority", TODAY)).toBe(false);
   });
 
   it("mixes a preset with literal values", () => {
-    expect(matchesFilter("A3", ["only-as", "value:D"], "priority", TODAY)).toBe(true);
-    expect(matchesFilter("D", ["only-as", "value:D"], "priority", TODAY)).toBe(true);
-    expect(matchesFilter("B", ["only-as", "value:D"], "priority", TODAY)).toBe(false);
+    const sel = optionsFilter(["only-as", "value:D"]);
+    expect(matchesFilter("A3", sel, "priority", TODAY)).toBe(true);
+    expect(matchesFilter("D", sel, "priority", TODAY)).toBe(true);
+    expect(matchesFilter("B", sel, "priority", TODAY)).toBe(false);
   });
 
   it("treats an empty selection and (All) as the same unfiltered state", () => {
     // Otherwise an empty grid could sit behind a filter button that looks inactive.
     expect(filterActive(ALL_FILTER)).toBe(false);
-    expect(filterActive([])).toBe(false);
-    expect(filterActive(["all"])).toBe(false);
-    expect(filterActive(["only-as"])).toBe(true);
+    expect(filterActive(optionsFilter([]))).toBe(false);
+    expect(filterActive(optionsFilter(["all"]))).toBe(false);
+    expect(filterActive(optionsFilter(["only-as"]))).toBe(true);
 
-    expect(matchesFilter("B", [], "priority", TODAY)).toBe(true);
-    expect(matchesFilter("B", ["all"], "priority", TODAY)).toBe(true);
+    expect(matchesFilter("B", optionsFilter([]), "priority", TODAY)).toBe(true);
+    expect(matchesFilter("B", optionsFilter(["all"]), "priority", TODAY)).toBe(true);
   });
 
   it("stays unfiltered when (All) rides along with a real option", () => {
-    expect(matchesFilter("B", ["all", "only-as"], "priority", TODAY)).toBe(true);
+    expect(
+      matchesFilter("B", optionsFilter(["all", "only-as"]), "priority", TODAY),
+    ).toBe(true);
   });
 
   it("combines blanks with a value, which one choice per column could not", () => {
-    expect(matchesFilter(null, ["blanks", "value:A1"], "priority", TODAY)).toBe(true);
-    expect(matchesFilter("A1", ["blanks", "value:A1"], "priority", TODAY)).toBe(true);
-    expect(matchesFilter("B2", ["blanks", "value:A1"], "priority", TODAY)).toBe(false);
+    const sel = optionsFilter(["blanks", "value:A1"]);
+    expect(matchesFilter(null, sel, "priority", TODAY)).toBe(true);
+    expect(matchesFilter("A1", sel, "priority", TODAY)).toBe(true);
+    expect(matchesFilter("B2", sel, "priority", TODAY)).toBe(false);
   });
 });
 
@@ -173,6 +183,7 @@ describe("filterOptions", () => {
     const options = filterOptions("priority", ["A1", "B", ""]);
     const ids = options.map((o) => o.id);
     expect(ids[0]).toBe("all");
+    expect(ids[1]).toBe("custom");
     expect(ids).toContain("only-a1");
     expect(ids).toContain("value:A1");
     expect(ids).toContain("value:B");
@@ -182,13 +193,15 @@ describe("filterOptions", () => {
 
 describe("rowPassesFilters", () => {
   it("ignores columns with nothing selected", () => {
-    expect(rowPassesFilters({ priority: "D" }, { priority: [] }, {}, TODAY)).toBe(true);
+    expect(
+      rowPassesFilters({ priority: "D" }, { priority: optionsFilter([]) }, {}, TODAY),
+    ).toBe(true);
   });
 
   it("requires every active column filter to pass", () => {
     const filters: Record<string, ColumnFilter> = {
-      priority: ["only-as"],
-      deadline: ["today"],
+      priority: optionsFilter(["only-as"]),
+      deadline: optionsFilter(["today"]),
     };
     const kinds = { priority: "priority" as const, deadline: "date" as const };
 

@@ -1,4 +1,10 @@
 import { shiftDateKey } from "@/lib/schedule/geometry";
+import {
+  filterActive,
+  isCustomFilter,
+  matchesCustom,
+  type ColumnFilter,
+} from "@/lib/grid/customFilter";
 import type { FilterKind } from "./columns";
 
 /**
@@ -7,34 +13,38 @@ import type { FilterKind } from "./columns";
  * Achieve ships a long list of semantic presets for Priority and Deadline. Those live here
  * as pure functions so the Projects / Tasks tabs can unit-test them without a DOM, and so
  * the grid never reimplements "is this A or B?" in JSX.
- */
-
-/**
- * The option ids selected for one column, OR'd together — Achieve offers one choice per
- * column, but "show me A1 *and* B1" is the question people actually ask of a priority
- * column, and there is no reason a preset cannot sit alongside two literal values.
  *
- * Empty means unfiltered, and so does a selection containing `all`: the dropdown's "(All)"
- * entry and "nothing ticked" are the same state, and treating them differently would leave
- * an empty grid with no visible reason for it.
+ * Custom multi-condition filters (`mode: "custom"`) live in `@/lib/grid/customFilter` and
+ * are mutually exclusive with the checklist (`mode: "options"`) per column.
  */
-export type ColumnFilter = string[];
 
-export const ALL_FILTER: ColumnFilter = [];
-
-/** Whether this column is narrowing anything. */
-export function filterActive(filter: ColumnFilter): boolean {
-  return filter.length > 0 && !filter.includes("all");
-}
+export {
+  ALL_FILTER,
+  filterActive,
+  isCustomFilter,
+  isOptionsFilter,
+  optionsFilter,
+  type ColumnFilter,
+  type CustomColumnFilter,
+  type FilterCondition,
+  type FilterJoin,
+  type FilterOperator,
+  type OptionsColumnFilter,
+} from "@/lib/grid/customFilter";
 
 export type FilterOption = {
   id: string;
   label: string;
 };
 
-/** Universal entries every filterable column gets, before kind-specific presets. */
+/**
+ * Universal entries every filterable column gets, before kind-specific presets.
+ * `(Custom)...` is listed here for order, but the header treats it as a dialog action
+ * rather than a toggleable checklist id.
+ */
 export const UNIVERSAL_OPTIONS: FilterOption[] = [
   { id: "all", label: "(All)" },
+  { id: "custom", label: "(Custom)..." },
   { id: "blanks", label: "(Blanks)" },
   { id: "nonblanks", label: "(NonBlanks)" },
 ];
@@ -106,8 +116,10 @@ export function filterOptions(
 }
 
 /**
- * Whether a cell's filter value passes the column's selection. Any selected option
- * matching is enough.
+ * Whether a cell's filter value passes the column's selection.
+ *
+ * Options mode: any selected option matching is enough (OR). Custom mode: And/Or of
+ * conditions — see `matchesCustom`.
  *
  * `today` is `YYYY-MM-DD` (or null before hydration). Date presets that need a clock treat
  * an unknown today as "match everything", so the server and first paint do not disagree.
@@ -119,7 +131,8 @@ export function matchesFilter(
   today: string | null,
 ): boolean {
   if (!filterActive(filter)) return true;
-  return filter.some((id) => matchesOption(value, id, kind, today));
+  if (isCustomFilter(filter)) return matchesCustom(value, filter, kind);
+  return filter.ids.some((id) => matchesOption(value, id, kind, today));
 }
 
 function matchesOption(

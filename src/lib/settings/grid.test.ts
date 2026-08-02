@@ -25,7 +25,17 @@ describe("parseGridSettings", () => {
     const settings = {
       order: ["name", "priority"],
       widths: { name: 320 },
-      filters: { priority: ["only-as", "value:B1"] },
+      filters: {
+        priority: { mode: "options" as const, ids: ["only-as", "value:B1"] },
+        state: {
+          mode: "custom" as const,
+          join: "and" as const,
+          conditions: [
+            { op: "neq" as const, value: "C" },
+            { op: "neq" as const, value: "Cn" },
+          ],
+        },
+      },
       sort: { columnId: "deadline", direction: "desc" as const },
       collapsedGroups: ["area:health"],
       view: "active-status",
@@ -87,15 +97,24 @@ describe("parseGridSettings", () => {
   it("keeps an empty filter selection rather than inventing one", () => {
     // Parsing does not editorialise: an empty list stays empty. Whether that *means*
     // anything is `hasActiveFilters`' call, and it reads empty as unfiltered.
+    // Legacy bare arrays are wrapped as options mode.
     expect(parseGridSettings({ filters: { state: [] } }).filters).toEqual({
-      state: [],
+      state: { mode: "options", ids: [] },
     });
   });
 
-  it("drops a filter whose value is not a list, keeping its siblings", () => {
+  it("drops a filter whose value is garbage, keeping its siblings", () => {
     expect(
       parseGridSettings({ filters: { state: "done", priority: ["only-as"] } }).filters,
-    ).toEqual({ priority: ["only-as"] });
+    ).toEqual({ priority: { mode: "options", ids: ["only-as"] } });
+  });
+
+  it("accepts legacy string[] filters as options mode", () => {
+    expect(
+      parseGridSettings({ filters: { priority: ["only-as", "value:B1"] } }).filters,
+    ).toEqual({
+      priority: { mode: "options", ids: ["only-as", "value:B1"] },
+    });
   });
 
   it("discards a sort with no column, and defaults an unknown direction", () => {
@@ -117,12 +136,31 @@ describe("parseGridSettings", () => {
 describe("hasActiveFilters", () => {
   it("is false when nothing narrows the rows", () => {
     expect(hasActiveFilters({})).toBe(false);
-    expect(hasActiveFilters({ state: [] })).toBe(false);
-    expect(hasActiveFilters({ state: ["all"] })).toBe(false);
+    expect(hasActiveFilters({ state: { mode: "options", ids: [] } })).toBe(false);
+    expect(hasActiveFilters({ state: { mode: "options", ids: ["all"] } })).toBe(false);
+    expect(
+      hasActiveFilters({ state: { mode: "custom", join: "and", conditions: [] } }),
+    ).toBe(false);
   });
 
   it("is true once a column selects something other than (All)", () => {
-    expect(hasActiveFilters({ state: ["value:done"] })).toBe(true);
-    expect(hasActiveFilters({ a: ["all"], b: ["only-as"] })).toBe(true);
+    expect(hasActiveFilters({ state: { mode: "options", ids: ["value:done"] } })).toBe(
+      true,
+    );
+    expect(
+      hasActiveFilters({
+        a: { mode: "options", ids: ["all"] },
+        b: { mode: "options", ids: ["only-as"] },
+      }),
+    ).toBe(true);
+    expect(
+      hasActiveFilters({
+        state: {
+          mode: "custom",
+          join: "and",
+          conditions: [{ op: "neq", value: "Cn" }],
+        },
+      }),
+    ).toBe(true);
   });
 });

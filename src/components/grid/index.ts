@@ -27,10 +27,15 @@ export { useOptimisticNodes } from "./useOptimisticNodes";
 export { useToday } from "./useToday";
 export {
   ALL_FILTER,
+  filterActive,
   filterOptions,
+  isCustomFilter,
+  isOptionsFilter,
   matchesFilter,
+  optionsFilter,
   rowPassesFilters,
   PRIORITY_PRESETS,
   DEADLINE_PRESETS,
   type ColumnFilter,
 } from "./filters";
+export { CustomFilterDialog } from "./CustomFilterDialog";

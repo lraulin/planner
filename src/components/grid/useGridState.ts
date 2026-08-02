@@ -212,10 +212,10 @@ export function useGridState<TCol extends ColumnMeta>(
   );
 
   const setFilter = useCallback(
-    (columnId: string, ids: string[]) => {
+    (columnId: string, filter: GridSettings["filters"][string]) => {
       patch((current) => ({
         ...current,
-        filters: { ...current.filters, [columnId]: ids },
+        filters: { ...current.filters, [columnId]: filter },
       }));
     },
     [patch],

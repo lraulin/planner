@@ -8,7 +8,14 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { MAX_COLUMN_WIDTH, MIN_COLUMN_WIDTH } from "@/lib/settings/grid";
+import {
+  isCustomFilter,
+  isOptionsFilter,
+  optionsFilter,
+  type CustomColumnFilter,
+} from "@/lib/grid/customFilter";
 import { alignClass, type ColumnMeta, type FilterKind } from "./columns";
+import { CustomFilterDialog } from "./CustomFilterDialog";
 import {
   ALL_FILTER,
   filterActive,
@@ -19,7 +26,8 @@ import {
 
 /**
  * One header cell: label, optional sort indicator, optional filter funnel that opens the
- * Achieve-style dropdown of presets and distinct values.
+ * Achieve-style dropdown of presets and distinct values, plus (Custom)... for the criteria
+ * dialog.
  */
 export function ColumnHeaderRow({
   columns,
@@ -102,6 +110,7 @@ export function ColumnHeaderRow({
                   column.filterKind,
                   distinctValues?.[column.id] ?? [],
                 )}
+                distinctValues={distinctValues?.[column.id] ?? []}
                 onChange={(next) => onFilterChange(column.id, next)}
               />
             )}
@@ -127,6 +136,7 @@ function FilterButton({
   filter,
   active,
   options,
+  distinctValues,
   onChange,
 }: {
   columnId: string;
@@ -135,9 +145,11 @@ function FilterButton({
   filter: ColumnFilter;
   active: boolean;
   options: FilterOption[];
+  distinctValues: string[];
   onChange: (filter: ColumnFilter) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [customOpen, setCustomOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const listId = useId();
 
@@ -157,9 +169,10 @@ function FilterButton({
     };
   }, [open]);
 
-  // kind is reserved for future custom-builder entry points; presets already use it via options.
-  void kind;
   void columnId;
+
+  const customActive = isCustomFilter(filter) && filterActive(filter);
+  const optionIds = isOptionsFilter(filter) ? filter.ids : [];
 
   return (
     <div ref={rootRef} className="relative flex-none">
@@ -186,7 +199,12 @@ function FilterButton({
         >
           {options.map((option) => {
             const isAll = option.id === "all";
-            const selected = isAll ? !active : filter.includes(option.id);
+            const isCustom = option.id === "custom";
+            const selected = isCustom
+              ? customActive
+              : isAll
+                ? !active
+                : optionIds.includes(option.id);
 
             return (
               <li key={option.id}>
@@ -195,13 +213,17 @@ function FilterButton({
                   role="option"
                   aria-selected={selected}
                   onClick={() => {
-                    // "(All)" is the way back to unfiltered, so it closes; ticking values
-                    // keeps the list open, because picking several is the whole point.
                     if (isAll) {
                       onChange(ALL_FILTER);
                       setOpen(false);
                       return;
                     }
+                    if (isCustom) {
+                      setOpen(false);
+                      setCustomOpen(true);
+                      return;
+                    }
+                    // Checklist selection replaces any custom filter on this column.
                     onChange(toggleOption(filter, option.id));
                   }}
                   className={[
@@ -224,6 +246,16 @@ function FilterButton({
           })}
         </ul>
       )}
+
+      <CustomFilterDialog
+        open={customOpen}
+        columnLabel={label}
+        kind={kind}
+        filter={isCustomFilter(filter) ? filter : null}
+        distinctValues={distinctValues}
+        onApply={(next: CustomColumnFilter) => onChange(next)}
+        onClose={() => setCustomOpen(false)}
+      />
     </div>
   );
 }
@@ -232,12 +264,15 @@ function FilterButton({
  * Add or remove one option. Unticking the last one lands on `ALL_FILTER` rather than an
  * empty selection, so "nothing ticked" and "(All)" stay the same state — an empty grid
  * whose filter button looks inactive would be unexplainable.
+ *
+ * Always returns options mode: ticking a checklist value replaces any custom filter.
  */
 function toggleOption(filter: ColumnFilter, id: string): ColumnFilter {
-  const next = filter.includes(id)
-    ? filter.filter((entry) => entry !== id)
-    : [...filter.filter((entry) => entry !== "all"), id];
-  return next.length === 0 ? ALL_FILTER : next;
+  const current = isOptionsFilter(filter) ? filter.ids : [];
+  const next = current.includes(id)
+    ? current.filter((entry) => entry !== id)
+    : [...current.filter((entry) => entry !== "all"), id];
+  return next.length === 0 ? ALL_FILTER : optionsFilter(next);
 }
 
 /**
