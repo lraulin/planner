@@ -1,0 +1,175 @@
+# Achieve Planner file formats
+
+How Achieve stores and exchanges data, and how we plan to import/export it.
+
+Sources: real files under Dropbox `AppDocuments/Achieve Planner`, the Wine install of
+Achieve 2 (`Achieve2.exe` command IDs), `docs/APReleaseLog.txt`, and the Full XML dump
+`Achieve-Feb-2011XML.achxml`.
+
+## Three interchange paths (plus native)
+
+| UI                  | Command ID         | Role                                                          |
+| ------------------- | ------------------ | ------------------------------------------------------------- |
+| **Full XML export** | `FileXMLDump`      | Dump the **entire** live database as ADO.NET DataSet XML      |
+| **Load from XML**   | `FileOpenFromXML`  | **Open/replace** the current file from a full XML dump        |
+| **Export branch**   | `FileExportBranch` | Export a selected outline branch (RA / projects / tasks only) |
+| **ACX file import** | `FileACXImport`    | **Merge** that branch package into the open file              |
+
+Also:
+
+| Extension                | Role                                                         |
+| ------------------------ | ------------------------------------------------------------ |
+| **`.ach`**               | Native binary data file (day-to-day save format)             |
+| **`.achxml` / Full XML** | Whole-file DataSet XML (same logical model as `.ach`)        |
+| **`.acx`**               | Branch exchange package (pair of Export branch / ACX import) |
+
+Native `.ach` is not the preferred interchange surface. Prefer Full XML for migration and
+ACX for selective branch exchange once we have a sample `.acx`.
+
+```
+.ach  ──Full XML export──►  .achxml / Full XML
+.achxml ──Load from XML──►  .ach (replaces open file)
+
+outline branch ──Export branch──►  .acx
+.acx ──ACX import──►  merge into open .ach
+```
+
+## Native `.ach` (binary)
+
+All observed files share a fixed 16-byte magic, then version fields, then a proprietary
+serialization of the same DataSet as Full XML:
+
+```
+08 2d 23 65 a5 7f ac 62 43 af 97 f6 87 50 fa 28   # magic
+… version / flags …
+[dataset properties: AchieveDB, MajorDatabaseVersion, …]
+[for each table:]
+  ba ed fe de ba ed fe   # 0xDEFEEDBA twice, little-endian
+  u8 nameLen + tableName
+  u32 columnCount
+  column descriptors + row data
+```
+
+- Entropy is mid-range (~5.5–6): structured binary, not full encryption.
+- Table names, field names, and RTF notes appear as plaintext strings.
+- `MajorDatabaseVersion` observed as **15** across Sample / 2017 / 2020 / 2022 files.
+- `Default.dat` in the install is a blank `.ach` (same magic).
+
+Reading `.ach` without Achieve is possible later; writing valid `.ach` is high cost. For
+migration, open in Wine Achieve and Full-XML-export.
+
+## Full XML (`.achxml`)
+
+ADO.NET `DataSet.WriteXml` with schema. Shape:
+
+```xml
+<?xml version="1.0" standalone="yes"?>
+<AchieveDB>
+  <xs:schema id="AchieveDB" … msdata:IsDataSet="true"
+    msprop:MajorDatabaseVersion="15"
+    msprop:DatabaseVersion="83"
+    …>
+    … table definitions …
+  </xs:schema>
+  <ResultAreas>…</ResultAreas>
+  <Projects>…</Projects>
+  <Tasks>…</Tasks>
+  …
+</AchieveDB>
+```
+
+- About **74 tables** (outline, appointments, goals/wishes, contacts, metrics, UI chrome,
+  Outlook sync, …).
+- Primary keys are **GUIDs** (string form).
+- Sibling order is **`__ORDINAL__`** (int).
+- Hierarchy is **per-type parent pointers**: `ParentResultAreaId`, `ParentProjectId`,
+  `ParentTaskId` (not a single parent column).
+
+Core outline tables for import v1:
+
+| Table                  | Parent link                        | Notes           |
+| ---------------------- | ---------------------------------- | --------------- |
+| `ResultAreaCategories` | —                                  | Work / Personal |
+| `ResultAreas`          | `ParentResultAreaId`, `CategoryId` |                 |
+| `Projects`             | `ResultAreaId`, `ParentProjectId`  | 70+ columns     |
+| `Tasks`                | `ProjectId`, `ParentTaskId`        | 60+ columns     |
+
+Also present and useful later: `Goals`, `Wishes`, `Dreams`, `Appointments`,
+`AppointmentRecurrence`, `NoteItems`, `TimeCharts` / `TimeChartAreas`.
+
+### Encodings
+
+**Priority** (int, default `100000` = none):
+
+| Band       | Meaning                         |
+| ---------- | ------------------------------- |
+| `1, 2, 3…` | A1, A2, A3… (rank is the value) |
+| `2500`     | B (no rank); `2501` = B1        |
+| `5000`     | C; `5001` = C1                  |
+| `7500`     | D; `7501` = D1                  |
+| `100000`   | no priority                     |
+
+Letter bases are 0 / 2500 / 5000 / 7500; rank is the offset within the 2500-wide band (for
+A, the stored value _is_ the rank).
+
+**Percent complete:** `0…10000` → 0%…100% (`10000` = fully done). We store 0–100.
+
+**Status** (int on Projects/Tasks) — Achieve order, correlated with `IsCompleted` on real
+data; codes after 3 are provisional until confirmed in the UI:
+
+| Code | State                          |
+| ---: | ------------------------------ |
+|    0 | not_started                    |
+|    1 | in_progress                    |
+|    2 | waiting                        |
+|    3 | completed (`IsCompleted=true`) |
+|    4 | postponed                      |
+|    5 | delegated                      |
+|    6 | should_delegate                |
+|    7 | cancelled                      |
+|    8 | proposed                       |
+
+**Effort / duration units** (observed): `0` = minutes, `1` = hours. Values are stored in
+those units; convert to minutes on import.
+
+**Notes:** RTF (`{\rtf1\ansi…}`), not plain text. Strip or convert on import.
+
+**Recurrence:** `IsRecurring` + base64 `BinRecurrenceData` (opaque binary blob). Appointments
+also use the `AppointmentRecurrence` table. Decode later against our recurrence model.
+
+**TC priority:** same int encoding as outline priority, on `TCPriority`.
+
+## ACX (branch exchange)
+
+Not yet sampled in this repo. Strong hypothesis: DataSet XML (or a thin wrapper) containing
+only Result Areas, Projects, and Tasks for the exported branch — the only types the release
+log says can be imported/exported this way.
+
+Generate a sample: open Achieve → select a branch → File → Export branch → save `.acx`,
+then document root element and table set here.
+
+## Mapping to this planner
+
+| Achieve                      | Ours                                         |
+| ---------------------------- | -------------------------------------------- |
+| ResultAreas tree             | `nodes` type `result_area`                   |
+| Projects tree                | `nodes` type `project` (+ `project_details`) |
+| Tasks tree                   | `nodes` type `task` (+ `task_details`)       |
+| Priority int                 | `priorityLetter` + `priorityRank`            |
+| TCPriority int               | `tcPriorityLetter` + `tcPriorityRank`        |
+| Status int                   | `nodeStateEnum`                              |
+| `__ORDINAL__` among siblings | `sortKey` (fractional index)                 |
+| Per-type parents             | unified `parentId` with nest rules           |
+| Notes RTF                    | `nodes.notes` (plain/markdown best-effort)   |
+| Effort fields (minutes)      | `task_details` effort columns                |
+| Percent 0–10000              | `percentComplete` 0–100                      |
+
+Code lives under `src/lib/achieve/` (pure parse + map). Database write is a separate
+mutation layer and is not required for the encodings/parser tripwires.
+
+## What we intentionally skip (for now)
+
+- Writing native `.ach`
+- Contacts, File Organizer, Resources, Outlook `SyncItems`
+- Form layouts, view customizations, binary `Preferences`
+- Perfect RTF and `BinRecurrenceData` fidelity
