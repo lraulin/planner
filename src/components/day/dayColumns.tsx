@@ -27,11 +27,12 @@ export type DayColumnCtx = {
 };
 
 /**
- * The check box, or Franklin Covey's forwarded mark.
+ * The check box, cancelled X, or Franklin Covey's forwarded mark.
  *
- * "Done" is bound to `completedAt` rather than `state`, because a recurring task is sent
- * back to `not_started` the instant it is completed — see the schema comment on
- * `daily_items.completed_at`.
+ * "Done" is bound to `completedAt` rather than `state === "completed"`, because a
+ * recurring task is sent back to `not_started` the instant it is completed — see the
+ * schema comment on `daily_items.completed_at`. Cancelled also stamps `completedAt`, but
+ * keeps `state === "cancelled"` so this cell can show an **X** instead of a tick.
  *
  * A **forwarded** row shows "→" and no box. That row is history: the live copy is on the
  * day it moved to, and a check box here would offer to complete a line that has already
@@ -52,6 +53,25 @@ function CheckCell({ item, ctx }: { item: DailyItemView; ctx: DayColumnCtx }) {
     );
   }
 
+  // Cancelled is settled like completed, but the mark is an X — not a check and not a
+  // missing box. Clicking reopens (clears cancel), same as unchecking a completed line.
+  if (item.state === "cancelled") {
+    return (
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          ctx.onSetState(item.id, "not_started");
+        }}
+        aria-label="Cancelled — click to reopen"
+        title="Cancelled"
+        className="flex h-3.5 w-3.5 cursor-pointer items-center justify-center text-[0.75rem] font-semibold leading-none text-ink-muted hover:text-ink"
+      >
+        ×
+      </button>
+    );
+  }
+
   const done = item.completedAt !== null;
   return (
     <input
@@ -67,12 +87,14 @@ function CheckCell({ item, ctx }: { item: DailyItemView; ctx: DayColumnCtx }) {
 
 /** Free-text title. Node-backed rows show the task's live name and are not edited here. */
 function TitleCell({ item, ctx }: { item: DailyItemView; ctx: DayColumnCtx }) {
-  const done = item.completedAt !== null;
+  // Settled lines (completed or cancelled) share strikethrough; state alone is not enough
+  // for completed, because a recurring task may already be `not_started` again.
+  const settled = item.completedAt !== null || item.state === "cancelled";
   const forwarded = item.forwardedTo !== null;
 
   const className = [
     "w-full truncate border-none bg-transparent text-[0.8125rem] outline-none",
-    done ? "text-ink-faint line-through" : forwarded ? "text-ink-faint" : "text-ink",
+    settled ? "text-ink-faint line-through" : forwarded ? "text-ink-faint" : "text-ink",
   ].join(" ");
 
   if (item.nodeId) {

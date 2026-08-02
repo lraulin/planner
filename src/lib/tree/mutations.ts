@@ -461,6 +461,18 @@ export async function applyStateTransition(
 ): Promise<void> {
   const now = at;
 
+  // Cancelled is a settled decision not to do the work — the day keeps a crossed-off line
+  // with an X, the same way completed keeps a check. It is not the same as deleting the
+  // task, and it is not a soft reopen of an earlier completion either.
+  if (state === "cancelled") {
+    await tx
+      .update(nodes)
+      .set({ state: "cancelled", completedAt: null, updatedAt: now })
+      .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+    await syncDayLineOnCancel(tx, userId, nodeId, now);
+    return;
+  }
+
   if (state !== "completed") {
     await tx
       .update(nodes)
@@ -605,6 +617,31 @@ async function syncDayLineOnCompletion(
   nodeId: string,
   completedAt: Date,
 ): Promise<void> {
+  await settleDayLine(tx, userId, nodeId, completedAt, "completed");
+}
+
+/**
+ * Same paper-day record as completion, for a cancelled task. The line stays on the day with
+ * `completedAt` set so it sorts and filters with settled work; the state itself is
+ * `cancelled` so the check box can show an X rather than a tick.
+ */
+async function syncDayLineOnCancel(
+  tx: Executor,
+  userId: string,
+  nodeId: string,
+  at: Date,
+): Promise<void> {
+  await settleDayLine(tx, userId, nodeId, at, "cancelled");
+}
+
+/** Cross off the open day line (or write one for today) as completed or cancelled. */
+async function settleDayLine(
+  tx: Executor,
+  userId: string,
+  nodeId: string,
+  at: Date,
+  state: "completed" | "cancelled",
+): Promise<void> {
   const rows = await tx
     .select({
       id: dailyItems.id,
@@ -616,23 +653,23 @@ async function syncDayLineOnCompletion(
     .from(dailyItems)
     .where(and(eq(dailyItems.userId, userId), eq(dailyItems.nodeId, nodeId)));
 
-  const today = toDateKey(completedAt);
+  const today = toDateKey(at);
   const open = rows.find((r) => r.completedAt === null && r.forwardedTo === null);
-  // Judged by when it was completed rather than which day it sits on, so ticking Monday's
+  // Judged by when it was settled rather than which day it sits on, so acting on Monday's
   // forgotten line today still counts as today's record.
-  const doneToday = rows.find(
+  const settledToday = rows.find(
     (r) => r.completedAt && toDateKey(r.completedAt) === today,
   );
 
   if (open) {
     await tx
       .update(dailyItems)
-      .set({ state: "completed", completedAt, updatedAt: completedAt })
+      .set({ state, completedAt: at, updatedAt: at })
       .where(eq(dailyItems.id, open.id));
-  } else if (!doneToday) {
+  } else if (!settledToday) {
     await addDayLine(tx, userId, nodeId, today, {
-      state: "completed",
-      completedAt,
+      state,
+      completedAt: at,
     });
   }
 }

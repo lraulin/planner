@@ -40,8 +40,9 @@ describe("itemsToForward", () => {
     expect(itemsToForward([done], TODAY)).toEqual([]);
   });
 
-  it("does not carry a row that was cancelled — Covey's Deleted mark", () => {
+  it("does not carry a cancelled row", () => {
     // Forwarding this would silently reverse a deliberate decision not to do it.
+    // Cancel is not delete — the line stays on the original day as settled history.
     expect(
       itemsToForward([item("a", "2026-07-30", { state: "cancelled" })], TODAY),
     ).toEqual([]);

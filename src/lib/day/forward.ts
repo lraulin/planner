@@ -31,9 +31,9 @@ export type ForwardCandidate = {
 /**
  * States that do not follow you forward.
  *
- * `cancelled` is Franklin Covey's "Deleted" mark — a deliberate decision not to do the
- * thing, which forwarding would silently reverse. `completed` is belt-and-braces alongside
- * the `completedAt` check.
+ * `cancelled` is a deliberate decision not to do the thing (not the same as deleting the
+ * row or the task), which forwarding would silently reverse. `completed` is belt-and-braces
+ * alongside the `completedAt` check.
  */
 const SETTLED: NodeState[] = ["cancelled", "completed"];
 

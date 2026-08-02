@@ -210,7 +210,8 @@ export function WeekPlanView({
 }
 
 function WeekItem({ item }: { item: DailyItemView }) {
-  const done = item.completedAt !== null;
+  // Cancelled settles like completed (strikethrough); only the day list's X distinguishes it.
+  const settled = item.completedAt !== null || item.state === "cancelled";
   const forwarded = item.forwardedTo !== null;
 
   return (
@@ -232,7 +233,9 @@ function WeekItem({ item }: { item: DailyItemView }) {
         {forwarded ? "→" : formatPriority(item.priorityLetter, item.priorityRank)}
       </span>
       <span
-        className={done ? "truncate text-ink-faint line-through" : "truncate text-ink"}
+        className={
+          settled ? "truncate text-ink-faint line-through" : "truncate text-ink"
+        }
       >
         {item.title}
       </span>

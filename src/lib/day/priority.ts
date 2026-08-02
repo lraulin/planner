@@ -89,14 +89,35 @@ export function planDayClear(
 }
 
 /**
- * The day list's full sort: priority first, then insertion order.
+ * Whether a day line is settled work (done or deliberately not doing it).
  *
- * Completed rows are **not** moved to the bottom. Franklin Covey's day page keeps a checked
- * item exactly where it was so the page reads as a record of the day rather than a queue
- * that reshuffles under you every time you tick something off.
+ * Both completed and cancelled stamp `completedAt` so the open-day unique index drops them
+ * and they no longer forward. Cancelled is distinguished only by `state` (X vs check).
  */
-export function sortDayItems<T extends Ranked & { sortKey: string }>(items: T[]): T[] {
+export function isDayItemSettled(item: {
+  state?: string;
+  completedAt?: Date | null;
+}): boolean {
+  return (
+    item.completedAt != null || item.state === "completed" || item.state === "cancelled"
+  );
+}
+
+/**
+ * The day list's full sort: open work first (by priority, then insertion order), settled
+ * lines last.
+ *
+ * Completed and cancelled share the bottom of each priority group so finishing or dropping
+ * a line does not leave a dead check in the middle of what you still mean to do. Within
+ * open and settled, order is still priority then `sortKey`.
+ */
+export function sortDayItems<
+  T extends Ranked & { sortKey: string; state?: string; completedAt?: Date | null },
+>(items: T[]): T[] {
   return [...items].sort((a, b) => {
+    const aSettled = isDayItemSettled(a);
+    const bSettled = isDayItemSettled(b);
+    if (aSettled !== bSettled) return aSettled ? 1 : -1;
     const byPriority = compareDayPriority(a, b);
     if (byPriority !== 0) return byPriority;
     return a.sortKey < b.sortKey ? -1 : a.sortKey > b.sortKey ? 1 : 0;

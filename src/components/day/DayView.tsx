@@ -1,12 +1,16 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { NodeState } from "@/db/schema";
+import { deleteNodeAction } from "@/app/outline/actions";
+import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
+import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import { ErrorBanner } from "@/components/tabs/tabChrome";
 import type { DayAssignment } from "@/lib/day/priority";
 import { sortDayItems } from "@/lib/day/priority";
 import type { DailyItemView, DayPayload } from "@/lib/day/types";
+import type { OutlineNode } from "@/lib/tree/types";
 import {
   createDailyItemAction,
   deleteDailyItemAction,
@@ -53,6 +57,13 @@ export function DayView({
   const [items, setItems] = useState<DailyItemView[]>(initial.items);
   const [error, setError] = useState<string | null>(null);
   const [pane, setPane] = useState<DayPane>("list");
+  /** Stub outline row for the detail drawer — enough for the header while detail loads. */
+  const [detailStub, setDetailStub] = useState<OutlineNode | null>(null);
+  const [pendingDeleteTask, setPendingDeleteTask] = useState<{
+    itemId: string;
+    nodeId: string;
+    title: string;
+  } | null>(null);
 
   /** Below `md` only the active pane is shown; above it all three always are. */
   const paneClass = (id: DayPane) => (id === pane ? "flex" : "hidden md:flex");
@@ -104,7 +115,11 @@ export function DayView({
 
   const onSetState = useCallback(
     (itemId: string, state: NodeState) => {
-      patch(itemId, { state });
+      const settling = state === "completed" || state === "cancelled";
+      patch(itemId, {
+        state,
+        completedAt: settling ? new Date() : null,
+      });
       void settle(setDailyItemStateAction(itemId, state));
     },
     [patch, settle],
@@ -145,6 +160,30 @@ export function DayView({
     [settle],
   );
 
+  const onDeleteTask = useCallback(
+    (itemId: string, nodeId: string) => {
+      const item = items.find((entry) => entry.id === itemId);
+      setPendingDeleteTask({
+        itemId,
+        nodeId,
+        title: item?.title ?? "this task",
+      });
+    },
+    [items],
+  );
+
+  const confirmDeleteTask = useCallback(() => {
+    if (!pendingDeleteTask) return;
+    const { itemId, nodeId } = pendingDeleteTask;
+    setPendingDeleteTask(null);
+    setItems((current) => current.filter((item) => item.id !== itemId));
+    if (detailStub?.id === nodeId) setDetailStub(null);
+    // Drop the day line and the task. Node delete alone would leave a snapshot row with
+    // `node_id` nulled, which still looks like work on the day.
+    void settle(deleteDailyItemAction(itemId));
+    void settle(deleteNodeAction(nodeId));
+  }, [pendingDeleteTask, detailStub, settle]);
+
   const onMoveToDay = useCallback(
     (itemId: string, target: string) => {
       setItems((current) => current.filter((item) => item.id !== itemId));
@@ -159,6 +198,17 @@ export function DayView({
     },
     [settle],
   );
+
+  const onOpenTask = useCallback((nodeId: string, title: string) => {
+    setDetailStub(taskStub(nodeId, title));
+  }, []);
+
+  const detailNode = useMemo(() => {
+    if (!detailStub) return null;
+    // Prefer the live title from the day list when the task is still on this day.
+    const live = items.find((item) => item.nodeId === detailStub.id);
+    return live ? { ...detailStub, name: live.title } : detailStub;
+  }, [detailStub, items]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
@@ -184,7 +234,9 @@ export function DayView({
             onRename={onRename}
             onPromote={onPromote}
             onDelete={onDelete}
+            onDeleteTask={onDeleteTask}
             onMoveToDay={onMoveToDay}
+            onOpenTask={onOpenTask}
             emptyHint="Nothing here yet. Type below to add what you are doing today, or drag tasks in from the Task Chooser."
           />
         </div>
@@ -196,8 +248,77 @@ export function DayView({
           className={paneClass("journal")}
         />
       </div>
+
+      <NodeDetailDrawer node={detailNode} onClose={() => setDetailStub(null)} />
+
+      <ConfirmDialog
+        open={pendingDeleteTask !== null}
+        title="Delete this task?"
+        message={
+          pendingDeleteTask
+            ? `“${pendingDeleteTask.title}” will be removed from the outline and this day. Cancelled lines stay on the day; this is permanent.`
+            : ""
+        }
+        confirmLabel="Delete"
+        destructive
+        onConfirm={confirmDeleteTask}
+        onCancel={() => setPendingDeleteTask(null)}
+      />
     </div>
   );
+}
+
+/**
+ * Enough of an `OutlineNode` for the detail drawer header while `loadNodeDetail` runs.
+ * Day view does not have the full outline in memory — only `nodeId` and the display title.
+ */
+function taskStub(id: string, name: string): OutlineNode {
+  return {
+    id,
+    parentId: null,
+    type: "task",
+    name,
+    sortKey: "",
+    priorityLetter: null,
+    priorityRank: null,
+    tcPriorityLetter: null,
+    tcPriorityRank: null,
+    state: "not_started",
+    deadline: null,
+    focus: false,
+    collapsed: false,
+    notes: "",
+    isInbox: false,
+    completedAt: null,
+    depth: 0,
+    effortMinutes: null,
+    effortLeftMinutes: null,
+    actualEffortMinutes: null,
+    percentComplete: null,
+    contexts: null,
+    color: null,
+    category: null,
+    importance: null,
+    targetStart: null,
+    targetEnd: null,
+    deferredDate: null,
+    recurrenceFrequency: "none",
+    purpose: "",
+    assignedTo: "",
+    definition: "",
+    range: "",
+    isDream: false,
+    lapLetter: null,
+    lapRank: null,
+    effortRollupMinutes: null,
+    effortLeftRollupMinutes: null,
+    actualEffortRollupMinutes: 0,
+    percentCompleteRollup: 0,
+    childCount: 0,
+    hasChildren: false,
+    hidden: false,
+    shelf: null,
+  };
 }
 
 /**

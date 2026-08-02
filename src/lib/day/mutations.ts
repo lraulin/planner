@@ -158,31 +158,46 @@ export async function setDailyItemState(
 ): Promise<void> {
   await db.transaction(async (tx) => {
     const item = await requireItem(tx, userId, itemId);
-    const completing = state === "completed";
+    // Completed *and* cancelled settle the day's record. Cancel is not a soft open state —
+    // it is the deliberate "not doing this" mark, and it must stamp `completedAt` so the
+    // line stays crossed off and does not forward or re-enter the open-day unique index.
+    const settling = state === "completed" || state === "cancelled";
 
-    // Re-opening a completed row puts it back into the "one open day per task" index. If
+    // Re-opening a settled row puts it back into the "one open day per task" index. If
     // the task has since been planned somewhere else, say so plainly rather than letting a
     // raw constraint violation surface.
-    if (!completing && item.completedAt !== null && item.nodeId) {
+    if (!settling && item.completedAt !== null && item.nodeId) {
       const other = await openRowForNode(tx, userId, item.nodeId);
       if (other && other.id !== itemId) {
         throw new Error(`That task is already planned for ${other.day}.`);
       }
     }
 
-    if (!item.nodeId || !completing) {
+    if (item.nodeId) {
+      // Completion and cancel both write the day line inside `applyStateTransition` (via
+      // settle helpers), so stamping here would race them. Intermediate states still need
+      // the day row's own state column kept in sync.
+      await applyStateTransition(tx, userId, item.nodeId, state);
+      if (!settling) {
+        await tx
+          .update(dailyItems)
+          .set({
+            state,
+            completedAt: null,
+            updatedAt: new Date(),
+          })
+          .where(and(eq(dailyItems.id, itemId), eq(dailyItems.userId, userId)));
+      }
+    } else {
+      // Jotted line: no task behind it, so the row is the whole record.
       await tx
         .update(dailyItems)
         .set({
           state,
-          completedAt: completing ? new Date() : null,
+          completedAt: settling ? new Date() : null,
           updatedAt: new Date(),
         })
         .where(and(eq(dailyItems.id, itemId), eq(dailyItems.userId, userId)));
-    }
-
-    if (item.nodeId) {
-      await applyStateTransition(tx, userId, item.nodeId, state);
     }
   });
 }

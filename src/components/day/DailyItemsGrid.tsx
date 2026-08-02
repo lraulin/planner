@@ -88,7 +88,9 @@ export function DailyItemsGrid({
   onRename,
   onPromote,
   onDelete,
+  onDeleteTask,
   onMoveToDay,
+  onOpenTask,
   emptyHint,
 }: {
   items: DailyItemView[];
@@ -98,8 +100,13 @@ export function DailyItemsGrid({
   onApplyPriorities: (assignments: DayAssignment[]) => void;
   onRename: (itemId: string, title: string) => void;
   onPromote: (itemId: string) => void;
+  /** Remove the day line only — a linked task is left alone. */
   onDelete: (itemId: string) => void;
+  /** Hard-delete the underlying task (node-backed rows only). */
+  onDeleteTask: (itemId: string, nodeId: string) => void;
   onMoveToDay: (itemId: string, day: string) => void;
+  /** Open the task detail form for a node-backed row. */
+  onOpenTask: (nodeId: string, title: string) => void;
   emptyHint: string;
 }) {
   const [draft, setDraft] = useState("");
@@ -192,7 +199,13 @@ export function DailyItemsGrid({
           onSelect: copySelectionAsText,
         },
         ...(item.nodeId
-          ? []
+          ? [
+              {
+                label: "Open task",
+                shortcut: "Enter",
+                onSelect: () => onOpenTask(item.nodeId!, item.title),
+              },
+            ]
           : [
               {
                 label: "Promote to task…",
@@ -215,8 +228,21 @@ export function DailyItemsGrid({
           onSelect: () => onSetState(itemId, "in_progress"),
         },
         { label: "Mark delegated", onSelect: () => onSetState(itemId, "delegated") },
-        { label: "Mark deleted", onSelect: () => onSetState(itemId, "cancelled") },
+        // Cancel = "not doing this" (stays on the day with an X). Delete removes the line
+        // or the task. They used to share one mislabelled "Mark deleted" entry.
+        {
+          label: "Mark cancelled",
+          onSelect: () => onSetState(itemId, "cancelled"),
+        },
         { label: "Remove from this day", onSelect: () => onDelete(itemId) },
+        ...(item.nodeId
+          ? [
+              {
+                label: "Delete task…",
+                onSelect: () => onDeleteTask(itemId, item.nodeId!),
+              },
+            ]
+          : []),
       ];
     },
     [
@@ -227,12 +253,14 @@ export function DailyItemsGrid({
       onMoveToDay,
       onSetState,
       onDelete,
+      onDeleteTask,
+      onOpenTask,
       onApplyPriorities,
       copySelectionAsText,
     ],
   );
 
-  // ⌘C / Shift+arrows when the day list has focus and no field is editing.
+  // ⌘C / Enter / arrows when the day list has focus and no field is editing.
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (isTypingTarget(event.target)) return;
@@ -247,6 +275,14 @@ export function DailyItemsGrid({
         copySelectionAsText();
         return;
       }
+      if (event.key === "Enter") {
+        const item = items.find((entry) => entry.id === selectedId);
+        if (item?.nodeId) {
+          event.preventDefault();
+          onOpenTask(item.nodeId, item.title);
+        }
+        return;
+      }
       if (event.key === "ArrowDown") {
         event.preventDefault();
         move(1, event.shiftKey);
@@ -257,7 +293,7 @@ export function DailyItemsGrid({
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [selectedId, copySelectionAsText, move]);
+  }, [selectedId, items, copySelectionAsText, move, onOpenTask]);
 
   /**
    * The two things done to a day item most often, and both reversible — swipe right ticks it
@@ -271,12 +307,16 @@ export function DailyItemsGrid({
 
       const tomorrow = shiftDateKey(item.day, 1);
 
-      const done = item.state === "completed";
+      const done = item.completedAt !== null || item.state === "completed";
+      const cancelled = item.state === "cancelled";
 
       return {
         right: {
-          label: done ? "Reopen" : "Complete",
-          run: () => onToggleComplete(itemId, !done),
+          label: cancelled || done ? "Reopen" : "Complete",
+          run: () => {
+            if (cancelled) onSetState(itemId, "not_started");
+            else onToggleComplete(itemId, !done);
+          },
         },
         left: {
           label: "Tomorrow",
@@ -284,7 +324,7 @@ export function DailyItemsGrid({
         },
       };
     },
-    [items, onToggleComplete, onMoveToDay],
+    [items, onToggleComplete, onSetState, onMoveToDay],
   );
 
   function commitDraft() {
@@ -328,6 +368,10 @@ export function DailyItemsGrid({
           rowDrag={rowDrag}
           rowMenu={rowMenu}
           rowSwipe={rowSwipe}
+          onOpenDetail={(itemId) => {
+            const item = items.find((entry) => entry.id === itemId);
+            if (item?.nodeId) onOpenTask(item.nodeId, item.title);
+          }}
           rowLabel={(row) => row.node.title}
           rowNumbers
           enableSort

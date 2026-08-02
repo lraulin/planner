@@ -137,15 +137,21 @@ describeDb("daily item basics", () => {
     expect(c).toBeDefined();
   });
 
-  it("leaves a checked line where it is rather than resorting the page", async () => {
+  it("moves a checked or cancelled line below open work", async () => {
+    // Settled lines (done or cancelled) drop to the bottom so the list still reads as
+    // what you mean to do, with crossed-off work after. Cancel shares that placement;
+    // only the mark (X vs check) distinguishes them.
     const first = await createDailyItem({ userId, day: MON, title: "First" });
     await createDailyItem({ userId, day: MON, title: "Second" });
+    const third = await createDailyItem({ userId, day: MON, title: "Third" });
 
     await setDailyItemState(userId, first, "completed");
+    await setDailyItemState(userId, third, "cancelled");
 
     const day = await loadDay(userId, MON, WED);
-    expect(day.items.map((i) => i.title)).toEqual(["First", "Second"]);
-    expect(day.items[0].completedAt).not.toBeNull();
+    expect(day.items.map((i) => i.title)).toEqual(["Second", "First", "Third"]);
+    expect(day.items[1].completedAt).not.toBeNull();
+    expect(day.items[2].state).toBe("cancelled");
   });
 
   it("renames a jotted line", async () => {
@@ -558,6 +564,35 @@ describeDb("completing from the day page", () => {
     const [task] = await db.select().from(nodes).where(eq(nodes.id, nodeId));
     expect(task.state).toBe("delegated");
     expect((await itemById(item.id)).completedAt).toBeNull();
+  });
+
+  it("cancels the task and settles the day line with completedAt (not a delete)", async () => {
+    // Cancel is "not doing this" — the line stays on the day crossed off. Deleting the
+    // task or removing the day line are separate menu actions.
+    const nodeId = await makeTask(userId, "Skip this");
+    await planNodeForDay(userId, nodeId, MON);
+    const [item] = await db
+      .select()
+      .from(dailyItems)
+      .where(eq(dailyItems.userId, userId));
+
+    await setDailyItemState(userId, item.id, "cancelled");
+
+    const [task] = await db.select().from(nodes).where(eq(nodes.id, nodeId));
+    expect(task.state).toBe("cancelled");
+    const dayRow = await itemById(item.id);
+    expect(dayRow.state).toBe("cancelled");
+    expect(dayRow.completedAt).not.toBeNull();
+  });
+
+  it("settles a jotted cancel the same way, without inventing a task", async () => {
+    const id = await createDailyItem({ userId, day: MON, title: "Maybe later" });
+    await setDailyItemState(userId, id, "cancelled");
+
+    const dayRow = await itemById(id);
+    expect(dayRow.state).toBe("cancelled");
+    expect(dayRow.completedAt).not.toBeNull();
+    expect(dayRow.nodeId).toBeNull();
   });
 });
 
