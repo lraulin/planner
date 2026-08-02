@@ -2,12 +2,13 @@
 
 import { useMemo, useState } from "react";
 import {
-  axisIndices,
   chartPoints,
+  dateXFraction,
   formatChartDate,
   niceTicks,
   plotPoint,
   seriesPolyline,
+  timeAxisDateKeys,
   yDomain,
 } from "@/lib/metrics/derive";
 import { formatMetricNumber } from "@/lib/metrics/parse";
@@ -20,7 +21,8 @@ const CHART_PAD = { left: 44, right: 16, top: 20, bottom: 28 };
 
 /**
  * Actual vs objective performance graph — pure SVG, no chart library.
- * Markers with hover tooltips; Y/X axes labeled at regular intervals (Achieve-style).
+ * X is linear in calendar time (each day the same width); Y is linear in value.
+ * Markers with hover tooltips; axes labeled at regular intervals (Achieve-style).
  * Fills its parent height so the Metrics split can resize the pane.
  */
 export function MetricChart({
@@ -59,8 +61,11 @@ export function MetricChart({
   const yMin = yTicks[0] ?? rawDomain.min;
   const yMax = yTicks[yTicks.length - 1] ?? rawDomain.max;
 
+  const minDate = points[0]?.date ?? "";
+  const maxDate = points[points.length - 1]?.date ?? minDate;
+
   const actualLine = seriesPolyline(
-    values,
+    points,
     CHART_WIDTH,
     CHART_HEIGHT,
     CHART_PAD,
@@ -68,11 +73,10 @@ export function MetricChart({
     yMax,
   );
 
-  const plotted = points.map((p, i) => ({
+  const plotted = points.map((p) => ({
     ...p,
     ...plotPoint(
-      i,
-      points.length,
+      dateXFraction(p.date, minDate, maxDate),
       p.value,
       CHART_WIDTH,
       CHART_HEIGHT,
@@ -82,20 +86,12 @@ export function MetricChart({
     ),
   }));
 
-  const xTickIndices = axisIndices(points.length, 6);
+  const xTickDates = minDate ? timeAxisDateKeys(minDate, maxDate, 6) : [];
 
   const objectiveY =
     showObjective && objectiveTarget !== null && Number.isFinite(objectiveTarget)
-      ? plotPoint(
-          0,
-          1,
-          objectiveTarget,
-          CHART_WIDTH,
-          CHART_HEIGHT,
-          CHART_PAD,
-          yMin,
-          yMax,
-        ).y
+      ? plotPoint(0, objectiveTarget, CHART_WIDTH, CHART_HEIGHT, CHART_PAD, yMin, yMax)
+          .y
       : null;
 
   if (points.length === 0) {
@@ -133,7 +129,6 @@ export function MetricChart({
           {yTicks.map((tick) => {
             const y = plotPoint(
               0,
-              1,
               tick,
               CHART_WIDTH,
               CHART_HEIGHT,
@@ -164,27 +159,34 @@ export function MetricChart({
             );
           })}
 
-          {xTickIndices.map((i) => {
-            const pt = plotted[i];
-            if (!pt) return null;
+          {xTickDates.map((dateKey) => {
+            const x = plotPoint(
+              dateXFraction(dateKey, minDate, maxDate),
+              yMin,
+              CHART_WIDTH,
+              CHART_HEIGHT,
+              CHART_PAD,
+              yMin,
+              yMax,
+            ).x;
             return (
-              <g key={`x-${i}`}>
+              <g key={`x-${dateKey}`}>
                 <line
-                  x1={pt.x}
-                  x2={pt.x}
+                  x1={x}
+                  x2={x}
                   y1={CHART_HEIGHT - CHART_PAD.bottom}
                   y2={CHART_HEIGHT - CHART_PAD.bottom + 4}
                   stroke="var(--rule)"
                   strokeWidth={1}
                 />
                 <text
-                  x={pt.x}
+                  x={x}
                   y={CHART_HEIGHT - 8}
                   textAnchor="middle"
                   className="fill-ink-faint"
                   style={{ fontSize: 8 }}
                 >
-                  {formatChartDate(pt.date)}
+                  {formatChartDate(dateKey)}
                 </text>
               </g>
             );

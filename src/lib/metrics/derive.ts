@@ -146,27 +146,105 @@ export function chartPoints(
   }));
 }
 
+/** Normalize chart padding to a per-side box. */
+function normalizePad(
+  padding: number | { left: number; right: number; top: number; bottom: number },
+): { left: number; right: number; top: number; bottom: number } {
+  return typeof padding === "number"
+    ? { left: padding, right: padding, top: padding, bottom: padding }
+    : padding;
+}
+
 /**
- * SVG polyline points for a series, mapped into a viewBox of width×height with padding.
- * Returns empty string when fewer than one point.
- * `padding` may be a uniform number or per-side box (left/right/top/bottom).
+ * Calendar-day ordinal for a `YYYY-MM-DD` key (UTC midnight / 86400000).
+ * Used only for linear day spacing — not wall-clock local time.
+ */
+export function dateKeyOrdinal(dateKey: string): number {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey.trim());
+  if (!m) return 0;
+  return Math.floor(Date.UTC(+m[1], +m[2] - 1, +m[3]) / 86_400_000);
+}
+
+/** Inverse of {@link dateKeyOrdinal}. */
+export function ordinalToDateKey(ordinal: number): string {
+  const d = new Date(ordinal * 86_400_000);
+  const y = d.getUTCFullYear();
+  const mo = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${mo}-${day}`;
+}
+
+/**
+ * Horizontal fraction in [0, 1] for a date between minDate and maxDate.
+ * Each calendar day takes equal width; same min/max → centre.
+ */
+export function dateXFraction(
+  dateKey: string,
+  minDate: string,
+  maxDate: string,
+): number {
+  const t0 = dateKeyOrdinal(minDate);
+  const t1 = dateKeyOrdinal(maxDate);
+  if (t0 === t1) return 0.5;
+  const t = dateKeyOrdinal(dateKey);
+  // Clamp so bad/out-of-range keys still land in the plot.
+  const f = (t - t0) / (t1 - t0);
+  return Math.min(1, Math.max(0, f));
+}
+
+/**
+ * Evenly spaced date keys across [minDate, maxDate] for X-axis labels
+ * (always includes endpoints). Spacing is by calendar day, not by sample count.
+ */
+export function timeAxisDateKeys(
+  minDate: string,
+  maxDate: string,
+  maxTicks = 6,
+): string[] {
+  const t0 = dateKeyOrdinal(minDate);
+  const t1 = dateKeyOrdinal(maxDate);
+  if (t0 === t1) return [minDate];
+  const span = t1 - t0;
+  const count = Math.min(maxTicks, span + 1);
+  if (count <= 1) return [minDate];
+  const set = new Set<string>();
+  for (let i = 0; i < count; i++) {
+    const ord = Math.round(t0 + (i / (count - 1)) * span);
+    set.add(ordinalToDateKey(ord));
+  }
+  // Ensure exact endpoints even if rounding drifted.
+  set.add(minDate);
+  set.add(maxDate);
+  return [...set].sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * SVG polyline for a dated series. X is linear in calendar time (each day same
+ * width); Y is linear in value. Returns empty string when no points.
  */
 export function seriesPolyline(
-  values: number[],
+  series: ReadonlyArray<{ date: string; value: number }>,
   width: number,
   height: number,
   padding: number | { left: number; right: number; top: number; bottom: number },
   yMin: number,
   yMax: number,
 ): string {
-  if (values.length === 0) return "";
-  const pad =
-    typeof padding === "number"
-      ? { left: padding, right: padding, top: padding, bottom: padding }
-      : padding;
-  return values
-    .map((v, i) => {
-      const { x, y } = plotPoint(i, values.length, v, width, height, pad, yMin, yMax);
+  if (series.length === 0) return "";
+  const pad = normalizePad(padding);
+  const minDate = series[0].date;
+  const maxDate = series[series.length - 1].date;
+  return series
+    .map((p) => {
+      const { x, y } = plotPoint(
+        dateXFraction(p.date, minDate, maxDate),
+        p.value,
+        width,
+        height,
+        pad,
+        yMin,
+        yMax,
+      );
       return `${x.toFixed(2)},${y.toFixed(2)}`;
     })
     .join(" ");
@@ -228,25 +306,11 @@ export function niceTicks(min: number, max: number, targetCount = 5): number[] {
 }
 
 /**
- * Indices into a chronological series for X-axis labels (always includes first & last).
+ * Map a horizontal fraction (0–1, from {@link dateXFraction}) + value into SVG
+ * coordinates. Same geometry as {@link seriesPolyline}.
  */
-export function axisIndices(count: number, maxTicks = 6): number[] {
-  if (count <= 0) return [];
-  if (count === 1) return [0];
-  if (count <= maxTicks) {
-    return Array.from({ length: count }, (_, i) => i);
-  }
-  const set = new Set<number>();
-  for (let t = 0; t < maxTicks; t++) {
-    set.add(Math.round((t / (maxTicks - 1)) * (count - 1)));
-  }
-  return [...set].sort((a, b) => a - b);
-}
-
-/** Map a series index + value into SVG coordinates (same geometry as seriesPolyline). */
 export function plotPoint(
-  index: number,
-  count: number,
+  xFraction: number,
   value: number,
   width: number,
   height: number,
@@ -257,7 +321,8 @@ export function plotPoint(
   const innerW = Math.max(1, width - padding.left - padding.right);
   const innerH = Math.max(1, height - padding.top - padding.bottom);
   const span = yMax - yMin || 1;
-  const x = padding.left + (count <= 1 ? innerW / 2 : (index / (count - 1)) * innerW);
+  const f = Number.isFinite(xFraction) ? Math.min(1, Math.max(0, xFraction)) : 0.5;
+  const x = padding.left + f * innerW;
   const y = padding.top + innerH - ((value - yMin) / span) * innerH;
   return { x, y };
 }

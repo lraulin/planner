@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   applyFrozenEntryOrder,
-  axisIndices,
   chartPoints,
+  dateKeyOrdinal,
+  dateXFraction,
   displayValue,
   formatChartDate,
   latestEntry,
@@ -12,6 +13,7 @@ import {
   seriesPolyline,
   shouldShowEntryTargetColumn,
   sortEntriesByDate,
+  timeAxisDateKeys,
   yDomain,
 } from "./derive";
 
@@ -222,10 +224,32 @@ describe("seriesPolyline", () => {
     expect(seriesPolyline([], 100, 50, 5, 0, 1)).toBe("");
   });
 
-  it("emits one point for a single value", () => {
-    const s = seriesPolyline([50], 100, 50, 10, 0, 100);
+  it("emits one point for a single value at horizontal centre", () => {
+    const s = seriesPolyline([{ date: "2025-01-01", value: 50 }], 100, 50, 10, 0, 100);
     expect(s.split(" ")).toHaveLength(1);
     expect(s.startsWith("50.00,")).toBe(true);
+  });
+
+  it("spaces points by calendar day, not by sample index", () => {
+    // Day 0, day 1, day 10 — gap 0→1 is 1/10 of gap 0→10, not equal index spacing.
+    const s = seriesPolyline(
+      [
+        { date: "2025-01-01", value: 0 },
+        { date: "2025-01-02", value: 0 },
+        { date: "2025-01-11", value: 0 },
+      ],
+      110,
+      50,
+      5,
+      0,
+      1,
+    );
+    const xs = s.split(" ").map((pair) => Number(pair.split(",")[0]));
+    expect(xs[0]).toBeCloseTo(5, 5);
+    expect(xs[2]).toBeCloseTo(105, 5);
+    // 1 day of a 10-day span → 10% of the 100px inner width from the left pad.
+    expect(xs[1] - xs[0]).toBeCloseTo(10, 5);
+    expect(xs[2] - xs[0]).toBeCloseTo(100, 5);
   });
 });
 
@@ -250,26 +274,44 @@ describe("niceTicks", () => {
   });
 });
 
-describe("axisIndices", () => {
-  it("returns every index when the series is short", () => {
-    expect(axisIndices(3, 6)).toEqual([0, 1, 2]);
+describe("dateXFraction / time axis", () => {
+  it("gives equal day width across a range", () => {
+    expect(dateXFraction("2025-01-01", "2025-01-01", "2025-01-11")).toBeCloseTo(0, 8);
+    expect(dateXFraction("2025-01-06", "2025-01-01", "2025-01-11")).toBeCloseTo(0.5, 8);
+    expect(dateXFraction("2025-01-11", "2025-01-01", "2025-01-11")).toBeCloseTo(1, 8);
   });
 
-  it("always includes first and last", () => {
-    const idx = axisIndices(20, 5);
-    expect(idx[0]).toBe(0);
-    expect(idx[idx.length - 1]).toBe(19);
-    expect(idx.length).toBeLessThanOrEqual(5);
+  it("centres a single-day range", () => {
+    expect(dateXFraction("2025-06-01", "2025-06-01", "2025-06-01")).toBe(0.5);
+  });
+
+  it("round-trips ordinals for consecutive days", () => {
+    expect(dateKeyOrdinal("2025-01-02") - dateKeyOrdinal("2025-01-01")).toBe(1);
+  });
+
+  it("labels include endpoints and stay within the range", () => {
+    const keys = timeAxisDateKeys("2025-01-01", "2025-01-31", 5);
+    expect(keys[0]).toBe("2025-01-01");
+    expect(keys[keys.length - 1]).toBe("2025-01-31");
+    expect(keys.length).toBeLessThanOrEqual(5);
+    for (const k of keys) {
+      expect(k >= "2025-01-01" && k <= "2025-01-31").toBe(true);
+    }
   });
 });
 
 describe("plotPoint", () => {
   const pad = { left: 10, right: 10, top: 10, bottom: 10 };
 
-  it("places a single point in the horizontal centre", () => {
-    const p = plotPoint(0, 1, 50, 100, 100, pad, 0, 100);
+  it("places xFraction 0.5 in the horizontal centre", () => {
+    const p = plotPoint(0.5, 50, 100, 100, pad, 0, 100);
     expect(p.x).toBe(50);
     expect(p.y).toBe(50);
+  });
+
+  it("maps xFraction 0 and 1 to the plot edges", () => {
+    expect(plotPoint(0, 0, 100, 100, pad, 0, 100).x).toBe(10);
+    expect(plotPoint(1, 0, 100, 100, pad, 0, 100).x).toBe(90);
   });
 });
 
