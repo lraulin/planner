@@ -64,6 +64,39 @@ for the fields that don't fit on a row.
 Where a value is a rollup of its descendants (a parent's effort), the cell is **read-only**.
 Never offer an editor whose result would be invisible behind a computed value.
 
+### Sorted grids: do not move the world while the user is still typing
+
+**Context preservation applies inside a grid row too.** If the user is mid-edit, the row
+must stay put. Re-sorting (or re-filtering) the moment a sort-key column changes under the
+cursor is classic poor UX: they lose their place, can't finish the value, and the interface
+feels hostile.
+
+Rules:
+
+1. **Commit on finish, not on every intermediate change.**  
+   Buffer the editor in local state. Write to the model on **blur**, **Enter**, or an
+   explicit Accept — not on each keystroke and not on each partial date-picker step.
+2. **Defer re-sort until the edit session ends.**  
+   While any cell in the sorted grid (or tracking table) has focus, freeze the on-screen
+   row order. After focus leaves the grid, re-apply sort. Optional later polish: animate
+   the row to its new place or offer a manual “Re-sort” control; never jump mid-edit.
+3. **Date pickers: month/year navigation is not a commit.**  
+   Changing month or year is exploratory. Only a complete day selection, Accept, or blur
+   of a finished value should update storage. With native `type="date"`, treat `onChange`
+   as draft-only and commit on blur — do not fire a server write that reloads and re-sorts
+   the list while the calendar is still open.
+4. **Same for other multi-step editors** (decimal fields, composite values): draft locally,
+   commit when the user is done (see Metric tracking value/date cells).
+
+| Action while editing a sorted column | Good                                    | Bad                                   |
+| ------------------------------------ | --------------------------------------- | ------------------------------------- |
+| Open date picker / change month      | Calendar navigates; no write; row stays | Picker closes, value saves, row jumps |
+| Key into a value cell                | Local draft only                        | Every keystroke re-sorts              |
+| Blur / Enter after a real change     | Commit, then re-sort when focus leaves  | Already sorted three steps ago        |
+
+This is the same principle as the drawer: **do not hide or rearrange the user's map while
+they are working on a piece of it.**
+
 ### Avoid modals for routine editing
 
 Modals hide context, increase cognitive load, and feel interruptive. Reserve them for:
@@ -216,3 +249,5 @@ sub-editors may treat Save as done (Cancel + Save only). Details live in
 | Is this a short nested "return a value" editor?                                  | Save may close (exception)                  | Save stays open; Save & Close finishes           |
 | Is the viewport below `md`?                                                      | List + full-screen sheet                    | Grid + right drawer                              |
 | Is the action only reachable by hover / right-click / double-click / a shortcut? | It is broken on touch — add a tappable path | Ship it                                          |
+| Does editing this cell change the active sort key?                               | Draft locally; freeze order until blur      | Never live re-sort under the cursor              |
+| Is this a multi-step control (date picker, decimal, composite)?                  | Commit on blur / Enter / Accept             | Do not write on intermediate steps               |

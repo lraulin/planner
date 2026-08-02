@@ -7,6 +7,7 @@ import {
   useMemo,
   useState,
   useTransition,
+  type FocusEvent as ReactFocusEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import type { PriorityLetter } from "@/db/schema";
@@ -27,10 +28,15 @@ import {
   entriesToCsv,
   pickEntriesInOrder,
 } from "@/lib/metrics/csv";
-import { sortEntriesByDate, type EntryDateSort } from "@/lib/metrics/derive";
+import {
+  applyFrozenEntryOrder,
+  sortEntriesByDate,
+  type EntryDateSort,
+} from "@/lib/metrics/derive";
 import { isTypingTarget } from "@/lib/keyboard";
 import {
   formatMetricNumber,
+  isDateKey,
   localDateKey,
   parseMetricInput,
 } from "@/lib/metrics/parse";
@@ -145,6 +151,11 @@ function MetricForm({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [selectionAnchor, setSelectionAnchor] = useState<string | null>(null);
   const [showFields, setShowFields] = useState(false);
+  /**
+   * While focus is inside the tracking table, keep this id order so a date/value
+   * commit cannot re-sort the row out from under the user (ux-principles).
+   */
+  const [frozenOrder, setFrozenOrder] = useState<string[] | null>(null);
 
   // Shared across every metric (not per-metric) — same rail as other grids.
   const trackingFields = useGridState(
@@ -170,15 +181,38 @@ function MetricForm({
     [detail.entries, dateSort],
   );
 
+  const displayEntries = useMemo(
+    () => applyFrozenEntryOrder(sortedEntries, frozenOrder),
+    [sortedEntries, frozenOrder],
+  );
+
   const toggleDateSort = () => {
+    setFrozenOrder(null);
     setDateSort((d) => (d === "desc" ? "asc" : "desc"));
+  };
+
+  const freezeDisplayOrder = useCallback(() => {
+    setFrozenOrder((prev) => {
+      if (prev) return prev;
+      return sortEntriesByDate(detail.entries, dateSort).map((e) => e.id);
+    });
+  }, [detail.entries, dateSort]);
+
+  const onTrackingTableFocusOut = (event: ReactFocusEvent<HTMLTableElement>) => {
+    // Defer: native date pickers can briefly clear focus while navigating months.
+    const table = event.currentTarget;
+    window.setTimeout(() => {
+      const active = document.activeElement;
+      if (active instanceof Node && table.contains(active)) return;
+      setFrozenOrder(null);
+    }, 0);
   };
 
   const selectEntryRow = useCallback(
     (entryId: string, event: ReactMouseEvent) => {
       setSelectedIds((prev) => {
         if (event.shiftKey && selectionAnchor) {
-          const ids = sortedEntries.map((e) => e.id);
+          const ids = displayEntries.map((e) => e.id);
           const a = ids.indexOf(selectionAnchor);
           const b = ids.indexOf(entryId);
           if (a >= 0 && b >= 0) {
@@ -196,15 +230,15 @@ function MetricForm({
       });
       if (!event.shiftKey) setSelectionAnchor(entryId);
     },
-    [selectionAnchor, sortedEntries],
+    [selectionAnchor, displayEntries],
   );
 
   const copySelectedEntries = useCallback(async () => {
-    const rows = pickEntriesInOrder(sortedEntries, selectedIds);
+    const rows = pickEntriesInOrder(displayEntries, selectedIds);
     if (rows.length === 0) return;
     const text = entriesToClipboardTsv(rows, { includeTarget: showTargetColumn });
     await writeClipboardText(text);
-  }, [sortedEntries, selectedIds, showTargetColumn]);
+  }, [displayEntries, selectedIds, showTargetColumn]);
 
   useEffect(() => {
     if (tab !== "tracking") return;
@@ -566,7 +600,11 @@ function MetricForm({
             </div>
 
             <div className="overflow-x-auto rounded border border-rule">
-              <table className="w-full min-w-[16rem] text-left text-[0.8125rem]">
+              <table
+                className="w-full min-w-[16rem] text-left text-[0.8125rem]"
+                onFocusCapture={freezeDisplayOrder}
+                onBlurCapture={onTrackingTableFocusOut}
+              >
                 <thead className="bg-surface-raised text-ink-muted">
                   <tr>
                     {fieldIds.map((fieldId) => {
@@ -602,7 +640,7 @@ function MetricForm({
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedEntries.length === 0 && (
+                  {displayEntries.length === 0 && (
                     <tr>
                       <td
                         colSpan={tableColSpan}
@@ -612,9 +650,10 @@ function MetricForm({
                       </td>
                     </tr>
                   )}
-                  {sortedEntries.map((entry) => {
+                  {displayEntries.map((entry) => {
                     const selected = selectedIds.has(entry.id);
                     const focusRow = () => {
+                      freezeDisplayOrder();
                       setSelectedIds(new Set([entry.id]));
                       setSelectionAnchor(entry.id);
                     };
@@ -637,16 +676,13 @@ function MetricForm({
                           if (fieldId === "date") {
                             return (
                               <td key={fieldId} className="px-1 py-0.5">
-                                <input
-                                  type="date"
-                                  value={entry.entryDate}
-                                  onChange={(e) =>
-                                    updateEntry(entry, {
-                                      entryDate: e.target.value,
-                                    })
-                                  }
+                                <MetricDateCell
+                                  committed={entry.entryDate}
+                                  onCommit={(entryDate) => {
+                                    if (entryDate === entry.entryDate) return;
+                                    updateEntry(entry, { entryDate });
+                                  }}
                                   onFocus={focusRow}
-                                  className="w-full rounded border border-transparent bg-transparent px-1 py-1 hover:border-rule focus:border-select-edge"
                                 />
                               </td>
                             );
@@ -756,6 +792,51 @@ function MetricForm({
         onClose={() => setShowFields(false)}
       />
     </>
+  );
+}
+
+/**
+ * Date cell: local draft while the native picker is open; commit on blur/Enter.
+ * Month/year navigation must not write the server or re-sort the grid.
+ */
+function MetricDateCell({
+  committed,
+  onCommit,
+  onFocus,
+}: {
+  committed: string;
+  onCommit: (dateKey: string) => void;
+  onFocus?: () => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const value = draft ?? committed;
+
+  const finish = () => {
+    const next = (draft ?? committed).trim();
+    setDraft(null);
+    if (!isDateKey(next)) return;
+    if (next !== committed) onCommit(next);
+  };
+
+  return (
+    <input
+      type="date"
+      value={value}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={finish}
+      onFocus={onFocus}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          (e.target as HTMLInputElement).blur();
+        }
+        if (e.key === "Escape") {
+          setDraft(null);
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+      className="w-full rounded border border-transparent bg-transparent px-1 py-1 hover:border-rule focus:border-select-edge"
+    />
   );
 }
 

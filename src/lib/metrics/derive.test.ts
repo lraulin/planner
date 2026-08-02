@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyFrozenEntryOrder,
   chartPoints,
   displayValue,
   latestEntry,
@@ -9,6 +10,38 @@ import {
   sortEntriesByDate,
   yDomain,
 } from "./derive";
+
+describe("applyFrozenEntryOrder", () => {
+  const rows = [
+    { id: "a", entryDate: "2025-01-01" },
+    { id: "b", entryDate: "2025-02-01" },
+    { id: "c", entryDate: "2025-03-01" },
+  ];
+
+  it("returns a copy when no freeze is active", () => {
+    expect(applyFrozenEntryOrder(rows, null).map((r) => r.id)).toEqual(["a", "b", "c"]);
+  });
+
+  it("keeps frozen positions even if the source order changed", () => {
+    // After a date edit, sorted data is c,a,b but freeze holds a,b,c.
+    const resorted = [rows[2], rows[0], rows[1]];
+    expect(applyFrozenEntryOrder(resorted, ["a", "b", "c"]).map((r) => r.id)).toEqual([
+      "a",
+      "b",
+      "c",
+    ]);
+  });
+
+  it("appends ids that are not in the freeze list", () => {
+    const withNew = [...rows, { id: "d", entryDate: "2025-04-01" }];
+    expect(applyFrozenEntryOrder(withNew, ["c", "a"]).map((r) => r.id)).toEqual([
+      "c",
+      "a",
+      "b",
+      "d",
+    ]);
+  });
+});
 
 describe("sortEntriesByDate", () => {
   const rows = [

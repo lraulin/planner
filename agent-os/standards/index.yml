@@ -4,7 +4,7 @@ database:
 
 components:
   ux-principles:
-    description: Core UI/UX philosophy — outline grid + drawer, inline editing for grid columns, modals only for confirmations, blocking decisions and fast capture, tabs for form sections
+    description: Core UI/UX philosophy — outline grid + drawer, inline editing, no re-sort while editing, date/decimal commit on blur, modals only for confirmations/capture, tabs for form sections
   drawer-pattern:
     description: Right-sliding drawer for full-record editing — DrawerFooter Cancel|Save|Save & Close (or autosave for notes), sticky footer, unsaved-changes on leave, server actions
   modal-pattern:

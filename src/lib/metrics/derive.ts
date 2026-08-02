@@ -21,6 +21,31 @@ export function sortEntriesByDate<T extends { entryDate: string; id: string }>(
 }
 
 /**
+ * Keep a display order frozen while the user is mid-edit (e.g. date picker open).
+ * Known ids keep their frozen positions; any new ids append in the caller's order.
+ * Pass `null` / empty to return entries unchanged (already sorted by the caller).
+ */
+export function applyFrozenEntryOrder<T extends { id: string }>(
+  entries: ReadonlyArray<T>,
+  frozenIds: readonly string[] | null | undefined,
+): T[] {
+  if (!frozenIds || frozenIds.length === 0) return [...entries];
+  const byId = new Map(entries.map((e) => [e.id, e]));
+  const out: T[] = [];
+  for (const id of frozenIds) {
+    const row = byId.get(id);
+    if (row) {
+      out.push(row);
+      byId.delete(id);
+    }
+  }
+  for (const row of entries) {
+    if (byId.has(row.id)) out.push(row);
+  }
+  return out;
+}
+
+/**
  * Whether the tracking grid should show a Target column.
  * Hidden when the metric has no objective and no entry carries its own target
  * (import history). Per-entry targets are rare; the metric objective is enough
