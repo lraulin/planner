@@ -344,19 +344,21 @@ export function DateField({
   label,
   value,
   onChange,
+  hint,
   className,
 }: {
   label: string;
   /** Stored as a timestamp; only the date half is edited. */
   value: Date | null;
   onChange: (value: Date | null) => void;
+  hint?: string;
   className?: string;
 }) {
   const id = useId();
   const text = value ? value.toISOString().slice(0, 10) : "";
 
   return (
-    <Field label={label} htmlFor={id} className={className}>
+    <Field label={label} htmlFor={id} hint={hint} className={className}>
       <input
         id={id}
         type="date"

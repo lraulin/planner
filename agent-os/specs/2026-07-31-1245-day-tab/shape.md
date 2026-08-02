@@ -137,6 +137,15 @@ meaning — this would have been the Today Project mistake again, one field down
 a single column cannot carry a **forwarded** mark, so Wednesday could never show what became
 of Wednesday.
 
+> **Revised 2026-08-01** by `agent-os/specs/2026-08-01-2030-start-date-is-the-plan/`. The
+> third reason stands and is why `daily_items` still exists. The first two do not: the score
+> term is `targetStartReached: 10` on a scale where an overdue deadline is 400, and every
+> weight is already tunable per view; and Achieve's own definition of target start is "when
+> you intend to begin working on this item", which is precisely what Plan for day says. The
+> conclusion drawn here was too broad — the _record_ has to live in `daily_items`, but which
+> day an unfinished task sits on is now decided by `target_start_date`, with the row kept in
+> step. Setting a start date puts the task on that day's list.
+
 One table, three ways in — type it on the day page, drag it in the week grid, set it on the
 task — all writing the same row. That is what "harmonious, not parallel" means concretely.
 

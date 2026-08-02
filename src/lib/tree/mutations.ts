@@ -14,6 +14,7 @@ import { addDays, daysBetween, startOfDay } from "@/lib/dateMath";
 import { nextDue } from "@/lib/recurrence/nextDue";
 import { nextOccurrence } from "@/lib/recurrence/pattern";
 import { toDateKey } from "@/lib/schedule/geometry";
+import { syncDayLineToTargetStart } from "@/lib/day/sync";
 import { assertCanNest, TYPE_LABELS } from "./hierarchy";
 import { loadOutline } from "./queries";
 import { between } from "./sortKey";
@@ -454,7 +455,7 @@ export async function applyStateTransition(
 
   if (!recurrence) {
     await finish();
-    await syncDayLineOnCompletion(tx, userId, nodeId, now, null);
+    await syncDayLineOnCompletion(tx, userId, nodeId, now);
     return;
   }
 
@@ -478,9 +479,9 @@ export async function applyStateTransition(
       .update(taskDetails)
       .set({ dateCompleted: now })
       .where(eq(taskDetails.nodeId, nodeId));
-    // No next occurrence to plant — the series is over — but the day line still gets
-    // checked off, exactly as it would for any other task being finished.
-    await syncDayLineOnCompletion(tx, userId, nodeId, now, null);
+    // The series is over, so nothing follows it onto a future day — but the day line still
+    // gets checked off, exactly as it would for any other task being finished.
+    await syncDayLineOnCompletion(tx, userId, nodeId, now);
     return;
   }
 
@@ -530,33 +531,28 @@ export async function applyStateTransition(
     .set({ dateCompleted: now, ...dates.task })
     .where(eq(taskDetails.nodeId, nodeId));
 
-  await syncDayLineOnCompletion(tx, userId, nodeId, now, next);
+  await syncDayLineOnCompletion(tx, userId, nodeId, now);
+  await syncDayLineToTargetStart(tx, userId, nodeId);
 }
 
 /**
- * Keep the Day page in step with a task that has just been completed.
+ * Record a completed task as crossed off on the day it was completed.
  *
  * The day page is a paper day: you can turn back to Tuesday and see what you wrote and what
  * you crossed off. So **every** completed task gets a struck-through line on the day it was
  * completed — whether or not it was planned there, whether or not it repeats, and whichever
  * surface you were looking at when you ticked it. A record with holes in it is not a record.
  *
- * Two different things are being written here, and they follow different rules:
- *
- * - **The record.** Always. An existing open line is checked off; a task that was never on
- *   the list gets a line created already crossed off.
- * - **The plan for the next occurrence.** Only when the task was already on a day list.
- *   "Plan for day" is a statement of intent, and it is the user's to make: recording that
- *   you did something today is not grounds for the app to decide you mean to do it again on
- *   Thursday. A routine you actually keep on the day page keeps coming back; one you drive
- *   from the outline stays out of the way.
+ * Only the record. Where a repeating task's *next* occurrence lands is not decided here:
+ * completing one writes a fresh `target_start_date`, and `syncDayLineToTargetStart` puts
+ * the open line on that day. One mechanism deciding which day a task sits on, not two
+ * aiming at the same square.
  */
 async function syncDayLineOnCompletion(
   tx: Executor,
   userId: string,
   nodeId: string,
   completedAt: Date,
-  next: Date | null,
 ): Promise<void> {
   const rows = await tx
     .select({
@@ -588,20 +584,6 @@ async function syncDayLineOnCompletion(
       completedAt,
     });
   }
-
-  // Was it on a day list before this? That is what makes the next occurrence a plan rather
-  // than an assumption.
-  if (!next || !(open ?? doneToday)) return;
-
-  // A missed occurrence lands in the past, where a new line would never be seen. Put it on
-  // today instead: it is due, and today is when you can act on it.
-  const day = toDateKey(next) < today ? today : toDateKey(next);
-  await addDayLine(tx, userId, nodeId, day, {
-    // The ABC letter is the day's own ranking, and a routine's is stable — it was an A
-    // yesterday because it is an A every day. The rank within the letter is not carried:
-    // where it sits among tomorrow's other work is tomorrow's question.
-    priorityLetter: (open ?? doneToday)!.priorityLetter,
-  });
 }
 
 /** Append a line for a task to the end of a day. Silent if one is already there. */
@@ -675,6 +657,14 @@ async function reopenDayLine(
     .update(dailyItems)
     .set({ state: "not_started", completedAt: null, updatedAt: now })
     .where(eq(dailyItems.id, doneToday.id));
+
+  // The line is open again on today, so the task's target start date has to say today —
+  // that column is what decides which day a task sits on, and reopening something you
+  // finished this morning is a statement that you are still doing it today.
+  await tx
+    .update(taskDetails)
+    .set({ targetStartDate: startOfDay(now) })
+    .where(eq(taskDetails.nodeId, nodeId));
 }
 
 export async function setState(

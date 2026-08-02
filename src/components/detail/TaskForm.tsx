@@ -17,7 +17,6 @@ import {
   TextArea,
   TextField,
 } from "./fields";
-import { PlanForDayField } from "./PlanForDayField";
 import { RecurrenceFields } from "./RecurrenceFields";
 import { skipRecurrenceAction } from "@/app/outline/actions";
 import { LinkedNotesPanel } from "@/components/notes/LinkedNotesPanel";
@@ -47,7 +46,7 @@ const CONSTRAINT_OPTIONS: { value: TaskConstraint; label: string }[] = [
  * cell does — its children's totals are what anyone reading the row actually wants.
  */
 export function taskTabs(props: DetailFormProps): FormTab[] {
-  const { detail, node, values, patch, patchTask, list, runAction } = props;
+  const { node, values, patch, patchTask, list, runAction } = props;
   const task = values.task ?? {};
   const rollsUp = node.hasChildren;
 
@@ -82,10 +81,15 @@ export function taskTabs(props: DetailFormProps): FormTab[] {
 
           <Section title="Dates">
             <FieldGrid columns={3}>
+              {/* Also the day-page plan. Achieve's target start date is "when you intend
+                  to begin working on this item", which is the same statement "Plan for day"
+                  used to make separately — two fields meaning one thing is how the Day tab
+                  and the outline end up disagreeing. See `src/lib/day/sync.ts`. */}
               <DateField
                 label="Target start"
                 value={task.targetStartDate ?? null}
                 onChange={(targetStartDate) => patchTask({ targetStartDate })}
+                hint="Also puts the task on that day's list. Not a deadline — it carries forward."
               />
               <DateField
                 label="Target end"
@@ -102,10 +106,6 @@ export function taskTabs(props: DetailFormProps): FormTab[] {
                 value={task.deferredDate ?? null}
                 onChange={(deferredDate) => patchTask({ deferredDate })}
               />
-              {/* Sits with the dates because that is where you look for it, but it is not
-                  one of them: it writes to `daily_items`, saves on change, and can never
-                  make anything overdue. */}
-              <PlanForDayField nodeId={node.id} plannedDay={detail.plannedDay} />
               <EffortField
                 label="Lead time"
                 value={task.leadTimeMinutes ?? null}

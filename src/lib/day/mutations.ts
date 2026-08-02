@@ -4,6 +4,7 @@ import {
   dailyItems,
   nodes,
   notes,
+  taskDetails,
   type NodeState,
   type PriorityLetter,
 } from "@/db/schema";
@@ -12,6 +13,7 @@ import { toDateKey } from "@/lib/schedule/geometry";
 import { applyStateTransition, createNode } from "@/lib/tree/mutations";
 import { between } from "@/lib/tree/sortKey";
 import { itemsToForward } from "./forward";
+import { setTargetStartDay } from "./sync";
 import { JOURNAL_SUBJECT } from "./types";
 import type { DayAssignment } from "./priority";
 
@@ -229,6 +231,16 @@ async function moveItemToDay(
       updatedAt: new Date(),
     })
     .where(and(eq(dailyItems.id, itemId), eq(dailyItems.userId, userId)));
+
+  // Dragging an unfinished task to another day is re-planning it, so its target start date
+  // moves too — otherwise the drawer would go on claiming the old day. A completed or
+  // forwarded row is history and does not re-plan anything.
+  if (item.nodeId && item.completedAt === null && item.forwardedTo === null) {
+    await tx
+      .update(taskDetails)
+      .set({ targetStartDate: new Date(`${day}T00:00:00`) })
+      .where(eq(taskDetails.nodeId, item.nodeId));
+  }
 }
 
 export async function moveDailyItemToDay(
@@ -250,8 +262,15 @@ export async function deleteDailyItem(userId: string, itemId: string): Promise<v
  * Plan a task for a day, or clear it — what the task form's "Plan for day" field and the
  * week view's drop targets both call.
  *
- * Passing `null` removes the task from whatever day it was on. It never completes or
- * deletes anything: unplanning is "not this day", not "not at all".
+ * For a **task** this writes `target_start_date`, because Achieve's target start date is
+ * "when you intend to begin working on this item" and that is the same statement. The day
+ * line follows from `syncDayLineToTargetStart`; see `./sync` for why the row still exists.
+ *
+ * A **project** has no target start date of its own — the column lives on `task_details` —
+ * so a planned project keeps its row as its only home, exactly as before.
+ *
+ * Passing `null` un-plans it. It never completes or deletes anything: unplanning is "not
+ * this day", not "not at all".
  */
 export async function planNodeForDay(
   userId: string,
@@ -259,6 +278,19 @@ export async function planNodeForDay(
   day: string | null,
 ): Promise<void> {
   await db.transaction(async (tx) => {
+    const [node] = await tx
+      .select({ name: nodes.name, type: nodes.type })
+      .from(nodes)
+      .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)))
+      .limit(1);
+
+    if (!node) throw new Error("Task not found.");
+
+    if (node.type === "task") {
+      await setTargetStartDay(tx, userId, nodeId, day);
+      return;
+    }
+
     const existing = await openRowForNode(tx, userId, nodeId);
 
     if (day === null) {
@@ -274,14 +306,6 @@ export async function planNodeForDay(
       await moveItemToDay(tx, userId, existing.id, day);
       return;
     }
-
-    const [node] = await tx
-      .select({ name: nodes.name })
-      .from(nodes)
-      .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)))
-      .limit(1);
-
-    if (!node) throw new Error("Task not found.");
 
     await tx.insert(dailyItems).values({
       userId,
@@ -317,6 +341,13 @@ export async function promoteToTask(userId: string, itemId: string): Promise<str
     .update(dailyItems)
     .set({ nodeId, updatedAt: new Date() })
     .where(and(eq(dailyItems.id, itemId), eq(dailyItems.userId, userId)));
+
+  // The line now stands for a task, and a task says which day it is on with its target
+  // start date. Without this the new task would have a day line and no date to explain it.
+  await db
+    .update(taskDetails)
+    .set({ targetStartDate: new Date(`${item.day}T00:00:00`) })
+    .where(eq(taskDetails.nodeId, nodeId));
 
   return nodeId;
 }
@@ -380,6 +411,17 @@ export async function forwardOpenItems(
         state: row.state,
         sortKey,
       });
+
+      // Carrying a task over is re-planning it for today, so its target start date comes
+      // with it — the one place a start date you sailed past gets bumped, which is how a
+      // task you meant to begin on Tuesday is still in front of you on Thursday rather
+      // than stranded on Tuesday's page.
+      if (row.nodeId) {
+        await tx
+          .update(taskDetails)
+          .set({ targetStartDate: new Date(`${today}T00:00:00`) })
+          .where(eq(taskDetails.nodeId, row.nodeId));
+      }
 
       sortKey = between(sortKey, null);
     }

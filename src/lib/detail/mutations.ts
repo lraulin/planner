@@ -9,6 +9,7 @@ import {
 } from "@/db/schema";
 import type { NodeItemKind } from "@/db/schema";
 import { and, asc, eq } from "drizzle-orm";
+import { syncDayLineToTargetStart } from "@/lib/day/sync";
 import { applyStateTransition } from "@/lib/tree/mutations";
 import { between } from "@/lib/tree/sortKey";
 import { fetchPageTitle, shouldAutofillAttachmentTitle } from "@/lib/url/pageTitle";
@@ -316,6 +317,14 @@ export async function saveNodeDetail(
     // do the same without the State dropdown ever being opened.
     if ("state" in core && core.state !== undefined && core.state !== node.state) {
       await applyStateTransition(tx, userId, nodeId, core.state);
+    }
+
+    // Last of all, and after the transition, which may have moved the date itself. Target
+    // start is where a task says which day it belongs on, so its day line follows — see
+    // `src/lib/day/sync.ts`. Cheap and idempotent, so it runs on any task save rather than
+    // trying to work out whether this particular one touched the date.
+    if (node.type === "task") {
+      await syncDayLineToTargetStart(tx, userId, nodeId);
     }
   });
 }

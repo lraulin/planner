@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { dailyItems, nodes, taskDetails, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { toDateKey } from "@/lib/schedule/geometry";
 import { createNode, setState } from "@/lib/tree/mutations";
 import { saveNodeDetail } from "@/lib/detail/mutations";
 import {
@@ -430,10 +431,10 @@ describeDb("completing from the day page", () => {
     expect(rows[0].completedAt).not.toBeNull();
   });
 
-  it("does not plan a future day for a routine that was never on the day list", async () => {
-    // The other half of the rule. Recording that you did something today is not grounds
-    // for the app to decide you intend to do it again on Thursday — "Plan for day" is the
-    // user's statement of intent, and only carries forward what was already there.
+  it("puts a routine on its next day from the target start date, not from a planted row", async () => {
+    // Nothing plants the next line any more. Completing a repeating task writes a fresh
+    // target start date, and the day line follows that column like every other task's —
+    // one mechanism deciding which day something sits on rather than two.
     const nodeId = await makeTask(userId, "Never planned");
     await saveNodeDetail(userId, nodeId, {
       task: { recurrenceFrequency: "daily", recurrenceInterval: 1 },
@@ -445,9 +446,61 @@ describeDb("completing from the day page", () => {
       .select()
       .from(dailyItems)
       .where(and(eq(dailyItems.userId, userId), eq(dailyItems.nodeId, nodeId)));
+    expect(rows).toHaveLength(2);
+    expect(rows.find((r) => r.day === todayKey())!.completedAt).not.toBeNull();
+    expect(rows.find((r) => r.day === tomorrowKey())!.completedAt).toBeNull();
+    expect(await plannedDayForNode(userId, nodeId)).toBe(tomorrowKey());
+  });
+
+  it("puts a task on a day when its target start date is set", async () => {
+    // The point of the whole seam: target start date *is* the plan. Setting it from the
+    // record puts the task on that day's list without anything else being asked of you.
+    const nodeId = await makeTask(userId, "Starts Wednesday");
+
+    await saveNodeDetail(userId, nodeId, {
+      task: { targetStartDate: new Date(`${WED}T00:00:00`) },
+    });
+
+    const rows = await db
+      .select()
+      .from(dailyItems)
+      .where(and(eq(dailyItems.userId, userId), eq(dailyItems.nodeId, nodeId)));
     expect(rows).toHaveLength(1);
-    expect(rows[0].day).toBe(todayKey());
-    expect(rows.every((r) => r.completedAt !== null)).toBe(true);
+    expect(rows[0].day).toBe(WED);
+    expect(await plannedDayForNode(userId, nodeId)).toBe(WED);
+  });
+
+  it("moves the day line when the target start date changes, and removes it when cleared", async () => {
+    const nodeId = await makeTask(userId, "Moves around");
+    await saveNodeDetail(userId, nodeId, {
+      task: { targetStartDate: new Date(`${MON}T00:00:00`) },
+    });
+
+    await saveNodeDetail(userId, nodeId, {
+      task: { targetStartDate: new Date(`${WED}T00:00:00`) },
+    });
+    expect(await plannedDayForNode(userId, nodeId)).toBe(WED);
+
+    await saveNodeDetail(userId, nodeId, { task: { targetStartDate: null } });
+    expect(await plannedDayForNode(userId, nodeId)).toBeNull();
+  });
+
+  it("takes the target start date with it when a line is dragged to another day", async () => {
+    // Otherwise the drawer would go on claiming Monday while the line sits on Wednesday.
+    const nodeId = await makeTask(userId, "Dragged");
+    await planNodeForDay(userId, nodeId, MON);
+    const [item] = await db
+      .select()
+      .from(dailyItems)
+      .where(and(eq(dailyItems.userId, userId), eq(dailyItems.nodeId, nodeId)));
+
+    await moveDailyItemToDay(userId, item.id, WED);
+
+    const [detail] = await db
+      .select()
+      .from(taskDetails)
+      .where(eq(taskDetails.nodeId, nodeId));
+    expect(toDateKey(detail.targetStartDate!)).toBe(WED);
   });
 
   it("keeps that record out of the Plan for day field", async () => {

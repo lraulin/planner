@@ -142,9 +142,11 @@ export async function loadWeek(
 /**
  * The day a task is currently planned for, or null.
  *
- * This is what backs the "Plan for day" field on the task form. It is single-valued because
- * `daily_items_open_node_uq` guarantees a task sits on at most one *open* day; completed and
- * forwarded rows are history and deliberately excluded.
+ * Read off the open day row rather than off `target_start_date`, even though for a task the
+ * two are kept equal by `syncDayLineToTargetStart`. The row is the wider answer: it also
+ * covers planned **projects**, which have no target start date of their own, and it is
+ * single-valued by construction because `daily_items_open_node_uq` allows a node at most one
+ * open day. Completed and forwarded rows are history and deliberately excluded.
  */
 export async function plannedDayForNode(
   userId: string,
