@@ -179,6 +179,8 @@ Code:
 - `src/lib/achieve/parseXml.ts` / `mapOutline.ts` / `encodings.ts` — pure parse + map
 - `src/lib/achieve/import.ts` — DB write (`userId`-scoped; `externalSource = "achieve"`)
 - `src/lib/achieve/exportXml.ts` / `exportLoad.ts` — XML build from `loadOutline`
+- HTTP: `POST /api/achieve/import` (multipart), `GET /api/achieve/export` — not Server
+  Actions; multi-MB XML breaks Flight serialization
 - Settings UI: `AchieveTransferPanel`
 
 **On the PC:** Achieve → Full XML export → save under Dropbox → Settings → Import on the Mac.

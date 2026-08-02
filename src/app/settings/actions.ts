@@ -1,10 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import type { NodeType } from "@/db/schema";
 import { getCurrentUserId } from "@/lib/auth";
-import { exportAchieveXmlForUser } from "@/lib/achieve/exportLoad";
-import { importAchieveXml, type ImportMode } from "@/lib/achieve/import";
 import * as settings from "@/lib/settings/mutations";
 import { disconnectGoogle, setCalendarSyncEnabled } from "@/lib/google/mutations";
 import { refreshCalendarsFromGoogle } from "@/lib/google/sync";
@@ -108,87 +105,6 @@ export async function setCalendarSyncEnabledAction(
     return {
       ok: false,
       error: error instanceof Error ? error.message : "Something went wrong.",
-    };
-  }
-}
-
-// ── Achieve Full XML ─────────────────────────────────────────────────────────
-
-export type ImportAchieveResult =
-  | {
-      ok: true;
-      created: number;
-      counts: Record<NodeType, number> | ExportCounts;
-      warnings: string[];
-      skippedTables: string[];
-      message?: string;
-    }
-  | { ok: false; error: string };
-
-type ExportCounts = {
-  result_area: number;
-  project: number;
-  task: number;
-  omitted: number;
-};
-
-export type ExportAchieveResult =
-  | {
-      ok: true;
-      xml: string;
-      counts: ExportCounts;
-      warnings: string[];
-    }
-  | { ok: false; error: string };
-
-/**
- * Import Achieve Full XML into the signed-in account. `replace` wipes the outline first.
- * Large files are fine as a string body for personal dumps (typically under a few MB).
- */
-export async function importAchieveXmlAction(
-  xml: string,
-  mode: ImportMode,
-): Promise<ImportAchieveResult> {
-  try {
-    if (!xml || !xml.trim()) {
-      return { ok: false, error: "That file was empty." };
-    }
-    if (xml.length > 25 * 1024 * 1024) {
-      return { ok: false, error: "File is larger than 25 MB." };
-    }
-    const userId = await getCurrentUserId();
-    const result = await importAchieveXml({ userId, xml, mode });
-    revalidatePath("/", "layout");
-    return {
-      ok: true,
-      created: result.created,
-      counts: result.counts,
-      warnings: result.warnings,
-      skippedTables: result.skippedTables,
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : "Import failed.",
-    };
-  }
-}
-
-/** Export this account's outline as Achieve Full XML (achxml). */
-export async function exportAchieveXmlAction(): Promise<ExportAchieveResult> {
-  try {
-    const userId = await getCurrentUserId();
-    const result = await exportAchieveXmlForUser(userId);
-    return {
-      ok: true,
-      xml: result.xml,
-      counts: result.counts,
-      warnings: result.warnings,
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : "Export failed.",
     };
   }
 }

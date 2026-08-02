@@ -1,93 +1,132 @@
 "use client";
 
 import { useId, useRef, useState, useTransition } from "react";
-import {
-  exportAchieveXmlAction,
-  importAchieveXmlAction,
-  type ImportAchieveResult,
-} from "@/app/settings/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
+
+type ImportOk = {
+  ok: true;
+  created: number;
+  counts: {
+    result_area?: number;
+    project?: number;
+    task?: number;
+    goal?: number;
+    omitted?: number;
+  };
+  warnings: string[];
+  skippedTables: string[];
+  message?: string;
+};
+
+type ImportFail = { ok: false; error: string };
 
 /**
  * Import / export Achieve Full XML (achxml) for the outline core.
  *
- * Export downloads a file. Import reads a local file and offers merge (append) or replace
- * (wipe this account's outline first). Replace is the usual "bring my AP file over" path.
+ * Large files go through `/api/achieve/*` route handlers (multipart / raw response), not
+ * Server Actions — Flight serialization rejects multi-MB XML with nesting/body errors.
  */
 export function AchieveTransferPanel() {
   const headingId = useId();
   const fileRef = useRef<HTMLInputElement>(null);
+  /** Hold the File until the user confirms replace — avoid parking multi-MB XML in React state. */
+  const pendingFileRef = useRef<File | null>(null);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<ImportAchieveResult | null>(null);
+  const [result, setResult] = useState<ImportOk | null>(null);
   const [mode, setMode] = useState<"merge" | "replace">("replace");
   const [confirmReplace, setConfirmReplace] = useState(false);
-  const [pendingXml, setPendingXml] = useState<string | null>(null);
 
   const onExport = () => {
     setError(null);
     setResult(null);
     startTransition(async () => {
-      const res = await exportAchieveXmlAction();
-      if (!res.ok) {
-        setError(res.error);
-        return;
+      try {
+        const res = await fetch("/api/achieve/export");
+        if (!res.ok) {
+          let message = "Export failed.";
+          try {
+            const body = (await res.json()) as ImportFail;
+            if (body.error) message = body.error;
+          } catch {
+            /* use default */
+          }
+          setError(message);
+          return;
+        }
+        const blob = await res.blob();
+        const disposition = res.headers.get("Content-Disposition") ?? "";
+        const match = /filename="([^"]+)"/.exec(disposition);
+        const filename =
+          match?.[1] ??
+          `planner-export-${new Date().toISOString().slice(0, 10)}.achxml`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+
+        let counts = { result_area: 0, project: 0, task: 0, omitted: 0 };
+        try {
+          counts = JSON.parse(
+            res.headers.get("X-Achieve-Export-Counts") ?? "{}",
+          ) as typeof counts;
+        } catch {
+          /* ignore */
+        }
+        const warningCount = Number(
+          res.headers.get("X-Achieve-Export-Warnings") ?? "0",
+        );
+        setResult({
+          ok: true,
+          created: 0,
+          counts,
+          warnings: warningCount > 0 ? [`${warningCount} export warning(s)`] : [],
+          skippedTables: [],
+          message:
+            `Exported ${counts.result_area ?? 0} result areas, ${counts.project ?? 0} projects, ${counts.task ?? 0} tasks` +
+            (counts.omitted ? ` (omitted ${counts.omitted} goals/other)` : ""),
+        });
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Export failed.");
       }
-      const blob = new Blob([res.xml], { type: "application/xml;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `planner-export-${new Date().toISOString().slice(0, 10)}.achxml`;
-      a.click();
-      URL.revokeObjectURL(url);
-      setResult({
-        ok: true,
-        created: 0,
-        counts: res.counts,
-        warnings: res.warnings,
-        skippedTables: [],
-        message:
-          `Exported ${res.counts.result_area} result areas, ${res.counts.project} projects, ${res.counts.task} tasks` +
-          (res.counts.omitted ? ` (omitted ${res.counts.omitted} goals/other)` : ""),
-      });
     });
   };
 
-  const readFile = (file: File) =>
-    new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result ?? ""));
-      reader.onerror = () => reject(new Error("Could not read that file."));
-      reader.readAsText(file);
-    });
-
-  const runImport = (xml: string, importMode: "merge" | "replace") => {
+  const runImport = (file: File, importMode: "merge" | "replace") => {
     setError(null);
     setResult(null);
     startTransition(async () => {
-      const res = await importAchieveXmlAction(xml, importMode);
-      if (!res.ok) {
-        setError(res.error);
-        return;
+      try {
+        const form = new FormData();
+        form.set("file", file);
+        form.set("mode", importMode);
+        const res = await fetch("/api/achieve/import", {
+          method: "POST",
+          body: form,
+        });
+        const body = (await res.json()) as ImportOk | ImportFail;
+        if (!body.ok) {
+          setError(body.error);
+          return;
+        }
+        setResult(body);
+        if (fileRef.current) fileRef.current.value = "";
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Import failed.");
       }
-      setResult(res);
-      if (fileRef.current) fileRef.current.value = "";
     });
   };
 
-  const onPickFile = async (file: File | null) => {
+  const onPickFile = (file: File | null) => {
     if (!file) return;
     setError(null);
-    try {
-      const xml = await readFile(file);
-      if (mode === "replace") {
-        setPendingXml(xml);
-        setConfirmReplace(true);
-      } else {
-        runImport(xml, "merge");
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not read that file.");
+    if (mode === "replace") {
+      pendingFileRef.current = file;
+      setConfirmReplace(true);
+    } else {
+      runImport(file, "merge");
     }
   };
 
@@ -149,7 +188,7 @@ export function AchieveTransferPanel() {
             type="file"
             accept=".achxml,.xml,application/xml,text/xml"
             disabled={pending}
-            onChange={(e) => void onPickFile(e.target.files?.[0] ?? null)}
+            onChange={(e) => onPickFile(e.target.files?.[0] ?? null)}
             className="block w-full text-[0.8125rem] text-ink file:mr-3 file:rounded file:border file:border-rule file:bg-surface-raised file:px-3 file:py-1.5 file:text-[0.8125rem] file:font-medium file:text-ink"
           />
           {mode === "replace" && (
@@ -172,7 +211,7 @@ export function AchieveTransferPanel() {
           <div className="rounded border border-rule bg-surface-raised px-3 py-2 text-[0.8125rem] text-ink">
             <p className="font-medium">
               {result.message ??
-                `Imported ${result.created} rows (${result.counts.result_area} areas, ${result.counts.project} projects, ${result.counts.task} tasks).`}
+                `Imported ${result.created} rows (${result.counts.result_area ?? 0} areas, ${result.counts.project ?? 0} projects, ${result.counts.task ?? 0} tasks).`}
             </p>
             {result.warnings.length > 0 && (
               <details className="mt-2">
@@ -208,14 +247,14 @@ export function AchieveTransferPanel() {
         destructive
         onCancel={() => {
           setConfirmReplace(false);
-          setPendingXml(null);
+          pendingFileRef.current = null;
           if (fileRef.current) fileRef.current.value = "";
         }}
         onConfirm={() => {
-          const xml = pendingXml;
+          const file = pendingFileRef.current;
           setConfirmReplace(false);
-          setPendingXml(null);
-          if (xml) runImport(xml, "replace");
+          pendingFileRef.current = null;
+          if (file) runImport(file, "replace");
         }}
       />
     </section>
