@@ -40,12 +40,22 @@ describe("nextDue", () => {
     expect(localKey(nextDue(at(2028, 2, 29), "yearly", 1)!)).toBe("2029-02-28");
   });
 
-  it("keeps local wall-clock time across a DST spring-forward", () => {
-    // US DST begins 2026-03-08. A 09:00 daily routine completed the day before comes back
-    // at 09:00, not 10:00 — which is what adding 86_400_000 ms would give.
+  it("lands on the next local day across a DST spring-forward", () => {
+    // US DST begins 2026-03-08. Adding 86_400_000 ms to a 09:00 completion would give
+    // 10:00 on the 8th; going through the local setters gives the right calendar day.
     const next = nextDue(at(2026, 3, 7, 9), "daily", 1)!;
     expect(localKey(next)).toBe("2026-03-08");
-    expect(next.getHours()).toBe(9);
+  });
+
+  it("returns local midnight rather than the time it was ticked at", () => {
+    // Not tidiness. These dates are compared as **UTC** calendar days by `isDeferred` and
+    // `useToday`, so a routine finished at 20:00 Eastern and left at 20:00 would carry a
+    // defer date whose UTC day is the day after the one it is due, and stay hidden through
+    // most of it. Local midnight in a western zone lands on the intended UTC day.
+    const next = nextDue(at(2026, 8, 1, 20), "daily", 1)!;
+    expect(localKey(next)).toBe("2026-08-02");
+    expect(next.getHours()).toBe(0);
+    expect(next.getMinutes()).toBe(0);
   });
 
   it("floors a zero or negative interval to 1 rather than repeating instantly", () => {

@@ -19,7 +19,7 @@
  */
 
 import type { RecurrenceFrequency } from "@/db/schema";
-import { addDays, addMonths, addYears } from "@/lib/dateMath";
+import { addDays, addMonths, addYears, startOfDay } from "@/lib/dateMath";
 
 /**
  * The next deferred-until date for a task completed at `completedAt`, or null when the
@@ -42,16 +42,22 @@ export function nextDue(
   if (frequency === "none") return null;
 
   const n = Math.max(1, Math.floor(interval));
+  // Local midnight, matching `nextOccurrence` and what `DateField` writes. Keeping the
+  // time you happened to tick it at is not merely untidy: these dates are compared as
+  // **UTC** calendar days by `isDeferred` and `useToday`, so a routine finished at 20:00
+  // Eastern would come back with a defer date whose UTC day is the day *after* the one it
+  // is meant to be due, and would stay hidden for most of it.
+  const from = startOfDay(completedAt);
 
   switch (frequency) {
     case "daily":
-      return addDays(completedAt, n);
+      return addDays(from, n);
     case "weekly":
-      return addDays(completedAt, n * 7);
+      return addDays(from, n * 7);
     case "monthly":
-      return addMonths(completedAt, n);
+      return addMonths(from, n);
     case "yearly":
-      return addYears(completedAt, n);
+      return addYears(from, n);
   }
 }
 

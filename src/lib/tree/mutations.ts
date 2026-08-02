@@ -339,6 +339,41 @@ function nextAnchor(
 }
 
 /**
+ * Where each of a repeating task's dates lands on the next occurrence.
+ *
+ * Everything already set shifts by the same number of days. What differs is which fields
+ * are **created** when they were empty, and the split is the same one Achieve makes:
+ *
+ * - **Target start and deferred date are always set.** The next occurrence exists from the
+ *   moment you complete this one, so it has to sit somewhere — Achieve's regenerated item
+ *   comes back with both filled in and its deadline still None. The deferred date is also
+ *   the only thing that takes a finished routine out of the Task Chooser, so without it a
+ *   deadline-anchored task could be ticked twice in one day.
+ * - **A deadline is only ever advanced, never invented.** This is the rule the whole
+ *   feature rests on: "should be done ASAP" is not a deadline, and a routine that quietly
+ *   acquired one would start competing with taxes and bills in Overdue.
+ * - **Target end and the reminder are only moved.** Both describe something the task did
+ *   not necessarily have — a window, a nudge — and inventing either means inventing a
+ *   duration or an alarm nobody asked for.
+ *
+ * The same rule governs "Plan for day", one level up in `syncDayLineOnCompletion`: a day
+ * you had planned moves, a day you had not is not chosen for you.
+ */
+function moveDates(r: Recurrence, shift: number, next: Date) {
+  const move = (date: Date | null) => (date ? addDays(date, shift) : null);
+
+  return {
+    deadline: move(r.deadline),
+    task: {
+      targetStartDate: move(r.targetStartDate) ?? next,
+      deferredDate: move(r.deferredDate) ?? next,
+      targetEndDate: move(r.targetEndDate),
+      reminderAt: move(r.reminderAt),
+    },
+  };
+}
+
+/**
  * Whether this completion is the series' last, so the task finishes for real instead of
  * cycling. `completionsSoFar` excludes the completion being recorded right now.
  */
@@ -476,34 +511,23 @@ export async function applyStateTransition(
   //
   // Every date the task already had shifts by the same number of days, so a task that
   // starts Monday and is due Friday keeps its four-day window instead of collapsing onto
-  // one day. Dates that were null stay null — in particular a routine with no deadline
-  // never acquires one, which is what keeps it out of Overdue.
+  // one day. Whole days applied with `addDays`, never a millisecond offset: an ordinal or
+  // weekday step is not a constant length, and a span crossing a daylight-saving boundary
+  // would otherwise drag every other date's time of day with it.
   //
-  // Whole days applied with `addDays`, never a millisecond offset: an ordinal or weekday
-  // step is not a constant length, and a span crossing a daylight-saving boundary would
-  // otherwise drag every other date's time of day with it.
+  // Which fields get *created* when they were empty is the part that matters. See
+  // `moveDates` below.
   const shift = anchor ? daysBetween(anchor, next!) : 0;
-  const move = (date: Date | null) => (date ? addDays(date, shift) : null);
+  const dates = moveDates(recurrence, shift, next!);
 
   await tx
     .update(nodes)
-    .set({ deadline: move(recurrence.deadline), updatedAt: now })
+    .set({ deadline: dates.deadline, updatedAt: now })
     .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
 
   await tx
     .update(taskDetails)
-    .set({
-      dateCompleted: now,
-      targetStartDate: move(recurrence.targetStartDate),
-      targetEndDate: move(recurrence.targetEndDate),
-      reminderAt: move(recurrence.reminderAt),
-      // Shifted like the rest when it was set — a defer date a few days before a deadline
-      // is a deliberate head start and has to survive the cycle. When it was *not* set it
-      // is created, because it is the only thing that takes a finished routine out of the
-      // Task Chooser: a deadline-anchored task without one could be ticked again the same
-      // day, inflating the completion log that "end after N occurrences" counts against.
-      deferredDate: move(recurrence.deferredDate) ?? next,
-    })
+    .set({ dateCompleted: now, ...dates.task })
     .where(eq(taskDetails.nodeId, nodeId));
 
   await syncDayLineOnCompletion(tx, userId, nodeId, now, next);
@@ -696,23 +720,16 @@ export async function skipRecurrence(userId: string, nodeId: string): Promise<vo
       throw new Error("This series has no occurrences left to skip to.");
     }
 
-    const shift = anchor ? daysBetween(anchor, next) : 0;
-    const move = (date: Date | null) => (date ? addDays(date, shift) : null);
+    // The same date rule as a completion, from the same function — skipping is a
+    // completion with the "you did it" half removed, and the two must not drift.
+    const dates = moveDates(recurrence, anchor ? daysBetween(anchor, next) : 0, next);
 
     await tx
       .update(nodes)
-      .set({ deadline: move(recurrence.deadline), updatedAt: now })
+      .set({ deadline: dates.deadline, updatedAt: now })
       .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
 
-    await tx
-      .update(taskDetails)
-      .set({
-        targetStartDate: move(recurrence.targetStartDate),
-        targetEndDate: move(recurrence.targetEndDate),
-        reminderAt: move(recurrence.reminderAt),
-        deferredDate: move(recurrence.deferredDate) ?? next,
-      })
-      .where(eq(taskDetails.nodeId, nodeId));
+    await tx.update(taskDetails).set(dates.task).where(eq(taskDetails.nodeId, nodeId));
   });
 }
 

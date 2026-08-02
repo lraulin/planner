@@ -1065,7 +1065,13 @@ describeDb("tree mutations", () => {
         expect(node.deadline!.getTime()).toBeLessThan(Date.now());
       });
 
-      it("gives a dateless routine a defer date and still no deadline", async () => {
+      it("gives a dateless routine a start and defer date, and still no deadline", async () => {
+        // The next occurrence exists the moment you finish this one, so it has to sit
+        // somewhere: Achieve's regenerated item comes back with Target Start and Deferred
+        // Date filled in and its Deadline still None. A deadline is only ever advanced,
+        // never invented — inventing one would put a routine in Overdue beside real
+        // constraints, which is the thing this whole feature exists to avoid. Target end
+        // and the reminder are only moved: creating either invents a window or an alarm.
         const task = await ruleTask({
           recurrenceFrequency: "daily",
           recurrenceMode: "regenerate",
@@ -1074,8 +1080,26 @@ describeDb("tree mutations", () => {
         await setState(userId, task, "completed");
 
         const [node] = await loadOutline(userId);
+        const detail = await taskRow(task);
         expect(node.deadline).toBeNull();
-        expect(localKey((await taskRow(task)).deferredDate!)).toBe(daysFromToday(1));
+        expect(localKey(detail.deferredDate!)).toBe(daysFromToday(1));
+        expect(localKey(detail.targetStartDate!)).toBe(daysFromToday(1));
+        expect(detail.targetEndDate).toBeNull();
+        expect(detail.reminderAt).toBeNull();
+      });
+
+      it("creates the same dates when an occurrence is skipped", async () => {
+        // Skipping is a completion with the "you did it" half removed, so it must land the
+        // dates in exactly the same place.
+        const task = await ruleTask({ recurrenceFrequency: "daily" });
+
+        await skipRecurrence(userId, task);
+
+        const [node] = await loadOutline(userId);
+        const detail = await taskRow(task);
+        expect(node.deadline).toBeNull();
+        expect(localKey(detail.deferredDate!)).toBe(daysFromToday(1));
+        expect(localKey(detail.targetStartDate!)).toBe(daysFromToday(1));
       });
 
       it("follows a monthly ordinal pattern", async () => {

@@ -55,7 +55,15 @@ drawer that a completion did something.
   accept duplicate rows if they made it easier; they did not.
 - **The pattern anchors on the deadline if there is one, else the deferred date, else the
   target start.** "Due every Friday" should put Friday on the deadline.
-- **Every other already-set date shifts by the same number of days; null stays null.**
+- **Every already-set date shifts by the same number of days.** Which fields are _created_
+  when empty follows Achieve: **target start and deferred date always are**, because the
+  next occurrence exists the moment you complete this one and has to sit somewhere — its
+  regenerated item comes back with both filled in and its Deadline still None. **A deadline
+  is only ever advanced, never invented.** Target end and the reminder are only moved:
+  creating either would invent a window or an alarm nobody asked for. The same split
+  governs "Plan for day" — a day you had planned moves, a day you had not is not chosen for
+  you.
+- **Where a date lands, when it was already set.**
   Achieve collapses all set dates onto the new occurrence date. Shifting by a delta is the
   same thing whenever they were equal — Achieve's normal case, and what its own screenshots
   show — and strictly better when they were not: a task that starts Monday and is due Friday
@@ -175,6 +183,7 @@ All verified against the running app and the real database on 2026-08-01.
 | 7   | **Skip Recurrence and the Day-list sync were added**, both out of scope when the plan was written.                                                                                                                                                  | Both turned out small once the engine existed, and both were asked for. Skip shares `nextAnchor` with the completion path rather than reimplementing the rule.                                                                                                                                                                                                                                                                                                                                                      |
 | 8   | **The day line follows a completion from every surface, and for every task** — not only when the task was ticked on the day page, and not only for repeating ones.                                                                                  | The first cut synced only the day page's own path, on the grounds that a second open line would collide with the one-open-day-per-task index. Lee: "Seems like completing a task should have the same effects regardless of which view you're in when completing it." Right — and completing the open line first is what makes room for the next one, so the index objection dissolves. Reopening a task the same day un-checks it again, narrowly: only today's line, and only when no open line exists elsewhere. |
 | 9   | **The day page records every completion, planned or not** — a task completed anywhere gets a struck-through line on that day even if it was never on the list. But the **next occurrence is only planned when the task was already on a day list**. | Lee: "the FC Day view does serve as a record of that day, just as it would if it was an actual page in a paper planner […] you should see a crossed out line for every task that was completed on that day." A record with holes is not a record. The second half is the counterweight: "Plan for day" is the user's statement of intent, and recording that you did something today is not grounds for the app to decide you mean to do it again on Thursday.                                                      |
+| 10  | **Target start is created when empty**, not only shifted — and `nextDue` now returns local midnight like `nextOccurrence`.                                                                                                                          | Lee: "It does set start date and deferred date even if they weren't set before, as since the task is created instantly, obviously some date is necessary." The midnight change is not tidiness: these dates are compared as **UTC** calendar days by `isDeferred` and `useToday`, so a routine finished at 20:00 Eastern carried a defer date whose UTC day was the day _after_ it was due and stayed hidden through most of it.                                                                                    |
 
 ## Follow-ups (new work — not amendments to this spec)
 
