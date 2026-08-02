@@ -1,6 +1,6 @@
 # Metrics Tab + Import/Export — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-08-02)
 
 ## Scope
 

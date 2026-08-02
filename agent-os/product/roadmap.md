@@ -92,6 +92,13 @@ Features that complete or surround the original product, plus making it multi-de
 ### Near-term Achieve surfaces
 
 - **Life Plan tab** (if still desired after living with Goals + Result Areas).
+- **✅ Metrics tab + import/export.** `specs/2026-08-02-0912-metrics-tab`. First-class
+  `metrics` / `metric_entries` (optional goal owner, history survives goal delete). Metrics
+  tab lists all metrics with Group by Owner and an SVG performance graph; Metric form
+  (General + Tracking) with tracking grid and CSV export; Goal form Metrics section uses the
+  same store. ACHXML import/export of `Metrics` + `MetricTracking`. Deferred: auto-target,
+  day contribution targets, auto-increase, metric recurrence/reminders (Status On Schedule /
+  Overdue), graph zoom/print, agent tools.
 - **✅ Task Chooser.** `specs/2026-07-30-1858-task-chooser`. `/chooser` ranks every leaf
   task and task-less project by a transparent additive score — inherited priority (L.A.P.)
   plus deadline proximity, target dates, Focus, and result-area importance — with the Score
@@ -220,7 +227,8 @@ Features that complete or surround the original product, plus making it multi-de
   Chooser and the planning surfaces degrade gracefully rather than being redesigned. Desktop
   layout and density are unchanged. Codified as `standards/components/responsive.md`.
 - **Import/export.** Achieve data import, full export (own-your-data mandate in
-  `mission.md`).
+  `mission.md`). Outline core + appointments / time charts / wishes / notes / **metrics**
+  ship; remaining Tier A–C tables still grow with product surfaces.
 
 ### Google integration
 

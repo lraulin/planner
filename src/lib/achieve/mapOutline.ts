@@ -19,7 +19,7 @@ import type { AchDocument, AchMappedNode, AchOutlineMap, AchRow } from "./types"
  * and roadmap stay honest about what Full XML still carries that we ignore.
  *
  * Tier A (next): appointments, time charts, wishes, project child grids, notes.
- * Tier B: metrics, contacts, labels.
+ * Tier B: contacts, labels (metrics → extras, done).
  * Tier C (UI chrome / sync): form layouts, record views, Outlook SyncItems, ActiveSync.
  */
 const KNOWN_SKIP = new Set([
@@ -72,8 +72,7 @@ const KNOWN_SKIP = new Set([
   "ContactHistory",
   // Labels (colour lookup used by extras; not imported as entities)
   "Labels",
-  "Metrics",
-  "MetricTracking",
+  // Metrics + MetricTracking handled in mapExtras (Tier B → done).
   "MasterKeywords",
   "ResourcePools",
   "ResourceCalendars",

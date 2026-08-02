@@ -14,6 +14,7 @@ export const TABS = [
   { id: "tasks", label: "Tasks", href: "/tasks", primary: true },
   { id: "goals", label: "Goals", href: "/goals", primary: false },
   { id: "wishes", label: "Wish List", href: "/wishes", primary: false },
+  { id: "metrics", label: "Metrics", href: "/metrics", primary: false },
   { id: "day", label: "Day", href: "/day", primary: true },
   { id: "schedule", label: "Weekly Schedule", href: "/schedule", primary: false },
   { id: "notes", label: "Notes", href: "/notes", primary: true },

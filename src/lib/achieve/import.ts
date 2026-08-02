@@ -2,6 +2,8 @@ import { db } from "@/db";
 import {
   appointments,
   goalDetails,
+  metricEntries,
+  metrics,
   nodeItems,
   nodes,
   notes,
@@ -31,6 +33,8 @@ export type ImportExtraCounts = {
   timeChartAreas: number;
   wishes: number;
   notes: number;
+  metrics: number;
+  metricEntries: number;
 };
 
 export type ImportResult = {
@@ -84,10 +88,12 @@ export async function writeMappedImport(params: {
 
   return db.transaction(async (tx) => {
     if (mode === "replace") {
-      // Order: areas → charts; notes; appointments; nodes last (children cascade).
+      // Order: areas → charts; notes; metrics; appointments; nodes last (children cascade).
       await tx.delete(timeChartAreas).where(eq(timeChartAreas.userId, userId));
       await tx.delete(timeCharts).where(eq(timeCharts.userId, userId));
       await tx.delete(notes).where(eq(notes.userId, userId));
+      await tx.delete(metricEntries).where(eq(metricEntries.userId, userId));
+      await tx.delete(metrics).where(eq(metrics.userId, userId));
       await tx.delete(appointments).where(eq(appointments.userId, userId));
       await tx.delete(nodes).where(eq(nodes.userId, userId));
     }
@@ -303,6 +309,8 @@ async function writeExtras(
   let timeChartAreasN = 0;
   let wishesN = 0;
   let notesN = 0;
+  let metricsN = 0;
+  let metricEntriesN = 0;
 
   // Wishes without ResultAreaId hang off the first imported result area.
   const [anyRa] = await tx
@@ -440,12 +448,76 @@ async function writeExtras(
     remainingNotes.push(...rest);
   }
 
+  // Metrics (optional goal owner via Achieve GUID → our node id)
+  const metricIdByAch = new Map<string, string>();
+  let metricSortPrev: string | null = null;
+  const sortedMetrics = [...extras.metrics].sort((a, b) => a.ordinal - b.ordinal);
+  for (const m of sortedMetrics) {
+    const ownerNodeId = m.ownerAchId ? (idByAch.get(m.ownerAchId) ?? null) : null;
+    if (m.ownerAchId && !ownerNodeId) {
+      warnings.push(
+        `Metric "${m.title}" owner ${m.ownerAchId} not in file; imported as standalone`,
+      );
+    }
+    const sortKey = between(metricSortPrev, null);
+    metricSortPrev = sortKey;
+    const [row] = await tx
+      .insert(metrics)
+      .values({
+        userId,
+        ownerNodeId,
+        title: m.title || "Untitled",
+        category: m.category,
+        question: m.question,
+        description: m.description,
+        reason: m.reason,
+        units: m.units,
+        active: m.active,
+        priorityLetter: m.priority.letter,
+        priorityRank: m.priority.rank,
+        metricType: m.metricType || "total",
+        objectiveTarget:
+          m.objectiveTarget === null || m.objectiveTarget === undefined
+            ? null
+            : String(m.objectiveTarget),
+        sortKey,
+        externalSource: ACHIEVE_EXTERNAL_SOURCE,
+        externalId: m.achId,
+      })
+      .returning({ id: metrics.id });
+    metricIdByAch.set(m.achId, row.id);
+    metricsN++;
+  }
+
+  for (const e of extras.metricEntries) {
+    const metricId = metricIdByAch.get(e.metricAchId);
+    if (!metricId) {
+      warnings.push(
+        `MetricTracking for ${e.metricAchId} has no imported metric; skipped`,
+      );
+      continue;
+    }
+    await tx.insert(metricEntries).values({
+      userId,
+      metricId,
+      entryDate: e.entryDate,
+      entryType: e.entryType || "new_total",
+      target: e.target === null || e.target === undefined ? null : String(e.target),
+      value: String(e.value),
+      externalSource: ACHIEVE_EXTERNAL_SOURCE,
+      externalId: e.achId,
+    });
+    metricEntriesN++;
+  }
+
   return {
     appointments: appointmentsN,
     timeCharts: timeChartsN,
     timeChartAreas: timeChartAreasN,
     wishes: wishesN,
     notes: notesN,
+    metrics: metricsN,
+    metricEntries: metricEntriesN,
   };
 }
 
@@ -455,6 +527,8 @@ function emptyExtras(): AchExtrasMap {
     timeCharts: [],
     wishes: [],
     notes: [],
+    metrics: [],
+    metricEntries: [],
     warnings: [],
   };
 }

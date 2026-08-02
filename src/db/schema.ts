@@ -1416,7 +1416,105 @@ export const userSettings = pgTable(
   ],
 );
 
+/**
+ * A measurable quantity the user tracks over time — Achieve's Metrics / Tracking tab.
+ *
+ * First-class domain (not `node_items`): metrics may be **standalone** (`ownerNodeId`
+ * null) or associated with a goal/dream. Deleting the owner sets the link null so
+ * tracking history is not cascade-wiped. See
+ * `agent-os/specs/2026-08-02-0912-metrics-tab/`.
+ */
+export const metrics = pgTable(
+  "metrics",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /**
+     * Goal or dream this metric is associated with, when any. Null = stand-alone
+     * (Metrics tab without a goal). `set null` on owner delete so history survives.
+     */
+    ownerNodeId: uuid("owner_node_id").references(() => nodes.id, {
+      onDelete: "set null",
+    }),
+    title: text("title").notNull().default(""),
+    category: text("category").notNull().default(""),
+    /** The question the metric answers, e.g. "What is my waist measurement?" */
+    question: text("question").notNull().default(""),
+    description: text("description").notNull().default(""),
+    reason: text("reason").notNull().default(""),
+    units: text("units").notNull().default(""),
+    active: boolean("active").notNull().default(true),
+    priorityLetter: priorityLetterEnum("priority_letter"),
+    priorityRank: smallint("priority_rank"),
+    /**
+     * Achieve tracking type. MVP only uses `"total"` (New Total entries). Stored as text
+     * so later types do not need an enum migration.
+     */
+    metricType: text("metric_type").notNull().default("total"),
+    /** Objective target value when set; null means none. */
+    objectiveTarget: numeric("objective_target", { precision: 18, scale: 6 }),
+    /** Manual order in the Metrics tab list (fractional indexing). */
+    sortKey: text("sort_key").notNull(),
+    externalSource: text("external_source"),
+    externalId: text("external_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("metrics_user_sort_idx").on(table.userId, table.sortKey),
+    index("metrics_user_owner_idx").on(table.userId, table.ownerNodeId),
+    unique("metrics_user_sort_key_uq").on(table.userId, table.sortKey),
+    uniqueIndex("metrics_external_ref_uq")
+      .on(table.userId, table.externalSource, table.externalId)
+      .where(sql`${table.externalId} is not null`),
+  ],
+);
+
+/**
+ * One dated measurement for a metric — Achieve's MetricTracking row.
+ * Cascades only with the metric itself, never with outline nodes.
+ */
+export const metricEntries = pgTable(
+  "metric_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    metricId: uuid("metric_id")
+      .notNull()
+      .references(() => metrics.id, { onDelete: "cascade" }),
+    /** Calendar day of the measurement (date-only string `YYYY-MM-DD`). */
+    entryDate: date("entry_date", { mode: "string" }).notNull(),
+    /** AP entry type label; MVP default `"new_total"`. */
+    entryType: text("entry_type").notNull().default("new_total"),
+    /** Target snapshot at the time of entry (often equals objective target). */
+    target: numeric("target", { precision: 18, scale: 6 }),
+    value: numeric("value", { precision: 18, scale: 6 }).notNull(),
+    externalSource: text("external_source"),
+    externalId: text("external_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("metric_entries_metric_date_idx").on(
+      table.userId,
+      table.metricId,
+      table.entryDate,
+    ),
+    uniqueIndex("metric_entries_external_ref_uq")
+      .on(table.userId, table.externalSource, table.externalId)
+      .where(sql`${table.externalId} is not null`),
+  ],
+);
+
 export type DailyItem = typeof dailyItems.$inferSelect;
 export type NewDailyItem = typeof dailyItems.$inferInsert;
 export type WorkoutSet = typeof workoutSets.$inferSelect;
 export type UserSetting = typeof userSettings.$inferSelect;
+export type Metric = typeof metrics.$inferSelect;
+export type NewMetric = typeof metrics.$inferInsert;
+export type MetricEntry = typeof metricEntries.$inferSelect;
+export type NewMetricEntry = typeof metricEntries.$inferInsert;

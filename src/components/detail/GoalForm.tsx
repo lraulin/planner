@@ -12,6 +12,7 @@ import {
   TextArea,
   TextField,
 } from "./fields";
+import { GoalMetricsPanel } from "@/components/metrics/GoalMetricsPanel";
 import { LinkedNotesPanel } from "@/components/notes/LinkedNotesPanel";
 import type { FormTab } from "./FormTabs";
 import { CoreHeaderFields, type DetailFormProps } from "./formShared";
@@ -284,7 +285,11 @@ export function goalTabs(props: DetailFormProps): FormTab[] {
       ),
     },
 
-    { id: "metrics", label: "Metrics", render: () => list("metric") },
+    {
+      id: "metrics",
+      label: "Metrics",
+      render: () => <GoalMetricsPanel goalId={props.detail.id} goals={[props.node]} />,
+    },
 
     {
       id: "notes",

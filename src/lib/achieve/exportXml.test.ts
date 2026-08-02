@@ -78,6 +78,8 @@ describe("buildAchieveXml", () => {
       goal: 0,
       project: 1,
       task: 1,
+      metric: 0,
+      metric_entry: 0,
       omitted: 0,
     });
   });
@@ -109,6 +111,45 @@ describe("buildAchieveXml", () => {
     expect(counts.goal).toBe(1);
     expect(counts.project).toBe(1);
     expect(counts.omitted).toBe(0);
+  });
+
+  it("exports metrics and tracking rows", () => {
+    const { xml, counts } = buildAchieveXml(
+      [row({ id: "g", type: "goal", name: "Body", sortKey: "a0" })],
+      [
+        {
+          id: "m1",
+          ownerNodeId: "g",
+          title: "Waist Width",
+          category: "Body",
+          question: "What is my waist measurement?",
+          description: "",
+          reason: "",
+          units: "cm",
+          active: true,
+          priorityLetter: "A",
+          priorityRank: 1,
+          metricType: "total",
+          objectiveTarget: 80,
+          sortKey: "a0",
+          entries: [
+            {
+              id: "e1",
+              entryDate: "2016-01-05",
+              entryType: "new_total",
+              target: 80,
+              value: 95,
+            },
+          ],
+        },
+      ],
+    );
+    expect(xml).toContain("<Metrics>");
+    expect(xml).toContain("Waist Width");
+    expect(xml).toContain("<MetricTracking>");
+    expect(xml).toContain("<Value>95</Value>");
+    expect(counts.metric).toBe(1);
+    expect(counts.metric_entry).toBe(1);
   });
 
   it("escapes XML special characters in names", () => {

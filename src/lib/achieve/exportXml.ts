@@ -56,9 +56,39 @@ export type ExportOutlineRow = {
   sortKey: string;
 };
 
+/** Metric rows for Achieve Metrics / MetricTracking export. */
+export type ExportMetricRow = {
+  id: string;
+  ownerNodeId: string | null;
+  title: string;
+  category: string;
+  question: string;
+  description: string;
+  reason: string;
+  units: string;
+  active: boolean;
+  priorityLetter: AchPriority["letter"];
+  priorityRank: AchPriority["rank"];
+  metricType: string;
+  objectiveTarget: number | null;
+  sortKey: string;
+  entries: ExportMetricEntryRow[];
+};
+
+export type ExportMetricEntryRow = {
+  id: string;
+  entryDate: string;
+  entryType: string;
+  target: number | null;
+  value: number;
+};
+
 export type ExportResult = {
   xml: string;
-  counts: Record<"result_area" | "goal" | "project" | "task" | "omitted", number>;
+  counts: Record<
+    "result_area" | "goal" | "project" | "task" | "metric" | "metric_entry" | "omitted",
+    number
+  >;
   warnings: string[];
 };
 
@@ -70,10 +100,21 @@ const EXPORT_TYPES = new Set<NodeType>(["result_area", "goal", "project", "task"
  * Notes go out as plain text (not RTF). Omits the huge embedded XSD — AP's Load from XML
  * can infer schema from the data rows for this subset.
  */
-export function buildAchieveXml(rows: ExportOutlineRow[]): ExportResult {
+export function buildAchieveXml(
+  rows: ExportOutlineRow[],
+  metricRows: ExportMetricRow[] = [],
+): ExportResult {
   const byId = new Map(rows.map((r) => [r.id, r]));
   const warnings: string[] = [];
-  const counts = { result_area: 0, goal: 0, project: 0, task: 0, omitted: 0 };
+  const counts = {
+    result_area: 0,
+    goal: 0,
+    project: 0,
+    task: 0,
+    metric: 0,
+    metric_entry: 0,
+    omitted: 0,
+  };
 
   type Exported = {
     row: ExportOutlineRow;
@@ -335,6 +376,53 @@ export function buildAchieveXml(rows: ExportOutlineRow[]): ExportResult {
       }),
     );
   }
+
+  // Metrics + tracking (owner is GoalId when linked to an exported goal).
+  const sortedMetrics = [...metricRows].sort((a, b) =>
+    a.sortKey.localeCompare(b.sortKey),
+  );
+  sortedMetrics.forEach((m, i) => {
+    counts.metric++;
+    parts.push(
+      element("Metrics", {
+        MetricId: syntheticGuid(`metric:${m.id}`),
+        GoalId: m.ownerNodeId ? achId(m.ownerNodeId) : undefined,
+        Title: m.title,
+        Category: m.category,
+        Question: m.question,
+        Description: m.description,
+        Reason: m.reason,
+        Units: m.units,
+        Active: m.active ? "true" : "false",
+        Priority: String(
+          encodePriority({ letter: m.priorityLetter, rank: m.priorityRank }),
+        ),
+        Type: m.metricType === "total" ? "0" : m.metricType,
+        ObjectiveTarget:
+          m.objectiveTarget === null || m.objectiveTarget === undefined
+            ? undefined
+            : String(m.objectiveTarget),
+        __ORDINAL__: String(i),
+      }),
+    );
+    const entries = [...m.entries].sort((a, b) =>
+      b.entryDate.localeCompare(a.entryDate),
+    );
+    for (const e of entries) {
+      counts.metric_entry++;
+      parts.push(
+        element("MetricTracking", {
+          MetricTrackingId: syntheticGuid(`metric-entry:${e.id}`),
+          MetricId: syntheticGuid(`metric:${m.id}`),
+          Date: `${e.entryDate}T00:00:00Z`,
+          Type: e.entryType === "new_total" ? "0" : e.entryType,
+          Target:
+            e.target === null || e.target === undefined ? undefined : String(e.target),
+          Value: String(e.value),
+        }),
+      );
+    }
+  });
 
   parts.push(`</AchieveDB>`);
   return { xml: parts.join("\n") + "\n", counts, warnings };

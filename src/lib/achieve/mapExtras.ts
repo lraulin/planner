@@ -13,6 +13,8 @@ export const EXTRAS_TABLES = new Set([
   "LabelData",
   "Wishes",
   "NoteItems",
+  "Metrics",
+  "MetricTracking",
 ]);
 
 export type MappedAppointment = {
@@ -73,11 +75,39 @@ export type MappedNote = {
   ordinal: number;
 };
 
+export type MappedMetric = {
+  achId: string;
+  /** Goal/Dream Achieve GUID when associated; null = standalone. */
+  ownerAchId: string | null;
+  title: string;
+  category: string;
+  question: string;
+  description: string;
+  reason: string;
+  units: string;
+  active: boolean;
+  priority: AchPriority;
+  metricType: string;
+  objectiveTarget: number | null;
+  ordinal: number;
+};
+
+export type MappedMetricEntry = {
+  achId: string;
+  metricAchId: string;
+  entryDate: string;
+  entryType: string;
+  target: number | null;
+  value: number;
+};
+
 export type AchExtrasMap = {
   appointments: MappedAppointment[];
   timeCharts: MappedTimeChart[];
   wishes: MappedWish[];
   notes: MappedNote[];
+  metrics: MappedMetric[];
+  metricEntries: MappedMetricEntry[];
   warnings: string[];
 };
 
@@ -141,8 +171,18 @@ export function mapExtras(doc: AchDocument): AchExtrasMap {
   const timeCharts = mapTimeCharts(doc, labelColor, warnings);
   const wishes = mapWishes(doc, warnings);
   const notes = mapNotes(doc, warnings);
+  const metrics = mapMetrics(doc, warnings);
+  const metricEntries = mapMetricEntries(doc, warnings);
 
-  return { appointments, timeCharts, wishes, notes, warnings };
+  return {
+    appointments,
+    timeCharts,
+    wishes,
+    notes,
+    metrics,
+    metricEntries,
+    warnings,
+  };
 }
 
 function mapAppointments(doc: AchDocument, warnings: string[]): MappedAppointment[] {
@@ -323,6 +363,117 @@ function mapNotes(doc: AchDocument, warnings: string[]): MappedNote[] {
     });
   }
   return out;
+}
+
+/**
+ * Achieve Metrics table → our metrics rows.
+ * Owner may be GoalId, DreamId, or OwnerId (best-effort field names).
+ */
+function mapMetrics(doc: AchDocument, warnings: string[]): MappedMetric[] {
+  const out: MappedMetric[] = [];
+  for (const row of tableRows(doc, "Metrics")) {
+    const achId = row.MetricId;
+    if (!achId) {
+      warnings.push("Metrics row missing MetricId; skipped");
+      continue;
+    }
+    const ownerAchId =
+      emptyToNull(row.GoalId) ??
+      emptyToNull(row.DreamId) ??
+      emptyToNull(row.OwnerId) ??
+      emptyToNull(row.ParentId);
+    const targetRaw =
+      row.ObjectiveTarget ?? row.TargetValue ?? row.Target ?? row.Objective;
+    out.push({
+      achId,
+      ownerAchId,
+      title: row.Title ?? row.Name ?? "",
+      category: row.Category ?? "",
+      question: row.Question ?? "",
+      description: rtfToPlainText(row.Description) || (row.Description ?? ""),
+      reason: rtfToPlainText(row.Reason) || (row.Reason ?? ""),
+      units: row.Units ?? row.Unit ?? "",
+      active: boolField(row, "Active", true),
+      priority: decodePriority(intField(row, "Priority")),
+      metricType: decodeMetricType(intField(row, "Type") ?? row.MetricType),
+      objectiveTarget: parseLooseNumber(targetRaw),
+      ordinal: intField(row, "__ORDINAL__") ?? 0,
+    });
+  }
+  return out;
+}
+
+function mapMetricEntries(doc: AchDocument, warnings: string[]): MappedMetricEntry[] {
+  const out: MappedMetricEntry[] = [];
+  for (const row of tableRows(doc, "MetricTracking")) {
+    const achId = row.MetricTrackingId ?? row.TrackingId ?? row.Id;
+    const metricAchId = row.MetricId;
+    if (!metricAchId) {
+      warnings.push("MetricTracking row missing MetricId; skipped");
+      continue;
+    }
+    const entryDate = parseEntryDateKey(row.Date ?? row.EntryDate ?? row.TrackingDate);
+    if (!entryDate) {
+      warnings.push(`MetricTracking ${achId ?? "?"} missing Date; skipped`);
+      continue;
+    }
+    const value = parseLooseNumber(row.Value ?? row.TrackingValue);
+    if (value === null) {
+      warnings.push(`MetricTracking ${achId ?? metricAchId} missing Value; skipped`);
+      continue;
+    }
+    out.push({
+      achId: achId ?? `${metricAchId}:${entryDate}:${value}`,
+      metricAchId,
+      entryDate,
+      entryType: decodeMetricEntryType(intField(row, "Type") ?? row.EntryType),
+      target: parseLooseNumber(row.Target ?? row.TargetValue),
+      value,
+    });
+  }
+  return out;
+}
+
+/** Prefer the calendar YYYY-MM-DD written in the dump (avoid TZ shift via Date). */
+function parseEntryDateKey(text: string | null | undefined): string | null {
+  if (!text) return null;
+  const m = /^(\d{4}-\d{2}-\d{2})/.exec(text.trim());
+  if (m?.[1]) return m[1];
+  const d = decodeDateTime(text);
+  if (!d) return null;
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${mo}-${day}`;
+}
+
+function decodeMetricType(raw: number | string | null | undefined): string {
+  if (raw === null || raw === undefined || raw === "") return "total";
+  if (typeof raw === "string") {
+    const s = raw.trim().toLowerCase();
+    if (s === "total" || s === "0") return "total";
+    return s || "total";
+  }
+  // 0 = Total in Achieve (observed convention for similar type enums).
+  if (raw === 0) return "total";
+  return String(raw);
+}
+
+function decodeMetricEntryType(raw: number | string | null | undefined): string {
+  if (raw === null || raw === undefined || raw === "") return "new_total";
+  if (typeof raw === "string") {
+    const s = raw.trim();
+    if (!s || s === "0" || /^new\s*total$/i.test(s)) return "new_total";
+    return s;
+  }
+  if (raw === 0) return "new_total";
+  return String(raw);
+}
+
+function parseLooseNumber(raw: string | null | undefined): number | null {
+  if (raw === null || raw === undefined || raw === "") return null;
+  const n = Number(String(raw).trim().replace(",", "."));
+  return Number.isFinite(n) ? n : null;
 }
 
 /** ShowTimeAs: 0 free, 1 busy, 2 tentative, 3 out of office (observed + Outlook-like). */

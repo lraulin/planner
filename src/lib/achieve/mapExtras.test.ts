@@ -124,5 +124,54 @@ describe("mapExtras", () => {
     expect(extras.notes).toHaveLength(1);
     expect(extras.notes[0]?.title).toBe("Life Plan");
     expect(extras.notes[0]?.body).toBe("18 credits remaining");
+
+    expect(extras.metrics).toHaveLength(0);
+    expect(extras.metricEntries).toHaveLength(0);
+  });
+
+  it("maps Metrics and MetricTracking", () => {
+    const xml = `<?xml version="1.0"?>
+<AchieveDB>
+  <Metrics>
+    <MetricId>mmmmmmmm-mmmm-mmmm-mmmm-mmmmmmmmmmmm</MetricId>
+    <Title>Waist Width</Title>
+    <GoalId>gggggggg-gggg-gggg-gggg-gggggggggggg</GoalId>
+    <Category>Body</Category>
+    <Question>What is my waist measurement?</Question>
+    <Units>cm</Units>
+    <Active>true</Active>
+    <Priority>1</Priority>
+    <Type>0</Type>
+    <ObjectiveTarget>80</ObjectiveTarget>
+    <__ORDINAL__>0</__ORDINAL__>
+  </Metrics>
+  <MetricTracking>
+    <MetricTrackingId>tttttttt-tttt-tttt-tttt-tttttttttttt</MetricTrackingId>
+    <MetricId>mmmmmmmm-mmmm-mmmm-mmmm-mmmmmmmmmmmm</MetricId>
+    <Date>2016-01-05T00:00:00Z</Date>
+    <Type>0</Type>
+    <Target>80</Target>
+    <Value>95</Value>
+  </MetricTracking>
+</AchieveDB>`;
+    const extras = mapExtras(parseAchXml(xml));
+    expect(extras.metrics).toHaveLength(1);
+    expect(extras.metrics[0]).toMatchObject({
+      title: "Waist Width",
+      ownerAchId: "gggggggg-gggg-gggg-gggg-gggggggggggg",
+      category: "Body",
+      units: "cm",
+      objectiveTarget: 80,
+      metricType: "total",
+      active: true,
+    });
+    expect(extras.metricEntries).toHaveLength(1);
+    expect(extras.metricEntries[0]).toMatchObject({
+      metricAchId: "mmmmmmmm-mmmm-mmmm-mmmm-mmmmmmmmmmmm",
+      entryDate: "2016-01-05",
+      value: 95,
+      target: 80,
+      entryType: "new_total",
+    });
   });
 });

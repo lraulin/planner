@@ -1,6 +1,6 @@
 # Metrics Tab + Import/Export (Core MVP)
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-02)  
 Spec folder: `agent-os/specs/2026-08-02-0912-metrics-tab/`
 
 ## Context
@@ -35,16 +35,25 @@ import/export.
 
 ## Acceptance criteria
 
-- [ ] **Metrics tab** (`/metrics` or `/tracking`) in the tab strip: lists **all** metrics for the user (active filter), columns roughly: Active, Priority, Title, Category, Question, Target, Last Value; optional Group by Owner.
-- [ ] **Create metric without a goal** from the Metrics tab; create **with** goal from Goal form Metrics section.
-- [ ] **Metric drawer/form**: General (title, owner set/clear, category, description/reason as needed) + Tracking (active, type Total for MVP, question, units, objective target value, tracking values grid with date / target / value).
-- [ ] **Add/edit/delete tracking entries**; **Last value** updates from latest entry by date.
-- [ ] **Performance graph** for selected metric (Actual line; Objective target as horizontal/series when set); Show Legend / Show Objective toggles acceptable as simple checkboxes.
-- [ ] **CSV export** of tracking rows from the metric form.
-- [ ] **ACHXML import** of `Metrics` + `MetricTracking` (merge/replace); **export** includes them.
-- [ ] Goal form Metrics list uses first-class metrics (not thin node_items editor for new work).
-- [ ] Pure logic tests + integration tests with **cross-user isolation** on all mutations/queries.
-- [ ] Spec frozen; `roadmap.md` and `achieve-file-formats.md` tier table updated.
+- [x] **Metrics tab** (`/metrics`) in the tab strip: lists **all** metrics, Active only, Group by Owner, columns Active/Priority/Title/Category/Question/Target/Last Value.
+- [x] **Create metric without a goal** from the Metrics tab; create **with** goal from Goal form Metrics section.
+- [x] **Metric drawer/form**: General + Tracking (active, type Total, question, units, objective target, tracking grid).
+- [x] **Add/edit/delete tracking entries**; **Last value** from latest entry by date.
+- [x] **Performance graph** (SVG Actual + Objective); Show Legend / Show Objective.
+- [x] **CSV export** of tracking rows from the metric form.
+- [x] **ACHXML import** of `Metrics` + `MetricTracking` (merge/replace); **export** includes them.
+- [x] Goal form Metrics list uses first-class metrics.
+- [x] Pure logic tests + integration tests with **cross-user isolation**.
+- [x] Spec frozen; `roadmap.md` and `achieve-file-formats.md` updated.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- Metric recurrence + reminders → Status On Schedule/Overdue
+- Auto-target / contribution / auto-increase
+- Graph zoom & print; auto-load graph on first paint if desired
+- DataGrid chrome (filters, show fields) on Metrics list if needed
+- Agent tools for logging a metric value
+- Richer ACHXML field fidelity after inspecting a full AP metrics dump
 
 ## Out of scope (this slice)
 
@@ -59,9 +68,11 @@ import/export.
 
 ## Changes from original plan
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                 | Why                                                         |
+| --- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| 1   | Metrics list is a purpose-built table (not full DataGrid Show Fields stack)            | Faster MVP; columns + Group by Owner match the screenshots. |
+| 2   | Goal Metrics panel lazy-loads on focus/hover rather than expanding goal detail payload | Keeps drawer light; same first-class tables.                |
+| 3   | Chart loads on selection / “Load graph”, not automatically on first paint              | Fetch stays in event handlers (lint + clarity).             |
 
 ---
 

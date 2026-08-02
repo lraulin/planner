@@ -224,8 +224,9 @@ list (and the tiers below) as a backlog, not a promise.
 | ------------ | ---------------------------------------------------------------------------------------- | ---------------------------------------- |
 | **Done**     | ResultAreaCategories, ResultAreas, Dreams, Goals, Projects, Tasks                        | Outline core                             |
 | **Done**     | Appointments; TimeCharts + TimeChartAreas; Wishes; NoteItems; LabelData colours          | Calendar, ideal week, wish list, notes   |
+| **Done**     | Metrics + MetricTracking                                                                 | Metrics tab + tracking history           |
 | **A — next** | AppointmentRecurrence (full rule decode); ProjectObjectives/Risks/…; GoalSteps/Actions/… | Series masters + detail-form child lists |
-| **B**        | Metrics + MetricTracking; Labels; Contacts                                               | Separate product lines                   |
+| **B**        | Labels; Contacts                                                                         | Separate product lines                   |
 | **C**        | FormLayouts, RecordView*, SyncItems, ActiveSync*, Users, Images, Resources*              | UI chrome / Outlook                      |
 
 ### Goal import notes
