@@ -142,11 +142,10 @@ export async function loadWeek(
 /**
  * The day a task is currently planned for, or null.
  *
- * Read off the open day row rather than off `target_start_date`, even though for a task the
- * two are kept equal by `syncDayLineToTargetStart`. The row is the wider answer: it also
- * covers planned **projects**, which have no target start date of their own, and it is
- * single-valued by construction because `daily_items_open_node_uq` allows a node at most one
- * open day. Completed and forwarded rows are history and deliberately excluded.
+ * Read off the open day row rather than off `target_start_date`, even though the two are
+ * kept equal by `syncDayLineToTargetStart`. The row is the authority on whether a line
+ * exists at all, and it is single-valued by construction: `daily_items_open_node_uq` allows
+ * a node at most one open day. Completed and forwarded rows are history and excluded.
  */
 export async function plannedDayForNode(
   userId: string,

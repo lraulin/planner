@@ -16,7 +16,6 @@ import {
   TextField,
 } from "./fields";
 import { STATE_OPTIONS } from "@/lib/tree/hierarchy";
-import { PlanForDayField } from "./PlanForDayField";
 import { LinkedNotesPanel } from "@/components/notes/LinkedNotesPanel";
 import type { FormTab } from "./FormTabs";
 import { CoreHeaderFields, type DetailFormProps } from "./formShared";
@@ -41,7 +40,7 @@ const SENSITIVITY_OPTIONS: { value: Sensitivity; label: string }[] = [
  * roadmap item after this one.
  */
 export function projectTabs(props: DetailFormProps): FormTab[] {
-  const { detail, node, values, patch, patchProject, list } = props;
+  const { node, values, patch, patchProject, list } = props;
   const project = values.project ?? {};
 
   return [
@@ -69,12 +68,6 @@ export function projectTabs(props: DetailFormProps): FormTab[] {
                 value={values.deadline}
                 onChange={(deadline) => patch({ deadline })}
               />
-              {/* Only meaningful for a task-less project, which the Task Chooser treats as
-                  choosable work in its own right (manual §8). A project with children is
-                  planned through its tasks. */}
-              {!node.hasChildren && (
-                <PlanForDayField nodeId={node.id} plannedDay={detail.plannedDay} />
-              )}
             </FieldGrid>
           </Section>
 

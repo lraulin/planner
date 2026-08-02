@@ -78,7 +78,12 @@ export function WeekPlanView({
       viewId: "todo-list",
       settings: defaultSettings("todo-list"),
     });
-    return items.filter((item) => !plannedNodeIds.has(item.node.id));
+    // Tasks only. The chooser's To-do List also offers task-less projects as choosable work
+    // (manual §8), but a day page holds what you can finish in a day — a project that wants
+    // to be on one should have a task under it saying what you are actually doing.
+    return items.filter(
+      (item) => item.node.type === "task" && !plannedNodeIds.has(item.node.id),
+    );
   }, [nodes, today, plannedNodeIds]);
 
   const onDropOnDay = useCallback(

@@ -57,6 +57,16 @@ are different, and the second is what stopped a start date putting a task on a d
   moves an unfinished line to today and leaves "→" behind, and it now bumps
   `target_start_date` with it. A task you meant to begin on Tuesday is in front of you on
   Thursday rather than stranded on Tuesday's page, and the two never disagree.
+- **A day-page gesture sets both ends of the range to that day.** Putting something on a
+  daily list means "I intend to start _and finish_ this on this day"; work that genuinely
+  spans days is a project, or at least a task with subtasks. Applies to planning, dragging
+  between days, carrying forward, and promoting a jotted line — but **not** to editing the
+  date on the record, where typing a start date is a finer act than dropping a card on a
+  square and overwriting a deliberate target end would be presumptuous.
+- **Tasks only on a day list.** Projects are refused, the Plan for day field is gone from
+  the Project form, and the week rail filters to tasks — the chooser's To-do List still
+  offers task-less projects as choosable work, but a day page holds what fits in a day. A
+  project that belongs on one should have a task under it saying what you are doing.
 - **Nothing plants a repeating task's next line any more.** Completing one writes a fresh
   `target_start_date` and the sync does the rest — one mechanism deciding which day a task
   sits on rather than two aiming at the same square.
@@ -72,14 +82,14 @@ are different, and the second is what stopped a start date putting a task on a d
 
 ## What was built
 
-| Piece                           | Where                                                                   |
-| ------------------------------- | ----------------------------------------------------------------------- |
-| The invariant, in one place     | `src/lib/day/sync.ts` — `syncDayLineToTargetStart`, `setTargetStartDay` |
-| Plan for day writes the date    | `planNodeForDay` in `src/lib/day/mutations.ts`                          |
-| Dragging a day carries the date | `moveItemToDay`, `forwardOpenItems`, `promoteToTask`                    |
-| Saving the record re-syncs      | `saveNodeDetail` in `src/lib/detail/mutations.ts`                       |
-| Reopening re-plans for today    | `reopenDayLine` in `src/lib/tree/mutations.ts`                          |
-| One field on the form           | `TaskForm`; `DateField` gained a `hint`                                 |
+| Piece                           | Where                                                                                             |
+| ------------------------------- | ------------------------------------------------------------------------------------------------- |
+| The invariant, in one place     | `src/lib/day/sync.ts` — `syncDayLineToTargetStart`, `setTargetStartDay`                           |
+| Day gestures write both dates   | `setDayPlan` in `sync.ts`; `planNodeForDay`, `moveItemToDay`, `forwardOpenItems`, `promoteToTask` |
+| Dragging a day carries the date | `moveItemToDay`, `forwardOpenItems`, `promoteToTask`                                              |
+| Saving the record re-syncs      | `saveNodeDetail` in `src/lib/detail/mutations.ts`                                                 |
+| Reopening re-plans for today    | `reopenDayLine` in `src/lib/tree/mutations.ts`                                                    |
+| One field on the form           | `TaskForm`; `DateField` gained a `hint`                                                           |
 
 ## Acceptance criteria
 
@@ -96,14 +106,17 @@ Verified against the running app and the real database on 2026-08-01.
 - [x] Completing a repeating task puts its next line on the new start date, with no planted
       row involved
 - [x] A completed task still gets its crossed-off record on the day it was completed
-- [x] A planned **project** still works, with no target start date to follow
+- [x] Dragging a task onto Thursday in the week grid set target **start and end** to that
+      day — checked live
+- [x] A project is refused from a day list, and the week rail no longer offers the 11
+      task-less projects it used to
+- [x] Editing the dates on the record leaves a deliberately different target end alone
 - [x] `test:unit`, `test:integration`, `typecheck`, `lint`, `build` all pass (1107 tests)
 
 ## Follow-ups
 
-- **`plannedDayForNode` still reads the row, not the column.** Correct today, because it also
-  answers for projects — but if `target_start_date` ever moves up to `nodes`, this and the
-  project branch of `planNodeForDay` both collapse.
+- **`plannedDayForNode` still reads the row, not the column.** Equivalent under the
+  invariant, and the row remains the authority on whether a line exists at all.
 - **Day-page volume.** Between this and "every completion is recorded", the day page now sees
   a lot of traffic. If it becomes noisy, the fix is a filter on the page.
 - **Lead Time → Target Start** (Achieve §3.9.5) is still not implemented, and would now write

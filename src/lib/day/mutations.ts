@@ -13,7 +13,7 @@ import { toDateKey } from "@/lib/schedule/geometry";
 import { applyStateTransition, createNode } from "@/lib/tree/mutations";
 import { between } from "@/lib/tree/sortKey";
 import { itemsToForward } from "./forward";
-import { setTargetStartDay } from "./sync";
+import { setDayPlan } from "./sync";
 import { JOURNAL_SUBJECT } from "./types";
 import type { DayAssignment } from "./priority";
 
@@ -232,13 +232,14 @@ async function moveItemToDay(
     })
     .where(and(eq(dailyItems.id, itemId), eq(dailyItems.userId, userId)));
 
-  // Dragging an unfinished task to another day is re-planning it, so its target start date
-  // moves too — otherwise the drawer would go on claiming the old day. A completed or
-  // forwarded row is history and does not re-plan anything.
+  // Dragging an unfinished task to another day is re-planning it, so both ends of its
+  // target range move with it — otherwise the drawer would go on claiming the old day. A
+  // completed or forwarded row is history and does not re-plan anything.
   if (item.nodeId && item.completedAt === null && item.forwardedTo === null) {
+    const date = new Date(`${day}T00:00:00`);
     await tx
       .update(taskDetails)
-      .set({ targetStartDate: new Date(`${day}T00:00:00`) })
+      .set({ targetStartDate: date, targetEndDate: date })
       .where(eq(taskDetails.nodeId, item.nodeId));
   }
 }
@@ -259,15 +260,16 @@ export async function deleteDailyItem(userId: string, itemId: string): Promise<v
 }
 
 /**
- * Plan a task for a day, or clear it — what the task form's "Plan for day" field and the
- * week view's drop targets both call.
+ * Plan a task for a day, or clear it — what the week view's drop targets and the day page
+ * both call.
  *
- * For a **task** this writes `target_start_date`, because Achieve's target start date is
- * "when you intend to begin working on this item" and that is the same statement. The day
- * line follows from `syncDayLineToTargetStart`; see `./sync` for why the row still exists.
+ * Writes `target_start_date` and `target_end_date`, both to that day: Achieve's target start
+ * date is "when you intend to begin working on this item", which is the same statement the
+ * day list makes, and a day list holds work you mean to finish that day. The row follows
+ * from `syncDayLineToTargetStart`; see `./sync` for why the row still exists at all.
  *
- * A **project** has no target start date of its own — the column lives on `task_details` —
- * so a planned project keeps its row as its only home, exactly as before.
+ * **Tasks only.** A project is by definition work that does not fit in a day; if one belongs
+ * on a day page, what belongs there is a task under it saying what you are actually doing.
  *
  * Passing `null` un-plans it. It never completes or deletes anything: unplanning is "not
  * this day", not "not at all".
@@ -279,43 +281,17 @@ export async function planNodeForDay(
 ): Promise<void> {
   await db.transaction(async (tx) => {
     const [node] = await tx
-      .select({ name: nodes.name, type: nodes.type })
+      .select({ type: nodes.type })
       .from(nodes)
       .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)))
       .limit(1);
 
     if (!node) throw new Error("Task not found.");
-
-    if (node.type === "task") {
-      await setTargetStartDay(tx, userId, nodeId, day);
-      return;
+    if (node.type !== "task") {
+      throw new Error("Only tasks go on a day list. Add a task under it instead.");
     }
 
-    const existing = await openRowForNode(tx, userId, nodeId);
-
-    if (day === null) {
-      if (existing) {
-        await tx
-          .delete(dailyItems)
-          .where(and(eq(dailyItems.id, existing.id), eq(dailyItems.userId, userId)));
-      }
-      return;
-    }
-
-    if (existing) {
-      await moveItemToDay(tx, userId, existing.id, day);
-      return;
-    }
-
-    await tx.insert(dailyItems).values({
-      userId,
-      day,
-      nodeId,
-      // Snapshot, so the day keeps an honest record if the task is later deleted. Display
-      // still prefers the task's live name while it exists.
-      title: node.name,
-      sortKey: await endOfDay(tx, userId, day),
-    });
+    await setDayPlan(tx, userId, nodeId, day);
   });
 }
 
@@ -343,10 +319,12 @@ export async function promoteToTask(userId: string, itemId: string): Promise<str
     .where(and(eq(dailyItems.id, itemId), eq(dailyItems.userId, userId)));
 
   // The line now stands for a task, and a task says which day it is on with its target
-  // start date. Without this the new task would have a day line and no date to explain it.
+  // dates. Without this the new task would have a day line and no dates to explain it. Both
+  // ends, because a line on a day page is work you mean to start and finish that day.
+  const date = new Date(`${item.day}T00:00:00`);
   await db
     .update(taskDetails)
-    .set({ targetStartDate: new Date(`${item.day}T00:00:00`) })
+    .set({ targetStartDate: date, targetEndDate: date })
     .where(eq(taskDetails.nodeId, nodeId));
 
   return nodeId;
@@ -417,9 +395,10 @@ export async function forwardOpenItems(
       // task you meant to begin on Tuesday is still in front of you on Thursday rather
       // than stranded on Tuesday's page.
       if (row.nodeId) {
+        const date = new Date(`${today}T00:00:00`);
         await tx
           .update(taskDetails)
-          .set({ targetStartDate: new Date(`${today}T00:00:00`) })
+          .set({ targetStartDate: date, targetEndDate: date })
           .where(eq(taskDetails.nodeId, row.nodeId));
       }
 

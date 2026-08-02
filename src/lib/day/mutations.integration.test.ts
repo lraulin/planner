@@ -452,6 +452,52 @@ describeDb("completing from the day page", () => {
     expect(await plannedDayForNode(userId, nodeId)).toBe(tomorrowKey());
   });
 
+  it("sets both ends of the range when a task is planned for a day", async () => {
+    // A line on a day page is work you mean to start *and finish* that day. Work that
+    // genuinely spans days is a project, or a task with subtasks.
+    const nodeId = await makeTask(userId, "One day's work");
+
+    await planNodeForDay(userId, nodeId, WED);
+
+    const [detail] = await db
+      .select()
+      .from(taskDetails)
+      .where(eq(taskDetails.nodeId, nodeId));
+    expect(toDateKey(detail.targetStartDate!)).toBe(WED);
+    expect(toDateKey(detail.targetEndDate!)).toBe(WED);
+  });
+
+  it("refuses to put a project on a day list", async () => {
+    const projectId = await createNode({
+      userId,
+      parentId: null,
+      type: "project",
+      name: "Too big for a day",
+    });
+
+    await expect(planNodeForDay(userId, projectId, MON)).rejects.toThrow("Only tasks");
+    expect((await loadDay(userId, MON, WED)).items).toHaveLength(0);
+  });
+
+  it("leaves target end alone when the date is edited on the record", async () => {
+    // Typing a start date into the form is a finer act than dropping a card on a day.
+    // Overwriting a target end that was set on purpose would be presumptuous.
+    const nodeId = await makeTask(userId, "Spans a few days");
+    await saveNodeDetail(userId, nodeId, {
+      task: {
+        targetStartDate: new Date(`${MON}T00:00:00`),
+        targetEndDate: new Date(`${WED}T00:00:00`),
+      },
+    });
+
+    const [detail] = await db
+      .select()
+      .from(taskDetails)
+      .where(eq(taskDetails.nodeId, nodeId));
+    expect(toDateKey(detail.targetEndDate!)).toBe(WED);
+    expect(await plannedDayForNode(userId, nodeId)).toBe(MON);
+  });
+
   it("puts a task on a day when its target start date is set", async () => {
     // The point of the whole seam: target start date *is* the plan. Setting it from the
     // record puts the task on that day's list without anything else being asked of you.

@@ -20,9 +20,9 @@
  * Completed and forwarded rows are untouched — they are history, and history does not move
  * when you change your plans.
  *
- * **Tasks only.** Projects can be planned for a day too, but `target_start_date` lives on
- * `task_details` and projects have no equivalent, so a planned project keeps its row as its
- * only home. Widening this would mean moving the column up to `nodes`.
+ * **Tasks only**, and that is the whole rule for the day list — a day page holds work you
+ * can finish in a day, which is what distinguishes a task from a project. A project that
+ * wants to be on a day should have a task under it that says what you are actually doing.
  */
 
 import { and, eq, isNull, sql } from "drizzle-orm";
@@ -134,16 +134,29 @@ export async function syncDayLineToTargetStart(
   });
 }
 
-/** Write a task's target start date, then put its day line where that says. */
-export async function setTargetStartDay(
+/**
+ * Put a task on a day — the write behind every day-page gesture.
+ *
+ * Sets **both** ends of the range to that day, because that is what putting something on a
+ * daily list means: I intend to start and finish this on this day. Work that genuinely
+ * spans several days is a project, or at least a task with subtasks, and wants its dates
+ * set on the record rather than by dropping it on a square.
+ *
+ * Editing Target start on the record deliberately does *not* come through here. Typing a
+ * date into the form is a finer act than dropping a card on a day, and overwriting a target
+ * end you had set on purpose would be presumptuous.
+ */
+export async function setDayPlan(
   tx: Executor,
   userId: string,
   nodeId: string,
   day: string | null,
 ): Promise<void> {
+  const date = day ? new Date(`${day}T00:00:00`) : null;
+
   await tx
     .update(taskDetails)
-    .set({ targetStartDate: day ? new Date(`${day}T00:00:00`) : null })
+    .set({ targetStartDate: date, targetEndDate: date })
     .where(eq(taskDetails.nodeId, nodeId));
 
   await syncDayLineToTargetStart(tx, userId, nodeId);

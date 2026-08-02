@@ -144,7 +144,9 @@ of Wednesday.
 > you intend to begin working on this item", which is precisely what Plan for day says. The
 > conclusion drawn here was too broad — the _record_ has to live in `daily_items`, but which
 > day an unfinished task sits on is now decided by `target_start_date`, with the row kept in
-> step. Setting a start date puts the task on that day's list.
+> step. Setting a start date puts the task on that day's list, and a day-page gesture sets
+> both ends of the range, since a day list holds work you mean to finish that day. Planned
+> **projects** are also gone: only tasks go on a day list.
 
 One table, three ways in — type it on the day page, drag it in the week grid, set it on the
 task — all writing the same row. That is what "harmonious, not parallel" means concretely.
