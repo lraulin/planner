@@ -413,7 +413,27 @@ describeDb("completing from the day page", () => {
     expect(rows.find((r) => r.day === tomorrowKey())!.completedAt).toBeNull();
   });
 
-  it("leaves a task that was never planned for a day off the day list entirely", async () => {
+  it("records an unplanned task as crossed off on the day it was completed", async () => {
+    // The day page is a paper day you can turn back to. A record with holes in it is not a
+    // record, so a task completed anywhere lands there struck through even if it was never
+    // planned.
+    const nodeId = await makeTask(userId, "Never planned");
+
+    await setState(userId, nodeId, "completed");
+
+    const rows = await db
+      .select()
+      .from(dailyItems)
+      .where(and(eq(dailyItems.userId, userId), eq(dailyItems.nodeId, nodeId)));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].day).toBe(todayKey());
+    expect(rows[0].completedAt).not.toBeNull();
+  });
+
+  it("does not plan a future day for a routine that was never on the day list", async () => {
+    // The other half of the rule. Recording that you did something today is not grounds
+    // for the app to decide you intend to do it again on Thursday — "Plan for day" is the
+    // user's statement of intent, and only carries forward what was already there.
     const nodeId = await makeTask(userId, "Never planned");
     await saveNodeDetail(userId, nodeId, {
       task: { recurrenceFrequency: "daily", recurrenceInterval: 1 },
@@ -425,7 +445,18 @@ describeDb("completing from the day page", () => {
       .select()
       .from(dailyItems)
       .where(and(eq(dailyItems.userId, userId), eq(dailyItems.nodeId, nodeId)));
-    expect(rows).toHaveLength(0);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].day).toBe(todayKey());
+    expect(rows.every((r) => r.completedAt !== null)).toBe(true);
+  });
+
+  it("keeps that record out of the Plan for day field", async () => {
+    // `plannedDayForNode` reads open lines only, so an auto-recorded completed line does
+    // not make the drawer claim the task is planned for today.
+    const nodeId = await makeTask(userId, "Never planned");
+    await setState(userId, nodeId, "completed");
+
+    expect(await plannedDayForNode(userId, nodeId)).toBeNull();
   });
 
   it("carries a state like delegated through to the task", async () => {

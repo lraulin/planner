@@ -510,20 +510,22 @@ export async function applyStateTransition(
 }
 
 /**
- * Keep the Day page's line for a task in step with the task itself.
+ * Keep the Day page in step with a task that has just been completed.
  *
- * Completing a task means the same thing wherever you do it, so the day line that stands
- * for it is checked off whether you ticked it on the day page, in the outline, in a grid
- * or from the drawer. Only the *route* differs: from the day page,
- * `setDailyItemState` has already stamped the row before this runs, and finds nothing
- * left to do.
+ * The day page is a paper day: you can turn back to Tuesday and see what you wrote and what
+ * you crossed off. So **every** completed task gets a struck-through line on the day it was
+ * completed — whether or not it was planned there, whether or not it repeats, and whichever
+ * surface you were looking at when you ticked it. A record with holes in it is not a record.
  *
- * Then, for a repeating task, an open line appears on the day it is next due — because the
- * completed one stays crossed off where it was (that is what `daily_items.completedAt` is
- * for, and why it survives the node reset), and a daily routine that vanishes from every
- * future day is not a routine.
+ * Two different things are being written here, and they follow different rules:
  *
- * Returns nothing; a task that was never on a day list is left alone entirely.
+ * - **The record.** Always. An existing open line is checked off; a task that was never on
+ *   the list gets a line created already crossed off.
+ * - **The plan for the next occurrence.** Only when the task was already on a day list.
+ *   "Plan for day" is a statement of intent, and it is the user's to make: recording that
+ *   you did something today is not grounds for the app to decide you mean to do it again on
+ *   Thursday. A routine you actually keep on the day page keeps coming back; one you drive
+ *   from the outline stays out of the way.
  */
 async function syncDayLineOnCompletion(
   tx: Executor,
@@ -545,25 +547,51 @@ async function syncDayLineOnCompletion(
 
   const today = toDateKey(completedAt);
   const open = rows.find((r) => r.completedAt === null && r.forwardedTo === null);
+  // Judged by when it was completed rather than which day it sits on, so ticking Monday's
+  // forgotten line today still counts as today's record.
+  const doneToday = rows.find(
+    (r) => r.completedAt && toDateKey(r.completedAt) === today,
+  );
 
   if (open) {
     await tx
       .update(dailyItems)
       .set({ state: "completed", completedAt, updatedAt: completedAt })
       .where(eq(dailyItems.id, open.id));
+  } else if (!doneToday) {
+    await addDayLine(tx, userId, nodeId, today, {
+      state: "completed",
+      completedAt,
+    });
   }
 
-  // Was this task on someone's day list for today? Either the line just checked off above,
-  // or one the day page had already stamped on its way here. Judged by when it was
-  // completed rather than which day it sits on, so ticking Monday's forgotten line today
-  // still counts.
-  const planned =
-    open ?? rows.find((r) => r.completedAt && toDateKey(r.completedAt) === today);
-  if (!planned || !next) return;
+  // Was it on a day list before this? That is what makes the next occurrence a plan rather
+  // than an assumption.
+  if (!next || !(open ?? doneToday)) return;
 
   // A missed occurrence lands in the past, where a new line would never be seen. Put it on
   // today instead: it is due, and today is when you can act on it.
   const day = toDateKey(next) < today ? today : toDateKey(next);
+  await addDayLine(tx, userId, nodeId, day, {
+    // The ABC letter is the day's own ranking, and a routine's is stable — it was an A
+    // yesterday because it is an A every day. The rank within the letter is not carried:
+    // where it sits among tomorrow's other work is tomorrow's question.
+    priorityLetter: (open ?? doneToday)!.priorityLetter,
+  });
+}
+
+/** Append a line for a task to the end of a day. Silent if one is already there. */
+async function addDayLine(
+  tx: Executor,
+  userId: string,
+  nodeId: string,
+  day: string,
+  values: {
+    state?: NodeState;
+    completedAt?: Date;
+    priorityLetter?: PriorityLetter | null;
+  },
+): Promise<void> {
   const [last] = await tx
     .select({ sortKey: dailyItems.sortKey })
     .from(dailyItems)
@@ -578,10 +606,7 @@ async function syncDayLineOnCompletion(
       nodeId,
       day,
       sortKey: between(last?.sortKey ?? null, null),
-      // The ABC letter is the day's own ranking, and a routine's is stable — it was an A
-      // yesterday because it is an A every day. The rank within the letter is not carried:
-      // where it sits among tomorrow's other work is tomorrow's question.
-      priorityLetter: planned.priorityLetter,
+      ...values,
     })
     .onConflictDoNothing();
 }

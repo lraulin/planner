@@ -138,9 +138,16 @@ export async function updateDailyItemTitle(
  * the day page fires recurrence, the effort reset and the `task_completions` log exactly as
  * completing it from the outline would.
  *
- * `completedAt` is stamped on the row itself and is what makes the day's record durable: a
- * recurring task is reset to `not_started` by that same call, and without a local stamp the
- * line would silently un-check itself the moment you finished it.
+ * **Checking off a node-backed line is not written here.** `applyStateTransition` owns the
+ * completion stamp for every surface — it has to, since a task can be completed from four
+ * of them — and stamping it here as well would be the same write twice, with the result
+ * quietly depending on which ran last. A jotted line has no task behind it, so it does
+ * stamp itself; and so does any line being *re*-opened, because the row's own state
+ * (in progress, delegated, waiting) is finer than the task's and is not derivable from it.
+ *
+ * `completedAt` living on the row is what makes the day's record durable: a recurring task
+ * is reset to `not_started` by that same call, and a derived checkmark would silently
+ * un-check itself the moment you finished it.
  */
 export async function setDailyItemState(
   userId: string,
@@ -161,14 +168,16 @@ export async function setDailyItemState(
       }
     }
 
-    await tx
-      .update(dailyItems)
-      .set({
-        state,
-        completedAt: completing ? new Date() : null,
-        updatedAt: new Date(),
-      })
-      .where(and(eq(dailyItems.id, itemId), eq(dailyItems.userId, userId)));
+    if (!item.nodeId || !completing) {
+      await tx
+        .update(dailyItems)
+        .set({
+          state,
+          completedAt: completing ? new Date() : null,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(dailyItems.id, itemId), eq(dailyItems.userId, userId)));
+    }
 
     if (item.nodeId) {
       await applyStateTransition(tx, userId, item.nodeId, state);
