@@ -12,7 +12,11 @@ import {
 } from "@/app/metrics/actions";
 import { Drawer, DrawerFooter, DrawerHeader } from "@/components/detail/Drawer";
 import { entriesToCsv } from "@/lib/metrics/csv";
-import { formatMetricNumber, localDateKey } from "@/lib/metrics/parse";
+import {
+  formatMetricNumber,
+  localDateKey,
+  parseMetricInput,
+} from "@/lib/metrics/parse";
 import type { MetricDetail, MetricEntryView, MetricType } from "@/lib/metrics/types";
 import { METRIC_TYPE_LABELS, METRIC_TYPES } from "@/lib/metrics/types";
 import type { OutlineNode } from "@/lib/tree/types";
@@ -137,10 +141,12 @@ function MetricForm({
     setSaving(true);
     setError(null);
     const rank = draft.priorityRank.trim() === "" ? null : Number(draft.priorityRank);
-    const target =
-      draft.objectiveTarget.trim() === ""
-        ? null
-        : Number(draft.objectiveTarget.replace(",", "."));
+    const targetParsed = parseMetricInput(draft.objectiveTarget);
+    if (!targetParsed.ok) {
+      setSaving(false);
+      setError("Objective target must be a number or empty.");
+      return false;
+    }
     const result = await updateMetricAction(detail.id, {
       title: draft.title,
       category: draft.category,
@@ -155,7 +161,7 @@ function MetricForm({
           ? null
           : rank,
       metricType: draft.metricType,
-      objectiveTarget: target === null || !Number.isFinite(target) ? null : target,
+      objectiveTarget: targetParsed.value,
       ownerNodeId: draft.ownerNodeId === "" ? null : draft.ownerNodeId,
     });
     setSaving(false);
@@ -185,10 +191,8 @@ function MetricForm({
       const result = await createMetricEntryAction(detail.id, {
         entryDate: localDateKey(),
         value: 0,
-        target:
-          draft.objectiveTarget.trim() === ""
-            ? null
-            : Number(draft.objectiveTarget.replace(",", ".")),
+        // Per-entry target is optional; objective target still drives the graph.
+        target: null,
       });
       if (!result.ok) setError(result.error);
       else reloadDetail();
@@ -412,12 +416,13 @@ function MetricForm({
                 className={inputClass}
               />
             </Field>
-            <Field label="Objective target">
+            <Field label="Objective target (optional)">
               <input
                 value={draft.objectiveTarget}
                 onChange={(e) => patchDraft({ objectiveTarget: e.target.value })}
                 className={inputClass}
                 inputMode="decimal"
+                placeholder="None"
               />
             </Field>
 
@@ -475,29 +480,25 @@ function MetricForm({
                       </td>
                       <td className="px-2 py-1 text-ink-muted">New Total</td>
                       <td className="px-1 py-0.5">
-                        <input
-                          value={
-                            entry.target != null ? formatMetricNumber(entry.target) : ""
-                          }
-                          onChange={(e) => {
-                            const v = e.target.value.trim();
-                            updateEntry(entry, {
-                              target: v === "" ? null : Number(v.replace(",", ".")),
-                            });
+                        <MetricDecimalCell
+                          committed={entry.target}
+                          allowEmpty
+                          placeholder="—"
+                          onCommit={(n) => {
+                            if (n === entry.target) return;
+                            if (n === null && entry.target === null) return;
+                            updateEntry(entry, { target: n });
                           }}
-                          className="w-full rounded border border-transparent bg-transparent px-1 py-1 hover:border-rule focus:border-select-edge"
-                          inputMode="decimal"
                         />
                       </td>
                       <td className="px-1 py-0.5">
-                        <input
-                          value={formatMetricNumber(entry.value)}
-                          onChange={(e) => {
-                            const n = Number(e.target.value.replace(",", "."));
-                            if (Number.isFinite(n)) updateEntry(entry, { value: n });
+                        <MetricDecimalCell
+                          committed={entry.value}
+                          allowEmpty={false}
+                          onCommit={(n) => {
+                            if (n === null || n === entry.value) return;
+                            updateEntry(entry, { value: n });
                           }}
-                          className="w-full rounded border border-transparent bg-transparent px-1 py-1 hover:border-rule focus:border-select-edge"
-                          inputMode="decimal"
                         />
                       </td>
                       <td className="px-1">
@@ -536,6 +537,57 @@ function MetricForm({
         error={error}
       />
     </>
+  );
+}
+
+/**
+ * Decimal cell that edits as free text and commits on blur/Enter.
+ * Avoids controlled Number() on every keystroke, which strips trailing "." mid-type.
+ */
+function MetricDecimalCell({
+  committed,
+  onCommit,
+  allowEmpty,
+  placeholder,
+}: {
+  committed: number | null;
+  onCommit: (n: number | null) => void;
+  allowEmpty: boolean;
+  placeholder?: string;
+}) {
+  const display = committed != null ? formatMetricNumber(committed) : "";
+  const [draft, setDraft] = useState<string | null>(null);
+  const text = draft ?? display;
+
+  const finish = () => {
+    const parsed = parseMetricInput(text);
+    if (!parsed.ok || (parsed.value === null && !allowEmpty)) {
+      setDraft(null);
+      return;
+    }
+    onCommit(parsed.value);
+    setDraft(null);
+  };
+
+  return (
+    <input
+      value={text}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={finish}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          (e.target as HTMLInputElement).blur();
+        }
+        if (e.key === "Escape") {
+          setDraft(null);
+          (e.target as HTMLInputElement).blur();
+        }
+      }}
+      placeholder={placeholder}
+      className="w-full rounded border border-transparent bg-transparent px-1 py-1 hover:border-rule focus:border-select-edge"
+      inputMode="decimal"
+    />
   );
 }
 

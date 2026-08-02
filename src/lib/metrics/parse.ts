@@ -8,6 +8,27 @@ export function parseNumeric(raw: string | number | null | undefined): number | 
   return Number.isFinite(n) ? n : null;
 }
 
+/**
+ * Parse user-typed metric text (value / target fields).
+ * Empty → `{ ok: true, value: null }` (caller decides if null is allowed).
+ * Invalid → `{ ok: false }`. Accepts comma as decimal separator.
+ * Trailing "." on blur is treated as the integer part ("1." → 1).
+ */
+export function parseMetricInput(
+  raw: string,
+): { ok: true; value: number | null } | { ok: false } {
+  const trimmed = raw.trim().replace(",", ".");
+  if (trimmed === "") return { ok: true, value: null };
+  const normalized =
+    trimmed.endsWith(".") && trimmed.length > 1 ? trimmed.slice(0, -1) : trimmed;
+  if (normalized === "" || normalized === "-" || normalized === "+") {
+    return { ok: false };
+  }
+  const n = Number(normalized);
+  if (!Number.isFinite(n)) return { ok: false };
+  return { ok: true, value: n };
+}
+
 /** Format a number for display without trailing junk (1.618, 80, 86.5). */
 export function formatMetricNumber(n: number | null | undefined): string {
   if (n === null || n === undefined || !Number.isFinite(n)) return "";
