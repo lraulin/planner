@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { OutlineNode } from "@/lib/tree/types";
 import { sliceTree, type GridRow } from "@/lib/tree/slice";
 import { formatPriority } from "@/lib/tree/format";
+import { toDateKey } from "@/lib/schedule/geometry";
 import { STATE_LABELS } from "@/lib/tree/hierarchy";
 import type { ColumnDef } from "@/components/grid/columns";
 import { DataGrid } from "@/components/grid/DataGrid";
@@ -120,10 +121,8 @@ function buildColumns(): ColumnDef<GoalsCtx>[] {
       width: "7rem",
       align: "right",
       filterKind: "date",
-      filterValue: (row) =>
-        row.node.deadline ? row.node.deadline.toISOString().slice(0, 10) : null,
-      sortValue: (row) =>
-        row.node.deadline ? row.node.deadline.toISOString().slice(0, 10) : null,
+      filterValue: (row) => (row.node.deadline ? toDateKey(row.node.deadline) : null),
+      sortValue: (row) => (row.node.deadline ? toDateKey(row.node.deadline) : null),
       render: (row, ctx) => (
         <DeadlineCell
           node={row.node}

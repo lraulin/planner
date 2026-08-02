@@ -9,6 +9,9 @@
  * Shared by appointment recurrence (`src/lib/schedule/recurrence.ts`) and task recurrence
  * (`src/lib/recurrence/nextDue.ts`). They are unrelated features that happen to need the
  * same clamping rules; keeping one copy is what stops the two from drifting apart.
+ *
+ * Day *keys* (`YYYY-MM-DD`) live in `geometry.ts` (`toDateKey` / `fromDateKey` /
+ * `daysBetweenKeys`). See `agent-os/standards/development/dates.md`.
  */
 
 /**

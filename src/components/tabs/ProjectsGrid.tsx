@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { OutlineNode } from "@/lib/tree/types";
 import { sliceTree, type GroupBy, type GridRow } from "@/lib/tree/slice";
 import { formatEffort, formatPriority } from "@/lib/tree/format";
+import { toDateKey } from "@/lib/schedule/geometry";
 import { scheduleStatus, STATUS_LABELS } from "@/lib/tree/status";
 import type { ColumnDef } from "@/components/grid/columns";
 import { DataGrid } from "@/components/grid/DataGrid";
@@ -151,14 +152,12 @@ function buildColumns(
       compact: "hidden",
       filterKind: "date",
       filterValue: (row) =>
-        row.node.targetStart ? row.node.targetStart.toISOString().slice(0, 10) : null,
+        row.node.targetStart ? toDateKey(row.node.targetStart) : null,
       sortValue: (row) =>
-        row.node.targetStart ? row.node.targetStart.toISOString().slice(0, 10) : null,
+        row.node.targetStart ? toDateKey(row.node.targetStart) : null,
       render: (row) => (
         <ReadOnlyCell
-          value={
-            row.node.targetStart ? row.node.targetStart.toISOString().slice(0, 10) : ""
-          }
+          value={row.node.targetStart ? toDateKey(row.node.targetStart) : ""}
           align="right"
         />
       ),

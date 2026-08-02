@@ -18,6 +18,7 @@ import {
   type DayAssignment,
 } from "@/lib/day/priority";
 import type { DailyItemView } from "@/lib/day/types";
+import { shiftDateKey } from "@/lib/schedule/geometry";
 import { copyAsText, writeClipboardText } from "@/lib/tree/copyAsText";
 import { isTypingTarget } from "@/lib/keyboard";
 import { DAY_COLUMNS, type DayColumnCtx } from "./dayColumns";
@@ -182,11 +183,7 @@ export function DailyItemsGrid({
         ? orderedIds.filter((id) => selectedIds.has(id))
         : [itemId];
 
-      const tomorrow = (() => {
-        const next = new Date(`${item.day}T00:00:00Z`);
-        next.setUTCDate(next.getUTCDate() + 1);
-        return next.toISOString().slice(0, 10);
-      })();
+      const tomorrow = shiftDateKey(item.day, 1);
 
       return [
         {
@@ -272,11 +269,7 @@ export function DailyItemsGrid({
       const item = items.find((entry) => entry.id === itemId);
       if (!item) return {};
 
-      const tomorrow = (() => {
-        const next = new Date(`${item.day}T00:00:00Z`);
-        next.setUTCDate(next.getUTCDate() + 1);
-        return next.toISOString().slice(0, 10);
-      })();
+      const tomorrow = shiftDateKey(item.day, 1);
 
       const done = item.state === "completed";
 

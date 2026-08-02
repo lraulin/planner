@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import type { PriorityLetter } from "@/db/schema";
+import { toDateKey, fromDateKey } from "@/lib/schedule/geometry";
 import {
   formatEffort,
   formatPriority,
@@ -408,12 +409,8 @@ export function DateField({
   min?: string;
 }) {
   const id = useId();
-  // Local calendar day, not UTC. `toISOString().slice(0, 10)` shifts the day after evening
-  // in the Americas (a completion at 20:00 Eastern shows as tomorrow) and the other way in
-  // Asia for local-midnight stamps. Matches `toDateKey` / `fromDateKey` and DateField write.
-  const text = value
-    ? `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`
-    : "";
+  // Local calendar day via `toDateKey` — never `toISOString().slice(0, 10)`.
+  const text = value ? toDateKey(value) : "";
 
   return (
     <Field label={label} htmlFor={id} hint={hint} className={className}>
@@ -424,13 +421,7 @@ export function DateField({
         max={max}
         min={min}
         onChange={(event) => {
-          if (!event.target.value) {
-            onChange(null);
-            return;
-          }
-          // Local midnight for the chosen day — never `new Date("YYYY-MM-DD")`, which is UTC.
-          const [y, m, d] = event.target.value.split("-").map(Number);
-          onChange(new Date(y, m - 1, d));
+          onChange(event.target.value ? fromDateKey(event.target.value) : null);
         }}
         className={`tabular ${INPUT_CLASS}`}
       />

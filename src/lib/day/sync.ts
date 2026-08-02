@@ -35,7 +35,7 @@
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { dailyItems, nodes } from "@/db/schema";
-import { toDateKey } from "@/lib/schedule/geometry";
+import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { laterShelf, ownShelf, shelfHolds, type Shelf } from "@/lib/tree/shelving";
 import { between } from "@/lib/tree/sortKey";
 
@@ -288,7 +288,7 @@ export async function setDayPlan(
   nodeId: string,
   day: string | null,
 ): Promise<void> {
-  const date = day ? new Date(`${day}T00:00:00`) : null;
+  const date = day ? fromDateKey(day) : null;
 
   if (day) {
     // `nodes_start_not_before_deferred` would reject this write, and a raw constraint error

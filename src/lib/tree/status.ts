@@ -1,4 +1,5 @@
 import type { NodeState } from "@/db/schema";
+import { daysBetweenKeys, toDateKey } from "@/lib/schedule/geometry";
 import { effectiveState, type Shelf } from "./shelving";
 
 /**
@@ -59,8 +60,8 @@ export function scheduleStatus(
   if (effectiveState(state, shelf, today) === "postponed") return "deferred";
   if (!deadline || !today) return "on_schedule";
 
-  const due = deadline.toISOString().slice(0, 10);
-  const daysOut = daysBetween(today, due);
+  const due = toDateKey(deadline);
+  const daysOut = daysBetweenKeys(today, due);
 
   if (daysOut < 0) return "overdue";
   if (daysOut === 0) return "due_today";
@@ -68,15 +69,4 @@ export function scheduleStatus(
   if (daysOut <= CLOSE_TO_DEADLINE_DAYS) return "close_to_deadline";
   if (daysOut <= DUE_SOON_DAYS) return "due_soon";
   return "on_schedule";
-}
-
-/**
- * Whole days from `from` to `to`, both `YYYY-MM-DD`. Parsed as UTC midnight so the
- * subtraction never lands mid-day and daylight saving cannot shift a boundary.
- */
-function daysBetween(from: string, to: string): number {
-  const MS_PER_DAY = 24 * 60 * 60 * 1000;
-  return Math.round(
-    (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / MS_PER_DAY,
-  );
 }

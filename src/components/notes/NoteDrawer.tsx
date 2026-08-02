@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import type { NoteFlag } from "@/db/schema";
 import type { NoteNode } from "@/lib/notes/types";
 import type { NoteInput } from "@/lib/notes/mutations";
+import { fromDateKey } from "@/lib/schedule/geometry";
 import type { OutlineNode } from "@/lib/tree/types";
 import { TYPE_LABELS } from "@/lib/tree/hierarchy";
 import { updateNoteAction } from "@/app/notes/actions";
@@ -93,7 +94,7 @@ function toInput(draft: Draft): Partial<NoteInput> {
     body: draft.body,
     // Parsed as local midnight rather than `new Date("2026-01-05")`, which is UTC and
     // lands on the previous day for anyone west of Greenwich.
-    noteDate: draft.noteDate ? new Date(`${draft.noteDate}T00:00:00`) : null,
+    noteDate: draft.noteDate ? fromDateKey(draft.noteDate) : null,
     flag: draft.flag,
     contexts: draft.contexts
       .split(",")

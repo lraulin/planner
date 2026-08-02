@@ -23,7 +23,7 @@ import {
   updateAppointmentAction,
   type AppointmentFormPayload,
 } from "@/app/schedule/actions";
-import { WEEKDAY_LABELS } from "@/lib/schedule/geometry";
+import { toDateKey, WEEKDAY_LABELS } from "@/lib/schedule/geometry";
 import {
   checkStateLabel,
   checkStateMark,
@@ -152,9 +152,7 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
     full ? (value.recurrenceCount ?? 10) : 10,
   );
   const [recurrenceUntil, setRecurrenceUntil] = useState(
-    full && value.recurrenceUntil
-      ? value.recurrenceUntil.toISOString().slice(0, 10)
-      : "",
+    full && value.recurrenceUntil ? toDateKey(value.recurrenceUntil) : "",
   );
   const [dirty, setDirty] = useState(false);
   const [justSaved, setJustSaved] = useState(false);

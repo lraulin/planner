@@ -28,10 +28,9 @@ const MONTHS = [
  * A date short enough for a compact row's meta line: "12 Sep", or "12 Sep 27" once the year
  * stops being obvious.
  *
- * Takes the `YYYY-MM-DD` string the grid already carries rather than a `Date`, deliberately.
- * Deadlines are calendar days, and every existing call site reads them as
- * `deadline.toISOString().slice(0, 10)` — parsing that back into a `Date` to format it would
- * reintroduce the local-midnight-versus-UTC bug that convention exists to avoid.
+ * Takes a `YYYY-MM-DD` **day key** (from `toDateKey`), not a `Date`. Callers must convert
+ * with `toDateKey` — never `toISOString().slice(0, 10)`. See
+ * `agent-os/standards/development/dates.md`.
  */
 export function formatCompactDate(
   iso: string | null | undefined,

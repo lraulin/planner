@@ -8,7 +8,7 @@ import {
   type PriorityLetter,
 } from "@/db/schema";
 import { ensureInbox } from "@/lib/capture/mutations";
-import { toDateKey } from "@/lib/schedule/geometry";
+import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { applyStateTransition, createNode } from "@/lib/tree/mutations";
 import { between } from "@/lib/tree/sortKey";
 import { itemsToForward } from "./forward";
@@ -236,7 +236,7 @@ async function moveItemToDay(
   // target range move with it — otherwise the drawer would go on claiming the old day. A
   // completed or forwarded row is history and does not re-plan anything.
   if (item.nodeId && item.completedAt === null && item.forwardedTo === null) {
-    const date = new Date(`${day}T00:00:00`);
+    const date = fromDateKey(day);
     await tx
       .update(nodes)
       .set({ targetStartDate: date, targetEndDate: date, updatedAt: new Date() })
@@ -321,7 +321,7 @@ export async function promoteToTask(userId: string, itemId: string): Promise<str
   // The line now stands for a task, and a task says which day it is on with its target
   // dates. Without this the new task would have a day line and no dates to explain it. Both
   // ends, because a line on a day page is work you mean to start and finish that day.
-  const date = new Date(`${item.day}T00:00:00`);
+  const date = fromDateKey(item.day);
   await db
     .update(nodes)
     .set({ targetStartDate: date, targetEndDate: date, updatedAt: new Date() })
@@ -411,7 +411,7 @@ export async function forwardOpenItems(
       // task you meant to begin on Tuesday is still in front of you on Thursday rather
       // than stranded on Tuesday's page.
       if (row.nodeId) {
-        const date = new Date(`${today}T00:00:00`);
+        const date = fromDateKey(today);
         await tx
           .update(nodes)
           .set({ targetStartDate: date, targetEndDate: date, updatedAt: new Date() })
@@ -480,7 +480,7 @@ export async function saveJournal(
         title: day,
         subject: JOURNAL_SUBJECT,
         body,
-        noteDate: new Date(`${day}T12:00:00Z`),
+        noteDate: fromDateKey(day),
       })
       .returning({ id: notes.id });
 

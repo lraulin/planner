@@ -1,3 +1,4 @@
+import { shiftDateKey } from "@/lib/schedule/geometry";
 import type { FilterKind } from "./columns";
 
 /**
@@ -248,10 +249,9 @@ function matchesDeadline(
   return true;
 }
 
-/** Shift a `YYYY-MM-DD` calendar day by `delta` whole days, in UTC. */
+/** Shift a `YYYY-MM-DD` calendar day by `delta` whole days (day-label arithmetic). */
 export function shiftDays(isoDate: string, delta: number): string {
-  const ms = Date.parse(`${isoDate}T00:00:00Z`) + delta * 24 * 60 * 60 * 1000;
-  return new Date(ms).toISOString().slice(0, 10);
+  return shiftDateKey(isoDate, delta);
 }
 
 /**

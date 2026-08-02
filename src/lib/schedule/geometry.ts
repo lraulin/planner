@@ -20,7 +20,13 @@ export function normalizeTimeRange(
   return { startMinute: start, durationMinutes: duration };
 }
 
-/** Local calendar day as YYYY-MM-DD. */
+/**
+ * Local calendar day as `YYYY-MM-DD`.
+ *
+ * The only Date → day-key conversion for plan/record/shelf fields. Do not use
+ * `date.toISOString().slice(0, 10)` — that is the UTC day. See
+ * `agent-os/standards/development/dates.md`.
+ */
 export function toDateKey(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -28,10 +34,38 @@ export function toDateKey(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-/** Parse YYYY-MM-DD as local midnight. */
+/**
+ * Parse `YYYY-MM-DD` as local midnight.
+ *
+ * Never `new Date("YYYY-MM-DD")` — that is UTC midnight and shifts the local day in the
+ * Americas.
+ */
 export function fromDateKey(key: string): Date {
   const [y, m, d] = key.split("-").map(Number);
   return new Date(y, m - 1, d);
+}
+
+/**
+ * Whole days from `from` to `to`, both `YYYY-MM-DD` keys.
+ *
+ * Pure string arithmetic at UTC midnight so DST cannot shift a boundary. Safe because the
+ * inputs are already day *labels*, not instants — do not use this on `toISOString()` output
+ * from a local-midnight Date; convert with `toDateKey` first.
+ */
+export function daysBetweenKeys(from: string, to: string): number {
+  const MS_PER_DAY = 24 * 60 * 60 * 1000;
+  return Math.round(
+    (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / MS_PER_DAY,
+  );
+}
+
+/**
+ * Shift a `YYYY-MM-DD` key by whole calendar days without going through local Date getters.
+ * Used for day-page navigation where the key is a label, not a timezone-aware instant.
+ */
+export function shiftDateKey(key: string, days: number): string {
+  const ms = Date.parse(`${key}T00:00:00Z`) + days * 24 * 60 * 60 * 1000;
+  return new Date(ms).toISOString().slice(0, 10);
 }
 
 /** Start of the week containing `date`. `weekStartsOn`: 0=Sun (Achieve default). */

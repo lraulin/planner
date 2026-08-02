@@ -16,6 +16,7 @@ import {
   STATE_LABELS,
   STATE_OPTIONS,
 } from "@/lib/tree/hierarchy";
+import { toDateKey } from "@/lib/schedule/geometry";
 import { scheduleStatus, STATUS_LABELS } from "@/lib/tree/status";
 import { TypeIcon } from "@/components/icons/TypeIcon";
 
@@ -349,7 +350,7 @@ export function DeadlineCell({
   today: string | null;
   onChange: (deadline: string | null) => void;
 }) {
-  const value = node.deadline ? node.deadline.toISOString().slice(0, 10) : "";
+  const value = node.deadline ? toDateKey(node.deadline) : "";
   const overdue =
     value !== "" && today !== null && value < today && node.state !== "completed";
 

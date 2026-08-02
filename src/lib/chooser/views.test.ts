@@ -18,8 +18,10 @@ import type { OutlineRow } from "@/lib/tree/types";
 
 const TODAY = "2026-07-28";
 
+/** Local midnight `days` from TODAY — same shape DateField / toDateKey use. */
 function dayOut(days: number): Date {
-  return new Date(Date.parse(`${TODAY}T00:00:00Z`) + days * 24 * 60 * 60 * 1000);
+  const [y, m, d] = TODAY.split("-").map(Number);
+  return new Date(y, m - 1, d + days);
 }
 
 /** Local midnight for a `YYYY-MM-DD` — same key space as `toDateKey` / shelving. */

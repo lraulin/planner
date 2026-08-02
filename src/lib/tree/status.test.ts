@@ -5,9 +5,10 @@ import { nodeStateEnum, type NodeState } from "@/db/schema";
 
 const TODAY = "2026-07-28";
 
-/** A deadline `days` out from TODAY, as the database would hand it back. */
+/** Local midnight `days` from TODAY — same shape DateField / toDateKey use. */
 function deadline(days: number): Date {
-  return new Date(Date.parse(`${TODAY}T00:00:00Z`) + days * 24 * 60 * 60 * 1000);
+  const [y, m, d] = TODAY.split("-").map(Number);
+  return new Date(y, m - 1, d + days);
 }
 
 function statusIn(days: number, state: NodeState = "not_started"): ScheduleStatus {
@@ -43,7 +44,8 @@ describe("scheduleStatus", () => {
 
   it("treats a deadline as a calendar day, not an instant", () => {
     // Late in the day on the deadline is Due Today, not Overdue.
-    const lateToday = new Date(`${TODAY}T23:30:00Z`);
+    const [y, m, d] = TODAY.split("-").map(Number);
+    const lateToday = new Date(y, m - 1, d, 23, 30, 0);
     expect(scheduleStatus(lateToday, TODAY, "not_started")).toBe("due_today");
   });
 

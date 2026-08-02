@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { NodeItem, NodeItemKind } from "@/db/schema";
+import { toDateKey } from "@/lib/schedule/geometry";
 import { formatPriority } from "@/lib/tree/format";
 import type { NodeItemValues } from "@/lib/detail/types";
 import { normalizeHttpUrl } from "@/lib/url/pageTitle";
@@ -210,7 +211,7 @@ function summaryOf(item: NodeItem, column: ItemColumnKey): string {
   const value = item[column];
   if (value === null || value === undefined) return "";
   if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (value instanceof Date) return toDateKey(value);
   return String(value);
 }
 

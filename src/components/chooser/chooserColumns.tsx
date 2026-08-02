@@ -4,6 +4,7 @@ import type { OutlineColumnCtx } from "@/components/outline/outlineColumns";
 import type { PriorityLetter } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
 import { formatEffort, formatPriority } from "@/lib/tree/format";
+import { toDateKey } from "@/lib/schedule/geometry";
 import { TcPriorityCell } from "./TcPriorityCell";
 import { scheduleStatus, STATUS_LABELS } from "@/lib/tree/status";
 import {
@@ -183,7 +184,7 @@ export function buildChooserColumns(
       render: (row, ctx) => {
         const due = ctx.facts.get(row.node.id)?.effectiveDeadline ?? null;
         if (!due) return null;
-        const value = due.toISOString().slice(0, 10);
+        const value = toDateKey(due);
         const inherited = row.node.deadline === null;
         return (
           <span

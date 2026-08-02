@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { shiftDateKey } from "@/lib/schedule/geometry";
 import { TabToolbar } from "@/components/tabs/tabChrome";
 
 /**
@@ -12,9 +13,7 @@ import { TabToolbar } from "@/components/tabs/tabChrome";
  */
 
 function shift(day: string, days: number): string {
-  const date = new Date(`${day}T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
+  return shiftDateKey(day, days);
 }
 
 function longDate(day: string): string {

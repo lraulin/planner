@@ -1,4 +1,5 @@
 import type { OutlineNode } from "@/lib/tree/types";
+import { daysBetweenKeys, toDateKey } from "@/lib/schedule/geometry";
 
 /**
  * Date helpers shared by the chooser's scoring and its date filters.
@@ -6,25 +7,19 @@ import type { OutlineNode } from "@/lib/tree/types";
  * Everything here works in **calendar days as `YYYY-MM-DD` strings**, the same convention
  * `src/lib/tree/status.ts` already established for the Status column: a deadline at 09:00
  * is not "past" at 17:00, and no module calls `new Date()` on its own so the whole chooser
- * stays directly testable.
+ * stays directly testable. Day keys are **local** (`toDateKey`), not UTC.
  */
 
-/** The calendar day a timestamp falls on, as `YYYY-MM-DD`. */
+/** The local calendar day a timestamp falls on, as `YYYY-MM-DD`. */
 export function dayString(date: Date): string {
-  return date.toISOString().slice(0, 10);
+  return toDateKey(date);
 }
 
 /**
  * Whole days from `from` to `to`, both `YYYY-MM-DD`. Negative when `to` is in the past.
- *
- * Both sides are parsed as UTC midnight so the subtraction never lands mid-day and
- * daylight saving cannot shift a boundary — the same trick `status.ts` uses.
  */
 export function daysBetween(from: string, to: string): number {
-  const MS_PER_DAY = 24 * 60 * 60 * 1000;
-  return Math.round(
-    (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / MS_PER_DAY,
-  );
+  return daysBetweenKeys(from, to);
 }
 
 /**

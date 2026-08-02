@@ -1,6 +1,7 @@
 "use client";
 
 import type { NodeState, PriorityLetter } from "@/db/schema";
+import { toDateKey } from "@/lib/schedule/geometry";
 import type { OutlineNode } from "@/lib/tree/types";
 import { formatCompactDate, formatPriority } from "@/lib/tree/format";
 import { STATE_CODES } from "@/lib/tree/hierarchy";
@@ -79,15 +80,13 @@ export function deadlineColumn(): ColumnDef<OutlineColumnCtx> {
     width: "7rem",
     align: "right",
     filterKind: "date",
-    filterValue: (row) =>
-      row.node.deadline ? row.node.deadline.toISOString().slice(0, 10) : null,
-    sortValue: (row) =>
-      row.node.deadline ? row.node.deadline.toISOString().slice(0, 10) : null,
-    // The filter's ISO string is the wrong shape for a meta chip; "12 Sep" is the same
+    filterValue: (row) => (row.node.deadline ? toDateKey(row.node.deadline) : null),
+    sortValue: (row) => (row.node.deadline ? toDateKey(row.node.deadline) : null),
+    // The filter's day key is the wrong shape for a meta chip; "12 Sep" is the same
     // information in a third of the width.
     compactText: (row) =>
       formatCompactDate(
-        row.node.deadline?.toISOString().slice(0, 10),
+        row.node.deadline ? toDateKey(row.node.deadline) : null,
         new Date().getFullYear(),
       ),
     render: (row, ctx) => (

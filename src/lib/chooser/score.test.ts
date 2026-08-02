@@ -17,9 +17,10 @@ import type { OutlineNode } from "@/lib/tree/types";
 const TODAY = "2026-07-28";
 const W = DEFAULT_WEIGHTS;
 
-/** A date `days` out from TODAY, as the database would hand it back. */
+/** Local midnight `days` from TODAY — same shape DateField / toDateKey use. */
 function dayOut(days: number): Date {
-  return new Date(Date.parse(`${TODAY}T00:00:00Z`) + days * 24 * 60 * 60 * 1000);
+  const [y, m, d] = TODAY.split("-").map(Number);
+  return new Date(y, m - 1, d + days);
 }
 
 function facts(partial: Partial<ScoreFacts> = {}): ScoreFacts {
@@ -82,7 +83,8 @@ describe("deadlineScore", () => {
 
   it("treats a deadline as a calendar day, not an instant", () => {
     // Late in the day on the deadline is still due today, not overdue.
-    expect(deadlineScore(new Date(`${TODAY}T23:30:00Z`), TODAY, W)).toBe(
+    const [y, m, d] = TODAY.split("-").map(Number);
+    expect(deadlineScore(new Date(y, m - 1, d, 23, 30, 0), TODAY, W)).toBe(
       W.deadlineToday,
     );
   });

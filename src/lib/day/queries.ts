@@ -1,7 +1,7 @@
 import { aliasedTable, and, asc, eq, gte, isNull, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { dailyItems, nodes, notes } from "@/db/schema";
-import { toDateKey } from "@/lib/schedule/geometry";
+import { shiftDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { forwardOpenItems } from "./mutations";
 import { sortDayItems } from "./priority";
 import {
@@ -120,10 +120,8 @@ export async function loadWeek(
     .orderBy(asc(dailyItems.day), asc(dailyItems.sortKey));
 
   const days: string[] = [];
-  const cursor = new Date(`${weekStart}T00:00:00Z`);
   for (let i = 0; i < 7; i++) {
-    days.push(cursor.toISOString().slice(0, 10));
-    cursor.setUTCDate(cursor.getUTCDate() + 1);
+    days.push(shiftDateKey(weekStart, i));
   }
 
   const itemsByDay: Record<string, DailyItemView[]> = Object.fromEntries(

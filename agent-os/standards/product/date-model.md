@@ -107,9 +107,8 @@ An explicit State dropdown wins over anything implied by a date.
 and steps a series from _that_ day, not from now. Recurrence leaves the routine `postponed`
 until its next occurrence — the deferred date it just acquired _is_ that shelf's expiry.
 
-**Local calendar days, not UTC keys.** `toDateKey`, DateField display/write, `useToday`,
-`isDeferred`, and shelving all use the reader's local day. `toISOString().slice(0, 10)`
-shifts the day after evening in the Americas and is not used for these fields.
+**Local calendar days, not UTC keys.** Mechanics (`toDateKey`, DateField, clamping, tests)
+live in `agent-os/standards/development/dates.md`. This file is only _what the dates mean_.
 
 See `src/lib/detail/stateFromDates.ts`.
 
