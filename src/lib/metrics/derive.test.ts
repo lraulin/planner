@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   applyFrozenEntryOrder,
+  axisIndices,
   chartPoints,
   displayValue,
+  formatChartDate,
   latestEntry,
+  niceTicks,
   normalizeMetricType,
+  plotPoint,
   seriesPolyline,
   shouldShowEntryTargetColumn,
   sortEntriesByDate,
@@ -222,5 +226,56 @@ describe("seriesPolyline", () => {
     const s = seriesPolyline([50], 100, 50, 10, 0, 100);
     expect(s.split(" ")).toHaveLength(1);
     expect(s.startsWith("50.00,")).toBe(true);
+  });
+});
+
+describe("niceTicks", () => {
+  it("returns regular steps covering the range", () => {
+    const ticks = niceTicks(0, 100, 5);
+    expect(ticks[0]).toBeLessThanOrEqual(0);
+    expect(ticks[ticks.length - 1]).toBeGreaterThanOrEqual(100);
+    expect(ticks.length).toBeGreaterThanOrEqual(2);
+    // Even steps
+    const step = ticks[1] - ticks[0];
+    for (let i = 1; i < ticks.length; i++) {
+      expect(ticks[i] - ticks[i - 1]).toBeCloseTo(step, 8);
+    }
+  });
+
+  it("handles a flat domain", () => {
+    const ticks = niceTicks(50, 50, 5);
+    expect(ticks.length).toBeGreaterThanOrEqual(2);
+    expect(ticks[0]).toBeLessThan(50);
+    expect(ticks[ticks.length - 1]).toBeGreaterThan(50);
+  });
+});
+
+describe("axisIndices", () => {
+  it("returns every index when the series is short", () => {
+    expect(axisIndices(3, 6)).toEqual([0, 1, 2]);
+  });
+
+  it("always includes first and last", () => {
+    const idx = axisIndices(20, 5);
+    expect(idx[0]).toBe(0);
+    expect(idx[idx.length - 1]).toBe(19);
+    expect(idx.length).toBeLessThanOrEqual(5);
+  });
+});
+
+describe("plotPoint", () => {
+  const pad = { left: 10, right: 10, top: 10, bottom: 10 };
+
+  it("places a single point in the horizontal centre", () => {
+    const p = plotPoint(0, 1, 50, 100, 100, pad, 0, 100);
+    expect(p.x).toBe(50);
+    expect(p.y).toBe(50);
+  });
+});
+
+describe("formatChartDate", () => {
+  it("formats YYYY-MM-DD as m/d/yy", () => {
+    expect(formatChartDate("2016-01-05")).toBe("1/5/16");
+    expect(formatChartDate("2025-12-31")).toBe("12/31/25");
   });
 });

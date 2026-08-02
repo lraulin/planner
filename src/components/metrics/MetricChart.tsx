@@ -1,14 +1,26 @@
 "use client";
 
-import { useMemo } from "react";
-import { chartPoints, seriesPolyline, yDomain } from "@/lib/metrics/derive";
+import { useMemo, useState } from "react";
+import {
+  axisIndices,
+  chartPoints,
+  formatChartDate,
+  niceTicks,
+  plotPoint,
+  seriesPolyline,
+  yDomain,
+} from "@/lib/metrics/derive";
 import { formatMetricNumber } from "@/lib/metrics/parse";
 import type { MetricEntryView, MetricType } from "@/lib/metrics/types";
 
+const CHART_WIDTH = 640;
+const CHART_HEIGHT = 240;
+/** Room for axis labels (left Y values, bottom X dates). */
+const CHART_PAD = { left: 44, right: 16, top: 20, bottom: 28 };
+
 /**
  * Actual vs objective performance graph — pure SVG, no chart library.
- * Mirrors Achieve's split-view graph under the Metrics list.
- * Cumulative metrics plot a running sum; instance/total plot raw values.
+ * Markers with hover tooltips; Y/X axes labeled at regular intervals (Achieve-style).
  * Fills its parent height so the Metrics split can resize the pane.
  */
 export function MetricChart({
@@ -30,9 +42,11 @@ export function MetricChart({
   showLegend?: boolean;
   showObjective?: boolean;
 }) {
-  const width = 640;
-  const height = 220;
-  const padding = 28;
+  const [hover, setHover] = useState<{
+    index: number;
+    x: number;
+    y: number;
+  } | null>(null);
 
   const points = useMemo(
     () => chartPoints(entries, objectiveTarget, metricType),
@@ -40,22 +54,48 @@ export function MetricChart({
   );
 
   const values = points.map((p) => p.value);
-  const domain = yDomain(values, showObjective ? objectiveTarget : null);
+  const rawDomain = yDomain(values, showObjective ? objectiveTarget : null);
+  const yTicks = niceTicks(rawDomain.min, rawDomain.max, 5);
+  const yMin = yTicks[0] ?? rawDomain.min;
+  const yMax = yTicks[yTicks.length - 1] ?? rawDomain.max;
+
   const actualLine = seriesPolyline(
     values,
-    width,
-    height,
-    padding,
-    domain.min,
-    domain.max,
+    CHART_WIDTH,
+    CHART_HEIGHT,
+    CHART_PAD,
+    yMin,
+    yMax,
   );
+
+  const plotted = points.map((p, i) => ({
+    ...p,
+    ...plotPoint(
+      i,
+      points.length,
+      p.value,
+      CHART_WIDTH,
+      CHART_HEIGHT,
+      CHART_PAD,
+      yMin,
+      yMax,
+    ),
+  }));
+
+  const xTickIndices = axisIndices(points.length, 6);
 
   const objectiveY =
     showObjective && objectiveTarget !== null && Number.isFinite(objectiveTarget)
-      ? padding +
-        (height - padding * 2) -
-        ((objectiveTarget - domain.min) / (domain.max - domain.min || 1)) *
-          (height - padding * 2)
+      ? plotPoint(
+          0,
+          1,
+          objectiveTarget,
+          CHART_WIDTH,
+          CHART_HEIGHT,
+          CHART_PAD,
+          yMin,
+          yMax,
+        ).y
       : null;
 
   if (points.length === 0) {
@@ -73,6 +113,8 @@ export function MetricChart({
     .filter(Boolean)
     .join(", ");
 
+  const hoverPoint = hover ? plotted[hover.index] : null;
+
   return (
     <div className="flex h-full min-h-0 flex-col rounded border border-rule bg-surface p-3">
       {caption && (
@@ -82,64 +124,94 @@ export function MetricChart({
       )}
       <div className="relative min-h-0 w-full flex-1 overflow-hidden">
         <svg
-          viewBox={`0 0 ${width} ${height}`}
+          viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
           preserveAspectRatio="none"
           className="h-full w-full min-h-[6rem] text-ink"
           role="img"
           aria-label={caption || "Metric performance"}
         >
-          {/* grid lines */}
-          {[0, 0.25, 0.5, 0.75, 1].map((t) => {
-            const y = padding + t * (height - padding * 2);
+          {yTicks.map((tick) => {
+            const y = plotPoint(
+              0,
+              1,
+              tick,
+              CHART_WIDTH,
+              CHART_HEIGHT,
+              CHART_PAD,
+              yMin,
+              yMax,
+            ).y;
             return (
-              <line
-                key={t}
-                x1={padding}
-                x2={width - padding}
-                y1={y}
-                y2={y}
-                stroke="var(--rule)"
-                strokeWidth={1}
-              />
+              <g key={`y-${tick}`}>
+                <line
+                  x1={CHART_PAD.left}
+                  x2={CHART_WIDTH - CHART_PAD.right}
+                  y1={y}
+                  y2={y}
+                  stroke="var(--rule)"
+                  strokeWidth={1}
+                />
+                <text
+                  x={CHART_PAD.left - 6}
+                  y={y + 3}
+                  textAnchor="end"
+                  className="fill-ink-muted"
+                  style={{ fontSize: 9 }}
+                >
+                  {formatMetricNumber(tick)}
+                </text>
+              </g>
             );
           })}
-          {/* y labels */}
-          <text
-            x={4}
-            y={padding + 4}
-            className="fill-ink-muted"
-            style={{ fontSize: 10 }}
-          >
-            {formatMetricNumber(domain.max)}
-          </text>
-          <text
-            x={4}
-            y={height - padding}
-            className="fill-ink-muted"
-            style={{ fontSize: 10 }}
-          >
-            {formatMetricNumber(domain.min)}
-          </text>
+
+          {xTickIndices.map((i) => {
+            const pt = plotted[i];
+            if (!pt) return null;
+            return (
+              <g key={`x-${i}`}>
+                <line
+                  x1={pt.x}
+                  x2={pt.x}
+                  y1={CHART_HEIGHT - CHART_PAD.bottom}
+                  y2={CHART_HEIGHT - CHART_PAD.bottom + 4}
+                  stroke="var(--rule)"
+                  strokeWidth={1}
+                />
+                <text
+                  x={pt.x}
+                  y={CHART_HEIGHT - 8}
+                  textAnchor="middle"
+                  className="fill-ink-faint"
+                  style={{ fontSize: 8 }}
+                >
+                  {formatChartDate(pt.date)}
+                </text>
+              </g>
+            );
+          })}
+
           {units && (
             <text
-              x={padding}
-              y={14}
+              x={CHART_PAD.left}
+              y={12}
               className="fill-ink-faint"
-              style={{ fontSize: 10 }}
+              style={{ fontSize: 9 }}
             >
               {units}
             </text>
           )}
+
           {objectiveY !== null && (
             <line
-              x1={padding}
-              x2={width - padding}
+              x1={CHART_PAD.left}
+              x2={CHART_WIDTH - CHART_PAD.right}
               y1={objectiveY}
               y2={objectiveY}
               stroke="#6aab6a"
               strokeWidth={1.5}
             />
           )}
+
           {actualLine && (
             <polyline
               fill="none"
@@ -148,29 +220,53 @@ export function MetricChart({
               points={actualLine}
             />
           )}
-          {/* end markers */}
-          {points.length > 0 && (
-            <>
-              <text
-                x={padding}
-                y={height - 6}
-                className="fill-ink-faint"
-                style={{ fontSize: 9 }}
-              >
-                {points[0].date}
-              </text>
-              <text
-                x={width - padding}
-                y={height - 6}
-                textAnchor="end"
-                className="fill-ink-faint"
-                style={{ fontSize: 9 }}
-              >
-                {points[points.length - 1].date}
-              </text>
-            </>
-          )}
+
+          {plotted.map((pt, i) => (
+            <g
+              key={`pt-${pt.date}-${i}`}
+              onMouseEnter={() => setHover({ index: i, x: pt.x, y: pt.y })}
+              onMouseLeave={() => setHover(null)}
+              className="cursor-default"
+            >
+              <circle cx={pt.x} cy={pt.y} r={10} fill="transparent" />
+              <circle
+                cx={pt.x}
+                cy={pt.y}
+                r={hover?.index === i ? 4.5 : 3}
+                fill="#3b5bdb"
+                stroke="var(--surface, #fff)"
+                strokeWidth={1}
+              />
+              <title>
+                {formatChartDate(pt.date)}: {formatMetricNumber(pt.value)}
+                {units ? ` ${units}` : ""}
+                {pt.target != null ? ` (target ${formatMetricNumber(pt.target)})` : ""}
+              </title>
+            </g>
+          ))}
         </svg>
+
+        {hoverPoint && hover && (
+          <div
+            className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded border border-rule bg-surface-raised px-2 py-1 text-[0.6875rem] text-ink shadow-sm"
+            style={{
+              left: `${(hover.x / CHART_WIDTH) * 100}%`,
+              top: `${(hover.y / CHART_HEIGHT) * 100}%`,
+              marginTop: -8,
+            }}
+          >
+            <div className="font-medium">{formatChartDate(hoverPoint.date)}</div>
+            <div>
+              {formatMetricNumber(hoverPoint.value)}
+              {units ? ` ${units}` : ""}
+            </div>
+            {hoverPoint.target != null && (
+              <div className="text-ink-muted">
+                Target {formatMetricNumber(hoverPoint.target)}
+              </div>
+            )}
+          </div>
+        )}
       </div>
       {showLegend && (
         <div className="mt-1 flex flex-none justify-end gap-4 text-[0.75rem] text-ink-muted">

@@ -149,25 +149,24 @@ export function chartPoints(
 /**
  * SVG polyline points for a series, mapped into a viewBox of width×height with padding.
  * Returns empty string when fewer than one point.
+ * `padding` may be a uniform number or per-side box (left/right/top/bottom).
  */
 export function seriesPolyline(
   values: number[],
   width: number,
   height: number,
-  padding: number,
+  padding: number | { left: number; right: number; top: number; bottom: number },
   yMin: number,
   yMax: number,
 ): string {
   if (values.length === 0) return "";
-  const innerW = Math.max(1, width - padding * 2);
-  const innerH = Math.max(1, height - padding * 2);
-  const span = yMax - yMin || 1;
+  const pad =
+    typeof padding === "number"
+      ? { left: padding, right: padding, top: padding, bottom: padding }
+      : padding;
   return values
     .map((v, i) => {
-      const x =
-        padding +
-        (values.length === 1 ? innerW / 2 : (i / (values.length - 1)) * innerW);
-      const y = padding + innerH - ((v - yMin) / span) * innerH;
+      const { x, y } = plotPoint(i, values.length, v, width, height, pad, yMin, yMax);
       return `${x.toFixed(2)},${y.toFixed(2)}`;
     })
     .join(" ");
@@ -193,4 +192,82 @@ export function yDomain(
     max += pad;
   }
   return { min, max };
+}
+
+/**
+ * Evenly spaced “nice” tick values covering [min, max] (Wilkinson-style step).
+ * Used for Y axis labels at regular intervals rather than only the extremes.
+ */
+export function niceTicks(min: number, max: number, targetCount = 5): number[] {
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return [0, 1];
+  if (min === max) {
+    const pad = Math.abs(min) * 0.1 || 1;
+    return niceTicks(min - pad, max + pad, targetCount);
+  }
+  const lo = Math.min(min, max);
+  const hi = Math.max(min, max);
+  const span = hi - lo;
+  const rough = span / Math.max(1, targetCount - 1);
+  const power = 10 ** Math.floor(Math.log10(rough));
+  const err = rough / power;
+  let step: number;
+  if (err >= 5) step = 10 * power;
+  else if (err >= 2) step = 5 * power;
+  else if (err >= 1) step = 2 * power;
+  else step = power;
+
+  const niceMin = Math.floor(lo / step) * step;
+  const niceMax = Math.ceil(hi / step) * step;
+  const ticks: number[] = [];
+  // Guard against float drift ending the loop early or late.
+  const end = niceMax + step * 0.5;
+  for (let v = niceMin; v <= end; v += step) {
+    ticks.push(Number(v.toPrecision(12)));
+  }
+  return ticks.length >= 2 ? ticks : [lo, hi];
+}
+
+/**
+ * Indices into a chronological series for X-axis labels (always includes first & last).
+ */
+export function axisIndices(count: number, maxTicks = 6): number[] {
+  if (count <= 0) return [];
+  if (count === 1) return [0];
+  if (count <= maxTicks) {
+    return Array.from({ length: count }, (_, i) => i);
+  }
+  const set = new Set<number>();
+  for (let t = 0; t < maxTicks; t++) {
+    set.add(Math.round((t / (maxTicks - 1)) * (count - 1)));
+  }
+  return [...set].sort((a, b) => a - b);
+}
+
+/** Map a series index + value into SVG coordinates (same geometry as seriesPolyline). */
+export function plotPoint(
+  index: number,
+  count: number,
+  value: number,
+  width: number,
+  height: number,
+  padding: { left: number; right: number; top: number; bottom: number },
+  yMin: number,
+  yMax: number,
+): { x: number; y: number } {
+  const innerW = Math.max(1, width - padding.left - padding.right);
+  const innerH = Math.max(1, height - padding.top - padding.bottom);
+  const span = yMax - yMin || 1;
+  const x = padding.left + (count <= 1 ? innerW / 2 : (index / (count - 1)) * innerW);
+  const y = padding.top + innerH - ((value - yMin) / span) * innerH;
+  return { x, y };
+}
+
+/** Short chart label for a `YYYY-MM-DD` key (e.g. 1/5/16). */
+export function formatChartDate(dateKey: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey.trim());
+  if (!m) return dateKey;
+  const year = m[1].slice(2);
+  const month = String(Number(m[2]));
+  const day = String(Number(m[3]));
+  return `${month}/${day}/${year}`;
 }
