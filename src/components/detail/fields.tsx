@@ -80,22 +80,66 @@ export function FieldGrid({
   );
 }
 
-/** A titled block within a tab — Achieve's forms group fields under headings like this. */
+/**
+ * A titled block within a tab — Achieve's forms group fields under headings like this.
+ *
+ * Pass `collapsible` for progressive disclosure (`ux-principles.md`): secondary blocks
+ * most records never need (recurrence) start closed and expand on demand. `defaultOpen`
+ * only seeds the first render — the form remounts when the record changes, so it tracks
+ * the loaded row rather than a sticky user preference.
+ */
 export function Section({
   title,
   children,
+  collapsible = false,
+  defaultOpen = true,
+  summary,
 }: {
   title?: string;
   children: React.ReactNode;
+  collapsible?: boolean;
+  defaultOpen?: boolean;
+  /** Muted label beside the title when collapsed, e.g. "Does not repeat". */
+  summary?: string;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  if (!collapsible) {
+    return (
+      <section className="flex flex-col gap-3">
+        {title && (
+          <h3 className="text-[0.75rem] font-semibold uppercase tracking-wider text-ink">
+            {title}
+          </h3>
+        )}
+        {children}
+      </section>
+    );
+  }
+
   return (
     <section className="flex flex-col gap-3">
-      {title && (
-        <h3 className="text-[0.75rem] font-semibold uppercase tracking-wider text-ink">
-          {title}
-        </h3>
-      )}
-      {children}
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        className="flex min-h-tap w-full items-center gap-2 text-left md:min-h-0"
+      >
+        <span className="text-[0.6875rem] text-ink-faint" aria-hidden>
+          {open ? "▼" : "▶"}
+        </span>
+        {title && (
+          <h3 className="text-[0.75rem] font-semibold uppercase tracking-wider text-ink">
+            {title}
+          </h3>
+        )}
+        {!open && summary && (
+          <span className="truncate text-[0.8125rem] font-normal normal-case tracking-normal text-ink-muted">
+            {summary}
+          </span>
+        )}
+      </button>
+      {open ? children : null}
     </section>
   );
 }

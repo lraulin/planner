@@ -253,8 +253,17 @@ export function RecurrenceFields({
       pattern === "by_month_day" ||
       pattern === "by_ordinal");
 
+  // Most tasks never repeat — collapse the whole block so Dates and Progress stay in view.
+  // A live rule opens expanded and names itself on the header when closed.
+  const summary = frequency === "none" ? "Does not repeat" : describeRule(rule, mode);
+
   return (
-    <Section title="Recurrence">
+    <Section
+      title="Recurrence"
+      collapsible
+      defaultOpen={frequency !== "none"}
+      summary={summary}
+    >
       <FieldGrid columns={3}>
         <SelectField
           label="Repeats"

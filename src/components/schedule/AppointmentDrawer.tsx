@@ -49,6 +49,19 @@ function toLocalInputValue(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+/** Short label for a collapsed appointment recurrence header. */
+function appointmentRecurrenceSummary(
+  frequency: RecurrenceFrequency,
+  interval: number,
+): string {
+  if (frequency === "none") return "Does not repeat";
+  const n = Math.max(1, interval || 1);
+  const unit = { daily: "day", weekly: "week", monthly: "month", yearly: "year" }[
+    frequency
+  ];
+  return n === 1 ? `Every ${unit}` : `Every ${n} ${unit}s`;
+}
+
 function isFullAppointment(v: Appointment | DraftAppointment): v is Appointment {
   return "location" in v && "showAs" in v && "checkState" in v;
 }
@@ -407,7 +420,15 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
               </div>
             </Section>
 
-            <Section title="Recurrence">
+            <Section
+              title="Recurrence"
+              collapsible
+              defaultOpen={recurrenceFrequency !== "none"}
+              summary={appointmentRecurrenceSummary(
+                recurrenceFrequency,
+                recurrenceInterval,
+              )}
+            >
               <FieldGrid>
                 <label className="flex flex-col gap-1 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
                   Pattern
