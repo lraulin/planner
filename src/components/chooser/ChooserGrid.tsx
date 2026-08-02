@@ -131,6 +131,17 @@ export function ChooserGrid({
     [visible, dateFilter, today, view.tcPriority],
   );
 
+  const navigableIds = useMemo(
+    () => rows.flatMap((row) => (row.kind === "node" ? [row.id] : [])),
+    [rows],
+  );
+  const navigableKey = navigableIds.join("\0");
+  const [seenNavigable, setSeenNavigable] = useState(navigableKey);
+  if (navigableKey !== seenNavigable) {
+    setSeenNavigable(navigableKey);
+    tab.setNavigableIds(navigableIds);
+  }
+
   /**
    * Apply a ranking plan: patch every affected row optimistically, then persist the batch.
    *
@@ -345,7 +356,8 @@ export function ChooserGrid({
         columns={gridState.columns}
         columnCtx={columnCtx}
         selectedId={tab.selectedId}
-        onSelect={tab.setSelectedId}
+        selectedIds={tab.selectedIds}
+        onSelect={tab.select}
         onOpenDetail={tab.openDetail}
         ariaLabel="Task Chooser"
         rowMenu={tab.rowMenu}

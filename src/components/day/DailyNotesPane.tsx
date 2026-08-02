@@ -57,7 +57,9 @@ export function DailyNotesPane({
           ariaLabel={`Notes for ${day}`}
           rows={24}
           toolbarExtra={
-            <span className="text-[0.6875rem] text-ink-faint">
+            // Fixed width so "Saved" ↔ "Saving…" does not reflow the toolbar and nudge the
+            // editor box down a pixel when the longer label appears.
+            <span className="inline-block min-w-[3.75rem] text-right text-[0.6875rem] leading-none text-ink-faint">
               {status.state === "saving" && "Saving…"}
               {status.state === "saved" && "Saved"}
               {status.state === "error" && (

@@ -30,8 +30,12 @@ import { sortRowsWithinGroups } from "@/lib/grid/sortRows";
 import { resolveCompactFields } from "@/lib/grid/compactFields";
 import { useIsCompact } from "@/components/shell/useIsCompact";
 import { CompactRow, type RowSwipe } from "./CompactRow";
+import type { SelectMods } from "@/lib/grid/selection";
 
 export type SortState = { columnId: string; direction: "asc" | "desc" } | null;
+
+/** Click / keyboard modifiers the host turns into multi-select. */
+export type GridSelectMods = SelectMods;
 
 /**
  * Opt-in row drag-and-drop. The grid owns the gesture — what counts as a "before" versus an
@@ -118,6 +122,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   columns,
   columnCtx,
   selectedId,
+  selectedIds,
   onSelect,
   onOpenDetail,
   ariaLabel,
@@ -142,8 +147,14 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   rows: GridRow<TRow>[];
   columns: ColumnDef<TCtx, TRow>[];
   columnCtx: TCtx;
+  /** Primary / keyboard-focus row. */
   selectedId: string | null;
-  onSelect: (id: string) => void;
+  /**
+   * Multi-selection highlight. When omitted, only `selectedId` is lit — hosts that have
+   * not adopted multi-select keep the old single-row look without extra wiring.
+   */
+  selectedIds?: ReadonlySet<string>;
+  onSelect: (id: string, mods?: GridSelectMods) => void;
   onOpenDetail?: (id: string) => void;
   ariaLabel: string;
   empty?: ReactNode;
@@ -356,6 +367,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
           : null,
       onStart: () => {
         setDragId(rowId);
+        // A drag always acts on the dragged row as a single selection; multi-drag is out.
         onSelect(rowId);
       },
       onOver: (zone) => {
@@ -419,8 +431,15 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
                 Nothing to show.
               </div>
             ))
-          : displayRows.map((row) =>
-              row.kind === "group" ? (
+          : displayRows.map((row) => {
+              const isSelected = selectedIds
+                ? selectedIds.has(row.id)
+                : row.id === selectedId;
+              // Only the focus row scrolls into view — multi-select must not jump the
+              // viewport to every newly-lit row as the range grows.
+              const isFocus = row.id === selectedId;
+
+              return row.kind === "group" ? (
                 <GroupHeader
                   key={row.id}
                   row={row}
@@ -439,13 +458,15 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
                   row={row}
                   columnCtx={columnCtx}
                   fields={compactFields}
-                  selected={row.id === selectedId}
+                  selected={isSelected}
                   onSelect={() => onSelect(row.id)}
                   onOpenDetail={onOpenDetail ? () => onOpenDetail(row.id) : undefined}
                   onLongPress={
                     rowMenu &&
                     ((x, y) => {
-                      onSelect(row.id);
+                      // Right-click / long-press on an already-selected row keeps the multi
+                      // selection so "Copy as text" can act on all of them.
+                      if (!selectedIds?.has(row.id)) onSelect(row.id);
                       setMenu({ rowId: row.id, x, y });
                     })
                   }
@@ -460,22 +481,23 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
                   columns={columns}
                   columnCtx={columnCtx}
                   gridTemplate={gridTemplate}
-                  selected={row.id === selectedId}
-                  onSelect={() => onSelect(row.id)}
+                  selected={isSelected}
+                  focused={isFocus}
+                  onSelect={(mods) => onSelect(row.id, mods)}
                   onOpenDetail={onOpenDetail ? () => onOpenDetail(row.id) : undefined}
                   drag={dragBindingFor(row.id)}
                   onContextMenu={
                     rowMenu &&
                     ((x, y) => {
-                      onSelect(row.id);
+                      if (!selectedIds?.has(row.id)) onSelect(row.id);
                       setMenu({ rowId: row.id, x, y });
                     })
                   }
                   rowLabel={rowLabel}
                   rowExpansion={rowExpansion}
                 />
-              ),
-            )}
+              );
+            })}
       </div>
 
       {menu && rowMenu && (
@@ -498,6 +520,7 @@ function DataRow<TCtx, TRow>({
   columnCtx,
   gridTemplate,
   selected,
+  focused = selected,
   onSelect,
   onOpenDetail,
   drag,
@@ -510,7 +533,9 @@ function DataRow<TCtx, TRow>({
   columnCtx: TCtx;
   gridTemplate: string;
   selected: boolean;
-  onSelect: () => void;
+  /** Keyboard-focus row — the one that scrolls into view. Defaults to `selected`. */
+  focused?: boolean;
+  onSelect: (mods?: GridSelectMods) => void;
   onOpenDetail?: () => void;
   drag?: RowDragBinding;
   onContextMenu?: (x: number, y: number) => void;
@@ -525,10 +550,10 @@ function DataRow<TCtx, TRow>({
   const expanded = rowExpansionFor(row, rowExpansion);
 
   useEffect(() => {
-    if (selected) {
+    if (focused) {
       rowRef.current?.scrollIntoView({ block: "nearest" });
     }
-  }, [selected]);
+  }, [focused]);
 
   return (
     <div
@@ -538,7 +563,18 @@ function DataRow<TCtx, TRow>({
       aria-selected={selected}
       aria-expanded={expanded}
       aria-label={label}
-      onClick={onSelect}
+      onClick={(event) => {
+        // Cell editors and expanders handle their own clicks; let them bubble for a plain
+        // select, but never treat a click inside an input as a multi-select gesture.
+        if ((event.target as HTMLElement).closest("input, select, textarea")) {
+          onSelect();
+          return;
+        }
+        onSelect({
+          extend: event.shiftKey,
+          toggle: event.metaKey || event.ctrlKey,
+        });
+      }}
       onDoubleClick={onOpenDetail}
       onContextMenu={
         onContextMenu &&

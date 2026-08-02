@@ -186,6 +186,17 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     });
   }, [tab.nodes, tab.byId, tab.today, view, groupByArea, includeDeferred, scopeId]);
 
+  const navigableIds = useMemo(
+    () => rows.flatMap((row) => (row.kind === "node" ? [row.id] : [])),
+    [rows],
+  );
+  const navigableKey = navigableIds.join("\0");
+  const [seenNavigable, setSeenNavigable] = useState(navigableKey);
+  if (navigableKey !== seenNavigable) {
+    setSeenNavigable(navigableKey);
+    tab.setNavigableIds(navigableIds);
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
       <TabToolbar>
@@ -273,7 +284,8 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         columns={gridState.columns}
         columnCtx={tab.cellHandlers}
         selectedId={tab.selectedId}
-        onSelect={tab.setSelectedId}
+        selectedIds={tab.selectedIds}
+        onSelect={tab.select}
         onOpenDetail={tab.openDetail}
         ariaLabel="Tasks"
         rowMenu={tab.rowMenu}

@@ -181,6 +181,17 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     [tab.nodes, tab.today, view, scopeId],
   );
 
+  const navigableIds = useMemo(
+    () => rows.flatMap((row) => (row.kind === "node" ? [row.id] : [])),
+    [rows],
+  );
+  const navigableKey = navigableIds.join("\0");
+  const [seenNavigable, setSeenNavigable] = useState(navigableKey);
+  if (navigableKey !== seenNavigable) {
+    setSeenNavigable(navigableKey);
+    tab.setNavigableIds(navigableIds);
+  }
+
   const columnCtx: GoalsCtx = useMemo(
     () => ({
       ...tab.cellHandlers,
@@ -251,7 +262,8 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         columns={gridState.columns}
         columnCtx={columnCtx}
         selectedId={tab.selectedId}
-        onSelect={tab.setSelectedId}
+        selectedIds={tab.selectedIds}
+        onSelect={tab.select}
         onOpenDetail={tab.openDetail}
         ariaLabel="Goals"
         rowMenu={tab.rowMenu}

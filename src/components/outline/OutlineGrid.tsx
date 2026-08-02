@@ -43,6 +43,7 @@ import { DataGrid, type RowDrag } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 import { SortChip, sortColumnLabel } from "@/components/grid/SortChip";
 import { useGridState } from "@/components/grid/useGridState";
+import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useOptimisticNodes } from "@/components/grid/useOptimisticNodes";
 import { useToday } from "@/components/grid/useToday";
 import { useSetting, type SettingCodec } from "@/components/settings/SettingsProvider";
@@ -53,6 +54,7 @@ import {
   type OutlineFilters,
 } from "@/lib/settings/outline";
 import { OUTLINE_FILTERS_SCOPE } from "@/lib/settings/scopes";
+import { copyAsText, writeClipboardText } from "@/lib/tree/copyAsText";
 import { HintBar } from "./HintBar";
 import { NewChildDialog } from "./NewChildDialog";
 import {
@@ -76,9 +78,6 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const { nodes, byId, patch, apply, error, setError } =
     useOptimisticNodes(initialNodes);
   const { detail: detailId, setDetail: setDetailId } = useViewStateUrl();
-  const [selectedId, setSelectedId] = useState<string | null>(
-    detailId ?? initialNodes[0]?.id ?? null,
-  );
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<OutlineNode | null>(null);
   /** The row a new child is being added to, while its kind is being chosen. */
@@ -94,14 +93,6 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const { types: filters, focusOnly } = typeFilters;
 
   const gridState = useGridState("outline", outlineColumns, [...OUTLINE_COLUMN_IDS]);
-
-  // Back / forward and deep-links change `?detail=`. Sync selection during render so the
-  // open drawer always has a selected owner without an effect-driven cascade.
-  const [seenDetailId, setSeenDetailId] = useState(detailId);
-  if (detailId !== seenDetailId) {
-    setSeenDetailId(detailId);
-    if (detailId) setSelectedId(detailId);
-  }
 
   const visible = useMemo(() => {
     const dropped = new Set<string>();
@@ -149,24 +140,40 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     return out;
   }, [byCategory, visible, gridRows, gridState.collapsedGroups]);
 
+  const orderedIds = useMemo(() => navigable.map((n) => n.id), [navigable]);
+  const multi = useMultiSelect(orderedIds, detailId ?? initialNodes[0]?.id ?? null);
+  const { selectedId, selectedIds, select, selectOne, move } = multi;
+
+  // Back / forward and deep-links change `?detail=`. Sync selection during render so the
+  // open drawer always has a selected owner without an effect-driven cascade.
+  const [seenDetailId, setSeenDetailId] = useState(detailId);
+  if (detailId !== seenDetailId) {
+    setSeenDetailId(detailId);
+    if (detailId) selectOne(detailId);
+  }
+
   const selected = selectedId ? (byId.get(selectedId) ?? null) : null;
 
-  const startNaming = useCallback((id?: string) => {
-    if (!id) return;
-    setSelectedId(id);
-    setEditingId(id);
-  }, []);
-
-  const selectRelative = useCallback(
-    (delta: number) => {
-      if (navigable.length === 0) return;
-      const index = navigable.findIndex((n) => n.id === selectedId);
-      const next =
-        index === -1 ? 0 : Math.min(Math.max(index + delta, 0), navigable.length - 1);
-      setSelectedId(navigable[next].id);
+  const startNaming = useCallback(
+    (id?: string) => {
+      if (!id) return;
+      selectOne(id);
+      setEditingId(id);
     },
-    [navigable, selectedId],
+    [selectOne],
   );
+
+  const copySelectionAsText = useCallback(() => {
+    const text = copyAsText(
+      navigable.map((node) => ({
+        id: node.id,
+        name: node.name,
+        depth: node.depth,
+      })),
+      selectedIds,
+    );
+    void writeClipboardText(text);
+  }, [navigable, selectedIds]);
 
   const addSibling = useCallback(
     (node: OutlineNode | null, where: "before" | "after") => {
@@ -272,10 +279,10 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
       const index = navigable.findIndex((n) => n.id === node.id);
       const nextSelection =
         navigable[index + 1]?.id ?? navigable[index - 1]?.id ?? null;
-      setSelectedId(nextSelection);
+      selectOne(nextSelection);
       apply(() => deleteNodeAction(node.id));
     },
-    [navigable, apply],
+    [navigable, apply, selectOne],
   );
 
   /**
@@ -304,12 +311,15 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const commands = useMemo(
     () => ({
       ...commandsFor(selected),
-      selectUp: () => selectRelative(-1),
-      selectDown: () => selectRelative(1),
+      selectUp: () => move(-1, false),
+      selectDown: () => move(1, false),
+      extendUp: () => move(-1, true),
+      extendDown: () => move(1, true),
+      copyAsText: copySelectionAsText,
       collapseAll: () => setTreeCollapsed(true),
       expandAll: () => setTreeCollapsed(false),
     }),
-    [commandsFor, selected, selectRelative, setTreeCollapsed],
+    [commandsFor, selected, move, copySelectionAsText, setTreeCollapsed],
   );
 
   const suspended =
@@ -330,9 +340,16 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
       const siblings = nodes.filter((n) => n.parentId === node.parentId);
       const index = siblings.findIndex((n) => n.id === node.id);
 
+      const multiCount = selectedIds.has(nodeId) ? selectedIds.size : 1;
+
       return [
         { label: "Open record", shortcut: "Enter", onSelect: command.openDetail },
         { label: "Rename", shortcut: "F2", onSelect: command.rename },
+        {
+          label: multiCount > 1 ? `Copy as text (${multiCount})` : "Copy as text",
+          shortcut: "⌘C",
+          onSelect: copySelectionAsText,
+        },
         "separator",
         {
           label: "Add sibling after",
@@ -395,7 +412,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         },
       ];
     },
-    [byId, nodes, commandsFor],
+    [byId, nodes, commandsFor, selectedIds, copySelectionAsText],
   );
 
   /**
@@ -438,7 +455,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
           drop = withRootCategoryFromPlacement(drop, dragId, byId);
         }
 
-        setSelectedId(dragId);
+        selectOne(dragId);
         apply(async () => {
           const result = await moveNodeAction({
             nodeId: dragId,
@@ -454,7 +471,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         });
       },
     };
-  }, [byId, byCategory, nodes, apply, gridState.sort]);
+  }, [byId, byCategory, nodes, apply, gridState.sort, selectOne]);
 
   const columnCtx: OutlineColumnCtx = useMemo(
     () => ({
@@ -463,7 +480,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
       editingId,
       onToggleCollapsed: (node) => toggleCollapsed(node, !node.collapsed),
       onOpenDetail: (node) => {
-        setSelectedId(node.id);
+        selectOne(node.id);
         setDetailId(node.id);
       },
       onFinishEdit: (node, name) => {
@@ -498,7 +515,16 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         apply(() => setEffortAction(node.id, minutes));
       },
     }),
-    [today, selectedId, editingId, toggleCollapsed, patch, apply, setDetailId],
+    [
+      today,
+      selectedId,
+      editingId,
+      toggleCollapsed,
+      patch,
+      apply,
+      setDetailId,
+      selectOne,
+    ],
   );
 
   const detailNode = detailId ? (byId.get(detailId) ?? null) : null;
@@ -551,9 +577,10 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         columns={gridState.columns}
         columnCtx={columnCtx}
         selectedId={selectedId}
-        onSelect={setSelectedId}
+        selectedIds={selectedIds}
+        onSelect={select}
         onOpenDetail={(id) => {
-          setSelectedId(id);
+          selectOne(id);
           setDetailId(id);
         }}
         ariaLabel="Outline"
@@ -671,15 +698,29 @@ function useOutlineKeyboard({
         return;
       }
 
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        !event.altKey &&
+        (event.key === "c" || event.key === "C")
+      ) {
+        // Copy selected rows as indented plain text. The browser's own copy still wins
+        // inside a field (isTypingTarget above); here the grid owns the clipboard.
+        event.preventDefault();
+        commands.copyAsText();
+        return;
+      }
+
       switch (event.key) {
         case "ArrowUp":
           event.preventDefault();
           if (event.altKey) commands.moveUp();
+          else if (event.shiftKey) commands.extendUp();
           else commands.selectUp();
           break;
         case "ArrowDown":
           event.preventDefault();
           if (event.altKey) commands.moveDown();
+          else if (event.shiftKey) commands.extendDown();
           else commands.selectDown();
           break;
         case "ArrowLeft":

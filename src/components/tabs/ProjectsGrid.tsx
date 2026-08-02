@@ -284,6 +284,18 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
     });
   }, [tab.nodes, tab.today, view, groups, includeGoals, includeDeferred, scopeId]);
 
+  const navigableIds = useMemo(
+    () => rows.flatMap((row) => (row.kind === "node" ? [row.id] : [])),
+    [rows],
+  );
+  // Shift-range and arrows walk the on-screen list, not the whole tree.
+  const navigableKey = navigableIds.join("\0");
+  const [seenNavigable, setSeenNavigable] = useState(navigableKey);
+  if (navigableKey !== seenNavigable) {
+    setSeenNavigable(navigableKey);
+    tab.setNavigableIds(navigableIds);
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
       <TabToolbar>
@@ -354,7 +366,8 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
         columns={columns}
         columnCtx={tab.cellHandlers}
         selectedId={tab.selectedId}
-        onSelect={tab.setSelectedId}
+        selectedIds={tab.selectedIds}
+        onSelect={tab.select}
         onOpenDetail={tab.openDetail}
         ariaLabel="Projects"
         rowMenu={tab.rowMenu}
