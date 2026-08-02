@@ -12,12 +12,14 @@ import type { NodeState } from "@/db/schema";
  * Precedence, when a single save touches more than one: **finished beats shelved beats
  * started.** Completion is the strongest claim a record can make about itself.
  *
- * Only a date being **newly set** counts. The drawer posts its whole draft on every save, so
- * an unchanged date arrives on saves that had nothing to do with it, and re-deriving state
- * from it would fight whatever the user actually did. Clearing a date is never a state
- * change either: clearing a deferred date leaves a node **postponed indefinitely**, which is
- * the whole reason the state exists alongside the date, and un-shelving is done from the
- * State field.
+ * The caller decides what counts as a change (empty→filled for Started on; a new calendar
+ * day for Date completed — which must re-fire after a recurring cycle, when the column
+ * already holds "last completed"). This function only maps those changes onto a state. The
+ * drawer posts its whole draft on every save, so an unchanged date must arrive here as
+ * null or re-deriving would fight whatever the user actually did. Clearing a date is never
+ * a state change either: clearing a deferred date leaves a node **postponed indefinitely**,
+ * which is the whole reason the state exists alongside the date, and un-shelving is done
+ * from the State field.
  *
  * Pure, so the precedence can be tested without a database.
  */
@@ -26,7 +28,10 @@ export type ImpliedState = { state: NodeState; at: Date | null };
 export function stateFromDates(opts: {
   /** The state stored before this save. */
   current: NodeState;
-  /** Non-null when Date completed was newly filled in by this save. */
+  /**
+   * Non-null when Date completed was set or moved to a different calendar day by this
+   * save. Already-completed tasks ignore it (a correction, not a second completion).
+   */
   completedAt: Date | null;
   /** Non-null when Deferred until was newly set — or moved — by this save. */
   deferredUntil: Date | null;

@@ -35,19 +35,60 @@ type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 type Executor = Db | Tx;
 
 /**
+ * Coerce a value that may have crossed the server-action boundary into a real `Date`.
+ * Flight usually preserves Dates; a plain ISO string still has to work, and an unparseable
+ * value must not reach the completion path as an Invalid Date (which can write a shelved
+ * row with a null deferred date).
+ */
+function asDate(value: Date | string | null | undefined): Date | null {
+  if (value == null) return null;
+  const d = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
  * The new value only when a field went from empty to filled. `undefined` means the caller
  * did not send the field at all, which is not a change either.
  */
-function newlySet(before: Date | null | undefined, next: Date | null | undefined) {
-  if (next === undefined || next === null) return null;
-  return before ? null : next;
+function newlySet(
+  before: Date | null | undefined,
+  next: Date | string | null | undefined,
+) {
+  const parsed = asDate(next === undefined ? undefined : next);
+  if (parsed === null) return null;
+  return before ? null : parsed;
 }
 
 /** The new value only when it actually differs from the stored one. */
-function changedTo(before: Date | null, next: Date | null | undefined) {
-  if (next === undefined || next === null) return null;
-  if (before && before.getTime() === next.getTime()) return null;
-  return next;
+function changedTo(before: Date | null, next: Date | string | null | undefined) {
+  const parsed = asDate(next === undefined ? undefined : next);
+  if (parsed === null) return null;
+  if (before && before.getTime() === parsed.getTime()) return null;
+  return parsed;
+}
+
+/**
+ * Date completed was filled in or moved to a different calendar day.
+ *
+ * Unlike Started on, this is not "empty → filled" only. A recurring task keeps
+ * `dateCompleted` as "last completed" after every cycle, so the field is almost always
+ * already set when you next finish the chore. Treating only the first fill as a completion
+ * is what made "complete by typing the date" work once and then silently stop working —
+ * and left a second save looking like Postponed with no deferred date if the user then
+ * tried to fix the state by hand.
+ *
+ * Compared as calendar days so a re-save of the draft (which may rebuild local midnight
+ * from the date picker) does not re-fire on an unchanged day. Clearing the field is never
+ * a completion.
+ */
+function completedDateSet(
+  before: Date | null | undefined,
+  next: Date | string | null | undefined,
+): Date | null {
+  const parsed = asDate(next === undefined ? undefined : next);
+  if (parsed === null) return null;
+  if (before && toDateKey(before) === toDateKey(parsed)) return null;
+  return parsed;
 }
 
 /** Copies the keys the caller actually supplied, and nothing else. */
@@ -300,6 +341,18 @@ export async function saveNodeDetail(
         : undefined;
 
     const core = pick(values, CORE_KEYS);
+    // Same boundary coercion as the task side table: core dates ride the same draft.
+    for (const key of [
+      "deadline",
+      "targetStartDate",
+      "targetEndDate",
+      "deferredDate",
+    ] as const) {
+      if (key in core && core[key] != null) {
+        const parsed = asDate(core[key]);
+        if (parsed) (core as Record<string, unknown>)[key] = parsed;
+      }
+    }
 
     // A plan may not precede availability (`nodes_start_not_before_deferred`). Setting a
     // deferred date past an existing target start would trip the constraint; clear the plan
@@ -364,6 +417,21 @@ export async function saveNodeDetail(
       }
     } else if (node.type === "task") {
       const set = pick(values.task, TASK_KEYS);
+      // Date columns must be real Dates for drizzle; coerce anything that arrived as an
+      // ISO string across the server-action boundary so a completion-by-date save cannot
+      // fail the side-table write and leave the transition un-run.
+      for (const key of [
+        "actualStartDate",
+        "dateCompleted",
+        "reminderAt",
+        "constraintDate",
+        "recurrenceUntil",
+      ] as const) {
+        if (key in set && set[key] != null) {
+          const parsed = asDate(set[key]);
+          if (parsed) (set as Record<string, unknown>)[key] = parsed;
+        }
+      }
       if (hasValues(set)) {
         await tx
           .insert(taskDetails)
@@ -372,13 +440,21 @@ export async function saveNodeDetail(
       }
     }
 
-    // What the dates say about the state, for the fields that were newly filled in. Read
-    // against `before`, not against the draft: the drawer posts every field on every save,
-    // so "is it set?" would be true forever after the first time and would re-derive a
-    // state on saves that never touched a date.
+    // What the dates say about the state, for the fields that were newly filled in or
+    // moved. Read against `before`, not against the draft: the drawer posts every field on
+    // every save, so "is it set?" would be true forever after the first time and would
+    // re-derive a state on saves that never touched a date.
+    //
+    // Date completed uses `completedDateSet` (change of calendar day), not empty→filled:
+    // after a recurring cycle the column already holds "last completed", and the next time
+    // you finish the chore by typing the date that field has to speak again.
+    const completedAt = completedDateSet(
+      before?.dateCompleted,
+      values.task?.dateCompleted,
+    );
     const implied = stateFromDates({
       current: node.state,
-      completedAt: newlySet(before?.dateCompleted, values.task?.dateCompleted),
+      completedAt,
       deferredUntil: changedTo(node.deferredDate, core.deferredDate),
       startedAt: newlySet(before?.actualStartDate, values.task?.actualStartDate),
       today: toDateKey(new Date()),
@@ -399,10 +475,19 @@ export async function saveNodeDetail(
     // do the same without the State dropdown ever being opened.
     //
     // An explicit change to the State field wins over one implied by a date: you said it in
-    // so many words. A date only speaks when the dropdown was left alone.
+    // so many words. A date only speaks when the dropdown was left alone. When the explicit
+    // change *is* a completion, still honour a Date completed in the same save as the
+    // instant it happened — otherwise setting State to C and backdating the date would step
+    // a series from now instead of from the day you actually did it.
     const explicit =
       "state" in core && core.state !== undefined && core.state !== node.state
-        ? { state: core.state, at: null }
+        ? {
+            state: core.state,
+            at:
+              core.state === "completed"
+                ? (asDate(values.task?.dateCompleted) ?? completedAt)
+                : null,
+          }
         : null;
     const transition = explicit ?? implied;
 

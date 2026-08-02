@@ -188,6 +188,111 @@ describeDb("detail mutations", () => {
       // A repeating task does not stay completed; it comes back shelved until next time.
       expect(row?.state).toBe("postponed");
       expect(row?.deferredDate?.toISOString().slice(0, 10)).toBe("2026-03-08");
+      // Target start is created with the deferred date — the next occurrence has a plan.
+      const [dates] = await db
+        .select({
+          targetStartDate: nodes.targetStartDate,
+          dateCompleted: taskDetails.dateCompleted,
+        })
+        .from(nodes)
+        .innerJoin(taskDetails, eq(taskDetails.nodeId, nodes.id))
+        .where(eq(nodes.id, id))
+        .limit(1);
+      expect(dates.targetStartDate?.toISOString().slice(0, 10)).toBe("2026-03-08");
+      expect(dates.dateCompleted?.toISOString().slice(0, 10)).toBe("2026-03-01");
+    });
+
+    it("completes again via Date completed after a prior cycle", async () => {
+      // The bug this exists for: after the first cycle, dateCompleted still holds "last
+      // completed", so treating only empty→filled as a completion left the second finish
+      // (typed into the same field) as a silent no-op — postponed with a stale shelf, or
+      // worse if the user then set State by hand.
+      const id = await task("Mow lawn");
+      await saveNodeDetail(userId, id, {
+        ...core,
+        name: "Mow lawn",
+        task: {
+          recurrenceFrequency: "weekly",
+          recurrenceMode: "regenerate",
+          recurrenceInterval: 1,
+        },
+      });
+
+      // First finish, the way the status dropdown does it.
+      await saveNodeDetail(userId, id, {
+        ...core,
+        name: "Mow lawn",
+        state: "completed",
+      });
+      const afterFirst = await stateOf(id);
+      expect(afterFirst?.state).toBe("postponed");
+      expect(afterFirst?.deferredDate).not.toBeNull();
+
+      // Drawer reseed would show dateCompleted already filled. User changes it to the day
+      // they actually mowed — same path as typing Date completed on a fresh task.
+      await saveNodeDetail(userId, id, {
+        ...core,
+        name: "Mow lawn",
+        state: "postponed",
+        deferredDate: afterFirst?.deferredDate ?? null,
+        task: {
+          recurrenceFrequency: "weekly",
+          recurrenceMode: "regenerate",
+          recurrenceInterval: 1,
+          dateCompleted: new Date("2026-08-01T00:00:00"),
+        },
+      });
+
+      const afterSecond = await stateOf(id);
+      expect(afterSecond?.state).toBe("postponed");
+      expect(afterSecond?.deferredDate?.toISOString().slice(0, 10)).toBe("2026-08-08");
+
+      const [dates] = await db
+        .select({
+          targetStartDate: nodes.targetStartDate,
+          dateCompleted: taskDetails.dateCompleted,
+        })
+        .from(nodes)
+        .innerJoin(taskDetails, eq(taskDetails.nodeId, nodes.id))
+        .where(eq(nodes.id, id))
+        .limit(1);
+      expect(dates.targetStartDate?.toISOString().slice(0, 10)).toBe("2026-08-08");
+      expect(dates.dateCompleted?.toISOString().slice(0, 10)).toBe("2026-08-01");
+    });
+
+    it("does not re-cycle when Date completed is re-saved on the same day", async () => {
+      // The drawer posts the whole draft; an unchanged calendar day must stay quiet.
+      const id = await task("Mow lawn");
+      await saveNodeDetail(userId, id, {
+        ...core,
+        name: "Mow lawn",
+        task: { recurrenceFrequency: "weekly", recurrenceMode: "regenerate" },
+      });
+      await saveNodeDetail(userId, id, {
+        ...core,
+        name: "Mow lawn",
+        task: { dateCompleted: new Date("2026-03-01T10:00:00Z") },
+      });
+      const mid = await stateOf(id);
+      expect(mid?.deferredDate?.toISOString().slice(0, 10)).toBe("2026-03-08");
+
+      await saveNodeDetail(userId, id, {
+        ...core,
+        name: "Mow lawn",
+        state: "postponed",
+        deferredDate: mid?.deferredDate ?? null,
+        notes: "later",
+        // Same calendar day as last completed — local midnight from a re-opened picker.
+        task: {
+          recurrenceFrequency: "weekly",
+          recurrenceMode: "regenerate",
+          dateCompleted: new Date("2026-03-01T00:00:00"),
+        },
+      });
+
+      const again = await stateOf(id);
+      expect(again?.state).toBe("postponed");
+      expect(again?.deferredDate?.toISOString().slice(0, 10)).toBe("2026-03-08");
     });
 
     it("completes a one-off at the date given", async () => {
