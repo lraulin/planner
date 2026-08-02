@@ -19,22 +19,26 @@ import {
   updateMetricEntryAction,
 } from "@/app/metrics/actions";
 import { Drawer, DrawerFooter, DrawerHeader } from "@/components/detail/Drawer";
+import { ShowFieldsDialog } from "@/components/grid/ShowFieldsDialog";
+import { useGridState } from "@/components/grid/useGridState";
 import {
+  displayEntryType,
   entriesToClipboardTsv,
   entriesToCsv,
   pickEntriesInOrder,
 } from "@/lib/metrics/csv";
-import {
-  shouldShowEntryTargetColumn,
-  sortEntriesByDate,
-  type EntryDateSort,
-} from "@/lib/metrics/derive";
+import { sortEntriesByDate, type EntryDateSort } from "@/lib/metrics/derive";
 import { isTypingTarget } from "@/lib/keyboard";
 import {
   formatMetricNumber,
   localDateKey,
   parseMetricInput,
 } from "@/lib/metrics/parse";
+import {
+  TRACKING_COLUMNS,
+  TRACKING_DEFAULT_ORDER,
+  TRACKING_GRID_TAB_ID,
+} from "@/lib/metrics/trackingColumns";
 import type { MetricDetail, MetricEntryView, MetricType } from "@/lib/metrics/types";
 import { METRIC_TYPE_LABELS, METRIC_TYPES } from "@/lib/metrics/types";
 import { writeClipboardText } from "@/lib/tree/copyAsText";
@@ -140,15 +144,20 @@ function MetricForm({
   const [dateSort, setDateSort] = useState<EntryDateSort>("desc");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [selectionAnchor, setSelectionAnchor] = useState<string | null>(null);
+  const [showFields, setShowFields] = useState(false);
 
-  // No metric objective (and no imported per-entry targets) → hide Target column.
-  // Objective alone is enough for the graph; per-row target is the exception.
-  const showTargetColumn = shouldShowEntryTargetColumn(
-    detail.objectiveTarget,
-    detail.entries,
-    draft.objectiveTarget,
+  // Shared across every metric (not per-metric) — same rail as other grids.
+  const trackingFields = useGridState(
+    TRACKING_GRID_TAB_ID,
+    TRACKING_COLUMNS,
+    TRACKING_DEFAULT_ORDER,
   );
-  const targetColSpan = showTargetColumn ? 5 : 4;
+  const fieldIds = trackingFields.order;
+  const showTypeColumn = fieldIds.includes("type");
+  const showTargetColumn = fieldIds.includes("target");
+  // +1 for the delete control column
+  const tableColSpan = fieldIds.length + 1;
+
   const objectivePlaceholder =
     draft.objectiveTarget.trim() !== ""
       ? draft.objectiveTarget.trim()
@@ -519,9 +528,9 @@ function MetricForm({
               />
             </Field>
 
-            <div className="mt-2 flex items-center justify-between">
+            <div className="mt-2 flex items-center justify-between gap-2">
               <h3 className="text-[0.8125rem] font-medium text-ink">Tracking values</h3>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap justify-end gap-2">
                 {selectedIds.size > 0 && (
                   <button
                     type="button"
@@ -531,6 +540,13 @@ function MetricForm({
                     Copy{selectedIds.size > 1 ? ` (${selectedIds.size})` : ""}
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => setShowFields(true)}
+                  className="rounded border border-rule px-2 py-1 text-[0.75rem] text-ink-muted hover:bg-surface-raised"
+                >
+                  Show Fields…
+                </button>
                 <button
                   type="button"
                   onClick={exportCsv}
@@ -550,31 +566,38 @@ function MetricForm({
             </div>
 
             <div className="overflow-x-auto rounded border border-rule">
-              <table className="w-full min-w-[20rem] text-left text-[0.8125rem]">
+              <table className="w-full min-w-[16rem] text-left text-[0.8125rem]">
                 <thead className="bg-surface-raised text-ink-muted">
                   <tr>
-                    <th className="px-2 py-1.5 font-medium">
-                      <button
-                        type="button"
-                        onClick={toggleDateSort}
-                        className="inline-flex items-center gap-0.5 uppercase tracking-wider hover:text-ink"
-                        title={
-                          dateSort === "desc"
-                            ? "Newest first — click for oldest first"
-                            : "Oldest first — click for newest first"
-                        }
-                      >
-                        Date
-                        <span aria-hidden className="font-normal">
-                          {dateSort === "desc" ? " ↓" : " ↑"}
-                        </span>
-                      </button>
-                    </th>
-                    <th className="px-2 py-1.5 font-medium">Type</th>
-                    {showTargetColumn && (
-                      <th className="px-2 py-1.5 font-medium">Target</th>
-                    )}
-                    <th className="px-2 py-1.5 font-medium">Value</th>
+                    {fieldIds.map((fieldId) => {
+                      if (fieldId === "date") {
+                        return (
+                          <th key={fieldId} className="px-2 py-1.5 font-medium">
+                            <button
+                              type="button"
+                              onClick={toggleDateSort}
+                              className="inline-flex items-center gap-0.5 uppercase tracking-wider hover:text-ink"
+                              title={
+                                dateSort === "desc"
+                                  ? "Newest first — click for oldest first"
+                                  : "Oldest first — click for newest first"
+                              }
+                            >
+                              Date
+                              <span aria-hidden className="font-normal">
+                                {dateSort === "desc" ? " ↓" : " ↑"}
+                              </span>
+                            </button>
+                          </th>
+                        );
+                      }
+                      const meta = TRACKING_COLUMNS.find((c) => c.id === fieldId);
+                      return (
+                        <th key={fieldId} className="px-2 py-1.5 font-medium">
+                          {meta?.label ?? fieldId}
+                        </th>
+                      );
+                    })}
                     <th className="w-8" />
                   </tr>
                 </thead>
@@ -582,7 +605,7 @@ function MetricForm({
                   {sortedEntries.length === 0 && (
                     <tr>
                       <td
-                        colSpan={targetColSpan}
+                        colSpan={tableColSpan}
                         className="px-2 py-4 text-center text-ink-muted"
                       >
                         No entries yet.
@@ -591,6 +614,10 @@ function MetricForm({
                   )}
                   {sortedEntries.map((entry) => {
                     const selected = selectedIds.has(entry.id);
+                    const focusRow = () => {
+                      setSelectedIds(new Set([entry.id]));
+                      setSelectionAnchor(entry.id);
+                    };
                     return (
                       <tr
                         key={entry.id}
@@ -606,53 +633,69 @@ function MetricForm({
                           selectEntryRow(entry.id, e);
                         }}
                       >
-                        <td className="px-1 py-0.5">
-                          <input
-                            type="date"
-                            value={entry.entryDate}
-                            onChange={(e) =>
-                              updateEntry(entry, { entryDate: e.target.value })
-                            }
-                            onFocus={() => {
-                              setSelectedIds(new Set([entry.id]));
-                              setSelectionAnchor(entry.id);
-                            }}
-                            className="w-full rounded border border-transparent bg-transparent px-1 py-1 hover:border-rule focus:border-select-edge"
-                          />
-                        </td>
-                        <td className="px-2 py-1 text-ink-muted">New Total</td>
-                        {showTargetColumn && (
-                          <td className="px-1 py-0.5">
-                            <MetricDecimalCell
-                              committed={entry.target}
-                              allowEmpty
-                              placeholder={objectivePlaceholder}
-                              onCommit={(n) => {
-                                if (n === entry.target) return;
-                                if (n === null && entry.target === null) return;
-                                updateEntry(entry, { target: n });
-                              }}
-                              onFocus={() => {
-                                setSelectedIds(new Set([entry.id]));
-                                setSelectionAnchor(entry.id);
-                              }}
-                            />
-                          </td>
-                        )}
-                        <td className="px-1 py-0.5">
-                          <MetricDecimalCell
-                            committed={entry.value}
-                            allowEmpty={false}
-                            onCommit={(n) => {
-                              if (n === null || n === entry.value) return;
-                              updateEntry(entry, { value: n });
-                            }}
-                            onFocus={() => {
-                              setSelectedIds(new Set([entry.id]));
-                              setSelectionAnchor(entry.id);
-                            }}
-                          />
-                        </td>
+                        {fieldIds.map((fieldId) => {
+                          if (fieldId === "date") {
+                            return (
+                              <td key={fieldId} className="px-1 py-0.5">
+                                <input
+                                  type="date"
+                                  value={entry.entryDate}
+                                  onChange={(e) =>
+                                    updateEntry(entry, {
+                                      entryDate: e.target.value,
+                                    })
+                                  }
+                                  onFocus={focusRow}
+                                  className="w-full rounded border border-transparent bg-transparent px-1 py-1 hover:border-rule focus:border-select-edge"
+                                />
+                              </td>
+                            );
+                          }
+                          if (fieldId === "type") {
+                            return (
+                              <td
+                                key={fieldId}
+                                className="px-2 py-1 text-ink-muted"
+                                title="Per-entry type override (read-only for now)"
+                              >
+                                {displayEntryType(entry.entryType)}
+                              </td>
+                            );
+                          }
+                          if (fieldId === "target") {
+                            return (
+                              <td key={fieldId} className="px-1 py-0.5">
+                                <MetricDecimalCell
+                                  committed={entry.target}
+                                  allowEmpty
+                                  placeholder={objectivePlaceholder}
+                                  onCommit={(n) => {
+                                    if (n === entry.target) return;
+                                    if (n === null && entry.target === null) return;
+                                    updateEntry(entry, { target: n });
+                                  }}
+                                  onFocus={focusRow}
+                                />
+                              </td>
+                            );
+                          }
+                          if (fieldId === "value") {
+                            return (
+                              <td key={fieldId} className="px-1 py-0.5">
+                                <MetricDecimalCell
+                                  committed={entry.value}
+                                  allowEmpty={false}
+                                  onCommit={(n) => {
+                                    if (n === null || n === entry.value) return;
+                                    updateEntry(entry, { value: n });
+                                  }}
+                                  onFocus={focusRow}
+                                />
+                              </td>
+                            );
+                          }
+                          return null;
+                        })}
                         <td className="px-1">
                           <button
                             type="button"
@@ -671,9 +714,13 @@ function MetricForm({
             </div>
             <p className="text-[0.6875rem] text-ink-faint">
               Click Date to sort. Click a row to select; Shift-click for a range,
-              ⌘-click to multi-select; ⌘C copies selected values.
+              ⌘-click to multi-select; ⌘C copies. Show Fields chooses columns for every
+              metric.
               {showTargetColumn
                 ? " Leave Target blank to use the metric objective on the graph."
+                : ""}
+              {showTypeColumn
+                ? " Type is the per-entry override (rarely needed; metric Type covers most cases)."
                 : ""}
             </p>
             <p className="text-[0.75rem] text-ink-muted">
@@ -695,6 +742,18 @@ function MetricForm({
         dirty={dirty}
         justSaved={justSaved}
         error={error}
+      />
+
+      <ShowFieldsDialog
+        open={showFields}
+        allColumns={TRACKING_COLUMNS}
+        shownIds={trackingFields.order}
+        onShow={trackingFields.show}
+        onHide={trackingFields.hide}
+        onMove={trackingFields.move}
+        onReset={trackingFields.resetColumns}
+        onResetGrid={trackingFields.reset}
+        onClose={() => setShowFields(false)}
       />
     </>
   );
