@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useTransition,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { useRouter } from "next/navigation";
 import {
   createMetricAction,
@@ -10,6 +17,7 @@ import {
 } from "@/app/metrics/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { ContextMenu, type MenuItem } from "@/components/grid/ContextMenu";
+import { useSetting, type SettingCodec } from "@/components/settings/SettingsProvider";
 import {
   ErrorBanner,
   TabToolbar,
@@ -17,11 +25,24 @@ import {
   ToolbarToggle,
 } from "@/components/tabs/tabChrome";
 import { isTypingTarget } from "@/lib/keyboard";
+import {
+  clampPerformanceHeight,
+  DEFAULT_PERFORMANCE_HEIGHT,
+  METRICS_LAYOUT_SCOPE,
+  parseMetricsLayout,
+  serializeMetricsLayout,
+  type MetricsLayoutSettings,
+} from "@/lib/metrics/layout";
 import { formatMetricNumber } from "@/lib/metrics/parse";
 import type { MetricDetail, MetricListRow } from "@/lib/metrics/types";
 import type { OutlineNode } from "@/lib/tree/types";
 import { MetricChart } from "./MetricChart";
 import { MetricDrawer } from "./MetricDrawer";
+
+const LAYOUT_CODEC: SettingCodec<MetricsLayoutSettings> = {
+  parse: parseMetricsLayout,
+  serialize: serializeMetricsLayout,
+};
 
 /**
  * Metrics tab: list of all metrics (standalone or goal-owned), optional group by owner,
@@ -56,6 +77,22 @@ export function MetricsView({
   const [pendingDelete, setPendingDelete] = useState<MetricListRow | null>(null);
   const [menu, setMenu] = useState<{ rowId: string; x: number; y: number } | null>(
     null,
+  );
+
+  const { value: layout, patch: patchLayout } = useSetting(
+    METRICS_LAYOUT_SCOPE,
+    LAYOUT_CODEC,
+  );
+  const performanceHeight = layout.performanceHeight;
+
+  const setPerformanceHeight = useCallback(
+    (height: number) => {
+      patchLayout((current) => ({
+        ...current,
+        performanceHeight: clampPerformanceHeight(height),
+      }));
+    },
+    [patchLayout],
   );
 
   const refreshList = useCallback(() => {
@@ -334,39 +371,53 @@ export function MetricsView({
       </div>
 
       {showPerformance && selected && (
-        <div className="flex-none border-t border-rule p-3">
-          <div className="mb-2 flex flex-wrap gap-4">
-            <ToolbarToggle
-              checked={showLegend}
-              onChange={() => setShowLegend((v) => !v)}
-              label="Show Legend"
-            />
-            <ToolbarToggle
-              checked={showObjective}
-              onChange={() => setShowObjective((v) => !v)}
-              label="Show Objective"
-            />
-            {!chartSource && (
-              <button
-                type="button"
-                className="text-[0.8125rem] text-ink-muted underline"
-                onClick={() => loadChart(selected.id)}
-              >
-                Load graph
-              </button>
-            )}
-          </div>
-          <MetricChart
-            title={chartSource?.title ?? selected.title}
-            question={chartSource?.question ?? selected.question}
-            units={chartSource?.units ?? selected.units}
-            entries={chartSource?.entries ?? []}
-            objectiveTarget={chartSource?.objectiveTarget ?? selected.objectiveTarget}
-            metricType={chartSource?.metricType ?? selected.metricType}
-            showLegend={showLegend}
-            showObjective={showObjective}
+        <>
+          <PerformanceResizeHandle
+            height={performanceHeight}
+            onResize={setPerformanceHeight}
+            onReset={() => setPerformanceHeight(DEFAULT_PERFORMANCE_HEIGHT)}
           />
-        </div>
+          <div
+            className="flex flex-none flex-col overflow-hidden border-t border-rule bg-surface"
+            style={{ height: performanceHeight }}
+          >
+            <div className="flex flex-none flex-wrap gap-4 px-3 pt-2">
+              <ToolbarToggle
+                checked={showLegend}
+                onChange={() => setShowLegend((v) => !v)}
+                label="Show Legend"
+              />
+              <ToolbarToggle
+                checked={showObjective}
+                onChange={() => setShowObjective((v) => !v)}
+                label="Show Objective"
+              />
+              {!chartSource && (
+                <button
+                  type="button"
+                  className="text-[0.8125rem] text-ink-muted underline"
+                  onClick={() => loadChart(selected.id)}
+                >
+                  Load graph
+                </button>
+              )}
+            </div>
+            <div className="min-h-0 flex-1 p-3 pt-2">
+              <MetricChart
+                title={chartSource?.title ?? selected.title}
+                question={chartSource?.question ?? selected.question}
+                units={chartSource?.units ?? selected.units}
+                entries={chartSource?.entries ?? []}
+                objectiveTarget={
+                  chartSource?.objectiveTarget ?? selected.objectiveTarget
+                }
+                metricType={chartSource?.metricType ?? selected.metricType}
+                showLegend={showLegend}
+                showObjective={showObjective}
+              />
+            </div>
+          </div>
+        </>
       )}
 
       <MetricDrawer
@@ -419,6 +470,56 @@ export function MetricsView({
 
       <MetricsHintBar />
     </div>
+  );
+}
+
+/**
+ * Horizontal split handle between the metrics list and the performance pane.
+ * Drag up to grow the graph; double-click resets to the default height.
+ * Same idea as column resize in DataGrid (pointermove on document).
+ */
+function PerformanceResizeHandle({
+  height,
+  onResize,
+  onReset,
+}: {
+  height: number;
+  onResize: (height: number) => void;
+  onReset: () => void;
+}) {
+  function beginResize(event: ReactPointerEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    const startY = event.clientY;
+    const startHeight = height;
+
+    function onMove(move: PointerEvent) {
+      // Dragging the handle upward grows the pane below.
+      onResize(startHeight + (startY - move.clientY));
+    }
+    function onUp() {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    }
+
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+  }
+
+  return (
+    <button
+      type="button"
+      aria-label="Resize performance graph"
+      title="Drag to resize performance graph, double-click to reset"
+      onPointerDown={beginResize}
+      onDoubleClick={onReset}
+      className="group relative z-10 flex h-2 flex-none cursor-row-resize items-center justify-center border-0 bg-transparent p-0"
+    >
+      <span className="h-0.5 w-10 rounded-full bg-rule transition-colors group-hover:bg-rule-strong group-active:bg-select-edge" />
+    </button>
   );
 }
 

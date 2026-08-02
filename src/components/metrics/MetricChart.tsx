@@ -9,6 +9,7 @@ import type { MetricEntryView, MetricType } from "@/lib/metrics/types";
  * Actual vs objective performance graph — pure SVG, no chart library.
  * Mirrors Achieve's split-view graph under the Metrics list.
  * Cumulative metrics plot a running sum; instance/total plot raw values.
+ * Fills its parent height so the Metrics split can resize the pane.
  */
 export function MetricChart({
   title,
@@ -59,7 +60,7 @@ export function MetricChart({
 
   if (points.length === 0) {
     return (
-      <div className="flex h-48 items-center justify-center rounded border border-rule bg-surface-raised text-[0.8125rem] text-ink-muted">
+      <div className="flex h-full min-h-[8rem] items-center justify-center rounded border border-rule bg-surface-raised text-[0.8125rem] text-ink-muted">
         No tracking values yet — add entries on the Tracking tab.
       </div>
     );
@@ -73,16 +74,17 @@ export function MetricChart({
     .join(", ");
 
   return (
-    <div className="rounded border border-rule bg-surface p-3">
+    <div className="flex h-full min-h-0 flex-col rounded border border-rule bg-surface p-3">
       {caption && (
-        <p className="mb-2 text-center text-[0.8125rem] font-medium text-ink">
+        <p className="mb-2 flex-none text-center text-[0.8125rem] font-medium text-ink">
           {caption}
         </p>
       )}
-      <div className="relative w-full overflow-x-auto">
+      <div className="relative min-h-0 w-full flex-1 overflow-hidden">
         <svg
           viewBox={`0 0 ${width} ${height}`}
-          className="h-48 w-full min-w-[20rem] text-ink"
+          preserveAspectRatio="none"
+          className="h-full w-full min-h-[6rem] text-ink"
           role="img"
           aria-label={caption || "Metric performance"}
         >
@@ -171,7 +173,7 @@ export function MetricChart({
         </svg>
       </div>
       {showLegend && (
-        <div className="mt-1 flex justify-end gap-4 text-[0.75rem] text-ink-muted">
+        <div className="mt-1 flex flex-none justify-end gap-4 text-[0.75rem] text-ink-muted">
           <span className="inline-flex items-center gap-1.5">
             <span className="inline-block h-0.5 w-4 bg-[#3b5bdb]" /> Actual
           </span>
