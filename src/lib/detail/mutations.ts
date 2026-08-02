@@ -11,6 +11,8 @@ import type { NodeItemKind } from "@/db/schema";
 import { and, asc, eq } from "drizzle-orm";
 import { syncDayLineToTargetStart } from "@/lib/day/sync";
 import { applyStateTransition } from "@/lib/tree/mutations";
+import { toDateKey } from "@/lib/schedule/geometry";
+import { stateFromDates } from "./stateFromDates";
 import { between } from "@/lib/tree/sortKey";
 import { fetchPageTitle, shouldAutofillAttachmentTitle } from "@/lib/url/pageTitle";
 import type { ItemPosition, NodeDetailPatch, NodeItemValues } from "./types";
@@ -28,6 +30,22 @@ import type { ItemPosition, NodeDetailPatch, NodeItemValues } from "./types";
 type Db = typeof db;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 type Executor = Db | Tx;
+
+/**
+ * The new value only when a field went from empty to filled. `undefined` means the caller
+ * did not send the field at all, which is not a change either.
+ */
+function newlySet(before: Date | null | undefined, next: Date | null | undefined) {
+  if (next === undefined || next === null) return null;
+  return before ? null : next;
+}
+
+/** The new value only when it actually differs from the stored one. */
+function changedTo(before: Date | null, next: Date | null | undefined) {
+  if (next === undefined || next === null) return null;
+  if (before && before.getTime() === next.getTime()) return null;
+  return next;
+}
 
 /** Copies the keys the caller actually supplied, and nothing else. */
 function pick<T extends object, K extends keyof T>(
@@ -214,7 +232,12 @@ const ITEM_KEYS = [
 
 async function requireNode(tx: Executor, userId: string, nodeId: string) {
   const [node] = await tx
-    .select({ id: nodes.id, type: nodes.type, state: nodes.state })
+    .select({
+      id: nodes.id,
+      type: nodes.type,
+      state: nodes.state,
+      deferredDate: nodes.deferredDate,
+    })
     .from(nodes)
     .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)))
     .limit(1);
@@ -253,11 +276,40 @@ export async function saveNodeDetail(
   await db.transaction(async (tx) => {
     const node = await requireNode(tx, userId, nodeId);
 
+    // The task's own dates as they stand, so a newly-filled Started on or Date completed can
+    // be told from one that was already there. Only for tasks; only when the draft carries
+    // them at all.
+    const before =
+      node.type === "task" &&
+      (values.task?.dateCompleted !== undefined ||
+        values.task?.actualStartDate !== undefined)
+        ? (
+            await tx
+              .select({
+                dateCompleted: taskDetails.dateCompleted,
+                actualStartDate: taskDetails.actualStartDate,
+              })
+              .from(taskDetails)
+              .where(eq(taskDetails.nodeId, nodeId))
+              .limit(1)
+          )[0]
+        : undefined;
+
     const core = pick(values, CORE_KEYS);
     await tx
       .update(nodes)
       .set({
         ...core,
+        // Shelving something whose deferred date has already gone by would un-shelve it the
+        // instant it was shelved, since expiry is derived. Choosing Postponed by hand means
+        // an indefinite shelf, so the stale date goes.
+        ...("state" in core &&
+        core.state === "postponed" &&
+        core.deferredDate === undefined &&
+        node.deferredDate &&
+        toDateKey(node.deferredDate) <= toDateKey(new Date())
+          ? { deferredDate: null }
+          : {}),
         // A rank without a letter is meaningless, so clear it alongside — matching
         // `setPriority` in the tree mutations.
         ...("priorityLetter" in core && core.priorityLetter === null
@@ -301,6 +353,18 @@ export async function saveNodeDetail(
       }
     }
 
+    // What the dates say about the state, for the fields that were newly filled in. Read
+    // against `before`, not against the draft: the drawer posts every field on every save,
+    // so "is it set?" would be true forever after the first time and would re-derive a
+    // state on saves that never touched a date.
+    const implied = stateFromDates({
+      current: node.state,
+      completedAt: newlySet(before?.dateCompleted, values.task?.dateCompleted),
+      deferredUntil: changedTo(node.deferredDate, core.deferredDate),
+      startedAt: newlySet(before?.actualStartDate, values.task?.actualStartDate),
+      today: toDateKey(new Date()),
+    });
+
     // Last, deliberately. The state write above set the column; this stamps `completedAt`
     // to match — and, for a recurring task, cycles it instead: logs the completion, pushes
     // the defer date out, and un-completes the subtree. That reset has to land *after* the
@@ -314,8 +378,23 @@ export async function saveNodeDetail(
     // re-saving a completed repeating task would log a second completion and push its dates
     // out another full interval. Setting Repeats on a task that was already completed would
     // do the same without the State dropdown ever being opened.
-    if ("state" in core && core.state !== undefined && core.state !== node.state) {
-      await applyStateTransition(tx, userId, nodeId, core.state);
+    //
+    // An explicit change to the State field wins over one implied by a date: you said it in
+    // so many words. A date only speaks when the dropdown was left alone.
+    const explicit =
+      "state" in core && core.state !== undefined && core.state !== node.state
+        ? { state: core.state, at: null }
+        : null;
+    const transition = explicit ?? implied;
+
+    if (transition) {
+      await applyStateTransition(
+        tx,
+        userId,
+        nodeId,
+        transition.state,
+        transition.at ?? undefined,
+      );
     }
 
     // Last of all, and after the transition, which may have moved the date itself. Target

@@ -822,12 +822,16 @@ describeDb("tree mutations", () => {
       return localKey(d);
     }
 
-    it("comes back Not Started instead of staying completed", async () => {
+    it("comes back shelved until next time instead of staying completed", async () => {
+      // Postponed, not Not Started: the deferred date it just acquired *is* the expiry of
+      // the postponed state, and a routine you have already done today is not waiting to be
+      // started. The State column now says why it is missing from the Chooser instead of
+      // leaving that to be inferred.
       const task = await recurringTask();
       await setState(userId, task, "completed");
 
       const [node] = await loadOutline(userId);
-      expect(node.state).toBe("not_started");
+      expect(node.state).toBe("postponed");
       expect(node.completedAt).toBeNull();
     });
 
@@ -933,7 +937,7 @@ describeDb("tree mutations", () => {
       await saveNodeDetail(userId, task, { state: "completed" });
 
       const [node] = await loadOutline(userId);
-      expect(node.state).toBe("not_started");
+      expect(node.state).toBe("postponed");
       expect(localKey((await nodeRow(task)).deferredDate!)).toBe(daysFromToday(3));
       expect(await completionsOf(userId, task)).toHaveLength(1);
     });
@@ -1141,7 +1145,7 @@ describeDb("tree mutations", () => {
         });
 
         await setState(userId, task, "completed");
-        expect((await loadOutline(userId))[0].state).toBe("not_started");
+        expect((await loadOutline(userId))[0].state).toBe("postponed");
 
         await setState(userId, task, "completed");
         const [node] = await loadOutline(userId);
@@ -1180,7 +1184,7 @@ describeDb("tree mutations", () => {
         const [node] = await loadOutline(userId);
         expect(localKey(node.deadline!)).toBe("2026-08-14");
         expect(localKey(detail.deferredDate!)).toBe("2026-08-14");
-        expect(node.state).toBe("not_started");
+        expect(node.state).toBe("postponed");
         expect((await taskRow(task)).dateCompleted).toBeNull();
         expect(await completionsOf(userId, task)).toHaveLength(0);
       });

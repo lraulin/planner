@@ -289,8 +289,9 @@ describeDb("completing from the day page", () => {
   });
 
   it("keeps the day's record when a recurring task resets itself", async () => {
-    // The reason `completed_at` lives on the row: completing a recurring task sends the
-    // node back to not_started, and a derived checkmark would silently un-check itself.
+    // The reason `completed_at` lives on the row: completing a recurring task shelves it
+    // until next time (postponed + deferred date), and a derived checkmark would silently
+    // un-check itself.
     const nodeId = await makeTask(userId, "Water the plants");
     await saveNodeDetail(userId, nodeId, {
       task: { recurrenceFrequency: "daily", recurrenceInterval: 3 },
@@ -304,7 +305,7 @@ describeDb("completing from the day page", () => {
     await setDailyItemState(userId, item.id, "completed");
 
     const [task] = await db.select().from(nodes).where(eq(nodes.id, nodeId));
-    expect(task.state).toBe("not_started");
+    expect(task.state).toBe("postponed");
 
     const [details] = await db.select().from(nodes).where(eq(nodes.id, nodeId));
     expect(details.deferredDate).not.toBeNull();

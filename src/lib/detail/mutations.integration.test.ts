@@ -112,6 +112,134 @@ describeDb("detail mutations", () => {
     notes: "",
   };
 
+  describe("state follows the dates", () => {
+    async function task(name: string) {
+      return createNode({ userId, parentId: projectId, type: "task", name });
+    }
+
+    async function stateOf(nodeId: string) {
+      const [row] = await db
+        .select({ state: nodes.state, deferredDate: nodes.deferredDate })
+        .from(nodes)
+        .where(eq(nodes.id, nodeId))
+        .limit(1);
+      return row;
+    }
+
+    it("starts a task when its actual start date is filled in", async () => {
+      const id = await task("Draft the thing");
+      await saveNodeDetail(userId, id, {
+        ...core,
+        name: "Draft the thing",
+        task: { actualStartDate: new Date("2026-03-07T09:00:00Z") },
+      });
+
+      expect((await stateOf(id))?.state).toBe("in_progress");
+    });
+
+    it("shelves a project when a future deferred date is set", async () => {
+      // The case this whole model exists for, and a project rather than a task.
+      await saveNodeDetail(userId, projectId, {
+        ...core,
+        name: "Pay Taxes",
+        deferredDate: new Date("2027-02-15T00:00:00Z"),
+      });
+
+      expect((await stateOf(projectId))?.state).toBe("postponed");
+    });
+
+    it("clears a stale deferred date when postponed by hand", async () => {
+      // Otherwise it would un-shelve the instant it was shelved, since expiry is derived.
+      const id = await task("Someday");
+      await db
+        .update(nodes)
+        .set({ deferredDate: new Date("2020-01-01T00:00:00Z") })
+        .where(eq(nodes.id, id));
+
+      await saveNodeDetail(userId, id, {
+        ...core,
+        name: "Someday",
+        state: "postponed",
+      });
+
+      const row = await stateOf(id);
+      expect(row?.state).toBe("postponed");
+      expect(row?.deferredDate).toBeNull();
+    });
+
+    it("completes at the date given, and steps a series from it", async () => {
+      // Ticking something off long after it was really done. The completion belongs on the
+      // day it happened, and a weekly task completed on the 1st is next due on the 8th —
+      // not seven days from whenever the record was finally corrected.
+      const id = await task("Weekly review");
+      await saveNodeDetail(userId, id, {
+        ...core,
+        name: "Weekly review",
+        task: { recurrenceFrequency: "weekly", recurrenceMode: "regenerate" },
+      });
+
+      await saveNodeDetail(userId, id, {
+        ...core,
+        name: "Weekly review",
+        task: { dateCompleted: new Date("2026-03-01T10:00:00Z") },
+      });
+
+      const row = await stateOf(id);
+      // A repeating task does not stay completed; it comes back shelved until next time.
+      expect(row?.state).toBe("postponed");
+      expect(row?.deferredDate?.toISOString().slice(0, 10)).toBe("2026-03-08");
+    });
+
+    it("completes a one-off at the date given", async () => {
+      const id = await task("Filed the return");
+      await saveNodeDetail(userId, id, {
+        ...core,
+        name: "Filed the return",
+        task: { dateCompleted: new Date("2026-02-03T10:00:00Z") },
+      });
+
+      const row = await stateOf(id);
+      expect(row?.state).toBe("completed");
+      expect((await completedAtOf(id))?.toISOString().slice(0, 10)).toBe("2026-02-03");
+    });
+
+    it("does not re-fire on a save that touched nothing", async () => {
+      // The drawer posts its whole draft every time, so an unchanged date must stay quiet.
+      const id = await task("Draft the thing");
+      await saveNodeDetail(userId, id, {
+        ...core,
+        name: "Draft the thing",
+        task: { actualStartDate: new Date("2026-03-07T09:00:00Z") },
+      });
+      await saveNodeDetail(userId, id, {
+        ...core,
+        name: "Draft the thing",
+        state: "waiting",
+        task: { actualStartDate: new Date("2026-03-07T09:00:00Z") },
+      });
+
+      // Explicit beats implied, and the unchanged start date does not drag it back.
+      expect((await stateOf(id))?.state).toBe("waiting");
+    });
+
+    it("scopes by user", async () => {
+      const intruder = await makeUser();
+      const id = await task("Mine");
+
+      await expect(
+        saveNodeDetail(intruder, id, {
+          ...core,
+          name: "Yours now",
+          deferredDate: new Date("2027-02-15T00:00:00Z"),
+        }),
+      ).rejects.toThrow();
+
+      const row = await stateOf(id);
+      expect(row?.state).toBe("not_started");
+      expect(row?.deferredDate).toBeNull();
+    });
+  });
+
   it("saves core fields and the side table together", async () => {
     await saveNodeDetail(userId, areaId, {
       name: "Career & Craft",

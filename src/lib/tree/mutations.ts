@@ -436,14 +436,20 @@ function seriesEnds(
  * next; if progress did carry over, the task would not be recurring at all.
  *
  * Takes an executor so callers can compose it into their own transaction.
+ *
+ * `at` is **when this happened**, defaulting to now. It is not decoration: a task ticked off
+ * weeks after it was really done should record the completion on the day it happened, and a
+ * repeating one should step to its next occurrence from *that* date rather than from today.
+ * Typing the real date into Date completed is how you say so — see `stateFromDates`.
  */
 export async function applyStateTransition(
   tx: Executor,
   userId: string,
   nodeId: string,
   state: NodeState,
+  at: Date = new Date(),
 ): Promise<void> {
-  const now = new Date();
+  const now = at;
 
   if (state !== "completed") {
     await tx
@@ -533,7 +539,17 @@ export async function applyStateTransition(
 
   await tx
     .update(nodes)
-    .set({ ...dates.node, updatedAt: now })
+    .set({
+      ...dates.node,
+      // Shelved until its next occurrence — the deferred date this write lands is the expiry
+      // of exactly that. The blanket reset above put the whole subtree back to Not Started,
+      // which is right for the checklist beneath it but not for the task itself: it is not
+      // waiting to be started, it is done until next time, and the State column should say
+      // so rather than leaving the Chooser to explain its absence. If the new date is
+      // somehow already past, the shelf simply reads as expired.
+      state: "postponed",
+      updatedAt: now,
+    })
     .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
 
   await tx
@@ -745,7 +761,7 @@ export async function skipRecurrence(userId: string, nodeId: string): Promise<vo
 
     await tx
       .update(nodes)
-      .set({ ...dates.node, updatedAt: now })
+      .set({ ...dates.node, state: "postponed", updatedAt: now })
       .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
 
     await tx.update(taskDetails).set(dates.task).where(eq(taskDetails.nodeId, nodeId));

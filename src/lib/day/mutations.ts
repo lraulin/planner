@@ -147,8 +147,8 @@ export async function updateDailyItemTitle(
  * (in progress, delegated, waiting) is finer than the task's and is not derivable from it.
  *
  * `completedAt` living on the row is what makes the day's record durable: a recurring task
- * is reset to `not_started` by that same call, and a derived checkmark would silently
- * un-check itself the moment you finished it.
+ * is shelved until next time by that same call (`postponed` + deferred date), and a
+ * derived checkmark would silently un-check itself the moment you finished it.
  */
 export async function setDailyItemState(
   userId: string,
