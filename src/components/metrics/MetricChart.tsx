@@ -6,9 +6,9 @@ import {
   dateXFraction,
   formatChartDate,
   niceTicks,
+  niceTimeTicks,
   plotPoint,
   seriesPolyline,
-  timeAxisDateKeys,
   yDomain,
 } from "@/lib/metrics/derive";
 import { formatMetricNumber } from "@/lib/metrics/parse";
@@ -86,7 +86,8 @@ export function MetricChart({
     ),
   }));
 
-  const xTickDates = minDate ? timeAxisDateKeys(minDate, maxDate, 6) : [];
+  // Calendar-aligned labels (days/months/years by span) — not sample dates.
+  const xTicks = minDate ? niceTimeTicks(minDate, maxDate, 14) : [];
 
   const objectiveY =
     showObjective && objectiveTarget !== null && Number.isFinite(objectiveTarget)
@@ -159,9 +160,9 @@ export function MetricChart({
             );
           })}
 
-          {xTickDates.map((dateKey) => {
+          {xTicks.map((tick) => {
             const x = plotPoint(
-              dateXFraction(dateKey, minDate, maxDate),
+              dateXFraction(tick.dateKey, minDate, maxDate),
               yMin,
               CHART_WIDTH,
               CHART_HEIGHT,
@@ -170,23 +171,26 @@ export function MetricChart({
               yMax,
             ).x;
             return (
-              <g key={`x-${dateKey}`}>
+              <g key={`x-${tick.dateKey}-${tick.label}`}>
                 <line
                   x1={x}
                   x2={x}
                   y1={CHART_HEIGHT - CHART_PAD.bottom}
-                  y2={CHART_HEIGHT - CHART_PAD.bottom + 4}
+                  y2={CHART_HEIGHT - CHART_PAD.bottom + (tick.major ? 5 : 3)}
                   stroke="var(--rule)"
-                  strokeWidth={1}
+                  strokeWidth={tick.major ? 1.25 : 1}
                 />
                 <text
                   x={x}
                   y={CHART_HEIGHT - 8}
                   textAnchor="middle"
-                  className="fill-ink-faint"
-                  style={{ fontSize: 8 }}
+                  className={tick.major ? "fill-ink-muted" : "fill-ink-faint"}
+                  style={{
+                    fontSize: tick.major ? 9 : 8,
+                    fontWeight: tick.major ? 600 : 400,
+                  }}
                 >
-                  {formatChartDate(dateKey)}
+                  {tick.label}
                 </text>
               </g>
             );

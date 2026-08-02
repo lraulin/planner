@@ -192,30 +192,226 @@ export function dateXFraction(
   return Math.min(1, Math.max(0, f));
 }
 
+/** One X-axis label: calendar-aligned, not tied to sample dates. */
+export type TimeAxisTick = {
+  /** Position on the linear time axis (`YYYY-MM-DD`). */
+  dateKey: string;
+  label: string;
+  /** Year starts (and year-unit ticks) — render slightly stronger. */
+  major: boolean;
+};
+
+const MONTH_SHORT = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
+
+function parseDateParts(dateKey: string): { y: number; m: number; d: number } | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey.trim());
+  if (!match) return null;
+  return { y: +match[1], m: +match[2], d: +match[3] };
+}
+
+function monthKey(y: number, month1: number): string {
+  return `${y}-${String(month1).padStart(2, "0")}-01`;
+}
+
+function yearKey(y: number): string {
+  return `${y}-01-01`;
+}
+
+function addMonths(y: number, month1: number, step: number): { y: number; m: number } {
+  const idx = y * 12 + (month1 - 1) + step;
+  return { y: Math.floor(idx / 12), m: (idx % 12) + 1 };
+}
+
 /**
- * Evenly spaced date keys across [minDate, maxDate] for X-axis labels
- * (always includes endpoints). Spacing is by calendar day, not by sample count.
+ * Choose a calendar unit so ticks are regular and legible (like {@link niceTicks}
+ * for Y). Short ranges → days; ~months–years → months; long → years.
  */
-export function timeAxisDateKeys(
+function chooseTimeStep(
+  spanDays: number,
+  maxTicks: number,
+): { unit: "day" | "month" | "year"; step: number } {
+  const cap = Math.max(2, maxTicks);
+  if (spanDays <= 0) return { unit: "day", step: 1 };
+  // Daily when every day still fits (or nearly).
+  if (spanDays <= cap) return { unit: "day", step: 1 };
+  if (spanDays <= cap * 2) return { unit: "day", step: 2 };
+  if (spanDays <= 45) {
+    return { unit: "day", step: Math.max(3, Math.ceil(spanDays / (cap - 1))) };
+  }
+
+  const spanMonths = spanDays / 30.437;
+  // Prefer one tick per month for ~year-long series (legible at chart width).
+  if (spanMonths <= Math.max(cap, 16)) return { unit: "month", step: 1 };
+  if (spanMonths <= cap * 2) return { unit: "month", step: 2 };
+  if (spanMonths <= cap * 3) return { unit: "month", step: 3 };
+  if (spanMonths <= cap * 6) return { unit: "month", step: 6 };
+
+  const spanYears = spanDays / 365.25;
+  return {
+    unit: "year",
+    step: Math.max(1, Math.ceil(spanYears / (cap - 1))),
+  };
+}
+
+function formatDayLabel(dateKey: string, showYear: boolean): string {
+  const p = parseDateParts(dateKey);
+  if (!p) return dateKey;
+  if (showYear) return `${p.m}/${p.d}/${String(p.y).slice(2)}`;
+  return `${p.m}/${p.d}`;
+}
+
+function formatMonthLabel(
+  y: number,
+  month1: number,
+  opts: { major: boolean; forceYear: boolean },
+): string {
+  const name = MONTH_SHORT[month1 - 1] ?? String(month1);
+  if (opts.major) {
+    // January (or forced): year is the prominent part.
+    return month1 === 1 ? String(y) : `${name} '${String(y).slice(2)}`;
+  }
+  if (opts.forceYear) return `${name} '${String(y).slice(2)}`;
+  return name;
+}
+
+/**
+ * Calendar-aligned X-axis ticks for a linear time domain.
+ * Independent of sample dates — hover shows exact entry dates.
+ *
+ * Granularity follows the span (days → months → years) so labels stay evenly
+ * spaced and readable; year boundaries are marked `major`.
+ */
+export function niceTimeTicks(
   minDate: string,
   maxDate: string,
-  maxTicks = 6,
-): string[] {
+  maxTicks = 12,
+): TimeAxisTick[] {
   const t0 = dateKeyOrdinal(minDate);
   const t1 = dateKeyOrdinal(maxDate);
-  if (t0 === t1) return [minDate];
-  const span = t1 - t0;
-  const count = Math.min(maxTicks, span + 1);
-  if (count <= 1) return [minDate];
-  const set = new Set<string>();
-  for (let i = 0; i < count; i++) {
-    const ord = Math.round(t0 + (i / (count - 1)) * span);
-    set.add(ordinalToDateKey(ord));
+  if (t0 === t1) {
+    return [
+      {
+        dateKey: minDate,
+        label: formatChartDate(minDate),
+        major: true,
+      },
+    ];
   }
-  // Ensure exact endpoints even if rounding drifted.
-  set.add(minDate);
-  set.add(maxDate);
-  return [...set].sort((a, b) => a.localeCompare(b));
+
+  const lo = Math.min(t0, t1);
+  const hi = Math.max(t0, t1);
+  const minKey = ordinalToDateKey(lo);
+  const maxKey = ordinalToDateKey(hi);
+  const spanDays = hi - lo;
+  const { unit, step } = chooseTimeStep(spanDays, maxTicks);
+
+  const raw: { dateKey: string; y: number; m: number; d: number }[] = [];
+
+  if (unit === "day") {
+    // Start at domain min so daily series line up with the first sample day.
+    for (let t = lo; t <= hi; t += step) {
+      const dateKey = ordinalToDateKey(t);
+      const p = parseDateParts(dateKey)!;
+      raw.push({ dateKey, ...p });
+    }
+  } else if (unit === "month") {
+    const start = parseDateParts(minKey)!;
+    // First month-start on or after minDate.
+    let y = start.y;
+    let m = start.m;
+    if (start.d > 1) {
+      ({ y, m } = addMonths(y, m, 1));
+    }
+    // Align to step grid from a fixed origin (year 0) so ticks are regular.
+    const startIdx = y * 12 + (m - 1);
+    const aligned = Math.ceil(startIdx / step) * step;
+    y = Math.floor(aligned / 12);
+    m = (aligned % 12) + 1;
+    for (;;) {
+      const dateKey = monthKey(y, m);
+      if (dateKeyOrdinal(dateKey) > hi) break;
+      if (dateKeyOrdinal(dateKey) >= lo) {
+        raw.push({ dateKey, y, m, d: 1 });
+      }
+      ({ y, m } = addMonths(y, m, step));
+      if (raw.length > 64) break;
+    }
+  } else {
+    const startY = parseDateParts(minKey)!.y;
+    const endY = parseDateParts(maxKey)!.y;
+    // First year tick on or after min (Jan 1).
+    let y = startY;
+    if (minKey > yearKey(y)) y += 1;
+    // Align to step from year 0.
+    y = Math.ceil(y / step) * step;
+    for (; y <= endY; y += step) {
+      const dateKey = yearKey(y);
+      if (dateKeyOrdinal(dateKey) < lo) continue;
+      if (dateKeyOrdinal(dateKey) > hi) break;
+      raw.push({ dateKey, y, m: 1, d: 1 });
+    }
+  }
+
+  // If alignment produced nothing (tiny range mid-month with month step), fall back
+  // to domain endpoints as day labels.
+  if (raw.length === 0) {
+    return [
+      {
+        dateKey: minKey,
+        label: formatChartDate(minKey),
+        major: true,
+      },
+      {
+        dateKey: maxKey,
+        label: formatChartDate(maxKey),
+        major: true,
+      },
+    ];
+  }
+
+  return raw.map((tick, i) => {
+    if (unit === "day") {
+      const prev = raw[i - 1];
+      const showYear =
+        i === 0 ||
+        (prev !== undefined && prev.y !== tick.y) ||
+        (tick.m === 1 && tick.d === 1);
+      const major = tick.m === 1 && tick.d === 1;
+      return {
+        dateKey: tick.dateKey,
+        label: formatDayLabel(tick.dateKey, showYear || major),
+        major,
+      };
+    }
+    if (unit === "year") {
+      return {
+        dateKey: tick.dateKey,
+        label: String(tick.y),
+        major: true,
+      };
+    }
+    // month
+    const major = tick.m === 1;
+    const forceYear = i === 0 && !major;
+    return {
+      dateKey: tick.dateKey,
+      label: formatMonthLabel(tick.y, tick.m, { major, forceYear }),
+      major: major || forceYear,
+    };
+  });
 }
 
 /**

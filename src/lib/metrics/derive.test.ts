@@ -8,12 +8,12 @@ import {
   formatChartDate,
   latestEntry,
   niceTicks,
+  niceTimeTicks,
   normalizeMetricType,
   plotPoint,
   seriesPolyline,
   shouldShowEntryTargetColumn,
   sortEntriesByDate,
-  timeAxisDateKeys,
   yDomain,
 } from "./derive";
 
@@ -289,14 +289,61 @@ describe("dateXFraction / time axis", () => {
     expect(dateKeyOrdinal("2025-01-02") - dateKeyOrdinal("2025-01-01")).toBe(1);
   });
 
-  it("labels include endpoints and stay within the range", () => {
-    const keys = timeAxisDateKeys("2025-01-01", "2025-01-31", 5);
-    expect(keys[0]).toBe("2025-01-01");
-    expect(keys[keys.length - 1]).toBe("2025-01-31");
-    expect(keys.length).toBeLessThanOrEqual(5);
-    for (const k of keys) {
-      expect(k >= "2025-01-01" && k <= "2025-01-31").toBe(true);
+  it("uses daily ticks for a short range", () => {
+    const ticks = niceTimeTicks("2025-01-01", "2025-01-07", 12);
+    expect(ticks.map((t) => t.dateKey)).toEqual([
+      "2025-01-01",
+      "2025-01-02",
+      "2025-01-03",
+      "2025-01-04",
+      "2025-01-05",
+      "2025-01-06",
+      "2025-01-07",
+    ]);
+  });
+
+  it("uses month starts for ~1 year, with years prominent", () => {
+    // Matches a Dante-like span: late Sep 2024 → late Oct 2025.
+    const ticks = niceTimeTicks("2024-09-21", "2025-10-29", 12);
+    expect(ticks.length).toBeGreaterThanOrEqual(10);
+    expect(ticks.length).toBeLessThanOrEqual(14);
+    // Calendar-aligned (not sample dates like 9/21 or 10/29).
+    for (const t of ticks) {
+      expect(t.dateKey.endsWith("-01")).toBe(true);
+      expect(t.dateKey >= "2024-09-21" || t.dateKey.endsWith("-01")).toBe(true);
+      expect(t.dateKey <= "2025-10-29").toBe(true);
     }
+    const jan = ticks.find((t) => t.dateKey === "2025-01-01");
+    expect(jan?.major).toBe(true);
+    expect(jan?.label).toBe("2025");
+    // Regular month labels, not erratic sample days.
+    expect(ticks.some((t) => t.label === "Feb" || t.label.startsWith("Feb"))).toBe(
+      true,
+    );
+  });
+
+  it("uses year ticks for a multi-year range", () => {
+    const ticks = niceTimeTicks("2016-03-15", "2026-08-01", 12);
+    expect(ticks.every((t) => t.dateKey.endsWith("-01-01"))).toBe(true);
+    expect(ticks.every((t) => t.major)).toBe(true);
+    expect(ticks.map((t) => t.label)).toEqual(
+      expect.arrayContaining(["2017", "2020", "2025"]),
+    );
+    // Even year spacing
+    const years = ticks.map((t) => Number(t.label));
+    if (years.length >= 3) {
+      const step = years[1] - years[0];
+      for (let i = 1; i < years.length; i++) {
+        expect(years[i] - years[i - 1]).toBe(step);
+      }
+    }
+  });
+
+  it("does not place labels on arbitrary sample midpoints", () => {
+    const ticks = niceTimeTicks("2024-09-21", "2025-10-29", 12);
+    const labels = ticks.map((t) => t.label);
+    // Old index-based axis produced dates like 1/28/25, 5/7/25, 7/11/25.
+    expect(labels.join(" ")).not.toMatch(/\d+\/\d+\/\d+/);
   });
 });
 
