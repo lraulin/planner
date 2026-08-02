@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_OUTLINE_FILTERS,
+  isSettledOutlineState,
   parseOutlineFilters,
   serializeOutlineFilters,
 } from "./outline";
@@ -21,6 +22,7 @@ describe("parseOutlineFilters", () => {
         task: true,
       },
       focusOnly: true,
+      showCompleted: true,
     };
     expect(parseOutlineFilters(serializeOutlineFilters(settings))).toEqual(settings);
   });
@@ -29,10 +31,12 @@ describe("parseOutlineFilters", () => {
     const parsed = parseOutlineFilters({
       types: { goal: false, fantasy: true },
       focusOnly: "yes",
+      showCompleted: "nope",
     });
     expect(parsed.types.goal).toBe(false);
     expect(parsed.types.task).toBe(true);
     expect(parsed.focusOnly).toBe(false);
+    expect(parsed.showCompleted).toBe(false);
     expect("fantasy" in parsed.types).toBe(false);
   });
 
@@ -53,5 +57,40 @@ describe("parseOutlineFilters", () => {
       project: false,
       task: false,
     });
+  });
+
+  it("defaults showCompleted to false when the key is absent", () => {
+    // Older stored blobs predate this flag; missing means hide done items, not "show
+    // everything because we cannot tell".
+    const parsed = parseOutlineFilters({
+      types: { task: true },
+      focusOnly: false,
+    });
+    expect(parsed.showCompleted).toBe(false);
+  });
+
+  it("honours an explicit showCompleted true", () => {
+    expect(parseOutlineFilters({ showCompleted: true }).showCompleted).toBe(true);
+  });
+});
+
+describe("isSettledOutlineState", () => {
+  it("treats completed and cancelled as settled", () => {
+    expect(isSettledOutlineState("completed")).toBe(true);
+    expect(isSettledOutlineState("cancelled")).toBe(true);
+  });
+
+  it("leaves every open work state visible", () => {
+    for (const state of [
+      "not_started",
+      "in_progress",
+      "waiting",
+      "postponed",
+      "delegated",
+      "should_delegate",
+      "proposed",
+    ] as const) {
+      expect(isSettledOutlineState(state)).toBe(false);
+    }
   });
 });

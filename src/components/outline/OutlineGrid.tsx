@@ -49,6 +49,7 @@ import { useToday } from "@/components/grid/useToday";
 import { useSetting, type SettingCodec } from "@/components/settings/SettingsProvider";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import {
+  isSettledOutlineState,
   parseOutlineFilters,
   serializeOutlineFilters,
   type OutlineFilters,
@@ -71,9 +72,9 @@ const OUTLINE_FILTERS_CODEC: SettingCodec<OutlineFilters> = {
 };
 
 /**
- * Outline tab host: tree commands, type filters, drawer, and the shared DataGrid with the
- * outline's column set. Optional "By category" lays group headers over the tree and lets
- * root result areas change category by drag.
+ * Outline tab host: tree commands, type / focus / completed filters, drawer, and the
+ * shared DataGrid with the outline's column set. Optional "By category" lays group
+ * headers over the tree and lets root result areas change category by drag.
  */
 export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const { nodes, byId, patch, apply, error, setError } =
@@ -91,7 +92,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     patch: patchTypeFilters,
     reset: resetTypeFilters,
   } = useSetting(OUTLINE_FILTERS_SCOPE, OUTLINE_FILTERS_CODEC);
-  const { types: filters, focusOnly } = typeFilters;
+  const { types: filters, focusOnly, showCompleted } = typeFilters;
 
   const gridState = useGridState("outline", outlineColumns, [...OUTLINE_COLUMN_IDS]);
 
@@ -99,14 +100,17 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     const dropped = new Set<string>();
     return nodes.filter((node) => {
       const parentDropped = node.parentId ? dropped.has(node.parentId) : false;
-      const filteredOut = !filters[node.type] || (focusOnly && !node.focus);
+      const filteredOut =
+        !filters[node.type] ||
+        (focusOnly && !node.focus) ||
+        (!showCompleted && isSettledOutlineState(node.state));
       if (parentDropped || filteredOut) {
         dropped.add(node.id);
         return false;
       }
       return !node.hidden;
     });
-  }, [nodes, filters, focusOnly]);
+  }, [nodes, filters, focusOnly, showCompleted]);
 
   /**
    * The outline is the tree itself, so its rows are a flat list at tree depth. By Category
@@ -584,6 +588,13 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
             focusOnly: !current.focusOnly,
           }))
         }
+        showCompleted={showCompleted}
+        onToggleShowCompleted={() =>
+          patchTypeFilters((current) => ({
+            ...current,
+            showCompleted: !current.showCompleted,
+          }))
+        }
         byCategory={byCategory}
         onToggleByCategory={() => setByCategory((v) => !v)}
         commands={commands}
@@ -814,6 +825,8 @@ function FilterBar({
   onToggleType,
   focusOnly,
   onToggleFocusOnly,
+  showCompleted,
+  onToggleShowCompleted,
   byCategory,
   onToggleByCategory,
   commands,
@@ -826,6 +839,8 @@ function FilterBar({
   onToggleType: (type: NodeType) => void;
   focusOnly: boolean;
   onToggleFocusOnly: () => void;
+  showCompleted: boolean;
+  onToggleShowCompleted: () => void;
   byCategory: boolean;
   onToggleByCategory: () => void;
   commands: Record<string, () => void>;
@@ -906,6 +921,12 @@ function FilterBar({
         ))}
         <Toggle checked={focusOnly} onChange={onToggleFocusOnly} label="Focus only" />
         <Toggle
+          checked={showCompleted}
+          onChange={onToggleShowCompleted}
+          label="Show completed"
+          title="Show completed and cancelled items"
+        />
+        <Toggle
           checked={byCategory}
           onChange={onToggleByCategory}
           label="By category"
@@ -943,13 +964,18 @@ function Toggle({
   checked,
   onChange,
   label,
+  title,
 }: {
   checked: boolean;
   onChange: () => void;
   label: string;
+  title?: string;
 }) {
   return (
-    <label className="flex cursor-pointer select-none items-center gap-1.5">
+    <label
+      className="flex cursor-pointer select-none items-center gap-1.5"
+      title={title}
+    >
       <input
         type="checkbox"
         checked={checked}
