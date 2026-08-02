@@ -5,8 +5,31 @@ import {
   latestEntry,
   normalizeMetricType,
   seriesPolyline,
+  shouldShowEntryTargetColumn,
   yDomain,
 } from "./derive";
+
+describe("shouldShowEntryTargetColumn", () => {
+  it("hides when no objective and no entry targets", () => {
+    expect(shouldShowEntryTargetColumn(null, [{ target: null }])).toBe(false);
+    expect(shouldShowEntryTargetColumn(null, [])).toBe(false);
+  });
+
+  it("shows when metric has an objective target", () => {
+    expect(shouldShowEntryTargetColumn(80, [])).toBe(true);
+  });
+
+  it("shows when any entry has a target (import history)", () => {
+    expect(shouldShowEntryTargetColumn(null, [{ target: null }, { target: 50 }])).toBe(
+      true,
+    );
+  });
+
+  it("shows while the user is typing an objective in the draft", () => {
+    expect(shouldShowEntryTargetColumn(null, [], "1.6")).toBe(true);
+    expect(shouldShowEntryTargetColumn(null, [], "   ")).toBe(false);
+  });
+});
 
 describe("latestEntry", () => {
   it("returns null for empty", () => {

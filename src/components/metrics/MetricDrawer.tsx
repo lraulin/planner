@@ -12,6 +12,7 @@ import {
 } from "@/app/metrics/actions";
 import { Drawer, DrawerFooter, DrawerHeader } from "@/components/detail/Drawer";
 import { entriesToCsv } from "@/lib/metrics/csv";
+import { shouldShowEntryTargetColumn } from "@/lib/metrics/derive";
 import {
   formatMetricNumber,
   localDateKey,
@@ -117,6 +118,21 @@ function MetricForm({
   const [dirty, setDirty] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
   const [busy, startTransition] = useTransition();
+
+  // No metric objective (and no imported per-entry targets) → hide Target column.
+  // Objective alone is enough for the graph; per-row target is the exception.
+  const showTargetColumn = shouldShowEntryTargetColumn(
+    detail.objectiveTarget,
+    detail.entries,
+    draft.objectiveTarget,
+  );
+  const targetColSpan = showTargetColumn ? 5 : 4;
+  const objectivePlaceholder =
+    draft.objectiveTarget.trim() !== ""
+      ? draft.objectiveTarget.trim()
+      : detail.objectiveTarget != null
+        ? formatMetricNumber(detail.objectiveTarget)
+        : "—";
 
   const reloadDetail = () => {
     startTransition(async () => {
@@ -448,12 +464,14 @@ function MetricForm({
             </div>
 
             <div className="overflow-x-auto rounded border border-rule">
-              <table className="w-full min-w-[28rem] text-left text-[0.8125rem]">
+              <table className="w-full min-w-[20rem] text-left text-[0.8125rem]">
                 <thead className="bg-surface-raised text-ink-muted">
                   <tr>
                     <th className="px-2 py-1.5 font-medium">Date</th>
                     <th className="px-2 py-1.5 font-medium">Type</th>
-                    <th className="px-2 py-1.5 font-medium">Target</th>
+                    {showTargetColumn && (
+                      <th className="px-2 py-1.5 font-medium">Target</th>
+                    )}
                     <th className="px-2 py-1.5 font-medium">Value</th>
                     <th className="w-8" />
                   </tr>
@@ -461,7 +479,10 @@ function MetricForm({
                 <tbody>
                   {detail.entries.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="px-2 py-4 text-center text-ink-muted">
+                      <td
+                        colSpan={targetColSpan}
+                        className="px-2 py-4 text-center text-ink-muted"
+                      >
                         No entries yet.
                       </td>
                     </tr>
@@ -479,18 +500,20 @@ function MetricForm({
                         />
                       </td>
                       <td className="px-2 py-1 text-ink-muted">New Total</td>
-                      <td className="px-1 py-0.5">
-                        <MetricDecimalCell
-                          committed={entry.target}
-                          allowEmpty
-                          placeholder="—"
-                          onCommit={(n) => {
-                            if (n === entry.target) return;
-                            if (n === null && entry.target === null) return;
-                            updateEntry(entry, { target: n });
-                          }}
-                        />
-                      </td>
+                      {showTargetColumn && (
+                        <td className="px-1 py-0.5">
+                          <MetricDecimalCell
+                            committed={entry.target}
+                            allowEmpty
+                            placeholder={objectivePlaceholder}
+                            onCommit={(n) => {
+                              if (n === entry.target) return;
+                              if (n === null && entry.target === null) return;
+                              updateEntry(entry, { target: n });
+                            }}
+                          />
+                        </td>
+                      )}
                       <td className="px-1 py-0.5">
                         <MetricDecimalCell
                           committed={entry.value}
@@ -516,6 +539,12 @@ function MetricForm({
                 </tbody>
               </table>
             </div>
+            {showTargetColumn && (
+              <p className="text-[0.6875rem] text-ink-faint">
+                Leave Target blank to use the metric objective on the graph. Override a
+                row only if that day’s target differed.
+              </p>
+            )}
             <p className="text-[0.75rem] text-ink-muted">
               Current / last value:{" "}
               <span className="font-medium text-ink">

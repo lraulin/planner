@@ -2,6 +2,25 @@ import type { MetricChartPoint, MetricEntryView, MetricType } from "./types";
 import { METRIC_TYPES } from "./types";
 
 /**
+ * Whether the tracking grid should show a Target column.
+ * Hidden when the metric has no objective and no entry carries its own target
+ * (import history). Per-entry targets are rare; the metric objective is enough
+ * for the graph via `entry.target ?? objectiveTarget`.
+ */
+export function shouldShowEntryTargetColumn(
+  objectiveTarget: number | null | undefined,
+  entries: ReadonlyArray<{ target: number | null | undefined }>,
+  /** Live draft text from the form (reveals the column as the user types). */
+  draftObjectiveText?: string,
+): boolean {
+  if (draftObjectiveText !== undefined && draftObjectiveText.trim() !== "") {
+    return true;
+  }
+  if (objectiveTarget !== null && objectiveTarget !== undefined) return true;
+  return entries.some((e) => e.target !== null && e.target !== undefined);
+}
+
+/**
  * Pick the latest entry by entryDate (lexicographic YYYY-MM-DD), then higher id
  * on a tie.
  */
