@@ -45,7 +45,12 @@ export const DEFAULT_GRID_SETTINGS: GridSettings = {
   order: null,
   widths: {},
   filters: {},
-  sort: null,
+  /**
+   * Achieve's Projects / Tasks / Outline views open sorted by priority. Tabs without a
+   * `priority` column ignore this (DataGrid only sorts when `sortValue` exists). Clearing
+   * the sort chip restores manual / tree order for that tab.
+   */
+  sort: { columnId: "priority", direction: "asc" },
   collapsedGroups: [],
   view: null,
   includeDeferred: true,

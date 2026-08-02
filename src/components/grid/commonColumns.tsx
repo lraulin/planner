@@ -1,6 +1,7 @@
 "use client";
 
 import type { NodeState, PriorityLetter } from "@/db/schema";
+import { encodePriority } from "@/lib/achieve/encodings";
 import { toDateKey } from "@/lib/schedule/geometry";
 import type { OutlineNode } from "@/lib/tree/types";
 import { formatCompactDate, formatPriority } from "@/lib/tree/format";
@@ -62,7 +63,14 @@ export function priorityColumn(): ColumnDef<OutlineColumnCtx> {
     filterKind: "priority",
     filterValue: (row) =>
       formatPriority(row.node.priorityLetter, row.node.priorityRank) || null,
-    sortValue: (row) => formatPriority(row.node.priorityLetter, row.node.priorityRank),
+    // Achieve's int encoding so A1 < A2 < A10 < B, and blank sorts last (null).
+    sortValue: (row) =>
+      row.node.priorityLetter
+        ? encodePriority({
+            letter: row.node.priorityLetter,
+            rank: row.node.priorityRank,
+          })
+        : null,
     render: (row, ctx) => (
       <PriorityCell
         key={`priority:${formatPriority(row.node.priorityLetter, row.node.priorityRank)}`}

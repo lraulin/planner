@@ -7,6 +7,7 @@ import {
   type WishKind,
   type WishListRow,
 } from "@/lib/detail/wishTypes";
+import { encodePriority } from "@/lib/achieve/encodings";
 import { formatPriority, parsePriority } from "@/lib/tree/format";
 import type { ColumnDef } from "@/components/grid/columns";
 
@@ -42,7 +43,13 @@ export const wishesColumns: ColumnDef<WishesColumnCtx, WishListRow>[] = [
     filterKind: "priority",
     filterValue: (row) =>
       formatPriority(row.node.priorityLetter, row.node.priorityRank) || null,
-    sortValue: (row) => formatPriority(row.node.priorityLetter, row.node.priorityRank),
+    sortValue: (row) =>
+      row.node.priorityLetter
+        ? encodePriority({
+            letter: row.node.priorityLetter,
+            rank: row.node.priorityRank,
+          })
+        : null,
     render: (row, ctx) => (
       <WishPriorityCell
         key={`pri:${formatPriority(row.node.priorityLetter, row.node.priorityRank)}`}

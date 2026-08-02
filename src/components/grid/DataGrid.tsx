@@ -312,8 +312,8 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
 
     if (sort) {
       const column = columns.find((entry) => entry.id === sort.columnId);
-      // Sorting happens within each group segment, so a grouped tab reorders its rows
-      // rather than silently ignoring the click. See `@/lib/grid/sortRows`.
+      // Within each group, only siblings reorder — parent/child structure is preserved.
+      // See `@/lib/grid/sortRows`.
       if (column?.sortValue) {
         const sortValue = column.sortValue;
         next = sortRowsWithinGroups(next, (row) => sortValue(row), sort.direction);

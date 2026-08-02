@@ -446,6 +446,63 @@ describeDb("detail mutations", () => {
     expect(detail?.resultArea?.importance).toBe(80);
   });
 
+  it("promotes a nested result area to the root when its category changes", async () => {
+    // Achieve: category is top-level organisation. Nesting inherits the parent's
+    // category; editing the child's category un-nests it rather than forking a
+    // second Personal/Work header under a parent that still claims the old one.
+    await saveNodeDetail(userId, areaId, {
+      ...core,
+      name: "Career",
+      resultArea: { category: "Personal" },
+    });
+    const nested = await createNode({
+      userId,
+      parentId: areaId,
+      type: "result_area",
+      name: "Side project area",
+    });
+    // Inherited on create.
+    expect((await loadNodeDetail(userId, nested))?.resultArea?.category).toBe(
+      "Personal",
+    );
+
+    await saveNodeDetail(userId, nested, {
+      ...core,
+      name: "Side project area",
+      resultArea: { category: "Work" },
+    });
+
+    const [row] = await db
+      .select({ parentId: nodes.parentId })
+      .from(nodes)
+      .where(eq(nodes.id, nested))
+      .limit(1);
+    expect(row?.parentId).toBeNull();
+    expect((await loadNodeDetail(userId, nested))?.resultArea?.category).toBe("Work");
+  });
+
+  it("cascades a root result area's category to nested areas", async () => {
+    const nested = await createNode({
+      userId,
+      parentId: areaId,
+      type: "result_area",
+      name: "Nested",
+    });
+    await saveNodeDetail(userId, areaId, {
+      ...core,
+      name: "Career",
+      resultArea: { category: "Work" },
+    });
+    expect((await loadNodeDetail(userId, nested))?.resultArea?.category).toBe("Work");
+    // Still nested — only a change *on the child* promotes.
+    const [row] = await db
+      .select({ parentId: nodes.parentId })
+      .from(nodes)
+      .where(eq(nodes.id, nested))
+      .limit(1);
+    expect(row?.parentId).toBe(areaId);
+  });
+
   it("writes only the side table matching the record's own type", async () => {
     // A Result Area is sent Project values; they must be dropped, not stored.
     await saveNodeDetail(userId, areaId, {

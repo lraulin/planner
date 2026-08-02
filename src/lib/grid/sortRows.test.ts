@@ -5,8 +5,8 @@ import { compareSortValues, sortRowsWithinGroups } from "./sortRows";
 /** Rows carrying just enough shape to sort; the payload is the sort value itself. */
 type Row = GridRow<{ value: string | number | null }>;
 
-function node(id: string, value: string | number | null): Row {
-  return { kind: "node", id, node: { value }, depth: 0 };
+function node(id: string, value: string | number | null, depth = 0): Row {
+  return { kind: "node", id, node: { value }, depth };
 }
 
 function group(id: string, depth = 0): Row {
@@ -127,5 +127,69 @@ describe("sortRowsWithinGroups", () => {
 
   it("returns an empty list untouched", () => {
     expect(sortRowsWithinGroups([], valueOf, "asc")).toEqual([]);
+  });
+
+  it("only reorders siblings — children stay under their parent", () => {
+    // Outline / Projects: sorting by priority must not pull a high-priority sub-project
+    // above its lower-priority parent, or interleave two parents' children.
+    const rows = [
+      node("ra-c", "C", 0),
+      node("p-a", "A", 1), // child of ra-c, higher priority than parent
+      node("p-b", "B", 1),
+      node("ra-a", "A", 0),
+      node("p-z", "Z", 1),
+    ];
+
+    expect(ids(sortRowsWithinGroups(rows, valueOf, "asc"))).toEqual([
+      "ra-a",
+      "p-z",
+      "ra-c",
+      "p-a",
+      "p-b",
+    ]);
+  });
+
+  it("sorts each sibling group independently at every depth", () => {
+    const rows = [
+      node("parent-b", "B", 0),
+      node("child-z", "Z", 1),
+      node("child-a", "A", 1),
+      node("parent-a", "A", 0),
+      node("child-m", "M", 1),
+      node("grandchild-b", "B", 2),
+      node("grandchild-a", "A", 2),
+    ];
+
+    expect(ids(sortRowsWithinGroups(rows, valueOf, "asc"))).toEqual([
+      "parent-a",
+      "child-m",
+      "grandchild-a",
+      "grandchild-b",
+      "parent-b",
+      "child-a",
+      "child-z",
+    ]);
+  });
+
+  it("keeps hierarchy inside a category/result-area group run", () => {
+    const rows = [
+      group("personal"),
+      node("proj-c", "C", 0),
+      node("sub-a", "A", 1),
+      node("proj-a", "A", 0),
+      group("work"),
+      node("work-b", "B", 0),
+      node("work-a", "A", 0),
+    ];
+
+    expect(ids(sortRowsWithinGroups(rows, valueOf, "asc"))).toEqual([
+      "[personal]",
+      "proj-a",
+      "proj-c",
+      "sub-a",
+      "[work]",
+      "work-a",
+      "work-b",
+    ]);
   });
 });

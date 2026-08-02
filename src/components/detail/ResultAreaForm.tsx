@@ -40,7 +40,7 @@ export function resultAreaTabs(props: DetailFormProps): FormTab[] {
               onChange={(category) => patchResultArea({ category })}
               options={categoryChoices}
               placeholder="Personal or Work"
-              hint="Personal or Work by default — type another name to add one. Groups this area in the outline's category view. Nested areas inherit their parent's category."
+              hint="Personal or Work by default — type another name to add one. Nested areas inherit their parent's category; changing a nested area's category promotes it to the top level."
             />
             <SelectField
               label="State"

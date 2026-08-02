@@ -8,7 +8,7 @@ import {
   taskDetails,
 } from "@/db/schema";
 import type { NodeItemKind } from "@/db/schema";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import {
   clearConflictingDescendantPlans,
   syncDayLineToTargetStart,
@@ -308,6 +308,7 @@ async function requireNode(tx: Executor, userId: string, nodeId: string) {
     .select({
       id: nodes.id,
       type: nodes.type,
+      parentId: nodes.parentId,
       state: nodes.state,
       deferredDate: nodes.deferredDate,
       targetStartDate: nodes.targetStartDate,
@@ -423,17 +424,27 @@ export async function saveNodeDetail(
 
     if (node.type === "result_area") {
       const set = pick(values.resultArea, RESULT_AREA_KEYS);
-      // Blank / whitespace-only category means uncategorised; trim so "Personal " cannot
-      // open a second group that looks identical to Personal.
-      if ("category" in set && typeof set.category === "string") {
-        const trimmed = set.category.trim();
-        set.category = trimmed === "" ? null : trimmed;
+      // Category is handled separately: Achieve treats it as top-level organisation, so
+      // changing a nested area's category promotes it to the root.
+      let categoryPatch: string | null | undefined;
+      if ("category" in set) {
+        const raw = set.category;
+        if (raw === null || raw === undefined) {
+          categoryPatch = null;
+        } else if (typeof raw === "string") {
+          const trimmed = raw.trim();
+          categoryPatch = trimmed === "" ? null : trimmed;
+        }
+        delete set.category;
       }
       if (hasValues(set)) {
         await tx
           .insert(resultAreaDetails)
           .values({ nodeId, ...set })
           .onConflictDoUpdate({ target: resultAreaDetails.nodeId, set });
+      }
+      if (categoryPatch !== undefined) {
+        await applyResultAreaCategory(tx, userId, nodeId, node.parentId, categoryPatch);
       }
     } else if (node.type === "goal") {
       const set = pick(values.goal, GOAL_KEYS);
@@ -605,6 +616,67 @@ export async function setGoalFields(
  */
 function hasValues(set: object): boolean {
   return Object.keys(set).length > 0;
+}
+
+/**
+ * Set a result area's category and cascade it to nested result areas.
+ *
+ * Achieve treats category as top-level organisation (Personal / Work), not as a field a
+ * nested area can disagree with its parent about. Changing the category of a nested area
+ * promotes it to the root; the subtree comes with it and inherits the new category.
+ */
+async function applyResultAreaCategory(
+  tx: Executor,
+  userId: string,
+  nodeId: string,
+  parentId: string | null,
+  category: string | null,
+): Promise<void> {
+  if (parentId !== null) {
+    // Land at the end of the root list so the promoted area is findable rather than
+    // inserted at a random fractional sort key among existing roots.
+    const roots = await tx
+      .select({ sortKey: nodes.sortKey })
+      .from(nodes)
+      .where(and(eq(nodes.userId, userId), isNull(nodes.parentId)))
+      .orderBy(asc(nodes.sortKey));
+    const sortKey = between(roots[roots.length - 1]?.sortKey ?? null, null);
+
+    await tx
+      .update(nodes)
+      .set({ parentId: null, sortKey, updatedAt: new Date() })
+      .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+  }
+
+  // Cascade so nested areas do not keep a stale category that would split Projects
+  // grouping or the outline's By category view.
+  const raIds: string[] = [];
+  const queue = [nodeId];
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    const [row] = await tx
+      .select({ type: nodes.type })
+      .from(nodes)
+      .where(and(eq(nodes.id, id), eq(nodes.userId, userId)))
+      .limit(1);
+    if (!row) continue;
+    if (row.type === "result_area") raIds.push(id);
+    const children = await tx
+      .select({ id: nodes.id })
+      .from(nodes)
+      .where(and(eq(nodes.userId, userId), eq(nodes.parentId, id)));
+    for (const child of children) queue.push(child.id);
+  }
+
+  for (const id of raIds) {
+    await tx
+      .insert(resultAreaDetails)
+      .values({ nodeId: id, category })
+      .onConflictDoUpdate({
+        target: resultAreaDetails.nodeId,
+        set: { category },
+      });
+  }
 }
 
 /** Sort keys already in one list, in order. */
