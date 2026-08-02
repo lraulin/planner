@@ -284,6 +284,7 @@ function MetricForm({
           <div className="flex flex-col gap-3">
             <Field label="Title">
               <input
+                autoFocus
                 value={draft.title}
                 onChange={(e) => patchDraft({ title: e.target.value })}
                 className={inputClass}

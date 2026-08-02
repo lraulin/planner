@@ -33,9 +33,17 @@ export function useModalFocus(ref: RefObject<HTMLElement | null>, open: boolean)
 
     const opener = document.activeElement as HTMLElement | null;
 
-    // A form's first field is usually the point, so focus it rather than the close button.
-    const first = focusable(container)[0];
-    (first ?? container).focus();
+    // Prefer a real form field over header chrome (Delete / Close). `autoFocus` wins when
+    // set; otherwise the first input/select/textarea; otherwise the first focusable control.
+    const elements = focusable(container);
+    const preferred =
+      container.querySelector<HTMLElement>("[autofocus]") ??
+      elements.find((el) => {
+        const tag = el.tagName;
+        return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+      }) ??
+      elements[0];
+    (preferred ?? container).focus();
 
     function onKeyDown(event: KeyboardEvent) {
       if (event.key !== "Tab" || !container) return;

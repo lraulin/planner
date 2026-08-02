@@ -130,8 +130,18 @@ export function GoalMetricsPanel({
           <tbody>
             {loaded && rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-2 py-4 text-center text-ink-muted">
-                  No metrics yet. How will you know whether this is working?
+                <td colSpan={6} className="px-2 py-6 text-center">
+                  <p className="mb-2 text-ink-muted">
+                    No metrics yet. How will you know whether this is working?
+                  </p>
+                  <button
+                    type="button"
+                    onClick={create}
+                    disabled={busy}
+                    className="rounded border border-rule px-2 py-1 text-[0.8125rem] text-ink hover:bg-surface-raised"
+                  >
+                    + Metric
+                  </button>
                 </td>
               </tr>
             )}
