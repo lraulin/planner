@@ -639,6 +639,7 @@ function DataRow<TCtx, TRow>({
           onSelect();
           return;
         }
+        // Shift = range, Ctrl (Windows) / ⌘ (Mac) = add/remove one row. Both are standard.
         onSelect({
           extend: event.shiftKey,
           toggle: event.metaKey || event.ctrlKey,
@@ -650,6 +651,13 @@ function DataRow<TCtx, TRow>({
         ((event) => {
           // Inside a cell's editor the browser's own cut/copy/paste menu is the useful one.
           if ((event.target as HTMLElement).closest("input, select, textarea")) return;
+          // On macOS, Ctrl+click is often synthesised as a secondary click and never reaches
+          // `click` — only `contextmenu`. Treat Ctrl/⌘+click as multi-select, not the menu.
+          if (event.ctrlKey || event.metaKey) {
+            event.preventDefault();
+            onSelect({ toggle: true });
+            return;
+          }
           event.preventDefault();
           onContextMenu(event.clientX, event.clientY);
         })
@@ -771,10 +779,19 @@ function RowHandle({
           toggle: event.metaKey || event.ctrlKey,
         });
       }}
+      onContextMenu={(event) => {
+        // Same Ctrl/⌘+click → multi-select rule as the row body (macOS synthesises a
+        // contextmenu for Ctrl+click and skips the click event).
+        if (event.ctrlKey || event.metaKey) {
+          event.preventDefault();
+          event.stopPropagation();
+          onSelect({ toggle: true });
+        }
+      }}
       onMouseDown={
         onArmDrag &&
         ((event) => {
-          // Only left button starts a drag. Shift/⌘ clicks are pure selection.
+          // Only left button starts a drag. Shift / Ctrl / ⌘ clicks are pure selection.
           if (event.button !== 0) return;
           if (event.shiftKey || event.metaKey || event.ctrlKey) return;
           onArmDrag();

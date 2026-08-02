@@ -13,7 +13,7 @@ const HINTS: { keys: string[]; label: string }[] = [
   { keys: ["F2"], label: "rename" },
   { keys: ["↑", "↓"], label: "move selection" },
   { keys: ["⇧↑", "⇧↓", "⇧click"], label: "extend selection" },
-  { keys: ["⌘click"], label: "toggle selection" },
+  { keys: ["⌘click", "Ctrl+click"], label: "add/remove row" },
   { keys: ["⌘C"], label: "copy as text" },
   { keys: ["Tab", "⇧Tab"], label: "indent / outdent" },
   { keys: ["⌥↑", "⌥↓"], label: "move row" },
