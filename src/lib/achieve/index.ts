@@ -6,9 +6,11 @@ export {
   decodePercentComplete,
   decodePriority,
   decodeStatus,
+  decodeProgressReview,
   encodeEffortFromMinutes,
   encodePercentComplete,
   encodePriority,
+  encodeProgressReview,
   encodeStatus,
   intField,
 } from "./encodings";

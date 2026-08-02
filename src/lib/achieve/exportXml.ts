@@ -1,8 +1,9 @@
-import type { NodeType } from "@/db/schema";
+import type { NodeType, ProgressReview } from "@/db/schema";
 import {
   encodeEffortFromMinutes,
   encodePercentComplete,
   encodePriority,
+  encodeProgressReview,
   encodeStatus,
 } from "./encodings";
 import type { AchPriority } from "./types";
@@ -38,41 +39,52 @@ export type ExportOutlineRow = {
   place?: string;
   category: string | null;
   importance: number | null;
+  definition?: string;
+  isDream?: boolean;
+  vision?: string;
+  kindOfPerson?: string;
+  personalChanges?: string;
+  baseline?: string;
+  limitingFactor?: string;
+  values?: string;
+  question?: string;
+  affirmation?: string;
+  strategy?: string;
+  progressReview?: ProgressReview;
+  scorecard?: boolean;
   /** Depth-first index among siblings sharing the same export parent (set by caller or derived). */
   sortKey: string;
 };
 
 export type ExportResult = {
   xml: string;
-  counts: Record<"result_area" | "project" | "task" | "omitted", number>;
+  counts: Record<"result_area" | "goal" | "project" | "task" | "omitted", number>;
   warnings: string[];
 };
 
+const EXPORT_TYPES = new Set<NodeType>(["result_area", "goal", "project", "task"]);
+
 /**
- * Build Achieve Full XML for the outline core (categories, result areas, projects, tasks).
+ * Build Achieve Full XML for the outline core (categories, RAs, goals, projects, tasks).
  *
- * Goals and other types are omitted; their descendants reparent to the nearest exported
- * ancestor so AP still gets a coherent tree. Notes go out as plain text (not RTF).
- *
- * Omits the huge embedded XSD — AP's Load from XML can infer schema from the data rows for
- * this subset. If a particular AP build is picky, re-export from AP once after load to
- * rehydrate a full schema file.
+ * Notes go out as plain text (not RTF). Omits the huge embedded XSD — AP's Load from XML
+ * can infer schema from the data rows for this subset.
  */
 export function buildAchieveXml(rows: ExportOutlineRow[]): ExportResult {
   const byId = new Map(rows.map((r) => [r.id, r]));
   const warnings: string[] = [];
-  const counts = { result_area: 0, project: 0, task: 0, omitted: 0 };
+  const counts = { result_area: 0, goal: 0, project: 0, task: 0, omitted: 0 };
 
   type Exported = {
     row: ExportOutlineRow;
-    /** Our node id of the export parent (RA/project/task only), or null for roots. */
+    /** Our node id of the export parent, or null for roots. */
     exportParentId: string | null;
   };
 
   const exported: Exported[] = [];
 
   for (const row of rows) {
-    if (row.type !== "result_area" && row.type !== "project" && row.type !== "task") {
+    if (!EXPORT_TYPES.has(row.type)) {
       counts.omitted++;
       continue;
     }
@@ -143,6 +155,57 @@ export function buildAchieveXml(rows: ExportOutlineRow[]): ExportResult {
           encodePriority({ letter: row.priorityLetter, rank: row.priorityRank }),
         ),
         Notes: row.notes,
+        __ORDINAL__: String(ordinalById.get(row.id) ?? 0),
+      }),
+    );
+  }
+
+  for (const { row, exportParentId } of exported) {
+    if (row.type !== "goal") continue;
+    counts.goal++;
+    const parentRow = exportParentId ? byId.get(exportParentId) : null;
+    const parentGoal = parentRow?.type === "goal" ? achId(exportParentId!) : null;
+    const resultAreaId = nearestOfType(row.id, "result_area", byId);
+    // Prefer a direct project child as the Achieve ProjectId link.
+    const linkedProject = exported.find(
+      (e) => e.row.type === "project" && e.exportParentId === row.id,
+    );
+    const completed = row.state === "completed";
+    parts.push(
+      element(row.isDream ? "Dreams" : "Goals", {
+        ...(row.isDream
+          ? { DreamId: achId(row.id), Title: row.name }
+          : { GoalId: achId(row.id), Title: row.name }),
+        ResultAreaId: resultAreaId ? achId(resultAreaId) : undefined,
+        ParentGoalId: !row.isDream ? parentGoal : undefined,
+        ParentDreamId: row.isDream ? parentGoal : undefined,
+        DreamId:
+          !row.isDream && parentRow?.isDream ? achId(exportParentId!) : undefined,
+        ProjectId: linkedProject ? achId(linkedProject.row.id) : undefined,
+        Definition: row.definition ?? row.description ?? "",
+        Purpose: row.purpose,
+        Vision: row.vision ?? "",
+        KindOfPerson: row.kindOfPerson ?? "",
+        ChangesRequired: row.personalChanges ?? "",
+        Baseline: row.baseline ?? "",
+        LimitingFactor: row.limitingFactor ?? "",
+        Values: row.values ?? "",
+        Question: row.question ?? "",
+        Affirmation: row.affirmation ?? "",
+        Strategy: row.strategy ?? "",
+        Priority: String(
+          encodePriority({ letter: row.priorityLetter, rank: row.priorityRank }),
+        ),
+        Status: String(encodeStatus(row.state)),
+        IsCompleted: completed ? "true" : "false",
+        DateCompleted: completed ? formatAchDate(row.completedAt) : undefined,
+        Deadline: formatAchDate(row.deadline),
+        TargetStartDate: formatAchDate(row.targetStart),
+        ProgressReviewSchedule: String(
+          encodeProgressReview(row.progressReview ?? "none"),
+        ),
+        Scorecard: row.scorecard ? "true" : "false",
+        IsExpanded: row.collapsed ? "false" : "true",
         __ORDINAL__: String(ordinalById.get(row.id) ?? 0),
       }),
     );
@@ -285,7 +348,7 @@ function nearestExportAncestor(
   while (cur) {
     const p = byId.get(cur);
     if (!p) return null;
-    if (p.type === "result_area" || p.type === "project" || p.type === "task") {
+    if (EXPORT_TYPES.has(p.type)) {
       return cur;
     }
     cur = p.parentId;

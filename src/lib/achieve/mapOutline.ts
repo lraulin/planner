@@ -1,10 +1,11 @@
-import type { NodeType } from "@/db/schema";
+import type { NodeType, ProgressReview } from "@/db/schema";
 import {
   boolField,
   decodeDateTime,
   decodeEffortToMinutes,
   decodePercentComplete,
   decodePriority,
+  decodeProgressReview,
   decodeStatus,
   intField,
 } from "./encodings";
@@ -12,45 +13,23 @@ import { tableRows } from "./parseXml";
 import { rtfToPlainText } from "./rtf";
 import type { AchDocument, AchMappedNode, AchOutlineMap, AchRow } from "./types";
 
-/** Tables we deliberately do not map in the outline pass. */
+/**
+ * Tables we know about but do not map yet. Grouped by product area so the import summary
+ * and roadmap stay honest about what Full XML still carries that we ignore.
+ *
+ * Tier A (next): appointments, time charts, wishes, project child grids, notes.
+ * Tier B: metrics, contacts, labels.
+ * Tier C (UI chrome / sync): form layouts, record views, Outlook SyncItems, ActiveSync.
+ */
 const KNOWN_SKIP = new Set([
+  // Calendar
   "AppointmentRecurrence",
   "AppointmentRecurrenceDeletions",
   "Appointments",
-  "Contacts",
-  "ContactAddress",
-  "ContactEmail",
-  "ContactPhones",
-  "ContactWeb",
-  "ContactImportantDates",
-  "ContactDiscussions",
-  "ContactHistory",
-  "LabelData",
-  "Labels",
   "TimeCharts",
   "TimeChartAreas",
-  "FileItems",
-  "NoteItems",
-  "SyncItems",
-  "ResourcePools",
-  "ResourceCalendars",
-  "WorkResources",
-  "ResourceAvailability",
-  "ResourcePoolAndResourceIdAssociation",
-  "ResourceCalendarsSpecialDates",
-  "FormLayouts",
-  "Users",
-  "Metrics",
-  "MetricTracking",
-  "MasterKeywords",
-  "RecordViewCustomizations",
-  "RecordViewFieldCustomizations",
-  "RecordViewFilterCustomizations",
-  "CustomRecordViews",
-  "RecordViewCategoryCustomizations",
-  "ActiveSyncIDMapping",
-  "Images",
-  "Goals",
+  // Wish list + goal sub-grids
+  "Wishes",
   "GoalObstacles",
   "GoalResources",
   "GoalTeam",
@@ -64,10 +43,9 @@ const KNOWN_SKIP = new Set([
   "GoalBenefits",
   "GoalProgressEntries",
   "GuidingPrinciples",
-  "Wishes",
-  "Dreams",
   "DreamImpacts",
   "DreamTeam",
+  // Project child lists
   "ProjectObjectives",
   "ProjectPriorities",
   "ProjectRisks",
@@ -84,11 +62,48 @@ const KNOWN_SKIP = new Set([
   "TaskWorkResources",
   "TaskContacts",
   "TaskAttachments",
+  // Notes / files
+  "NoteItems",
+  "FileItems",
+  // Contacts
+  "Contacts",
+  "ContactAddress",
+  "ContactEmail",
+  "ContactPhones",
+  "ContactWeb",
+  "ContactImportantDates",
+  "ContactDiscussions",
+  "ContactHistory",
+  // Labels / metrics / resources
+  "LabelData",
+  "Labels",
+  "Metrics",
+  "MetricTracking",
+  "MasterKeywords",
+  "ResourcePools",
+  "ResourceCalendars",
+  "WorkResources",
+  "ResourceAvailability",
+  "ResourcePoolAndResourceIdAssociation",
+  "ResourceCalendarsSpecialDates",
+  // App chrome + Outlook
+  "FormLayouts",
+  "Users",
+  "RecordViewCustomizations",
+  "RecordViewFieldCustomizations",
+  "RecordViewFilterCustomizations",
+  "CustomRecordViews",
+  "RecordViewCategoryCustomizations",
+  "ActiveSyncIDMapping",
+  "Images",
+  "SyncItems",
 ]);
 
 const OUTLINE_TABLES = new Set([
   "ResultAreaCategories",
   "ResultAreas",
+  "Dreams",
+  "Goals",
   "Projects",
   "Tasks",
 ]);
@@ -101,8 +116,9 @@ const OUTLINE_TABLES = new Set([
  *
  * Hierarchy:
  * - Result area → parent result area (or root)
+ * - Dream / Goal → parent goal/dream, else result area, else RA of linked project
  * - Project → parent project, else its result area
- * - Task → parent task, else its project
+ * - Task → parent task, else project, else result area
  */
 export function mapOutline(doc: AchDocument): AchOutlineMap {
   const warnings: string[] = [];
@@ -147,6 +163,117 @@ export function mapOutline(doc: AchDocument): AchOutlineMap {
         weaknesses: row.Weaknesses ?? "",
         opportunities: row.Opportunities ?? "",
         threats: row.Threats ?? "",
+      }),
+    );
+  }
+
+  // Project → ResultArea for goals that only carry ProjectId.
+  const projectResultArea = new Map<string, string>();
+  for (const row of tableRows(doc, "Projects")) {
+    const pid = row.ProjectId;
+    const ra = emptyToNull(row.ResultAreaId);
+    if (pid && ra) projectResultArea.set(pid, ra);
+  }
+
+  // Dreams first so goals can parent under them by DreamId.
+  for (const row of tableRows(doc, "Dreams")) {
+    const achId = row.DreamId;
+    if (!achId) {
+      warnings.push("Dreams row missing DreamId; skipped");
+      continue;
+    }
+    const name =
+      (row.Title ?? "").trim() || (row.Definition ?? "").trim() || "(Untitled dream)";
+    nodes.push(
+      baseNode({
+        achId,
+        type: "goal",
+        parentAchId: emptyToNull(row.ParentDreamId) ?? emptyToNull(row.ResultAreaId),
+        name,
+        ordinal: intField(row, "__ORDINAL__") ?? 0,
+        row,
+        categoryName: null,
+        importance: null,
+        effortMinutes: null,
+        effortLeftMinutes: null,
+        actualEffortMinutes: null,
+        percentComplete: null,
+        description: row.Definition ?? "",
+        purpose: row.Purpose ?? "",
+        place: "",
+        isDream: true,
+        definition: row.Definition ?? row.IdealizedDefinition ?? "",
+        vision: row.OuterExperienceVision ?? "",
+        kindOfPerson: "",
+        personalChanges: "",
+        baseline: "",
+        limitingFactor: "",
+        values: "",
+        question: "",
+        affirmation: "",
+        range: "",
+        progressReview: "none",
+        scorecard: false,
+        strategy: row.Strategy ?? "",
+        deadlineField: undefined,
+        targetStartField: undefined,
+      }),
+    );
+  }
+
+  for (const row of tableRows(doc, "Goals")) {
+    const achId = row.GoalId;
+    if (!achId) {
+      warnings.push("Goals row missing GoalId; skipped");
+      continue;
+    }
+    const linkedProject = emptyToNull(row.ProjectId);
+    const parentGoal = emptyToNull(row.ParentGoalId);
+    const resultArea = emptyToNull(row.ResultAreaId);
+    const dreamId = emptyToNull(row.DreamId);
+    const parentAchId =
+      parentGoal ??
+      resultArea ??
+      dreamId ??
+      (linkedProject ? (projectResultArea.get(linkedProject) ?? null) : null);
+
+    const name =
+      (row.Title ?? "").trim() || (row.Definition ?? "").trim() || "(Untitled goal)";
+
+    nodes.push(
+      baseNode({
+        achId,
+        type: "goal",
+        parentAchId,
+        name,
+        ordinal: intField(row, "__ORDINAL__") ?? 0,
+        row,
+        categoryName: null,
+        importance: null,
+        effortMinutes: null,
+        effortLeftMinutes: null,
+        actualEffortMinutes: null,
+        percentComplete: null,
+        description: row.Definition ?? "",
+        purpose: row.Purpose ?? "",
+        place: "",
+        isDream: false,
+        definition: row.Definition ?? "",
+        vision: row.Vision ?? "",
+        kindOfPerson: row.KindOfPerson ?? "",
+        personalChanges: row.ChangesRequired ?? "",
+        baseline: row.Baseline ?? "",
+        limitingFactor: row.LimitingFactor ?? "",
+        values: row.Values ?? "",
+        question: row.Question ?? "",
+        affirmation: row.Affirmation ?? "",
+        range: "",
+        progressReview: decodeProgressReview(intField(row, "ProgressReviewSchedule")),
+        scorecard: boolField(row, "Scorecard", false),
+        strategy: row.Strategy ?? "",
+        linkedProjectAchId: linkedProject,
+        deadlineField: "Deadline",
+        targetStartField: "TargetStartDate",
       }),
     );
   }
@@ -206,8 +333,12 @@ export function mapOutline(doc: AchDocument): AchOutlineMap {
     }
     const parentTask = emptyToNull(row.ParentTaskId);
     const projectId = emptyToNull(row.ProjectId);
-    if (!parentTask && !projectId) {
-      warnings.push(`Task ${achId} has no ProjectId or ParentTaskId; skipped`);
+    const resultAreaId = emptyToNull(row.ResultAreaId);
+    const parentAchId = parentTask ?? projectId ?? resultAreaId;
+    if (!parentAchId) {
+      warnings.push(
+        `Task ${achId} has no ProjectId, ParentTaskId, or ResultAreaId; skipped`,
+      );
       continue;
     }
     // Prefer Best estimate when present, else Low.
@@ -225,7 +356,7 @@ export function mapOutline(doc: AchDocument): AchOutlineMap {
       baseNode({
         achId,
         type: "task",
-        parentAchId: parentTask ?? projectId,
+        parentAchId,
         name: row.Name ?? "",
         ordinal: intField(row, "__ORDINAL__") ?? 0,
         row,
@@ -320,6 +451,20 @@ function baseNode(args: {
   blockSizeMinutes?: number | null;
   timePerWeekMinutes?: number | null;
   onlyShowNextTask?: boolean;
+  isDream?: boolean;
+  definition?: string;
+  vision?: string;
+  kindOfPerson?: string;
+  personalChanges?: string;
+  baseline?: string;
+  limitingFactor?: string;
+  values?: string;
+  question?: string;
+  affirmation?: string;
+  range?: string;
+  progressReview?: ProgressReview;
+  scorecard?: boolean;
+  linkedProjectAchId?: string | null;
   deadlineField?: string;
   targetStartField?: string;
   targetEndField?: string;
@@ -390,5 +535,19 @@ function baseNode(args: {
     blockSizeMinutes: args.blockSizeMinutes ?? null,
     timePerWeekMinutes: args.timePerWeekMinutes ?? null,
     onlyShowNextTask: args.onlyShowNextTask ?? false,
+    isDream: args.isDream ?? false,
+    definition: args.definition ?? "",
+    vision: args.vision ?? "",
+    kindOfPerson: args.kindOfPerson ?? "",
+    personalChanges: args.personalChanges ?? "",
+    baseline: args.baseline ?? "",
+    limitingFactor: args.limitingFactor ?? "",
+    values: args.values ?? "",
+    question: args.question ?? "",
+    affirmation: args.affirmation ?? "",
+    range: args.range ?? "",
+    progressReview: args.progressReview ?? "none",
+    scorecard: args.scorecard ?? false,
+    linkedProjectAchId: args.linkedProjectAchId ?? null,
   };
 }

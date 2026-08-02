@@ -1,4 +1,4 @@
-import type { NodeState, NodeType, PriorityLetter } from "@/db/schema";
+import type { NodeState, NodeType, PriorityLetter, ProgressReview } from "@/db/schema";
 
 /**
  * One row as read from an Achieve DataSet XML table — string field values only.
@@ -71,6 +71,26 @@ export type AchMappedNode = {
   blockSizeMinutes: number | null;
   timePerWeekMinutes: number | null;
   onlyShowNextTask: boolean;
+  /** Goal / Dream fields. */
+  isDream: boolean;
+  definition: string;
+  vision: string;
+  kindOfPerson: string;
+  personalChanges: string;
+  baseline: string;
+  limitingFactor: string;
+  values: string;
+  question: string;
+  affirmation: string;
+  range: string;
+  progressReview: ProgressReview;
+  scorecard: boolean;
+  /**
+   * Achieve often links a Goal to a Project via ProjectId without nesting either way in
+   * the outline. On import we place the goal under its RA (or root), then reparent that
+   * project under the goal so our hierarchy matches the association.
+   */
+  linkedProjectAchId: string | null;
 };
 
 export type AchOutlineMap = {

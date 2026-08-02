@@ -20,7 +20,13 @@ export async function GET() {
         "Content-Type": "application/xml; charset=utf-8",
         "Content-Disposition": `attachment; filename="${filename}"`,
         // Small summary for the UI without stuffing the body into JSON.
-        "X-Achieve-Export-Counts": JSON.stringify(result.counts),
+        "X-Achieve-Export-Counts": JSON.stringify({
+          result_area: result.counts.result_area,
+          goal: result.counts.goal,
+          project: result.counts.project,
+          task: result.counts.task,
+          omitted: result.counts.omitted,
+        }),
         "X-Achieve-Export-Warnings": String(result.warnings.length),
       },
     });

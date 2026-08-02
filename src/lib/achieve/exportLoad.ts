@@ -36,6 +36,8 @@ function toExportRow(n: OutlineNode): ExportOutlineRow {
     purpose: n.purpose,
     category: n.category,
     importance: n.importance,
+    definition: n.definition,
+    isDream: n.isDream,
     sortKey: n.sortKey,
   };
 }

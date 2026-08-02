@@ -5,10 +5,12 @@ import {
   decodeEffortToMinutes,
   decodePercentComplete,
   decodePriority,
+  decodeProgressReview,
   decodeStatus,
   encodeEffortFromMinutes,
   encodePercentComplete,
   encodePriority,
+  encodeProgressReview,
   encodeStatus,
 } from "./encodings";
 
@@ -103,6 +105,20 @@ describe("effort units", () => {
   it("prefers hours when encoding exact multi-hour values", () => {
     expect(encodeEffortFromMinutes(120)).toEqual({ amount: 2, units: 1 });
     expect(encodeEffortFromMinutes(45)).toEqual({ amount: 45, units: 0 });
+  });
+});
+
+describe("decodeProgressReview", () => {
+  it("maps Achieve schedule codes", () => {
+    expect(decodeProgressReview(0)).toBe("none");
+    expect(decodeProgressReview(1)).toBe("weekly");
+    expect(decodeProgressReview(2)).toBe("daily");
+  });
+
+  it("round-trips", () => {
+    for (const v of ["none", "daily", "weekly"] as const) {
+      expect(decodeProgressReview(encodeProgressReview(v))).toBe(v);
+    }
   });
 });
 

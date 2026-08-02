@@ -217,16 +217,45 @@ describeDb("importAchieveXml", () => {
       xml,
       mode: "replace",
     });
-    expect(result.created).toBe(
-      outline.filter(
-        (n) => n.type === "result_area" || n.type === "project" || n.type === "task",
-      ).length,
-    );
-    const namesA = outline
-      .filter((n) => n.type !== "goal")
-      .map((n) => n.name)
-      .sort();
+    expect(result.created).toBe(outline.length);
+    const namesA = outline.map((n) => n.name).sort();
     const namesB = (await loadOutline(userB)).map((n) => n.name).sort();
     expect(namesB).toEqual(namesA);
+  });
+
+  it("imports a goal and reparents its linked project underneath", async () => {
+    const xml = `<?xml version="1.0"?>
+<AchieveDB>
+  <ResultAreas>
+    <ResultAreaId>aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa</ResultAreaId>
+    <Name>Body</Name>
+    <Priority>2500</Priority>
+    <__ORDINAL__>0</__ORDINAL__>
+  </ResultAreas>
+  <Projects>
+    <ProjectId>bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb</ProjectId>
+    <ResultAreaId>aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa</ResultAreaId>
+    <Name>Gym</Name>
+    <Priority>1</Priority>
+    <__ORDINAL__>0</__ORDINAL__>
+  </Projects>
+  <Goals>
+    <GoalId>cccccccc-cccc-cccc-cccc-cccccccccccc</GoalId>
+    <ProjectId>bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb</ProjectId>
+    <Definition>130 cm shoulders</Definition>
+    <Priority>100000</Priority>
+    <ProgressReviewSchedule>1</ProgressReviewSchedule>
+    <Status>0</Status>
+    <IsCompleted>false</IsCompleted>
+    <__ORDINAL__>0</__ORDINAL__>
+  </Goals>
+</AchieveDB>`;
+    await importAchieveXml({ userId, xml, mode: "replace" });
+    const outline = await loadOutline(userId);
+    const goal = outline.find((n) => n.name === "130 cm shoulders");
+    const gym = outline.find((n) => n.name === "Gym");
+    expect(goal?.type).toBe("goal");
+    expect(gym?.parentId).toBe(goal?.id);
+    expect(goal?.parentId).toBe(outline.find((n) => n.name === "Body")?.id);
   });
 });

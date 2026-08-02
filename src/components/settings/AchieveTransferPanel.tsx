@@ -67,11 +67,20 @@ export function AchieveTransferPanel() {
         a.click();
         URL.revokeObjectURL(url);
 
-        let counts = { result_area: 0, project: 0, task: 0, omitted: 0 };
+        const counts = {
+          result_area: 0,
+          goal: 0,
+          project: 0,
+          task: 0,
+          omitted: 0,
+        };
         try {
-          counts = JSON.parse(
-            res.headers.get("X-Achieve-Export-Counts") ?? "{}",
-          ) as typeof counts;
+          Object.assign(
+            counts,
+            JSON.parse(res.headers.get("X-Achieve-Export-Counts") ?? "{}") as Partial<
+              typeof counts
+            >,
+          );
         } catch {
           /* ignore */
         }
@@ -85,8 +94,8 @@ export function AchieveTransferPanel() {
           warnings: warningCount > 0 ? [`${warningCount} export warning(s)`] : [],
           skippedTables: [],
           message:
-            `Exported ${counts.result_area ?? 0} result areas, ${counts.project ?? 0} projects, ${counts.task ?? 0} tasks` +
-            (counts.omitted ? ` (omitted ${counts.omitted} goals/other)` : ""),
+            `Exported ${counts.result_area} result areas, ${counts.goal} goals, ${counts.project} projects, ${counts.task} tasks` +
+            (counts.omitted ? ` (omitted ${counts.omitted} other)` : ""),
         });
       } catch (e) {
         setError(e instanceof Error ? e.message : "Export failed.");
@@ -146,8 +155,8 @@ export function AchieveTransferPanel() {
           Import a Full XML export from Achieve Planner (File → Full XML export /{" "}
           <span className="font-mono text-[0.8125rem]">.achxml</span>
           ), or export this account&apos;s outline as XML Achieve can Load from XML.
-          Only result areas, projects, and tasks are transferred; goals and appointments
-          are skipped for now.
+          Transfers result areas, goals/dreams, projects, and tasks. Appointments,
+          wishes, notes, and other tables are still skipped (listed after import).
         </p>
 
         <div className="flex flex-wrap items-end gap-3">
@@ -211,7 +220,7 @@ export function AchieveTransferPanel() {
           <div className="rounded border border-rule bg-surface-raised px-3 py-2 text-[0.8125rem] text-ink">
             <p className="font-medium">
               {result.message ??
-                `Imported ${result.created} rows (${result.counts.result_area ?? 0} areas, ${result.counts.project ?? 0} projects, ${result.counts.task ?? 0} tasks).`}
+                `Imported ${result.created} rows (${result.counts.result_area ?? 0} areas, ${result.counts.goal ?? 0} goals, ${result.counts.project ?? 0} projects, ${result.counts.task ?? 0} tasks).`}
             </p>
             {result.warnings.length > 0 && (
               <details className="mt-2">

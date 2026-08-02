@@ -169,10 +169,10 @@ mutation layer and is not required for the encodings/parser tripwires.
 
 ## Planner import / export (implemented)
 
-| Action     | Where                            | What                                                                                                                      |
-| ---------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| **Import** | Settings → Achieve Planner (XML) | Full XML → outline (RA / projects / tasks). Modes: **Replace** (wipe this account’s outline first) or **Merge** (append). |
-| **Export** | Same panel                       | Outline → `.achxml` download (same tables). Goals are omitted; descendants reparent to the nearest exported ancestor.     |
+| Action     | Where                            | What                                                                                          |
+| ---------- | -------------------------------- | --------------------------------------------------------------------------------------------- |
+| **Import** | Settings → Achieve Planner (XML) | Full XML → outline (RA / goals / dreams / projects / tasks). Modes: **Replace** or **Merge**. |
+| **Export** | Same panel                       | Outline → `.achxml` download (same core tables).                                              |
 
 Code:
 
@@ -215,12 +215,31 @@ Things the DataSet makes obvious that we already align with or should keep in mi
 
 12. **Categories are light** — `ResultAreaCategories` is just name + WorkRelated. We store category as text on the result area; good enough until we need a global category list.
 
+## Skipped tables → roadmap cues
+
+After a real import, the UI lists tables present in the file but not yet mapped. Use that
+list (and the tiers below) as a backlog, not a promise.
+
+| Tier         | Tables                                                                               | Why it matters                                                            |
+| ------------ | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| **Done**     | ResultAreaCategories, ResultAreas, Dreams, Goals, Projects, Tasks                    | Outline core                                                              |
+| **A — next** | Appointments + AppointmentRecurrence; TimeCharts + TimeChartAreas; Wishes; NoteItems | Calendar + wish list + notes are daily surfaces we already have partially |
+| **A**        | ProjectObjectives/Risks/… child grids; GoalSteps/Actions/…                           | Detail-form child lists → `node_items`                                    |
+| **B**        | Metrics + MetricTracking; Labels; Contacts (+ address/email/…)                       | Valuable but separate product lines                                       |
+| **C**        | FormLayouts, RecordView*, SyncItems, ActiveSync*, Users, Images, Resources*          | UI chrome / Outlook — low priority for our web app                        |
+
+### Goal import notes
+
+- Achieve often links a goal to a **project** via `ProjectId` without nesting either under
+  the other. We place the goal under the project’s result area, then **reparent the project
+  under the goal** so our RA → goal → project shape holds.
+- Empty `Title` is common; we fall back to `Definition`, then “(Untitled goal)”.
+- Dreams import as goals with `isDream`.
+
 ## What we intentionally skip (for now)
 
 - Writing native `.ach`
 - ACX branch format (until we have a sample)
-- Goals / Wishes / Dreams / Appointments / TimeCharts / Notes / Contacts import
-- Contacts, File Organizer, Resources, Outlook `SyncItems`
-- Form layouts, view customizations, binary `Preferences`
+- Tier A–C tables above
 - Perfect RTF and `BinRecurrenceData` fidelity
 - Smart merge by Achieve GUID (re-import in merge mode currently duplicates)

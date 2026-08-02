@@ -1,4 +1,4 @@
-import type { NodeState, PriorityLetter } from "@/db/schema";
+import type { NodeState, PriorityLetter, ProgressReview } from "@/db/schema";
 import type { AchPriority } from "./types";
 
 /**
@@ -80,6 +80,23 @@ export function decodeStatus(code: number | null | undefined): NodeState {
 export function encodeStatus(state: NodeState): number {
   const idx = STATUS_BY_CODE.indexOf(state);
   return idx >= 0 ? idx : 0;
+}
+
+/**
+ * Achieve Goal `ProgressReviewSchedule` int → our enum.
+ * Observed default is `1` on almost every goal; treat 0 as none, 1 as weekly (the usual
+ * planning cadence), 2 as daily. Unknown codes collapse to none.
+ */
+export function decodeProgressReview(code: number | null | undefined): ProgressReview {
+  if (code === 1) return "weekly";
+  if (code === 2) return "daily";
+  return "none";
+}
+
+export function encodeProgressReview(value: ProgressReview): number {
+  if (value === "weekly") return 1;
+  if (value === "daily") return 2;
+  return 0;
 }
 
 /**

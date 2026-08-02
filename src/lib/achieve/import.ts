@@ -1,7 +1,13 @@
 import { db } from "@/db";
-import { nodes, projectDetails, resultAreaDetails, taskDetails } from "@/db/schema";
+import {
+  goalDetails,
+  nodes,
+  projectDetails,
+  resultAreaDetails,
+  taskDetails,
+} from "@/db/schema";
 import type { NodeType } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { assertCanNest } from "@/lib/tree/hierarchy";
 import { between } from "@/lib/tree/sortKey";
 import { mapOutline } from "./mapOutline";
@@ -21,7 +27,8 @@ export type ImportResult = {
 };
 
 /**
- * Parse Achieve Full XML and write Result Areas / Projects / Tasks into the user's outline.
+ * Parse Achieve Full XML and write the outline core into the user's tree:
+ * result areas, goals/dreams, projects, and tasks.
  *
  * - **replace** — deletes this user's entire outline first (cascades details).
  * - **merge** — appends; parents that are not in the file become roots (with a warning).
@@ -29,6 +36,9 @@ export type ImportResult = {
  * Each imported row keeps Achieve's GUID as `externalId` with source `"achieve"`, so a
  * later pass can recognise what came from AP. Import does not update existing rows by
  * GUID yet — re-importing the same file in merge mode will duplicate.
+ *
+ * Goals that carry only a `ProjectId` association are placed under that project's result
+ * area, then the project is reparented under the goal so our hierarchy matches the link.
  */
 export async function importAchieveXml(params: {
   userId: string;
@@ -201,11 +211,48 @@ export async function writeMappedOutline(params: {
             opportunities: n.opportunities,
             threats: n.threats,
           });
+        } else if (n.type === "goal") {
+          await tx.insert(goalDetails).values({
+            nodeId: row.id,
+            isDream: n.isDream,
+            definition: n.definition,
+            purpose: n.purpose,
+            vision: n.vision,
+            kindOfPerson: n.kindOfPerson,
+            personalChanges: n.personalChanges,
+            baseline: n.baseline,
+            limitingFactor: n.limitingFactor,
+            values: n.values,
+            question: n.question,
+            affirmation: n.affirmation,
+            range: n.range,
+            strategy: n.strategy,
+            progressReview: n.progressReview,
+            scorecard: n.scorecard,
+            plannedStart: n.targetStart,
+          });
         }
       }
 
       remaining.length = 0;
       remaining.push(...rest);
+    }
+
+    // Goals that Achieve only linked via ProjectId: hang the project under the goal.
+    for (const n of mapped.nodes) {
+      if (n.type !== "goal" || !n.linkedProjectAchId) continue;
+      const goalId = idByAch.get(n.achId);
+      const projectId = idByAch.get(n.linkedProjectAchId);
+      if (!goalId || !projectId) continue;
+      try {
+        assertCanNest("project", "goal");
+      } catch {
+        continue;
+      }
+      await tx
+        .update(nodes)
+        .set({ parentId: goalId, updatedAt: new Date() })
+        .where(and(eq(nodes.id, projectId), eq(nodes.userId, userId)));
     }
 
     return {

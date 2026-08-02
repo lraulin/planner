@@ -75,13 +75,14 @@ describe("buildAchieveXml", () => {
     expect(xml).toContain("<ExpectedEffortBest>30</ExpectedEffortBest>");
     expect(counts).toEqual({
       result_area: 1,
+      goal: 0,
       project: 1,
       task: 1,
       omitted: 0,
     });
   });
 
-  it("omits goals and reparents their children to the result area", () => {
+  it("exports goals and links child projects via ProjectId", () => {
     const { xml, counts } = buildAchieveXml([
       row({ id: "ra", type: "result_area", name: "Home", sortKey: "a0" }),
       row({
@@ -89,6 +90,7 @@ describe("buildAchieveXml", () => {
         parentId: "ra",
         type: "goal",
         name: "A goal",
+        definition: "Reach the summit",
         sortKey: "a0",
       }),
       row({
@@ -100,10 +102,13 @@ describe("buildAchieveXml", () => {
       }),
     ]);
 
-    expect(xml).not.toContain("A goal");
+    expect(xml).toContain("<Goals>");
+    expect(xml).toContain("A goal");
+    expect(xml).toContain("Reach the summit");
     expect(xml).toContain("Under goal");
-    expect(counts.omitted).toBe(1);
+    expect(counts.goal).toBe(1);
     expect(counts.project).toBe(1);
+    expect(counts.omitted).toBe(0);
   });
 
   it("escapes XML special characters in names", () => {
@@ -146,12 +151,9 @@ describe("buildAchieveXml", () => {
     ]);
 
     const mapped = mapOutline(parseAchXml(xml));
-    expect(mapped.counts).toEqual({
-      result_area: 1,
-      goal: 0,
-      project: 1,
-      task: 1,
-    });
+    expect(mapped.counts.result_area).toBe(1);
+    expect(mapped.counts.project).toBe(1);
+    expect(mapped.counts.task).toBe(1);
     const gym = mapped.nodes.find((n) => n.name === "Gym");
     expect(gym?.priority).toEqual({ letter: "A", rank: 1 });
     expect(gym?.state).toBe("in_progress");
