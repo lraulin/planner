@@ -14,11 +14,6 @@ import { between } from "@/lib/tree/sortKey";
 import { itemsToForward } from "./forward";
 import { effectiveShelfOf, setDayPlan } from "./sync";
 import { shelfHolds } from "@/lib/tree/shelving";
-import {
-  ensureJournalMonth,
-  findJournalForDay,
-  rehomeJournalNote,
-} from "./journalPath";
 import { JOURNAL_SUBJECT } from "./types";
 import type { DayAssignment } from "./priority";
 
@@ -447,9 +442,8 @@ export async function forwardOpenItems(
  * Write the day's journal entry, creating the note on first keystroke.
  *
  * A journal entry is an ordinary row in `notes` — same table, same markdown editor, same
- * tree — distinguished only by `subject = "Journal"` and its `noteDate`. Days live under
- * `Journal / YYYY / YYYY-MM /` so Nested Notes browses like a diary archive (see
- * `journalPath.ts`).
+ * tree — distinguished only by `subject = "Journal"` and its `noteDate`. Flat at the notes
+ * root (no year/month folder scaffolding).
  */
 export async function saveJournal(
   userId: string,
@@ -457,14 +451,23 @@ export async function saveJournal(
   body: string,
 ): Promise<string> {
   return db.transaction(async (tx) => {
-    const { monthId } = await ensureJournalMonth(tx, userId, day);
-    const existing = await findJournalForDay(tx, userId, day);
+    const [existing] = await tx
+      .select({ id: notes.id })
+      .from(notes)
+      .where(
+        and(
+          eq(notes.userId, userId),
+          eq(notes.subject, JOURNAL_SUBJECT),
+          sql`${notes.noteDate}::date = ${day}::date`,
+        ),
+      )
+      .orderBy(asc(notes.createdAt))
+      .limit(1);
 
     if (existing) {
-      await rehomeJournalNote(tx, userId, existing.id, monthId);
       await tx
         .update(notes)
-        .set({ body, title: day, updatedAt: new Date() })
+        .set({ body, updatedAt: new Date() })
         .where(and(eq(notes.id, existing.id), eq(notes.userId, userId)));
       return existing.id;
     }
@@ -472,7 +475,7 @@ export async function saveJournal(
     const [last] = await tx
       .select({ sortKey: notes.sortKey })
       .from(notes)
-      .where(and(eq(notes.userId, userId), eq(notes.parentId, monthId)))
+      .where(and(eq(notes.userId, userId), isNull(notes.parentId)))
       .orderBy(sql`${notes.sortKey} desc`)
       .limit(1);
 
@@ -480,7 +483,7 @@ export async function saveJournal(
       .insert(notes)
       .values({
         userId,
-        parentId: monthId,
+        parentId: null,
         sortKey: between(last?.sortKey ?? null, null),
         title: day,
         subject: JOURNAL_SUBJECT,

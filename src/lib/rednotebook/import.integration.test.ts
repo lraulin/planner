@@ -3,10 +3,8 @@ import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { notes, users } from "@/db/schema";
 import { loadDay } from "@/lib/day/queries";
-import { saveJournal } from "@/lib/day/mutations";
-import { JOURNAL_SUBJECT } from "@/lib/day/types";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
-import { importRedNotebookFiles } from "./import";
+import { importRedNotebookFiles, REDNOTEBOOK_SUBJECT } from "./import";
 
 const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
@@ -45,7 +43,7 @@ With //italic// and #tag1'}
 `,
   };
 
-  it("creates journal days under Journal / year / month", async () => {
+  it("creates flat notes with subject Rednotebook", async () => {
     const result = await importRedNotebookFiles({
       userId,
       files: [monthFile],
@@ -55,56 +53,23 @@ With //italic// and #tag1'}
     expect(result.skipped).toBe(0);
     expect(result.warnings).toEqual([]);
 
-    const day = await loadDay(userId, "2018-06-04", "2018-06-10");
-    expect(day.journal?.body).toBe("Hello from RedNotebook");
+    // Not Day journals — Day view journal pane stays empty.
+    expect((await loadDay(userId, "2018-06-04", "2018-06-10")).journal).toBeNull();
 
-    const [dayNote] = await db
+    const rows = await db
       .select()
       .from(notes)
-      .where(
-        and(
-          eq(notes.userId, userId),
-          eq(notes.subject, JOURNAL_SUBJECT),
-          eq(notes.title, "2018-06-04"),
-        ),
-      );
-    expect(dayNote).toBeTruthy();
-    expect(dayNote.parentId).not.toBeNull();
+      .where(and(eq(notes.userId, userId), eq(notes.subject, REDNOTEBOOK_SUBJECT)));
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => r.parentId === null)).toBe(true);
 
-    const [month] = await db
-      .select()
-      .from(notes)
-      .where(and(eq(notes.id, dayNote.parentId!), eq(notes.userId, userId)));
-    expect(month.title).toBe("2018-06");
+    const day4 = rows.find((r) => r.title === "2018-06-04");
+    expect(day4?.body).toBe("Hello from RedNotebook");
 
-    const [year] = await db
-      .select()
-      .from(notes)
-      .where(and(eq(notes.id, month.parentId!), eq(notes.userId, userId)));
-    expect(year.title).toBe("2018");
-
-    const [root] = await db
-      .select()
-      .from(notes)
-      .where(and(eq(notes.id, year.parentId!), eq(notes.userId, userId)));
-    expect(root.title).toBe("Journal");
-    expect(root.parentId).toBeNull();
-
-    const day5 = await loadDay(userId, "2018-06-05", "2018-06-10");
-    expect(day5.journal?.body).toContain("### Title");
-    expect(day5.journal?.body).toContain("*italic*");
-
-    const [tagged] = await db
-      .select({ contexts: notes.contexts })
-      .from(notes)
-      .where(
-        and(
-          eq(notes.userId, userId),
-          eq(notes.subject, JOURNAL_SUBJECT),
-          eq(notes.title, "2018-06-05"),
-        ),
-      );
-    expect(tagged.contexts).toContain("tag1");
+    const day5 = rows.find((r) => r.title === "2018-06-05");
+    expect(day5?.body).toContain("### Title");
+    expect(day5?.body).toContain("*italic*");
+    expect(day5?.contexts).toContain("tag1");
   });
 
   it("skips exact re-import and does not duplicate body", async () => {
@@ -115,58 +80,28 @@ With //italic// and #tag1'}
     expect(second.skipped).toBe(2);
     expect(second.updated).toBe(0);
 
-    const journalRows = await db
+    const rows = await db
       .select()
       .from(notes)
-      .where(and(eq(notes.userId, userId), eq(notes.subject, JOURNAL_SUBJECT)));
-    expect(journalRows).toHaveLength(2);
-    expect(journalRows.find((r) => r.title === "2018-06-04")?.body).toBe(
+      .where(and(eq(notes.userId, userId), eq(notes.subject, REDNOTEBOOK_SUBJECT)));
+    expect(rows).toHaveLength(2);
+    expect(rows.find((r) => r.title === "2018-06-04")?.body).toBe(
       "Hello from RedNotebook",
     );
   });
 
-  it("appends when the day already has different journal text", async () => {
-    await saveJournal(userId, "2018-06-04", "Written in planner");
+  it("appends when the same date already has different Rednotebook text", async () => {
+    await importRedNotebookFiles({
+      userId,
+      files: [{ name: "2018-06.txt", text: `4: {text: 'First import'}` }],
+    });
     const result = await importRedNotebookFiles({
       userId,
-      files: [
-        {
-          name: "2018-06.txt",
-          text: `4: {text: 'From RedNotebook'}`,
-        },
-      ],
+      files: [{ name: "2018-06.txt", text: `4: {text: 'Second pass'}` }],
     });
 
     expect(result.created).toBe(0);
     expect(result.updated).toBe(1);
-
-    const day = await loadDay(userId, "2018-06-04", "2018-06-10");
-    expect(day.journal?.body).toContain("Written in planner");
-    expect(day.journal?.body).toContain("From RedNotebook");
-    expect(day.journal?.body).toContain("---");
-  });
-
-  it("rehomes a legacy flat journal under the tree", async () => {
-    // Simulate pre-hierarchy insert: root-level Journal note.
-    await db.insert(notes).values({
-      userId,
-      parentId: null,
-      sortKey: "a1",
-      title: "2018-06-04",
-      subject: JOURNAL_SUBJECT,
-      body: "flat",
-      noteDate: new Date(Date.UTC(2018, 5, 4, 12, 0, 0)),
-    });
-
-    await importRedNotebookFiles({
-      userId,
-      files: [
-        {
-          name: "2018-06.txt",
-          text: `4: {text: 'flat'}`,
-        },
-      ],
-    });
 
     const [row] = await db
       .select()
@@ -174,40 +109,59 @@ With //italic// and #tag1'}
       .where(
         and(
           eq(notes.userId, userId),
-          eq(notes.subject, JOURNAL_SUBJECT),
+          eq(notes.subject, REDNOTEBOOK_SUBJECT),
           eq(notes.title, "2018-06-04"),
         ),
       );
-    expect(row.parentId).not.toBeNull();
-
-    const roots = await db
-      .select()
-      .from(notes)
-      .where(and(eq(notes.userId, userId), isNull(notes.parentId)));
-    expect(roots.some((r) => r.subject === JOURNAL_SUBJECT)).toBe(false);
+    expect(row.body).toContain("First import");
+    expect(row.body).toContain("Second pass");
+    expect(row.body).toContain("---");
   });
 
-  it("does not let a second user read or alter the first user's journals", async () => {
+  it("does not let a second user read or alter the first user's notes", async () => {
     await importRedNotebookFiles({ userId, files: [monthFile] });
     const intruder = await makeUser();
 
-    expect((await loadDay(intruder, "2018-06-04", "2018-06-10")).journal).toBeNull();
+    const intruderView = await db
+      .select()
+      .from(notes)
+      .where(and(eq(notes.userId, intruder), eq(notes.subject, REDNOTEBOOK_SUBJECT)));
+    expect(intruderView).toHaveLength(0);
 
     await importRedNotebookFiles({
       userId: intruder,
-      files: [
-        {
-          name: "2018-06.txt",
-          text: `4: {text: 'Intruder day'}`,
-        },
-      ],
+      files: [{ name: "2018-06.txt", text: `4: {text: 'Intruder day'}` }],
     });
 
-    expect((await loadDay(userId, "2018-06-04", "2018-06-10")).journal?.body).toBe(
-      "Hello from RedNotebook",
-    );
-    expect((await loadDay(intruder, "2018-06-04", "2018-06-10")).journal?.body).toBe(
-      "Intruder day",
-    );
+    const [owner] = await db
+      .select()
+      .from(notes)
+      .where(
+        and(
+          eq(notes.userId, userId),
+          eq(notes.subject, REDNOTEBOOK_SUBJECT),
+          eq(notes.title, "2018-06-04"),
+        ),
+      );
+    expect(owner.body).toBe("Hello from RedNotebook");
+
+    const [other] = await db
+      .select()
+      .from(notes)
+      .where(
+        and(
+          eq(notes.userId, intruder),
+          eq(notes.subject, REDNOTEBOOK_SUBJECT),
+          eq(notes.title, "2018-06-04"),
+        ),
+      );
+    expect(other.body).toBe("Intruder day");
+
+    // Both users' root notes stay isolated (no shared parents).
+    const ownerRoots = await db
+      .select()
+      .from(notes)
+      .where(and(eq(notes.userId, userId), isNull(notes.parentId)));
+    expect(ownerRoots.every((r) => r.userId === userId)).toBe(true);
   });
 });

@@ -1,34 +1,61 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { notes } from "@/db/schema";
-import {
-  ensureJournalMonth,
-  findJournalForDay,
-  rehomeAllJournalNotes,
-  rehomeJournalNote,
-} from "@/lib/day/journalPath";
-import { JOURNAL_SUBJECT } from "@/lib/day/types";
 import { fromDateKey } from "@/lib/schedule/geometry";
 import { between } from "@/lib/tree/sortKey";
 import { mapRedNotebookFiles } from "./map";
 import { normalizeBody } from "./markup";
 
+/**
+ * Reserved subject for notes imported from RedNotebook. Distinct from Day-view journals
+ * (`subject = "Journal"`) so the Notes filter can isolate the diary archive without
+ * year/month folder scaffolding.
+ */
+export const REDNOTEBOOK_SUBJECT = "Rednotebook";
+
 export type RedNotebookImportResult = {
   created: number;
   updated: number;
   skipped: number;
-  rehomed: number;
   warnings: string[];
 };
 
 const APPEND_SEPARATOR = "\n\n---\n\n";
 
+type Db = typeof db;
+type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+type Executor = Db | Tx;
+
+async function findRednotebookForDay(
+  tx: Executor,
+  userId: string,
+  dayKey: string,
+): Promise<{ id: string; body: string; contexts: string[] } | null> {
+  const [row] = await tx
+    .select({
+      id: notes.id,
+      body: notes.body,
+      contexts: notes.contexts,
+    })
+    .from(notes)
+    .where(
+      and(
+        eq(notes.userId, userId),
+        eq(notes.subject, REDNOTEBOOK_SUBJECT),
+        sql`${notes.noteDate}::date = ${dayKey}::date`,
+      ),
+    )
+    .orderBy(asc(notes.createdAt))
+    .limit(1);
+  return row ?? null;
+}
+
 /**
- * Import RedNotebook month files as Day journal notes under Journal / YYYY / YYYY-MM.
+ * Import RedNotebook month files as **flat** notes with subject `Rednotebook`.
  *
  * - Exact body match (trailing newlines normalized) → skip
- * - Existing journal with different body → append if imported text not already contained
- * - No journal → create
+ * - Existing same-date note with different body → append if not already contained
+ * - No note for that date → create at the notes root
  */
 export async function importRedNotebookFiles(params: {
   userId: string;
@@ -43,7 +70,6 @@ export async function importRedNotebookFiles(params: {
       created: 0,
       updated: 0,
       skipped: 0,
-      rehomed: 0,
       warnings:
         warnings.length > 0
           ? warnings
@@ -52,23 +78,18 @@ export async function importRedNotebookFiles(params: {
   }
 
   return db.transaction(async (tx) => {
-    const rehomed = await rehomeAllJournalNotes(tx, userId);
-
     let created = 0;
     let updated = 0;
     let skipped = 0;
 
     for (const day of mapped.days) {
-      const { monthId } = await ensureJournalMonth(tx, userId, day.dateKey);
-      const existing = await findJournalForDay(tx, userId, day.dateKey);
+      const existing = await findRednotebookForDay(tx, userId, day.dateKey);
       const incoming = normalizeBody(day.body);
 
       if (existing) {
-        await rehomeJournalNote(tx, userId, existing.id, monthId);
         const current = normalizeBody(existing.body);
 
         if (current === incoming) {
-          // Still merge contexts if import found tags the note lacks.
           const mergedContexts = mergeContexts(existing.contexts, day.contexts);
           if (contextsChanged(existing.contexts, mergedContexts)) {
             await tx
@@ -82,7 +103,6 @@ export async function importRedNotebookFiles(params: {
           continue;
         }
 
-        // Already contains the imported text → treat as skip (idempotent append).
         if (current.includes(incoming) && incoming.length > 0) {
           skipped++;
           continue;
@@ -112,16 +132,16 @@ export async function importRedNotebookFiles(params: {
       const [last] = await tx
         .select({ sortKey: notes.sortKey })
         .from(notes)
-        .where(and(eq(notes.userId, userId), eq(notes.parentId, monthId)))
+        .where(and(eq(notes.userId, userId), isNull(notes.parentId)))
         .orderBy(sql`${notes.sortKey} desc`)
         .limit(1);
 
       await tx.insert(notes).values({
         userId,
-        parentId: monthId,
+        parentId: null,
         sortKey: between(last?.sortKey ?? null, null),
         title: day.dateKey,
-        subject: JOURNAL_SUBJECT,
+        subject: REDNOTEBOOK_SUBJECT,
         body: incoming,
         noteDate: fromDateKey(day.dateKey),
         contexts: day.contexts,
@@ -129,7 +149,7 @@ export async function importRedNotebookFiles(params: {
       created++;
     }
 
-    return { created, updated, skipped, rehomed, warnings };
+    return { created, updated, skipped, warnings };
   });
 }
 

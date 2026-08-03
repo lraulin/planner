@@ -1,52 +1,44 @@
-# RedNotebook import + journal year/month/day hierarchy
+# RedNotebook import (flat notes)
 
 **Status: active**  
 Spec folder: `agent-os/specs/2026-08-03-1518-rednotebook-journal-import/`
 
 ## Context
 
-See `shape.md`. Day journals become a tree under **Journal → Year → Month**; RedNotebook
-month files import as those same journal days.
+Import RedNotebook `YYYY-MM.txt` month files as ordinary Notes rows — **flat**, subject
+**Rednotebook**, titled and dated by calendar day. Day-view journals stay separate
+(`subject = "Journal"`, also flat).
 
-## Decisions (summary)
+## Decisions (current)
 
-| Topic     | Choice                                                        |
-| --------- | ------------------------------------------------------------- |
-| Tree      | Root `Journal`, then year, month, day note                    |
-| Day note  | `subject=Journal`, `title=YYYY-MM-DD`, `noteDate` = day       |
-| Folders   | Empty subject, no date; titles `Journal` / `YYYY` / `YYYY-MM` |
-| Input     | Multi-file `YYYY-MM.txt`                                      |
-| Re-import | Skip exact body; append if different and not contained        |
-| Markup    | Light RN → markdown                                           |
-| Schema    | No migration                                                  |
-
-## Acceptance criteria
-
-- [ ] Day journal create/update homes under `Journal / YYYY / YYYY-MM /`.
-- [ ] Legacy flat Journal notes reparent on next save or import rehome.
-- [ ] Settings multi-file RedNotebook import works.
-- [ ] Imported text shows in `/day` Journal pane for that date.
-- [ ] Nested Notes shows the tree; subject filter Journal still works on day rows only.
-- [ ] Exact re-import skips without duplicating bodies.
-- [ ] Light markup conversion + hashtags → contexts.
-- [ ] Bad filenames/files warn; batch continues.
-- [ ] Cross-user isolation on import writes.
-- [ ] typecheck, lint, tests green.
+| Topic        | Choice                                                  |
+| ------------ | ------------------------------------------------------- |
+| Shape        | **Flat** root notes — no Journal/year/month folder tree |
+| Subject      | `Rednotebook` (not Day journal)                         |
+| Title / date | `title = YYYY-MM-DD`, `noteDate` = that day             |
+| Input        | Multi-file `YYYY-MM.txt`                                |
+| Re-import    | Skip exact body; append if different and not contained  |
+| Markup       | Light RN → markdown                                     |
+| Day journals | Unchanged flat `subject=Journal` notes                  |
 
 ## Changes from original plan
 
-| #   | Change       | Why |
-| --- | ------------ | --- |
-|     | _(none yet)_ |     |
+| #   | Change                                                       | Why                                                                |
+| --- | ------------------------------------------------------------ | ------------------------------------------------------------------ |
+| 1   | Dropped year → month → day note tree for journals and import | Empty year/month folder notes clutter Nested Notes                 |
+| 2   | Import subject `Rednotebook`, not `Journal`                  | Separate diary archive from Day-view journals; filterable on Notes |
+| 3   | Deferred calendar tree _view_ over notes                     | Optional later UX; not storage hierarchy                           |
 
-## Tasks
+## Acceptance criteria
 
-1. Spec docs (this folder)
-2. `src/lib/day/journalPath.ts` + wire `saveJournal`
-3. `src/lib/rednotebook/*` parse, markup, map, import + tests
-4. `POST /api/rednotebook/import` + Settings panel
-5. Verify + commit
+- [x] Multi-file RedNotebook import in Settings
+- [x] Flat notes, subject Rednotebook, noteDate set
+- [x] Exact re-import skips; light markup + hashtags → contexts
+- [x] Day journals remain flat Journal notes (no path scaffolding)
+- [x] Cross-user isolation
+- [ ] Optional later: Notes tree _view_ grouped by year/month/day (no empty folders)
 
 ## Follow-ups
 
-Zip upload, export, one-click rehome-all button, richer markup.
+- Calendar / Y-M-D tree **view** over dated notes (display only)
+- Zip upload, export, richer markup

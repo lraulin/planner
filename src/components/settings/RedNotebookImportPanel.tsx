@@ -7,15 +7,14 @@ type ImportOk = {
   created: number;
   updated: number;
   skipped: number;
-  rehomed: number;
   warnings: string[];
 };
 
 type ImportFail = { ok: false; error: string };
 
 /**
- * Import RedNotebook month files (`YYYY-MM.txt` from `.rednotebook/data/`) as Day journal
- * notes under Journal → Year → Month in the Notes tree.
+ * Import RedNotebook month files (`YYYY-MM.txt` from `.rednotebook/data/`) as flat notes
+ * with subject "Rednotebook".
  */
 export function RedNotebookImportPanel() {
   const headingId = useId();
@@ -70,10 +69,9 @@ export function RedNotebookImportPanel() {
           Import diary days from RedNotebook month files (
           <span className="font-mono text-[0.8125rem]">YYYY-MM.txt</span> in your
           journal <span className="font-mono text-[0.8125rem]">data/</span> folder).
-          Each day becomes a Journal note under{" "}
-          <span className="font-medium text-ink">Journal → year → month</span>, the same
-          place Day-view journals live. Re-importing the same files skips exact
-          duplicates.
+          Each day becomes a flat note titled with its date, subject{" "}
+          <span className="font-medium text-ink">Rednotebook</span>, so you can filter
+          them on the Notes tab. Re-importing the same files skips exact duplicates.
         </p>
 
         <div>
@@ -108,17 +106,7 @@ export function RedNotebookImportPanel() {
         {result?.ok && (
           <div className="rounded border border-rule bg-surface-raised px-3 py-2 text-[0.8125rem] text-ink">
             <p className="font-medium">
-              {[
-                `Created ${result.created}`,
-                `updated ${result.updated}`,
-                `skipped ${result.skipped}`,
-                result.rehomed > 0
-                  ? `rehomed ${result.rehomed} existing journal notes`
-                  : null,
-              ]
-                .filter(Boolean)
-                .join(", ")}
-              .
+              {`Created ${result.created}, updated ${result.updated}, skipped ${result.skipped}.`}
             </p>
             {result.warnings.length > 0 && (
               <details className="mt-2">

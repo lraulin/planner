@@ -1,4 +1,4 @@
-export { importRedNotebookFiles } from "./import";
+export { importRedNotebookFiles, REDNOTEBOOK_SUBJECT } from "./import";
 export type { RedNotebookImportResult } from "./import";
 export { mapRedNotebookFiles } from "./map";
 export { parseMonthFile, yearMonthFromFilename } from "./parse";

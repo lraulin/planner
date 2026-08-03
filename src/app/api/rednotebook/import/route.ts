@@ -78,7 +78,6 @@ export async function POST(request: Request) {
       created: result.created,
       updated: result.updated,
       skipped: result.skipped,
-      rehomed: result.rehomed,
       warnings,
     });
   } catch (error) {
