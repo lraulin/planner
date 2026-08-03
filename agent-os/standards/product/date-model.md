@@ -36,10 +36,14 @@ and steps the series — the same as setting State to Completed.
 
 **`postponed` is the state; `deferred_date` is its optional expiry.**
 
-- No date → shelved until you say otherwise (Achieve's Postponed).
-- A date → it comes back on its own (Achieve's Deferred Date).
+- No date → shelved until you say otherwise (indefinite hold).
+- A date → it comes back on its own (GTD-style tickler).
 - One hiding rule everywhere: effectively postponed → hidden from Chooser / grids when the
   "Postponed" toggle is off.
+
+Setting a future deferred date **implies** state `postponed` (see coupling below). You can
+still set Postponed with no date for an open-ended park. There is no separate "deferred but
+not postponed" path — deferred is not a second status, only the shelf's optional end.
 
 Expiry is **derived at read time, never swept**. A postponed row whose deferred date has
 passed reads as not-started with nothing having written to the row. Stored state can stay
@@ -48,6 +52,39 @@ passed reads as not-started with nothing having written to the row. Stored state
 Clearing a deferred date leaves the node postponed indefinitely. Un-shelving is a state
 change. Setting the state to postponed by hand clears a deferred date that has already
 passed — otherwise it would un-shelve the instant it was shelved.
+
+### Why we link them (deliberate divergence from Achieve)
+
+In Achieve Planner, **Postponed** (state) and **Deferred Date** (field + Actions → Defer)
+were separate, overlapping mechanisms from different eras of the product:
+
+- Deferred Date was the later GTD tickler: hide until a date, auto-reactivate, hard
+  constraint for auto-scheduling.
+- Postponed was an early state flag: park something, usually without a clean "when does
+  this come back?"
+
+For personal use they did nearly the same job — extra ways to hide work. Linking them is
+intentional:
+
+| Shape                     | Meaning                                        |
+| ------------------------- | ---------------------------------------------- |
+| Postponed + deferred date | Temporary; reappears automatically on that day |
+| Postponed, no date        | Indefinite hold; you must un-shelve by hand    |
+
+That covers the two real needs (dated tickler vs open-ended park) without a dual hide
+system. Achieve's independent Postponed status is not a goal to re-split unless a workflow
+appears that needs "state X but also date-hidden" as independent axes.
+
+**Semantic flavor (not modeled as separate states today):** everyday language treats
+"postponed" as interrupted commitment (was about to do it; external factors delayed it) and
+"proposed" / Someday as uncommitted incubation. In knowledge-work use that distinction is
+rarely load-bearing; Postponed-without-date is a fine indefinite park. `proposed` already
+exists as a state if we want a clearer Someday/Maybe later.
+
+**Possible future cleanup (not planned work):** thin or rename states so the palette is more
+distinct — e.g. Active / Deferred-with-date / Someday-indefinite / Completed / Cancelled —
+rather than keeping every Achieve state name. Until then, keep the linked shelf model; do
+not invent a second independent "deferred status."
 
 ## Inheritance
 
