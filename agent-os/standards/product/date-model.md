@@ -83,8 +83,10 @@ exists as a state if we want a clearer Someday/Maybe later.
 
 **Possible future cleanup (not planned work):** thin or rename states so the palette is more
 distinct — e.g. Active / Deferred-with-date / Someday-indefinite / Completed / Cancelled —
-rather than keeping every Achieve state name. Until then, keep the linked shelf model; do
-not invent a second independent "deferred status."
+rather than keeping every Achieve state name. Broader GTD-first-class direction (Someday as
+its own place, Inbox not a fake project, etc.) lives in `agent-os/product/roadmap.md` under
+**Beyond Achieve → GTD as first-class**. Until then, keep the linked shelf model; do not
+invent a second independent "deferred status."
 
 ## Inheritance
 

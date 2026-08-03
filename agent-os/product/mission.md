@@ -30,9 +30,11 @@ rewrite. Multi-user features are not activated in the MVP.
 
 Four things distinguish it:
 
-- **Achieve's exact workflow.** Faithfully reproduces the Achieve Planner model —
-  hierarchical project/task outline, weekly planning process, time-blocked calendar — which
-  no modern app replicates.
+- **Achieve's workflow as the foundation.** Faithfully reproduces the Achieve Planner
+  model — hierarchical project/task outline, weekly planning process, time-blocked calendar
+  — which no modern app replicates. Default when ambiguous: match Achieve. Where we
+  deliberately improve (shelving model, day page, GTD-shaped surfaces later), that is
+  product intent, not accidental drift — see `roadmap.md` and `docs/achieve-planner/`.
 - **Cross-platform via the web.** Runs in any browser instead of being locked to Windows
   desktop; reachable from phone, tablet, and any OS.
 - **Own your data.** Full export, no lock-in, no subscription — so this planner can't be

@@ -304,6 +304,44 @@ Product lines that use the outline/goals as a hub. Each has its own MVP → medi
 horizon. Ship vertical slices; do not wait for full Achieve parity to start an MVP if the
 core loop is already useful.
 
+### GTD as first-class (not filter workarounds)
+
+**Status: future product direction — not shaped, not scheduled.** Capture intent only so we
+do not treat today's AP-compatible workarounds as permanent architecture.
+
+Achieve (and our Phase 1/2 port) can **simulate** GTD: Inbox as a D-priority project in the
+tree, Someday/Maybe as low priority and/or `proposed` / postponed projects, tickler via
+Deferred Date, Next Actions via Chooser filters. That was the right choice when fidelity to
+AP was the scarce asset and the hierarchy was the only place to put things. It is not the
+only choice once we own the model.
+
+Lee's direction: the parts of GTD that are good should be **first-class product concepts**,
+not views you assemble with priority + state + filters so the outline pretends they are
+projects.
+
+| Today (AP-shaped)                                                          | Direction (if we pursue this)                                                                                        |
+| -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Inbox = special `is_inbox` **project** living among Result Areas           | Capture queue outside (or beside) the committed hierarchy — process into projects/tasks, not "a project named Inbox" |
+| Someday/Maybe ≈ D priority, `proposed`, or indefinite postponed "projects" | Explicit incubation place that is not the same kind of thing as an active project                                    |
+| Deferred = linked postponed + date (already cleaner than AP)               | Keep; maps cleanly to GTD tickler                                                                                    |
+| Next Action via Chooser / NA filter                                        | Already first-class enough; refine rather than replace                                                               |
+
+**Why change:** "Someday/Maybe as a project with PR status" and "Inbox as a sibling of real
+work in the outline" feel wrong because they **are** wrong as types — they are lifecycle
+buckets forced into a project tree. Filters paper over that; they do not fix the ontology.
+
+**Why not yet:** Phase 1 Achieve loop + living with the app still earns more daily value
+than a hierarchy redesign. Inbox-as-project and proposed/postponed already work. This is a
+**deliberate future rewrite candidate**, not a bug in the current design.
+
+**When shaping:** open a delta-spec; decide whether Inbox/Someday are node types, list
+memberships, or parallel collections; migration for existing Inbox projects and `proposed`
+rows; keep weekly project-block workflow intact. Do not half-implement with more filters
+that pretend the tree is fine.
+
+Related: state-palette thinning in `standards/product/date-model.md` (Active / Deferred /
+Someday / done) is the same cleanup impulse at the state layer.
+
 ### Fitness tracker
 
 - **✅ Short-term MVP (strength log):** `specs/2026-07-30-1240-fitness-strength-log`.
@@ -362,6 +400,8 @@ Phase 2 ──► Pomodoro on task/project (writes Actual Effort)
         ├──► AI tools/API ✅ (agent HTTP + planner-agent repo; Bedrock later)
         │
 Beyond Achieve (can start MVPs in parallel once Phase 1 core is daily-usable):
+        │         ├──► GTD first-class (Inbox / Someday ontology — future, not filters)
+        │         ├──► fitness ✅ MVP, financial, …
         ├── Fitness log MVP
         └── Finance CSV + envelopes MVP
               └── later: goals links, AI advice, Plaid / Health
