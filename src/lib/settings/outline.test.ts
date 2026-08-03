@@ -23,6 +23,7 @@ describe("parseOutlineFilters", () => {
       },
       focusOnly: true,
       showCompleted: true,
+      byCategory: true,
     };
     expect(parseOutlineFilters(serializeOutlineFilters(settings))).toEqual(settings);
   });
@@ -32,11 +33,13 @@ describe("parseOutlineFilters", () => {
       types: { goal: false, fantasy: true },
       focusOnly: "yes",
       showCompleted: "nope",
+      byCategory: "on",
     });
     expect(parsed.types.goal).toBe(false);
     expect(parsed.types.task).toBe(true);
     expect(parsed.focusOnly).toBe(false);
     expect(parsed.showCompleted).toBe(false);
+    expect(parsed.byCategory).toBe(false);
     expect("fantasy" in parsed.types).toBe(false);
   });
 
@@ -71,6 +74,20 @@ describe("parseOutlineFilters", () => {
 
   it("honours an explicit showCompleted true", () => {
     expect(parseOutlineFilters({ showCompleted: true }).showCompleted).toBe(true);
+  });
+
+  it("defaults byCategory to false when the key is absent", () => {
+    // Older blobs predate grouping; missing must open the plain tree, not category headers.
+    const parsed = parseOutlineFilters({
+      types: { task: true },
+      focusOnly: false,
+      showCompleted: false,
+    });
+    expect(parsed.byCategory).toBe(false);
+  });
+
+  it("honours an explicit byCategory true", () => {
+    expect(parseOutlineFilters({ byCategory: true }).byCategory).toBe(true);
   });
 });
 

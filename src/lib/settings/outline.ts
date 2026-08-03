@@ -4,12 +4,12 @@ import { SETTINGS_VERSION } from "./scopes";
 
 /**
  * What the Outline remembers beyond its grid state: which node types are shown,
- * whether Focus only is on, and whether completed/cancelled rows stay visible.
- * Stored under `outline:filters`.
+ * whether Focus only is on, whether completed/cancelled rows stay visible, and
+ * whether rows are grouped by result-area category. Stored under `outline:filters`.
  *
- * Kept separate from `grid:outline` because these filters are not column filters —
- * they remove whole subtrees before the grid ever sees a row, and they have no
- * column id to hang off.
+ * Kept separate from `grid:outline` because these controls are not column filters —
+ * they reshape the tree before the grid ever sees a row, and they have no column
+ * id to hang off. Same pattern as `notes:filter` for Notes-specific view mode/sort.
  */
 
 const ALL_TYPES = nodeTypeEnum.enumValues;
@@ -23,6 +23,11 @@ export type OutlineFilters = {
    * with it so the tree never shows orphans.
    */
   showCompleted: boolean;
+  /**
+   * When true, root result areas are laid under category group headers (Achieve's
+   * "By category"). Off by default so a fresh outline shows the plain tree.
+   */
+  byCategory: boolean;
 };
 
 export const DEFAULT_OUTLINE_FILTERS: OutlineFilters = {
@@ -34,6 +39,7 @@ export const DEFAULT_OUTLINE_FILTERS: OutlineFilters = {
   },
   focusOnly: false,
   showCompleted: false,
+  byCategory: false,
 };
 
 /** Settled states the outline can hide when `showCompleted` is off. */
@@ -60,6 +66,9 @@ export function parseOutlineFilters(value: unknown): OutlineFilters {
       record.showCompleted,
       DEFAULT_OUTLINE_FILTERS.showCompleted,
     ),
+    // Older blobs predate this flag; missing means the plain tree, not "group by
+    // category because we cannot tell".
+    byCategory: asBoolean(record.byCategory, DEFAULT_OUTLINE_FILTERS.byCategory),
   };
 }
 

@@ -84,7 +84,6 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const [pendingDelete, setPendingDelete] = useState<OutlineNode | null>(null);
   /** The row a new child is being added to, while its kind is being chosen. */
   const [pendingChildOf, setPendingChildOf] = useState<OutlineNode | null>(null);
-  const [byCategory, setByCategory] = useState(false);
   const today = useToday();
 
   const {
@@ -92,7 +91,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     patch: patchTypeFilters,
     reset: resetTypeFilters,
   } = useSetting(OUTLINE_FILTERS_SCOPE, OUTLINE_FILTERS_CODEC);
-  const { types: filters, focusOnly, showCompleted } = typeFilters;
+  const { types: filters, focusOnly, showCompleted, byCategory } = typeFilters;
 
   const gridState = useGridState("outline", outlineColumns, [...OUTLINE_COLUMN_IDS]);
 
@@ -596,7 +595,12 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
           }))
         }
         byCategory={byCategory}
-        onToggleByCategory={() => setByCategory((v) => !v)}
+        onToggleByCategory={() =>
+          patchTypeFilters((current) => ({
+            ...current,
+            byCategory: !current.byCategory,
+          }))
+        }
         commands={commands}
         onAddResultArea={addResultArea}
         onAddGoal={addGoal}
