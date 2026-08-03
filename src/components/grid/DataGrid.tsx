@@ -717,7 +717,7 @@ function DataRow<TCtx, TRow>({
         drag?.dragging ? "opacity-40" : "",
         // Child-drop: whole row framed so it is not confused with the thin sibling line.
         drag?.hint?.zone === "inside"
-          ? "bg-priority-a/10 ring-2 ring-priority-a ring-inset"
+          ? "bg-select-edge/10 ring-2 ring-select-edge ring-inset"
           : "",
       ].join(" ")}
       style={{
@@ -859,10 +859,10 @@ function DropLine({
     >
       {/* Filled chevron — reads as "insert here" even on a 1px gap between rows. */}
       <span
-        className="mr-0.5 inline-block h-0 w-0 shrink-0 border-y-[5px] border-y-transparent border-r-[7px] border-r-priority-a"
+        className="mr-0.5 inline-block h-0 w-0 shrink-0 border-y-[5px] border-y-transparent border-r-[7px] border-r-select-edge"
         title={zone === "before" ? "Drop before" : "Drop after"}
       />
-      <span className="h-[3px] min-w-0 flex-1 rounded-full bg-priority-a shadow-[0_0_0_1px_rgb(0_0_0/10%)]" />
+      <span className="h-[3px] min-w-0 flex-1 rounded-full bg-select-edge shadow-[0_0_0_1px_rgb(0_0_0/10%)]" />
     </div>
   );
 }
@@ -886,9 +886,9 @@ function ChildDropMark({
         left: `calc(${nameColumnLeft} + ${Math.max(0, depth - 1)} * var(--indent-step))`,
       }}
     >
-      <span className="text-[0.75rem] font-bold leading-none text-priority-a">→</span>
+      <span className="text-[0.75rem] font-bold leading-none text-select-edge">→</span>
       <span className="min-w-0 flex-1" />
-      <span className="text-[0.75rem] font-bold leading-none text-priority-a">←</span>
+      <span className="text-[0.75rem] font-bold leading-none text-select-edge">←</span>
       <span className="sr-only">Drop as child</span>
     </div>
   );
@@ -960,7 +960,7 @@ function GroupHeader({
         // A compact header is a sticky section label, not a row in a template: it keeps its
         // place while the list under it scrolls, and it is tall enough to tap.
         compact ? "sticky top-0 z-10 min-h-9 py-1.5 text-[0.8125rem]" : "",
-        drag?.hint ? "bg-priority-a/10 ring-2 ring-priority-a ring-inset" : "",
+        drag?.hint ? "bg-select-edge/10 ring-2 ring-select-edge ring-inset" : "",
       ].join(" ")}
       style={
         compact
