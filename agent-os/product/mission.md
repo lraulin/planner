@@ -14,6 +14,11 @@ that survives its platform.
 If the product is ever marketed publicly, it would need revisiting to ensure it is legally
 distinct from Effexis' work. That is out of scope for now.
 
+**Achieve reference material:** How Achieve worked and was intended to be used is captured
+under [`docs/achieve-planner/`](../../docs/achieve-planner/README.md) (user manual,
+workflow/training from the Effexis site, online help, FAQ, file formats). Agents should
+consult that pack when clarifying AP semantics; see also `Agents.md`.
+
 ## Target Users
 
 Primarily Lee — a single user, personally. However, the system is built **multi-user

@@ -11,6 +11,10 @@ See `agent-os/product/` for the mission, roadmap, and tech stack, and `agent-os/
 individual feature specs. Spec workflow (shape → active updates during implement → freeze):
 `agent-os/specs/README.md` and standing rules in `AGENTS.md`.
 
+**Achieve Planner source material** (user manual, workflow/training, online help, FAQ,
+file formats) lives in [`docs/achieve-planner/`](docs/achieve-planner/README.md). Use it
+when clarifying how the original app worked or was meant to be used.
+
 ## Stack
 
 Next.js (App Router) · TypeScript · Tailwind · Drizzle ORM · PostgreSQL

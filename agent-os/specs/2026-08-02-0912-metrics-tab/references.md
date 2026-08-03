@@ -12,9 +12,9 @@
 
 ### User manual / file formats
 
-- `docs/APUserManual.md` — Metrics tab = standalone or part of dream/goal
-- `docs/achieve-file-formats.md` — Tier B: Metrics + MetricTracking
-- `docs/APReleaseLog.txt` — auto-target, graph zoom, CSV export, Last Date, Status, etc.
+- `docs/achieve-planner/user-manual.md` — Metrics tab = standalone or part of dream/goal
+- `docs/achieve-planner/file-formats.md` — Tier B: Metrics + MetricTracking
+- `docs/achieve-planner/release-log.txt` — auto-target, graph zoom, CSV export, Last Date, Status, etc.
   (many deferred for MVP)
 
 ## Similar implementations in this codebase

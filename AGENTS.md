@@ -13,6 +13,22 @@ Personal project in Lee's personal GitHub (`lraulin/planner`).
   "Generated with Claude Code" line, no references in the body.
 - The default branch is `master`.
 
+### Achieve Planner reference (how AP was meant to work)
+
+This app reimplements **Effexis Achieve Planner** for personal use. When behavior is
+ambiguous, or before deliberately diverging from Achieve:
+
+1. Check **`docs/achieve-planner/`** — the reference pack (workflow/training, user manual,
+   online help, FAQ, file formats). Start with
+   [`docs/achieve-planner/README.md`](docs/achieve-planner/README.md).
+2. Prefer **workflow intent** (`workflow-and-training.md`) and the **user manual** over
+   inventing semantics from UI chrome alone.
+3. If we intentionally differ from Achieve, say so in the active feature spec (and keep
+   that note when freezing).
+
+Do not re-scrape the Effexis website unless the user asks; `docs/achieve-planner/` is the
+local source of truth.
+
 ### Tests
 
 Full rules: `agent-os/standards/development/testing.md`. The short version, because tests

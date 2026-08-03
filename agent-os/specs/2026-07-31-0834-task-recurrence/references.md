@@ -73,7 +73,7 @@
 
 | What                                                            | Where                                                                                                       |
 | --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Manual — Project/Task Recurrence                                | `docs/APUserManual.md` §3.9                                                                                 |
+| Manual — Project/Task Recurrence                                | `docs/achieve-planner/user-manual.md` §3.9                                                                  |
 | Manual — recurrence patterns (date-based vs regeneration-based) | §3.9.1 — the "Regenerate new item N week(s) after each instance is completed" radio is the one we implement |
 | Manual — removing recurrence                                    | §3.9.3 — ours is setting Repeats back to Never                                                              |
 | Manual — skipping a recurrence                                  | §3.9.4 — follow-up, not in this slice                                                                       |

@@ -69,10 +69,10 @@
 
 ## Source material
 
-| What                                | Where                                                                                                                               |
-| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Achieve Task Chooser screenshot     | `visuals/task-chooser.png` (copy of `screenshots/TaskChooserSS.png`)                                                                |
-| Manual — Task Chooser               | `docs/APUserManual.md` §8 (§8.1 window, §8.1.1 views, §8.1.2 Show More/Less, §8.1.3 date filters, §8.2 settings, §8.3 next actions) |
-| Manual — Focus field                | `docs/APUserManual.md` §3.10 — "primarily affects the positioning of the project/task in the Task Chooser"                          |
-| Manual — next-action definitions    | `docs/APUserManual.md` §2.6.4 (advanced/predecessor — not available to us)                                                          |
-| Manual — next-action reminder tasks | `docs/APUserManual.md` §7.2.5 — zero-effort tasks; they stay in the list (visible in the screenshot, row 7)                         |
+| What                                | Where                                                                                                                                              |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Achieve Task Chooser screenshot     | `visuals/task-chooser.png` (copy of `screenshots/TaskChooserSS.png`)                                                                               |
+| Manual — Task Chooser               | `docs/achieve-planner/user-manual.md` §8 (§8.1 window, §8.1.1 views, §8.1.2 Show More/Less, §8.1.3 date filters, §8.2 settings, §8.3 next actions) |
+| Manual — Focus field                | `docs/achieve-planner/user-manual.md` §3.10 — "primarily affects the positioning of the project/task in the Task Chooser"                          |
+| Manual — next-action definitions    | `docs/achieve-planner/user-manual.md` §2.6.4 (advanced/predecessor — not available to us)                                                          |
+| Manual — next-action reminder tasks | `docs/achieve-planner/user-manual.md` §7.2.5 — zero-effort tasks; they stay in the list (visible in the screenshot, row 7)                         |

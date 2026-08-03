@@ -81,5 +81,5 @@ project at a time. A different altitude, and untouched by this spec.
 
 ## External
 
-- Achieve Planner user manual: `docs/APUserManual.md` §8 (Task Chooser — the candidate rule
+- Achieve Planner user manual: `docs/achieve-planner/user-manual.md` §8 (Task Chooser — the candidate rule
   and the To-do List view), §4 (priorities).

@@ -13,7 +13,7 @@ can be created on a goal form **or** without an owner.
 Today the planner only has a thin Goal form child list (`node_items` kind `metric`: title,
 category, question, target, active) with **no tracking history**, **no Metrics tab**, and
 **no ACHXML import/export** of `Metrics` / `MetricTracking` (Tier B in
-`docs/achieve-file-formats.md`). Fitness already documented why goal metrics are the wrong
+`docs/achieve-planner/file-formats.md`). Fitness already documented why goal metrics are the wrong
 store for durable multi-entry history.
 
 This slice completes **core metrics** as a Phase 2 Achieve surface plus own-your-data
@@ -174,7 +174,7 @@ Do **not** put business logic in React components.
 - **import write**: insert metrics/entries with `externalSource=achieve` + GUID; replace mode deletes user's metrics first (with entries cascade).
 - **export**: emit Metrics + MetricTracking tables from DB; owner GUID from node's externalId when present else synthetic stable id.
 - Unit tests on mapper with fixture XML snippet; integration test import path.
-- Update `KNOWN_SKIP` / `EXTRAS_TABLES`; `docs/achieve-file-formats.md` move Metrics to Done.
+- Update `KNOWN_SKIP` / `EXTRAS_TABLES`; `docs/achieve-planner/file-formats.md` move Metrics to Done.
 
 ---
 

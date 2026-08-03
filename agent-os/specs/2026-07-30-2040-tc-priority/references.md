@@ -36,11 +36,11 @@ date filters, and settings persistence — all of which this builds on.
 
 ## Source material
 
-| What                                           | Where                                                                                                                                                                                                  |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Achieve Task Chooser screenshot (Best Overall) | `../2026-07-30-1858-task-chooser/visuals/task-chooser.png`                                                                                                                                             |
-| Manual — Task Chooser                          | `docs/APUserManual.md` §8. **Note:** the PDF conversion lost the TC Priority column entirely — no `TC` appears anywhere in the text. This slice was built from the user's description of the original. |
-| As-built screenshots                           | `visuals/tc-todo.png`, `visuals/tc-dragged.png`, `visuals/tc-settings.png`                                                                                                                             |
+| What                                           | Where                                                                                                                                                                                                                 |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Achieve Task Chooser screenshot (Best Overall) | `../2026-07-30-1858-task-chooser/visuals/task-chooser.png`                                                                                                                                                            |
+| Manual — Task Chooser                          | `docs/achieve-planner/user-manual.md` §8. **Note:** the PDF conversion lost the TC Priority column entirely — no `TC` appears anywhere in the text. This slice was built from the user's description of the original. |
+| As-built screenshots                           | `visuals/tc-todo.png`, `visuals/tc-dragged.png`, `visuals/tc-settings.png`                                                                                                                                            |
 
 ## Standards
 

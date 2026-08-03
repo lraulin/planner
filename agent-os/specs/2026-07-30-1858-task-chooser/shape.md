@@ -83,7 +83,7 @@ Outline.
 - **Visuals:** `visuals/task-chooser.png` (from `screenshots/TaskChooserSS.png`) — the
   Achieve Task Chooser tab, showing the selection bar, the ranked grid, and the Parents pane
   we are not building.
-- **Manual:** `docs/APUserManual.md` §8 (§8.1 window, §8.1.1 views, §8.1.2 Show More/Less,
+- **Manual:** `docs/achieve-planner/user-manual.md` §8 (§8.1 window, §8.1.1 views, §8.1.2 Show More/Less,
   §8.1.3 date filters, §8.2 settings, §8.3 next actions), plus §3.10 on the Focus field.
 - **References:** see `references.md` — chiefly `TasksGrid`, `useGridTab`, `sliceTree`,
   `derive`, `scheduleStatus`, and `useGridColumns`.
