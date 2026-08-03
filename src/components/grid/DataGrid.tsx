@@ -31,6 +31,7 @@ import { resolveCompactFields } from "@/lib/grid/compactFields";
 import { useIsCompact } from "@/components/shell/useIsCompact";
 import { CompactRow, type RowSwipe } from "./CompactRow";
 import type { SelectMods } from "@/lib/grid/selection";
+import { RowDragActiveContext } from "./rowDragContext";
 
 export type SortState = { columnId: string; direction: "asc" | "desc" } | null;
 
@@ -63,8 +64,8 @@ type RowDragBinding = {
   dragging: boolean;
   hint: { zone: DropZone; depth: number } | null;
   /**
-   * Drag starts only from explicit handles (`[data-row-handle]`, `[data-drag-handle]`) —
-   * cells stay free for edit and pickers.
+   * Selection for multi-drag is decided at mousedown on a handle, before dragstart, so a
+   * plain press on an unselected handle still works as single-drag.
    */
   onHandleMouseDown: () => void;
   onStart: () => void;
@@ -618,12 +619,6 @@ function DataRow<TCtx, TRow>({
   onContextMenu?: (x: number, y: number) => void;
 } & RowMeta<TRow>) {
   const rowRef = useRef<HTMLDivElement>(null);
-  // Drag is armed only from explicit handles — a permanently draggable row steals
-  // click-and-drag text selection inside priority, effort and deadline inputs.
-  const [armed, setArmed] = useState(false);
-  // True between dragstart and dragend so a window mouseup during the gesture does not
-  // clear `draggable` mid-flight.
-  const dragActiveRef = useRef(false);
 
   const label = rowLabelFor(row, rowLabel);
   const expanded = rowExpansionFor(row, rowExpansion);
@@ -633,34 +628,6 @@ function DataRow<TCtx, TRow>({
       rowRef.current?.scrollIntoView({ block: "nearest" });
     }
   }, [focused]);
-
-  function disarmDrag() {
-    setArmed(false);
-    if (rowRef.current) rowRef.current.draggable = false;
-  }
-
-  /**
-   * Arm HTML5 drag from a handle. Must set the DOM `draggable` attribute *synchronously*
-   * in this mousedown — React state alone re-renders too late, and the browser will not
-   * start a drag for a press that began on a non-draggable element.
-   *
-   * Do not disarm on mouseleave: leaving the small handle is how every drag begins.
-   */
-  function armDrag() {
-    if (!drag || !rowRef.current) return;
-    drag.onHandleMouseDown();
-    dragActiveRef.current = false;
-    rowRef.current.draggable = true;
-    setArmed(true);
-
-    const onUp = () => {
-      window.removeEventListener("mouseup", onUp);
-      // Still mid-drag: dragend owns cleanup. A plain click lands here and stands down.
-      if (dragActiveRef.current) return;
-      disarmDrag();
-    };
-    window.addEventListener("mouseup", onUp);
-  }
 
   return (
     <div
@@ -702,25 +669,42 @@ function DataRow<TCtx, TRow>({
           onContextMenu(event.clientX, event.clientY);
         })
       }
-      draggable={drag ? armed : undefined}
       onMouseDown={
         drag &&
         ((event) => {
-          // Only left button. Shift / Ctrl / ⌘ are pure selection (handle still selects).
+          // Only left button. Shift / Ctrl / ⌘ are pure selection.
           if (event.button !== 0) return;
           if (event.shiftKey || event.metaKey || event.ctrlKey) return;
-          // Left gutter and type icon (or any `[data-drag-handle]`) — not the whole row.
           if (!isDragHandleTarget(event.target)) return;
-          armDrag();
+          // Select the row before dragstart so multi-drag sees the right block.
+          drag.onHandleMouseDown();
         })
       }
       onDragStart={
         drag &&
         ((event) => {
+          // Handles are the only permanently-draggable nodes; refuse anything else that
+          // might bubble (e.g. a browser-default image drag).
+          if (!isDragHandleTarget(event.target)) {
+            event.preventDefault();
+            return;
+          }
+          // Modifier-click is multi-select, not a drag.
+          if (event.shiftKey || event.metaKey || event.ctrlKey) {
+            event.preventDefault();
+            return;
+          }
           // Some drop targets ignore a drag carrying no data at all.
           event.dataTransfer.setData("text/plain", row.id);
           event.dataTransfer.effectAllowed = "move";
-          dragActiveRef.current = true;
+          // Ghost the whole row, not the tiny handle the press started on.
+          if (rowRef.current) {
+            event.dataTransfer.setDragImage(
+              rowRef.current,
+              24,
+              Math.round(rowRef.current.offsetHeight / 2),
+            );
+          }
           drag.onStart();
         })
       }
@@ -740,18 +724,9 @@ function DataRow<TCtx, TRow>({
         ((event) => {
           event.preventDefault();
           drag.onDrop(dropZoneFor(event));
-          dragActiveRef.current = false;
-          disarmDrag();
         })
       }
-      onDragEnd={
-        drag &&
-        (() => {
-          dragActiveRef.current = false;
-          drag.onEnd();
-          disarmDrag();
-        })
-      }
+      onDragEnd={drag && (() => drag.onEnd())}
       className={[
         "relative grid items-center border-b border-rule/60 pr-3 text-[0.875rem]",
         selected ? "bg-select" : "hover:bg-surface-raised/60",
@@ -764,22 +739,30 @@ function DataRow<TCtx, TRow>({
         height: "var(--row-height)",
       }}
     >
-      <RowHandle
-        number={rowNumber}
-        selected={selected}
-        draggable={Boolean(drag)}
-        onSelect={onSelect}
-      />
+      {/*
+        Handles (gutter + type icon) are permanently `draggable` when row drag is on.
+        Arming the row on mousedown is too late for HTML5 DnD — the browser has already
+        decided the gesture is text selection. The row itself stays undraggable so cell
+        inputs keep click-and-drag text selection.
+      */}
+      <RowDragActiveContext.Provider value={Boolean(drag)}>
+        <RowHandle
+          number={rowNumber}
+          selected={selected}
+          draggable={Boolean(drag)}
+          onSelect={onSelect}
+        />
 
-      {columns.map((column) => (
-        <div
-          key={column.id}
-          role="gridcell"
-          className={`flex min-w-0 items-center self-stretch ${alignClass(column.align)}`}
-        >
-          {column.render(row, columnCtx)}
-        </div>
-      ))}
+        {columns.map((column) => (
+          <div
+            key={column.id}
+            role="gridcell"
+            className={`flex min-w-0 items-center self-stretch ${alignClass(column.align)}`}
+          >
+            {column.render(row, columnCtx)}
+          </div>
+        ))}
+      </RowDragActiveContext.Provider>
 
       {drag?.hint && drag.hint.zone !== "inside" && (
         <DropLine
@@ -795,7 +778,7 @@ function DataRow<TCtx, TRow>({
 /**
  * Left gutter shared by every desktop row: select (with multi modifiers) and drag handle.
  * Numbered on list tabs, blank on the Outline — same box, different chrome.
- * Drag arming is owned by the row (see `armDrag`); this only marks the hit target.
+ * When `draggable` is true the element itself is the HTML5 drag source (not the row).
  */
 function RowHandle({
   number,
@@ -812,6 +795,7 @@ function RowHandle({
     <div
       data-row-handle
       role="gridcell"
+      draggable={draggable || undefined}
       aria-label={number !== null ? `Row ${number}` : "Row handle"}
       title={draggable ? "Drag to reorder · click to select" : "Click to select"}
       onClick={(event) => {

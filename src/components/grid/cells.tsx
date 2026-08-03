@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import type { NodeState, PriorityLetter } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
 import {
@@ -19,6 +19,7 @@ import {
 import { toDateKey } from "@/lib/schedule/geometry";
 import { scheduleStatus, STATUS_LABELS, type ScheduleStatus } from "@/lib/tree/status";
 import { TypeIcon } from "@/components/icons/TypeIcon";
+import { RowDragActiveContext } from "./rowDragContext";
 
 const PRIORITY_COLOR: Record<PriorityLetter, string> = {
   A: "text-priority-a",
@@ -59,8 +60,9 @@ export function NameCell({
   onFinishEdit,
   onCancelEdit,
   /**
-   * When the host grid supports row drag, the type icon is a second handle next to the
-   * left gutter — marked `[data-drag-handle]` so `DataGrid` can arm HTML5 drag from it.
+   * When true, the type icon is a second drag handle next to the left gutter. It only
+   * becomes `draggable` while the surrounding grid is actually accepting row drag (see
+   * `RowDragActiveContext`) — e.g. not while a header sort has stand-down drag.
    */
   dragHandle = false,
 }: {
@@ -77,6 +79,10 @@ export function NameCell({
   const done = node.state === "completed" || node.state === "cancelled";
   // A dream is typographically a goal — it differs only in its glyph and what it is called.
   const kind = kindOfNode(node);
+  // Permanently draggable while the grid wants drag: arming on mousedown is too late for
+  // HTML5 DnD and the browser falls through to selecting the name text instead.
+  const dragActive = useContext(RowDragActiveContext);
+  const iconIsHandle = dragHandle && dragActive;
 
   return (
     <div className="flex min-w-0 items-stretch self-stretch">
@@ -103,10 +109,18 @@ export function NameCell({
       {dragHandle ? (
         <span
           data-drag-handle
-          title="Drag to reorder"
-          className="mr-1.5 flex flex-none cursor-grab items-center self-center active:cursor-grabbing"
+          draggable={iconIsHandle || undefined}
+          title={iconIsHandle ? "Drag to reorder" : undefined}
+          className={[
+            "mr-1.5 flex flex-none select-none items-center self-center",
+            iconIsHandle ? "cursor-grab active:cursor-grabbing" : "",
+          ].join(" ")}
         >
-          <TypeIcon kind={kind} className={`h-3.5 w-3.5 ${done ? "opacity-45" : ""}`} />
+          {/* pointer-events-none so the span is unambiguously the drag source, not the SVG. */}
+          <TypeIcon
+            kind={kind}
+            className={`pointer-events-none h-3.5 w-3.5 ${done ? "opacity-45" : ""}`}
+          />
         </span>
       ) : (
         <TypeIcon
