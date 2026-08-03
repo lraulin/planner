@@ -18,7 +18,6 @@ import {
   useTabView,
 } from "@/components/grid/useGridState";
 import { useTreeRowDrag } from "@/components/grid/useTreeRowDrag";
-import { SortChip, sortColumnLabel } from "@/components/grid/SortChip";
 import { ShowFieldsDialog } from "@/components/grid/ShowFieldsDialog";
 import {
   abbrStateColumn,
@@ -381,14 +380,6 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
       </TabToolbar>
 
       {tab.error && <ErrorBanner message={tab.error} />}
-
-      {gridState.sort && (
-        <SortChip
-          sort={gridState.sort}
-          columnLabel={sortColumnLabel(gridState.sort, allColumns)}
-          onClear={gridState.clearSort}
-        />
-      )}
 
       <DataGrid
         rows={rows}

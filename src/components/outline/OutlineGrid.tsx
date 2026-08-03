@@ -45,7 +45,6 @@ import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import { DataGrid, type RowDrag } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";
-import { SortChip, sortColumnLabel } from "@/components/grid/SortChip";
 import { useGridState } from "@/components/grid/useGridState";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useOptimisticNodes } from "@/components/grid/useOptimisticNodes";
@@ -649,14 +648,6 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         >
           {error}
         </p>
-      )}
-
-      {gridState.sort && (
-        <SortChip
-          sort={gridState.sort}
-          columnLabel={sortColumnLabel(gridState.sort, outlineColumns)}
-          onClear={gridState.clearSort}
-        />
       )}
 
       <DataGrid

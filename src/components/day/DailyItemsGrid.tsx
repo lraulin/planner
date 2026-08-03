@@ -5,7 +5,6 @@ import type { NodeState, PriorityLetter } from "@/db/schema";
 import { DataGrid, type RowDrag } from "@/components/grid/DataGrid";
 import type { RowSwipe } from "@/components/grid/CompactRow";
 import type { MenuItem } from "@/components/grid/ContextMenu";
-import { SortChip, sortColumnLabel } from "@/components/grid/SortChip";
 import { useGridState } from "@/components/grid/useGridState";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import type { GridRow } from "@/lib/tree/slice";
@@ -349,14 +348,6 @@ export function DailyItemsGrid({
           Reset this grid
         </button>
       </div>
-      {gridState.sort && (
-        <SortChip
-          sort={gridState.sort}
-          columnLabel={sortColumnLabel(gridState.sort, DAY_COLUMNS)}
-          onClear={gridState.clearSort}
-          blocksDrag
-        />
-      )}
       <div className="min-h-0 flex-1 overflow-auto">
         <DataGrid<DayColumnCtx, DailyItemView>
           rows={rows}

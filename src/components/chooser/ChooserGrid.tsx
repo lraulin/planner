@@ -3,7 +3,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { DataGrid, type RowDrag } from "@/components/grid/DataGrid";
 import { ShowFieldsDialog } from "@/components/grid/ShowFieldsDialog";
-import { SortChip, sortColumnLabel } from "@/components/grid/SortChip";
 import { useGridState, useTabView } from "@/components/grid/useGridState";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import {
@@ -211,8 +210,8 @@ export function ChooserGrid({
 
   /**
    * TC Priority is ranked by drag. While a header sort is active the on-screen order is
-   * not the ranking, so dragging would write ranks the user cannot see — stand down and
-   * show the SortChip instead.
+   * not the ranking, so dragging would write ranks the user cannot see — stand down
+   * (cycle the column header back to unsorted to drag again).
    */
   const rowDrag: RowDrag | undefined = useMemo(() => {
     if (!view.tcPriority || gridState.sort) return undefined;
@@ -342,15 +341,6 @@ export function ChooserGrid({
       </div>
 
       {tab.error && <ErrorBanner message={tab.error} />}
-
-      {gridState.sort && (
-        <SortChip
-          sort={gridState.sort}
-          columnLabel={sortColumnLabel(gridState.sort, allColumns)}
-          onClear={gridState.clearSort}
-          blocksDrag
-        />
-      )}
 
       <DataGrid
         rows={rows}

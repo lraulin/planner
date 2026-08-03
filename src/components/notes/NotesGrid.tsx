@@ -31,7 +31,6 @@ import {
   updateNoteAction,
 } from "@/app/notes/actions";
 import { DataGrid, type RowDrag } from "@/components/grid/DataGrid";
-import { SortChip, sortColumnLabel } from "@/components/grid/SortChip";
 import { useGridState } from "@/components/grid/useGridState";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { ShowFieldsDialog } from "@/components/grid/ShowFieldsDialog";
@@ -600,14 +599,6 @@ export function NotesGrid({
       </TabToolbar>
 
       {error && <ErrorBanner message={error} />}
-
-      {gridState.sort && (
-        <SortChip
-          sort={gridState.sort}
-          columnLabel={sortColumnLabel(gridState.sort, notesColumns)}
-          onClear={gridState.clearSort}
-        />
-      )}
 
       <DataGrid
         rows={rows}
