@@ -62,7 +62,10 @@ type DropHint = { targetId: string; zone: DropZone; depth: number };
 type RowDragBinding = {
   dragging: boolean;
   hint: { zone: DropZone; depth: number } | null;
-  /** Drag starts only from the row handle — cells stay free for edit and pickers. */
+  /**
+   * Drag starts only from explicit handles (`[data-row-handle]`, `[data-drag-handle]`) —
+   * cells stay free for edit and pickers.
+   */
   onHandleMouseDown: () => void;
   onStart: () => void;
   /** Returns whether the hover is a legal drop, which decides the cursor. */
@@ -71,6 +74,12 @@ type RowDragBinding = {
   onDrop: (zone: DropZone) => void;
   onEnd: () => void;
 };
+
+/** True when the pointer is on a surface that may start a row drag. */
+function isDragHandleTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  return Boolean(target.closest("[data-row-handle], [data-drag-handle]"));
+}
 
 /** Left gutter width: wide enough for a 3-digit row number, narrow without one. */
 const HANDLE_WIDTH_NUMBERED = "2rem";
@@ -609,9 +618,12 @@ function DataRow<TCtx, TRow>({
   onContextMenu?: (x: number, y: number) => void;
 } & RowMeta<TRow>) {
   const rowRef = useRef<HTMLDivElement>(null);
-  // Drag is armed only from the handle — a permanently draggable row steals click-and-drag
-  // text selection inside priority, effort and deadline inputs.
+  // Drag is armed only from explicit handles — a permanently draggable row steals
+  // click-and-drag text selection inside priority, effort and deadline inputs.
   const [armed, setArmed] = useState(false);
+  // True between dragstart and dragend so a window mouseup during the gesture does not
+  // clear `draggable` mid-flight.
+  const dragActiveRef = useRef(false);
 
   const label = rowLabelFor(row, rowLabel);
   const expanded = rowExpansionFor(row, rowExpansion);
@@ -621,6 +633,34 @@ function DataRow<TCtx, TRow>({
       rowRef.current?.scrollIntoView({ block: "nearest" });
     }
   }, [focused]);
+
+  function disarmDrag() {
+    setArmed(false);
+    if (rowRef.current) rowRef.current.draggable = false;
+  }
+
+  /**
+   * Arm HTML5 drag from a handle. Must set the DOM `draggable` attribute *synchronously*
+   * in this mousedown — React state alone re-renders too late, and the browser will not
+   * start a drag for a press that began on a non-draggable element.
+   *
+   * Do not disarm on mouseleave: leaving the small handle is how every drag begins.
+   */
+  function armDrag() {
+    if (!drag || !rowRef.current) return;
+    drag.onHandleMouseDown();
+    dragActiveRef.current = false;
+    rowRef.current.draggable = true;
+    setArmed(true);
+
+    const onUp = () => {
+      window.removeEventListener("mouseup", onUp);
+      // Still mid-drag: dragend owns cleanup. A plain click lands here and stands down.
+      if (dragActiveRef.current) return;
+      disarmDrag();
+    };
+    window.addEventListener("mouseup", onUp);
+  }
 
   return (
     <div
@@ -663,12 +703,24 @@ function DataRow<TCtx, TRow>({
         })
       }
       draggable={drag ? armed : undefined}
+      onMouseDown={
+        drag &&
+        ((event) => {
+          // Only left button. Shift / Ctrl / ⌘ are pure selection (handle still selects).
+          if (event.button !== 0) return;
+          if (event.shiftKey || event.metaKey || event.ctrlKey) return;
+          // Left gutter and type icon (or any `[data-drag-handle]`) — not the whole row.
+          if (!isDragHandleTarget(event.target)) return;
+          armDrag();
+        })
+      }
       onDragStart={
         drag &&
         ((event) => {
           // Some drop targets ignore a drag carrying no data at all.
           event.dataTransfer.setData("text/plain", row.id);
           event.dataTransfer.effectAllowed = "move";
+          dragActiveRef.current = true;
           drag.onStart();
         })
       }
@@ -688,14 +740,16 @@ function DataRow<TCtx, TRow>({
         ((event) => {
           event.preventDefault();
           drag.onDrop(dropZoneFor(event));
-          setArmed(false);
+          dragActiveRef.current = false;
+          disarmDrag();
         })
       }
       onDragEnd={
         drag &&
         (() => {
+          dragActiveRef.current = false;
           drag.onEnd();
-          setArmed(false);
+          disarmDrag();
         })
       }
       className={[
@@ -715,15 +769,6 @@ function DataRow<TCtx, TRow>({
         selected={selected}
         draggable={Boolean(drag)}
         onSelect={onSelect}
-        onArmDrag={
-          drag
-            ? () => {
-                drag.onHandleMouseDown();
-                setArmed(true);
-              }
-            : undefined
-        }
-        onDisarmDrag={() => setArmed(false)}
       />
 
       {columns.map((column) => (
@@ -750,21 +795,18 @@ function DataRow<TCtx, TRow>({
 /**
  * Left gutter shared by every desktop row: select (with multi modifiers) and drag handle.
  * Numbered on list tabs, blank on the Outline — same box, different chrome.
+ * Drag arming is owned by the row (see `armDrag`); this only marks the hit target.
  */
 function RowHandle({
   number,
   selected,
   draggable,
   onSelect,
-  onArmDrag,
-  onDisarmDrag,
 }: {
   number: number | null;
   selected: boolean;
   draggable: boolean;
   onSelect: (mods?: GridSelectMods) => void;
-  onArmDrag?: () => void;
-  onDisarmDrag?: () => void;
 }) {
   return (
     <div
@@ -788,17 +830,6 @@ function RowHandle({
           onSelect({ toggle: true });
         }
       }}
-      onMouseDown={
-        onArmDrag &&
-        ((event) => {
-          // Only left button starts a drag. Shift / Ctrl / ⌘ clicks are pure selection.
-          if (event.button !== 0) return;
-          if (event.shiftKey || event.metaKey || event.ctrlKey) return;
-          onArmDrag();
-        })
-      }
-      onMouseUp={onDisarmDrag}
-      onMouseLeave={onDisarmDrag}
       className={[
         "flex h-full cursor-default select-none items-center justify-center self-stretch border-r border-rule/50 text-[0.6875rem] tabular-nums text-ink-faint",
         draggable ? "cursor-grab active:cursor-grabbing" : "",

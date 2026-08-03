@@ -30,7 +30,7 @@ export const OUTLINE_COLUMN_IDS = [
  */
 export const outlineColumns: ColumnDef<OutlineColumnCtx>[] = [
   priorityColumn(),
-  nameColumn({ width: "minmax(16rem,1fr)" }),
+  nameColumn({ width: "minmax(16rem,1fr)", dragHandle: true }),
   {
     id: "effort",
     label: "Effort",

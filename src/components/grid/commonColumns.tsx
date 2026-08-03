@@ -149,9 +149,9 @@ export function percentColumn(): ColumnDef<OutlineColumnCtx> {
  * `flat: true` because its ranking is cross-project and must not imply nesting.
  */
 export function nameColumn(
-  options: { width?: string; flat?: boolean } = {},
+  options: { width?: string; flat?: boolean; dragHandle?: boolean } = {},
 ): ColumnDef<OutlineColumnCtx> {
-  const { width = "minmax(14rem,1.4fr)", flat = false } = options;
+  const { width = "minmax(14rem,1.4fr)", flat = false, dragHandle = false } = options;
 
   return {
     id: "name",
@@ -167,6 +167,7 @@ export function nameColumn(
         depth={flat ? 0 : row.depth}
         selected={row.node.id === ctx.selectedId}
         editing={row.node.id === ctx.editingId}
+        dragHandle={dragHandle}
         onToggleCollapsed={() => ctx.onToggleCollapsed(row.node)}
         onOpenDetail={() => ctx.onOpenDetail(row.node)}
         onFinishEdit={(name) => ctx.onFinishEdit(row.node, name)}

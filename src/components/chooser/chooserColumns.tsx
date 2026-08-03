@@ -139,7 +139,7 @@ export function buildChooserColumns(
         />
       ),
     },
-    nameColumn({ flat: true }),
+    nameColumn({ flat: true, dragHandle: true }),
     {
       id: "effort",
       label: "Effort",

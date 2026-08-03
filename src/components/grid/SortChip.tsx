@@ -28,6 +28,7 @@ export function SortChip({
     >
       <span>
         Sorted by {columnLabel} {arrow}
+        <span className="text-ink-faint"> · drag off</span>
       </span>
       <button
         type="button"

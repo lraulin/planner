@@ -58,6 +58,11 @@ export function NameCell({
   onOpenDetail,
   onFinishEdit,
   onCancelEdit,
+  /**
+   * When the host grid supports row drag, the type icon is a second handle next to the
+   * left gutter — marked `[data-drag-handle]` so `DataGrid` can arm HTML5 drag from it.
+   */
+  dragHandle = false,
 }: {
   node: OutlineNode;
   depth: number;
@@ -67,6 +72,7 @@ export function NameCell({
   onOpenDetail: () => void;
   onFinishEdit: (name: string) => void;
   onCancelEdit: () => void;
+  dragHandle?: boolean;
 }) {
   const done = node.state === "completed" || node.state === "cancelled";
   // A dream is typographically a goal — it differs only in its glyph and what it is called.
@@ -94,10 +100,20 @@ export function NameCell({
         {node.collapsed ? "▶" : "▼"}
       </button>
 
-      <TypeIcon
-        kind={kind}
-        className={`mr-1.5 h-3.5 w-3.5 flex-none self-center ${done ? "opacity-45" : ""}`}
-      />
+      {dragHandle ? (
+        <span
+          data-drag-handle
+          title="Drag to reorder"
+          className="mr-1.5 flex flex-none cursor-grab items-center self-center active:cursor-grabbing"
+        >
+          <TypeIcon kind={kind} className={`h-3.5 w-3.5 ${done ? "opacity-45" : ""}`} />
+        </span>
+      ) : (
+        <TypeIcon
+          kind={kind}
+          className={`mr-1.5 h-3.5 w-3.5 flex-none self-center ${done ? "opacity-45" : ""}`}
+        />
+      )}
 
       {editing ? (
         <NameEditor
