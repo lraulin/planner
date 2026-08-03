@@ -3,21 +3,24 @@
 import type { GridSort } from "@/lib/settings/grid";
 
 /**
- * Shown above a manually-ordered grid when a header sort is active.
+ * Shown above a grid when a header sort is active.
  *
- * Sorting on Outline, Day, and the Chooser is a non-destructive view: it never writes
- * `sortKey`, so the chip both explains why drag is disabled and is the one way back to
- * the hand-built order.
+ * On ranking grids (Day, Chooser) a header sort stands drag down — pass `blocksDrag` so
+ * the chip says so. On Outline, drag stays on under a sort and the chip is just a view
+ * indicator (a drop clears the sort so the written tree order is visible).
  */
 export function SortChip({
   sort,
   columnLabel,
   onClear,
+  blocksDrag = false,
 }: {
   sort: GridSort;
   /** Human label for the sorted column (its header text). */
   columnLabel: string;
   onClear: () => void;
+  /** When true, row drag is off until the sort is cleared (Day / Chooser ranks). */
+  blocksDrag?: boolean;
 }) {
   const arrow = sort.direction === "asc" ? "↑" : "↓";
 
@@ -28,7 +31,7 @@ export function SortChip({
     >
       <span>
         Sorted by {columnLabel} {arrow}
-        <span className="text-ink-faint"> · drag off</span>
+        {blocksDrag && <span className="text-ink-faint"> · drag off</span>}
       </span>
       <button
         type="button"

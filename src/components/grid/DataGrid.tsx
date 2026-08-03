@@ -2,6 +2,7 @@
 
 import {
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -31,7 +32,7 @@ import { resolveCompactFields } from "@/lib/grid/compactFields";
 import { useIsCompact } from "@/components/shell/useIsCompact";
 import { CompactRow, type RowSwipe } from "./CompactRow";
 import type { SelectMods } from "@/lib/grid/selection";
-import { RowDragActiveContext } from "./rowDragContext";
+import { RowDragHandleContext, type RowDragHandleApi } from "./rowDragContext";
 
 export type SortState = { columnId: string; direction: "asc" | "desc" } | null;
 
@@ -75,12 +76,6 @@ type RowDragBinding = {
   onDrop: (zone: DropZone) => void;
   onEnd: () => void;
 };
-
-/** True when the pointer is on a surface that may start a row drag. */
-function isDragHandleTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof Element)) return false;
-  return Boolean(target.closest("[data-row-handle], [data-drag-handle]"));
-}
 
 /** Left gutter width: wide enough for a 3-digit row number, narrow without one. */
 const HANDLE_WIDTH_NUMBERED = "2rem";
@@ -629,6 +624,34 @@ function DataRow<TCtx, TRow>({
     }
   }, [focused]);
 
+  // Stable enough for the provider: rebuilt when `drag` identity changes (per-row binding).
+  const handleApi: RowDragHandleApi | null = drag
+    ? {
+        onHandleMouseDown: () => {
+          drag.onHandleMouseDown();
+        },
+        onDragStart: (event) => {
+          // Modifier-click is multi-select, not a drag.
+          if (event.shiftKey || event.metaKey || event.ctrlKey) {
+            event.preventDefault();
+            return;
+          }
+          // Some drop targets ignore a drag carrying no data at all.
+          event.dataTransfer.setData("text/plain", row.id);
+          event.dataTransfer.effectAllowed = "move";
+          // Ghost the whole row, not the tiny handle the press started on.
+          if (rowRef.current) {
+            event.dataTransfer.setDragImage(
+              rowRef.current,
+              24,
+              Math.round(rowRef.current.offsetHeight / 2),
+            );
+          }
+          drag.onStart();
+        },
+      }
+    : null;
+
   return (
     <div
       ref={rowRef}
@@ -669,45 +692,6 @@ function DataRow<TCtx, TRow>({
           onContextMenu(event.clientX, event.clientY);
         })
       }
-      onMouseDown={
-        drag &&
-        ((event) => {
-          // Only left button. Shift / Ctrl / ⌘ are pure selection.
-          if (event.button !== 0) return;
-          if (event.shiftKey || event.metaKey || event.ctrlKey) return;
-          if (!isDragHandleTarget(event.target)) return;
-          // Select the row before dragstart so multi-drag sees the right block.
-          drag.onHandleMouseDown();
-        })
-      }
-      onDragStart={
-        drag &&
-        ((event) => {
-          // Handles are the only permanently-draggable nodes; refuse anything else that
-          // might bubble (e.g. a browser-default image drag).
-          if (!isDragHandleTarget(event.target)) {
-            event.preventDefault();
-            return;
-          }
-          // Modifier-click is multi-select, not a drag.
-          if (event.shiftKey || event.metaKey || event.ctrlKey) {
-            event.preventDefault();
-            return;
-          }
-          // Some drop targets ignore a drag carrying no data at all.
-          event.dataTransfer.setData("text/plain", row.id);
-          event.dataTransfer.effectAllowed = "move";
-          // Ghost the whole row, not the tiny handle the press started on.
-          if (rowRef.current) {
-            event.dataTransfer.setDragImage(
-              rowRef.current,
-              24,
-              Math.round(rowRef.current.offsetHeight / 2),
-            );
-          }
-          drag.onStart();
-        })
-      }
       onDragOver={
         drag &&
         ((event) => {
@@ -740,18 +724,13 @@ function DataRow<TCtx, TRow>({
       }}
     >
       {/*
-        Handles (gutter + type icon) are permanently `draggable` when row drag is on.
-        Arming the row on mousedown is too late for HTML5 DnD — the browser has already
-        decided the gesture is text selection. The row itself stays undraggable so cell
-        inputs keep click-and-drag text selection.
+        Handles (gutter + type icon) are permanently `draggable` when row drag is on, and
+        own their own dragstart. Arming the row on mousedown is too late for HTML5 DnD —
+        the browser falls through to text selection. The row itself stays undraggable so
+        cell inputs keep click-and-drag text selection.
       */}
-      <RowDragActiveContext.Provider value={Boolean(drag)}>
-        <RowHandle
-          number={rowNumber}
-          selected={selected}
-          draggable={Boolean(drag)}
-          onSelect={onSelect}
-        />
+      <RowDragHandleContext.Provider value={handleApi}>
+        <RowHandle number={rowNumber} selected={selected} onSelect={onSelect} />
 
         {columns.map((column) => (
           <div
@@ -762,7 +741,7 @@ function DataRow<TCtx, TRow>({
             {column.render(row, columnCtx)}
           </div>
         ))}
-      </RowDragActiveContext.Provider>
+      </RowDragHandleContext.Provider>
 
       {drag?.hint && drag.hint.zone !== "inside" && (
         <DropLine
@@ -778,26 +757,27 @@ function DataRow<TCtx, TRow>({
 /**
  * Left gutter shared by every desktop row: select (with multi modifiers) and drag handle.
  * Numbered on list tabs, blank on the Outline — same box, different chrome.
- * When `draggable` is true the element itself is the HTML5 drag source (not the row).
+ * When the row offers drag, this element is the HTML5 drag source (not the row).
  */
 function RowHandle({
   number,
   selected,
-  draggable,
   onSelect,
 }: {
   number: number | null;
   selected: boolean;
-  draggable: boolean;
   onSelect: (mods?: GridSelectMods) => void;
 }) {
+  const api = useContext(RowDragHandleContext);
+  const canDrag = api !== null;
+
   return (
     <div
       data-row-handle
       role="gridcell"
-      draggable={draggable || undefined}
+      draggable={canDrag || undefined}
       aria-label={number !== null ? `Row ${number}` : "Row handle"}
-      title={draggable ? "Drag to reorder · click to select" : "Click to select"}
+      title={canDrag ? "Drag to reorder · click to select" : "Click to select"}
       onClick={(event) => {
         event.stopPropagation();
         onSelect({
@@ -814,9 +794,19 @@ function RowHandle({
           onSelect({ toggle: true });
         }
       }}
+      onMouseDown={
+        api
+          ? (event) => {
+              if (event.button !== 0) return;
+              if (event.shiftKey || event.metaKey || event.ctrlKey) return;
+              api.onHandleMouseDown();
+            }
+          : undefined
+      }
+      onDragStart={api ? (event) => api.onDragStart(event) : undefined}
       className={[
         "flex h-full cursor-default select-none items-center justify-center self-stretch border-r border-rule/50 text-[0.6875rem] tabular-nums text-ink-faint",
-        draggable ? "cursor-grab active:cursor-grabbing" : "",
+        canDrag ? "cursor-grab active:cursor-grabbing" : "",
         selected ? "bg-select-edge/10 text-ink-muted" : "hover:bg-surface-raised",
       ].join(" ")}
     >

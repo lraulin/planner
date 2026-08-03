@@ -354,6 +354,7 @@ export function DailyItemsGrid({
           sort={gridState.sort}
           columnLabel={sortColumnLabel(gridState.sort, DAY_COLUMNS)}
           onClear={gridState.clearSort}
+          blocksDrag
         />
       )}
       <div className="min-h-0 flex-1 overflow-auto">

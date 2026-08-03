@@ -19,7 +19,7 @@ import {
 import { toDateKey } from "@/lib/schedule/geometry";
 import { scheduleStatus, STATUS_LABELS, type ScheduleStatus } from "@/lib/tree/status";
 import { TypeIcon } from "@/components/icons/TypeIcon";
-import { RowDragActiveContext } from "./rowDragContext";
+import { RowDragHandleContext } from "./rowDragContext";
 
 const PRIORITY_COLOR: Record<PriorityLetter, string> = {
   A: "text-priority-a",
@@ -60,9 +60,9 @@ export function NameCell({
   onFinishEdit,
   onCancelEdit,
   /**
-   * When true, the type icon is a second drag handle next to the left gutter. It only
-   * becomes `draggable` while the surrounding grid is actually accepting row drag (see
-   * `RowDragActiveContext`) — e.g. not while a header sort has stand-down drag.
+   * When true, the type icon is a second drag handle next to the left gutter. It becomes
+   * `draggable` only while the surrounding row is accepting drag (see
+   * `RowDragHandleContext`) — e.g. not while a header sort has stood drag down.
    */
   dragHandle = false,
 }: {
@@ -79,10 +79,10 @@ export function NameCell({
   const done = node.state === "completed" || node.state === "cancelled";
   // A dream is typographically a goal — it differs only in its glyph and what it is called.
   const kind = kindOfNode(node);
-  // Permanently draggable while the grid wants drag: arming on mousedown is too late for
+  // Permanently draggable while the row wants drag: arming on mousedown is too late for
   // HTML5 DnD and the browser falls through to selecting the name text instead.
-  const dragActive = useContext(RowDragActiveContext);
-  const iconIsHandle = dragHandle && dragActive;
+  const dragApi = useContext(RowDragHandleContext);
+  const iconIsHandle = Boolean(dragHandle && dragApi);
 
   return (
     <div className="flex min-w-0 items-stretch self-stretch">
@@ -111,6 +111,18 @@ export function NameCell({
           data-drag-handle
           draggable={iconIsHandle || undefined}
           title={iconIsHandle ? "Drag to reorder" : undefined}
+          onMouseDown={
+            iconIsHandle && dragApi
+              ? (event) => {
+                  if (event.button !== 0) return;
+                  if (event.shiftKey || event.metaKey || event.ctrlKey) return;
+                  dragApi.onHandleMouseDown();
+                }
+              : undefined
+          }
+          onDragStart={
+            iconIsHandle && dragApi ? (event) => dragApi.onDragStart(event) : undefined
+          }
           className={[
             "mr-1.5 flex flex-none select-none items-center self-center",
             iconIsHandle ? "cursor-grab active:cursor-grabbing" : "",

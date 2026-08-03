@@ -348,6 +348,7 @@ export function ChooserGrid({
           sort={gridState.sort}
           columnLabel={sortColumnLabel(gridState.sort, allColumns)}
           onClear={gridState.clearSort}
+          blocksDrag
         />
       )}
 

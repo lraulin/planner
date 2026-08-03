@@ -272,18 +272,25 @@ export function NotesGrid({
   );
 
   const gridState = useGridState("notes", notesColumns, [...NOTES_COLUMN_IDS]);
-  const { columns, show, hide, move } = gridState;
+  const {
+    columns,
+    show,
+    hide,
+    move,
+    sort: headerSort,
+    clearSort: clearHeaderSort,
+  } = gridState;
 
   /**
    * Drag-to-reorder. Unlike the outline there are no nesting rules to enforce — any note
    * may sit under any note — so the only illegal drop is into a note's own subtree, which
    * `moveNote` re-checks on the server anyway.
    *
-   * Turned off entirely unless the rows on screen are the stored tree: dragging a row into
-   * a position within a sorted or flattened list would write an order nothing displays.
-   * A column header sort (gridState.sort) is the same rule — the chip is the way back.
+   * Needs nested + notes manual order (not a notes-view title/date sort). A column header
+   * sort stays on during the drag; a successful drop clears it so the written tree order
+   * is what you see (same as Outline / Achieve).
    */
-  const canReorder = mode === "nested" && sort === "manual" && gridState.sort === null;
+  const canReorder = mode === "nested" && sort === "manual";
 
   const rowDrag: RowDrag | undefined = useMemo(() => {
     if (!canReorder) return undefined;
@@ -328,6 +335,7 @@ export function NotesGrid({
         if (!target) return;
 
         selectOne(roots[0]);
+        if (headerSort) clearHeaderSort();
         apply(async () => {
           let previousId: string | null = null;
           let lastResult: { ok: true } | { ok: false; error: string } = { ok: true };
@@ -359,7 +367,7 @@ export function NotesGrid({
         });
       },
     };
-  }, [canReorder, byId, apply, selectOne]);
+  }, [canReorder, byId, apply, selectOne, headerSort, clearHeaderSort]);
 
   const rowMenu = useCallback(
     (noteId: string): MenuItem[] => {

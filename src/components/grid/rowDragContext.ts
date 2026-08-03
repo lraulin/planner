@@ -1,11 +1,17 @@
 "use client";
 
-import { createContext } from "react";
+import { createContext, type DragEvent } from "react";
 
 /**
- * True while the surrounding desktop grid is accepting row drag. Handles (left gutter,
- * type icon) read this so they can be permanently `draggable` — HTML5 drag only starts if
- * the source was already draggable at mousedown, so arming the row on press is too late
- * and the browser falls through to text selection instead.
+ * API a row exposes to its drag handles (left gutter, type icon).
+ *
+ * Handles are the HTML5 drag sources themselves — permanently `draggable` while this
+ * context is non-null. Arming the *row* on mousedown is too late: the browser has already
+ * decided the gesture is text selection. Drop targets stay on the row.
  */
-export const RowDragActiveContext = createContext(false);
+export type RowDragHandleApi = {
+  onHandleMouseDown: () => void;
+  onDragStart: (event: DragEvent) => void;
+};
+
+export const RowDragHandleContext = createContext<RowDragHandleApi | null>(null);

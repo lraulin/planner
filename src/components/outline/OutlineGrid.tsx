@@ -94,6 +94,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const { types: filters, focusOnly, showCompleted, byCategory } = typeFilters;
 
   const gridState = useGridState("outline", outlineColumns, [...OUTLINE_COLUMN_IDS]);
+  const { sort: headerSort, clearSort: clearHeaderSort } = gridState;
 
   const visible = useMemo(() => {
     const dropped = new Set<string>();
@@ -429,13 +430,13 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
    * and the server round-trip that `apply` already performs is the honest way to get them.
    */
   /**
-   * Drag is the hand-built tree order. While a header sort is active the rows on screen
-   * are not that order, so dragging would write a sortKey the user cannot see. Stand down
-   * entirely and let the SortChip clear the way back.
+   * Drag writes the hand-built tree order (parent + sortKey). A header sort is only a view:
+   * drop targets are still resolved by row identity, like Achieve — you do not have to clear
+   * the sort first. After a successful drop we clear the sort so the order you just wrote is
+   * what stays on screen (under a priority sort a sibling reorder would otherwise look like
+   * nothing happened).
    */
   const rowDrag: RowDrag | undefined = useMemo(() => {
-    if (gridState.sort) return undefined;
-
     const rootsOf = (dragIds: readonly string[]) =>
       selectionMoveRoots(
         new Set(dragIds),
@@ -477,6 +478,9 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
           drop = withRootCategoryFromPlacement(drop, primary, byId);
         }
 
+        // Leave the sorted view so the tree order the drop wrote is what the user sees.
+        if (headerSort) clearHeaderSort();
+
         selectOne(primary);
         const placement = drop;
         apply(async () => {
@@ -512,7 +516,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         });
       },
     };
-  }, [byId, byCategory, nodes, apply, gridState.sort, selectOne]);
+  }, [byId, byCategory, nodes, apply, headerSort, clearHeaderSort, selectOne]);
 
   const columnCtx: OutlineColumnCtx = useMemo(
     () => ({
