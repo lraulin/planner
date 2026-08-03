@@ -304,43 +304,52 @@ Product lines that use the outline/goals as a hub. Each has its own MVP → medi
 horizon. Ship vertical slices; do not wait for full Achieve parity to start an MVP if the
 core loop is already useful.
 
-### GTD as first-class (not filter workarounds)
+### GTD as first-class (open questions, not a rewrite plan)
 
-**Status: future product direction — not shaped, not scheduled.** Capture intent only so we
-do not treat today's AP-compatible workarounds as permanent architecture.
+**Status: future product thinking — not shaped, not scheduled.** Intent only. Do not treat
+today's design as a bug; do not invent more filter workarounds as if they were the end
+state either.
 
-Achieve (and our Phase 1/2 port) can **simulate** GTD: Inbox as a D-priority project in the
-tree, Someday/Maybe as low priority and/or `proposed` / postponed projects, tickler via
-Deferred Date, Next Actions via Chooser filters. That was the right choice when fidelity to
-AP was the scarce asset and the hierarchy was the only place to put things. It is not the
-only choice once we own the model.
+Achieve (and our Phase 1/2 port) **can** do GTD: Inbox project, `proposed` (PR) for
+uncommitted work, deferred tickler, Next Actions via Chooser. That was right when AP
+fidelity was the scarce asset. Owning the model means we _may_ promote some of that to
+first-class concepts — but only where the tree genuinely hurts, and only after living with
+what already works.
 
-Lee's direction: the parts of GTD that are good should be **first-class product concepts**,
-not views you assemble with priority + state + filters so the outline pretends they are
-projects.
+#### What already works (keep these strengths)
 
-| Today (AP-shaped)                                                          | Direction (if we pursue this)                                                                                        |
-| -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Inbox = special `is_inbox` **project** living among Result Areas           | Capture queue outside (or beside) the committed hierarchy — process into projects/tasks, not "a project named Inbox" |
-| Someday/Maybe ≈ D priority, `proposed`, or indefinite postponed "projects" | Explicit incubation place that is not the same kind of thing as an active project                                    |
-| Deferred = linked postponed + date (already cleaner than AP)               | Keep; maps cleanly to GTD tickler                                                                                    |
-| Next Action via Chooser / NA filter                                        | Already first-class enough; refine rather than replace                                                               |
+- **Inbox items as real tasks** under an Inbox project: capture can attach notes, links,
+  imports from elsewhere; processing to "Next Action" is often just **dragging into the
+  right place in the hierarchy**. That is a feature of "everything is a node," not only a
+  hack.
+- **Someday/Maybe as Proposed projects** (`proposed` state — **not** Postponed):
+  uncommitted incubation with room to collect links, notes, child ideas **before** you
+  decide to commit. Postponed is the shelf/tickler axis (interrupted or dated hide);
+  Proposed is "I have not signed up for this yet." Conflating them is a doc/agent mistake.
+- **Deferred + postponed shelf** already maps cleanly to GTD tickler (see date-model).
 
-**Why change:** "Someday/Maybe as a project with PR status" and "Inbox as a sibling of real
-work in the outline" feel wrong because they **are** wrong as types — they are lifecycle
-buckets forced into a project tree. Filters paper over that; they do not fix the ontology.
+#### Where it still feels wrong
 
-**Why not yet:** Phase 1 Achieve loop + living with the app still earns more daily value
-than a hierarchy redesign. Inbox-as-project and proposed/postponed already work. This is a
-**deliberate future rewrite candidate**, not a bug in the current design.
+- Inbox as a **sibling of Result Areas** in the committed hierarchy (a project whose job is
+  "not yet decided") can feel ontologically off even when drag-to-process works well.
+- Pure Someday lists vs "real" projects: if every maybe is a full project row, the outline
+  can fill with incubation noise — but those rows _are_ useful as containers for reference
+  material. Tension, not a free fix.
 
-**When shaping:** open a delta-spec; decide whether Inbox/Someday are node types, list
-memberships, or parallel collections; migration for existing Inbox projects and `proposed`
-rows; keep weekly project-block workflow intact. Do not half-implement with more filters
-that pretend the tree is fine.
+#### Open questions for a future shape-spec (if any)
 
-Related: state-palette thinning in `standards/product/date-model.md` (Active / Deferred /
-Someday / done) is the same cleanup impulse at the state layer.
+1. Keep Inbox-as-tasks + drag-to-process, but change **where** the queue lives (not a peer
+   of Work/Personal RAs)?
+2. Is Someday first-class **list membership**, a **state** (`proposed` promoted in UI), or
+   still "just projects with PR"?
+3. How do notes/links/attachments on proposed projects stay first-class either way?
+4. Do not half-implement with more filters that only paper over the tree.
+
+**Why not yet:** daily value still comes from the Achieve loop + current capture. This is
+exploratory product direction, not a commitment to rip out `is_inbox` or `proposed`.
+
+Related: state vocabulary in `standards/product/date-model.md` (Postponed vs Proposed
+flavor; optional palette thinning).
 
 ### Fitness tracker
 

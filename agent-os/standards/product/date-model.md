@@ -75,18 +75,23 @@ That covers the two real needs (dated tickler vs open-ended park) without a dual
 system. Achieve's independent Postponed status is not a goal to re-split unless a workflow
 appears that needs "state X but also date-hidden" as independent axes.
 
-**Semantic flavor (not modeled as separate states today):** everyday language treats
-"postponed" as interrupted commitment (was about to do it; external factors delayed it) and
-"proposed" / Someday as uncommitted incubation. In knowledge-work use that distinction is
-rarely load-bearing; Postponed-without-date is a fine indefinite park. `proposed` already
-exists as a state if we want a clearer Someday/Maybe later.
+**Semantic flavor — keep these distinct:**
 
-**Possible future cleanup (not planned work):** thin or rename states so the palette is more
-distinct — e.g. Active / Deferred-with-date / Someday-indefinite / Completed / Cancelled —
-rather than keeping every Achieve state name. Broader GTD-first-class direction (Someday as
-its own place, Inbox not a fake project, etc.) lives in `agent-os/product/roadmap.md` under
-**Beyond Achieve → GTD as first-class**. Until then, keep the linked shelf model; do not
-invent a second independent "deferred status."
+| State / shape                            | Meaning                                                                  |
+| ---------------------------------------- | ------------------------------------------------------------------------ |
+| **Postponed** (+ optional deferred date) | Was or would be active; parked (dated tickler or indefinite). Shelf.     |
+| **Proposed**                             | Uncommitted incubation — idea / Someday; not the same as "pushed later." |
+| Postponed, no date                       | Indefinite hold on something you _were_ treating as real work            |
+
+Do **not** document Someday/Maybe as "postponed projects." Lee's usage is **Proposed**
+projects (often with notes/links collected before any commitment). Postponed is the hide /
+tickler axis. See `roadmap.md` → GTD as first-class for open questions (Inbox-as-tasks is
+valuable for drag-to-process and imports; not pure workaround).
+
+**Possible future cleanup (not planned work):** thin or rename UI labels so the palette
+reads clearer — without inventing a second independent "deferred status." Until then, keep
+the linked shelf model (Postponed + deferred date) and keep `proposed` as the incubation
+state.
 
 ## Inheritance
 
