@@ -17,6 +17,8 @@ import {
   useIncludeDeferred,
   useTabView,
 } from "@/components/grid/useGridState";
+import { useTreeRowDrag } from "@/components/grid/useTreeRowDrag";
+import { SortChip, sortColumnLabel } from "@/components/grid/SortChip";
 import { ShowFieldsDialog } from "@/components/grid/ShowFieldsDialog";
 import {
   abbrStateColumn,
@@ -105,7 +107,7 @@ function buildColumns(
   return [
     abbrStateColumn(),
     priorityColumn(),
-    nameColumn(),
+    nameColumn({ dragHandle: true }),
     {
       id: "tasks",
       label: "Tasks",
@@ -267,6 +269,15 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
   );
   const defaultOrder = useMemo(() => viewOrder(view), [view]);
   const gridState = useGridState(`projects.${view}`, allColumns, defaultOrder);
+  const rowDrag = useTreeRowDrag({
+    nodes: tab.nodes,
+    byId: tab.byId,
+    apply: tab.apply,
+    patch: tab.patch,
+    selectOne: tab.selectOne,
+    headerSort: gridState.sort,
+    clearHeaderSort: gridState.clearSort,
+  });
 
   // When the view changes, reset to that view's preset (still overridable via Show Fields).
   const columns = gridState.columns;
@@ -371,6 +382,14 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
 
       {tab.error && <ErrorBanner message={tab.error} />}
 
+      {gridState.sort && (
+        <SortChip
+          sort={gridState.sort}
+          columnLabel={sortColumnLabel(gridState.sort, allColumns)}
+          onClear={gridState.clearSort}
+        />
+      )}
+
       <DataGrid
         rows={rows}
         columns={columns}
@@ -382,6 +401,7 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
         ariaLabel="Projects"
         rowNumbers
         rowMenu={tab.rowMenu}
+        rowDrag={rowDrag}
         enableFilters
         enableSort
         sort={gridState.sort}

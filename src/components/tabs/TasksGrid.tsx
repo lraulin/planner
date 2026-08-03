@@ -16,6 +16,8 @@ import {
   useIncludeDeferred,
   useTabView,
 } from "@/components/grid/useGridState";
+import { useTreeRowDrag } from "@/components/grid/useTreeRowDrag";
+import { SortChip, sortColumnLabel } from "@/components/grid/SortChip";
 import { ShowFieldsDialog } from "@/components/grid/ShowFieldsDialog";
 import {
   abbrStateColumn,
@@ -70,7 +72,7 @@ function buildColumns(
   return [
     abbrStateColumn(),
     priorityColumn(),
-    nameColumn(),
+    nameColumn({ dragHandle: true }),
     {
       id: "effort",
       label: "Effort",
@@ -170,6 +172,15 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     [tab.nodes, tab.today],
   );
   const gridState = useGridState(`tasks.${view}`, allColumns, DEFAULT_ORDER);
+  const rowDrag = useTreeRowDrag({
+    nodes: tab.nodes,
+    byId: tab.byId,
+    apply: tab.apply,
+    patch: tab.patch,
+    selectOne: tab.selectOne,
+    headerSort: gridState.sort,
+    clearHeaderSort: gridState.clearSort,
+  });
 
   const purposeText = useMemo(() => {
     if (!showPurpose || !scopeId) return null;
@@ -296,6 +307,14 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
 
       {tab.error && <ErrorBanner message={tab.error} />}
 
+      {gridState.sort && (
+        <SortChip
+          sort={gridState.sort}
+          columnLabel={sortColumnLabel(gridState.sort, allColumns)}
+          onClear={gridState.clearSort}
+        />
+      )}
+
       <DataGrid
         rows={rows}
         columns={gridState.columns}
@@ -307,6 +326,7 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         ariaLabel="Tasks"
         rowNumbers
         rowMenu={tab.rowMenu}
+        rowDrag={rowDrag}
         enableFilters
         enableSort
         sort={gridState.sort}

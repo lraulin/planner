@@ -22,6 +22,10 @@ import {
   withRootCategoryFromPlacement,
 } from "@/lib/tree/dnd";
 import {
+  planSiblingPriorityDrop,
+  priorityDropFromPosition,
+} from "@/lib/tree/outlinePriority";
+import {
   createNodeAction,
   deleteNodeAction,
   indentNodeAction,
@@ -430,11 +434,11 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
    * and the server round-trip that `apply` already performs is the honest way to get them.
    */
   /**
-   * Drag writes the hand-built tree order (parent + sortKey). A header sort is only a view:
-   * drop targets are still resolved by row identity, like Achieve — you do not have to clear
-   * the sort first. After a successful drop we clear the sort so the order you just wrote is
-   * what stays on screen (under a priority sort a sibling reorder would otherwise look like
-   * nothing happened).
+   * Achieve-style drag: drop targets resolve by row identity (no need to clear sort first).
+   * Sibling before/after also rewrites priority letter/rank among the destination parent's
+   * children. Inside reparent only moves structure. A priority header sort stays on so the
+   * renumber is what you see; any other column sort is cleared so a non-priority view does
+   * not hide the new order.
    */
   const rowDrag: RowDrag | undefined = useMemo(() => {
     const rootsOf = (dragIds: readonly string[]) =>
@@ -478,11 +482,29 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
           drop = withRootCategoryFromPlacement(drop, primary, byId);
         }
 
-        // Leave the sorted view so the tree order the drop wrote is what the user sees.
-        if (headerSort) clearHeaderSort();
+        // Priority sort is the Achieve default and matches sibling renumber; other sorts hide it.
+        if (headerSort && headerSort.columnId !== "priority") clearHeaderSort();
+
+        const placement = drop;
+        const priSlot = priorityDropFromPosition(placement.position);
+        const priorityPlan = priSlot
+          ? planSiblingPriorityDrop(
+              nodes,
+              roots,
+              priSlot.targetId,
+              priSlot.zone,
+              placement.parentId,
+            )
+          : [];
 
         selectOne(primary);
-        const placement = drop;
+        for (const assignment of priorityPlan) {
+          patch(assignment.id, {
+            priorityLetter: assignment.letter,
+            priorityRank: assignment.rank,
+          });
+        }
+
         apply(async () => {
           // Move the block as consecutive siblings: first to the resolved placement, each
           // later root after the previous. Children of a selected parent ride along with it
@@ -504,6 +526,14 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
             if (!lastResult.ok) return lastResult;
             previousId = nodeId;
           }
+          for (const assignment of priorityPlan) {
+            lastResult = await setPriorityAction(
+              assignment.id,
+              assignment.letter,
+              assignment.rank,
+            );
+            if (!lastResult.ok) return lastResult;
+          }
           // Dropping into a closed row would otherwise read as the node vanishing.
           if (
             lastResult.ok &&
@@ -516,7 +546,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         });
       },
     };
-  }, [byId, byCategory, nodes, apply, headerSort, clearHeaderSort, selectOne]);
+  }, [byId, byCategory, nodes, apply, patch, headerSort, clearHeaderSort, selectOne]);
 
   const columnCtx: OutlineColumnCtx = useMemo(
     () => ({

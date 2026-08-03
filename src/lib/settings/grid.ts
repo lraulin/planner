@@ -54,13 +54,13 @@ export const DEFAULT_GRID_SETTINGS: GridSettings = {
   widths: {},
   filters: {},
   /**
-   * Manual / tree order by default so Outline drag works immediately. List tabs (Projects,
-   * Tasks) can still open sorted by priority with one click on Pri — Achieve did that for
-   * those grids. Tabs without a `priority` column ignore a priority sort (DataGrid only
-   * sorts when `sortValue` exists). Outline keeps drag enabled under a header sort and
-   * clears it on drop so the written tree order is what you see.
+   * Achieve opens prioritized grids sorted by priority. Sibling drag rewrites letter/rank
+   * among the destination parent's children, so a priority sort stays meaningful after a
+   * drop (we only clear the chip when the active sort is something other than priority).
+   * Tabs without a `priority` column ignore this (DataGrid only sorts when `sortValue`
+   * exists).
    */
-  sort: null,
+  sort: { columnId: "priority", direction: "asc" },
   collapsedGroups: [],
   view: null,
   includeDeferred: true,
