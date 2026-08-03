@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { dailyItems, nodes, users } from "@/db/schema";
+import { dailyItems, nodes, notes, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { toDateKey } from "@/lib/schedule/geometry";
 import { createNode, moveNode, setState } from "@/lib/tree/mutations";
@@ -759,6 +759,17 @@ describeDb("week view and journal", () => {
     expect(again).toBe(id);
     const day = await loadDay(userId, MON, WED);
     expect(day.journal).toMatchObject({ id, body: "Rough start. Better by lunch." });
+
+    // Day journals sit under Journal / YYYY / YYYY-MM, not at the notes root.
+    const [row] = await db.select().from(notes).where(eq(notes.id, id));
+    expect(row.parentId).not.toBeNull();
+    const [month] = await db.select().from(notes).where(eq(notes.id, row.parentId!));
+    expect(month.title).toBe("2026-07");
+    const [year] = await db.select().from(notes).where(eq(notes.id, month.parentId!));
+    expect(year.title).toBe("2026");
+    const [root] = await db.select().from(notes).where(eq(notes.id, year.parentId!));
+    expect(root.title).toBe("Journal");
+    expect(root.parentId).toBeNull();
   });
 
   it("keeps journal entries separate per day", async () => {
