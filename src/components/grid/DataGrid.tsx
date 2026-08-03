@@ -715,7 +715,10 @@ function DataRow<TCtx, TRow>({
         "relative grid items-center border-b border-rule/60 pr-3 text-[0.875rem]",
         selected ? "bg-select" : "hover:bg-surface-raised/60",
         drag?.dragging ? "opacity-40" : "",
-        drag?.hint?.zone === "inside" ? "ring-1 ring-select-edge ring-inset" : "",
+        // Child-drop: whole row framed so it is not confused with the thin sibling line.
+        drag?.hint?.zone === "inside"
+          ? "bg-priority-a/10 ring-2 ring-priority-a ring-inset"
+          : "",
       ].join(" ")}
       style={{
         gridTemplateColumns: gridTemplate,
@@ -743,13 +746,19 @@ function DataRow<TCtx, TRow>({
         ))}
       </RowDragHandleContext.Provider>
 
-      {drag?.hint && drag.hint.zone !== "inside" && (
-        <DropLine
-          zone={drag.hint.zone}
-          depth={drag.hint.depth}
-          nameColumnLeft={nameColumnLeft(columns, handleWidth)}
-        />
-      )}
+      {drag?.hint &&
+        (drag.hint.zone === "inside" ? (
+          <ChildDropMark
+            depth={drag.hint.depth}
+            nameColumnLeft={nameColumnLeft(columns, handleWidth)}
+          />
+        ) : (
+          <DropLine
+            zone={drag.hint.zone}
+            depth={drag.hint.depth}
+            nameColumnLeft={nameColumnLeft(columns, handleWidth)}
+          />
+        ))}
     </div>
   );
 }
@@ -825,9 +834,8 @@ function dropZoneFor(event: React.DragEvent<HTMLDivElement>): DropZone {
 }
 
 /**
- * The insertion line, indented to the depth the node will land at rather than to the depth
- * of the row under the cursor — so a drop that snaps out to an ancestor's level says so
- * before the mouse is released.
+ * Sibling insertion: Achieve draws a single red arrow on the line between rows. We use a
+ * chevron + bar at the depth the node will land (which may snap out from the cursor row).
  */
 function DropLine({
   zone,
@@ -841,13 +849,48 @@ function DropLine({
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute right-0 z-10 h-0.5 bg-select-edge"
+      className="pointer-events-none absolute right-2 z-20 flex h-0 items-center"
       style={{
         left: `calc(${nameColumnLeft} + ${depth} * var(--indent-step))`,
-        top: zone === "before" ? "-1px" : undefined,
-        bottom: zone === "after" ? "-1px" : undefined,
+        top: zone === "before" ? "0" : undefined,
+        bottom: zone === "after" ? "0" : undefined,
+        transform: "translateY(-50%)",
       }}
-    />
+    >
+      {/* Filled chevron — reads as "insert here" even on a 1px gap between rows. */}
+      <span
+        className="mr-0.5 inline-block h-0 w-0 shrink-0 border-y-[5px] border-y-transparent border-r-[7px] border-r-priority-a"
+        title={zone === "before" ? "Drop before" : "Drop after"}
+      />
+      <span className="h-[3px] min-w-0 flex-1 rounded-full bg-priority-a shadow-[0_0_0_1px_rgb(0_0_0/10%)]" />
+    </div>
+  );
+}
+
+/**
+ * Child drop: Achieve frames the target with opposing red arrows (→ status ←). We put the
+ * same idea on the name track at landing depth, plus the row ring from the parent.
+ */
+function ChildDropMark({
+  depth,
+  nameColumnLeft,
+}: {
+  depth: number;
+  nameColumnLeft: string;
+}) {
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-y-0 right-2 z-20 flex items-center"
+      style={{
+        left: `calc(${nameColumnLeft} + ${Math.max(0, depth - 1)} * var(--indent-step))`,
+      }}
+    >
+      <span className="text-[0.75rem] font-bold leading-none text-priority-a">→</span>
+      <span className="min-w-0 flex-1" />
+      <span className="text-[0.75rem] font-bold leading-none text-priority-a">←</span>
+      <span className="sr-only">Drop as child</span>
+    </div>
   );
 }
 
@@ -917,7 +960,7 @@ function GroupHeader({
         // A compact header is a sticky section label, not a row in a template: it keeps its
         // place while the list under it scrolls, and it is tall enough to tap.
         compact ? "sticky top-0 z-10 min-h-9 py-1.5 text-[0.8125rem]" : "",
-        drag?.hint ? "ring-1 ring-select-edge ring-inset" : "",
+        drag?.hint ? "bg-priority-a/10 ring-2 ring-priority-a ring-inset" : "",
       ].join(" ")}
       style={
         compact
