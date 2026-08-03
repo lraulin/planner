@@ -347,22 +347,24 @@ function nextAnchor(
  * Where each of a repeating task's dates lands on the next occurrence.
  *
  * Everything already set shifts by the same number of days. What differs is which fields
- * are **created** when they were empty, and the split is the same one Achieve makes:
+ * are **created** when they were empty:
  *
- * - **Target start and deferred date are always set.** The next occurrence exists from the
- *   moment you complete this one, so it has to sit somewhere — Achieve's regenerated item
- *   comes back with both filled in and its deadline still None. The deferred date is also
- *   the only thing that takes a finished routine out of the Task Chooser, so without it a
- *   deadline-anchored task could be ticked twice in one day.
- * - **A deadline is only ever advanced, never invented.** This is the rule the whole
- *   feature rests on: "should be done ASAP" is not a deadline, and a routine that quietly
- *   acquired one would start competing with taxes and bills in Overdue.
- * - **Target end and the reminder are only moved.** Both describe something the task did
- *   not necessarily have — a window, a nudge — and inventing either means inventing a
- *   duration or an alarm nobody asked for.
+ * - **Target start and deferred date are always set** to the next occurrence (when empty).
+ *   Live Achieve (latest release) does the same on complete for both Repeat and Regenerate
+ *   patterns: next instance gets Start Date and Deferred Date equal to the recurrence day,
+ *   even with no deadline. That both *plans* the next run and *hides* it until then
+ *   (tickler). We keep that date pair.
+ * - **State becomes postponed** until the deferred date expires — our deliberate link
+ *   between Postponed and Deferred Date (GTD tickler). Achieve left the new instance NS
+ *   and used the deferred date alone for visibility; we park it as postponed so one shelf
+ *   rule hides it everywhere without a separate "deferred filter".
+ * - **A deadline is only ever advanced, never invented.** "Should be done ASAP" is not a
+ *   deadline; inventing one would push routines into Overdue against real bills.
+ * - **Target end and the reminder are only moved**, never invented.
  *
- * The same rule governs "Plan for day", one level up in `syncDayLineOnCompletion`: a day
- * you had planned moves, a day you had not is not chosen for you.
+ * We also **cycle one row** and log completions rather than copying the outline tree —
+ * otherwise daily routines fill the file with completed clones (the failure mode in large
+ * Achieve data files).
  */
 function moveDates(r: Recurrence, shift: number, next: Date) {
   // Calendar columns must leave as UTC noon, not process-local midnight after addDays.

@@ -17,7 +17,7 @@ import {
   STATE_OPTIONS,
 } from "@/lib/tree/hierarchy";
 import { toDateKey } from "@/lib/schedule/geometry";
-import { scheduleStatus, STATUS_LABELS } from "@/lib/tree/status";
+import { scheduleStatus, STATUS_LABELS, type ScheduleStatus } from "@/lib/tree/status";
 import { TypeIcon } from "@/components/icons/TypeIcon";
 
 const PRIORITY_COLOR: Record<PriorityLetter, string> = {
@@ -459,14 +459,27 @@ export function FocusCell({
 export function StatusCell({
   node,
   today,
+  status,
 }: {
   node: OutlineNode;
   today: string | null;
+  /** Precomputed (e.g. with child→parent propagation). Defaults to local status. */
+  status?: ScheduleStatus;
 }) {
-  const status = scheduleStatus(node.deadline, today, node.state, node.shelf);
+  const resolved =
+    status ??
+    scheduleStatus({
+      deadline: node.deadline,
+      targetStart: node.targetStart,
+      targetEnd: node.targetEnd,
+      state: node.state,
+      shelf: node.shelf,
+      priorityLetter: node.priorityLetter,
+      today,
+    });
   return (
     <span className="truncate text-[0.75rem] text-ink-muted">
-      {STATUS_LABELS[status]}
+      {STATUS_LABELS[resolved]}
     </span>
   );
 }

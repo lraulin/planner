@@ -316,6 +316,7 @@ function taskStub(id: string, name: string): OutlineNode {
     percentCompleteRollup: 0,
     childCount: 0,
     hasChildren: false,
+    hasActiveChildren: false,
     hidden: false,
     shelf: null,
   };

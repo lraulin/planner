@@ -6,7 +6,7 @@ import type { OutlineNode } from "@/lib/tree/types";
 import { formatEffort, formatPriority } from "@/lib/tree/format";
 import { toDateKey } from "@/lib/schedule/geometry";
 import { TcPriorityCell } from "./TcPriorityCell";
-import { scheduleStatus, STATUS_LABELS } from "@/lib/tree/status";
+import { scheduleStatusForNode, STATUS_LABELS } from "@/lib/tree/status";
 import {
   abbrStateColumn,
   deadlineColumn,
@@ -201,10 +201,7 @@ export function buildChooserColumns(
       label: "Status",
       width: "7.5rem",
       filterKind: "enum",
-      filterValue: (row) =>
-        STATUS_LABELS[
-          scheduleStatus(row.node.deadline, today, row.node.state, row.node.shelf)
-        ],
+      filterValue: (row) => STATUS_LABELS[scheduleStatusForNode(row.node, today)],
       render: (row, ctx) => <StatusCell node={row.node} today={ctx.today} />,
     },
     {

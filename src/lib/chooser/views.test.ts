@@ -369,12 +369,51 @@ describe("applyNextActionFilter", () => {
     row({ id: "loose", type: "task", name: "loose", priorityLetter: "B" }),
   ];
 
-  it("keeps the project's topmost item in priority order", () => {
+  it("keeps the project's highest outline-priority item(s), not outline order", () => {
+    // "topmost" is C but first in the tree; "best" is A — next action is priority order.
     const items = build(rows, "next-action", {
       onlyNextAction: true,
       useTaskPriorityOrder: true,
     });
-    expect(names(items).sort()).toEqual(["loose", "topmost"]);
+    expect(names(items).sort()).toEqual(["best", "loose"]);
+  });
+
+  it("keeps every task that shares the top priority under a project", () => {
+    const multi = [
+      row({ id: "p", type: "project", name: "P", sortKey: "a" }),
+      row({
+        id: "a1",
+        type: "task",
+        parentId: "p",
+        name: "first-A1",
+        priorityLetter: "A",
+        priorityRank: 1,
+        sortKey: "a",
+      }),
+      row({
+        id: "a1b",
+        type: "task",
+        parentId: "p",
+        name: "second-A1",
+        priorityLetter: "A",
+        priorityRank: 1,
+        sortKey: "b",
+      }),
+      row({
+        id: "a2",
+        type: "task",
+        parentId: "p",
+        name: "A2",
+        priorityLetter: "A",
+        priorityRank: 2,
+        sortKey: "c",
+      }),
+    ];
+    const items = build(multi, "next-action", {
+      onlyNextAction: true,
+      useTaskPriorityOrder: true,
+    });
+    expect(names(items).sort()).toEqual(["first-A1", "second-A1"]);
   });
 
   it("keeps the project's highest-scoring item when priority order is off", () => {
@@ -411,8 +450,28 @@ describe("applyNextActionFilter", () => {
       onlyNextAction: true,
       useTaskPriorityOrder: true,
     });
-    // "loose" is a B, "topmost" is a C — score order, not project order.
-    expect(names(items)).toEqual(["loose", "topmost"]);
+    // "best" is A, "loose" is B — score order among the survivors.
+    expect(names(items)).toEqual(["best", "loose"]);
+  });
+
+  it("treats a parent whose children are all completed as a leaf", () => {
+    // Achieve: include items with no children or only completed children.
+    const tree = [
+      row({ id: "p", type: "project", name: "Done kids", sortKey: "a" }),
+      row({
+        id: "t",
+        type: "task",
+        parentId: "p",
+        name: "Finished",
+        state: "completed",
+        sortKey: "a",
+      }),
+    ];
+    const items = build(tree, "best-overall", {
+      states: ["not_started", "in_progress", "completed"],
+    });
+    // Project is now a chooser candidate; completed child can appear if states allow.
+    expect(names(items)).toContain("Done kids");
   });
 
   it("is a no-op on an empty list", () => {

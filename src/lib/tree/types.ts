@@ -87,7 +87,17 @@ export type OutlineNode = OutlineRow & {
   /** Percent complete, weighted by effort across the subtree. */
   percentCompleteRollup: number;
   childCount: number;
+  /**
+   * Structural: any child rows exist. Drives expand/collapse chrome and effort rollup
+   * display — completed children still count.
+   */
   hasChildren: boolean;
+  /**
+   * At least one child is still open (not completed or cancelled). The Task Chooser treats
+   * a node with only finished children as a leaf (Achieve: "no children or only completed
+   * children").
+   */
+  hasActiveChildren: boolean;
   /** True when an ancestor is collapsed, so the row should not render. */
   hidden: boolean;
   /**

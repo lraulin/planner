@@ -37,6 +37,11 @@ export type ChooserWeights = {
   targetEndPast: number;
   /** Target start date reached, so the work is meant to be underway. */
   targetStartReached: number;
+  /**
+   * Penalty when target start is still in the future (Achieve: future start demotes score).
+   * Applied once for any future start; not scaled by how far out.
+   */
+  targetStartFuture: number;
 
   /**
    * Achieve's Focus flag (§3.10). Kept **below `priorityLetterStep`** in the defaults, so
@@ -51,10 +56,10 @@ export type ChooserWeights = {
 };
 
 /**
- * A bare letter with no rank scores as if mid-pack within its letter: "A1" is a deliberate
- * refinement and a plain "A" is not, so it should not silently outrank one.
+ * Bare letter (no rank) sorts **after** every ranked rank of that letter — Achieve's
+ * outline priority rule. Scored as if rank were just past the spinner max.
  */
-export const UNRANKED_RANK = 5;
+export const UNRANKED_RANK = 10;
 
 /** Highest rank Achieve's rank spinner reaches; used to keep a letter's band from bleeding. */
 const MAX_RANK = 9;
@@ -72,6 +77,7 @@ export const DEFAULT_WEIGHTS: ChooserWeights = {
 
   targetEndPast: 25,
   targetStartReached: 10,
+  targetStartFuture: 15,
 
   focusBonus: 15,
 
@@ -101,7 +107,8 @@ const LETTER_INDEX: Record<PriorityLetter, number> = { A: 0, B: 1, C: 2, D: 3 };
  * unprioritised task under an A1 project still outranks one under a C project.
  *
  * `priorityRankStep * MAX_RANK` stays below `priorityLetterStep` in the defaults, so the
- * worst A still beats the best B — ranks refine a letter, they do not cross it.
+ * worst A still beats the best B — ranks refine a letter, they do not cross it. Unranked
+ * (bare letter) is worse than A9 but still beats B1.
  */
 export function priorityScore(
   letter: PriorityLetter | null,
@@ -109,11 +116,14 @@ export function priorityScore(
   weights: ChooserWeights,
 ): number {
   if (letter === null) return 0;
-  const effectiveRank = rank ?? UNRANKED_RANK;
+  // Null rank → after every spinner rank. Numeric ranks clamp to 1..MAX_RANK so a stray
+  // 50 cannot equal bare-letter scoring or cross into the next letter.
+  const effectiveRank =
+    rank === null ? UNRANKED_RANK : Math.min(Math.max(rank, 1), MAX_RANK);
   return (
     weights.priorityTop -
     LETTER_INDEX[letter] * weights.priorityLetterStep -
-    (Math.min(effectiveRank, MAX_RANK) - 1) * weights.priorityRankStep
+    (effectiveRank - 1) * weights.priorityRankStep
   );
 }
 
@@ -138,9 +148,8 @@ export function deadlineScore(
 }
 
 /**
- * Target-date term. The two halves are independent and add: work whose start date has
- * arrived is due to be underway, and work whose end date has passed has slipped — an item
- * can be both.
+ * Target-date term. Halves are independent and add: past end, start reached, or future
+ * start penalty (Achieve demotes work that is not yet meant to begin).
  */
 export function targetDateScore(
   targetStart: Date | null,
@@ -154,8 +163,10 @@ export function targetDateScore(
   if (targetEnd && daysBetween(today, dayString(targetEnd)) < 0) {
     total += weights.targetEndPast;
   }
-  if (targetStart && daysBetween(today, dayString(targetStart)) <= 0) {
-    total += weights.targetStartReached;
+  if (targetStart) {
+    const startOut = daysBetween(today, dayString(targetStart));
+    if (startOut <= 0) total += weights.targetStartReached;
+    else total -= weights.targetStartFuture;
   }
 
   return total;

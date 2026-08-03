@@ -126,7 +126,24 @@ describe("derive — structure", () => {
     ]);
     expect(nodes[0].childCount).toBe(2);
     expect(nodes[0].hasChildren).toBe(true);
+    expect(nodes[0].hasActiveChildren).toBe(true);
     expect(nodes[1].hasChildren).toBe(false);
+    expect(nodes[1].hasActiveChildren).toBe(false);
+  });
+
+  it("treats only completed/cancelled children as inactive for hasActiveChildren", () => {
+    const nodes = derive([
+      row({ id: "p", type: "project" }),
+      row({
+        id: "done",
+        type: "task",
+        parentId: "p",
+        depth: 1,
+        state: "completed",
+      }),
+    ]);
+    expect(nodes[0].hasChildren).toBe(true);
+    expect(nodes[0].hasActiveChildren).toBe(false);
   });
 
   it("hides descendants of a collapsed node", () => {

@@ -18,6 +18,7 @@ function node(
     percentCompleteRollup: 0,
     childCount: 0,
     hasChildren: false,
+    hasActiveChildren: false,
     hidden: false,
     shelf: null,
     ...partial,

@@ -668,6 +668,18 @@ describeDb("carry-over", () => {
     expect(rows).toHaveLength(2);
   });
 
+  it("does not rewrite target start when a line is carried forward", async () => {
+    // Behind Schedule needs the original plan date. The day line still moves to today.
+    const nodeId = await makeTask(userId, "Still meant for Monday");
+    await planNodeForDay(userId, nodeId, MON);
+
+    await loadDay(userId, WED, WED);
+
+    const [detail] = await db.select().from(nodes).where(eq(nodes.id, nodeId));
+    expect(toDateKey(detail.targetStartDate!)).toBe(MON);
+    expect(await plannedDayForNode(userId, nodeId)).toBe(WED);
+  });
+
   it("collapses several stale days onto today at once", async () => {
     await createDailyItem({ userId, day: MON, title: "From Monday" });
     await createDailyItem({ userId, day: TUE, title: "From Tuesday" });

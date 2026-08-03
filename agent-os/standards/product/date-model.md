@@ -6,12 +6,17 @@ pinned here.
 
 ## The four dates
 
-| Column              | Means                                                      | Who writes it                                        |
-| ------------------- | ---------------------------------------------------------- | ---------------------------------------------------- |
-| `target_start_date` | The day you **plan to begin** — the day plan               | Day page drag, Plan for day, recurrence, detail form |
-| `target_end_date`   | When you intend to finish (often equal to start for a day) | Day plan (both ends), detail form                    |
-| `deadline`          | When it is **due** — the hard date                         | Detail form, outline column                          |
-| `deferred_date`     | **Expiry of the postponed shelf** — optional               | Detail form, recurrence on complete/skip             |
+| Column              | Means                                                                | Who writes it                                        |
+| ------------------- | -------------------------------------------------------------------- | ---------------------------------------------------- |
+| `target_start_date` | The day you **plan to begin** — the day plan (and FC day assignment) | Day page drag, Plan for day, recurrence, detail form |
+| `target_end_date`   | When you intend to finish (often equal to start for a day)           | Day plan (both ends), detail form                    |
+| `deadline`          | When it is **due** — the hard date                                   | Detail form, outline column                          |
+| `deferred_date`     | **Expiry of the postponed shelf** — optional                         | Detail form, recurrence on complete/skip             |
+
+**Behind Schedule vs carry-forward:** If target start is in the past and the task is still
+NS (or target end is past and it is started), Status is **Behind Schedule** (Achieve §3.8).
+Carry-forward moves the open `daily_items` line onto today so the work stays on the day
+page, but **does not rewrite** `target_start_date` — the slip is the point.
 
 `actual_start_date` and `date_completed` live on `task_details`. They are **records**, not
 plans: when work really began, and when it was finished. They are deliberately editable so a

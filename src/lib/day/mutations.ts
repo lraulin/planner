@@ -421,17 +421,11 @@ export async function forwardOpenItems(
         sortKey,
       });
 
-      // Carrying a task over is re-planning it for today, so its target start date comes
-      // with it — the one place a start date you sailed past gets bumped, which is how a
-      // task you meant to begin on Tuesday is still in front of you on Thursday rather
-      // than stranded on Tuesday's page.
-      if (row.nodeId) {
-        const date = fromDateKey(today);
-        await tx
-          .update(nodes)
-          .set({ targetStartDate: date, targetEndDate: date, updatedAt: new Date() })
-          .where(and(eq(nodes.id, row.nodeId), eq(nodes.userId, userId)));
-      }
+      // Target start stays put. A plan you meant for Tuesday that you did not finish is
+      // **Behind Schedule** (manual §3.8), not a new plan for today — rewriting the start
+      // would erase the slip. The day *line* still moves so the work stays on today's page;
+      // `syncDayLineToTargetStart` clamps past starts to today the same way so a later
+      // detail save does not pull the line back onto the original day.
 
       sortKey = between(sortKey, null);
     }

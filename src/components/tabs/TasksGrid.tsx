@@ -4,7 +4,11 @@ import { useMemo, useState } from "react";
 import type { OutlineNode } from "@/lib/tree/types";
 import { sliceTree, type GroupBy, type GridRow } from "@/lib/tree/slice";
 import { formatEffort, formatPriority } from "@/lib/tree/format";
-import { scheduleStatus, STATUS_LABELS } from "@/lib/tree/status";
+import {
+  scheduleStatusById,
+  scheduleStatusForNode,
+  STATUS_LABELS,
+} from "@/lib/tree/status";
 import type { ColumnDef } from "@/components/grid/columns";
 import { DataGrid } from "@/components/grid/DataGrid";
 import {
@@ -58,7 +62,11 @@ function isActive(node: OutlineNode): boolean {
   return node.state !== "completed" && node.state !== "cancelled";
 }
 
-function buildColumns(today: string | null): ColumnDef<OutlineColumnCtx>[] {
+function buildColumns(
+  allNodes: OutlineNode[],
+  today: string | null,
+): ColumnDef<OutlineColumnCtx>[] {
+  const statuses = scheduleStatusById(allNodes, today);
   return [
     abbrStateColumn(),
     priorityColumn(),
@@ -128,11 +136,17 @@ function buildColumns(today: string | null): ColumnDef<OutlineColumnCtx>[] {
       filterKind: "enum",
       filterValue: (row) =>
         STATUS_LABELS[
-          scheduleStatus(row.node.deadline, today, row.node.state, row.node.shelf)
+          statuses.get(row.node.id) ?? scheduleStatusForNode(row.node, today)
         ],
-      // Derived from the state and deadline chips already on the line.
+      // Derived from dates + state (manual §3.8 bands), with child→parent roll-up.
       compact: "hidden",
-      render: (row, ctx) => <StatusCell node={row.node} today={ctx.today} />,
+      render: (row, ctx) => (
+        <StatusCell
+          node={row.node}
+          today={ctx.today}
+          status={statuses.get(row.node.id)}
+        />
+      ),
     },
   ];
 }
@@ -151,7 +165,10 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     [tab.nodes],
   );
 
-  const allColumns = useMemo(() => buildColumns(tab.today), [tab.today]);
+  const allColumns = useMemo(
+    () => buildColumns(tab.nodes, tab.today),
+    [tab.nodes, tab.today],
+  );
   const gridState = useGridState(`tasks.${view}`, allColumns, DEFAULT_ORDER);
 
   const purposeText = useMemo(() => {

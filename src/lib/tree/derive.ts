@@ -140,6 +140,10 @@ export function derive(rows: OutlineRow[]): OutlineNode[] {
           : 0,
       childCount: children.length,
       hasChildren: children.length > 0,
+      hasActiveChildren: children.some((id) => {
+        const child = byId.get(id)!;
+        return child.state !== "completed" && child.state !== "cancelled";
+      }),
       hidden: parentHidden,
       shelf: shelfFor(row.id),
     };

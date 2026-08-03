@@ -47,6 +47,7 @@ const WEIGHT_GROUPS: { title: string; fields: WeightField[] }[] = [
     fields: [
       { key: "targetEndPast", label: "Target end passed" },
       { key: "targetStartReached", label: "Target start reached" },
+      { key: "targetStartFuture", label: "Future target start (penalty)" },
       { key: "focusBonus", label: "Focus flag" },
       {
         key: "importanceWeight",

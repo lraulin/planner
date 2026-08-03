@@ -129,7 +129,8 @@ export const CHOOSER_VIEWS: ChooserView[] = [
     keep: null,
     tcPriority: false,
     states: DEFAULT_STATES,
-    description: "One item per project — the next thing that project needs.",
+    description:
+      "Next action(s) per project — highest outline priority under each project (multi-A1 kept).",
   },
   {
     id: "todo-list",
@@ -239,8 +240,11 @@ export function isChooserCandidate(
   today: string | null = null,
 ): boolean {
   if (!states.includes(effectiveState(node.state, node.shelf, today))) return false;
-  if (node.type === "task") return !node.hasChildren;
-  if (node.type === "project") return !node.hasChildren;
+  // Achieve: leaf work is tasks/projects with no children **or only completed children**.
+  // Structural `hasChildren` still true when kids are finished; `hasActiveChildren` is the
+  // chooser rule.
+  if (node.type === "task") return !node.hasActiveChildren;
+  if (node.type === "project") return !node.hasActiveChildren;
   return false;
 }
 
@@ -346,11 +350,14 @@ function inScope(
 }
 
 /**
- * Manual §8.3: collapse to one item per project.
+ * Manual §8.3 / training "Next Action Only": restrict to next actions per project.
  *
- * With `useTaskPriorityOrder`, the survivor is the project's **topmost** item in outline
- * order — the same "simple" next action the Outline shows. Without it, the survivor is the
- * project's **highest-scoring** item, which may be neither topmost nor obvious.
+ * With `useTaskPriorityOrder` (basic NA definition): keep every candidate that shares the
+ * **highest outline priority** under that project (letter, then rank). Since Achieve 1.9.6,
+ * multiple A1s are all next actions — not a single survivor. Unranked letters sort after
+ * every ranked rank of that letter; no priority is worst.
+ *
+ * Without it: keep the **highest-scoring** item only (items already arrive score-ordered).
  *
  * Items with no project ancestor pass through untouched: since the hierarchy relaxation in
  * the quick-capture spec, a task need not live under a project at all, and dropping those
@@ -362,25 +369,58 @@ export function applyNextActionFilter(
   items: ChooserItem[],
   settings: Pick<ChooserSettings, "useTaskPriorityOrder">,
 ): ChooserItem[] {
-  const winnerByProject = new Map<string, ChooserItem>();
+  const byProject = new Map<string, ChooserItem[]>();
 
   for (const item of items) {
     if (item.projectId === null) continue;
-    const current = winnerByProject.get(item.projectId);
-    if (!current) {
-      winnerByProject.set(item.projectId, item);
+    const list = byProject.get(item.projectId);
+    if (list) list.push(item);
+    else byProject.set(item.projectId, [item]);
+  }
+
+  const kept = new Set<string>();
+
+  for (const group of byProject.values()) {
+    if (!settings.useTaskPriorityOrder) {
+      // Score order: first item is the best for that project.
+      kept.add(group[0].node.id);
       continue;
     }
-    // `items` is score-ordered, so the incumbent already wins the score comparison; only
-    // the priority-order rule can displace it.
-    if (settings.useTaskPriorityOrder && item.order < current.order) {
-      winnerByProject.set(item.projectId, item);
+
+    let bestKey = outlinePriorityKey(group[0].node);
+    for (let i = 1; i < group.length; i++) {
+      const key = outlinePriorityKey(group[i].node);
+      if (comparePriorityKeys(key, bestKey) < 0) bestKey = key;
+    }
+    for (const item of group) {
+      if (comparePriorityKeys(outlinePriorityKey(item.node), bestKey) === 0) {
+        kept.add(item.node.id);
+      }
     }
   }
 
-  const kept = new Set([...winnerByProject.values()].map((item) => item.node.id));
-
   return items.filter((item) => item.projectId === null || kept.has(item.node.id));
+}
+
+const LETTER_ORDER: Record<string, number> = { A: 0, B: 1, C: 2, D: 3 };
+
+/**
+ * Outline Priority sort key for next-action selection. Own letter/rank only (not L.A.P.) —
+ * next actions are "highest priority under the project" in the task's Priority column.
+ * Rank null (bare letter) sorts after every numeric rank; no letter is last of all.
+ */
+function outlinePriorityKey(node: OutlineNode): [number, number] {
+  if (node.priorityLetter === null) return [4, 0];
+  // Unranked letter after ranks 1..n — same convention as Achieve priority sort and our
+  // chooser score's unranked-after-ranked rule.
+  const rank = node.priorityRank ?? Number.MAX_SAFE_INTEGER;
+  return [LETTER_ORDER[node.priorityLetter] ?? 4, rank];
+}
+
+/** Negative if `a` is higher priority than `b`. */
+function comparePriorityKeys(a: [number, number], b: [number, number]): number {
+  if (a[0] !== b[0]) return a[0] - b[0];
+  return a[1] - b[1];
 }
 
 /**
@@ -430,8 +470,16 @@ export function applyDateFilter(
       case "overdue":
         return deadline !== null && deadline < 0;
 
-      case "behind":
-        return (end !== null && end < 0) || (deadline !== null && deadline < 0);
+      case "behind": {
+        // Manual §3.8 Behind Schedule (+ chooser date-filter help): overdue, past target
+        // end, NS with past target start, or started with past target end.
+        if (deadline !== null && deadline < 0) return true;
+        if (end !== null && end < 0) return true;
+        if (item.node.state === "not_started" && start !== null && start < 0) {
+          return true;
+        }
+        return false;
+      }
 
       case "due-soon":
         return (

@@ -5,7 +5,11 @@ import type { OutlineNode } from "@/lib/tree/types";
 import { sliceTree, type GroupBy, type GridRow } from "@/lib/tree/slice";
 import { formatEffort, formatPriority } from "@/lib/tree/format";
 import { toDateKey } from "@/lib/schedule/geometry";
-import { scheduleStatus, STATUS_LABELS } from "@/lib/tree/status";
+import {
+  scheduleStatusById,
+  scheduleStatusForNode,
+  STATUS_LABELS,
+} from "@/lib/tree/status";
 import type { ColumnDef } from "@/components/grid/columns";
 import { DataGrid } from "@/components/grid/DataGrid";
 import {
@@ -97,6 +101,7 @@ function buildColumns(
   allNodes: OutlineNode[],
   today: string | null,
 ): ColumnDef<OutlineColumnCtx>[] {
+  const statuses = scheduleStatusById(allNodes, today);
   return [
     abbrStateColumn(),
     priorityColumn(),
@@ -173,11 +178,17 @@ function buildColumns(
       compact: "hidden",
       filterValue: (row) =>
         STATUS_LABELS[
-          scheduleStatus(row.node.deadline, today, row.node.state, row.node.shelf)
+          statuses.get(row.node.id) ?? scheduleStatusForNode(row.node, today)
         ],
       sortValue: (row) =>
-        scheduleStatus(row.node.deadline, today, row.node.state, row.node.shelf),
-      render: (row, ctx) => <StatusCell node={row.node} today={ctx.today} />,
+        statuses.get(row.node.id) ?? scheduleStatusForNode(row.node, today),
+      render: (row, ctx) => (
+        <StatusCell
+          node={row.node}
+          today={ctx.today}
+          status={statuses.get(row.node.id)}
+        />
+      ),
     },
     {
       id: "lap",

@@ -14,8 +14,12 @@
  *
  * The invariant, maintained here and nowhere else:
  *
- * > A task with a target start date has exactly one open day line, on that date — unless
- * > that day still falls inside an active shelf (own or inherited). Then it has none.
+ * > A task with a target start date has exactly one open day line on that date when the
+ * > start is today or future — unless that day still falls inside an active shelf (own or
+ * > inherited), in which case it has none.
+ * > When target start is **in the past** and the task is still open, the open line sits on
+ * > **today** so Behind Schedule work stays on the day page without rewriting the plan
+ * > date (manual §3.8: NS + past target start = Behind Schedule).
  * > A task without a target start has none.
  *
  * The shelf rule is deliberately **narrow**: suppress only while the planned day is still
@@ -35,7 +39,7 @@
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { dailyItems, nodes } from "@/db/schema";
-import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
+import { localDateKey, fromDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { laterShelf, ownShelf, shelfHolds, type Shelf } from "@/lib/tree/shelving";
 import { between } from "@/lib/tree/sortKey";
 
@@ -98,6 +102,11 @@ export async function syncDayLineToTargetStart(
   tx: Executor,
   userId: string,
   nodeId: string,
+  /**
+   * Calendar day for "past start stays on the day page". Defaults to the server's local
+   * today — same as carry-forward.
+   */
+  today: string = localDateKey(new Date()),
 ): Promise<void> {
   const [task] = await tx
     .select({
@@ -132,6 +141,17 @@ export async function syncDayLineToTargetStart(
       : task.targetStartDate
         ? toDateKey(task.targetStartDate)
         : null;
+
+  // Past plan date: keep the work on today's page without rewriting target start (Behind
+  // Schedule). Future plans stay on their day; today is unchanged.
+  if (
+    wanted &&
+    wanted < today &&
+    task.state !== "completed" &&
+    task.state !== "cancelled"
+  ) {
+    wanted = today;
+  }
 
   // No open line while the day it would sit on is still inside a shelf (own or inherited).
   // `shelfHolds` with the planned day as "today" is exactly that comparison.

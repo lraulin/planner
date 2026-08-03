@@ -54,10 +54,14 @@ describe("priorityScore", () => {
     expect(priorityScore("C", 9, W)).toBeGreaterThan(priorityScore("D", 1, W));
   });
 
-  it("scores an unranked letter as mid-pack, not as rank 1", () => {
-    // "A1" is a deliberate refinement; a bare "A" must not silently outrank it.
-    expect(priorityScore("A", null, W)).toBeLessThan(priorityScore("A", 1, W));
-    expect(priorityScore("A", null, W)).toBe(priorityScore("A", UNRANKED_RANK, W));
+  it("scores an unranked letter after every ranked rank of that letter", () => {
+    // Achieve: bare "A" sorts after A1..A9, still above B1.
+    expect(priorityScore("A", null, W)).toBeLessThan(priorityScore("A", 9, W));
+    expect(priorityScore("A", null, W)).toBeGreaterThan(priorityScore("B", 1, W));
+    // One rank step past A9 (UNRANKED_RANK is the virtual rank used for bare letters).
+    expect(priorityScore("A", 9, W) - priorityScore("A", null, W)).toBe(
+      W.priorityRankStep * (UNRANKED_RANK - 9),
+    );
   });
 
   it("puts an item with no priority at all below every D", () => {
@@ -96,9 +100,9 @@ describe("targetDateScore", () => {
     expect(both).toBe(W.targetStartReached + W.targetEndPast);
   });
 
-  it("counts a start date reached today", () => {
+  it("counts a start date reached today and penalises a future start", () => {
     expect(targetDateScore(dayOut(0), null, TODAY, W)).toBe(W.targetStartReached);
-    expect(targetDateScore(dayOut(1), null, TODAY, W)).toBe(0);
+    expect(targetDateScore(dayOut(1), null, TODAY, W)).toBe(-W.targetStartFuture);
   });
 
   it("does not count a target end that is still ahead", () => {
