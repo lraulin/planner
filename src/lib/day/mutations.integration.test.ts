@@ -60,13 +60,10 @@ async function itemById(itemId: string) {
   return row;
 }
 
-const MON = "2026-07-27";
-const TUE = "2026-07-28";
-const WED = "2026-07-29";
-
 /**
- * Recurrence works from the clock, not from the fixed days above, so the carry-forward
- * tests have to ask for today and tomorrow rather than pinning a date.
+ * Calendar day for wall-clock "today" (and offsets). Recurrence and the past-start clamp
+ * in `syncDayLineToTargetStart` both read the real clock, so fixtures cannot be a frozen
+ * week that eventually falls behind.
  */
 function dayKey(offset = 0): string {
   const d = new Date();
@@ -74,6 +71,15 @@ function dayKey(offset = 0): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
+
+/**
+ * A three-day window **ahead of** real today. Planning a target start in the past would
+ * put the open day line on real today (Behind Schedule); these stay on their own days.
+ * Tests that need a simulated "today" pass WED as the `today` argument to `loadDay`.
+ */
+const MON = dayKey(1);
+const TUE = dayKey(2);
+const WED = dayKey(3);
 
 const todayKey = () => dayKey(0);
 const tomorrowKey = () => dayKey(1);
@@ -744,7 +750,8 @@ describeDb("week view and journal", () => {
     await createDailyItem({ userId, day: MON, title: "Monday thing" });
     await createDailyItem({ userId, day: WED, title: "Wednesday thing" });
 
-    const week = await loadWeek(userId, MON, "2026-08-02");
+    const weekEnd = dayKey(7);
+    const week = await loadWeek(userId, MON, weekEnd);
 
     expect(week.days).toHaveLength(7);
     expect(week.itemsByDay[MON].map((i) => i.title)).toEqual(["Monday thing"]);
@@ -764,9 +771,9 @@ describeDb("week view and journal", () => {
     const [row] = await db.select().from(notes).where(eq(notes.id, id));
     expect(row.parentId).not.toBeNull();
     const [month] = await db.select().from(notes).where(eq(notes.id, row.parentId!));
-    expect(month.title).toBe("2026-07");
+    expect(month.title).toBe(MON.slice(0, 7));
     const [year] = await db.select().from(notes).where(eq(notes.id, month.parentId!));
-    expect(year.title).toBe("2026");
+    expect(year.title).toBe(MON.slice(0, 4));
     const [root] = await db.select().from(notes).where(eq(notes.id, year.parentId!));
     expect(root.title).toBe("Journal");
     expect(root.parentId).toBeNull();
