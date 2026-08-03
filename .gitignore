@@ -49,3 +49,7 @@ todo.tmp.md
 
 # Scrape tool local venv
 /tools/scrape-effexis/.venv/
+
+# Python bytecode from scrape tool
+**/__pycache__/
+*.py[cod]
