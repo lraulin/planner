@@ -13,7 +13,12 @@ import { and, asc, count, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { addDays, daysBetween } from "@/lib/dateMath";
 import { nextDue } from "@/lib/recurrence/nextDue";
 import { nextOccurrence } from "@/lib/recurrence/pattern";
-import { asCalendarDay, toDateKey } from "@/lib/schedule/geometry";
+import {
+  asCalendarDay,
+  fromDateKey,
+  localDateKey,
+  toDateKey,
+} from "@/lib/schedule/geometry";
 import {
   clearConflictingDescendantPlans,
   syncDayLineToTargetStart,
@@ -492,10 +497,12 @@ export async function applyStateTransition(
 
   const recurrence = await recurrenceOf(tx, userId, nodeId);
 
-  // Date completed is a calendar day, not an instant. Encode as UTC noon of that day so a
-  // UTC server and a US laptop agree on "the 1st" (local midnight + startOfDay on the
-  // server was rewriting Aug 1 into Jul 31). Instants stay on `completedAt` columns.
-  const completedDay = asCalendarDay(now);
+  // Date completed is a calendar day, not an instant. `at` is the wall-clock moment of
+  // completion (or a UTC-noon day from the Date completed field): take its **local** day
+  // key, then encode as UTC noon. Using `toDateKey`/`asCalendarDay` on a live instant is
+  // wrong after ~20:00 in the Americas — UTC has already rolled to tomorrow.
+  // See agent-os/standards/development/dates.md.
+  const completedDay = fromDateKey(localDateKey(now));
 
   async function finish() {
     await tx
@@ -655,12 +662,13 @@ async function settleDayLine(
     .from(dailyItems)
     .where(and(eq(dailyItems.userId, userId), eq(dailyItems.nodeId, nodeId)));
 
-  const today = toDateKey(at);
+  // Wall-clock day of the instant — not `toDateKey` (UTC components of an instant).
+  const today = localDateKey(at);
   const open = rows.find((r) => r.completedAt === null && r.forwardedTo === null);
   // Judged by when it was settled rather than which day it sits on, so acting on Monday's
   // forgotten line today still counts as today's record.
   const settledToday = rows.find(
-    (r) => r.completedAt && toDateKey(r.completedAt) === today,
+    (r) => r.completedAt && localDateKey(r.completedAt) === today,
   );
 
   if (open) {
@@ -737,9 +745,10 @@ async function reopenDayLine(
 
   if (rows.some((r) => r.completedAt === null && r.forwardedTo === null)) return;
 
-  const today = toDateKey(now);
+  // Wall-clock day of the reopen instant (same rule as settleDayLine).
+  const today = localDateKey(now);
   const doneToday = rows.find(
-    (r) => r.completedAt && toDateKey(r.completedAt) === today,
+    (r) => r.completedAt && localDateKey(r.completedAt) === today,
   );
   if (!doneToday) return;
 
@@ -757,7 +766,7 @@ async function reopenDayLine(
   // leaving the shelf in place would both hide it from the Chooser and put a plan before
   // its availability, which the constraint rejects. Only a *future* shelf is cleared — a
   // date already past is inert and is left as the record of the last cycle.
-  const startOfToday = asCalendarDay(now);
+  const startOfToday = fromDateKey(today);
   const [node] = await tx
     .select({ deferredDate: nodes.deferredDate })
     .from(nodes)

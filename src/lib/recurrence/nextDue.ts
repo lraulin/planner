@@ -20,7 +20,12 @@
 
 import type { RecurrenceFrequency } from "@/db/schema";
 import { addDays, addMonths, addYears } from "@/lib/dateMath";
-import { asCalendarDay, toDateKey } from "@/lib/schedule/geometry";
+import {
+  asCalendarDay,
+  fromDateKey,
+  localDateKey,
+  toDateKey,
+} from "@/lib/schedule/geometry";
 
 /**
  * The next deferred-until date for a task completed at `completedAt`, or null when the
@@ -43,9 +48,10 @@ export function nextDue(
   if (frequency === "none") return null;
 
   const n = Math.max(1, Math.floor(interval));
-  // Calendar-day encoding (UTC noon), not process-local midnight — the completion may be
-  // stamped on a UTC server while the form runs in the Americas.
-  const from = asCalendarDay(completedAt);
+  // Completion is an **instant** (or a UTC-noon day from Date completed). Take its wall-clock
+  // day, then store as UTC noon. `asCalendarDay`/`toDateKey` on a live instant is wrong after
+  // evening in the Americas (UTC already tomorrow). See dates.md.
+  const from = fromDateKey(localDateKey(completedAt));
 
   switch (frequency) {
     case "daily":
