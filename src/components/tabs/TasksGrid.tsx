@@ -163,7 +163,9 @@ const TASK_SWITCHES: GridSwitch[] = [
   { id: "showPurpose", label: "Project's Purpose", defaultOn: false },
 ];
 
+/** Same dimensions as Projects, plus Project — a task's home is its project. */
 const TASK_GROUP_DIMENSIONS: GroupBy[] = [
+  "category",
   "resultArea",
   "project",
   "goal",
