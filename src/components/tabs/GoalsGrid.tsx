@@ -11,7 +11,11 @@ import { DataGrid } from "@/components/grid/DataGrid";
 import { useGridState, useTabView } from "@/components/grid/useGridState";
 import { GridToolbar } from "@/components/grid/GridToolbar";
 import { collectDistinctValues } from "@/lib/grid/distinct";
-import { categoryColumn } from "@/components/grid/commonColumns";
+import {
+  categoryColumn,
+  dateCompletedColumn,
+  purposeColumn,
+} from "@/components/grid/commonColumns";
 import {
   DeadlineCell,
   NameCell,
@@ -149,6 +153,9 @@ function buildColumns(): ColumnDef<GoalsCtx>[] {
         />
       ),
     },
+    // Optional AP fields — available via Show Fields; not in DEFAULT_ORDER.
+    dateCompletedColumn(),
+    purposeColumn(),
   ];
 }
 

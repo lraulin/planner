@@ -25,11 +25,29 @@ import {
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import {
   abbrStateColumn,
+  actualEffortColumn,
+  actualStartColumn,
   categoryColumn,
+  completedColumn,
+  contextsColumn,
+  costColumn,
+  dateCompletedColumn,
+  dateCreatedColumn,
+  dateModifiedColumn,
   deadlineColumn,
+  deadlineLeadTimeColumn,
+  deferToColumn,
+  descriptionColumn,
+  effortDrivenColumn,
+  focusColumn,
+  leadTimeColumn,
   nameColumn,
   percentColumn,
+  placeColumn,
   priorityColumn,
+  stateColumn,
+  targetEndColumn,
+  targetStartColumn,
 } from "@/components/grid/commonColumns";
 import { EffortCell, StatusCell } from "@/components/grid/cells";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
@@ -150,6 +168,27 @@ function buildColumns(
         />
       ),
     },
+    // Optional AP fields — available via Show Fields; not in DEFAULT_ORDER.
+    actualEffortColumn(),
+    actualStartColumn(),
+    completedColumn(),
+    contextsColumn(),
+    costColumn("costToDate", "Cost to date", (node) => node.costToDate),
+    dateCreatedColumn(),
+    dateModifiedColumn(),
+    deadlineLeadTimeColumn(),
+    deferToColumn(),
+    descriptionColumn(),
+    effortDrivenColumn(),
+    costColumn("costHigh", "High cost", (node) => node.costHigh),
+    leadTimeColumn(),
+    costColumn("costLow", "Low cost", (node) => node.costLow),
+    placeColumn(),
+    dateCompletedColumn(),
+    stateColumn(),
+    targetEndColumn(),
+    targetStartColumn(),
+    focusColumn(),
   ];
 }
 

@@ -348,6 +348,7 @@ export function MetricsView({
                 <th className="px-2 py-1.5 font-medium">Question</th>
                 <th className="w-20 px-2 py-1.5 font-medium">Target</th>
                 <th className="w-24 px-2 py-1.5 font-medium">Last Value</th>
+                <th className="w-24 px-2 py-1.5 font-medium">Last Date</th>
               </tr>
             </thead>
             <tbody>
@@ -611,7 +612,7 @@ function GroupRows({
       {label != null && (
         <tr className="bg-surface-raised/80">
           <td
-            colSpan={7}
+            colSpan={8}
             className="px-2 py-1 text-[0.75rem] font-medium text-ink-muted"
           >
             Owner: {label} ({rows.length} {rows.length === 1 ? "item" : "items"})
@@ -670,6 +671,9 @@ function GroupRows({
             </td>
             <td className="px-2 py-1 tabular-nums">
               {row.lastValue != null ? formatMetricNumber(row.lastValue) : "—"}
+            </td>
+            <td className="px-2 py-1 tabular-nums text-ink-muted">
+              {row.lastDate ?? "—"}
             </td>
           </tr>
         );

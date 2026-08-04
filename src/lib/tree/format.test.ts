@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatCompactDate,
   formatEffort,
+  formatMoney,
   formatPriority,
   parseEffort,
   parsePriority,
@@ -50,6 +51,14 @@ describe("formatEffort", () => {
   it("renders nothing for no estimate", () => {
     expect(formatEffort(null)).toBe("");
     expect(formatEffort(0)).toBe("");
+  });
+});
+
+describe("formatMoney", () => {
+  it("renders modeled costs as stable dollar amounts", () => {
+    expect(formatMoney(12)).toBe("$12.00");
+    expect(formatMoney(1234.5)).toBe("$1,234.50");
+    expect(formatMoney(null)).toBe("");
   });
 });
 

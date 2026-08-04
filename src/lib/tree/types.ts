@@ -29,12 +29,28 @@ export type OutlineRow = {
   /** True for the one project quick capture drops into. See `src/lib/capture/`. */
   isInbox: boolean;
   completedAt: Date | null;
+  /** Calendar completion date for tasks; falls back to the completion instant for other rows. */
+  dateCompleted: Date | null;
+  /** True instants, unlike the calendar-day fields above and below. */
+  createdAt: Date;
+  updatedAt: Date;
   depth: number;
   effortMinutes: number | null;
   effortLeftMinutes: number | null;
   actualEffortMinutes: number | null;
   percentComplete: number | null;
   contexts: string[] | null;
+  /** Type-specific grid fields, kept here because the whole-outline read feeds every grid. */
+  actualStartDate: Date | null;
+  description: string;
+  effortDriven: boolean | null;
+  leadTimeMinutes: number | null;
+  deadlineLeadTimeMinutes: number | null;
+  place: string;
+  expectedCost: number | null;
+  costLow: number | null;
+  costHigh: number | null;
+  costToDate: number | null;
   color: string | null;
   category: string | null;
   /**
@@ -80,6 +96,11 @@ export type OutlineNode = OutlineRow & {
    */
   lapLetter: PriorityLetter | null;
   lapRank: number | null;
+  /** Nearest Result Area's name, for project rows and cross-tree inspection. */
+  resultAreaName: string | null;
+  /** Raw priority of the nearest Project (not the node's L.A.P.). */
+  projectPriorityLetter: PriorityLetter | null;
+  projectPriorityRank: number | null;
   /**
    * Category inherited from the nearest ancestor that carries one, starting with the node
    * itself — the same walk as L.A.P., and for the same reason.

@@ -66,7 +66,7 @@ import { copyAsText, writeClipboardText } from "@/lib/tree/copyAsText";
 import { HintBar } from "./HintBar";
 import { NewChildDialog } from "./NewChildDialog";
 import {
-  outlineColumns,
+  buildOutlineColumns,
   OUTLINE_COLUMN_IDS,
   type OutlineColumnCtx,
 } from "./outlineColumns";
@@ -99,6 +99,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   } = useSetting(OUTLINE_FILTERS_SCOPE, OUTLINE_FILTERS_CODEC);
   const { types: filters, focusOnly, showCompleted, byCategory } = typeFilters;
 
+  const outlineColumns = useMemo(() => buildOutlineColumns(today), [today]);
   const gridState = useGridState("outline", outlineColumns, [...OUTLINE_COLUMN_IDS]);
   const { sort: headerSort, clearSort: clearHeaderSort } = gridState;
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
@@ -142,7 +143,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         outlineColumns,
         gridRows.flatMap((row) => (row.kind === "node" ? [row] : [])),
       ),
-    [gridRows],
+    [outlineColumns, gridRows],
   );
 
   /**

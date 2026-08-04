@@ -11,8 +11,11 @@ function node(
   return {
     ...row(partial),
     lapLetter: null,
-    effectiveCategory: null,
     lapRank: null,
+    resultAreaName: null,
+    projectPriorityLetter: null,
+    projectPriorityRank: null,
+    effectiveCategory: null,
     effortRollupMinutes: null,
     effortLeftRollupMinutes: null,
     actualEffortRollupMinutes: 0,

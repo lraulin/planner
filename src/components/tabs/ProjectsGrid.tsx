@@ -3,8 +3,7 @@
 import { useMemo, useState } from "react";
 import type { OutlineNode } from "@/lib/tree/types";
 import { asGroupBy, sliceTree, type GroupBy, type GridRow } from "@/lib/tree/slice";
-import { formatEffort, formatPriority } from "@/lib/tree/format";
-import { toDateKey } from "@/lib/schedule/geometry";
+import { formatEffort } from "@/lib/tree/format";
 import {
   scheduleStatusById,
   scheduleStatusForNode,
@@ -26,11 +25,30 @@ import {
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import {
   abbrStateColumn,
+  actualEffortColumn,
+  actualStartColumn,
+  assigneeColumn,
   categoryColumn,
+  completedColumn,
+  contextsColumn,
+  costColumn,
+  dateCompletedColumn,
+  dateCreatedColumn,
   deadlineColumn,
+  descriptionColumn,
+  effortDrivenColumn,
+  focusColumn,
+  lapColumn,
+  leadTimeColumn,
   nameColumn,
   percentColumn,
+  placeColumn,
   priorityColumn,
+  purposeColumn,
+  resultAreaNameColumn,
+  stateColumn,
+  targetEndColumn,
+  targetStartColumn,
 } from "@/components/grid/commonColumns";
 import { EffortCell, ReadOnlyCell, StatusCell } from "@/components/grid/cells";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
@@ -149,26 +167,8 @@ function buildColumns(
         />
       ),
     },
-    {
-      id: "targetStart",
-      label: "Start",
-      width: "7rem",
-      align: "right",
-      // Two bare dates on one line with nothing to say which is which; the deadline is the
-      // one that matters at a glance.
-      compact: "hidden",
-      filterKind: "date",
-      filterValue: (row) =>
-        row.node.targetStart ? toDateKey(row.node.targetStart) : null,
-      sortValue: (row) =>
-        row.node.targetStart ? toDateKey(row.node.targetStart) : null,
-      render: (row) => (
-        <ReadOnlyCell
-          value={row.node.targetStart ? toDateKey(row.node.targetStart) : ""}
-          align="right"
-        />
-      ),
-    },
+    // Compact-hidden like the prior hand-rolled column: two bare dates compete on a phone.
+    { ...targetStartColumn(), compact: "hidden" as const },
     deadlineColumn(),
     percentColumn(),
     {
@@ -192,38 +192,27 @@ function buildColumns(
         />
       ),
     },
-    {
-      id: "lap",
-      label: "L.A.P.",
-      width: "3.5rem",
-      align: "center",
-      filterKind: "priority",
-      filterValue: (row) =>
-        formatPriority(row.node.lapLetter, row.node.lapRank) || null,
-      sortValue: (row) => formatPriority(row.node.lapLetter, row.node.lapRank),
-      render: (row) => (
-        <ReadOnlyCell
-          value={formatPriority(row.node.lapLetter, row.node.lapRank)}
-          align="center"
-        />
-      ),
-    },
-    {
-      id: "purpose",
-      label: "Purpose",
-      width: "minmax(10rem,1fr)",
-      filterKind: "text",
-      filterValue: (row) => row.node.purpose || null,
-      render: (row) => <ReadOnlyCell value={row.node.purpose} />,
-    },
-    {
-      id: "assignedTo",
-      label: "Assigned",
-      width: "8rem",
-      filterKind: "text",
-      filterValue: (row) => row.node.assignedTo || null,
-      render: (row) => <ReadOnlyCell value={row.node.assignedTo} />,
-    },
+    lapColumn(),
+    purposeColumn(),
+    assigneeColumn(),
+    // Optional AP fields — available via Show Fields; not in view defaults.
+    actualEffortColumn(),
+    actualStartColumn(),
+    completedColumn(),
+    contextsColumn(),
+    dateCompletedColumn(),
+    dateCreatedColumn(),
+    descriptionColumn(),
+    effortDrivenColumn(),
+    costColumn("expectedCost", "Expected cost", (node) => node.expectedCost),
+    focusColumn(),
+    costColumn("costHigh", "High cost", (node) => node.costHigh),
+    leadTimeColumn(),
+    costColumn("costLow", "Low cost", (node) => node.costLow),
+    placeColumn(),
+    resultAreaNameColumn(),
+    stateColumn(),
+    targetEndColumn(),
   ];
 }
 

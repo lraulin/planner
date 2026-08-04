@@ -67,6 +67,15 @@ export function formatEffort(minutes: number | null): string {
     : `${hours}:${String(remainder).padStart(2, "0")} h`;
 }
 
+/** Dollar display for the cost fields Planner currently models. */
+export function formatMoney(amount: number | null): string {
+  if (amount === null || !Number.isFinite(amount)) return "";
+  return `$${amount.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 /**
  * Reads a duration back into minutes. Accepts everything `formatEffort` emits, plus the
  * shorthand someone would actually type: "45m", "2h", "3:45", "3d", or a bare number of

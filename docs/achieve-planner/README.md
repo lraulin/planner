@@ -16,6 +16,7 @@ distribution.
 | [`online-help.md`](./online-help.md)                     | Consolidated HTML online help                                 | Scoring formulas, scheduling, options, menus, form details                                          |
 | [`faq.md`](./faq.md)                                     | Product FAQ from the site                                     | Edge cases and intended defaults                                                                    |
 | [`file-formats.md`](./file-formats.md)                   | Our reverse-engineering of AP data formats / import           | XML/ACX import-export, schema mapping                                                               |
+| [`grid-columns.md`](./grid-columns.md)                   | Complete AP grid-column inventory                             | Field availability and Planner parity decisions                                                     |
 | [`release-log.txt`](./release-log.txt)                   | Achieve release notes (vendor log)                            | When a feature appeared or changed historically                                                     |
 
 ## Reading order (for agents)

@@ -40,6 +40,44 @@ describe("derive — inherited priority (L.A.P.)", () => {
   });
 });
 
+describe("derive — ancestry display values", () => {
+  it("keeps Result Area Name and Project Priority distinct from L.A.P.", () => {
+    const nodes = derive([
+      row({ id: "ra", type: "result_area", name: "  Health  ", priorityLetter: "A" }),
+      row({ id: "goal", type: "goal", parentId: "ra", depth: 1, priorityLetter: "B" }),
+      row({
+        id: "project",
+        type: "project",
+        parentId: "goal",
+        depth: 2,
+        priorityLetter: "C",
+        priorityRank: 2,
+      }),
+      row({
+        id: "task",
+        type: "task",
+        parentId: "project",
+        depth: 3,
+        priorityLetter: "A",
+      }),
+    ]);
+
+    expect(nodes.map((node) => node.resultAreaName)).toEqual([
+      "Health",
+      "Health",
+      "Health",
+      "Health",
+    ]);
+    expect(nodes[0]?.projectPriorityLetter).toBeNull();
+    expect(nodes[1]?.projectPriorityLetter).toBeNull();
+    expect(nodes[2]?.projectPriorityLetter).toBe("C");
+    expect(nodes[3]?.projectPriorityLetter).toBe("C");
+    expect(nodes[3]?.projectPriorityRank).toBe(2);
+    // Task's own priority wins L.A.P.; Project Priority answers a different question.
+    expect(nodes[3]?.lapLetter).toBe("A");
+  });
+});
+
 describe("derive — effort rollups", () => {
   it("reports a leaf's own effort", () => {
     const [node] = derive([row({ id: "a", type: "task", effortMinutes: 120 })]);

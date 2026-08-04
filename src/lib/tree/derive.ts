@@ -49,6 +49,50 @@ export function derive(rows: OutlineRow[]): OutlineNode[] {
     return result;
   }
 
+  /** The name of the nearest Result Area, rather than a grid cell walking the tree per row. */
+  const resultAreaNameCache = new Map<string, string | null>();
+
+  function resultAreaNameFor(id: string): string | null {
+    const cached = resultAreaNameCache.get(id);
+    if (cached !== undefined) return cached;
+
+    const row = byId.get(id)!;
+    const result =
+      row.type === "result_area"
+        ? row.name.trim() || null
+        : row.parentId && byId.has(row.parentId)
+          ? resultAreaNameFor(row.parentId)
+          : null;
+
+    resultAreaNameCache.set(id, result);
+    return result;
+  }
+
+  /** Raw priority of the nearest Project. This intentionally does not use L.A.P. */
+  const projectPriorityCache = new Map<
+    string,
+    { letter: OutlineRow["priorityLetter"]; rank: number | null }
+  >();
+
+  function projectPriorityFor(id: string): {
+    letter: OutlineRow["priorityLetter"];
+    rank: number | null;
+  } {
+    const cached = projectPriorityCache.get(id);
+    if (cached) return cached;
+
+    const row = byId.get(id)!;
+    const result =
+      row.type === "project"
+        ? { letter: row.priorityLetter, rank: row.priorityRank }
+        : row.parentId && byId.has(row.parentId)
+          ? projectPriorityFor(row.parentId)
+          : { letter: null, rank: null };
+
+    projectPriorityCache.set(id, result);
+    return result;
+  }
+
   /**
    * Inherited category — the same walk again. Only Result Areas are given one in practice,
    * but the rule is written against the field rather than the type, so category behaves
@@ -148,6 +192,7 @@ export function derive(rows: OutlineRow[]): OutlineNode[] {
     hiddenById.set(row.id, parentHidden);
 
     const lap = lapFor(row.id);
+    const projectPriority = projectPriorityFor(row.id);
     const rollup = rollups.get(row.id)!;
     const children = childIds.get(row.id) ?? [];
 
@@ -155,6 +200,9 @@ export function derive(rows: OutlineRow[]): OutlineNode[] {
       ...row,
       lapLetter: lap.letter,
       lapRank: lap.rank,
+      resultAreaName: resultAreaNameFor(row.id),
+      projectPriorityLetter: projectPriority.letter,
+      projectPriorityRank: projectPriority.rank,
       effectiveCategory: categoryFor(row.id),
       effortRollupMinutes: rollup.effort,
       effortLeftRollupMinutes: rollup.effortLeft,
