@@ -1,16 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { derive } from "./derive";
 import { row } from "./fixtures";
+import { fromDateKey } from "@/lib/schedule/geometry";
 import {
+  asGroupBy,
   categoryGroupId,
   categoryLabelFromGroupId,
   categoryOptions,
   categoryValueFromLabel,
+  deadlineBandOf,
   DEFAULT_CATEGORIES,
   groupByCategory,
   NO_CATEGORY,
   sliceTree,
   type GridRow,
+  type GroupBy,
 } from "./slice";
 import type { OutlineNode } from "./types";
 
@@ -177,7 +181,7 @@ describe("sliceTree — inherited context", () => {
         color: "#0f0",
       },
       { id: "g", type: "goal", parentId: "ra", depth: 1, name: "Get fit" },
-      { id: "p", type: "project", parentId: "g", depth: 2 },
+      { id: "p", type: "project", parentId: "g", depth: 2, name: "Gym plan" },
     );
 
     const [row] = sliceTree(nodes, {
@@ -195,6 +199,10 @@ describe("sliceTree — inherited context", () => {
       category: "Personal",
       goalId: "g",
       goalName: "Get fit",
+      // A project is its own nearest project, so grouping by project keeps a sub-project's
+      // rows under that sub-project rather than folding them into its parent.
+      projectId: "p",
+      projectName: "Gym plan",
     });
   });
 
@@ -392,6 +400,183 @@ describe("sliceTree — group headers", () => {
     for (const g of groups(rows)) {
       expect(g.collapsed).toBe(false);
     }
+  });
+});
+
+/**
+ * The dimensions added when grouping became a user control rather than a per-tab constant.
+ * These read the row's own fields rather than its ancestry, which is why `groupKey` takes
+ * the whole prepared entry.
+ */
+describe("sliceTree — group by row fields", () => {
+  const TODAY = "2026-08-04";
+  const day = (key: string) => fromDateKey(key);
+
+  const sample = tree(
+    { id: "ra", type: "result_area", name: "Health", category: "Personal" },
+    {
+      id: "p-a",
+      type: "project",
+      parentId: "ra",
+      depth: 1,
+      name: "Alpha",
+      priorityLetter: "A",
+      priorityRank: 1,
+      state: "in_progress",
+      deadline: day("2026-08-04"),
+    },
+    {
+      id: "p-b",
+      type: "project",
+      parentId: "ra",
+      depth: 1,
+      name: "Beta",
+      priorityLetter: "C",
+      state: "not_started",
+      deadline: day("2026-08-01"),
+    },
+    {
+      id: "p-c",
+      type: "project",
+      parentId: "ra",
+      depth: 1,
+      name: "Gamma",
+      priorityLetter: null,
+      state: "in_progress",
+      deadline: null,
+    },
+    {
+      id: "p-d",
+      type: "project",
+      parentId: "ra",
+      depth: 1,
+      name: "Delta",
+      priorityLetter: "B",
+      state: "not_started",
+      deadline: day("2026-08-20"),
+    },
+  );
+
+  const slice = (groupBy: GroupBy[], today: string | null = TODAY) =>
+    sliceTree(sample, { keep: projectsOnly, groupBy, includeDeferred: true, today });
+
+  it("groups by state, spelled out", () => {
+    expect(groups(slice(["state"])).map((g) => [g.label, g.count])).toEqual([
+      ["In progress", 2],
+      ["Not started", 2],
+    ]);
+  });
+
+  /**
+   * Rank is ignored on purpose. Grouping by A1, A2, A3 would give one header per row, which
+   * is not grouping at all.
+   */
+  it("groups by priority letter, ignoring rank, with unprioritized last", () => {
+    expect(groups(slice(["priorityLetter"])).map((g) => [g.label, g.count])).toEqual([
+      ["A", 1],
+      ["B", 1],
+      ["C", 1],
+      ["(Unprioritized)", 1],
+    ]);
+  });
+
+  it("groups by deadline band, soonest first and undated last", () => {
+    expect(groups(slice(["deadlineBand"])).map((g) => [g.label, g.count])).toEqual([
+      ["Overdue", 1],
+      ["Due Today", 1],
+      ["Next 30 Days", 1],
+      ["(No Deadline)", 1],
+    ]);
+  });
+
+  /**
+   * Before hydration the client does not know the date. Bucketing dated rows by a guessed
+   * "today" would make the server and the first paint disagree about what is overdue.
+   */
+  it("puts every dated row in one neutral band when today is unknown", () => {
+    expect(
+      groups(slice(["deadlineBand"], null)).map((g) => [g.label, g.count]),
+    ).toEqual([
+      ["Later", 3],
+      ["(No Deadline)", 1],
+    ]);
+  });
+
+  it("nests two field dimensions with correct counts", () => {
+    const rows = slice(["state", "priorityLetter"]);
+    expect(groups(rows).map((g) => [g.label, g.count, g.depth])).toEqual([
+      ["In progress", 2, 0],
+      ["A", 1, 1],
+      ["(Unprioritized)", 1, 1],
+      ["Not started", 2, 0],
+      ["B", 1, 1],
+      ["C", 1, 1],
+    ]);
+  });
+
+  it("groups tasks under their nearest project, including a sub-project", () => {
+    const withTasks = tree(
+      { id: "ra", type: "result_area", name: "Health" },
+      { id: "p1", type: "project", parentId: "ra", depth: 1, name: "Gym plan" },
+      { id: "t1", type: "task", parentId: "p1", depth: 2, name: "Buy shoes" },
+      { id: "p1a", type: "project", parentId: "p1", depth: 2, name: "Week 1" },
+      { id: "t2", type: "task", parentId: "p1a", depth: 3, name: "Run 5k" },
+      { id: "t3", type: "task", parentId: "ra", depth: 1, name: "Loose task" },
+    );
+
+    const rows = sliceTree(withTasks, {
+      keep: tasksOnly,
+      groupBy: ["project"],
+      includeDeferred: true,
+      today: TODAY,
+    });
+
+    expect(groups(rows).map((g) => [g.label, g.count])).toEqual([
+      ["Gym plan", 1],
+      ["Week 1", 1],
+      ["(No Project)", 1],
+    ]);
+  });
+
+  it("mixes an ancestry dimension with a field one", () => {
+    const rows = slice(["category", "state"]);
+    expect(groups(rows).map((g) => [g.label, g.depth])).toEqual([
+      ["Personal", 0],
+      ["In progress", 1],
+      ["Not started", 1],
+    ]);
+  });
+});
+
+describe("asGroupBy", () => {
+  it("keeps known dimensions in order and drops retired ones", () => {
+    // Stored settings are plain strings; a dimension removed in a later build must degrade
+    // to "not grouped by that" rather than failing to parse the whole layout.
+    expect(asGroupBy(["resultArea", "pivot", "state"])).toEqual([
+      "resultArea",
+      "state",
+    ]);
+    expect(asGroupBy([])).toEqual([]);
+  });
+});
+
+describe("deadlineBandOf", () => {
+  const TODAY = "2026-08-04";
+
+  it("buckets by the deadline alone", () => {
+    expect(deadlineBandOf(null, TODAY)).toBe("none");
+    expect(deadlineBandOf(fromDateKey("2026-08-03"), TODAY)).toBe("overdue");
+    expect(deadlineBandOf(fromDateKey("2026-08-04"), TODAY)).toBe("today");
+    expect(deadlineBandOf(fromDateKey("2026-08-05"), TODAY)).toBe("tomorrow");
+    expect(deadlineBandOf(fromDateKey("2026-08-11"), TODAY)).toBe("next7");
+    expect(deadlineBandOf(fromDateKey("2026-08-12"), TODAY)).toBe("next30");
+    expect(deadlineBandOf(fromDateKey("2026-09-03"), TODAY)).toBe("next30");
+    expect(deadlineBandOf(fromDateKey("2026-09-04"), TODAY)).toBe("later");
+  });
+
+  it("treats an unknown today as one neutral band", () => {
+    expect(deadlineBandOf(fromDateKey("2026-08-03"), null)).toBe("later");
+    expect(deadlineBandOf(null, null)).toBe("none");
   });
 });
 

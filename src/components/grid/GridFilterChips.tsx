@@ -1,0 +1,136 @@
+"use client";
+
+import { useMemo } from "react";
+import { buildGridChips, type GridChip } from "@/lib/grid/chips";
+import type { CrossColumnFilter } from "@/lib/grid/crossFilter";
+import { ALL_FILTER, filterOptions, type ColumnFilter } from "./filters";
+import type { ColumnMeta } from "./columns";
+
+/**
+ * What is currently narrowing the grid, and how many rows survived it.
+ *
+ * Three controls filter these grids — column funnels, the advanced builder, and the search
+ * box — and two of them are invisible the moment their popover closes. Without this bar a
+ * user looking at forty rows out of three hundred has no way to see what they asked for,
+ * and no way to undo one piece of it short of clearing everything.
+ *
+ * Renders nothing at all when nothing is active, so an unfiltered grid loses no vertical
+ * space to a row that would always read "Showing 312 of 312".
+ */
+export function GridFilterChips({
+  columns,
+  distinctValues,
+  filters,
+  advancedFilter,
+  search,
+  shown,
+  total,
+  onClearColumn,
+  onRemoveCondition,
+  onClearSearch,
+  onClearAll,
+}: {
+  /** Every column the tab defines, for labelling chips on hidden columns too. */
+  columns: ColumnMeta[];
+  distinctValues: Record<string, string[]>;
+  filters: Record<string, ColumnFilter>;
+  advancedFilter: CrossColumnFilter | null;
+  search: string;
+  shown: number;
+  total: number;
+  onClearColumn: (columnId: string) => void;
+  onRemoveCondition: (index: number) => void;
+  onClearSearch: () => void;
+  onClearAll: () => void;
+}) {
+  const byId = useMemo(
+    () => new Map(columns.map((column) => [column.id, column])),
+    [columns],
+  );
+
+  const chips = useMemo(
+    () =>
+      buildGridChips({
+        filters,
+        advancedFilter,
+        search,
+        labelOf: (columnId) => byId.get(columnId)?.label ?? columnId,
+        optionLabelOf: (columnId, optionId) => {
+          const column = byId.get(columnId);
+          const options = filterOptions(
+            column?.filterKind,
+            distinctValues[columnId] ?? [],
+          );
+          return options.find((option) => option.id === optionId)?.label ?? optionId;
+        },
+      }),
+    [filters, advancedFilter, search, byId, distinctValues],
+  );
+
+  if (chips.length === 0) return null;
+
+  return (
+    <div className="flex flex-none flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-rule bg-surface-raised/40 px-3 py-1.5 text-[0.75rem]">
+      <span className="tabular-nums whitespace-nowrap text-ink-muted">
+        Showing <strong className="font-semibold text-ink">{shown}</strong> of {total}
+      </span>
+
+      <span aria-hidden className="text-ink-faint">
+        ·
+      </span>
+
+      {chips.map((chip) => (
+        <Chip
+          key={chip.key}
+          chip={chip}
+          onRemove={() =>
+            removeChip(chip, { onClearColumn, onRemoveCondition, onClearSearch })
+          }
+        />
+      ))}
+
+      <button
+        type="button"
+        onClick={onClearAll}
+        className="min-h-tap ml-auto flex-none rounded px-2 py-0.5 whitespace-nowrap text-ink-muted underline decoration-dotted underline-offset-2 transition-colors hover:text-ink md:min-h-0"
+      >
+        Clear all
+      </button>
+    </div>
+  );
+}
+
+function removeChip(
+  chip: GridChip,
+  handlers: {
+    onClearColumn: (columnId: string) => void;
+    onRemoveCondition: (index: number) => void;
+    onClearSearch: () => void;
+  },
+) {
+  if (chip.kind === "column") handlers.onClearColumn(chip.columnId);
+  else if (chip.kind === "condition") handlers.onRemoveCondition(chip.index);
+  else handlers.onClearSearch();
+}
+
+function Chip({ chip, onRemove }: { chip: GridChip; onRemove: () => void }) {
+  return (
+    <span className="inline-flex max-w-full items-center gap-1 rounded-full border border-rule bg-surface py-0.5 pr-1 pl-2 text-ink">
+      <span className="min-w-0 truncate" title={chip.label}>
+        {chip.label}
+      </span>
+      <button
+        type="button"
+        onClick={onRemove}
+        title={`Remove ${chip.label}`}
+        aria-label={`Remove filter: ${chip.label}`}
+        className="min-h-tap flex-none rounded-full px-1.5 leading-none text-ink-faint transition-colors hover:bg-surface-raised hover:text-ink md:min-h-0"
+      >
+        ×
+      </button>
+    </span>
+  );
+}
+
+/** Reset one column's funnel to (All). Exported so hosts do not re-derive the empty shape. */
+export const CLEARED_COLUMN_FILTER: ColumnFilter = ALL_FILTER;

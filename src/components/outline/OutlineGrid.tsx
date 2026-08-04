@@ -46,6 +46,9 @@ import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import { DataGrid, type RowDrag } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 import { useGridState } from "@/components/grid/useGridState";
+import { GridToolbar } from "@/components/grid/GridToolbar";
+import { collectDistinctValues } from "@/lib/grid/distinct";
+import { ToolbarToggle } from "@/components/tabs/tabChrome";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useOptimisticNodes } from "@/components/grid/useOptimisticNodes";
 import { useToday } from "@/components/grid/useToday";
@@ -98,6 +101,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
 
   const gridState = useGridState("outline", outlineColumns, [...OUTLINE_COLUMN_IDS]);
   const { sort: headerSort, clearSort: clearHeaderSort } = gridState;
+  const [counts, setCounts] = useState({ shown: 0, total: 0 });
 
   const visible = useMemo(() => {
     const dropped = new Set<string>();
@@ -130,6 +134,15 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
             depth: node.depth,
           })),
     [visible, byCategory, byId],
+  );
+
+  const distinctValues = useMemo(
+    () =>
+      collectDistinctValues(
+        outlineColumns,
+        gridRows.flatMap((row) => (row.kind === "node" ? [row] : [])),
+      ),
+    [gridRows],
   );
 
   /**
@@ -606,53 +619,82 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
       <FilterBar
-        filters={filters}
-        onToggleType={(type) =>
-          patchTypeFilters((current) => ({
-            ...current,
-            types: { ...current.types, [type]: !current.types[type] },
-          }))
-        }
-        focusOnly={focusOnly}
-        onToggleFocusOnly={() =>
-          patchTypeFilters((current) => ({
-            ...current,
-            focusOnly: !current.focusOnly,
-          }))
-        }
-        showCompleted={showCompleted}
-        onToggleShowCompleted={() =>
-          patchTypeFilters((current) => ({
-            ...current,
-            showCompleted: !current.showCompleted,
-          }))
-        }
-        byCategory={byCategory}
-        onToggleByCategory={() =>
-          patchTypeFilters((current) => ({
-            ...current,
-            byCategory: !current.byCategory,
-          }))
-        }
         commands={commands}
         onAddResultArea={addResultArea}
         onAddGoal={addGoal}
         hasSelection={selected !== null}
-        onResetGrid={gridState.reset}
       />
 
-      {error && (
-        <p
-          role="alert"
-          className="flex-none border-b border-priority-a/40 bg-priority-a/10 px-4 py-1.5 text-[0.8125rem] text-priority-a"
-        >
-          {error}
-        </p>
-      )}
+      <GridToolbar
+        grid={gridState}
+        gridLabel="Outline"
+        allColumns={outlineColumns}
+        distinctValues={distinctValues}
+        counts={counts}
+        error={error}
+        left={
+          <>
+            {/*
+              The outline's own view toggles. They live here rather than in `FilterBar`
+              because that bar is a *command* bar — add, indent, delete — and these decide
+              what the grid shows, which is what every other control in this toolbar does.
+            */}
+            {(Object.keys(TYPE_LABELS) as NodeType[]).map((type) => (
+              <ToolbarToggle
+                key={type}
+                checked={filters[type]}
+                onChange={() =>
+                  patchTypeFilters((current) => ({
+                    ...current,
+                    types: { ...current.types, [type]: !current.types[type] },
+                  }))
+                }
+                label={`${TYPE_LABELS[type]}s`}
+              />
+            ))}
+            <ToolbarToggle
+              checked={focusOnly}
+              onChange={() =>
+                patchTypeFilters((current) => ({
+                  ...current,
+                  focusOnly: !current.focusOnly,
+                }))
+              }
+              label="Focus only"
+            />
+            <ToolbarToggle
+              checked={showCompleted}
+              onChange={() =>
+                patchTypeFilters((current) => ({
+                  ...current,
+                  showCompleted: !current.showCompleted,
+                }))
+              }
+              label="Show completed"
+            />
+            {/*
+              Category headers over the outline are their own arrangement — whole subtrees
+              move under one header (`groupByCategory`) rather than rows being regrouped —
+              so this stays a toggle instead of joining the Group by picker.
+            */}
+            <ToolbarToggle
+              checked={byCategory}
+              onChange={() =>
+                patchTypeFilters((current) => ({
+                  ...current,
+                  byCategory: !current.byCategory,
+                }))
+              }
+              label="By category"
+            />
+          </>
+        }
+      />
 
       <DataGrid
         rows={gridRows}
         columns={gridState.columns}
+        allColumns={outlineColumns}
         columnCtx={columnCtx}
         selectedId={selectedId}
         selectedIds={selectedIds}
@@ -666,15 +708,20 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         rowMenu={rowMenu}
         enableFilters
         enableSort
-        sort={gridState.sort}
+        sorts={gridState.sorts}
         onSortChange={gridState.toggleSort}
         filters={gridState.filters}
         onFilterChange={gridState.setFilter}
+        advancedFilter={gridState.advancedFilter}
+        search={gridState.search}
+        distinctValues={distinctValues}
+        onCountsChange={setCounts}
         widths={gridState.widths}
         onResizeColumn={gridState.setWidth}
         onResetColumnWidth={gridState.clearWidth}
         collapsedGroups={gridState.collapsedGroups}
         onToggleGroup={gridState.toggleGroup}
+        density={gridState.density}
         empty={
           <EmptyState
             filtered={nodes.length > 0}
@@ -850,33 +897,15 @@ function useOutlineKeyboard({
 }
 
 function FilterBar({
-  filters,
-  onToggleType,
-  focusOnly,
-  onToggleFocusOnly,
-  showCompleted,
-  onToggleShowCompleted,
-  byCategory,
-  onToggleByCategory,
   commands,
   onAddResultArea,
   onAddGoal,
   hasSelection,
-  onResetGrid,
 }: {
-  filters: OutlineFilters["types"];
-  onToggleType: (type: NodeType) => void;
-  focusOnly: boolean;
-  onToggleFocusOnly: () => void;
-  showCompleted: boolean;
-  onToggleShowCompleted: () => void;
-  byCategory: boolean;
-  onToggleByCategory: () => void;
   commands: Record<string, () => void>;
   onAddResultArea: () => void;
   onAddGoal: () => void;
   hasSelection: boolean;
-  onResetGrid: () => void;
 }) {
   return (
     // Scrolls sideways below `md` rather than wrapping into three rows, matching
@@ -931,35 +960,6 @@ function FilterBar({
         <Command onClick={commands.collapseAll} title="Collapse all (⌘←)">
           Collapse all
         </Command>
-        <Command
-          onClick={onResetGrid}
-          title="Clear filters, sort, column layout and collapsed groups"
-        >
-          Reset this grid
-        </Command>
-      </div>
-
-      <div className="ml-auto flex items-center gap-3 text-[0.8125rem] text-ink-muted">
-        {(Object.keys(TYPE_LABELS) as NodeType[]).map((type) => (
-          <Toggle
-            key={type}
-            checked={filters[type]}
-            onChange={() => onToggleType(type)}
-            label={`${TYPE_LABELS[type]}s`}
-          />
-        ))}
-        <Toggle checked={focusOnly} onChange={onToggleFocusOnly} label="Focus only" />
-        <Toggle
-          checked={showCompleted}
-          onChange={onToggleShowCompleted}
-          label="Show completed"
-          title="Show completed and cancelled items"
-        />
-        <Toggle
-          checked={byCategory}
-          onChange={onToggleByCategory}
-          label="By category"
-        />
       </div>
     </div>
   );
@@ -986,33 +986,6 @@ function Command({
     >
       {children}
     </button>
-  );
-}
-
-function Toggle({
-  checked,
-  onChange,
-  label,
-  title,
-}: {
-  checked: boolean;
-  onChange: () => void;
-  label: string;
-  title?: string;
-}) {
-  return (
-    <label
-      className="flex cursor-pointer select-none items-center gap-1.5"
-      title={title}
-    >
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={onChange}
-        className="h-3.5 w-3.5 accent-[var(--select-edge)]"
-      />
-      {label}
-    </label>
   );
 }
 

@@ -213,6 +213,42 @@ describe("rowPassesFilters", () => {
       rowPassesFilters({ priority: "B", deadline: TODAY }, filters, kinds, TODAY),
     ).toBe(false);
   });
+
+  /**
+   * Show Fields hides a column but does not un-ask the question. `values` carries an entry
+   * for every column the tab *defines*, so a filter on a hidden one keeps selecting rows.
+   */
+  it("filters on a column that is not currently visible", () => {
+    const filters = { purpose: optionsFilter(["value:Health"]) };
+    const kinds = { purpose: "text" as const };
+
+    expect(rowPassesFilters({ purpose: "Health" }, filters, kinds, TODAY)).toBe(true);
+    expect(rowPassesFilters({ purpose: "Career" }, filters, kinds, TODAY)).toBe(false);
+    expect(rowPassesFilters({ purpose: null }, filters, kinds, TODAY)).toBe(false);
+  });
+
+  /**
+   * The regression this guards: a missing key used to read as a blank cell, so a filter
+   * left over from a renamed or removed column failed every row and emptied the grid with
+   * no funnel on screen to explain it. It must be inert instead.
+   */
+  it("ignores a filter naming a column that no longer exists", () => {
+    const filters = { gone: optionsFilter(["value:Health"]) };
+
+    expect(rowPassesFilters({ priority: "A1" }, filters, {}, TODAY)).toBe(true);
+    expect(rowPassesFilters({}, filters, {}, TODAY)).toBe(true);
+  });
+
+  it("still applies the columns that do exist alongside a stale one", () => {
+    const filters = {
+      gone: optionsFilter(["value:Health"]),
+      priority: optionsFilter(["only-as"]),
+    };
+    const kinds = { priority: "priority" as const };
+
+    expect(rowPassesFilters({ priority: "A1" }, filters, kinds, TODAY)).toBe(true);
+    expect(rowPassesFilters({ priority: "B1" }, filters, kinds, TODAY)).toBe(false);
+  });
 });
 
 describe("shiftDays", () => {

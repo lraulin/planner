@@ -11,6 +11,7 @@ import {
 } from "react";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { GridRow } from "@/lib/tree/slice";
+import type { GridDensity } from "@/lib/settings/grid";
 import type { DropZone } from "@/lib/tree/dnd";
 import { TYPE_LABELS } from "@/lib/tree/hierarchy";
 import {
@@ -27,6 +28,13 @@ import {
   rowPassesFilters,
   type ColumnFilter,
 } from "./filters";
+import {
+  crossFilterActive,
+  rowPassesCrossFilter,
+  type CrossColumnFilter,
+} from "@/lib/grid/crossFilter";
+import { collectDistinctValues } from "@/lib/grid/distinct";
+import { rowMatchesSearch, searchActive } from "@/lib/grid/search";
 import { sortRowsWithinGroups } from "@/lib/grid/sortRows";
 import { resolveCompactFields } from "@/lib/grid/compactFields";
 import { useIsCompact } from "@/components/shell/useIsCompact";
@@ -34,7 +42,16 @@ import { CompactRow, type RowSwipe } from "./CompactRow";
 import type { SelectMods } from "@/lib/grid/selection";
 import { RowDragHandleContext, type RowDragHandleApi } from "./rowDragContext";
 
-export type SortState = { columnId: string; direction: "asc" | "desc" } | null;
+export type GridSortKey = { columnId: string; direction: "asc" | "desc" };
+
+/**
+ * The grid's sort, primary key first. An empty array is unsorted.
+ *
+ * A list rather than a single key so a secondary sort can break ties in the primary one —
+ * "priority, then deadline" is the sort people actually want on a planning grid, and one
+ * key can only approximate it.
+ */
+export type SortState = GridSortKey[];
 
 /** Click / keyboard modifiers the host turns into multi-select. */
 export type GridSelectMods = SelectMods;
@@ -135,6 +152,7 @@ function rowExpansionFor<TRow>(
 export function DataGrid<TCtx, TRow = OutlineNode>({
   rows,
   columns,
+  allColumns,
   columnCtx,
   selectedId,
   selectedIds,
@@ -144,15 +162,21 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   empty,
   enableFilters = false,
   enableSort = false,
-  sort: controlledSort,
+  sorts: controlledSorts,
   onSortChange,
   filters: controlledFilters,
   onFilterChange,
+  advancedFilter = null,
+  search = "",
+  distinctValues: providedDistinctValues,
+  onCountsChange,
   widths,
   onResizeColumn,
   onResetColumnWidth,
   collapsedGroups,
   onToggleGroup,
+  onGroupIdsChange,
+  density = "comfortable",
   rowDrag,
   rowMenu,
   rowSwipe,
@@ -165,7 +189,17 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   rowNumbers = false,
 }: {
   rows: GridRow<TRow>[];
+  /** Visible columns, in order. These are the only ones that get a track and a cell. */
   columns: ColumnDef<TCtx, TRow>[];
+  /**
+   * Every column the tab defines, whether or not Show Fields is currently showing it.
+   * Filtering and searching evaluate against this set, so a filter on a hidden column keeps
+   * working — hiding a column is a layout choice, not a change to what you asked for.
+   *
+   * Defaults to `columns`, which is the old behaviour, for grids that offer no way to hide
+   * a column in the first place.
+   */
+  allColumns?: ColumnDef<TCtx, TRow>[];
   columnCtx: TCtx;
   /** Primary / keyboard-focus row. */
   selectedId: string | null;
@@ -186,10 +220,31 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
    * persist them. Omitting both keeps the grid's own state, so a tab can adopt one at a
    * time — and so a grid with nothing to remember does not need a store.
    */
-  sort?: SortState;
-  onSortChange?: (columnId: string) => void;
+  sorts?: SortState;
+  /** `additive` is a Shift-click: refine the existing sort rather than replacing it. */
+  onSortChange?: (columnId: string, additive: boolean) => void;
   filters?: Record<string, ColumnFilter>;
   onFilterChange?: (columnId: string, filter: ColumnFilter) => void;
+  /**
+   * Cross-column And/Or expression from the advanced filter builder, ANDed with the
+   * per-column filters. Always controlled — there is no host-less version, because the
+   * builder that writes it lives in the toolbar.
+   */
+  advancedFilter?: CrossColumnFilter | null;
+  /** Quick-search text, matched across every filterable column. */
+  search?: string;
+  /**
+   * Distinct values per column id. Pass the same object given to `GridToolbar` so the
+   * header funnels and the advanced builder offer identical choices; omit it and the grid
+   * derives its own.
+   */
+  distinctValues?: Record<string, string[]>;
+  /**
+   * Reports how many node rows survive narrowing, and how many there were to begin with, so
+   * the host can render "Showing 47 of 312" beside its filter chips. Group headers are not
+   * counted — they are chrome, not results.
+   */
+  onCountsChange?: (counts: { shown: number; total: number }) => void;
   /** Column id to pixel width, overriding each column's declared track. */
   widths?: Record<string, number>;
   /** Omit to leave columns unresizable, as a grid with nowhere to store widths should. */
@@ -198,6 +253,19 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   /** Group ids the user has collapsed. Omitted means every group is open. */
   collapsedGroups?: Set<string>;
   onToggleGroup?: (groupId: string) => void;
+  /**
+   * Every group id currently in the row set, so the toolbar can offer Expand all / Collapse
+   * all without re-deriving the grouping it does not own. Reported before collapse is
+   * applied, or collapsing one group would hide the nested ids under it and "Expand all"
+   * would only reopen one level per press.
+   */
+  onGroupIdsChange?: (groupIds: string[]) => void;
+  /**
+   * Row height. Overrides `--row-height` on the grid's own subtree rather than setting a
+   * height per row: the header, the data rows and the group headers all already read that
+   * one variable, so density stays a single change instead of three that can drift.
+   */
+  density?: GridDensity;
   /** Omit to leave rows undraggable, as every tab but the outline does. */
   rowDrag?: RowDrag;
   /**
@@ -213,9 +281,9 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
 } & RowMeta<TRow>) {
   type Row = NodeGridRow<TRow>;
 
-  const [ownSort, setOwnSort] = useState<SortState>(null);
+  const [ownSorts, setOwnSorts] = useState<SortState>([]);
   const [ownFilters, setOwnFilters] = useState<Record<string, ColumnFilter>>({});
-  const sort = controlledSort !== undefined ? controlledSort : ownSort;
+  const sorts = controlledSorts ?? ownSorts;
   const filters = controlledFilters ?? ownFilters;
 
   const [dragIds, setDragIds] = useState<readonly string[] | null>(null);
@@ -251,30 +319,30 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
     [columns],
   );
 
+  /**
+   * The set filtering works over: every defined column, not just the visible ones. Falls
+   * back to the visible set for grids that never hide anything.
+   */
+  const filterColumns = allColumns ?? columns;
+
   const kinds = useMemo(() => {
     const map: Record<string, ColumnDef<TCtx, TRow>["filterKind"]> = {};
-    for (const column of columns) map[column.id] = column.filterKind;
+    for (const column of filterColumns) map[column.id] = column.filterKind;
     return map;
-  }, [columns]);
+  }, [filterColumns]);
 
   const nodeRows = useMemo(
     () => rows.filter((row): row is Row => row.kind === "node"),
     [rows],
   );
 
-  const distinctValues = useMemo(() => {
-    const map: Record<string, string[]> = {};
-    for (const column of columns) {
-      if (!column.filterValue) continue;
-      const seen = new Set<string>();
-      for (const row of nodeRows) {
-        const value = column.filterValue(row);
-        if (value !== null && value !== "") seen.add(value);
-      }
-      map[column.id] = Array.from(seen);
-    }
-    return map;
-  }, [columns, nodeRows]);
+  // A host that also renders `GridToolbar` has already derived these and passes them in, so
+  // the funnel checklists and the advanced builder cannot end up offering different values.
+  const ownDistinctValues = useMemo(
+    () => collectDistinctValues(filterColumns, nodeRows),
+    [filterColumns, nodeRows],
+  );
+  const distinctValues = providedDistinctValues ?? ownDistinctValues;
 
   const today =
     typeof columnCtx === "object" &&
@@ -286,25 +354,61 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
         ? ((columnCtx as { today: string | null }).today ?? null)
         : null;
 
-  const anyFilterActive = useMemo(
-    () => Object.values(filters).some(filterActive),
-    [filters],
+  /**
+   * Anything narrowing the rows. All three compose with AND: the column funnels, the
+   * cross-column builder and the search box each answer a different question, and a row has
+   * to satisfy every question that was asked.
+   */
+  const narrowing = useMemo(
+    () =>
+      Object.values(filters).some(filterActive) ||
+      crossFilterActive(advancedFilter) ||
+      searchActive(search),
+    [filters, advancedFilter, search],
   );
+
+  /**
+   * Node ids surviving every narrowing control, or null when nothing is narrowing.
+   *
+   * Kept separate from `displayRows` so the "Showing N of M" count can be taken from here
+   * rather than from what is finally on screen. Collapsing a group hides rows without
+   * filtering them out; counting the visible list would make the number drop and read as if
+   * a filter had tightened.
+   */
+  const passIds = useMemo(() => {
+    if (!narrowing) return null;
+
+    const pass = new Set<string>();
+    for (const row of nodeRows) {
+      const values: Record<string, string | null> = {};
+      for (const column of filterColumns) {
+        if (column.filterValue) values[column.id] = column.filterValue(row);
+      }
+      if (
+        rowPassesFilters(values, filters, kinds, today) &&
+        rowPassesCrossFilter(values, advancedFilter, kinds) &&
+        rowMatchesSearch(values, search)
+      ) {
+        pass.add(row.id);
+      }
+    }
+    return pass;
+  }, [
+    narrowing,
+    nodeRows,
+    filterColumns,
+    filters,
+    advancedFilter,
+    search,
+    kinds,
+    today,
+  ]);
 
   const displayRows = useMemo(() => {
     let next = rows;
 
-    if (anyFilterActive) {
-      // Filter node rows; drop group headers whose section ends up empty.
-      const passIds = new Set<string>();
-      for (const row of nodeRows) {
-        const values: Record<string, string | null> = {};
-        for (const column of columns) {
-          if (column.filterValue) values[column.id] = column.filterValue(row);
-        }
-        if (rowPassesFilters(values, filters, kinds, today)) passIds.add(row.id);
-      }
-
+    if (passIds) {
+      // Drop filtered-out node rows, then group headers whose section ends up empty.
       next = dropEmptyGroups(
         next.filter((row) => row.kind !== "node" || passIds.has(row.id)),
         passIds,
@@ -315,42 +419,78 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
       next = applyGroupCollapse(next, collapsedGroups);
     }
 
-    if (sort) {
-      const column = columns.find((entry) => entry.id === sort.columnId);
-      // Within each group, only siblings reorder — parent/child structure is preserved.
-      // See `@/lib/grid/sortRows`.
-      if (column?.sortValue) {
-        const sortValue = column.sortValue;
-        next = sortRowsWithinGroups(next, (row) => sortValue(row), sort.direction);
-      }
-    }
+    // Within each group, only siblings reorder — parent/child structure is preserved, for
+    // every key. See `@/lib/grid/sortRows`.
+    //
+    // Keys are resolved against `columns` (the visible set) rather than `filterColumns`: a
+    // sort you cannot see the indicator for is a grid that has silently rearranged itself.
+    // Filtering by a hidden column is legible from its chip; sorting by one is not.
+    const keys = sorts.flatMap((entry) => {
+      const column = columns.find((candidate) => candidate.id === entry.columnId);
+      if (!column?.sortValue) return [];
+      const sortValue = column.sortValue;
+      return [{ valueOf: (row: Row) => sortValue(row), direction: entry.direction }];
+    });
+
+    if (keys.length > 0) next = sortRowsWithinGroups(next, keys);
 
     return next;
-  }, [
-    rows,
-    nodeRows,
-    columns,
-    filters,
-    anyFilterActive,
-    kinds,
-    today,
-    sort,
-    collapsedGroups,
-  ]);
+  }, [rows, columns, passIds, sorts, collapsedGroups]);
 
+  /**
+   * Counts for the host's "Showing N of M". `total` is the count before any narrowing, so
+   * the denominator holds still as the user types — a fraction whose bottom half also moves
+   * says nothing about how much has been filtered out.
+   */
+  const shownCount = passIds ? passIds.size : nodeRows.length;
+
+  useEffect(() => {
+    onCountsChange?.({ shown: shownCount, total: nodeRows.length });
+  }, [onCountsChange, shownCount, nodeRows.length]);
+
+  // Taken from `rows`, not `displayRows`: collapsing an outer group removes the nested
+  // headers beneath it from the visible list, and a toolbar working off that could only
+  // reopen one level per press.
+  const groupIdKey = rows
+    .filter((row) => row.kind === "group")
+    .map((row) => row.id)
+    .join("\0");
+
+  useEffect(() => {
+    onGroupIdsChange?.(groupIdKey === "" ? [] : groupIdKey.split("\0"));
+  }, [onGroupIdsChange, groupIdKey]);
+
+  /**
+   * Achieve's header cycle: unsorted → ascending → descending → unsorted.
+   *
+   * A plain click replaces the whole sort; `additive` (Shift-click) cycles this one column's
+   * key and leaves the others alone. Mirrors `useGridState.toggleSort`, which is the
+   * controlled version — the two must agree or a tab would behave differently depending on
+   * whether it persists its sort.
+   */
   const handleSort = useCallback(
-    (columnId: string) => {
+    (columnId: string, additive: boolean) => {
       if (onSortChange) {
-        onSortChange(columnId);
+        onSortChange(columnId, additive);
         return;
       }
-      // Achieve's header cycle: unsorted -> ascending -> descending -> unsorted.
-      setOwnSort((current) => {
-        if (!current || current.columnId !== columnId) {
-          return { columnId, direction: "asc" };
+      setOwnSorts((current) => {
+        const existing = current.find((entry) => entry.columnId === columnId);
+
+        if (!additive) {
+          const isSoleKey = current.length === 1 && existing !== undefined;
+          if (!isSoleKey) return [{ columnId, direction: "asc" }];
+          return existing.direction === "asc" ? [{ columnId, direction: "desc" }] : [];
         }
-        if (current.direction === "asc") return { columnId, direction: "desc" };
-        return null;
+
+        if (!existing) return [...current, { columnId, direction: "asc" }];
+        return existing.direction === "asc"
+          ? current.map((entry) =>
+              entry.columnId === columnId
+                ? { columnId, direction: "desc" as const }
+                : entry,
+            )
+          : current.filter((entry) => entry.columnId !== columnId);
       });
     },
     [onSortChange],
@@ -448,7 +588,16 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div
+      className="flex min-h-0 flex-1 flex-col"
+      // Compact is a genuine trade, not a default: more rows per screen against a smaller
+      // target for the inline editors that live in those rows. Left to the user per grid.
+      style={
+        density === "compact"
+          ? ({ "--row-height": "1.375rem" } as React.CSSProperties)
+          : undefined
+      }
+    >
       {/* No column header on a phone: there are no columns to head, and sort, filter and
           resize are all mouse-shaped controls at 10px. Sorting stays reachable from the
           view's own toolbar. */}
@@ -456,7 +605,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
         <ColumnHeaderRow
           columns={columns}
           gridTemplate={gridTemplate}
-          sort={enableSort ? sort : null}
+          sorts={enableSort ? sorts : []}
           onSort={enableSort ? handleSort : undefined}
           filters={filters}
           onFilterChange={handleFilterChange}
@@ -956,21 +1105,30 @@ function GroupHeader({
         })
       }
       className={[
-        "grid cursor-pointer items-center border-b border-rule bg-surface-raised/80 px-3 text-[0.8125rem] font-semibold text-ink hover:bg-surface-raised",
-        // A compact header is a sticky section label, not a row in a template: it keeps its
-        // place while the list under it scrolls, and it is tall enough to tap.
-        compact ? "sticky top-0 z-10 min-h-9 py-1.5 text-[0.8125rem]" : "",
+        // Sticky in both layouts: scrolling through forty rows of a group without being
+        // able to see which group you are in is the failure mode grouping exists to avoid.
+        // `bg-surface-raised` (not `/80`) so rows do not show through while it is pinned.
+        "sticky top-0 z-10 grid cursor-pointer items-center border-b border-rule bg-surface-raised px-3 text-[0.8125rem] font-semibold text-ink hover:brightness-95",
+        // A compact header is a section label rather than a row in a template, and is tall
+        // enough to tap.
+        compact ? "min-h-9 py-1.5" : "",
         drag?.hint ? "bg-select-edge/10 ring-2 ring-select-edge ring-inset" : "",
       ].join(" ")}
-      style={
-        compact
-          ? undefined
+      style={{
+        // Nested headers stack rather than cover each other: each level parks one row-height
+        // lower than its parent, and outer levels keep the higher z so they stay on top.
+        top: compact
+          ? `calc(${row.depth} * 2.25rem)`
+          : `calc(${row.depth} * var(--row-height))`,
+        zIndex: 20 - row.depth,
+        ...(compact
+          ? {}
           : {
               gridTemplateColumns: gridTemplate,
               columnGap: "0.75rem",
               height: "var(--row-height)",
-            }
-      }
+            }),
+      }}
     >
       <div
         className="flex min-w-0 items-center gap-1.5"
@@ -991,30 +1149,39 @@ function GroupHeader({
   );
 }
 
+/**
+ * Drop filtered-out rows, drop group headers left with nothing under them, and **restate
+ * the counts** on the headers that survive.
+ *
+ * Recounting is the part that is easy to miss and impossible to miss once seen: the counts
+ * come from the unfiltered slice, so a header reading "Career (7)" above a single visible
+ * row is not a rounding error, it is a claim the user can see is false. A count beside a
+ * filtered list has to be the count of that list.
+ */
 function dropEmptyGroups<TRow>(
   rows: GridRow<TRow>[],
   passIds: Set<string>,
 ): GridRow<TRow>[] {
-  // Walk bottom-up: a group stays if any subsequent node before the next same-or-shallower
-  // group is still present.
   const out: GridRow<TRow>[] = [];
+
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     if (row.kind === "node") {
       if (passIds.has(row.id)) out.push(row);
       continue;
     }
-    let hasChild = false;
+
+    // Everything under this header, up to the next header at the same or shallower depth.
+    let surviving = 0;
     for (let j = i + 1; j < rows.length; j++) {
       const next = rows[j];
       if (next.kind === "group" && next.depth <= row.depth) break;
-      if (next.kind === "node" && passIds.has(next.id)) {
-        hasChild = true;
-        break;
-      }
+      if (next.kind === "node" && passIds.has(next.id)) surviving += 1;
     }
-    if (hasChild) out.push(row);
+
+    if (surviving > 0) out.push({ ...row, count: surviving });
   }
+
   return out;
 }
 

@@ -32,7 +32,7 @@ import {
 export function ColumnHeaderRow({
   columns,
   gridTemplate,
-  sort,
+  sorts = [],
   onSort,
   filters,
   onFilterChange,
@@ -46,8 +46,10 @@ export function ColumnHeaderRow({
   // business knowing what a row is.
   columns: ColumnMeta[];
   gridTemplate: string;
-  sort?: { columnId: string; direction: "asc" | "desc" } | null;
-  onSort?: (columnId: string) => void;
+  /** Sort keys, primary first. Empty is unsorted. */
+  sorts?: readonly { columnId: string; direction: "asc" | "desc" }[];
+  /** `additive` is a Shift-click: refine the sort rather than replacing it. */
+  onSort?: (columnId: string, additive: boolean) => void;
   filters?: Record<string, ColumnFilter>;
   onFilterChange?: (columnId: string, filter: ColumnFilter) => void;
   /** Distinct filter values per column id, from the unfiltered row set. */
@@ -75,7 +77,8 @@ export function ColumnHeaderRow({
         <div aria-hidden className="h-full self-stretch border-r border-rule/50" />
       )}
       {columns.map((column) => {
-        const sorted = sort?.columnId === column.id ? sort.direction : null;
+        const sortIndex = sorts.findIndex((entry) => entry.columnId === column.id);
+        const sorted = sortIndex === -1 ? null : sorts[sortIndex].direction;
         const filter = filters?.[column.id] ?? ALL_FILTER;
         const active = filterActive(filter);
 
@@ -87,16 +90,33 @@ export function ColumnHeaderRow({
             <button
               type="button"
               disabled={!column.sortValue || !onSort}
-              onClick={() => onSort?.(column.id)}
+              onClick={(event) => onSort?.(column.id, event.shiftKey)}
+              title={
+                column.sortValue && onSort
+                  ? "Click to sort · Shift-click to add a secondary sort"
+                  : undefined
+              }
               className={[
                 "min-w-0 truncate uppercase tracking-wider",
                 column.sortValue && onSort
                   ? "cursor-pointer hover:text-ink"
                   : "cursor-default",
+                sorted ? "text-ink" : "",
               ].join(" ")}
             >
               {column.label}
-              {sorted === "asc" ? " ↑" : sorted === "desc" ? " ↓" : ""}
+              {sorted && (
+                <span className="ml-0.5 whitespace-nowrap">
+                  {sorted === "asc" ? "↑" : "↓"}
+                  {/* The rank only appears once there is more than one key — a lone "1"
+                      beside a single sorted column is noise. */}
+                  {sorts.length > 1 && (
+                    <span className="align-super text-[0.5625rem] tabular-nums">
+                      {sortIndex + 1}
+                    </span>
+                  )}
+                </span>
+              )}
             </button>
 
             {enableFilters && Boolean(column.filterValue) && onFilterChange && (

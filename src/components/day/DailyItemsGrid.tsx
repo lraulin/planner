@@ -352,6 +352,7 @@ export function DailyItemsGrid({
         <DataGrid<DayColumnCtx, DailyItemView>
           rows={rows}
           columns={gridState.columns}
+          allColumns={DAY_COLUMNS}
           columnCtx={columnCtx}
           selectedId={selectedId}
           selectedIds={selectedIds}
@@ -367,7 +368,7 @@ export function DailyItemsGrid({
           rowLabel={(row) => row.node.title}
           rowNumbers
           enableSort
-          sort={gridState.sort}
+          sorts={gridState.sorts}
           onSortChange={gridState.toggleSort}
           filters={gridState.filters}
           onFilterChange={gridState.setFilter}

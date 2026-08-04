@@ -2,12 +2,15 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { DataGrid, type RowDrag } from "@/components/grid/DataGrid";
-import { ShowFieldsDialog } from "@/components/grid/ShowFieldsDialog";
+import {
+  GridToolbar,
+  switchValue,
+  type GridSwitch,
+} from "@/components/grid/GridToolbar";
+import { collectDistinctValues } from "@/lib/grid/distinct";
 import { useGridState, useTabView } from "@/components/grid/useGridState";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import {
-  ErrorBanner,
-  TabToolbar,
   ToolbarButton,
   ToolbarSelect,
   ToolbarToggle,
@@ -60,6 +63,14 @@ import { useChooserSettings } from "./useChooserSettings";
 const PAGE_STEP = 10;
 const INITIAL_LIMIT = 20;
 
+/**
+ * Achieve gates the header funnels behind an "Advanced Filters" toggle here, because the
+ * Chooser's own scoring controls are the primary way to narrow it. Kept, now persisted.
+ */
+const CHOOSER_SWITCHES: GridSwitch[] = [
+  { id: "advancedFilters", label: "Advanced Filters", defaultOn: false },
+];
+
 export function ChooserGrid({
   initialNodes,
   plannedNodeIds,
@@ -72,9 +83,8 @@ export function ChooserGrid({
   const [viewId, setViewId] = useTabView("chooser", CHOOSER_VIEW_IDS, "best-overall");
   const [dateFilter, setDateFilter] = useState<ChooserDateFilter>("none");
   const [limit, setLimit] = useState(INITIAL_LIMIT);
-  const [advancedFilters, setAdvancedFilters] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showFields, setShowFields] = useState(false);
+  const [counts, setCounts] = useState({ shown: 0, total: 0 });
 
   const { settings, update, reset } = useChooserSettings(viewId);
   const view = chooserView(viewId);
@@ -125,6 +135,8 @@ export function ChooserGrid({
     return map;
   }, [matching]);
 
+  const advancedFilters = switchValue(gridState, CHOOSER_SWITCHES[0]);
+
   const rows = useMemo(
     () => chooserRows(visible, dateFilter, today, view.tcPriority),
     [visible, dateFilter, today, view.tcPriority],
@@ -133,6 +145,15 @@ export function ChooserGrid({
   const navigableIds = useMemo(
     () => rows.flatMap((row) => (row.kind === "node" ? [row.id] : [])),
     [rows],
+  );
+
+  const distinctValues = useMemo(
+    () =>
+      collectDistinctValues(
+        allColumns,
+        rows.flatMap((row) => (row.kind === "node" ? [row] : [])),
+      ),
+    [allColumns, rows],
   );
   const navigableKey = navigableIds.join("\0");
   const [seenNavigable, setSeenNavigable] = useState(navigableKey);
@@ -234,98 +255,96 @@ export function ChooserGrid({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
-      <TabToolbar>
-        <ToolbarSelect
-          label="View"
-          value={viewId}
-          onChange={(value) => {
-            setViewId(value as ChooserViewId);
-            setLimit(INITIAL_LIMIT);
-          }}
-          options={CHOOSER_VIEWS.map((entry) => ({
-            value: entry.id,
-            label: entry.label,
-          }))}
-        />
-        <ToolbarButton onClick={() => setShowSettings(true)}>Settings…</ToolbarButton>
+      <GridToolbar
+        grid={gridState}
+        gridLabel="Task Chooser"
+        allColumns={allColumns}
+        distinctValues={distinctValues}
+        switches={CHOOSER_SWITCHES}
+        counts={counts}
+        error={tab.error}
+        left={
+          <>
+            <ToolbarSelect
+              label="View"
+              value={viewId}
+              onChange={(value) => {
+                setViewId(value as ChooserViewId);
+                setLimit(INITIAL_LIMIT);
+              }}
+              options={CHOOSER_VIEWS.map((entry) => ({
+                value: entry.id,
+                label: entry.label,
+              }))}
+            />
+            <ToolbarButton onClick={() => setShowSettings(true)}>
+              Settings…
+            </ToolbarButton>
 
-        <span className="flex items-center gap-2">
-          <ToolbarButton
-            onClick={() => setLimit((n) => Math.max(PAGE_STEP, n - PAGE_STEP))}
-            disabled={limit <= PAGE_STEP}
-          >
-            Show Less
-          </ToolbarButton>
-          <span className="tabular text-[0.8125rem] text-ink-muted">
-            {visible.length} of {matching.length}
-          </span>
-          <ToolbarButton
-            onClick={() => setLimit((n) => n + PAGE_STEP)}
-            disabled={limit >= matching.length}
-          >
-            Show More
-          </ToolbarButton>
-        </span>
+            <span className="flex items-center gap-2">
+              <ToolbarButton
+                onClick={() => setLimit((n) => Math.max(PAGE_STEP, n - PAGE_STEP))}
+                disabled={limit <= PAGE_STEP}
+              >
+                Show Less
+              </ToolbarButton>
+              <span className="tabular text-[0.8125rem] text-ink-muted">
+                {visible.length} of {matching.length}
+              </span>
+              <ToolbarButton
+                onClick={() => setLimit((n) => n + PAGE_STEP)}
+                disabled={limit >= matching.length}
+              >
+                Show More
+              </ToolbarButton>
+            </span>
 
-        <ToolbarSelect
-          label="Date"
-          value={dateFilter}
-          onChange={(value) => {
-            setDateFilter(value as ChooserDateFilter);
-            setLimit(INITIAL_LIMIT);
-          }}
-          options={DATE_FILTERS.map((entry) => ({
-            value: entry.id,
-            label: entry.label,
-          }))}
-        />
-        <ToolbarToggle
-          checked={advancedFilters}
-          onChange={() => setAdvancedFilters((v) => !v)}
-          label="Advanced Filters"
-        />
-        {/* Achieve's Deferred toggle, kept as a shortcut into the state list rather than
-            a second mechanism beside it. */}
-        <ToolbarToggle
-          checked={settings.states.includes("postponed")}
-          onChange={() =>
-            update({
-              states: settings.states.includes("postponed")
-                ? settings.states.filter((state) => state !== "postponed")
-                : [...settings.states, "postponed"],
-            })
-          }
-          label="Deferred"
-        />
-        <ToolbarButton onClick={() => setShowFields(true)}>Show Fields</ToolbarButton>
-        <ToolbarButton
-          onClick={gridState.clearFilters}
-          disabled={!gridState.filtersActive}
-          title="Clear every column filter on this view"
-        >
-          Clear Filters
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={gridState.reset}
-          title="Clear filters, sort, column layout and collapsed groups for this view"
-        >
-          Reset this grid
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => tab.selectedId && tab.setEditingId(tab.selectedId)}
-          disabled={!tab.selectedId}
-          title="F2"
-        >
-          Rename
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => tab.selectedId && tab.openDetail(tab.selectedId)}
-          disabled={!tab.selectedId}
-          title="Enter"
-        >
-          Open
-        </ToolbarButton>
-      </TabToolbar>
+            <ToolbarSelect
+              label="Date"
+              value={dateFilter}
+              onChange={(value) => {
+                setDateFilter(value as ChooserDateFilter);
+                setLimit(INITIAL_LIMIT);
+              }}
+              options={DATE_FILTERS.map((entry) => ({
+                value: entry.id,
+                label: entry.label,
+              }))}
+            />
+            {/* Achieve's Deferred toggle, kept as a shortcut into the state list rather
+                than a second mechanism beside it — so it is not a `switches` entry. */}
+            <ToolbarToggle
+              checked={settings.states.includes("postponed")}
+              onChange={() =>
+                update({
+                  states: settings.states.includes("postponed")
+                    ? settings.states.filter((state) => state !== "postponed")
+                    : [...settings.states, "postponed"],
+                })
+              }
+              label="Deferred"
+            />
+          </>
+        }
+        right={
+          <>
+            <ToolbarButton
+              onClick={() => tab.selectedId && tab.setEditingId(tab.selectedId)}
+              disabled={!tab.selectedId}
+              title="F2"
+            >
+              Rename
+            </ToolbarButton>
+            <ToolbarButton
+              onClick={() => tab.selectedId && tab.openDetail(tab.selectedId)}
+              disabled={!tab.selectedId}
+              title="Enter"
+            >
+              Open
+            </ToolbarButton>
+          </>
+        }
+      />
 
       <div className="flex flex-none items-baseline gap-2 border-b border-rule bg-surface-raised/60 px-4 py-1.5">
         <span className="flex-none text-[0.6875rem] font-medium uppercase tracking-wider text-ink-faint">
@@ -340,11 +359,10 @@ export function ChooserGrid({
         </span>
       </div>
 
-      {tab.error && <ErrorBanner message={tab.error} />}
-
       <DataGrid
         rows={rows}
         columns={gridState.columns}
+        allColumns={allColumns}
         columnCtx={columnCtx}
         selectedId={tab.selectedId}
         selectedIds={tab.selectedIds}
@@ -356,15 +374,20 @@ export function ChooserGrid({
         rowNumbers
         enableFilters={advancedFilters}
         enableSort
-        sort={gridState.sort}
+        sorts={gridState.sorts}
         onSortChange={gridState.toggleSort}
         filters={gridState.filters}
         onFilterChange={gridState.setFilter}
+        advancedFilter={gridState.advancedFilter}
+        search={gridState.search}
+        distinctValues={distinctValues}
+        onCountsChange={setCounts}
         widths={gridState.widths}
         onResizeColumn={gridState.setWidth}
         onResetColumnWidth={gridState.clearWidth}
         collapsedGroups={gridState.collapsedGroups}
         onToggleGroup={gridState.toggleGroup}
+        density={gridState.density}
         empty={
           <div className="flex h-full items-center justify-center p-8 text-[0.9375rem] text-ink-muted">
             Nothing to choose from in this view.
@@ -388,18 +411,6 @@ export function ChooserGrid({
           onClose={() => setShowSettings(false)}
         />
       )}
-
-      <ShowFieldsDialog
-        open={showFields}
-        allColumns={allColumns}
-        shownIds={gridState.order}
-        onShow={gridState.show}
-        onHide={gridState.hide}
-        onMove={gridState.move}
-        onReset={gridState.resetColumns}
-        onResetGrid={gridState.reset}
-        onClose={() => setShowFields(false)}
-      />
     </div>
   );
 }

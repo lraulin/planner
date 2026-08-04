@@ -269,7 +269,16 @@ export function shiftDays(isoDate: string, delta: number): string {
 
 /**
  * Apply every active column filter to a node row's filter values.
- * `values` is keyed by column id.
+ *
+ * `values` is keyed by column id and must carry an entry for **every filterable column the
+ * tab defines**, not merely the visible ones — a column hidden by Show Fields still filters.
+ * A blank cell is `null`; a *missing key* means the column does not exist at all.
+ *
+ * That distinction is the whole point. A filter naming a column the grid cannot supply a
+ * value for is treated as **inert**, not as "every cell is blank": the latter fails every
+ * row, so a layout saved before a column was renamed would silently empty the grid with no
+ * funnel on screen to explain it. `useGridState` degrades a stale column `order` the same
+ * way rather than stranding the tab.
  */
 export function rowPassesFilters(
   values: Record<string, string | null>,
@@ -279,7 +288,8 @@ export function rowPassesFilters(
 ): boolean {
   for (const [columnId, filter] of Object.entries(filters)) {
     if (!filterActive(filter)) continue;
-    if (!matchesFilter(values[columnId] ?? null, filter, kinds[columnId], today)) {
+    if (!(columnId in values)) continue;
+    if (!matchesFilter(values[columnId], filter, kinds[columnId], today)) {
       return false;
     }
   }

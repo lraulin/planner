@@ -1,3 +1,5 @@
+import { shiftDateKey, toDateKey } from "@/lib/schedule/geometry";
+import { STATE_LABELS } from "./hierarchy";
 import { shelfHolds } from "./shelving";
 import type { OutlineNode } from "./types";
 
@@ -13,6 +15,13 @@ export type RowContext = {
   category: string | null;
   goalId: string | null;
   goalName: string | null;
+  /**
+   * Nearest project at or above the row — the row itself when it *is* a project, so
+   * grouping tasks by project puts a sub-project's tasks under that sub-project rather than
+   * under its parent.
+   */
+  projectId: string | null;
+  projectName: string | null;
 };
 
 /**
@@ -39,7 +48,47 @@ export type GridRow<T = OutlineNode> =
       context?: RowContext;
     };
 
-export type GroupBy = "category" | "resultArea" | "goal";
+/**
+ * A dimension rows can be grouped under. The first three come from a row's **ancestry** and
+ * were the original fixed set; the rest come from the row's **own fields**, and exist so
+ * grouping is a control the user drives rather than a per-tab arrangement baked into each
+ * grid's `sliceTree` call.
+ */
+export type GroupBy =
+  | "category"
+  | "resultArea"
+  | "goal"
+  | "project"
+  | "state"
+  | "priorityLetter"
+  | "deadlineBand";
+
+export const GROUP_BY_VALUES: readonly GroupBy[] = [
+  "category",
+  "resultArea",
+  "goal",
+  "project",
+  "state",
+  "priorityLetter",
+  "deadlineBand",
+];
+
+export const GROUP_BY_LABELS: Record<GroupBy, string> = {
+  category: "Category",
+  resultArea: "Result Area",
+  goal: "Goal",
+  project: "Project",
+  state: "State",
+  priorityLetter: "Priority",
+  deadlineBand: "Deadline",
+};
+
+/** Narrow stored strings to legal dimensions, dropping any retired in a later build. */
+export function asGroupBy(values: readonly string[]): GroupBy[] {
+  return values.filter((value): value is GroupBy =>
+    (GROUP_BY_VALUES as readonly string[]).includes(value),
+  );
+}
 
 export type SliceOpts = {
   /** Which nodes survive into the row set. Type filters live here. */
@@ -107,7 +156,7 @@ export function sliceTree(nodes: OutlineNode[], opts: SliceOpts): GridRow[] {
     return kept.map(toNodeRow);
   }
 
-  return emitGrouped(kept, groupBy);
+  return emitGrouped(kept, groupBy, opts.today);
 }
 
 /** The label a blank or missing category groups under, in both grouping paths. */
@@ -294,9 +343,15 @@ function contextFor(node: OutlineNode, byId: Map<string, OutlineNode>): RowConte
   let category: string | null = null;
   let goalId: string | null = null;
   let goalName: string | null = null;
+  let projectId: string | null = null;
+  let projectName: string | null = null;
 
   let cur: OutlineNode | undefined = node;
   while (cur) {
+    if (cur.type === "project" && projectId === null) {
+      projectId = cur.id;
+      projectName = cur.name;
+    }
     if (cur.type === "result_area" && resultAreaId === null) {
       resultAreaId = cur.id;
       resultAreaName = cur.name;
@@ -319,10 +374,27 @@ function contextFor(node: OutlineNode, byId: Map<string, OutlineNode>): RowConte
     category,
     goalId,
     goalName,
+    projectId,
+    projectName,
   };
 }
 
-function groupKey(dim: GroupBy, context: RowContext): { key: string; label: string } {
+/**
+ * Which group a row falls into on one dimension.
+ *
+ * Takes the whole prepared entry rather than only its `RowContext`: ancestry answers
+ * category / result area / goal / project, but state, priority and deadline are fields on
+ * the row itself. `today` is threaded through for the deadline bands, which are relative by
+ * definition — and is nullable, because before hydration the client does not know what day
+ * it is and must not disagree with the server about which rows are overdue.
+ */
+function groupKey(
+  dim: GroupBy,
+  entry: Prepared,
+  today: string | null,
+): { key: string; label: string } {
+  const { context, node } = entry;
+
   switch (dim) {
     case "category": {
       // Key and label both use the trimmed value so accidental trailing spaces cannot
@@ -343,7 +415,75 @@ function groupKey(dim: GroupBy, context: RowContext): { key: string; label: stri
         key: context.goalId ?? "",
         label: context.goalName ?? "(No Goal)",
       };
+    case "project":
+      return {
+        key: context.projectId ?? "",
+        label: context.projectName ?? "(No Project)",
+      };
+    case "state":
+      return { key: node.state, label: STATE_LABELS[node.state] };
+    case "priorityLetter":
+      return {
+        key: node.priorityLetter ?? "",
+        // Rank is deliberately ignored: grouping by A1, A2, A3 … is one header per row.
+        label: node.priorityLetter ?? "(Unprioritized)",
+      };
+    case "deadlineBand": {
+      const band = deadlineBandOf(node.deadline, today);
+      return { key: band, label: DEADLINE_BAND_LABELS[band] };
+    }
   }
+}
+
+/**
+ * Coarse deadline buckets for grouping.
+ *
+ * Deliberately **not** the derived schedule status from `status.ts`, which folds in state,
+ * target dates and priority — grouping by that would put a completed item due yesterday
+ * under "Completed" while the user was asking to see what is overdue. These read the
+ * deadline and nothing else, and reuse the same day boundaries as the deadline filter
+ * presets in `components/grid/filters.ts` so the two controls agree.
+ */
+export type DeadlineBand =
+  "overdue" | "today" | "tomorrow" | "next7" | "next30" | "later" | "none";
+
+const DEADLINE_BAND_LABELS: Record<DeadlineBand, string> = {
+  overdue: "Overdue",
+  today: "Due Today",
+  tomorrow: "Due Tomorrow",
+  next7: "Next 7 Days",
+  next30: "Next 30 Days",
+  later: "Later",
+  none: "(No Deadline)",
+};
+
+/** Band order for headers: soonest first, undated last — the order you triage in. */
+const DEADLINE_BAND_ORDER: DeadlineBand[] = [
+  "overdue",
+  "today",
+  "tomorrow",
+  "next7",
+  "next30",
+  "later",
+  "none",
+];
+
+export function deadlineBandOf(
+  deadline: Date | null,
+  today: string | null,
+): DeadlineBand {
+  if (!deadline) return "none";
+  // Before hydration every dated row lands in one neutral bucket rather than being sorted
+  // into bands the server would draw differently.
+  if (!today) return "later";
+
+  const key = toDateKey(deadline);
+  if (key < today) return "overdue";
+  if (key === today) return "today";
+  if (key === shiftDateKey(today, 1)) return "tomorrow";
+  if (key <= shiftDateKey(today, 7)) return "next7";
+  if (key <= shiftDateKey(today, 30)) return "next30";
+  return "later";
 }
 
 /**
@@ -354,7 +494,11 @@ function groupKey(dim: GroupBy, context: RowContext): { key: string; label: stri
  * {@link groupByCategory}. Other dimensions keep first-seen order so result areas stay
  * in outline order under their category. Within a leaf group, DFS order is preserved.
  */
-function gatherByGroupKeys(kept: Prepared[], groupBy: GroupBy[]): Prepared[] {
+function gatherByGroupKeys(
+  kept: Prepared[],
+  groupBy: GroupBy[],
+  today: string | null,
+): Prepared[] {
   if (groupBy.length === 0 || kept.length === 0) return kept;
 
   function partition(items: Prepared[], level: number): Prepared[] {
@@ -365,7 +509,7 @@ function gatherByGroupKeys(kept: Prepared[], groupBy: GroupBy[]): Prepared[] {
     const order: string[] = [];
 
     for (const item of items) {
-      const { key } = groupKey(dim, item.context);
+      const { key } = groupKey(dim, item, today);
       const bucket = buckets.get(key);
       if (bucket) {
         bucket.push(item);
@@ -375,13 +519,7 @@ function gatherByGroupKeys(kept: Prepared[], groupBy: GroupBy[]): Prepared[] {
       }
     }
 
-    if (dim === "category") {
-      order.sort((a, b) => {
-        const labelA = groupKey(dim, buckets.get(a)![0].context).label;
-        const labelB = groupKey(dim, buckets.get(b)![0].context).label;
-        return compareCategories(labelA, labelB);
-      });
-    }
+    sortGroupKeys(dim, order, buckets, today);
 
     const out: Prepared[] = [];
     for (const key of order) {
@@ -394,13 +532,68 @@ function gatherByGroupKeys(kept: Prepared[], groupBy: GroupBy[]): Prepared[] {
 }
 
 /**
+ * Header order within one level, in place.
+ *
+ * Most dimensions keep **first-seen** order, which is outline order — a result area stays
+ * where the user put it. Three have an order that is meaningful rather than incidental, and
+ * leaving those to tree order would produce headers in an arbitrary sequence the user
+ * cannot predict:
+ *
+ * - **Category** — alphabetical, uncategorised last (matches `groupByCategory`).
+ * - **Priority** — A, B, C, D, then unprioritized. Not alphabetical by accident: the empty
+ *   letter has to sort last, and "" sorts first.
+ * - **Deadline band** — soonest first, undated last: the order you triage in.
+ */
+function sortGroupKeys(
+  dim: GroupBy,
+  order: string[],
+  buckets: Map<string, Prepared[]>,
+  today: string | null,
+): void {
+  if (dim === "category") {
+    order.sort((a, b) => {
+      const labelA = groupKey(dim, buckets.get(a)![0], today).label;
+      const labelB = groupKey(dim, buckets.get(b)![0], today).label;
+      return compareCategories(labelA, labelB);
+    });
+    return;
+  }
+
+  if (dim === "priorityLetter") {
+    order.sort(
+      (a, b) => rankOf(a, PRIORITY_LETTER_ORDER) - rankOf(b, PRIORITY_LETTER_ORDER),
+    );
+    return;
+  }
+
+  if (dim === "deadlineBand") {
+    order.sort(
+      (a, b) => rankOf(a, DEADLINE_BAND_ORDER) - rankOf(b, DEADLINE_BAND_ORDER),
+    );
+  }
+}
+
+/** Position in a fixed order; anything unrecognised sorts last rather than first. */
+function rankOf(key: string, order: readonly string[]): number {
+  const index = order.indexOf(key);
+  return index === -1 ? order.length : index;
+}
+
+/** Letters first in rank order, then the blank (unprioritized) key. */
+const PRIORITY_LETTER_ORDER: readonly string[] = ["A", "B", "C", "D", ""];
+
+/**
  * Nested group headers around the kept nodes. Items are gathered under each group key
  * first (see {@link gatherByGroupKeys}), then headers are emitted as the key path changes.
  * Counts are the number of node rows under a header, including those nested under deeper
  * group levels.
  */
-function emitGrouped(kept: Prepared[], groupBy: GroupBy[]): GridRow[] {
-  const ordered = gatherByGroupKeys(kept, groupBy);
+function emitGrouped(
+  kept: Prepared[],
+  groupBy: GroupBy[],
+  today: string | null,
+): GridRow[] {
+  const ordered = gatherByGroupKeys(kept, groupBy, today);
   const out: GridRow[] = [];
 
   type Frame = {
@@ -429,7 +622,7 @@ function emitGrouped(kept: Prepared[], groupBy: GroupBy[]): GridRow[] {
   for (const entry of ordered) {
     for (let level = 0; level < groupBy.length; level++) {
       const dim = groupBy[level];
-      const { key, label } = groupKey(dim, entry.context);
+      const { key, label } = groupKey(dim, entry, today);
       const frame = stack[level];
 
       if (frame && frame.key === key && frame.dim === dim) {

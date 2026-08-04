@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { OutlineNode } from "@/lib/tree/types";
-import { sliceTree, type GroupBy, type GridRow } from "@/lib/tree/slice";
+import { asGroupBy, sliceTree, type GroupBy, type GridRow } from "@/lib/tree/slice";
 import { formatEffort, formatPriority } from "@/lib/tree/format";
 import { toDateKey } from "@/lib/schedule/geometry";
 import {
@@ -18,7 +18,12 @@ import {
   useTabView,
 } from "@/components/grid/useGridState";
 import { useTreeRowDrag } from "@/components/grid/useTreeRowDrag";
-import { ShowFieldsDialog } from "@/components/grid/ShowFieldsDialog";
+import {
+  GridToolbar,
+  switchValue,
+  type GridSwitch,
+} from "@/components/grid/GridToolbar";
+import { collectDistinctValues } from "@/lib/grid/distinct";
 import {
   abbrStateColumn,
   deadlineColumn,
@@ -28,13 +33,7 @@ import {
 } from "@/components/grid/commonColumns";
 import { EffortCell, ReadOnlyCell, StatusCell } from "@/components/grid/cells";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
-import {
-  ErrorBanner,
-  TabToolbar,
-  ToolbarButton,
-  ToolbarSelect,
-  ToolbarToggle,
-} from "./tabChrome";
+import { ToolbarButton, ToolbarSelect, ToolbarToggle } from "./tabChrome";
 import { useGridTab } from "./useGridTab";
 import type { OutlineColumnCtx } from "@/components/outline/outlineColumns";
 
@@ -248,14 +247,35 @@ function viewOrder(view: ViewId): string[] {
   }
 }
 
+/**
+ * Toolbar toggles this tab declares. They live in the persisted `switches` map rather than
+ * component state, so they survive a reload like every other grid preference.
+ *
+ * `includeDeferred` keeps its own hook: it is stored on the **tab** scope so one setting
+ * covers every sub-view, where these are per-view.
+ */
+const PROJECT_SWITCHES: GridSwitch[] = [
+  { id: "groups", label: "Groups", defaultOn: true },
+  { id: "includeGoals", label: "Goals", defaultOn: false },
+];
+
+/** Dimensions worth offering here. Goal is included; a project's goal is its natural home. */
+const PROJECT_GROUP_DIMENSIONS: GroupBy[] = [
+  "category",
+  "resultArea",
+  "goal",
+  "state",
+  "priorityLetter",
+  "deadlineBand",
+];
+
 export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const tab = useGridTab(initialNodes);
   const [view, setView] = useTabView("projects", VIEW_IDS, "active-status");
   const [scopeId, setScopeId] = useState<string>("");
-  const [groups, setGroups] = useState(true);
-  const [includeGoals, setIncludeGoals] = useState(false);
   const [includeDeferred, setIncludeDeferred] = useIncludeDeferred("projects");
-  const [showFields, setShowFields] = useState(false);
+  const [counts, setCounts] = useState({ shown: 0, total: 0 });
+  const [groupIds, setGroupIds] = useState<string[]>([]);
 
   const resultAreas = useMemo(
     () => tab.nodes.filter((n) => n.type === "result_area"),
@@ -274,15 +294,23 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
     apply: tab.apply,
     patch: tab.patch,
     selectOne: tab.selectOne,
-    headerSort: gridState.sort,
+    headerSorts: gridState.sorts,
     clearHeaderSort: gridState.clearSort,
   });
+
+  const groups = switchValue(gridState, PROJECT_SWITCHES[0]);
+  const includeGoals = switchValue(gridState, PROJECT_SWITCHES[1]);
 
   // When the view changes, reset to that view's preset (still overridable via Show Fields).
   const columns = gridState.columns;
 
   const rows: GridRow[] = useMemo(() => {
-    const groupBy: GroupBy[] = groups ? ["category", "resultArea"] : [];
+    // The Groups switch keeps Achieve's Category → Result Area arrangement as the default;
+    // Group by overrides it entirely once the user picks a dimension.
+    const chosen = asGroupBy(gridState.groupBy);
+    const groupBy: GroupBy[] =
+      chosen.length > 0 ? chosen : groups ? ["category", "resultArea"] : [];
+
     return sliceTree(tab.nodes, {
       keep: (node) => {
         if (node.type === "project") {
@@ -302,7 +330,25 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
       includeDeferred,
       today: tab.today,
     });
-  }, [tab.nodes, tab.today, view, groups, includeGoals, includeDeferred, scopeId]);
+  }, [
+    tab.nodes,
+    tab.today,
+    view,
+    groups,
+    gridState.groupBy,
+    includeGoals,
+    includeDeferred,
+    scopeId,
+  ]);
+
+  const distinctValues = useMemo(
+    () =>
+      collectDistinctValues(
+        allColumns,
+        rows.flatMap((row) => (row.kind === "node" ? [row] : [])),
+      ),
+    [allColumns, rows],
+  );
 
   const navigableIds = useMemo(
     () => rows.flatMap((row) => (row.kind === "node" ? [row.id] : [])),
@@ -318,72 +364,65 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
-      <TabToolbar>
-        <ToolbarSelect
-          label="Result Area"
-          value={scopeId}
-          onChange={setScopeId}
-          options={[
-            { value: "", label: "All Result Areas" },
-            ...resultAreas.map((area) => ({ value: area.id, label: area.name })),
-          ]}
-        />
-        <ToolbarSelect
-          label="View"
-          value={view}
-          onChange={(value) => setView(value as ViewId)}
-          options={VIEWS.map((entry) => ({ value: entry.id, label: entry.label }))}
-        />
-        <ToolbarToggle
-          checked={groups}
-          onChange={() => setGroups((v) => !v)}
-          label="Groups"
-        />
-        <ToolbarToggle
-          checked={includeGoals}
-          onChange={() => setIncludeGoals((v) => !v)}
-          label="Goals"
-        />
-        <ToolbarToggle
-          checked={includeDeferred}
-          onChange={() => setIncludeDeferred(!includeDeferred)}
-          label="Postponed"
-        />
-        <ToolbarButton onClick={() => setShowFields(true)}>Show Fields</ToolbarButton>
-        <ToolbarButton
-          onClick={gridState.clearFilters}
-          disabled={!gridState.filtersActive}
-          title="Clear every column filter on this view"
-        >
-          Clear Filters
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={gridState.reset}
-          title="Clear filters, sort, column layout and collapsed groups for this view"
-        >
-          Reset this grid
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => tab.selectedId && tab.setEditingId(tab.selectedId)}
-          disabled={!tab.selectedId}
-          title="F2"
-        >
-          Rename
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => tab.selectedId && tab.openDetail(tab.selectedId)}
-          disabled={!tab.selectedId}
-          title="Enter"
-        >
-          Open
-        </ToolbarButton>
-      </TabToolbar>
-
-      {tab.error && <ErrorBanner message={tab.error} />}
+      <GridToolbar
+        grid={gridState}
+        gridLabel="Projects"
+        allColumns={allColumns}
+        distinctValues={distinctValues}
+        groupDimensions={PROJECT_GROUP_DIMENSIONS}
+        groupIds={groupIds}
+        switches={PROJECT_SWITCHES}
+        counts={counts}
+        error={tab.error}
+        left={
+          <>
+            <ToolbarSelect
+              label="Result Area"
+              value={scopeId}
+              onChange={setScopeId}
+              options={[
+                { value: "", label: "All Result Areas" },
+                ...resultAreas.map((area) => ({ value: area.id, label: area.name })),
+              ]}
+            />
+            <ToolbarSelect
+              label="View"
+              value={view}
+              onChange={(value) => setView(value as ViewId)}
+              options={VIEWS.map((entry) => ({ value: entry.id, label: entry.label }))}
+            />
+            {/* Tab-scoped, not per-view: one Postponed setting covers every sub-view. */}
+            <ToolbarToggle
+              checked={includeDeferred}
+              onChange={() => setIncludeDeferred(!includeDeferred)}
+              label="Postponed"
+            />
+          </>
+        }
+        right={
+          <>
+            <ToolbarButton
+              onClick={() => tab.selectedId && tab.setEditingId(tab.selectedId)}
+              disabled={!tab.selectedId}
+              title="F2"
+            >
+              Rename
+            </ToolbarButton>
+            <ToolbarButton
+              onClick={() => tab.selectedId && tab.openDetail(tab.selectedId)}
+              disabled={!tab.selectedId}
+              title="Enter"
+            >
+              Open
+            </ToolbarButton>
+          </>
+        }
+      />
 
       <DataGrid
         rows={rows}
         columns={columns}
+        allColumns={allColumns}
         columnCtx={tab.cellHandlers}
         selectedId={tab.selectedId}
         selectedIds={tab.selectedIds}
@@ -395,15 +434,21 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
         rowDrag={rowDrag}
         enableFilters
         enableSort
-        sort={gridState.sort}
+        sorts={gridState.sorts}
         onSortChange={gridState.toggleSort}
         filters={gridState.filters}
         onFilterChange={gridState.setFilter}
+        advancedFilter={gridState.advancedFilter}
+        search={gridState.search}
+        distinctValues={distinctValues}
+        onCountsChange={setCounts}
         widths={gridState.widths}
         onResizeColumn={gridState.setWidth}
         onResetColumnWidth={gridState.clearWidth}
         collapsedGroups={gridState.collapsedGroups}
         onToggleGroup={gridState.toggleGroup}
+        onGroupIdsChange={setGroupIds}
+        density={gridState.density}
         empty={
           <div className="flex h-full items-center justify-center p-8 text-[0.9375rem] text-ink-muted">
             No projects match this view.
@@ -415,18 +460,6 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
         node={tab.detailNode}
         nodes={tab.nodes}
         onClose={() => tab.setDetailId(null)}
-      />
-
-      <ShowFieldsDialog
-        open={showFields}
-        allColumns={allColumns}
-        shownIds={gridState.order}
-        onShow={gridState.show}
-        onHide={gridState.hide}
-        onMove={gridState.move}
-        onReset={gridState.resetColumns}
-        onResetGrid={gridState.reset}
-        onClose={() => setShowFields(false)}
       />
     </div>
   );

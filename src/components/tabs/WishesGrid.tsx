@@ -9,12 +9,13 @@ import { updateNodeItemAction } from "@/app/outline/detail-actions";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import { DataGrid } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";
-import { ShowFieldsDialog } from "@/components/grid/ShowFieldsDialog";
+import { GridToolbar } from "@/components/grid/GridToolbar";
+import { collectDistinctValues } from "@/lib/grid/distinct";
 import { useGridState } from "@/components/grid/useGridState";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { copyAsText, writeClipboardText } from "@/lib/tree/copyAsText";
-import { ErrorBanner, TabToolbar, ToolbarButton, ToolbarSelect } from "./tabChrome";
+import { ToolbarButton, ToolbarSelect } from "./tabChrome";
 import { isTypingTarget } from "@/lib/keyboard";
 import {
   wishesColumns,
@@ -43,7 +44,7 @@ export function WishesGrid({
   const [patches, setPatches] = useState<Record<string, Partial<WishListRow>>>({});
   const [scopeId, setScopeId] = useState("");
   const { detail: detailNodeId, setDetail: setDetailNodeId } = useViewStateUrl();
-  const [showFields, setShowFields] = useState(false);
+  const [counts, setCounts] = useState({ shown: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
@@ -133,6 +134,15 @@ export function WishesGrid({
       };
     });
   }, [rows, scopeId]);
+
+  const distinctValues = useMemo(
+    () =>
+      collectDistinctValues(
+        wishesColumns,
+        gridRows.flatMap((row) => (row.kind === "node" ? [row] : [])),
+      ),
+    [gridRows],
+  );
 
   const orderedIds = useMemo(
     () => gridRows.flatMap((row) => (row.kind === "node" ? [row.id] : [])),
@@ -256,37 +266,32 @@ export function WishesGrid({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
-      <TabToolbar>
-        <ToolbarSelect
-          label="Result Area"
-          value={scopeId}
-          onChange={setScopeId}
-          options={[{ value: "", label: "All Result Areas" }, ...resultAreas]}
-        />
-        <ToolbarButton onClick={() => setShowFields(true)}>Show Fields</ToolbarButton>
-        <ToolbarButton
-          onClick={gridState.clearFilters}
-          disabled={!gridState.filtersActive}
-          title="Clear every column filter on this view"
-        >
-          Clear Filters
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={gridState.reset}
-          title="Clear filters, sort, column layout and collapsed groups for this view"
-        >
-          Reset this grid
-        </ToolbarButton>
-        <ToolbarButton onClick={openOwner} disabled={!selectedWish} title="Enter">
-          Open owner
-        </ToolbarButton>
-      </TabToolbar>
-
-      {error && <ErrorBanner message={error} />}
+      <GridToolbar
+        grid={gridState}
+        gridLabel="Wish List"
+        allColumns={wishesColumns}
+        distinctValues={distinctValues}
+        counts={counts}
+        error={error}
+        left={
+          <ToolbarSelect
+            label="Result Area"
+            value={scopeId}
+            onChange={setScopeId}
+            options={[{ value: "", label: "All Result Areas" }, ...resultAreas]}
+          />
+        }
+        right={
+          <ToolbarButton onClick={openOwner} disabled={!selectedWish} title="Enter">
+            Open owner
+          </ToolbarButton>
+        }
+      />
 
       <DataGrid<WishesColumnCtx, WishListRow>
         rows={gridRows}
         columns={gridState.columns}
+        allColumns={wishesColumns}
         columnCtx={columnCtx}
         selectedId={selectedId}
         selectedIds={selectedIds}
@@ -301,15 +306,20 @@ export function WishesGrid({
         rowLabel={(row) => row.node.title || "Untitled wish"}
         enableFilters
         enableSort
-        sort={gridState.sort}
+        sorts={gridState.sorts}
         onSortChange={gridState.toggleSort}
         filters={gridState.filters}
         onFilterChange={gridState.setFilter}
+        advancedFilter={gridState.advancedFilter}
+        search={gridState.search}
+        distinctValues={distinctValues}
+        onCountsChange={setCounts}
         widths={gridState.widths}
         onResizeColumn={gridState.setWidth}
         onResetColumnWidth={gridState.clearWidth}
         collapsedGroups={gridState.collapsedGroups}
         onToggleGroup={gridState.toggleGroup}
+        density={gridState.density}
         empty={
           <div className="flex h-full items-center justify-center p-8 text-[0.9375rem] text-ink-muted">
             No wishes yet. Add them on a Result Area&apos;s Wishes tab.
@@ -321,18 +331,6 @@ export function WishesGrid({
         node={detailNode}
         nodes={initialNodes}
         onClose={() => setDetailNodeId(null)}
-      />
-
-      <ShowFieldsDialog
-        open={showFields}
-        allColumns={wishesColumns}
-        shownIds={gridState.order}
-        onShow={gridState.show}
-        onHide={gridState.hide}
-        onMove={gridState.move}
-        onReset={gridState.resetColumns}
-        onResetGrid={gridState.reset}
-        onClose={() => setShowFields(false)}
       />
     </div>
   );

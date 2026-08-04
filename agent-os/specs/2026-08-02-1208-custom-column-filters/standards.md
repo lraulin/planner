@@ -1,6 +1,6 @@
 # Custom Column Filters — Standards Applied
 
-**Status: active**
+**Status: frozen / complete (2026-08-04)**
 
 Full text of long standards is not duplicated here; agents should read the live files under
 `agent-os/standards/`. This feature primarily touches:

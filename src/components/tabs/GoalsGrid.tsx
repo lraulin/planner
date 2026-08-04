@@ -2,14 +2,15 @@
 
 import { useMemo, useState } from "react";
 import type { OutlineNode } from "@/lib/tree/types";
-import { sliceTree, type GridRow } from "@/lib/tree/slice";
+import { asGroupBy, sliceTree, type GridRow, type GroupBy } from "@/lib/tree/slice";
 import { formatPriority } from "@/lib/tree/format";
 import { toDateKey } from "@/lib/schedule/geometry";
 import { STATE_LABELS } from "@/lib/tree/hierarchy";
 import type { ColumnDef } from "@/components/grid/columns";
 import { DataGrid } from "@/components/grid/DataGrid";
 import { useGridState, useTabView } from "@/components/grid/useGridState";
-import { ShowFieldsDialog } from "@/components/grid/ShowFieldsDialog";
+import { GridToolbar } from "@/components/grid/GridToolbar";
+import { collectDistinctValues } from "@/lib/grid/distinct";
 import {
   DeadlineCell,
   NameCell,
@@ -19,7 +20,7 @@ import {
 } from "@/components/grid/cells";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import { setGoalFieldAction } from "@/app/outline/detail-actions";
-import { ErrorBanner, TabToolbar, ToolbarButton, ToolbarSelect } from "./tabChrome";
+import { ToolbarButton, ToolbarSelect } from "./tabChrome";
 import { useGridTab } from "./useGridTab";
 import type { OutlineColumnCtx } from "@/components/outline/outlineColumns";
 
@@ -149,11 +150,20 @@ function buildColumns(): ColumnDef<GoalsCtx>[] {
   ];
 }
 
+/** A goal has no project or deadline band worth grouping under; these are what remain. */
+const GOAL_GROUP_DIMENSIONS: GroupBy[] = [
+  "resultArea",
+  "category",
+  "state",
+  "priorityLetter",
+];
+
 export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const tab = useGridTab(initialNodes);
   const [view, setView] = useTabView("goals", VIEW_IDS, "all");
   const [scopeId, setScopeId] = useState<string>("");
-  const [showFields, setShowFields] = useState(false);
+  const [counts, setCounts] = useState({ shown: 0, total: 0 });
+  const [groupIds, setGroupIds] = useState<string[]>([]);
 
   const resultAreas = useMemo(
     () => tab.nodes.filter((n) => n.type === "result_area"),
@@ -172,12 +182,25 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
           if (view === "active") return isActive(node);
           return true;
         },
-        groupBy: ["resultArea"],
+        // Result Area is the arrangement Achieve ships; Group by overrides it on request.
+        groupBy: (() => {
+          const chosen = asGroupBy(gridState.groupBy);
+          return chosen.length > 0 ? chosen : (["resultArea"] as GroupBy[]);
+        })(),
         scopeId: scopeId || null,
         includeDeferred: true,
         today: tab.today,
       }),
-    [tab.nodes, tab.today, view, scopeId],
+    [tab.nodes, tab.today, view, scopeId, gridState.groupBy],
+  );
+
+  const distinctValues = useMemo(
+    () =>
+      collectDistinctValues(
+        allColumns,
+        rows.flatMap((row) => (row.kind === "node" ? [row] : [])),
+      ),
+    [allColumns, rows],
   );
 
   const navigableIds = useMemo(
@@ -208,57 +231,58 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
-      <TabToolbar>
-        <ToolbarSelect
-          label="Result Area"
-          value={scopeId}
-          onChange={setScopeId}
-          options={[
-            { value: "", label: "All Result Areas" },
-            ...resultAreas.map((area) => ({ value: area.id, label: area.name })),
-          ]}
-        />
-        <ToolbarSelect
-          label="View"
-          value={view}
-          onChange={(value) => setView(value as ViewId)}
-          options={VIEWS.map((entry) => ({ value: entry.id, label: entry.label }))}
-        />
-        <ToolbarButton onClick={() => setShowFields(true)}>Show Fields</ToolbarButton>
-        <ToolbarButton
-          onClick={gridState.clearFilters}
-          disabled={!gridState.filtersActive}
-          title="Clear every column filter on this view"
-        >
-          Clear Filters
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={gridState.reset}
-          title="Clear filters, sort, column layout and collapsed groups for this view"
-        >
-          Reset this grid
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => tab.selectedId && tab.setEditingId(tab.selectedId)}
-          disabled={!tab.selectedId}
-          title="F2"
-        >
-          Rename
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => tab.selectedId && tab.openDetail(tab.selectedId)}
-          disabled={!tab.selectedId}
-          title="Enter"
-        >
-          Open
-        </ToolbarButton>
-      </TabToolbar>
-
-      {tab.error && <ErrorBanner message={tab.error} />}
+      <GridToolbar
+        grid={gridState}
+        gridLabel="Goals"
+        allColumns={allColumns}
+        distinctValues={distinctValues}
+        groupDimensions={GOAL_GROUP_DIMENSIONS}
+        groupIds={groupIds}
+        counts={counts}
+        error={tab.error}
+        left={
+          <>
+            <ToolbarSelect
+              label="Result Area"
+              value={scopeId}
+              onChange={setScopeId}
+              options={[
+                { value: "", label: "All Result Areas" },
+                ...resultAreas.map((area) => ({ value: area.id, label: area.name })),
+              ]}
+            />
+            <ToolbarSelect
+              label="View"
+              value={view}
+              onChange={(value) => setView(value as ViewId)}
+              options={VIEWS.map((entry) => ({ value: entry.id, label: entry.label }))}
+            />
+          </>
+        }
+        right={
+          <>
+            <ToolbarButton
+              onClick={() => tab.selectedId && tab.setEditingId(tab.selectedId)}
+              disabled={!tab.selectedId}
+              title="F2"
+            >
+              Rename
+            </ToolbarButton>
+            <ToolbarButton
+              onClick={() => tab.selectedId && tab.openDetail(tab.selectedId)}
+              disabled={!tab.selectedId}
+              title="Enter"
+            >
+              Open
+            </ToolbarButton>
+          </>
+        }
+      />
 
       <DataGrid
         rows={rows}
         columns={gridState.columns}
+        allColumns={allColumns}
         columnCtx={columnCtx}
         selectedId={tab.selectedId}
         selectedIds={tab.selectedIds}
@@ -269,15 +293,21 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         rowMenu={tab.rowMenu}
         enableFilters
         enableSort
-        sort={gridState.sort}
+        sorts={gridState.sorts}
         onSortChange={gridState.toggleSort}
         filters={gridState.filters}
         onFilterChange={gridState.setFilter}
+        advancedFilter={gridState.advancedFilter}
+        search={gridState.search}
+        distinctValues={distinctValues}
+        onCountsChange={setCounts}
         widths={gridState.widths}
         onResizeColumn={gridState.setWidth}
         onResetColumnWidth={gridState.clearWidth}
         collapsedGroups={gridState.collapsedGroups}
         onToggleGroup={gridState.toggleGroup}
+        onGroupIdsChange={setGroupIds}
+        density={gridState.density}
         empty={
           <div className="flex h-full items-center justify-center p-8 text-[0.9375rem] text-ink-muted">
             No goals match this view.
@@ -289,18 +319,6 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         node={tab.detailNode}
         nodes={tab.nodes}
         onClose={() => tab.setDetailId(null)}
-      />
-
-      <ShowFieldsDialog
-        open={showFields}
-        allColumns={allColumns}
-        shownIds={gridState.order}
-        onShow={gridState.show}
-        onHide={gridState.hide}
-        onMove={gridState.move}
-        onReset={gridState.resetColumns}
-        onResetGrid={gridState.reset}
-        onClose={() => setShowFields(false)}
       />
     </div>
   );

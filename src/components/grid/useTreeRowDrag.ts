@@ -29,7 +29,7 @@ export function useTreeRowDrag({
   apply,
   patch,
   selectOne,
-  headerSort,
+  headerSorts,
   clearHeaderSort,
 }: {
   nodes: OutlineNode[];
@@ -37,7 +37,8 @@ export function useTreeRowDrag({
   apply: (work: () => Promise<ApplyResult>) => void;
   patch: (id: string, partial: Partial<OutlineNode>) => void;
   selectOne: (id: string) => void;
-  headerSort: GridSort | null;
+  /** Active sort keys. Drag is only compatible with a priority sort — see `onDrop`. */
+  headerSorts: readonly GridSort[];
   clearHeaderSort: () => void;
 }): RowDrag {
   return useMemo(() => {
@@ -64,7 +65,13 @@ export function useTreeRowDrag({
         const placement = resolveDrop(primary, targetId, zone, byId);
         if (!placement) return;
 
-        if (headerSort && headerSort.columnId !== "priority") clearHeaderSort();
+        // A drop rewrites letter/rank among the new siblings, so a priority sort stays
+        // meaningful and is kept. Any other sort would immediately re-order the row away
+        // from where it was just dropped, so it is cleared instead — including when it is
+        // only a secondary key, because a secondary key still decides where ties land.
+        if (headerSorts.some((entry) => entry.columnId !== "priority")) {
+          clearHeaderSort();
+        }
 
         const priSlot = priorityDropFromPosition(placement.position);
         const priorityPlan = priSlot
@@ -120,5 +127,5 @@ export function useTreeRowDrag({
         });
       },
     };
-  }, [nodes, byId, apply, patch, selectOne, headerSort, clearHeaderSort]);
+  }, [nodes, byId, apply, patch, selectOne, headerSorts, clearHeaderSort]);
 }

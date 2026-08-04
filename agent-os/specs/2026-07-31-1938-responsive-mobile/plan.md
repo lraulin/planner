@@ -198,7 +198,7 @@ Verified at 390 × 844 with touch emulation via the `run-planner` driver's new `
 `scheme` steps, unless noted.
 
 - [x] No horizontal scroll on the page body — measured `documentElement.scrollWidth -
-    innerWidth === 0` on all thirteen routes.
+innerWidth === 0` on all thirteen routes.
 - [x] **Focusing any input does not zoom the viewport** — zero controls below 16px on any
       route, including all 18 inside the node drawer.
 - [x] Bottom nav present below `md`; all five slots measure 78 × 48px; `.pb-safe` clears the

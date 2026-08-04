@@ -77,20 +77,26 @@ export function filterActive(filter: ColumnFilter): boolean {
 
 export type OperatorOption = { id: FilterOperator; label: string; symbol: string };
 
-const OP_META: Record<FilterOperator, { label: string; symbol: string }> = {
-  eq: { label: "Equals", symbol: "=" },
-  neq: { label: "Does not equal", symbol: "≠" },
-  contains: { label: "Contains", symbol: "∋" },
-  not_contains: { label: "Does not contain", symbol: "∌" },
-  starts_with: { label: "Starts with", symbol: "A…" },
-  ends_with: { label: "Ends with", symbol: "…Z" },
-  blank: { label: "Is blank", symbol: "∅" },
-  nonblank: { label: "Is not blank", symbol: "≠∅" },
-  lt: { label: "Less than", symbol: "<" },
-  lte: { label: "Less than or equal to", symbol: "≤" },
-  gt: { label: "Greater than", symbol: ">" },
-  gte: { label: "Greater than or equal to", symbol: "≥" },
-};
+/**
+ * Label and symbol per operator. Exported so the cross-column builder in `crossFilter.ts`
+ * renders the same vocabulary rather than forking a second one, and so `in OPERATOR_META`
+ * is the single validity check for an operator read out of a stored blob.
+ */
+export const OPERATOR_META: Record<FilterOperator, { label: string; symbol: string }> =
+  {
+    eq: { label: "Equals", symbol: "=" },
+    neq: { label: "Does not equal", symbol: "≠" },
+    contains: { label: "Contains", symbol: "∋" },
+    not_contains: { label: "Does not contain", symbol: "∌" },
+    starts_with: { label: "Starts with", symbol: "A…" },
+    ends_with: { label: "Ends with", symbol: "…Z" },
+    blank: { label: "Is blank", symbol: "∅" },
+    nonblank: { label: "Is not blank", symbol: "≠∅" },
+    lt: { label: "Less than", symbol: "<" },
+    lte: { label: "Less than or equal to", symbol: "≤" },
+    gt: { label: "Greater than", symbol: ">" },
+    gte: { label: "Greater than or equal to", symbol: "≥" },
+  };
 
 const TEXT_OPS: FilterOperator[] = [
   "eq",
@@ -125,7 +131,7 @@ export function operatorsForKind(kind: ColumnFilterKind | undefined): OperatorOp
         ? ENUM_OPS
         : TEXT_OPS;
 
-  return ops.map((id) => ({ id, ...OP_META[id] }));
+  return ops.map((id) => ({ id, ...OPERATOR_META[id] }));
 }
 
 export function operatorNeedsOperand(op: FilterOperator): boolean {
@@ -275,7 +281,7 @@ export function describeCustom(
   if (filter.conditions.length === 0) return "";
 
   const parts = filter.conditions.map((condition) => {
-    const meta = OP_META[condition.op];
+    const meta = OPERATOR_META[condition.op];
     if (!operatorNeedsOperand(condition.op)) {
       return `[${columnLabel}] ${meta.symbol}`;
     }
@@ -317,7 +323,7 @@ export function parseColumnFilter(value: unknown): ColumnFilter | null {
     for (const entry of record.conditions) {
       if (!entry || typeof entry !== "object") continue;
       const row = entry as Record<string, unknown>;
-      if (typeof row.op !== "string" || !(row.op in OP_META)) continue;
+      if (typeof row.op !== "string" || !(row.op in OPERATOR_META)) continue;
       conditions.push({
         op: row.op as FilterOperator,
         value: typeof row.value === "string" ? row.value : "",

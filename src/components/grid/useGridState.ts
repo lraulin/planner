@@ -6,11 +6,15 @@ import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import {
   DEFAULT_GRID_SETTINGS,
   hasActiveFilters,
+  hasAnyNarrowing,
+  MAX_SORT_KEYS,
   parseGridSettings,
   serializeGridSettings,
+  type GridDensity,
   type GridSettings,
   type GridSort,
 } from "@/lib/settings/grid";
+import { EMPTY_CROSS_FILTER, type CrossColumnFilter } from "@/lib/grid/crossFilter";
 import { gridScope } from "@/lib/settings/scopes";
 import type { ColumnMeta } from "./columns";
 
@@ -221,28 +225,137 @@ export function useGridState<TCol extends ColumnMeta>(
     [patch],
   );
 
+  /**
+   * Clear everything narrowing the rows — column filters, the advanced filter and the
+   * search — in one action. Column layout, sort and group collapse are untouched: the user
+   * asked to see all their rows, not to give up their view.
+   */
   const clearFilters = useCallback(() => {
-    patch((current) => ({ ...current, filters: {} }));
+    patch((current) => ({
+      ...current,
+      filters: {},
+      advancedFilter: null,
+      search: "",
+    }));
   }, [patch]);
 
-  /** Achieve's header cycle: unsorted → ascending → descending → unsorted. */
-  const toggleSort = useCallback(
-    (columnId: string) => {
+  const setAdvancedFilter = useCallback(
+    (filter: CrossColumnFilter | null) => {
+      // An empty condition list is stored as null rather than an empty expression, so the
+      // chip bar and `hasAnyNarrowing` have one shape to test instead of two.
+      const next = filter && filter.conditions.length > 0 ? filter : null;
+      patch((current) => ({ ...current, advancedFilter: next }));
+    },
+    [patch],
+  );
+
+  const removeAdvancedCondition = useCallback(
+    (index: number) => {
       patch((current) => {
-        const sort: GridSort | null =
-          current.sort?.columnId !== columnId
-            ? { columnId, direction: "asc" }
-            : current.sort.direction === "asc"
-              ? { columnId, direction: "desc" }
-              : null;
-        return { ...current, sort };
+        if (!current.advancedFilter) return current;
+        const conditions = current.advancedFilter.conditions.filter(
+          (_, position) => position !== index,
+        );
+        return {
+          ...current,
+          advancedFilter:
+            conditions.length > 0 ? { ...current.advancedFilter, conditions } : null,
+        };
+      });
+    },
+    [patch],
+  );
+
+  const setSearch = useCallback(
+    (search: string) => {
+      patch((current) => ({ ...current, search }));
+    },
+    [patch],
+  );
+
+  const setGroupBy = useCallback(
+    (groupBy: string[]) => {
+      // Collapsed group ids encode the dimensions they came from, so they are meaningless
+      // against a new grouping and would silently hide the wrong sections.
+      patch((current) => ({ ...current, groupBy, collapsedGroups: [] }));
+    },
+    [patch],
+  );
+
+  const setDensity = useCallback(
+    (density: GridDensity) => {
+      patch((current) => ({ ...current, density }));
+    },
+    [patch],
+  );
+
+  const setSwitch = useCallback(
+    (id: string, value: boolean) => {
+      patch((current) => ({
+        ...current,
+        switches: { ...current.switches, [id]: value },
+      }));
+    },
+    [patch],
+  );
+
+  /**
+   * Achieve's header cycle: unsorted → ascending → descending → unsorted.
+   *
+   * A plain click **replaces** the whole sort with this one column, so the common case is
+   * unchanged and there is no way to accumulate sort keys by accident. `additive` (Shift-
+   * click) instead cycles this column's own key while leaving the others in place, which is
+   * the only way to build a secondary sort.
+   *
+   * Cycling an additive key to "unsorted" removes just that key. Removing the primary
+   * promotes the next one rather than clearing everything — the user asked to drop one
+   * criterion, not to abandon the ordering.
+   */
+  const toggleSort = useCallback(
+    (columnId: string, additive = false) => {
+      patch((current) => {
+        const existing = current.sorts.find((entry) => entry.columnId === columnId);
+
+        if (!additive) {
+          // Cycle only when this column is already the sole key; otherwise start fresh at
+          // ascending, so clicking a new header never lands on "unsorted".
+          const isSoleKey = current.sorts.length === 1 && existing !== undefined;
+          if (!isSoleKey)
+            return { ...current, sorts: [{ columnId, direction: "asc" }] };
+          return {
+            ...current,
+            sorts:
+              existing.direction === "asc"
+                ? [{ columnId, direction: "desc" as const }]
+                : [],
+          };
+        }
+
+        if (!existing) {
+          if (current.sorts.length >= MAX_SORT_KEYS) return current;
+          return {
+            ...current,
+            sorts: [...current.sorts, { columnId, direction: "asc" }],
+          };
+        }
+
+        const sorts: GridSort[] =
+          existing.direction === "asc"
+            ? current.sorts.map((entry) =>
+                entry.columnId === columnId
+                  ? { columnId, direction: "desc" as const }
+                  : entry,
+              )
+            : current.sorts.filter((entry) => entry.columnId !== columnId);
+
+        return { ...current, sorts };
       });
     },
     [patch],
   );
 
   const clearSort = useCallback(() => {
-    patch((current) => ({ ...current, sort: null }));
+    patch((current) => ({ ...current, sorts: [] }));
   }, [patch]);
 
   const toggleGroup = useCallback(
@@ -253,6 +366,23 @@ export function useGridState<TCol extends ColumnMeta>(
         else next.add(groupId);
         return { ...current, collapsedGroups: [...next] };
       });
+    },
+    [patch],
+  );
+
+  /**
+   * Collapse every group the grid currently has, or open all of them.
+   *
+   * Collapsing stores the ids rather than a single "all collapsed" flag, so a group added
+   * later (a new result area) arrives **open**. A flag would silently swallow it, and the
+   * user would have no reason to suspect a section existed.
+   */
+  const setAllGroupsCollapsed = useCallback(
+    (groupIds: readonly string[], collapsed: boolean) => {
+      patch((current) => ({
+        ...current,
+        collapsedGroups: collapsed ? [...groupIds] : [],
+      }));
     },
     [patch],
   );
@@ -283,12 +413,39 @@ export function useGridState<TCol extends ColumnMeta>(
     clearFilters,
     filtersActive: hasActiveFilters(settings.filters),
 
-    sort: settings.sort,
+    advancedFilter: settings.advancedFilter,
+    setAdvancedFilter,
+    removeAdvancedCondition,
+    /** A blank builder to seed the dialog with when nothing is stored yet. */
+    emptyAdvancedFilter: EMPTY_CROSS_FILTER,
+
+    search: settings.search,
+    setSearch,
+
+    /** True when column filters, the advanced filter or the search are narrowing rows. */
+    narrowing: hasAnyNarrowing(settings),
+
+    sorts: settings.sorts,
+    /**
+     * The primary key, for the callers that only ask "is this grid sorted at all?" —
+     * manual-order grids disable drag on any sort, and do not care which.
+     */
+    sort: settings.sorts[0] ?? null,
     toggleSort,
     clearSort,
 
+    groupBy: settings.groupBy,
+    setGroupBy,
+
     collapsedGroups,
     toggleGroup,
+    setAllGroupsCollapsed,
+
+    density: settings.density,
+    setDensity,
+
+    switches: settings.switches,
+    setSwitch,
 
     view: settings.view,
     setView,

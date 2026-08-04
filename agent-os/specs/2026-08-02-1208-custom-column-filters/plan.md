@@ -1,6 +1,6 @@
 # Custom Column Filters (Pragmatic MVP)
 
-**Status: active**  
+**Status: frozen / complete (2026-08-04)**  
 Spec folder: `agent-os/specs/2026-08-02-1208-custom-column-filters/`
 
 ## Context
@@ -31,15 +31,18 @@ for {Column}" dialog (And/Or, operator, operand, multi-row). Earlier specs defer
 
 ## Acceptance criteria
 
-- [ ] Filter dropdown gains **(Custom)...** (after `(All)`), opening a criteria dialog for that column.
-- [ ] Dialog: And/Or join, add/delete condition rows, operator select (kind-restricted), operand (text / date / value dropdown as appropriate; hidden for blank/nonblank).
-- [ ] Live expression preview, e.g. `[State] ≠ 'Cancelled' AND [State] ≠ 'Completed'`.
-- [ ] OK applies; Cancel discards draft; Escape closes without apply.
-- [ ] Matching pure-tested for text / enum / priority / date operators including blanks and And vs Or.
-- [ ] Persisted under existing `grid:{tabId}.filters` with backward-compatible parse of legacy `string[]`.
-- [ ] Preset/value selection replaces custom; `(All)` clears; reopening Custom edits saved conditions.
-- [ ] Funnel indicator active for custom filters; `hasActiveFilters` / clear-filters / Reset this grid treat custom as active.
-- [ ] Spec remains active until verified; then freeze + roadmap note that custom filters shipped (reopened from out-of-roadmap).
+Shipped and in daily use; frozen retroactively on 2026-08-04 by
+`specs/2026-08-04-0924-grid-control-surface`, which builds on this module.
+
+- [x] Filter dropdown gains **(Custom)...** (after `(All)`), opening a criteria dialog for that column.
+- [x] Dialog: And/Or join, add/delete condition rows, operator select (kind-restricted), operand (text / date / value dropdown as appropriate; hidden for blank/nonblank).
+- [x] Live expression preview, e.g. `[State] ≠ 'Cancelled' AND [State] ≠ 'Completed'`.
+- [x] OK applies; Cancel discards draft; Escape closes without apply.
+- [x] Matching pure-tested for text / enum / priority / date operators including blanks and And vs Or.
+- [x] Persisted under existing `grid:{tabId}.filters` with backward-compatible parse of legacy `string[]`.
+- [x] Preset/value selection replaces custom; `(All)` clears; reopening Custom edits saved conditions.
+- [x] Funnel indicator active for custom filters; `hasActiveFilters` / clear-filters / Reset this grid treat custom as active.
+- [x] Spec remains active until verified; then freeze + roadmap note that custom filters shipped (reopened from out-of-roadmap).
 
 ## Out of scope (this slice)
 
@@ -58,7 +61,24 @@ for {Column}" dialog (And/Or, operator, operand, multi-row). Earlier specs defer
 
 ## Follow-ups (new work — not amendments once frozen)
 
+Two of the original follow-ups were **delivered** by
+`specs/2026-08-04-0924-grid-control-surface`:
+
+- ~~Chip / summary of custom expression on the header~~ → the grid-wide chip bar
+  (`GridFilterChips`) renders every active condition, including per-column custom
+  expressions, each removable.
+- ~~Cross-column expressions / global advanced find~~ → `Filter…` builds an And/Or
+  expression across different columns, including ones Show Fields has hidden
+  (`src/lib/grid/crossFilter.ts`).
+
+Still open:
+
 - Regex / Like operators if daily use asks
 - Seed custom from current value ticks when opening (Custom)
-- Chip / summary of custom expression on the header (beyond funnel colour)
-- Chooser / Notes adoption if wanted
+- Notes keeps its own domain filter (`NoteFilterDialog`) over subjects/contexts/flags,
+  renamed **Note filter…** to sit beside the grid's column `Filter…`. Unify only if the
+  distinction stops being useful.
+
+Note: `OP_META` in `src/lib/grid/customFilter.ts` was exported and renamed
+`OPERATOR_META` so the cross-column builder shares one operator vocabulary instead of
+forking a second.

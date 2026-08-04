@@ -33,16 +33,12 @@ import {
 import { DataGrid, type RowDrag } from "@/components/grid/DataGrid";
 import { useGridState } from "@/components/grid/useGridState";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
-import { ShowFieldsDialog } from "@/components/grid/ShowFieldsDialog";
+import { GridToolbar } from "@/components/grid/GridToolbar";
+import { collectDistinctValues } from "@/lib/grid/distinct";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 import { useSetting, type SettingCodec } from "@/components/settings/SettingsProvider";
-import {
-  ErrorBanner,
-  TabToolbar,
-  ToolbarButton,
-  ToolbarSelect,
-} from "@/components/tabs/tabChrome";
+import { ToolbarButton, ToolbarSelect } from "@/components/tabs/tabChrome";
 import {
   parseNotesView,
   serializeNotesView,
@@ -55,7 +51,7 @@ import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { notesColumns, NOTES_COLUMN_IDS, type NotesColumnCtx } from "./notesColumns";
 import { NoteFilterDialog } from "./NoteFilterDialog";
 import { NoteDrawer } from "./NoteDrawer";
-import { isTypingTarget } from "@/lib/keyboard";
+import { isModalOpen, isTypingTarget } from "@/lib/keyboard";
 
 const NOTES_VIEW_CODEC: SettingCodec<NotesViewSettings> = {
   parse: parseNotesView,
@@ -113,7 +109,7 @@ export function NotesGrid({
     [patchView],
   );
   const [filterOpen, setFilterOpen] = useState(false);
-  const [fieldsOpen, setFieldsOpen] = useState(false);
+  const [counts, setCounts] = useState({ shown: 0, total: 0 });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<NoteNode | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -169,6 +165,15 @@ export function NotesGrid({
       depth: row.depth,
     }));
   }, [notes, mode, sort, filter]);
+
+  const distinctValues = useMemo(
+    () =>
+      collectDistinctValues(
+        notesColumns,
+        rows.flatMap((row) => (row.kind === "node" ? [row] : [])),
+      ),
+    [rows],
+  );
 
   const orderedIds = useMemo(() => rows.map((row) => row.id), [rows]);
   const multi = useMultiSelect(orderedIds, urlNoteId);
@@ -271,14 +276,8 @@ export function NotesGrid({
   );
 
   const gridState = useGridState("notes", notesColumns, [...NOTES_COLUMN_IDS]);
-  const {
-    columns,
-    show,
-    hide,
-    move,
-    sort: headerSort,
-    clearSort: clearHeaderSort,
-  } = gridState;
+  // Show / hide / move now travel to Show Fields through `GridToolbar`, not from here.
+  const { columns, sort: headerSort, clearSort: clearHeaderSort } = gridState;
 
   /**
    * Drag-to-reorder. Unlike the outline there are no nesting rules to enforce — any note
@@ -413,7 +412,11 @@ export function NotesGrid({
   // Keyboard, matching Achieve's own hint bar and the bindings every other tab uses.
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (drawerId || editingId || filterOpen || fieldsOpen || pendingDelete) return;
+      // `isModalOpen` rather than a flag per dialog: Show Fields and the grid's Filter
+      // now live inside `GridToolbar`, so this component cannot see them, and a flag list
+      // would silently miss any dialog added later.
+      if (drawerId || editingId || filterOpen || pendingDelete) return;
+      if (isModalOpen()) return;
 
       if (isTypingTarget(event.target)) return;
 
@@ -486,7 +489,6 @@ export function NotesGrid({
     drawerId,
     editingId,
     filterOpen,
-    fieldsOpen,
     pendingDelete,
     selected,
     addNote,
@@ -501,108 +503,118 @@ export function NotesGrid({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
-      <TabToolbar>
-        <ToolbarSelect
-          label="Show"
-          value={mode}
-          onChange={(next) => {
-            const nextMode = next as NotesMode;
-            setMode(nextMode);
-            // Manual order is a statement about a tree; a flat list has none to show.
-            if (nextMode === "flat" && sort === "manual") setSort("title");
-          }}
-          options={[
-            { value: "nested", label: "Nested" },
-            { value: "flat", label: "Flat" },
-          ]}
-        />
+      <GridToolbar
+        grid={gridState}
+        gridLabel="Notes"
+        allColumns={notesColumns}
+        distinctValues={distinctValues}
+        counts={counts}
+        error={error}
+        left={
+          <>
+            <ToolbarSelect
+              label="Show"
+              value={mode}
+              onChange={(next) => {
+                const nextMode = next as NotesMode;
+                setMode(nextMode);
+                // Manual order is a statement about a tree; a flat list has none to show.
+                if (nextMode === "flat" && sort === "manual") setSort("title");
+              }}
+              options={[
+                { value: "nested", label: "Nested" },
+                { value: "flat", label: "Flat" },
+              ]}
+            />
 
-        <ToolbarSelect
-          label="Sort"
-          value={sort}
-          onChange={(next) => setSort(next as NotesSort)}
-          options={[
-            ...(mode === "nested" ? [{ value: "manual", label: "Manual" }] : []),
-            { value: "title", label: "Title" },
-            { value: "date", label: "Date" },
-          ]}
-        />
+            <ToolbarSelect
+              label="Sort"
+              value={sort}
+              onChange={(next) => setSort(next as NotesSort)}
+              options={[
+                ...(mode === "nested" ? [{ value: "manual", label: "Manual" }] : []),
+                { value: "title", label: "Title" },
+                { value: "date", label: "Date" },
+              ]}
+            />
 
-        <ToolbarButton onClick={() => setFilterOpen(true)}>
-          {filterActive ? "Filter (on)…" : "Filter…"}
-        </ToolbarButton>
+            {/*
+              Named for its subject rather than just "Filter": the shared toolbar now has a
+              Filter of its own over the grid's *columns*, and two identically-labelled
+              buttons that narrow the same list by different rules is the kind of thing
+              nobody works out twice.
+            */}
+            <ToolbarButton onClick={() => setFilterOpen(true)}>
+              {filterActive ? "Note filter (on)…" : "Note filter…"}
+            </ToolbarButton>
 
-        {filterActive && (
-          <ToolbarButton onClick={() => setFilter(EMPTY_NOTE_FILTER)}>
-            Clear filter
-          </ToolbarButton>
-        )}
+            {filterActive && (
+              <ToolbarButton onClick={() => setFilter(EMPTY_NOTE_FILTER)}>
+                Clear note filter
+              </ToolbarButton>
+            )}
 
-        {/* Journal entries are ordinary notes filed under one subject, so browsing them is
-            the subject filter you can already set by hand — this is the one-click path to
-            it, not a second notes system. */}
-        <ToolbarButton
-          onClick={() =>
-            setFilter({
-              ...EMPTY_NOTE_FILTER,
-              subjects: [JOURNAL_SUBJECT],
-              subjectMode: "any",
-            })
-          }
-          title="Show the Day tab's daily notes"
-        >
-          Journal
-        </ToolbarButton>
+            {/* Journal entries are ordinary notes filed under one subject, so browsing them
+                is the subject filter you can already set by hand — this is the one-click
+                path to it, not a second notes system. */}
+            <ToolbarButton
+              onClick={() =>
+                setFilter({
+                  ...EMPTY_NOTE_FILTER,
+                  subjects: [JOURNAL_SUBJECT],
+                  subjectMode: "any",
+                })
+              }
+              title="Show the Day tab's daily notes"
+            >
+              Journal
+            </ToolbarButton>
+          </>
+        }
+        right={
+          <>
+            <span className="h-4 w-px bg-rule" aria-hidden />
 
-        <span className="h-4 w-px bg-rule" aria-hidden />
+            <ToolbarButton onClick={() => addNote("sibling")} title="Insert">
+              New note
+            </ToolbarButton>
+            <ToolbarButton
+              onClick={() => addNote("child")}
+              disabled={!selected}
+              title="Ctrl+Insert"
+            >
+              New child
+            </ToolbarButton>
+            <ToolbarButton
+              onClick={() => setPendingDelete(selected)}
+              disabled={!selected}
+              title="Delete"
+            >
+              Delete
+            </ToolbarButton>
 
-        <ToolbarButton onClick={() => addNote("sibling")} title="Insert">
-          New note
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => addNote("child")}
-          disabled={!selected}
-          title="Ctrl+Insert"
-        >
-          New child
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => setPendingDelete(selected)}
-          disabled={!selected}
-          title="Delete"
-        >
-          Delete
-        </ToolbarButton>
+            <span className="h-4 w-px bg-rule" aria-hidden />
 
-        <span className="h-4 w-px bg-rule" aria-hidden />
-
-        <ToolbarButton onClick={() => apply(() => setAllNotesCollapsedAction(false))}>
-          Expand all
-        </ToolbarButton>
-        <ToolbarButton onClick={() => apply(() => setAllNotesCollapsedAction(true))}>
-          Collapse all
-        </ToolbarButton>
-        <ToolbarButton onClick={() => setFieldsOpen(true)}>Show Fields…</ToolbarButton>
-        <ToolbarButton
-          onClick={gridState.clearFilters}
-          disabled={!gridState.filtersActive}
-          title="Clear every column filter on this view"
-        >
-          Clear Filters
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={gridState.reset}
-          title="Clear filters, sort, column layout and collapsed groups for this view"
-        >
-          Reset this grid
-        </ToolbarButton>
-      </TabToolbar>
-
-      {error && <ErrorBanner message={error} />}
+            {/* Note-tree collapse, persisted server-side — not the grid's group collapse,
+                which this tab has none of. */}
+            <ToolbarButton
+              onClick={() => apply(() => setAllNotesCollapsedAction(false))}
+            >
+              Expand all
+            </ToolbarButton>
+            <ToolbarButton
+              onClick={() => apply(() => setAllNotesCollapsedAction(true))}
+            >
+              Collapse all
+            </ToolbarButton>
+          </>
+        }
+      />
 
       <DataGrid
         rows={rows}
         columns={columns}
+        allColumns={notesColumns}
         columnCtx={columnCtx}
         selectedId={selectedId}
         selectedIds={selectedIds}
@@ -611,10 +623,14 @@ export function NotesGrid({
         ariaLabel="Notes"
         enableFilters
         enableSort
-        sort={gridState.sort}
+        sorts={gridState.sorts}
         onSortChange={gridState.toggleSort}
         filters={gridState.filters}
         onFilterChange={gridState.setFilter}
+        advancedFilter={gridState.advancedFilter}
+        search={gridState.search}
+        distinctValues={distinctValues}
+        onCountsChange={setCounts}
         widths={gridState.widths}
         onResizeColumn={gridState.setWidth}
         onResetColumnWidth={gridState.clearWidth}
@@ -639,18 +655,6 @@ export function NotesGrid({
         contexts={contexts}
         onApply={setFilter}
         onClose={() => setFilterOpen(false)}
-      />
-
-      <ShowFieldsDialog
-        open={fieldsOpen}
-        allColumns={notesColumns}
-        shownIds={columns.map((column) => column.id)}
-        onShow={show}
-        onHide={hide}
-        onMove={move}
-        onReset={gridState.resetColumns}
-        onResetGrid={gridState.reset}
-        onClose={() => setFieldsOpen(false)}
       />
 
       <NoteDrawer

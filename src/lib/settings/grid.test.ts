@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_GRID_SETTINGS,
   hasActiveFilters,
+  hasAnyNarrowing,
   MAX_COLUMN_WIDTH,
+  MAX_SORT_KEYS,
   MIN_COLUMN_WIDTH,
   parseGridSettings,
   serializeGridSettings,
@@ -36,10 +38,24 @@ describe("parseGridSettings", () => {
           ],
         },
       },
-      sort: { columnId: "deadline", direction: "desc" as const },
+      advancedFilter: {
+        join: "and" as const,
+        conditions: [
+          { columnId: "purpose", op: "not_contains" as const, value: "archive" },
+          { columnId: "assignedTo", op: "nonblank" as const, value: "" },
+        ],
+      },
+      search: "report",
+      sorts: [
+        { columnId: "deadline", direction: "desc" as const },
+        { columnId: "priority", direction: "asc" as const },
+      ],
+      groupBy: ["resultArea", "state"],
       collapsedGroups: ["area:health"],
+      density: "compact" as const,
       view: "active-status",
       includeDeferred: false,
+      switches: { groups: true, includeGoals: false },
     };
 
     expect(parseGridSettings(serializeGridSettings(settings))).toEqual(settings);
@@ -118,11 +134,105 @@ describe("parseGridSettings", () => {
   });
 
   it("discards a sort with no column, and defaults an unknown direction", () => {
-    expect(parseGridSettings({ sort: { direction: "asc" } }).sort).toBeNull();
-    expect(parseGridSettings({ sort: "deadline" }).sort).toBeNull();
+    expect(parseGridSettings({ sorts: [{ direction: "asc" }] }).sorts).toEqual([]);
+    expect(parseGridSettings({ sorts: ["deadline"] }).sorts).toEqual([]);
     expect(
-      parseGridSettings({ sort: { columnId: "deadline", direction: "sideways" } }).sort,
-    ).toEqual({ columnId: "deadline", direction: "asc" });
+      parseGridSettings({ sorts: [{ columnId: "deadline", direction: "sideways" }] })
+        .sorts,
+    ).toEqual([{ columnId: "deadline", direction: "asc" }]);
+  });
+
+  it("reads a pre-multi-sort blob's single `sort` key", () => {
+    // The upgrade must not silently throw away an ordering the user chose. A legacy blob
+    // has `sort`, never `sorts`.
+    expect(
+      parseGridSettings({ sort: { columnId: "deadline", direction: "desc" } }).sorts,
+    ).toEqual([{ columnId: "deadline", direction: "desc" }]);
+
+    expect(parseGridSettings({ sort: null }).sorts).toEqual([]);
+    expect(parseGridSettings({ sort: "deadline" }).sorts).toEqual([]);
+  });
+
+  it("honours an explicitly empty sorts array over a stale legacy key", () => {
+    // "I turned sorting off" must survive, even next to a `sort` left behind by an older
+    // build that wrote both.
+    expect(
+      parseGridSettings({ sorts: [], sort: { columnId: "priority", direction: "asc" } })
+        .sorts,
+    ).toEqual([]);
+  });
+
+  it("keeps one sort key per column and caps the total", () => {
+    expect(
+      parseGridSettings({
+        sorts: [
+          { columnId: "priority", direction: "asc" },
+          { columnId: "priority", direction: "desc" },
+          { columnId: "deadline", direction: "desc" },
+        ],
+      }).sorts,
+    ).toEqual([
+      { columnId: "priority", direction: "asc" },
+      { columnId: "deadline", direction: "desc" },
+    ]);
+
+    expect(
+      parseGridSettings({
+        sorts: ["a", "b", "c", "d", "e"].map((columnId) => ({
+          columnId,
+          direction: "asc",
+        })),
+      }).sorts,
+    ).toHaveLength(MAX_SORT_KEYS);
+  });
+
+  it("drops a malformed advanced-filter condition but keeps its siblings", () => {
+    expect(
+      parseGridSettings({
+        advancedFilter: {
+          join: "or",
+          conditions: [
+            { columnId: "purpose", op: "contains", value: "health" },
+            { columnId: "purpose", op: "sideways", value: "x" },
+            { op: "eq", value: "no column" },
+            { columnId: "", op: "eq", value: "blank column" },
+          ],
+        },
+      }).advancedFilter,
+    ).toEqual({
+      join: "or",
+      conditions: [{ columnId: "purpose", op: "contains", value: "health" }],
+    });
+  });
+
+  it("degrades a garbage advanced filter to none rather than a broken expression", () => {
+    for (const value of [null, "and", 7, [], { join: "and" }]) {
+      expect(parseGridSettings({ advancedFilter: value }).advancedFilter).toBeNull();
+    }
+  });
+
+  it("defaults density and rejects an unknown one", () => {
+    expect(parseGridSettings({}).density).toBe("comfortable");
+    expect(parseGridSettings({ density: "compact" }).density).toBe("compact");
+    expect(parseGridSettings({ density: "tiny" }).density).toBe("comfortable");
+  });
+
+  it("keeps only boolean switches", () => {
+    expect(
+      parseGridSettings({ switches: { groups: true, goals: "yes", area: false } })
+        .switches,
+    ).toEqual({ groups: true, area: false });
+    expect(parseGridSettings({ switches: "on" }).switches).toEqual({});
+  });
+
+  it("reads search as text and groupBy as an ordered list", () => {
+    expect(parseGridSettings({ search: "report" }).search).toBe("report");
+    expect(parseGridSettings({ search: 7 }).search).toBe("");
+    expect(parseGridSettings({ groupBy: ["resultArea", "state"] }).groupBy).toEqual([
+      "resultArea",
+      "state",
+    ]);
+    expect(parseGridSettings({ groupBy: "resultArea" }).groupBy).toEqual([]);
   });
 
   it("ignores keys it has never heard of", () => {
@@ -160,6 +270,42 @@ describe("hasActiveFilters", () => {
           join: "and",
           conditions: [{ op: "neq", value: "Cn" }],
         },
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("hasAnyNarrowing", () => {
+  const base = DEFAULT_GRID_SETTINGS;
+
+  it("is false when the grid is showing everything", () => {
+    expect(hasAnyNarrowing(base)).toBe(false);
+    expect(hasAnyNarrowing({ ...base, search: "   " })).toBe(false);
+    expect(
+      hasAnyNarrowing({ ...base, advancedFilter: { join: "and", conditions: [] } }),
+    ).toBe(false);
+  });
+
+  /**
+   * The reason this exists rather than reusing `hasActiveFilters`: a grid narrowed only by
+   * the search box or the advanced builder would otherwise show a disabled Clear button
+   * next to rows the user cannot account for.
+   */
+  it("catches narrowing that is not a column filter", () => {
+    expect(hasAnyNarrowing({ ...base, search: "report" })).toBe(true);
+    expect(
+      hasAnyNarrowing({
+        ...base,
+        advancedFilter: {
+          join: "and",
+          conditions: [{ columnId: "purpose", op: "contains", value: "health" }],
+        },
+      }),
+    ).toBe(true);
+    expect(
+      hasAnyNarrowing({
+        ...base,
+        filters: { state: { mode: "options", ids: ["value:done"] } },
       }),
     ).toBe(true);
   });

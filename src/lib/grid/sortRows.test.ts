@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { GridRow } from "@/lib/tree/slice";
-import { compareSortValues, sortRowsWithinGroups } from "./sortRows";
+import {
+  compareSortValues,
+  sortRowsWithinGroups,
+  type SortDirection,
+  type SortKey,
+} from "./sortRows";
 
 /** Rows carrying just enough shape to sort; the payload is the sort value itself. */
 type Row = GridRow<{ value: string | number | null }>;
@@ -14,6 +19,11 @@ function group(id: string, depth = 0): Row {
 }
 
 const valueOf = (row: Extract<Row, { kind: "node" }>) => row.node.value;
+
+/** The single-key sort every pre-existing case here is about. */
+const by = (direction: SortDirection): SortKey<{ value: string | number | null }>[] => [
+  { valueOf, direction },
+];
 
 function ids(rows: Row[]): string[] {
   return rows.map((row) => (row.kind === "group" ? `[${row.id}]` : row.id));
@@ -40,8 +50,8 @@ describe("compareSortValues", () => {
 describe("sortRowsWithinGroups", () => {
   it("sorts a flat list", () => {
     const rows = [node("c", "c"), node("a", "a"), node("b", "b")];
-    expect(ids(sortRowsWithinGroups(rows, valueOf, "asc"))).toEqual(["a", "b", "c"]);
-    expect(ids(sortRowsWithinGroups(rows, valueOf, "desc"))).toEqual(["c", "b", "a"]);
+    expect(ids(sortRowsWithinGroups(rows, by("asc")))).toEqual(["a", "b", "c"]);
+    expect(ids(sortRowsWithinGroups(rows, by("desc")))).toEqual(["c", "b", "a"]);
   });
 
   it("sorts inside each group instead of skipping the sort", () => {
@@ -56,7 +66,7 @@ describe("sortRowsWithinGroups", () => {
       node("h1", "y"),
     ];
 
-    expect(ids(sortRowsWithinGroups(rows, valueOf, "asc"))).toEqual([
+    expect(ids(sortRowsWithinGroups(rows, by("asc")))).toEqual([
       "[work]",
       "w1",
       "w2",
@@ -70,7 +80,7 @@ describe("sortRowsWithinGroups", () => {
     // "a" in the second group must not lead the first group, whatever the direction.
     const rows = [group("g1"), node("n1", "m"), group("g2"), node("n2", "a")];
 
-    expect(ids(sortRowsWithinGroups(rows, valueOf, "asc"))).toEqual([
+    expect(ids(sortRowsWithinGroups(rows, by("asc")))).toEqual([
       "[g1]",
       "n1",
       "[g2]",
@@ -81,7 +91,7 @@ describe("sortRowsWithinGroups", () => {
   it("handles nested group headers", () => {
     const rows = [group("outer", 0), group("inner", 1), node("b", "b"), node("a", "a")];
 
-    expect(ids(sortRowsWithinGroups(rows, valueOf, "asc"))).toEqual([
+    expect(ids(sortRowsWithinGroups(rows, by("asc")))).toEqual([
       "[outer]",
       "[inner]",
       "a",
@@ -91,7 +101,7 @@ describe("sortRowsWithinGroups", () => {
 
   it("leaves a header with no rows, and a single-row group, alone", () => {
     const rows = [group("empty"), group("one"), node("only", "x")];
-    expect(ids(sortRowsWithinGroups(rows, valueOf, "asc"))).toEqual([
+    expect(ids(sortRowsWithinGroups(rows, by("asc")))).toEqual([
       "[empty]",
       "[one]",
       "only",
@@ -102,7 +112,7 @@ describe("sortRowsWithinGroups", () => {
     // Stability is the only sensible tiebreak: for the tree tabs the incoming order is the
     // outline's own.
     const rows = [node("first", "same"), node("second", "same"), node("third", "same")];
-    expect(ids(sortRowsWithinGroups(rows, valueOf, "desc"))).toEqual([
+    expect(ids(sortRowsWithinGroups(rows, by("desc")))).toEqual([
       "first",
       "second",
       "third",
@@ -113,20 +123,12 @@ describe("sortRowsWithinGroups", () => {
     // Descending should not bury thirty rows with no deadline above the ones that have one.
     const rows = [node("blank", null), node("a", "a"), node("b", "b")];
 
-    expect(ids(sortRowsWithinGroups(rows, valueOf, "asc"))).toEqual([
-      "a",
-      "b",
-      "blank",
-    ]);
-    expect(ids(sortRowsWithinGroups(rows, valueOf, "desc"))).toEqual([
-      "b",
-      "a",
-      "blank",
-    ]);
+    expect(ids(sortRowsWithinGroups(rows, by("asc")))).toEqual(["a", "b", "blank"]);
+    expect(ids(sortRowsWithinGroups(rows, by("desc")))).toEqual(["b", "a", "blank"]);
   });
 
   it("returns an empty list untouched", () => {
-    expect(sortRowsWithinGroups([], valueOf, "asc")).toEqual([]);
+    expect(sortRowsWithinGroups([], by("asc"))).toEqual([]);
   });
 
   it("only reorders siblings — children stay under their parent", () => {
@@ -140,7 +142,7 @@ describe("sortRowsWithinGroups", () => {
       node("p-z", "Z", 1),
     ];
 
-    expect(ids(sortRowsWithinGroups(rows, valueOf, "asc"))).toEqual([
+    expect(ids(sortRowsWithinGroups(rows, by("asc")))).toEqual([
       "ra-a",
       "p-z",
       "ra-c",
@@ -160,7 +162,7 @@ describe("sortRowsWithinGroups", () => {
       node("grandchild-a", "A", 2),
     ];
 
-    expect(ids(sortRowsWithinGroups(rows, valueOf, "asc"))).toEqual([
+    expect(ids(sortRowsWithinGroups(rows, by("asc")))).toEqual([
       "parent-a",
       "child-m",
       "grandchild-a",
@@ -182,7 +184,7 @@ describe("sortRowsWithinGroups", () => {
       node("work-a", "A", 0),
     ];
 
-    expect(ids(sortRowsWithinGroups(rows, valueOf, "asc"))).toEqual([
+    expect(ids(sortRowsWithinGroups(rows, by("asc")))).toEqual([
       "[personal]",
       "proj-a",
       "proj-c",
@@ -191,5 +193,120 @@ describe("sortRowsWithinGroups", () => {
       "work-a",
       "work-b",
     ]);
+  });
+});
+
+/**
+ * Multi-column sort. The two invariants at the top of `sortRows.ts` — headers stay put,
+ * only siblings reorder — must survive extra keys unchanged, because extra keys only refine
+ * how two *siblings* compare and never change which rows are siblings.
+ */
+describe("sortRowsWithinGroups — multiple keys", () => {
+  type Pair = { letter: string; rank: number | null };
+  type PairRow = GridRow<Pair>;
+
+  function pair(id: string, letter: string, rank: number | null, depth = 0): PairRow {
+    return { kind: "node", id, node: { letter, rank }, depth };
+  }
+
+  function pairIds(rows: PairRow[]): string[] {
+    return rows.map((row) => (row.kind === "group" ? `[${row.id}]` : row.id));
+  }
+
+  const byLetter = (direction: SortDirection): SortKey<Pair> => ({
+    valueOf: (row) => row.node.letter,
+    direction,
+  });
+  const byRank = (direction: SortDirection): SortKey<Pair> => ({
+    valueOf: (row) => row.node.rank,
+    direction,
+  });
+
+  it("breaks ties in the primary key with the secondary", () => {
+    const rows = [
+      pair("a3", "A", 3),
+      pair("b1", "B", 1),
+      pair("a1", "A", 1),
+      pair("a2", "A", 2),
+    ];
+
+    expect(
+      pairIds(sortRowsWithinGroups(rows, [byLetter("asc"), byRank("asc")])),
+    ).toEqual(["a1", "a2", "a3", "b1"]);
+  });
+
+  it("gives each key its own direction", () => {
+    // "Priority ascending, then deadline descending" is not expressible with one shared
+    // direction, and is the sort a planning grid actually wants.
+    const rows = [pair("a1", "A", 1), pair("a3", "A", 3), pair("b2", "B", 2)];
+
+    expect(
+      pairIds(sortRowsWithinGroups(rows, [byLetter("asc"), byRank("desc")])),
+    ).toEqual(["a3", "a1", "b2"]);
+  });
+
+  it("never consults a later key once an earlier one has decided", () => {
+    const rows = [pair("b1", "B", 1), pair("a9", "A", 9)];
+
+    expect(
+      pairIds(sortRowsWithinGroups(rows, [byLetter("asc"), byRank("asc")])),
+    ).toEqual(["a9", "b1"]);
+  });
+
+  it("keeps blanks last on the secondary key in both directions", () => {
+    const rows = [pair("none", "A", null), pair("a2", "A", 2), pair("a1", "A", 1)];
+
+    expect(
+      pairIds(sortRowsWithinGroups(rows, [byLetter("asc"), byRank("asc")])),
+    ).toEqual(["a1", "a2", "none"]);
+    expect(
+      pairIds(sortRowsWithinGroups(rows, [byLetter("asc"), byRank("desc")])),
+    ).toEqual(["a2", "a1", "none"]);
+  });
+
+  it("still refuses to lift a child above its parent", () => {
+    // The child sorts first on every key, and must stay under its parent regardless.
+    const rows = [
+      pair("parent-b", "B", 9),
+      pair("child-a", "A", 1, 1),
+      pair("parent-a", "A", 2),
+    ];
+
+    expect(
+      pairIds(sortRowsWithinGroups(rows, [byLetter("asc"), byRank("asc")])),
+    ).toEqual(["parent-a", "parent-b", "child-a"]);
+  });
+
+  it("still leaves group headers where they are", () => {
+    const rows: PairRow[] = [
+      {
+        kind: "group",
+        id: "personal",
+        label: "Personal",
+        count: 2,
+        depth: 0,
+        collapsed: false,
+      },
+      pair("b1", "B", 1),
+      pair("a2", "A", 2),
+      {
+        kind: "group",
+        id: "work",
+        label: "Work",
+        count: 1,
+        depth: 0,
+        collapsed: false,
+      },
+      pair("a1", "A", 1),
+    ];
+
+    expect(
+      pairIds(sortRowsWithinGroups(rows, [byLetter("asc"), byRank("asc")])),
+    ).toEqual(["[personal]", "a2", "b1", "[work]", "a1"]);
+  });
+
+  it("leaves rows exactly as given when there are no keys", () => {
+    const rows = [pair("c", "C", 1), pair("a", "A", 1)];
+    expect(pairIds(sortRowsWithinGroups(rows, []))).toEqual(["c", "a"]);
   });
 });

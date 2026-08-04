@@ -71,11 +71,29 @@ The core Achieve Planner loop — plan the week, block the time, work the outlin
   `?note=`, `?view=`); per-grid reset and `/settings` "Reset everything". Delivers the
   Phase 1 "light polish on the main grids" line for persistence and uniformity.
 
+- **✅ Grid control surface.** `specs/2026-08-04-0924-grid-control-surface`. The grid
+  customization story finished: a tab now declares **what it has** (columns, switches, group
+  dimensions) and the shared `GridToolbar` supplies **how you control it**, so a capability
+  is added once rather than per grid. Filtering, quick search and the new cross-column
+  advanced filter reach every column the tab _defines_ — including ones Show Fields has
+  hidden, which also fixed a live bug where hiding a filtered column silently emptied the
+  grid. Active narrowing is now visible: removable chips, `Showing N of M`, one `Clear all`.
+  User-chosen **Group by** (Category / Result Area / Goal / Project / State / Priority /
+  Deadline band) with sticky headers, correct post-filter counts and Expand/Collapse all,
+  replacing each tab's hardcoded arrangement. Multi-column sort (Shift-click, numbered) and
+  a density toggle. Every per-tab switch that used to live in component `useState` now
+  persists like the rest of the view state. **The library question was re-opened and settled
+  again: hand-rolled stays** — TanStack cannot do tree data and grouping at once, and its
+  state layer is in-memory where ours already persists. Rules extracted to
+  `agent-os/standards/components/data-grid.md`. Deferred: frozen first column, multi-level
+  Group by from the toolbar, user-saved named views.
+
 ### Still in Phase 1
 
 - **Residual grid chrome polish** if needed after daily use (Project scope as a filtered
   tree popover rather than a select; finer Show Fields multi-select / multi-move; Life Plan
-  only if still wanted). Persistence and control uniformity shipped above.
+  only if still wanted). Persistence, control uniformity and the shared control surface
+  shipped above.
 - **Day-to-day friction from living with the MVP** — expand/collapse-all, find-in-outline,
   seed goals for demos — pick off as they annoy. (Quick capture already shipped in Phase 2
   capture track.)
