@@ -7,7 +7,7 @@
 export type WeightUnit = "lb" | "kg";
 
 /** How the lift is loaded — catalog source of truth for the session logger UI. */
-export type ExerciseEquipment = "barbell" | "dumbbell" | "bodyweight";
+export type ExerciseEquipment = "barbell" | "dumbbell" | "club" | "mace" | "bodyweight";
 
 export type ExerciseSummary = {
   id: string;
@@ -16,7 +16,7 @@ export type ExerciseSummary = {
   equipment: ExerciseEquipment;
   /** Bar mass in lb when equipment is barbell. */
   barWeight: number;
-  /** Left/right reps when dumbbell or bodyweight. */
+  /** Left/right reps when the equipment allows unilateral. */
   unilateral: boolean;
   createdAt: Date;
   updatedAt: Date;

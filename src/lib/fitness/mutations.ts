@@ -10,7 +10,12 @@ import { between } from "@/lib/tree/sortKey";
 import { DEFAULT_BAR_WEIGHT_LB, parseBarWeight } from "./bars";
 import { coerceExercisePrefs, normaliseEquipment } from "./equipment";
 import { normaliseSetInput } from "./format";
-import type { ExercisePrefs, SessionExerciseInput, SessionInput } from "./types";
+import type {
+  ExerciseEquipment,
+  ExercisePrefs,
+  SessionExerciseInput,
+  SessionInput,
+} from "./types";
 
 /**
  * Every mutation takes a `userId` and scopes on it. History rows never cascade from the
@@ -96,7 +101,7 @@ export async function updateExercise(
   const patch: {
     name?: string;
     notes?: string;
-    equipment?: "barbell" | "dumbbell" | "bodyweight";
+    equipment?: ExerciseEquipment;
     barWeight?: string;
     unilateral?: boolean;
     updatedAt: Date;

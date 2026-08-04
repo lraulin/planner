@@ -7,11 +7,27 @@ export const EQUIPMENT_OPTIONS: Array<{
 }> = [
   { value: "barbell", label: "Barbell" },
   { value: "dumbbell", label: "Dumbbell" },
+  { value: "club", label: "Club" },
+  { value: "mace", label: "Mace" },
   { value: "bodyweight", label: "Bodyweight" },
 ];
 
+const EQUIPMENT_LABEL: Record<ExerciseEquipment, string> = {
+  barbell: "Barbell",
+  dumbbell: "Dumbbell",
+  club: "Club",
+  mace: "Mace",
+  bodyweight: "Bodyweight",
+};
+
 export function isExerciseEquipment(value: string): value is ExerciseEquipment {
-  return value === "barbell" || value === "dumbbell" || value === "bodyweight";
+  return (
+    value === "barbell" ||
+    value === "dumbbell" ||
+    value === "club" ||
+    value === "mace" ||
+    value === "bodyweight"
+  );
 }
 
 export function normaliseEquipment(
@@ -26,13 +42,27 @@ export function usesPlateCalculator(equipment: ExerciseEquipment): boolean {
   return equipment === "barbell";
 }
 
+/** Free weights and barbells log a load; bodyweight does not. */
 export function usesWeight(equipment: ExerciseEquipment): boolean {
-  return equipment === "barbell" || equipment === "dumbbell";
+  return (
+    equipment === "barbell" ||
+    equipment === "dumbbell" ||
+    equipment === "club" ||
+    equipment === "mace"
+  );
 }
 
-/** Unilateral L/R only valid for dumbbell or bodyweight. */
+/**
+ * Unilateral L/R valid for handheld free weights and bodyweight
+ * (clubs/maces often train one side at a time).
+ */
 export function allowsUnilateral(equipment: ExerciseEquipment): boolean {
-  return equipment === "dumbbell" || equipment === "bodyweight";
+  return (
+    equipment === "dumbbell" ||
+    equipment === "club" ||
+    equipment === "mace" ||
+    equipment === "bodyweight"
+  );
 }
 
 export function effectiveUnilateral(
@@ -42,18 +72,17 @@ export function effectiveUnilateral(
   return allowsUnilateral(equipment) && unilateral;
 }
 
-/** Short equipment tag for dropdowns — no need to put "Dumbbell" in the exercise name. */
-export function formatEquipmentShort(
-  equipment: ExerciseEquipment,
-  barWeightLb: number,
+function formatSimpleEquipment(
+  equipment: Exclude<ExerciseEquipment, "barbell">,
   unilateral: boolean,
+  style: "short" | "badge",
 ): string {
-  if (equipment === "bodyweight") {
-    return effectiveUnilateral(equipment, unilateral) ? "Bodyweight L/R" : "Bodyweight";
-  }
-  if (equipment === "dumbbell") {
-    return effectiveUnilateral(equipment, unilateral) ? "Dumbbell L/R" : "Dumbbell";
-  }
+  const base = EQUIPMENT_LABEL[equipment];
+  if (!effectiveUnilateral(equipment, unilateral)) return base;
+  return style === "short" ? `${base} L/R` : `${base} · L/R`;
+}
+
+function formatBarbellShort(barWeightLb: number): string {
   const bar = parseBarWeight(barWeightLb);
   const preset = BAR_PRESETS.find((p) => p.weight === bar && p.id !== "none");
   if (preset?.id === "ez") return "Barbell · EZ 15";
@@ -64,23 +93,7 @@ export function formatEquipmentShort(
   return `Barbell · ${bar} lb`;
 }
 
-/**
- * Compact badge for catalog list / session hint.
- * e.g. "Barbell · EZ 15", "Dumbbell · L/R", "Bodyweight".
- */
-export function formatEquipmentBadge(
-  equipment: ExerciseEquipment,
-  barWeightLb: number,
-  unilateral: boolean,
-): string {
-  if (equipment === "bodyweight") {
-    return effectiveUnilateral(equipment, unilateral)
-      ? "Bodyweight · L/R"
-      : "Bodyweight";
-  }
-  if (equipment === "dumbbell") {
-    return effectiveUnilateral(equipment, unilateral) ? "Dumbbell · L/R" : "Dumbbell";
-  }
+function formatBarbellBadge(barWeightLb: number): string {
   const bar = parseBarWeight(barWeightLb);
   const preset = BAR_PRESETS.find((p) => p.weight === bar && p.id !== "none");
   if (preset?.id === "olympic") return "Barbell · Olympic 45";
@@ -88,6 +101,29 @@ export function formatEquipmentBadge(
   if (preset?.id === "training") return "Barbell · Training 35";
   if (bar === DEFAULT_BAR_WEIGHT_LB) return "Barbell · Olympic 45";
   return `Barbell · ${bar} lb`;
+}
+
+/** Short equipment tag for dropdowns — no need to put "Dumbbell" in the exercise name. */
+export function formatEquipmentShort(
+  equipment: ExerciseEquipment,
+  barWeightLb: number,
+  unilateral: boolean,
+): string {
+  if (equipment === "barbell") return formatBarbellShort(barWeightLb);
+  return formatSimpleEquipment(equipment, unilateral, "short");
+}
+
+/**
+ * Compact badge for catalog list / session hint.
+ * e.g. "Barbell · EZ 15", "Dumbbell · L/R", "Club", "Mace · L/R", "Bodyweight".
+ */
+export function formatEquipmentBadge(
+  equipment: ExerciseEquipment,
+  barWeightLb: number,
+  unilateral: boolean,
+): string {
+  if (equipment === "barbell") return formatBarbellBadge(barWeightLb);
+  return formatSimpleEquipment(equipment, unilateral, "badge");
 }
 
 /**
