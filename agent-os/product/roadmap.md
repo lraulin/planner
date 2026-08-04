@@ -85,8 +85,18 @@ The core Achieve Planner loop — plan the week, block the time, work the outlin
   persists like the rest of the view state. **The library question was re-opened and settled
   again: hand-rolled stays** — TanStack cannot do tree data and grouping at once, and its
   state layer is in-memory where ours already persists. Rules extracted to
-  `agent-os/standards/components/data-grid.md`. Deferred: frozen first column, multi-level
-  Group by from the toolbar, user-saved named views.
+  `agent-os/standards/components/data-grid.md`. Deferred: frozen first column, user-saved
+  named views.
+- **✅ Multi-level grouping + Category as an ordinary property.**
+  `specs/2026-08-04-1115-grouping-levels-and-category`. Group by stacks up to three
+  dimensions (`Group by` … `then by` …), each select appearing as the one above it is
+  filled. **Category stopped being a special case**: it is inherited through the hierarchy
+  like L.A.P. (`effectiveCategory`, computed once in `derive.ts` by the same walk, and no
+  longer keyed to the Result Area type), and it is now a real column — showable, sortable,
+  filterable, searchable — instead of a grouping dimension with no visible value behind it.
+  The `Groups` and `Group by Area` switches were removed: with a capable picker they were
+  duplicates that silently won, so `Group by → (None)` did not actually ungroup. A tab's
+  default arrangement is now its default `groupBy`, which the picker shows and can clear.
 
 ### Still in Phase 1
 

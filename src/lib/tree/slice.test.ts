@@ -10,6 +10,8 @@ import {
   categoryValueFromLabel,
   deadlineBandOf,
   DEFAULT_CATEGORIES,
+  MAX_GROUP_LEVELS,
+  setGroupLevel,
   groupByCategory,
   NO_CATEGORY,
   sliceTree,
@@ -700,5 +702,65 @@ describe("categoryOptions", () => {
       { id: "p", type: "project", parentId: "a", depth: 1 },
     );
     expect(categoryOptions(nodes)).toEqual(["Family", "Personal", "Work"]);
+  });
+});
+
+/**
+ * The picker's rules. Pure because getting them wrong produces a control that looks broken
+ * — a level that will not clear, or a dimension nested inside itself — rather than an error.
+ */
+describe("setGroupLevel", () => {
+  it("sets the first level from nothing", () => {
+    expect(setGroupLevel([], 0, "resultArea")).toEqual(["resultArea"]);
+  });
+
+  it("appends a second and third level", () => {
+    expect(setGroupLevel(["resultArea"], 1, "state")).toEqual(["resultArea", "state"]);
+    expect(setGroupLevel(["resultArea", "state"], 2, "priorityLetter")).toEqual([
+      "resultArea",
+      "state",
+      "priorityLetter",
+    ]);
+  });
+
+  it("replaces a level in place, keeping the ones after it", () => {
+    expect(setGroupLevel(["resultArea", "state"], 0, "category")).toEqual([
+      "category",
+      "state",
+    ]);
+  });
+
+  /**
+   * Clearing level one cannot leave level two behind — there would be nothing for it to sit
+   * under, and the grid would silently regroup by a dimension the user had not asked for.
+   */
+  it("truncates the levels below the one being cleared", () => {
+    expect(setGroupLevel(["category", "resultArea", "state"], 1, null)).toEqual([
+      "category",
+    ]);
+    expect(setGroupLevel(["category", "resultArea"], 0, null)).toEqual([]);
+  });
+
+  it("moves a dimension rather than letting it appear twice", () => {
+    // Grouping by State inside State is a no-op that reads as a broken control.
+    expect(setGroupLevel(["resultArea", "state"], 0, "state")).toEqual(["state"]);
+    expect(setGroupLevel(["category", "resultArea", "state"], 1, "state")).toEqual([
+      "category",
+      "state",
+    ]);
+  });
+
+  it("appends when the index is past the end", () => {
+    expect(setGroupLevel(["category"], 2, "state")).toEqual(["category", "state"]);
+  });
+
+  it("refuses to grow past the cap", () => {
+    const full: GroupBy[] = ["category", "resultArea", "state"];
+    expect(setGroupLevel(full, MAX_GROUP_LEVELS, "goal")).toEqual(full);
+    expect(setGroupLevel(full, 1, "goal")).toHaveLength(MAX_GROUP_LEVELS);
+  });
+
+  it("ignores a negative index rather than corrupting the list", () => {
+    expect(setGroupLevel(["category"], -1, "state")).toEqual(["category"]);
   });
 });

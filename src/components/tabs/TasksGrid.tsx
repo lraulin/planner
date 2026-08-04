@@ -25,6 +25,7 @@ import {
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import {
   abbrStateColumn,
+  categoryColumn,
   deadlineColumn,
   nameColumn,
   percentColumn,
@@ -71,6 +72,7 @@ function buildColumns(
     abbrStateColumn(),
     priorityColumn(),
     nameColumn({ dragHandle: true }),
+    categoryColumn(),
     {
       id: "effort",
       label: "Effort",
@@ -153,11 +155,11 @@ function buildColumns(
 
 /**
  * Toolbar toggles this tab declares, persisted in `switches` rather than component state.
- * `Group by Area` predates the Group by picker and is kept as the one-click shortcut it
- * always was; picking a dimension from the picker overrides it.
+ *
+ * `Group by Area` used to live here. It is Result Area in the Group by picker now — a
+ * toggle beside a picker that does the same thing meant `(None)` did not mean none.
  */
 const TASK_SWITCHES: GridSwitch[] = [
-  { id: "groupByArea", label: "Group by Area", defaultOn: false },
   { id: "showPurpose", label: "Project's Purpose", defaultOn: false },
 ];
 
@@ -198,8 +200,7 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     clearHeaderSort: gridState.clearSort,
   });
 
-  const groupByArea = switchValue(gridState, TASK_SWITCHES[0]);
-  const showPurpose = switchValue(gridState, TASK_SWITCHES[1]);
+  const showPurpose = switchValue(gridState, TASK_SWITCHES[0]);
 
   const purposeText = useMemo(() => {
     if (!showPurpose || !scopeId) return null;
@@ -208,9 +209,7 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   }, [showPurpose, scopeId, tab.byId]);
 
   const rows: GridRow[] = useMemo(() => {
-    const chosen = asGroupBy(gridState.groupBy);
-    const groupBy: GroupBy[] =
-      chosen.length > 0 ? chosen : groupByArea ? ["resultArea"] : [];
+    const groupBy = asGroupBy(gridState.groupBy);
     return sliceTree(tab.nodes, {
       keep: (node) => {
         if (node.type !== "task") return false;
@@ -238,7 +237,6 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     tab.byId,
     tab.today,
     view,
-    groupByArea,
     gridState.groupBy,
     includeDeferred,
     scopeId,

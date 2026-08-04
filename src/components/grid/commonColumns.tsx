@@ -13,6 +13,7 @@ import {
   NameCell,
   PercentCell,
   PriorityCell,
+  ReadOnlyCell,
 } from "./cells";
 
 /**
@@ -123,6 +124,30 @@ export function abbrStateColumn(): ColumnDef<OutlineColumnCtx> {
         onChange={(state) => ctx.onStateChange(row.node, state)}
       />
     ),
+  };
+}
+
+/**
+ * Category, inherited from the nearest ancestor that carries one (`effectiveCategory`, see
+ * `derive.ts`). Read-only: the value belongs to the Result Area that set it, and editing it
+ * from a task's row would silently rewrite every sibling under that area.
+ *
+ * Exists so Category is an ordinary column — showable, sortable, filterable, reachable from
+ * the advanced filter and the search box — rather than a grouping dimension with no visible
+ * value behind it. Off by default in every preset; add it from Show Fields.
+ */
+export function categoryColumn(): ColumnDef<OutlineColumnCtx> {
+  return {
+    id: "category",
+    label: "Category",
+    width: "8rem",
+    filterKind: "enum",
+    filterValue: (row) => row.node.effectiveCategory,
+    sortValue: (row) => row.node.effectiveCategory,
+    // Already the outermost grouping on most views; a chip repeating it on every phone row
+    // spends a slot on something the section header above it already says.
+    compact: "hidden",
+    render: (row) => <ReadOnlyCell value={row.node.effectiveCategory ?? ""} />,
   };
 }
 

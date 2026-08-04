@@ -172,3 +172,82 @@ describe("derive — structure", () => {
     expect(derive([])).toEqual([]);
   });
 });
+
+/**
+ * Category is inherited the same way L.A.P. is. Only Result Areas are given one in
+ * practice, but the rule is written against the field rather than the type — that is what
+ * lets Category be an ordinary column you can show, sort and filter, instead of a grouping
+ * dimension with no visible value behind it.
+ */
+describe("derive — effectiveCategory", () => {
+  it("inherits from the nearest ancestor that has one", () => {
+    const nodes = derive([
+      row({ id: "ra", type: "result_area", category: "Personal" }),
+      row({ id: "g", type: "goal", parentId: "ra", depth: 1 }),
+      row({ id: "p", type: "project", parentId: "g", depth: 2 }),
+      row({ id: "t", type: "task", parentId: "p", depth: 3 }),
+    ]);
+
+    expect(nodes.map((n) => n.effectiveCategory)).toEqual([
+      "Personal",
+      "Personal",
+      "Personal",
+      "Personal",
+    ]);
+  });
+
+  it("prefers the node's own category over an ancestor's", () => {
+    const nodes = derive([
+      row({ id: "ra", type: "result_area", category: "Personal" }),
+      row({
+        id: "inner",
+        type: "result_area",
+        parentId: "ra",
+        depth: 1,
+        category: "Work",
+      }),
+      row({ id: "p", type: "project", parentId: "inner", depth: 2 }),
+    ]);
+
+    expect(nodes.map((n) => n.effectiveCategory)).toEqual(["Personal", "Work", "Work"]);
+  });
+
+  it("does not care which type carries the category", () => {
+    // Nothing sets one below a result area today, but the rule must not special-case type
+    // or the column would show a value that grouping ignored.
+    const nodes = derive([
+      row({ id: "ra", type: "result_area", category: "Personal" }),
+      row({ id: "p", type: "project", parentId: "ra", depth: 1, category: "Work" }),
+      row({ id: "t", type: "task", parentId: "p", depth: 2 }),
+    ]);
+
+    expect(nodes.map((n) => n.effectiveCategory)).toEqual(["Personal", "Work", "Work"]);
+  });
+
+  it("is null when nothing above the row has one", () => {
+    const nodes = derive([
+      row({ id: "ra", type: "result_area" }),
+      row({ id: "p", type: "project", parentId: "ra", depth: 1 }),
+    ]);
+
+    expect(nodes.map((n) => n.effectiveCategory)).toEqual([null, null]);
+  });
+
+  it("trims, so whitespace variants are one category", () => {
+    const nodes = derive([
+      row({ id: "ra", type: "result_area", category: "  Personal  " }),
+      row({ id: "p", type: "project", parentId: "ra", depth: 1 }),
+    ]);
+
+    expect(nodes.map((n) => n.effectiveCategory)).toEqual(["Personal", "Personal"]);
+  });
+
+  it("treats a blank category as absent rather than as a value", () => {
+    const nodes = derive([
+      row({ id: "ra", type: "result_area", category: "Personal" }),
+      row({ id: "p", type: "project", parentId: "ra", depth: 1, category: "   " }),
+    ]);
+
+    expect(nodes.map((n) => n.effectiveCategory)).toEqual(["Personal", "Personal"]);
+  });
+});

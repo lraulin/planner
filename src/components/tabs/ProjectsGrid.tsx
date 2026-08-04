@@ -26,6 +26,7 @@ import {
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import {
   abbrStateColumn,
+  categoryColumn,
   deadlineColumn,
   nameColumn,
   percentColumn,
@@ -106,6 +107,7 @@ function buildColumns(
     abbrStateColumn(),
     priorityColumn(),
     nameColumn({ dragHandle: true }),
+    categoryColumn(),
     {
       id: "tasks",
       label: "Tasks",
@@ -255,9 +257,16 @@ function viewOrder(view: ViewId): string[] {
  * covers every sub-view, where these are per-view.
  */
 const PROJECT_SWITCHES: GridSwitch[] = [
-  { id: "groups", label: "Groups", defaultOn: true },
   { id: "includeGoals", label: "Goals", defaultOn: false },
 ];
+
+/**
+ * Achieve opens Projects grouped Category → Result Area. That used to be a `Groups` toggle
+ * beside the picker, which meant Group by → (None) still showed headers — two controls for
+ * one thing, with the older one quietly winning. It is the tab's **default grouping** now,
+ * so the picker shows it, can extend it, and can genuinely clear it.
+ */
+const PROJECT_DEFAULT_GROUP_BY = ["category", "resultArea"];
 
 /** Dimensions worth offering here. Goal is included; a project's goal is its natural home. */
 const PROJECT_GROUP_DIMENSIONS: GroupBy[] = [
@@ -287,7 +296,12 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
     [tab.nodes, tab.today],
   );
   const defaultOrder = useMemo(() => viewOrder(view), [view]);
-  const gridState = useGridState(`projects.${view}`, allColumns, defaultOrder);
+  const gridState = useGridState(
+    `projects.${view}`,
+    allColumns,
+    defaultOrder,
+    PROJECT_DEFAULT_GROUP_BY,
+  );
   const rowDrag = useTreeRowDrag({
     nodes: tab.nodes,
     byId: tab.byId,
@@ -298,18 +312,13 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
     clearHeaderSort: gridState.clearSort,
   });
 
-  const groups = switchValue(gridState, PROJECT_SWITCHES[0]);
-  const includeGoals = switchValue(gridState, PROJECT_SWITCHES[1]);
+  const includeGoals = switchValue(gridState, PROJECT_SWITCHES[0]);
 
   // When the view changes, reset to that view's preset (still overridable via Show Fields).
   const columns = gridState.columns;
 
   const rows: GridRow[] = useMemo(() => {
-    // The Groups switch keeps Achieve's Category → Result Area arrangement as the default;
-    // Group by overrides it entirely once the user picks a dimension.
-    const chosen = asGroupBy(gridState.groupBy);
-    const groupBy: GroupBy[] =
-      chosen.length > 0 ? chosen : groups ? ["category", "resultArea"] : [];
+    const groupBy = asGroupBy(gridState.groupBy);
 
     return sliceTree(tab.nodes, {
       keep: (node) => {
@@ -334,7 +343,6 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
     tab.nodes,
     tab.today,
     view,
-    groups,
     gridState.groupBy,
     includeGoals,
     includeDeferred,

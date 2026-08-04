@@ -90,6 +90,50 @@ export function asGroupBy(values: readonly string[]): GroupBy[] {
   );
 }
 
+/**
+ * How many dimensions may be stacked. Three already nests headers three deep before the
+ * first row; a fourth is a tree with no leaves left to read.
+ */
+export const MAX_GROUP_LEVELS = 3;
+
+/**
+ * Set one level of a grouping, returning the new list.
+ *
+ * The rules that make the picker behave the way people expect:
+ *
+ * - **Clearing a level truncates the ones below it.** "Group by Result Area, then State"
+ *   with Result Area cleared cannot mean "group by State at level two" — there is no level
+ *   one left for it to sit under.
+ * - **A dimension may appear once.** Choosing one that is already used elsewhere *moves*
+ *   it rather than duplicating it, because grouping by State inside State is a no-op that
+ *   looks like a broken control.
+ * - **Setting a level past the end appends**, so the "then by…" select the UI shows at the
+ *   end does not need to know its own index.
+ */
+export function setGroupLevel(
+  levels: readonly GroupBy[],
+  index: number,
+  value: GroupBy | null,
+): GroupBy[] {
+  if (index < 0 || index >= MAX_GROUP_LEVELS) return [...levels];
+
+  if (value === null) return levels.slice(0, index);
+
+  const next = levels.slice(0, Math.min(index, levels.length));
+  next[index] = value;
+
+  // Drop any later duplicate of the dimension just chosen, and any hole a sparse write
+  // could have left.
+  const seen = new Set<GroupBy>();
+  const out: GroupBy[] = [];
+  for (const level of [...next, ...levels.slice(index + 1)]) {
+    if (level === undefined || seen.has(level)) continue;
+    seen.add(level);
+    out.push(level);
+  }
+  return out.slice(0, MAX_GROUP_LEVELS);
+}
+
 export type SliceOpts = {
   /** Which nodes survive into the row set. Type filters live here. */
   keep: (node: OutlineNode) => boolean;
@@ -240,13 +284,15 @@ function compareCategories(a: string, b: string): number {
  * The label is always trimmed so `"Personal "` and `"Personal"` group together.
  */
 export function categoryOf(node: OutlineNode, byId: Map<string, OutlineNode>): string {
-  let cur: OutlineNode | undefined = node;
-  while (cur) {
-    const trimmed = cur.type === "result_area" ? cur.category?.trim() : undefined;
-    if (trimmed) return trimmed;
-    cur = cur.parentId ? byId.get(cur.parentId) : undefined;
-  }
-  return NO_CATEGORY;
+  // `effectiveCategory` is computed once in `derive` by the same walk as L.A.P. Reading it
+  // here rather than re-walking keeps one rule: whatever the Category column shows is what
+  // grouping groups by, and neither can drift from the other.
+  //
+  // `byId` is no longer needed but stays in the signature — every caller has it, and the
+  // parameter is what makes it obvious this is an ancestry-derived value rather than a
+  // field on the row.
+  void byId;
+  return node.effectiveCategory ?? NO_CATEGORY;
 }
 
 /** Default result-area categories offered in the form combobox. */
@@ -340,7 +386,6 @@ function contextFor(node: OutlineNode, byId: Map<string, OutlineNode>): RowConte
   let resultAreaId: string | null = null;
   let resultAreaName: string | null = null;
   let resultAreaColor: string | null = null;
-  let category: string | null = null;
   let goalId: string | null = null;
   let goalName: string | null = null;
   let projectId: string | null = null;
@@ -356,9 +401,6 @@ function contextFor(node: OutlineNode, byId: Map<string, OutlineNode>): RowConte
       resultAreaId = cur.id;
       resultAreaName = cur.name;
       resultAreaColor = cur.color;
-      // Trim so whitespace-only variants of the same name group under one header.
-      const trimmed = cur.category?.trim();
-      category = trimmed ? trimmed : null;
     }
     if (cur.type === "goal" && goalId === null) {
       goalId = cur.id;
@@ -371,7 +413,9 @@ function contextFor(node: OutlineNode, byId: Map<string, OutlineNode>): RowConte
     resultAreaId,
     resultAreaName,
     resultAreaColor,
-    category,
+    // One rule, computed in `derive`: nearest self-or-ancestor carrying a category. Not
+    // re-derived from the result area here, or the header and the column could disagree.
+    category: node.effectiveCategory,
     goalId,
     goalName,
     projectId,

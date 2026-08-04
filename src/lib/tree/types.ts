@@ -80,6 +80,19 @@ export type OutlineNode = OutlineRow & {
    */
   lapLetter: PriorityLetter | null;
   lapRank: number | null;
+  /**
+   * Category inherited from the nearest ancestor that carries one, starting with the node
+   * itself — the same walk as L.A.P., and for the same reason.
+   *
+   * In practice only Result Areas are given a category, but the field is on every row and
+   * the rule does not care which type set it. Treating category as an ordinary inherited
+   * property is what lets it be a column you can show, sort, filter and search like any
+   * other, rather than a grouping dimension with no visible value behind it.
+   *
+   * Trimmed, so `"Personal "` and `"Personal"` are one category. Null when nothing above
+   * the row has one.
+   */
+  effectiveCategory: string | null;
   /** Effort summed across the subtree. A leaf reports its own; a parent reports its leaves. */
   effortRollupMinutes: number | null;
   effortLeftRollupMinutes: number | null;

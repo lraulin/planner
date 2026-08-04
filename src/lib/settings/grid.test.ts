@@ -50,7 +50,7 @@ describe("parseGridSettings", () => {
         { columnId: "deadline", direction: "desc" as const },
         { columnId: "priority", direction: "asc" as const },
       ],
-      groupBy: ["resultArea", "state"],
+      groupBy: ["resultArea", "state"] as string[] | null,
       collapsedGroups: ["area:health"],
       density: "compact" as const,
       view: "active-status",
@@ -225,14 +225,27 @@ describe("parseGridSettings", () => {
     expect(parseGridSettings({ switches: "on" }).switches).toEqual({});
   });
 
-  it("reads search as text and groupBy as an ordered list", () => {
+  it("reads search as text", () => {
     expect(parseGridSettings({ search: "report" }).search).toBe("report");
     expect(parseGridSettings({ search: 7 }).search).toBe("");
+  });
+
+  it("reads groupBy as an ordered list", () => {
     expect(parseGridSettings({ groupBy: ["resultArea", "state"] }).groupBy).toEqual([
       "resultArea",
       "state",
     ]);
-    expect(parseGridSettings({ groupBy: "resultArea" }).groupBy).toEqual([]);
+  });
+
+  /**
+   * Same distinction as `order`, and it matters more here: Projects groups by
+   * Category → Result Area out of the box, so if "the user turned grouping off" parsed the
+   * same as "never chose", picking Group by → (None) there would appear to do nothing.
+   */
+  it("distinguishes an absent grouping from an explicitly empty one", () => {
+    expect(parseGridSettings({}).groupBy).toBeNull();
+    expect(parseGridSettings({ groupBy: "resultArea" }).groupBy).toBeNull();
+    expect(parseGridSettings({ groupBy: [] }).groupBy).toEqual([]);
   });
 
   it("ignores keys it has never heard of", () => {

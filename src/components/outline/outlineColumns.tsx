@@ -4,6 +4,7 @@ import { formatEffort } from "@/lib/tree/format";
 import { STATE_LABELS } from "@/lib/tree/hierarchy";
 import type { ColumnDef } from "@/components/grid/columns";
 import {
+  categoryColumn,
   deadlineColumn,
   nameColumn,
   priorityColumn,
@@ -31,6 +32,7 @@ export const OUTLINE_COLUMN_IDS = [
 export const outlineColumns: ColumnDef<OutlineColumnCtx>[] = [
   priorityColumn(),
   nameColumn({ width: "minmax(16rem,1fr)", dragHandle: true }),
+  categoryColumn(),
   {
     id: "effort",
     label: "Effort",

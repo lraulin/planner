@@ -49,6 +49,30 @@ export function derive(rows: OutlineRow[]): OutlineNode[] {
     return result;
   }
 
+  /**
+   * Inherited category — the same walk again. Only Result Areas are given one in practice,
+   * but the rule is written against the field rather than the type, so category behaves
+   * like every other inherited property instead of needing a special case wherever it is
+   * read.
+   */
+  const categoryCache = new Map<string, string | null>();
+
+  function categoryFor(id: string): string | null {
+    const cached = categoryCache.get(id);
+    if (cached !== undefined) return cached;
+
+    const row = byId.get(id)!;
+    const own = row.category?.trim();
+    const result = own
+      ? own
+      : row.parentId && byId.has(row.parentId)
+        ? categoryFor(row.parentId)
+        : null;
+
+    categoryCache.set(id, result);
+    return result;
+  }
+
   // Inherited shelving, the same walk as `lapFor` and for the same reason: deferring a
   // project takes its subtree with it, and the shelf is *inherited* rather than copied onto
   // the children — copying breaks on re-parenting, cannot be undone, and would drift as each
@@ -131,6 +155,7 @@ export function derive(rows: OutlineRow[]): OutlineNode[] {
       ...row,
       lapLetter: lap.letter,
       lapRank: lap.rank,
+      effectiveCategory: categoryFor(row.id),
       effortRollupMinutes: rollup.effort,
       effortLeftRollupMinutes: rollup.effortLeft,
       actualEffortRollupMinutes: rollup.actual,

@@ -66,11 +66,18 @@ export type GridSettings = {
    */
   sorts: GridSort[];
   /**
-   * Group dimension ids, outer first (see `GroupBy` in `@/lib/tree/slice`). Empty means
-   * ungrouped. Stored as plain strings rather than the union so a dimension retired in a
-   * later build degrades to "ungrouped" instead of failing to parse.
+   * Group dimension ids, outer first (see `GroupBy` in `@/lib/tree/slice`), or null to
+   * follow the tab's own default.
+   *
+   * Nullable for the same reason `order` is, and it is the same distinction: null means
+   * "whatever this tab groups by out of the box", `[]` means "the user turned grouping
+   * off". Collapsing those two would make Group by → (None) un-representable on a tab that
+   * groups by default, so choosing it would silently do nothing.
+   *
+   * Plain strings rather than the union so a dimension retired in a later build degrades to
+   * ungrouped instead of failing to parse the whole layout.
    */
-  groupBy: string[];
+  groupBy: string[] | null;
   collapsedGroups: string[];
   density: GridDensity;
   /** Sub-view / scope picker selection, or null to follow the tab's default. */
@@ -108,8 +115,8 @@ export const DEFAULT_GRID_SETTINGS: GridSettings = {
    * exists).
    */
   sorts: [{ columnId: "priority", direction: "asc" }],
-  /** Ungrouped by default; each tab opts in through its own preset. */
-  groupBy: [],
+  /** Follow the tab's own default until the user chooses. */
+  groupBy: null,
   collapsedGroups: [],
   density: "comfortable",
   view: null,
@@ -143,7 +150,7 @@ export function parseGridSettings(value: unknown): GridSettings {
     advancedFilter: parseCrossColumnFilter(record.advancedFilter),
     search: asString(record.search, ""),
     sorts: parseSorts(record),
-    groupBy: asStringArray(record.groupBy, []),
+    groupBy: Array.isArray(record.groupBy) ? asStringArray(record.groupBy, []) : null,
     collapsedGroups: asStringArray(record.collapsedGroups, []),
     density: asOneOf(record.density, GRID_DENSITIES, "comfortable"),
     view: typeof record.view === "string" ? record.view : null,

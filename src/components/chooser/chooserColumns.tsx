@@ -9,6 +9,7 @@ import { TcPriorityCell } from "./TcPriorityCell";
 import { scheduleStatusForNode, STATUS_LABELS } from "@/lib/tree/status";
 import {
   abbrStateColumn,
+  categoryColumn,
   deadlineColumn,
   nameColumn,
   priorityColumn,
@@ -140,6 +141,7 @@ export function buildChooserColumns(
       ),
     },
     nameColumn({ flat: true, dragHandle: true }),
+    categoryColumn(),
     {
       id: "effort",
       label: "Effort",

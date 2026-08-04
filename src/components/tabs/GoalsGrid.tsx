@@ -11,6 +11,7 @@ import { DataGrid } from "@/components/grid/DataGrid";
 import { useGridState, useTabView } from "@/components/grid/useGridState";
 import { GridToolbar } from "@/components/grid/GridToolbar";
 import { collectDistinctValues } from "@/lib/grid/distinct";
+import { categoryColumn } from "@/components/grid/commonColumns";
 import {
   DeadlineCell,
   NameCell,
@@ -47,6 +48,7 @@ function isActive(node: OutlineNode): boolean {
 
 function buildColumns(): ColumnDef<GoalsCtx>[] {
   return [
+    categoryColumn(),
     {
       id: "priority",
       label: "Pri",

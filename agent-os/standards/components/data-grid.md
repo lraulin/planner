@@ -38,6 +38,35 @@ rank among the destination parent's children (`useTreeRowDrag`, `lib/tree/outlin
   Group By panel (AG Grid's pattern) competes with row drag; grouping is a toolbar picker
   here for exactly that reason.
 
+## Grouping
+
+- **Up to three levels**, chosen from progressive `Group by` / `then by` selects that appear
+  as the level above them is filled. A dimension appears once — choosing one already in use
+  moves it rather than nesting it inside itself. Clearing a level truncates the ones below,
+  because there is nothing left for them to sit under. Rules live in `setGroupLevel`.
+- **A tab's default arrangement is its default `groupBy`, never a separate toggle.** Projects
+  opens on Category → Result Area; that used to be a `Groups` switch beside the picker, which
+  meant `Group by → (None)` still showed headers. One control per thing, and the control
+  shows the current state.
+- This is why `groupBy` is `string[] | null`: null follows the tab's default, `[]` is the
+  user having turned grouping off. Same distinction as `order`, and for the same reason.
+
+## Inherited values are computed once, in `derive`
+
+A value a row gets from its ancestry — L.A.P., shelving, category — is computed **once** in
+`src/lib/tree/derive.ts` as a memoized walk up the tree, and exposed as a field on
+`OutlineNode`. Never re-derive one at the point of use.
+
+The rule is written against the **field**, not the type: category is set only on Result
+Areas in practice, but `effectiveCategory` takes the nearest self-or-ancestor carrying one
+whatever its type. Special-casing by type is how a value ends up meaning one thing to the
+grouping code and another to the column.
+
+**An inherited value that can be grouped by must also be a column.** Grouping by something
+the grid cannot show is a header the user cannot account for — they can see the sections but
+not the value that made them, cannot filter by it, and cannot sort by it. Category was in
+exactly that state before it became a column.
+
 ## Filtering, searching and grouping act on _defined_ columns, not visible ones
 
 Show Fields hides a column. It does not un-ask the question you asked about it.

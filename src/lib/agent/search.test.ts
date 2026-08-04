@@ -11,6 +11,7 @@ function node(
   return {
     ...row(partial),
     lapLetter: null,
+    effectiveCategory: null,
     lapRank: null,
     effortRollupMinutes: null,
     effortLeftRollupMinutes: null,

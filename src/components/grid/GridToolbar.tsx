@@ -1,7 +1,13 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { asGroupBy, GROUP_BY_LABELS, type GroupBy } from "@/lib/tree/slice";
+import {
+  asGroupBy,
+  GROUP_BY_LABELS,
+  MAX_GROUP_LEVELS,
+  setGroupLevel,
+  type GroupBy,
+} from "@/lib/tree/slice";
 import {
   ErrorBanner,
   TabToolbar,
@@ -98,19 +104,12 @@ export function GridToolbar({
         </ToolbarButton>
 
         {groupDimensions.length > 0 && (
-          <ToolbarSelect
-            label="Group by"
-            // One level from the toolbar. Nesting a second dimension is possible in the
-            // model and is not worth a second select until something actually asks for it.
-            value={activeGroupBy[0] ?? ""}
-            onChange={(value) => grid.setGroupBy(value === "" ? [] : [value])}
-            options={[
-              { value: "", label: "(None)" },
-              ...groupDimensions.map((dim) => ({
-                value: dim,
-                label: GROUP_BY_LABELS[dim],
-              })),
-            ]}
+          <GroupByLevels
+            dimensions={groupDimensions}
+            levels={activeGroupBy}
+            onChange={(index, value) =>
+              grid.setGroupBy(setGroupLevel(activeGroupBy, index, value))
+            }
           />
         )}
 
@@ -209,6 +208,61 @@ export function GridToolbar({
         onResetGrid={grid.reset}
         onClose={() => setFieldsOpen(false)}
       />
+    </>
+  );
+}
+
+/**
+ * Group by, one select per level, plus one empty "then by…" select to add the next.
+ *
+ * Progressive rather than three selects up front: most grouping is one level, and a row of
+ * three `(None)`s reads as a control that is doing something when it is not. A level only
+ * appears once the one above it is set, so the toolbar grows only for people using it.
+ *
+ * A dimension already chosen at another level is left out of the remaining selects — it is
+ * still reachable, because picking it *moves* it (see `setGroupLevel`), but offering it
+ * twice invites a nesting that would do nothing.
+ */
+function GroupByLevels({
+  dimensions,
+  levels,
+  onChange,
+}: {
+  dimensions: readonly GroupBy[];
+  levels: readonly GroupBy[];
+  onChange: (index: number, value: GroupBy | null) => void;
+}) {
+  // One select per set level, and a trailing empty one while there is room to add another.
+  const slots = Math.min(levels.length + 1, MAX_GROUP_LEVELS, dimensions.length);
+
+  return (
+    <>
+      {Array.from({ length: slots }, (_, index) => {
+        const current = levels[index] ?? "";
+        const available = dimensions.filter(
+          (dim) => dim === current || !levels.includes(dim),
+        );
+
+        return (
+          <ToolbarSelect
+            key={index}
+            label={index === 0 ? "Group by" : "then by"}
+            value={current}
+            onChange={(value) =>
+              onChange(index, value === "" ? null : (value as GroupBy))
+            }
+            options={[
+              // Clearing a level drops the ones under it — there would be nothing for them
+              // to sit inside. `setGroupLevel` enforces that.
+              { value: "", label: "(None)" },
+              ...available.map((dim) => ({
+                value: dim,
+                label: GROUP_BY_LABELS[dim],
+              })),
+            ]}
+          />
+        );
+      })}
     </>
   );
 }

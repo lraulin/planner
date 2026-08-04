@@ -309,6 +309,7 @@ function taskStub(id: string, name: string): OutlineNode {
     range: "",
     isDream: false,
     lapLetter: null,
+    effectiveCategory: null,
     lapRank: null,
     effortRollupMinutes: null,
     effortLeftRollupMinutes: null,

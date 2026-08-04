@@ -104,6 +104,15 @@ export function useGridState<TCol extends ColumnMeta>(
   tabId: string,
   allColumns: TCol[],
   defaultOrder: string[],
+  /**
+   * How this tab groups before the user chooses — Projects opens on Achieve's
+   * Category → Result Area arrangement, most tabs on nothing.
+   *
+   * Same contract as `defaultOrder`: a stored `null` follows this, a stored `[]` is the
+   * user having turned grouping off. Without the distinction, picking Group by → (None) on
+   * a tab that groups by default would appear to do nothing.
+   */
+  defaultGroupBy: string[] = [],
 ) {
   const { value: settings, patch, reset } = useSetting(gridScope(tabId), CODEC);
 
@@ -434,7 +443,7 @@ export function useGridState<TCol extends ColumnMeta>(
     toggleSort,
     clearSort,
 
-    groupBy: settings.groupBy,
+    groupBy: settings.groupBy ?? defaultGroupBy,
     setGroupBy,
 
     collapsedGroups,
