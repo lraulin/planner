@@ -7,7 +7,8 @@
 export type WeightUnit = "lb" | "kg";
 
 /** How the lift is loaded — catalog source of truth for the session logger UI. */
-export type ExerciseEquipment = "barbell" | "dumbbell" | "club" | "mace" | "bodyweight";
+export type ExerciseEquipment =
+  "barbell" | "dumbbell" | "kettlebell" | "club" | "mace" | "bodyweight";
 
 export type ExerciseSummary = {
   id: string;

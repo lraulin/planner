@@ -296,7 +296,7 @@ export function FitnessView({
         ) : exercises.length === 0 ? (
           <EmptyState
             title="No exercises yet"
-            body="Create an exercise and set equipment (barbell, dumbbell, club, mace, or bodyweight). Then pick it when you log a session."
+            body="Create an exercise and set equipment (barbell, dumbbell, kettlebell, club, mace, or bodyweight). Then pick it when you log a session."
             actionLabel="New exercise"
             onAction={openNewExercise}
           />

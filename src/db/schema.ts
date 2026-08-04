@@ -433,12 +433,13 @@ export const nodes = pgTable(
 /**
  * How the lift is loaded. Config lives on the catalog exercise; the session log only
  * selects an exercise and adapts set fields. `barbell` uses `barWeight` for plate math;
- * free-weight types (dumbbell, club, mace) record weight; `bodyweight` does not.
- * Unilateral L/R is allowed for dumbbell, club, mace, and bodyweight.
+ * free-weight types (dumbbell, kettlebell, club, mace) record weight; `bodyweight` does not.
+ * Unilateral L/R is allowed for those free weights and bodyweight.
  */
 export const exerciseEquipmentEnum = pgEnum("exercise_equipment", [
   "barbell",
   "dumbbell",
+  "kettlebell",
   "club",
   "mace",
   "bodyweight",
@@ -462,7 +463,7 @@ export const exercises = pgTable(
       .notNull()
       .default("45"),
     /**
-     * Each side separately (dumbbell, club, mace, or bodyweight).
+     * Each side separately (dumbbell, kettlebell, club, mace, or bodyweight).
      * Sets store reps_left / reps_right.
      */
     unilateral: boolean("unilateral").notNull().default(false),

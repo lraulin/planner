@@ -7,6 +7,7 @@ export const EQUIPMENT_OPTIONS: Array<{
 }> = [
   { value: "barbell", label: "Barbell" },
   { value: "dumbbell", label: "Dumbbell" },
+  { value: "kettlebell", label: "Kettlebell" },
   { value: "club", label: "Club" },
   { value: "mace", label: "Mace" },
   { value: "bodyweight", label: "Bodyweight" },
@@ -15,6 +16,7 @@ export const EQUIPMENT_OPTIONS: Array<{
 const EQUIPMENT_LABEL: Record<ExerciseEquipment, string> = {
   barbell: "Barbell",
   dumbbell: "Dumbbell",
+  kettlebell: "Kettlebell",
   club: "Club",
   mace: "Mace",
   bodyweight: "Bodyweight",
@@ -24,6 +26,7 @@ export function isExerciseEquipment(value: string): value is ExerciseEquipment {
   return (
     value === "barbell" ||
     value === "dumbbell" ||
+    value === "kettlebell" ||
     value === "club" ||
     value === "mace" ||
     value === "bodyweight"
@@ -47,6 +50,7 @@ export function usesWeight(equipment: ExerciseEquipment): boolean {
   return (
     equipment === "barbell" ||
     equipment === "dumbbell" ||
+    equipment === "kettlebell" ||
     equipment === "club" ||
     equipment === "mace"
   );
@@ -54,11 +58,12 @@ export function usesWeight(equipment: ExerciseEquipment): boolean {
 
 /**
  * Unilateral L/R valid for handheld free weights and bodyweight
- * (clubs/maces often train one side at a time).
+ * (clubs/maces/KBs often train one side at a time).
  */
 export function allowsUnilateral(equipment: ExerciseEquipment): boolean {
   return (
     equipment === "dumbbell" ||
+    equipment === "kettlebell" ||
     equipment === "club" ||
     equipment === "mace" ||
     equipment === "bodyweight"

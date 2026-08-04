@@ -1,0 +1,1 @@
+ALTER TYPE "public"."exercise_equipment" ADD VALUE 'kettlebell' BEFORE 'club';
