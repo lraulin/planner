@@ -7,6 +7,7 @@ import {
   optionsFilter,
   rowPassesFilters,
   shiftDays,
+  usesSetFilter,
   type ColumnFilter,
 } from "./filters";
 
@@ -188,6 +189,16 @@ describe("filterOptions", () => {
     expect(ids).toContain("value:A1");
     expect(ids).toContain("value:B");
     expect(ids).not.toContain("value:");
+  });
+});
+
+describe("usesSetFilter", () => {
+  it("skips the value checklist for priority — ranges cover the bands", () => {
+    expect(usesSetFilter("priority")).toBe(false);
+    expect(usesSetFilter("date")).toBe(true);
+    expect(usesSetFilter("enum")).toBe(true);
+    expect(usesSetFilter("text")).toBe(true);
+    expect(usesSetFilter(undefined)).toBe(true);
   });
 });
 

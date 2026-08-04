@@ -84,11 +84,11 @@ Show Fields hides a column. It does not un-ask the question you asked about it.
 
 ## Progressive disclosure: three rungs, in this order
 
-| Rung | Control                                                                                                         | For                             |
-| ---- | --------------------------------------------------------------------------------------------------------------- | ------------------------------- |
-| 1    | **Quick search** — one box, all columns, case-insensitive substring                                             | "I know a word that's in it"    |
-| 2    | **Column funnel** — a set filter over that column's values, plus semantic ranges and per-column custom criteria | Focused refinement on one field |
-| 3    | **Advanced filter** — And/Or across different columns, including hidden ones                                    | Real Boolean criteria           |
+| Rung | Control                                                                                                                   | For                             |
+| ---- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| 1    | **Quick search** — one box, all columns, case-insensitive substring                                                       | "I know a word that's in it"    |
+| 2    | **Column funnel** — set filter over values (most columns), or semantic ranges (priority); plus per-column custom criteria | Focused refinement on one field |
+| 3    | **Advanced filter** — And/Or across different columns, including hidden ones                                              | Real Boolean criteria           |
 
 All three compose with **AND**: each answers a different question and a row must satisfy
 every question asked. Do not add a fourth rung before the first three are outgrown.
@@ -96,9 +96,12 @@ every question asked. Do not add a fourth rung before the first three are outgro
 Keep search dumb — substring only, no operators, no field syntax, no regex. Anything more
 expressive belongs on rung 3, where the expression stays visible.
 
-### The column funnel is a set filter
+### The column funnel is a set filter (with one exception)
 
-Modelled on AG Grid's and Excel's, because that is what people already know:
+Modelled on AG Grid's and Excel's, because that is what people already know. Most columns
+get the value checklist; **priority does not** (`usesSetFilter` in `filters.ts`).
+
+**Set-filter columns** (state, enum, text, date, …):
 
 - **The values the column actually holds**, each with the **number of rows** carrying it, so
   you can see what a tick is worth before making it.
@@ -111,8 +114,8 @@ Modelled on AG Grid's and Excel's, because that is what people already know:
   thirty means unticking twenty-nine.
 - **`(Blanks)`** is an entry in the list, not a separate concept, and is omitted when no row
   is blank.
-- Semantic **ranges** (priority bands, deadline windows) sit below the values under their
-  own divider. They describe a range rather than name a value, so they keep plain
+- Semantic **ranges** (deadline windows) sit below the values under their own divider when
+  the kind has them. They describe a range rather than name a value, so they keep plain
   add/remove behaviour.
 
 Two rules the selection model depends on:
@@ -125,6 +128,12 @@ Two rules the selection model depends on:
 There is deliberately no "select none": the stored model cannot express "show no rows", and
 a control that can put the grid in a state it cannot describe is worse than one without it.
 That is what `only` is for.
+
+**Priority is ranges-only.** Rank numbers are open-ended (`A1`…`A99`…), so listing every
+used value is noise the presets already cover ("Only As", "As & Bs", ranked,
+unprioritized, …). Exact ranks still work via **Custom criteria**. Matching still accepts
+stored `value:A1` option ids if an older session saved one; the funnel just no longer
+offers them.
 
 ### Filter values may be stored and displayed differently
 

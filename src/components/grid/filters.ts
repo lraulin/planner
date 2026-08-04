@@ -110,6 +110,20 @@ export function presetOptions(kind: FilterKind | undefined): FilterOption[] {
 }
 
 /**
+ * Whether the column funnel shows the set-filter checklist of distinct values.
+ *
+ * Priority does not. Rank numbers are open-ended (`A1`…`A99`…), so listing every used
+ * value is mostly noise — the range presets already cover "Only As", "As & Bs", ranked,
+ * unprioritized, and the rest. Exact `A1` still works via Custom criteria.
+ *
+ * Date keeps the checklist: a finite set of ISO dates is scannable, and the range presets
+ * sit under it rather than replace it.
+ */
+export function usesSetFilter(kind: FilterKind | undefined): boolean {
+  return kind !== "priority";
+}
+
+/**
  * Every option id a column can hold, in one list: universal entries, kind presets, and the
  * distinct values present in the current rows.
  *

@@ -28,6 +28,7 @@ import {
   ALL_FILTER,
   filterActive,
   presetOptions,
+  usesSetFilter,
   type ColumnFilter,
   type FilterOption,
 } from "./filters";
@@ -207,19 +208,24 @@ function FilterButton({
 
   const customActive = isCustomFilter(filter) && filterActive(filter);
   const optionIds = isOptionsFilter(filter) ? filter.ids : [];
+  // Priority (and any future kind with open-ended ranks) skips the value checklist —
+  // see `usesSetFilter`. Matching still accepts `value:…` ids if an old filter stored one.
+  const showSetFilter = usesSetFilter(kind);
 
   // Every entry, regardless of the search box — the search hides rows from the list but
   // must not drop them from the selection being computed.
-  const allEntries = buildSetFilterEntries({
-    values,
-    selectedIds: optionIds,
-    labelOf: filterLabel,
-  });
+  const allEntries = showSetFilter
+    ? buildSetFilterEntries({
+        values,
+        selectedIds: optionIds,
+        labelOf: filterLabel,
+      })
+    : [];
   const shown = matchesSearch(allEntries, search);
   const allSelected = selectAllState(allEntries) === "all";
 
   // A handful of states needs no search box; forty result areas do.
-  const showSearch = allEntries.length > SEARCH_THRESHOLD;
+  const showSearch = showSetFilter && allEntries.length > SEARCH_THRESHOLD;
 
   const setIds = (ids: string[]) =>
     onChange(ids.length === 0 ? ALL_FILTER : optionsFilter(ids));
@@ -266,79 +272,86 @@ function FilterButton({
           <ul
             role="listbox"
             aria-multiselectable
-            aria-label={`${label} values`}
+            aria-label={showSetFilter ? `${label} values` : `${label} ranges`}
             className="min-h-0 flex-1 overflow-auto py-1"
           >
-            <li>
-              <button
-                type="button"
-                role="option"
-                aria-selected={allSelected}
-                disabled={allSelected}
-                onClick={() => onChange(ALL_FILTER)}
-                title={
-                  allSelected
-                    ? "Every value is already showing"
-                    : "Show every value again"
-                }
-                className="flex w-full items-center gap-2 border-b border-rule/60 px-2 py-1 text-left text-[0.8125rem] normal-case tracking-normal text-ink hover:bg-surface-raised disabled:cursor-default disabled:hover:bg-transparent"
-              >
-                <Tick state={allSelected ? "all" : "some"} />
-                <span className="min-w-0 flex-1 truncate font-medium">
-                  (Select all)
-                </span>
-              </button>
-            </li>
-
-            {shown.length === 0 ? (
-              <li className="px-3 py-3 text-[0.8125rem] normal-case tracking-normal text-ink-faint">
-                {allEntries.length === 0 ? "No values to filter." : "No match."}
-              </li>
-            ) : (
-              shown.map((entry) => (
-                <li key={entry.optionId} className="group flex items-center">
+            {showSetFilter && (
+              <>
+                <li>
                   <button
                     type="button"
                     role="option"
-                    aria-selected={entry.selected}
-                    onClick={() =>
-                      setIds(toggleSetEntry(allEntries, optionIds, entry.optionId))
+                    aria-selected={allSelected}
+                    disabled={allSelected}
+                    onClick={() => onChange(ALL_FILTER)}
+                    title={
+                      allSelected
+                        ? "Every value is already showing"
+                        : "Show every value again"
                     }
-                    className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1 text-left text-[0.8125rem] normal-case tracking-normal text-ink hover:bg-surface-raised"
+                    className="flex w-full items-center gap-2 border-b border-rule/60 px-2 py-1 text-left text-[0.8125rem] normal-case tracking-normal text-ink hover:bg-surface-raised disabled:cursor-default disabled:hover:bg-transparent"
                   >
-                    <Tick state={entry.selected ? "all" : "none"} />
-                    <span className="min-w-0 flex-1 truncate">{entry.label}</span>
-                    <span className="flex-none tabular-nums text-[0.6875rem] text-ink-faint">
-                      {entry.count}
+                    <Tick state={allSelected ? "all" : "some"} />
+                    <span className="min-w-0 flex-1 truncate font-medium">
+                      (Select all)
                     </span>
                   </button>
-                  {/*
-                    Excel's "Only this". Without it, narrowing to one value out of thirty
-                    means unticking twenty-nine. Dimmed until hover or focus rather than
-                    hidden, so it is still tabbable — this popover has no compact
-                    counterpart (there is no column header below `md`), so the
-                    always-visible-action rule in `ux-principles.md` is not in play.
-                  */}
-                  <button
-                    type="button"
-                    onClick={() => setIds(onlySelection(entry.optionId))}
-                    title={`Show only ${entry.label}`}
-                    className="mr-1 flex-none rounded px-1.5 py-0.5 text-[0.6875rem] normal-case tracking-normal text-ink-faint opacity-0 transition-opacity group-hover:opacity-100 hover:bg-surface-raised hover:text-ink focus:opacity-100"
-                  >
-                    only
-                  </button>
                 </li>
-              ))
+
+                {shown.length === 0 ? (
+                  <li className="px-3 py-3 text-[0.8125rem] normal-case tracking-normal text-ink-faint">
+                    {allEntries.length === 0 ? "No values to filter." : "No match."}
+                  </li>
+                ) : (
+                  shown.map((entry) => (
+                    <li key={entry.optionId} className="group flex items-center">
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={entry.selected}
+                        onClick={() =>
+                          setIds(toggleSetEntry(allEntries, optionIds, entry.optionId))
+                        }
+                        className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1 text-left text-[0.8125rem] normal-case tracking-normal text-ink hover:bg-surface-raised"
+                      >
+                        <Tick state={entry.selected ? "all" : "none"} />
+                        <span className="min-w-0 flex-1 truncate">{entry.label}</span>
+                        <span className="flex-none tabular-nums text-[0.6875rem] text-ink-faint">
+                          {entry.count}
+                        </span>
+                      </button>
+                      {/*
+                        Excel's "Only this". Without it, narrowing to one value out of thirty
+                        means unticking twenty-nine. Dimmed until hover or focus rather than
+                        hidden, so it is still tabbable — this popover has no compact
+                        counterpart (there is no column header below `md`), so the
+                        always-visible-action rule in `ux-principles.md` is not in play.
+                      */}
+                      <button
+                        type="button"
+                        onClick={() => setIds(onlySelection(entry.optionId))}
+                        title={`Show only ${entry.label}`}
+                        className="mr-1 flex-none rounded px-1.5 py-0.5 text-[0.6875rem] normal-case tracking-normal text-ink-faint opacity-0 transition-opacity group-hover:opacity-100 hover:bg-surface-raised hover:text-ink focus:opacity-100"
+                      >
+                        only
+                      </button>
+                    </li>
+                  ))
+                )}
+              </>
             )}
 
             {presets.length > 0 && (
               <>
-                <li
-                  aria-hidden
-                  className="mt-1 border-t border-rule px-2 pt-1.5 pb-0.5 text-[0.625rem] font-medium tracking-wider text-ink-faint uppercase"
-                >
-                  Ranges
-                </li>
+                {/* Divider only when ranges sit under a value list; alone they are the list. */}
+                {showSetFilter && (
+                  <li
+                    aria-hidden
+                    className="mt-1 border-t border-rule px-2 pt-1.5 pb-0.5 text-[0.625rem] font-medium tracking-wider text-ink-faint uppercase"
+                  >
+                    Ranges
+                  </li>
+                )}
                 {presets.map((preset) => {
                   const selected = optionIds.includes(preset.id);
                   return (
