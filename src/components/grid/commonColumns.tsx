@@ -5,7 +5,7 @@ import { encodePriority } from "@/lib/achieve/encodings";
 import { toDateKey } from "@/lib/schedule/geometry";
 import type { OutlineNode } from "@/lib/tree/types";
 import { formatCompactDate, formatPriority } from "@/lib/tree/format";
-import { STATE_CODES } from "@/lib/tree/hierarchy";
+import { STATE_CODES, STATE_LABELS } from "@/lib/tree/hierarchy";
 import type { ColumnDef } from "./columns";
 import {
   AbbrStateCell,
@@ -53,6 +53,18 @@ export type OutlineColumnCtx = {
   onDeadlineChange: (node: OutlineNode, deadline: string | null) => void;
   onEffortChange: (node: OutlineNode, minutes: number | null) => void;
 };
+
+/**
+ * Achieve's two-letter State codes back to their full labels, for the set filter. Built
+ * from `STATE_CODES` rather than written out again, so a new state cannot appear in one
+ * map and not the other.
+ */
+const STATE_LABEL_BY_CODE: Record<string, string> = Object.fromEntries(
+  (Object.keys(STATE_CODES) as (keyof typeof STATE_CODES)[]).map((state) => [
+    STATE_CODES[state],
+    STATE_LABELS[state],
+  ]),
+);
 
 /** ABCD priority with its rank — `A1`, `B`, or blank. */
 export function priorityColumn(): ColumnDef<OutlineColumnCtx> {
@@ -116,7 +128,10 @@ export function abbrStateColumn(): ColumnDef<OutlineColumnCtx> {
     width: "3.5rem",
     align: "center",
     filterKind: "enum",
+    // Filters on the code, because that is what the cell shows and what stored filters
+    // already match on; the set filter spells it out via `filterLabel`.
     filterValue: (row) => STATE_CODES[row.node.state],
+    filterLabel: (code) => STATE_LABEL_BY_CODE[code] ?? code,
     sortValue: (row) => row.node.state,
     render: (row, ctx) => (
       <AbbrStateCell

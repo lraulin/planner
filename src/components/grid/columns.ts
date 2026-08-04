@@ -38,6 +38,18 @@ export type ColumnDef<TCtx = unknown, TRow = OutlineNode> = {
    */
   filterValue?: (row: NodeGridRow<TRow>) => string | null;
   filterKind?: FilterKind;
+  /**
+   * How a filter value reads in the set-filter list and on a chip, when the canonical value
+   * is not what a person would recognise.
+   *
+   * The State column filters on Achieve's two-letter codes, because that is what the cell
+   * shows and what a stored filter has to keep matching. A checklist of `NS / IP / W / Cn`
+   * is not something you can pick from, so it renders `Not started / In progress / …`
+   * instead. Matching is untouched — this is presentation only.
+   *
+   * Omit where the canonical value already reads well, which is most columns.
+   */
+  filterLabel?: (value: string) => string;
   /** When false, the Show Fields dialog cannot hide this column. Default true. */
   hideable?: boolean;
   /**
@@ -70,6 +82,8 @@ export type ColumnMeta = {
   sortValue?: unknown;
   filterValue?: unknown;
   filterKind?: FilterKind;
+  /** Presentation for a filter value — see `ColumnDef.filterLabel`. */
+  filterLabel?: (value: string) => string;
   hideable?: boolean;
 };
 

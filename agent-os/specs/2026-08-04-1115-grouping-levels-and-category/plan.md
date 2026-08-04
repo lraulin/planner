@@ -1,4 +1,4 @@
-# Multi-level Grouping + Category as an Ordinary Property
+# Multi-level Grouping, Category as an Ordinary Property, and the Set Filter
 
 **Status: frozen / complete (2026-08-04)**  
 Spec folder: `agent-os/specs/2026-08-04-1115-grouping-levels-and-category/`
@@ -62,6 +62,48 @@ All verified in the running app on 2026-08-04.
 | 2   | `groupBy` became nullable                                      | Fallout of (1): a tab that groups by default needs "never chose" and "chose nothing" to be different values.                                                                 |
 | 3   | `categoryOf(node, byId)` keeps its now-unused `byId` parameter | Every caller has it, and the parameter is what signals this is an ancestry-derived value rather than a field on the row. Removing it is churn across call sites for no gain. |
 | 4   | Category added to the **Chooser** too                          | Its rows are nodes and its columns are the shared ones; leaving it out would have re-created the inconsistency one tab down.                                                 |
+
+## Change: set filter on the column funnel (2026-08-04)
+
+Added in the same session, after the grouping and category work landed.
+
+The funnel was a flat list of distinct values with a tick beside the chosen ones — no way to
+find a value among many, no sense of how much each covers, and on the **State** column the
+entries were Achieve's two-letter codes (`NS`, `IP`, `Cn`), which nobody picks from.
+
+It is now a set filter in the AG Grid / Excel sense:
+
+- Values with **per-row counts**, sorted by label, `(Blanks)` last and omitted when unused.
+- A **search box** over the list once there are more than eight values, searching the
+  **label** rather than the stored value.
+- **`(Select all)`** — checked when unfiltered, indeterminate otherwise, disabled when it
+  would do nothing.
+- **`only`** per row, because isolating one value out of thirty should not mean unticking
+  twenty-nine.
+- Semantic **ranges** (priority bands, deadline windows) moved below the values under their
+  own divider, keeping plain add/remove behaviour.
+
+`ColumnDef.filterLabel` maps a stored value to something readable (`NS` → `Not started`)
+without touching what is matched or persisted. The **chip bar uses it too** — a chip reading
+`NS` beside a list reading `Not started` looks like two different filters.
+
+Two rules the selection model depends on, both tested in `src/lib/grid/setFilter.test.ts`:
+
+- An **empty selection draws every entry ticked**, because nothing is filtered out.
+- **Ticking the last missing entry collapses back to unfiltered**, never to a list naming
+  every current value — that list would silently exclude any value added later.
+
+There is deliberately **no "select none"**: the stored model cannot express "show no rows".
+`only` covers the workflow that would need it.
+
+`collectDistinctValues` became a view over `collectColumnValues`, which returns counts and a
+blank tally in one walk — so the funnel, the advanced builder and the chips cannot disagree
+about what a column contains.
+
+Verified: State reads `In progress 15 / Not started 28 / Postponed 3 / Proposed 1`;
+unticking one gave `Showing 19 of 47` with the chip `State: In progress, Postponed,
+Proposed`; `only` on Postponed gave 3; `(Select all)` returned to unfiltered; the Name
+column's 48 values searched down to 2; `Only As & Bs` still filtered to 23.
 
 ## Follow-ups (new work — not amendments to this frozen spec)
 

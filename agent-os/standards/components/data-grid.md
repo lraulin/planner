@@ -84,17 +84,55 @@ Show Fields hides a column. It does not un-ask the question you asked about it.
 
 ## Progressive disclosure: three rungs, in this order
 
-| Rung | Control                                                                      | For                             |
-| ---- | ---------------------------------------------------------------------------- | ------------------------------- |
-| 1    | **Quick search** — one box, all columns, case-insensitive substring          | "I know a word that's in it"    |
-| 2    | **Column funnel** — presets, distinct values, per-column custom expression   | Focused refinement on one field |
-| 3    | **Advanced filter** — And/Or across different columns, including hidden ones | Real Boolean criteria           |
+| Rung | Control                                                                                                         | For                             |
+| ---- | --------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| 1    | **Quick search** — one box, all columns, case-insensitive substring                                             | "I know a word that's in it"    |
+| 2    | **Column funnel** — a set filter over that column's values, plus semantic ranges and per-column custom criteria | Focused refinement on one field |
+| 3    | **Advanced filter** — And/Or across different columns, including hidden ones                                    | Real Boolean criteria           |
 
 All three compose with **AND**: each answers a different question and a row must satisfy
 every question asked. Do not add a fourth rung before the first three are outgrown.
 
 Keep search dumb — substring only, no operators, no field syntax, no regex. Anything more
 expressive belongs on rung 3, where the expression stays visible.
+
+### The column funnel is a set filter
+
+Modelled on AG Grid's and Excel's, because that is what people already know:
+
+- **The values the column actually holds**, each with the **number of rows** carrying it, so
+  you can see what a tick is worth before making it.
+- **A search box over the list**, once there are more values than fit at a glance. It
+  searches the **label**, not the stored value.
+- **`(Select all)`** returns to showing everything. It is checked when the filter is
+  inactive, indeterminate otherwise, and disabled when already showing all — a control that
+  does nothing on click is worse than one that is visibly unavailable.
+- **`only`** on each row narrows to that one value. Without it, isolating one value out of
+  thirty means unticking twenty-nine.
+- **`(Blanks)`** is an entry in the list, not a separate concept, and is omitted when no row
+  is blank.
+- Semantic **ranges** (priority bands, deadline windows) sit below the values under their
+  own divider. They describe a range rather than name a value, so they keep plain
+  add/remove behaviour.
+
+Two rules the selection model depends on:
+
+- **An empty selection means every entry is ticked**, because nothing is being filtered out.
+  Drawing them unticked would say the opposite of what the grid is doing.
+- **Ticking the last missing entry collapses back to "unfiltered"**, never to a list naming
+  every current value — such a list would silently exclude any value added later.
+
+There is deliberately no "select none": the stored model cannot express "show no rows", and
+a control that can put the grid in a state it cannot describe is worse than one without it.
+That is what `only` is for.
+
+### Filter values may be stored and displayed differently
+
+A column filters on whatever its cell shows — the State column stores Achieve's two-letter
+codes because that is what a stored filter has to keep matching. `ColumnDef.filterLabel`
+maps that to something pickable (`NS` → `Not started`). **Every surface that shows a value
+must use it**: the set filter, and the chips. A chip reading `NS` beside a list reading
+`Not started` looks like two different filters.
 
 ## Filter state is always visible and always clearable
 

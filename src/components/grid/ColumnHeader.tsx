@@ -14,12 +14,20 @@ import {
   optionsFilter,
   type CustomColumnFilter,
 } from "@/lib/grid/customFilter";
+import type { ColumnValues } from "@/lib/grid/distinct";
+import {
+  buildSetFilterEntries,
+  matchesSearch,
+  onlySelection,
+  selectAllState,
+  toggleSetEntry,
+} from "@/lib/grid/setFilter";
 import { alignClass, type ColumnMeta, type FilterKind } from "./columns";
 import { CustomFilterDialog } from "./CustomFilterDialog";
 import {
   ALL_FILTER,
   filterActive,
-  filterOptions,
+  presetOptions,
   type ColumnFilter,
   type FilterOption,
 } from "./filters";
@@ -37,6 +45,7 @@ export function ColumnHeaderRow({
   filters,
   onFilterChange,
   distinctValues,
+  columnValues,
   enableFilters = false,
   onResize,
   onResetWidth,
@@ -54,6 +63,8 @@ export function ColumnHeaderRow({
   onFilterChange?: (columnId: string, filter: ColumnFilter) => void;
   /** Distinct filter values per column id, from the unfiltered row set. */
   distinctValues?: Record<string, string[]>;
+  /** The same values with per-value row counts, for the set filter's list. */
+  columnValues?: Record<string, ColumnValues>;
   enableFilters?: boolean;
   /** Omit to leave columns unresizable, as a grid with nowhere to store widths should. */
   onResize?: (columnId: string, width: number) => void;
@@ -121,15 +132,13 @@ export function ColumnHeaderRow({
 
             {enableFilters && Boolean(column.filterValue) && onFilterChange && (
               <FilterButton
-                columnId={column.id}
                 label={column.label}
                 kind={column.filterKind}
+                filterLabel={column.filterLabel}
                 filter={filter}
                 active={active}
-                options={filterOptions(
-                  column.filterKind,
-                  distinctValues?.[column.id] ?? [],
-                )}
+                values={columnValues?.[column.id]}
+                presets={presetOptions(column.filterKind)}
                 distinctValues={distinctValues?.[column.id] ?? []}
                 onChange={(next) => onFilterChange(column.id, next)}
               />
@@ -150,26 +159,33 @@ export function ColumnHeaderRow({
 }
 
 function FilterButton({
-  columnId,
   label,
   kind,
+  filterLabel,
   filter,
   active,
-  options,
+  values,
+  presets,
   distinctValues,
   onChange,
 }: {
-  columnId: string;
   label: string;
   kind: FilterKind | undefined;
+  /** Presentation for a stored value — see `ColumnDef.filterLabel`. */
+  filterLabel?: (value: string) => string;
   filter: ColumnFilter;
   active: boolean;
-  options: FilterOption[];
+  /** Values this column holds and how many rows hold each. */
+  values: ColumnValues | undefined;
+  /** Semantic bands for this kind (priority, deadline). Empty for most columns. */
+  presets: FilterOption[];
+  /** Plain value list, for the custom-criteria dialog's operand picker. */
   distinctValues: string[];
   onChange: (filter: ColumnFilter) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [customOpen, setCustomOpen] = useState(false);
+  const [search, setSearch] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
   const listId = useId();
 
@@ -189,10 +205,24 @@ function FilterButton({
     };
   }, [open]);
 
-  void columnId;
-
   const customActive = isCustomFilter(filter) && filterActive(filter);
   const optionIds = isOptionsFilter(filter) ? filter.ids : [];
+
+  // Every entry, regardless of the search box — the search hides rows from the list but
+  // must not drop them from the selection being computed.
+  const allEntries = buildSetFilterEntries({
+    values,
+    selectedIds: optionIds,
+    labelOf: filterLabel,
+  });
+  const shown = matchesSearch(allEntries, search);
+  const allSelected = selectAllState(allEntries) === "all";
+
+  // A handful of states needs no search box; forty result areas do.
+  const showSearch = allEntries.length > SEARCH_THRESHOLD;
+
+  const setIds = (ids: string[]) =>
+    onChange(ids.length === 0 ? ALL_FILTER : optionsFilter(ids));
 
   return (
     <div ref={rootRef} className="relative flex-none">
@@ -201,7 +231,12 @@ function FilterButton({
         aria-label={`Filter ${label}`}
         aria-expanded={open}
         aria-controls={listId}
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => {
+          // Reset the query on the way in: a stale one would silently hide values the next
+          // time the funnel is opened.
+          setSearch("");
+          setOpen((value) => !value);
+        }}
         className={[
           "rounded px-0.5 text-[0.625rem] leading-none",
           active ? "text-priority-a" : "text-ink-faint hover:text-ink",
@@ -211,60 +246,141 @@ function FilterButton({
       </button>
 
       {open && (
-        <ul
+        <div
           id={listId}
-          role="listbox"
-          aria-multiselectable
-          className="absolute top-full left-0 z-40 mt-1 max-h-64 min-w-[12rem] overflow-auto rounded border border-rule-strong bg-surface py-1 shadow-lg"
+          className="absolute top-full left-0 z-40 mt-1 flex max-h-80 w-64 flex-col rounded border border-rule-strong bg-surface shadow-lg"
         >
-          {options.map((option) => {
-            const isAll = option.id === "all";
-            const isCustom = option.id === "custom";
-            const selected = isCustom
-              ? customActive
-              : isAll
-                ? !active
-                : optionIds.includes(option.id);
+          {showSearch && (
+            <div className="flex-none border-b border-rule p-1.5">
+              <input
+                type="search"
+                autoFocus
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search values…"
+                className="w-full rounded border border-rule bg-surface px-2 py-1 text-[0.8125rem] normal-case tracking-normal text-ink outline-none focus:border-select-edge"
+              />
+            </div>
+          )}
 
-            return (
-              <li key={option.id}>
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={selected}
-                  onClick={() => {
-                    if (isAll) {
-                      onChange(ALL_FILTER);
-                      setOpen(false);
-                      return;
-                    }
-                    if (isCustom) {
-                      setOpen(false);
-                      setCustomOpen(true);
-                      return;
-                    }
-                    // Checklist selection replaces any custom filter on this column.
-                    onChange(toggleOption(filter, option.id));
-                  }}
-                  className={[
-                    "flex w-full items-center gap-2 px-3 py-1 text-left text-[0.8125rem] normal-case tracking-normal",
-                    selected
-                      ? "bg-select font-medium text-ink"
-                      : "text-ink hover:bg-surface-raised",
-                  ].join(" ")}
-                >
-                  <span
-                    aria-hidden
-                    className="w-3 flex-none text-[0.6875rem] text-ink-muted"
-                  >
-                    {selected ? "✓" : ""}
-                  </span>
-                  <span className="min-w-0 truncate">{option.label}</span>
-                </button>
+          <ul
+            role="listbox"
+            aria-multiselectable
+            aria-label={`${label} values`}
+            className="min-h-0 flex-1 overflow-auto py-1"
+          >
+            <li>
+              <button
+                type="button"
+                role="option"
+                aria-selected={allSelected}
+                disabled={allSelected}
+                onClick={() => onChange(ALL_FILTER)}
+                title={
+                  allSelected
+                    ? "Every value is already showing"
+                    : "Show every value again"
+                }
+                className="flex w-full items-center gap-2 border-b border-rule/60 px-2 py-1 text-left text-[0.8125rem] normal-case tracking-normal text-ink hover:bg-surface-raised disabled:cursor-default disabled:hover:bg-transparent"
+              >
+                <Tick state={allSelected ? "all" : "some"} />
+                <span className="min-w-0 flex-1 truncate font-medium">
+                  (Select all)
+                </span>
+              </button>
+            </li>
+
+            {shown.length === 0 ? (
+              <li className="px-3 py-3 text-[0.8125rem] normal-case tracking-normal text-ink-faint">
+                {allEntries.length === 0 ? "No values to filter." : "No match."}
               </li>
-            );
-          })}
-        </ul>
+            ) : (
+              shown.map((entry) => (
+                <li key={entry.optionId} className="group flex items-center">
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={entry.selected}
+                    onClick={() =>
+                      setIds(toggleSetEntry(allEntries, optionIds, entry.optionId))
+                    }
+                    className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1 text-left text-[0.8125rem] normal-case tracking-normal text-ink hover:bg-surface-raised"
+                  >
+                    <Tick state={entry.selected ? "all" : "none"} />
+                    <span className="min-w-0 flex-1 truncate">{entry.label}</span>
+                    <span className="flex-none tabular-nums text-[0.6875rem] text-ink-faint">
+                      {entry.count}
+                    </span>
+                  </button>
+                  {/*
+                    Excel's "Only this". Without it, narrowing to one value out of thirty
+                    means unticking twenty-nine. Dimmed until hover or focus rather than
+                    hidden, so it is still tabbable — this popover has no compact
+                    counterpart (there is no column header below `md`), so the
+                    always-visible-action rule in `ux-principles.md` is not in play.
+                  */}
+                  <button
+                    type="button"
+                    onClick={() => setIds(onlySelection(entry.optionId))}
+                    title={`Show only ${entry.label}`}
+                    className="mr-1 flex-none rounded px-1.5 py-0.5 text-[0.6875rem] normal-case tracking-normal text-ink-faint opacity-0 transition-opacity group-hover:opacity-100 hover:bg-surface-raised hover:text-ink focus:opacity-100"
+                  >
+                    only
+                  </button>
+                </li>
+              ))
+            )}
+
+            {presets.length > 0 && (
+              <>
+                <li
+                  aria-hidden
+                  className="mt-1 border-t border-rule px-2 pt-1.5 pb-0.5 text-[0.625rem] font-medium tracking-wider text-ink-faint uppercase"
+                >
+                  Ranges
+                </li>
+                {presets.map((preset) => {
+                  const selected = optionIds.includes(preset.id);
+                  return (
+                    <li key={preset.id}>
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={selected}
+                        onClick={() => onChange(togglePreset(filter, preset.id))}
+                        className={[
+                          "flex w-full items-center gap-2 px-2 py-1 text-left text-[0.8125rem] normal-case tracking-normal",
+                          selected
+                            ? "bg-select font-medium text-ink"
+                            : "text-ink hover:bg-surface-raised",
+                        ].join(" ")}
+                      >
+                        <Tick state={selected ? "all" : "none"} />
+                        <span className="min-w-0 truncate">{preset.label}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </>
+            )}
+          </ul>
+
+          <div className="flex-none border-t border-rule p-1">
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                setCustomOpen(true);
+              }}
+              className={[
+                "w-full rounded px-2 py-1 text-left text-[0.8125rem] normal-case tracking-normal hover:bg-surface-raised",
+                customActive ? "font-medium text-ink" : "text-ink-muted",
+              ].join(" ")}
+            >
+              {customActive ? "Custom criteria (on)…" : "Custom criteria…"}
+            </button>
+          </div>
+        </div>
       )}
 
       <CustomFilterDialog
@@ -280,14 +396,31 @@ function FilterButton({
   );
 }
 
+/** How many values before the list needs its own search box. */
+const SEARCH_THRESHOLD = 8;
+
+function Tick({ state }: { state: "all" | "some" | "none" }) {
+  return (
+    <span
+      aria-hidden
+      className={[
+        "flex h-3.5 w-3.5 flex-none items-center justify-center rounded-[0.1875rem] border text-[0.625rem] leading-none",
+        state === "none"
+          ? "border-rule-strong text-transparent"
+          : "border-select-edge bg-select-edge/20 text-ink",
+      ].join(" ")}
+    >
+      {state === "all" ? "✓" : state === "some" ? "–" : ""}
+    </span>
+  );
+}
+
 /**
- * Add or remove one option. Unticking the last one lands on `ALL_FILTER` rather than an
- * empty selection, so "nothing ticked" and "(All)" stay the same state — an empty grid
- * whose filter button looks inactive would be unexplainable.
- *
- * Always returns options mode: ticking a checklist value replaces any custom filter.
+ * Toggle a semantic band. Bands are not part of the set list — they describe a range rather
+ * than name a value — so they keep the plain add/remove behaviour, and picking one replaces
+ * any custom criteria on the column.
  */
-function toggleOption(filter: ColumnFilter, id: string): ColumnFilter {
+function togglePreset(filter: ColumnFilter, id: string): ColumnFilter {
   const current = isOptionsFilter(filter) ? filter.ids : [];
   const next = current.includes(id)
     ? current.filter((entry) => entry !== id)

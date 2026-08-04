@@ -97,8 +97,25 @@ export const DEADLINE_PRESETS: FilterOption[] = [
 ];
 
 /**
- * Options shown in a column's filter dropdown: universal + kind presets + distinct values
- * found in the current rows (so a State filter lists the states that are actually present).
+ * The semantic bands a column kind offers, without the universal entries or the values.
+ *
+ * The set filter lists values in its own section, so the header needs these on their own.
+ * `filterOptions` still returns everything together, because the chip bar resolves any
+ * option id — preset, value or universal — through one lookup.
+ */
+export function presetOptions(kind: FilterKind | undefined): FilterOption[] {
+  if (kind === "priority") return PRIORITY_PRESETS;
+  if (kind === "date") return DEADLINE_PRESETS;
+  return [];
+}
+
+/**
+ * Every option id a column can hold, in one list: universal entries, kind presets, and the
+ * distinct values present in the current rows.
+ *
+ * The header no longer renders this — it builds a set filter from the values and reads
+ * presets separately. This remains the one place an arbitrary stored option id can be
+ * turned back into a label, which is what the chip bar needs.
  */
 export function filterOptions(
   kind: FilterKind | undefined,

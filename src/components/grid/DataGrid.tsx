@@ -33,7 +33,7 @@ import {
   rowPassesCrossFilter,
   type CrossColumnFilter,
 } from "@/lib/grid/crossFilter";
-import { collectDistinctValues } from "@/lib/grid/distinct";
+import { collectColumnValues, distinctValuesOf } from "@/lib/grid/distinct";
 import { rowMatchesSearch, searchActive } from "@/lib/grid/search";
 import { sortRowsWithinGroups } from "@/lib/grid/sortRows";
 import { resolveCompactFields } from "@/lib/grid/compactFields";
@@ -336,11 +336,19 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
     [rows],
   );
 
-  // A host that also renders `GridToolbar` has already derived these and passes them in, so
-  // the funnel checklists and the advanced builder cannot end up offering different values.
-  const ownDistinctValues = useMemo(
-    () => collectDistinctValues(filterColumns, nodeRows),
+  /**
+   * Values per column, with counts. The header's set filter needs the counts, so this is
+   * derived here regardless of what the host passed — and `distinctValues` is read back off
+   * it rather than walked again, so the funnel and the advanced builder cannot end up
+   * offering different values for the same column.
+   */
+  const columnValues = useMemo(
+    () => collectColumnValues(filterColumns, nodeRows),
     [filterColumns, nodeRows],
+  );
+  const ownDistinctValues = useMemo(
+    () => distinctValuesOf(columnValues),
+    [columnValues],
   );
   const distinctValues = providedDistinctValues ?? ownDistinctValues;
 
@@ -610,6 +618,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
           filters={filters}
           onFilterChange={handleFilterChange}
           distinctValues={distinctValues}
+          columnValues={columnValues}
           onResize={onResizeColumn}
           onResetWidth={onResetColumnWidth}
           enableFilters={enableFilters}

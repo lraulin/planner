@@ -57,6 +57,13 @@ export function GridFilterChips({
         labelOf: (columnId) => byId.get(columnId)?.label ?? columnId,
         optionLabelOf: (columnId, optionId) => {
           const column = byId.get(columnId);
+          // A value entry reads through the column's own `filterLabel`, so a chip says
+          // "Not started" wherever the set filter said "Not started" — the State column
+          // stores Achieve's two-letter code, and a chip showing `NS` beside a list
+          // showing `Not started` looks like two different filters.
+          if (column?.filterLabel && optionId.startsWith("value:")) {
+            return column.filterLabel(optionId.slice("value:".length));
+          }
           const options = filterOptions(
             column?.filterKind,
             distinctValues[columnId] ?? [],
