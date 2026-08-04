@@ -1,6 +1,6 @@
 "use client";
 
-import type { NodeState, PriorityLetter } from "@/db/schema";
+import type { NodeState, NodeType, PriorityLetter } from "@/db/schema";
 import { encodePriority } from "@/lib/achieve/encodings";
 import { localDateKey, toDateKey } from "@/lib/schedule/geometry";
 import type { OutlineNode } from "@/lib/tree/types";
@@ -10,7 +10,14 @@ import {
   formatMoney,
   formatPriority,
 } from "@/lib/tree/format";
-import { kindOfNode, STATE_CODES, STATE_LABELS } from "@/lib/tree/hierarchy";
+import {
+  kindOfNode,
+  KIND_LABELS,
+  NODE_KINDS,
+  STATE_CODES,
+  STATE_LABELS,
+  type NodeKind,
+} from "@/lib/tree/hierarchy";
 import {
   scheduleStatusForNode,
   STATUS_LABELS,
@@ -530,15 +537,30 @@ export function importanceColumn(): ColumnDef<OutlineColumnCtx> {
   };
 }
 
+/**
+ * Achieve's Icon column: the type glyph in a column of its own.
+ *
+ * **Showing it moves the glyph out of the Name cell** rather than drawing a second one —
+ * see `data-grid.md`. That is what makes this column a *placement choice* instead of a
+ * duplicate: Achieve puts the icon here and leaves plain names in the tree, we default to
+ * the icon beside the name, and this column swaps between the two.
+ *
+ * Reach for `typeColumn()` instead when what you want is to filter or group by type — it
+ * says the word and leaves the glyph where it is.
+ */
 export function iconColumn(): ColumnDef<OutlineColumnCtx> {
   return {
     id: "icon",
     label: "Icon",
+    // Two columns carry the same value, so the field list has to say which rendering is
+    // which. Side by side they read as a pair: "Type icon" / "Type name".
+    fieldLabel: "Type icon",
     width: "3rem",
     align: "center",
     filterKind: "enum",
     filterValue: (row) => kindOfNode(row.node),
-    sortValue: (row) => kindOfNode(row.node),
+    filterLabel: kindLabel,
+    sortValue: (row) => kindRank(row.node),
     compact: "hidden",
     render: (row) => (
       <span className="flex justify-center">
@@ -546,6 +568,44 @@ export function iconColumn(): ColumnDef<OutlineColumnCtx> {
       </span>
     ),
   };
+}
+
+/**
+ * The row's kind as a word — Result Area, Goal, Dream, Project, Task.
+ *
+ * The readable half of the Icon column, and the one to add when the point is to *filter* by
+ * type: it never competes with the glyph beside the name, so both can be on screen at once.
+ * Dream reads as its own type here, as it does everywhere else in the UI, even though the
+ * database stores it as a goal.
+ *
+ * Sorts in hierarchy order rather than alphabetically. Alphabetical would file a Task above
+ * a Result Area, which is exactly backwards for a column whose whole subject is the levels
+ * of the tree.
+ */
+export function typeColumn(): ColumnDef<OutlineColumnCtx> {
+  return {
+    id: "type",
+    label: "Type",
+    fieldLabel: "Type name",
+    width: "5.5rem",
+    filterKind: "enum",
+    filterValue: (row) => kindOfNode(row.node),
+    filterLabel: kindLabel,
+    sortValue: (row) => kindRank(row.node),
+    compact: "hidden",
+    compactText: (row) => KIND_LABELS[kindOfNode(row.node)],
+    render: (row) => <ReadOnlyCell value={KIND_LABELS[kindOfNode(row.node)]} />,
+  };
+}
+
+/** Stored kinds are enum values (`result_area`); nobody picks one of those off a list. */
+function kindLabel(value: string): string {
+  return KIND_LABELS[value as NodeKind] ?? value;
+}
+
+/** Broadest first, so sorting by type walks down the tree's levels. */
+function kindRank(node: { type: NodeType; isDream?: boolean }): number {
+  return NODE_KINDS.indexOf(kindOfNode(node));
 }
 
 export function projectPriorityColumn(): ColumnDef<OutlineColumnCtx> {

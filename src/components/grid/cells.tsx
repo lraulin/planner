@@ -19,6 +19,7 @@ import {
 import { toDateKey } from "@/lib/schedule/geometry";
 import { scheduleStatus, STATUS_LABELS, type ScheduleStatus } from "@/lib/tree/status";
 import { TypeIcon } from "@/components/icons/TypeIcon";
+import { NameIconContext } from "./nameIconContext";
 import { RowDragHandleContext } from "./rowDragContext";
 
 const PRIORITY_COLOR: Record<PriorityLetter, string> = {
@@ -82,7 +83,10 @@ export function NameCell({
   // Permanently draggable while the row wants drag: arming on mousedown is too late for
   // HTML5 DnD and the browser falls through to selecting the name text instead.
   const dragApi = useContext(RowDragHandleContext);
-  const iconIsHandle = Boolean(dragHandle && dragApi);
+  // False while the optional `icon` column is on screen, which is where the glyph goes
+  // instead — see `NameIconContext`. The row gutter is still a drag handle either way.
+  const showIcon = useContext(NameIconContext);
+  const iconIsHandle = Boolean(dragHandle && dragApi && showIcon);
 
   return (
     <div className="flex min-w-0 items-stretch self-stretch">
@@ -106,7 +110,7 @@ export function NameCell({
         {node.collapsed ? "▶" : "▼"}
       </button>
 
-      {dragHandle ? (
+      {!showIcon ? null : dragHandle ? (
         <span
           data-drag-handle
           draggable={iconIsHandle || undefined}

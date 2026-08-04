@@ -13,6 +13,7 @@ import { GridToolbar } from "@/components/grid/GridToolbar";
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import {
   categoryColumn,
+  typeColumn,
   dateCompletedColumn,
   purposeColumn,
 } from "@/components/grid/commonColumns";
@@ -53,6 +54,7 @@ function isActive(node: OutlineNode): boolean {
 function buildColumns(): ColumnDef<GoalsCtx>[] {
   return [
     categoryColumn(),
+    typeColumn(),
     {
       id: "priority",
       label: "Pri",

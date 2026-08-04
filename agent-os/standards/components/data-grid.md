@@ -21,6 +21,18 @@ _which_ rows you see and _in what order siblings appear_ — never who a row's p
 - **Filtering keeps the shape.** A group header whose rows have all been filtered out is
   dropped; one that survives **restates its count** to the number actually under it. A
   header reading "Career (7)" above one visible row is a claim the user can see is false.
+- **A surviving row brings its ancestors with it** (`lib/grid/ancestors.ts`), so a matching
+  task is never left indented three levels under nothing. This applies to the column
+  funnels, the advanced filter and the search box alike, and it is what makes filtering by
+  type behave the way Achieve does. Ancestors count as shown — `Showing N of M` is the
+  number of rows you can count on screen, not the number that matched.
+
+**Never filter a tree by dropping a node's subtree with it.** That is the inverse mistake
+and it hides work you explicitly asked to see: the Outline once filtered type and focus that
+way, so unticking "Result Areas" emptied the entire grid and a focused task under an
+unfocused project disappeared. The one place it is correct is `showCompleted`, because
+settling a project genuinely settles the work beneath it — and that is a pre-grid reshape of
+the tree, not a column filter.
 
 This is the reason we did not adopt a grid library. See "Why hand-rolled" below.
 
@@ -121,6 +133,30 @@ Knowing what you wanted to do told you nothing about where to do it.
 returned ready-made by `useGridState`) rather than six props at eight call sites. A grid that
 cannot persist a column layout should not be able to offer half a menu — omit the bundle and
 those items are visibly unavailable.
+
+## One type glyph per row, and the column set decides where it goes
+
+The row's type is available as two columns rendering the same value, and **only one of them
+ever draws the glyph**:
+
+| Column          | Field list  | Shows                                | Use it to                     |
+| --------------- | ----------- | ------------------------------------ | ----------------------------- |
+| `icon` (3rem)   | `Type icon` | The glyph, in a column of its own    | Reproduce Achieve's layout    |
+| `type` (5.5rem) | `Type name` | `Result Area` / `Goal` / `Dream` / … | Filter, sort or group by type |
+
+By default the glyph sits in the Name cell, after the indentation, where it names the thing
+you are reading — this is a deliberate departure from Achieve, which puts icons in a flat
+column and leaves the tree as bare text. Showing the `icon` column moves it there instead
+(`NameIconContext`), so the two can never both draw it; hiding the column hands it back.
+That makes `icon` a **placement choice**, not a duplicate.
+
+`type` exists so filtering by type never costs you the icon beside the name. It sorts in
+hierarchy order rather than alphabetically — a Task filed above a Result Area is backwards
+for a column whose subject is the levels of the tree.
+
+**A grid-wide fact belongs in a context, not in `ColumnDef`.** The Name cell has no business
+knowing which other columns are on screen, and threading it through every tab's column
+context would make eight files care about a question only `DataGrid` can answer.
 
 ## Progressive disclosure: three rungs, in this order
 
@@ -227,6 +263,20 @@ A tab declares **what it has** — columns, switches, group dimensions. It does 
 buttons. If you find yourself adding a control to one grid, add it to `GridToolbar` instead
 and let every grid have it.
 
+**And take controls back out again.** A toolbar earns its width; every button on it is one
+the user has to read past to find the one they want. Two tests, both of which the grid has
+failed at least once:
+
+- **Is it a column filter wearing a checkbox?** The Outline's four type checkboxes and its
+  Focus only toggle were, so they went to the `icon` / `type` and `focus` columns. A per-type
+  view is what the Projects, Tasks and Goals tabs already are.
+- **Are its only two states "unavailable" and "duplicated"?** `Clear filters` was disabled in
+  exactly the state where the chip bar is absent, so it could only be pressed while the chip
+  bar was on screen offering `Clear all`.
+
+Prefer a control that shows its own state to one that needs a label to say what it is:
+density is a two-button segmented control (`Roomy` / `Dense`), not a `Density:` select.
+
 Keep _commands_ and _view controls_ in separate bars where a view has many commands (the
 Outline: add / indent / delete in `FilterBar`, search / filter / fields / density in
 `GridToolbar`). They are different kinds of thing and mixing them makes both harder to find.
@@ -273,6 +323,7 @@ knowing about:
 | -------------------------- | ------------------------------------------------------------ |
 | `lib/grid/sortRows.ts`     | Hierarchy-preserving multi-key sort                          |
 | `lib/grid/columnMenu.ts`   | Which column-menu items are available, and header drag slots |
+| `lib/grid/ancestors.ts`    | Ancestor closure that keeps a filtered tree connected        |
 | `lib/grid/customFilter.ts` | Operator vocabulary and per-column expressions               |
 | `lib/grid/crossFilter.ts`  | Cross-column And/Or advanced filter                          |
 | `lib/grid/search.ts`       | Quick search matching                                        |

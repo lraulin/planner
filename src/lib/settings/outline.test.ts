@@ -14,62 +14,32 @@ describe("parseOutlineFilters", () => {
   });
 
   it("round-trips what it serializes", () => {
-    const settings = {
-      types: {
-        result_area: true,
-        goal: true,
-        project: false,
-        task: true,
-      },
-      focusOnly: true,
-      showCompleted: true,
-      byCategory: true,
-    };
+    const settings = { showCompleted: true, byCategory: true };
     expect(parseOutlineFilters(serializeOutlineFilters(settings))).toEqual(settings);
   });
 
-  it("keeps unknown type keys from poisoning the defaults", () => {
-    const parsed = parseOutlineFilters({
-      types: { goal: false, fantasy: true },
-      focusOnly: "yes",
-      showCompleted: "nope",
-      byCategory: "on",
-    });
-    expect(parsed.types.goal).toBe(false);
-    expect(parsed.types.task).toBe(true);
-    expect(parsed.focusOnly).toBe(false);
+  it("degrades a garbage value per field rather than dropping the whole blob", () => {
+    const parsed = parseOutlineFilters({ showCompleted: "nope", byCategory: "on" });
     expect(parsed.showCompleted).toBe(false);
     expect(parsed.byCategory).toBe(false);
-    expect("fantasy" in parsed.types).toBe(false);
   });
 
-  it("honours an explicit false for every type", () => {
-    // "Show me nothing" is legal. Replacing it with the default would make the type
-    // checkboxes lie about what is on screen.
+  it("ignores the retired type and focus fields without failing to parse", () => {
+    // A blob written before those two moved to their columns must still open the outline,
+    // and must not resurrect a stored "hide every task" as something with no control left
+    // to undo it.
     const parsed = parseOutlineFilters({
-      types: {
-        result_area: false,
-        goal: false,
-        project: false,
-        task: false,
-      },
+      types: { result_area: false, goal: false, project: false, task: false },
+      focusOnly: true,
+      showCompleted: true,
     });
-    expect(parsed.types).toEqual({
-      result_area: false,
-      goal: false,
-      project: false,
-      task: false,
-    });
+    expect(parsed).toEqual({ showCompleted: true, byCategory: false });
   });
 
   it("defaults showCompleted to false when the key is absent", () => {
     // Older stored blobs predate this flag; missing means hide done items, not "show
     // everything because we cannot tell".
-    const parsed = parseOutlineFilters({
-      types: { task: true },
-      focusOnly: false,
-    });
-    expect(parsed.showCompleted).toBe(false);
+    expect(parseOutlineFilters({}).showCompleted).toBe(false);
   });
 
   it("honours an explicit showCompleted true", () => {
@@ -78,12 +48,7 @@ describe("parseOutlineFilters", () => {
 
   it("defaults byCategory to false when the key is absent", () => {
     // Older blobs predate grouping; missing must open the plain tree, not category headers.
-    const parsed = parseOutlineFilters({
-      types: { task: true },
-      focusOnly: false,
-      showCompleted: false,
-    });
-    expect(parsed.byCategory).toBe(false);
+    expect(parseOutlineFilters({ showCompleted: false }).byCategory).toBe(false);
   });
 
   it("honours an explicit byCategory true", () => {

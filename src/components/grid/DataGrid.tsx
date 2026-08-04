@@ -34,6 +34,7 @@ import {
   rowPassesCrossFilter,
   type CrossColumnFilter,
 } from "@/lib/grid/crossFilter";
+import { withAncestors } from "@/lib/grid/ancestors";
 import { collectColumnValues, distinctValuesOf } from "@/lib/grid/distinct";
 import { rowMatchesSearch, searchActive } from "@/lib/grid/search";
 import { sortRowsWithinGroups } from "@/lib/grid/sortRows";
@@ -41,6 +42,7 @@ import { resolveCompactFields } from "@/lib/grid/compactFields";
 import { useIsCompact } from "@/components/shell/useIsCompact";
 import { CompactRow, type RowSwipe } from "./CompactRow";
 import type { SelectMods } from "@/lib/grid/selection";
+import { NameIconContext } from "./nameIconContext";
 import { RowDragHandleContext, type RowDragHandleApi } from "./rowDragContext";
 
 export type GridSortKey = { columnId: string; direction: "asc" | "desc" };
@@ -415,7 +417,11 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
         pass.add(row.id);
       }
     }
-    return pass;
+
+    // Hierarchy survives filtering: a row that matched keeps the rows it is indented under,
+    // or it would sit three levels in claiming a parent that is not on screen. Flat grids
+    // get the same set back untouched. See `lib/grid/ancestors.ts`.
+    return withAncestors(nodeRows, pass);
   }, [
     narrowing,
     nodeRows,
@@ -630,152 +636,162 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
     };
   }
 
+  // One type glyph per row, and the visible column set decides where it goes: its own
+  // column when the user has shown `icon`, beside the name otherwise. See `NameIconContext`.
+  const nameShowsIcon = !columns.some((column) => column.id === "icon");
+
   return (
-    <div
-      className="flex min-h-0 flex-1 flex-col"
-      // Compact is a genuine trade, not a default: more rows per screen against a smaller
-      // target for the inline editors that live in those rows. Left to the user per grid.
-      style={
-        density === "compact"
-          ? ({ "--row-height": "1.375rem" } as React.CSSProperties)
-          : undefined
-      }
-    >
-      {/* No column header on a phone: there are no columns to head, and sort, filter and
+    <NameIconContext.Provider value={nameShowsIcon}>
+      <div
+        className="flex min-h-0 flex-1 flex-col"
+        // Compact is a genuine trade, not a default: more rows per screen against a smaller
+        // target for the inline editors that live in those rows. Left to the user per grid.
+        style={
+          density === "compact"
+            ? ({ "--row-height": "1.375rem" } as React.CSSProperties)
+            : undefined
+        }
+      >
+        {/* No column header on a phone: there are no columns to head, and sort, filter and
           resize are all mouse-shaped controls at 10px. Sorting stays reachable from the
           view's own toolbar. */}
-      {!compact && (
-        <ColumnHeaderRow
-          columns={columns}
-          allColumns={filterColumns}
-          gridTemplate={gridTemplate}
-          sorts={enableSort ? sorts : []}
-          onSort={enableSort ? handleSort : undefined}
-          onSetSort={enableSort ? handleSetSort : undefined}
-          filters={filters}
-          onFilterChange={handleFilterChange}
-          distinctValues={distinctValues}
-          columnValues={columnValues}
-          onResize={onResizeColumn}
-          onResetWidth={onResetColumnWidth}
-          widths={widths}
-          controls={columnControls}
-          enableFilters={enableFilters}
-          leadingGutter
-        />
-      )}
+        {!compact && (
+          <ColumnHeaderRow
+            columns={columns}
+            allColumns={filterColumns}
+            gridTemplate={gridTemplate}
+            sorts={enableSort ? sorts : []}
+            onSort={enableSort ? handleSort : undefined}
+            onSetSort={enableSort ? handleSetSort : undefined}
+            filters={filters}
+            onFilterChange={handleFilterChange}
+            distinctValues={distinctValues}
+            columnValues={columnValues}
+            onResize={onResizeColumn}
+            onResetWidth={onResetColumnWidth}
+            widths={widths}
+            controls={columnControls}
+            enableFilters={enableFilters}
+            leadingGutter
+          />
+        )}
 
-      <div
-        ref={gridRef}
-        tabIndex={0}
-        role="treegrid"
-        aria-label={ariaLabel}
-        className="min-h-0 flex-1 overflow-auto outline-none"
-      >
-        {displayRows.length === 0
-          ? (empty ?? (
-              <div className="flex h-full items-center justify-center p-8 text-[0.9375rem] text-ink-muted">
-                Nothing to show.
-              </div>
-            ))
-          : (() => {
-              // 1-based index among node rows only — group headers do not consume a number.
-              let rowNumber = 0;
-              const nodeOrder = displayRows
-                .filter((r): r is NodeGridRow<TRow> => r.kind === "node")
-                .map((r) => r.id);
+        <div
+          ref={gridRef}
+          tabIndex={0}
+          role="treegrid"
+          aria-label={ariaLabel}
+          className="min-h-0 flex-1 overflow-auto outline-none"
+        >
+          {displayRows.length === 0
+            ? (empty ?? (
+                <div className="flex h-full items-center justify-center p-8 text-[0.9375rem] text-ink-muted">
+                  Nothing to show.
+                </div>
+              ))
+            : (() => {
+                // 1-based index among node rows only — group headers do not consume a number.
+                let rowNumber = 0;
+                const nodeOrder = displayRows
+                  .filter((r): r is NodeGridRow<TRow> => r.kind === "node")
+                  .map((r) => r.id);
 
-              return displayRows.map((row) => {
-                const isSelected = selectedIds
-                  ? selectedIds.has(row.id)
-                  : row.id === selectedId;
-                // Only the focus row scrolls into view — multi-select must not jump the
-                // viewport to every newly-lit row as the range grows.
-                const isFocus = row.id === selectedId;
+                return displayRows.map((row) => {
+                  const isSelected = selectedIds
+                    ? selectedIds.has(row.id)
+                    : row.id === selectedId;
+                  // Only the focus row scrolls into view — multi-select must not jump the
+                  // viewport to every newly-lit row as the range grows.
+                  const isFocus = row.id === selectedId;
 
-                if (row.kind === "group") {
-                  return (
-                    <GroupHeader
+                  if (row.kind === "group") {
+                    return (
+                      <GroupHeader
+                        key={row.id}
+                        row={row}
+                        gridTemplate={gridTemplate}
+                        // +1 for the handle track so the header still spans the full row.
+                        columnCount={columns.length + 1}
+                        collapsed={collapsedGroups?.has(row.id) ?? false}
+                        onToggle={() => onToggleGroup?.(row.id)}
+                        // Groups are drop targets only (never dragged). Outline category headers
+                        // use this so a root result area can change category by landing on a group.
+                        drag={dragBindingFor(row.id, nodeOrder)}
+                        compact={compact}
+                      />
+                    );
+                  }
+
+                  rowNumber += 1;
+                  const number = rowNumber;
+
+                  return compact ? (
+                    <CompactRow
                       key={row.id}
                       row={row}
+                      columnCtx={columnCtx}
+                      fields={compactFields}
+                      selected={isSelected}
+                      onSelect={() => onSelect(row.id)}
+                      onOpenDetail={
+                        onOpenDetail ? () => onOpenDetail(row.id) : undefined
+                      }
+                      onLongPress={
+                        rowMenu &&
+                        ((x, y) => {
+                          // Right-click / long-press on an already-selected row keeps the multi
+                          // selection so "Copy as text" can act on all of them.
+                          if (!selectedIds?.has(row.id)) onSelect(row.id);
+                          setMenu({ rowId: row.id, x, y });
+                        })
+                      }
+                      swipe={rowSwipe?.(row.id)}
+                      label={rowLabelFor(row, rowLabel)}
+                      expanded={rowExpansionFor(row, rowExpansion)}
+                    />
+                  ) : (
+                    <DataRow
+                      key={row.id}
+                      row={row}
+                      columns={columns}
+                      columnCtx={columnCtx}
                       gridTemplate={gridTemplate}
-                      // +1 for the handle track so the header still spans the full row.
-                      columnCount={columns.length + 1}
-                      collapsed={collapsedGroups?.has(row.id) ?? false}
-                      onToggle={() => onToggleGroup?.(row.id)}
-                      // Groups are drop targets only (never dragged). Outline category headers
-                      // use this so a root result area can change category by landing on a group.
+                      handleWidth={handleWidth}
+                      selected={isSelected}
+                      focused={isFocus}
+                      rowNumber={rowNumbers ? number : null}
+                      onSelect={(mods) => onSelect(row.id, mods)}
+                      onOpenDetail={
+                        onOpenDetail ? () => onOpenDetail(row.id) : undefined
+                      }
                       drag={dragBindingFor(row.id, nodeOrder)}
-                      compact={compact}
+                      onContextMenu={
+                        rowMenu &&
+                        ((x, y) => {
+                          if (!selectedIds?.has(row.id)) onSelect(row.id);
+                          setMenu({ rowId: row.id, x, y });
+                        })
+                      }
+                      rowLabel={rowLabel}
+                      rowExpansion={rowExpansion}
                     />
                   );
-                }
+                });
+              })()}
+        </div>
 
-                rowNumber += 1;
-                const number = rowNumber;
-
-                return compact ? (
-                  <CompactRow
-                    key={row.id}
-                    row={row}
-                    columnCtx={columnCtx}
-                    fields={compactFields}
-                    selected={isSelected}
-                    onSelect={() => onSelect(row.id)}
-                    onOpenDetail={onOpenDetail ? () => onOpenDetail(row.id) : undefined}
-                    onLongPress={
-                      rowMenu &&
-                      ((x, y) => {
-                        // Right-click / long-press on an already-selected row keeps the multi
-                        // selection so "Copy as text" can act on all of them.
-                        if (!selectedIds?.has(row.id)) onSelect(row.id);
-                        setMenu({ rowId: row.id, x, y });
-                      })
-                    }
-                    swipe={rowSwipe?.(row.id)}
-                    label={rowLabelFor(row, rowLabel)}
-                    expanded={rowExpansionFor(row, rowExpansion)}
-                  />
-                ) : (
-                  <DataRow
-                    key={row.id}
-                    row={row}
-                    columns={columns}
-                    columnCtx={columnCtx}
-                    gridTemplate={gridTemplate}
-                    handleWidth={handleWidth}
-                    selected={isSelected}
-                    focused={isFocus}
-                    rowNumber={rowNumbers ? number : null}
-                    onSelect={(mods) => onSelect(row.id, mods)}
-                    onOpenDetail={onOpenDetail ? () => onOpenDetail(row.id) : undefined}
-                    drag={dragBindingFor(row.id, nodeOrder)}
-                    onContextMenu={
-                      rowMenu &&
-                      ((x, y) => {
-                        if (!selectedIds?.has(row.id)) onSelect(row.id);
-                        setMenu({ rowId: row.id, x, y });
-                      })
-                    }
-                    rowLabel={rowLabel}
-                    rowExpansion={rowExpansion}
-                  />
-                );
-              });
-            })()}
+        {menu && rowMenu && (
+          // Built on open rather than held in state, so an item's enabled/disabled state
+          // reflects the tree as it is now.
+          <ContextMenu
+            x={menu.x}
+            y={menu.y}
+            items={rowMenu(menu.rowId)}
+            onClose={closeMenu}
+          />
+        )}
       </div>
-
-      {menu && rowMenu && (
-        // Built on open rather than held in state, so an item's enabled/disabled state
-        // reflects the tree as it is now.
-        <ContextMenu
-          x={menu.x}
-          y={menu.y}
-          items={rowMenu(menu.rowId)}
-          onClose={closeMenu}
-        />
-      )}
-    </div>
+    </NameIconContext.Provider>
   );
 }
 
@@ -1208,7 +1224,7 @@ function GroupHeader({
  */
 function dropEmptyGroups<TRow>(
   rows: GridRow<TRow>[],
-  passIds: Set<string>,
+  passIds: ReadonlySet<string>,
 ): GridRow<TRow>[] {
   const out: GridRow<TRow>[] = [];
 

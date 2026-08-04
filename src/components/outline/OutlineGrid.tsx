@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { NodeType } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
 import {
   categoryLabelFromGroupId,
@@ -13,7 +12,6 @@ import {
   defaultChildType,
   KIND_LABELS,
   kindOfNode,
-  TYPE_LABELS,
   type NodeKind,
 } from "@/lib/tree/hierarchy";
 import {
@@ -78,9 +76,12 @@ const OUTLINE_FILTERS_CODEC: SettingCodec<OutlineFilters> = {
 };
 
 /**
- * Outline tab host: tree commands, type / focus / completed filters, drawer, and the
- * shared DataGrid with the outline's column set. Optional "By category" lays group
- * headers over the tree and lets root result areas change category by drag.
+ * Outline tab host: tree commands, the completed filter, drawer, and the shared DataGrid
+ * with the outline's column set. Optional "By category" lays group headers over the tree
+ * and lets root result areas change category by drag.
+ *
+ * Filtering by type or focus is not here — those are the `type` / `icon` and `focus`
+ * columns, filtered from their column menus like everything else.
  */
 export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const { nodes, byId, patch, apply, error, setError } =
@@ -97,28 +98,34 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     patch: patchTypeFilters,
     reset: resetTypeFilters,
   } = useSetting(OUTLINE_FILTERS_SCOPE, OUTLINE_FILTERS_CODEC);
-  const { types: filters, focusOnly, showCompleted, byCategory } = typeFilters;
+  const { showCompleted, byCategory } = typeFilters;
 
   const outlineColumns = useMemo(() => buildOutlineColumns(today), [today]);
   const gridState = useGridState("outline", outlineColumns, [...OUTLINE_COLUMN_IDS]);
   const { sort: headerSort, clearSort: clearHeaderSort } = gridState;
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
 
+  /**
+   * Settled rows, and everything under them, before the grid sees a row.
+   *
+   * Subtree-dropping is right *here* and wrong for a column filter: finishing a project
+   * settles the work beneath it, so its completed children are not results you are hiding
+   * by accident. Type and Focus used to be filtered the same way and were moved to their
+   * columns, where a match keeps its ancestors instead — see `lib/settings/outline.ts`.
+   */
   const visible = useMemo(() => {
+    if (showCompleted) return nodes.filter((node) => !node.hidden);
+
     const dropped = new Set<string>();
     return nodes.filter((node) => {
       const parentDropped = node.parentId ? dropped.has(node.parentId) : false;
-      const filteredOut =
-        !filters[node.type] ||
-        (focusOnly && !node.focus) ||
-        (!showCompleted && isSettledOutlineState(node.state));
-      if (parentDropped || filteredOut) {
+      if (parentDropped || isSettledOutlineState(node.state)) {
         dropped.add(node.id);
         return false;
       }
       return !node.hidden;
     });
-  }, [nodes, filters, focusOnly, showCompleted]);
+  }, [nodes, showCompleted]);
 
   /**
    * The outline is the tree itself, so its rows are a flat list at tree depth. By Category
@@ -639,30 +646,11 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
               The outline's own view toggles. They live here rather than in `FilterBar`
               because that bar is a *command* bar — add, indent, delete — and these decide
               what the grid shows, which is what every other control in this toolbar does.
+
+              Only two are left. Type and Focus went to their columns: both were column
+              filters wearing checkboxes, and four permanent tick boxes for a filter the
+              per-type tabs already answer is a lot of toolbar for a rare question.
             */}
-            {(Object.keys(TYPE_LABELS) as NodeType[]).map((type) => (
-              <ToolbarToggle
-                key={type}
-                checked={filters[type]}
-                onChange={() =>
-                  patchTypeFilters((current) => ({
-                    ...current,
-                    types: { ...current.types, [type]: !current.types[type] },
-                  }))
-                }
-                label={`${TYPE_LABELS[type]}s`}
-              />
-            ))}
-            <ToolbarToggle
-              checked={focusOnly}
-              onChange={() =>
-                patchTypeFilters((current) => ({
-                  ...current,
-                  focusOnly: !current.focusOnly,
-                }))
-              }
-              label="Focus only"
-            />
             <ToolbarToggle
               checked={showCompleted}
               onChange={() =>

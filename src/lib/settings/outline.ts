@@ -1,22 +1,26 @@
-import { nodeTypeEnum, type NodeState, type NodeType } from "@/db/schema";
+import type { NodeState } from "@/db/schema";
 import { asBoolean, asRecord } from "./parse";
 import { SETTINGS_VERSION } from "./scopes";
 
 /**
- * What the Outline remembers beyond its grid state: which node types are shown,
- * whether Focus only is on, whether completed/cancelled rows stay visible, and
- * whether rows are grouped by result-area category. Stored under `outline:filters`.
+ * What the Outline remembers beyond its grid state: whether completed/cancelled rows stay
+ * visible, and whether rows are grouped by result-area category. Stored under
+ * `outline:filters`.
  *
- * Kept separate from `grid:outline` because these controls are not column filters —
- * they reshape the tree before the grid ever sees a row, and they have no column
- * id to hang off. Same pattern as `notes:filter` for Notes-specific view mode/sort.
+ * Kept separate from `grid:outline` because neither is a column filter — both reshape the
+ * tree before the grid ever sees a row, and neither has a column id to hang off. Same
+ * pattern as `notes:filter` for Notes-specific view mode/sort.
+ *
+ * **`types` and `focusOnly` used to live here and are gone.** Both were column filters
+ * wearing toolbar checkboxes — type is the `icon` / `type` column, focus is the `focus`
+ * column — and both were implemented by dropping a node's whole subtree with it, so a
+ * focused task under an unfocused project vanished and unticking "Result Areas" emptied
+ * the grid. Column filters keep ancestors instead (`lib/grid/ancestors.ts`), which is both
+ * the correct behaviour and one place to define it. Old blobs still parse; the two fields
+ * are simply ignored.
  */
 
-const ALL_TYPES = nodeTypeEnum.enumValues;
-
 export type OutlineFilters = {
-  types: Record<NodeType, boolean>;
-  focusOnly: boolean;
   /**
    * When false (the default), completed and cancelled nodes are hidden — matching
    * the active views on Projects / Tasks / Goals. Children of a hidden parent drop
@@ -31,13 +35,6 @@ export type OutlineFilters = {
 };
 
 export const DEFAULT_OUTLINE_FILTERS: OutlineFilters = {
-  types: {
-    result_area: true,
-    goal: true,
-    project: true,
-    task: true,
-  },
-  focusOnly: false,
   showCompleted: false,
   byCategory: false,
 };
@@ -51,17 +48,7 @@ export function parseOutlineFilters(value: unknown): OutlineFilters {
   const record = asRecord(value);
   if (!record) return DEFAULT_OUTLINE_FILTERS;
 
-  const storedTypes = asRecord(record.types);
-  const types = { ...DEFAULT_OUTLINE_FILTERS.types };
-  if (storedTypes) {
-    for (const type of ALL_TYPES) {
-      types[type] = asBoolean(storedTypes[type], types[type]);
-    }
-  }
-
   return {
-    types,
-    focusOnly: asBoolean(record.focusOnly, DEFAULT_OUTLINE_FILTERS.focusOnly),
     showCompleted: asBoolean(
       record.showCompleted,
       DEFAULT_OUTLINE_FILTERS.showCompleted,

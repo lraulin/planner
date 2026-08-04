@@ -8,6 +8,7 @@ import {
   setGroupLevel,
   type GroupBy,
 } from "@/lib/tree/slice";
+import type { GridDensity } from "@/lib/settings/grid";
 import {
   ErrorBanner,
   TabToolbar,
@@ -138,25 +139,14 @@ export function GridToolbar({
 
         <ToolbarButton onClick={() => setFieldsOpen(true)}>Show Fields</ToolbarButton>
 
-        <ToolbarSelect
-          label="Density"
-          value={grid.density}
-          onChange={(value) =>
-            grid.setDensity(value === "compact" ? "compact" : "comfortable")
-          }
-          options={[
-            { value: "comfortable", label: "Comfortable" },
-            { value: "compact", label: "Compact" },
-          ]}
-        />
+        <DensityToggle value={grid.density} onChange={grid.setDensity} />
 
-        <ToolbarButton
-          onClick={grid.clearFilters}
-          disabled={!grid.narrowing}
-          title="Clear every filter and the search on this view"
-        >
-          Clear filters
-        </ToolbarButton>
+        {/*
+          There is no "Clear filters" button here any more. It was disabled in exactly the
+          state where the chip bar is absent, so it could only ever be pressed while the
+          chip bar was on screen offering "Clear all" — a control whose only two states are
+          "unavailable" and "duplicated" is one control too many.
+        */}
 
         <ToolbarButton
           onClick={grid.reset}
@@ -210,6 +200,53 @@ export function GridToolbar({
         onClose={() => setFieldsOpen(false)}
       />
     </>
+  );
+}
+
+/**
+ * Row height, as two buttons rather than a labelled dropdown.
+ *
+ * It is a binary choice whose options are visible at a glance, which is a segmented control,
+ * not a `<select>` — the old one spent a word of label plus a collapsed menu on something
+ * that fits in eleven characters. The current state is the pressed button, so the control
+ * says what it is doing without a label explaining that it is Density.
+ */
+function DensityToggle({
+  value,
+  onChange,
+}: {
+  value: GridDensity;
+  onChange: (density: GridDensity) => void;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label="Row height"
+      className="flex flex-none overflow-hidden rounded border border-rule"
+    >
+      {(
+        [
+          ["comfortable", "Roomy", "Taller rows, easier inline editing"],
+          ["compact", "Dense", "More rows per screen"],
+        ] as const
+      ).map(([density, label, title]) => (
+        <button
+          key={density}
+          type="button"
+          aria-pressed={value === density}
+          title={title}
+          onClick={() => onChange(density)}
+          className={[
+            "min-h-tap px-2 py-1 text-[0.8125rem] leading-none whitespace-nowrap transition-colors md:min-h-0",
+            value === density
+              ? "bg-select text-ink"
+              : "text-ink-muted hover:bg-surface-raised hover:text-ink",
+          ].join(" ")}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
   );
 }
 

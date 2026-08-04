@@ -29,6 +29,7 @@ import {
   actualStartColumn,
   assigneeColumn,
   categoryColumn,
+  typeColumn,
   completedColumn,
   contextsColumn,
   costColumn,
@@ -126,6 +127,7 @@ function buildColumns(
     priorityColumn(),
     nameColumn({ dragHandle: true }),
     categoryColumn(),
+    typeColumn(),
     {
       id: "tasks",
       label: "Tasks",
