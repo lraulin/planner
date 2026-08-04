@@ -123,6 +123,15 @@ describe("parsePriority", () => {
     expect(parsePriority(" a1 ")).toEqual({ letter: "A", rank: 1 });
   });
 
+  it("maps Achieve's aa shortcut to A1", () => {
+    // Release log 1.1.10: "Use 'aa' as a shortcut for typing priority a1".
+    expect(parsePriority("aa")).toEqual({ letter: "A", rank: 1 });
+    expect(parsePriority("AA")).toEqual({ letter: "A", rank: 1 });
+    expect(parsePriority(" aa ")).toEqual({ letter: "A", rank: 1 });
+    // Not generalized — only aa is documented.
+    expect(parsePriority("bb")).toBeUndefined();
+  });
+
   it("clears the priority on empty input", () => {
     expect(parsePriority("")).toEqual({ letter: null, rank: null });
   });
@@ -131,6 +140,5 @@ describe("parsePriority", () => {
     expect(parsePriority("E")).toBeUndefined();
     expect(parsePriority("A123")).toBeUndefined();
     expect(parsePriority("1A")).toBeUndefined();
-    expect(parsePriority("AA")).toBeUndefined();
   });
 });

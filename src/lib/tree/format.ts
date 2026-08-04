@@ -114,12 +114,19 @@ export function formatPriority(
 /**
  * Reads "A1" or "A" back into its parts. Empty input clears the priority; anything
  * unrecognised returns `undefined`, so a typo reverts rather than silently clearing.
+ *
+ * Achieve also accepts `aa` as a typing shortcut for `A1` (home-row convenience —
+ * no shift needed to reach `1`). See `docs/achieve-planner/release-log.txt`
+ * (1.1.10).
  */
 export function parsePriority(
   text: string,
 ): { letter: PriorityLetter | null; rank: number | null } | undefined {
   const input = text.trim().toUpperCase();
   if (input === "") return { letter: null, rank: null };
+
+  // Achieve shortcut: "aa" → A1. Not generalized to bb/cc/dd — release note names only aa.
+  if (input === "AA") return { letter: "A", rank: 1 };
 
   const match = /^([ABCD])(\d{1,2})?$/.exec(input);
   if (!match) return undefined;
