@@ -7,7 +7,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { ModalShell } from "@/components/detail/ModalShell";
-import type { ColumnMeta } from "./columns";
+import { fieldNameOf, type ColumnMeta } from "./columns";
 
 const FIELD_MIME = "application/x-planner-show-field";
 
@@ -452,7 +452,7 @@ function FieldList({
                   >
                     ⋮⋮
                   </span>
-                  <span className="min-w-0 flex-1 truncate">{column.label}</span>
+                  <span className="min-w-0 flex-1 truncate">{fieldNameOf(column)}</span>
                   {locked && side === "shown" && (
                     <span className="flex-none text-[0.6875rem] text-ink-faint">
                       required

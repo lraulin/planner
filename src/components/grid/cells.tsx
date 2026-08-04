@@ -445,8 +445,14 @@ export function StateCell({
 }
 
 /**
- * Narrow twin of `StateCell` for the Projects / Tasks Abbreviated State column — same
- * select, same write path, codes instead of full labels in the closed control.
+ * Narrow twin of `StateCell` for the Abbreviated State column — same write path, the
+ * two-letter code in the cell.
+ *
+ * A native `<select>` shows the selected option's own text, so a cell that reads `NS` and
+ * a list that reads `Not Started` cannot be the same string. Pairing them (`NS — Not
+ * Started`) is the worst of both: as long as the full label, and no clearer. So the code
+ * is drawn as text and the select sits transparent on top of it, carrying full labels for
+ * the dropdown and for screen readers.
  */
 export function AbbrStateCell({
   node,
@@ -456,19 +462,27 @@ export function AbbrStateCell({
   onChange: (state: NodeState) => void;
 }) {
   return (
-    <select
-      value={node.state}
-      onClick={(event) => event.stopPropagation()}
-      onChange={(event) => onChange(event.target.value as NodeState)}
-      aria-label={`State: ${STATE_LABELS[node.state]}`}
-      className="w-full cursor-pointer truncate border-none bg-transparent text-center text-[0.75rem] font-medium text-ink-muted focus:text-ink"
-    >
-      {STATE_OPTIONS.map((option) => (
-        <option key={option.value} value={option.value}>
-          {STATE_CODES[option.value]} — {option.label}
-        </option>
-      ))}
-    </select>
+    <span className="relative block w-full">
+      <select
+        value={node.state}
+        onClick={(event) => event.stopPropagation()}
+        onChange={(event) => onChange(event.target.value as NodeState)}
+        aria-label={`State: ${STATE_LABELS[node.state]}`}
+        className="peer absolute inset-0 h-full w-full cursor-pointer border-none bg-transparent text-[0.75rem] opacity-0"
+      >
+        {STATE_OPTIONS.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      <span
+        aria-hidden
+        className="pointer-events-none block truncate text-center text-[0.75rem] font-medium text-ink-muted peer-focus:text-ink"
+      >
+        {STATE_CODES[node.state]}
+      </span>
+    </span>
   );
 }
 

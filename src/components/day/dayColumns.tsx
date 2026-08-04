@@ -3,7 +3,7 @@
 import type { NodeState, PriorityLetter } from "@/db/schema";
 import { LetterRankCell } from "@/components/grid/LetterRankCell";
 import type { ColumnDef } from "@/components/grid/columns";
-import { STATE_CODES, STATE_LABELS, STATE_OPTIONS } from "@/lib/tree/hierarchy";
+import { STATE_LABELS, STATE_OPTIONS } from "@/lib/tree/hierarchy";
 import type { DailyItemView } from "@/lib/day/types";
 
 /**
@@ -178,8 +178,9 @@ export const DAY_COLUMNS: ColumnDef<DayColumnCtx, DailyItemView>[] = [
   {
     id: "state",
     label: "State",
-    width: "5rem",
-    align: "center",
+    // The day list carries one State column, so it is the spelled-out one: a bare code has
+    // nothing beside it to decode it, and code-plus-label is just a longer label.
+    width: "7rem",
     render: (row, ctx) => (
       <select
         value={row.node.state}
@@ -188,11 +189,11 @@ export const DAY_COLUMNS: ColumnDef<DayColumnCtx, DailyItemView>[] = [
           ctx.onSetState(row.node.id, event.target.value as NodeState)
         }
         aria-label={`State: ${STATE_LABELS[row.node.state]}`}
-        className="w-full cursor-pointer truncate border-none bg-transparent text-center text-[0.75rem] font-medium text-ink-muted focus:text-ink"
+        className="w-full cursor-pointer truncate border-none bg-transparent text-[0.75rem] text-ink-muted focus:text-ink"
       >
         {STATE_OPTIONS.map((option) => (
           <option key={option.value} value={option.value}>
-            {STATE_CODES[option.value]} — {option.label}
+            {option.label}
           </option>
         ))}
       </select>

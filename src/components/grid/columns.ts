@@ -26,6 +26,14 @@ export type FilterKind = "text" | "priority" | "date" | "enum";
 export type ColumnDef<TCtx = unknown, TRow = OutlineNode> = {
   id: string;
   label: string;
+  /**
+   * Name used where a column is *chosen* rather than displayed — Show Fields and the
+   * advanced filter's column dropdown. Achieve ships two State columns, wide and narrow,
+   * and heads both of them "State"; the header has the cells under it to disambiguate,
+   * a list of field names does not. Defaults to `label`, which is right for every column
+   * whose header is already unique.
+   */
+  fieldLabel?: string;
   /** A CSS grid track size, e.g. `minmax(16rem,1fr)` or `3rem`. */
   width: string;
   align?: ColumnAlign;
@@ -76,6 +84,8 @@ export type ColumnDef<TCtx = unknown, TRow = OutlineNode> = {
 export type ColumnMeta = {
   id: string;
   label: string;
+  /** Name for pick-lists — see `ColumnDef.fieldLabel`. */
+  fieldLabel?: string;
   width: string;
   align?: ColumnAlign;
   /** Presence, not shape: the header only asks whether the column can sort or filter. */
@@ -105,6 +115,11 @@ export function buildGridTemplate(
       return override === undefined ? column.width : `${override}px`;
     })
     .join(" ");
+}
+
+/** What to call a column in a list of fields to pick from. */
+export function fieldNameOf(column: Pick<ColumnMeta, "label" | "fieldLabel">): string {
+  return column.fieldLabel ?? column.label;
 }
 
 export function alignClass(align: ColumnAlign | undefined): string {

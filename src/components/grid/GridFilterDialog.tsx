@@ -14,7 +14,7 @@ import {
   type CrossColumnFilter,
   type CrossCondition,
 } from "@/lib/grid/crossFilter";
-import type { ColumnMeta } from "./columns";
+import { fieldNameOf, type ColumnMeta } from "./columns";
 
 /**
  * The grid's advanced filter: one And/Or expression whose conditions may each name a
@@ -164,7 +164,10 @@ function GridFilterDialogBody({
     }));
   };
 
-  const preview = describeCrossFilter(draft, (id) => byId.get(id)?.label ?? id);
+  const preview = describeCrossFilter(draft, (id) => {
+    const column = byId.get(id);
+    return column ? fieldNameOf(column) : id;
+  });
 
   const hiddenInUse = draft.conditions.some(
     (condition) => byId.has(condition.columnId) && !visible.has(condition.columnId),
@@ -243,7 +246,7 @@ function GridFilterDialogBody({
                       )}
                       {filterable.map((entry) => (
                         <option key={entry.id} value={entry.id}>
-                          {entry.label}
+                          {fieldNameOf(entry)}
                           {visible.has(entry.id) ? "" : " · hidden"}
                         </option>
                       ))}

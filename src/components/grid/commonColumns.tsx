@@ -134,12 +134,19 @@ export function deadlineColumn(): ColumnDef<OutlineColumnCtx> {
   };
 }
 
-/** Achieve's two-letter State code — `NS`, `IP`, `C`. */
+/**
+ * Achieve's two-letter State code — `NS`, `IP`, `C`. Heads "State" like its wide twin;
+ * only Show Fields and the filter builder call it "Abbreviated State", where the two have
+ * to be told apart.
+ */
 export function abbrStateColumn(): ColumnDef<OutlineColumnCtx> {
   return {
     id: "abbrState",
     label: "State",
-    width: "3.5rem",
+    fieldLabel: "Abbreviated State",
+    // Wide enough for the "State" header to render unabbreviated — a column headed "Sta…"
+    // cannot do the disambiguating the shared header name relies on.
+    width: "4.25rem",
     align: "center",
     filterKind: "enum",
     // Filters on the code, because that is what the cell shows and what stored filters
