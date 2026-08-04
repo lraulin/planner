@@ -1,10 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { NodeItem, NodeItemKind } from "@/db/schema";
 import { toDateKey } from "@/lib/schedule/geometry";
 import { formatPriority } from "@/lib/tree/format";
 import type { NodeItemValues } from "@/lib/detail/types";
+import {
+  cycleItemSort,
+  defaultItemSort,
+  sortItems,
+  type ItemSort,
+} from "@/lib/detail/itemSort";
 import { normalizeHttpUrl } from "@/lib/url/pageTitle";
 import {
   CheckboxField,
@@ -32,6 +38,10 @@ import {
  * form. We expand the row in place instead: `ux-principles.md` calls stacked modals the part
  * of Achieve's design worth leaving behind.
  *
+ * Lists with a Pri column open sorted by priority (Achieve's default). Every summary header
+ * is clickable and cycles unsorted → asc → desc → unsorted like the main grids. Sorting is
+ * display-only; ↑/↓ still rewrite stored `sortKey` order and only work when sort is cleared.
+ *
  * Keyboard follows the outline's conventions, since the two sit inches apart: `Insert` (or
  * `Cmd+Enter`) adds a row, `Enter` opens the selected one, `Delete` removes it.
  */
@@ -54,6 +64,13 @@ export function ItemList({
 }) {
   const config = ITEM_KINDS[kind];
   const [openId, setOpenId] = useState<string | null>(null);
+  const [sort, setSort] = useState<ItemSort | null>(() =>
+    defaultItemSort(config.columns),
+  );
+
+  const displayItems = useMemo(() => sortItems(items, sort), [items, sort]);
+  // Manual reorder only makes sense against stored order, not a temporary column sort.
+  const canReorder = sort === null;
 
   return (
     <section className="flex flex-col gap-2">
@@ -78,21 +95,35 @@ export function ItemList({
         </p>
       ) : (
         <div className="overflow-hidden rounded border border-rule">
-          <div
-            className="flex items-center gap-3 border-b border-rule bg-surface-raised px-3 py-1.5 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted"
-            aria-hidden
-          >
-            {config.columns.map((column) => (
-              <span key={column} className={columnClass(column)}>
-                {columnLabel(config, column)}
-              </span>
-            ))}
+          <div className="flex items-center gap-3 border-b border-rule bg-surface-raised px-3 py-1.5 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
+            {config.columns.map((column) => {
+              const active = sort?.column === column ? sort.direction : null;
+              return (
+                <button
+                  key={column}
+                  type="button"
+                  onClick={() => setSort((current) => cycleItemSort(current, column))}
+                  className={`${columnClass(column)} min-w-0 cursor-pointer truncate uppercase tracking-wider hover:text-ink ${
+                    column === "priority" ||
+                    column === "severity" ||
+                    column === "probability" ||
+                    column === "score"
+                      ? ""
+                      : "text-left"
+                  }`}
+                  aria-label={`Sort by ${columnLabel(config, column)}`}
+                >
+                  {columnLabel(config, column)}
+                  {active === "asc" ? " ↑" : active === "desc" ? " ↓" : ""}
+                </button>
+              );
+            })}
             {/* Spacer matching the row-controls column. */}
             <span className="w-24 flex-none md:w-16" />
           </div>
 
           <ul>
-            {items.map((item, index) => (
+            {displayItems.map((item, index) => (
               <li key={item.id} className="border-b border-rule/60 last:border-b-0">
                 <div
                   className="flex items-center gap-3 px-3 py-1.5 text-[0.8125rem] hover:bg-surface-raised/60"
@@ -131,14 +162,16 @@ export function ItemList({
                     <RowButton
                       label="Move up"
                       onClick={() => onMove(item.id, "up")}
-                      disabled={busy || index === 0}
+                      disabled={busy || !canReorder || index === 0}
                     >
                       ↑
                     </RowButton>
                     <RowButton
                       label="Move down"
                       onClick={() => onMove(item.id, "down")}
-                      disabled={busy || index === items.length - 1}
+                      disabled={
+                        busy || !canReorder || index === displayItems.length - 1
+                      }
                     >
                       ↓
                     </RowButton>

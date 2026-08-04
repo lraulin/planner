@@ -1,0 +1,94 @@
+import type { NodeItem } from "@/db/schema";
+import { encodePriority } from "@/lib/achieve/encodings";
+import {
+  compareSortValues,
+  type SortDirection,
+  type SortValue,
+} from "@/lib/grid/sortRows";
+import { toDateKey } from "@/lib/schedule/geometry";
+
+/**
+ * Client-side sort for the detail form's repeating lists (Benefits, Objectives, Risks, …).
+ *
+ * Achieve opens these grids ordered by priority. We keep that default when the kind has a
+ * Pri column, and let any summary column become the active sort via clickable headers —
+ * the same unsorted → asc → desc → unsorted cycle the main grids use.
+ *
+ * Sorting is display-only: it never rewrites `sortKey`. Manual ↑/↓ reorder stays the path
+ * that changes stored order, and is only meaningful when no column sort is active.
+ */
+
+/** Column keys the list can sort on — matches the summary columns on each kind. */
+export type ItemSortColumn = "priority" | keyof NodeItem;
+
+export type ItemSort = {
+  column: ItemSortColumn;
+  direction: SortDirection;
+};
+
+/** Priority ascending when the list shows Pri; otherwise stored order. */
+export function defaultItemSort(columns: readonly ItemSortColumn[]): ItemSort | null {
+  return columns.includes("priority") ? { column: "priority", direction: "asc" } : null;
+}
+
+/**
+ * Achieve-style header cycle: first click on a column sorts ascending; a second click
+ * flips to descending; a third clears the sort and returns to stored order. Clicking a
+ * different column starts fresh at ascending.
+ */
+export function cycleItemSort(
+  current: ItemSort | null,
+  column: ItemSortColumn,
+): ItemSort | null {
+  if (current?.column !== column) return { column, direction: "asc" };
+  if (current.direction === "asc") return { column, direction: "desc" };
+  return null;
+}
+
+/**
+ * Cell value used for comparison. Mirrors the main grid's priority encoding so A1 < A2
+ * < A10 < B, blanks sort last, and dates / numbers / booleans compare as themselves.
+ */
+export function itemSortValue(item: NodeItem, column: ItemSortColumn): SortValue {
+  if (column === "priority") {
+    if (!item.priorityLetter) return null;
+    return encodePriority({
+      letter: item.priorityLetter,
+      rank: item.priorityRank,
+    });
+  }
+
+  const value = item[column];
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "boolean") return value ? 1 : 0;
+  if (value instanceof Date) return toDateKey(value);
+  if (typeof value === "number") return value;
+  return String(value).toLowerCase();
+}
+
+/**
+ * Stable sort of a list under the active sort. `null` sort returns the input order
+ * (stored `sortKey` order from the query).
+ */
+export function sortItems(items: NodeItem[], sort: ItemSort | null): NodeItem[] {
+  if (!sort || items.length <= 1) return items;
+
+  const factor = sort.direction === "asc" ? 1 : -1;
+  // Stable: decorate with original index so ties keep stored order.
+  return items
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => {
+      const left = itemSortValue(a.item, sort.column);
+      const right = itemSortValue(b.item, sort.column);
+      // Nulls last in both directions (same rule as the main grid).
+      if (left == null || right == null) {
+        const blank = compareSortValues(left, right);
+        if (blank !== 0) return blank;
+      } else {
+        const cmp = compareSortValues(left, right) * factor;
+        if (cmp !== 0) return cmp;
+      }
+      return a.index - b.index;
+    })
+    .map(({ item }) => item);
+}
