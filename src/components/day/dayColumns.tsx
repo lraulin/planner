@@ -131,6 +131,9 @@ export const DAY_COLUMNS: ColumnDef<DayColumnCtx, DailyItemView>[] = [
   {
     id: "check",
     label: "",
+    // The header is a tick box with no room for a word; every list that *names* a field —
+    // Show Fields, the column menu — needs one anyway.
+    fieldLabel: "Done",
     width: "2rem",
     align: "center",
     hideable: false,

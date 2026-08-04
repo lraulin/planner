@@ -98,6 +98,27 @@ export type ColumnMeta = {
 };
 
 /**
+ * The layout commands a column header can issue: the header menu's Move / Hide / Show
+ * fields / Reset items, and the drag that reorders columns.
+ *
+ * One bundle rather than six props because every one of them is the same object on
+ * `GridState` (`useGridState` returns it ready-made), and a grid that cannot persist a
+ * column layout should not be able to offer half a menu. Omit it and the header keeps the
+ * items it can honour on its own — sort, filter, reset width.
+ */
+export type ColumnControls = {
+  show: (id: string, atIndex?: number) => void;
+  hide: (id: string) => void;
+  move: (id: string, direction: "up" | "down") => void;
+  /** Land `id` at `toIndex`, measured against the order including `id` itself. */
+  place: (id: string, toIndex: number) => void;
+  /** Back to the view's preset column set, order and widths. */
+  resetColumns: () => void;
+  /** The whole `grid:{tabId}` scope: columns, filters, sort, groups, density. */
+  resetGrid: () => void;
+};
+
+/**
  * CSS `grid-template-columns` value for the visible set.
  *
  * A stored override wins over the column's declared track. Overrides are pixel numbers

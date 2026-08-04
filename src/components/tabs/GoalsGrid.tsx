@@ -304,6 +304,7 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         enableSort
         sorts={gridState.sorts}
         onSortChange={gridState.toggleSort}
+        onSetSort={gridState.setSort}
         filters={gridState.filters}
         onFilterChange={gridState.setFilter}
         advancedFilter={gridState.advancedFilter}
@@ -313,6 +314,7 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         widths={gridState.widths}
         onResizeColumn={gridState.setWidth}
         onResetColumnWidth={gridState.clearWidth}
+        columnControls={gridState.columnControls}
         collapsedGroups={gridState.collapsedGroups}
         onToggleGroup={gridState.toggleGroup}
         onGroupIdsChange={setGroupIds}

@@ -16,6 +16,11 @@ export type MenuItem =
       label: string;
       /** Printed on the right, e.g. "⌥↑". Purely informational. */
       shortcut?: string;
+      /**
+       * Hover explanation. Worth writing on a **disabled** item especially — "this column
+       * cannot be hidden" is the difference between an unavailable control and a broken one.
+       */
+      title?: string;
       disabled?: boolean;
       destructive?: boolean;
       onSelect: () => void;
@@ -167,6 +172,7 @@ export function ContextMenu({
             type="button"
             role="menuitem"
             disabled={item.disabled}
+            title={item.title}
             onClick={() => choose(item)}
             onMouseEnter={() => setActive(index)}
             className={[

@@ -34,9 +34,14 @@ rank among the destination parent's children (`useTreeRowDrag`, `lib/tree/outlin
   rather than silently refusing.
 - Drag is **desktop-only**. Below `md` the equivalent lives in the long-press menu — see
   `responsive.md`. Never make drag the only path to an outcome.
-- Do not overload the drag gesture for grid configuration. A drag-a-column-header-into-a-zone
-  Group By panel (AG Grid's pattern) competes with row drag; grouping is a toolbar picker
-  here for exactly that reason.
+- **Dragging a column header reorders columns**, and is the one configuration gesture that
+  earns its place: it starts on the header label, not on a row, so it cannot be confused
+  with a row drag, and its outcome is also on the column menu as Move left / Move right.
+  The header row accepts a drop only while a header drag is in flight, so a row dragged
+  over it gets the browser's no-drop cursor rather than looking like a column move.
+- Do **not** overload the gesture any further. A drag-a-column-header-into-a-zone Group By
+  panel (AG Grid's pattern) is still out: it gives one gesture two meanings depending on
+  where you let go, and grouping is a toolbar picker here for exactly that reason.
 
 ## Grouping
 
@@ -81,6 +86,41 @@ Show Fields hides a column. It does not un-ask the question you asked about it.
 - **Sort is the exception**: sort keys resolve against the _visible_ columns. A filter on a
   hidden column is legible from its chip; a sort on one is a grid that has silently
   rearranged itself.
+
+## The column menu is where everything that acts on a column lives
+
+Every header cell carries one `▾` button (`ColumnMenu.tsx`) opening a **tabbed** popover:
+**Filter** (the funnel described below) and **Menu** (sort, layout, and the grid-wide column
+dialogs). Right-clicking anywhere on a header cell opens the same menu, the way a Windows
+list header does.
+
+The problem it solves is that the controls used to be grouped by _mechanism_ rather than by
+_target_: sort was a click on the label, filter was a funnel, hiding and reordering were in a
+toolbar dialog, and resetting a width was a double-click on a handle you could not see.
+Knowing what you wanted to do told you nothing about where to do it.
+
+- **One button, not two.** A separate funnel and menu do not fit beside a label in a 48px
+  header cell (Priority, Icon). Tabs are how AG Grid and MUI X solve the same problem.
+- **The Filter tab opens by default on any column that has one**, so the button costs
+  exactly what the funnel cost on the path taken most. Everything else is one tab away
+  rather than somewhere else entirely.
+- **Items are disabled, not omitted**, with a `title` saying why — "This column cannot be
+  hidden" is the difference between an unavailable control and a broken one. Same posture as
+  `(Select all)` when nothing is filtered. The rules are pure and tested in
+  `lib/grid/columnMenu.ts`; the component asks and renders, and never re-derives one.
+- **The menu tab must never scroll.** A menu whose last two items are below a fold looks like
+  a menu that does not have them. Only the filter's value list scrolls.
+- **The gestures on the header are shortcuts to menu items, never the only path.** Click to
+  sort, Shift-click to add a key, drag to reorder, double-click the handle to reset a width —
+  each also appears in the menu, which is where the keyboard and the un-initiated find it.
+- Grid-wide entries (`Show fields…`, `Reset columns`) repeat what the toolbar offers **on
+  purpose**. That repetition is the feature; it is what stops the menu from being a partial
+  answer that sends you to the toolbar anyway.
+
+`DataGrid` receives the layout commands as one `columnControls` bundle (`ColumnControls`,
+returned ready-made by `useGridState`) rather than six props at eight call sites. A grid that
+cannot persist a column layout should not be able to offer half a menu — omit the bundle and
+those items are visibly unavailable.
 
 ## Progressive disclosure: three rungs, in this order
 
@@ -229,16 +269,17 @@ Per `development/testing.md`: the logic lives in `src/lib/grid/**` and `src/lib/
 with a test beside it, and there are **no React component tests**. The pure modules worth
 knowing about:
 
-| Module                     | What it owns                                         |
-| -------------------------- | ---------------------------------------------------- |
-| `lib/grid/sortRows.ts`     | Hierarchy-preserving multi-key sort                  |
-| `lib/grid/customFilter.ts` | Operator vocabulary and per-column expressions       |
-| `lib/grid/crossFilter.ts`  | Cross-column And/Or advanced filter                  |
-| `lib/grid/search.ts`       | Quick search matching                                |
-| `lib/grid/chips.ts`        | What the chip bar says                               |
-| `lib/grid/distinct.ts`     | Distinct values, shared by funnel and builder        |
-| `lib/settings/grid.ts`     | The persisted shape, its defaults and its migrations |
-| `lib/tree/slice.ts`        | Row slice, group dimensions and header counts        |
+| Module                     | What it owns                                                 |
+| -------------------------- | ------------------------------------------------------------ |
+| `lib/grid/sortRows.ts`     | Hierarchy-preserving multi-key sort                          |
+| `lib/grid/columnMenu.ts`   | Which column-menu items are available, and header drag slots |
+| `lib/grid/customFilter.ts` | Operator vocabulary and per-column expressions               |
+| `lib/grid/crossFilter.ts`  | Cross-column And/Or advanced filter                          |
+| `lib/grid/search.ts`       | Quick search matching                                        |
+| `lib/grid/chips.ts`        | What the chip bar says                                       |
+| `lib/grid/distinct.ts`     | Distinct values, shared by funnel and builder                |
+| `lib/settings/grid.ts`     | The persisted shape, its defaults and its migrations         |
+| `lib/tree/slice.ts`        | Row slice, group dimensions and header counts                |
 
 A test earns its place if it would fail on a plausible mistake. The mistakes this area
 actually makes are: a filter that silently matches nothing, a sort that lifts a child above

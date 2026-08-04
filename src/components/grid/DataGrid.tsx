@@ -17,6 +17,7 @@ import { TYPE_LABELS } from "@/lib/tree/hierarchy";
 import {
   alignClass,
   buildGridTemplate,
+  type ColumnControls,
   type ColumnDef,
   type NodeGridRow,
 } from "./columns";
@@ -164,6 +165,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   enableSort = false,
   sorts: controlledSorts,
   onSortChange,
+  onSetSort,
   filters: controlledFilters,
   onFilterChange,
   advancedFilter = null,
@@ -173,6 +175,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   widths,
   onResizeColumn,
   onResetColumnWidth,
+  columnControls,
   collapsedGroups,
   onToggleGroup,
   onGroupIdsChange,
@@ -223,6 +226,12 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   sorts?: SortState;
   /** `additive` is a Shift-click: refine the existing sort rather than replacing it. */
   onSortChange?: (columnId: string, additive: boolean) => void;
+  /**
+   * Set one column's sort key outright, or drop it with `null`. The header's cycle cannot
+   * express "make this descending" in one step, and a menu item that has to be clicked twice
+   * to reach the direction it names is not a menu item.
+   */
+  onSetSort?: (columnId: string, direction: GridSortKey["direction"] | null) => void;
   filters?: Record<string, ColumnFilter>;
   onFilterChange?: (columnId: string, filter: ColumnFilter) => void;
   /**
@@ -250,6 +259,12 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   /** Omit to leave columns unresizable, as a grid with nowhere to store widths should. */
   onResizeColumn?: (columnId: string, width: number) => void;
   onResetColumnWidth?: (columnId: string) => void;
+  /**
+   * Show / hide / move / reset for the column set — what the header menu's layout items and
+   * header drag-to-reorder act through. `useGridState` returns this ready-made as
+   * `columnControls`. Omit it and those items are visibly unavailable rather than missing.
+   */
+  columnControls?: ColumnControls;
   /** Group ids the user has collapsed. Omitted means every group is open. */
   collapsedGroups?: Set<string>;
   onToggleGroup?: (groupId: string) => void;
@@ -504,6 +519,26 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
     [onSortChange],
   );
 
+  /**
+   * The column menu's Sort ascending / descending / Clear sort. Replaces the whole sort with
+   * this one key, matching a plain header click — accumulating keys stays Shift-click's job,
+   * so a menu pick can never quietly leave a stale secondary sort behind.
+   */
+  const handleSetSort = useCallback(
+    (columnId: string, direction: GridSortKey["direction"] | null) => {
+      if (onSetSort) {
+        onSetSort(columnId, direction);
+        return;
+      }
+      setOwnSorts((current) =>
+        direction === null
+          ? current.filter((entry) => entry.columnId !== columnId)
+          : [{ columnId, direction }],
+      );
+    },
+    [onSetSort],
+  );
+
   const handleFilterChange = useCallback(
     (columnId: string, filter: ColumnFilter) => {
       if (onFilterChange) {
@@ -612,15 +647,19 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
       {!compact && (
         <ColumnHeaderRow
           columns={columns}
+          allColumns={filterColumns}
           gridTemplate={gridTemplate}
           sorts={enableSort ? sorts : []}
           onSort={enableSort ? handleSort : undefined}
+          onSetSort={enableSort ? handleSetSort : undefined}
           filters={filters}
           onFilterChange={handleFilterChange}
           distinctValues={distinctValues}
           columnValues={columnValues}
           onResize={onResizeColumn}
           onResetWidth={onResetColumnWidth}
+          widths={widths}
+          controls={columnControls}
           enableFilters={enableFilters}
           leadingGutter
         />

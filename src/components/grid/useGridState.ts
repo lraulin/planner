@@ -13,11 +13,12 @@ import {
   type GridDensity,
   type GridSettings,
   type GridSort,
+  type SortDirection,
 } from "@/lib/settings/grid";
 import { EMPTY_CROSS_FILTER, type CrossColumnFilter } from "@/lib/grid/crossFilter";
 import { hideField, moveField, placeField, showField } from "@/lib/grid/fieldOrder";
 import { gridScope } from "@/lib/settings/scopes";
-import type { ColumnMeta } from "./columns";
+import type { ColumnControls, ColumnMeta } from "./columns";
 
 /**
  * Everything one grid tab remembers: which columns are shown and in what order and width,
@@ -370,6 +371,29 @@ export function useGridState<TCol extends ColumnMeta>(
     [patch],
   );
 
+  /**
+   * Set one column's sort key outright, or drop it with `null`. What the column menu's
+   * Sort ascending / Sort descending / Clear sort call.
+   *
+   * A direction **replaces** the whole sort, exactly as a plain header click does — a menu
+   * pick must not silently leave a secondary key behind that the user cannot see they
+   * chose. Clearing removes only this column's key and promotes whatever was under it, so
+   * dropping one criterion is not the same as abandoning the ordering.
+   */
+  const setSort = useCallback(
+    (columnId: string, direction: SortDirection | null) => {
+      patch((current) =>
+        direction === null
+          ? {
+              ...current,
+              sorts: current.sorts.filter((entry) => entry.columnId !== columnId),
+            }
+          : { ...current, sorts: [{ columnId, direction }] },
+      );
+    },
+    [patch],
+  );
+
   const clearSort = useCallback(() => {
     patch((current) => ({ ...current, sorts: [] }));
   }, [patch]);
@@ -410,6 +434,16 @@ export function useGridState<TCol extends ColumnMeta>(
     [patch],
   );
 
+  /**
+   * The layout commands bundled for `DataGrid`'s column menu and header drag-to-reorder.
+   * One object rather than six props at eight call sites, and memoized so the header row
+   * does not re-render on every keystroke elsewhere in the tab.
+   */
+  const columnControls: ColumnControls = useMemo(
+    () => ({ show, hide, move, place, resetColumns, resetGrid: reset }),
+    [show, hide, move, place, resetColumns, reset],
+  );
+
   return {
     columns,
     order,
@@ -420,6 +454,7 @@ export function useGridState<TCol extends ColumnMeta>(
     place,
     setOrder,
     resetColumns,
+    columnControls,
 
     widths: settings.widths,
     setWidth,
@@ -449,6 +484,7 @@ export function useGridState<TCol extends ColumnMeta>(
      */
     sort: settings.sorts[0] ?? null,
     toggleSort,
+    setSort,
     clearSort,
 
     groupBy: settings.groupBy ?? defaultGroupBy,

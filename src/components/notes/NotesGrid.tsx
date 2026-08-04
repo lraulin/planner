@@ -625,6 +625,7 @@ export function NotesGrid({
         enableSort
         sorts={gridState.sorts}
         onSortChange={gridState.toggleSort}
+        onSetSort={gridState.setSort}
         filters={gridState.filters}
         onFilterChange={gridState.setFilter}
         advancedFilter={gridState.advancedFilter}
@@ -634,6 +635,7 @@ export function NotesGrid({
         widths={gridState.widths}
         onResizeColumn={gridState.setWidth}
         onResetColumnWidth={gridState.clearWidth}
+        columnControls={gridState.columnControls}
         rowDrag={rowDrag}
         rowMenu={rowMenu}
         rowNumbers

@@ -1,4 +1,5 @@
 export type {
+  ColumnControls,
   ColumnDef,
   ColumnMeta,
   ColumnAlign,
@@ -21,6 +22,7 @@ export {
 } from "./cells";
 export { DataGrid } from "./DataGrid";
 export { ColumnHeaderRow } from "./ColumnHeader";
+export { ColumnMenuButton } from "./ColumnMenu";
 export { ShowFieldsDialog } from "./ShowFieldsDialog";
 export { useGridState, useIncludeDeferred, useTabView } from "./useGridState";
 export { useOptimisticNodes } from "./useOptimisticNodes";
