@@ -89,6 +89,31 @@ export async function createNodeItemAction(params: {
   });
 }
 
+/**
+ * Bulk-append rows from a client-parsed CSV. Returns how many were created so the list
+ * can show a short status line (metrics import uses the same shape).
+ */
+export async function importNodeItemsAction(params: {
+  nodeId: string;
+  kind: NodeItemKind;
+  rows: NodeItemValues[];
+}): Promise<{ ok: true; data: { created: number } } | { ok: false; error: string }> {
+  try {
+    const userId = await getCurrentUserId();
+    if (params.rows.length === 0) {
+      throw new Error("No rows to import.");
+    }
+    if (params.rows.length > 2000) {
+      throw new Error("Too many rows (max 2000 per import).");
+    }
+    const data = await detail.importNodeItems({ userId, ...params });
+    revalidatePath("/", "layout");
+    return { ok: true, data: { created: data.created } };
+  } catch (error) {
+    return { ok: false, error: message(error) };
+  }
+}
+
 export async function updateNodeItemAction(
   itemId: string,
   values: NodeItemValues,

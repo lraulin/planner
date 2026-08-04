@@ -1,16 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, type ChangeEvent as ReactChangeEvent } from "react";
 import type { NodeItem, NodeItemKind } from "@/db/schema";
-import { toDateKey } from "@/lib/schedule/geometry";
-import { formatPriority } from "@/lib/tree/format";
-import type { NodeItemValues } from "@/lib/detail/types";
+import { itemsToCsv, parseItemsCsv } from "@/lib/detail/itemCsv";
 import {
   cycleItemSort,
   defaultItemSort,
   sortItems,
   type ItemSort,
 } from "@/lib/detail/itemSort";
+import type { NodeItemValues } from "@/lib/detail/types";
+import { toDateKey } from "@/lib/schedule/geometry";
+import { formatPriority } from "@/lib/tree/format";
 import { normalizeHttpUrl } from "@/lib/url/pageTitle";
 import {
   CheckboxField,
@@ -42,6 +43,10 @@ import {
  * is clickable and cycles unsorted → asc → desc → unsorted like the main grids. Sorting is
  * display-only; ↑/↓ still rewrite stored `sortKey` order and only work when sort is cleared.
  *
+ * CSV export/import uses the kind's full editor fields so a round-trip keeps descriptions
+ * and extras, not only the summary columns. Import appends; export follows the on-screen
+ * order (including the active sort).
+ *
  * Keyboard follows the outline's conventions, since the two sit inches apart: `Insert` (or
  * `Cmd+Enter`) adds a row, `Enter` opens the selected one, `Delete` removes it.
  */
@@ -52,6 +57,7 @@ export function ItemList({
   onChange,
   onDelete,
   onMove,
+  onImport,
   busy,
 }: {
   kind: NodeItemKind;
@@ -60,6 +66,9 @@ export function ItemList({
   onChange: (itemId: string, values: NodeItemValues) => void;
   onDelete: (item: NodeItem) => void;
   onMove: (itemId: string, direction: "up" | "down") => void;
+  onImport: (
+    rows: NodeItemValues[],
+  ) => Promise<{ ok: true; created: number } | { ok: false; error: string }>;
   busy: boolean;
 }) {
   const config = ITEM_KINDS[kind];
@@ -67,27 +76,116 @@ export function ItemList({
   const [sort, setSort] = useState<ItemSort | null>(() =>
     defaultItemSort(config.columns),
   );
+  const [status, setStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const csvImportRef = useRef<HTMLInputElement>(null);
 
   const displayItems = useMemo(() => sortItems(items, sort), [items, sort]);
   // Manual reorder only makes sense against stored order, not a temporary column sort.
   const canReorder = sort === null;
 
+  const exportCsv = () => {
+    const csv = itemsToCsv(config.fields, displayItems);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${config.title.replace(/[^\w.-]+/g, "_").toLowerCase()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importCsv = (event: ReactChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    // Allow re-selecting the same file later.
+    event.target.value = "";
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = typeof reader.result === "string" ? reader.result : "";
+      const parsed = parseItemsCsv(config.fields, text);
+      if (parsed.rows.length === 0) {
+        const first = parsed.errors[0];
+        setStatus(null);
+        setError(
+          first?.message ??
+            `No ${config.singular} rows found. Export first for a template header.`,
+        );
+        return;
+      }
+
+      void (async () => {
+        const result = await onImport(parsed.rows);
+        if (!result.ok) {
+          setStatus(null);
+          setError(result.error);
+          return;
+        }
+        const parts = [`Imported ${result.created}`];
+        if (parsed.errors.length > 0) {
+          parts.push(`${parsed.errors.length} invalid row(s) ignored`);
+        }
+        setError(null);
+        setStatus(parts.join("; ") + ".");
+      })();
+    };
+    reader.onerror = () => {
+      setStatus(null);
+      setError("Could not read the CSV file.");
+    };
+    reader.readAsText(file);
+  };
+
   return (
     <section className="flex flex-col gap-2">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <h3 className="text-[0.75rem] font-semibold uppercase tracking-wider text-ink">
           {config.title}
         </h3>
         <span className="tabular text-[0.75rem] text-ink-faint">{items.length}</span>
-        <button
-          type="button"
-          onClick={onCreate}
-          disabled={busy}
-          className="ml-auto rounded border border-rule px-2 py-1 text-[0.75rem] leading-none text-ink transition-colors hover:border-rule-strong hover:bg-surface-raised disabled:opacity-40"
-        >
-          Add {config.singular}
-        </button>
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
+          <button
+            type="button"
+            onClick={exportCsv}
+            className="rounded border border-rule px-2 py-1 text-[0.75rem] leading-none text-ink-muted transition-colors hover:border-rule-strong hover:bg-surface-raised hover:text-ink"
+          >
+            CSV Export…
+          </button>
+          <button
+            type="button"
+            onClick={() => csvImportRef.current?.click()}
+            disabled={busy}
+            className="rounded border border-rule px-2 py-1 text-[0.75rem] leading-none text-ink-muted transition-colors hover:border-rule-strong hover:bg-surface-raised hover:text-ink disabled:opacity-40"
+          >
+            CSV Import…
+          </button>
+          <input
+            ref={csvImportRef}
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={importCsv}
+          />
+          <button
+            type="button"
+            onClick={onCreate}
+            disabled={busy}
+            className="rounded border border-rule px-2 py-1 text-[0.75rem] leading-none text-ink transition-colors hover:border-rule-strong hover:bg-surface-raised disabled:opacity-40"
+          >
+            Add {config.singular}
+          </button>
+        </div>
       </div>
+
+      {(error || status) && (
+        <p
+          className={`text-[0.75rem] ${error ? "text-priority-a" : "text-ink-muted"}`}
+          role={error ? "alert" : "status"}
+        >
+          {error ?? status}
+        </p>
+      )}
 
       {items.length === 0 ? (
         <p className="rounded border border-dashed border-rule px-3 py-4 text-center text-[0.8125rem] text-ink-faint">

@@ -24,6 +24,7 @@ import type { OutlineNode } from "@/lib/tree/types";
 import type { NodeDetail, NodeDetailValues, NodeItemValues } from "@/lib/detail/types";
 import {
   createNodeItemAction,
+  importNodeItemsAction,
   deleteNodeItemAction,
   loadNodeDetailAction,
   moveNodeItemAction,
@@ -336,9 +337,26 @@ function DetailForm({
         onMove={(itemId, direction) =>
           runItemAction(() => moveNodeItemAction(itemId, direction))
         }
+        onImport={(rows) =>
+          new Promise((resolve) => {
+            startTransition(async () => {
+              const result = await importNodeItemsAction({
+                nodeId: detail.id,
+                kind,
+                rows,
+              });
+              if (!result.ok) {
+                resolve(result);
+                return;
+              }
+              await refreshItems();
+              resolve({ ok: true, created: result.data.created });
+            });
+          })
+        }
       />
     ),
-    [items, busy, detail.id, runItemAction],
+    [items, busy, detail.id, runItemAction, refreshItems, startTransition],
   );
 
   const formProps: DetailFormProps = useMemo(

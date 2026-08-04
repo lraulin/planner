@@ -1,6 +1,9 @@
+import { escapeCsvField, splitCsvLine } from "@/lib/csv/text";
 import { sortEntriesByDate } from "./derive";
 import { formatMetricNumber, isDateKey, parseMetricInput } from "./parse";
 import type { MetricEntryInput, MetricEntryView } from "./types";
+
+export { splitCsvLine };
 
 type EntryRow = Pick<
   MetricEntryView,
@@ -18,42 +21,7 @@ export type ParseCsvEntriesResult = {
 
 /** Escape one CSV field (RFC-style: quote when needed). */
 function field(value: string): string {
-  if (/[",\n\r]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
-  return value;
-}
-
-/**
- * Split a CSV line into fields. Handles quoted fields with commas and "" escapes.
- * Does not support multi-line quoted fields (export never produces them).
- */
-export function splitCsvLine(line: string): string[] {
-  const out: string[] = [];
-  let cur = "";
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (inQuotes) {
-      if (ch === '"') {
-        if (line[i + 1] === '"') {
-          cur += '"';
-          i++;
-        } else {
-          inQuotes = false;
-        }
-      } else {
-        cur += ch;
-      }
-    } else if (ch === '"') {
-      inQuotes = true;
-    } else if (ch === ",") {
-      out.push(cur);
-      cur = "";
-    } else {
-      cur += ch;
-    }
-  }
-  out.push(cur);
-  return out;
+  return escapeCsvField(value);
 }
 
 /** Normalize export labels / codes to the stored entry type. */

@@ -746,6 +746,45 @@ export async function createNodeItem(params: {
   });
 }
 
+export type ImportNodeItemsResult = {
+  created: number;
+  createdIds: string[];
+};
+
+/**
+ * Bulk-append list rows (CSV import path). Each row gets a new sort key at the end of
+ * its kind list. Empty input is a no-op; more than 2000 rows is rejected so a bad paste
+ * cannot balloon a single request.
+ */
+export async function importNodeItems(params: {
+  userId: string;
+  nodeId: string;
+  kind: NodeItemKind;
+  rows: readonly NodeItemValues[];
+}): Promise<ImportNodeItemsResult> {
+  const { userId, nodeId, kind, rows } = params;
+  if (rows.length === 0) return { created: 0, createdIds: [] };
+  if (rows.length > 2000) {
+    throw new Error("Too many rows (max 2000 per import).");
+  }
+
+  return db.transaction(async (tx) => {
+    await requireNode(tx, userId, nodeId);
+    const createdIds: string[] = [];
+
+    for (const values of rows) {
+      const sortKey = await sortKeyFor(tx, userId, nodeId, kind, { at: "last" });
+      const [created] = await tx
+        .insert(nodeItems)
+        .values({ userId, nodeId, kind, sortKey, ...pick(values, ITEM_KEYS) })
+        .returning({ id: nodeItems.id });
+      createdIds.push(created.id);
+    }
+
+    return { created: createdIds.length, createdIds };
+  });
+}
+
 export async function updateNodeItem(
   userId: string,
   itemId: string,

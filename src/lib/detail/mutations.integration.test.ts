@@ -16,6 +16,7 @@ import {
   autofillAttachmentTitleFromUrl,
   createNodeItem,
   deleteNodeItem,
+  importNodeItems,
   moveNodeItem,
   saveNodeDetail,
   updateNodeItem,
@@ -816,6 +817,46 @@ describeDb("detail mutations", () => {
 
       await expect(
         createNodeItem({ userId: otherUserId, nodeId: projectId, kind: "risk" }),
+      ).rejects.toThrow(`Node not found: ${projectId}`);
+    });
+
+    it("bulk-imports CSV rows at the end of the list", async () => {
+      await createNodeItem({
+        userId,
+        nodeId: projectId,
+        kind: "risk",
+        values: { title: "Existing" },
+      });
+
+      const result = await importNodeItems({
+        userId,
+        nodeId: projectId,
+        kind: "risk",
+        rows: [
+          { title: "Imported A", priorityLetter: "A", priorityRank: 1 },
+          { title: "Imported B", severity: 5 },
+        ],
+      });
+
+      expect(result.created).toBe(2);
+      expect(await titlesOf("risk")).toEqual(["Existing", "Imported A", "Imported B"]);
+
+      const detail = await loadNodeDetail(userId, projectId);
+      const imported = detail?.items.find((item) => item.title === "Imported A");
+      expect(imported?.priorityLetter).toBe("A");
+      expect(imported?.priorityRank).toBe(1);
+    });
+
+    it("will not bulk-import onto another user's node", async () => {
+      const otherUserId = await makeUser();
+
+      await expect(
+        importNodeItems({
+          userId: otherUserId,
+          nodeId: projectId,
+          kind: "risk",
+          rows: [{ title: "Nope" }],
+        }),
       ).rejects.toThrow(`Node not found: ${projectId}`);
     });
 
