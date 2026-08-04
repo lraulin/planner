@@ -172,6 +172,7 @@ export const DAY_COLUMNS: ColumnDef<DayColumnCtx, DailyItemView>[] = [
     hideable: false,
     render: (row, ctx) => <TitleCell item={row.node} ctx={ctx} />,
     sortValue: (row) => row.node.title.toLowerCase(),
+    filterKind: "text",
     filterValue: (row) => row.node.title,
   },
   {
@@ -196,6 +197,7 @@ export const DAY_COLUMNS: ColumnDef<DayColumnCtx, DailyItemView>[] = [
         ))}
       </select>
     ),
+    filterKind: "enum",
     filterValue: (row) => STATE_LABELS[row.node.state],
   },
   {
@@ -210,6 +212,9 @@ export const DAY_COLUMNS: ColumnDef<DayColumnCtx, DailyItemView>[] = [
         {row.node.sourceName ?? ""}
       </span>
     ),
+    // The projects feeding today are a short, closed list — a checklist of them is the
+    // point of the column, not an accident of the data.
+    filterKind: "enum",
     filterValue: (row) => row.node.sourceName ?? "",
   },
 ];

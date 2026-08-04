@@ -5,7 +5,9 @@ import {
   filterOptions,
   matchesFilter,
   optionsFilter,
+  presetOptions,
   rowPassesFilters,
+  selectPreset,
   shiftDays,
   usesSetFilter,
   type ColumnFilter,
@@ -193,12 +195,42 @@ describe("filterOptions", () => {
 });
 
 describe("usesSetFilter", () => {
-  it("skips the value checklist for priority — ranges cover the bands", () => {
-    expect(usesSetFilter("priority")).toBe(false);
-    expect(usesSetFilter("date")).toBe(true);
+  it("offers the value checklist only where the values are a closed set", () => {
     expect(usesSetFilter("enum")).toBe(true);
-    expect(usesSetFilter("text")).toBe(true);
-    expect(usesSetFilter(undefined)).toBe(true);
+
+    // Open-ended or continuous: a list of the values present is a list of the rows.
+    expect(usesSetFilter("priority")).toBe(false);
+    expect(usesSetFilter("date")).toBe(false);
+    expect(usesSetFilter("text")).toBe(false);
+    expect(usesSetFilter(undefined)).toBe(false);
+  });
+});
+
+describe("presetOptions", () => {
+  it("gives every non-enum kind bands to pick from, and enums none", () => {
+    expect(presetOptions("enum")).toEqual([]);
+
+    expect(presetOptions("date").map((o) => o.id)).toContain("today-and-past");
+    expect(presetOptions("priority").map((o) => o.id)).toContain("only-as");
+
+    // Free text has no bands of its own, but "has a value at all" is still worth one click.
+    expect(presetOptions("text").map((o) => o.id)).toEqual(["blanks", "nonblanks"]);
+    expect(presetOptions(undefined).map((o) => o.id)).toEqual(["blanks", "nonblanks"]);
+  });
+
+  it("never offers bands and the checklist on the same column", () => {
+    for (const kind of ["text", "priority", "date", "enum", undefined] as const) {
+      expect(presetOptions(kind).length > 0).toBe(!usesSetFilter(kind));
+    }
+  });
+});
+
+describe("selectPreset", () => {
+  it("replaces the column's selection rather than adding to it", () => {
+    // Two date bands OR'd would widen the filter on a click that reads like narrowing it.
+    expect(selectPreset("today")).toEqual(optionsFilter(["today"]));
+    expect(selectPreset("past")).toEqual(optionsFilter(["past"]));
+    expect(filterActive(selectPreset("past"))).toBe(true);
   });
 });
 

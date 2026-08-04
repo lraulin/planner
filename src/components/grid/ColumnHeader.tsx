@@ -28,6 +28,7 @@ import {
   ALL_FILTER,
   filterActive,
   presetOptions,
+  selectPreset,
   usesSetFilter,
   type ColumnFilter,
   type FilterOption,
@@ -178,7 +179,7 @@ function FilterButton({
   active: boolean;
   /** Values this column holds and how many rows hold each. */
   values: ColumnValues | undefined;
-  /** Semantic bands for this kind (priority, deadline). Empty for most columns. */
+  /** Semantic bands for this kind (priority, date, blank/non-blank). Empty for enums. */
   presets: FilterOption[];
   /** Plain value list, for the custom-criteria dialog's operand picker. */
   distinctValues: string[];
@@ -208,7 +209,7 @@ function FilterButton({
 
   const customActive = isCustomFilter(filter) && filterActive(filter);
   const optionIds = isOptionsFilter(filter) ? filter.ids : [];
-  // Priority (and any future kind with open-ended ranks) skips the value checklist —
+  // Enum columns get the ticked value checklist; every other kind gets exclusive bands —
   // see `usesSetFilter`. Matching still accepts `value:…` ids if an old filter stored one.
   const showSetFilter = usesSetFilter(kind);
 
@@ -271,7 +272,9 @@ function FilterButton({
 
           <ul
             role="listbox"
-            aria-multiselectable
+            // Values are ticked independently; bands are one-at-a-time, so the popover must
+            // not advertise multi-select on a column that cannot do it.
+            aria-multiselectable={showSetFilter || undefined}
             aria-label={showSetFilter ? `${label} values` : `${label} ranges`}
             className="min-h-0 flex-1 overflow-auto py-1"
           >
@@ -343,15 +346,26 @@ function FilterButton({
 
             {presets.length > 0 && (
               <>
-                {/* Divider only when ranges sit under a value list; alone they are the list. */}
-                {showSetFilter && (
-                  <li
-                    aria-hidden
-                    className="mt-1 border-t border-rule px-2 pt-1.5 pb-0.5 text-[0.625rem] font-medium tracking-wider text-ink-faint uppercase"
+                {/*
+                  `(All)` is the only way out of a band, since picking one replaces the last
+                  rather than toggling it off — the same role `(Select all)` plays above a
+                  value checklist, which is why the two never appear together.
+                */}
+                <li>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={!active}
+                    disabled={!active}
+                    onClick={() => onChange(ALL_FILTER)}
+                    title={!active ? "Nothing is filtered out" : "Show every row again"}
+                    className="flex w-full items-center gap-2 border-b border-rule/60 px-2 py-1 text-left text-[0.8125rem] normal-case tracking-normal text-ink hover:bg-surface-raised disabled:cursor-default disabled:hover:bg-transparent"
                   >
-                    Ranges
-                  </li>
-                )}
+                    <Dot selected={!active} />
+                    <span className="min-w-0 flex-1 truncate font-medium">(All)</span>
+                  </button>
+                </li>
+
                 {presets.map((preset) => {
                   const selected = optionIds.includes(preset.id);
                   return (
@@ -360,7 +374,7 @@ function FilterButton({
                         type="button"
                         role="option"
                         aria-selected={selected}
-                        onClick={() => onChange(togglePreset(filter, preset.id))}
+                        onClick={() => onChange(selectPreset(preset.id))}
                         className={[
                           "flex w-full items-center gap-2 px-2 py-1 text-left text-[0.8125rem] normal-case tracking-normal",
                           selected
@@ -368,7 +382,7 @@ function FilterButton({
                             : "text-ink hover:bg-surface-raised",
                         ].join(" ")}
                       >
-                        <Tick state={selected ? "all" : "none"} />
+                        <Dot selected={selected} />
                         <span className="min-w-0 truncate">{preset.label}</span>
                       </button>
                     </li>
@@ -429,16 +443,24 @@ function Tick({ state }: { state: "all" | "some" | "none" }) {
 }
 
 /**
- * Toggle a semantic band. Bands are not part of the set list — they describe a range rather
- * than name a value — so they keep the plain add/remove behaviour, and picking one replaces
- * any custom criteria on the column.
+ * A band's indicator. Round rather than square on purpose: the shape is the only thing
+ * telling you that clicking a second band drops the first, where a tick beside a value
+ * promises it will add to what is already ticked.
  */
-function togglePreset(filter: ColumnFilter, id: string): ColumnFilter {
-  const current = isOptionsFilter(filter) ? filter.ids : [];
-  const next = current.includes(id)
-    ? current.filter((entry) => entry !== id)
-    : [...current.filter((entry) => entry !== "all"), id];
-  return next.length === 0 ? ALL_FILTER : optionsFilter(next);
+function Dot({ selected }: { selected: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={[
+        "flex h-3.5 w-3.5 flex-none items-center justify-center rounded-full border",
+        selected ? "border-select-edge bg-select-edge/20" : "border-rule-strong",
+      ].join(" ")}
+    >
+      <span
+        className={`h-1.5 w-1.5 rounded-full ${selected ? "bg-ink" : "bg-transparent"}`}
+      />
+    </span>
+  );
 }
 
 /**

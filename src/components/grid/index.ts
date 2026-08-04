@@ -35,7 +35,7 @@ export {
   optionsFilter,
   rowPassesFilters,
   PRIORITY_PRESETS,
-  DEADLINE_PRESETS,
+  DATE_PRESETS,
   type ColumnFilter,
 } from "./filters";
 export { CustomFilterDialog } from "./CustomFilterDialog";

@@ -3,6 +3,7 @@ import {
   filterActive,
   isCustomFilter,
   matchesCustom,
+  optionsFilter,
   type ColumnFilter,
 } from "@/lib/grid/customFilter";
 import type { FilterKind } from "./columns";
@@ -50,6 +51,18 @@ export const UNIVERSAL_OPTIONS: FilterOption[] = [
 ];
 
 /**
+ * All a free-text or numeric column offers as named bands: is there a value or not.
+ *
+ * Everything narrower on such a column is a phrase or a threshold, which is Custom
+ * criteria's job — a checklist of every distinct project name or effort string is a list of
+ * the rows themselves, not a way to choose among options.
+ */
+export const BLANK_PRESETS: FilterOption[] = [
+  { id: "blanks", label: "(Blanks)" },
+  { id: "nonblanks", label: "(NonBlanks)" },
+];
+
+/**
  * Priority presets from screenshot 10.55.58, plus the "up to letter + unprioritized"
  * bands that keep blanks visible so you can still assign them. Values are the strings
  * `formatPriority` produces (`A1`, `A`, `B2`, …) or `""` / null for unset.
@@ -78,8 +91,15 @@ export const PRIORITY_PRESETS: FilterOption[] = [
   { id: "unprioritized", label: "Unprioritized" },
 ];
 
-/** Deadline presets from screenshot 10.57.07. Values are `YYYY-MM-DD` or null. */
-export const DEADLINE_PRESETS: FilterOption[] = [
+/**
+ * Date presets from screenshot 10.57.07. Values are `YYYY-MM-DD` or null.
+ *
+ * These are **bands of the calendar relative to today**, not values — which is why a date
+ * column offers them instead of a checklist. A list of the ISO dates a column happens to
+ * hold answers "which rows exist", never "what is overdue", and it goes stale the moment a
+ * deadline moves; `(Today & Past)` keeps meaning the same thing tomorrow.
+ */
+export const DATE_PRESETS: FilterOption[] = [
   { id: "none", label: "(None)" },
   { id: "has-date", label: "(Has Date)" },
   { id: "past-and-none", label: "(Past & None)" },
@@ -99,28 +119,54 @@ export const DEADLINE_PRESETS: FilterOption[] = [
 /**
  * The semantic bands a column kind offers, without the universal entries or the values.
  *
- * The set filter lists values in its own section, so the header needs these on their own.
+ * Exactly one of these and the set filter is ever on screen — see `usesSetFilter`. Enum
+ * columns are the checklist case and have no bands; every other kind is bands only.
+ *
  * `filterOptions` still returns everything together, because the chip bar resolves any
  * option id — preset, value or universal — through one lookup.
  */
 export function presetOptions(kind: FilterKind | undefined): FilterOption[] {
+  if (kind === "enum") return [];
   if (kind === "priority") return PRIORITY_PRESETS;
-  if (kind === "date") return DEADLINE_PRESETS;
-  return [];
+  if (kind === "date") return DATE_PRESETS;
+  return BLANK_PRESETS;
 }
 
 /**
  * Whether the column funnel shows the set-filter checklist of distinct values.
  *
- * Priority does not. Rank numbers are open-ended (`A1`…`A99`…), so listing every used
- * value is mostly noise — the range presets already cover "Only As", "As & Bs", ranked,
- * unprioritized, and the rest. Exact `A1` still works via Custom criteria.
+ * **Only enum columns.** A checklist of ticked values is the right control when the values
+ * are a closed set someone could have picked from a dropdown — State, Status, Icon,
+ * Category — because ticking three of five states is a choice among the options themselves.
  *
- * Date keeps the checklist: a finite set of ISO dates is scannable, and the range presets
- * sit under it rather than replace it.
+ * It is the wrong control everywhere else, and wrong in two different ways:
+ *
+ * - **Open-ended values** (name, notes, effort, cost, priority ranks). The list is as long
+ *   as the grid and grows with it; you would be picking rows, not narrowing by a property.
+ *   Priority also has real bands — "Only As", "As & Bs", unprioritized — that a list of
+ *   `A1 / A2 / B` cannot express.
+ * - **Dates.** The distinct dates a column holds are an accident of the data, and a filter
+ *   naming them is stale as soon as a deadline moves. What you actually want is a band
+ *   relative to today (`(Past)`, `(Today & Past)`, `(Next 7 Days)`) or a threshold —
+ *   `> 2026-08-01 AND <= 2026-08-31` — which is Custom criteria.
+ *
+ * Those columns get `presetOptions` instead, chosen one at a time. Anything finer than a
+ * named band is Custom criteria, which offers `<` `<=` `>` `>=` joined by And/Or.
  */
 export function usesSetFilter(kind: FilterKind | undefined): boolean {
-  return kind !== "priority";
+  return kind === "enum";
+}
+
+/**
+ * Presets are **mutually exclusive**: picking one replaces whatever the column had.
+ *
+ * They describe overlapping bands of one axis, so an OR of two is nearly always either
+ * redundant ("Only As" or "Only As & Bs" is just the latter) or a way to build a range
+ * nobody meant. A radio list also stops the funnel from claiming a column is filtered four
+ * ways at once. `(All)` is the way back out; Custom criteria is the way to combine.
+ */
+export function selectPreset(id: string): ColumnFilter {
+  return optionsFilter([id]);
 }
 
 /**
@@ -136,7 +182,7 @@ export function filterOptions(
   distinctValues: string[],
 ): FilterOption[] {
   const presets =
-    kind === "priority" ? PRIORITY_PRESETS : kind === "date" ? DEADLINE_PRESETS : [];
+    kind === "priority" ? PRIORITY_PRESETS : kind === "date" ? DATE_PRESETS : [];
 
   const values = distinctValues
     .filter((value) => value !== "")
