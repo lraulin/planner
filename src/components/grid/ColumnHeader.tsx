@@ -188,6 +188,9 @@ function FilterButton({
   const [open, setOpen] = useState(false);
   const [customOpen, setCustomOpen] = useState(false);
   const [search, setSearch] = useState("");
+  // Which edge the popover hangs from. Decided per open, because Show Fields and column
+  // resizing both move a column across the threshold without remounting this button.
+  const [alignRight, setAlignRight] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const listId = useId();
 
@@ -239,6 +242,14 @@ function FilterButton({
         aria-expanded={open}
         aria-controls={listId}
         onClick={() => {
+          // Measure here rather than in an effect after opening: this runs before the
+          // popover's first paint, so it never renders off screen and then jumps.
+          const anchor = rootRef.current?.getBoundingClientRect();
+          if (anchor) {
+            setAlignRight(
+              anchor.left + POPOVER_WIDTH > window.innerWidth - VIEWPORT_GUTTER,
+            );
+          }
           // Reset the query on the way in: a stale one would silently hide values the next
           // time the funnel is opened.
           setSearch("");
@@ -255,7 +266,13 @@ function FilterButton({
       {open && (
         <div
           id={listId}
-          className="absolute top-full left-0 z-40 mt-1 flex max-h-80 w-64 flex-col rounded border border-rule-strong bg-surface shadow-lg"
+          // Hangs from whichever edge keeps it on screen — the funnels on the last columns
+          // are the ones you reach for most (Status, L.A.P.) and were unreachable off the
+          // right edge. Width must stay in step with `POPOVER_WIDTH`.
+          className={[
+            "absolute top-full z-40 mt-1 flex max-h-80 w-64 flex-col rounded border border-rule-strong bg-surface shadow-lg",
+            alignRight ? "right-0" : "left-0",
+          ].join(" ")}
         >
           {showSearch && (
             <div className="flex-none border-b border-rule p-1.5">
@@ -425,6 +442,12 @@ function FilterButton({
 
 /** How many values before the list needs its own search box. */
 const SEARCH_THRESHOLD = 8;
+
+/** The popover's `w-64`, in pixels. Only used to decide which edge it opens from. */
+const POPOVER_WIDTH = 256;
+
+/** Slack at the window edge, so a popover that just fits is not flush against it. */
+const VIEWPORT_GUTTER = 8;
 
 function Tick({ state }: { state: "all" | "some" | "none" }) {
   return (
