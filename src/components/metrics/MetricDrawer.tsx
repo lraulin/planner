@@ -862,6 +862,7 @@ function MetricForm({
         onShow={trackingFields.show}
         onHide={trackingFields.hide}
         onMove={trackingFields.move}
+        onPlace={trackingFields.place}
         onReset={trackingFields.resetColumns}
         onResetGrid={trackingFields.reset}
         onClose={() => setShowFields(false)}

@@ -204,6 +204,7 @@ export function GridToolbar({
         onShow={grid.show}
         onHide={grid.hide}
         onMove={grid.move}
+        onPlace={grid.place}
         onReset={grid.resetColumns}
         onResetGrid={grid.reset}
         onClose={() => setFieldsOpen(false)}

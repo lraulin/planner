@@ -15,6 +15,7 @@ import {
   type GridSort,
 } from "@/lib/settings/grid";
 import { EMPTY_CROSS_FILTER, type CrossColumnFilter } from "@/lib/grid/crossFilter";
+import { hideField, moveField, placeField, showField } from "@/lib/grid/fieldOrder";
 import { gridScope } from "@/lib/settings/scopes";
 import type { ColumnMeta } from "./columns";
 
@@ -166,9 +167,13 @@ export function useGridState<TCol extends ColumnMeta>(
   );
 
   const show = useCallback(
-    (id: string) => {
+    (id: string, atIndex?: number) => {
       if (!byId.has(id) || order.includes(id)) return;
-      setOrder([...order, id]);
+      if (atIndex === undefined) {
+        setOrder(showField(order, id));
+        return;
+      }
+      setOrder(placeField(order, id, atIndex));
     },
     [byId, order, setOrder],
   );
@@ -179,23 +184,25 @@ export function useGridState<TCol extends ColumnMeta>(
       if (!column || column.hideable === false) return;
       // Never hide the last column; the grid would have nothing to render a row into.
       if (order.length <= 1) return;
-      setOrder(order.filter((entry) => entry !== id));
+      setOrder(hideField(order, id));
     },
     [byId, order, setOrder],
   );
 
   const move = useCallback(
     (id: string, direction: "up" | "down") => {
-      const index = order.indexOf(id);
-      if (index < 0) return;
-      const target = direction === "up" ? index - 1 : index + 1;
-      if (target < 0 || target >= order.length) return;
-
-      const next = order.slice();
-      [next[index], next[target]] = [next[target], next[index]];
-      setOrder(next);
+      setOrder(moveField(order, id, direction));
     },
     [order, setOrder],
+  );
+
+  /** Drag reorder / drop at index — moves or inserts `id` so it lands at `toIndex`. */
+  const place = useCallback(
+    (id: string, toIndex: number) => {
+      if (!byId.has(id)) return;
+      setOrder(placeField(order, id, toIndex));
+    },
+    [byId, order, setOrder],
   );
 
   /** Back to the view's preset, leaving filters, sort and widths alone. */
@@ -410,6 +417,7 @@ export function useGridState<TCol extends ColumnMeta>(
     show,
     hide,
     move,
+    place,
     setOrder,
     resetColumns,
 
