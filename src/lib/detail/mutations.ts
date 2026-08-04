@@ -147,7 +147,8 @@ const CORE_KEYS = [
   "notes",
 ] as const;
 
-const RESULT_AREA_KEYS = [
+/** Allowlists for side-table writes — also used by the agent API field parser. */
+export const RESULT_AREA_KEYS = [
   "color",
   "category",
   "description",
@@ -162,7 +163,7 @@ const RESULT_AREA_KEYS = [
   "threats",
 ] as const;
 
-const PROJECT_KEYS = [
+export const PROJECT_KEYS = [
   "effortDriven",
   "onlyShowNextTask",
   "leadTimeMinutes",
@@ -188,7 +189,7 @@ const PROJECT_KEYS = [
   "description",
 ] as const;
 
-const GOAL_KEYS = [
+export const GOAL_KEYS = [
   "isDream",
   "range",
   "plannedStart",

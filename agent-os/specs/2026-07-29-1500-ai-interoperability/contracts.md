@@ -42,23 +42,40 @@ Args:
 ```ts
 {
   type: NodeType;
-  parentId?: string | null; // required unless result_area
+  parentId?: string | null; // omit → top level (any type)
   name?: string;
+  // Core (optional — empty is fine)
   state?: NodeState;
   priorityLetter?: "A"|"B"|"C"|"D"|null;
-  priorityRank?: number;
-  deadline?: string | null; // ISO
+  priorityRank?: number; // requires priorityLetter
+  deadline?: string | null; // ISO or YYYY-MM-DD
+  targetStartDate?: string | null;
+  targetEndDate?: string | null;
+  deferredDate?: string | null;
   focus?: boolean;
-  effortMinutes?: number | null; // tasks only
+  notes?: string; // main item notes (nodes.notes)
+  // Type halves — same columns as the detail forms / saveNodeDetail allowlists
+  project?: { purpose?, idealVision?, sufficientVision?, strategy?, description?, … };
+  task?: { description?, effortMinutes?, contexts?, place?, … };
+  goal?: { purpose?, definition?, vision?, strategy?, … };
+  resultArea?: { description?, mission?, … };
+  // Legacy shortcut (merged into task.effortMinutes when nested key absent)
+  effortMinutes?: number | null;
 }
 ```
 
-Returns: `{ node }`
+Returns: `{ node }` — full form via `get_node` (notes, side table, linked-note stubs).
 
 ## update_node
 
-Args: `{ id: string }` plus any of the optional create fields (except `type`/`parentId`).  
-Returns: `{ node }`
+Args: `{ id: string }` plus any of the optional create fields (except `type`/`parentId`).
+Partial writes only change supplied keys.  
+Returns: `{ node }` (full form)
+
+## get_node
+
+Args: `{ id: string }`  
+Returns: `{ node }` with summary fields **plus** `notes`, plan dates, type half, `linkedNotes[]`.
 
 ## create_note
 

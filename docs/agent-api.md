@@ -58,23 +58,23 @@ Codes: `unauthorized` (401), `validation` (400), `not_found` (404), `conflict` (
 
 ## Tools
 
-| Tool                                                                 | Purpose                                                                                                     |
-| -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `health`                                                             | Liveness + tool list                                                                                        |
-| `get_context`                                                        | Focus, top open A/B work, this week’s plan glance                                                           |
-| `search_nodes`                                                       | Filter outline (`type`, `state`, `focus`, `query`, `parentId`, …)                                           |
-| `get_node`                                                           | One node by id                                                                                              |
-| `create_node`                                                        | Create under `parentId`, or at the top level when it is omitted (`type`, `name`, optional priority/state/…) |
-| `capture`                                                            | GTD capture into the **Inbox**: one task (`name`) or a batch (`items`). Not the same as root `create_node`  |
-| `update_node`                                                        | Patch name/state/priority/deadline/focus/effort                                                             |
-| `create_note` / `update_note` / `list_notes`                         | Capture markdown notes                                                                                      |
-| `get_week`                                                           | Week schedule + plan summary                                                                                |
-| `create_appointment` / `update_appointment` / `delete_appointment`   | Light calendar writes                                                                                       |
-| `ensure_weekly_plan` / `update_weekly_plan` / `load_weekly_plan`     | Weekly plan read/write                                                                                      |
-| `upsert_plan_entry` / `set_focus_area` / `set_weekly_plan_completed` | Wizard-equivalent steps                                                                                     |
-| `list_metrics` / `get_metric`                                        | List metrics (filter by owner/query/active) or load one with recent entries                                 |
-| `create_metric` / `update_metric`                                    | Define or patch a metric (title, units, type, target, optional goal owner)                                  |
-| `log_metric_entry` / `update_metric_entry`                           | Record or correct a tracking value (`entryDate` defaults to today as `YYYY-MM-DD`)                          |
+| Tool                                                                 | Purpose                                                                                                    |
+| -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `health`                                                             | Liveness + tool list                                                                                       |
+| `get_context`                                                        | Focus, top open A/B work, this week’s plan glance                                                          |
+| `search_nodes`                                                       | Filter outline (`type`, `state`, `focus`, `query`, `parentId`, …)                                          |
+| `get_node`                                                           | One node by id                                                                                             |
+| `create_node`                                                        | Create under `parentId`, or at the top level when omitted. Full form fields optional (see below)           |
+| `capture`                                                            | GTD capture into the **Inbox**: one task (`name`) or a batch (`items`). Not the same as root `create_node` |
+| `update_node`                                                        | Patch any core or type-specific form field (same shape as create; partial writes)                          |
+| `create_note` / `update_note` / `list_notes`                         | Capture markdown notes                                                                                     |
+| `get_week`                                                           | Week schedule + plan summary                                                                               |
+| `create_appointment` / `update_appointment` / `delete_appointment`   | Light calendar writes                                                                                      |
+| `ensure_weekly_plan` / `update_weekly_plan` / `load_weekly_plan`     | Weekly plan read/write                                                                                     |
+| `upsert_plan_entry` / `set_focus_area` / `set_weekly_plan_completed` | Wizard-equivalent steps                                                                                    |
+| `list_metrics` / `get_metric`                                        | List metrics (filter by owner/query/active) or load one with recent entries                                |
+| `create_metric` / `update_metric`                                    | Define or patch a metric (title, units, type, target, optional goal owner)                                 |
+| `log_metric_entry` / `update_metric_entry`                           | Record or correct a tracking value (`entryDate` defaults to today as `YYYY-MM-DD`)                         |
 
 ### Example
 
@@ -84,6 +84,64 @@ curl -sS -X POST "http://localhost:3047/api/agent/get_context" \
   -H "Content-Type: application/json" \
   -d '{}'
 ```
+
+### create_node / update_node (full forms)
+
+Every field on the detail forms is writable. **Leaving fields out is normal** — only send
+what you know. Prefer richer detail on **projects** (they persist as a record); keep
+**tasks** lean unless something is actually useful.
+
+Core (any type), top-level:
+
+```json
+{
+  "type": "project",
+  "parentId": "<uuid-or-null>",
+  "name": "Kitchen remodel",
+  "notes": "Main freeform notes for this item (markdown ok)",
+  "state": "not_started",
+  "priorityLetter": "B",
+  "priorityRank": 1,
+  "deadline": "2026-09-01",
+  "targetStartDate": null,
+  "targetEndDate": null,
+  "deferredDate": null,
+  "focus": false
+}
+```
+
+Type-specific halves are nested objects. Unknown keys are rejected with `validation`.
+
+| Type        | Nested key   | Useful fields (non-exhaustive)                                                                                                     |
+| ----------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Project     | `project`    | `purpose`, `idealVision`, `sufficientVision`, `strategy`, `description`, `place`, `contexts`, `assignedTo`, costs, scheduling mins |
+| Task        | `task`       | `description`, `effortMinutes`, `place`, `contexts`, `source`, recurrence fields, …                                                |
+| Goal        | `goal`       | `purpose`, `definition`, `vision`, `strategy`, `values`, `range`, `isDream`, …                                                     |
+| Result area | `resultArea` | `description`, `mission`, vision/SWOT prose, `category`, `importance`, …                                                           |
+
+Example project create:
+
+```json
+{
+  "type": "project",
+  "parentId": "<result-area-uuid>",
+  "name": "Kitchen remodel",
+  "notes": "Contractor quotes in email",
+  "project": {
+    "purpose": "Make the kitchen usable again",
+    "idealVision": "New counters and sink",
+    "strategy": "One wall at a time",
+    "contexts": ["@home"]
+  }
+}
+```
+
+`get_node` returns the full form (notes + side table + linked-note stubs). `search_nodes`
+stays compact. Top-level `effortMinutes` still works as a shortcut into `task.effortMinutes`.
+
+**Notes field vs linked notes:** `notes` is the item’s main freeform box (`nodes.notes`).
+`create_note` with `nodeId` is optional supplementary material in the Notes tab — not a
+substitute for the form fields above.
 
 ### Capture (Inbox)
 

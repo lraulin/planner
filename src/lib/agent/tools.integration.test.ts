@@ -84,6 +84,143 @@ describeDb("agent tools", () => {
     expect(done.node.state).toBe("completed");
   });
 
+  // Full form fields (notes, project purpose/vision, task description) go through the
+  // same allowlist as the drawer — the agent is not limited to outline basics.
+  it("creates a project with notes and detail fields, and get_node returns them", async () => {
+    const area = await createNode({
+      userId,
+      parentId: null,
+      type: "result_area",
+      name: "Life",
+    });
+
+    const created = (await dispatchAgentTool(
+      "create_node",
+      {
+        type: "project",
+        parentId: area,
+        name: "Kitchen remodel",
+        notes: "Main notes live on the project",
+        priorityLetter: "B",
+        project: {
+          purpose: "Make the kitchen usable again",
+          idealVision: "New counters and sink",
+          strategy: "One wall at a time",
+          description: "Started after the leak",
+          place: "Home",
+          contexts: ["@home"],
+        },
+      },
+      userId,
+    )) as {
+      node: {
+        id: string;
+        notes: string;
+        project: {
+          purpose: string;
+          idealVision: string;
+          strategy: string;
+          description: string;
+          place: string;
+          contexts: string[];
+        } | null;
+      };
+    };
+
+    expect(created.node.notes).toBe("Main notes live on the project");
+    expect(created.node.project).toMatchObject({
+      purpose: "Make the kitchen usable again",
+      idealVision: "New counters and sink",
+      strategy: "One wall at a time",
+      description: "Started after the leak",
+      place: "Home",
+      contexts: ["@home"],
+    });
+
+    const again = (await dispatchAgentTool(
+      "get_node",
+      { id: created.node.id },
+      userId,
+    )) as { node: { notes: string; project: { purpose: string } | null } };
+    expect(again.node.notes).toBe("Main notes live on the project");
+    expect(again.node.project?.purpose).toBe("Make the kitchen usable again");
+
+    const task = (await dispatchAgentTool(
+      "create_node",
+      {
+        type: "task",
+        parentId: created.node.id,
+        name: "Measure cabinets",
+        notes: "Bring tape measure",
+        effortMinutes: 30,
+        task: { description: "Width and height of each bay", place: "Kitchen" },
+      },
+      userId,
+    )) as {
+      node: {
+        notes: string;
+        effortMinutes: number | null;
+        task: {
+          description: string;
+          place: string;
+          effortMinutes: number | null;
+        } | null;
+      };
+    };
+    expect(task.node.notes).toBe("Bring tape measure");
+    expect(task.node.effortMinutes).toBe(30);
+    expect(task.node.task).toMatchObject({
+      description: "Width and height of each bay",
+      place: "Kitchen",
+      effortMinutes: 30,
+    });
+
+    const patched = (await dispatchAgentTool(
+      "update_node",
+      {
+        id: created.node.id,
+        notes: "Updated main notes",
+        project: { purpose: "Revised purpose" },
+      },
+      userId,
+    )) as {
+      node: { notes: string; project: { purpose: string; strategy: string } | null };
+    };
+    expect(patched.node.notes).toBe("Updated main notes");
+    expect(patched.node.project?.purpose).toBe("Revised purpose");
+    // Unmentioned nested fields stay put — partial save, same as the drawer.
+    expect(patched.node.project?.strategy).toBe("One wall at a time");
+  });
+
+  it("does not let a second user write detail fields on the first user's project", async () => {
+    const area = await createNode({
+      userId,
+      parentId: null,
+      type: "result_area",
+      name: "Mine",
+    });
+    const project = await createNode({
+      userId,
+      parentId: area,
+      type: "project",
+      name: "Private project",
+    });
+
+    await expect(
+      dispatchAgentTool(
+        "update_node",
+        { id: project, notes: "hacked", project: { purpose: "nope" } },
+        otherId,
+      ),
+    ).rejects.toBeInstanceOf(AgentError);
+
+    const owner = (await dispatchAgentTool("get_node", { id: project }, userId)) as {
+      node: { notes: string; project: { purpose: string } | null };
+    };
+    expect(owner.node.notes).toBe("");
+    expect(owner.node.project?.purpose ?? "").toBe("");
+  });
+
   // An agent capturing something it has not placed yet should not have to invent a parent
   // for it, so omitting parentId means the top level rather than a validation error.
   it("creates a task at the top level when no parent is given", async () => {

@@ -32,17 +32,16 @@ import {
 import { loadSchedule } from "@/lib/schedule/queries";
 import { startOfWeek, toDateKey } from "@/lib/schedule/geometry";
 import { captureItems } from "@/lib/capture/mutations";
-import {
-  createNode,
-  renameNode,
-  setDeadline,
-  setEffort,
-  setFocus,
-  setPriority,
-  setState,
-} from "@/lib/tree/mutations";
+import { saveNodeDetail } from "@/lib/detail/mutations";
+import { loadNodeDetail } from "@/lib/detail/queries";
+import { createNode } from "@/lib/tree/mutations";
 import { loadOutline } from "@/lib/tree/queries";
 import { parseCaptureArgs } from "./captureArgs";
+import {
+  detailPatchHasWrites,
+  parseNodeDetailPatch,
+  stripCreateOnlyArgs,
+} from "./detailArgs";
 import { AgentError, toAgentError } from "./errors";
 import {
   asObject,
@@ -58,7 +57,13 @@ import {
   requireString,
 } from "./parse";
 import { filterOutline, type SearchNodesFilter } from "./search";
-import { buildPathMap, iso, nodeSummary, noteSummary } from "./serialize";
+import {
+  buildPathMap,
+  iso,
+  nodeDetailForAgent,
+  nodeSummary,
+  noteSummary,
+} from "./serialize";
 
 export const AGENT_TOOLS = [
   "health",
@@ -263,11 +268,12 @@ async function searchNodes(userId: string, args: Record<string, unknown>) {
 
 async function getNode(userId: string, args: Record<string, unknown>) {
   const id = requireString(args, "id");
+  const detail = await loadNodeDetail(userId, id);
+  if (!detail) throw new AgentError("not_found", `Node not found: ${id}`);
   const outline = await loadOutline(userId);
-  const node = outline.find((n) => n.id === id);
-  if (!node) throw new AgentError("not_found", `Node not found: ${id}`);
+  const row = outline.find((n) => n.id === id);
   const paths = buildPathMap(outline);
-  return { node: nodeSummary(node, paths) };
+  return { node: nodeDetailForAgent(detail, row, paths) };
 }
 
 async function createNodeTool(userId: string, args: Record<string, unknown>) {
@@ -284,28 +290,21 @@ async function createNodeTool(userId: string, args: Record<string, unknown>) {
     parentId = args.parentId;
   }
 
-  const id = await createNode({ userId, parentId, type, name });
+  // Full form fields (notes, purpose, dates, …) go through the same allowlisted save as
+  // the drawer. Type / parentId only apply at create time.
+  const patch = parseNodeDetailPatch(stripCreateOnlyArgs(args));
+  // Name is also passed into createNode so the row is not briefly untitled if the patch
+  // write fails; saveNodeDetail will re-apply it when present.
+  const id = await createNode({
+    userId,
+    parentId,
+    type,
+    name: patch.name ?? name,
+    notes: patch.notes ?? "",
+  });
 
-  if (args.state !== undefined) {
-    await setState(userId, id, parseNodeState(args.state));
-  }
-  if (args.priorityLetter !== undefined) {
-    await setPriority(
-      userId,
-      id,
-      parsePriorityLetter(args.priorityLetter),
-      optionalNumber(args, "priorityRank") ?? null,
-    );
-  }
-  if (args.deadline !== undefined) {
-    const d = parseDate(optionalNullableString(args, "deadline") ?? null, "deadline");
-    await setDeadline(userId, id, d ?? null);
-  }
-  if (args.focus !== undefined) {
-    await setFocus(userId, id, optionalBoolean(args, "focus") ?? false);
-  }
-  if (args.effortMinutes !== undefined && type === "task") {
-    await setEffort(userId, id, optionalNumber(args, "effortMinutes") ?? null);
+  if (detailPatchHasWrites(patch)) {
+    await saveNodeDetail(userId, id, patch);
   }
 
   return getNode(userId, { id });
@@ -355,37 +354,12 @@ async function captureTool(userId: string, args: Record<string, unknown>) {
 
 async function updateNodeTool(userId: string, args: Record<string, unknown>) {
   const id = requireString(args, "id");
-  // Prove ownership before applying patches (mutations that no-op on missing rows).
+  // Prove ownership first so a missing id is `not_found` before we parse a large patch.
   await getNode(userId, { id });
 
-  if (args.name !== undefined) {
-    await renameNode(userId, id, requireString(args, "name"));
-  }
-  if (args.state !== undefined) {
-    await setState(userId, id, parseNodeState(args.state));
-  }
-  if (args.priorityLetter !== undefined) {
-    await setPriority(
-      userId,
-      id,
-      parsePriorityLetter(args.priorityLetter),
-      optionalNumber(args, "priorityRank") ?? null,
-    );
-  } else if (args.priorityRank !== undefined) {
-    throw new AgentError(
-      "validation",
-      "priorityRank requires priorityLetter in the same call",
-    );
-  }
-  if (args.deadline !== undefined) {
-    const d = parseDate(optionalNullableString(args, "deadline") ?? null, "deadline");
-    await setDeadline(userId, id, d ?? null);
-  }
-  if (args.focus !== undefined) {
-    await setFocus(userId, id, optionalBoolean(args, "focus") ?? false);
-  }
-  if (args.effortMinutes !== undefined) {
-    await setEffort(userId, id, optionalNumber(args, "effortMinutes") ?? null);
+  const patch = parseNodeDetailPatch(stripCreateOnlyArgs(args));
+  if (detailPatchHasWrites(patch)) {
+    await saveNodeDetail(userId, id, patch);
   }
 
   return getNode(userId, { id });
