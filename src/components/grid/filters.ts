@@ -4,6 +4,7 @@ import {
   isCustomFilter,
   matchesCustom,
   optionsFilter,
+  NONE_OPTION_ID,
   type ColumnFilter,
 } from "@/lib/grid/customFilter";
 import type { FilterKind } from "./columns";
@@ -21,6 +22,8 @@ import type { FilterKind } from "./columns";
 
 export {
   ALL_FILTER,
+  NONE_FILTER,
+  NONE_OPTION_ID,
   filterActive,
   isCustomFilter,
   isOptionsFilter,
@@ -48,6 +51,9 @@ export const UNIVERSAL_OPTIONS: FilterOption[] = [
   { id: "custom", label: "(Custom)..." },
   { id: "blanks", label: "(Blanks)" },
   { id: "nonblanks", label: "(NonBlanks)" },
+  // Not an entry anyone ticks — `(Select none)` writes it. Listed so the chip bar can name
+  // the one filter that empties a grid instead of showing a raw id.
+  { id: NONE_OPTION_ID, label: "(None selected)" },
 ];
 
 /**
@@ -218,6 +224,10 @@ function matchesOption(
   kind: FilterKind | undefined,
   today: string | null,
 ): boolean {
+  // A cleared checklist. Checked ahead of everything else — including the date presets,
+  // which have their own `none` meaning "blank" — so it can never be read as a band.
+  if (id === NONE_OPTION_ID) return false;
+
   if (id === "blanks") return value === null || value === "";
   if (id === "nonblanks") return value !== null && value !== "";
 

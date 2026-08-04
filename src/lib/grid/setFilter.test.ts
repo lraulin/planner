@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { ColumnValues } from "./distinct";
+import { NONE_OPTION_ID } from "./customFilter";
 import {
   buildSetFilterEntries,
+  clearSelection,
   onlySelection,
   selectAllState,
   toggleSetEntry,
@@ -77,6 +79,16 @@ describe("buildSetFilterEntries", () => {
     expect(build(["all"]).every((e) => e.selected)).toBe(true);
   });
 
+  /**
+   * The one selection that draws everything unticked. An empty list and a cleared one are
+   * both "no values named" but mean opposite things, so the sentinel has to survive the
+   * round trip through `ids` — otherwise `(Select none)` reads as `(Select all)`.
+   */
+  it("shows every entry unticked when the checklist was cleared", () => {
+    expect(build([NONE_OPTION_ID]).every((e) => !e.selected)).toBe(true);
+    expect(build([NONE_OPTION_ID])).toHaveLength(4);
+  });
+
   it("ticks exactly the selected entries once something is chosen", () => {
     const entries = build(["value:IP"]);
     expect(entries.filter((e) => e.selected).map((e) => e.label)).toEqual([
@@ -103,6 +115,15 @@ describe("selectAllState", () => {
   it("is all only when nothing is filtered out", () => {
     expect(selectAllState(build())).toBe("all");
     expect(selectAllState(build(["value:IP"]))).toBe("some");
+  });
+
+  it("is none once the checklist is cleared", () => {
+    expect(selectAllState(build([NONE_OPTION_ID]))).toBe("none");
+  });
+
+  /** Nothing is being hidden, so the box must not claim the column is emptied. */
+  it("is all for a column with no values at all", () => {
+    expect(selectAllState([])).toBe("all");
   });
 });
 
@@ -141,11 +162,34 @@ describe("toggleSetEntry", () => {
   });
 
   /**
-   * Unticking the last remaining entry would leave an empty list, which the model reads as
-   * "show everything" — again the opposite of the click. Keep it selected instead.
+   * Unticking the last remaining entry leaves nothing ticked. It must not collapse to an
+   * empty list, which the model reads as "show everything" — the opposite of the click.
    */
-  it("refuses to leave nothing selected", () => {
-    expect(toggleSetEntry(all, ["value:IP"], "value:IP")).toEqual(["value:IP"]);
+  it("lands on cleared when the last tick comes off", () => {
+    expect(toggleSetEntry(all, ["value:IP"], "value:IP")).toEqual([NONE_OPTION_ID]);
+  });
+
+  /**
+   * The whole point of `(Select none)`: the first tick after it selects that value alone.
+   * Treating a cleared list like an empty one would select everything *but* the value just
+   * clicked.
+   */
+  it("ticks a single value from a cleared checklist", () => {
+    expect(toggleSetEntry(all, [NONE_OPTION_ID], "value:IP")).toEqual(["value:IP"]);
+  });
+
+  it("adds to a selection built up from cleared", () => {
+    const first = toggleSetEntry(all, clearSelection(), "value:IP");
+    expect(toggleSetEntry(all, first, "value:C").sort()).toEqual(
+      ["value:C", "value:IP"].sort(),
+    );
+  });
+
+  /** Ticking every value back on is still unfiltered, however you got there. */
+  it("collapses to unfiltered when a cleared checklist is filled back in", () => {
+    let ids = clearSelection();
+    for (const entry of all) ids = toggleSetEntry(all, ids, entry.optionId);
+    expect(ids).toEqual([]);
   });
 
   it("ignores a stale (All) marker in the stored ids", () => {

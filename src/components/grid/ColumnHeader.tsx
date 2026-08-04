@@ -17,6 +17,7 @@ import {
 import type { ColumnValues } from "@/lib/grid/distinct";
 import {
   buildSetFilterEntries,
+  clearSelection,
   matchesSearch,
   onlySelection,
   selectAllState,
@@ -226,7 +227,9 @@ function FilterButton({
       })
     : [];
   const shown = matchesSearch(allEntries, search);
-  const allSelected = selectAllState(allEntries) === "all";
+  const tickState = selectAllState(allEntries);
+  const allSelected = tickState === "all";
+  const noneSelected = tickState === "none";
 
   // A handful of states needs no search box; forty result areas do.
   const showSearch = showSetFilter && allEntries.length > SEARCH_THRESHOLD;
@@ -297,7 +300,7 @@ function FilterButton({
           >
             {showSetFilter && (
               <>
-                <li>
+                <li className="group flex items-center border-b border-rule/60">
                   <button
                     type="button"
                     role="option"
@@ -309,12 +312,33 @@ function FilterButton({
                         ? "Every value is already showing"
                         : "Show every value again"
                     }
-                    className="flex w-full items-center gap-2 border-b border-rule/60 px-2 py-1 text-left text-[0.8125rem] normal-case tracking-normal text-ink hover:bg-surface-raised disabled:cursor-default disabled:hover:bg-transparent"
+                    className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1 text-left text-[0.8125rem] normal-case tracking-normal text-ink hover:bg-surface-raised disabled:cursor-default disabled:hover:bg-transparent"
                   >
-                    <Tick state={allSelected ? "all" : "some"} />
+                    <Tick state={tickState} />
                     <span className="min-w-0 flex-1 truncate font-medium">
                       (Select all)
                     </span>
+                  </button>
+                  {/*
+                    The counterpart to "only" on a value row, and the reason it is a plain
+                    button rather than a second checklist entry: it is an action on the list,
+                    not a value you can be filtered to. Picking three of thirty values means
+                    clearing and ticking three instead of unticking twenty-seven — the grid
+                    is empty in between, which the chip bar explains.
+                  */}
+                  <button
+                    type="button"
+                    aria-label={`Untick every ${label} value`}
+                    disabled={noneSelected || allEntries.length === 0}
+                    onClick={() => setIds(clearSelection())}
+                    title={
+                      noneSelected
+                        ? "Nothing is ticked"
+                        : "Untick everything, then pick the few you want"
+                    }
+                    className="mr-1 flex-none rounded px-1.5 py-0.5 text-[0.6875rem] normal-case tracking-normal text-ink-faint hover:bg-surface-raised hover:text-ink disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-ink-faint"
+                  >
+                    none
                   </button>
                 </li>
 

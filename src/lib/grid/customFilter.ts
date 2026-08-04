@@ -50,6 +50,21 @@ export type ColumnFilter = OptionsColumnFilter | CustomColumnFilter;
 
 export const ALL_FILTER: ColumnFilter = { mode: "options", ids: [] };
 
+/**
+ * The option id that matches nothing, so a set filter can say "no values selected".
+ *
+ * An empty `ids` already means *unfiltered*, so the model has no other way to express a
+ * cleared checklist — and without one, `(Select none)` would silently mean its opposite.
+ * A sentinel id keeps that inside the existing OR-of-ids shape: it simply never matches, so
+ * every matcher, chip and persisted layout handles it without a second filter mode.
+ *
+ * It is a **staging state**, not a destination: you clear the ticks so you can put three
+ * back. Ticking any value drops the sentinel — see `toggleSetEntry`.
+ */
+export const NONE_OPTION_ID = "none-selected";
+
+export const NONE_FILTER: ColumnFilter = { mode: "options", ids: [NONE_OPTION_ID] };
+
 export function optionsFilter(ids: string[] = []): OptionsColumnFilter {
   return { mode: "options", ids };
 }

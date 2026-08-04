@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   ALL_FILTER,
+  NONE_FILTER,
+  NONE_OPTION_ID,
   filterActive,
   filterOptions,
   matchesFilter,
@@ -35,6 +37,27 @@ describe("matchesFilter — universal", () => {
   it("matches a distinct value option", () => {
     expect(matchesFilter("NS", optionsFilter(["value:NS"]), "enum", TODAY)).toBe(true);
     expect(matchesFilter("IP", optionsFilter(["value:NS"]), "enum", TODAY)).toBe(false);
+  });
+
+  /**
+   * `(Select none)` has to hide every row, including blanks, on every kind. The date presets
+   * carry their own `none` meaning "blank", so the sentinel losing to that lookup would turn
+   * a cleared Deadline checklist into a filter that shows exactly the undated rows.
+   */
+  it("hides every row under a cleared checklist", () => {
+    expect(filterActive(NONE_FILTER)).toBe(true);
+    for (const kind of ["text", "enum", "priority", "date"] as const) {
+      expect(matchesFilter("NS", NONE_FILTER, kind, TODAY)).toBe(false);
+      expect(matchesFilter(null, NONE_FILTER, kind, TODAY)).toBe(false);
+      expect(matchesFilter("", NONE_FILTER, kind, TODAY)).toBe(false);
+    }
+  });
+
+  /** A leftover tick still counts: the sentinel only speaks for itself. */
+  it("still shows rows matching another id selected alongside the sentinel", () => {
+    const filter = optionsFilter([NONE_OPTION_ID, "value:NS"]);
+    expect(matchesFilter("NS", filter, "enum", TODAY)).toBe(true);
+    expect(matchesFilter("IP", filter, "enum", TODAY)).toBe(false);
   });
 });
 

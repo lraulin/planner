@@ -1,3 +1,4 @@
+import { NONE_OPTION_ID } from "./customFilter";
 import type { ColumnValues } from "./distinct";
 
 /**
@@ -44,7 +45,8 @@ export function valueOptionId(value: string): string {
  *
  * **An empty selection shows every entry as ticked.** Nothing selected means nothing is
  * being filtered out, so every value is on screen — drawing them all unticked would say the
- * opposite of what the grid is doing.
+ * opposite of what the grid is doing. The one selection that does draw everything unticked
+ * is `NONE_OPTION_ID`, which is the cleared checklist `(Select none)` leaves behind.
  */
 export function buildSetFilterEntries({
   values,
@@ -60,8 +62,10 @@ export function buildSetFilterEntries({
 }): SetFilterEntry[] {
   if (!values) return [];
 
-  const active = selectedIds.filter((id) => id !== "all");
-  const showAll = active.length === 0;
+  const active = selectedIds.filter((id) => id !== "all" && id !== NONE_OPTION_ID);
+  // An explicitly cleared checklist and an empty one look identical in `ids` otherwise, and
+  // they mean opposite things — see `NONE_OPTION_ID`.
+  const showAll = active.length === 0 && !selectedIds.includes(NONE_OPTION_ID);
   const selected = new Set(active);
 
   const entries: SetFilterEntry[] = Array.from(values.counts, ([value, count]) => ({
@@ -100,13 +104,16 @@ export function matchesSearch(
 /**
  * State of the `(Select all)` box.
  *
- * `all` when nothing is filtered out — which is what an empty selection means. There is
- * deliberately no `none`: the selection model cannot express "show no rows", and a control
- * that can put the grid in a state it cannot describe is worse than one without it. Picking
- * a single value is one click on its label (`onlySelection`) rather than unticking the rest.
+ * `all` when nothing is filtered out — which is what an empty selection means — and `none`
+ * once the checklist has been cleared. A column with no values at all reads as `all`: there
+ * is nothing being hidden.
  */
-export function selectAllState(entries: readonly SetFilterEntry[]): "all" | "some" {
-  return entries.every((entry) => entry.selected) ? "all" : "some";
+export function selectAllState(
+  entries: readonly SetFilterEntry[],
+): "all" | "some" | "none" {
+  if (entries.every((entry) => entry.selected)) return "all";
+  if (entries.every((entry) => !entry.selected)) return "none";
+  return "some";
 }
 
 /**
@@ -119,23 +126,26 @@ export function selectAllState(entries: readonly SetFilterEntry[]): "all" | "som
  * Ticking the last missing entry lands back on `[]` — unfiltered — rather than a list of
  * every current value. This matters beyond tidiness: a stored list naming everything that
  * existed at the time would silently exclude any value added later.
+ *
+ * From a cleared checklist the first tick selects exactly that entry, since `(Select none)`
+ * already said the others are out. Unticking the last remaining entry lands back on cleared,
+ * which is the `(Select none)` state rather than "show everything".
  */
 export function toggleSetEntry(
   allEntries: readonly SetFilterEntry[],
   selectedIds: readonly string[],
   optionId: string,
 ): string[] {
-  const active = selectedIds.filter((id) => id !== "all");
+  const cleared = selectedIds.includes(NONE_OPTION_ID);
+  const active = selectedIds.filter((id) => id !== "all" && id !== NONE_OPTION_ID);
   const everything = allEntries.map((entry) => entry.optionId);
 
-  const current = active.length === 0 ? everything : active;
+  const current = cleared ? [] : active.length === 0 ? everything : active;
   const next = current.includes(optionId)
     ? current.filter((id) => id !== optionId)
     : [...current, optionId];
 
-  // Unticking the last one would show nothing, which the model reads as "show everything" —
-  // the opposite of the click. Keep it as the only selection instead.
-  if (next.length === 0) return [optionId];
+  if (next.length === 0) return clearSelection();
 
   const coversEverything =
     everything.length > 0 && everything.every((id) => next.includes(id));
@@ -145,4 +155,16 @@ export function toggleSetEntry(
 /** Select this value and nothing else — Excel's "Only". */
 export function onlySelection(optionId: string): string[] {
   return [optionId];
+}
+
+/**
+ * Untick everything — `(Select none)`.
+ *
+ * The grid goes empty for as long as this stands, which is the honest reading of the click
+ * and is exactly what makes it useful: on a column with thirty values, picking the three you
+ * want means clearing and ticking three rather than unticking twenty-seven. The chip bar
+ * still names the column, so an empty grid is never unexplained.
+ */
+export function clearSelection(): string[] {
+  return [NONE_OPTION_ID];
 }
