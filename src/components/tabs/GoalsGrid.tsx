@@ -13,7 +13,9 @@ import {
   useGridState,
   useIncludeDeferred,
   useTabView,
+  type GridDefaults,
 } from "@/components/grid/useGridState";
+import { openStateFilters, settledStateFilters } from "@/lib/grid/stateFilters";
 import { GridToolbar } from "@/components/grid/GridToolbar";
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import {
@@ -39,10 +41,18 @@ const VIEW_IDS = ["all", "active", "completed"] as const;
 
 type ViewId = (typeof VIEW_IDS)[number];
 
-const VIEWS: { id: ViewId; label: string }[] = [
+/**
+ * Views as collections of settings — see the note on Tasks. Goals' default order carries the
+ * **wide** State column, which filters on full labels rather than Achieve's codes.
+ */
+const VIEWS: { id: ViewId; label: string; filters?: GridDefaults["filters"] }[] = [
   { id: "all", label: "All Goals" },
-  { id: "active", label: "Active Goals" },
-  { id: "completed", label: "Completed Goals" },
+  { id: "active", label: "Active Goals", filters: openStateFilters("state", "label") },
+  {
+    id: "completed",
+    label: "Completed Goals",
+    filters: settledStateFilters("state", "label"),
+  },
 ];
 
 const DEFAULT_ORDER = ["priority", "name", "definition", "state", "deadline", "range"];
@@ -51,10 +61,6 @@ type GoalsCtx = OutlineColumnCtx & {
   onDefinitionChange: (node: OutlineNode, value: string) => void;
   onRangeChange: (node: OutlineNode, value: string) => void;
 };
-
-function isActive(node: OutlineNode): boolean {
-  return node.state !== "completed" && node.state !== "cancelled";
-}
 
 function buildColumns(): ColumnDef<GoalsCtx>[] {
   return [
@@ -187,18 +193,16 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   );
 
   const allColumns = useMemo(() => buildColumns(), []);
-  const gridState = useGridState(`goals.${view}`, allColumns, DEFAULT_ORDER);
+  const gridState = useGridState(`goals.${view}`, allColumns, DEFAULT_ORDER, {
+    filters: VIEWS.find((entry) => entry.id === view)?.filters,
+  });
   const [includeDeferred, setIncludeDeferred] = useIncludeDeferred("goals");
 
   const rows: GridRow[] = useMemo(
     () =>
       sliceTree(tab.nodes, {
-        keep: (node) => {
-          if (node.type !== "goal") return false;
-          if (view === "completed") return node.state === "completed";
-          if (view === "active") return isActive(node);
-          return true;
-        },
+        // Structural only — which states a view shows is its default State filter.
+        keep: (node) => node.type === "goal",
         // Result Area is the arrangement Achieve ships; Group by overrides it on request.
         groupBy: (() => {
           const chosen = asGroupBy(gridState.groupBy);
@@ -208,7 +212,7 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         includeDeferred,
         today: tab.today,
       }),
-    [tab.nodes, tab.today, view, scopeId, gridState.groupBy, includeDeferred],
+    [tab.nodes, tab.today, scopeId, gridState.groupBy, includeDeferred],
   );
 
   const distinctValues = useMemo(

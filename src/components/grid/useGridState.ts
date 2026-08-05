@@ -16,6 +16,10 @@ import {
   type SortDirection,
 } from "@/lib/settings/grid";
 import { EMPTY_CROSS_FILTER, type CrossColumnFilter } from "@/lib/grid/crossFilter";
+import type { ColumnFilter } from "@/lib/grid/customFilter";
+
+/** Module-level so the default `defaults` object cannot churn the memos below. */
+const EMPTY_GROUP_BY: string[] = [];
 import { hideField, moveField, placeField, showField } from "@/lib/grid/fieldOrder";
 import { gridScope } from "@/lib/settings/scopes";
 import type { ColumnControls, ColumnMeta } from "./columns";
@@ -102,10 +106,14 @@ export function useIncludeDeferred(tabId: string) {
   return [value.includeDeferred, setIncludeDeferred] as const;
 }
 
-export function useGridState<TCol extends ColumnMeta>(
-  tabId: string,
-  allColumns: TCol[],
-  defaultOrder: string[],
+/**
+ * What a view opens as, before the user has chosen anything.
+ *
+ * This is what makes a view **a collection of settings** rather than a mode: everything here
+ * is an ordinary stored value the user can see, change and clear. A view that also carried
+ * behaviour reachable no other way would be a mode wearing a preset's name.
+ */
+export type GridDefaults = {
   /**
    * How this tab groups before the user chooses — Projects opens on Achieve's
    * Category → Result Area arrangement, most tabs on nothing.
@@ -114,8 +122,25 @@ export function useGridState<TCol extends ColumnMeta>(
    * user having turned grouping off. Without the distinction, picking Group by → (None) on
    * a tab that groups by default would appear to do nothing.
    */
-  defaultGroupBy: string[] = [],
+  groupBy?: string[];
+  /**
+   * Column filters the view opens with — "Active Tasks" is a State filter, not a hidden
+   * row predicate. They arrive as ordinary chips: visible, removable, and restored by
+   * Reset this grid.
+   */
+  filters?: Record<string, ColumnFilter>;
+};
+
+const NO_FILTERS: Record<string, ColumnFilter> = {};
+
+export function useGridState<TCol extends ColumnMeta>(
+  tabId: string,
+  allColumns: TCol[],
+  defaultOrder: string[],
+  defaults: GridDefaults = {},
 ) {
+  const defaultGroupBy = defaults.groupBy ?? EMPTY_GROUP_BY;
+  const defaultFilters = defaults.filters ?? NO_FILTERS;
   const { value: settings, patch, reset } = useSetting(gridScope(tabId), CODEC);
 
   const byId = useMemo(() => {
@@ -159,6 +184,13 @@ export function useGridState<TCol extends ColumnMeta>(
     () => new Set(settings.collapsedGroups),
     [settings.collapsedGroups],
   );
+
+  /**
+   * Stored filters, or the view's defaults while the user has not touched them. Everything
+   * downstream — the grid, the chips, the funnels, `narrowing` — reads this, so a default
+   * filter is indistinguishable from one the user set. That is the point.
+   */
+  const filters = settings.filters ?? defaultFilters;
 
   const setOrder = useCallback(
     (next: string[]) => {
@@ -233,13 +265,15 @@ export function useGridState<TCol extends ColumnMeta>(
   );
 
   const setFilter = useCallback(
-    (columnId: string, filter: GridSettings["filters"][string]) => {
+    (columnId: string, filter: ColumnFilter) => {
       patch((current) => ({
         ...current,
-        filters: { ...current.filters, [columnId]: filter },
+        // Editing one column materialises the view's other defaults alongside it, so the
+        // rest of the preset does not silently vanish the first time a funnel is touched.
+        filters: { ...(current.filters ?? defaultFilters), [columnId]: filter },
       }));
     },
-    [patch],
+    [patch, defaultFilters],
   );
 
   /**
@@ -250,6 +284,8 @@ export function useGridState<TCol extends ColumnMeta>(
   const clearFilters = useCallback(() => {
     patch((current) => ({
       ...current,
+      // Explicitly empty, not null: "show me everything" has to survive a reload. Reset this
+      // grid is how you get the view's defaults back.
       filters: {},
       advancedFilter: null,
       search: "",
@@ -460,10 +496,10 @@ export function useGridState<TCol extends ColumnMeta>(
     setWidth,
     clearWidth,
 
-    filters: settings.filters,
+    filters,
     setFilter,
     clearFilters,
-    filtersActive: hasActiveFilters(settings.filters),
+    filtersActive: hasActiveFilters(filters),
 
     advancedFilter: settings.advancedFilter,
     setAdvancedFilter,
@@ -475,7 +511,7 @@ export function useGridState<TCol extends ColumnMeta>(
     setSearch,
 
     /** True when column filters, the advanced filter or the search are narrowing rows. */
-    narrowing: hasAnyNarrowing(settings),
+    narrowing: hasAnyNarrowing(filters, settings.advancedFilter, settings.search),
 
     sorts: settings.sorts,
     /**

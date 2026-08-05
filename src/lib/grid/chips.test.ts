@@ -189,3 +189,73 @@ describe("buildGridChips", () => {
     expect(chips.map((chip) => chip.kind)).toEqual(["column", "condition", "search"]);
   });
 });
+
+describe("a mostly-ticked set filter", () => {
+  /** Nine states, of which a view leaves seven ticked. */
+  const domain = ["NS", "IP", "W", "P", "D", "SD", "PR", "C", "Cn"].map(
+    (code) => `value:${code}`,
+  );
+
+  function chipFor(ids: string[], withDomain = true): string {
+    return buildGridChips({
+      filters: { abbrState: { mode: "options", ids } },
+      advancedFilter: null,
+      search: "",
+      labelOf: () => "State",
+      optionLabelOf: (_columnId, optionId) => optionId.replace("value:", ""),
+      domainOf: withDomain ? () => domain : undefined,
+    })[0].label;
+  }
+
+  it("says what it hides rather than counting what it keeps", () => {
+    // "State: 7 selected" tells you a column is narrowed while withholding the one thing
+    // you wanted to know. Views open in exactly this shape.
+    expect(chipFor(domain.filter((id) => id !== "value:C" && id !== "value:Cn"))).toBe(
+      "State: all but C, Cn",
+    );
+  });
+
+  it("falls back to counting when the excluded list is the long one", () => {
+    expect(chipFor(["value:NS", "value:IP", "value:W", "value:P"])).toBe(
+      "State: 4 selected",
+    );
+  });
+
+  it("still lists a short selection outright", () => {
+    expect(chipFor(["value:NS", "value:IP"])).toBe("State: NS, IP");
+  });
+
+  it("counts when no domain is available, rather than claiming to know what is missing", () => {
+    expect(
+      chipFor(
+        domain.filter((id) => id !== "value:C" && id !== "value:Cn"),
+        false,
+      ),
+    ).toBe("State: 7 selected");
+  });
+});
+
+describe("a filter that is not currently hiding anything", () => {
+  const domain = ["value:NS", "value:IP"];
+
+  function chips(ids: string[]) {
+    return buildGridChips({
+      filters: { state: { mode: "options", ids } },
+      advancedFilter: null,
+      search: "",
+      labelOf: () => "State",
+      optionLabelOf: (_c, id) => id.replace("value:", ""),
+      domainOf: () => domain,
+    });
+  }
+
+  it("draws no chip when every value present is ticked", () => {
+    // A view opening with "all but Completed" on data that has no completed rows. The chip
+    // would otherwise sit beside "Showing 22 of 22" implying rows were held back.
+    expect(chips(["value:NS", "value:IP", "value:C", "value:Cn"])).toEqual([]);
+  });
+
+  it("still draws one as soon as a ticked-off value appears in the data", () => {
+    expect(chips(["value:NS"])).toHaveLength(1);
+  });
+});

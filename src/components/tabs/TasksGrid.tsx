@@ -14,6 +14,7 @@ import { CascadeConfirm } from "@/components/grid/CascadeConfirm";
 import { DataGrid } from "@/components/grid/DataGrid";
 import {
   useGridState,
+  type GridDefaults,
   useIncludeDeferred,
   useTabView,
 } from "@/components/grid/useGridState";
@@ -53,6 +54,7 @@ import {
 import { EffortCell, StatusCell } from "@/components/grid/cells";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import { ToolbarSelect, ToolbarToggle } from "./tabChrome";
+import { openStateFilters, settledStateFilters } from "@/lib/grid/stateFilters";
 import { nextActionsOnly } from "@/lib/tree/nextActions";
 import { useGridTab } from "./useGridTab";
 import type { OutlineColumnCtx } from "@/components/outline/outlineColumns";
@@ -61,12 +63,37 @@ const VIEW_IDS = ["active-status", "active-schedule", "completed", "all"] as con
 
 type ViewId = (typeof VIEW_IDS)[number];
 
-const VIEWS: { id: ViewId; label: string }[] = [
-  { id: "active-status", label: "Active Task Status" },
-  { id: "active-schedule", label: "Active Task Schedule" },
-  { id: "completed", label: "Completed Tasks" },
-  { id: "all", label: "All Tasks" },
+/**
+ * A view is a **collection of settings**, not a mode: its `defaults` are ordinary stored
+ * values the user can see as chips, change, and clear. What used to be a hidden `keep`
+ * predicate inside `sliceTree` — "active means not completed or cancelled" — is a State
+ * filter here, so the grid says what it is doing and you can combine it with anything.
+ *
+ * `active-status` and `active-schedule` differ only in the column layout each has stored
+ * under its own `grid:tasks.{view}` scope; that is what a preset is.
+ */
+const VIEWS: { id: ViewId; label: string; defaults: GridDefaults }[] = [
+  {
+    id: "active-status",
+    label: "Active Task Status",
+    defaults: { filters: openStateFilters("abbrState", "code") },
+  },
+  {
+    id: "active-schedule",
+    label: "Active Task Schedule",
+    defaults: { filters: openStateFilters("abbrState", "code") },
+  },
+  {
+    id: "completed",
+    label: "Completed Tasks",
+    defaults: { filters: settledStateFilters("abbrState", "code") },
+  },
+  { id: "all", label: "All Tasks", defaults: {} },
 ];
+
+function viewDefaults(id: ViewId): GridDefaults {
+  return VIEWS.find((entry) => entry.id === id)?.defaults ?? {};
+}
 
 const DEFAULT_ORDER = [
   "abbrState",
@@ -78,10 +105,6 @@ const DEFAULT_ORDER = [
   "percent",
   "status",
 ];
-
-function isActive(node: OutlineNode): boolean {
-  return node.state !== "completed" && node.state !== "cancelled";
-}
 
 function buildColumns(
   allNodes: OutlineNode[],
@@ -239,7 +262,12 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     () => buildColumns(tab.nodes, tab.today),
     [tab.nodes, tab.today],
   );
-  const gridState = useGridState(`tasks.${view}`, allColumns, DEFAULT_ORDER);
+  const gridState = useGridState(
+    `tasks.${view}`,
+    allColumns,
+    DEFAULT_ORDER,
+    viewDefaults(view),
+  );
   const rowDrag = useTreeRowDrag({
     nodes: tab.nodes,
     byId: tab.byId,
@@ -272,12 +300,9 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const rows: GridRow[] = useMemo(() => {
     const groupBy = asGroupBy(gridState.groupBy);
     return sliceTree(sourceNodes, {
-      keep: (node) => {
-        if (node.type !== "task") return false;
-        if (view === "completed") return node.state === "completed";
-        if (view === "all") return true;
-        return isActive(node);
-      },
+      // Structural only. Which *states* a view shows is its default State filter, which
+      // the user can see and change; being a task is what makes this the Tasks tab.
+      keep: (node) => node.type === "task",
       groupBy,
       // Empty scope = all; special "__none__" = tasks with no project ancestor.
       scopeId: scopeId && scopeId !== "__none__" ? scopeId : null,
@@ -293,15 +318,7 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
       }
       return true;
     });
-  }, [
-    sourceNodes,
-    tab.byId,
-    tab.today,
-    view,
-    gridState.groupBy,
-    includeDeferred,
-    scopeId,
-  ]);
+  }, [sourceNodes, tab.byId, tab.today, gridState.groupBy, includeDeferred, scopeId]);
 
   const distinctValues = useMemo(
     () =>

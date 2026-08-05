@@ -222,6 +222,40 @@ The Task Chooser keeps its own rule (`lib/chooser/views.ts`, manual §8.3): it i
 list with no hierarchy, so "first leaf sibling" has nothing to mean there. Same question,
 different shape — which is why they are two functions and not one with a flag.
 
+## A view is a collection of settings, never a mode
+
+Every `View` picker entry is a set of **ordinary stored values** — column layout, grouping,
+and filters — that the user could have reached one at a time. "Active Tasks" is a State filter
+you can see in the chip bar, remove, and combine with anything; it is not a hidden row
+predicate inside `sliceTree`.
+
+The test: **if picking the view is the only way to get some behaviour, it is a mode.** A mode
+cannot be combined, cannot be inspected, and can only be described by its own name.
+
+- `keep` stays **structural only** — "this tab shows tasks". Which _states_ a view shows is
+  its default filter (`lib/grid/stateFilters.ts` builds them the shape the funnel writes, so
+  the funnel opens with the right boxes already unticked).
+- **`GridSettings.filters` is nullable, and the three states are distinct**: `null` follows
+  the view's defaults, `{}` is the user having cleared everything, and a map is their
+  choice. Without that distinction a view could only have defaults that were impossible to
+  turn off — clearing them would last until the next render. Same contract as `order` and
+  `groupBy`, and `parseGridSettings` carries the v1 migration for it.
+- **`Clear all` clears to nothing; `Reset this grid` restores the view's defaults.** Two
+  different questions, two different controls.
+- A default filter is **indistinguishable from one the user set**, on purpose: same chip,
+  same funnel state, same `Clear all`. That is what makes it a setting rather than a mode.
+
+### The chip bar accounts for missing rows, not for stored state
+
+Two rules follow, both of which the state filters made visible:
+
+- A set filter stores what is **ticked**, so hiding two of nine states is stored as seven ids.
+  Describe it by what is **excluded** when that list is shorter — `State: all but Completed,
+Cancelled`, not `State: 7 selected`.
+- A filter ticking **every value the column currently holds** draws no chip at all. It is
+  hiding nothing, and `Status: 7 selected` beside `Showing 22 of 22` reads as though rows were
+  held back. The chip returns the moment a ticked-off value appears in the data.
+
 ## Progressive disclosure: three rungs, in this order
 
 | Rung | Control                                                                                                                   | For                             |
@@ -306,6 +340,8 @@ per-tab switches.
 - **One hook owns the whole scope.** A write replaces the scope's value, so two hooks each
   persisting one field would clobber each other — changing a filter would reset the column
   layout. See the header comment on `useGridState.ts`.
+- **A view's defaults are `GridDefaults`**, passed to `useGridState` — filters and grouping a
+  tab opens with. Never a hardcoded predicate the user cannot see.
 - **Per-tab toggles go in the open `switches` map**, declared by the tab as
   `{ id, label, defaultOn }`. A new toggle is one array entry; a removed one leaves a
   harmless orphan key rather than a parse failure. The tab supplies the default, because

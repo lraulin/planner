@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { SETTINGS_VERSION } from "@/lib/settings/scopes";
 import {
   clampPerformanceHeight,
   DEFAULT_PERFORMANCE_HEIGHT,
@@ -40,7 +41,9 @@ describe("serializeMetricsLayout", () => {
       v: number;
       performanceHeight: number;
     };
-    expect(out.v).toBe(1);
+    // The constant, not a literal: `v` is the shared settings version and moves when a
+    // payload shape changes elsewhere.
+    expect(out.v).toBe(SETTINGS_VERSION);
     expect(out.performanceHeight).toBe(MIN_PERFORMANCE_HEIGHT);
   });
 });

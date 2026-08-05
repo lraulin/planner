@@ -14,6 +14,7 @@ import { CascadeConfirm } from "@/components/grid/CascadeConfirm";
 import { DataGrid } from "@/components/grid/DataGrid";
 import {
   useGridState,
+  type GridDefaults,
   useIncludeDeferred,
   useTabView,
 } from "@/components/grid/useGridState";
@@ -24,6 +25,7 @@ import {
   type GridSwitch,
 } from "@/components/grid/GridToolbar";
 import { collectDistinctValues } from "@/lib/grid/distinct";
+import { openStateFilters, settledStateFilters } from "@/lib/grid/stateFilters";
 import {
   abbrStateColumn,
   actualEffortColumn,
@@ -58,6 +60,10 @@ import { ToolbarSelect, ToolbarToggle } from "./tabChrome";
 import { useGridTab } from "./useGridTab";
 import type { OutlineColumnCtx } from "@/components/outline/outlineColumns";
 
+/** Projects' default order leads with the narrow State column, which filters on codes. */
+const OPEN = openStateFilters("abbrState", "code");
+const SETTLED = settledStateFilters("abbrState", "code");
+
 const VIEW_IDS = [
   "active-status",
   "active-schedule",
@@ -69,12 +75,17 @@ const VIEW_IDS = [
 
 type ViewId = (typeof VIEW_IDS)[number];
 
-const VIEWS: { id: ViewId; label: string }[] = [
-  { id: "active-status", label: "Active Project Status" },
-  { id: "active-schedule", label: "Active Project Schedule" },
-  { id: "active-purpose", label: "Active Project Purpose" },
-  { id: "active-delegation", label: "Active Project Delegation" },
-  { id: "completed", label: "Completed Projects" },
+/**
+ * Views as collections of settings — see the same note on Tasks. The four `active-*` views
+ * share one State filter and differ only in the column layout each stores; "Completed" is the
+ * mirror filter, and "All" simply has none.
+ */
+const VIEWS: { id: ViewId; label: string; filters?: GridDefaults["filters"] }[] = [
+  { id: "active-status", label: "Active Project Status", filters: OPEN },
+  { id: "active-schedule", label: "Active Project Schedule", filters: OPEN },
+  { id: "active-purpose", label: "Active Project Purpose", filters: OPEN },
+  { id: "active-delegation", label: "Active Project Delegation", filters: OPEN },
+  { id: "completed", label: "Completed Projects", filters: SETTLED },
   { id: "all", label: "All Projects" },
 ];
 
@@ -288,12 +299,10 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
     [tab.nodes, tab.today],
   );
   const defaultOrder = useMemo(() => viewOrder(view), [view]);
-  const gridState = useGridState(
-    `projects.${view}`,
-    allColumns,
-    defaultOrder,
-    PROJECT_DEFAULT_GROUP_BY,
-  );
+  const gridState = useGridState(`projects.${view}`, allColumns, defaultOrder, {
+    groupBy: PROJECT_DEFAULT_GROUP_BY,
+    filters: VIEWS.find((entry) => entry.id === view)?.filters,
+  });
   const rowDrag = useTreeRowDrag({
     nodes: tab.nodes,
     byId: tab.byId,
@@ -313,33 +322,14 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
     const groupBy = asGroupBy(gridState.groupBy);
 
     return sliceTree(tab.nodes, {
-      keep: (node) => {
-        if (node.type === "project") {
-          if (view === "completed") return node.state === "completed";
-          if (view === "all") return true;
-          return isActive(node);
-        }
-        if (includeGoals && node.type === "goal") {
-          if (view === "completed") return node.state === "completed";
-          if (view === "all") return true;
-          return isActive(node);
-        }
-        return false;
-      },
+      // Structural only — which states a view shows is its default State filter.
+      keep: (node) => node.type === "project" || (includeGoals && node.type === "goal"),
       groupBy,
       scopeId: scopeId || null,
       includeDeferred,
       today: tab.today,
     });
-  }, [
-    tab.nodes,
-    tab.today,
-    view,
-    gridState.groupBy,
-    includeGoals,
-    includeDeferred,
-    scopeId,
-  ]);
+  }, [tab.nodes, tab.today, gridState.groupBy, includeGoals, includeDeferred, scopeId]);
 
   const distinctValues = useMemo(
     () =>

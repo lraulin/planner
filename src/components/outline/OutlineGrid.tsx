@@ -46,6 +46,7 @@ import type { MenuItem } from "@/components/grid/ContextMenu";
 import { useGridState } from "@/components/grid/useGridState";
 import { GridToolbar, switchValue } from "@/components/grid/GridToolbar";
 import { collectDistinctValues } from "@/lib/grid/distinct";
+import { openStateFilters } from "@/lib/grid/stateFilters";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useOptimisticNodes } from "@/components/grid/useOptimisticNodes";
 import { useStateChange } from "@/components/grid/useStateChange";
@@ -109,7 +110,15 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const stateChange = useStateChange({ nodes, patch, apply });
 
   const outlineColumns = useMemo(() => buildOutlineColumns(today), [today]);
-  const gridState = useGridState("outline", outlineColumns, [...OUTLINE_COLUMN_IDS]);
+  const gridState = useGridState("outline", outlineColumns, [...OUTLINE_COLUMN_IDS], {
+    /**
+     * The Outline opens with finished work hidden — Achieve's default, and what the old
+     * `Show completed` checkbox did. It is an ordinary State filter now: it says so in the
+     * chip bar, `Clear all` removes it, and `Reset this grid` brings it back. That is the
+     * whole difference between a default and a mode.
+     */
+    filters: openStateFilters("state", "label"),
+  });
   const { sort: headerSort, clearSort: clearHeaderSort } = gridState;
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
   const [groupIds, setGroupIds] = useState<readonly string[]>([]);

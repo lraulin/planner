@@ -49,8 +49,13 @@ export type GridSettings = {
   /**
    * Column id → checklist option ids (`mode: "options"`) or a multi-condition custom
    * filter (`mode: "custom"`). The two modes are mutually exclusive per column.
+   *
+   * **Null means "use the view's defaults", which is not the same as `{}`.** A view opens
+   * with completed work hidden; clearing every chip has to be able to say "show me
+   * everything" and *stay* said. Without the distinction a view could only have default
+   * filters it was impossible to turn off. Same contract as `order` and `groupBy`.
    */
-  filters: Record<string, ColumnFilter>;
+  filters: Record<string, ColumnFilter> | null;
   /**
    * Cross-column And/Or expression from the advanced filter builder, ANDed with the
    * per-column filters above. Null when the user has never opened the builder.
@@ -104,7 +109,7 @@ export type GridSettings = {
 export const DEFAULT_GRID_SETTINGS: GridSettings = {
   order: null,
   widths: {},
-  filters: {},
+  filters: null,
   advancedFilter: null,
   search: "",
   /**
@@ -146,7 +151,7 @@ export function parseGridSettings(value: unknown): GridSettings {
         ? asClampedNumber(entry, MIN_COLUMN_WIDTH, MIN_COLUMN_WIDTH, MAX_COLUMN_WIDTH)
         : null,
     ),
-    filters: asMap(record.filters, (entry) => parseColumnFilter(entry)),
+    filters: parseFilters(record),
     advancedFilter: parseCrossColumnFilter(record.advancedFilter),
     search: asString(record.search, ""),
     sorts: parseSorts(record),
@@ -162,6 +167,30 @@ export function parseGridSettings(value: unknown): GridSettings {
       typeof entry === "boolean" ? entry : null,
     ),
   };
+}
+
+/**
+ * Stored filters, or null to follow the view's defaults.
+ *
+ * **The v1 migration lives here.** Version 1 had no way to say "cleared": every grid
+ * serialized `filters: {}` whether or not the user had ever opened a funnel, so an empty map
+ * from a v1 blob cannot be read as a deliberate choice and follows the defaults instead. A v1
+ * blob with real filters keeps them, and from v2 on an empty map means exactly what it says.
+ *
+ * The cost is one-time and small: a v1 grid the user had genuinely cleared comes back with
+ * its view's defaults once. The alternative is a default nobody who already used the app
+ * would ever see.
+ */
+function parseFilters(
+  record: Record<string, unknown>,
+): Record<string, ColumnFilter> | null {
+  if (!asRecord(record.filters)) return null;
+
+  const filters = asMap(record.filters, (entry) => parseColumnFilter(entry));
+  const version = typeof record.v === "number" ? record.v : 1;
+  if (version < 2 && Object.keys(filters).length === 0) return null;
+
+  return filters;
 }
 
 /**
@@ -226,10 +255,15 @@ export function hasActiveFilters(filters: Record<string, ColumnFilter>): boolean
  * user staring at a filtered grid with a disabled clear button because the only thing
  * narrowing it was the search box.
  */
-export function hasAnyNarrowing(settings: GridSettings): boolean {
+export function hasAnyNarrowing(
+  /** The **effective** filters — `settings.filters` resolved against the view's defaults. */
+  filters: Record<string, ColumnFilter>,
+  advancedFilter: CrossColumnFilter | null,
+  search: string,
+): boolean {
   return (
-    hasActiveFilters(settings.filters) ||
-    crossFilterActive(settings.advancedFilter) ||
-    settings.search.trim() !== ""
+    hasActiveFilters(filters) ||
+    crossFilterActive(advancedFilter) ||
+    search.trim() !== ""
   );
 }

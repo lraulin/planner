@@ -6,8 +6,14 @@
  * heard of, and what lets a write reject junk before it reaches the table.
  */
 
-/** Bumped only when a payload shape changes in a way defaults cannot absorb. */
-export const SETTINGS_VERSION = 1;
+/**
+ * Bumped only when a payload shape changes in a way defaults cannot absorb.
+ *
+ * **2** — grid `filters` became nullable, so a stored `{}` could finally mean "the user
+ * cleared everything" rather than "untouched". `parseGridSettings` reads this to tell the two
+ * apart in blobs written before the change; nothing else reads it.
+ */
+export const SETTINGS_VERSION = 2;
 
 export const SCOPE_KINDS = ["grid", "chooser", "outline", "notes", "drawer"] as const;
 export type ScopeKind = (typeof SCOPE_KINDS)[number];

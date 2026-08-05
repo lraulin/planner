@@ -39,6 +39,11 @@ export type ChipContext = {
    * in rather than imported.
    */
   optionLabelOf: (columnId: string, optionId: string) => string;
+  /**
+   * Every option id a column's set filter could tick, so a chip can describe a mostly-ticked
+   * list by what it *excludes*. Omit it (or return `[]`) and chips fall back to counting.
+   */
+  domainOf?: (columnId: string) => string[];
 };
 
 /**
@@ -52,6 +57,11 @@ export function buildGridChips(context: ChipContext): GridChip[] {
 
   for (const [columnId, filter] of Object.entries(context.filters)) {
     if (!filterActive(filter)) continue;
+    // A set filter ticking every value the column currently holds is hiding nothing, and a
+    // chip's job is to account for rows that are missing. This is what a view's default
+    // filter looks like on data that has none of the states it excludes — "Status: 7
+    // selected" beside "Showing 22 of 22" reads as though something were filtered out.
+    if (coversEveryValue(columnId, filter, context)) continue;
     chips.push({
       kind: "column",
       key: `column:${columnId}`,
@@ -82,6 +92,19 @@ export function buildGridChips(context: ChipContext): GridChip[] {
   return chips;
 }
 
+/** True when every value present in the column is ticked. */
+function coversEveryValue(
+  columnId: string,
+  filter: ColumnFilter,
+  context: ChipContext,
+): boolean {
+  if (filter.mode !== "options") return false;
+  const domain = context.domainOf?.(columnId) ?? [];
+  if (domain.length === 0) return false;
+  const ids = new Set(filter.ids);
+  return domain.every((id) => ids.has(id));
+}
+
 function describeColumnFilter(
   columnId: string,
   filter: ColumnFilter,
@@ -98,6 +121,20 @@ function describeColumnFilter(
   if (ids.length <= MAX_LISTED_OPTIONS) {
     const parts = ids.map((id) => context.optionLabelOf(columnId, id));
     return `${columnLabel}: ${parts.join(", ")}`;
+  }
+
+  /*
+    A set filter stores what is *ticked*, so hiding two states out of nine is stored as seven
+    ids — and "State: 7 selected" tells you a column is narrowed while withholding the only
+    thing you wanted to know. Views open with exactly that shape, so describe it by what is
+    missing whenever that is the shorter list: "State: all but Completed, Cancelled".
+  */
+  const excluded = (context.domainOf?.(columnId) ?? []).filter(
+    (id) => !ids.includes(id),
+  );
+  if (excluded.length > 0 && excluded.length <= MAX_LISTED_OPTIONS) {
+    const parts = excluded.map((id) => context.optionLabelOf(columnId, id));
+    return `${columnLabel}: all but ${parts.join(", ")}`;
   }
 
   // Beyond the cap the exact set matters less than knowing the column is narrowed and by

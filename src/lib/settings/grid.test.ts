@@ -289,14 +289,12 @@ describe("hasActiveFilters", () => {
 });
 
 describe("hasAnyNarrowing", () => {
-  const base = DEFAULT_GRID_SETTINGS;
+  const NONE = {};
 
   it("is false when the grid is showing everything", () => {
-    expect(hasAnyNarrowing(base)).toBe(false);
-    expect(hasAnyNarrowing({ ...base, search: "   " })).toBe(false);
-    expect(
-      hasAnyNarrowing({ ...base, advancedFilter: { join: "and", conditions: [] } }),
-    ).toBe(false);
+    expect(hasAnyNarrowing(NONE, null, "")).toBe(false);
+    expect(hasAnyNarrowing(NONE, null, "   ")).toBe(false);
+    expect(hasAnyNarrowing(NONE, { join: "and", conditions: [] }, "")).toBe(false);
   });
 
   /**
@@ -305,21 +303,61 @@ describe("hasAnyNarrowing", () => {
    * next to rows the user cannot account for.
    */
   it("catches narrowing that is not a column filter", () => {
-    expect(hasAnyNarrowing({ ...base, search: "report" })).toBe(true);
+    expect(hasAnyNarrowing(NONE, null, "report")).toBe(true);
     expect(
-      hasAnyNarrowing({
-        ...base,
-        advancedFilter: {
+      hasAnyNarrowing(
+        NONE,
+        {
           join: "and",
           conditions: [{ columnId: "purpose", op: "contains", value: "health" }],
         },
-      }),
+        "",
+      ),
     ).toBe(true);
     expect(
-      hasAnyNarrowing({
-        ...base,
-        filters: { state: { mode: "options", ids: ["value:done"] } },
-      }),
+      hasAnyNarrowing({ state: { mode: "options", ids: ["value:done"] } }, null, ""),
     ).toBe(true);
+  });
+
+  /**
+   * A view's default filter is narrowing like any other. It has to read as active or the
+   * chip bar would not draw it and `Clear all` would sit disabled beside rows the user
+   * cannot account for — which is the failure this whole mechanism exists to prevent.
+   */
+  it("counts a view's default filters, because the user cannot tell them apart", () => {
+    expect(
+      hasAnyNarrowing({ abbrState: { mode: "options", ids: ["value:NS"] } }, null, ""),
+    ).toBe(true);
+  });
+});
+
+describe("parseGridSettings — filters, and the v1 migration", () => {
+  it("follows the view's defaults when filters were never written", () => {
+    expect(parseGridSettings({ v: 2 }).filters).toBeNull();
+  });
+
+  it("honours an explicitly cleared map from v2 on", () => {
+    // "Show me everything" is a choice, and it has to survive a reload — otherwise a view
+    // could only have defaults you were unable to turn off.
+    expect(parseGridSettings({ v: 2, filters: {} }).filters).toEqual({});
+  });
+
+  it("reads an empty v1 map as never-set, because v1 could not say 'cleared'", () => {
+    // Every v1 grid serialized `filters: {}` whether or not a funnel had been opened, so an
+    // empty map from v1 is not evidence of a decision.
+    expect(parseGridSettings({ v: 1, filters: {} }).filters).toBeNull();
+    expect(parseGridSettings({ filters: {} }).filters).toBeNull();
+  });
+
+  it("keeps real filters from a v1 blob untouched", () => {
+    const stored = { state: { mode: "options", ids: ["value:NS"] } };
+    expect(parseGridSettings({ v: 1, filters: stored }).filters).toEqual(stored);
+  });
+
+  it("degrades garbage to the defaults rather than to an empty map", () => {
+    // An empty map would mean "the user cleared everything", which is a claim a corrupt
+    // blob has not earned.
+    expect(parseGridSettings({ v: 2, filters: "nope" }).filters).toBeNull();
+    expect(parseGridSettings({ v: 2, filters: [] }).filters).toBeNull();
   });
 });

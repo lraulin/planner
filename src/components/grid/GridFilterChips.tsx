@@ -70,6 +70,10 @@ export function GridFilterChips({
           );
           return options.find((option) => option.id === optionId)?.label ?? optionId;
         },
+        // Only the values a column actually holds, so "all but Completed" means all but the
+        // ones on screen — not all but every state the enum could ever have.
+        domainOf: (columnId) =>
+          (distinctValues[columnId] ?? []).map((value) => `value:${value}`),
       }),
     [filters, advancedFilter, search, byId, distinctValues],
   );
