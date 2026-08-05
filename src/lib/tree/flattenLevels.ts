@@ -50,8 +50,17 @@ function levelOf(node: OutlineNode): FlattenableLevel | null {
  * many hidden levels a row sat under varies from branch to branch: a task under
  * area → goal → project rises by two, one under area → project by one.
  *
+ * `hidden` — "an ancestor is collapsed, do not render me" — is recomputed for the same
+ * reason. A collapsed row that is itself dissolved has no twisty left to click, so its
+ * collapse cannot be undone and must not still be hiding anything: with Areas off, a
+ * collapsed area's goals come up to the top level like every other area's. Being collapsed
+ * is not a filter, and a level that is gone cannot hold its subtree shut.
+ *
+ * Every row is returned, hidden ones included, exactly as they arrive — the caller drops
+ * `hidden` rows as it always did, once the flag means what it should.
+ *
  * The tree itself is untouched. This is a view, and turning the switch back on restores
- * every row to where it was.
+ * every row to where it was, still collapsed.
  */
 export function flattenLevels(
   nodes: readonly OutlineNode[],
@@ -61,6 +70,8 @@ export function flattenLevels(
 
   /** Surviving depth per node id, for the rows that survive. */
   const depthById = new Map<string, number>();
+  /** Whether a node's children are hidden — it or a surviving ancestor is collapsed. */
+  const childrenHiddenById = new Map<string, boolean>();
   const out: OutlineNode[] = [];
 
   for (const node of nodes) {
@@ -68,17 +79,26 @@ export function flattenLevels(
     // the nearest surviving ancestor — which is what "as if the level were not there" means.
     const parentDepth =
       node.parentId === null ? -1 : (depthById.get(node.parentId) ?? -1);
+    const rowHidden =
+      node.parentId === null ? false : (childrenHiddenById.get(node.parentId) ?? false);
 
     const level = levelOf(node);
     if (level !== null && hidden.has(level)) {
-      // Dropped, but still a step on the path: its children take its own surviving depth.
+      // Dropped, but still a step on the path: its children take its own surviving depth,
+      // and whatever hid it still hides them — its own collapse leaves with it.
       depthById.set(node.id, parentDepth);
+      childrenHiddenById.set(node.id, rowHidden);
       continue;
     }
 
     const depth = parentDepth + 1;
     depthById.set(node.id, depth);
-    out.push(depth === node.depth ? node : { ...node, depth });
+    childrenHiddenById.set(node.id, rowHidden || node.collapsed);
+    out.push(
+      depth === node.depth && rowHidden === node.hidden
+        ? node
+        : { ...node, depth, hidden: rowHidden },
+    );
   }
 
   return out;

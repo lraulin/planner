@@ -25,21 +25,36 @@ const SHAPE: Shape[] = [
   ["Run a marathon", "Someday", 2, "project"],
 ];
 
-function tree(): OutlineNode[] {
-  return SHAPE.map(([name, parent, depth, type]) => ({
+/** The tree, optionally with some rows collapsed (and their subtrees `hidden` for it). */
+function tree(...collapsed: string[]): OutlineNode[] {
+  const nodes = SHAPE.map(([name, parent, depth, type]) => ({
     id: name,
     parentId: parent,
     depth,
     type,
     name,
     isDream: name === "Someday",
+    collapsed: collapsed.includes(name),
+    hidden: false,
   })) as unknown as OutlineNode[];
+
+  // What `derive` does: a row is hidden when any ancestor is collapsed.
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  for (const node of nodes) {
+    const parent = node.parentId === null ? null : byId.get(node.parentId)!;
+    if (parent) node.hidden = parent.hidden || parent.collapsed;
+  }
+  return nodes;
+}
+
+function render(nodes: readonly OutlineNode[]): string[] {
+  return nodes
+    .filter((node) => !node.hidden)
+    .map((node) => `${"  ".repeat(node.depth)}${node.name}`);
 }
 
 function flat(...hidden: FlattenableLevel[]): string[] {
-  return flattenLevels(tree(), new Set(hidden)).map(
-    (node) => `${"  ".repeat(node.depth)}${node.name}`,
-  );
+  return render(flattenLevels(tree(), new Set(hidden)));
 }
 
 describe("flattenLevels", () => {
@@ -104,6 +119,40 @@ describe("flattenLevels", () => {
       "Health",
       "Run a marathon",
     ]);
+  });
+
+  it("shows the subtree of a collapsed row whose own level was dissolved", () => {
+    // The bug: collapsing Career and then turning Areas off left its whole branch out of
+    // the grid. Collapsing is not filtering — Career is gone, so nothing is holding its
+    // goals shut, and they arrive at the top level like Health's do.
+    expect(
+      render(flattenLevels(tree("Career"), new Set<FlattenableLevel>(["result_area"]))),
+    ).toEqual([
+      "Ship it",
+      "  Website",
+      "    Write copy",
+      "Loose project",
+      "Someday",
+      "  Run a marathon",
+    ]);
+  });
+
+  it("keeps a surviving collapsed row's subtree hidden", () => {
+    // Ship it is still on screen with a twisty to click, so unticking Areas must not blow
+    // its subtree open — only the dissolved level loses its grip.
+    expect(
+      render(
+        flattenLevels(tree("Ship it"), new Set<FlattenableLevel>(["result_area"])),
+      ),
+    ).toEqual(["Ship it", "Loose project", "Someday", "  Run a marathon"]);
+  });
+
+  it("hides a promoted row when an ancestor above the dissolved level is collapsed", () => {
+    // Career survives Goals being turned off and is collapsed, so Ship it's children come
+    // up to sit under it — still hidden, because the row that hid them is still there.
+    expect(
+      render(flattenLevels(tree("Career"), new Set<FlattenableLevel>(["goal"]))),
+    ).toEqual(["Career", "Health", "  Run a marathon"]);
   });
 
   it("leaves untouched rows as the same objects", () => {

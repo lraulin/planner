@@ -135,18 +135,18 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   );
 
   /**
-   * Rows the tree itself hides (an ancestor is collapsed), then any dissolved level.
+   * Any dissolved level, then the rows the tree itself hides (an ancestor is collapsed).
+   *
+   * That order matters: a collapsed row that the switch just dissolved is gone, so it can no
+   * longer hide its children — `flattenLevels` works out which ancestors are still standing
+   * and re-sets `hidden` before we drop anything.
    *
    * Nothing else is dropped here any more. Completed rows used to be, along with their whole
    * subtree; completing a node now settles the work under it, so an ordinary State filter
    * removes a finished branch on its own — no special case, and it shows as a chip.
    */
   const visible = useMemo(
-    () =>
-      flattenLevels(
-        nodes.filter((node) => !node.hidden),
-        hiddenLevels,
-      ),
+    () => flattenLevels(nodes, hiddenLevels).filter((node) => !node.hidden),
     [nodes, hiddenLevels],
   );
 
