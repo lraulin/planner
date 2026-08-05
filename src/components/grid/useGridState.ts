@@ -59,6 +59,11 @@ export type GridState = ReturnType<typeof useGridState>;
  */
 export function useTabView<T extends string>(
   tabId: string,
+  /**
+   * Every id the picker offers — built-in **and** saved. A saved view is a legal selection
+   * exactly while it exists; delete it and the stored preference falls back rather than
+   * leaving the tab pointing at a view that is gone.
+   */
   allowed: readonly T[],
   fallback: T,
 ) {
@@ -115,6 +120,12 @@ export function useIncludeDeferred(tabId: string) {
  */
 export type GridDefaults = {
   /**
+   * Visible column ids, in order. The view's preset — a stored `null` follows it and a
+   * stored `[]` is the user having hidden everything, which is why it cannot just be a
+   * default value on the field.
+   */
+  order: string[];
+  /**
    * How this tab groups before the user chooses — Projects opens on Achieve's
    * Category → Result Area arrangement, most tabs on nothing.
    *
@@ -136,9 +147,9 @@ const NO_FILTERS: Record<string, ColumnFilter> = {};
 export function useGridState<TCol extends ColumnMeta>(
   tabId: string,
   allColumns: TCol[],
-  defaultOrder: string[],
-  defaults: GridDefaults = {},
+  defaults: GridDefaults,
 ) {
+  const defaultOrder = defaults.order;
   const defaultGroupBy = defaults.groupBy ?? EMPTY_GROUP_BY;
   const defaultFilters = defaults.filters ?? NO_FILTERS;
   const { value: settings, patch, reset } = useSetting(gridScope(tabId), CODEC);

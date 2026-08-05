@@ -275,7 +275,9 @@ export function NotesGrid({
     [selectedId, editingId, patch, apply, openDetail],
   );
 
-  const gridState = useGridState("notes", notesColumns, [...NOTES_COLUMN_IDS]);
+  const gridState = useGridState("notes", notesColumns, {
+    order: [...NOTES_COLUMN_IDS],
+  });
   // Show / hide / move now travel to Show Fields through `GridToolbar`, not from here.
   const { columns, sort: headerSort, clearSort: clearHeaderSort } = gridState;
 

@@ -164,11 +164,9 @@ function MetricForm({
   const [frozenOrder, setFrozenOrder] = useState<string[] | null>(null);
 
   // Shared across every metric (not per-metric) — same rail as other grids.
-  const trackingFields = useGridState(
-    TRACKING_GRID_TAB_ID,
-    TRACKING_COLUMNS,
-    TRACKING_DEFAULT_ORDER,
-  );
+  const trackingFields = useGridState(TRACKING_GRID_TAB_ID, TRACKING_COLUMNS, {
+    order: TRACKING_DEFAULT_ORDER,
+  });
   const fieldIds = trackingFields.order;
   const showTypeColumn = fieldIds.includes("type");
   const showTargetColumn = fieldIds.includes("target");

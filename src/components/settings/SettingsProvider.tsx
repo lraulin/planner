@@ -296,6 +296,14 @@ export function useSetting<T>(scope: string, codec: SettingCodec<T>) {
 }
 
 /** The reset page's view: which scopes are stored, and how to clear them. */
+/**
+ * Clear any scope by id, for the caller that is deleting the thing a scope belongs to
+ * rather than editing it — `useSetting(...).reset` only reaches its own.
+ */
+export function useResetScope() {
+  return useSettingsContext().resetScope;
+}
+
 export function useAllSettings() {
   const { snapshot, resetScope, resetAll, saveError } = useSettingsContext();
 

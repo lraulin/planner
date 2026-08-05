@@ -110,7 +110,8 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const stateChange = useStateChange({ nodes, patch, apply });
 
   const outlineColumns = useMemo(() => buildOutlineColumns(today), [today]);
-  const gridState = useGridState("outline", outlineColumns, [...OUTLINE_COLUMN_IDS], {
+  const gridState = useGridState("outline", outlineColumns, {
+    order: [...OUTLINE_COLUMN_IDS],
     /**
      * The Outline opens with finished work hidden — Achieve's default, and what the old
      * `Show completed` checkbox did. It is an ordinary State filter now: it says so in the

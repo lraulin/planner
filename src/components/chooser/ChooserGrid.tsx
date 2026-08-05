@@ -90,11 +90,9 @@ export function ChooserGrid({
   const view = chooserView(viewId);
 
   const allColumns = useMemo(() => buildChooserColumns(tab.today), [tab.today]);
-  const gridState = useGridState(
-    `chooser.${viewId}`,
-    allColumns,
-    view.tcPriority ? CHOOSER_TODO_ORDER : CHOOSER_DEFAULT_ORDER,
-  );
+  const gridState = useGridState(`chooser.${viewId}`, allColumns, {
+    order: view.tcPriority ? CHOOSER_TODO_ORDER : CHOOSER_DEFAULT_ORDER,
+  });
 
   /**
    * Scoring needs a day to measure against, and on the server there isn't one. `null` is

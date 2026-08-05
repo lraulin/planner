@@ -111,7 +111,7 @@ export function DailyItemsGrid({
   const [draft, setDraft] = useState("");
   const draftRef = useRef<HTMLInputElement>(null);
 
-  const gridState = useGridState("day", DAY_COLUMNS, DAY_COLUMN_IDS);
+  const gridState = useGridState("day", DAY_COLUMNS, { order: DAY_COLUMN_IDS });
   const rows = useMemo(() => buildRows(items), [items]);
   const orderedIds = useMemo(
     () => rows.flatMap((row) => (row.kind === "node" ? [row.id] : [])),

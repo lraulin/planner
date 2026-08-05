@@ -15,12 +15,20 @@
  */
 export const SETTINGS_VERSION = 2;
 
-export const SCOPE_KINDS = ["grid", "chooser", "outline", "notes", "drawer"] as const;
+export const SCOPE_KINDS = [
+  "grid",
+  "views",
+  "chooser",
+  "outline",
+  "notes",
+  "drawer",
+] as const;
 export type ScopeKind = (typeof SCOPE_KINDS)[number];
 
 /** Kinds that take a key (`grid:tasks`); the rest are singletons (`drawer`). */
 const KEYED: ReadonlySet<ScopeKind> = new Set<ScopeKind>([
   "grid",
+  "views",
   "chooser",
   "outline",
   "notes",
@@ -67,6 +75,14 @@ export function gridScope(tabId: string): string {
   return `grid:${tabId}`;
 }
 
+/**
+ * A tab's saved views — the **catalogue** of what each one is. How you have since adjusted
+ * one lives in its own `grid:{tab}.{viewId}` scope, exactly as a built-in view's does.
+ */
+export function viewsScope(tabId: string): string {
+  return `views:${tabId}`;
+}
+
 export function chooserScope(viewId: string): string {
   return `chooser:${viewId}`;
 }
@@ -76,6 +92,7 @@ export const DRAWER_SCOPE = "drawer";
 
 const KIND_LABELS: Record<ScopeKind, string> = {
   grid: "Grid",
+  views: "Saved views",
   chooser: "Task Chooser",
   outline: "Outline",
   notes: "Notes",

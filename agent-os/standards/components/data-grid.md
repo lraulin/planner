@@ -245,6 +245,25 @@ cannot be combined, cannot be inspected, and can only be described by its own na
 - A default filter is **indistinguishable from one the user set**, on purpose: same chip,
   same funnel state, same `Clear all`. That is what makes it a setting rather than a mode.
 
+### Saved views
+
+Because a view is only a column order, some filters and a grouping, **saving one is copying
+three values and giving them a name** — which is why the "we deliberately do not do user-saved
+views" line is gone. Its own condition was _revisit when the presets demonstrably do not cover
+it_, and the answer turned out not to be a new feature at all.
+
+- The **catalogue** lives in `views:{tabId}`; how you have since adjusted a saved view lives in
+  its own `grid:{tab}.{id}` scope, exactly as a built-in view's does. `Reset this grid` returns
+  to what you saved.
+- A saved view captures **order, filters and grouping** — precisely the three settings that
+  already distinguish "not chosen" from "chosen" (see the nullable fields in `grid.ts`). Sort
+  and density have no such distinction, so a view default could never win against a stored
+  one; capturing them needs a second migration and is deliberately not done.
+- Ids are **random, not sequential**. A reissued id would inherit the deleted view's leftover
+  grid scope. Deleting a view clears that scope with it.
+- Saved ids join the built-ins in `useTabView`'s allow-list, so deleting the view you are on
+  falls back instead of stranding the tab.
+
 ### The chip bar accounts for missing rows, not for stored state
 
 Two rules follow, both of which the state filters made visible:
@@ -405,7 +424,6 @@ in `ux-principles.md`.
 | **Server-side sort / filter** | Everything is already in memory from one recursive CTE. Round-tripping a keystroke would be slower, not faster.                                                                                                                        |
 | **Aggregation footers**       | The numbers that matter — effort, effort left, % complete — already roll up the _tree_ in `derive.ts`. A second, group-shaped sum of the same field in the same column would be a different number with no way to tell which is which. |
 | **Pivoting**                  | No question anyone has asked of this data needs it.                                                                                                                                                                                    |
-| **User-saved named views**    | Built-in presets plus persisted switches cover it so far. Revisit when the presets demonstrably do not.                                                                                                                                |
 
 ## Why hand-rolled, and when to revisit
 

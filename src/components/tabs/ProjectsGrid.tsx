@@ -24,6 +24,12 @@ import {
   switchValue,
   type GridSwitch,
 } from "@/components/grid/GridToolbar";
+import { ViewPicker } from "@/components/grid/ViewPicker";
+import {
+  savedViewDefaults,
+  snapshotOf,
+  useSavedViews,
+} from "@/components/grid/useSavedViews";
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import { openStateFilters, settledStateFilters } from "@/lib/grid/stateFilters";
 import {
@@ -230,7 +236,8 @@ function buildColumns(
   ];
 }
 
-function viewOrder(view: ViewId): string[] {
+/** A built-in view's column preset, or the tab's default for a saved id. */
+function viewOrder(view: string): string[] {
   switch (view) {
     case "active-purpose":
       return ["abbrState", "priority", "name", "purpose", "status", "deadline"];
@@ -283,7 +290,12 @@ const PROJECT_GROUP_DIMENSIONS: GroupBy[] = [
 
 export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const tab = useGridTab(initialNodes);
-  const [view, setView] = useTabView("projects", VIEW_IDS, "active-status");
+  const savedViews = useSavedViews("projects");
+  const viewIds = useMemo(
+    () => [...VIEW_IDS, ...savedViews.views.map((entry) => entry.id)],
+    [savedViews.views],
+  );
+  const [view, setView] = useTabView("projects", viewIds, "active-status");
   const [scopeId, setScopeId] = useState<string>("");
   const [includeDeferred, setIncludeDeferred] = useIncludeDeferred("projects");
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
@@ -299,10 +311,15 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
     [tab.nodes, tab.today],
   );
   const defaultOrder = useMemo(() => viewOrder(view), [view]);
-  const gridState = useGridState(`projects.${view}`, allColumns, defaultOrder, {
-    groupBy: PROJECT_DEFAULT_GROUP_BY,
-    filters: VIEWS.find((entry) => entry.id === view)?.filters,
-  });
+  const gridState = useGridState(
+    `projects.${view}`,
+    allColumns,
+    savedViewDefaults(savedViews.find(view), {
+      order: defaultOrder,
+      groupBy: PROJECT_DEFAULT_GROUP_BY,
+      filters: VIEWS.find((entry) => entry.id === view)?.filters,
+    }),
+  );
   const rowDrag = useTreeRowDrag({
     nodes: tab.nodes,
     byId: tab.byId,
@@ -375,11 +392,16 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
                 ...resultAreas.map((area) => ({ value: area.id, label: area.name })),
               ]}
             />
-            <ToolbarSelect
-              label="View"
+            <ViewPicker
               value={view}
-              onChange={(value) => setView(value as ViewId)}
-              options={VIEWS.map((entry) => ({ value: entry.id, label: entry.label }))}
+              onChange={setView}
+              builtIn={VIEWS}
+              saved={savedViews}
+              onSave={(name) => setView(savedViews.save(name, snapshotOf(gridState)))}
+              onDelete={(id) => {
+                setView(VIEWS[0].id);
+                savedViews.remove(id);
+              }}
             />
             {/* Tab-scoped, not per-view: one Postponed setting covers every sub-view. */}
             <ToolbarToggle

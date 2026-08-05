@@ -17,6 +17,12 @@ import {
 } from "@/components/grid/useGridState";
 import { openStateFilters, settledStateFilters } from "@/lib/grid/stateFilters";
 import { GridToolbar } from "@/components/grid/GridToolbar";
+import { ViewPicker } from "@/components/grid/ViewPicker";
+import {
+  savedViewDefaults,
+  snapshotOf,
+  useSavedViews,
+} from "@/components/grid/useSavedViews";
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import {
   categoryColumn,
@@ -182,7 +188,12 @@ const GOAL_GROUP_DIMENSIONS: GroupBy[] = [
 
 export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const tab = useGridTab(initialNodes);
-  const [view, setView] = useTabView("goals", VIEW_IDS, "all");
+  const savedViews = useSavedViews("goals");
+  const viewIds = useMemo(
+    () => [...VIEW_IDS, ...savedViews.views.map((entry) => entry.id)],
+    [savedViews.views],
+  );
+  const [view, setView] = useTabView("goals", viewIds, "all");
   const [scopeId, setScopeId] = useState<string>("");
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
   const [groupIds, setGroupIds] = useState<string[]>([]);
@@ -193,9 +204,14 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   );
 
   const allColumns = useMemo(() => buildColumns(), []);
-  const gridState = useGridState(`goals.${view}`, allColumns, DEFAULT_ORDER, {
-    filters: VIEWS.find((entry) => entry.id === view)?.filters,
-  });
+  const gridState = useGridState(
+    `goals.${view}`,
+    allColumns,
+    savedViewDefaults(savedViews.find(view), {
+      order: DEFAULT_ORDER,
+      filters: VIEWS.find((entry) => entry.id === view)?.filters,
+    }),
+  );
   const [includeDeferred, setIncludeDeferred] = useIncludeDeferred("goals");
 
   const rows: GridRow[] = useMemo(
@@ -272,11 +288,16 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
                 ...resultAreas.map((area) => ({ value: area.id, label: area.name })),
               ]}
             />
-            <ToolbarSelect
-              label="View"
+            <ViewPicker
               value={view}
-              onChange={(value) => setView(value as ViewId)}
-              options={VIEWS.map((entry) => ({ value: entry.id, label: entry.label }))}
+              onChange={setView}
+              builtIn={VIEWS}
+              saved={savedViews}
+              onSave={(name) => setView(savedViews.save(name, snapshotOf(gridState)))}
+              onDelete={(id) => {
+                setView(VIEWS[0].id);
+                savedViews.remove(id);
+              }}
             />
             {/*
               Parity with Tasks and Projects. Goals used to hard-code `includeDeferred: true`,

@@ -55,6 +55,12 @@ import { EffortCell, StatusCell } from "@/components/grid/cells";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import { ToolbarSelect, ToolbarToggle } from "./tabChrome";
 import { openStateFilters, settledStateFilters } from "@/lib/grid/stateFilters";
+import { ViewPicker } from "@/components/grid/ViewPicker";
+import {
+  savedViewDefaults,
+  snapshotOf,
+  useSavedViews,
+} from "@/components/grid/useSavedViews";
 import { nextActionsOnly } from "@/lib/tree/nextActions";
 import { useGridTab } from "./useGridTab";
 import type { OutlineColumnCtx } from "@/components/outline/outlineColumns";
@@ -72,29 +78,6 @@ type ViewId = (typeof VIEW_IDS)[number];
  * `active-status` and `active-schedule` differ only in the column layout each has stored
  * under its own `grid:tasks.{view}` scope; that is what a preset is.
  */
-const VIEWS: { id: ViewId; label: string; defaults: GridDefaults }[] = [
-  {
-    id: "active-status",
-    label: "Active Task Status",
-    defaults: { filters: openStateFilters("abbrState", "code") },
-  },
-  {
-    id: "active-schedule",
-    label: "Active Task Schedule",
-    defaults: { filters: openStateFilters("abbrState", "code") },
-  },
-  {
-    id: "completed",
-    label: "Completed Tasks",
-    defaults: { filters: settledStateFilters("abbrState", "code") },
-  },
-  { id: "all", label: "All Tasks", defaults: {} },
-];
-
-function viewDefaults(id: ViewId): GridDefaults {
-  return VIEWS.find((entry) => entry.id === id)?.defaults ?? {};
-}
-
 const DEFAULT_ORDER = [
   "abbrState",
   "priority",
@@ -105,6 +88,39 @@ const DEFAULT_ORDER = [
   "percent",
   "status",
 ];
+
+const VIEWS: { id: ViewId; label: string; defaults: GridDefaults }[] = [
+  {
+    id: "active-status",
+    label: "Active Task Status",
+    defaults: {
+      order: DEFAULT_ORDER,
+      filters: openStateFilters("abbrState", "code"),
+    },
+  },
+  {
+    id: "active-schedule",
+    label: "Active Task Schedule",
+    defaults: {
+      order: DEFAULT_ORDER,
+      filters: openStateFilters("abbrState", "code"),
+    },
+  },
+  {
+    id: "completed",
+    label: "Completed Tasks",
+    defaults: {
+      order: DEFAULT_ORDER,
+      filters: settledStateFilters("abbrState", "code"),
+    },
+  },
+  { id: "all", label: "All Tasks", defaults: { order: DEFAULT_ORDER } },
+];
+
+/** A built-in view's defaults, or the tab's preset for a saved id. */
+function viewDefaults(id: string): GridDefaults {
+  return VIEWS.find((entry) => entry.id === id)?.defaults ?? { order: DEFAULT_ORDER };
+}
 
 function buildColumns(
   allNodes: OutlineNode[],
@@ -247,7 +263,17 @@ const TASK_GROUP_DIMENSIONS: GroupBy[] = [
 
 export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const tab = useGridTab(initialNodes);
-  const [view, setView] = useTabView("tasks", VIEW_IDS, "active-status");
+  const savedViews = useSavedViews("tasks");
+  /**
+   * Saved ids join the built-ins so `useTabView` treats them as legal selections. Deleting
+   * one drops it from this list, and the stored preference falls back rather than leaving
+   * the tab pointing at a view that no longer exists.
+   */
+  const viewIds = useMemo(
+    () => [...VIEW_IDS, ...savedViews.views.map((entry) => entry.id)],
+    [savedViews.views],
+  );
+  const [view, setView] = useTabView("tasks", viewIds, "active-status");
   const [scopeId, setScopeId] = useState<string>("");
   const [includeDeferred, setIncludeDeferred] = useIncludeDeferred("tasks");
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
@@ -265,8 +291,7 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const gridState = useGridState(
     `tasks.${view}`,
     allColumns,
-    DEFAULT_ORDER,
-    viewDefaults(view),
+    savedViewDefaults(savedViews.find(view), viewDefaults(view)),
   );
   const rowDrag = useTreeRowDrag({
     nodes: tab.nodes,
@@ -367,11 +392,16 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
                 })),
               ]}
             />
-            <ToolbarSelect
-              label="View"
+            <ViewPicker
               value={view}
-              onChange={(value) => setView(value as ViewId)}
-              options={VIEWS.map((entry) => ({ value: entry.id, label: entry.label }))}
+              onChange={setView}
+              builtIn={VIEWS}
+              saved={savedViews}
+              onSave={(name) => setView(savedViews.save(name, snapshotOf(gridState)))}
+              onDelete={(id) => {
+                setView(VIEWS[0].id);
+                savedViews.remove(id);
+              }}
             />
             {/* Tab-scoped, not per-view: one Postponed setting covers every sub-view. */}
             <ToolbarToggle

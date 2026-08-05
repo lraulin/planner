@@ -48,7 +48,9 @@ export function WishesGrid({
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
-  const gridState = useGridState("wishes", wishesColumns, [...WISHES_COLUMN_IDS]);
+  const gridState = useGridState("wishes", wishesColumns, {
+    order: [...WISHES_COLUMN_IDS],
+  });
 
   const rows = useMemo(
     () =>
