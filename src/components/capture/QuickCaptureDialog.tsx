@@ -25,9 +25,10 @@ import { TYPE_LABELS } from "@/lib/tree/hierarchy";
  * is no record for a drawer to hang off, and the outline behind it is irrelevant to the
  * thought you are trying to offload before you lose it.
  *
- * Enter captures and closes: multi-line already covers bulk entry, and per-item detail
- * belongs in the normal interface rather than in a box you keep reopening. The parent
- * unmounts this on close, so the draft goes with it.
+ * Enter captures and closes on desktop: multi-line already covers bulk entry, and per-item
+ * detail belongs in the normal interface rather than in a box you keep reopening. On a
+ * phone the Send action sits beside the text area, so the soft keyboard never hides the
+ * only way to finish capture. The parent unmounts this on close, so the draft goes with it.
  */
 export function QuickCaptureDialog({
   onClose,
@@ -51,6 +52,7 @@ export function QuickCaptureDialog({
   const [deadline, setDeadline] = useState<Date | null>(null);
   const [effortMinutes, setEffortMinutes] = useState<number | null>(null);
   const [contexts, setContexts] = useState<string[]>([]);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   const [targets, setTargets] = useState<CaptureTarget[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -104,8 +106,8 @@ export function QuickCaptureDialog({
     // multi-line is always available, so there is nothing to toggle.
     //
     // Except on a soft keyboard, which has no Shift+Enter — Enter-submits would make the
-    // second line of a multi-line capture unreachable. Below `md` return means return, and
-    // the Add button is the way in. `modal-pattern.md` already required that button to exist.
+    // second line of a multi-line capture unreachable. Below `md`, return means return, and
+    // the Send button beside the composer is the way in.
     if (compact) return;
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
@@ -113,93 +115,144 @@ export function QuickCaptureDialog({
     }
   }
 
+  const disabled = pending || text.trim() === "";
+
   return (
     <ModalShell open onClose={onClose} labelledBy={titleId} width="max-w-2xl">
-      <div className="border-b border-rule px-5 py-3">
-        <h2 id={titleId} className="text-[0.9375rem] font-semibold text-ink">
-          Quick capture
-        </h2>
-      </div>
-
-      <div className="px-5 py-4">
-        <textarea
-          ref={textareaRef}
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          onKeyDown={onKeyDown}
-          rows={6}
-          aria-label="New tasks"
-          aria-describedby={hintId}
-          placeholder="What's on your mind?"
-          className="w-full resize-y rounded border border-rule bg-surface px-2 py-1.5 text-[0.875rem] leading-relaxed text-ink outline-none focus:border-rule-strong"
-        />
-
-        <p id={hintId} className="mt-1.5 text-[0.75rem] leading-relaxed text-ink-faint">
-          <span className="hidden md:inline">
-            <kbd className="font-medium">Enter</kbd> to add,{" "}
-            <kbd className="font-medium">Shift+Enter</kbd> for a new line.{" "}
-          </span>
-          Indent a line to make it a subtask. Add a note with <code>##</code> — “Buy
-          milk ## whole, not 2%”.
-        </p>
-
-        <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
-          <PriorityField
-            letter={priority.letter}
-            rank={priority.rank}
-            onChange={(letter, rank) => setPriority({ letter, rank })}
-          />
-          <EffortField
-            label="Effort"
-            value={effortMinutes}
-            onChange={setEffortMinutes}
-          />
-          <DateField label="Deadline" value={deadline} onChange={setDeadline} />
-          <ContextsField value={contexts} onChange={setContexts} />
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          submit();
+        }}
+      >
+        <div className="border-b border-rule px-4 py-3 md:px-5">
+          <h2 id={titleId} className="text-[0.9375rem] font-semibold text-ink">
+            Quick capture
+          </h2>
+          <p className="mt-0.5 text-[0.75rem] text-ink-muted">
+            Send it to your Inbox now. Sort it later.
+          </p>
         </div>
 
-        <label className="mt-3 block">
-          <span className="mb-1 block text-[0.75rem] font-medium text-ink-muted">
-            Add to
-          </span>
-          <select
-            value={parentId}
-            onChange={(event) => setParentId(event.target.value)}
-            className="min-h-tap w-full rounded border border-rule bg-surface px-2 py-1 text-[0.8125rem] text-ink outline-none focus:border-rule-strong md:min-h-0"
+        <div className="px-4 py-4 md:px-5">
+          <div className="flex items-end gap-2">
+            <textarea
+              ref={textareaRef}
+              value={text}
+              onChange={(event) => setText(event.target.value)}
+              onKeyDown={onKeyDown}
+              rows={compact ? 4 : 6}
+              enterKeyHint="send"
+              aria-label="New tasks"
+              aria-describedby={hintId}
+              placeholder="What's on your mind?"
+              className="min-h-32 min-w-0 flex-1 resize-y rounded border border-rule bg-surface px-3 py-2 text-[0.875rem] leading-relaxed text-ink outline-none focus:border-select-edge"
+            />
+
+            <button
+              type="submit"
+              disabled={disabled}
+              aria-label="Send to Inbox"
+              className="min-h-tap min-w-[4.25rem] shrink-0 rounded-lg border border-select-edge bg-select px-2 py-2 text-[0.8125rem] font-semibold text-ink transition-colors hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-40 md:hidden"
+            >
+              {pending ? "Sending…" : "Send"}
+            </button>
+          </div>
+
+          <p
+            id={hintId}
+            className="mt-1.5 text-[0.75rem] leading-relaxed text-ink-faint"
           >
-            <option value="">Inbox</option>
-            {(targets ?? []).map((target) => (
-              <option key={target.id} value={target.id}>
-                {`${"  ".repeat(target.depth)}${target.name} · ${TYPE_LABELS[target.type]}`}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+            <span className="hidden md:inline">
+              <kbd className="font-medium">Enter</kbd> to send,{" "}
+              <kbd className="font-medium">Shift+Enter</kbd> for a new line.{" "}
+            </span>
+            Indent a line to make it a subtask. Add a note with <code>##</code> — “Buy
+            milk ## whole, not 2%”.
+          </p>
 
-      <div className="flex items-center justify-between gap-3 border-t border-rule px-5 py-3">
-        <p role="status" aria-live="polite" className="text-[0.75rem] text-priority-a">
-          {error ?? ""}
-        </p>
+          <p
+            role="status"
+            aria-live="polite"
+            className="mt-2 min-h-4 text-[0.75rem] text-priority-a"
+          >
+            {error ?? ""}
+          </p>
 
-        <div className="flex gap-2">
           <button
             type="button"
-            onClick={onClose}
-            className="min-h-tap rounded border border-rule px-3 py-1.5 text-[0.8125rem] text-ink transition-colors hover:border-rule-strong hover:bg-surface-raised md:min-h-0"
+            onClick={() => setDetailsOpen((open) => !open)}
+            aria-expanded={detailsOpen}
+            className="mt-3 flex min-h-tap w-full items-center justify-between rounded border border-rule px-3 text-left text-[0.8125rem] font-medium text-ink transition-colors hover:border-rule-strong hover:bg-surface-raised md:hidden"
           >
-            Close
+            <span>Add details</span>
+            <span className="text-ink-faint" aria-hidden>
+              {detailsOpen ? "−" : "+"}
+            </span>
           </button>
-          <button
-            type="button"
-            onClick={submit}
-            disabled={pending || text.trim() === ""}
-            className="min-h-tap rounded border border-select-edge bg-select px-4 py-1.5 text-[0.8125rem] font-medium text-ink transition-colors hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-40 md:min-h-0 md:px-3"
+
+          <div
+            className={
+              detailsOpen ? "mt-4 block md:mt-4" : "mt-4 hidden md:mt-4 md:block"
+            }
           >
-            {pending ? "Adding…" : "Add"}
-          </button>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
+              <PriorityField
+                letter={priority.letter}
+                rank={priority.rank}
+                onChange={(letter, rank) => setPriority({ letter, rank })}
+              />
+              <EffortField
+                label="Effort"
+                value={effortMinutes}
+                onChange={setEffortMinutes}
+              />
+              <DateField label="Deadline" value={deadline} onChange={setDeadline} />
+              <ContextsField value={contexts} onChange={setContexts} />
+            </div>
+
+            <label className="mt-3 block">
+              <span className="mb-1 block text-[0.75rem] font-medium text-ink-muted">
+                Add to
+              </span>
+              <select
+                value={parentId}
+                onChange={(event) => setParentId(event.target.value)}
+                className="min-h-tap w-full rounded border border-rule bg-surface px-2 py-1 text-[0.8125rem] text-ink outline-none focus:border-rule-strong md:min-h-0"
+              >
+                <option value="">Inbox</option>
+                {(targets ?? []).map((target) => (
+                  <option key={target.id} value={target.id}>
+                    {`${"  ".repeat(target.depth)}${target.name} · ${TYPE_LABELS[target.type]}`}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
         </div>
-      </div>
+
+        <div className="flex items-center justify-end gap-2 border-t border-rule px-4 py-3 md:justify-between md:px-5">
+          <span className="hidden text-[0.75rem] text-ink-faint md:inline">
+            Defaults to Inbox
+          </span>
+          <div className="flex w-full gap-2 md:w-auto">
+            <button
+              type="button"
+              onClick={onClose}
+              className="min-h-tap flex-1 rounded border border-rule px-3 py-1.5 text-[0.8125rem] text-ink transition-colors hover:border-rule-strong hover:bg-surface-raised md:min-h-0 md:flex-none"
+            >
+              Close
+            </button>
+            <button
+              type="submit"
+              disabled={disabled}
+              className="hidden min-h-tap rounded border border-select-edge bg-select px-4 py-1.5 text-[0.8125rem] font-medium text-ink transition-colors hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-40 md:inline-flex md:min-h-0 md:px-3"
+            >
+              {pending ? "Sending…" : "Send"}
+            </button>
+          </div>
+        </div>
+      </form>
     </ModalShell>
   );
 }
