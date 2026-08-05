@@ -1771,6 +1771,66 @@ export const contactItems = pgTable(
   ],
 );
 
+/**
+ * A person or pool of working capacity — Achieve's Resources list.
+ *
+ * The planner currently uses a resource only as a reusable default for a week's time budget;
+ * it does not schedule individual projects or tasks around resource assignments yet. The full
+ * AP field set belongs here now so that later scheduling work needs an algorithm, not another
+ * migration. `availableMinutes` is deliberately *not* stored: it is a derived answer from
+ * the seven day inputs, overhead and effectiveness (`src/lib/resources/capacity.ts`).
+ */
+export const resources = pgTable(
+  "resources",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Achieve recommends a compact scheduling name, e.g. "Lee" or "Design team". */
+    shortName: text("short_name").notNull().default(""),
+    description: text("description").notNull().default(""),
+    /** The person behind this capacity, if there is one. Deleting them keeps the resource. */
+    contactId: uuid("contact_id").references(() => contacts.id, {
+      onDelete: "set null",
+    }),
+    /** Percent of working time lost to email, meetings and administrative work. */
+    overheadPercent: numeric("overhead_percent", { precision: 6, scale: 2 })
+      .notNull()
+      .default("0"),
+    /** Capacity relative to an average team member; 100% is the neutral default. */
+    effectivenessPercent: numeric("effectiveness_percent", { precision: 7, scale: 2 })
+      .notNull()
+      .default("100"),
+    /** Working minutes on each weekday, rather than hours, so partial days stay exact. */
+    mondayMinutes: integer("monday_minutes").notNull().default(0),
+    tuesdayMinutes: integer("tuesday_minutes").notNull().default(0),
+    wednesdayMinutes: integer("wednesday_minutes").notNull().default(0),
+    thursdayMinutes: integer("thursday_minutes").notNull().default(0),
+    fridayMinutes: integer("friday_minutes").notNull().default(0),
+    saturdayMinutes: integer("saturday_minutes").notNull().default(0),
+    sundayMinutes: integer("sunday_minutes").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("resources_user_short_name_idx").on(table.userId, table.shortName),
+    index("resources_user_contact_idx").on(table.userId, table.contactId),
+    check(
+      "resources_percent_ranges",
+      sql`${table.overheadPercent} between 0 and 100
+          and ${table.effectivenessPercent} >= 0`,
+    ),
+    check(
+      "resources_day_minutes_nonnegative",
+      sql`${table.mondayMinutes} >= 0 and ${table.tuesdayMinutes} >= 0
+          and ${table.wednesdayMinutes} >= 0 and ${table.thursdayMinutes} >= 0
+          and ${table.fridayMinutes} >= 0 and ${table.saturdayMinutes} >= 0
+          and ${table.sundayMinutes} >= 0`,
+    ),
+  ],
+);
+
 export type DailyItem = typeof dailyItems.$inferSelect;
 export type NewDailyItem = typeof dailyItems.$inferInsert;
 export type WorkoutSet = typeof workoutSets.$inferSelect;
@@ -1784,3 +1844,5 @@ export type NewContact = typeof contacts.$inferInsert;
 export type ContactItem = typeof contactItems.$inferSelect;
 export type NewContactItem = typeof contactItems.$inferInsert;
 export type ContactItemKind = (typeof contactItemKindEnum.enumValues)[number];
+export type Resource = typeof resources.$inferSelect;
+export type NewResource = typeof resources.$inferInsert;

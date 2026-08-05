@@ -13,6 +13,8 @@ import { startOfWeek } from "@/lib/schedule/geometry";
 import { loadSchedule, type SchedulePayload } from "@/lib/schedule/queries";
 import { loadOutline } from "@/lib/tree/queries";
 import type { OutlineNode } from "@/lib/tree/types";
+import { listResources } from "@/lib/resources/queries";
+import type { ResourceListRow } from "@/lib/resources/types";
 
 export async function getWeeklyPlan(
   userId: string,
@@ -187,6 +189,8 @@ export type WeeklyPlanPayload = {
   schedule: SchedulePayload;
   resultAreaReviews: [string, ResultAreaReview][];
   previousRewrites: [string, { rewrite: string; weekStart: string }][];
+  /** Resource capacities offered as a starting point at the Time Budget step. */
+  resources: ResourceListRow[];
   weekStart: string;
   weekStartsOn: number;
 };
@@ -206,7 +210,7 @@ export async function loadWeeklyPlanPayload(
 
   const plan = await getWeeklyPlan(userId, weekStart, weekStartsOn);
 
-  const [entries, outline, schedule, reviews, previous] = await Promise.all([
+  const [entries, outline, schedule, reviews, previous, resources] = await Promise.all([
     plan ? listPlanEntries(userId, plan.id) : Promise.resolve([]),
     loadOutline(userId),
     loadSchedule(userId, {
@@ -216,6 +220,7 @@ export async function loadWeeklyPlanPayload(
     }),
     loadResultAreaReviews(userId),
     loadPreviousRewrites(userId, weekStart),
+    listResources(userId),
   ]);
 
   return {
@@ -228,6 +233,7 @@ export async function loadWeeklyPlanPayload(
       nodeId,
       { rewrite: value.rewrite, weekStart: value.weekStart.toISOString() },
     ]),
+    resources,
     weekStart: weekStart.toISOString(),
     weekStartsOn,
   };

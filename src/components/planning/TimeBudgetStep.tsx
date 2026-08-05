@@ -8,19 +8,27 @@ import {
 } from "@/lib/planning/budget";
 import { selectProjectsForCommitment } from "@/lib/planning/review";
 import { formatEffort, parseEffort } from "@/lib/tree/format";
+import type { ResourceListRow } from "@/lib/resources/types";
 import type { StepContext } from "./types";
 
 type Props = {
   ctx: StepContext;
   availableMinutes: number | null;
+  resources: ResourceListRow[];
   onAvailableChange: (minutes: number | null) => void;
 };
 
 /**
  * Step 4 — set the week's available time and a commitment per leaf project.
- * Resources are out of scope; one budget for the whole week.
+ * Picking a resource copies its adjusted weekly capacity into this plan; the time box stays
+ * editable because a particular week can differ from a person's normal capacity.
  */
-export function TimeBudgetStep({ ctx, availableMinutes, onAvailableChange }: Props) {
+export function TimeBudgetStep({
+  ctx,
+  availableMinutes,
+  resources,
+  onAvailableChange,
+}: Props) {
   const projects = useMemo(() => selectProjectsForCommitment(ctx.nodes), [ctx.nodes]);
 
   const rows = useMemo(
@@ -44,6 +52,7 @@ export function TimeBudgetStep({ ctx, availableMinutes, onAvailableChange }: Pro
     formatEffort(availableMinutes) || (availableMinutes === 0 ? "0" : ""),
   );
   const [prevAvailable, setPrevAvailable] = useState(availableMinutes);
+  const [resourceId, setResourceId] = useState("");
   if (availableMinutes !== prevAvailable) {
     setPrevAvailable(availableMinutes);
     setAvailableText(
@@ -65,6 +74,33 @@ export function TimeBudgetStep({ ctx, availableMinutes, onAvailableChange }: Pro
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 p-4">
       <div className="flex flex-wrap items-end gap-4">
+        <label className="flex flex-col gap-1">
+          <span className="text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
+            Resource
+          </span>
+          <select
+            value={resourceId}
+            onChange={(event) => {
+              const nextId = event.target.value;
+              setResourceId(nextId);
+              const resource = resources.find((candidate) => candidate.id === nextId);
+              if (resource) onAvailableChange(resource.weeklyAvailableMinutes);
+            }}
+            className="min-h-tap min-w-48 rounded border border-rule bg-surface px-2 py-1.5 text-[0.875rem] text-ink outline-none focus:border-select-edge md:min-h-0"
+          >
+            <option value="">Manual time budget</option>
+            {resources.map((resource) => (
+              <option key={resource.id} value={resource.id}>
+                {resource.shortName} ·{" "}
+                {formatEffort(resource.weeklyAvailableMinutes) || "0"}
+              </option>
+            ))}
+          </select>
+          <span className="text-[0.75rem] text-ink-faint">
+            Applies this resource&apos;s normal capacity; override the time below for
+            this week.
+          </span>
+        </label>
         <label className="flex flex-col gap-1">
           <span className="text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
             Available Time

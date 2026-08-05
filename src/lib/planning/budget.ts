@@ -2,9 +2,10 @@
  * Step 4 of the wizard: how the week's available time divides across projects.
  *
  * Achieve runs this per Resource, with a Total Committed / Time Left pair under the grid.
- * We have no resources, so there is one budget for the week — but the arithmetic and the
- * over-commitment case are the same, and they are the part worth getting right: a plan
- * that quietly commits 60 hours to a 40-hour week is the failure this step exists to catch.
+ * This planner's wizard still makes one cross-project budget, but it can now prefill that
+ * budget from a Resource's weekly capacity. The copied number on `weekly_plans` remains
+ * authoritative — a resource is a useful starting point, not a retroactive rewrite of a
+ * week you have already planned.
  */
 
 export type CommitmentRow = {

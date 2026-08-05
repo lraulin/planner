@@ -102,5 +102,6 @@ const GO_KEYWORDS: Record<string, string> = {
   fitness: "workout exercise log",
   notes: "note journal markdown",
   "time-charts": "time chart ideal week template background blocks",
+  resources: "capacity availability workload hours overhead effectiveness team",
   contacts: "people address book phone email rolodex who discussion items",
 };

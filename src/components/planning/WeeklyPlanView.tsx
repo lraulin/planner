@@ -375,6 +375,7 @@ export function WeeklyPlanView({ payload, weekKey, step }: Props) {
           <TimeBudgetStep
             ctx={stepContext}
             availableMinutes={plan.availableMinutes}
+            resources={payload.resources}
             onAvailableChange={(minutes) =>
               void patchPlan({ availableMinutes: minutes })
             }

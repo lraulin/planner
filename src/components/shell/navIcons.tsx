@@ -173,6 +173,18 @@ export function ContactsIcon() {
   );
 }
 
+/** Resources: three joined capacity blocks, rather than a person or a project tree. */
+export function ResourcesIcon() {
+  return (
+    <svg {...BASE} className="h-5 w-5">
+      <rect x="3" y="4" width="5" height="5" rx="1" />
+      <rect x="12" y="4" width="5" height="5" rx="1" />
+      <rect x="7.5" y="12" width="5" height="5" rx="1" />
+      <path d="M8 6.5h4M10 9v3" />
+    </svg>
+  );
+}
+
 /**
  * Time Charts: a week's worth of painted blocks. Deliberately unlike `ScheduleIcon`'s empty
  * week grid — a time chart is the week you *intended*, which is why it has fill and the

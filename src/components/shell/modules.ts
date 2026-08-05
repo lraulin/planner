@@ -10,6 +10,7 @@ import {
   OutlineIcon,
   ProjectsIcon,
   ResultAreasIcon,
+  ResourcesIcon,
   ScheduleIcon,
   TasksIcon,
   TimeChartsIcon,
@@ -235,7 +236,8 @@ export const MODULES = [
     href: "/resources",
     section: "library",
     primary: false,
-    status: "reserved",
+    status: "built",
+    icon: ResourcesIcon,
   },
   {
     id: "contacts",

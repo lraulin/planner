@@ -176,6 +176,13 @@
       "when": 1785958095175,
       "tag": "0024_thick_morph",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1785961982371,
+      "tag": "0025_lyrical_wind_dancer",
+      "breakpoints": true
     }
   ]
 }
