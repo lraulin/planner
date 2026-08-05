@@ -24,6 +24,7 @@ import {
   syncDayLineToTargetStart,
   syncDayLinesInSubtree,
 } from "@/lib/day/sync";
+import { cascadeStateChange, type CascadeNode } from "./completionCascade";
 import { assertCanNest, TYPE_LABELS } from "./hierarchy";
 import { loadOutline } from "./queries";
 import { between } from "./sortKey";
@@ -785,12 +786,76 @@ async function reopenDayLine(
     .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
 }
 
+/**
+ * Set one node's state, and bring the rest of its branch into line — see
+ * `completionCascade.ts` for the rule and why it is asymmetric.
+ *
+ * Every affected node goes through `applyStateTransition`, so a cascaded completion means
+ * exactly what a hand-typed one does: the same day-line sync, and the same treatment of a
+ * repeating task, which steps to its next occurrence rather than closing.
+ *
+ * One transaction, so a branch is never left half-settled.
+ */
 export async function setState(
   userId: string,
   nodeId: string,
   state: NodeState,
 ): Promise<void> {
-  await db.transaction((tx) => applyStateTransition(tx, userId, nodeId, state));
+  await db.transaction(async (tx) => {
+    await applyStateTransition(tx, userId, nodeId, state);
+
+    // Cascade from the state the node **actually ended up in**, not the one that was asked
+    // for. Completing a repeating task does not settle it — it steps to the next occurrence
+    // and resets its subtree (see `applyStateTransition`) — so reading the request would
+    // settle the very children that were just cleared for the next round. Reading the result
+    // instead gets that case right without special-casing recurrence here.
+    const branch = await branchStates(tx, userId, nodeId);
+    const settled = branch.find((node) => node.id === nodeId)?.state ?? state;
+
+    for (const change of cascadeStateChange(branch, nodeId, settled)) {
+      await applyStateTransition(tx, userId, change.id, change.state);
+    }
+  });
+}
+
+/**
+ * The node's subtree and its ancestor chain, which between them are every node the cascade
+ * can reach. Loading the whole outline would work and would also mean reading a few thousand
+ * rows to settle one task.
+ */
+async function branchStates(
+  tx: Executor,
+  userId: string,
+  nodeId: string,
+): Promise<CascadeNode[]> {
+  const select = { id: nodes.id, parentId: nodes.parentId, state: nodes.state };
+
+  const descendants = await tx
+    .select(select)
+    .from(nodes)
+    .where(
+      and(
+        eq(nodes.userId, userId),
+        inArray(nodes.id, await subtreeIds(tx, userId, nodeId)),
+      ),
+    );
+
+  const out = [...descendants];
+  const seen = new Set(out.map((node) => node.id));
+
+  let parentId = descendants.find((node) => node.id === nodeId)?.parentId ?? null;
+  while (parentId !== null && !seen.has(parentId)) {
+    const [parent] = await tx
+      .select(select)
+      .from(nodes)
+      .where(and(eq(nodes.userId, userId), eq(nodes.id, parentId)));
+    if (!parent) break;
+    out.push(parent);
+    seen.add(parent.id);
+    parentId = parent.parentId;
+  }
+
+  return out;
 }
 
 /**

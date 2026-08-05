@@ -7,6 +7,7 @@ import { formatPriority } from "@/lib/tree/format";
 import { toDateKey } from "@/lib/schedule/geometry";
 import { STATE_LABELS } from "@/lib/tree/hierarchy";
 import type { ColumnDef } from "@/components/grid/columns";
+import { CascadeConfirm } from "@/components/grid/CascadeConfirm";
 import { DataGrid } from "@/components/grid/DataGrid";
 import { useGridState, useTabView } from "@/components/grid/useGridState";
 import { GridToolbar } from "@/components/grid/GridToolbar";
@@ -327,6 +328,8 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
           </div>
         }
       />
+
+      <CascadeConfirm state={tab.stateChange} />
 
       <NodeDetailDrawer
         node={tab.detailNode}

@@ -27,6 +27,24 @@ _which_ rows you see and _in what order siblings appear_ — never who a row's p
   type behave the way Achieve does. Ancestors count as shown — `Showing N of M` is the
   number of rows you can count on screen, not the number that matched.
 
+### Filtering is not flattening
+
+Two different questions, and conflating them is what made the Outline's old type checkboxes
+wrong in both directions:
+
+| Question                                | Control                                     | Behaviour                                                          |
+| --------------------------------------- | ------------------------------------------- | ------------------------------------------------------------------ |
+| "Which rows do I want to look at?"      | Column filter / search                      | Matches keep their ancestors; the shape is preserved               |
+| "Stop organising my work by this level" | Outline's `Areas` / `Goals/Dreams` switches | The level is dissolved and its children **rise** to take its place |
+
+`lib/tree/flattenLevels.ts` owns the second. It re-depths survivors from their surviving
+ancestry rather than subtracting a constant, because how many hidden levels a row sat under
+varies branch to branch. The tree is untouched — this is a view, and switching the level back
+on restores every row.
+
+Only organising levels are flattenable. Projects are what tasks belong to and tasks nest
+arbitrarily, so "flatten tasks" has no level to remove; a flat task list is the Tasks tab.
+
 **Never filter a tree by dropping a node's subtree with it.** That is the inverse mistake
 and it hides work you explicitly asked to see: the Outline once filtered type and focus that
 way, so unticking "Result Areas" emptied the entire grid and a focused task under an
@@ -98,6 +116,29 @@ Show Fields hides a column. It does not un-ask the question you asked about it.
 - **Sort is the exception**: sort keys resolve against the _visible_ columns. A filter on a
   hidden column is legible from its chip; a sort on one is a grid that has silently
   rearranged itself.
+
+## A parent's state is a claim about the work beneath it
+
+Settling a node settles the open work under it; re-opening one re-opens the settled nodes
+above it, as `in_progress` — something under it _has_ been done. `lib/tree/completionCascade.ts`
+owns the rule; `setState` runs it in one transaction so a branch is never half-settled, and
+`useStateChange` repeats it locally so the other rows move on the same frame.
+
+- **Completed and cancelled are interchangeably settled.** Achieve reopens a completed parent
+  when a child is cancelled but does not complete a cancelled child when the parent completes;
+  one rule that treats both as "not coming back" is easier to hold than two that disagree.
+- **Re-opening never cascades downward.** Re-opening a project must not undo twenty tasks that
+  really were finished.
+- **That asymmetry is why settling asks first** — and only when it would settle _open_
+  descendants, naming the count. A leaf task, or a project whose work is already done, goes
+  straight through. This is not Achieve's confirm-on-every-tick.
+- **Cascade from the state the node ended up in, not the one requested.** Completing a
+  repeating task steps it to the next occurrence and resets its subtree; reading the request
+  would settle the children that were just cleared for the next round.
+
+**This is why there is no "Show completed" toggle.** A finished branch is now settled all the
+way down, so an ordinary State column filter removes it — visible as a chip, clearable with
+everything else, no special case in the row walk.
 
 ## The column menu is where everything that acts on a column lives
 
@@ -273,6 +314,9 @@ failed at least once:
 - **Are its only two states "unavailable" and "duplicated"?** `Clear filters` was disabled in
   exactly the state where the chip bar is absent, so it could only be pressed while the chip
   bar was on screen offering `Clear all`.
+- **Is it an arrangement?** Then it is `groupBy`, never a toggle — the Outline's `By category`
+  checkbox was a standing exception to a rule the Projects tab already followed. Folding it in
+  cost one click and bought `Collapse all`, which the bespoke toggle never had.
 
 Prefer a control that shows its own state to one that needs a label to say what it is:
 density is a two-button segmented control (`Roomy` / `Dense`), not a `Density:` select.
@@ -319,18 +363,20 @@ Per `development/testing.md`: the logic lives in `src/lib/grid/**` and `src/lib/
 with a test beside it, and there are **no React component tests**. The pure modules worth
 knowing about:
 
-| Module                     | What it owns                                                 |
-| -------------------------- | ------------------------------------------------------------ |
-| `lib/grid/sortRows.ts`     | Hierarchy-preserving multi-key sort                          |
-| `lib/grid/columnMenu.ts`   | Which column-menu items are available, and header drag slots |
-| `lib/grid/ancestors.ts`    | Ancestor closure that keeps a filtered tree connected        |
-| `lib/grid/customFilter.ts` | Operator vocabulary and per-column expressions               |
-| `lib/grid/crossFilter.ts`  | Cross-column And/Or advanced filter                          |
-| `lib/grid/search.ts`       | Quick search matching                                        |
-| `lib/grid/chips.ts`        | What the chip bar says                                       |
-| `lib/grid/distinct.ts`     | Distinct values, shared by funnel and builder                |
-| `lib/settings/grid.ts`     | The persisted shape, its defaults and its migrations         |
-| `lib/tree/slice.ts`        | Row slice, group dimensions and header counts                |
+| Module                          | What it owns                                                 |
+| ------------------------------- | ------------------------------------------------------------ |
+| `lib/grid/sortRows.ts`          | Hierarchy-preserving multi-key sort                          |
+| `lib/grid/columnMenu.ts`        | Which column-menu items are available, and header drag slots |
+| `lib/grid/ancestors.ts`         | Ancestor closure that keeps a filtered tree connected        |
+| `lib/tree/flattenLevels.ts`     | Dissolving a level and promoting its children                |
+| `lib/tree/completionCascade.ts` | Which other nodes a state change moves, and which way        |
+| `lib/grid/customFilter.ts`      | Operator vocabulary and per-column expressions               |
+| `lib/grid/crossFilter.ts`       | Cross-column And/Or advanced filter                          |
+| `lib/grid/search.ts`            | Quick search matching                                        |
+| `lib/grid/chips.ts`             | What the chip bar says                                       |
+| `lib/grid/distinct.ts`          | Distinct values, shared by funnel and builder                |
+| `lib/settings/grid.ts`          | The persisted shape, its defaults and its migrations         |
+| `lib/tree/slice.ts`             | Row slice, group dimensions and header counts                |
 
 A test earns its place if it would fail on a plausible mistake. The mistakes this area
 actually makes are: a filter that silently matches nothing, a sort that lifts a child above

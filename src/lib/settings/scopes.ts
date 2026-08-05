@@ -65,7 +65,6 @@ export function chooserScope(viewId: string): string {
   return `chooser:${viewId}`;
 }
 
-export const OUTLINE_FILTERS_SCOPE = "outline:filters";
 export const NOTES_FILTER_SCOPE = "notes:filter";
 export const DRAWER_SCOPE = "drawer";
 

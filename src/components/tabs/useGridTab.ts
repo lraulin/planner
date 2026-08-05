@@ -13,6 +13,7 @@ import {
 } from "@/app/outline/actions";
 import { useOptimisticNodes } from "@/components/grid/useOptimisticNodes";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
+import { useStateChange } from "@/components/grid/useStateChange";
 import { useToday } from "@/components/grid/useToday";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
@@ -79,6 +80,8 @@ export function useGridTab(initialNodes: OutlineNode[]) {
     void writeClipboardText(text);
   }, [order, byId, selectedIds]);
 
+  const stateChange = useStateChange({ nodes, patch, apply });
+
   const cellHandlers = useMemo(
     () => ({
       today,
@@ -107,13 +110,10 @@ export function useGridTab(initialNodes: OutlineNode[]) {
         patch(node.id, { priorityLetter: letter, priorityRank: rank });
         apply(() => setPriorityAction(node.id, letter, rank));
       },
-      onStateChange: (
-        node: OutlineNode,
-        state: Parameters<typeof setStateAction>[1],
-      ) => {
-        patch(node.id, { state });
-        apply(() => setStateAction(node.id, state));
-      },
+      // Settling a row settles the open work under it, and re-opening one re-opens the
+      // settled rows above it — see `useStateChange`, which also owns the confirmation.
+      onStateChange: (node: OutlineNode, state: Parameters<typeof setStateAction>[1]) =>
+        stateChange.request(node, state, setStateAction),
       onFocusChange: (node: OutlineNode, focus: boolean) => {
         patch(node.id, { focus });
         apply(() => setFocusAction(node.id, focus));
@@ -130,7 +130,7 @@ export function useGridTab(initialNodes: OutlineNode[]) {
         apply(() => setEffortAction(node.id, minutes));
       },
     }),
-    [today, selectedId, editingId, patch, apply, openDetail],
+    [today, selectedId, editingId, patch, apply, openDetail, stateChange],
   );
 
   /**
@@ -220,6 +220,8 @@ export function useGridTab(initialNodes: OutlineNode[]) {
     detailNode,
     openDetail,
     cellHandlers,
+    /** Cascade confirmation state — the host renders the dialog. */
+    stateChange,
     rowMenu,
     copySelectionAsText,
   };

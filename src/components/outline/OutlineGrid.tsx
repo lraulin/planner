@@ -44,21 +44,18 @@ import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import { DataGrid, type RowDrag } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 import { useGridState } from "@/components/grid/useGridState";
-import { GridToolbar } from "@/components/grid/GridToolbar";
+import { GridToolbar, switchValue } from "@/components/grid/GridToolbar";
 import { collectDistinctValues } from "@/lib/grid/distinct";
-import { ToolbarToggle } from "@/components/tabs/tabChrome";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useOptimisticNodes } from "@/components/grid/useOptimisticNodes";
+import { useStateChange } from "@/components/grid/useStateChange";
 import { useToday } from "@/components/grid/useToday";
-import { useSetting, type SettingCodec } from "@/components/settings/SettingsProvider";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import {
-  isSettledOutlineState,
-  parseOutlineFilters,
-  serializeOutlineFilters,
-  type OutlineFilters,
-} from "@/lib/settings/outline";
-import { OUTLINE_FILTERS_SCOPE } from "@/lib/settings/scopes";
+  flattenLevels,
+  LEVEL_LABELS,
+  type FlattenableLevel,
+} from "@/lib/tree/flattenLevels";
 import { selectionMoveRoots } from "@/lib/grid/selection";
 import { copyAsText, writeClipboardText } from "@/lib/tree/copyAsText";
 import { HintBar } from "./HintBar";
@@ -70,10 +67,27 @@ import {
 } from "./outlineColumns";
 import { isTypingTarget } from "@/lib/keyboard";
 
-const OUTLINE_FILTERS_CODEC: SettingCodec<OutlineFilters> = {
-  parse: parseOutlineFilters,
-  serialize: serializeOutlineFilters,
-};
+/**
+ * Achieve's Areas and Goals checkboxes: **on means the level exists.** Turning one off
+ * dissolves it and promotes its children — see `lib/tree/flattenLevels.ts` for why that is
+ * a different question from filtering, and not the thing the old type checkboxes did.
+ */
+const LEVEL_SWITCHES = [
+  {
+    id: "levelAreas",
+    level: "result_area" as FlattenableLevel,
+    label: LEVEL_LABELS.result_area,
+    defaultOn: true,
+    title: "Off: goals and projects rise to the top level",
+  },
+  {
+    id: "levelGoals",
+    level: "goal" as FlattenableLevel,
+    label: LEVEL_LABELS.goal,
+    defaultOn: true,
+    title: "Off: projects rise to sit directly under their result area",
+  },
+];
 
 /**
  * Outline tab host: tree commands, the completed filter, drawer, and the shared DataGrid
@@ -92,45 +106,50 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   /** The row a new child is being added to, while its kind is being chosen. */
   const [pendingChildOf, setPendingChildOf] = useState<OutlineNode | null>(null);
   const today = useToday();
-
-  const {
-    value: typeFilters,
-    patch: patchTypeFilters,
-    reset: resetTypeFilters,
-  } = useSetting(OUTLINE_FILTERS_SCOPE, OUTLINE_FILTERS_CODEC);
-  const { showCompleted, byCategory } = typeFilters;
+  const stateChange = useStateChange({ nodes, patch, apply });
 
   const outlineColumns = useMemo(() => buildOutlineColumns(today), [today]);
   const gridState = useGridState("outline", outlineColumns, [...OUTLINE_COLUMN_IDS]);
   const { sort: headerSort, clearSort: clearHeaderSort } = gridState;
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
+  const [groupIds, setGroupIds] = useState<readonly string[]>([]);
+
+  const hiddenLevels = useMemo(
+    () =>
+      new Set(
+        LEVEL_SWITCHES.filter((entry) => !switchValue(gridState, entry)).map(
+          (entry) => entry.level,
+        ),
+      ),
+    [gridState],
+  );
 
   /**
-   * Settled rows, and everything under them, before the grid sees a row.
+   * Rows the tree itself hides (an ancestor is collapsed), then any dissolved level.
    *
-   * Subtree-dropping is right *here* and wrong for a column filter: finishing a project
-   * settles the work beneath it, so its completed children are not results you are hiding
-   * by accident. Type and Focus used to be filtered the same way and were moved to their
-   * columns, where a match keeps its ancestors instead — see `lib/settings/outline.ts`.
+   * Nothing else is dropped here any more. Completed rows used to be, along with their whole
+   * subtree; completing a node now settles the work under it, so an ordinary State filter
+   * removes a finished branch on its own — no special case, and it shows as a chip.
    */
-  const visible = useMemo(() => {
-    if (showCompleted) return nodes.filter((node) => !node.hidden);
-
-    const dropped = new Set<string>();
-    return nodes.filter((node) => {
-      const parentDropped = node.parentId ? dropped.has(node.parentId) : false;
-      if (parentDropped || isSettledOutlineState(node.state)) {
-        dropped.add(node.id);
-        return false;
-      }
-      return !node.hidden;
-    });
-  }, [nodes, showCompleted]);
+  const visible = useMemo(
+    () =>
+      flattenLevels(
+        nodes.filter((node) => !node.hidden),
+        hiddenLevels,
+      ),
+    [nodes, hiddenLevels],
+  );
 
   /**
-   * The outline is the tree itself, so its rows are a flat list at tree depth. By Category
-   * lays headers over that without disturbing it — see `groupByCategory`.
+   * The outline is the tree itself, so its rows are a flat list at tree depth. Grouping by
+   * Category lays headers over that without disturbing it — see `groupByCategory`.
+   *
+   * It is the standard `Group by` picker rather than a bespoke toggle, per `data-grid.md`:
+   * a tab's arrangement is its `groupBy`. Category is the only dimension the Outline offers,
+   * because everything else worth grouping by is already a level of the tree.
    */
+  const byCategory = gridState.groupBy.includes("category");
+
   const gridRows: GridRow[] = useMemo(
     () =>
       byCategory
@@ -590,10 +609,9 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         patch(node.id, { priorityLetter: letter, priorityRank: rank });
         apply(() => setPriorityAction(node.id, letter, rank));
       },
-      onStateChange: (node, state) => {
-        patch(node.id, { state });
-        apply(() => setStateAction(node.id, state));
-      },
+      // Settling a row settles the open work under it, and re-opening one re-opens the
+      // settled rows above it — see `useStateChange`, which also owns the confirmation.
+      onStateChange: (node, state) => stateChange.request(node, state, setStateAction),
       onFocusChange: (node, focus) => {
         patch(node.id, { focus });
         apply(() => setFocusAction(node.id, focus));
@@ -619,6 +637,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
       apply,
       setDetailId,
       selectOne,
+      stateChange,
     ],
   );
 
@@ -640,44 +659,9 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         distinctValues={distinctValues}
         counts={counts}
         error={error}
-        left={
-          <>
-            {/*
-              The outline's own view toggles. They live here rather than in `FilterBar`
-              because that bar is a *command* bar — add, indent, delete — and these decide
-              what the grid shows, which is what every other control in this toolbar does.
-
-              Only two are left. Type and Focus went to their columns: both were column
-              filters wearing checkboxes, and four permanent tick boxes for a filter the
-              per-type tabs already answer is a lot of toolbar for a rare question.
-            */}
-            <ToolbarToggle
-              checked={showCompleted}
-              onChange={() =>
-                patchTypeFilters((current) => ({
-                  ...current,
-                  showCompleted: !current.showCompleted,
-                }))
-              }
-              label="Show completed"
-            />
-            {/*
-              Category headers over the outline are their own arrangement — whole subtrees
-              move under one header (`groupByCategory`) rather than rows being regrouped —
-              so this stays a toggle instead of joining the Group by picker.
-            */}
-            <ToolbarToggle
-              checked={byCategory}
-              onChange={() =>
-                patchTypeFilters((current) => ({
-                  ...current,
-                  byCategory: !current.byCategory,
-                }))
-              }
-              label="By category"
-            />
-          </>
-        }
+        switches={LEVEL_SWITCHES}
+        groupDimensions={["category"]}
+        groupIds={groupIds}
       />
 
       <DataGrid
@@ -712,15 +696,13 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         columnControls={gridState.columnControls}
         collapsedGroups={gridState.collapsedGroups}
         onToggleGroup={gridState.toggleGroup}
+        onGroupIdsChange={setGroupIds}
         density={gridState.density}
         empty={
           <EmptyState
             filtered={nodes.length > 0}
             onAddResultArea={addResultArea}
-            onClearFilters={() => {
-              resetTypeFilters();
-              gridState.clearFilters();
-            }}
+            onClearFilters={gridState.clearFilters}
           />
         }
       />
@@ -761,6 +743,17 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         }}
         onCancel={() => setPendingDelete(null)}
       />
+
+      {stateChange.prompt && (
+        <ConfirmDialog
+          open
+          title={stateChange.prompt.title}
+          message={stateChange.prompt.message}
+          confirmLabel={stateChange.prompt.confirmLabel}
+          onConfirm={stateChange.confirm}
+          onCancel={stateChange.cancel}
+        />
+      )}
     </div>
   );
 }

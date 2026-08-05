@@ -10,6 +10,7 @@ import {
   STATUS_LABELS,
 } from "@/lib/tree/status";
 import type { ColumnDef } from "@/components/grid/columns";
+import { CascadeConfirm } from "@/components/grid/CascadeConfirm";
 import { DataGrid } from "@/components/grid/DataGrid";
 import {
   useGridState,
@@ -415,6 +416,8 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
           </div>
         }
       />
+
+      <CascadeConfirm state={tab.stateChange} />
 
       <NodeDetailDrawer
         node={tab.detailNode}

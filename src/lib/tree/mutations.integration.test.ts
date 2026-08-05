@@ -910,6 +910,24 @@ describeDb("tree mutations", () => {
       expect(byId.get(started)!.state).toBe("not_started");
     });
 
+    it("does not settle the subtree it just reset for the next occurrence", async () => {
+      // The cascade reads the state the node ended up in, not the one that was asked for.
+      // A repeating task never reaches "completed" — it steps on — so its freshly reset
+      // steps must stay Not Started rather than being completed behind it.
+      const parent = await recurringTask({ frequency: "weekly" });
+      const step = await createNode({
+        userId,
+        parentId: parent,
+        type: "task",
+        name: "Step",
+      });
+
+      await setState(userId, parent, "completed");
+
+      const byId = new Map((await loadOutline(userId)).map((n) => [n.id, n]));
+      expect(byId.get(step)!.state).toBe("not_started");
+    });
+
     it("still just completes a task that does not repeat", async () => {
       const task = await recurringTask({ frequency: "none" });
       await setState(userId, task, "completed");
@@ -1240,6 +1258,168 @@ describeDb("tree mutations", () => {
       expect(node.state).toBe("completed");
       expect(await completionsOf(userId, task)).toHaveLength(0);
       expect((await nodeRow(task)).deferredDate).toBeNull();
+    });
+  });
+
+  describe("completion cascade", () => {
+    /** area > goal > project > (task-a, task-b > subtask). Ids by name. */
+    async function branch(): Promise<Record<string, string>> {
+      const area = await createNode({
+        userId,
+        parentId: null,
+        type: "result_area",
+        name: "Area",
+      });
+      const goal = await createNode({
+        userId,
+        parentId: area,
+        type: "goal",
+        name: "Goal",
+      });
+      const project = await createNode({
+        userId,
+        parentId: goal,
+        type: "project",
+        name: "Project",
+      });
+      const taskA = await createNode({
+        userId,
+        parentId: project,
+        type: "task",
+        name: "Task A",
+      });
+      const taskB = await createNode({
+        userId,
+        parentId: project,
+        type: "task",
+        name: "Task B",
+      });
+      const subtask = await createNode({
+        userId,
+        parentId: taskB,
+        type: "task",
+        name: "Subtask",
+      });
+      return { area, goal, project, taskA, taskB, subtask };
+    }
+
+    async function statesOf(ids: Record<string, string>) {
+      const byId = new Map((await loadOutline(userId)).map((n) => [n.id, n]));
+      return Object.fromEntries(
+        Object.entries(ids).map(([name, id]) => [name, byId.get(id)?.state]),
+      );
+    }
+
+    it("completes every open descendant, at any depth", async () => {
+      const ids = await branch();
+      await setState(userId, ids.project, "completed");
+
+      expect(await statesOf(ids)).toMatchObject({
+        project: "completed",
+        taskA: "completed",
+        taskB: "completed",
+        subtask: "completed",
+        // Ancestors are a claim about work below them, and that claim has not changed.
+        goal: "not_started",
+        area: "not_started",
+      });
+    });
+
+    it("cancels open descendants but leaves finished work completed", async () => {
+      const ids = await branch();
+      await setState(userId, ids.taskA, "completed");
+      await setState(userId, ids.project, "cancelled");
+
+      expect(await statesOf(ids)).toMatchObject({
+        project: "cancelled",
+        taskA: "completed",
+        taskB: "cancelled",
+        subtask: "cancelled",
+      });
+    });
+
+    it("stamps completedAt on the cascaded rows, not just the one that was clicked", async () => {
+      const ids = await branch();
+      await setState(userId, ids.project, "completed");
+
+      const rows = await db
+        .select({ id: nodes.id, completedAt: nodes.completedAt })
+        .from(nodes)
+        .where(eq(nodes.userId, userId));
+      for (const row of rows) {
+        if (row.id === ids.area || row.id === ids.goal) continue;
+        expect(row.completedAt, `completedAt for ${row.id}`).not.toBeNull();
+      }
+    });
+
+    it("reopens settled ancestors as in progress when a child is re-opened", async () => {
+      const ids = await branch();
+      await setState(userId, ids.area, "completed");
+      await setState(userId, ids.subtask, "in_progress");
+
+      expect(await statesOf(ids)).toMatchObject({
+        subtask: "in_progress",
+        taskB: "in_progress",
+        project: "in_progress",
+        goal: "in_progress",
+        area: "in_progress",
+        // Re-opening never reaches sideways or down: Task A really was finished.
+        taskA: "completed",
+      });
+    });
+
+    it("treats cancelling a child as settled, so the parent stays settled", async () => {
+      // Achieve reopens the parent here; we do not, because cancelled is settled too.
+      const ids = await branch();
+      await setState(userId, ids.project, "completed");
+      await setState(userId, ids.taskA, "cancelled");
+
+      expect(await statesOf(ids)).toMatchObject({
+        project: "completed",
+        taskA: "cancelled",
+      });
+    });
+
+    it("leaves the whole branch settled or open, never half of each", async () => {
+      const ids = await branch();
+      await setState(userId, ids.area, "completed");
+      const states = await statesOf(ids);
+      expect(Object.values(states).every((state) => state === "completed")).toBe(true);
+    });
+
+    it("cannot cascade across users", async () => {
+      // The failure this guards is a cascade that walks the tree without scoping: another
+      // user's node id is a plausible parent, and settling a stranger's subtree would be
+      // invisible from either side.
+      const ids = await branch();
+      const other = await makeUser();
+      const theirs = await createNode({
+        userId: other,
+        parentId: null,
+        type: "result_area",
+        name: "Theirs",
+      });
+      const theirTask = await createNode({
+        userId: other,
+        parentId: theirs,
+        type: "task",
+        name: "Their task",
+      });
+
+      await setState(userId, ids.area, "completed");
+      // Reading, changing and clearing the other user's rows from this user all fail.
+      await setState(other, theirs, "in_progress");
+
+      const theirRows = new Map((await loadOutline(other)).map((n) => [n.id, n]));
+      expect(theirRows.get(theirTask)!.state).toBe("not_started");
+
+      await setState(userId, theirTask, "completed");
+      expect((await loadOutline(other)).find((n) => n.id === theirTask)!.state).toBe(
+        "not_started",
+      );
+
+      await deleteNode(userId, theirs);
+      expect((await loadOutline(other)).map((n) => n.id)).toContain(theirs);
     });
   });
 

@@ -6,7 +6,6 @@ import {
   gridScope,
   isValidScope,
   NOTES_FILTER_SCOPE,
-  OUTLINE_FILTERS_SCOPE,
   parseScope,
 } from "./scopes";
 
@@ -24,7 +23,7 @@ describe("parseScope", () => {
   });
 
   it("accepts the constants this app actually writes", () => {
-    for (const scope of [OUTLINE_FILTERS_SCOPE, NOTES_FILTER_SCOPE, DRAWER_SCOPE]) {
+    for (const scope of [NOTES_FILTER_SCOPE, DRAWER_SCOPE]) {
       expect(isValidScope(scope)).toBe(true);
     }
   });
