@@ -261,7 +261,7 @@ export function ChooserGrid({
         allColumns={allColumns}
         distinctValues={distinctValues}
         switches={CHOOSER_SWITCHES}
-        counts={counts}
+        counts={{ shown: counts.shown, total: matching.length }}
         error={tab.error}
         left={
           <>
@@ -281,19 +281,24 @@ export function ChooserGrid({
               Settings…
             </ToolbarButton>
 
-            <span className="flex items-center gap-2">
+            {/*
+              No count between these any more. The chip bar already says "Showing N of M",
+              and this said "20 of 47" beside it saying "Showing 20 of 20" — two numbers
+              about the same list that disagreed, because the grid can only count the rows
+              it was handed. `counts` below gives it the real denominator instead.
+            */}
+            <span className="flex items-center gap-1">
               <ToolbarButton
                 onClick={() => setLimit((n) => Math.max(PAGE_STEP, n - PAGE_STEP))}
                 disabled={limit <= PAGE_STEP}
+                title="Show ten fewer"
               >
                 Show Less
               </ToolbarButton>
-              <span className="tabular text-[0.8125rem] text-ink-muted">
-                {visible.length} of {matching.length}
-              </span>
               <ToolbarButton
                 onClick={() => setLimit((n) => n + PAGE_STEP)}
                 disabled={limit >= matching.length}
+                title="Show ten more"
               >
                 Show More
               </ToolbarButton>
@@ -311,8 +316,18 @@ export function ChooserGrid({
                 label: entry.label,
               }))}
             />
-            {/* Achieve's Deferred toggle, kept as a shortcut into the state list rather
-                than a second mechanism beside it — so it is not a `switches` entry. */}
+            {/*
+              Two shortcuts into fields of the Chooser's own settings, rather than second
+              mechanisms beside them — which is why neither is a `switches` entry. Next
+              actions is the one worth having on the bar: it is the difference between
+              "everything available" and "one thing per project", and burying the switch in
+              a dialog is what made it feel like a property of the Next Action Only view.
+            */}
+            <ToolbarToggle
+              checked={settings.onlyNextAction}
+              onChange={() => update({ onlyNextAction: !settings.onlyNextAction })}
+              label="Next actions"
+            />
             <ToolbarToggle
               checked={settings.states.includes("postponed")}
               onChange={() =>
@@ -326,24 +341,11 @@ export function ChooserGrid({
             />
           </>
         }
-        right={
-          <>
-            <ToolbarButton
-              onClick={() => tab.selectedId && tab.setEditingId(tab.selectedId)}
-              disabled={!tab.selectedId}
-              title="F2"
-            >
-              Rename
-            </ToolbarButton>
-            <ToolbarButton
-              onClick={() => tab.selectedId && tab.openDetail(tab.selectedId)}
-              disabled={!tab.selectedId}
-              title="Enter"
-            >
-              Open
-            </ToolbarButton>
-          </>
-        }
+        rowActions={{
+          selectedId: tab.selectedId,
+          onRename: tab.setEditingId,
+          onOpen: tab.openDetail,
+        }}
       />
 
       <div className="flex flex-none items-baseline gap-2 border-b border-rule bg-surface-raised/60 px-4 py-1.5">

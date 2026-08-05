@@ -59,6 +59,7 @@ export function GridToolbar({
   switches = [],
   counts,
   error,
+  rowActions,
   left,
   right,
 }: {
@@ -78,6 +79,17 @@ export function GridToolbar({
   switches?: readonly GridSwitch[];
   counts: { shown: number; total: number };
   error?: string | null;
+  /**
+   * Rename and Open for the selected row. Every node tab had these, spelled out identically,
+   * and `ux-principles.md` requires them: `F2` and `Enter` are the real bindings, and a
+   * shortcut with no visible button fails the person who does not know it yet. One prop
+   * rather than fourteen lines per tab means they cannot drift apart.
+   */
+  rowActions?: {
+    selectedId: string | null;
+    onRename: (id: string) => void;
+    onOpen: (id: string) => void;
+  };
   /** Tab-specific selects that come first: Result Area, View, Project scope. */
   left?: ReactNode;
   /** Tab-specific actions that come last: Rename, Open, New note. */
@@ -154,6 +166,29 @@ export function GridToolbar({
         >
           Reset this grid
         </ToolbarButton>
+
+        {rowActions && (
+          <>
+            <ToolbarButton
+              onClick={() =>
+                rowActions.selectedId && rowActions.onRename(rowActions.selectedId)
+              }
+              disabled={!rowActions.selectedId}
+              title="F2"
+            >
+              Rename
+            </ToolbarButton>
+            <ToolbarButton
+              onClick={() =>
+                rowActions.selectedId && rowActions.onOpen(rowActions.selectedId)
+              }
+              disabled={!rowActions.selectedId}
+              title="Enter"
+            >
+              Open
+            </ToolbarButton>
+          </>
+        )}
 
         {right}
       </TabToolbar>

@@ -199,6 +199,29 @@ for a column whose subject is the levels of the tree.
 knowing which other columns are on screen, and threading it through every tab's column
 context would make eight files care about a question only `DataGrid` can answer.
 
+## Next actions is a switch, not a view
+
+Achieve's simple **Next Action Only** list keeps every summary row and, among sibling
+_leaves_, only the first one still open (`lib/tree/nextActions.ts`). Planning a project as six
+ordered steps is good practice; being shown all six while picking what to do next is not.
+
+It is a **switch on the Tasks tab and on the Task Chooser**, not a property of a view. A view
+should be a collection of settings you could have reached one at a time — the moment it also
+carries a setting available nowhere else, picking the view is the only way to get the
+behaviour and you cannot combine it with anything.
+
+Two rules the implementation depends on:
+
+- **Judge leaf-ness inside the list you were given**, not from `hasChildren`. A task whose
+  subtasks this view filters out is a leaf _here_; otherwise a view can show a summary with
+  nothing under it and call it a next action.
+- **Group siblings by real `parentId`, not row depth.** Tasks re-bases depth so every task
+  looks top-level; grouping by depth would leave one next action for the whole tab.
+
+The Task Chooser keeps its own rule (`lib/chooser/views.ts`, manual §8.3): it is a flat scored
+list with no hierarchy, so "first leaf sibling" has nothing to mean there. Same question,
+different shape — which is why they are two functions and not one with a flag.
+
 ## Progressive disclosure: three rungs, in this order
 
 | Rung | Control                                                                                                                   | For                             |
@@ -317,6 +340,14 @@ failed at least once:
 - **Is it an arrangement?** Then it is `groupBy`, never a toggle — the Outline's `By category`
   checkbox was a standing exception to a rule the Projects tab already followed. Folding it in
   cost one click and bought `Collapse all`, which the bespoke toggle never had.
+
+- **Does the tab already have one?** Rename and Open were spelled out identically on four
+  tabs; they are `GridToolbar`'s `rowActions` now. `ux-principles.md` requires them — `F2` and
+  `Enter` are the real bindings and a shortcut with no button fails whoever does not know it —
+  but a tab should declare that it has a selection, not assemble two buttons.
+- **Is a second control reporting the same number?** The Task Chooser said `20 of 47` beside
+  the chip bar saying `Showing 20 of 20`, because the grid can only count the rows it was
+  handed. One count, in the chip bar, with the host passing the real denominator.
 
 Prefer a control that shows its own state to one that needs a label to say what it is:
 density is a two-button segmented control (`Roomy` / `Dense`), not a `Density:` select.

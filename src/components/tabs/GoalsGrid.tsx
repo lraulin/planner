@@ -9,7 +9,11 @@ import { STATE_LABELS } from "@/lib/tree/hierarchy";
 import type { ColumnDef } from "@/components/grid/columns";
 import { CascadeConfirm } from "@/components/grid/CascadeConfirm";
 import { DataGrid } from "@/components/grid/DataGrid";
-import { useGridState, useTabView } from "@/components/grid/useGridState";
+import {
+  useGridState,
+  useIncludeDeferred,
+  useTabView,
+} from "@/components/grid/useGridState";
 import { GridToolbar } from "@/components/grid/GridToolbar";
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import {
@@ -27,7 +31,7 @@ import {
 } from "@/components/grid/cells";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import { setGoalFieldAction } from "@/app/outline/detail-actions";
-import { ToolbarButton, ToolbarSelect } from "./tabChrome";
+import { ToolbarSelect, ToolbarToggle } from "./tabChrome";
 import { useGridTab } from "./useGridTab";
 import type { OutlineColumnCtx } from "@/components/outline/outlineColumns";
 
@@ -184,6 +188,7 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
 
   const allColumns = useMemo(() => buildColumns(), []);
   const gridState = useGridState(`goals.${view}`, allColumns, DEFAULT_ORDER);
+  const [includeDeferred, setIncludeDeferred] = useIncludeDeferred("goals");
 
   const rows: GridRow[] = useMemo(
     () =>
@@ -200,10 +205,10 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
           return chosen.length > 0 ? chosen : (["resultArea"] as GroupBy[]);
         })(),
         scopeId: scopeId || null,
-        includeDeferred: true,
+        includeDeferred,
         today: tab.today,
       }),
-    [tab.nodes, tab.today, view, scopeId, gridState.groupBy],
+    [tab.nodes, tab.today, view, scopeId, gridState.groupBy, includeDeferred],
   );
 
   const distinctValues = useMemo(
@@ -269,26 +274,23 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
               onChange={(value) => setView(value as ViewId)}
               options={VIEWS.map((entry) => ({ value: entry.id, label: entry.label }))}
             />
+            {/*
+              Parity with Tasks and Projects. Goals used to hard-code `includeDeferred: true`,
+              so a goal shelved until next quarter sat in the list with no way to put it away
+              — the one node tab where shelving did nothing.
+            */}
+            <ToolbarToggle
+              checked={includeDeferred}
+              onChange={() => setIncludeDeferred(!includeDeferred)}
+              label="Postponed"
+            />
           </>
         }
-        right={
-          <>
-            <ToolbarButton
-              onClick={() => tab.selectedId && tab.setEditingId(tab.selectedId)}
-              disabled={!tab.selectedId}
-              title="F2"
-            >
-              Rename
-            </ToolbarButton>
-            <ToolbarButton
-              onClick={() => tab.selectedId && tab.openDetail(tab.selectedId)}
-              disabled={!tab.selectedId}
-              title="Enter"
-            >
-              Open
-            </ToolbarButton>
-          </>
-        }
+        rowActions={{
+          selectedId: tab.selectedId,
+          onRename: tab.setEditingId,
+          onOpen: tab.openDetail,
+        }}
       />
 
       <DataGrid

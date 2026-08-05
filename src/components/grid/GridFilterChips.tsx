@@ -74,7 +74,11 @@ export function GridFilterChips({
     [filters, advancedFilter, search, byId, distinctValues],
   );
 
-  if (chips.length === 0) return null;
+  // Renders for the count alone when something other than a filter is holding rows back —
+  // the Task Chooser's Show More limit is the case: `Showing 20 of 47` is exactly the thing
+  // the user needs to know there, and it used to be a second, separately-computed number on
+  // the toolbar that disagreed with this one.
+  if (chips.length === 0 && shown >= total) return null;
 
   return (
     <div className="flex flex-none flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-rule bg-surface-raised/40 px-3 py-1.5 text-[0.75rem]">
@@ -82,9 +86,11 @@ export function GridFilterChips({
         Showing <strong className="font-semibold text-ink">{shown}</strong> of {total}
       </span>
 
-      <span aria-hidden className="text-ink-faint">
-        ·
-      </span>
+      {chips.length > 0 && (
+        <span aria-hidden className="text-ink-faint">
+          ·
+        </span>
+      )}
 
       {chips.map((chip) => (
         <Chip
@@ -96,13 +102,16 @@ export function GridFilterChips({
         />
       ))}
 
-      <button
-        type="button"
-        onClick={onClearAll}
-        className="min-h-tap ml-auto flex-none rounded px-2 py-0.5 whitespace-nowrap text-ink-muted underline decoration-dotted underline-offset-2 transition-colors hover:text-ink md:min-h-0"
-      >
-        Clear all
-      </button>
+      {/* Nothing to clear when the bar is here only to report a count. */}
+      {chips.length > 0 && (
+        <button
+          type="button"
+          onClick={onClearAll}
+          className="min-h-tap ml-auto flex-none rounded px-2 py-0.5 whitespace-nowrap text-ink-muted underline decoration-dotted underline-offset-2 transition-colors hover:text-ink md:min-h-0"
+        >
+          Clear all
+        </button>
+      )}
     </div>
   );
 }

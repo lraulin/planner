@@ -52,7 +52,8 @@ import {
 } from "@/components/grid/commonColumns";
 import { EffortCell, StatusCell } from "@/components/grid/cells";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
-import { ToolbarButton, ToolbarSelect, ToolbarToggle } from "./tabChrome";
+import { ToolbarSelect, ToolbarToggle } from "./tabChrome";
+import { nextActionsOnly } from "@/lib/tree/nextActions";
 import { useGridTab } from "./useGridTab";
 import type { OutlineColumnCtx } from "@/components/outline/outlineColumns";
 
@@ -200,6 +201,13 @@ function buildColumns(
  * toggle beside a picker that does the same thing meant `(None)` did not mean none.
  */
 const TASK_SWITCHES: GridSwitch[] = [
+  {
+    id: "nextActions",
+    label: "Next actions",
+    defaultOn: false,
+    title:
+      "Only the first open step under each task — plan a sequence without it crowding the list",
+  },
   { id: "showPurpose", label: "Project's Purpose", defaultOn: false },
 ];
 
@@ -242,7 +250,8 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     clearHeaderSort: gridState.clearSort,
   });
 
-  const showPurpose = switchValue(gridState, TASK_SWITCHES[0]);
+  const nextActions = switchValue(gridState, TASK_SWITCHES[0]);
+  const showPurpose = switchValue(gridState, TASK_SWITCHES[1]);
 
   const purposeText = useMemo(() => {
     if (!showPurpose || !scopeId) return null;
@@ -250,9 +259,19 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     return project?.purpose ?? "";
   }, [showPurpose, scopeId, tab.byId]);
 
+  /**
+   * Next actions narrows the **tree**, before slicing: the rule is about which of a task's
+   * siblings is available, so it has to see them as siblings. Running it on the sliced rows
+   * would judge a re-based list where every task looks top-level.
+   */
+  const sourceNodes = useMemo(
+    () => (nextActions ? nextActionsOnly(tab.nodes) : tab.nodes),
+    [nextActions, tab.nodes],
+  );
+
   const rows: GridRow[] = useMemo(() => {
     const groupBy = asGroupBy(gridState.groupBy);
-    return sliceTree(tab.nodes, {
+    return sliceTree(sourceNodes, {
       keep: (node) => {
         if (node.type !== "task") return false;
         if (view === "completed") return node.state === "completed";
@@ -275,7 +294,7 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
       return true;
     });
   }, [
-    tab.nodes,
+    sourceNodes,
     tab.byId,
     tab.today,
     view,
@@ -345,24 +364,11 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
             />
           </>
         }
-        right={
-          <>
-            <ToolbarButton
-              onClick={() => tab.selectedId && tab.setEditingId(tab.selectedId)}
-              disabled={!tab.selectedId}
-              title="F2"
-            >
-              Rename
-            </ToolbarButton>
-            <ToolbarButton
-              onClick={() => tab.selectedId && tab.openDetail(tab.selectedId)}
-              disabled={!tab.selectedId}
-              title="Enter"
-            >
-              Open
-            </ToolbarButton>
-          </>
-        }
+        rowActions={{
+          selectedId: tab.selectedId,
+          onRename: tab.setEditingId,
+          onOpen: tab.openDetail,
+        }}
       />
 
       {showPurpose && (

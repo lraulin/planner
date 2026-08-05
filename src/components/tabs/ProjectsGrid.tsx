@@ -54,7 +54,7 @@ import {
 } from "@/components/grid/commonColumns";
 import { EffortCell, ReadOnlyCell, StatusCell } from "@/components/grid/cells";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
-import { ToolbarButton, ToolbarSelect, ToolbarToggle } from "./tabChrome";
+import { ToolbarSelect, ToolbarToggle } from "./tabChrome";
 import { useGridTab } from "./useGridTab";
 import type { OutlineColumnCtx } from "@/components/outline/outlineColumns";
 
@@ -399,24 +399,11 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
             />
           </>
         }
-        right={
-          <>
-            <ToolbarButton
-              onClick={() => tab.selectedId && tab.setEditingId(tab.selectedId)}
-              disabled={!tab.selectedId}
-              title="F2"
-            >
-              Rename
-            </ToolbarButton>
-            <ToolbarButton
-              onClick={() => tab.selectedId && tab.openDetail(tab.selectedId)}
-              disabled={!tab.selectedId}
-              title="Enter"
-            >
-              Open
-            </ToolbarButton>
-          </>
-        }
+        rowActions={{
+          selectedId: tab.selectedId,
+          onRename: tab.setEditingId,
+          onOpen: tab.openDetail,
+        }}
       />
 
       <DataGrid
