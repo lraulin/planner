@@ -43,7 +43,8 @@ import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import { DataGrid, type RowDrag } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";
-import { useGridState } from "@/components/grid/useGridState";
+import type { GridDefaults } from "@/components/grid/useGridState";
+import { useModuleViews } from "@/components/grid/useModuleViews";
 import { GridToolbar, switchValue } from "@/components/grid/GridToolbar";
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import { openStateFilters } from "@/lib/grid/stateFilters";
@@ -91,6 +92,29 @@ const LEVEL_SWITCHES = [
 ];
 
 /**
+ * The Outline has one built-in view, and that is not a placeholder.
+ *
+ * Achieve's Outline is a single arrangement of everything; the per-type lists are the Projects,
+ * Goals and Tasks modules. What the Outline *does* need is somewhere to keep the setups you
+ * arrive at by hand — the levels dissolved, the states shown, a column set — which is what
+ * saved views are for. So: one preset, and as many of your own as you like.
+ */
+const OUTLINE_VIEWS = [{ id: "outline", label: "Full Outline" }] as const;
+
+function viewDefaults(): GridDefaults {
+  return {
+    order: [...OUTLINE_COLUMN_IDS],
+    /**
+     * The Outline opens with finished work hidden — Achieve's default, and what the old
+     * `Show completed` checkbox did. It is an ordinary State filter now: it says so in the
+     * chip bar, `Clear all` removes it, and `Reset this grid` brings it back. That is the
+     * whole difference between a default and a mode.
+     */
+    filters: openStateFilters("state", "label"),
+  };
+}
+
+/**
  * Outline tab host: tree commands, the completed filter, drawer, and the shared DataGrid
  * with the outline's column set. Optional "By category" lays group headers over the tree
  * and lets root result areas change category by drag.
@@ -110,16 +134,17 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const stateChange = useStateChange({ nodes, patch, apply });
 
   const outlineColumns = useMemo(() => buildOutlineColumns(today), [today]);
-  const gridState = useGridState("outline", outlineColumns, {
-    order: [...OUTLINE_COLUMN_IDS],
-    /**
-     * The Outline opens with finished work hidden — Achieve's default, and what the old
-     * `Show completed` checkbox did. It is an ordinary State filter now: it says so in the
-     * chip bar, `Clear all` removes it, and `Reset this grid` brings it back. That is the
-     * whole difference between a default and a mode.
-     */
-    filters: openStateFilters("state", "label"),
+  const views = useModuleViews({
+    moduleId: "outline",
+    builtIn: OUTLINE_VIEWS,
+    defaultViewId: "outline",
+    // The Outline had no view picker before, so its stored layout lives at `grid:outline`.
+    // Gaining one must not move it. See the option's own note.
+    defaultViewSharesModuleScope: true,
+    columns: outlineColumns,
+    defaultsFor: viewDefaults,
   });
+  const gridState = views.grid;
   const { sort: headerSort, clearSort: clearHeaderSort } = gridState;
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
   const [groupIds, setGroupIds] = useState<readonly string[]>([]);
@@ -672,6 +697,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         switches={LEVEL_SWITCHES}
         groupDimensions={["category"]}
         groupIds={groupIds}
+        views={views}
       />
 
       <DataGrid

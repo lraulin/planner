@@ -197,11 +197,6 @@ export const CHOOSER_VIEWS: ChooserView[] = [
   },
 ];
 
-/** The view ids, for validating a stored selection against what still exists. */
-export const CHOOSER_VIEW_IDS: readonly ChooserViewId[] = CHOOSER_VIEWS.map(
-  (view) => view.id,
-);
-
 export function chooserView(id: ChooserViewId): ChooserView {
   return CHOOSER_VIEWS.find((view) => view.id === id) ?? CHOOSER_VIEWS[0];
 }

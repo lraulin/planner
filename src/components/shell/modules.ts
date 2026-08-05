@@ -14,25 +14,32 @@ import {
 } from "./navIcons";
 
 /**
- * Every view the app has, and every view it is going to have.
+ * Every **module** the app has, and every one it is going to have.
  *
  * One list, read by five surfaces that must not drift: the desktop `Sidebar`, the phone
  * `MobileNav`, the `MoreSheet` behind it, `MobileHeader`'s "you are here" title, and the
  * command palette's go-to entries.
  *
  * This replaces the flat `TABS` array and the tab strip that rendered it. Achieve reached
- * its sixteen views through the **Go** menu (manual §1.3) and kept only the ones you had
- * opened as tabs; we inherited the tabs without the Go menu, so eleven of them had to be
+ * its sixteen destinations through the **Go** menu (manual §1.3) and kept only the ones you
+ * had opened as tabs; we inherited the tabs without the Go menu, so eleven of them had to be
  * permanent and a twelfth had nowhere to go. Sections plus a palette is that Go menu,
  * rendered the way this decade renders it.
  *
- * `primary` still marks the views that earn a slot in the phone bottom nav's five —
+ * **Why "module" and not "view".** These were `VIEWS` until saved views spread to every grid,
+ * at which point one word named two things: a destination in the sidebar, and a stored column
+ * layout with filters inside one of them. Achieve called the in-grid presets Views — "Active
+ * Task Status" — and so do our UI, `data-grid.md` and every grid call site, so `View` kept that
+ * meaning and the destinations were renamed. Storage keys still say `tab`; renaming a persisted
+ * scope key would be a migration bought for nothing.
+ *
+ * `primary` still marks the modules that earn a slot in the phone bottom nav's five —
  * unchanged from `TABS`, and unrelated to `section`, which is a desktop grouping.
  */
 
 /**
  * Section order is display order. A section renders only when it holds at least one
- * **built** view, which is what lets `Library` sit here fully specified and completely
+ * **built** module, which is what lets `Library` sit here fully specified and completely
  * invisible until Time Charts or Resources exists.
  */
 export const SECTIONS = [
@@ -44,7 +51,7 @@ export const SECTIONS = [
 
 export type SectionId = (typeof SECTIONS)[number]["id"];
 
-type ViewEntry = {
+type ModuleEntry = {
   id: string;
   label: string;
   href: string;
@@ -52,17 +59,17 @@ type ViewEntry = {
   /** Bottom-nav slot on the phone. Three of them, plus capture and More, make five. */
   primary: boolean;
   /**
-   * `reserved` is a view we have decided the home of but not built. It renders nowhere and
-   * is not a navigation target — it exists so that adding the view later is a one-word edit
-   * rather than another argument about navigation. Deliberately *not* shown as a disabled
-   * entry: a menu full of dead rows teaches you to stop reading the menu.
+   * `reserved` is a module we have decided the home of but not built. It renders nowhere and
+   * is not a navigation target — it exists so that adding it later is a one-word edit rather
+   * than another argument about navigation. Deliberately *not* shown as a disabled entry: a
+   * menu full of dead rows teaches you to stop reading the menu.
    */
   status: "built" | "reserved";
-  /** Required on a built view; the collapsed rail is icons only. */
+  /** Required on a built module; the collapsed rail is icons only. */
   icon?: ComponentType;
 };
 
-export const VIEWS = [
+export const MODULES = [
   // Plan — the outline and the things in it, in Achieve's own order.
   {
     id: "outline",
@@ -234,34 +241,34 @@ export const VIEWS = [
     primary: false,
     status: "reserved",
   },
-] as const satisfies readonly ViewEntry[];
+] as const satisfies readonly ModuleEntry[];
 
-export type ViewId = (typeof VIEWS)[number]["id"];
+export type ModuleId = (typeof MODULES)[number]["id"];
 
-/** A view that actually exists — the only kind anything renders or navigates to. */
-export type BuiltView = Extract<(typeof VIEWS)[number], { status: "built" }>;
+/** A module that actually exists — the only kind anything renders or navigates to. */
+export type BuiltModule = Extract<(typeof MODULES)[number], { status: "built" }>;
 
-export const BUILT_VIEWS: readonly BuiltView[] = VIEWS.filter(
-  (view): view is BuiltView => view.status === "built",
+export const BUILT_MODULES: readonly BuiltModule[] = MODULES.filter(
+  (entry): entry is BuiltModule => entry.status === "built",
 );
 
-export function viewLabel(id: ViewId): string {
-  return VIEWS.find((view) => view.id === id)?.label ?? "Planner";
+export function moduleLabel(id: ModuleId): string {
+  return MODULES.find((entry) => entry.id === id)?.label ?? "Planner";
 }
 
 /**
- * Sections paired with their built views, skipping any section that has none.
+ * Sections paired with their built modules, skipping any section that has none.
  *
  * Both the sidebar and the More sheet render from this, so the phone and the desktop group
  * the app identically — the one thing a second grouping implementation would get wrong.
  */
-export function sectionsWithViews(): {
+export function sectionsWithModules(): {
   id: SectionId;
   label: string;
-  views: readonly BuiltView[];
+  modules: readonly BuiltModule[];
 }[] {
   return SECTIONS.map((section) => ({
     ...section,
-    views: BUILT_VIEWS.filter((view) => view.section === section.id),
-  })).filter((section) => section.views.length > 0);
+    modules: BUILT_MODULES.filter((entry) => entry.section === section.id),
+  })).filter((section) => section.modules.length > 0);
 }

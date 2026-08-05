@@ -9,7 +9,8 @@ import type { ChooserView } from "@/lib/chooser/views";
 
 /**
  * Achieve's Task Chooser Settings dialog (manual §8.2, §8.3): the scoring weights and the
- * next-action flags for the **current view only** — every view keeps its own.
+ * next-action flags for the **current view only** — every view keeps its own, saved views
+ * included, because a saved view's id keys its own `chooser:` scope.
  *
  * A modal because it is a short-lived configuration step, the one class `ux-principles`
  * allows, and built on `ModalShell` per `modal-pattern`. It holds no draft: each field
@@ -61,13 +62,23 @@ const WEIGHT_GROUPS: { title: string; fields: WeightField[] }[] = [
 export function ChooserSettingsDialog({
   open,
   view,
+  viewName,
   settings,
   onChange,
   onReset,
   onClose,
 }: {
   open: boolean;
+  /** The **built-in** the selected view derives from: supplies the defaults and the blurb. */
   view: ChooserView;
+  /**
+   * The selected view's name, which is not `view.label` once a saved view is selected.
+   *
+   * The heading has to say the view whose settings these *are*. Titling it with the base
+   * while the picker says "Deadline heavy" makes the line underneath — "these settings apply
+   * to this view only" — point at the wrong view, which is worse than saying nothing.
+   */
+  viewName: string;
   settings: ChooserSettings;
   onChange: (
     patch: Partial<Omit<ChooserSettings, "weights">> & {
@@ -84,7 +95,7 @@ export function ChooserSettingsDialog({
       <div className="flex max-h-[80vh] flex-col">
         <div className="flex-none border-b border-rule p-5 pb-3">
           <h2 id={titleId} className="text-[0.9375rem] font-semibold text-ink">
-            {view.label} Settings
+            {viewName} Settings
           </h2>
           <p className="mt-1 text-[0.8125rem] text-ink-muted">{view.description}</p>
           <p className="mt-1 text-[0.75rem] text-ink-faint">

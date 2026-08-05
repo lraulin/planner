@@ -304,6 +304,32 @@ export function useResetScope() {
   return useSettingsContext().resetScope;
 }
 
+/**
+ * Copy one scope's stored value to another, for the caller **forking** a scope rather than
+ * editing it.
+ *
+ * Saving a view has to carry the module's own per-view settings with it. Those live in their
+ * own view-keyed scopes — the Task Chooser's weights in `chooser:{viewId}`, Notes' mode and
+ * filter in `notes:{viewId}` — so a new view's scope starts empty and would fall back to the
+ * module's defaults. The user would name the grid in front of them and get something else.
+ *
+ * Copies the raw stored value rather than a parsed one, deliberately: this has no business
+ * knowing any module's payload shape, and a round-trip through the wrong codec would drop
+ * fields it did not recognise.
+ */
+export function useCopyScope() {
+  const { snapshot, write } = useSettingsContext();
+
+  return useCallback(
+    (from: string, to: string) => {
+      const value = snapshot[from];
+      // Nothing stored means the source is on its defaults, and so is the destination.
+      if (value !== undefined) write(to, value);
+    },
+    [snapshot, write],
+  );
+}
+
 export function useAllSettings() {
   const { snapshot, resetScope, resetAll, saveError } = useSettingsContext();
 

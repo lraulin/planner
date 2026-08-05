@@ -23,8 +23,10 @@ import { GridFilterChips } from "./GridFilterChips";
 import { GridFilterDialog } from "./GridFilterDialog";
 import { GridSearchBox } from "./GridSearchBox";
 import { ShowFieldsDialog } from "./ShowFieldsDialog";
+import { ViewPicker } from "./ViewPicker";
 import type { ColumnMeta } from "./columns";
 import type { GridState } from "./useGridState";
+import type { ModuleViewsApi } from "./useModuleViews";
 
 const EMPTY_GROUP_DIMENSIONS: readonly GroupBy[] = [];
 const EMPTY_GROUP_IDS: readonly string[] = [];
@@ -67,6 +69,7 @@ export function GridToolbar({
   counts,
   error,
   rowActions,
+  views,
   left,
   right,
 }: {
@@ -97,7 +100,17 @@ export function GridToolbar({
     onRename: (id: string) => void;
     onOpen: (id: string) => void;
   };
-  /** Tab-specific selects that come first: Result Area, View, Project scope. */
+  /**
+   * This grid's views, from `useModuleViews`. Supplying it renders the View select and
+   * registers Save / Update / Rename / Delete.
+   *
+   * A prop rather than something each grid hand-places in `left`, which is what the last cycle
+   * did three times: `data-grid.md` — "a tab declares what it has, it does not assemble
+   * buttons. If you find yourself adding a control to one grid, add it to `GridToolbar`
+   * instead and let every grid have it."
+   */
+  views?: ModuleViewsApi;
+  /** Tab-specific selects that come first: Result Area, Project scope. */
   left?: ReactNode;
   /** Tab-specific actions that come last: Rename, Open, New note. */
   right?: ReactNode;
@@ -202,7 +215,18 @@ export function GridToolbar({
 
   return (
     <>
-      <TabToolbar pinned={<OverflowMenu label="More commands for this view" />}>
+      {/*
+        "for this grid", not "for this view": there is now a View select on this bar, and
+        Save / Update / Rename / Delete view are among the commands inside this menu. A label
+        saying "this view" next to a control that changes the view would read as the menu
+        acting on whichever view is selected.
+      */}
+      <TabToolbar pinned={<OverflowMenu label="More commands for this grid" />}>
+        {/*
+          Ahead of `left`: the view decides what the rest of the bar is even showing, and a
+          module's own scope pickers narrow within it.
+        */}
+        {views && <ViewPicker views={views} />}
         {left}
 
         <GridSearchBox value={grid.search} onChange={grid.setSearch} />

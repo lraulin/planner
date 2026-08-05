@@ -86,7 +86,8 @@ The core Achieve Planner loop — plan the week, block the time, work the outlin
   again: hand-rolled stays** — TanStack cannot do tree data and grouping at once, and its
   state layer is in-memory where ours already persists. Rules extracted to
   `agent-os/standards/components/data-grid.md`. Deferred: frozen first column, user-saved
-  named views.
+  named views — the latter delivered in two steps, `specs/2026-08-05-0230-saved-views` then
+  `specs/2026-08-05-1059-views-across-modules`.
 - **✅ Multi-level grouping + Category as an ordinary property.**
   `specs/2026-08-04-1115-grouping-levels-and-category`. Group by stacks up to three
   dimensions (`Group by` … `then by` …), each select appearing as the one above it is
@@ -197,6 +198,23 @@ Features that complete or surround the original product, plus making it multi-de
   built. Phone keeps its bottom nav; the More sheet is grouped the same way and `⋯` is the
   touch path to commands. New standard: `components/navigation.md`. Deferred: converting the
   six row context menus into registered commands; `⋯` on the four views with no grid toolbar.
+- **✅ Views across all modules.** `specs/2026-08-05-1059-views-across-modules`. Saved views
+  stopped being a feature of three grids and became one of the app: **Outline, Projects, Goals,
+  Tasks, Wish List, Notes and the Task Chooser** all create, update, rename and delete named
+  views through one hook (`useModuleViews`) and one control, with only the View select on the
+  bar and the four commands behind `⋯`. This closes the "user-saved named views" deferral
+  above. Two things changed about what a view _is_: it now records **switch positions** (the
+  Outline's Areas/Goals levels, Next Actions, Include Goals) with no migration — a switch is
+  independently keyed, so the fallback is per key rather than per map — and a module's **own**
+  settings ride along in view-keyed scopes, so a Chooser view keeps its own scoring weights
+  (Achieve's rule, manual §8.1.4) and a Notes view its nested/flat mode, sort and filter.
+  `SavedView.base` names the built-in a view derives from, because the Chooser resolves
+  behaviour and not just defaults from the view id. **Terminology:** the eleven navigation
+  destinations are now **modules**, freeing "View" for the in-grid thing Achieve called a View;
+  storage keys still say `tab`, deliberately. Dropped from scope: the Metrics tracking grid
+  (four columns, two unhideable — a view there would carry two booleans). Deferred: unifying
+  the settings UI so a module's own settings stop looking distinct from grid settings;
+  capturing sort and density.
 - Any remaining Achieve chrome that earns its keep.
 - **Pomodoro → time tracking.** Effort, Effort Left, Actual Effort, and % complete
   already live on tasks (and roll up); what’s missing is a way to _earn_ those numbers

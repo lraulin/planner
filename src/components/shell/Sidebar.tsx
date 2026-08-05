@@ -8,18 +8,18 @@ import { parseShellSettings, serializeShellSettings } from "@/lib/settings/shell
 import { SHELL_SCOPE } from "@/lib/settings/scopes";
 import { ChevronIcon, SettingsIcon } from "./navIcons";
 import { openCommandPalette } from "./commandEvent";
-import { sectionsWithViews, type ViewId } from "./views";
+import { sectionsWithModules, type ModuleId } from "./modules";
 
 /**
  * Desktop navigation: a grouped, collapsible left rail, replacing the tab strip.
  *
- * The strip held eleven views in one non-wrapping row and had nowhere to put a twelfth.
+ * The strip held eleven modules in one non-wrapping row and had nowhere to put a twelfth.
  * Sections turn that into a problem of vertical space, which is the space this app has —
  * eleven entries under four headings fit comfortably where eleven tabs across did not.
  *
- * Sections come from `sectionsWithViews()`, shared with the phone's More sheet so the two
+ * Sections come from `sectionsWithModules()`, shared with the phone's More sheet so the two
  * cannot group the app differently. Settings and Sign out sit below the sections because
- * they are chrome, not views.
+ * they are chrome, not modules.
  */
 
 /**
@@ -31,19 +31,19 @@ const SHELL_CODEC = {
   serialize: serializeShellSettings,
 };
 
-export function Sidebar({ active }: { active: ViewId }) {
+export function Sidebar({ active }: { active: ModuleId }) {
   const { value, patch } = useSetting(SHELL_SCOPE, SHELL_CODEC);
   const collapsed = value.sidebarCollapsed;
 
-  const sections = sectionsWithViews();
+  const sections = sectionsWithModules();
 
   return (
     <nav
-      aria-label="Views"
+      aria-label="Modules"
       // `hidden md:flex`, not a width transition: below `md` the phone owns navigation
       // entirely (`responsive.md` — adaptive, not shrunken), so there is nothing here to
       // narrow.
-      // Keep desktop nav above drawer backdrops so changing views is always possible.
+      // Keep desktop nav above drawer backdrops so navigating away is always possible.
       className={`hidden flex-none flex-col border-r border-rule bg-shell md:relative md:z-50 md:flex ${
         collapsed ? "w-12" : "w-44"
       }`}
@@ -78,7 +78,7 @@ export function Sidebar({ active }: { active: ViewId }) {
       <button
         type="button"
         onClick={openCommandPalette}
-        title="Search views and commands (⌘K)"
+        title="Search modules and commands (⌘K)"
         className={`mx-2 mb-2 flex flex-none items-center gap-2 rounded border border-rule px-2 py-1 text-[0.75rem] text-ink-faint hover:border-rule-strong hover:bg-surface-raised hover:text-ink ${
           collapsed ? "justify-center" : ""
         }`}
@@ -106,16 +106,16 @@ export function Sidebar({ active }: { active: ViewId }) {
               </h2>
             )}
 
-            {section.views.map((view) => {
-              const Icon = view.icon;
-              const isActive = view.id === active;
+            {section.modules.map((entry) => {
+              const Icon = entry.icon;
+              const isActive = entry.id === active;
 
               return (
                 <Link
-                  key={view.id}
-                  href={view.href}
+                  key={entry.id}
+                  href={entry.href}
                   aria-current={isActive ? "page" : undefined}
-                  title={collapsed ? view.label : undefined}
+                  title={collapsed ? entry.label : undefined}
                   className={`flex items-center gap-2 rounded px-2 py-1 text-[0.8125rem] leading-6 ${
                     collapsed ? "justify-center" : ""
                   } ${
@@ -127,7 +127,7 @@ export function Sidebar({ active }: { active: ViewId }) {
                   <span className="flex-none">
                     <Icon />
                   </span>
-                  {!collapsed && <span className="truncate">{view.label}</span>}
+                  {!collapsed && <span className="truncate">{entry.label}</span>}
                 </Link>
               );
             })}
@@ -161,7 +161,7 @@ export function Sidebar({ active }: { active: ViewId }) {
   );
 }
 
-/** Local to the sidebar's search row; not a view glyph, so it stays out of `navIcons`. */
+/** Local to the sidebar's search row; not a module glyph, so it stays out of `navIcons`. */
 function SearchGlyph() {
   return (
     <svg

@@ -7,6 +7,7 @@ import {
   MAX_SORT_KEYS,
   MIN_COLUMN_WIDTH,
   parseGridSettings,
+  resolveSwitches,
   serializeGridSettings,
 } from "./grid";
 
@@ -359,5 +360,31 @@ describe("parseGridSettings — filters, and the v1 migration", () => {
     // blob has not earned.
     expect(parseGridSettings({ v: 2, filters: "nope" }).filters).toBeNull();
     expect(parseGridSettings({ v: 2, filters: [] }).filters).toBeNull();
+  });
+});
+
+describe("resolveSwitches", () => {
+  it("lets the user's own position beat the view's", () => {
+    // The mistake this exists to catch: spread the other way and turning a switch off on a view
+    // that has it on does nothing, which reads as a broken toggle rather than a precedence bug.
+    expect(resolveSwitches({ nextActions: true }, { nextActions: false })).toEqual({
+      nextActions: false,
+    });
+  });
+
+  it("supplies the view's position for a switch the user has not touched", () => {
+    expect(resolveSwitches({ nextActions: true }, {})).toEqual({ nextActions: true });
+  });
+
+  it("leaves an untouched switch absent, so the tab's declared default still applies", () => {
+    // Absent is the third state, and it has to survive: `switchValue` reads `defaultOn` only
+    // when the id is missing from this map. Filling it in with `false` would silently override
+    // every switch a tab declares as on by default.
+    expect(resolveSwitches({}, {})).not.toHaveProperty("levelAreas");
+    expect(resolveSwitches(undefined, {})).toEqual({});
+  });
+
+  it("keeps switches from both sides", () => {
+    expect(resolveSwitches({ a: true }, { b: true })).toEqual({ a: true, b: true });
   });
 });

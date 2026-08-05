@@ -31,7 +31,8 @@ import {
   updateNoteAction,
 } from "@/app/notes/actions";
 import { DataGrid, type RowDrag } from "@/components/grid/DataGrid";
-import { useGridState } from "@/components/grid/useGridState";
+import type { GridDefaults } from "@/components/grid/useGridState";
+import { useModuleViews } from "@/components/grid/useModuleViews";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { GridToolbar } from "@/components/grid/GridToolbar";
 import { collectDistinctValues } from "@/lib/grid/distinct";
@@ -44,7 +45,7 @@ import {
   serializeNotesView,
   type NotesViewSettings,
 } from "@/lib/settings/notes";
-import { NOTES_FILTER_SCOPE } from "@/lib/settings/scopes";
+import { notesViewScope } from "@/lib/settings/scopes";
 import { selectionMoveRoots } from "@/lib/grid/selection";
 import { copyAsText, writeClipboardText } from "@/lib/tree/copyAsText";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
@@ -59,6 +60,22 @@ const NOTES_VIEW_CODEC: SettingCodec<NotesViewSettings> = {
 };
 
 const NOTES_MODES: readonly NotesMode[] = ["nested", "flat"];
+
+/**
+ * One built-in view. Notes' three controls — Nested/Flat, Sort, Filter — are a *lot* of state
+ * to rebuild by hand, which is exactly what makes saved views worth having here: "Flat, by
+ * date, only meeting notes" is a view, not three settings you set again every Monday.
+ */
+const NOTES_VIEWS = [{ id: "notes", label: "All Notes" }] as const;
+
+function viewDefaults(): GridDefaults {
+  return { order: [...NOTES_COLUMN_IDS] };
+}
+
+/** Notes' own per-view settings, so saving a view carries the mode / sort / filter with it. */
+function notesScopes(viewId: string): readonly string[] {
+  return [notesViewScope(viewId)];
+}
 
 /**
  * The Notes tab.
@@ -80,25 +97,49 @@ export function NotesGrid({
   const {
     note: urlNoteId,
     setNote: setUrlNoteId,
-    view: urlView,
-    setView: setUrlView,
+    mode: urlMode,
+    setMode: setUrlMode,
   } = useViewStateUrl();
+
+  const views = useModuleViews({
+    moduleId: "notes",
+    builtIn: NOTES_VIEWS,
+    defaultViewId: "notes",
+    // No view picker before this, so the stored layout is at `grid:notes` and stays there.
+    defaultViewSharesModuleScope: true,
+    columns: notesColumns,
+    defaultsFor: viewDefaults,
+    viewScopes: notesScopes,
+  });
+  const gridState = views.grid;
+
+  /**
+   * Notes' own settings, **per view**.
+   *
+   * Mode, sort and the filter dialog are what actually distinguish one way of working with
+   * notes from another, and no column can carry them — so once Notes has views they belong to
+   * the view, the same way the Task Chooser's weights always have. They used to sit in one
+   * scope shared by the whole module, which meant a saved Notes view could only ever have
+   * remembered its columns.
+   */
   const { value: view, patch: patchView } = useSetting(
-    NOTES_FILTER_SCOPE,
+    notesViewScope(views.viewId),
     NOTES_VIEW_CODEC,
   );
   const { sort, filter } = view;
-  // `?view=` overrides stored mode when it is nested|flat; the store is the default.
+
+  /** `?mode=` overrides the stored mode when it names one; the store is the default. */
   const mode: NotesMode =
-    urlView !== null && (NOTES_MODES as readonly string[]).includes(urlView)
-      ? (urlView as NotesMode)
+    urlMode !== null && (NOTES_MODES as readonly string[]).includes(urlMode)
+      ? (urlMode as NotesMode)
       : view.mode;
+
   const setMode = useCallback(
     (next: NotesMode) => {
       patchView((current) => ({ ...current, mode: next }));
-      setUrlView(next);
+      setUrlMode(next);
     },
-    [patchView, setUrlView],
+    [patchView, setUrlMode],
   );
   const setSort = useCallback(
     (next: NotesSort) => patchView((current) => ({ ...current, sort: next })),
@@ -275,9 +316,6 @@ export function NotesGrid({
     [selectedId, editingId, patch, apply, openDetail],
   );
 
-  const gridState = useGridState("notes", notesColumns, {
-    order: [...NOTES_COLUMN_IDS],
-  });
   // Show / hide / move now travel to Show Fields through `GridToolbar`, not from here.
   const { columns, sort: headerSort, clearSort: clearHeaderSort } = gridState;
 
@@ -512,6 +550,7 @@ export function NotesGrid({
         distinctValues={distinctValues}
         counts={counts}
         error={error}
+        views={views}
         left={
           <>
             <ToolbarSelect

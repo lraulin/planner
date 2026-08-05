@@ -8,20 +8,10 @@ import { toDateKey } from "@/lib/schedule/geometry";
 import type { ColumnDef } from "@/components/grid/columns";
 import { CascadeConfirm } from "@/components/grid/CascadeConfirm";
 import { DataGrid } from "@/components/grid/DataGrid";
-import {
-  useGridState,
-  useIncludeDeferred,
-  useTabView,
-  type GridDefaults,
-} from "@/components/grid/useGridState";
+import { useIncludeDeferred, type GridDefaults } from "@/components/grid/useGridState";
+import { useModuleViews } from "@/components/grid/useModuleViews";
 import { openStateFilters, settledStateFilters } from "@/lib/grid/stateFilters";
 import { GridToolbar } from "@/components/grid/GridToolbar";
-import { ViewPicker } from "@/components/grid/ViewPicker";
-import {
-  savedViewDefaults,
-  snapshotOf,
-  useSavedViews,
-} from "@/components/grid/useSavedViews";
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import {
   categoryColumn,
@@ -42,9 +32,7 @@ import { ToolbarSelect, ToolbarToggle } from "./tabChrome";
 import { useGridTab } from "./useGridTab";
 import type { OutlineColumnCtx } from "@/components/outline/outlineColumns";
 
-const VIEW_IDS = ["all", "active", "completed"] as const;
-
-type ViewId = (typeof VIEW_IDS)[number];
+type ViewId = "all" | "active" | "completed";
 
 /**
  * Views as collections of settings — see the note on Tasks. Goals' default order carries the
@@ -61,6 +49,14 @@ const VIEWS: { id: ViewId; label: string; filters?: GridDefaults["filters"] }[] 
 ];
 
 const DEFAULT_ORDER = ["priority", "name", "definition", "state", "deadline", "range"];
+
+/** Module scope so `useModuleViews` gets a stable identity, not a fresh closure per render. */
+function viewDefaults(id: string): GridDefaults {
+  return {
+    order: DEFAULT_ORDER,
+    filters: VIEWS.find((entry) => entry.id === id)?.filters,
+  };
+}
 
 type GoalsCtx = OutlineColumnCtx & {
   onDefinitionChange: (node: OutlineNode, value: string) => void;
@@ -176,12 +172,6 @@ const GOAL_GROUP_DIMENSIONS: GroupBy[] = [
 
 export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const tab = useGridTab(initialNodes);
-  const savedViews = useSavedViews("goals");
-  const viewIds = useMemo(
-    () => [...VIEW_IDS, ...savedViews.views.map((entry) => entry.id)],
-    [savedViews.views],
-  );
-  const [view, setView] = useTabView("goals", viewIds, "all");
   const [scopeId, setScopeId] = useState<string>("");
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
   const [groupIds, setGroupIds] = useState<string[]>([]);
@@ -192,14 +182,14 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   );
 
   const allColumns = useMemo(() => buildColumns(tab.today), [tab.today]);
-  const gridState = useGridState(
-    `goals.${view}`,
-    allColumns,
-    savedViewDefaults(savedViews.find(view), {
-      order: DEFAULT_ORDER,
-      filters: VIEWS.find((entry) => entry.id === view)?.filters,
-    }),
-  );
+  const views = useModuleViews({
+    moduleId: "goals",
+    builtIn: VIEWS,
+    defaultViewId: "all",
+    columns: allColumns,
+    defaultsFor: viewDefaults,
+  });
+  const gridState = views.grid;
   const [includeDeferred, setIncludeDeferred] = useIncludeDeferred("goals");
 
   const rows: GridRow[] = useMemo(
@@ -265,6 +255,7 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         groupIds={groupIds}
         counts={counts}
         error={tab.error}
+        views={views}
         left={
           <>
             <ToolbarSelect
@@ -275,17 +266,6 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
                 { value: "", label: "All Result Areas" },
                 ...resultAreas.map((area) => ({ value: area.id, label: area.name })),
               ]}
-            />
-            <ViewPicker
-              value={view}
-              onChange={setView}
-              builtIn={VIEWS}
-              saved={savedViews}
-              onSave={(name) => setView(savedViews.save(name, snapshotOf(gridState)))}
-              onDelete={(id) => {
-                setView(VIEWS[0].id);
-                savedViews.remove(id);
-              }}
             />
             {/*
               Parity with Tasks and Projects. Goals used to hard-code `includeDeferred: true`,

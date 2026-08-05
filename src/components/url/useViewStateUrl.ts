@@ -50,8 +50,15 @@ export function useViewStateUrl() {
     [navigate],
   );
 
+  /**
+   * Switching view clears `?mode=`, because a mode override belonged to the view you just left.
+   *
+   * A module's display mode is now part of what a view stores (Notes' nested/flat), so a
+   * lingering param would pin it across every view you picked afterwards — you would switch to
+   * a view saved as Nested and get Flat, with nothing on screen explaining why.
+   */
   const setView = useCallback(
-    (view: string | null) => navigate({ view }, "replace"),
+    (view: string | null) => navigate({ view, mode: null }, "replace"),
     [navigate],
   );
 
@@ -60,12 +67,20 @@ export function useViewStateUrl() {
     [navigate],
   );
 
+  /** Like a view switch, and `replace` for the same reason: it is not a place you came from. */
+  const setMode = useCallback(
+    (mode: string | null) => navigate({ mode }, "replace"),
+    [navigate],
+  );
+
   return {
     detail: state.detail,
     view: state.view,
     note: state.note,
+    mode: state.mode,
     setDetail,
     setView,
     setNote,
+    setMode,
   };
 }

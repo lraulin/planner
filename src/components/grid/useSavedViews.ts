@@ -16,8 +16,10 @@ import {
   removeSavedView,
   renameSavedView,
   serializeSavedViews,
+  updateSavedView,
   type SavedView,
   type SavedViews,
+  type SavedViewSettings,
 } from "@/lib/settings/views";
 import type { GridDefaults } from "./useGridState";
 import type { GridState } from "./useGridState";
@@ -68,6 +70,17 @@ export function useSavedViews(tabId: string) {
     [patch],
   );
 
+  /**
+   * Write the grid back into the view you are on. The counterpart to `save`: without it every
+   * adjustment you wanted to keep had to become a new view.
+   */
+  const update = useCallback(
+    (id: string, settings: SavedViewSettings) => {
+      patch((current) => updateSavedView(current, id, settings));
+    },
+    [patch],
+  );
+
   return useMemo(
     () => ({
       views: value.views,
@@ -76,16 +89,28 @@ export function useSavedViews(tabId: string) {
       save,
       remove,
       rename,
+      update,
     }),
-    [value, save, remove, rename],
+    [value, save, remove, rename, update],
   );
 }
 
 export type SavedViewsApi = ReturnType<typeof useSavedViews>;
 
-/** What a saved view captures, read off a live grid. See `lib/settings/views.ts`. */
-export function snapshotOf(grid: GridState): Omit<SavedView, "id" | "name"> {
-  return { order: grid.order, filters: grid.filters, groupBy: grid.groupBy };
+/**
+ * What a saved view captures, read off a live grid. See `lib/settings/views.ts`.
+ *
+ * Every value here is the **resolved** one — what the grid is showing, not what the user has
+ * explicitly stored. That is the point: you are naming the grid in front of you, so a switch
+ * left at its default is captured at the position you can see it in.
+ */
+export function snapshotOf(grid: GridState): SavedViewSettings {
+  return {
+    order: grid.order,
+    filters: grid.filters,
+    groupBy: grid.groupBy,
+    switches: grid.switches,
+  };
 }
 
 /**
@@ -102,6 +127,7 @@ export function savedViewDefaults(
     order: view.order ?? fallback.order,
     filters: view.filters,
     groupBy: view.groupBy,
+    switches: view.switches,
   };
 }
 

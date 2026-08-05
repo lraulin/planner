@@ -45,6 +45,7 @@ describe("readViewState", () => {
       detail: null,
       view: null,
       note: null,
+      mode: null,
     });
   });
 
@@ -53,11 +54,13 @@ describe("readViewState", () => {
       detail: "node-1",
       view: "active-status",
       note: "note-9",
+      mode: "flat",
     });
     expect(readViewState(written)).toEqual({
       detail: "node-1",
       view: "active-status",
       note: "note-9",
+      mode: "flat",
     });
   });
 
@@ -91,7 +94,20 @@ describe("readViewState", () => {
       detail: null,
       view: "all",
       note: "note-1",
+      mode: null,
     });
+  });
+
+  it("clears mode alongside a view switch", () => {
+    // A mode override belongs to the view it was set on. Left behind, it would pin Notes to
+    // Flat through every view you picked afterwards.
+    const current = writeViewState(new URLSearchParams(), {
+      view: "notes",
+      mode: "flat",
+    });
+    const next = writeViewState(current, { view: "saved-1a2b", mode: null });
+    expect(next.get("view")).toBe("saved-1a2b");
+    expect(next.has("mode")).toBe(false);
   });
 });
 

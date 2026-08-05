@@ -5,7 +5,9 @@ import {
   DRAWER_SCOPE,
   gridScope,
   isValidScope,
+  NOTES_DEFAULT_VIEW_ID,
   NOTES_FILTER_SCOPE,
+  notesViewScope,
   parseScope,
 } from "./scopes";
 
@@ -79,5 +81,21 @@ describe("describeScope", () => {
   it("falls back to the raw scope rather than hiding a row it cannot name", () => {
     // A row written by an older build must still be visible and resettable.
     expect(describeScope("retired:thing")).toBe("retired:thing");
+  });
+});
+
+describe("notesViewScope", () => {
+  it("keeps the default view on the legacy key", () => {
+    // Every existing mode and saved filter lives at `notes:filter`. Notes gaining a view
+    // picker must not move them, or the first load after the upgrade silently resets them.
+    expect(notesViewScope(NOTES_DEFAULT_VIEW_ID)).toBe(NOTES_FILTER_SCOPE);
+  });
+
+  it("gives a saved view its own scope, addressable by the settings store", () => {
+    const scope = notesViewScope("saved-1a2b3c4d");
+    expect(scope).toBe("notes:saved-1a2b3c4d");
+    // It is also the fork target when a view is saved, so an unwritable key would lose the
+    // module's settings rather than fail loudly.
+    expect(isValidScope(scope)).toBe(true);
   });
 });

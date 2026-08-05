@@ -3,7 +3,12 @@
  *
  *   ?detail=<nodeId>   open detail drawer (Outline, Projects, Tasks, Goals, Wishes, Chooser)
  *   ?note=<noteId>     open note drawer (Notes)
- *   ?view=<viewId>     sub-view / mode picker (Tasks, Projects, Goals, Chooser, Notes mode)
+ *   ?view=<viewId>     the selected view, built-in or saved (every module with a picker)
+ *   ?mode=<modeId>     a module's own display mode (Notes nested/flat)
+ *
+ * `?view=` used to double as the Notes nested/flat mode, which stopped being tenable once
+ * Notes gained real views: one param cannot name both which view you are on and how that view
+ * draws. So `view` means the view everywhere, and the mode moved to its own param.
  *
  * Filters, sort and column layout stay out of the URL — those live on `user_settings`.
  * Pure helpers so round-trip and junk handling can be unit-tested without a router.
@@ -12,18 +17,21 @@
 export const DETAIL_PARAM = "detail";
 export const VIEW_PARAM = "view";
 export const NOTE_PARAM = "note";
+export const MODE_PARAM = "mode";
 
 export type ViewStatePatch = {
   /** `null` clears the param; `undefined` leaves it alone. */
   detail?: string | null;
   view?: string | null;
   note?: string | null;
+  mode?: string | null;
 };
 
 export type ViewState = {
   detail: string | null;
   view: string | null;
   note: string | null;
+  mode: string | null;
 };
 
 /**
@@ -63,6 +71,8 @@ export function readViewState(params: URLSearchParams): ViewState {
     detail: asRecordId(firstParam(params, DETAIL_PARAM)),
     view: asViewId(firstParam(params, VIEW_PARAM)),
     note: asRecordId(firstParam(params, NOTE_PARAM)),
+    // Same shape as a view id — ours, lower-case, no spaces.
+    mode: asViewId(firstParam(params, MODE_PARAM)),
   };
 }
 
@@ -104,6 +114,12 @@ export function writeViewState(
     const id = asRecordId(patch.note);
     if (id) next.set(NOTE_PARAM, id);
     else next.delete(NOTE_PARAM);
+  }
+
+  if (patch.mode !== undefined) {
+    const id = asViewId(patch.mode);
+    if (id) next.set(MODE_PARAM, id);
+    else next.delete(MODE_PARAM);
   }
 
   return next;

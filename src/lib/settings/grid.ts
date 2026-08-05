@@ -248,6 +248,27 @@ export function hasActiveFilters(filters: Record<string, ColumnFilter>): boolean
 }
 
 /**
+ * A view's switch positions with the user's own adjustments on top.
+ *
+ * Three layers resolve per **key**, not per map: what the grid has stored wins, then what the
+ * view was saved with, then the default the tab declared (`switchValue`, at the far end of this
+ * chain, supplies that last one). That is why `switches` needed no nullable treatment and no
+ * `SETTINGS_VERSION` bump, unlike `filters`: `Clear all` acts on the whole filter map, so `{}`
+ * had to be distinguishable from "never touched", while a switch the user has not touched is
+ * simply an absent key.
+ *
+ * Order matters and is the easy mistake: spread the other way and a view with a switch on
+ * would override the user having just turned it off, which reads as the toggle being broken.
+ */
+export function resolveSwitches(
+  viewSwitches: Record<string, boolean> | undefined,
+  stored: Record<string, boolean>,
+): Record<string, boolean> {
+  if (!viewSwitches) return stored;
+  return { ...viewSwitches, ...stored };
+}
+
+/**
  * Whether *anything* is narrowing the rows — column filters, the advanced filter, or the
  * quick search.
  *

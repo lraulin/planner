@@ -12,24 +12,14 @@ import {
 import type { ColumnDef } from "@/components/grid/columns";
 import { CascadeConfirm } from "@/components/grid/CascadeConfirm";
 import { DataGrid } from "@/components/grid/DataGrid";
-import {
-  useGridState,
-  type GridDefaults,
-  useIncludeDeferred,
-  useTabView,
-} from "@/components/grid/useGridState";
+import { type GridDefaults, useIncludeDeferred } from "@/components/grid/useGridState";
+import { useModuleViews } from "@/components/grid/useModuleViews";
 import { useTreeRowDrag } from "@/components/grid/useTreeRowDrag";
 import {
   GridToolbar,
   switchValue,
   type GridSwitch,
 } from "@/components/grid/GridToolbar";
-import { ViewPicker } from "@/components/grid/ViewPicker";
-import {
-  savedViewDefaults,
-  snapshotOf,
-  useSavedViews,
-} from "@/components/grid/useSavedViews";
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import { openStateFilters, settledStateFilters } from "@/lib/grid/stateFilters";
 import {
@@ -70,16 +60,13 @@ import type { OutlineColumnCtx } from "@/components/outline/outlineColumns";
 const OPEN = openStateFilters("abbrState", "code");
 const SETTLED = settledStateFilters("abbrState", "code");
 
-const VIEW_IDS = [
-  "active-status",
-  "active-schedule",
-  "active-purpose",
-  "active-delegation",
-  "completed",
-  "all",
-] as const;
-
-type ViewId = (typeof VIEW_IDS)[number];
+type ViewId =
+  | "active-status"
+  | "active-schedule"
+  | "active-purpose"
+  | "active-delegation"
+  | "completed"
+  | "all";
 
 /**
  * Views as collections of settings — see the same note on Tasks. The four `active-*` views
@@ -260,6 +247,18 @@ function viewOrder(view: string): string[] {
 }
 
 /**
+ * What each built-in view opens as. Module scope, so `useModuleViews` can memoise on the view
+ * id — `viewOrder` builds a fresh array per call.
+ */
+function viewDefaults(id: string): GridDefaults {
+  return {
+    order: viewOrder(id),
+    groupBy: PROJECT_DEFAULT_GROUP_BY,
+    filters: VIEWS.find((entry) => entry.id === id)?.filters,
+  };
+}
+
+/**
  * Toolbar toggles this tab declares. They live in the persisted `switches` map rather than
  * component state, so they survive a reload like every other grid preference.
  *
@@ -290,12 +289,6 @@ const PROJECT_GROUP_DIMENSIONS: GroupBy[] = [
 
 export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const tab = useGridTab(initialNodes);
-  const savedViews = useSavedViews("projects");
-  const viewIds = useMemo(
-    () => [...VIEW_IDS, ...savedViews.views.map((entry) => entry.id)],
-    [savedViews.views],
-  );
-  const [view, setView] = useTabView("projects", viewIds, "active-status");
   const [scopeId, setScopeId] = useState<string>("");
   const [includeDeferred, setIncludeDeferred] = useIncludeDeferred("projects");
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
@@ -310,16 +303,14 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
     () => buildColumns(tab.nodes, tab.today),
     [tab.nodes, tab.today],
   );
-  const defaultOrder = useMemo(() => viewOrder(view), [view]);
-  const gridState = useGridState(
-    `projects.${view}`,
-    allColumns,
-    savedViewDefaults(savedViews.find(view), {
-      order: defaultOrder,
-      groupBy: PROJECT_DEFAULT_GROUP_BY,
-      filters: VIEWS.find((entry) => entry.id === view)?.filters,
-    }),
-  );
+  const views = useModuleViews({
+    moduleId: "projects",
+    builtIn: VIEWS,
+    defaultViewId: "active-status",
+    columns: allColumns,
+    defaultsFor: viewDefaults,
+  });
+  const gridState = views.grid;
   const rowDrag = useTreeRowDrag({
     nodes: tab.nodes,
     byId: tab.byId,
@@ -381,6 +372,7 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
         switches={PROJECT_SWITCHES}
         counts={counts}
         error={tab.error}
+        views={views}
         left={
           <>
             <ToolbarSelect
@@ -391,17 +383,6 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
                 { value: "", label: "All Result Areas" },
                 ...resultAreas.map((area) => ({ value: area.id, label: area.name })),
               ]}
-            />
-            <ViewPicker
-              value={view}
-              onChange={setView}
-              builtIn={VIEWS}
-              saved={savedViews}
-              onSave={(name) => setView(savedViews.save(name, snapshotOf(gridState)))}
-              onDelete={(id) => {
-                setView(VIEWS[0].id);
-                savedViews.remove(id);
-              }}
             />
             {/* Tab-scoped, not per-view: one Postponed setting covers every sub-view. */}
             <ToolbarToggle

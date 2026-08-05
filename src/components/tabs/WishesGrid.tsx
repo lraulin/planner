@@ -11,7 +11,8 @@ import { DataGrid } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 import { GridToolbar } from "@/components/grid/GridToolbar";
 import { collectDistinctValues } from "@/lib/grid/distinct";
-import { useGridState } from "@/components/grid/useGridState";
+import type { GridDefaults } from "@/components/grid/useGridState";
+import { useModuleViews } from "@/components/grid/useModuleViews";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { copyAsText, writeClipboardText } from "@/lib/tree/copyAsText";
@@ -22,6 +23,16 @@ import {
   WISHES_COLUMN_IDS,
   type WishesColumnCtx,
 } from "./wishesColumns";
+
+/**
+ * One built-in view. The Wish List is a single list by nature; what it gains from views is
+ * somewhere to keep "the ones I'm actually considering" as a named filter set.
+ */
+const WISHES_VIEWS = [{ id: "wishes", label: "All Wishes" }] as const;
+
+function viewDefaults(): GridDefaults {
+  return { order: [...WISHES_COLUMN_IDS] };
+}
 
 /**
  * Wish List tab.
@@ -48,9 +59,16 @@ export function WishesGrid({
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
-  const gridState = useGridState("wishes", wishesColumns, {
-    order: [...WISHES_COLUMN_IDS],
+  const views = useModuleViews({
+    moduleId: "wishes",
+    builtIn: WISHES_VIEWS,
+    defaultViewId: "wishes",
+    // No view picker before this, so the stored layout is at `grid:wishes` and stays there.
+    defaultViewSharesModuleScope: true,
+    columns: wishesColumns,
+    defaultsFor: viewDefaults,
   });
+  const gridState = views.grid;
 
   const rows = useMemo(
     () =>
@@ -275,6 +293,7 @@ export function WishesGrid({
         distinctValues={distinctValues}
         counts={counts}
         error={error}
+        views={views}
         left={
           <ToolbarSelect
             label="Result Area"

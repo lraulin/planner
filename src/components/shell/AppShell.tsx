@@ -4,10 +4,10 @@ import { CommandProvider } from "./CommandProvider";
 import { MobileHeader } from "./MobileHeader";
 import { MobileNav } from "./MobileNav";
 import { Sidebar } from "./Sidebar";
-import type { ViewId } from "./views";
+import type { ModuleId } from "./modules";
 
 /**
- * The chrome every signed-in view sits inside.
+ * The chrome every signed-in module sits inside.
  *
  * This wrapper was copy-pasted into thirteen page files, which is how the shell ended up with
  * nowhere to add phone navigation. It lives here now — and being one seam is also what made
@@ -31,7 +31,7 @@ export function AppShell({
   active,
   children,
 }: {
-  active: ViewId;
+  active: ModuleId;
   children: React.ReactNode;
 }) {
   return (

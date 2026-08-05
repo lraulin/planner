@@ -7,7 +7,7 @@ import {
   overflowCommands,
   type Command,
 } from "./registry";
-import { BUILT_VIEWS, VIEWS } from "@/components/shell/views";
+import { BUILT_MODULES, MODULES } from "@/components/shell/modules";
 
 function command(id: string, label: string, extra: Partial<Command> = {}): Command {
   return { id, label, group: "app", run: () => {}, ...extra };
@@ -160,28 +160,28 @@ describe("command groups", () => {
 });
 
 /**
- * The palette's go-to entries are generated from the view registry, so these are really
- * tests of `views.ts` — but this is the consumer that a mistake there would break.
+ * The palette's go-to entries are generated from the module registry, so these are really
+ * tests of `modules.ts` — but this is the consumer that a mistake there would break.
  */
-describe("views as command sources", () => {
-  it("excludes reserved views, which have no route to navigate to", () => {
-    expect(BUILT_VIEWS.some((view) => view.status !== "built")).toBe(false);
-    expect(VIEWS.some((view) => view.status === "reserved")).toBe(true);
+describe("modules as command sources", () => {
+  it("excludes reserved modules, which have no route to navigate to", () => {
+    expect(BUILT_MODULES.some((entry) => entry.status !== "built")).toBe(false);
+    expect(MODULES.some((entry) => entry.status === "reserved")).toBe(true);
   });
 
-  it("gives every built view an icon, because the collapsed rail is icons only", () => {
-    for (const view of BUILT_VIEWS) {
-      expect(view.icon, `${view.id} has no icon`).toBeTruthy();
+  it("gives every built module an icon, because the collapsed rail is icons only", () => {
+    for (const entry of BUILT_MODULES) {
+      expect(entry.icon, `${entry.id} has no icon`).toBeTruthy();
     }
   });
 
-  it("has no duplicate view ids or hrefs", () => {
-    expect(new Set(VIEWS.map((v) => v.id)).size).toBe(VIEWS.length);
-    expect(new Set(VIEWS.map((v) => v.href)).size).toBe(VIEWS.length);
+  it("has no duplicate module ids or hrefs", () => {
+    expect(new Set(MODULES.map((m) => m.id)).size).toBe(MODULES.length);
+    expect(new Set(MODULES.map((m) => m.href)).size).toBe(MODULES.length);
   });
 
-  it("marks exactly the three views the phone bottom bar has slots for", () => {
-    expect(VIEWS.filter((view) => view.primary).map((v) => v.id)).toEqual([
+  it("marks exactly the three modules the phone bottom bar has slots for", () => {
+    expect(MODULES.filter((entry) => entry.primary).map((m) => m.id)).toEqual([
       "tasks",
       "day",
       "notes",

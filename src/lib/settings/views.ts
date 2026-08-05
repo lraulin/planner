@@ -11,24 +11,56 @@ import { SETTINGS_VERSION } from "./scopes";
  * view is not a new feature at all. A view is already nothing but a column order, a set of
  * filters and a grouping; saving one is copying three values the grid is holding anyway.
  *
- * **What a saved view captures, and what it deliberately does not.** Order, filters and
- * grouping are exactly the three settings that already distinguish "the user has not chosen"
- * from "the user chose this" — see the nullable fields in `grid.ts`. Sort and density have no
- * such distinction: every stored blob carries a concrete `sorts` array, so a view default
- * could never win against one, and `sorts: []` legitimately means "unsorted" rather than
- * "unset". Capturing them would need a second migration to buy a fraction of the value, so a
- * saved view is the three that work and says so.
+ * **What a saved view captures, and what it deliberately does not.** Order, filters, grouping
+ * and switches. The first three already distinguish "the user has not chosen" from "the user
+ * chose this" — see the nullable fields in `grid.ts`. Switches join them without needing that
+ * distinction at all, because each switch is its own key: `resolveSwitches` falls back per id,
+ * so there is no whole-map "cleared" state to represent and no migration to pay for.
+ *
+ * Sort and density stay out. Every stored blob carries a concrete `sorts` array, so a view
+ * default could never win against one, and `sorts: []` legitimately means "unsorted" rather
+ * than "unset". Capturing them *would* need the nullable treatment and a migration.
+ *
+ * `includeDeferred` stays out for a different reason: `data-grid.md` keeps it on the tab scope
+ * on purpose, so it is not a per-view setting to capture.
  */
 
-/** The settings a saved view carries. A subset of `GridSettings`, by the note above. */
-export type SavedView = {
-  /** Scope-safe and stable: it becomes the key of `grid:{tab}.{id}`. */
-  id: string;
-  name: string;
+/**
+ * The settings half of a view — everything except which view it is.
+ *
+ * Separate from the identity fields so `updateSavedView` cannot overwrite a name, an id, or a
+ * `base` while writing the grid back: "update the settings, keep the view" is a fact about the
+ * type rather than a rule the call site has to remember.
+ */
+export type SavedViewSettings = {
   /** Visible column ids in order. Null follows the tab's preset, as everywhere else. */
   order: string[] | null;
   filters: Record<string, ColumnFilter>;
   groupBy: string[];
+  /**
+   * Toolbar switch positions, by the id the tab declares. Merged *under* the grid's own
+   * stored switches — see `resolveSwitches` in `grid.ts`.
+   */
+  switches: Record<string, boolean>;
+};
+
+export type SavedView = SavedViewSettings & {
+  /** Scope-safe and stable: it becomes the key of `grid:{tab}.{id}`. */
+  id: string;
+  name: string;
+  /**
+   * The **built-in** view this one was saved from, or null for "the module's default".
+   *
+   * Needed because some modules resolve *behaviour* from the view id rather than only
+   * defaults: the Task Chooser's `chooserView`, `parseChooserSettings` and `buildChooserItems`
+   * all take a `ChooserViewId`, and `saved-a1b2c3d4` is not one of the five. `base` is what
+   * they get fed instead.
+   *
+   * Always a built-in, never another saved view — `baseViewId` follows a chain if a hand-edited
+   * blob contains one, but `save` resolves through at write time so none is created. A
+   * two-level chain would make deleting the middle view silently re-base the last.
+   */
+  base: string | null;
 };
 
 export type SavedViews = { views: SavedView[] };
@@ -80,9 +112,15 @@ function parseSavedView(value: unknown): SavedView | null {
   return {
     id,
     name,
+    // A base that no longer names a built-in is not rejected here — `baseViewId` degrades it to
+    // the module's default. Views outlive the presets they were saved from.
+    base: isValidViewId(asString(record.base, "")) ? asString(record.base, "") : null,
     order: Array.isArray(record.order) ? asStringArray(record.order, []) : null,
     filters: asMap(record.filters, (entry) => parseColumnFilter(entry)),
     groupBy: asStringArray(record.groupBy, []),
+    switches: asMap(record.switches, (entry) =>
+      typeof entry === "boolean" ? entry : null,
+    ),
   };
 }
 
@@ -131,6 +169,54 @@ export function renameSavedView(
   };
 }
 
+/**
+ * Write the grid back into the view you are on, keeping its identity.
+ *
+ * The counterpart to Save, and the reason Save stopped being the only command: without this,
+ * adjusting a saved view and keeping the adjustment was impossible — every Save minted a new
+ * view, so the picker filled up with "This week (2)", "This week (3)".
+ */
+export function updateSavedView(
+  saved: SavedViews,
+  id: string,
+  settings: SavedViewSettings,
+): SavedViews {
+  return {
+    views: saved.views.map((view) =>
+      view.id === id ? { ...view, ...settings } : view,
+    ),
+  };
+}
+
 export function findSavedView(saved: SavedViews, id: string): SavedView | null {
   return saved.views.find((view) => view.id === id) ?? null;
+}
+
+/**
+ * The built-in view whose defaults and behaviour apply to `viewId`.
+ *
+ * A built-in resolves to itself; a saved view to its `base`; anything unresolvable to
+ * `defaultViewId`. This is what lets a module hand a saved view straight to code that only
+ * understands its own preset ids.
+ *
+ * The loop exists for hand-edited blobs only. `save` resolves through, so a stored `base` never
+ * names another saved view — but a chain read from the database must terminate rather than
+ * hang, and the bound is the reason it cannot.
+ */
+export function baseViewId(
+  views: readonly SavedView[],
+  viewId: string,
+  builtInIds: readonly string[],
+  defaultViewId: string,
+): string {
+  let current = viewId;
+
+  for (let hops = 0; hops <= views.length; hops += 1) {
+    if (builtInIds.includes(current)) return current;
+    const view = views.find((entry) => entry.id === current);
+    if (!view?.base) break;
+    current = view.base;
+  }
+
+  return defaultViewId;
 }

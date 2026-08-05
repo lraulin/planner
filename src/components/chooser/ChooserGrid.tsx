@@ -8,7 +8,9 @@ import {
   type GridSwitch,
 } from "@/components/grid/GridToolbar";
 import { collectDistinctValues } from "@/lib/grid/distinct";
-import { useGridState, useTabView } from "@/components/grid/useGridState";
+import type { GridDefaults } from "@/components/grid/useGridState";
+import { useModuleViews } from "@/components/grid/useModuleViews";
+import { chooserScope } from "@/lib/settings/scopes";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import {
   ToolbarButton,
@@ -22,7 +24,6 @@ import {
   chooserRows,
   chooserView,
   CHOOSER_VIEWS,
-  CHOOSER_VIEW_IDS,
   DATE_FILTERS,
   TC_UNRANKED_GROUP_ID,
   tcLetterFromGroupId,
@@ -71,6 +72,26 @@ const CHOOSER_SWITCHES: GridSwitch[] = [
   { id: "advancedFilters", label: "Advanced Filters", defaultOn: false },
 ];
 
+/**
+ * The To-do List's TC Priority layout, or the scored one. Module scope so `useModuleViews` can
+ * memoise on the base view id.
+ */
+function viewDefaults(id: string): GridDefaults {
+  return {
+    order: chooserView(id as ChooserViewId).tcPriority
+      ? CHOOSER_TODO_ORDER
+      : CHOOSER_DEFAULT_ORDER,
+  };
+}
+
+/**
+ * The weights, per view. Achieve's own rule (manual §8.1.4) and ours since before saved views
+ * existed — this is what carries them into a view you save.
+ */
+function chooserScopes(viewId: string): readonly string[] {
+  return [chooserScope(viewId)];
+}
+
 export function ChooserGrid({
   initialNodes,
   plannedNodeIds,
@@ -80,19 +101,30 @@ export function ChooserGrid({
   plannedNodeIds?: string[];
 }) {
   const tab = useGridTab(initialNodes);
-  const [viewId, setViewId] = useTabView("chooser", CHOOSER_VIEW_IDS, "best-overall");
   const [dateFilter, setDateFilter] = useState<ChooserDateFilter>("none");
   const [limit, setLimit] = useState(INITIAL_LIMIT);
   const [showSettings, setShowSettings] = useState(false);
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
 
-  const { settings, update, reset } = useChooserSettings(viewId);
-  const view = chooserView(viewId);
-
   const allColumns = useMemo(() => buildChooserColumns(tab.today), [tab.today]);
-  const gridState = useGridState(`chooser.${viewId}`, allColumns, {
-    order: view.tcPriority ? CHOOSER_TODO_ORDER : CHOOSER_DEFAULT_ORDER,
+  const views = useModuleViews({
+    moduleId: "chooser",
+    builtIn: CHOOSER_VIEWS,
+    defaultViewId: "best-overall",
+    columns: allColumns,
+    defaultsFor: viewDefaults,
+    viewScopes: chooserScopes,
   });
+  const gridState = views.grid;
+
+  /**
+   * Everything that scores reads the **base** view, not the selected one: `chooserView`,
+   * `defaultSettings` and `buildChooserItems` all take a `ChooserViewId`, and a saved view's id
+   * is not one of the five. The weights themselves are keyed by the selected view, so a saved
+   * view keeps its own.
+   */
+  const { settings, update, reset } = useChooserSettings(views.viewId, views.base);
+  const view = chooserView(views.base);
 
   /**
    * Scoring needs a day to measure against, and on the server there isn't one. `null` is
@@ -107,12 +139,22 @@ export function ChooserGrid({
     () =>
       buildChooserItems(tab.nodes, {
         today,
-        viewId,
+        viewId: views.base,
         settings,
         plannedNodeIds: planned,
       }),
-    [tab.nodes, today, viewId, settings, planned],
+    [tab.nodes, today, views.base, settings, planned],
   );
+
+  /**
+   * Paging belongs to the list in front of you, so a view switch starts at the top again. Same
+   * render-time reset the node grids use for their navigable ids.
+   */
+  const [seenViewId, setSeenViewId] = useState(views.viewId);
+  if (seenViewId !== views.viewId) {
+    setSeenViewId(views.viewId);
+    setLimit(INITIAL_LIMIT);
+  }
 
   const matching = useMemo(
     () => applyDateFilter(scored, dateFilter, today),
@@ -261,20 +303,14 @@ export function ChooserGrid({
         switches={CHOOSER_SWITCHES}
         counts={{ shown: counts.shown, total: matching.length }}
         error={tab.error}
+        views={views}
         left={
           <>
-            <ToolbarSelect
-              label="View"
-              value={viewId}
-              onChange={(value) => {
-                setViewId(value as ChooserViewId);
-                setLimit(INITIAL_LIMIT);
-              }}
-              options={CHOOSER_VIEWS.map((entry) => ({
-                value: entry.id,
-                label: entry.label,
-              }))}
-            />
+            {/*
+              Achieve pairs the view dropdown with a Change Settings button, and the dialog
+              behind it is this view's weights (manual §8.1.4). Kept beside the shared picker
+              for the same reason: it is where the Chooser's own per-view settings live.
+            */}
             <ToolbarButton onClick={() => setShowSettings(true)}>
               Settings…
             </ToolbarButton>
@@ -407,6 +443,7 @@ export function ChooserGrid({
         <ChooserSettingsDialog
           open
           view={view}
+          viewName={views.current?.name ?? view.label}
           settings={settings}
           onChange={update}
           onReset={reset}

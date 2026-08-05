@@ -9,6 +9,7 @@ import {
   hasAnyNarrowing,
   MAX_SORT_KEYS,
   parseGridSettings,
+  resolveSwitches,
   serializeGridSettings,
   type GridDensity,
   type GridSettings,
@@ -140,6 +141,18 @@ export type GridDefaults = {
    * Reset this grid.
    */
   filters?: Record<string, ColumnFilter>;
+  /**
+   * Toolbar switch positions the view opens with, by the id the tab declared.
+   *
+   * A saved view records where the switches were; this is how they come back. It does **not**
+   * make a switch a property of the view — `data-grid.md`'s rule is that a view may not carry
+   * behaviour reachable no other way, and every switch here stays on the toolbar, toggleable
+   * and combinable. Only the *position* travels, exactly as a column's visibility does.
+   *
+   * Resolution is per key, not per map (`resolveSwitches`): the user's stored position wins,
+   * then this, then the `defaultOn` the tab declared.
+   */
+  switches?: Record<string, boolean>;
 };
 
 const NO_FILTERS: Record<string, ColumnFilter> = {};
@@ -152,7 +165,18 @@ export function useGridState<TCol extends ColumnMeta>(
   const defaultOrder = defaults.order;
   const defaultGroupBy = defaults.groupBy ?? EMPTY_GROUP_BY;
   const defaultFilters = defaults.filters ?? NO_FILTERS;
+  const defaultSwitches = defaults.switches;
   const { value: settings, patch, reset } = useSetting(gridScope(tabId), CODEC);
+
+  /**
+   * The view's switch positions under the user's own. Unlike `order` / `filters` / `groupBy`
+   * this needs no nullable field, because a switch the user has not touched is simply an absent
+   * key — see `resolveSwitches`.
+   */
+  const resolvedSwitches = useMemo(
+    () => resolveSwitches(defaultSwitches, settings.switches),
+    [defaultSwitches, settings.switches],
+  );
 
   const byId = useMemo(() => {
     const map = new Map<string, TCol>();
@@ -544,7 +568,7 @@ export function useGridState<TCol extends ColumnMeta>(
     density: settings.density,
     setDensity,
 
-    switches: settings.switches,
+    switches: resolvedSwitches,
     setSwitch,
 
     view: settings.view,

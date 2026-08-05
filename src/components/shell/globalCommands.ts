@@ -5,29 +5,29 @@ import { useMemo } from "react";
 import { requestQuickCapture } from "@/components/capture/event";
 import { signOut } from "@/lib/auth/client";
 import type { Command } from "@/lib/commands/registry";
-import { BUILT_VIEWS } from "./views";
+import { BUILT_MODULES } from "./modules";
 
 /**
  * The commands that mean the same thing on every screen.
  *
- * The `go` half is generated from the view registry rather than written out, so a new view
+ * The `go` half is generated from the module registry rather than written out, so a new module
  * becomes reachable by `⌘K` the moment it is added — this is Achieve's Go menu, and the
  * manual's promise that it lists *all* the tabs is only true if nobody has to remember to
  * add one here.
  *
- * Views marked `reserved` are excluded by `BUILT_VIEWS`. A palette entry that 404s is worse
- * than a missing one.
+ * Modules marked `reserved` are excluded by `BUILT_MODULES`. A palette entry that 404s is
+ * worse than a missing one.
  */
 export function useGlobalCommands(): readonly Command[] {
   const router = useRouter();
 
   return useMemo(() => {
-    const go: Command[] = BUILT_VIEWS.map((view) => ({
-      id: `go.${view.id}`,
-      label: view.label,
+    const go: Command[] = BUILT_MODULES.map((entry) => ({
+      id: `go.${entry.id}`,
+      label: entry.label,
       group: "go",
-      keywords: GO_KEYWORDS[view.id],
-      run: () => router.push(view.href),
+      keywords: GO_KEYWORDS[entry.id],
+      run: () => router.push(entry.href),
     }));
 
     const app: Command[] = [

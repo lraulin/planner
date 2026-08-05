@@ -16,10 +16,10 @@ import { useGlobalCommands } from "./globalCommands";
 /**
  * `⌘K` — the Go menu, and the index of everything the app can do.
  *
- * Achieve reached all sixteen of its views through **Go** and kept only what you had opened
- * as tabs. We had the tabs without the Go menu, which is why eleven of them were permanent.
- * This is the missing half, and it also swallows the Actions / Tools / View menus: one
- * registry, listed here and rendered again behind each view's `⋯` (`registry.ts`).
+ * Achieve reached all sixteen of its destinations through **Go** and kept only what you had
+ * opened as tabs. We had the tabs without the Go menu, which is why eleven of them were
+ * permanent. This is the missing half, and it also swallows the Actions / Tools / View menus:
+ * one registry, listed here and rendered again behind each module's `⋯` (`registry.ts`).
  *
  * Built on `ModalShell` per `modal-pattern.md`, so it gets the roles, capture-phase Escape,
  * focus handling, and the below-`md` bottom sheet for free — though on a phone this is
@@ -106,7 +106,7 @@ function PaletteDialog({ onClose }: { onClose: () => void }) {
   return (
     <ModalShell open onClose={onClose} labelledBy={titleId} width="max-w-lg">
       <h2 id={titleId} className="sr-only">
-        Search views and commands
+        Search modules and commands
       </h2>
 
       <input
@@ -120,8 +120,8 @@ function PaletteDialog({ onClose }: { onClose: () => void }) {
           // render deciding what the first one already knew.
           setActive(0);
         }}
-        placeholder="Go to a view, or run a command…"
-        aria-label="Search views and commands"
+        placeholder="Go to a module, or run a command…"
+        aria-label="Search modules and commands"
         // `isTypingTarget` is true in here, so the global `c` and `⌘K` handlers stand down
         // on their own — nothing extra is needed to type a "c".
         onKeyDown={(event) => {

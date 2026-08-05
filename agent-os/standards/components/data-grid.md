@@ -247,22 +247,55 @@ cannot be combined, cannot be inspected, and can only be described by its own na
 
 ### Saved views
 
-Because a view is only a column order, some filters and a grouping, **saving one is copying
-three values and giving them a name** — which is why the "we deliberately do not do user-saved
-views" line is gone. Its own condition was _revisit when the presets demonstrably do not cover
-it_, and the answer turned out not to be a new feature at all.
+Because a view is only stored settings, **saving one is copying a handful of values and giving
+them a name** — which is why the "we deliberately do not do user-saved views" line is gone. Its
+own condition was _revisit when the presets demonstrably do not cover it_, and the answer turned
+out not to be a new feature at all.
+
+**Every main grid has them**, through one hook: `useModuleViews`. A module declares its
+built-in views, which one it opens on, and what each of those defaults to; the hook owns the
+sequence — catalogue, allow-list, selection, grid state — whose **order is load-bearing**
+(`useSavedViews` before `useTabView`, or every saved id is rejected as illegal and the module
+silently falls back to its default). Passing its return value to `GridToolbar`'s `views` prop
+is the whole integration.
 
 - The **catalogue** lives in `views:{tabId}`; how you have since adjusted a saved view lives in
   its own `grid:{tab}.{id}` scope, exactly as a built-in view's does. `Reset this grid` returns
   to what you saved.
-- A saved view captures **order, filters and grouping** — precisely the three settings that
-  already distinguish "not chosen" from "chosen" (see the nullable fields in `grid.ts`). Sort
-  and density have no such distinction, so a view default could never win against a stored
-  one; capturing them needs a second migration and is deliberately not done.
+- A saved view captures **order, filters, grouping and switch positions**. The first three
+  already distinguish "not chosen" from "chosen" (the nullable fields in `grid.ts`); switches
+  need no such distinction because each is its own key — `resolveSwitches` falls back per id
+  (stored → view → the tab's `defaultOn`), so there is no whole-map "cleared" state and no
+  migration. Sort and density stay out: every blob carries a concrete `sorts`, so a view
+  default could never win against one.
+- **A view recording a switch does not make the switch a property of the view.** The rule above
+  — a view may not carry behaviour reachable no other way — is intact: every switch stays on
+  the toolbar, toggleable and combinable. Only its _position_ travels, as a column's
+  visibility does.
+- **`base` names the built-in a saved view derives from**, because some modules resolve
+  behaviour and not merely defaults from the view id: `chooserView`, `parseChooserSettings` and
+  `buildChooserItems` all take a `ChooserViewId`, and `saved-a1b2c3d4` is not one. `base`
+  always names a built-in — saving from a saved view follows the chain through, so deleting the
+  middle view cannot silently re-base the last.
+- **A module's own per-view settings hang off the view id**, rather than living inside the
+  view: the Task Chooser's weights in `chooser:{viewId}`, Notes' mode / sort / filter in
+  `notes:{viewId}`. Achieve requires this for the Chooser (manual §8.1.4 — _"Other views will
+  retain their own unique settings"_). Declare them as `viewScopes` so **saving forks them**;
+  without that, naming the grid in front of you would snap the module's settings back to their
+  defaults. Deleting a view clears them, as it clears the grid scope.
+- **A module whose default view had no picker keeps its bare grid scope**
+  (`defaultViewSharesModuleScope`). `GridSettings.view` is already nullable with null meaning
+  "the module's default", so `grid:outline` _is_ that view's scope — which is what let Outline,
+  Wishes and Notes gain views without orphaning a single stored column layout.
 - Ids are **random, not sequential**. A reissued id would inherit the deleted view's leftover
-  grid scope. Deleting a view clears that scope with it.
+  scopes. Deleting a view clears them with it.
 - Saved ids join the built-ins in `useTabView`'s allow-list, so deleting the view you are on
-  falls back instead of stranding the tab.
+  falls back instead of stranding the grid.
+- **Only the select holds bar width.** Save / Update / Rename / Delete register as commands and
+  live behind `⋯`, per the three-tier table below. The three that act on the selected view are
+  **disabled, not absent**, on a built-in: a built-in is not yours to rename, and a command
+  that vanishes teaches you it does not exist. Update needs its own feedback — it writes what
+  is already on screen, so nothing visibly happens.
 
 ### The chip bar accounts for missing rows, not for stored state
 
@@ -359,8 +392,9 @@ per-tab switches.
 - **One hook owns the whole scope.** A write replaces the scope's value, so two hooks each
   persisting one field would clobber each other — changing a filter would reset the column
   layout. See the header comment on `useGridState.ts`.
-- **A view's defaults are `GridDefaults`**, passed to `useGridState` — filters and grouping a
-  tab opens with. Never a hardcoded predicate the user cannot see.
+- **A view's defaults are `GridDefaults`**, passed to `useGridState` — the order, filters,
+  grouping and switch positions a view opens with. Never a hardcoded predicate the user cannot
+  see.
 - **Per-tab toggles go in the open `switches` map**, declared by the tab as
   `{ id, label, defaultOn }`. A new toggle is one array entry; a removed one leaves a
   harmless orphan key rather than a parse failure. The tab supplies the default, because
@@ -376,7 +410,8 @@ per-tab switches.
 ## Toolbar
 
 `GridToolbar` renders the shared controls from `GridState`; the tab supplies only what is
-its own, through `left` (scope and view pickers) and `right` (record actions).
+its own, through `views` (its `useModuleViews` result), `left` (scope pickers) and `right`
+(record actions).
 
 A tab declares **what it has** — columns, switches, group dimensions. It does not assemble
 buttons. If you find yourself adding a control to one grid, add it to `GridToolbar` instead

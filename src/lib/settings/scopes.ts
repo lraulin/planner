@@ -88,7 +88,33 @@ export function chooserScope(viewId: string): string {
   return `chooser:${viewId}`;
 }
 
+/**
+ * The Notes module's **default** view's own settings — mode, sort and the filter dialog.
+ *
+ * Kept under its original key rather than renamed to match the view: this is where every
+ * existing mode and saved filter already lives, and Notes gaining a view picker must not reset
+ * them. See `notesViewScope`.
+ */
 export const NOTES_FILTER_SCOPE = "notes:filter";
+
+/** The Notes module's default view id — the one whose settings stay at `notes:filter`. */
+export const NOTES_DEFAULT_VIEW_ID = "notes";
+
+/**
+ * Notes' own settings for one view.
+ *
+ * Notes has module settings that no column can carry — nested vs flat, the sort, the filter
+ * dialog — and once views exist they belong to the view, exactly as the Task Chooser's weights
+ * always have (`chooserScope`). A saved Notes view therefore gets its own scope, keyed by the
+ * same id as its grid state.
+ *
+ * Takes the plain selected view id, so a module can hand the same function to
+ * `useModuleViews`' `viewScopes` and have saving fork the right row.
+ */
+export function notesViewScope(viewId: string): string {
+  return viewId === NOTES_DEFAULT_VIEW_ID ? NOTES_FILTER_SCOPE : `notes:${viewId}`;
+}
+
 export const DRAWER_SCOPE = "drawer";
 export const SHELL_SCOPE = "shell";
 
