@@ -29,7 +29,7 @@ A drawer is a client component holding its own form state, rendered from the pag
   resets it.
 - **Width**: full-width on small screens, capped around `720px` on desktop
   (`w-full sm:w-[90%] md:max-w-[45rem]`).
-- **Position below the app chrome** — the tab strip stays visible and clickable.
+- **Position beside the app chrome** — the sidebar stays visible and clickable.
 - **Below `md` the drawer is a full-screen sheet** at `100dvh` (not `100%` — a fixed parent
   resolves against iOS's large viewport and puts the footer under Safari's toolbar). There is
   no visible backdrop and no chrome behind it to preserve; the header carries the notch inset

@@ -6,8 +6,8 @@ import { QuickCaptureDialog } from "./QuickCaptureDialog";
 import { CAPTURE_EVENT } from "./event";
 
 /**
- * The app-wide capture shortcut, mounted by `TabStrip` so it exists on every tab and on no
- * unauthenticated page.
+ * The app-wide capture shortcut, mounted by `AppShell` so it exists on every signed-in view
+ * and on no unauthenticated page.
  *
  * `c` follows the Gmail/GitHub convention for "create". It is safe as a bare letter here
  * because every other binding in the app is a named key — Insert, arrows, Tab, Enter, F2,

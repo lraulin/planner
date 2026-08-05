@@ -41,6 +41,13 @@ document differs from the original, it is because Achieve Planner's model differ
 
 ## Layout & Navigation
 
+### Getting between views, and finding commands
+
+A grouped, collapsible **sidebar** for where you can go; a `⌘K` **palette** for what the app
+can do; a **`⋯` overflow** on each view's toolbar so no command is reachable by shortcut
+alone. Views and commands each live in exactly one registry. Full rules, including why a
+palette-only command is not shipped: **`navigation.md`**.
+
 ### Grid + drawer is the default
 
 The **outline grid + right-sliding drawer** is the standard pattern for list + form work

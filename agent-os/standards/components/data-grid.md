@@ -407,6 +407,29 @@ failed at least once:
 Prefer a control that shows its own state to one that needs a label to say what it is:
 density is a two-button segmented control (`Roomy` / `Dense`), not a `Density:` select.
 
+### The overflow tier
+
+A control that survives those tests but is used **occasionally** does not have to hold width
+on every grid on every screen forever. It goes behind `⋯` at the end of the bar, which renders
+the commands the grid registered (`navigation.md`). `Show Fields` and `Reset this grid` live
+there; `Filter…`, `Group by`, the tab's switches, density and `Rename` / `Open` stayed on the
+bar.
+
+Three tiers, and a control belongs in the lowest one that still works:
+
+| Tier           | Test                                                        |
+| -------------- | ----------------------------------------------------------- |
+| **On the bar** | Used most sessions, or required visible (`Rename` / `Open`) |
+| **Behind `⋯`** | A real command, used occasionally                           |
+| **Deleted**    | Fails one of the tests above                                |
+
+`⋯` is not a place to hide things you could not justify. If a control fails the "column filter
+wearing a checkbox" or "unavailable or duplicated" test, moving it into the menu does not fix
+it — a menu with junk in it is read exactly as carefully as a toolbar with junk on it, which is
+to say not at all. And it is not optional cover for a keyboard shortcut: it is the _visible_
+path `ux-principles.md` requires, which is why it is a real button with a 44px tap target and
+not a hover reveal.
+
 Keep _commands_ and _view controls_ in separate bars where a view has many commands (the
 Outline: add / indent / delete in `FilterBar`, search / filter / fields / density in
 `GridToolbar`). They are different kinds of thing and mixing them makes both harder to find.

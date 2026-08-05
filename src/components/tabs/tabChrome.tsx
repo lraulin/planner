@@ -8,11 +8,30 @@
  * Wrapping was costing four rows and a fifth of a 390px screen before a single task was
  * visible. One row that pans is the trade `responsive.md` asks for: wide content scrolls
  * inside its own container rather than eating the view.
+ *
+ * `pinned` sits **outside** that scroller, against the right edge. The `⋯` overflow goes
+ * there because it is the phone's only path to the view's commands, and a command surface
+ * you reach by panning 1900px of other controls is one you do not have — which is what it
+ * was, measured, before this existed.
  */
-export function TabToolbar({ children }: { children: React.ReactNode }) {
+export function TabToolbar({
+  children,
+  pinned,
+}: {
+  children: React.ReactNode;
+  pinned?: React.ReactNode;
+}) {
   return (
-    <div className="flex flex-none flex-nowrap items-center gap-x-4 gap-y-2 overflow-x-auto border-b border-rule px-3 py-2 md:flex-wrap md:overflow-x-visible">
-      {children}
+    <div className="flex flex-none items-stretch border-b border-rule">
+      <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-x-4 gap-y-2 overflow-x-auto px-3 py-2 md:flex-wrap md:overflow-x-visible">
+        {children}
+      </div>
+
+      {pinned && (
+        <div className="flex flex-none items-center border-l border-rule px-2 py-2 md:border-l-0 md:pl-0">
+          {pinned}
+        </div>
+      )}
     </div>
   );
 }

@@ -11,8 +11,10 @@ import { isGoogleLinked, listCalendarLinks } from "@/lib/google/queries";
 export const dynamic = "force-dynamic";
 
 /**
- * Preference reset surface. Not a main tab — reached from the shell's Settings link —
- * so it uses a slim header rather than the full TabStrip.
+ * Preference reset surface. Not a view — reached from the Settings link pinned below the
+ * sidebar's sections — so it keeps its own slim header rather than sitting in `AppShell`.
+ * Nothing in the sidebar would be highlighted while you are here, and a rail with no active
+ * entry looks broken.
  */
 export default async function SettingsRoute() {
   const account = await getCurrentAccount();

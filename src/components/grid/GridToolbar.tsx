@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   asGroupBy,
   GROUP_BY_LABELS,
@@ -16,6 +16,9 @@ import {
   ToolbarSelect,
   ToolbarToggle,
 } from "@/components/tabs/tabChrome";
+import { useRegisterCommands } from "@/components/shell/CommandProvider";
+import { OverflowMenu } from "@/components/shell/OverflowMenu";
+import type { Command } from "@/lib/commands/registry";
 import { GridFilterChips } from "./GridFilterChips";
 import { GridFilterDialog } from "./GridFilterDialog";
 import { GridSearchBox } from "./GridSearchBox";
@@ -102,9 +105,100 @@ export function GridToolbar({
   const allCollapsed =
     groupIds.length > 0 && groupIds.every((id) => grid.collapsedGroups.has(id));
 
+  const selectedId = rowActions?.selectedId ?? null;
+  const onRename = rowActions?.onRename;
+  const onOpen = rowActions?.onOpen;
+  const { reset: resetGrid, setAllGroupsCollapsed } = grid;
+
+  /*
+   * What this grid can do, published once for both the `⌘K` palette and the `⋯` menu.
+   *
+   * `hasOwnControl` marks the ones still holding a button on the bar: the palette lists
+   * everything, `⋯` lists only what is not already visible. Memoised because
+   * `useRegisterCommands` re-registers whenever this array changes, and re-registering sets
+   * state — a fresh array each render would be an infinite loop.
+   */
+  const commands = useMemo<Command[]>(() => {
+    const list: Command[] = [
+      {
+        id: "view.filter",
+        label: "Filter…",
+        group: "view",
+        keywords: "advanced condition where",
+        hasOwnControl: true,
+        run: () => setFilterOpen(true),
+      },
+      {
+        id: "view.fields",
+        label: "Show Fields",
+        group: "view",
+        keywords: "columns hide customize current view",
+        run: () => setFieldsOpen(true),
+      },
+      {
+        id: "view.reset",
+        label: "Reset this grid",
+        group: "view",
+        keywords: "clear default columns layout",
+        title: "Clear filters, sort, column layout, grouping and density for this view",
+        run: resetGrid,
+      },
+    ];
+
+    if (groupIds.length > 0) {
+      list.splice(1, 0, {
+        id: "view.collapse-all",
+        label: allCollapsed ? "Expand all" : "Collapse all",
+        group: "view",
+        keywords: "groups",
+        hasOwnControl: true,
+        run: () => setAllGroupsCollapsed(groupIds, !allCollapsed),
+      });
+    }
+
+    if (onRename && onOpen) {
+      // Disabled rather than absent when nothing is selected: `registry.ts` — a command that
+      // vanishes teaches you it does not exist. `title` is what says why.
+      list.push(
+        {
+          id: "record.rename",
+          label: "Rename",
+          group: "record",
+          shortcut: "F2",
+          disabled: selectedId === null,
+          title: selectedId === null ? "Select a row first" : undefined,
+          hasOwnControl: true,
+          run: () => selectedId && onRename(selectedId),
+        },
+        {
+          id: "record.open",
+          label: "Open",
+          group: "record",
+          shortcut: "⏎",
+          disabled: selectedId === null,
+          title: selectedId === null ? "Select a row first" : undefined,
+          hasOwnControl: true,
+          run: () => selectedId && onOpen(selectedId),
+        },
+      );
+    }
+
+    return list;
+  }, [
+    resetGrid,
+    setAllGroupsCollapsed,
+    groupIds,
+    allCollapsed,
+    selectedId,
+    onRename,
+    onOpen,
+  ]);
+
+  useRegisterCommands(commands);
+
   return (
     <>
-      <TabToolbar>
+      <TabToolbar pinned={<OverflowMenu label="More commands for this view" />}>
         {left}
 
         <GridSearchBox value={grid.search} onChange={grid.setSearch} />
@@ -149,8 +243,6 @@ export function GridToolbar({
           />
         ))}
 
-        <ToolbarButton onClick={() => setFieldsOpen(true)}>Show Fields</ToolbarButton>
-
         <DensityToggle value={grid.density} onChange={grid.setDensity} />
 
         {/*
@@ -158,14 +250,13 @@ export function GridToolbar({
           state where the chip bar is absent, so it could only ever be pressed while the
           chip bar was on screen offering "Clear all" — a control whose only two states are
           "unavailable" and "duplicated" is one control too many.
-        */}
 
-        <ToolbarButton
-          onClick={grid.reset}
-          title="Clear filters, sort, column layout, grouping and density for this view"
-        >
-          Reset this grid
-        </ToolbarButton>
+          "Show Fields" and "Reset this grid" are gone from the bar too, into `⋯` and the
+          palette. Neither is used often enough to hold width on every grid on every screen
+          forever — which is the test `data-grid.md` asks a toolbar button to pass. They are
+          not hidden: `⋯` is one click away and visible on touch, which is what keeps them
+          legal under `ux-principles.md`.
+        */}
 
         {rowActions && (
           <>

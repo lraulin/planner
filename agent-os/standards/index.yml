@@ -5,6 +5,8 @@ database:
 components:
   ux-principles:
     description: Core UI/UX philosophy — outline grid + drawer, inline editing, no re-sort while editing, date/decimal commit on blur, modals only for confirmations/capture, tabs for form sections
+  navigation:
+    description: Getting around and finding commands — the grouped sidebar, the ⌘K palette and the ⋯ overflow; one registry for views and one for commands; reserved views render nothing; no command is palette-only, and the complete-palette / short-menu split; shell state is a server-rendered setting, not a localStorage flag
   data-grid:
     description: The one shared DataGrid — hierarchy survives sort/filter/group, drag-to-reorder is first-class, filtering and search reach hidden columns, three rungs of progressive filter disclosure, chips + "Showing N of M", every preference persists through useGridState; and why no grid library
   drawer-pattern:

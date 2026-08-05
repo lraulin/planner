@@ -16,7 +16,9 @@ import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useStateChange } from "@/components/grid/useStateChange";
 import { useToday } from "@/components/grid/useToday";
 import type { MenuItem } from "@/components/grid/ContextMenu";
+import { useRegisterCommands } from "@/components/shell/CommandProvider";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
+import type { Command } from "@/lib/commands/registry";
 import { copyAsText, writeClipboardText } from "@/lib/tree/copyAsText";
 import { isTypingTarget } from "@/lib/keyboard";
 
@@ -39,7 +41,14 @@ export function useGridTab(initialNodes: OutlineNode[]) {
   const [navigableIds, setNavigableIds] = useState<readonly string[]>([]);
   const today = useToday();
 
-  const order = navigableIds.length > 0 ? navigableIds : nodes.map((n) => n.id);
+  // Memoised because the fallback branch builds a new array, and everything downstream keys
+  // off its identity: `copySelectionAsText` was being rebuilt on every single render, which
+  // stayed invisible until a consumer registered it as a command and the churn had somewhere
+  // to become a re-render loop.
+  const order = useMemo(
+    () => (navigableIds.length > 0 ? navigableIds : nodes.map((n) => n.id)),
+    [navigableIds, nodes],
+  );
   const multi = useMultiSelect(order, detailId);
   const { selectedId, selectedIds, select, selectOne, move } = multi;
 
@@ -160,6 +169,32 @@ export function useGridTab(initialNodes: OutlineNode[]) {
     },
     [byId, openDetail, selectedIds, copySelectionAsText],
   );
+
+  /**
+   * The one row-menu command with no button anywhere.
+   *
+   * Open and Rename reach the registry through `GridToolbar`'s `rowActions`; Copy as text is
+   * right-click-or-⌘C only, which `ux-principles.md` calls broken on touch. Registering it
+   * here gives all three list tabs a visible path at once, via `⋯`.
+   */
+  const commands = useMemo<Command[]>(
+    () => [
+      {
+        id: "record.copy-as-text",
+        label:
+          selectedIds.size > 1 ? `Copy as text (${selectedIds.size})` : "Copy as text",
+        group: "record",
+        shortcut: "⌘C",
+        keywords: "clipboard export outline",
+        disabled: selectedId === null,
+        title: selectedId === null ? "Select a row first" : undefined,
+        run: copySelectionAsText,
+      },
+    ],
+    [selectedId, selectedIds, copySelectionAsText],
+  );
+
+  useRegisterCommands(commands);
 
   // Keyboard: Enter opens drawer, F2 renames, arrows move/extend selection, ⌘C copies text.
   useEffect(() => {

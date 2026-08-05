@@ -22,6 +22,7 @@ export const SCOPE_KINDS = [
   "outline",
   "notes",
   "drawer",
+  "shell",
 ] as const;
 export type ScopeKind = (typeof SCOPE_KINDS)[number];
 
@@ -89,6 +90,7 @@ export function chooserScope(viewId: string): string {
 
 export const NOTES_FILTER_SCOPE = "notes:filter";
 export const DRAWER_SCOPE = "drawer";
+export const SHELL_SCOPE = "shell";
 
 const KIND_LABELS: Record<ScopeKind, string> = {
   grid: "Grid",
@@ -97,6 +99,7 @@ const KIND_LABELS: Record<ScopeKind, string> = {
   outline: "Outline",
   notes: "Notes",
   drawer: "Detail drawer",
+  shell: "App shell",
 };
 
 /** `projects.active-status` → `Projects / Active status`. */

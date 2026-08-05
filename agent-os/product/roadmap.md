@@ -184,6 +184,19 @@ Features that complete or surround the original product, plus making it multi-de
   the planned day falls inside the shelf; state and dates couple both ways (including
   backdated completions). Grids' "Postponed" toggle defaults to showing and is persisted.
   Follow-ups: grid states-list like the Chooser; project recurrence.
+- **✅ Navigation & command surface.**
+  `specs/2026-08-05-0838-navigation-and-command-surface`. The eleven-tab strip is gone,
+  replaced by a grouped, collapsible **sidebar** (Plan / Do / Track, with Library reserved)
+  and a `⌘K` **command palette** — which is Achieve's **Go** menu, the piece we had never
+  ported, and the reason every view had to be a permanent tab. Commands live in one registry
+  rendered by two surfaces: the palette lists everything, a `⋯` overflow on each view's
+  toolbar lists what does not already have a button, so nothing is reachable by shortcut
+  alone. `Show Fields` and `Reset this grid` moved off the always-visible toolbar into `⋯`.
+  Future views (Overview, Result Areas, Life Plan, Time Charts, Resources, Contacts, Focus
+  Timer, Time Log, Reports) each have a section assigned already and render nothing until
+  built. Phone keeps its bottom nav; the More sheet is grouped the same way and `⋯` is the
+  touch path to commands. New standard: `components/navigation.md`. Deferred: converting the
+  six row context menus into registered commands; `⋯` on the four views with no grid toolbar.
 - Any remaining Achieve chrome that earns its keep.
 - **Pomodoro → time tracking.** Effort, Effort Left, Actual Effort, and % complete
   already live on tasks (and roll up); what’s missing is a way to _earn_ those numbers

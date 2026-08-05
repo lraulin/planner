@@ -17,6 +17,8 @@ the app presents **a different information architecture over the same data**:
 | Desktop                        | Phone                                   | Why                                                          |
 | ------------------------------ | --------------------------------------- | ------------------------------------------------------------ |
 | Grid + right drawer            | List → full-screen sheet                | Context preservation is cheap on 1440px, impossible on 390px |
+| Grouped sidebar (collapsible)  | Bottom nav + More sheet                 | A 48px icon rail on a 390px screen is the shrunken answer    |
+| `⌘K` command palette           | `⋯` on the view's toolbar               | There is no `⌘K` on touch — see `navigation.md`              |
 | Multi-column panes, side rails | One column, segmented control to switch | Horizontal scrolling is a failure state                      |
 | Hover reveals, double-click    | Persistent affordances, single tap      | There is no hover on touch                                   |
 | Right-click menu               | Long-press menu                         | There is no right button                                     |
@@ -30,7 +32,7 @@ scrolls horizontally inside its own container and says so. It does not get squas
 ## One breakpoint carries the weight
 
 **`md` — 48rem / 768px.** Below it is _compact_: phones, and iPad in portrait. At and above it
-is _the instrument_: the full grid, the right drawer, the tab strip, the keyboard model.
+is _the instrument_: the full grid, the right drawer, the sidebar, the keyboard model.
 
 - Use `md:` for anything structural. `sm:` is for minor reflow inside an already-compact
   layout (a two-up field row becoming one-up).
