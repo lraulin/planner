@@ -26,6 +26,10 @@ import { ShowFieldsDialog } from "./ShowFieldsDialog";
 import type { ColumnMeta } from "./columns";
 import type { GridState } from "./useGridState";
 
+const EMPTY_GROUP_DIMENSIONS: readonly GroupBy[] = [];
+const EMPTY_GROUP_IDS: readonly string[] = [];
+const EMPTY_SWITCHES: readonly GridSwitch[] = [];
+
 /**
  * The controls every grid gets, assembled once.
  *
@@ -57,9 +61,9 @@ export function GridToolbar({
   gridLabel,
   allColumns,
   distinctValues,
-  groupDimensions = [],
-  groupIds = [],
-  switches = [],
+  groupDimensions = EMPTY_GROUP_DIMENSIONS,
+  groupIds = EMPTY_GROUP_IDS,
+  switches = EMPTY_SWITCHES,
   counts,
   error,
   rowActions,

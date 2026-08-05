@@ -43,7 +43,8 @@ export function Sidebar({ active }: { active: ViewId }) {
       // `hidden md:flex`, not a width transition: below `md` the phone owns navigation
       // entirely (`responsive.md` — adaptive, not shrunken), so there is nothing here to
       // narrow.
-      className={`hidden flex-none flex-col border-r border-rule bg-shell md:flex ${
+      // Keep desktop nav above drawer backdrops so changing views is always possible.
+      className={`hidden flex-none flex-col border-r border-rule bg-shell md:relative md:z-50 md:flex ${
         collapsed ? "w-12" : "w-44"
       }`}
     >
