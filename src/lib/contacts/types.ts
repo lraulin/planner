@@ -1,4 +1,5 @@
 import type { ContactItemKind, NodeState, PriorityLetter } from "@/db/schema";
+import type { LinkedNoteSummary } from "@/lib/detail/types";
 
 /** One repeating sub-record of a contact, as the drawer edits it. */
 export type ContactItemView = {
@@ -64,15 +65,12 @@ export type DiscussionItemSummary = {
   resolved: boolean;
 };
 
-/** A note filed against a contact — Achieve's Contact History. */
-export type ContactHistoryEntry = {
-  id: string;
-  title: string;
-  subject: string;
-  body: string;
-  noteDate: Date | null;
-  updatedAt: Date;
-};
+/**
+ * Achieve's Contact History is a note with a date, so it reuses `LinkedNoteSummary` and the
+ * panel that already renders one — rather than a parallel type and a second component that
+ * would drift from it.
+ */
+export type ContactHistoryEntry = LinkedNoteSummary;
 
 /** Everything the contact drawer needs, in one payload. */
 export type ContactDetail = {

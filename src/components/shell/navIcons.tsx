@@ -163,6 +163,16 @@ export function FitnessIcon() {
   );
 }
 
+/** Contacts: a person. The only glyph in the app that is a human being. */
+export function ContactsIcon() {
+  return (
+    <svg {...BASE} className="h-5 w-5">
+      <circle cx="10" cy="6.75" r="3.25" />
+      <path d="M3.75 17.25a6.25 6.25 0 0 1 12.5 0" />
+    </svg>
+  );
+}
+
 /**
  * Time Charts: a week's worth of painted blocks. Deliberately unlike `ScheduleIcon`'s empty
  * week grid — a time chart is the week you *intended*, which is why it has fill and the

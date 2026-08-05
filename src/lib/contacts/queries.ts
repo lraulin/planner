@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { contactItems, contacts, nodes, taskDetails } from "@/db/schema";
 import type { ContactItemKind } from "@/db/schema";
 import { loadNotesForContact } from "@/lib/notes/queries";
+import { noteSnippet } from "@/lib/notes/snippet";
 import { compareContacts, displayNameOf, fileAsOf, primaryOf } from "./name";
 import { GRID_CONTACT_ITEM_KINDS } from "./itemKinds";
 import type {
@@ -158,9 +159,8 @@ export async function getContactDetail(
   const history: ContactHistoryEntry[] = notes.map((note) => ({
     id: note.id,
     title: note.title,
-    subject: note.subject,
-    body: note.body,
     noteDate: note.noteDate,
+    snippet: noteSnippet(note.body),
     updatedAt: note.updatedAt,
   }));
 
@@ -236,12 +236,32 @@ export async function loadDiscussionItems(
  * drawer's Contact field reads the same string the Contacts grid does.
  */
 export async function loadContactOptions(userId: string): Promise<ContactOption[]> {
-  const rows = await db.select().from(contacts).where(eq(contacts.userId, userId));
+  const [rows, emailRows] = await Promise.all([
+    db.select().from(contacts).where(eq(contacts.userId, userId)),
+    db
+      .select()
+      .from(contactItems)
+      .where(and(eq(contactItems.userId, userId), eq(contactItems.kind, "email")))
+      .orderBy(asc(contactItems.sortKey)),
+  ]);
+
+  const emailsByContact = new Map<string, ContactItemView[]>();
+  for (const row of emailRows) {
+    const items = emailsByContact.get(row.contactId);
+    if (items) items.push(toItemView(row));
+    else emailsByContact.set(row.contactId, [toItemView(row)]);
+  }
 
   return rows
     .map((row) => ({
       id: row.id,
-      displayName: displayNameOf(row),
+      // This is a picker as well as a grid lookup. Preserve the same e-mail fallback the
+      // Contacts page uses, or an e-mail-only person turns into an unhelpful "Unnamed
+      // contact" everywhere except their own list.
+      displayName: displayNameOf(
+        row,
+        primaryOf(emailsByContact.get(row.id) ?? [])?.value,
+      ),
       fileAs: fileAsOf(row),
     }))
     .sort(compareContacts)

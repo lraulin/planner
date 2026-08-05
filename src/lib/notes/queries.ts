@@ -11,7 +11,8 @@ import type { NoteNode, NoteRow } from "./types";
  * depth-first order with siblings correctly sequenced.
  *
  * The join to `nodes` is for the "Linked to" column. It is a left join on a nullable
- * column, so an unlinked note — the common case — costs nothing.
+ * column, so an unlinked note — the common case — costs nothing. Contact labels are joined
+ * in `NotesGrid` from `loadContactOptions`, which keeps their name derivation in one place.
  */
 export async function loadNotes(userId: string): Promise<NoteNode[]> {
   const result = await db.execute(sql`
@@ -62,6 +63,7 @@ export async function loadNotes(userId: string): Promise<NoteNode[]> {
     depth: Number(r.depth),
     nodeId: (r.node_id as string | null) ?? null,
     contactId: (r.contact_id as string | null) ?? null,
+    contactName: null,
     nodeName: (r.node_name as string | null) ?? null,
     nodeType: (r.node_type as NoteRow["nodeType"]) ?? null,
     createdAt: new Date(r.created_at as string),

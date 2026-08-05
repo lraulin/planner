@@ -5,6 +5,7 @@ import type { NoteFlag } from "@/db/schema";
 import { JOURNAL_SUBJECT } from "@/lib/day/types";
 import type { NoteNode, NotePosition } from "@/lib/notes/types";
 import type { OutlineNode } from "@/lib/tree/types";
+import type { ContactOption } from "@/lib/contacts/types";
 import type { GridRow } from "@/lib/tree/slice";
 import {
   sliceNotes,
@@ -88,10 +89,13 @@ function notesScopes(viewId: string): readonly string[] {
 export function NotesGrid({
   initialNotes,
   nodes,
+  contacts,
 }: {
   initialNotes: NoteNode[];
   /** Records a note can be linked to. */
   nodes: OutlineNode[];
+  /** People a note can be filed against, as Contact History. */
+  contacts: ContactOption[];
 }) {
   const [patches, setPatches] = useState<Record<string, Partial<NoteNode>>>({});
   const {
@@ -160,12 +164,26 @@ export function NotesGrid({
   // bookmark does not crash the tab — it just looks empty until the user closes it.
   const drawerId = urlNoteId;
 
+  const contactNameById = useMemo(
+    () => new Map(contacts.map((contact) => [contact.id, contact.displayName])),
+    [contacts],
+  );
   const notes = useMemo(
     () =>
-      initialNotes.map((note) =>
-        patches[note.id] ? { ...note, ...patches[note.id] } : note,
-      ),
-    [initialNotes, patches],
+      initialNotes.map((note) => {
+        const linkedContactName = note.contactId
+          ? (contactNameById.get(note.contactId) ?? null)
+          : null;
+        return {
+          ...note,
+          // Contact labels always come from `loadContactOptions`, the sole place where the
+          // email fallback and other name rules are derived. The Notes read stays a cheap
+          // tree query rather than duplicating that logic in SQL or a second helper.
+          contactName: linkedContactName,
+          ...patches[note.id],
+        };
+      }),
+    [initialNotes, patches, contactNameById],
   );
 
   const byId = useMemo(() => {
@@ -703,6 +721,7 @@ export function NotesGrid({
       <NoteDrawer
         note={drawerNote}
         nodes={nodes}
+        contacts={contacts}
         subjects={subjects}
         onClose={closeDetail}
       />

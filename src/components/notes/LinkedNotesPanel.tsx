@@ -8,19 +8,30 @@ import { notesPath } from "@/lib/url/viewState";
 import { createNoteAction } from "@/app/notes/actions";
 
 /**
- * The reverse surface of note↔node linking: every note attached to this record, as a
- * read-only list that links out to `/notes?note=<id>`.
+ * What a note can be filed against. A node — a project, a task — or a contact, which is
+ * Achieve's Contact History tab: a note with a date is exactly what a history entry is, so
+ * this panel serves both rather than growing a near-identical twin.
+ */
+export type NoteLink = { nodeId: string } | { contactId: string };
+
+/**
+ * The reverse surface of note linking: every note attached to this record, as a read-only
+ * list that links out to `/notes?note=<id>`.
  *
  * Deliberately not an embedded editor. A drawer over a drawer is what `ux-principles.md`
  * rules out, and the Notes tab is the place to write — this surface is only how you find
  * the notes that point here.
  */
 export function LinkedNotesPanel({
-  nodeId,
+  link,
   notes,
+  title = "Linked notes",
+  emptyText = "No notes linked to this record yet.",
 }: {
-  nodeId: string;
+  link: NoteLink;
   notes: LinkedNoteSummary[];
+  title?: string;
+  emptyText?: string;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +41,7 @@ export function LinkedNotesPanel({
     setError(null);
     startTransition(async () => {
       const result = await createNoteAction({
-        values: { nodeId, title: "" },
+        values: { ...link, title: "" },
       });
       if (!result.ok) {
         setError(result.error);
@@ -46,7 +57,7 @@ export function LinkedNotesPanel({
     <section className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-[0.75rem] font-semibold uppercase tracking-wider text-ink">
-          Linked notes
+          {title}
         </h3>
         <button
           type="button"
@@ -65,9 +76,7 @@ export function LinkedNotesPanel({
       )}
 
       {notes.length === 0 ? (
-        <p className="text-[0.8125rem] italic text-ink-faint">
-          No notes linked to this record yet.
-        </p>
+        <p className="text-[0.8125rem] italic text-ink-faint">{emptyText}</p>
       ) : (
         <ul className="divide-y divide-rule rounded border border-rule">
           {notes.map((note) => (

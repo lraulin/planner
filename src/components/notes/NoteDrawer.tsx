@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import type { NoteFlag } from "@/db/schema";
 import type { NoteNode } from "@/lib/notes/types";
 import type { NoteInput } from "@/lib/notes/mutations";
+import type { ContactOption } from "@/lib/contacts/types";
 import { fromDateKey } from "@/lib/schedule/geometry";
 import type { OutlineNode } from "@/lib/tree/types";
 import { TYPE_LABELS } from "@/lib/tree/hierarchy";
@@ -26,6 +27,7 @@ import { FLAG_LABELS, FlagSwatch } from "./flags";
 export function NoteDrawer({
   note,
   nodes,
+  contacts,
   subjects,
   onClose,
 }: {
@@ -33,6 +35,8 @@ export function NoteDrawer({
   note: NoteNode | null;
   /** Records a note can be linked to. */
   nodes: OutlineNode[];
+  /** People a note can be filed against, as Contact History. */
+  contacts: ContactOption[];
   /** Existing subjects, for the combobox. Always includes "General". */
   subjects: string[];
   onClose: () => void;
@@ -49,6 +53,7 @@ export function NoteDrawer({
           titleId={titleId}
           note={note}
           nodes={nodes}
+          contacts={contacts}
           subjects={subjects}
           onClose={onClose}
         />
@@ -65,6 +70,7 @@ type Draft = {
   flag: NoteFlag;
   contexts: string;
   nodeId: string;
+  contactId: string;
 };
 
 function toDraft(note: NoteNode): Draft {
@@ -76,6 +82,7 @@ function toDraft(note: NoteNode): Draft {
     flag: note.flag,
     contexts: note.contexts.join(", "),
     nodeId: note.nodeId ?? "",
+    contactId: note.contactId ?? "",
   };
 }
 
@@ -101,6 +108,7 @@ function toInput(draft: Draft): Partial<NoteInput> {
       .map((part) => part.trim())
       .filter(Boolean),
     nodeId: draft.nodeId || null,
+    contactId: draft.contactId || null,
   };
 }
 
@@ -108,12 +116,14 @@ function NoteForm({
   titleId,
   note,
   nodes,
+  contacts,
   subjects,
   onClose,
 }: {
   titleId: string;
   note: NoteNode;
   nodes: OutlineNode[];
+  contacts: ContactOption[];
   subjects: string[];
   onClose: () => void;
 }) {
@@ -224,23 +234,40 @@ function NoteForm({
           </FieldRow>
         </div>
 
-        <FieldRow
-          label="Linked to"
-          hint="Optional. Keeps this note against a record, and lists it on that record."
-        >
-          <select
-            value={draft.nodeId}
-            onChange={(event) => patch({ nodeId: event.target.value })}
-            className={INPUT_CLASS}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <FieldRow
+            label="Linked record"
+            hint="Optional. Keeps this note against a plan record."
           >
-            <option value="">Not linked</option>
-            {nodeOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </FieldRow>
+            <select
+              value={draft.nodeId}
+              onChange={(event) => patch({ nodeId: event.target.value })}
+              className={INPUT_CLASS}
+            >
+              <option value="">Not linked</option>
+              {nodeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </FieldRow>
+
+          <FieldRow label="Contact" hint="Files this note in the contact's History.">
+            <select
+              value={draft.contactId}
+              onChange={(event) => patch({ contactId: event.target.value })}
+              className={INPUT_CLASS}
+            >
+              <option value="">Not linked</option>
+              {contacts.map((contact) => (
+                <option key={contact.id} value={contact.id}>
+                  {contact.displayName}
+                </option>
+              ))}
+            </select>
+          </FieldRow>
+        </div>
 
         <div className="flex min-h-[22rem] flex-1 flex-col pt-1">
           <MarkdownEditor

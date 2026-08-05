@@ -62,6 +62,15 @@ describeDb("contacts mutations", () => {
     expect(rows[0].fileAs).toBe("King, Ada");
   });
 
+  it("uses a primary email as the option label for an otherwise unnamed contact", async () => {
+    const id = await createContact(userId);
+    await createContactItem(userId, id, "email", { value: "ada@example.com" });
+
+    await expect(loadContactOptions(userId)).resolves.toEqual([
+      { id, displayName: "ada@example.com" },
+    ]);
+  });
+
   it("writes only the keys it was given", async () => {
     const id = await createContact(userId, { givenName: "Ada", company: "Analytical" });
     await updateContact(userId, id, { jobTitle: "Analyst" });

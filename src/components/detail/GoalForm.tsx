@@ -303,7 +303,10 @@ export function goalTabs(props: DetailFormProps): FormTab[] {
             value={values.notes}
             onChange={(notes) => patch({ notes })}
           />
-          <LinkedNotesPanel nodeId={props.detail.id} notes={props.detail.linkedNotes} />
+          <LinkedNotesPanel
+            link={{ nodeId: props.detail.id }}
+            notes={props.detail.linkedNotes}
+          />
         </div>
       ),
     },

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { OutlineNode } from "@/lib/tree/types";
+import type { ContactOption } from "@/lib/contacts/types";
 import { asGroupBy, sliceTree, type GroupBy, type GridRow } from "@/lib/tree/slice";
 import { formatEffort, formatPriority } from "@/lib/tree/format";
 import {
@@ -116,6 +117,7 @@ function viewDefaults(id: string): GridDefaults {
 function buildColumns(
   allNodes: OutlineNode[],
   today: string | null,
+  contactById: ReadonlyMap<string, string>,
 ): ColumnDef<OutlineColumnCtx>[] {
   const statuses = scheduleStatusById(allNodes, today);
   return [
@@ -221,6 +223,33 @@ function buildColumns(
     targetEndColumn(),
     targetStartColumn(),
     focusColumn(),
+    {
+      // `contactId` travels through the outline's existing task-details join. Names are
+      // deliberately resolved here from a page-level lookup — adding another join to the
+      // recursive outline query would charge every page for an optional Tasks column.
+      id: "contact",
+      label: "Contact",
+      width: "10rem",
+      filterKind: "text",
+      filterValue: (row) =>
+        row.node.contactId ? (contactById.get(row.node.contactId) ?? null) : null,
+      sortValue: (row) =>
+        row.node.contactId
+          ? (contactById.get(row.node.contactId)?.toLowerCase() ?? null)
+          : null,
+      compact: "hidden",
+      render: (row) => {
+        const name = row.node.contactId ? contactById.get(row.node.contactId) : null;
+        return (
+          <span
+            className="truncate text-[0.8125rem] text-ink-muted"
+            title={name ?? undefined}
+          >
+            {name ?? ""}
+          </span>
+        );
+      },
+    },
   ];
 }
 
@@ -252,7 +281,14 @@ const TASK_GROUP_DIMENSIONS: GroupBy[] = [
   "deadlineBand",
 ];
 
-export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
+export function TasksGrid({
+  initialNodes,
+  contactOptions,
+}: {
+  initialNodes: OutlineNode[];
+  /** Name lookup for the optional Contact column; see `buildColumns`. */
+  contactOptions: ContactOption[];
+}) {
   const tab = useGridTab(initialNodes);
   const [scopeId, setScopeId] = useState<string>("");
   const [includeDeferred, setIncludeDeferred] = useIncludeDeferred("tasks");
@@ -263,10 +299,14 @@ export function TasksGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     () => tab.nodes.filter((n) => n.type === "project"),
     [tab.nodes],
   );
+  const contactById = useMemo(
+    () => new Map(contactOptions.map((contact) => [contact.id, contact.displayName])),
+    [contactOptions],
+  );
 
   const allColumns = useMemo(
-    () => buildColumns(tab.nodes, tab.today),
-    [tab.nodes, tab.today],
+    () => buildColumns(tab.nodes, tab.today, contactById),
+    [tab.nodes, tab.today, contactById],
   );
   const views = useModuleViews({
     moduleId: "tasks",

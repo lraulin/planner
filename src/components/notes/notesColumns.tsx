@@ -142,19 +142,30 @@ export const notesColumns: ColumnDef<NotesColumnCtx, NoteNode>[] = [
     label: "Linked to",
     width: "10rem",
     filterKind: "text",
-    filterValue: (row) => row.node.nodeName,
-    sortValue: (row) => row.node.nodeName?.toLowerCase() ?? null,
-    render: (row) =>
-      row.node.nodeName ? (
+    filterValue: (row) => row.node.nodeName ?? row.node.contactName ?? null,
+    sortValue: (row) =>
+      (row.node.nodeName ?? row.node.contactName)?.toLowerCase() ?? null,
+    render: (row) => {
+      const name = row.node.nodeName ?? row.node.contactName;
+      const kind = row.node.nodeName
+        ? row.node.nodeType
+          ? TYPE_LABELS[row.node.nodeType]
+          : "Record"
+        : row.node.contactName
+          ? "Contact"
+          : null;
+
+      return name ? (
         <span
           className="truncate text-[0.8125rem] text-ink-muted"
-          title={`${row.node.nodeType ? TYPE_LABELS[row.node.nodeType] : ""}: ${row.node.nodeName}`}
+          title={`${kind ?? ""}: ${name}`}
         >
-          {row.node.nodeName}
+          {name}
         </span>
       ) : (
         <span className="text-[0.8125rem] text-ink-faint">—</span>
-      ),
+      );
+    },
   },
 ];
 

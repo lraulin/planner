@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import {
   ChooserIcon,
+  ContactsIcon,
   DayIcon,
   FitnessIcon,
   GoalsIcon,
@@ -242,7 +243,8 @@ export const MODULES = [
     href: "/contacts",
     section: "library",
     primary: false,
-    status: "reserved",
+    status: "built",
+    icon: ContactsIcon,
   },
 ] as const satisfies readonly ModuleEntry[];
 

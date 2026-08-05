@@ -20,6 +20,8 @@ export type NoteRow = {
   nodeType: NodeType | null;
   /** The contact this note is filed against — Achieve's Contact History. */
   contactId: string | null;
+  /** Resolved in the Notes read, so the grid can identify a contact-linked note. */
+  contactName?: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
