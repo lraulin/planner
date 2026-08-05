@@ -1,0 +1,7 @@
+interface:
+  display_name: "Index Standards"
+  short_description: "Rebuild the standards index"
+  default_prompt: "Use $index-standards to rebuild the index."
+
+policy:
+  allow_implicit_invocation: false

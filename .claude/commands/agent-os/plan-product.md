@@ -4,9 +4,12 @@ Establish foundational product documentation through an interactive conversation
 
 ## Important Guidelines
 
-- **Always use the structured question tool** when asking the user anything:
-  `AskUserQuestion` (Claude Code) or `ask_user_question` (Grok). Prefer options the user
-  can confirm or adjust. One question at a time — don't overwhelm.
+- **Always use the structured question tool** when asking the user anything. References
+  below to `AskUserQuestion` mean the current harness's native facility: `AskUserQuestion`
+  (Claude Code), `ask_user_question` (Grok), `vscode_askQuestions` (Copilot), or
+  `request_user_input` in Codex plan mode. In another Codex mode, ask one concise direct
+  question instead. Prefer options the user can confirm or adjust. One question at a time —
+  don't overwhelm.
 - **Keep it lightweight** — gather enough to create useful docs without over-documenting
 - **One question at a time** — don't overwhelm with multiple questions
 

@@ -6,6 +6,11 @@ Rebuild and maintain the standards index file (`index.yml`).
 
 The index enables `/inject-standards` to suggest relevant standards without reading all files. It maps each standard to a brief description for quick matching.
 
+When this command says `AskUserQuestion`, use the current harness's structured question
+facility: `AskUserQuestion` (Claude Code), `ask_user_question` (Grok),
+`vscode_askQuestions` (Copilot), or `request_user_input` in Codex plan mode. In another
+Codex mode, ask one concise direct question instead.
+
 ## Process
 
 ### Step 1: Scan for Standards Files

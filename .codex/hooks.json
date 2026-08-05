@@ -1,0 +1,17 @@
+{
+  "description": "Lint changed JavaScript and TypeScript files when a Codex turn ends.",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$(git rev-parse --show-toplevel)/.claude/hooks/lint-changed.sh\"",
+            "timeout": 120,
+            "statusMessage": "Linting changed files…"
+          }
+        ]
+      }
+    ]
+  }
+}

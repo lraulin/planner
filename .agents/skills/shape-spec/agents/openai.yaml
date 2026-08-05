@@ -1,0 +1,7 @@
+interface:
+  display_name: "Shape Spec"
+  short_description: "Shape a significant planner feature"
+  default_prompt: "Use $shape-spec to shape this planner feature."
+
+policy:
+  allow_implicit_invocation: false

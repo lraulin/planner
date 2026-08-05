@@ -14,7 +14,14 @@
 set -uo pipefail
 
 input="$(cat)"
-root="${CLAUDE_PROJECT_DIR:-$(pwd)}"
+root="$(printf '%s' "$input" | jq -r '.cwd // empty' 2>/dev/null)"
+[ -n "$root" ] || root="${CLAUDE_PROJECT_DIR:-$(pwd)}"
+
+# Codex sends its session cwd in the hook payload; Claude Code exposes the project
+# directory as an environment variable. Normalize either to the repository root so the
+# changed-file paths passed to ESLint are stable even when the agent started in a subdir.
+git_root="$(git -C "$root" rev-parse --show-toplevel 2>/dev/null)"
+[ -n "$git_root" ] && root="$git_root"
 
 # Claude Code sets this when the agent is already running *because* this hook fired.
 # Without the guard, a violation the agent can't fix would wake it forever.

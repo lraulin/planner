@@ -3,7 +3,9 @@
 Inject relevant standards into the current context, formatted appropriately for the situation.
 
 When this command says **AskUserQuestion**, use the structured question tool for the
-current harness: `AskUserQuestion` (Claude Code) or `ask_user_question` (Grok).
+current harness: `AskUserQuestion` (Claude Code), `ask_user_question` (Grok),
+`vscode_askQuestions` (Copilot), or `request_user_input` in Codex plan mode. In another
+Codex mode, ask one concise direct question instead.
 
 ## Usage Modes
 
@@ -239,6 +241,7 @@ When in conversation scenario, check project skill dirs for related skills:
 
 - `.claude/skills/` and `.claude/commands/` (Claude Code + Grok Claude-compat)
 - `.grok/skills/` and `.grok/commands/` (Grok-native, if present)
+- `.agents/skills/` (Codex)
 
 ```
 Related Skills you might want to use:

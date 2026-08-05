@@ -14,10 +14,10 @@ selection rules below.
 
 These are the rules that make this command different from ordinary work. Read them twice.
 
-1. **Never ask a question.** Do not call `AskUserQuestion` / `ask_user_question`. Do not
-   end a turn with "should I…?", "let me know if…", or a list of options. If you find
-   yourself wanting to ask, the item is **out of scope** — log it under _Needs a decision_
-   and move to the next item.
+1. **Never ask a question.** Do not call `AskUserQuestion`, `ask_user_question`,
+   `vscode_askQuestions`, or `request_user_input`. Do not end a turn with "should I…?",
+   "let me know if…", or a list of options. If you find yourself wanting to ask, the item
+   is **out of scope** — log it under _Needs a decision_ and move to the next item.
 2. **Never block.** If something can't proceed (missing credential, flaky external
    service, ambiguous intent), abandon that item, record why, and pick another. There is
    always more work in the backlog than there is night.
@@ -247,7 +247,8 @@ recommendation, not just the question.
 ## Notes
 
 - Harness-agnostic: works in Claude Code and Grok via the flat symlink at
-  `.claude/commands/overnight.md`.
+  `.claude/commands/overnight.md`, in Copilot through its prompt, and in Codex as
+  `$overnight`.
 - If you want this to keep re-entering on its own after a natural stopping point, it can be
   driven with `/loop /overnight` — but the command is written to run continuously on its
   own and should not need it.

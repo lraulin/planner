@@ -59,13 +59,17 @@ implemented against the saved spec folder.
 **Clear, durable intent is the scarce asset; code is regenerable.** Specs capture what we
 meant to build and why — not every line of implementation detail.
 
-#### Slash commands (Claude Code + Grok + Copilot)
+#### Agent OS workflows (Claude Code, Grok, Copilot, and Codex)
 
 Canonical command docs live in `.claude/commands/agent-os/`.
 
 - Claude Code + Grok discover them from `.claude/commands/` (with flat symlinks for short names).
 - Copilot discovers equivalent slash commands from `.github/prompts/*.prompt.md`, each of
   which references the same canonical docs above.
+- Codex discovers the thin wrappers in `.agents/skills/`; invoke them as `$shape-spec`,
+  `$inject-standards`, `$discover-standards`, `$index-standards`, `$plan-product`, or
+  `$overnight`. Its user-local aliases, when installed, are `/prompts:shape-spec`,
+  `/prompts:inject-standards`, and the corresponding `/prompts:<workflow>` names.
 
 | Command               | Purpose                                                        |
 | --------------------- | -------------------------------------------------------------- |
@@ -76,9 +80,11 @@ Canonical command docs live in `.claude/commands/agent-os/`.
 | `/plan-product`       | Mission / roadmap / tech-stack in `agent-os/product/`          |
 | `/overnight`          | Unattended self-directed work; report in `agent-os/overnight/` |
 
-When asking the user structured questions from these flows, use `AskUserQuestion` (Claude),
-`ask_user_question` (Grok), or `vscode_askQuestions` (Copilot). **Exception:
-`/overnight` forbids questions entirely** — nobody is awake to answer.
+When asking the user structured questions from these flows, use the native facility:
+`AskUserQuestion` (Claude), `ask_user_question` (Grok), `vscode_askQuestions` (Copilot),
+or `request_user_input` in Codex plan mode. If Codex has no structured-question facility
+in the active mode, ask one concise direct question instead. **Exception: `/overnight`
+forbids questions entirely** — nobody is awake to answer.
 
 #### Spec lifecycle
 

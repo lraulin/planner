@@ -1,0 +1,7 @@
+interface:
+  display_name: "Discover Standards"
+  short_description: "Turn code patterns into standards"
+  default_prompt: "Use $discover-standards for this area."
+
+policy:
+  allow_implicit_invocation: false

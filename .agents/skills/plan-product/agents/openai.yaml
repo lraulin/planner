@@ -1,0 +1,7 @@
+interface:
+  display_name: "Plan Product"
+  short_description: "Define mission, roadmap, and stack"
+  default_prompt: "Use $plan-product to establish product context."
+
+policy:
+  allow_implicit_invocation: false

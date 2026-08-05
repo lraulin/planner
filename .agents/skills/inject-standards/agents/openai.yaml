@@ -1,0 +1,7 @@
+interface:
+  display_name: "Inject Standards"
+  short_description: "Select relevant project standards"
+  default_prompt: "Use $inject-standards for this work."
+
+policy:
+  allow_implicit_invocation: false

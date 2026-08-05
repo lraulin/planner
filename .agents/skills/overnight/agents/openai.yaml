@@ -1,0 +1,7 @@
+interface:
+  display_name: "Overnight"
+  short_description: "Run unattended useful project work"
+  default_prompt: "Use $overnight to find and finish useful work."
+
+policy:
+  allow_implicit_invocation: false

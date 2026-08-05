@@ -4,15 +4,18 @@ Gather context and structure planning for significant work. **Run this command w
 
 ## Important Guidelines
 
-- **Always use the structured question tool** when asking the user anything:
-  `AskUserQuestion` (Claude Code) or `ask_user_question` (Grok). Prefer options the user
-  can confirm, adjust, or correct.
+- **Always use the structured question tool** when asking the user anything. References
+  below to `AskUserQuestion` mean the current harness's native facility: `AskUserQuestion`
+  (Claude Code), `ask_user_question` (Grok), `vscode_askQuestions` (Copilot), or
+  `request_user_input` in Codex plan mode. In another Codex mode, ask one concise direct
+  question instead. Prefer options the user can confirm, adjust, or correct.
 - **Offer suggestions** — Present options the user can confirm, adjust, or correct
 - **Keep it lightweight** — This is shaping, not exhaustive documentation
 - **Specs stay useful after planning** — See **Spec lifecycle** below. Implementation will
   refine intent; the active folder is a working document until freeze.
-- **Harness-agnostic** — Same command works in Claude Code and Grok (via `.claude/commands/`
-  flat symlinks). Plan mode is required on both (`/plan` or the plan-mode toggle).
+- **Harness-agnostic** — The same workflow is a Claude/Grok command via `.claude/commands/`,
+  a Copilot prompt, and a Codex `$shape-spec` skill. Plan mode is required (`/plan` or the
+  plan-mode toggle).
 
 ## Prerequisites
 
