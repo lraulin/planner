@@ -58,6 +58,7 @@ export function row(
     definition: "",
     range: "",
     isDream: false,
+    contactId: null,
     ...partial,
   };
 }

@@ -61,7 +61,8 @@ export async function loadOutline(userId: string): Promise<OutlineNode[]> {
       rad.color, rad.category, rad.importance,
       t.deferred_date, t.target_start_date AS target_start, t.target_end_date AS target_end,
       COALESCE(pd.purpose, gd.purpose, '') AS purpose, pd.assigned_to,
-      gd.definition, gd.range, gd.is_dream
+      gd.definition, gd.range, gd.is_dream,
+      td.contact_id
     FROM tree t
     LEFT JOIN task_details td ON td.node_id = t.id
     LEFT JOIN result_area_details rad ON rad.node_id = t.id
@@ -132,6 +133,7 @@ export async function loadOutline(userId: string): Promise<OutlineNode[]> {
       definition: (r.definition as string | null) ?? "",
       range: (r.range as string | null) ?? "",
       isDream: Boolean(r.is_dream),
+      contactId: (r.contact_id as string | null) ?? null,
     }),
   );
 

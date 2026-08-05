@@ -23,6 +23,7 @@ function note(overrides: Partial<NoteRow> & { id?: string } = {}): NoteNode {
     collapsed: false,
     depth: 0,
     nodeId: null,
+    contactId: null,
     nodeName: null,
     nodeType: null,
     createdAt: new Date("2026-01-01"),

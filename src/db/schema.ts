@@ -582,6 +582,20 @@ export const taskDetails = pgTable(
     exerciseId: uuid("exercise_id").references(() => exercises.id, {
       onDelete: "set null",
     }),
+    /**
+     * The contact this task is a **discussion item** for — Achieve's Contact form Discussion
+     * Items grid, whose columns (Priority, Title, Type, Context, Description, Deadline,
+     * Resolved) are task fields in everything but name. Modelling them separately would have
+     * built a second, worse task list that the Task Chooser and the Day view could not see.
+     *
+     * Task-only, so it belongs here rather than on `nodes`: a result area does not have a
+     * discussion item, and `nodes` is selected whole by `loadOutline` on every render. Same
+     * shape as `exerciseId` above, and `set null` for the same reason — deleting the person
+     * must never delete the work.
+     */
+    contactId: uuid("contact_id").references(() => contacts.id, {
+      onDelete: "set null",
+    }),
   },
   // The recurrence combinations the engine cannot make sense of, refused by the database
   // and not only by the form. `src/lib/recurrence/pattern.ts` is pure and is fed straight
@@ -1154,12 +1168,24 @@ export const notes = pgTable(
     contexts: text("contexts").array().notNull().default([]),
     collapsed: boolean("collapsed").notNull().default(false),
     nodeId: uuid("node_id").references(() => nodes.id, { onDelete: "set null" }),
+    /**
+     * The contact this note is filed against — Achieve's Contact form History tab, whose
+     * columns (Subject, Type, Context, Start Date, Notes) are a note with a date. A note
+     * already has a title, a markdown body, a date, contexts and a flag, so linking beats
+     * building a second place to write prose about a person.
+     *
+     * `set null` like `nodeId`: two independent records that happen to point at each other.
+     */
+    contactId: uuid("contact_id").references(() => contacts.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index("notes_user_parent_sort_idx").on(table.userId, table.parentId, table.sortKey),
     index("notes_user_node_idx").on(table.userId, table.nodeId),
+    index("notes_user_contact_idx").on(table.userId, table.contactId),
     // Same shape as `nodes_sibling_sort_key_uq`: NULLS NOT DISTINCT so the constraint also
     // covers root notes, whose parent_id is null.
     unique("notes_sibling_sort_key_uq")
@@ -1521,6 +1547,230 @@ export const metricEntries = pgTable(
   ],
 );
 
+/**
+ * The repeating typed sub-records of a contact — Achieve's Contact form Phone Numbers,
+ * E-mail, Addresses and Web URLs grids, which are also Google People's `phoneNumbers`,
+ * `emailAddresses`, `addresses` and `urls`.
+ *
+ * One table rather than four, for the reason `node_item_kind` gives about itself: they share
+ * one shape — label + value + primary + notes — so they share one table. Addresses add seven
+ * part columns that are blank on the others, which is the same sparseness `node_items`
+ * already accepts across twenty kinds.
+ *
+ * The last four are **seeded but unrendered**. People has `relations`, `events`, `imClients`
+ * and `userDefined`, and a sync must be able to land them without `ALTER TYPE ... ADD VALUE`
+ * on a live enum — a statement that fails outright on Neon's transaction-mode pooler.
+ * `user_defined` is also where Achieve's dropped Details fields (Customer Id, Language,
+ * Hobbies) would go if they are ever missed.
+ */
+export const contactItemKindEnum = pgEnum("contact_item_kind", [
+  "phone",
+  "email",
+  "address",
+  "url",
+  "relation",
+  "event",
+  "im",
+  "user_defined",
+]);
+
+/**
+ * A person. Achieve's Contacts tab (`Go -> Contacts`, manual §1.3).
+ *
+ * **Every column here is shaped to Google People API v1**, so the sync that will eventually
+ * mirror this table is code rather than a migration. Name parts are stored separately
+ * because People stores them separately; the single-line renderings (display name, file-as,
+ * initials) are derived in `src/lib/contacts/name.ts` and never written down.
+ *
+ * **Local-only — a sync must never write or clear these:** `contexts`, and
+ * `contact_items.notes`. So are the *inbound* links: `task_details.contact_id` (Achieve's
+ * Discussion Items, which are tasks here) and `notes.contact_id` (Contact History, which are
+ * notes here).
+ *
+ * **Two of the six `external_*` columns are placeholders**, carried for shape parity with
+ * `appointments` rather than because People has somewhere to put them — see each one.
+ *
+ * **`notes` ↔ `biographies[0].value` is the one two-way clobber risk**, being both heavily
+ * hand-edited and syncable. The rule, decided now while it is cheap: Google wins only when
+ * `external_updated_at` is strictly newer than `updated_at`, and never on a blank remote
+ * value.
+ */
+export const contacts = pgTable(
+  "contacts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+
+    // Name — `names[0]`. Achieve's "Title" is People's honorific prefix.
+    namePrefix: text("name_prefix").notNull().default(""),
+    givenName: text("given_name").notNull().default(""),
+    middleName: text("middle_name").notNull().default(""),
+    familyName: text("family_name").notNull().default(""),
+    nameSuffix: text("name_suffix").notNull().default(""),
+    /** `nicknames[type=DEFAULT].value`. */
+    nickname: text("nickname").notNull().default(""),
+    /** Achieve's Initials field ↔ `nicknames[type=INITIALS]`. Blank means derive. */
+    initials: text("initials").notNull().default(""),
+    /** Sort-name override ↔ `fileAses[0].value`. Blank means derive. */
+    fileAs: text("file_as").notNull().default(""),
+
+    // Organization — `organizations[0]`.
+    company: text("company").notNull().default(""),
+    jobTitle: text("job_title").notNull().default(""),
+    /**
+     * Dropped from Achieve's Details tab, kept anyway: `organizations[].department` is a
+     * first-class People field and the point of this table is that a sync needs no
+     * migration. Not on the drawer's first screen.
+     */
+    department: text("department").notNull().default(""),
+
+    /**
+     * People models these as repeated `relations[type=manager|assistant]`, where `.person`
+     * is a **name string, not a link**. Achieve shows one field each and so do we; a sync
+     * writes the first match here and must not delete the others.
+     */
+    managerName: text("manager_name").notNull().default(""),
+    assistantName: text("assistant_name").notNull().default(""),
+
+    /**
+     * Achieve's Group field ↔ `memberships[].contactGroupMembership`. A name, not a
+     * resource id — mapping the two needs a `contactGroups.list` call the sync will own.
+     */
+    groupName: text("group_name").notNull().default(""),
+
+    /**
+     * `birthdays[0].date`. Three columns rather than a `date` because People's `year` is
+     * genuinely optional and routinely unknown, which a date column cannot express.
+     */
+    birthdayYear: smallint("birthday_year"),
+    birthdayMonth: smallint("birthday_month"),
+    birthdayDay: smallint("birthday_day"),
+
+    /** `photos[0].url`. Output-only there — mirror it, never write it. */
+    photoUrl: text("photo_url").notNull().default(""),
+
+    /** `biographies[0].value` (TEXT_PLAIN). See the clobber rule above. */
+    notes: text("notes").notNull().default(""),
+    /** Ours alone. People has no home for it. */
+    contexts: text("contexts").array().notNull().default([]),
+
+    externalSource: text("external_source"),
+    /** People's `resourceName`, e.g. `people/c123…`. Opaque; never parsed. */
+    externalId: text("external_id"),
+    /** **No People analogue.** Carried for shape parity with `appointments`. */
+    externalSeriesId: text("external_series_id"),
+    /** Repurposed: which People collection — `connections` vs `otherContacts`. */
+    externalCalendarId: text("external_calendar_id"),
+    /** The Person `etag`, so an unchanged contact can skip a write. */
+    externalEtag: text("external_etag"),
+    externalUpdatedAt: timestamp("external_updated_at", { withTimezone: true }),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("contacts_user_name_idx").on(table.userId, table.familyName, table.givenName),
+    index("contacts_user_company_idx").on(table.userId, table.company),
+    // Same partial shape as `appointments_external_ref_uq`: local-only rows must not all
+    // fight over one key, and the mirror's upsert has to be idempotent rather than a race.
+    uniqueIndex("contacts_external_ref_uq")
+      .on(table.userId, table.externalSource, table.externalId)
+      .where(sql`${table.externalId} is not null`),
+    // A day without a month is not a date. Month+day with no year is the common case, and
+    // People permits a year on its own, so only the day is tied to the month.
+    check(
+      "contacts_birthday_month_day_together",
+      sql`(${table.birthdayMonth} is null) = (${table.birthdayDay} is null)`,
+    ),
+    check(
+      "contacts_birthday_ranges",
+      sql`(${table.birthdayMonth} is null or ${table.birthdayMonth} between 1 and 12)
+          and (${table.birthdayDay} is null or ${table.birthdayDay} between 1 and 31)
+          and (${table.birthdayYear} is null or ${table.birthdayYear} between 1000 and 9999)`,
+    ),
+  ],
+);
+
+/**
+ * One phone number, e-mail address, postal address or URL belonging to a contact.
+ *
+ * No `external_*` columns: People's sub-fields have **no stable identifier**, so a sync
+ * cannot address one. It must reconcile by `(kind, normalised value)` and carry `notes` and
+ * `sort_key` forward from the matched local row, inserting and deleting only the difference.
+ * The obvious implementation — delete the contact's phones, insert Google's — silently eats
+ * the local-only `notes` on every row, which is why the rule is written here rather than
+ * left to be invented later.
+ */
+export const contactItems = pgTable(
+  "contact_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    kind: contactItemKindEnum("kind").notNull(),
+    /** Order within the kind. People's array order is meaningful; this preserves it. */
+    sortKey: text("sort_key").notNull(),
+
+    /**
+     * People's `type` — "home", "work", "mobile", or anything the user typed. Text, not an
+     * enum: People allows custom types and returns them verbatim. The suggestion list lives
+     * in `src/lib/contacts/itemKinds.ts`.
+     */
+    label: text("label").notNull().default(""),
+    /**
+     * The single-line value: the number, the address, the URL. On an `address` row this is
+     * People's `formattedValue`, with the parts below it.
+     */
+    value: text("value").notNull().default(""),
+    /** Achieve's E-mail "Display As" ↔ `emailAddresses[].displayName`. */
+    displayName: text("display_name").notNull().default(""),
+    /** People's `metadata.primary`. At most one per (contact, kind) — enforced below. */
+    isPrimary: boolean("is_primary").notNull().default(false),
+    /** Achieve's per-row Notes. **No People analogue — local-only.** */
+    notes: text("notes").notNull().default(""),
+
+    // Address parts (`addresses[]`); blank on every other kind.
+    streetAddress: text("street_address").notNull().default(""),
+    extendedAddress: text("extended_address").notNull().default(""),
+    poBox: text("po_box").notNull().default(""),
+    city: text("city").notNull().default(""),
+    /** Achieve's "State". */
+    region: text("region").notNull().default(""),
+    postalCode: text("postal_code").notNull().default(""),
+    country: text("country").notNull().default(""),
+    countryCode: text("country_code").notNull().default(""),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("contact_items_owner_list_idx").on(
+      table.userId,
+      table.contactId,
+      table.kind,
+      table.sortKey,
+    ),
+    unique("contact_items_sibling_sort_key_uq").on(
+      table.userId,
+      table.contactId,
+      table.kind,
+      table.sortKey,
+    ),
+    // One primary per kind, as a fact the database holds rather than an invariant whoever
+    // writes the next mutation has to remember. Without it the grid can show one phone
+    // while the drawer shows another, and nothing anywhere is wrong enough to notice.
+    uniqueIndex("contact_items_primary_uq")
+      .on(table.userId, table.contactId, table.kind)
+      .where(sql`${table.isPrimary}`),
+  ],
+);
+
 export type DailyItem = typeof dailyItems.$inferSelect;
 export type NewDailyItem = typeof dailyItems.$inferInsert;
 export type WorkoutSet = typeof workoutSets.$inferSelect;
@@ -1529,3 +1779,8 @@ export type Metric = typeof metrics.$inferSelect;
 export type NewMetric = typeof metrics.$inferInsert;
 export type MetricEntry = typeof metricEntries.$inferSelect;
 export type NewMetricEntry = typeof metricEntries.$inferInsert;
+export type Contact = typeof contacts.$inferSelect;
+export type NewContact = typeof contacts.$inferInsert;
+export type ContactItem = typeof contactItems.$inferSelect;
+export type NewContactItem = typeof contactItems.$inferInsert;
+export type ContactItemKind = (typeof contactItemKindEnum.enumValues)[number];

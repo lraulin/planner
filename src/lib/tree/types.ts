@@ -85,6 +85,13 @@ export type OutlineRow = {
   definition: string;
   range: string;
   isDream: boolean;
+  /**
+   * Task only: the contact this task is a **discussion item** for. Carried on the outline
+   * row only so a grid can mark and filter one — the contact's *name* is resolved
+   * client-side from a lookup, rather than adding a fifth join to the query that loads on
+   * every page in the app.
+   */
+  contactId: string | null;
 };
 
 /** A row plus everything derived from its position in the tree. */

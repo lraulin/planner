@@ -169,6 +169,13 @@
       "when": 1785957100411,
       "tag": "0023_secret_shaman",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1785958095175,
+      "tag": "0024_thick_morph",
+      "breakpoints": true
     }
   ]
 }

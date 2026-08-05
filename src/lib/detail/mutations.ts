@@ -257,6 +257,7 @@ export const TASK_KEYS = [
   "mileage",
   "description",
   "exerciseId",
+  "contactId",
 ] as const;
 
 const ITEM_KEYS = [

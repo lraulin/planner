@@ -103,6 +103,8 @@ export type NoteInput = {
   flag: NoteFlag;
   contexts: string[];
   nodeId: string | null;
+  /** The contact this note is filed against — Achieve's Contact History. */
+  contactId: string | null;
 };
 
 export async function createNote(params: {
@@ -133,6 +135,7 @@ export async function createNote(params: {
       flag: values.flag ?? "none",
       contexts: values.contexts ?? [],
       nodeId: values.nodeId ?? null,
+      contactId: values.contactId ?? null,
     };
 
     const [created] = await tx.insert(notes).values(row).returning({ id: notes.id });
@@ -160,6 +163,7 @@ export async function updateNote(
   if (input.flag !== undefined) patch.flag = input.flag;
   if (input.contexts !== undefined) patch.contexts = input.contexts;
   if (input.nodeId !== undefined) patch.nodeId = input.nodeId;
+  if (input.contactId !== undefined) patch.contactId = input.contactId;
 
   const updated = await db
     .update(notes)

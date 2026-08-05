@@ -18,7 +18,7 @@ export async function loadNotes(userId: string): Promise<NoteNode[]> {
     WITH RECURSIVE note_tree AS (
       SELECT
         n.id, n.parent_id, n.sort_key, n.title, n.subject, n.body,
-        n.note_date, n.flag, n.contexts, n.collapsed, n.node_id,
+        n.note_date, n.flag, n.contexts, n.collapsed, n.node_id, n.contact_id,
         n.created_at, n.updated_at,
         0 AS depth,
         ARRAY[n.sort_key] AS path
@@ -29,7 +29,7 @@ export async function loadNotes(userId: string): Promise<NoteNode[]> {
 
       SELECT
         c.id, c.parent_id, c.sort_key, c.title, c.subject, c.body,
-        c.note_date, c.flag, c.contexts, c.collapsed, c.node_id,
+        c.note_date, c.flag, c.contexts, c.collapsed, c.node_id, c.contact_id,
         c.created_at, c.updated_at,
         t.depth + 1,
         t.path || c.sort_key
@@ -39,7 +39,7 @@ export async function loadNotes(userId: string): Promise<NoteNode[]> {
     )
     SELECT
       t.id, t.parent_id, t.sort_key, t.title, t.subject, t.body,
-      t.note_date, t.flag, t.contexts, t.collapsed, t.node_id,
+      t.note_date, t.flag, t.contexts, t.collapsed, t.node_id, t.contact_id,
       t.created_at, t.updated_at, t.depth,
       linked.name AS node_name,
       linked.type AS node_type
@@ -61,6 +61,7 @@ export async function loadNotes(userId: string): Promise<NoteNode[]> {
     collapsed: Boolean(r.collapsed),
     depth: Number(r.depth),
     nodeId: (r.node_id as string | null) ?? null,
+    contactId: (r.contact_id as string | null) ?? null,
     nodeName: (r.node_name as string | null) ?? null,
     nodeType: (r.node_type as NoteRow["nodeType"]) ?? null,
     createdAt: new Date(r.created_at as string),
@@ -78,5 +79,16 @@ export async function loadNotesForNode(
   const all = await loadNotes(userId);
   return all
     .filter((note) => note.nodeId === nodeId)
+    .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+}
+
+/** Every note filed against one contact, newest first. Backs the contact drawer's History. */
+export async function loadNotesForContact(
+  userId: string,
+  contactId: string,
+): Promise<NoteNode[]> {
+  const all = await loadNotes(userId);
+  return all
+    .filter((note) => note.contactId === contactId)
     .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
 }
