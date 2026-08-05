@@ -85,7 +85,7 @@ export function buildChooserColumns(
         </span>
       ),
     },
-    abbrStateColumn(),
+    abbrStateColumn(today),
     priorityColumn(),
     {
       // The flat cross-project ranking. Default column of the To-do List, available

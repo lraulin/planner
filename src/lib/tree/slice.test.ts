@@ -469,6 +469,42 @@ describe("sliceTree — group by row fields", () => {
     ]);
   });
 
+  it("groups an expired shelf under Not started, not Postponed", () => {
+    // Same rule as the State column: expiry is derived, so a routine whose shelf ran out
+    // must not go on collecting under a Postponed header nothing ever writes it out of.
+    const nodes = tree(
+      { id: "ra", type: "result_area", name: "Health" },
+      {
+        id: "p-expired",
+        type: "project",
+        parentId: "ra",
+        depth: 1,
+        name: "Was shelved",
+        state: "postponed",
+        deferredDate: day("2026-03-01"),
+      },
+      {
+        id: "p-shelved",
+        type: "project",
+        parentId: "ra",
+        depth: 1,
+        name: "Still shelved",
+        state: "postponed",
+        deferredDate: day("2026-09-01"),
+      },
+    );
+    const rows = sliceTree(nodes, {
+      keep: projectsOnly,
+      groupBy: ["state"],
+      includeDeferred: true,
+      today: TODAY,
+    });
+    expect(groups(rows).map((g) => [g.label, g.count])).toEqual([
+      ["Not started", 1],
+      ["Postponed", 1],
+    ]);
+  });
+
   /**
    * Rank is ignored on purpose. Grouping by A1, A2, A3 would give one header per row, which
    * is not grouping at all.

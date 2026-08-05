@@ -5,7 +5,6 @@ import type { OutlineNode } from "@/lib/tree/types";
 import { asGroupBy, sliceTree, type GridRow, type GroupBy } from "@/lib/tree/slice";
 import { formatPriority } from "@/lib/tree/format";
 import { toDateKey } from "@/lib/schedule/geometry";
-import { STATE_LABELS } from "@/lib/tree/hierarchy";
 import type { ColumnDef } from "@/components/grid/columns";
 import { CascadeConfirm } from "@/components/grid/CascadeConfirm";
 import { DataGrid } from "@/components/grid/DataGrid";
@@ -29,12 +28,12 @@ import {
   typeColumn,
   dateCompletedColumn,
   purposeColumn,
+  stateColumn,
 } from "@/components/grid/commonColumns";
 import {
   DeadlineCell,
   NameCell,
   PriorityCell,
-  StateCell,
   TextCell,
 } from "@/components/grid/cells";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
@@ -68,7 +67,7 @@ type GoalsCtx = OutlineColumnCtx & {
   onRangeChange: (node: OutlineNode, value: string) => void;
 };
 
-function buildColumns(): ColumnDef<GoalsCtx>[] {
+function buildColumns(today: string | null): ColumnDef<GoalsCtx>[] {
   return [
     categoryColumn(),
     typeColumn(),
@@ -126,21 +125,10 @@ function buildColumns(): ColumnDef<GoalsCtx>[] {
         />
       ),
     },
-    {
-      id: "state",
-      label: "Status",
-      width: "7rem",
-      filterKind: "enum",
-      // Goals tab: Status is nodes.state spelled out, not the derived schedule status.
-      filterValue: (row) => STATE_LABELS[row.node.state],
-      sortValue: (row) => row.node.state,
-      render: (row, ctx) => (
-        <StateCell
-          node={row.node}
-          onChange={(state) => ctx.onStateChange(row.node, state)}
-        />
-      ),
-    },
+    // Goals tab: "Status" here is nodes.state spelled out, not the derived schedule
+    // status. Only the heading differs from the shared column, so it borrows it rather
+    // than keeping a second copy that has to be remembered whenever State changes.
+    { ...stateColumn(today), label: "Status" },
     {
       id: "deadline",
       label: "Deadline",
@@ -203,7 +191,7 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     [tab.nodes],
   );
 
-  const allColumns = useMemo(() => buildColumns(), []);
+  const allColumns = useMemo(() => buildColumns(tab.today), [tab.today]);
   const gridState = useGridState(
     `goals.${view}`,
     allColumns,

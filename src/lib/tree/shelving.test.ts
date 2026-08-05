@@ -4,6 +4,7 @@ import { row } from "./fixtures";
 import {
   effectiveState,
   laterShelf,
+  ownEffectiveState,
   ownShelf,
   shelfHolds,
   type Shelf,
@@ -99,6 +100,50 @@ describe("effectiveState", () => {
   it("leaves an unshelved state alone", () => {
     expect(effectiveState("in_progress", null, TODAY)).toBe("in_progress");
     expect(effectiveState("waiting", null, TODAY)).toBe("waiting");
+  });
+});
+
+describe("ownEffectiveState", () => {
+  it("un-postpones a routine the morning after its shelf ran out", () => {
+    // The case the whole model exists for: tick off "empty cat litter", recurrence shelves
+    // it until tomorrow, and tomorrow it is simply due again — with nothing having written
+    // to the row overnight. Reading the stored state here is what made a view filtering
+    // Postponed out hide the routine forever.
+    const routine = { id: "t", state: "postponed" as const, deferredDate: at(TODAY) };
+    expect(ownEffectiveState(routine, TODAY)).toBe("not_started");
+  });
+
+  it("still reads postponed on the day it was shelved", () => {
+    expect(
+      ownEffectiveState(
+        { id: "t", state: "postponed", deferredDate: at("2026-03-09") },
+        TODAY,
+      ),
+    ).toBe("postponed");
+  });
+
+  it("keeps an undated shelf indefinitely", () => {
+    expect(
+      ownEffectiveState({ id: "t", state: "postponed", deferredDate: null }, TODAY),
+    ).toBe("postponed");
+  });
+
+  it("ignores a shelf inherited from an ancestor", () => {
+    // Unlike `effectiveState`. The State cell is an editor of this row's own field, so it
+    // has to say what writing to it would change; the inherited shelf shows up in the
+    // read-only Status column and in what the row hides with.
+    const child = { id: "t", state: "in_progress" as const, deferredDate: null };
+    expect(ownEffectiveState(child, TODAY)).toBe("in_progress");
+  });
+
+  it("treats nothing as expired before hydration", () => {
+    // `today` is null on the server and on the first client render; both must agree.
+    expect(
+      ownEffectiveState(
+        { id: "t", state: "postponed", deferredDate: at("2026-03-01") },
+        null,
+      ),
+    ).toBe("postponed");
   });
 });
 

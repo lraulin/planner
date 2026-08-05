@@ -1,6 +1,6 @@
 import { shiftDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { STATE_LABELS } from "./hierarchy";
-import { shelfHolds } from "./shelving";
+import { ownEffectiveState, shelfHolds } from "./shelving";
 import type { OutlineNode } from "./types";
 
 /**
@@ -464,8 +464,13 @@ function groupKey(
         key: context.projectId ?? "",
         label: context.projectName ?? "(No Project)",
       };
-    case "state":
-      return { key: node.state, label: STATE_LABELS[node.state] };
+    case "state": {
+      // The row's own effective state, matching what the State column shows and filters
+      // on — a header saying "Postponed" over a routine whose shelf ran out yesterday
+      // would be the same stale reading in a second place.
+      const state = ownEffectiveState(node, today);
+      return { key: state, label: STATE_LABELS[state] };
+    }
     case "priorityLetter":
       return {
         key: node.priorityLetter ?? "",

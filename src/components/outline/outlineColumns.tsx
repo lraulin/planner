@@ -81,7 +81,7 @@ export function buildOutlineColumns(
       ),
     },
     deadlineColumn(),
-    stateColumn(),
+    stateColumn(today),
     focusColumn(),
     // Optional AP fields — Show Fields only.
     actualEffortColumn(),
@@ -102,7 +102,7 @@ export function buildOutlineColumns(
     iconColumn(),
     typeColumn(),
     projectPriorityColumn(),
-    abbrStateColumn(),
+    abbrStateColumn(today),
     scheduleStatusColumn(new Map(), today),
     lapColumn(),
   ];

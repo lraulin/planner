@@ -423,20 +423,26 @@ export function DeadlineCell({
 // State variants
 // ---------------------------------------------------------------------------
 
-/** Full-label state dropdown — the outline column and the Goals tab's "Status". */
+/**
+ * Full-label state dropdown — the outline column and the Goals tab's "Status".
+ *
+ * `state` is the row's *own effective* state (`ownEffectiveState`), not the stored one: a
+ * shelf whose deferred date has passed has to read Not started here as it does everywhere
+ * else, or the routine that expired overnight goes on claiming to be Postponed.
+ */
 export function StateCell({
-  node,
+  state,
   onChange,
 }: {
-  node: OutlineNode;
+  state: NodeState;
   onChange: (state: NodeState) => void;
 }) {
   return (
     <select
-      value={node.state}
+      value={state}
       onClick={(event) => event.stopPropagation()}
       onChange={(event) => onChange(event.target.value as NodeState)}
-      aria-label={`State: ${STATE_LABELS[node.state]}`}
+      aria-label={`State: ${STATE_LABELS[state]}`}
       className="w-full cursor-pointer truncate border-none bg-transparent text-[0.75rem] text-ink-muted focus:text-ink"
     >
       {STATE_OPTIONS.map((option) => (
@@ -459,19 +465,19 @@ export function StateCell({
  * the dropdown and for screen readers.
  */
 export function AbbrStateCell({
-  node,
+  state,
   onChange,
 }: {
-  node: OutlineNode;
+  state: NodeState;
   onChange: (state: NodeState) => void;
 }) {
   return (
     <span className="relative block w-full">
       <select
-        value={node.state}
+        value={state}
         onClick={(event) => event.stopPropagation()}
         onChange={(event) => onChange(event.target.value as NodeState)}
-        aria-label={`State: ${STATE_LABELS[node.state]}`}
+        aria-label={`State: ${STATE_LABELS[state]}`}
         className="peer absolute inset-0 h-full w-full cursor-pointer border-none bg-transparent text-[0.75rem] opacity-0"
       >
         {STATE_OPTIONS.map((option) => (
@@ -484,7 +490,7 @@ export function AbbrStateCell({
         aria-hidden
         className="pointer-events-none block truncate text-center text-[0.75rem] font-medium text-ink-muted peer-focus:text-ink"
       >
-        {STATE_CODES[node.state]}
+        {STATE_CODES[state]}
       </span>
     </span>
   );

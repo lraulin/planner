@@ -87,3 +87,28 @@ export function effectiveState(
   if (shelfHolds(shelf, today)) return "postponed";
   return state === "postponed" ? "not_started" : state;
 }
+
+/**
+ * The state a row reads as **on its own**, ignoring any shelf inherited from an ancestor:
+ * the stored state, with an expired shelf collapsed back to not-started.
+ *
+ * This is what the State column shows, filters and sorts on, and what grouping by State
+ * groups by. Without it the stored `postponed` outlives its date in exactly the place the
+ * user looks: tick off a daily routine and recurrence shelves it until tomorrow, but
+ * tomorrow the cell still reads *Postponed* — so a view whose State filter has Postponed
+ * unticked never shows the row again, and the routine that was supposed to come back on
+ * its own silently doesn't. Expiry being derived rather than swept only works if every
+ * reader derives it.
+ *
+ * Deliberately **not** the inherited {@link effectiveState}. The State cell is an editor of
+ * one row's own field: showing a child *Postponed* because its project is shelved would
+ * mean the dropdown no longer says what writing to it would change. Inherited shelving is
+ * already visible in the read-only Status column ("Deferred") and in what the row filters
+ * and hides with.
+ */
+export function ownEffectiveState(
+  row: { id: string; state: NodeState; deferredDate: Date | null },
+  today: string | null,
+): NodeState {
+  return effectiveState(row.state, ownShelf(row), today);
+}

@@ -23,6 +23,7 @@ import {
   STATUS_LABELS,
   type ScheduleStatus,
 } from "@/lib/tree/status";
+import { ownEffectiveState } from "@/lib/tree/shelving";
 import { TypeIcon } from "@/components/icons/TypeIcon";
 import type { ColumnDef } from "./columns";
 import {
@@ -146,7 +147,9 @@ export function deadlineColumn(): ColumnDef<OutlineColumnCtx> {
  * only Show Fields and the filter builder call it "Abbreviated State", where the two have
  * to be told apart.
  */
-export function abbrStateColumn(): ColumnDef<OutlineColumnCtx> {
+export function abbrStateColumn(today: string | null): ColumnDef<OutlineColumnCtx> {
+  const stateOf = (node: OutlineNode) => ownEffectiveState(node, today);
+
   return {
     id: "abbrState",
     label: "State",
@@ -158,12 +161,12 @@ export function abbrStateColumn(): ColumnDef<OutlineColumnCtx> {
     filterKind: "enum",
     // Filters on the code, because that is what the cell shows and what stored filters
     // already match on; the set filter spells it out via `filterLabel`.
-    filterValue: (row) => STATE_CODES[row.node.state],
+    filterValue: (row) => STATE_CODES[stateOf(row.node)],
     filterLabel: (code) => STATE_LABEL_BY_CODE[code] ?? code,
-    sortValue: (row) => row.node.state,
+    sortValue: (row) => stateOf(row.node),
     render: (row, ctx) => (
       <AbbrStateCell
-        node={row.node}
+        state={stateOf(row.node)}
         onChange={(state) => ctx.onStateChange(row.node, state)}
       />
     ),
@@ -209,17 +212,19 @@ export function percentColumn(): ColumnDef<OutlineColumnCtx> {
 }
 
 /** Full-label State, alongside the narrow `abbrStateColumn` when a view needs both. */
-export function stateColumn(): ColumnDef<OutlineColumnCtx> {
+export function stateColumn(today: string | null): ColumnDef<OutlineColumnCtx> {
+  const stateOf = (node: OutlineNode) => ownEffectiveState(node, today);
+
   return {
     id: "state",
     label: "State",
     width: "7rem",
     filterKind: "enum",
-    filterValue: (row) => STATE_LABELS[row.node.state],
-    sortValue: (row) => row.node.state,
+    filterValue: (row) => STATE_LABELS[stateOf(row.node)],
+    sortValue: (row) => stateOf(row.node),
     render: (row, ctx) => (
       <StateCell
-        node={row.node}
+        state={stateOf(row.node)}
         onChange={(state) => ctx.onStateChange(row.node, state)}
       />
     ),

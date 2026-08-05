@@ -141,7 +141,7 @@ function buildColumns(
 ): ColumnDef<OutlineColumnCtx>[] {
   const statuses = scheduleStatusById(allNodes, today);
   return [
-    abbrStateColumn(),
+    abbrStateColumn(today),
     priorityColumn(),
     nameColumn({ dragHandle: true }),
     categoryColumn(),
@@ -231,7 +231,7 @@ function buildColumns(
     costColumn("costLow", "Low cost", (node) => node.costLow),
     placeColumn(),
     resultAreaNameColumn(),
-    stateColumn(),
+    stateColumn(today),
     targetEndColumn(),
   ];
 }
