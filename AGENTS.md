@@ -59,12 +59,13 @@ implemented against the saved spec folder.
 **Clear, durable intent is the scarce asset; code is regenerable.** Specs capture what we
 meant to build and why — not every line of implementation detail.
 
-#### Slash commands (Claude Code + Grok)
+#### Slash commands (Claude Code + Grok + Copilot)
 
-Commands live under `.claude/commands/` so both harnesses discover them. Canonical files
-are in `.claude/commands/agent-os/`; **flat symlinks** at `.claude/commands/*.md` exist so
-Grok (and short Claude names) see `/shape-spec` etc. — nested-only paths are easy for
-Claude and easy for Grok to miss.
+Canonical command docs live in `.claude/commands/agent-os/`.
+
+- Claude Code + Grok discover them from `.claude/commands/` (with flat symlinks for short names).
+- Copilot discovers equivalent slash commands from `.github/prompts/*.prompt.md`, each of
+  which references the same canonical docs above.
 
 | Command               | Purpose                                                        |
 | --------------------- | -------------------------------------------------------------- |
@@ -75,8 +76,8 @@ Claude and easy for Grok to miss.
 | `/plan-product`       | Mission / roadmap / tech-stack in `agent-os/product/`          |
 | `/overnight`          | Unattended self-directed work; report in `agent-os/overnight/` |
 
-When asking the user structured questions from these flows, use `AskUserQuestion` (Claude)
-or `ask_user_question` (Grok) — same idea, harness-specific tool name. **Exception:
+When asking the user structured questions from these flows, use `AskUserQuestion` (Claude),
+`ask_user_question` (Grok), or `vscode_askQuestions` (Copilot). **Exception:
 `/overnight` forbids questions entirely** — nobody is awake to answer.
 
 #### Spec lifecycle
