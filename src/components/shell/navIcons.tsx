@@ -109,6 +109,19 @@ export function WishesIcon() {
   );
 }
 
+/**
+ * Result Areas: a pie, because an area's Importance is its slice of a fixed hundred. The
+ * one glyph in Plan that is about proportion rather than structure.
+ */
+export function ResultAreasIcon() {
+  return (
+    <svg {...BASE} className="h-5 w-5">
+      <circle cx="10" cy="10" r="7.25" />
+      <path d="M10 2.75V10l6.4 3.4" />
+    </svg>
+  );
+}
+
 /** Task Chooser: a ranked, scored shortlist — three bars, tallest first. */
 export function ChooserIcon() {
   return (

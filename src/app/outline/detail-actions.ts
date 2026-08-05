@@ -73,6 +73,18 @@ export async function setGoalFieldAction(
   return run((userId) => detail.setGoalFields(userId, nodeId, { [field]: value }));
 }
 
+/** Result Areas grid: inline Category / Importance / Description without a full drawer save. */
+export async function setResultAreaFieldsAction(
+  nodeId: string,
+  fields: {
+    category?: string | null;
+    importance?: number | null;
+    description?: string;
+  },
+): Promise<ActionResult> {
+  return run((userId) => detail.setResultAreaFields(userId, nodeId, fields));
+}
+
 export async function createNodeItemAction(params: {
   nodeId: string;
   kind: NodeItemKind;

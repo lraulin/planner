@@ -90,6 +90,7 @@ export function useGlobalCommands(): readonly Command[] {
  */
 const GO_KEYWORDS: Record<string, string> = {
   outline: "tree result areas dreams hierarchy",
+  "result-areas": "result area roles life dimensions importance weighting",
   projects: "project list",
   tasks: "task list todo",
   goals: "goal dreams objectives",

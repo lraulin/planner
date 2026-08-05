@@ -8,6 +8,7 @@ import {
   NotesIcon,
   OutlineIcon,
   ProjectsIcon,
+  ResultAreasIcon,
   ScheduleIcon,
   TasksIcon,
   TimeChartsIcon,
@@ -123,7 +124,8 @@ export const MODULES = [
     href: "/result-areas",
     section: "plan",
     primary: false,
-    status: "reserved",
+    status: "built",
+    icon: ResultAreasIcon,
   },
   {
     id: "life-plan",

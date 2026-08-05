@@ -609,6 +609,37 @@ export async function setGoalFields(
 }
 
 /**
+ * Inline edit of a result area's Category, Importance or Description from the Result Areas
+ * grid. Same allowlist path as `saveNodeDetail`, without requiring a full form draft.
+ */
+export async function setResultAreaFields(
+  userId: string,
+  nodeId: string,
+  fields: {
+    category?: string | null;
+    importance?: number | null;
+    description?: string;
+  },
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    const node = await requireNode(tx, userId, nodeId);
+    if (node.type !== "result_area") {
+      throw new Error("These fields are only on result areas.");
+    }
+    const set = pick(fields, ["category", "importance", "description"] as const);
+    if (!hasValues(set)) return;
+    await tx
+      .insert(resultAreaDetails)
+      .values({ nodeId, ...set })
+      .onConflictDoUpdate({ target: resultAreaDetails.nodeId, set });
+    await tx
+      .update(nodes)
+      .set({ updatedAt: new Date() })
+      .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+  });
+}
+
+/**
  * Whether a picked payload has anything to write.
  *
  * A form that touched no side-table field — or one whose values were all outside the
