@@ -125,6 +125,28 @@ describe("scheduleStatus — shelf / deferred", () => {
   it("prefers deferred over a deadline band while shelved", () => {
     expect(status({ deadline: day(-1), shelf: shelf(3) })).toBe("deferred");
   });
+
+  /**
+   * The stored state outliving its shelf is normal — expiry is derived, never swept — so
+   * every band below the deferred check has to read the *effective* state too. Reading the
+   * raw one made a routine that came back this morning look like work already underway.
+   */
+  it("reads a routine back off the shelf as not started, not as underway", () => {
+    // Tick off "empty cat litter": postponed, deferred and planned for tomorrow. Tomorrow.
+    expect(status({ state: "postponed", shelf: shelf(0), targetStart: day(0) })).toBe(
+      "need_to_start",
+    );
+  });
+
+  it("puts a routine whose planned day has passed behind schedule", () => {
+    expect(status({ state: "postponed", shelf: shelf(-1), targetStart: day(-3) })).toBe(
+      "behind_schedule",
+    );
+  });
+
+  it("leaves an expired shelf with no plan unscheduled rather than ongoing", () => {
+    expect(status({ state: "postponed", shelf: shelf(-1) })).toBe("not_scheduled");
+  });
 });
 
 describe("scheduleStatus — hydration", () => {

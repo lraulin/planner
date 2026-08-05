@@ -90,15 +90,21 @@ export function scheduleStatus(input: ScheduleStatusInput): ScheduleStatus {
 
   if (state === "completed" || state === "cancelled") return "completed";
 
+  // Every band below reads the *effective* state, not the stored one. A shelf that ran out
+  // is not swept, so `state` stays `postponed` long after the row came back — and reading
+  // that raw made `started` true, which is how a routine due again this morning came out
+  // as Ongoing (started work, no near end date) instead of Need to Start.
+  const effective = effectiveState(state, shelf, today);
+
   // Shelf still holds → not on your plate. Finished already returned above.
-  if (effectiveState(state, shelf, today) === "postponed") return "deferred";
+  if (effective === "postponed") return "deferred";
 
   if (!today) return "on_schedule";
 
   const due = deadline ? daysBetweenKeys(today, toDateKey(deadline)) : null;
   const start = targetStart ? daysBetweenKeys(today, toDateKey(targetStart)) : null;
   const end = targetEnd ? daysBetweenKeys(today, toDateKey(targetEnd)) : null;
-  const started = state !== "not_started";
+  const started = effective !== "not_started";
 
   // --- Deadline bands (manual order) ---
   if (due !== null && due < 0) return "overdue";
@@ -134,7 +140,7 @@ export function scheduleStatus(input: ScheduleStatusInput): ScheduleStatus {
   // Need to Start: NS with target start of today.
   if (!started && start === 0) return "need_to_start";
 
-  if (state === "waiting") return "waiting";
+  if (effective === "waiting") return "waiting";
 
   // Ongoing: started, not waiting, end missing or more than 5 days out.
   if (started && (end === null || end > DUE_SOON_DAYS)) return "ongoing";
