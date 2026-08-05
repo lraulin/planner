@@ -162,6 +162,13 @@
       "when": 1785858976802,
       "tag": "0022_brief_tarantula",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1785957100411,
+      "tag": "0023_secret_shaman",
+      "breakpoints": true
     }
   ]
 }

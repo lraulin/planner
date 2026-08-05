@@ -100,4 +100,5 @@ const GO_KEYWORDS: Record<string, string> = {
   metrics: "measures tracking numbers graph",
   fitness: "workout exercise log",
   notes: "note journal markdown",
+  "time-charts": "time chart ideal week template background blocks",
 };

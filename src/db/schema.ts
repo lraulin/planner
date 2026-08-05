@@ -883,6 +883,12 @@ export const timeCharts = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     name: text("name").notNull().default(""),
+    /**
+     * Achieve's Time Chart Information form has Name and Description on its General tab, and
+     * the Time Charts list shows both. We had only the name because the chart was reachable
+     * solely from the Weekly Schedule's picker, where a description has nowhere to render.
+     */
+    description: text("description").notNull().default(""),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

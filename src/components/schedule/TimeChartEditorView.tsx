@@ -24,6 +24,7 @@ import {
   createTimeChartAreaAction,
   deleteTimeChartAreaAction,
   renameTimeChartAction,
+  updateTimeChartAction,
   updateTimeChartAreaAction,
 } from "@/app/schedule/actions";
 import { contrastText } from "@/lib/schedule/geometry";
@@ -57,6 +58,7 @@ export function TimeChartEditorView({ chart, initialAreas, nodes, returnTo }: Pr
   const calendarRef = useRef<FullCalendar | null>(null);
 
   const [chartName, setChartName] = useState(chart.name);
+  const [chartDescription, setChartDescription] = useState(chart.description);
   const [areas, setAreas] = useState(initialAreas);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -124,6 +126,17 @@ export function TimeChartEditorView({ chart, initialAreas, nodes, returnTo }: Pr
 
   async function saveChartName() {
     const result = await renameTimeChartAction(chart.id, chartName);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    refresh();
+  }
+
+  async function saveChartDescription() {
+    const result = await updateTimeChartAction(chart.id, {
+      description: chartDescription,
+    });
     if (!result.ok) {
       setError(result.error);
       return;
@@ -305,7 +318,7 @@ export function TimeChartEditorView({ chart, initialAreas, nodes, returnTo }: Pr
           className="rounded border border-rule bg-surface px-2 py-1 text-ink hover:bg-surface-raised"
           onClick={goBack}
         >
-          ← Back to Schedule
+          ← Back to {returnTo === "/time-charts" ? "Time Charts" : "Schedule"}
         </button>
         <span className="text-ink-muted">Edit Time Chart</span>
         <input
@@ -319,6 +332,20 @@ export function TimeChartEditorView({ chart, initialAreas, nodes, returnTo }: Pr
             }
           }}
           aria-label="Time Chart name"
+        />
+        {/* Achieve's General tab is Name + Description; this bar is that tab. */}
+        <input
+          className="min-w-[14rem] flex-1 rounded border border-rule bg-surface px-2 py-1 text-ink placeholder:text-ink-faint/60"
+          value={chartDescription}
+          onChange={(e) => setChartDescription(e.target.value)}
+          onBlur={asyncHandler(saveChartDescription, setError)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.currentTarget.blur();
+            }
+          }}
+          placeholder="Description"
+          aria-label="Time Chart description"
         />
         <span className="text-ink-faint">
           Template week (Sun–Sat) · drag to create · Ctrl+drag to copy

@@ -1,0 +1,1 @@
+ALTER TABLE "time_charts" ADD COLUMN "description" text DEFAULT '' NOT NULL;

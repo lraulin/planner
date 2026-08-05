@@ -63,14 +63,35 @@ export async function createTimeChart(userId: string, name: string) {
   return row;
 }
 
-export async function renameTimeChart(userId: string, id: string, name: string) {
+export type TimeChartInput = {
+  name?: string;
+  description?: string;
+};
+
+/**
+ * Achieve's Time Chart Information form, General tab. An omitted key is left alone, so the
+ * list can rename in place without clearing a description it never loaded.
+ */
+export async function updateTimeChart(
+  userId: string,
+  id: string,
+  input: TimeChartInput,
+) {
+  const values: Partial<typeof timeCharts.$inferInsert> = { updatedAt: new Date() };
+  if (input.name !== undefined) values.name = input.name.trim() || "Untitled";
+  if (input.description !== undefined) values.description = input.description.trim();
+
   const [row] = await db
     .update(timeCharts)
-    .set({ name: name.trim() || "Untitled", updatedAt: new Date() })
+    .set(values)
     .where(and(eq(timeCharts.id, id), eq(timeCharts.userId, userId)))
     .returning();
   if (!row) throw new Error("Time Chart not found.");
   return row;
+}
+
+export async function renameTimeChart(userId: string, id: string, name: string) {
+  return updateTimeChart(userId, id, { name });
 }
 
 export async function deleteTimeChart(userId: string, id: string) {

@@ -10,6 +10,7 @@ import {
   ProjectsIcon,
   ScheduleIcon,
   TasksIcon,
+  TimeChartsIcon,
   WishesIcon,
 } from "./navIcons";
 
@@ -39,8 +40,8 @@ import {
 
 /**
  * Section order is display order. A section renders only when it holds at least one
- * **built** module, which is what lets `Library` sit here fully specified and completely
- * invisible until Time Charts or Resources exists.
+ * **built** module. That rule let `Library` sit here fully specified and completely
+ * invisible for a cycle; Time Charts is what finally made it appear.
  */
 export const SECTIONS = [
   { id: "plan", label: "Plan" },
@@ -215,15 +216,15 @@ export const MODULES = [
     status: "reserved",
   },
 
-  // Library — reference data you maintain but rarely sit in. Empty today, so it does not
-  // render; the section exists so these three land somewhere already decided.
+  // Library — reference data you maintain but rarely sit in.
   {
     id: "time-charts",
     label: "Time Charts",
     href: "/time-charts",
     section: "library",
     primary: false,
-    status: "reserved",
+    status: "built",
+    icon: TimeChartsIcon,
   },
   {
     id: "resources",

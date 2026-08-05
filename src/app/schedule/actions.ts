@@ -10,7 +10,11 @@ import type {
   ShowAs,
 } from "@/db/schema";
 import * as schedule from "@/lib/schedule/mutations";
-import type { AppointmentInput, TimeChartAreaInput } from "@/lib/schedule/mutations";
+import type {
+  AppointmentInput,
+  TimeChartAreaInput,
+  TimeChartInput,
+} from "@/lib/schedule/mutations";
 import { startOfWeek } from "@/lib/schedule/geometry";
 import { syncWindow } from "@/lib/google/sync";
 
@@ -45,6 +49,13 @@ export async function renameTimeChartAction(
   name: string,
 ): Promise<ActionResult> {
   return run((userId) => schedule.renameTimeChart(userId, id, name));
+}
+
+export async function updateTimeChartAction(
+  id: string,
+  input: TimeChartInput,
+): Promise<ActionResult> {
+  return run((userId) => schedule.updateTimeChart(userId, id, input));
 }
 
 export async function deleteTimeChartAction(id: string): Promise<ActionResult> {

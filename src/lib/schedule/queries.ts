@@ -19,6 +19,38 @@ export async function listTimeCharts(userId: string) {
     .orderBy(asc(timeCharts.name));
 }
 
+/**
+ * The Time Charts module's list: every chart plus how many areas it holds.
+ *
+ * Separate from `listTimeCharts` on purpose — that one feeds the Weekly Schedule's picker
+ * and is called on every schedule load, where a count join is waste.
+ */
+export type TimeChartListRow = {
+  id: string;
+  name: string;
+  description: string;
+  updatedAt: Date;
+  areaCount: number;
+};
+
+export async function listTimeChartSummaries(
+  userId: string,
+): Promise<TimeChartListRow[]> {
+  return db
+    .select({
+      id: timeCharts.id,
+      name: timeCharts.name,
+      description: timeCharts.description,
+      updatedAt: timeCharts.updatedAt,
+      areaCount: sql<number>`count(${timeChartAreas.id})::int`,
+    })
+    .from(timeCharts)
+    .leftJoin(timeChartAreas, eq(timeChartAreas.timeChartId, timeCharts.id))
+    .where(eq(timeCharts.userId, userId))
+    .groupBy(timeCharts.id)
+    .orderBy(asc(timeCharts.name));
+}
+
 export async function getTimeChart(userId: string, id: string) {
   const [chart] = await db
     .select()

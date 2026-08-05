@@ -30,7 +30,7 @@ export default async function TimeChartEditorPage({
   ]);
 
   return (
-    <AppShell active="schedule">
+    <AppShell active="time-charts">
       <TimeChartEditorView
         chart={chart}
         initialAreas={areas}

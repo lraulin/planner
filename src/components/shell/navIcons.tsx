@@ -150,6 +150,23 @@ export function FitnessIcon() {
   );
 }
 
+/**
+ * Time Charts: a week's worth of painted blocks. Deliberately unlike `ScheduleIcon`'s empty
+ * week grid — a time chart is the week you *intended*, which is why it has fill and the
+ * schedule does not.
+ */
+export function TimeChartsIcon() {
+  return (
+    <svg {...BASE} className="h-5 w-5">
+      <rect x="2.75" y="3.75" width="14.5" height="12.5" rx="1.5" />
+      <path d="M7.5 3.75v12.5M12.5 3.75v12.5" />
+      <rect x="3.5" y="6" width="3.25" height="3.5" fill="currentColor" stroke="none" />
+      <rect x="8.25" y="10" width="3.5" height="5" fill="currentColor" stroke="none" />
+      <rect x="13.25" y="5" width="3.25" height="3" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 /** Settings, pinned below the sections — chrome, not a view. */
 export function SettingsIcon() {
   return (
