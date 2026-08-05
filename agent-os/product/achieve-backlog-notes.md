@@ -45,7 +45,8 @@ From Outline / Edit / View menus — useful without matching every shortcut:
 | Motivational Images / Thought Master / Wish Brainstorming          | Nice-to-have coaching chrome                                                     |
 | Outlook Synchronization                                            | Microsoft lock-in; CSV/export first                                              |
 | Automated Scheduling (chapter 7)                                   | Explicitly out of weekly-wizard scope                                            |
-| Contacts, File Organizer, Resources tabs                           | Resources already out; contacts/files are other products                         |
+| Contacts and Resources tabs                                        | ✅ Shipped in `2026-08-05-1458-remaining-go-menu-modules`                        |
+| File Organizer                                                     | Permanently out: without file storage, it would be a different product           |
 | Overview tab as productivity process dashboard                     | Optional later; tabs already navigable                                           |
 | Notes tab                                                          | Placeholder in TabStrip; needs a product decision (plain notes vs project notes) |
 | Customize Keyboard / Options dialogs                               | Ship defaults first                                                              |

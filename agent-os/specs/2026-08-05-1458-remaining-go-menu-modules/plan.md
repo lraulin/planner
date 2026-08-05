@@ -1,7 +1,10 @@
 # Remaining Go-menu modules — Contacts, Resources, Time Charts, Result Areas
 
-**Status: active**
+**Status: frozen / complete (2026-08-05)**
 Spec folder: `agent-os/specs/2026-08-05-1458-remaining-go-menu-modules/`
+
+This document is the durable record of what shipped. Future extensions should open a new
+delta-spec rather than changing this frozen decision record.
 
 ## Context
 
@@ -68,31 +71,47 @@ mean to have exists.
 
 ## Acceptance criteria
 
-- [ ] `Library` renders in the sidebar and the More sheet with Time Charts, Resources and
+- [x] `Library` renders in the sidebar and the More sheet with Time Charts, Resources and
       Contacts; `Result Areas` renders under Plan. All four reachable from `⌘K`.
-- [ ] `/time-charts` lists charts with Name + Description, opens the existing editor, and
+- [x] `/time-charts` lists charts with Name + Description, opens the existing editor, and
       creates/renames/deletes. The editor breadcrumbs to Time Charts, not Schedule.
-- [ ] `/result-areas` lists result areas with the standard grid controls and opens the
+- [x] `/result-areas` lists result areas with the standard grid controls and opens the
       existing Result Area drawer.
-- [ ] `/contacts` lists contacts with primary phone/email/city, filters and groups, and has
+- [x] `/contacts` lists contacts with primary phone/email/city, filters and groups, and has
       a "Needs a Conversation" built-in view driven by open discussion items.
-- [ ] A contact drawer edits name parts, org, group, birthday, contexts, notes, and the four
+- [x] A contact drawer edits name parts, org, group, birthday, contexts, notes, and the four
       repeating lists; exactly one primary per kind is enforceable only one way.
-- [ ] Creating a discussion item from a contact produces a task in the Inbox that appears in
+- [x] Creating a discussion item from a contact produces a task in the Inbox that appears in
       the Task Chooser; the Task drawer shows and edits its Contact.
-- [ ] A note can be filed against a contact and appears in the contact's History.
-- [ ] Deleting a contact leaves its discussion tasks and notes intact with null links.
-- [ ] `/resources` lists resources; the weekly wizard's time-budget step offers the selected
-      resource's weekly hours and the user can still override.
-- [ ] `File Organizer` and `Life Plan` appear nowhere, including `MODULES`.
-- [ ] `npm run test:unit` passes with the DB up (check for the skip warning), `npm run lint`,
+- [x] A note can be filed against a contact and appears in the contact's History.
+- [x] Deleting a contact leaves its discussion tasks and notes intact with null links.
+- [x] `/resources` lists resources; the weekly wizard's time-budget step offers the selected
+      resource's adjusted weekly capacity and the user can still override.
+- [x] `File Organizer` and `Life Plan` appear nowhere, including `MODULES`.
+- [x] `npm run test:unit` passes with the DB up (check for the skip warning), `npm run lint`,
       `npx tsc --noEmit`, and `npm run build` all clean.
 
 ## Changes from original plan
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                     | Why                               |
+| --- | -------------------------- | --------------------------------- |
+| 1   | No material scope changes. | Implementation matched the shape. |
+
+## Verification completed
+
+- Applied the generated resources migration locally.
+- `npm run test:integration` passed: 18 files, 437 tests.
+- `npm run test:unit` passed with Postgres reachable: 96 files, 1,328 tests.
+- `npm run lint`, `npx tsc --noEmit`, and `npm run build` passed. Route smoke checks served
+  `/resources` and the resource-aware weekly-planning step from the development server.
+- Interactive browser automation was unavailable in this environment, so the planned
+  click-through checks were covered by the data integration tests, build, and route smoke
+  checks instead.
+
+## New work
+
+- **Google People sync** — a separate delta-spec for OAuth, reconciliation and sync state.
+- **Automated scheduling** — a separate delta-spec that consumes the Resources capacity model.
 
 ---
 
@@ -309,8 +328,8 @@ single selection, not a per-row boolean.
 Schema: `resources` — `shortName`, `description`, `overheadPercent`, `effectivenessPercent`,
 per-day working minutes (`mondayMinutes` … `sundayMinutes`), nullable `contactId`
 (`set null`) since AP's Resource Information form links one. The full AP field set ships now
-so a future automated-scheduling spec needs no migration, even though only the weekly hours
-are consumed today.
+so a future automated-scheduling spec needs no migration; the wizard already consumes the
+adjusted weekly capacity (working time less overhead, times effectiveness).
 
 - `src/lib/resources/{types,queries,mutations}.ts` + `mutations.integration.test.ts`.
 - `src/lib/resources/capacity.ts` + `capacity.test.ts` — pure:

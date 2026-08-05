@@ -18,33 +18,33 @@ Three surfaces now, each answering a different question.
 Below `md` the sidebar is replaced by the bottom nav plus the More sheet, and there is no
 palette at all — `⋯` is the whole command surface. See `responsive.md`.
 
-## Views live in one registry
+## Modules live in one registry
 
-`src/components/shell/views.ts` is the only list of views. It is read by the sidebar, the
+`src/components/shell/modules.ts` is the only list of modules. It is read by the sidebar, the
 phone bottom nav, the More sheet, the phone header's "you are here" title, and the palette's
 go-to entries.
 
-**Never hard-code a view anywhere else.** Five surfaces reading one array is what stops the
+**Never hard-code a module anywhere else.** Five surfaces reading one array is what stops the
 phone and the desktop from disagreeing about what the app contains — the previous version of
 this file was four surfaces reading `TABS`, and that was already the reason it worked.
 
-### Sections, and reserved views
+### Sections, and reserved modules
 
-Views are grouped into ordered sections (`Plan`, `Do`, `Track`, `Library`). Both the sidebar
-and the More sheet render `sectionsWithViews()`, so the two group the app identically.
+Modules are grouped into ordered sections (`Plan`, `Do`, `Track`, `Library`). Both the sidebar
+and the More sheet render `sectionsWithModules()`, so the two group the app identically.
 
-A view we have decided the home of but not built is marked `status: "reserved"`. It renders
-nowhere and is not a navigation target; a section holding only reserved views does not render
+A module we have decided the home of but not built is marked `status: "reserved"`. It renders
+nowhere and is not a navigation target; a section holding only reserved modules does not render
 at all.
 
-- **Do** decide a future view's section when you know it. It costs a line and it stops the
+- **Do** decide a future module's section when you know it. It costs a line and it stops the
   next person re-arguing navigation.
-- **Do not** render a reserved view as a disabled or "coming soon" entry. A menu full of dead
+- **Do not** render a reserved module as a disabled or "coming soon" entry. A menu full of dead
   rows teaches the reader to stop reading the menu, and then the live rows stop working too.
 
 ## Commands live in one registry
 
-`src/lib/commands/registry.ts` defines what a command is. A view publishes its own with
+`src/lib/commands/registry.ts` defines what a command is. A module publishes its own with
 `useRegisterCommands` and both renderers read them through `useCommands`.
 
 **One registry, two renderers.** A command described in two places is a command whose two

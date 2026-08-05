@@ -1,5 +1,7 @@
 # References
 
+**Status: frozen / complete (2026-08-05)**
+
 What to read before writing each part, and what to take from it.
 
 ## Achieve Planner source of truth
@@ -120,8 +122,6 @@ What to read before writing each part, and what to take from it.
 ## Product docs
 
 - `agent-os/product/achieve-backlog-notes.md` — its "Explicitly low priority or out" table
-  lists **"Contacts, File Organizer, Resources tabs — Resources already out; contacts/files
-  are other products."** This spec supersedes that row for Contacts and Resources, and
-  confirms it for File Organizer. Update the table at freeze so a future reader is not
-  reading a decision that has since been reversed.
+  was updated at freeze: Contacts and Resources are shipped; File Organizer remains
+  permanently out of scope.
 - `agent-os/product/roadmap.md` — Phase 1 Achieve MVP; this spec closes it.

@@ -98,19 +98,25 @@ The core Achieve Planner loop — plan the week, block the time, work the outlin
   The `Groups` and `Group by Area` switches were removed: with a capable picker they were
   duplicates that silently won, so `Group by → (None)` did not actually ungroup. A tab's
   default arrangement is now its default `groupBy`, which the picker shows and can clear.
+- **✅ Remaining Go-menu modules.** `specs/2026-08-05-1458-remaining-go-menu-modules`.
+  Result Areas, Time Charts, Contacts and Resources complete the intended Go-menu modules:
+  the Library section is now live, Contacts turns discussion items into real tasks and
+  history into notes, and Resources supplies an editable weekly capacity budget. File
+  Organizer and Life Plan are permanently out: the former needs file storage, and the latter
+  is already a better note.
 
 ### Still in Phase 1
 
 - **Residual grid chrome polish** if needed after daily use (Project scope as a filtered
-  tree popover rather than a select; finer Show Fields multi-select / multi-move; Life Plan
-  only if still wanted). Persistence, control uniformity and the shared control surface
+  tree popover rather than a select; finer Show Fields multi-select / multi-move).
+  Persistence, control uniformity and the shared control surface
   shipped above.
 - **Day-to-day friction from living with the MVP** — expand/collapse-all, find-in-outline,
   seed goals for demos — pick off as they annoy. (Quick capture already shipped in Phase 2
   capture track.)
 
-Phase 1 core loop is complete enough for daily use. Remaining Phase 1 items are residual
-chrome polish, not blockers for Phase 2 slices.
+Phase 1's Achieve core is complete. Remaining Phase 1 items are residual chrome polish, not
+blockers for Phase 2 slices.
 
 ---
 
@@ -120,7 +126,6 @@ Features that complete or surround the original product, plus making it multi-de
 
 ### Near-term Achieve surfaces
 
-- **Life Plan tab** (if still desired after living with Goals + Result Areas).
 - **✅ Metrics tab + import/export.** `specs/2026-08-02-0912-metrics-tab`. First-class
   `metrics` / `metric_entries` (optional goal owner, history survives goal delete). Metrics
   tab lists all metrics with Group by Owner and an SVG performance graph; Metric form
@@ -193,11 +198,12 @@ Features that complete or surround the original product, plus making it multi-de
   rendered by two surfaces: the palette lists everything, a `⋯` overflow on each view's
   toolbar lists what does not already have a button, so nothing is reachable by shortcut
   alone. `Show Fields` and `Reset this grid` moved off the always-visible toolbar into `⋯`.
-  Future views (Overview, Result Areas, Life Plan, Time Charts, Resources, Contacts, Focus
-  Timer, Time Log, Reports) each have a section assigned already and render nothing until
-  built. Phone keeps its bottom nav; the More sheet is grouped the same way and `⋯` is the
-  touch path to commands. New standard: `components/navigation.md`. Deferred: converting the
-  six row context menus into registered commands; `⋯` on the four views with no grid toolbar.
+  Library was initially reserved, then gained Time Charts, Resources and Contacts through
+  `specs/2026-08-05-1458-remaining-go-menu-modules`; Result Areas is also built under Plan.
+  Overview, Focus Timer, Time Log and Reports remain reserved. Phone keeps its bottom nav;
+  the More sheet is grouped the same way and `⋯` is the touch path to commands. New standard:
+  `components/navigation.md`. Deferred: converting the six row context menus into registered
+  commands; `⋯` on the four views with no grid toolbar.
 - **✅ Views across all modules.** `specs/2026-08-05-1059-views-across-modules`. Saved views
   stopped being a feature of three grids and became one of the app: **Outline, Projects, Goals,
   Tasks, Wish List, Notes and the Task Chooser** all create, update, rename and delete named

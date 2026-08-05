@@ -1,6 +1,6 @@
 # Standards that apply
 
-**Status: active**
+**Status: frozen / complete (2026-08-05)**
 
 Distilled to the points this spec actually turns on. Read the source files for the rest.
 
@@ -115,6 +115,5 @@ Four new grids. The parts that decide things here:
   generated from `BUILT_MODULES`.
 - **A built module must have an icon** — the collapsed rail is icons only.
 
-> **Note:** this file is stale post-rename. It still says `src/components/shell/views.ts` and
-> `sectionsWithViews()`; the real names are `modules.ts` and `sectionsWithModules()`. Fixed at
-> freeze (Task 12).
+> **Freeze note:** `agent-os/standards/components/navigation.md` now uses the current
+> `src/components/shell/modules.ts` and `sectionsWithModules()` terminology.

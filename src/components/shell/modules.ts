@@ -129,15 +129,6 @@ export const MODULES = [
     status: "built",
     icon: ResultAreasIcon,
   },
-  {
-    id: "life-plan",
-    label: "Life Plan",
-    href: "/life-plan",
-    section: "plan",
-    primary: false,
-    status: "reserved",
-  },
-
   // Do — what you are working on now, this day, this week.
   {
     id: "day",

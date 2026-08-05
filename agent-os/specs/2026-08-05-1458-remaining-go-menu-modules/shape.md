@@ -1,6 +1,9 @@
 # Remaining Go-menu modules — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete (2026-08-05)**
+
+This document records the settled shape of the shipped feature. Later changes belong in a
+new delta-spec.
 
 ## Scope
 
@@ -117,13 +120,14 @@ invariant nobody enforces and the grid has to filter with `jsonb_path_query`.
 
 The comment at `src/lib/planning/budget.ts:5` currently reads "We have no resources, so there
 is one budget for the week." The wizard's time-budget step gains a resource select; picking
-one fills `weekly_plans.availableMinutes` from the resource's weekly hours. The stored value
-stays authoritative and hand-overridable — the resource supplies a number, it does not own it.
+one fills `weekly_plans.availableMinutes` from the resource's adjusted weekly capacity. The
+stored value stays authoritative and hand-overridable — the resource supplies a number, it
+does not own it.
 
 The full AP field set (overhead %, effectiveness %, per-day working hours, linked contact)
-ships now even though only the hours are read, so a future automated-scheduling spec is code
-rather than a migration. The user's stated intent: "I might want to implement the automated
-scheduling at some point so I can at least give it a chance."
+ships now and already informs that capacity calculation, so a future automated-scheduling
+spec is code rather than a migration. The user's stated intent: "I might want to implement
+the automated scheduling at some point so I can at least give it a chance."
 
 ### `ItemList` is not generalized
 
@@ -162,4 +166,14 @@ for a generic repeating list ever appears, generalize then.
   toolbar rule (bar / `⋯` / dialog).
 - `components/drawer-pattern.md` — the contact and resource drawers.
 - `components/navigation.md` — one module registry, five surfaces, no hard-coded modules.
-  (This file is stale post-rename and gets fixed at freeze.)
+  The terminology was corrected to `modules.ts` / `sectionsWithModules()` at freeze.
+
+## Completion and later work
+
+All four intended modules shipped; `Library` now renders and the `life-plan` reservation was
+removed. File Organizer and Life Plan remain permanently out of scope.
+
+New work, deliberately outside this frozen spec:
+
+- Google People sync (OAuth, reconciliation and sync state).
+- Automated scheduling using the Resources capacity model.
