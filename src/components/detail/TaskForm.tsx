@@ -81,11 +81,6 @@ export function taskTabs(props: DetailFormProps): FormTab[] {
             />
           </FieldGrid>
 
-          <TaskFitnessPanel
-            exerciseId={task.exerciseId ?? null}
-            onChange={(exerciseId) => patchTask({ exerciseId })}
-          />
-
           <TaskContactPanel
             contactId={task.contactId ?? null}
             onChange={(contactId) => patchTask({ contactId })}
@@ -335,6 +330,11 @@ export function taskTabs(props: DetailFormProps): FormTab[] {
       label: "Details",
       render: () => (
         <>
+          <TaskFitnessPanel
+            exerciseId={task.exerciseId ?? null}
+            onChange={(exerciseId) => patchTask({ exerciseId })}
+          />
+
           <FieldGrid>
             <TextField
               label="Company"
