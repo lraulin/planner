@@ -10,6 +10,8 @@ import {
 } from "@/app/contacts/actions";
 import { DataGrid } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";
+import { rowMenuFor } from "@/components/grid/rowMenu";
+import { catalogCapabilities } from "@/components/grid/catalogCommands";
 import { GridToolbar } from "@/components/grid/GridToolbar";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { collectDistinctValues } from "@/lib/grid/distinct";
@@ -112,10 +114,6 @@ export function ContactsView({
   const orderedIds = useMemo(() => rows.map((row) => row.id), [rows]);
   const multi = useMultiSelect(orderedIds, null);
   const { selectedId, selectedIds, select, move } = multi;
-  const selected = selectedId
-    ? (rows.find((row) => row.id === selectedId) ?? null)
-    : null;
-
   const refreshList = useCallback(() => {
     startTransition(async () => {
       const result = await listContactsAction();
@@ -177,34 +175,26 @@ export function ContactsView({
     [rows],
   );
 
-  const commandCapabilities = useMemo(
-    () => ({
-      selection: {
-        id: selectedId,
-        count: selectedIds.size,
-        label: selected?.displayName,
-      },
-      actions: { onOpen: openDrawer, onDelete: requestDelete },
-      pageCommands: [
-        {
-          id: "contacts.create",
-          label: "New contact",
-          group: "record" as const,
-          toolbarGroup: "create" as const,
-          primary: true,
-          shortcut: "Insert",
-          run: createNew,
+  const capabilitiesFor = useCallback(
+    (rowId: string | null, count: number) =>
+      catalogCapabilities({
+        createLabel: "New contact",
+        openLabel: "Open contact",
+        selection: {
+          id: rowId,
+          count,
+          label: rows.find((entry) => entry.id === rowId)?.displayName,
         },
-      ],
-    }),
-    [
-      selectedId,
-      selectedIds.size,
-      selected?.displayName,
-      openDrawer,
-      requestDelete,
-      createNew,
-    ],
+        onCreate: createNew,
+        onOpen: openDrawer,
+        onDelete: requestDelete,
+      }),
+    [rows, createNew, openDrawer, requestDelete],
+  );
+
+  const commandCapabilities = useMemo(
+    () => capabilitiesFor(selectedId, selectedIds.size),
+    [capabilitiesFor, selectedId, selectedIds.size],
   );
 
   const columnCtx: ContactsColumnCtx = useMemo(
@@ -216,36 +206,19 @@ export function ContactsView({
     (contactId: string): MenuItem[] => {
       const row = rows.find((r) => r.id === contactId);
       if (!row) return [];
-      return [
-        {
-          label: "Open contact",
-          shortcut: "Enter",
-          onSelect: () => openDrawer(contactId),
-        },
-        { label: "New contact", shortcut: "Insert", onSelect: createNew },
-        "separator",
-        {
-          label: "Delete",
-          shortcut: "Delete",
-          destructive: true,
-          onSelect: () => setPendingDelete(row),
-        },
-      ];
+      return rowMenuFor(capabilitiesFor(contactId, 1), {
+        id: contactId,
+        count: 1,
+        label: row.displayName,
+      });
     },
-    [rows, openDrawer, createNew],
+    [rows, capabilitiesFor],
   );
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (openId || pendingDelete) return;
       if (isTypingTarget(event.target)) return;
-
-      const insert = event.key === "Insert" || (event.key === "Enter" && event.metaKey);
-      if (insert && !event.shiftKey && !event.ctrlKey) {
-        event.preventDefault();
-        createNew();
-        return;
-      }
 
       // Arrows before the has-a-selection guard: `moveSelection` reads a null focus as
       // "start from the end you are heading towards", so ArrowDown is how you pick the
@@ -260,26 +233,11 @@ export function ContactsView({
         move(-1, event.shiftKey);
         return;
       }
-
-      if (!selected) return;
-
-      switch (event.key) {
-        case "Enter":
-          if (event.metaKey || event.ctrlKey) return;
-          event.preventDefault();
-          openDrawer(selected.id);
-          break;
-        case "Delete":
-        case "Backspace":
-          event.preventDefault();
-          setPendingDelete(selected);
-          break;
-      }
     }
 
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [openId, pendingDelete, selected, createNew, openDrawer, move]);
+  }, [openId, pendingDelete, move]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">

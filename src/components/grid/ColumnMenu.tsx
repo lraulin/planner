@@ -24,7 +24,7 @@ import {
   type ColumnMeta,
   type FilterKind,
 } from "./columns";
-import type { MenuItem } from "./ContextMenu";
+import { MenuList, type MenuItem } from "./ContextMenu";
 import { CustomFilterDialog } from "./CustomFilterDialog";
 import {
   ALL_FILTER,
@@ -370,37 +370,16 @@ function MenuTabButton({
 function MenuPanel({ items }: { items: MenuItem[] }) {
   return (
     <div role="menu" className="min-h-0 flex-1 overflow-auto py-1">
-      {items.map((item, index) =>
-        item === "separator" ? (
-          <div
-            key={`separator-${index}`}
-            role="separator"
-            className="my-1 h-px bg-rule"
-          />
-        ) : (
-          <button
-            key={item.label}
-            type="button"
-            role="menuitem"
-            disabled={item.disabled}
-            title={item.title}
-            onClick={item.onSelect}
-            className={[
-              "flex w-full items-center gap-6 px-3 py-1 text-left text-[0.8125rem] normal-case leading-5 tracking-normal",
-              item.disabled
-                ? "cursor-not-allowed text-ink-faint"
-                : "text-ink hover:bg-surface-raised",
-            ].join(" ")}
-          >
-            <span className="flex-1 truncate">{item.label}</span>
-            {item.shortcut && (
-              <span className="tabular flex-none text-[0.6875rem] text-ink-faint">
-                {item.shortcut}
-              </span>
-            )}
-          </button>
-        ),
-      )}
+      {/*
+        `MenuList` rather than a second copy of the same rows — that copy is how this popover drifted
+        onto a different gap from the row menu it was written to match. `normal-case
+        tracking-normal` because the tab strip above imposes uppercase on its subtree.
+      */}
+      <MenuList
+        items={items}
+        onChoose={(item) => item.onSelect()}
+        rowClassName="normal-case tracking-normal"
+      />
     </div>
   );
 }

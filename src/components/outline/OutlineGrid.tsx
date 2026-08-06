@@ -47,7 +47,8 @@ import {
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import { DataGrid, type RowDrag } from "@/components/grid/DataGrid";
-import type { MenuItem } from "@/components/grid/ContextMenu";
+import { menuItemsFor, type MenuItem } from "@/components/grid/ContextMenu";
+import { rowMenuSections } from "@/lib/commands/menus";
 import type { GridDefaults } from "@/components/grid/useGridState";
 import { useModuleViews } from "@/components/grid/useModuleViews";
 import { GridToolbar, switchValue } from "@/components/grid/GridToolbar";
@@ -534,9 +535,17 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   useOutlineKeyboard({ commands, editingId, suspended });
 
   /**
-   * Right-click menu. Every entry is a command that also has a shortcut and a toolbar
-   * button — the menu adds discoverability, not capability — and each one is greyed out on
-   * exactly the conditions that would make it fail, so nothing here raises an error banner.
+   * Right-click menu, built from the registry for *this* row.
+   *
+   * Not the toolbar's command list: the toolbar's is about the selected row, and right-clicking a
+   * row that is not selected has to offer commands about the row under the pointer. So the same
+   * `buildGridCommands` runs again with that row's own legality flags, and `rowMenuSections` decides
+   * what appears and in what order.
+   *
+   * There used to be a twelve-id allowlist here deciding which commands were menu-worthy. It was a
+   * second placement rule living a thousand lines from the first, and it is now the `rowMenu` flag
+   * on the command itself. Every entry is greyed out on exactly the conditions that would make it
+   * fail, so nothing here raises an error banner.
    */
   const rowMenu = useCallback(
     (nodeId: string): MenuItem[] => {
@@ -578,31 +587,9 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
           onExpand: () => command.expand(),
           onCollapse: () => command.collapse(),
         },
-      }).filter((entry) =>
-        [
-          "record.open",
-          "record.rename",
-          "record.copy-as-text",
-          "grid.create.after",
-          "grid.create.before",
-          "grid.create.child",
-          "record.indent",
-          "record.outdent",
-          "record.move-up",
-          "record.move-down",
-          "record.expand-collapse",
-          "record.delete",
-        ].includes(entry.id),
-      );
+      });
 
-      return rowCommands.map((entry) => ({
-        label: entry.label,
-        shortcut: entry.shortcut,
-        title: entry.title,
-        disabled: entry.disabled,
-        destructive: entry.destructive,
-        onSelect: entry.run,
-      }));
+      return menuItemsFor(rowMenuSections(rowCommands));
     },
     [byId, nodes, commandsFor, selectedIds, copySelectionAsText],
   );

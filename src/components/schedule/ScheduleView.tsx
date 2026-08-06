@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useIsCompact } from "@/components/shell/useIsCompact";
 import type { Appointment, AppointmentCheck, TimeChart } from "@/db/schema";
@@ -28,6 +28,10 @@ import { WeekCalendar } from "./WeekCalendar";
 import { ProjectsRail } from "./ProjectsRail";
 import { AppointmentDrawer } from "./AppointmentDrawer";
 import { MiniMonth } from "./MiniMonth";
+import { CommandBar } from "@/components/grid/CommandBar";
+import { useRegisterCommands } from "@/components/shell/CommandProvider";
+import { OverflowMenu } from "@/components/shell/OverflowMenu";
+import type { Command } from "@/lib/commands/registry";
 
 type Props = {
   initial: SchedulePayload;
@@ -121,7 +125,7 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
       : null,
   );
 
-  async function handleSyncGoogle() {
+  const handleSyncGoogle = useCallback(async () => {
     setSyncing(true);
     setSyncError(null);
     try {
@@ -131,14 +135,20 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
     } finally {
       setSyncing(false);
     }
-  }
+  }, [router, weekKey]);
 
-  function openTimeChartEditor(chartId: string) {
-    const returnTo = encodeURIComponent(
-      `/schedule?week=${weekKey}${chartId ? `&chart=${chartId}` : ""}`,
-    );
-    router.push(`/schedule/time-chart/${chartId}?returnTo=${returnTo}`);
-  }
+  // `useCallback` on these three because they are dependencies of the registered command list, and
+  // `useRegisterCommands` re-registers on identity — a handler rebuilt every render would make the
+  // provider set state every render. Its dev churn guard exists because that has happened before.
+  const openTimeChartEditor = useCallback(
+    (chartId: string) => {
+      const returnTo = encodeURIComponent(
+        `/schedule?week=${weekKey}${chartId ? `&chart=${chartId}` : ""}`,
+      );
+      router.push(`/schedule/time-chart/${chartId}?returnTo=${returnTo}`);
+    },
+    [router, weekKey],
+  );
 
   const navigateWeek = useCallback(
     (next: Date) => {
@@ -282,7 +292,7 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
     }
   }
 
-  async function handleNewChart() {
+  const handleNewChart = useCallback(async () => {
     const name = window.prompt("Time Chart name", "New Time Chart");
     if (name == null) return;
     const result = await createTimeChartAction(name);
@@ -296,12 +306,12 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
       return;
     }
     refresh();
-  }
+  }, [openTimeChartEditor, refresh]);
 
-  function handleEditChart() {
+  const handleEditChart = useCallback(() => {
     if (!selectedChartId) return;
     openTimeChartEditor(selectedChartId);
-  }
+  }, [openTimeChartEditor, selectedChartId]);
 
   async function handleDeleteAppointment(id: string) {
     const result = await deleteAppointmentAction(id);
@@ -312,6 +322,79 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
     setEditingAppointment(null);
     refresh();
   }
+
+  /**
+   * The week's own verbs.
+   *
+   * `Refresh from Google` stays listed with a reason when no calendar is mirrored, rather than
+   * vanishing — `navigation.md`: a command that disappears teaches you it does not exist, a greyed
+   * one teaches you how to get it.
+   */
+  const commands = useMemo<Command[]>(
+    () => [
+      {
+        id: "schedule.new-chart",
+        label: "New Time Chart…",
+        group: "record",
+        menu: "new",
+        section: "New",
+        icon: "new",
+        toolbar: 10,
+        keywords: "template background week",
+        run: asyncHandler(handleNewChart, reportError),
+      },
+      {
+        id: "schedule.edit-chart",
+        label: "Edit Time Chart…",
+        group: "record",
+        menu: "item",
+        section: "Item",
+        icon: "open",
+        toolbar: 50,
+        keywords: "template background areas",
+        disabled: !selectedChartId,
+        title: selectedChartId ? undefined : "Pick a Time Chart first",
+        run: handleEditChart,
+      },
+      {
+        id: "schedule.today",
+        label: "Go to this week",
+        group: "view",
+        menu: "view",
+        section: "Layout",
+        icon: "schedule",
+        toolbar: 60,
+        keywords: "today now current",
+        run: () => navigateWeek(new Date()),
+      },
+      {
+        id: "schedule.sync-google",
+        label: syncing ? "Syncing…" : "Refresh from Google",
+        group: "view",
+        menu: "view",
+        section: "Layout",
+        icon: "reset",
+        keywords: "google calendar pull mirror",
+        disabled: syncing || initial.sync.state === "off",
+        title:
+          initial.sync.state === "off"
+            ? "No Google calendar is being mirrored — connect one in Settings"
+            : "Pull the latest from Google Calendar",
+        run: asyncHandler(handleSyncGoogle, reportError),
+      },
+    ],
+    [
+      selectedChartId,
+      syncing,
+      initial.sync.state,
+      handleEditChart,
+      handleNewChart,
+      handleSyncGoogle,
+      navigateWeek,
+    ],
+  );
+
+  useRegisterCommands(commands);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
@@ -334,9 +417,18 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
           </button>
         </div>
       )}
-      {/* Toolbar — Achieve's Time Chart / Today bar */}
-      {/* Scrolls sideways below `md` rather than wrapping into three rows, the same trade
-          `TabToolbar` makes. */}
+      {/*
+        Toolbar — Achieve's Time Chart / Today bar, now the two-row shape every grid uses.
+        The command row carries the verbs; the Time Chart picker and the pagers are the lens, and
+        scroll sideways below `md` rather than wrapping into three rows.
+
+        This view had no `⋯` and no palette entries: `Edit Time Chart…`, `New Time Chart…` and
+        `Refresh` existed as bordered buttons and nowhere else, and `Refresh` disappeared entirely
+        when sync was off rather than saying why.
+      */}
+      <div className="hidden flex-none items-center gap-2 border-b border-rule bg-shell px-3 py-1.5 md:flex">
+        <CommandBar commands={commands} />
+      </div>
       <div className="flex flex-none flex-nowrap items-center gap-2 overflow-x-auto border-b border-rule bg-shell px-3 py-1.5 text-[0.8125rem] md:flex-wrap md:overflow-x-visible">
         <label className="flex items-center gap-1.5 text-ink-muted">
           Time Chart:
@@ -355,45 +447,19 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
         </label>
         <button
           type="button"
-          className="rounded border border-rule bg-surface px-2 py-1 text-ink hover:bg-surface-raised disabled:opacity-40"
-          disabled={!selectedChartId}
-          onClick={handleEditChart}
-        >
-          Edit Time Chart…
-        </button>
-        <button
-          type="button"
-          className="rounded border border-rule bg-surface px-2 py-1 text-ink hover:bg-surface-raised"
-          onClick={asyncHandler(handleNewChart, reportError)}
-        >
-          New Time Chart…
-        </button>
-        <button
-          type="button"
-          className="rounded border border-rule bg-surface px-2 py-1 text-ink hover:bg-surface-raised"
-          onClick={() => navigateWeek(new Date())}
-        >
-          Today
-        </button>
-        <button
-          type="button"
-          className="rounded border border-select-edge bg-select px-2 py-1 font-medium text-ink hover:opacity-90"
+          className="rounded border border-select-edge bg-select px-2 py-1 text-[0.8125rem] font-medium text-ink hover:opacity-90"
           onClick={() => router.push(`/schedule/plan?week=${weekKey}&step=0`)}
         >
           Plan Week…
         </button>
-        {/* Only meaningful once a Google calendar is being mirrored — "off" means none is. */}
-        {initial.sync.state !== "off" && (
-          <button
-            type="button"
-            className="rounded border border-rule bg-surface px-2 py-1 text-ink hover:bg-surface-raised disabled:opacity-40"
-            disabled={syncing}
-            title="Pull the latest from Google Calendar"
-            onClick={asyncHandler(handleSyncGoogle, reportError)}
-          >
-            {syncing ? "Syncing…" : "⟳ Refresh"}
-          </button>
-        )}
+        {/*
+          `⋯` on the lens row, phone-only: the command row above is `md:flex`, so without this the
+          week's verbs would exist on a desktop and nowhere else. Not pinned outside a scroller here
+          because this row is short enough not to pan on a phone.
+        */}
+        <span className="flex-none md:hidden">
+          <OverflowMenu label="More commands for this week" />
+        </span>
         {/*
          * A day pager below `md`, stepping across week boundaries by navigating the week and
          * landing on the right end of it. The week pager beside it is hidden there — a

@@ -15,10 +15,8 @@ import { useOptimisticNodes } from "@/components/grid/useOptimisticNodes";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useStateChange } from "@/components/grid/useStateChange";
 import { useToday } from "@/components/grid/useToday";
-import type { MenuItem } from "@/components/grid/ContextMenu";
-import { useRegisterCommands } from "@/components/shell/CommandProvider";
+import { useSuspendCommandKeys } from "@/components/shell/CommandProvider";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
-import type { Command } from "@/lib/commands/registry";
 import { copyAsText, writeClipboardText } from "@/lib/tree/copyAsText";
 import { isTypingTarget } from "@/lib/keyboard";
 
@@ -142,84 +140,38 @@ export function useGridTab(initialNodes: OutlineNode[]) {
     [today, selectedId, editingId, patch, apply, openDetail, stateChange],
   );
 
-  /**
-   * Right-click menu for the list tabs. Deliberately short: these tabs are views onto the
-   * tree, not the tree itself, so they carry no restructuring commands — the menu offers
-   * exactly what their toolbar and keyboard already do. Restructuring lives on the Outline.
+  /*
+   * There is no `rowMenu` and no command registration here any more.
    *
-   * Collapse/expand is left off on purpose even though the rows have an expander. These
-   * tabs list matching nodes rather than a walkable tree, so collapsing one changes nothing
-   * on screen — the effect only shows up over on the Outline. A menu entry that appears to
-   * do nothing where you clicked it is worse than no entry.
-   */
-  const rowMenu = useCallback(
-    (nodeId: string): MenuItem[] => {
-      if (!byId.has(nodeId)) return [];
-      const multiCount = selectedIds.has(nodeId) ? selectedIds.size : 1;
-
-      return [
-        { label: "Open record", shortcut: "Enter", onSelect: () => openDetail(nodeId) },
-        { label: "Rename", shortcut: "F2", onSelect: () => setEditingId(nodeId) },
-        {
-          label: multiCount > 1 ? `Copy as text (${multiCount})` : "Copy as text",
-          shortcut: "⌘C",
-          onSelect: copySelectionAsText,
-        },
-      ];
-    },
-    [byId, openDetail, selectedIds, copySelectionAsText],
-  );
-
-  /**
-   * The one row-menu command with no button anywhere.
+   * Both moved to `useNodeCommandDeck`, which is where the rest of these grids' commands already
+   * lived. This hook had a hand-written three-item menu saying `Open record` while the toolbar said
+   * `Open`, and it registered `Copy as text` separately from the capabilities object that describes
+   * everything else — two halves of one view's vocabulary, kept in two places. One capabilities
+   * object now produces the toolbar, the menus, the row menu and the palette entries.
    *
-   * Open and Rename reach the registry through `GridToolbar`'s `rowActions`; Copy as text is
-   * right-click-or-⌘C only, which `ux-principles.md` calls broken on touch. Registering it
-   * here gives all three list tabs a visible path at once, via `⋯`.
+   * These tabs still carry no restructuring commands: they are views onto the tree rather than the
+   * tree, so move/indent/collapse belong to the Outline. That is `useNodeCommandDeck` declining to
+   * declare `hierarchy`, which is one decision in one place rather than a menu and an allowlist
+   * that have to agree.
    */
-  const commands = useMemo<Command[]>(
-    () => [
-      {
-        id: "record.copy-as-text",
-        label:
-          selectedIds.size > 1 ? `Copy as text (${selectedIds.size})` : "Copy as text",
-        group: "record",
-        shortcut: "⌘C",
-        keywords: "clipboard export outline",
-        disabled: selectedId === null,
-        title: selectedId === null ? "Select a row first" : undefined,
-        run: copySelectionAsText,
-      },
-    ],
-    [selectedId, selectedIds, copySelectionAsText],
-  );
 
-  useRegisterCommands(commands);
+  /*
+   * Selection navigation only.
+   *
+   * Enter, F2 and ⌘C used to be here too. They are commands with menu rows, so they are now
+   * `bindings` on those commands and `CommandKeys` fires them — which is what makes the printed
+   * `F2` and the key that renames the same fact. Arrows are not commands: moving the selection has
+   * no menu row and no label, it is how you get around a row set.
+   */
+  useSuspendCommandKeys(editingId !== null);
 
-  // Keyboard: Enter opens drawer, F2 renames, arrows move/extend selection, ⌘C copies text.
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (detailId || editingId) return;
       if (isTypingTarget(event.target)) return;
       if (!selectedId) return;
 
-      if (
-        (event.metaKey || event.ctrlKey) &&
-        !event.altKey &&
-        (event.key === "c" || event.key === "C")
-      ) {
-        event.preventDefault();
-        copySelectionAsText();
-        return;
-      }
-
-      if (event.key === "Enter") {
-        event.preventDefault();
-        openDetail(selectedId);
-      } else if (event.key === "F2") {
-        event.preventDefault();
-        setEditingId(selectedId);
-      } else if (event.key === "ArrowDown") {
+      if (event.key === "ArrowDown") {
         event.preventDefault();
         move(1, event.shiftKey);
       } else if (event.key === "ArrowUp") {
@@ -229,7 +181,7 @@ export function useGridTab(initialNodes: OutlineNode[]) {
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [detailId, editingId, selectedId, openDetail, move, copySelectionAsText]);
+  }, [detailId, editingId, selectedId, move]);
 
   return {
     nodes,
@@ -257,7 +209,6 @@ export function useGridTab(initialNodes: OutlineNode[]) {
     cellHandlers,
     /** Cascade confirmation state — the host renders the dialog. */
     stateChange,
-    rowMenu,
     copySelectionAsText,
   };
 }

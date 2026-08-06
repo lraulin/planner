@@ -17,6 +17,12 @@ import {
 } from "@/app/metrics/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { ContextMenu, type MenuItem } from "@/components/grid/ContextMenu";
+import { rowMenuFor } from "@/components/grid/rowMenu";
+import { catalogCapabilities } from "@/components/grid/catalogCommands";
+import { CommandBar } from "@/components/grid/CommandBar";
+import { buildGridCommands } from "@/lib/grid/commandDeck";
+import { useRegisterCommands } from "@/components/shell/CommandProvider";
+import { OverflowMenu } from "@/components/shell/OverflowMenu";
 import { useSetting, type SettingCodec } from "@/components/settings/SettingsProvider";
 import {
   ErrorBanner,
@@ -212,27 +218,58 @@ export function MetricsView({
     [navigableIds, selected?.id, selectRow],
   );
 
+  const requestDelete = useCallback(
+    (id: string) => {
+      const row = rows.find((entry) => entry.id === id);
+      if (row) setPendingDelete(row);
+    },
+    [rows],
+  );
+
+  /**
+   * Metrics had **no** `⋯` and no palette entries at all — its commands existed as two toolbar
+   * buttons and a hand-written row menu, which is `navigation.md`'s "no command is palette-only"
+   * broken rather than merely unpolished. Same three verbs as the other catalogs, so the same
+   * builder, plus its own view switches as page commands.
+   */
+  const capabilitiesFor = useCallback(
+    (rowId: string | null, count: number) =>
+      catalogCapabilities({
+        createLabel: "New metric",
+        openLabel: "Open metric",
+        selection: {
+          id: rowId,
+          count,
+          label: rows.find((entry) => entry.id === rowId)?.title,
+        },
+        onCreate: createNew,
+        onOpen: openDrawer,
+        onDelete: requestDelete,
+      }),
+    [rows, createNew, openDrawer, requestDelete],
+  );
+
+  const commandCapabilities = useMemo(
+    () => capabilitiesFor(selected?.id ?? null, selected ? 1 : 0),
+    [capabilitiesFor, selected],
+  );
+  const commands = useMemo(
+    () => buildGridCommands(commandCapabilities),
+    [commandCapabilities],
+  );
+  useRegisterCommands(commands);
+
   const rowMenu = useCallback(
     (metricId: string): MenuItem[] => {
       const row = rows.find((r) => r.id === metricId);
       if (!row) return [];
-      return [
-        {
-          label: "Open metric",
-          shortcut: "Enter",
-          onSelect: () => openDrawer(metricId),
-        },
-        { label: "New metric", shortcut: "Insert", onSelect: createNew },
-        "separator",
-        {
-          label: "Delete",
-          shortcut: "Delete",
-          destructive: true,
-          onSelect: () => setPendingDelete(row),
-        },
-      ];
+      return rowMenuFor(capabilitiesFor(metricId, 1), {
+        id: metricId,
+        count: 1,
+        label: row.title,
+      });
     },
-    [rows, openDrawer, createNew],
+    [rows, capabilitiesFor],
   );
 
   // Same document-level keys as Notes / Outline. Apple keyboards have no Insert, so
@@ -242,26 +279,9 @@ export function MetricsView({
       if (drawerDetail || drawerPending || pendingDelete || menu) return;
       if (isTypingTarget(event.target)) return;
 
-      const insert = event.key === "Insert" || (event.key === "Enter" && event.metaKey);
-      if (insert && !event.shiftKey && !event.ctrlKey) {
-        event.preventDefault();
-        createNew();
-        return;
-      }
-
       if (!selected) return;
 
       switch (event.key) {
-        case "Enter":
-          if (event.metaKey || event.ctrlKey) return;
-          event.preventDefault();
-          openDrawer(selected.id);
-          break;
-        case "Delete":
-        case "Backspace":
-          event.preventDefault();
-          setPendingDelete(selected);
-          break;
         case "ArrowDown":
           event.preventDefault();
           moveSelection(1);
@@ -275,16 +295,7 @@ export function MetricsView({
 
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [
-    drawerDetail,
-    drawerPending,
-    pendingDelete,
-    menu,
-    selected,
-    createNew,
-    openDrawer,
-    moveSelection,
-  ]);
+  }, [drawerDetail, drawerPending, pendingDelete, menu, selected, moveSelection]);
 
   const chartSource =
     chartDetail && selected && chartDetail.id === selected.id ? chartDetail : null;
@@ -293,17 +304,17 @@ export function MetricsView({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <TabToolbar>
-        <ToolbarButton onClick={createNew} disabled={busy} title="Insert">
-          New Metric
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => selected && setPendingDelete(selected)}
-          disabled={!selected || busy}
-          title="Delete"
-        >
-          Delete
-        </ToolbarButton>
+      {/*
+        The switches stay on the lens row — they change *what is listed*. New / Open / Delete moved
+        into the command row's menus and icon buttons, which is also how they reached `⌘K` and `⋯`
+        for the first time.
+      */}
+      <TabToolbar
+        commandRow={
+          <CommandBar commands={commands} selection={commandCapabilities.selection} />
+        }
+        pinned={<OverflowMenu label="More commands for metrics" />}
+      >
         <ToolbarToggle
           checked={activeOnly}
           onChange={() => setActiveOnly((v) => !v)}

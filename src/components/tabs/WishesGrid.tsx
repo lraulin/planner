@@ -9,6 +9,8 @@ import { updateNodeItemAction } from "@/app/outline/detail-actions";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import { DataGrid } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";
+import { rowMenuFor } from "@/components/grid/rowMenu";
+import type { GridCommandCapabilities } from "@/lib/grid/commandDeck";
 import { GridToolbar } from "@/components/grid/GridToolbar";
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import type { GridDefaults } from "@/components/grid/useGridState";
@@ -196,11 +198,6 @@ export function WishesGrid({
     : null;
   const detailNode = detailNodeId ? (byNodeId.get(detailNodeId) ?? null) : null;
 
-  const openOwner = useCallback(() => {
-    if (!selectedWish) return;
-    setDetailNodeId(selectedWish.nodeId);
-  }, [selectedWish, setDetailNodeId]);
-
   const columnCtx: WishesColumnCtx = useMemo(
     () => ({
       onPriorityChange: (row, letter: PriorityLetter | null, rank: number | null) => {
@@ -235,59 +232,66 @@ export function WishesGrid({
     void writeClipboardText(text);
   }, [orderedIds, rows, selectedIds]);
 
+  const capabilitiesFor = useCallback(
+    (wishId: string | null, count: number): GridCommandCapabilities => {
+      const wish = wishId ? (rows.find((row) => row.id === wishId) ?? null) : null;
+      return {
+        selection: { id: wishId, count, label: wish?.title },
+        actions: { onCopyAsText: copySelectionAsText },
+        pageCommands: [
+          /*
+           * `record.open` by id, overriding the built-in — see `buildGridCommands`.
+           *
+           * A wish is a row on a Goal, so opening one opens its **owner**. The hand-written row menu
+           * here already said "Open owner" while the toolbar button said "Open": the same command,
+           * named two things, in the two places that had to agree. Overriding the built-in is how one
+           * name reaches every surface.
+           */
+          {
+            id: "record.open",
+            label: "Open owner",
+            group: "record",
+            menu: "item",
+            section: "Item",
+            icon: "open",
+            toolbar: 50,
+            rowMenu: true,
+            bindings: [{ key: "Enter" }],
+            keywords: "goal parent node",
+            disabled: wish === null,
+            title: wish ? undefined : "Select a row first",
+            run: () => wish && setDetailNodeId(wish.nodeId),
+          },
+        ],
+      };
+    },
+    [rows, copySelectionAsText, setDetailNodeId],
+  );
+
   const commandCapabilities = useMemo(
-    () => ({
-      selection: {
-        id: selectedId,
-        count: selectedIds.size,
-        label: selectedWish?.title,
-      },
-      actions: {
-        onOpen: () => openOwner(),
-        onCopyAsText: copySelectionAsText,
-      },
-    }),
-    [selectedId, selectedIds.size, selectedWish?.title, openOwner, copySelectionAsText],
+    () => capabilitiesFor(selectedId, selectedIds.size),
+    [capabilitiesFor, selectedId, selectedIds.size],
   );
 
   const rowMenu = useCallback(
     (wishId: string): MenuItem[] => {
       const wish = rows.find((row) => row.id === wishId);
       if (!wish) return [];
-      const multiCount = selectedIds.has(wishId) ? selectedIds.size : 1;
-      return [
-        {
-          label: "Open owner",
-          shortcut: "Enter",
-          onSelect: () => setDetailNodeId(wish.nodeId),
-        },
-        {
-          label: multiCount > 1 ? `Copy as text (${multiCount})` : "Copy as text",
-          shortcut: "⌘C",
-          onSelect: copySelectionAsText,
-        },
-      ];
+      const count = selectedIds.has(wishId) ? selectedIds.size : 1;
+      return rowMenuFor(capabilitiesFor(wishId, count), {
+        id: wishId,
+        count,
+        label: wish.title,
+      });
     },
-    [rows, setDetailNodeId, selectedIds, copySelectionAsText],
+    [rows, selectedIds, capabilitiesFor],
   );
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (detailNodeId) return;
       if (isTypingTarget(event.target)) return;
-      if (
-        (event.metaKey || event.ctrlKey) &&
-        !event.altKey &&
-        (event.key === "c" || event.key === "C")
-      ) {
-        event.preventDefault();
-        copySelectionAsText();
-        return;
-      }
-      if (event.key === "Enter" && selectedWish) {
-        event.preventDefault();
-        setDetailNodeId(selectedWish.nodeId);
-      } else if (event.key === "ArrowDown") {
+      if (event.key === "ArrowDown") {
         event.preventDefault();
         move(1, event.shiftKey);
       } else if (event.key === "ArrowUp") {

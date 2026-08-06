@@ -12,6 +12,8 @@ import {
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { DataGrid } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";
+import { rowMenuFor } from "@/components/grid/rowMenu";
+import { catalogCapabilities } from "@/components/grid/catalogCommands";
 import { GridToolbar } from "@/components/grid/GridToolbar";
 import { useModuleViews } from "@/components/grid/useModuleViews";
 import type { GridDefaults } from "@/components/grid/useGridState";
@@ -77,10 +79,6 @@ export function ResourcesView({
   const orderedIds = useMemo(() => rows.map((row) => row.id), [rows]);
   const multi = useMultiSelect(orderedIds, null);
   const { selectedId, selectedIds, select, move } = multi;
-  const selected = selectedId
-    ? (rows.find((row) => row.id === selectedId) ?? null)
-    : null;
-
   const refresh = useCallback(() => {
     startTransition(async () => {
       const result = await listResourcesAction();
@@ -129,64 +127,44 @@ export function ResourcesView({
     [rows],
   );
 
-  const commandCapabilities = useMemo(
-    () => ({
-      selection: {
-        id: selectedId,
-        count: selectedIds.size,
-        label: selected?.shortName,
-      },
-      actions: { onOpen: openDrawer, onDelete: requestDelete },
-      pageCommands: [
-        {
-          id: "resources.create",
-          label: "New resource",
-          group: "record" as const,
-          toolbarGroup: "create" as const,
-          primary: true,
-          shortcut: "Insert",
-          run: createNew,
+  const capabilitiesFor = useCallback(
+    (rowId: string | null, count: number) =>
+      catalogCapabilities({
+        createLabel: "New resource",
+        openLabel: "Open resource",
+        selection: {
+          id: rowId,
+          count,
+          label: rows.find((entry) => entry.id === rowId)?.shortName,
         },
-      ],
-    }),
-    [
-      selectedId,
-      selectedIds.size,
-      selected?.shortName,
-      openDrawer,
-      requestDelete,
-      createNew,
-    ],
+        onCreate: createNew,
+        onOpen: openDrawer,
+        onDelete: requestDelete,
+      }),
+    [rows, createNew, openDrawer, requestDelete],
+  );
+
+  const commandCapabilities = useMemo(
+    () => capabilitiesFor(selectedId, selectedIds.size),
+    [capabilitiesFor, selectedId, selectedIds.size],
   );
 
   const rowMenu = useCallback(
     (id: string): MenuItem[] => {
       const row = rows.find((resource) => resource.id === id);
       if (!row) return [];
-      return [
-        { label: "Open resource", shortcut: "Enter", onSelect: () => openDrawer(id) },
-        { label: "New resource", shortcut: "Insert", onSelect: createNew },
-        "separator",
-        {
-          label: "Delete",
-          shortcut: "Delete",
-          destructive: true,
-          onSelect: () => setPendingDelete(row),
-        },
-      ];
+      return rowMenuFor(capabilitiesFor(id, 1), {
+        id: id,
+        count: 1,
+        label: row.shortName,
+      });
     },
-    [rows, openDrawer, createNew],
+    [rows, capabilitiesFor],
   );
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (openId || pendingDelete || isTypingTarget(event.target)) return;
-      const insert = event.key === "Insert" || (event.key === "Enter" && event.metaKey);
-      if (insert && !event.shiftKey && !event.ctrlKey) {
-        event.preventDefault();
-        createNew();
-        return;
-      }
       if (event.key === "ArrowDown") {
         event.preventDefault();
         move(1, event.shiftKey);
@@ -197,19 +175,10 @@ export function ResourcesView({
         move(-1, event.shiftKey);
         return;
       }
-      if (!selected) return;
-      if (event.key === "Enter" && !event.metaKey && !event.ctrlKey) {
-        event.preventDefault();
-        openDrawer(selected.id);
-      }
-      if (event.key === "Delete" || event.key === "Backspace") {
-        event.preventDefault();
-        setPendingDelete(selected);
-      }
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [openId, pendingDelete, selected, createNew, move, openDrawer]);
+  }, [openId, pendingDelete, move]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">

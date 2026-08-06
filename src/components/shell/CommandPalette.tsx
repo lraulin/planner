@@ -9,6 +9,7 @@ import {
   mergeCommands,
   type Command,
 } from "@/lib/commands/registry";
+import { formatBindings } from "@/lib/commands/bindings";
 import { COMMAND_PALETTE_EVENT } from "./commandEvent";
 import { useCommands } from "./CommandProvider";
 import { useGlobalCommands } from "./globalCommands";
@@ -182,9 +183,9 @@ function PaletteDialog({ onClose }: { onClose: () => void }) {
                   } ${!command.disabled && index === active ? "bg-surface-raised" : ""}`}
                 >
                   <span className="flex-1 truncate">{command.label}</span>
-                  {command.shortcut && (
+                  {formatBindings(command.bindings) && (
                     <span className="tabular flex-none text-[0.6875rem] text-ink-faint">
-                      {command.shortcut}
+                      {formatBindings(command.bindings)}
                     </span>
                   )}
                 </button>

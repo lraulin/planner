@@ -409,13 +409,30 @@ per-tab switches.
 
 ## Toolbar
 
-`GridToolbar` renders the shared controls from `GridState`; the tab supplies only what is
-its own, through `views` (its `useModuleViews` result), `left` (scope pickers) and `right`
-(record actions).
+**Two rows: verbs above, lens below.**
 
-A tab declares **what it has** — columns, switches, group dimensions. It does not assemble
-buttons. If you find yourself adding a control to one grid, add it to `GridToolbar` instead
-and let every grid have it.
+`GridToolbar` renders both. Row 1 is `CommandBar` — the view's named menus, the handful of
+commands promoted to icon buttons, the selection chip, the Commands panel toggle. Row 2 is the
+lens: view picker, scope pickers, search, `Filter…`, `Group by`, the tab's switches, density,
+with the chip bar under it.
+
+One row held both and the result was a flat run of identically-bordered controls where `New` and
+`Rename` sat between `Group by` and `Density` with nothing to say which kind of thing was which.
+Zoning a single row does not survive the real width: a view picker, two scope pickers, search,
+Filter, two `Group by` levels, switches and density already fill 1280px. ~28px is what the split
+costs and a bar you can read in one sweep is what it buys.
+
+Below `md` there is **one** row — the lens, panning sideways, with `⋯` pinned outside the
+scroller. The verbs are all inside `⋯` there (`responsive.md`).
+
+A tab supplies only what is its own: `commandCapabilities` (what can be done to a row),
+`views`, `left` (scope pickers) and `right`.
+
+A tab declares **what it has** — columns, switches, group dimensions, command capabilities. It
+does not assemble buttons, and it does not decide which surface a command appears on: the command
+declares its own `menu` / `section` / `icon` / `toolbar` / `rowMenu` and every surface reads that.
+If you find yourself adding a control to one grid, add it to `GridToolbar` instead and let every
+grid have it.
 
 **And take controls back out again.** A toolbar earns its width; every button on it is one
 the user has to read past to find the one they want. Two tests, both of which the grid has
@@ -432,9 +449,9 @@ failed at least once:
   cost one click and bought `Collapse all`, which the bespoke toggle never had.
 
 - **Does the tab already have one?** Rename and Open were spelled out identically on four
-  tabs; they are `GridToolbar`'s `rowActions` now. `ux-principles.md` requires them — `F2` and
-  `Enter` are the real bindings and a shortcut with no button fails whoever does not know it —
-  but a tab should declare that it has a selection, not assemble two buttons.
+  tabs; they are commands built from `commandCapabilities` now. `ux-principles.md` requires them
+  — `F2` and `Enter` are the real bindings and a shortcut with no button fails whoever does not
+  know it — but a tab should declare that it has a selection, not assemble two buttons.
 - **Is a second control reporting the same number?** The Task Chooser said `20 of 47` beside
   the chip bar saying `Showing 20 of 20`, because the grid can only count the rows it was
   handed. One count, in the chip bar, with the host passing the real denominator.
@@ -442,32 +459,33 @@ failed at least once:
 Prefer a control that shows its own state to one that needs a label to say what it is:
 density is a two-button segmented control (`Roomy` / `Dense`), not a `Density:` select.
 
-### The overflow tier
+### The menu tier
 
-A control that survives those tests but is used **occasionally** does not have to hold width
-on every grid on every screen forever. It goes behind `⋯` at the end of the bar, which renders
-the commands the grid registered (`navigation.md`). `Show Fields` and `Reset this grid` live
-there; `Filter…`, `Group by`, the tab's switches, density and `Rename` / `Open` stayed on the
-bar.
+A control that survives those tests but is used **occasionally** does not have to hold width on
+every grid on every screen forever. It goes in the menu it belongs to — `Show Fields` and
+`Reset this grid` are `View ▸ Layout` — and stays off the icon row.
+
+That demotion used to cost something, because the only tier below the bar was an unsorted `⋯`
+list. A _named, sectioned_ menu is findable by reading, so a command in `View ▸ Layout` is one
+click away **and** discoverable, which is what makes the tier honest.
 
 Three tiers, and a control belongs in the lowest one that still works:
 
-| Tier           | Test                                                        |
-| -------------- | ----------------------------------------------------------- |
-| **On the bar** | Used most sessions, or required visible (`Rename` / `Open`) |
-| **Behind `⋯`** | A real command, used occasionally                           |
-| **Deleted**    | Fails one of the tests above                                |
+| Tier           | Test                                                                               |
+| -------------- | ---------------------------------------------------------------------------------- |
+| **On the bar** | Used most sessions. An icon button on the command row, or a widget on the lens row |
+| **In a menu**  | A real command, used occasionally (`Show Fields`, `Convert to…`, the zooms)        |
+| **Deleted**    | Fails one of the tests above                                                       |
 
-`⋯` is not a place to hide things you could not justify. If a control fails the "column filter
-wearing a checkbox" or "unavailable or duplicated" test, moving it into the menu does not fix
-it — a menu with junk in it is read exactly as carefully as a toolbar with junk on it, which is
-to say not at all. And it is not optional cover for a keyboard shortcut: it is the _visible_
-path `ux-principles.md` requires, which is why it is a real button with a 44px tap target and
-not a hover reveal.
+A menu is not a place to hide things you could not justify. If a control fails the "column filter
+wearing a checkbox" or "unavailable or duplicated" test, moving it into a menu does not fix it —
+a menu with junk in it is read exactly as carefully as a toolbar with junk on it, which is to say
+not at all.
 
-Keep _commands_ and _view controls_ in separate bars where a view has many commands (the
-Outline: add / indent / delete in `FilterBar`, search / filter / fields / density in
-`GridToolbar`). They are different kinds of thing and mixing them makes both harder to find.
+**Commands and view controls go in different rows, always** — not "where a view has many
+commands". They answer different questions ("what can I do" vs "what am I looking at") and the
+rows are what say so. That rule used to be conditional and the Outline was the only view that
+followed it, with a bespoke second bar; it is now `GridToolbar`'s shape for every grid.
 
 Below `md` the toolbar is one horizontally-scrolling row, and dialogs open as sheets — see
 `responsive.md`. Tap targets stay 44px; that is not covered by the accessibility exemption

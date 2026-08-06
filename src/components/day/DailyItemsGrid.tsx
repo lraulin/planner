@@ -20,7 +20,8 @@ import type { DailyItemView } from "@/lib/day/types";
 import { shiftDateKey } from "@/lib/schedule/geometry";
 import { copyAsText, writeClipboardText } from "@/lib/tree/copyAsText";
 import { isTypingTarget } from "@/lib/keyboard";
-import { GridCommandDeck } from "@/components/grid/GridCommandDeck";
+import { CommandBar } from "@/components/grid/CommandBar";
+import { rowMenuFor } from "@/components/grid/rowMenu";
 import {
   buildGridCommands,
   type GridCommandCapabilities,
@@ -192,58 +193,212 @@ export function DailyItemsGrid({
     document.querySelector<HTMLInputElement>("[data-day-quick-entry]")?.focus();
   }, []);
 
-  const commandCapabilities = useMemo<GridCommandCapabilities>(
-    () => ({
-      selection: {
-        id: selectedId,
-        count: selectedIds.size,
-        label: items.find((item) => item.id === selectedId)?.title,
-      },
-      actions: {
-        onCopyAsText: copySelectionAsText,
-        onOpen: (id) => {
-          const item = items.find((entry) => entry.id === id);
-          if (item?.nodeId) onOpenTask(item.nodeId, item.title);
+  /**
+   * Everything this day can do, for one row.
+   *
+   * This used to be two lists: three page commands for the toolbar, and a hand-written thirteen-item
+   * right-click menu with `Rank A`, `Move to tomorrow`, `Mark delegated` and the rest reachable *only*
+   * by right-click. They were legal — a context menu is a visible path — but absent from the menus,
+   * the panel and the palette, so `⌘K` could not answer "how do I rank this B". One list now, and
+   * every surface gets all of it.
+   *
+   * Parameterised by row rather than closing over the selection, because right-clicking an unselected
+   * row has to rank *that* row.
+   */
+  const capabilitiesFor = useCallback(
+    (itemId: string | null, count: number): GridCommandCapabilities => {
+      const item = itemId ? (items.find((entry) => entry.id === itemId) ?? null) : null;
+      const nodeId = item?.nodeId ?? null;
+      // A right-click inside the selection ranks the whole selection; outside it, just that row.
+      const block =
+        itemId && selectedIds.has(itemId)
+          ? orderedIds.filter((id) => selectedIds.has(id))
+          : itemId
+            ? [itemId]
+            : [];
+      const suffix = count > 1 ? ` (${count})` : "";
+      const noRow = item ? undefined : "Select a row first";
+
+      return {
+        selection: { id: itemId, count, label: item?.title },
+        actions: {
+          onCopyAsText: copySelectionAsText,
+          onOpen: () => {
+            if (item && nodeId) onOpenTask(nodeId, item.title);
+          },
         },
-      },
-      pageCommands: [
-        {
-          id: "day.create",
-          label: "New day item",
-          group: "record",
-          toolbarGroup: "create",
-          primary: true,
-          shortcut: "Insert",
-          run: focusDraft,
-        },
-        {
-          id: "day.remove",
-          label: "Remove from this day",
-          group: "record",
-          toolbarGroup: "more",
-          disabled: selectedId === null,
-          title: selectedId === null ? "Select a row first" : undefined,
-          run: () => selectedId && onDelete(selectedId),
-        },
-        {
-          id: "day.reset-grid",
-          label: "Reset this grid",
-          group: "view",
-          toolbarGroup: "more",
-          run: gridState.reset,
-        },
-      ],
-    }),
+        pageCommands: [
+          {
+            id: "day.create",
+            label: "New day item",
+            group: "record",
+            menu: "new",
+            section: "New",
+            icon: "new",
+            toolbar: 10,
+            bindings: [{ key: "Insert" }, { key: "Enter", meta: true }],
+            run: focusDraft,
+          },
+          /*
+           * `record.open` by id, so this replaces the built-in rather than sitting beside it — see
+           * `buildGridCommands`. A day line that came from a task opens the task; one typed straight
+           * into the day has no task to open, and `Promote to task…` is the command that gives it
+           * one. Two different verbs, so two rows, each disabled when it is the wrong one.
+           */
+          {
+            id: "record.open",
+            label: "Open task",
+            group: "record",
+            menu: "item",
+            section: "Item",
+            icon: "open",
+            toolbar: 50,
+            rowMenu: true,
+            bindings: [{ key: "Enter" }],
+            disabled: nodeId === null,
+            title:
+              noRow ??
+              (nodeId ? undefined : "This line is not a task yet — promote it first"),
+            run: () => {
+              if (item && nodeId) onOpenTask(nodeId, item.title);
+            },
+          },
+          {
+            id: "day.promote",
+            label: "Promote to task…",
+            group: "record",
+            menu: "item",
+            section: "Item",
+            icon: "convert",
+            rowMenu: true,
+            keywords: "make real project outline",
+            disabled: item === null || nodeId !== null,
+            title: noRow ?? (nodeId ? "Already a task" : undefined),
+            run: () => itemId && onPromote(itemId),
+          },
+          {
+            id: "day.move-tomorrow",
+            label: "Move to tomorrow",
+            group: "record",
+            menu: "organize",
+            section: "Move",
+            icon: "move-down",
+            toolbar: 30,
+            rowMenu: true,
+            keywords: "defer push postpone",
+            disabled: item === null,
+            title: noRow,
+            run: () => {
+              if (item && itemId) onMoveToDay(itemId, shiftDateKey(item.day, 1));
+            },
+          },
+          // Ranking is a drag on desktop and drag is off on touch, so the same moves have to
+          // exist as named commands or A/B/C/D is unreachable from a phone entirely.
+          ...DAY_LETTERS.map((letter) => ({
+            id: `day.rank-${letter}`,
+            label: `Rank ${letter}${suffix}`,
+            group: "record" as const,
+            menu: "organize" as const,
+            section: "Rank",
+            icon: "priority" as const,
+            rowMenu: true,
+            disabled: item === null,
+            title: noRow,
+            run: () => onApplyPriorities(planDayDropOnLetter(items, block, letter)),
+          })),
+          {
+            id: "day.rank-clear",
+            label: `Clear rank${suffix}`,
+            group: "record",
+            menu: "organize",
+            section: "Rank",
+            icon: "priority",
+            rowMenu: true,
+            disabled: item === null,
+            title: noRow,
+            run: () => onApplyPriorities(planDayClear(items, block)),
+          },
+          ...(
+            [
+              ["in_progress", "Mark in progress"],
+              ["delegated", "Mark delegated"],
+              // Cancel = "not doing this" (stays on the day with an X). Remove takes the line off
+              // the day; Delete task… deletes the task itself. All three used to be one
+              // mislabelled "Mark deleted".
+              ["cancelled", "Mark cancelled"],
+            ] as const
+          ).map(([state, label]) => ({
+            id: `day.state-${state}`,
+            label,
+            group: "record" as const,
+            menu: "organize" as const,
+            section: "State",
+            icon: "convert" as const,
+            rowMenu: true,
+            disabled: item === null,
+            title: noRow,
+            run: () => itemId && onSetState(itemId, state),
+          })),
+          {
+            id: "day.remove",
+            label: "Remove from this day",
+            group: "record",
+            menu: "item",
+            section: "Danger",
+            icon: "delete",
+            rowMenu: true,
+            destructive: true,
+            disabled: item === null,
+            title: noRow,
+            run: () => itemId && onDelete(itemId),
+          },
+          {
+            id: "day.delete-task",
+            label: "Delete task…",
+            group: "record",
+            menu: "item",
+            section: "Danger",
+            icon: "delete",
+            rowMenu: true,
+            destructive: true,
+            disabled: nodeId === null,
+            title: noRow ?? (nodeId ? undefined : "This line is not a task"),
+            run: () => {
+              if (itemId && nodeId) onDeleteTask(itemId, nodeId);
+            },
+          },
+          {
+            id: "day.reset-grid",
+            label: "Reset this grid",
+            group: "view",
+            menu: "view",
+            section: "Layout",
+            icon: "reset",
+            run: gridState.reset,
+          },
+        ],
+      };
+    },
     [
-      selectedId,
-      selectedIds.size,
       items,
+      orderedIds,
+      selectedIds,
       copySelectionAsText,
       onOpenTask,
+      onPromote,
+      onMoveToDay,
+      onSetState,
       onDelete,
+      onDeleteTask,
+      onApplyPriorities,
       focusDraft,
       gridState.reset,
     ],
+  );
+
+  const commandCapabilities = useMemo(
+    () => capabilitiesFor(selectedId, selectedIds.size),
+    [capabilitiesFor, selectedId, selectedIds.size],
   );
   const commands = useMemo(
     () => buildGridCommands(commandCapabilities),
@@ -255,104 +410,22 @@ export function DailyItemsGrid({
     (itemId: string): MenuItem[] => {
       const item = items.find((entry) => entry.id === itemId);
       if (!item) return [];
-      const multiCount = selectedIds.has(itemId) ? selectedIds.size : 1;
-      const block = selectedIds.has(itemId)
-        ? orderedIds.filter((id) => selectedIds.has(id))
-        : [itemId];
-
-      const tomorrow = shiftDateKey(item.day, 1);
-
-      return [
-        {
-          label: multiCount > 1 ? `Copy as text (${multiCount})` : "Copy as text",
-          shortcut: "⌘C",
-          onSelect: copySelectionAsText,
-        },
-        ...(item.nodeId
-          ? [
-              {
-                label: "Open task",
-                shortcut: "Enter",
-                onSelect: () => onOpenTask(item.nodeId!, item.title),
-              },
-            ]
-          : [
-              {
-                label: "Promote to task…",
-                onSelect: () => onPromote(itemId),
-              },
-            ]),
-        { label: "Move to tomorrow", onSelect: () => onMoveToDay(itemId, tomorrow) },
-        // Ranking is a drag on desktop and drag is off on touch, so the same moves have to
-        // exist as named commands or A/B/C/D is unreachable from a phone entirely.
-        ...DAY_LETTERS.map((letter) => ({
-          label: multiCount > 1 ? `Rank ${letter} (${multiCount})` : `Rank ${letter}`,
-          onSelect: () => onApplyPriorities(planDayDropOnLetter(items, block, letter)),
-        })),
-        {
-          label: multiCount > 1 ? `Clear rank (${multiCount})` : "Clear rank",
-          onSelect: () => onApplyPriorities(planDayClear(items, block)),
-        },
-        {
-          label: "Mark in progress",
-          onSelect: () => onSetState(itemId, "in_progress"),
-        },
-        { label: "Mark delegated", onSelect: () => onSetState(itemId, "delegated") },
-        // Cancel = "not doing this" (stays on the day with an X). Delete removes the line
-        // or the task. They used to share one mislabelled "Mark deleted" entry.
-        {
-          label: "Mark cancelled",
-          onSelect: () => onSetState(itemId, "cancelled"),
-        },
-        { label: "Remove from this day", onSelect: () => onDelete(itemId) },
-        ...(item.nodeId
-          ? [
-              {
-                label: "Delete task…",
-                onSelect: () => onDeleteTask(itemId, item.nodeId!),
-              },
-            ]
-          : []),
-      ];
+      const count = selectedIds.has(itemId) ? selectedIds.size : 1;
+      return rowMenuFor(capabilitiesFor(itemId, count), {
+        id: itemId,
+        count,
+        label: item.title,
+      });
     },
-    [
-      items,
-      orderedIds,
-      selectedIds,
-      onPromote,
-      onMoveToDay,
-      onSetState,
-      onDelete,
-      onDeleteTask,
-      onOpenTask,
-      onApplyPriorities,
-      copySelectionAsText,
-    ],
+    [items, selectedIds, capabilitiesFor],
   );
 
-  // ⌘C / Enter / arrows when the day list has focus and no field is editing.
+  // Arrows only. ⌘C and Enter are `bindings` on the commands now — see `CommandKeys`.
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (isTypingTarget(event.target)) return;
       if (!selectedId) return;
 
-      if (
-        (event.metaKey || event.ctrlKey) &&
-        !event.altKey &&
-        (event.key === "c" || event.key === "C")
-      ) {
-        event.preventDefault();
-        copySelectionAsText();
-        return;
-      }
-      if (event.key === "Enter") {
-        const item = items.find((entry) => entry.id === selectedId);
-        if (item?.nodeId) {
-          event.preventDefault();
-          onOpenTask(item.nodeId, item.title);
-        }
-        return;
-      }
       if (event.key === "ArrowDown") {
         event.preventDefault();
         move(1, event.shiftKey);
@@ -363,7 +436,7 @@ export function DailyItemsGrid({
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [selectedId, items, copySelectionAsText, move, onOpenTask]);
+  }, [selectedId, move]);
 
   /**
    * The two things done to a day item most often, and both reversible — swipe right ticks it
@@ -407,8 +480,18 @@ export function DailyItemsGrid({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <TabToolbar pinned={<OverflowMenu label="More commands for this day" />}>
-        <GridCommandDeck commands={commands} capabilities={commandCapabilities} />
+      {/*
+        No lens row: the Day grid has no view picker, no scope and no grouping controls — its rows
+        are one date's list. So the command row is the whole toolbar, and below `md` the pinned `⋯`
+        is, which is why the `children` slot here is empty.
+      */}
+      <TabToolbar
+        commandRow={
+          <CommandBar commands={commands} selection={commandCapabilities.selection} />
+        }
+        pinned={<OverflowMenu label="More commands for this day" />}
+      >
+        {null}
       </TabToolbar>
       <div className="min-h-0 flex-1 overflow-auto">
         <DataGrid<DayColumnCtx, DailyItemView>

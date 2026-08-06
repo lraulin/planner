@@ -18,6 +18,7 @@ import {
   ToolbarToggle,
 } from "@/components/tabs/tabChrome";
 import { useGridTab } from "@/components/tabs/useGridTab";
+import { useNodeCommandDeck } from "@/components/grid/useNodeCommandDeck";
 import {
   applyDateFilter,
   buildChooserItems,
@@ -39,7 +40,6 @@ import {
 import type { ChooserDateFilter, ChooserViewId } from "@/lib/chooser/types";
 import type { PriorityLetter } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
-import { kindOfNode } from "@/lib/tree/hierarchy";
 import { setTcPrioritiesAction } from "@/app/outline/actions";
 import {
   buildChooserColumns,
@@ -102,15 +102,22 @@ export function ChooserGrid({
   plannedNodeIds?: string[];
 }) {
   const tab = useGridTab(initialNodes);
+  // The Chooser is a projection of the tree like Tasks and Projects are, so it gets the same
+  // non-structural command set rather than the two-action `rowActions` shim it used to pass —
+  // which was the last caller of that path, and the reason the path existed.
+  const nodeCommands = useNodeCommandDeck({
+    nodes: tab.nodes,
+    selectedId: tab.selectedId,
+    selectedIds: tab.selectedIds,
+    apply: tab.apply,
+    onOpen: tab.openDetail,
+    onRename: tab.setEditingId,
+    onCopyAsText: tab.copySelectionAsText,
+  });
   const [dateFilter, setDateFilter] = useState<ChooserDateFilter>("none");
   const [limit, setLimit] = useState(INITIAL_LIMIT);
   const [showSettings, setShowSettings] = useState(false);
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
-
-  const selectedNode = useMemo(
-    () => tab.nodes.find((node) => node.id === tab.selectedId) ?? null,
-    [tab.nodes, tab.selectedId],
-  );
 
   const allColumns = useMemo(() => buildChooserColumns(tab.today), [tab.today]);
   const views = useModuleViews({
@@ -381,14 +388,10 @@ export function ChooserGrid({
             />
           </>
         }
-        rowActions={{
-          selectedId: tab.selectedId,
-          selectedLabel: selectedNode?.name,
-          selectedKind: selectedNode ? kindOfNode(selectedNode) : undefined,
-          onRename: tab.setEditingId,
-          onOpen: tab.openDetail,
-        }}
+        commandCapabilities={nodeCommands.capabilities}
       />
+
+      {nodeCommands.conversionDialog}
 
       <div className="flex flex-none items-baseline gap-2 border-b border-rule bg-surface-raised/60 px-4 py-1.5">
         <span className="flex-none text-[0.6875rem] font-medium uppercase tracking-wider text-ink-faint">
@@ -413,7 +416,7 @@ export function ChooserGrid({
         onSelect={tab.select}
         onOpenDetail={tab.openDetail}
         ariaLabel="Task Chooser"
-        rowMenu={tab.rowMenu}
+        rowMenu={nodeCommands.rowMenu}
         rowDrag={rowDrag}
         rowNumbers
         enableFilters={advancedFilters}

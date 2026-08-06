@@ -1,0 +1,264 @@
+import { describe, expect, it } from "vitest";
+import {
+  buildMenus,
+  commandOrder,
+  MENU_SECTIONS,
+  overflowMenus,
+  rowMenuSections,
+  toolbarCommands,
+  toolbarSegments,
+} from "./menus";
+import { COMMAND_MENUS, COMMAND_MENU_LABELS, type Command } from "./registry";
+
+function command(id: string, extra: Partial<Command> = {}): Command {
+  return { id, label: id, group: "record", run: () => {}, ...extra };
+}
+
+describe("buildMenus", () => {
+  it("orders menus by the declared bar order, not by when commands arrived", () => {
+    // `useCommands` hands over registrations in effect order, which is child-before-parent. A
+    // menu bar that reordered itself depending on which grid mounted first is one you have to
+    // re-read on every tab.
+    const menus = buildMenus([
+      command("a", { menu: "view", section: "Layout" }),
+      command("b", { menu: "new", section: "New" }),
+      command("c", { menu: "organize", section: "Move" }),
+    ]);
+
+    expect(menus.map((menu) => menu.id)).toEqual(["new", "organize", "view"]);
+    expect(menus.map((menu) => menu.label)).toEqual(["New", "Organize", "View"]);
+  });
+
+  it("orders sections by the declared taxonomy, not by declaration order", () => {
+    // The real case: `Expand all items` is palette-group `view` and `Move up` is `record`, so
+    // anything ordering by group or by build order puts Expand above Move inside one menu.
+    const [organize] = buildMenus([
+      command("expand", { menu: "organize", section: "Expand" }),
+      command("zoom", { menu: "organize", section: "Zoom" }),
+      command("move", { menu: "organize", section: "Move" }),
+      command("priority", { menu: "organize", section: "Priority" }),
+    ]);
+
+    expect(organize.sections.map((section) => section.label)).toEqual([
+      "Move",
+      "Expand",
+      "Priority",
+      "Zoom",
+    ]);
+  });
+
+  it("keeps declaration order inside a section", () => {
+    const [organize] = buildMenus([
+      command("up", { menu: "organize", section: "Move" }),
+      command("down", { menu: "organize", section: "Move" }),
+      command("indent", { menu: "organize", section: "Move" }),
+    ]);
+
+    expect(organize.sections[0].commands.map((entry) => entry.id)).toEqual([
+      "up",
+      "down",
+      "indent",
+    ]);
+  });
+
+  it("leads with the unlabelled section and trails with sections it has never heard of", () => {
+    const [tools] = buildMenus([
+      command("invented", { menu: "tools", section: "Import" }),
+      command("bare", { menu: "tools" }),
+    ]);
+
+    expect(tools.sections.map((section) => section.label)).toEqual([null, "Import"]);
+  });
+
+  it("does not render a menu with nothing in it", () => {
+    // A flat catalog grid has creation and view control and nothing else. A bar showing five
+    // names where three open empty menus teaches you to stop opening them.
+    const menus = buildMenus([command("only", { menu: "new", section: "New" })]);
+    expect(menus.map((menu) => menu.id)).toEqual(["new"]);
+  });
+
+  it("leaves out a command with no menu", () => {
+    expect(buildMenus([command("nowhere")])).toEqual([]);
+  });
+
+  it("takes the newest definition of an id but keeps its original place", () => {
+    const menus = buildMenus([
+      command("first", { menu: "new", section: "New" }),
+      command("dupe", { menu: "new", section: "New", label: "old" }),
+      command("dupe", { menu: "new", section: "New", label: "new" }),
+    ]);
+
+    expect(menus[0].sections[0].commands.map((entry) => entry.label)).toEqual([
+      "first",
+      "new",
+    ]);
+  });
+});
+
+describe("commandOrder", () => {
+  it("dedupes by id, last winning, without reordering", () => {
+    const ordered = commandOrder([
+      command("a", { disabled: true }),
+      command("b"),
+      command("a"),
+    ]);
+
+    expect(ordered.map((entry) => entry.id)).toEqual(["a", "b"]);
+    expect(ordered[0].disabled).toBeUndefined();
+  });
+});
+
+describe("toolbarCommands", () => {
+  it("sorts by declared weight, not by build order", () => {
+    // The row reads create → insert → move → item verbs, which is not the order
+    // `buildGridCommands` happens to emit them in.
+    const promoted = toolbarCommands([
+      command("rename", { toolbar: 50 }),
+      command("new", { toolbar: 10 }),
+      command("move-up", { toolbar: 30 }),
+    ]);
+
+    expect(promoted.map((entry) => entry.id)).toEqual(["new", "move-up", "rename"]);
+  });
+
+  it("ignores everything without a weight", () => {
+    expect(toolbarCommands([command("menu-only")])).toEqual([]);
+  });
+
+  it("treats weight zero as promoted", () => {
+    // `toolbar: 0` is a legitimate first position; a truthiness check would silently drop it.
+    expect(
+      toolbarCommands([command("first", { toolbar: 0 })]).map((e) => e.id),
+    ).toEqual(["first"]);
+  });
+});
+
+describe("toolbarSegments", () => {
+  it("groups the row by weight decade, so a hairline lands between clusters", () => {
+    const segments = toolbarSegments([
+      command("new", { toolbar: 10 }),
+      command("before", { toolbar: 20 }),
+      command("after", { toolbar: 21 }),
+      command("up", { toolbar: 30 }),
+      command("down", { toolbar: 31 }),
+      command("rename", { toolbar: 50 }),
+    ]);
+
+    expect(segments.map((segment) => segment.map((entry) => entry.id))).toEqual([
+      ["new"],
+      ["before", "after"],
+      ["up", "down"],
+      ["rename"],
+    ]);
+  });
+
+  it("is empty rather than one empty segment when nothing is promoted", () => {
+    // The command row renders `null` on this; a single empty segment would draw a stray divider.
+    expect(toolbarSegments([command("menu-only")])).toEqual([]);
+  });
+});
+
+describe("rowMenuSections", () => {
+  it("shows only opted-in commands", () => {
+    const sections = rowMenuSections([
+      command("open", { menu: "item", section: "Item", rowMenu: true }),
+      command("fields", { menu: "view", section: "Layout" }),
+    ]);
+
+    expect(sections.flatMap((section) => section.commands.map((c) => c.id))).toEqual([
+      "open",
+    ]);
+  });
+
+  it("leads with the item verbs, not with New the way the bar does", () => {
+    // You right-clicked a row to do something to that row. The bar leads with New because that
+    // is where a session starts; this menu is answering a different question.
+    const sections = rowMenuSections([
+      command("insert", { menu: "new", section: "Insert row", rowMenu: true }),
+      command("move", { menu: "organize", section: "Move", rowMenu: true }),
+      command("open", { menu: "item", section: "Item", rowMenu: true }),
+    ]);
+
+    expect(sections.map((section) => section.label)).toEqual([
+      "Item",
+      "Insert row",
+      "Move",
+    ]);
+  });
+
+  it("sinks a destructive section to the bottom", () => {
+    // In the bar, Danger is the last thing in the Item menu. Here the menu opens *under the
+    // pointer*, so Delete two rows from the top is a misclick waiting to happen.
+    const sections = rowMenuSections([
+      command("delete", {
+        menu: "item",
+        section: "Danger",
+        rowMenu: true,
+        destructive: true,
+      }),
+      command("open", { menu: "item", section: "Item", rowMenu: true }),
+      command("move", { menu: "organize", section: "Move", rowMenu: true }),
+    ]);
+
+    expect(sections.map((section) => section.label)).toEqual([
+      "Item",
+      "Move",
+      "Danger",
+    ]);
+  });
+
+  it("keeps a row-menu command that forgot to name a menu", () => {
+    // A stray row at the bottom is a visible bug; a command silently missing from the only
+    // surface a touch user has is an invisible one.
+    const sections = rowMenuSections([command("orphan", { rowMenu: true })]);
+    expect(sections).toHaveLength(1);
+    expect(sections[0].commands.map((entry) => entry.id)).toEqual(["orphan"]);
+  });
+
+  it("is empty when nothing opted in", () => {
+    expect(rowMenuSections([command("a", { menu: "item", section: "Item" })])).toEqual(
+      [],
+    );
+  });
+});
+
+describe("overflowMenus", () => {
+  it("drops only the commands whose widget is still on screen below md", () => {
+    // `⋯` is the phone's menu bar. `Filter…` has a Filter button on the view bar down there, so
+    // reprinting it is the clutter the overflow tier exists to remove — but `New` and `Move up`
+    // are icon buttons on the *command* row, which the phone does not render at all, so `⋯` is
+    // the only place they exist.
+    const menus = overflowMenus([
+      command("filter", { menu: "view", section: "Layout", ownControl: true }),
+      command("fields", { menu: "view", section: "Layout" }),
+      command("new", { menu: "new", section: "New", toolbar: 10 }),
+    ]);
+
+    expect(
+      menus.flatMap((menu) =>
+        menu.sections.flatMap((s) => s.commands.map((c) => c.id)),
+      ),
+    ).toEqual(["new", "fields"]);
+  });
+});
+
+describe("the taxonomy itself", () => {
+  it("labels every menu", () => {
+    for (const menu of COMMAND_MENUS) {
+      expect(COMMAND_MENU_LABELS[menu], `${menu} has no label`).toBeTruthy();
+    }
+  });
+
+  it("declares a section list for every menu", () => {
+    for (const menu of COMMAND_MENUS) {
+      expect(MENU_SECTIONS[menu], `${menu} has no section list`).toBeDefined();
+    }
+  });
+
+  it("has no duplicate section name inside one menu", () => {
+    for (const menu of COMMAND_MENUS) {
+      const sections = MENU_SECTIONS[menu];
+      expect(new Set(sections).size, `${menu} repeats a section`).toBe(sections.length);
+    }
+  });
+});

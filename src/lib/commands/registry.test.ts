@@ -4,7 +4,6 @@ import {
   COMMAND_GROUPS,
   matchCommands,
   mergeCommands,
-  overflowCommands,
   type Command,
 } from "./registry";
 import { BUILT_MODULES, MODULES } from "@/components/shell/modules";
@@ -132,22 +131,13 @@ describe("mergeCommands", () => {
   });
 });
 
-describe("overflowCommands", () => {
-  it("drops the ones that already have a button on the toolbar", () => {
-    const commands = [
-      command("filter", "Filter…", { hasOwnControl: true }),
-      command("fields", "Show Fields"),
-      command("reset", "Reset this grid"),
-    ];
-    expect(overflowCommands(commands).map((c) => c.id)).toEqual(["fields", "reset"]);
-  });
-
-  it("does not hide them from the palette", () => {
-    // The palette has to be complete or you stop trusting it; `⋯` has to be short or it is
-    // the clutter it replaced. Same list, two questions.
-    const commands = [command("filter", "Filter…", { hasOwnControl: true })];
+describe("the palette stays complete", () => {
+  it("still lists a command whose control lives on the view bar", () => {
+    // `menus.ts` decides what each *menu* surface hides (`overflowMenus`). The palette hides
+    // nothing: it answers "what can this app do", and an answer that omits things is one you
+    // stop trusting, and then you stop opening it.
+    const commands = [command("filter", "Filter…", { ownControl: true })];
     expect(matchCommands(commands, "filter")).toHaveLength(1);
-    expect(overflowCommands(commands)).toHaveLength(0);
   });
 });
 

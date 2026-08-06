@@ -18,18 +18,19 @@ import {
 } from "@/components/tabs/tabChrome";
 import { useRegisterCommands } from "@/components/shell/CommandProvider";
 import { OverflowMenu } from "@/components/shell/OverflowMenu";
+import { useCommandsPanel } from "@/components/shell/useShellSettings";
+import { CommandGlyph } from "@/components/icons/commandIcons";
 import type { Command } from "@/lib/commands/registry";
 import { GridFilterChips } from "./GridFilterChips";
 import { GridFilterDialog } from "./GridFilterDialog";
 import { GridSearchBox } from "./GridSearchBox";
 import { ShowFieldsDialog } from "./ShowFieldsDialog";
 import { ViewPicker } from "./ViewPicker";
-import { GridCommandDeck } from "./GridCommandDeck";
+import { CommandBar } from "./CommandBar";
 import {
   buildGridCommands,
   type GridCommandCapabilities,
 } from "@/lib/grid/commandDeck";
-import type { NodeKind } from "@/lib/tree/hierarchy";
 import type { ColumnMeta } from "./columns";
 import type { GridState } from "./useGridState";
 import type { ModuleViewsApi } from "./useModuleViews";
@@ -39,13 +40,18 @@ const EMPTY_GROUP_IDS: readonly string[] = [];
 const EMPTY_SWITCHES: readonly GridSwitch[] = [];
 
 /**
- * The controls every grid gets, assembled once.
+ * The controls every grid gets, assembled once, in two rows.
  *
  * Before this, each tab hand-built roughly eight buttons and kept its distinguishing
  * toggles in plain `useState` — so unlike everything in `useGridState` they were lost on
  * reload, and adding a capability to one grid meant coding it into that grid. A tab now
- * declares **what it has** (its columns, its switches, its group dimensions) and this
- * supplies **how you control them**.
+ * declares **what it has** (its columns, its switches, its group dimensions, its command
+ * capabilities) and this supplies **how you control them**.
+ *
+ * Row 1 (`CommandBar`) is the **verbs**: the named menus, the promoted icon buttons, the selection
+ * chip, the Commands panel toggle. Row 2 is the **lens**: which view, which scope, what is filtered
+ * out, how it is grouped, how tall the rows are. The split is the point — one row holding both is
+ * what made `New` and `Group by` look like the same kind of thing.
  *
  * Everything here is driven from `GridState`, which owns the single `grid:{tabId}` scope.
  * Nothing in this component holds view state of its own except which dialog is open.
@@ -74,7 +80,6 @@ export function GridToolbar({
   switches = EMPTY_SWITCHES,
   counts,
   error,
-  rowActions,
   views,
   left,
   right,
@@ -97,19 +102,6 @@ export function GridToolbar({
   counts: { shown: number; total: number };
   error?: string | null;
   /**
-   * Rename and Open for the selected row. Every node tab had these, spelled out identically,
-   * and `ux-principles.md` requires them: `F2` and `Enter` are the real bindings, and a
-   * shortcut with no visible button fails the person who does not know it yet. One prop
-   * rather than fourteen lines per tab means they cannot drift apart.
-   */
-  rowActions?: {
-    selectedId: string | null;
-    selectedLabel?: string | null;
-    selectedKind?: NodeKind;
-    onRename: (id: string) => void;
-    onOpen: (id: string) => void;
-  };
-  /**
    * This grid's views, from `useModuleViews`. Supplying it renders the View select and
    * registers Save / Update / Rename / Delete.
    *
@@ -123,57 +115,49 @@ export function GridToolbar({
   left?: ReactNode;
   /** Tab-specific actions that come last: Rename, Open, New note. */
   right?: ReactNode;
-  /** Optional item/page capabilities. When omitted, rowActions still publish Open/Rename. */
+  /**
+   * What can be done to a row here, and what this page can make. Everything on the command row —
+   * the menus, the icon buttons, the selection chip — comes from this one object, and so does the
+   * grid's half of the palette and of every row menu.
+   *
+   * Omitted for a grid with no item actions at all: the command row then holds only the `View` menu
+   * and the panel toggle.
+   */
   commandCapabilities?: GridCommandCapabilities;
 }) {
   const [filterOpen, setFilterOpen] = useState(false);
   const [fieldsOpen, setFieldsOpen] = useState(false);
+  const { open: panelOpen, setOpen: setPanelOpen } = useCommandsPanel();
 
   const activeGroupBy = asGroupBy(grid.groupBy);
   const allCollapsed =
     groupIds.length > 0 && groupIds.every((id) => grid.collapsedGroups.has(id));
 
-  const onRename = rowActions?.onRename;
-  const onOpen = rowActions?.onOpen;
-  const rowSelectionId = rowActions?.selectedId ?? null;
-  const rowSelectionLabel = rowActions?.selectedLabel ?? null;
-  const rowSelectionKind = rowActions?.selectedKind;
-  const hasRowActions = rowActions !== undefined;
   const { reset: resetGrid, setAllGroupsCollapsed } = grid;
 
-  const deckCapabilities = useMemo<GridCommandCapabilities | undefined>(() => {
-    if (commandCapabilities) return commandCapabilities;
-    if (!hasRowActions) return undefined;
-    return {
-      selection: {
-        id: rowSelectionId,
-        label: rowSelectionLabel,
-        kind: rowSelectionKind,
-      },
-      actions: { onOpen, onRename },
-    };
-  }, [
-    commandCapabilities,
-    rowSelectionId,
-    rowSelectionLabel,
-    rowSelectionKind,
-    onOpen,
-    onRename,
-    hasRowActions,
-  ]);
-
+  /*
+   * There was a `rowActions` prop here that took a selection plus Open and Rename and built a
+   * two-command capabilities object from it. It existed because the node tabs each spelled those
+   * two buttons out by hand; by the end the Task Chooser was its only caller, and the Chooser now
+   * declares full capabilities like every other projection of the tree. A shim with one caller is
+   * a shim to delete.
+   */
   const deckCommands = useMemo(
-    () => (deckCapabilities ? buildGridCommands(deckCapabilities) : []),
-    [deckCapabilities],
+    () => (commandCapabilities ? buildGridCommands(commandCapabilities) : []),
+    [commandCapabilities],
   );
 
   /*
-   * What this grid can do, published once for both the `⌘K` palette and the `⋯` menu.
+   * What this grid can do, published once for every surface: the menu bar, the icon row, the
+   * Commands panel, a row's context menu, `⋯`, and the `⌘K` palette.
    *
-   * `hasOwnControl` marks the ones still holding a button on the bar: the palette lists
-   * everything, `⋯` lists only what is not already visible. Memoised because
-   * `useRegisterCommands` re-registers whenever this array changes, and re-registering sets
-   * state — a fresh array each render would be an infinite loop.
+   * `ownControl` marks the ones whose control is a *widget* on the lens row rather than a command
+   * button — Filter and the group collapse toggle. `⋯` skips exactly those, because down on a phone
+   * that widget is the thing still on screen. Everything else, including the commands promoted to
+   * the desktop icon row, stays in `⋯`.
+   *
+   * Memoised because `useRegisterCommands` re-registers whenever this array changes, and
+   * re-registering sets state — a fresh array each render would be an infinite loop.
    */
   const commands = useMemo<Command[]>(() => {
     const list: Command[] = [
@@ -182,14 +166,20 @@ export function GridToolbar({
         id: "view.filter",
         label: "Filter…",
         group: "view",
+        menu: "view",
+        section: "Layout",
+        icon: "filter",
         keywords: "advanced condition where",
-        hasOwnControl: true,
+        ownControl: true,
         run: () => setFilterOpen(true),
       },
       {
         id: "view.fields",
         label: "Show Fields",
         group: "view",
+        menu: "view",
+        section: "Layout",
+        icon: "fields",
         keywords: "columns hide customize current view",
         run: () => setFieldsOpen(true),
       },
@@ -197,25 +187,50 @@ export function GridToolbar({
         id: "view.reset",
         label: "Reset this grid",
         group: "view",
+        menu: "view",
+        section: "Layout",
+        icon: "reset",
         keywords: "clear default columns layout",
         title: "Clear filters, sort, column layout, grouping and density for this view",
         run: resetGrid,
+      },
+      {
+        id: "view.commands-panel",
+        label: panelOpen ? "Hide commands panel" : "Show commands panel",
+        group: "view",
+        menu: "view",
+        section: "Panels",
+        icon: "panel",
+        keywords: "pane sidebar actions palette",
+        title: "A pinned pane listing every command this view has, grouped",
+        run: () => setPanelOpen(!panelOpen),
       },
     ];
 
     if (groupIds.length > 0) {
       list.splice(1, 0, {
         id: "view.collapse-all",
-        label: allCollapsed ? "Expand all" : "Collapse all",
+        label: allCollapsed ? "Expand all groups" : "Collapse all groups",
         group: "view",
+        menu: "view",
+        section: "Layout",
+        icon: allCollapsed ? "expand" : "collapse",
         keywords: "groups",
-        hasOwnControl: true,
+        ownControl: true,
         run: () => setAllGroupsCollapsed(groupIds, !allCollapsed),
       });
     }
 
     return list;
-  }, [deckCommands, resetGrid, setAllGroupsCollapsed, groupIds, allCollapsed]);
+  }, [
+    deckCommands,
+    resetGrid,
+    setAllGroupsCollapsed,
+    groupIds,
+    allCollapsed,
+    panelOpen,
+    setPanelOpen,
+  ]);
 
   useRegisterCommands(commands);
 
@@ -227,15 +242,27 @@ export function GridToolbar({
         saying "this view" next to a control that changes the view would read as the menu
         acting on whichever view is selected.
       */}
-      <TabToolbar pinned={<OverflowMenu label="More commands for this grid" />}>
+      <TabToolbar
+        commandRow={
+          <CommandBar
+            commands={commands}
+            selection={commandCapabilities?.selection}
+            trailing={
+              <CommandsPanelToggle
+                open={panelOpen}
+                onToggle={() => setPanelOpen(!panelOpen)}
+              />
+            }
+          />
+        }
+        pinned={<OverflowMenu label="More commands for this grid" />}
+      >
         {/*
           Ahead of `left`: the view decides what the rest of the bar is even showing, and a
           module's own scope pickers narrow within it.
         */}
         {views && <ViewPicker views={views} />}
         {left}
-
-        <GridCommandDeck commands={commands} capabilities={deckCapabilities} />
 
         <GridSearchBox value={grid.search} onChange={grid.setSearch} />
 
@@ -264,6 +291,12 @@ export function GridToolbar({
             {allCollapsed ? "Expand all" : "Collapse all"}
           </ToolbarButton>
         )}
+        {/*
+          This is the group collapse, not the *item* collapse. They were both called
+          "Collapse all" while they lived on the same row; the command is now "Collapse all
+          groups" and the tree's is "Collapse all items", because the two ended up next to
+          each other in one Organize/Layout pair of menus and had to say which was which.
+        */}
 
         {switches.map((entry) => (
           <ToolbarToggle
@@ -287,11 +320,12 @@ export function GridToolbar({
           chip bar was on screen offering "Clear all" — a control whose only two states are
           "unavailable" and "duplicated" is one control too many.
 
-          "Show Fields" and "Reset this grid" are gone from the bar too, into `⋯` and the
-          palette. Neither is used often enough to hold width on every grid on every screen
-          forever — which is the test `data-grid.md` asks a toolbar button to pass. They are
-          not hidden: `⋯` is one click away and visible on touch, which is what keeps them
-          legal under `ux-principles.md`.
+          "Show Fields" and "Reset this grid" have no button either. They live in `View ▸
+          Layout`, which is where you would look for them, and in the palette and `⋯`.
+          Neither is used often enough to hold width on every grid on every screen forever —
+          the test `data-grid.md` asks a toolbar button to pass. A named menu is what makes
+          that demotion cost nothing: they are one click away *and* findable by reading,
+          which the old unsorted `⋯` was not.
         */}
 
         {right}
@@ -339,6 +373,38 @@ export function GridToolbar({
         onClose={() => setFieldsOpen(false)}
       />
     </>
+  );
+}
+
+/**
+ * The Commands panel toggle, pinned to the right of the command row.
+ *
+ * Pressed-state fill rather than a label change, matching the sidebar's own collapse toggle and the
+ * Density segments: the control says what it is doing, so it does not need a word explaining that
+ * it is about panels. The command in `View ▸ Panels` carries the sentence.
+ */
+function CommandsPanelToggle({
+  open,
+  onToggle,
+}: {
+  open: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={open}
+      onClick={onToggle}
+      title={open ? "Hide the commands panel" : "Show the commands panel"}
+      aria-label={open ? "Hide the commands panel" : "Show the commands panel"}
+      className={`flex h-7 w-7 flex-none items-center justify-center rounded transition-colors ${
+        open
+          ? "bg-select text-ink"
+          : "text-ink-faint hover:bg-surface-raised hover:text-ink"
+      }`}
+    >
+      <CommandGlyph icon="panel" />
+    </button>
   );
 }
 

@@ -1,19 +1,31 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState } from "react";
+import { CommandGlyph } from "@/components/icons/commandIcons";
+import { formatBindings } from "@/lib/commands/bindings";
+import type { MenuSection } from "@/lib/commands/menus";
+import type { CommandIcon } from "@/lib/commands/icons";
 
 /**
- * A right-click menu over a grid row.
+ * The app's one menu renderer: row context menus, the command bar's menus, the `⋯` sheet, and the
+ * per-column header menu.
  *
- * The menu is a third route to commands that already exist on the toolbar and the keyboard,
- * never the only way to reach one — `ux-principles.md` asks that nothing be reachable by
- * mouse alone. Each item prints its shortcut for exactly that reason: the menu is also how
- * the keyboard gets taught.
+ * A menu is never the only way to reach a command — `ux-principles.md` asks that nothing be
+ * reachable by mouse alone. Each item prints its shortcut for exactly that reason: the menu is
+ * also how the keyboard gets taught.
+ *
+ * Sections and an icon gutter, both after Achieve's: a menu of fifteen unbroken rows is one you
+ * read top to bottom every time, and the gutter is what lets you find the movement commands
+ * without reading at all.
  */
 export type MenuItem =
   | "separator"
+  /** A section heading. Not focusable, not selectable — see `step`. */
+  | { heading: string }
   | {
       label: string;
+      /** Glyph for the left gutter. When any item in the menu has one, all rows reserve it. */
+      icon?: CommandIcon;
       /** Printed on the right, e.g. "⌥↑". Purely informational. */
       shortcut?: string;
       /**
@@ -26,10 +38,145 @@ export type MenuItem =
       onSelect: () => void;
     };
 
-type Command = Exclude<MenuItem, "separator">;
+type Selectable = Extract<MenuItem, { label: string }>;
 
-function isCommand(item: MenuItem): item is Command {
-  return item !== "separator";
+function isCommand(item: MenuItem): item is Selectable {
+  return item !== "separator" && "label" in item;
+}
+
+function isHeading(item: MenuItem): item is { heading: string } {
+  return item !== "separator" && "heading" in item;
+}
+
+/**
+ * Turn the declared menu tree into rows.
+ *
+ * The single adapter every menu surface goes through, which is what stops the row menu and the
+ * command bar from labelling the same command differently — the labels, the shortcuts and the
+ * disabled reasons all arrive from the one `Command`.
+ *
+ * An unlabelled section leads without a heading; the rest get one. A rule is drawn between
+ * sections that both have headings only when it earns its place — the heading already separates
+ * them — so the separator is reserved for the boundary *into* an unheaded run.
+ */
+export function menuItemsFor(sections: readonly MenuSection[]): MenuItem[] {
+  const items: MenuItem[] = [];
+
+  for (const section of sections) {
+    if (items.length > 0) {
+      if (section.label === null) items.push("separator");
+      else items.push("separator", { heading: section.label });
+    } else if (section.label !== null) {
+      items.push({ heading: section.label });
+    }
+
+    for (const command of section.commands) {
+      items.push({
+        label: command.label,
+        icon: command.icon,
+        shortcut: formatBindings(command.bindings),
+        title: command.title,
+        disabled: command.disabled,
+        destructive: command.destructive,
+        onSelect: command.run,
+      });
+    }
+  }
+
+  return items;
+}
+
+/**
+ * The rows themselves, shared with `ColumnMenu`'s tabbed popover.
+ *
+ * That popover used to hand-render this same `MenuItem[]` with its own copy of the label/shortcut
+ * layout, which is how it ended up on `gap-6` while this one moved to `gap-3` — the two-renderers
+ * problem in miniature, on the exact type whose whole job is to have one renderer. Now there is one.
+ */
+export function MenuList({
+  items,
+  activeIndex = null,
+  onHover,
+  onChoose,
+  rowClassName = "",
+}: {
+  items: readonly MenuItem[];
+  /** Keyboard highlight. `ColumnMenu` drives its own selection and passes nothing. */
+  activeIndex?: number | null;
+  onHover?: (index: number) => void;
+  onChoose: (item: Selectable) => void;
+  /** Escape hatch for a container that imposes inherited type styling. */
+  rowClassName?: string;
+}) {
+  // One decision for the whole menu: the gutter is reserved for every row once *any* row has a
+  // glyph, so the labels line up in a column. A menu whose text starts at two different x positions
+  // depending on whether that particular verb got drawn is worse than one with no icons at all.
+  const hasIcons = items.some((item) => isCommand(item) && item.icon !== undefined);
+
+  return (
+    <>
+      {items.map((item, index) => {
+        if (item === "separator") {
+          return (
+            <div
+              key={`separator-${index}`}
+              role="separator"
+              className="my-1 h-px bg-rule"
+            />
+          );
+        }
+
+        if (isHeading(item)) {
+          // The sidebar's section heading, exactly — same size, weight, tracking and colour, so a
+          // menu and the nav read as one system rather than two designs.
+          return (
+            <h3
+              key={`heading-${index}`}
+              className="px-3 pt-1.5 pb-0.5 text-[0.625rem] font-semibold uppercase tracking-wider text-ink-faint"
+            >
+              {item.heading}
+            </h3>
+          );
+        }
+
+        return (
+          <button
+            key={`${item.label}-${index}`}
+            type="button"
+            role="menuitem"
+            disabled={item.disabled}
+            title={item.title}
+            onClick={() => onChoose(item)}
+            onMouseEnter={() => onHover?.(index)}
+            className={[
+              "flex w-full items-center gap-3 px-3 py-1 text-left text-[0.8125rem] leading-5",
+              rowClassName,
+              item.disabled
+                ? "cursor-not-allowed text-ink-faint"
+                : item.destructive
+                  ? "text-priority-a"
+                  : "text-ink",
+              !item.disabled && activeIndex === index ? "bg-surface-raised" : "",
+              // Hover highlight for the surfaces that do not drive an active index themselves.
+              !item.disabled && onHover === undefined ? "hover:bg-surface-raised" : "",
+            ].join(" ")}
+          >
+            {hasIcons && (
+              <span className="flex h-4 w-4 flex-none items-center justify-center text-ink-faint">
+                <CommandGlyph icon={item.icon} />
+              </span>
+            )}
+            <span className="flex-1 truncate">{item.label}</span>
+            {item.shortcut && (
+              <span className="tabular flex-none pl-3 text-[0.6875rem] text-ink-faint">
+                {item.shortcut}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </>
+  );
 }
 
 export function ContextMenu({
@@ -46,19 +193,33 @@ export function ContextMenu({
   const ref = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState<number | null>(null);
 
-  // Positioned imperatively after measuring: the menu has to be in the document to know how
-  // tall it is, and re-rendering to move it would flash it at the wrong place first.
+  /*
+   * Positioned imperatively after measuring: the menu has to be in the document to know how tall it
+   * is, and re-rendering to move it would flash it at the wrong place first.
+   *
+   * The **height cap** matters more than it looks. `⋯` is the phone's whole menu bar now, so on the
+   * Outline it holds every command the view has — around forty rows, which is taller than an iPhone.
+   * Before this it simply ran off the bottom and the rows down there could not be reached at all.
+   * Capping to the viewport and scrolling inside is what `responsive.md` asks of any wide or tall
+   * content: it scrolls in its own container rather than eating the page.
+   */
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const { width, height } = el.getBoundingClientRect();
     const margin = 4;
+    const available = window.innerHeight - margin * 2;
+    el.style.maxHeight = `${available}px`;
+
+    const { width, height } = el.getBoundingClientRect();
     const left = Math.max(margin, Math.min(x, window.innerWidth - width - margin));
-    // Near the bottom of the window the menu opens upward, the way desktop menus do.
+    // Near the bottom of the window the menu opens upward, the way desktop menus do. A menu tall
+    // enough to have been capped cannot do either, so it is pinned to the top margin.
     const top =
-      y + height > window.innerHeight - margin
-        ? Math.max(margin, y - height)
-        : Math.min(y, window.innerHeight - height - margin);
+      height >= available
+        ? margin
+        : y + height > window.innerHeight - margin
+          ? Math.max(margin, y - height)
+          : Math.min(y, window.innerHeight - height - margin);
     el.style.left = `${left}px`;
     el.style.top = `${top}px`;
     // preventScroll: focusing must not shift the grid under a menu that is already placed.
@@ -91,7 +252,14 @@ export function ContextMenu({
     };
   }, [onClose]);
 
-  /** Next selectable item in `step` direction, skipping separators and disabled entries. */
+  /**
+   * Next selectable item in `step` direction, skipping separators, **headings** and disabled
+   * entries.
+   *
+   * A heading that took arrow focus would be a row you can land on and not act on, which reads as
+   * the menu having stopped responding. `isCommand` is the single test for "can be chosen", and it
+   * is the same one `choose` uses.
+   */
   function step(from: number | null, delta: number): number | null {
     const count = items.length;
     for (let i = 1; i <= count; i++) {
@@ -154,46 +322,19 @@ export function ContextMenu({
             break;
         }
       }}
-      className="fixed z-50 min-w-[13rem] rounded border border-rule-strong bg-surface py-1 shadow-lg"
+      // `overscroll-contain` so scrolling to the bottom of a long menu does not then start
+      // scrolling the grid underneath it.
+      className="fixed z-50 min-w-[13rem] overflow-y-auto overscroll-contain rounded border border-rule-strong bg-surface py-1 shadow-lg"
       // The menu takes focus only so it can own the keyboard; the highlighted item is the
       // visible cue, so the global :focus-visible ring would just draw a box around itself.
       style={{ left: x, top: y, outline: "none" }}
     >
-      {items.map((item, index) =>
-        item === "separator" ? (
-          <div
-            key={`separator-${index}`}
-            role="separator"
-            className="my-1 h-px bg-rule"
-          />
-        ) : (
-          <button
-            key={item.label}
-            type="button"
-            role="menuitem"
-            disabled={item.disabled}
-            title={item.title}
-            onClick={() => choose(item)}
-            onMouseEnter={() => setActive(index)}
-            className={[
-              "flex w-full items-center gap-6 px-3 py-1 text-left text-[0.8125rem] leading-5",
-              item.disabled
-                ? "cursor-not-allowed text-ink-faint"
-                : item.destructive
-                  ? "text-priority-a"
-                  : "text-ink",
-              !item.disabled && active === index ? "bg-surface-raised" : "",
-            ].join(" ")}
-          >
-            <span className="flex-1 truncate">{item.label}</span>
-            {item.shortcut && (
-              <span className="tabular flex-none text-[0.6875rem] text-ink-faint">
-                {item.shortcut}
-              </span>
-            )}
-          </button>
-        ),
-      )}
+      <MenuList
+        items={items}
+        activeIndex={active}
+        onHover={setActive}
+        onChoose={choose}
+      />
     </div>
   );
 }

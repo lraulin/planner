@@ -35,7 +35,11 @@ export function useGlobalCommands(): readonly Command[] {
         id: "app.capture",
         label: "Quick capture",
         group: "app",
-        shortcut: "c",
+        // The binding stays where it is — `QuickCapture` owns a document listener with the
+        // `isModalOpen` guard, which the shared dispatcher deliberately does not do. Declaring it
+        // here is what makes the palette print `C`, and `bindings.ts` is what makes the printed
+        // string and that listener agree on which key it is.
+        bindings: [{ key: "c" }],
         keywords: "new task inbox add",
         run: requestQuickCapture,
       },

@@ -8,7 +8,11 @@ import { isValidScope, SHELL_SCOPE } from "./scopes";
 
 describe("parseShellSettings", () => {
   it("round-trips through serialize", () => {
-    const settings = { sidebarCollapsed: true };
+    const settings = {
+      sidebarCollapsed: true,
+      commandsPanelOpen: true,
+      commandsPanelCollapsed: { Zoom: true, Move: false },
+    };
     expect(parseShellSettings(serializeShellSettings(settings))).toEqual(settings);
   });
 
@@ -17,25 +21,45 @@ describe("parseShellSettings", () => {
    * does not fail one grid, it fails the shell — so every unusable shape has to land on the
    * default rather than on an exception.
    */
-  it("falls back to expanded for anything unusable", () => {
+  it("falls back to the defaults for anything unusable", () => {
     for (const junk of [undefined, null, "collapsed", 42, [], true]) {
       expect(parseShellSettings(junk)).toEqual(DEFAULT_SHELL_SETTINGS);
     }
   });
 
-  it("ignores a non-boolean sidebarCollapsed rather than treating it as truthy", () => {
-    expect(parseShellSettings({ sidebarCollapsed: "true" })).toEqual({
+  it("ignores a non-boolean flag rather than treating it as truthy", () => {
+    expect(parseShellSettings({ sidebarCollapsed: "true" })).toMatchObject({
       sidebarCollapsed: false,
     });
-    expect(parseShellSettings({ sidebarCollapsed: 1 })).toEqual({
+    expect(parseShellSettings({ sidebarCollapsed: 1 })).toMatchObject({
       sidebarCollapsed: false,
+    });
+    expect(parseShellSettings({ commandsPanelOpen: "yes" })).toMatchObject({
+      commandsPanelOpen: false,
     });
   });
 
   it("keeps the stored value when the blob carries unrelated keys", () => {
     expect(parseShellSettings({ v: 2, sidebarCollapsed: true, width: 240 })).toEqual({
+      ...DEFAULT_SHELL_SETTINGS,
       sidebarCollapsed: true,
     });
+  });
+
+  it("drops non-boolean entries from the collapsed-sections map", () => {
+    // The map is keyed by a section *label*, so its keys are strings this build may not know.
+    // A junk value has to fall out without taking the usable neighbours with it.
+    expect(
+      parseShellSettings({
+        commandsPanelCollapsed: { Zoom: true, Move: "nope", Expand: null },
+      }).commandsPanelCollapsed,
+    ).toEqual({ Zoom: true });
+  });
+
+  it("survives a collapsed-sections map that is not a map", () => {
+    expect(
+      parseShellSettings({ commandsPanelCollapsed: ["Zoom"] }).commandsPanelCollapsed,
+    ).toEqual({});
   });
 });
 

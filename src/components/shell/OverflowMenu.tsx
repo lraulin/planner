@@ -1,85 +1,42 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { ContextMenu, type MenuItem } from "@/components/grid/ContextMenu";
-import { mergeCommands, overflowCommands } from "@/lib/commands/registry";
+import { menuItemsFor, type MenuItem } from "@/components/grid/ContextMenu";
+import { overflowMenus } from "@/lib/commands/menus";
 import { MoreIcon } from "./navIcons";
+import { MenuButton } from "./MenuButton";
 import { useCommands } from "./CommandProvider";
 
 /**
- * `⋯` — the visible half of the command registry.
+ * `⋯` — the phone's menu bar.
  *
- * The palette is the fast path and this is the discoverable one. `ux-principles.md` rules
- * out a command reachable only by a shortcut ("a gesture nobody can see is not a
- * discoverable action"), and there is no `⌘K` on a phone at all, so a palette without this
- * button would be a command surface that does not exist on touch.
+ * Below `md` there is no command row and no `⌘K`, so this button is the entire command surface,
+ * and it used to render one flat unsorted list of everything a view could do. It now renders the
+ * *same tree* the desktop bar shows, with the menu names as headings — organized rather than
+ * merely present.
  *
- * It renders through the grid's existing `ContextMenu`, which already solves the whole
- * problem — arrow / Home / End navigation skipping separators and disabled rows, the
- * right-aligned shortcut column, measuring then flipping upward near the bottom edge, and
- * closing on scroll without closing on the scroll it causes itself.
+ * On desktop it stays mounted but hidden (`md:hidden` at the call site): the named menus are right
+ * there, and a third button repeating them is the clutter this replaced.
  *
- * It shows only what the current view registered, minus anything already carrying its own
- * toolbar button (`overflowCommands`). Never the global commands either — the palette and the
- * sidebar cover those, and a `⋯` reprinting "Settings" and "Sign out" on every toolbar would
- * be the permanent chrome this whole change exists to remove.
+ * It drops only `ownControl` commands — the ones whose widget (Filter, Group by, Density) is still
+ * visible on the view bar down here, so reprinting them is duplication. Commands promoted to the
+ * desktop icon row are kept, because that row does not exist on a phone.
  */
 export function OverflowMenu({ label = "More commands" }: { label?: string }) {
-  // Merged before filtering so the menu is ordered by group, exactly as the palette is.
-  // Raw registration order is effect order, which is child-before-parent — it put the
-  // Tasks grid's `Copy as text` above `Show Fields` on one tab and would not have on
-  // another. A menu whose entries move between views is a menu you have to read every time.
-  const commands = overflowCommands(mergeCommands(useCommands()));
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const [at, setAt] = useState<{ x: number; y: number } | null>(null);
-
-  // Nothing registered means nothing to open. Rendering a button whose menu is empty is
-  // worse than rendering no button — it reads as broken rather than as absent.
-  if (commands.length === 0) return null;
-
-  const items: MenuItem[] = commands.flatMap((command, index) => {
-    const item: MenuItem = {
-      label: command.label,
-      shortcut: command.shortcut,
-      title: command.title,
-      disabled: command.disabled,
-      destructive: command.destructive,
-      onSelect: command.run,
-    };
-
-    // A rule between groups, matching the palette's headings without spending a row on one.
-    const previous = commands[index - 1];
-    return previous && previous.group !== command.group
-      ? (["separator", item] as MenuItem[])
-      : [item];
-  });
+  /*
+   * Sections, not menus, are the headings here.
+   *
+   * Two levels of heading in one sheet is more structure than a 390px screen can carry, and the
+   * section names are the more useful half anyway: `Insert row`, `Move`, `Expand`, `Priority`,
+   * `Zoom`, `Saved views` say what you are looking at, where `New`/`Organize`/`View` only say
+   * which menu it would have been behind on a desktop that is not here.
+   */
+  const items: MenuItem[] = menuItemsFor(
+    overflowMenus(useCommands()).flatMap((menu) => menu.sections),
+  );
 
   return (
-    <>
-      <button
-        ref={buttonRef}
-        type="button"
-        onClick={() => {
-          const rect = buttonRef.current?.getBoundingClientRect();
-          // Anchored to the button's bottom-left rather than the pointer: this is a menu
-          // button, not a right-click, and it must land in the same place under a tap.
-          setAt(rect ? { x: rect.left, y: rect.bottom + 2 } : { x: 0, y: 0 });
-        }}
-        aria-haspopup="menu"
-        aria-expanded={at !== null}
-        aria-label={label}
-        title={label}
-        // 44 × 44 below `md`, both axes — `responsive.md` is explicit that hit-target size is
-        // not covered by the accessibility exemption, and this is the phone's only way to
-        // reach a view's commands.
-        className="flex min-h-tap min-w-tap flex-none items-center justify-center rounded border border-rule text-ink-muted transition-colors hover:border-rule-strong hover:bg-surface-raised hover:text-ink md:min-h-0 md:min-w-0 md:px-2 md:py-1"
-      >
-        <MoreIcon />
-      </button>
-
-      {at && (
-        <ContextMenu x={at.x} y={at.y} items={items} onClose={() => setAt(null)} />
-      )}
-    </>
+    <MenuButton items={items} ariaLabel={label} title={label} bordered>
+      <MoreIcon />
+    </MenuButton>
   );
 }

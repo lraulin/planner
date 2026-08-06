@@ -2,24 +2,15 @@
  * The navigation glyphs — one per view for the collapsed sidebar rail, plus the phone
  * bottom nav's and the shell's own chrome.
  *
- * Hand-drawn rather than pulled from an icon package: 20px glyphs at this count still do
- * not justify a dependency, and the app has none for UI today (`tech-stack.md` — no
- * component library). They inherit `currentColor`, so active/inactive states are handled
- * by whatever renders them.
- *
  * A collapsed rail is icons *only*, so these are the entire label for a view at 48px. Each
  * one is drawn to be distinguishable at a glance from the others in its section rather
  * than to be individually clever — `title` carries the name for anyone unsure.
+ *
+ * The shared preset lives in `@/components/icons/glyph`, so the command glyphs beside them in a
+ * menu gutter cannot end up a different stroke weight. Command verbs go in `commandIcons.tsx`;
+ * this file is views and shell chrome.
  */
-const BASE = {
-  viewBox: "0 0 20 20",
-  fill: "none",
-  stroke: "currentColor",
-  strokeWidth: 1.5,
-  strokeLinecap: "round",
-  strokeLinejoin: "round",
-  "aria-hidden": true,
-} as const;
+import { GLYPH as BASE } from "@/components/icons/glyph";
 
 export function DayIcon() {
   return (
@@ -212,18 +203,27 @@ export function SettingsIcon() {
   );
 }
 
+const CHEVRON_ROTATION = {
+  left: "",
+  right: "rotate-180",
+  up: "rotate-90",
+  down: "-rotate-90",
+} as const;
+
 /**
- * The sidebar's collapse toggle. One glyph flipped with a transform rather than two paths:
- * the two states are the same chevron pointing opposite ways, and drawing them separately
- * is how they drift apart.
+ * The sidebar's collapse toggle, and the Commands panel's section headers. One glyph rotated
+ * rather than four paths: all four states are the same chevron pointing a different way, and
+ * drawing them separately is how they drift apart.
  */
-export function ChevronIcon({ pointing }: { pointing: "left" | "right" }) {
+export function ChevronIcon({
+  pointing,
+  className = "h-4 w-4",
+}: {
+  pointing: keyof typeof CHEVRON_ROTATION;
+  className?: string;
+}) {
   return (
-    <svg
-      {...BASE}
-      className={`h-4 w-4 ${pointing === "right" ? "rotate-180" : ""}`}
-      viewBox="0 0 20 20"
-    >
+    <svg {...BASE} className={`${className} ${CHEVRON_ROTATION[pointing]}`}>
       <path d="m12 5-5 5 5 5" />
     </svg>
   );

@@ -153,10 +153,11 @@ export function ResultAreasGrid({ initialNodes }: { initialNodes: OutlineNode[] 
   const nodeCommands = useNodeCommandDeck({
     nodes: tab.nodes,
     selectedId: tab.selectedId,
-    selectedCount: tab.selectedIds.size,
+    selectedIds: tab.selectedIds,
     apply: tab.apply,
     onOpen: tab.openDetail,
     onRename: tab.setEditingId,
+    onCopyAsText: tab.copySelectionAsText,
   });
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
   const [groupIds, setGroupIds] = useState<string[]>([]);
@@ -259,7 +260,7 @@ export function ResultAreasGrid({ initialNodes }: { initialNodes: OutlineNode[] 
         onOpenDetail={tab.openDetail}
         ariaLabel="Result Areas"
         rowNumbers
-        rowMenu={tab.rowMenu}
+        rowMenu={nodeCommands.rowMenu}
         enableFilters
         enableSort
         sorts={gridState.sorts}

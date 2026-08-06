@@ -202,9 +202,9 @@ Features that complete or surround the original product, plus making it multi-de
   `specs/2026-08-05-1458-remaining-go-menu-modules`; Result Areas is also built under Plan.
   Overview, Focus Timer, Time Log and Reports remain reserved. Phone keeps its bottom nav;
   the More sheet is grouped the same way and `⋯` is the touch path to commands. New standard:
-  `components/navigation.md`. Deferred: converting the six row context menus into registered
-  commands (the Outline's is done — see the command deck below); `⋯` on the four views with
-  no grid toolbar.
+  `components/navigation.md`. Its two deferred items — converting the remaining row context menus
+  into registered commands, and a command surface on the views with no grid toolbar — are both
+  delivered by the command-surface slice below.
 - **✅ Shared command deck & item actions.**
   `specs/2026-08-05-2121-command-deck-and-item-actions`. One capability-aware command
   surface for every grid: a compact, selection-aware deck in `GridToolbar` plus the same
@@ -218,6 +218,34 @@ Features that complete or surround the original product, plus making it multi-de
   conversion with a loss/conflict preview and one transactional write, and Outline zoom as
   shareable URL state. Deferred: Wish → Dream/Goal conversion, the scheduling / pickup /
   drop command families, and a conversion dialog with server-loaded detail previews.
+- **✅ Command surface: menus, icon toolbar, Commands panel.**
+  `specs/2026-08-06-1010-command-surface`. The deck above got the plumbing right and the surface
+  wrong — a flat row of identically-bordered words overflowing into an **unsorted** `⋯`, which is a
+  traditional app menu with the organization removed. Replaced by what Achieve actually did, and
+  what Google Sheets still does: a **menu bar** of named, sectioned menus (`New · Item · Organize ·
+View · Tools`) with an icon gutter and shortcut column; an **icon row** for the handful of
+  commands used every session, clustered by hairline; a pinnable **Commands panel** (Achieve's
+  docked _Outline Commands_ pane, in the sidebar's exact visual language, opt-in and remembered per
+  user); and `⋯` demoted to the **phone's** menu bar, rendering the same tree with headings.
+  Toolbars are two rows now — **verbs above, lens below** — for every grid.
+
+  Under the surface, three kinds of drift closed. A command declares its own **placement**
+  (`menu` / `section` / `icon` / `toolbar` / `rowMenu`), so no surface filters the list itself and
+  the Outline's twelve-id row-menu allowlist is gone. All eight hand-written row menus derive from
+  the registry, which ended `Open record` sitting beside `Open` and Notes printing `Ctrl+Insert`
+  where everything else printed `⌃Insert`. And a command declares its **binding**, with the printed
+  shortcut derived from it and one `document` listener replacing eleven — selection movement stays
+  with the views, because arrows are navigation, not commands.
+
+  Metrics, Fitness and Schedule joined the shared surface, closing the `navigation.md` violation
+  those three were: their commands had existed as bordered buttons and nowhere else. The Day grid's
+  twelve right-click-only verbs (`Rank A`–`D`, the `Mark …` states, `Move to tomorrow`,
+  `Promote to task…`) are now in the menus, the panel and `⌘K`. Amends both
+  `components/navigation.md` (three surfaces → five) and `components/data-grid.md` (the menu tier;
+  verbs/lens is no longer conditional). Follow-ups: right-click **content** expansion with submenus
+  — the next slice — plus a pin/reorder command row and rebindable shortcuts, both of which the
+  weight-and-binding model now makes possible.
+
 - **✅ Views across all modules.** `specs/2026-08-05-1059-views-across-modules`. Saved views
   stopped being a feature of three grids and became one of the app: **Outline, Projects, Goals,
   Tasks, Wish List, Notes and the Task Chooser** all create, update, rename and delete named

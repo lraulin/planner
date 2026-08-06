@@ -39,6 +39,9 @@ import { GridToolbar } from "@/components/grid/GridToolbar";
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import type { MenuItem } from "@/components/grid/ContextMenu";
+import { rowMenuFor } from "@/components/grid/rowMenu";
+import type { GridCommandCapabilities } from "@/lib/grid/commandDeck";
+import { useSuspendCommandKeys } from "@/components/shell/CommandProvider";
 import { useSetting, type SettingCodec } from "@/components/settings/SettingsProvider";
 import { ToolbarButton, ToolbarSelect } from "@/components/tabs/tabChrome";
 import {
@@ -315,64 +318,6 @@ export function NotesGrid({
     [selected, setUrlNoteId, selectOne],
   );
 
-  const commandCapabilities = useMemo(
-    () => ({
-      hierarchy: mode === "nested",
-      selection: { id: selectedId, count: selectedIds.size, label: selected?.title },
-      actions: {
-        onOpen: openDetail,
-        onCopyAsText: copySelectionAsText,
-        onDelete: requestDelete,
-      },
-      pageCommands: [
-        {
-          id: "notes.create",
-          label: "New note",
-          group: "record" as const,
-          toolbarGroup: "create" as const,
-          primary: true,
-          shortcut: "Insert",
-          run: () => addNote("sibling"),
-        },
-        {
-          id: "notes.create-child",
-          label: "New child note",
-          group: "record" as const,
-          toolbarGroup: "more" as const,
-          shortcut: "⌃Insert",
-          disabled: !selected,
-          title: selected ? undefined : "Select a note first",
-          run: () => addNote("child"),
-        },
-        {
-          id: "notes.expand-all",
-          label: "Expand all notes",
-          group: "view" as const,
-          toolbarGroup: "more" as const,
-          run: () => apply(() => setAllNotesCollapsedAction(false)),
-        },
-        {
-          id: "notes.collapse-all",
-          label: "Collapse all notes",
-          group: "view" as const,
-          toolbarGroup: "more" as const,
-          run: () => apply(() => setAllNotesCollapsedAction(true)),
-        },
-      ],
-    }),
-    [
-      mode,
-      selectedId,
-      selectedIds.size,
-      selected,
-      openDetail,
-      copySelectionAsText,
-      requestDelete,
-      addNote,
-      apply,
-    ],
-  );
-
   const columnCtx: NotesColumnCtx = useMemo(
     () => ({
       selectedId,
@@ -413,6 +358,119 @@ export function NotesGrid({
    * is what you see (same as Outline / Achieve).
    */
   const canReorder = mode === "nested" && sort === "manual";
+
+  /**
+   * Everything a note row can do, for one row.
+   *
+   * `hierarchy` plus `onIndent` / `onOutdent` / `onMoveUp` / `onMoveDown`, so Indent, Outdent and the
+   * vertical moves come out of `buildGridCommands` like the Outline's do. They existed here before as
+   * hand-written row-menu entries printing `Ctrl+Insert` and `Shift+Tab` — the only two places in the
+   * app spelling those chords out in words — and they were on no other surface at all.
+   *
+   * `canReorder` is the real gate: manual order in nested mode. Sorted or flat, the tree moves have
+   * nowhere to land, so they arrive disabled with that as the reason rather than missing.
+   */
+  const capabilitiesFor = useCallback(
+    (noteId: string | null, count: number): GridCommandCapabilities => {
+      const note = noteId ? (byId.get(noteId) ?? null) : null;
+
+      return {
+        hierarchy: mode === "nested",
+        selection: {
+          id: noteId,
+          count,
+          label: note?.title,
+          canMoveUp: canReorder,
+          canMoveDown: canReorder,
+          canIndent: canReorder,
+          canOutdent: canReorder && note?.parentId !== null,
+          moveReason: canReorder
+            ? undefined
+            : "Sort by Manual order in Nested mode to rearrange notes",
+        },
+        actions: {
+          onOpen: (id) => openDetail(id),
+          onCopyAsText: copySelectionAsText,
+          onDelete: requestDelete,
+          onIndent: (id) => apply(() => indentNoteAction(id)),
+          onOutdent: (id) => apply(() => outdentNoteAction(id)),
+          onMoveUp: (id) => apply(() => moveNoteVerticallyAction(id, "up")),
+          onMoveDown: (id) => apply(() => moveNoteVerticallyAction(id, "down")),
+          onExpandAll: () => apply(() => setAllNotesCollapsedAction(false)),
+          onCollapseAll: () => apply(() => setAllNotesCollapsedAction(true)),
+        },
+        pageCommands: [
+          /*
+           * `grid.create.*` by id, overriding the built-ins. Notes are not typed nodes, so the
+           * kind-driven `New task` / `New project` family does not apply — but "a new sibling row"
+           * and "a new child row" are exactly the same two commands with the same two chords, so
+           * they keep the ids and inherit the placement rather than inventing a parallel pair.
+           */
+          {
+            id: "grid.create",
+            label: "New note",
+            group: "record",
+            menu: "new",
+            section: "New",
+            icon: "new",
+            toolbar: 10,
+            bindings: [{ key: "Insert" }, { key: "Enter", meta: true }],
+            run: () => addNote("sibling"),
+          },
+          {
+            id: "grid.create.child",
+            label: "New child note",
+            group: "record",
+            menu: "new",
+            section: "Insert row",
+            icon: "insert-child",
+            toolbar: 22,
+            rowMenu: true,
+            bindings: [
+              { key: "Insert", ctrl: true },
+              { key: "Enter", meta: true, ctrl: true },
+            ],
+            disabled: note === null,
+            title: note ? undefined : "Select a note first",
+            run: () => addNote("child"),
+          },
+          {
+            id: "notes.expand-all",
+            label: "Expand all notes",
+            group: "view",
+            menu: "organize",
+            section: "Expand",
+            icon: "expand",
+            run: () => apply(() => setAllNotesCollapsedAction(false)),
+          },
+          {
+            id: "notes.collapse-all",
+            label: "Collapse all notes",
+            group: "view",
+            menu: "organize",
+            section: "Expand",
+            icon: "collapse",
+            run: () => apply(() => setAllNotesCollapsedAction(true)),
+          },
+        ],
+      };
+    },
+    [
+      mode,
+      byId,
+      canReorder,
+      openDetail,
+      copySelectionAsText,
+      addNote,
+      apply,
+      requestDelete,
+    ],
+  );
+
+  const commandCapabilities = useMemo(
+    () => capabilitiesFor(selectedId, selectedIds.size),
+    [capabilitiesFor, selectedId, selectedIds.size],
+  );
 
   const rowDrag: RowDrag | undefined = useMemo(() => {
     if (!canReorder) return undefined;
@@ -495,133 +553,52 @@ export function NotesGrid({
     (noteId: string): MenuItem[] => {
       const note = byId.get(noteId);
       if (!note) return [];
-      const multiCount = selectedIds.has(noteId) ? selectedIds.size : 1;
-
-      return [
-        { label: "Open note", shortcut: "Enter", onSelect: () => openDetail(noteId) },
-        { label: "Rename", shortcut: "F2", onSelect: () => setEditingId(noteId) },
-        {
-          label: multiCount > 1 ? `Copy as text (${multiCount})` : "Copy as text",
-          shortcut: "⌘C",
-          onSelect: copySelectionAsText,
-        },
-        {
-          label: "New note after",
-          shortcut: "Insert",
-          onSelect: () => addNote("sibling"),
-        },
-        {
-          label: "New child note",
-          shortcut: "Ctrl+Insert",
-          onSelect: () => addNote("child"),
-        },
-        {
-          label: "Indent",
-          shortcut: "Tab",
-          disabled: !canReorder,
-          onSelect: () => apply(() => indentNoteAction(noteId)),
-        },
-        {
-          label: "Outdent",
-          shortcut: "Shift+Tab",
-          disabled: !canReorder || note.parentId === null,
-          onSelect: () => apply(() => outdentNoteAction(noteId)),
-        },
-        { label: "Delete", shortcut: "Delete", onSelect: () => setPendingDelete(note) },
-      ];
+      const count = selectedIds.has(noteId) ? selectedIds.size : 1;
+      return rowMenuFor(capabilitiesFor(noteId, count), {
+        id: noteId,
+        count,
+        label: note.title,
+        canMoveUp: canReorder,
+        canMoveDown: canReorder,
+        canIndent: canReorder,
+        canOutdent: canReorder && note.parentId !== null,
+        moveReason: canReorder
+          ? undefined
+          : "Sort by Manual order in Nested mode to rearrange notes",
+      });
     },
-    [byId, openDetail, addNote, apply, canReorder, selectedIds, copySelectionAsText],
+    [byId, capabilitiesFor, canReorder, selectedIds],
   );
 
-  // Keyboard, matching Achieve's own hint bar and the bindings every other tab uses.
+  /*
+   * Selection navigation only. Insert, ⌘C, Enter, F2, Delete, Tab, ⇧Tab and ⌥↑/↓ were all here as a
+   * `switch`; they are `bindings` on the commands now and `CommandKeys` fires them. This grid is
+   * where that mattered most — it printed `Ctrl+Insert` and `Shift+Tab` in its row menu while
+   * matching on `event.ctrlKey` and `event.shiftKey`, and nothing connected the two.
+   *
+   * The drawer and the inline editor are the two states the DOM cannot show, so they suspend the
+   * dispatcher. The dialogs do not need to: they are `role="dialog"` and `isModalOpen` sees them.
+   */
+  useSuspendCommandKeys(drawerId !== null || editingId !== null);
+
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      // `isModalOpen` rather than a flag per dialog: Show Fields and the grid's Filter
-      // now live inside `GridToolbar`, so this component cannot see them, and a flag list
-      // would silently miss any dialog added later.
       if (drawerId || editingId || filterOpen || pendingDelete) return;
       if (isModalOpen()) return;
-
       if (isTypingTarget(event.target)) return;
-
-      if (event.key === "Insert") {
-        event.preventDefault();
-        addNote(event.ctrlKey || event.metaKey ? "child" : "sibling");
-        return;
-      }
-
-      if (
-        (event.metaKey || event.ctrlKey) &&
-        !event.altKey &&
-        (event.key === "c" || event.key === "C")
-      ) {
-        event.preventDefault();
-        copySelectionAsText();
-        return;
-      }
-
       if (!selected) return;
+      // ⌥↑/↓ is Move up / Move down, which is a command. Left alone here so the dispatcher gets it.
+      if (event.altKey) return;
 
-      switch (event.key) {
-        case "Enter":
-          event.preventDefault();
-          openDetail(selected.id);
-          break;
-        case "F2":
-          event.preventDefault();
-          setEditingId(selected.id);
-          break;
-        case "Delete":
-        case "Backspace":
-          event.preventDefault();
-          setPendingDelete(selected);
-          break;
-        case "Tab": {
-          if (!canReorder) return;
-          event.preventDefault();
-          apply(() =>
-            event.shiftKey
-              ? outdentNoteAction(selected.id)
-              : indentNoteAction(selected.id),
-          );
-          break;
-        }
-        case "ArrowUp":
-        case "ArrowDown": {
-          event.preventDefault();
-
-          if (event.altKey) {
-            if (!canReorder) return;
-            apply(() =>
-              moveNoteVerticallyAction(
-                selected.id,
-                event.key === "ArrowUp" ? "up" : "down",
-              ),
-            );
-            return;
-          }
-
-          moveSelection(event.key === "ArrowUp" ? -1 : 1, event.shiftKey);
-          break;
-        }
+      if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+        event.preventDefault();
+        moveSelection(event.key === "ArrowUp" ? -1 : 1, event.shiftKey);
       }
     }
 
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [
-    drawerId,
-    editingId,
-    filterOpen,
-    pendingDelete,
-    selected,
-    addNote,
-    openDetail,
-    apply,
-    canReorder,
-    moveSelection,
-    copySelectionAsText,
-  ]);
+  }, [drawerId, editingId, filterOpen, pendingDelete, selected, moveSelection]);
 
   const filterActive = !isEmptyNoteFilter(filter);
 

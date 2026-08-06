@@ -30,6 +30,10 @@ type CommandContextValue = {
   commands: readonly Command[];
   register: (key: number, commands: readonly Command[]) => void;
   unregister: (key: number) => void;
+  /** How many components are currently claiming the keyboard. See `useSuspendCommandKeys`. */
+  suspensions: number;
+  suspend: () => void;
+  resume: () => void;
 };
 
 const CommandContext = createContext<CommandContextValue | null>(null);
@@ -38,6 +42,7 @@ let nextKey = 0;
 
 export function CommandProvider({ children }: { children: React.ReactNode }) {
   const [registrations, setRegistrations] = useState<Registration[]>([]);
+  const [suspensions, setSuspensions] = useState(0);
 
   const register = useCallback((key: number, commands: readonly Command[]) => {
     setRegistrations((current) => {
@@ -50,14 +55,20 @@ export function CommandProvider({ children }: { children: React.ReactNode }) {
     setRegistrations((current) => current.filter((entry) => entry.key !== key));
   }, []);
 
+  const suspend = useCallback(() => setSuspensions((count) => count + 1), []);
+  const resume = useCallback(
+    () => setSuspensions((count) => Math.max(0, count - 1)),
+    [],
+  );
+
   const commands = useMemo(
     () => registrations.flatMap((entry) => entry.commands),
     [registrations],
   );
 
   const value = useMemo(
-    () => ({ commands, register, unregister }),
-    [commands, register, unregister],
+    () => ({ commands, register, unregister, suspensions, suspend, resume }),
+    [commands, register, unregister, suspensions, suspend, resume],
   );
 
   return <CommandContext.Provider value={value}>{children}</CommandContext.Provider>;
@@ -69,6 +80,32 @@ export function CommandProvider({ children }: { children: React.ReactNode }) {
  */
 export function useCommands(): readonly Command[] {
   return useContext(CommandContext)?.commands ?? [];
+}
+
+/** True while any component is claiming the keyboard. Read by `useCommandKeys`. */
+export function useCommandKeysSuspended(): boolean {
+  return (useContext(CommandContext)?.suspensions ?? 0) > 0;
+}
+
+/**
+ * Claim the keyboard for as long as `active` is true, so no command binding fires.
+ *
+ * A counter rather than a flag: an inline row editor and a picker dialog can both be up, and the
+ * one that closes first must not hand the keyboard back while the other still owns it.
+ *
+ * This is for state the DOM cannot show — an inline cell editor, a row being renamed. Dialogs do not
+ * need it: they are `role="dialog"`, which `isModalOpen` already sees.
+ */
+export function useSuspendCommandKeys(active: boolean): void {
+  const context = useContext(CommandContext);
+  const suspend = context?.suspend;
+  const resume = context?.resume;
+
+  useEffect(() => {
+    if (!active || !suspend || !resume) return;
+    suspend();
+    return resume;
+  }, [active, suspend, resume]);
 }
 
 /** What a menu actually draws. Two arrays with the same signature render identically. */

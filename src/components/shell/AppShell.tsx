@@ -1,6 +1,8 @@
 import { QuickCapture } from "@/components/capture/QuickCapture";
+import { CommandKeys } from "./CommandKeys";
 import { CommandPalette } from "./CommandPalette";
 import { CommandProvider } from "./CommandProvider";
+import { CommandsPanel } from "./CommandsPanel";
 import { MobileHeader } from "./MobileHeader";
 import { MobileNav } from "./MobileNav";
 import { Sidebar } from "./Sidebar";
@@ -47,6 +49,19 @@ export function AppShell({
           <MobileNav active={active} />
         </div>
 
+        {/*
+          The Commands panel is a column of this row, on the far edge from the sidebar — the two
+          rails frame the grid the way Achieve's did. Here rather than in each module page because
+          it reads `useCommands()`, and one mount gives all sixteen modules the panel at once,
+          including the four with hand-rolled toolbars.
+
+          The detail drawer overlays it rather than sitting beside it. That is fine and deliberate:
+          the drawer is a modal surface about one record, and two 208px+ panes competing for the
+          right edge would leave the grid nothing.
+        */}
+        <CommandsPanel />
+
+        <CommandKeys />
         <CommandPalette />
         <QuickCapture />
       </div>

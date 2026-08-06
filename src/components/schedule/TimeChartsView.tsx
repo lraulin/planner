@@ -11,6 +11,8 @@ import {
 } from "@/app/schedule/actions";
 import { DataGrid } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";
+import { rowMenuFor } from "@/components/grid/rowMenu";
+import { catalogCapabilities } from "@/components/grid/catalogCommands";
 import { GridToolbar } from "@/components/grid/GridToolbar";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { collectDistinctValues } from "@/lib/grid/distinct";
@@ -88,10 +90,6 @@ export function TimeChartsView({
   const orderedIds = useMemo(() => rows.map((row) => row.id), [rows]);
   const multi = useMultiSelect(orderedIds, null);
   const { selectedId, selectedIds, select, move } = multi;
-  const selected = selectedId
-    ? (rows.find((row) => row.id === selectedId) ?? null)
-    : null;
-
   const apply = useCallback(
     (action: () => Promise<{ ok: true } | { ok: false; error: string }>) => {
       setError(null);
@@ -145,30 +143,26 @@ export function TimeChartsView({
     [rows],
   );
 
-  const commandCapabilities = useMemo(
-    () => ({
-      selection: { id: selectedId, count: selectedIds.size, label: selected?.name },
-      actions: { onOpen: openEditor, onDelete: requestDelete },
-      pageCommands: [
-        {
-          id: "time-charts.create",
-          label: "New time chart",
-          group: "record" as const,
-          toolbarGroup: "create" as const,
-          primary: true,
-          shortcut: "Insert",
-          run: createNew,
+  const capabilitiesFor = useCallback(
+    (rowId: string | null, count: number) =>
+      catalogCapabilities({
+        createLabel: "New time chart",
+        openLabel: "Edit areas",
+        selection: {
+          id: rowId,
+          count,
+          label: rows.find((entry) => entry.id === rowId)?.name,
         },
-      ],
-    }),
-    [
-      selectedId,
-      selectedIds.size,
-      selected?.name,
-      openEditor,
-      requestDelete,
-      createNew,
-    ],
+        onCreate: createNew,
+        onOpen: openEditor,
+        onDelete: requestDelete,
+      }),
+    [rows, createNew, openEditor, requestDelete],
+  );
+
+  const commandCapabilities = useMemo(
+    () => capabilitiesFor(selectedId, selectedIds.size),
+    [capabilitiesFor, selectedId, selectedIds.size],
   );
 
   const columnCtx: TimeChartsColumnCtx = useMemo(
@@ -189,70 +183,40 @@ export function TimeChartsView({
     (chartId: string): MenuItem[] => {
       const row = rows.find((r) => r.id === chartId);
       if (!row) return [];
-      return [
-        { label: "Edit areas", shortcut: "Enter", onSelect: () => openEditor(chartId) },
-        { label: "New Time Chart", shortcut: "Insert", onSelect: createNew },
-        "separator",
-        {
-          label: "Delete",
-          shortcut: "Delete",
-          destructive: true,
-          onSelect: () => setPendingDelete(row),
-        },
-      ];
+      return rowMenuFor(capabilitiesFor(chartId, 1), {
+        id: chartId,
+        count: 1,
+        label: row.name,
+      });
     },
-    [rows, openEditor, createNew],
+    [rows, capabilitiesFor],
   );
 
-  // Same document-level keys as Metrics / Notes / Outline. Apple keyboards have no Insert,
-  // so ⌘Return is bound alongside it.
+  /*
+   * Selection navigation only — Insert, Enter and Delete are `bindings` on the commands.
+   *
+   * Arrows come before any "needs a selection" guard on purpose: `moveSelection` treats a null focus
+   * as "start at the end you are heading towards", so ArrowDown is how you pick the first row.
+   * Guarding it first leaves the keyboard with no way in — every visible cell here is an inline input
+   * that stops propagation, so clicking a row does not select it either.
+   */
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (pendingDelete) return;
       if (isTypingTarget(event.target)) return;
 
-      const insert = event.key === "Insert" || (event.key === "Enter" && event.metaKey);
-      if (insert && !event.shiftKey && !event.ctrlKey) {
-        event.preventDefault();
-        createNew();
-        return;
-      }
-
-      // Arrows come before the "needs a selection" guard on purpose: `moveSelection` treats
-      // a null focus as "start at the end you are heading towards", so ArrowDown is how you
-      // pick the first row. Guarding it first leaves the keyboard with no way in — every
-      // visible cell here is an inline input that stops propagation, so clicking a row does
-      // not select it either.
       if (event.key === "ArrowDown") {
         event.preventDefault();
         move(1, event.shiftKey);
-        return;
-      }
-      if (event.key === "ArrowUp") {
+      } else if (event.key === "ArrowUp") {
         event.preventDefault();
         move(-1, event.shiftKey);
-        return;
-      }
-
-      if (!selected) return;
-
-      switch (event.key) {
-        case "Enter":
-          if (event.metaKey || event.ctrlKey) return;
-          event.preventDefault();
-          openEditor(selected.id);
-          break;
-        case "Delete":
-        case "Backspace":
-          event.preventDefault();
-          setPendingDelete(selected);
-          break;
       }
     }
 
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [pendingDelete, selected, createNew, openEditor, move]);
+  }, [pendingDelete, move]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">

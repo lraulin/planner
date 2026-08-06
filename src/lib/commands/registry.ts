@@ -1,24 +1,32 @@
 /**
  * What a command is, and how the palette narrows a list of them.
  *
- * Achieve kept its capabilities in menus — Actions, Tools, View, Outline. We kept ours on
- * toolbars, which meant every command we added became permanent screen furniture and the
- * grid toolbar grew to nine always-visible controls. A command declared here is rendered by
- * two surfaces instead: the `⌘K` palette, and the `⋯` overflow on the view's own toolbar.
+ * Achieve kept its capabilities in menus — Actions, Tools, View, Outline — plus icon toolbars and
+ * a docked commands pane, all reading one command set. Our first attempt kept ours on a flat
+ * toolbar with an unsorted `⋯` behind it, which is a menu with the organization removed. A command
+ * declared here is now rendered by five surfaces: the view's **menu bar**, its **icon toolbar**,
+ * the pinnable **Commands panel**, the row **context menu**, and the `⌘K` **palette** (with `⋯`
+ * standing in for the menu bar below `md`).
  *
- * **One registry, two renderers.** This is the same contract `views.ts` has, for the same
+ * **One registry, every renderer.** This is the same contract `views.ts` has, for the same
  * reason: a command described in two places is a command whose two descriptions eventually
- * disagree about whether it is available or what it is called. It is also what keeps the
- * palette legal — `ux-principles.md` rules out a command reachable only by shortcut, and
- * there is no `⌘K` on a phone, so `⋯` is the visible half of every entry here.
+ * disagree about whether it is available, what it is called, or which key fires it. That last one
+ * is why `shortcut` is gone — see `bindings.ts`.
  *
- * The pure part — the shape, and the matching — lives in `src/lib/` with its tests. The
- * provider, the palette and the overflow button are wiring (`testing.md`).
+ * The pure part — the shape, the matching, and the menu tree (`menus.ts`) — lives in `src/lib/`
+ * with its tests. The bar, the menus, the panel and the palette are wiring (`testing.md`).
  */
 
+import type { KeyBinding } from "./bindings";
+import type { CommandIcon } from "./icons";
+
 /**
- * Groups order the palette and separate the overflow menu. `go` is Achieve's Go menu: the
- * views, generated from the view registry rather than written out here.
+ * Groups order the palette. `go` is Achieve's Go menu: the views, generated from the view
+ * registry rather than written out here.
+ *
+ * This is the **palette's** axis and is deliberately not the menu bar's — the palette answers
+ * "what can this app do" and wants app-shaped buckets, while a menu bar answers "what can I do
+ * here" and wants verb families. `menu` / `section` below are that second axis.
  */
 export const COMMAND_GROUPS = ["go", "view", "record", "app"] as const;
 export type CommandGroup = (typeof COMMAND_GROUPS)[number];
@@ -30,13 +38,59 @@ export const COMMAND_GROUP_LABELS: Record<CommandGroup, string> = {
   app: "App",
 };
 
+/**
+ * The named menus on a view's command bar, in the order they appear.
+ *
+ * Five, in the order the work happens: make something, act on it, restructure it, change what you
+ * are looking at, and everything a single page invented for itself. A menu with nothing in it does
+ * not render, so a flat catalog grid shows two of these and the Outline shows all five — the same
+ * "a tab declares what it has" rule `data-grid.md` already imposes on columns.
+ */
+export const COMMAND_MENUS = ["new", "item", "organize", "view", "tools"] as const;
+export type CommandMenu = (typeof COMMAND_MENUS)[number];
+
+export const COMMAND_MENU_LABELS: Record<CommandMenu, string> = {
+  new: "New",
+  item: "Item",
+  organize: "Organize",
+  view: "View",
+  tools: "Tools",
+};
+
 export type Command = {
   /** Unique across the whole merged list. Two rows sharing one is a bug, not a tie. */
   id: string;
   label: string;
   group: CommandGroup;
-  /** Printed right-aligned, e.g. `F2`. Informational — the binding lives with its handler. */
-  shortcut?: string;
+  /**
+   * Which named menu this command lives in. Absent means it is reachable through the palette and
+   * whatever else claims it, but has no menu row — which for a *grid* command is almost always a
+   * mistake, because `navigation.md` rules out a command with no visible path.
+   */
+  menu?: CommandMenu;
+  /**
+   * The heading it sits under inside that menu, e.g. `"Move"`. Commands sharing a section are
+   * drawn together between rules, in declaration order; sections appear in the order they are
+   * first declared. Absent puts it in the menu's leading unlabelled section.
+   */
+  section?: string;
+  /** Glyph for the menu gutter, the panel row, and the toolbar button. See `icons.ts`. */
+  icon?: CommandIcon;
+  /**
+   * Present means this command also gets an **icon button** on the command row, and the number is
+   * its sort weight there. Absent means menus, panel, row menu and palette only.
+   *
+   * A weight rather than a boolean because the row's reading order is not the order commands
+   * happen to be built in: create, then insert, then move, then indent, then the item verbs.
+   */
+  toolbar?: number;
+  /** Appears in the right-click menu for a row, in menu-then-section order. */
+  rowMenu?: boolean;
+  /**
+   * The keys that fire it. The first one is the one printed next to the label, and the printed
+   * string is *derived* from it — see `bindings.ts` for why there is no `shortcut` field.
+   */
+  bindings?: readonly KeyBinding[];
   /**
    * Extra text to match on without showing it. `Weekly Schedule` should be reachable by
    * typing "calendar"; the label should not have to say "calendar" to make that work.
@@ -50,27 +104,19 @@ export type Command = {
   disabled?: boolean;
   title?: string;
   destructive?: boolean;
-  /** Where a command sits in a grid's compact command deck, when it has one. */
-  toolbarGroup?: "create" | "selected" | "organize" | "more";
-  /** A command with its own visible deck button is omitted from the contextual More menu. */
-  primary?: boolean;
   /**
-   * This command already has its own button on the view's toolbar, so the `⋯` menu skips it
-   * — the palette still lists it.
+   * A *non-command widget* on the view bar already controls this — the Filter button, the Group
+   * by selects, the Density segments. Below `md` the command row is not rendered and `⋯` becomes
+   * the menu bar, so `⋯` skips these and only these: their control is the one thing that *is*
+   * still on screen down there, and reprinting `Filter…` directly under the Filter button is the
+   * clutter the overflow tier exists to remove.
    *
-   * The two renderers are answering different questions. The palette asks "what can this app
-   * do", and the answer has to be complete or you stop trusting it. `⋯` asks "what *else*
-   * can this view do", and reprinting Filter and Open directly under the Filter and Open
-   * buttons is the toolbar clutter this whole change exists to remove.
+   * `toolbar` commands are *not* skipped, for the mirror-image reason: their icon button is
+   * desktop-only, so on a phone `⋯` is the only place they exist.
    */
-  hasOwnControl?: boolean;
+  ownControl?: boolean;
   run: () => void;
 };
-
-/** What the `⋯` menu shows: everything without a button of its own already on the bar. */
-export function overflowCommands(commands: readonly Command[]): Command[] {
-  return commands.filter((command) => !command.hasOwnControl);
-}
 
 /**
  * Case- and gap-insensitive subsequence match: "wksch" finds `Weekly Schedule`.

@@ -294,10 +294,11 @@ export function TasksGrid({
   const nodeCommands = useNodeCommandDeck({
     nodes: tab.nodes,
     selectedId: tab.selectedId,
-    selectedCount: tab.selectedIds.size,
+    selectedIds: tab.selectedIds,
     apply: tab.apply,
     onOpen: tab.openDetail,
     onRename: tab.setEditingId,
+    onCopyAsText: tab.copySelectionAsText,
   });
   const [scopeId, setScopeId] = useState<string>("");
   const [includeDeferred, setIncludeDeferred] = useIncludeDeferred("tasks");
@@ -462,7 +463,7 @@ export function TasksGrid({
         onOpenDetail={tab.openDetail}
         ariaLabel="Tasks"
         rowNumbers
-        rowMenu={tab.rowMenu}
+        rowMenu={nodeCommands.rowMenu}
         rowDrag={rowDrag}
         enableFilters
         enableSort

@@ -12,55 +12,109 @@ import { planNodeConversion, type ConversionPlan } from "@/lib/tree/conversion";
 import type { ActionResult } from "./useOptimisticNodes";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { GridCommandCapabilities } from "@/lib/grid/commandDeck";
+import type { MenuItem } from "./ContextMenu";
+import { rowMenuFor } from "./rowMenu";
 
 /** Shared non-structural commands for list views that are projections of the outline. */
 export function useNodeCommandDeck({
   nodes,
   selectedId,
-  selectedCount,
+  selectedIds,
   apply,
   onOpen,
   onRename,
+  onCopyAsText,
 }: {
   nodes: readonly OutlineNode[];
   selectedId: string | null;
-  selectedCount: number;
+  selectedIds: ReadonlySet<string>;
   apply: (action: () => Promise<ActionResult>) => void;
   onOpen: (id: string) => void;
   onRename: (id: string) => void;
-}): { capabilities: GridCommandCapabilities; conversionDialog: ReactNode } {
+  /**
+   * Copy as text. Here rather than registered separately by `useGridTab`, so that one capabilities
+   * object describes everything these grids can do — which is what lets the row menu be derived
+   * from it instead of written out again.
+   */
+  onCopyAsText: () => void;
+}): {
+  capabilities: GridCommandCapabilities;
+  rowMenu: (nodeId: string) => MenuItem[];
+  conversionDialog: ReactNode;
+} {
   const [pendingConversion, setPendingConversion] = useState<{
     nodeId: string;
     targetKind: NodeKind;
   } | null>(null);
   const byId = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
-  const selected = selectedId ? (byId.get(selectedId) ?? null) : null;
 
   const onConvert = useCallback((id: string, targetKind: NodeKind) => {
     setPendingConversion({ nodeId: id, targetKind });
   }, []);
 
-  const capabilities = useMemo<GridCommandCapabilities>(
+  /**
+   * The actions, independent of which row is selected.
+   *
+   * Split out from `capabilities` so `rowMenu` can reuse it with a *different* selection. Priority
+   * repair is the one action that needs the row id, so it takes it as an argument here rather than
+   * closing over `selectedId` the way it used to — otherwise a right-click on an unselected row
+   * would repair the selected row's sibling group instead.
+   */
+  const actions = useMemo(
     () => ({
-      priorityMaintenance: true,
-      conversionKinds: NODE_KINDS,
-      selection: {
-        id: selectedId,
-        count: selectedCount,
-        label: selected?.name ?? null,
-        kind: selected ? kindOfNode(selected) : undefined,
-      },
-      actions: {
-        onOpen,
-        onRename,
-        onRemovePriorityGaps: () => {
-          if (selectedId) apply(() => removePriorityGapsAction(selectedId));
-        },
-        onReprioritizeUnique: (id) => apply(() => reprioritizeUniqueAction(id)),
-        onConvert,
-      },
+      onOpen,
+      onRename,
+      onCopyAsText,
+      onRemovePriorityGaps: () => {},
+      onReprioritizeUnique: (id: string) => apply(() => reprioritizeUniqueAction(id)),
+      onConvert,
     }),
-    [apply, onConvert, onOpen, onRename, selected, selectedCount, selectedId],
+    [apply, onConvert, onOpen, onRename, onCopyAsText],
+  );
+
+  const capabilitiesFor = useCallback(
+    (id: string | null, count: number): GridCommandCapabilities => {
+      const node = id ? (byId.get(id) ?? null) : null;
+      return {
+        priorityMaintenance: true,
+        conversionKinds: NODE_KINDS,
+        selection: {
+          id,
+          count,
+          label: node?.name ?? null,
+          kind: node ? kindOfNode(node) : undefined,
+        },
+        actions: {
+          ...actions,
+          onRemovePriorityGaps: () => {
+            if (id) apply(() => removePriorityGapsAction(id));
+          },
+        },
+      };
+    },
+    [actions, apply, byId],
+  );
+
+  const capabilities = useMemo(
+    () => capabilitiesFor(selectedId, selectedIds.size),
+    [capabilitiesFor, selectedId, selectedIds.size],
+  );
+
+  const rowMenu = useCallback(
+    (nodeId: string): MenuItem[] => {
+      const node = byId.get(nodeId);
+      if (!node) return [];
+      // Multi-select survives a right-click on a row already in the selection, so `Copy as text`
+      // still says how many it is about to copy.
+      const count = selectedIds.has(nodeId) ? selectedIds.size : 1;
+      return rowMenuFor(capabilitiesFor(nodeId, count), {
+        id: nodeId,
+        count,
+        label: node.name,
+        kind: kindOfNode(node),
+      });
+    },
+    [byId, capabilitiesFor, selectedIds],
   );
 
   const conversionPlan = useMemo<ConversionPlan | null>(() => {
@@ -90,5 +144,5 @@ export function useNodeCommandDeck({
     />
   ) : null;
 
-  return { capabilities, conversionDialog };
+  return { capabilities, rowMenu, conversionDialog };
 }

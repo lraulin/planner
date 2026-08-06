@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   createSessionAction,
@@ -10,6 +10,10 @@ import {
 } from "@/app/fitness/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { ErrorBanner, TabToolbar, ToolbarButton } from "@/components/tabs/tabChrome";
+import { CommandBar } from "@/components/grid/CommandBar";
+import { useRegisterCommands } from "@/components/shell/CommandProvider";
+import { OverflowMenu } from "@/components/shell/OverflowMenu";
+import type { Command } from "@/lib/commands/registry";
 import { formatEquipmentBadge } from "@/lib/fitness/equipment";
 import {
   fitnessExerciseEditPath,
@@ -208,9 +212,61 @@ export function FitnessView({
     });
   }
 
+  /**
+   * The two things this view makes. Both are always offered: which one is *primary* depends on the
+   * mode, but hiding the other would mean "Log session" vanishing from the palette whenever you
+   * happened to be looking at the exercise list, and a command that comes and goes is one you stop
+   * looking for.
+   */
+  const commands = useMemo<Command[]>(
+    () => [
+      {
+        id: "fitness.log-session",
+        label: "Log session",
+        group: "record",
+        menu: "new",
+        section: "New",
+        icon: "new",
+        toolbar: mode === "sessions" ? 10 : 11,
+        keywords: "workout training record",
+        bindings:
+          mode === "sessions"
+            ? [{ key: "Insert" }, { key: "Enter", meta: true }]
+            : undefined,
+        run: () => openNewLog(null),
+      },
+      {
+        id: "fitness.new-exercise",
+        label: "New exercise",
+        group: "record",
+        menu: "new",
+        section: "New",
+        icon: "new",
+        toolbar: mode === "exercises" ? 10 : 11,
+        keywords: "movement lift catalog",
+        bindings:
+          mode === "exercises"
+            ? [{ key: "Insert" }, { key: "Enter", meta: true }]
+            : undefined,
+        run: openNewExercise,
+      },
+    ],
+    [mode, openNewLog, openNewExercise],
+  );
+
+  useRegisterCommands(commands);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <TabToolbar>
+      {/*
+        Sessions | Exercises is a lens control — it changes what is listed — so it stays on the lower
+        row. The two create verbs moved into the command row, and with them into `⌘K` and `⋯`, which
+        this view had neither of before.
+      */}
+      <TabToolbar
+        commandRow={<CommandBar commands={commands} />}
+        pinned={<OverflowMenu label="More commands for fitness" />}
+      >
         <div className="flex items-center gap-1 rounded border border-rule p-0.5">
           <button
             type="button"
@@ -233,11 +289,6 @@ export function FitnessView({
             Exercises
           </button>
         </div>
-        {mode === "exercises" ? (
-          <ToolbarButton onClick={openNewExercise}>New exercise</ToolbarButton>
-        ) : (
-          <ToolbarButton onClick={() => openNewLog(null)}>Log session</ToolbarButton>
-        )}
       </TabToolbar>
 
       {error && !editorOpen && <ErrorBanner message={error} />}
