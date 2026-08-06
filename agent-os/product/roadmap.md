@@ -209,9 +209,10 @@ Features that complete or surround the original product, plus making it multi-de
   `specs/2026-08-05-2121-command-deck-and-item-actions`. One capability-aware command
   surface for every grid: a compact, selection-aware deck in `GridToolbar` plus the same
   commands in the palette, `⋯` and row menus, all from one descriptor with shared labels
-  and disabled reasons. Eleven views pass capabilities today — Outline, Projects, Goals,
-  Tasks, Result Areas, Wish List, Notes, Day, Contacts, Resources, Time Charts; the Task
-  Chooser and Metrics are **not** on it yet. The Outline's persistent legacy command strip
+  and disabled reasons. Eleven views declare full capabilities — Outline, Projects, Goals,
+  Tasks, Result Areas, Wish List, Notes, Day, Contacts, Resources, Time Charts. The Task
+  Chooser gets only the Open/Rename deck `GridToolbar` synthesises from `rowActions`, and
+  **Metrics has no deck at all** — it does not use `GridToolbar`. The Outline's legacy strip
   is gone and its row menu is built from the same registry. Also lands: priority repair
   against the complete persisted sibling set rather than the filtered rows, type
   conversion with a loss/conflict preview and one transactional write, and Outline zoom as
