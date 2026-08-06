@@ -119,6 +119,10 @@
   --spacing-tap: var(--tap-target);
 }
 
+html {
+  overflow-x: hidden;
+}
+
 body {
   background: var(--shell);
   color: var(--ink);

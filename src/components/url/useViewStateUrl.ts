@@ -73,14 +73,22 @@ export function useViewStateUrl() {
     [navigate],
   );
 
+  const setZoom = useCallback(
+    (zoom: string | null, history: "push" | "replace" = "push") =>
+      navigate({ zoom }, history),
+    [navigate],
+  );
+
   return {
     detail: state.detail,
     view: state.view,
     note: state.note,
     mode: state.mode,
+    zoom: state.zoom,
     setDetail,
     setView,
     setNote,
     setMode,
+    setZoom,
   };
 }

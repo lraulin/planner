@@ -20,6 +20,14 @@ import type { DailyItemView } from "@/lib/day/types";
 import { shiftDateKey } from "@/lib/schedule/geometry";
 import { copyAsText, writeClipboardText } from "@/lib/tree/copyAsText";
 import { isTypingTarget } from "@/lib/keyboard";
+import { GridCommandDeck } from "@/components/grid/GridCommandDeck";
+import {
+  buildGridCommands,
+  type GridCommandCapabilities,
+} from "@/lib/grid/commandDeck";
+import { useRegisterCommands } from "@/components/shell/CommandProvider";
+import { OverflowMenu } from "@/components/shell/OverflowMenu";
+import { TabToolbar } from "@/components/tabs/tabChrome";
 import { DAY_COLUMNS, type DayColumnCtx } from "./dayColumns";
 
 const DAY_COLUMN_IDS = DAY_COLUMNS.map((column) => column.id);
@@ -180,6 +188,69 @@ export function DailyItemsGrid({
     void writeClipboardText(text);
   }, [orderedIds, items, selectedIds]);
 
+  const focusDraft = useCallback(() => {
+    document.querySelector<HTMLInputElement>("[data-day-quick-entry]")?.focus();
+  }, []);
+
+  const commandCapabilities = useMemo<GridCommandCapabilities>(
+    () => ({
+      selection: {
+        id: selectedId,
+        count: selectedIds.size,
+        label: items.find((item) => item.id === selectedId)?.title,
+      },
+      actions: {
+        onCopyAsText: copySelectionAsText,
+        onOpen: (id) => {
+          const item = items.find((entry) => entry.id === id);
+          if (item?.nodeId) onOpenTask(item.nodeId, item.title);
+        },
+      },
+      pageCommands: [
+        {
+          id: "day.create",
+          label: "New day item",
+          group: "record",
+          toolbarGroup: "create",
+          primary: true,
+          shortcut: "Insert",
+          run: focusDraft,
+        },
+        {
+          id: "day.remove",
+          label: "Remove from this day",
+          group: "record",
+          toolbarGroup: "more",
+          disabled: selectedId === null,
+          title: selectedId === null ? "Select a row first" : undefined,
+          run: () => selectedId && onDelete(selectedId),
+        },
+        {
+          id: "day.reset-grid",
+          label: "Reset this grid",
+          group: "view",
+          toolbarGroup: "more",
+          run: gridState.reset,
+        },
+      ],
+    }),
+    [
+      selectedId,
+      selectedIds.size,
+      items,
+      copySelectionAsText,
+      onOpenTask,
+      onDelete,
+      focusDraft,
+      gridState.reset,
+    ],
+  );
+  const commands = useMemo(
+    () => buildGridCommands(commandCapabilities),
+    [commandCapabilities],
+  );
+  useRegisterCommands(commands);
+
   const rowMenu = useCallback(
     (itemId: string): MenuItem[] => {
       const item = items.find((entry) => entry.id === itemId);
@@ -336,18 +407,9 @@ export function DailyItemsGrid({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* Hidden below `md`: it resets column widths and sort, neither of which a compact
-          row has. A whole bar for a control with nothing to do is not worth 32px there. */}
-      <div className="hidden flex-none items-center justify-end gap-2 border-b border-rule px-3 py-1 md:flex">
-        <button
-          type="button"
-          onClick={gridState.reset}
-          title="Clear sort, column widths and collapsed groups for this day list"
-          className="rounded border border-rule px-2 py-0.5 text-[0.75rem] text-ink-muted transition-colors hover:border-rule-strong hover:bg-surface-raised hover:text-ink"
-        >
-          Reset this grid
-        </button>
-      </div>
+      <TabToolbar pinned={<OverflowMenu label="More commands for this day" />}>
+        <GridCommandDeck commands={commands} capabilities={commandCapabilities} />
+      </TabToolbar>
       <div className="min-h-0 flex-1 overflow-auto">
         <DataGrid<DayColumnCtx, DailyItemView>
           rows={rows}
@@ -390,6 +452,7 @@ export function DailyItemsGrid({
         </span>
         <input
           ref={draftRef}
+          data-day-quick-entry
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={(event) => {

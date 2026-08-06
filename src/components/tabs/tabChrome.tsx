@@ -22,7 +22,7 @@ export function TabToolbar({
   pinned?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-none items-stretch border-b border-rule">
+    <div className="flex min-w-0 max-w-full flex-none items-stretch overflow-hidden border-b border-rule">
       <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-x-4 gap-y-2 overflow-x-auto px-3 py-2 md:flex-wrap md:overflow-x-visible">
         {children}
       </div>

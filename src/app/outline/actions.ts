@@ -66,6 +66,21 @@ export async function setPriorityAction(
   return run((userId) => tree.setPriority(userId, nodeId, letter, rank));
 }
 
+export async function removePriorityGapsAction(nodeId: string): Promise<ActionResult> {
+  return run((userId) => tree.removePriorityGaps(userId, nodeId));
+}
+
+export async function reprioritizeUniqueAction(nodeId: string): Promise<ActionResult> {
+  return run((userId) => tree.reprioritizeUnique(userId, nodeId));
+}
+
+export async function convertNodeAction(
+  nodeId: string,
+  targetKind: NodeKind,
+): Promise<ActionResult> {
+  return run((userId) => tree.convertNode(userId, nodeId, targetKind));
+}
+
 export async function setStateAction(
   nodeId: string,
   state: NodeState,

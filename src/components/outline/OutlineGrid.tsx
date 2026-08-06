@@ -12,6 +12,7 @@ import {
   defaultChildType,
   KIND_LABELS,
   kindOfNode,
+  NODE_KINDS,
   type NodeKind,
 } from "@/lib/tree/hierarchy";
 import {
@@ -25,10 +26,14 @@ import {
 } from "@/lib/tree/outlinePriority";
 import {
   createNodeAction,
+  convertNodeAction,
+  expandThroughDepthAction,
   deleteNodeAction,
   indentNodeAction,
   moveNodeAction,
   moveNodeVerticallyAction,
+  removePriorityGapsAction,
+  reprioritizeUniqueAction,
   outdentNodeAction,
   renameNodeAction,
   setAllCollapsedAction,
@@ -62,12 +67,20 @@ import { selectionMoveRoots } from "@/lib/grid/selection";
 import { copyAsText, writeClipboardText } from "@/lib/tree/copyAsText";
 import { HintBar } from "./HintBar";
 import { NewChildDialog } from "./NewChildDialog";
+import { ConversionDialog } from "./ConversionDialog";
+import { ExpandLevelDialog, OutlineZoomDialog } from "./OutlineCommandDialogs";
 import {
   buildOutlineColumns,
   OUTLINE_COLUMN_IDS,
   type OutlineColumnCtx,
 } from "./outlineColumns";
 import { isTypingTarget } from "@/lib/keyboard";
+import { zoomBranch, zoomOutRoot } from "@/lib/tree/zoom";
+import {
+  buildGridCommands,
+  type GridCommandCapabilities,
+} from "@/lib/grid/commandDeck";
+import { planNodeConversion, type ConversionPlan } from "@/lib/tree/conversion";
 
 /**
  * Achieve's Areas and Goals checkboxes: **on means the level exists.** Turning one off
@@ -123,11 +136,16 @@ function viewDefaults(): GridDefaults {
  * columns, filtered from their column menus like everything else.
  */
 export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
-  const { nodes, byId, patch, apply, error, setError } =
-    useOptimisticNodes(initialNodes);
-  const { detail: detailId, setDetail: setDetailId } = useViewStateUrl();
+  const { nodes, byId, patch, apply, error } = useOptimisticNodes(initialNodes);
+  const { detail: detailId, zoom, setDetail: setDetailId, setZoom } = useViewStateUrl();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<OutlineNode | null>(null);
+  const [pendingConversion, setPendingConversion] = useState<{
+    nodeId: string;
+    targetKind: NodeKind;
+  } | null>(null);
+  const [zoomPickerOpen, setZoomPickerOpen] = useState(false);
+  const [expandLevelPickerOpen, setExpandLevelPickerOpen] = useState(false);
   /** The row a new child is being added to, while its kind is being chosen. */
   const [pendingChildOf, setPendingChildOf] = useState<OutlineNode | null>(null);
   const today = useToday();
@@ -170,9 +188,14 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
    * subtree; completing a node now settles the work under it, so an ordinary State filter
    * removes a finished branch on its own — no special case, and it shows as a chip.
    */
+  const zoomed = useMemo(() => zoomBranch(nodes, zoom), [nodes, zoom]);
+  useEffect(() => {
+    if (zoomed.stale) setZoom(null, "replace");
+  }, [zoomed.stale, setZoom]);
+
   const visible = useMemo(
-    () => flattenLevels(nodes, hiddenLevels).filter((node) => !node.hidden),
-    [nodes, hiddenLevels],
+    () => flattenLevels(zoomed.nodes, hiddenLevels).filter((node) => !node.hidden),
+    [zoomed.nodes, hiddenLevels],
   );
 
   /**
@@ -236,6 +259,18 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   }
 
   const selected = selectedId ? (byId.get(selectedId) ?? null) : null;
+
+  const conversionPlan = useMemo<ConversionPlan | null>(() => {
+    if (!pendingConversion) return null;
+    const source = byId.get(pendingConversion.nodeId);
+    if (!source) return null;
+    return planNodeConversion({
+      nodeId: source.id,
+      sourceKind: kindOfNode(source),
+      targetKind: pendingConversion.targetKind,
+      nodes,
+    });
+  }, [pendingConversion, byId, nodes]);
 
   const startNaming = useCallback(
     (id?: string) => {
@@ -314,28 +349,15 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     );
   }, [apply, startNaming]);
 
-  const addGoal = useCallback(() => {
-    if (!selected) return;
-    const host =
-      selected.type === "result_area" || selected.type === "goal"
-        ? selected
-        : nearestGoalHost(selected, byId);
-
-    if (!host) {
-      setError("Goals sit under a result area. Select one first.");
-      return;
-    }
-
-    apply(
-      () =>
-        createNodeAction({
-          parentId: host.id,
-          kind: "goal",
-          position: { at: "last" },
-        }),
-      startNaming,
-    );
-  }, [selected, byId, apply, startNaming, setError]);
+  const addTopKind = useCallback(
+    (kind: NodeKind) => {
+      apply(
+        () => createNodeAction({ parentId: null, kind, position: { at: "last" } }),
+        startNaming,
+      );
+    },
+    [apply, startNaming],
+  );
 
   const toggleCollapsed = useCallback(
     (node: OutlineNode, collapsed: boolean) => {
@@ -405,8 +427,108 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     [commandsFor, selected, move, copySelectionAsText, setTreeCollapsed],
   );
 
+  const commandCapabilities = useMemo<GridCommandCapabilities>(() => {
+    const siblings = selected
+      ? nodes.filter((node) => node.parentId === selected.parentId)
+      : [];
+    const index = selected ? siblings.findIndex((node) => node.id === selected.id) : -1;
+    return {
+      createKinds: ["result_area", "goal", "dream", "project", "task"],
+      hierarchy: true,
+      priorityMaintenance: true,
+      conversionKinds: NODE_KINDS,
+      outlineZoom: true,
+      selection: {
+        id: selectedId,
+        count: selectedIds.size,
+        label: selected?.name ?? null,
+        kind: selected ? kindOfNode(selected) : undefined,
+        canMoveUp: index > 0,
+        canMoveDown: index >= 0 && index < siblings.length - 1,
+        canIndent: index > 0,
+        canOutdent: selected?.parentId !== null,
+        canExpand: selected?.hasChildren === true && selected.collapsed,
+        canCollapse: selected?.hasChildren === true && !selected.collapsed,
+      },
+      actions: {
+        onCreate: (kind, mode) => {
+          if (mode === "top") {
+            if (kind === "result_area") addResultArea();
+            else addTopKind(kind);
+          } else if (mode === "before" || mode === "after") {
+            addSibling(selected, mode);
+          } else {
+            addChild(selected);
+          }
+        },
+        onOpen: (id) => {
+          selectOne(id);
+          setDetailId(id);
+        },
+        onRename: (id) => {
+          selectOne(id);
+          setEditingId(id);
+        },
+        onDelete: (id) => {
+          const node = byId.get(id);
+          if (node) setPendingDelete(node);
+        },
+        onCopyAsText: copySelectionAsText,
+        onMoveUp: (id) => apply(() => moveNodeVerticallyAction(id, "up")),
+        onMoveDown: (id) => apply(() => moveNodeVerticallyAction(id, "down")),
+        onIndent: (id) => apply(() => indentNodeAction(id)),
+        onOutdent: (id) => apply(() => outdentNodeAction(id)),
+        onExpand: (id) => {
+          const node = byId.get(id);
+          if (node) toggleCollapsed(node, false);
+        },
+        onCollapse: (id) => {
+          const node = byId.get(id);
+          if (node) toggleCollapsed(node, true);
+        },
+        onExpandAll: () => setTreeCollapsed(false),
+        onCollapseAll: () => setTreeCollapsed(true),
+        onExpandThroughLevel: (level) => apply(() => expandThroughDepthAction(level)),
+        onChooseExpandThroughLevel: () => setExpandLevelPickerOpen(true),
+        onRemovePriorityGaps: () =>
+          selectedId && apply(() => removePriorityGapsAction(selectedId)),
+        onReprioritizeUnique: (id) => apply(() => reprioritizeUniqueAction(id)),
+        onConvert: (id, kind) => {
+          setPendingConversion({ nodeId: id, targetKind: kind });
+        },
+        onZoomIn: (id) => setZoom(id, "push"),
+        onZoomOut: () => setZoom(zoomOutRoot(nodes, zoom), "push"),
+        onClearZoom: () => setZoom(null, "push"),
+        onZoomToItem: () => setZoomPickerOpen(true),
+      },
+    };
+  }, [
+    selected,
+    nodes,
+    selectedId,
+    selectedIds,
+    byId,
+    addResultArea,
+    addTopKind,
+    addSibling,
+    addChild,
+    selectOne,
+    setDetailId,
+    copySelectionAsText,
+    apply,
+    toggleCollapsed,
+    setTreeCollapsed,
+    setZoom,
+    zoom,
+  ]);
+
   const suspended =
-    detailId !== null || pendingDelete !== null || pendingChildOf !== null;
+    detailId !== null ||
+    pendingDelete !== null ||
+    pendingChildOf !== null ||
+    pendingConversion !== null ||
+    zoomPickerOpen ||
+    expandLevelPickerOpen;
   useOutlineKeyboard({ commands, editingId, suspended });
 
   /**
@@ -423,77 +545,62 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
       const siblings = nodes.filter((n) => n.parentId === node.parentId);
       const index = siblings.findIndex((n) => n.id === node.id);
 
-      const multiCount = selectedIds.has(nodeId) ? selectedIds.size : 1;
+      const kind = kindOfNode(node);
+      const rowCommands = buildGridCommands({
+        createKinds: [kind],
+        hierarchy: true,
+        selection: {
+          id: nodeId,
+          count: selectedIds.has(nodeId) ? selectedIds.size : 1,
+          canMoveUp: index > 0,
+          canMoveDown: index < siblings.length - 1,
+          canIndent: index > 0,
+          canOutdent: node.parentId !== null,
+          canExpand: node.hasChildren && node.collapsed,
+          canCollapse: node.hasChildren && !node.collapsed,
+        },
+        actions: {
+          onCreate: (_kind, mode) => {
+            if (mode === "before") command.addSiblingBefore();
+            else if (mode === "after") command.addSiblingAfter();
+            else if (mode === "child") command.addChild();
+          },
+          onOpen: () => command.openDetail(),
+          onRename: () => command.rename(),
+          onCopyAsText: copySelectionAsText,
+          onDelete: () => command.remove(),
+          onMoveUp: () => command.moveUp(),
+          onMoveDown: () => command.moveDown(),
+          onIndent: () => command.indent(),
+          onOutdent: () => command.outdent(),
+          onExpand: () => command.expand(),
+          onCollapse: () => command.collapse(),
+        },
+      }).filter((entry) =>
+        [
+          "record.open",
+          "record.rename",
+          "record.copy-as-text",
+          "grid.create.after",
+          "grid.create.before",
+          "grid.create.child",
+          "record.indent",
+          "record.outdent",
+          "record.move-up",
+          "record.move-down",
+          "record.expand-collapse",
+          "record.delete",
+        ].includes(entry.id),
+      );
 
-      return [
-        { label: "Open record", shortcut: "Enter", onSelect: command.openDetail },
-        { label: "Rename", shortcut: "F2", onSelect: command.rename },
-        {
-          label: multiCount > 1 ? `Copy as text (${multiCount})` : "Copy as text",
-          shortcut: "⌘C",
-          onSelect: copySelectionAsText,
-        },
-        "separator",
-        {
-          label: "Add sibling after",
-          shortcut: "Insert",
-          onSelect: command.addSiblingAfter,
-        },
-        {
-          label: "Add sibling before",
-          shortcut: "⇧Insert",
-          onSelect: command.addSiblingBefore,
-        },
-        { label: "Add child", shortcut: "⌃Insert", onSelect: command.addChild },
-        "separator",
-        {
-          label: "Indent",
-          shortcut: "Tab",
-          // Indenting makes a node the last child of the sibling above it; the first node
-          // at a level has none.
-          disabled: index <= 0,
-          onSelect: command.indent,
-        },
-        {
-          label: "Outdent",
-          shortcut: "⇧Tab",
-          disabled: node.parentId === null,
-          onSelect: command.outdent,
-        },
-        {
-          label: "Move up",
-          shortcut: "⌥↑",
-          disabled: index <= 0,
-          onSelect: command.moveUp,
-        },
-        {
-          label: "Move down",
-          shortcut: "⌥↓",
-          disabled: index === siblings.length - 1,
-          onSelect: command.moveDown,
-        },
-        "separator",
-        node.collapsed
-          ? {
-              label: "Expand",
-              shortcut: "→",
-              disabled: !node.hasChildren,
-              onSelect: command.expand,
-            }
-          : {
-              label: "Collapse",
-              shortcut: "←",
-              disabled: !node.hasChildren,
-              onSelect: command.collapse,
-            },
-        "separator",
-        {
-          label: `Delete ${KIND_LABELS[kindOfNode(node)].toLowerCase()}`,
-          shortcut: "Delete",
-          destructive: true,
-          onSelect: command.remove,
-        },
-      ];
+      return rowCommands.map((entry) => ({
+        label: entry.label,
+        shortcut: entry.shortcut,
+        title: entry.title,
+        disabled: entry.disabled,
+        destructive: entry.destructive,
+        onSelect: entry.run,
+      }));
     },
     [byId, nodes, commandsFor, selectedIds, copySelectionAsText],
   );
@@ -680,13 +787,6 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
-      <FilterBar
-        commands={commands}
-        onAddResultArea={addResultArea}
-        onAddGoal={addGoal}
-        hasSelection={selected !== null}
-      />
-
       <GridToolbar
         grid={gridState}
         gridLabel="Outline"
@@ -698,7 +798,22 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         groupDimensions={["category"]}
         groupIds={groupIds}
         views={views}
+        commandCapabilities={commandCapabilities}
       />
+
+      {zoom && !zoomed.stale && (
+        <div className="flex flex-none items-center gap-2 border-b border-rule bg-surface-raised/50 px-3 py-1 text-[0.75rem] text-ink-muted">
+          <span className="font-medium text-ink">Zoomed outline</span>
+          <span className="truncate">{byId.get(zoom)?.name ?? "Selected branch"}</span>
+          <button
+            type="button"
+            onClick={() => setZoom(null, "push")}
+            className="ml-auto text-ink underline decoration-ink-faint underline-offset-2 hover:text-ink"
+          >
+            Clear zoom
+          </button>
+        </div>
+      )}
 
       <DataGrid
         rows={gridRows}
@@ -766,6 +881,43 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         />
       )}
 
+      {pendingConversion && (
+        <ConversionDialog
+          open
+          nodeName={byId.get(pendingConversion.nodeId)?.name ?? ""}
+          targetKind={pendingConversion.targetKind}
+          plan={conversionPlan}
+          onConfirm={() => {
+            const target = pendingConversion;
+            setPendingConversion(null);
+            apply(() => convertNodeAction(target.nodeId, target.targetKind));
+          }}
+          onCancel={() => setPendingConversion(null)}
+        />
+      )}
+
+      {zoomPickerOpen && (
+        <OutlineZoomDialog
+          open
+          nodes={nodes}
+          initialId={zoom}
+          onConfirm={(nodeId) => {
+            setZoomPickerOpen(false);
+            setZoom(nodeId, "push");
+          }}
+          onCancel={() => setZoomPickerOpen(false)}
+        />
+      )}
+
+      <ExpandLevelDialog
+        open={expandLevelPickerOpen}
+        onConfirm={(level) => {
+          setExpandLevelPickerOpen(false);
+          apply(() => expandThroughDepthAction(level));
+        }}
+        onCancel={() => setExpandLevelPickerOpen(false)}
+      />
+
       <ConfirmDialog
         open={pendingDelete !== null}
         title={`Delete this ${pendingDelete ? KIND_LABELS[kindOfNode(pendingDelete)].toLowerCase() : "row"}?`}
@@ -792,18 +944,6 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
       )}
     </div>
   );
-}
-
-function nearestGoalHost(
-  from: OutlineNode,
-  byId: Map<string, OutlineNode>,
-): OutlineNode | null {
-  let current = from.parentId ? (byId.get(from.parentId) ?? null) : null;
-  while (current) {
-    if (current.type === "result_area" || current.type === "goal") return current;
-    current = current.parentId ? (byId.get(current.parentId) ?? null) : null;
-  }
-  return null;
 }
 
 function deleteMessage(node: OutlineNode | null): string {
@@ -914,75 +1054,6 @@ function useOutlineKeyboard({
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [commands, editingId, suspended]);
-}
-
-function FilterBar({
-  commands,
-  onAddResultArea,
-  onAddGoal,
-  hasSelection,
-}: {
-  commands: Record<string, () => void>;
-  onAddResultArea: () => void;
-  onAddGoal: () => void;
-  hasSelection: boolean;
-}) {
-  return (
-    // Scrolls sideways below `md` rather than wrapping into three rows, matching
-    // `TabToolbar`. The buttons stay — several of them are the only tappable path to a
-    // keyboard-only command.
-    <div className="flex flex-none flex-nowrap items-center gap-x-4 gap-y-2 overflow-x-auto border-b border-rule px-3 py-2 md:flex-wrap md:overflow-x-visible">
-      <div className="flex flex-none items-center gap-1">
-        <Command onClick={onAddResultArea}>New result area</Command>
-        <Command onClick={onAddGoal} disabled={!hasSelection}>
-          New goal
-        </Command>
-        <Command onClick={commands.addSiblingAfter} disabled={!hasSelection}>
-          Add sibling
-        </Command>
-        <Command onClick={commands.addChild} disabled={!hasSelection}>
-          Add child
-        </Command>
-      </div>
-
-      <span className="h-4 w-px flex-none bg-rule" aria-hidden />
-
-      <div className="flex flex-none items-center gap-1">
-        <Command onClick={commands.openDetail} disabled={!hasSelection} title="Enter">
-          Open
-        </Command>
-        <Command onClick={commands.rename} disabled={!hasSelection} title="F2">
-          Rename
-        </Command>
-      </div>
-
-      <span className="h-4 w-px flex-none bg-rule" aria-hidden />
-
-      <div className="flex flex-none items-center gap-1">
-        <Command onClick={commands.outdent} disabled={!hasSelection} title="Shift+Tab">
-          ←
-        </Command>
-        <Command onClick={commands.indent} disabled={!hasSelection} title="Tab">
-          →
-        </Command>
-        <Command onClick={commands.moveUp} disabled={!hasSelection} title="Alt+Up">
-          ↑
-        </Command>
-        <Command onClick={commands.moveDown} disabled={!hasSelection} title="Alt+Down">
-          ↓
-        </Command>
-        <Command onClick={commands.remove} disabled={!hasSelection} title="Delete">
-          Delete
-        </Command>
-        <Command onClick={commands.expandAll} title="Expand all (⌘→)">
-          Expand all
-        </Command>
-        <Command onClick={commands.collapseAll} title="Collapse all (⌘←)">
-          Collapse all
-        </Command>
-      </div>
-    </div>
-  );
 }
 
 function Command({

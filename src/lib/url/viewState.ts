@@ -18,6 +18,7 @@ export const DETAIL_PARAM = "detail";
 export const VIEW_PARAM = "view";
 export const NOTE_PARAM = "note";
 export const MODE_PARAM = "mode";
+export const ZOOM_PARAM = "zoom";
 
 export type ViewStatePatch = {
   /** `null` clears the param; `undefined` leaves it alone. */
@@ -25,6 +26,7 @@ export type ViewStatePatch = {
   view?: string | null;
   note?: string | null;
   mode?: string | null;
+  zoom?: string | null;
 };
 
 export type ViewState = {
@@ -32,6 +34,7 @@ export type ViewState = {
   view: string | null;
   note: string | null;
   mode: string | null;
+  zoom: string | null;
 };
 
 /**
@@ -73,6 +76,7 @@ export function readViewState(params: URLSearchParams): ViewState {
     note: asRecordId(firstParam(params, NOTE_PARAM)),
     // Same shape as a view id — ours, lower-case, no spaces.
     mode: asViewId(firstParam(params, MODE_PARAM)),
+    zoom: asRecordId(firstParam(params, ZOOM_PARAM)),
   };
 }
 
@@ -86,6 +90,10 @@ export function readViewParam(params: URLSearchParams): string | null {
 
 export function readNoteParam(params: URLSearchParams): string | null {
   return readViewState(params).note;
+}
+
+export function readZoomParam(params: URLSearchParams): string | null {
+  return readViewState(params).zoom;
 }
 
 /**
@@ -120,6 +128,12 @@ export function writeViewState(
     const id = asViewId(patch.mode);
     if (id) next.set(MODE_PARAM, id);
     else next.delete(MODE_PARAM);
+  }
+
+  if (patch.zoom !== undefined) {
+    const id = asRecordId(patch.zoom);
+    if (id) next.set(ZOOM_PARAM, id);
+    else next.delete(ZOOM_PARAM);
   }
 
   return next;

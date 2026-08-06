@@ -50,6 +50,10 @@ export type Command = {
   disabled?: boolean;
   title?: string;
   destructive?: boolean;
+  /** Where a command sits in a grid's compact command deck, when it has one. */
+  toolbarGroup?: "create" | "selected" | "organize" | "more";
+  /** A command with its own visible deck button is omitted from the contextual More menu. */
+  primary?: boolean;
   /**
    * This command already has its own button on the view's toolbar, so the `⋯` menu skips it
    * — the palette still lists it.

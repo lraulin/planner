@@ -39,6 +39,7 @@ import {
 import type { ChooserDateFilter, ChooserViewId } from "@/lib/chooser/types";
 import type { PriorityLetter } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
+import { kindOfNode } from "@/lib/tree/hierarchy";
 import { setTcPrioritiesAction } from "@/app/outline/actions";
 import {
   buildChooserColumns,
@@ -377,6 +378,10 @@ export function ChooserGrid({
         }
         rowActions={{
           selectedId: tab.selectedId,
+          selectedLabel: tab.nodes.find((node) => node.id === tab.selectedId)?.name,
+          selectedKind: tab.nodes.find((node) => node.id === tab.selectedId)
+            ? kindOfNode(tab.nodes.find((node) => node.id === tab.selectedId)!)
+            : undefined,
           onRename: tab.setEditingId,
           onOpen: tab.openDetail,
         }}

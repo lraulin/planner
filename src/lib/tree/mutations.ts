@@ -2,6 +2,7 @@ import { db } from "@/db";
 import {
   dailyItems,
   goalDetails,
+  nodeItems,
   nodes,
   projectDetails,
   resultAreaDetails,
@@ -25,7 +26,18 @@ import {
   syncDayLinesInSubtree,
 } from "@/lib/day/sync";
 import { cascadeStateChange, type CascadeNode } from "./completionCascade";
-import { assertCanNest, TYPE_LABELS } from "./hierarchy";
+import {
+  assertCanNest,
+  kindOfNode,
+  TYPE_LABELS,
+  nodeFromKind,
+  type NodeKind,
+} from "./hierarchy";
+import { planNodeConversion } from "./conversion";
+import {
+  removePriorityGaps as planRemovePriorityGaps,
+  reprioritizeUnique as planReprioritizeUnique,
+} from "@/lib/priority/maintenance";
 import { loadOutline } from "./queries";
 import { between } from "./sortKey";
 import type { Position } from "./types";
@@ -230,6 +242,176 @@ export async function setPriority(
       updatedAt: new Date(),
     })
     .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+}
+
+async function applyPriorityAssignments(
+  tx: Executor,
+  userId: string,
+  assignments: { id: string; letter: PriorityLetter | null; rank: number | null }[],
+): Promise<void> {
+  for (const assignment of assignments) {
+    await tx
+      .update(nodes)
+      .set({
+        priorityLetter: assignment.letter,
+        priorityRank: assignment.letter === null ? null : assignment.rank,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(nodes.userId, userId), eq(nodes.id, assignment.id)));
+  }
+}
+
+/** Repair all ranked sibling values, including siblings hidden by a grid filter. */
+export async function removePriorityGaps(
+  userId: string,
+  nodeId: string,
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    const node = await requireNode(tx, userId, nodeId);
+    const siblings = await tx
+      .select({
+        id: nodes.id,
+        priorityLetter: nodes.priorityLetter,
+        priorityRank: nodes.priorityRank,
+      })
+      .from(nodes)
+      .where(and(eq(nodes.userId, userId), parentMatches(node.parentId)))
+      .orderBy(asc(nodes.sortKey));
+    await applyPriorityAssignments(tx, userId, planRemovePriorityGaps(siblings));
+  });
+}
+
+/** Make one sibling's current letter/rank unique, shifting only that sibling group. */
+export async function reprioritizeUnique(
+  userId: string,
+  nodeId: string,
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    const node = await requireNode(tx, userId, nodeId);
+    const siblings = await tx
+      .select({
+        id: nodes.id,
+        priorityLetter: nodes.priorityLetter,
+        priorityRank: nodes.priorityRank,
+      })
+      .from(nodes)
+      .where(and(eq(nodes.userId, userId), parentMatches(node.parentId)))
+      .orderBy(asc(nodes.sortKey));
+    await applyPriorityAssignments(
+      tx,
+      userId,
+      planReprioritizeUnique(siblings, nodeId),
+    );
+  });
+}
+
+/**
+ * Change a node's stored type without changing its id. The preview/planner owns legal
+ * placement and descendant checks; this transaction owns detail-row replacement and the
+ * user-scoped writes.
+ */
+export async function convertNode(
+  userId: string,
+  nodeId: string,
+  targetKind: NodeKind,
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    const source = await requireNode(tx, userId, nodeId);
+    const sourceKind =
+      source.type === "goal"
+        ? kindOfNode({
+            type: source.type,
+            isDream: (
+              await tx
+                .select({ isDream: goalDetails.isDream })
+                .from(goalDetails)
+                .where(eq(goalDetails.nodeId, nodeId))
+                .limit(1)
+            )[0]?.isDream,
+          })
+        : source.type;
+    const tree = await tx
+      .select({
+        id: nodes.id,
+        parentId: nodes.parentId,
+        type: nodes.type,
+        name: nodes.name,
+        sortKey: nodes.sortKey,
+      })
+      .from(nodes)
+      .where(eq(nodes.userId, userId));
+    const plan = planNodeConversion({
+      nodeId,
+      sourceKind,
+      targetKind,
+      nodes: tree,
+    });
+    if (plan.descendantConflicts.length > 0) {
+      throw new Error(
+        `Cannot convert while these children are under it: ${plan.descendantConflicts
+          .map((child) => child.name)
+          .join(", ")}. Convert or move them first.`,
+      );
+    }
+
+    const { type: targetType, isDream } = nodeFromKind(targetKind);
+    const placement = plan.placement;
+    let sortKey = source.sortKey;
+    if (placement.position) {
+      sortKey = await sortKeyFor(
+        tx,
+        userId,
+        placement.parentId,
+        placement.position,
+        nodeId,
+      );
+    }
+
+    if (source.type !== targetType) {
+      await tx.delete(resultAreaDetails).where(eq(resultAreaDetails.nodeId, nodeId));
+      await tx.delete(goalDetails).where(eq(goalDetails.nodeId, nodeId));
+      await tx.delete(projectDetails).where(eq(projectDetails.nodeId, nodeId));
+      await tx.delete(taskDetails).where(eq(taskDetails.nodeId, nodeId));
+      await tx
+        .delete(taskCompletions)
+        .where(
+          and(eq(taskCompletions.userId, userId), eq(taskCompletions.nodeId, nodeId)),
+        );
+      // Repeating lists are type-specific. Keeping them after a conversion would make a
+      // Project appear to have stale Task/Goal questions in its drawer.
+      await tx
+        .delete(nodeItems)
+        .where(and(eq(nodeItems.userId, userId), eq(nodeItems.nodeId, nodeId)));
+    }
+
+    await tx
+      .update(nodes)
+      .set({
+        type: targetType,
+        parentId: placement.parentId,
+        sortKey,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(nodes.userId, userId), eq(nodes.id, nodeId)));
+
+    if (targetType === "goal") {
+      if (source.type === "goal") {
+        await tx
+          .update(goalDetails)
+          .set({ isDream })
+          .where(eq(goalDetails.nodeId, nodeId));
+      } else {
+        await tx.insert(goalDetails).values({ nodeId, isDream });
+      }
+    } else if (targetType === "result_area") {
+      await tx.insert(resultAreaDetails).values({ nodeId, category: null });
+    } else if (targetType === "project") {
+      await tx.insert(projectDetails).values({ nodeId });
+    } else {
+      await tx.insert(taskDetails).values({ nodeId });
+    }
+    await syncDayLinesInSubtree(tx, userId, nodeId);
+  });
 }
 
 /**

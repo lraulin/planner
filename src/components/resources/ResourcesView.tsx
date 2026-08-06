@@ -19,7 +19,6 @@ import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import { isTypingTarget } from "@/lib/keyboard";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
-import { ToolbarButton } from "@/components/tabs/tabChrome";
 import { ResourceDrawer } from "./ResourceDrawer";
 import {
   RESOURCES_COLUMN_IDS,
@@ -46,7 +45,7 @@ export function ResourcesView({
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ResourceListRow | null>(null);
-  const [busy, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
   const { detail: openId, setDetail: setOpenId } = useViewStateUrl();
 
   if (initialResources !== seenServerRows) {
@@ -122,6 +121,44 @@ export function ResourcesView({
     });
   }, [pendingDelete, openId, closeDrawer, refresh]);
 
+  const requestDelete = useCallback(
+    (id: string) => {
+      const row = rows.find((entry) => entry.id === id);
+      if (row) setPendingDelete(row);
+    },
+    [rows],
+  );
+
+  const commandCapabilities = useMemo(
+    () => ({
+      selection: {
+        id: selectedId,
+        count: selectedIds.size,
+        label: selected?.shortName,
+      },
+      actions: { onOpen: openDrawer, onDelete: requestDelete },
+      pageCommands: [
+        {
+          id: "resources.create",
+          label: "New resource",
+          group: "record" as const,
+          toolbarGroup: "create" as const,
+          primary: true,
+          shortcut: "Insert",
+          run: createNew,
+        },
+      ],
+    }),
+    [
+      selectedId,
+      selectedIds.size,
+      selected?.shortName,
+      openDrawer,
+      requestDelete,
+      createNew,
+    ],
+  );
+
   const rowMenu = useCallback(
     (id: string): MenuItem[] => {
       const row = rows.find((resource) => resource.id === id);
@@ -184,20 +221,7 @@ export function ResourcesView({
         counts={counts}
         error={error}
         views={views}
-        right={
-          <>
-            <ToolbarButton onClick={createNew} disabled={busy} title="Insert">
-              New Resource
-            </ToolbarButton>
-            <ToolbarButton
-              onClick={() => selected && openDrawer(selected.id)}
-              disabled={!selected}
-              title="Enter"
-            >
-              Open
-            </ToolbarButton>
-          </>
-        }
+        commandCapabilities={commandCapabilities}
       />
 
       <DataGrid<ResourcesColumnCtx, ResourceListRow>

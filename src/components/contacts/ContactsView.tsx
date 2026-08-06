@@ -18,7 +18,6 @@ import { useModuleViews } from "@/components/grid/useModuleViews";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { isTypingTarget } from "@/lib/keyboard";
-import { ToolbarButton } from "@/components/tabs/tabChrome";
 import { ContactDrawer } from "./ContactDrawer";
 import {
   contactsColumns,
@@ -77,7 +76,7 @@ export function ContactsView({
   const [error, setError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ContactListRow | null>(null);
   const { detail: openId, setDetail: setOpenId } = useViewStateUrl();
-  const [busy, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
 
   // Adjust state during render rather than in an effect — the same idiom the node grids use
   // for `navigableIds`. An effect here would render the stale list once before correcting it.
@@ -170,6 +169,44 @@ export function ContactsView({
     });
   }, [pendingDelete, openId, closeDrawer, refreshList]);
 
+  const requestDelete = useCallback(
+    (id: string) => {
+      const row = rows.find((entry) => entry.id === id);
+      if (row) setPendingDelete(row);
+    },
+    [rows],
+  );
+
+  const commandCapabilities = useMemo(
+    () => ({
+      selection: {
+        id: selectedId,
+        count: selectedIds.size,
+        label: selected?.displayName,
+      },
+      actions: { onOpen: openDrawer, onDelete: requestDelete },
+      pageCommands: [
+        {
+          id: "contacts.create",
+          label: "New contact",
+          group: "record" as const,
+          toolbarGroup: "create" as const,
+          primary: true,
+          shortcut: "Insert",
+          run: createNew,
+        },
+      ],
+    }),
+    [
+      selectedId,
+      selectedIds.size,
+      selected?.displayName,
+      openDrawer,
+      requestDelete,
+      createNew,
+    ],
+  );
+
   const columnCtx: ContactsColumnCtx = useMemo(
     () => ({ onOpen: (row) => openDrawer(row.id) }),
     [openDrawer],
@@ -255,20 +292,7 @@ export function ContactsView({
         counts={counts}
         error={error}
         views={views}
-        right={
-          <>
-            <ToolbarButton onClick={createNew} disabled={busy} title="Insert">
-              New Contact
-            </ToolbarButton>
-            <ToolbarButton
-              onClick={() => selected && openDrawer(selected.id)}
-              disabled={!selected}
-              title="Enter"
-            >
-              Open
-            </ToolbarButton>
-          </>
-        }
+        commandCapabilities={commandCapabilities}
       />
 
       <DataGrid<ContactsColumnCtx, ContactListRow>

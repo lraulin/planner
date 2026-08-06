@@ -25,6 +25,7 @@ import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import { setResultAreaFieldsAction } from "@/app/outline/detail-actions";
 import { ToolbarToggle } from "./tabChrome";
 import { useGridTab } from "./useGridTab";
+import { useNodeCommandDeck } from "@/components/grid/useNodeCommandDeck";
 import type { OutlineColumnCtx } from "@/components/outline/outlineColumns";
 
 type ViewId = "all";
@@ -149,6 +150,14 @@ const RESULT_AREA_GROUP_DIMENSIONS: GroupBy[] = ["category"];
  */
 export function ResultAreasGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const tab = useGridTab(initialNodes);
+  const nodeCommands = useNodeCommandDeck({
+    nodes: tab.nodes,
+    selectedId: tab.selectedId,
+    selectedCount: tab.selectedIds.size,
+    apply: tab.apply,
+    onOpen: tab.openDetail,
+    onRename: tab.setEditingId,
+  });
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
   const [groupIds, setGroupIds] = useState<string[]>([]);
 
@@ -234,12 +243,10 @@ export function ResultAreasGrid({ initialNodes }: { initialNodes: OutlineNode[] 
             label="Postponed"
           />
         }
-        rowActions={{
-          selectedId: tab.selectedId,
-          onRename: tab.setEditingId,
-          onOpen: tab.openDetail,
-        }}
+        commandCapabilities={nodeCommands.capabilities}
       />
+
+      {nodeCommands.conversionDialog}
 
       <DataGrid
         rows={rows}

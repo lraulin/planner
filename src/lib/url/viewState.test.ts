@@ -46,6 +46,7 @@ describe("readViewState", () => {
       view: null,
       note: null,
       mode: null,
+      zoom: null,
     });
   });
 
@@ -55,12 +56,14 @@ describe("readViewState", () => {
       view: "active-status",
       note: "note-9",
       mode: "flat",
+      zoom: "node-1",
     });
     expect(readViewState(written)).toEqual({
       detail: "node-1",
       view: "active-status",
       note: "note-9",
       mode: "flat",
+      zoom: "node-1",
     });
   });
 
@@ -95,6 +98,7 @@ describe("readViewState", () => {
       view: "all",
       note: "note-1",
       mode: null,
+      zoom: null,
     });
   });
 

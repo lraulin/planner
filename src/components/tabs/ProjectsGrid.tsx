@@ -54,6 +54,7 @@ import { EffortCell, ReadOnlyCell, StatusCell } from "@/components/grid/cells";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import { ToolbarSelect, ToolbarToggle } from "./tabChrome";
 import { useGridTab } from "./useGridTab";
+import { useNodeCommandDeck } from "@/components/grid/useNodeCommandDeck";
 import type { OutlineColumnCtx } from "@/components/outline/outlineColumns";
 
 /** Projects' default order leads with the narrow State column, which filters on codes. */
@@ -289,6 +290,14 @@ const PROJECT_GROUP_DIMENSIONS: GroupBy[] = [
 
 export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const tab = useGridTab(initialNodes);
+  const nodeCommands = useNodeCommandDeck({
+    nodes: tab.nodes,
+    selectedId: tab.selectedId,
+    selectedCount: tab.selectedIds.size,
+    apply: tab.apply,
+    onOpen: tab.openDetail,
+    onRename: tab.setEditingId,
+  });
   const [scopeId, setScopeId] = useState<string>("");
   const [includeDeferred, setIncludeDeferred] = useIncludeDeferred("projects");
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
@@ -392,12 +401,10 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
             />
           </>
         }
-        rowActions={{
-          selectedId: tab.selectedId,
-          onRename: tab.setEditingId,
-          onOpen: tab.openDetail,
-        }}
+        commandCapabilities={nodeCommands.capabilities}
       />
+
+      {nodeCommands.conversionDialog}
 
       <DataGrid
         rows={rows}

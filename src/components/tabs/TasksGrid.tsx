@@ -54,6 +54,7 @@ import { ToolbarSelect, ToolbarToggle } from "./tabChrome";
 import { openStateFilters, settledStateFilters } from "@/lib/grid/stateFilters";
 import { nextActionsOnly } from "@/lib/tree/nextActions";
 import { useGridTab } from "./useGridTab";
+import { useNodeCommandDeck } from "@/components/grid/useNodeCommandDeck";
 import type { OutlineColumnCtx } from "@/components/outline/outlineColumns";
 
 type ViewId = "active-status" | "active-schedule" | "completed" | "all";
@@ -290,6 +291,14 @@ export function TasksGrid({
   contactOptions: ContactOption[];
 }) {
   const tab = useGridTab(initialNodes);
+  const nodeCommands = useNodeCommandDeck({
+    nodes: tab.nodes,
+    selectedId: tab.selectedId,
+    selectedCount: tab.selectedIds.size,
+    apply: tab.apply,
+    onOpen: tab.openDetail,
+    onRename: tab.setEditingId,
+  });
   const [scopeId, setScopeId] = useState<string>("");
   const [includeDeferred, setIncludeDeferred] = useIncludeDeferred("tasks");
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
@@ -424,12 +433,10 @@ export function TasksGrid({
             />
           </>
         }
-        rowActions={{
-          selectedId: tab.selectedId,
-          onRename: tab.setEditingId,
-          onOpen: tab.openDetail,
-        }}
+        commandCapabilities={nodeCommands.capabilities}
       />
+
+      {nodeCommands.conversionDialog}
 
       {showPurpose && (
         <div className="flex-none border-b border-rule bg-surface-raised/60 px-4 py-2">

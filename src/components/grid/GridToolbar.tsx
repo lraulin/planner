@@ -24,6 +24,12 @@ import { GridFilterDialog } from "./GridFilterDialog";
 import { GridSearchBox } from "./GridSearchBox";
 import { ShowFieldsDialog } from "./ShowFieldsDialog";
 import { ViewPicker } from "./ViewPicker";
+import { GridCommandDeck } from "./GridCommandDeck";
+import {
+  buildGridCommands,
+  type GridCommandCapabilities,
+} from "@/lib/grid/commandDeck";
+import type { NodeKind } from "@/lib/tree/hierarchy";
 import type { ColumnMeta } from "./columns";
 import type { GridState } from "./useGridState";
 import type { ModuleViewsApi } from "./useModuleViews";
@@ -72,6 +78,7 @@ export function GridToolbar({
   views,
   left,
   right,
+  commandCapabilities,
 }: {
   grid: GridState;
   /** Names the grid in the filter dialog title, e.g. "Tasks". */
@@ -97,6 +104,8 @@ export function GridToolbar({
    */
   rowActions?: {
     selectedId: string | null;
+    selectedLabel?: string | null;
+    selectedKind?: NodeKind;
     onRename: (id: string) => void;
     onOpen: (id: string) => void;
   };
@@ -114,6 +123,8 @@ export function GridToolbar({
   left?: ReactNode;
   /** Tab-specific actions that come last: Rename, Open, New note. */
   right?: ReactNode;
+  /** Optional item/page capabilities. When omitted, rowActions still publish Open/Rename. */
+  commandCapabilities?: GridCommandCapabilities;
 }) {
   const [filterOpen, setFilterOpen] = useState(false);
   const [fieldsOpen, setFieldsOpen] = useState(false);
@@ -122,10 +133,39 @@ export function GridToolbar({
   const allCollapsed =
     groupIds.length > 0 && groupIds.every((id) => grid.collapsedGroups.has(id));
 
-  const selectedId = rowActions?.selectedId ?? null;
   const onRename = rowActions?.onRename;
   const onOpen = rowActions?.onOpen;
+  const rowSelectionId = rowActions?.selectedId ?? null;
+  const rowSelectionLabel = rowActions?.selectedLabel ?? null;
+  const rowSelectionKind = rowActions?.selectedKind;
+  const hasRowActions = rowActions !== undefined;
   const { reset: resetGrid, setAllGroupsCollapsed } = grid;
+
+  const deckCapabilities = useMemo<GridCommandCapabilities | undefined>(() => {
+    if (commandCapabilities) return commandCapabilities;
+    if (!hasRowActions) return undefined;
+    return {
+      selection: {
+        id: rowSelectionId,
+        label: rowSelectionLabel,
+        kind: rowSelectionKind,
+      },
+      actions: { onOpen, onRename },
+    };
+  }, [
+    commandCapabilities,
+    rowSelectionId,
+    rowSelectionLabel,
+    rowSelectionKind,
+    onOpen,
+    onRename,
+    hasRowActions,
+  ]);
+
+  const deckCommands = useMemo(
+    () => (deckCapabilities ? buildGridCommands(deckCapabilities) : []),
+    [deckCapabilities],
+  );
 
   /*
    * What this grid can do, published once for both the `⌘K` palette and the `⋯` menu.
@@ -137,6 +177,7 @@ export function GridToolbar({
    */
   const commands = useMemo<Command[]>(() => {
     const list: Command[] = [
+      ...deckCommands,
       {
         id: "view.filter",
         label: "Filter…",
@@ -173,43 +214,8 @@ export function GridToolbar({
       });
     }
 
-    if (onRename && onOpen) {
-      // Disabled rather than absent when nothing is selected: `registry.ts` — a command that
-      // vanishes teaches you it does not exist. `title` is what says why.
-      list.push(
-        {
-          id: "record.rename",
-          label: "Rename",
-          group: "record",
-          shortcut: "F2",
-          disabled: selectedId === null,
-          title: selectedId === null ? "Select a row first" : undefined,
-          hasOwnControl: true,
-          run: () => selectedId && onRename(selectedId),
-        },
-        {
-          id: "record.open",
-          label: "Open",
-          group: "record",
-          shortcut: "⏎",
-          disabled: selectedId === null,
-          title: selectedId === null ? "Select a row first" : undefined,
-          hasOwnControl: true,
-          run: () => selectedId && onOpen(selectedId),
-        },
-      );
-    }
-
     return list;
-  }, [
-    resetGrid,
-    setAllGroupsCollapsed,
-    groupIds,
-    allCollapsed,
-    selectedId,
-    onRename,
-    onOpen,
-  ]);
+  }, [deckCommands, resetGrid, setAllGroupsCollapsed, groupIds, allCollapsed]);
 
   useRegisterCommands(commands);
 
@@ -228,6 +234,8 @@ export function GridToolbar({
         */}
         {views && <ViewPicker views={views} />}
         {left}
+
+        <GridCommandDeck commands={commands} capabilities={deckCapabilities} />
 
         <GridSearchBox value={grid.search} onChange={grid.setSearch} />
 
@@ -285,29 +293,6 @@ export function GridToolbar({
           not hidden: `⋯` is one click away and visible on touch, which is what keeps them
           legal under `ux-principles.md`.
         */}
-
-        {rowActions && (
-          <>
-            <ToolbarButton
-              onClick={() =>
-                rowActions.selectedId && rowActions.onRename(rowActions.selectedId)
-              }
-              disabled={!rowActions.selectedId}
-              title="F2"
-            >
-              Rename
-            </ToolbarButton>
-            <ToolbarButton
-              onClick={() =>
-                rowActions.selectedId && rowActions.onOpen(rowActions.selectedId)
-              }
-              disabled={!rowActions.selectedId}
-              title="Enter"
-            >
-              Open
-            </ToolbarButton>
-          </>
-        )}
 
         {right}
       </TabToolbar>

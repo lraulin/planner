@@ -18,7 +18,6 @@ import type { GridDefaults } from "@/components/grid/useGridState";
 import { useModuleViews } from "@/components/grid/useModuleViews";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { isTypingTarget } from "@/lib/keyboard";
-import { ToolbarButton } from "@/components/tabs/tabChrome";
 import {
   timeChartsColumns,
   TIME_CHARTS_COLUMN_IDS,
@@ -53,7 +52,7 @@ export function TimeChartsView({
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<TimeChartListRow | null>(null);
-  const [busy, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
 
   const views = useModuleViews({
     moduleId: "time-charts",
@@ -137,6 +136,40 @@ export function TimeChartsView({
     if (!target) return;
     apply(() => deleteTimeChartAction(target.id));
   }, [pendingDelete, apply]);
+
+  const requestDelete = useCallback(
+    (id: string) => {
+      const row = rows.find((entry) => entry.id === id);
+      if (row) setPendingDelete(row);
+    },
+    [rows],
+  );
+
+  const commandCapabilities = useMemo(
+    () => ({
+      selection: { id: selectedId, count: selectedIds.size, label: selected?.name },
+      actions: { onOpen: openEditor, onDelete: requestDelete },
+      pageCommands: [
+        {
+          id: "time-charts.create",
+          label: "New time chart",
+          group: "record" as const,
+          toolbarGroup: "create" as const,
+          primary: true,
+          shortcut: "Insert",
+          run: createNew,
+        },
+      ],
+    }),
+    [
+      selectedId,
+      selectedIds.size,
+      selected?.name,
+      openEditor,
+      requestDelete,
+      createNew,
+    ],
+  );
 
   const columnCtx: TimeChartsColumnCtx = useMemo(
     () => ({
@@ -231,20 +264,7 @@ export function TimeChartsView({
         counts={counts}
         error={error}
         views={views}
-        right={
-          <>
-            <ToolbarButton onClick={createNew} disabled={busy} title="Insert">
-              New Time Chart
-            </ToolbarButton>
-            <ToolbarButton
-              onClick={() => selected && openEditor(selected.id)}
-              disabled={!selected}
-              title="Enter"
-            >
-              Edit areas
-            </ToolbarButton>
-          </>
-        }
+        commandCapabilities={commandCapabilities}
       />
 
       <DataGrid<TimeChartsColumnCtx, TimeChartListRow>

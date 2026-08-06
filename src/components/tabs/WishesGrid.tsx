@@ -16,7 +16,7 @@ import { useModuleViews } from "@/components/grid/useModuleViews";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { copyAsText, writeClipboardText } from "@/lib/tree/copyAsText";
-import { ToolbarButton, ToolbarSelect } from "./tabChrome";
+import { ToolbarSelect } from "./tabChrome";
 import { isTypingTarget } from "@/lib/keyboard";
 import {
   wishesColumns,
@@ -235,6 +235,21 @@ export function WishesGrid({
     void writeClipboardText(text);
   }, [orderedIds, rows, selectedIds]);
 
+  const commandCapabilities = useMemo(
+    () => ({
+      selection: {
+        id: selectedId,
+        count: selectedIds.size,
+        label: selectedWish?.title,
+      },
+      actions: {
+        onOpen: () => openOwner(),
+        onCopyAsText: copySelectionAsText,
+      },
+    }),
+    [selectedId, selectedIds.size, selectedWish?.title, openOwner, copySelectionAsText],
+  );
+
   const rowMenu = useCallback(
     (wishId: string): MenuItem[] => {
       const wish = rows.find((row) => row.id === wishId);
@@ -302,11 +317,7 @@ export function WishesGrid({
             options={[{ value: "", label: "All Result Areas" }, ...resultAreas]}
           />
         }
-        right={
-          <ToolbarButton onClick={openOwner} disabled={!selectedWish} title="Enter">
-            Open owner
-          </ToolbarButton>
-        }
+        commandCapabilities={commandCapabilities}
       />
 
       <DataGrid<WishesColumnCtx, WishListRow>

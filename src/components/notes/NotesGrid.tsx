@@ -276,6 +276,14 @@ export function NotesGrid({
     setUrlNoteId(null);
   }, [setUrlNoteId]);
 
+  const requestDelete = useCallback(
+    (id: string) => {
+      const note = byId.get(id);
+      if (note) setPendingDelete(note);
+    },
+    [byId],
+  );
+
   const addNote = useCallback(
     (where: "sibling" | "child") => {
       const params =
@@ -305,6 +313,64 @@ export function NotesGrid({
       });
     },
     [selected, setUrlNoteId, selectOne],
+  );
+
+  const commandCapabilities = useMemo(
+    () => ({
+      hierarchy: mode === "nested",
+      selection: { id: selectedId, count: selectedIds.size, label: selected?.title },
+      actions: {
+        onOpen: openDetail,
+        onCopyAsText: copySelectionAsText,
+        onDelete: requestDelete,
+      },
+      pageCommands: [
+        {
+          id: "notes.create",
+          label: "New note",
+          group: "record" as const,
+          toolbarGroup: "create" as const,
+          primary: true,
+          shortcut: "Insert",
+          run: () => addNote("sibling"),
+        },
+        {
+          id: "notes.create-child",
+          label: "New child note",
+          group: "record" as const,
+          toolbarGroup: "more" as const,
+          shortcut: "⌃Insert",
+          disabled: !selected,
+          title: selected ? undefined : "Select a note first",
+          run: () => addNote("child"),
+        },
+        {
+          id: "notes.expand-all",
+          label: "Expand all notes",
+          group: "view" as const,
+          toolbarGroup: "more" as const,
+          run: () => apply(() => setAllNotesCollapsedAction(false)),
+        },
+        {
+          id: "notes.collapse-all",
+          label: "Collapse all notes",
+          group: "view" as const,
+          toolbarGroup: "more" as const,
+          run: () => apply(() => setAllNotesCollapsedAction(true)),
+        },
+      ],
+    }),
+    [
+      mode,
+      selectedId,
+      selectedIds.size,
+      selected,
+      openDetail,
+      copySelectionAsText,
+      requestDelete,
+      addNote,
+      apply,
+    ],
   );
 
   const columnCtx: NotesColumnCtx = useMemo(
@@ -630,44 +696,7 @@ export function NotesGrid({
             </ToolbarButton>
           </>
         }
-        right={
-          <>
-            <span className="h-4 w-px bg-rule" aria-hidden />
-
-            <ToolbarButton onClick={() => addNote("sibling")} title="Insert">
-              New note
-            </ToolbarButton>
-            <ToolbarButton
-              onClick={() => addNote("child")}
-              disabled={!selected}
-              title="Ctrl+Insert"
-            >
-              New child
-            </ToolbarButton>
-            <ToolbarButton
-              onClick={() => setPendingDelete(selected)}
-              disabled={!selected}
-              title="Delete"
-            >
-              Delete
-            </ToolbarButton>
-
-            <span className="h-4 w-px bg-rule" aria-hidden />
-
-            {/* Note-tree collapse, persisted server-side — not the grid's group collapse,
-                which this tab has none of. */}
-            <ToolbarButton
-              onClick={() => apply(() => setAllNotesCollapsedAction(false))}
-            >
-              Expand all
-            </ToolbarButton>
-            <ToolbarButton
-              onClick={() => apply(() => setAllNotesCollapsedAction(true))}
-            >
-              Collapse all
-            </ToolbarButton>
-          </>
-        }
+        commandCapabilities={commandCapabilities}
       />
 
       <DataGrid

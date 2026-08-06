@@ -59,7 +59,7 @@ export function GridSearchBox({
 
   return (
     <div className="flex flex-none items-center gap-1.5">
-      <label htmlFor={inputId} className="sr-only">
+      <label htmlFor={inputId} className="sr-only left-0 top-0">
         Search this grid
       </label>
       <div className="relative flex items-center">
