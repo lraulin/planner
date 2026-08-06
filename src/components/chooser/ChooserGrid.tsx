@@ -107,6 +107,11 @@ export function ChooserGrid({
   const [showSettings, setShowSettings] = useState(false);
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
 
+  const selectedNode = useMemo(
+    () => tab.nodes.find((node) => node.id === tab.selectedId) ?? null,
+    [tab.nodes, tab.selectedId],
+  );
+
   const allColumns = useMemo(() => buildChooserColumns(tab.today), [tab.today]);
   const views = useModuleViews({
     moduleId: "chooser",
@@ -378,10 +383,8 @@ export function ChooserGrid({
         }
         rowActions={{
           selectedId: tab.selectedId,
-          selectedLabel: tab.nodes.find((node) => node.id === tab.selectedId)?.name,
-          selectedKind: tab.nodes.find((node) => node.id === tab.selectedId)
-            ? kindOfNode(tab.nodes.find((node) => node.id === tab.selectedId)!)
-            : undefined,
+          selectedLabel: selectedNode?.name,
+          selectedKind: selectedNode ? kindOfNode(selectedNode) : undefined,
           onRename: tab.setEditingId,
           onOpen: tab.openDetail,
         }}

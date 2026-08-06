@@ -1,4 +1,5 @@
 import type { PriorityLetter } from "@/db/schema";
+import { PRIORITY_LETTERS } from "./letterRank";
 
 export type PriorityMaintenanceItem = {
   id: string;
@@ -50,7 +51,7 @@ export function removePriorityGaps(
   items: readonly PriorityMaintenanceItem[],
 ): PriorityMaintenanceAssignment[] {
   const assignments: PriorityMaintenanceAssignment[] = [];
-  for (const letter of ["A", "B", "C", "D"] as PriorityLetter[]) {
+  for (const letter of PRIORITY_LETTERS) {
     rankedInLetter(items, letter).forEach((item, index) => {
       const assignment = assignmentFor(item, letter, index + 1);
       if (assignment) assignments.push(assignment);
