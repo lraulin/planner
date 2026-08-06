@@ -434,6 +434,27 @@ declares its own `menu` / `section` / `icon` / `toolbar` / `rowMenu` and every s
 If you find yourself adding a control to one grid, add it to `GridToolbar` instead and let every
 grid have it.
 
+### What the grid hands back
+
+Three callbacks, and the third is the one that is easy to get wrong:
+
+| Callback               | Reports                                                  |
+| ---------------------- | -------------------------------------------------------- |
+| `onCountsChange`       | "Showing N of M", counted before grouping hides anything |
+| `onGroupIdsChange`     | The group headers, for Collapse all                      |
+| `onNavigableIdsChange` | **The node ids actually on screen**, in screen order     |
+
+A host must not derive that third list itself. The rows it passes _in_ are the list before this
+grid applies the column filters, the advanced filter and the search — and the Outline's default
+view hides completed work, so stepping through the host's own list walks rows that are not there.
+Every host that keeps a selection reads this one instead.
+
+### `rowMenu` takes a nullable row
+
+`rowMenu?: (nodeId: string | null) => MenuItem[]`. `null` is the blank area below the last row, or
+a group header — anywhere the pointer is over the grid but not over a record. Return the same menu
+with no selection rather than a shorter one; see `navigation.md`.
+
 **And take controls back out again.** A toolbar earns its width; every button on it is one
 the user has to read past to find the one they want. Two tests, both of which the grid has
 failed at least once:

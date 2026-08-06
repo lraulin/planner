@@ -1,6 +1,6 @@
 # Right-Click Completion — Submenus, Missing Surfaces, Missing Commands
 
-**Status: active**
+**Status: frozen / complete (2026-08-06)**
 Spec folder: `agent-os/specs/2026-08-06-1506-right-click-completion/`
 Delta on the frozen `agent-os/specs/2026-08-06-1010-command-surface/`, which named this work as
 its first follow-up.
@@ -53,9 +53,10 @@ unconditionally `hidden md:flex`, so hiding it is a panel-visibility feature, no
    `capabilitiesFor(id, count)` already provides in `useNodeCommandDeck`; the Outline gets the
    same shape and its toolbar and row menu then read one object.
 2. **Submenus are declared per section, not derived from length.** A section label in
-   `ROW_MENU_SUBMENUS` always collapses to one row with a fly-out, so `Convert to ▸` nests on
-   every view rather than nesting on the Outline and not on Tasks. The same nesting applies
-   inside the menu bar's dropdowns, because both go through `MenuList`.
+   `NESTED_SECTIONS` collapses to one row with a fly-out, so `Convert to ▸` nests on every view
+   rather than nesting on the Outline and not on Tasks, and on the menu bar's dropdowns as well
+   as the row menu — both go through `MenuList`. The one length condition is a floor of two
+   (change 2).
 3. **The blank-area menu is the row menu with no row.** `rowMenu` becomes
    `(rowId: string | null) => MenuItem[]`. Every item verb is already `disabled` with
    "Select a row first"; `navigation.md` says unavailable is not absent, so the blank menu is
@@ -79,25 +80,26 @@ unconditionally `hidden md:flex`, so hiding it is a panel-visibility feature, no
 
 ## Acceptance criteria
 
-- [ ] Every view's row menu comes from `rowMenuFor`; no host calls `buildGridCommands` for a
+- [x] Every view's row menu comes from `rowMenuFor`; no host calls `buildGridCommands` for a
       menu itself. The Outline's right-click offers Convert to, Priority and Zoom.
-- [ ] A declared section renders as a submenu on every surface that shows it, opens on hover /
+- [x] A declared section renders as a submenu on every surface that shows it, opens on hover /
       `→` / `Enter`, closes on `←` / `Escape`, flips side when it would leave the viewport, and
       keyboard focus enters and leaves it without a dead row.
-- [ ] Right-clicking blank grid space opens the same menu with row verbs greyed and a reason.
-- [ ] Right-clicking a calendar slot offers creation and navigation; right-clicking an
+- [x] Right-clicking blank grid space opens the same menu with row verbs greyed and a reason.
+- [x] Right-clicking a calendar slot offers creation and navigation; right-clicking an
       appointment offers open, check-state, duplicate and delete. Both reach `⌘K`.
-- [ ] Complete / mark state, Schedule block, View project / View tasks, and Cut / Paste rows
+- [x] Complete / mark state, Schedule block, View project / View tasks, and Cut / Paste rows
       exist on the node grids, in the menus, in the palette, and disabled-with-a-reason when
       unavailable.
-- [ ] `?scope=` round-trips: reload and Back preserve a scoped Tasks view.
-- [ ] Below `md`, long-press opens a bottom sheet; a submenu row drills in with a back row.
-- [ ] Delete, the state changes and Cut print the selection count and act on all of it.
-- [ ] Unit tests for the pure parts; integration tests for any new/changed mutation path with a
-      second user proving they cannot read, change or delete the first user's row.
-- [ ] Typecheck, lint, unit, integration, build, and browser verification at 1280×800 and
+- [x] `?scope=` round-trips: reload and Back preserve a scoped Tasks view.
+- [x] Below `md`, long-press opens a bottom sheet; a submenu row drills in with a back row.
+- [x] Delete, the state changes and Cut print the selection count and act on all of it.
+- [x] Unit tests for the pure parts. **No new or changed mutation path**, so no new integration
+      test: cut/paste is `moveNode` and Delete is `deleteNode`, both already covered two-user.
+      The existing suite runs — 130 files, 1918 tests, with Postgres up.
+- [x] Typecheck, lint, unit, integration, build, and browser verification at 1280×800 and
       390×844.
-- [ ] `navigation.md`, `data-grid.md` and `responsive.md` describe what was built.
+- [x] `navigation.md`, `data-grid.md` and `responsive.md` describe what was built.
 
 ## Changes from original plan
 
@@ -245,10 +247,26 @@ nullable row. `responsive.md` — the row menu as a sheet, matching what now shi
 
 ## Task 12: Verify, freeze spec, update roadmap
 
-Confirm every acceptance criterion; complete **Changes from original plan**; mark files
-**frozen / complete (date)**; list follow-ups as new work (paste-as-duplicate, Undo/Redo,
-right-click on the secondary panels, the rebindable-shortcuts dialog still open from the
-previous spec); update `agent-os/product/roadmap.md`.
+Done. See **Follow-ups** below.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- **Paste as a duplicate.** Cut/paste is a move because `moveNode` already exists. Deep-copying a
+  subtree — new ids, the whole branch, the sub-items hanging off each row — is real server work
+  and belongs in its own slice.
+- **Undo / Redo.** Every Achieve menu leads with them and the app has none. Now that Delete acts
+  on a multi-row selection and paste moves branches between modules, this is the largest missing
+  safety net in the app, not a menu row.
+- **Record Work / Expenses** (`Ctrl+K` on every Achieve item menu). Needs a time/expense model
+  first.
+- **Right-click on the secondary panels** — the sidebar's modules, the Projects rail, MiniMonth,
+  the Time Chart editor, Fitness, the Weekly Plan wizard.
+- **The Commands panel does not nest.** It renders `buildMenus` itself and shows all nine State
+  rows expanded. Defensible for a panel that scrolls and is opt-in, but it means one surface
+  reads the tree differently from the other four.
+- **A user-customisable command row**, **rebindable shortcuts** (`bindings` is the shape that
+  makes it possible; nothing reads a stored override yet), and **a `New ▾` split button** — all
+  still open from `2026-08-06-1010-command-surface`.
 
 ## Verification
 

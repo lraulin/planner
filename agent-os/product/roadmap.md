@@ -25,7 +25,8 @@ The core Achieve Planner loop — plan the week, block the time, work the outlin
 - **✅ Row context menus.** Same spec, "Change: row context menus (2026-07-28)". Right-click
   a row for the commands that already have shortcuts, each showing its shortcut: the full
   tree set on the Outline, open/rename on Projects / Tasks / Goals, open owner on Wish
-  List. Left out: Priority/State submenus, multi-select actions, `Shift+F10`.
+  List. Its three deferrals — Priority/State submenus and multi-select actions — closed under
+  "Right-click completion" below; `Shift+F10` is still out.
 - **✅ Priorities & scheduling fields.** Priority (A/B/C/D + rank), deadline, state, focus,
   effort (with rollups). Effort Left, Actual Effort, and % complete editable in the Task
   form (`specs/2026-07-27-1318-per-type-detail-forms`).
@@ -243,8 +244,45 @@ View · Tools`) with an icon gutter and shortcut column; an **icon row** for the
   `Promote to task…`) are now in the menus, the panel and `⌘K`. Amends both
   `components/navigation.md` (three surfaces → five) and `components/data-grid.md` (the menu tier;
   verbs/lens is no longer conditional). Follow-ups: right-click **content** expansion with submenus
-  — the next slice — plus a pin/reorder command row and rebindable shortcuts, both of which the
-  weight-and-binding model now makes possible.
+  — the next slice, below — plus a pin/reorder command row and rebindable shortcuts, both of which
+  the weight-and-binding model now makes possible.
+
+- **✅ Right-click completion: submenus, the surfaces it missed, the verbs it lacked.**
+  `specs/2026-08-06-1506-right-click-completion`. The surface above worked almost everywhere; this
+  finished what it carried and where it reached.
+
+  **Submenus.** A family named in `NESTED_SECTIONS` folds behind one row — a fly-out on the
+  desktop, a drill-in with a Back row on touch — on the menu bar as well as the row menu. That is
+  what let `Convert to ▸` onto the row menu at all: its five rows were a third of the menu's
+  height and had been kept off entirely, so the one view with conversions offered them nowhere on
+  right-click. Which families fold is declared, not derived from length; the one length rule is a
+  floor of two.
+
+  **The surfaces.** The Outline stopped building its row menu from a second, narrower
+  capabilities object and gained Convert to, Priority and Zoom. Blank grid space opens the same
+  menu with nothing selected — item verbs greyed with their reason, creation live — rather than
+  the browser's. And the **week calendar**, which had no right-click at all, got one: open,
+  duplicate, `State ▸` and delete on an appointment; create, navigate, slot granularity and Work
+  Week Mode on a slot. FullCalendar exposes no hook, so the target is resolved by hit-testing the
+  point — its slot rows and day columns are overlaid tables and neither is an ancestor of the
+  other.
+
+  **The verbs.** Complete (`⌃L`) with the state vocabulary behind `State ▸`, `Schedule block…`
+  (`⌃⌥⇧B`) which opens the week with a drawer prefilled from the row's own effort,
+  `View tasks…` / `View project…` (`⌃T` / `⌃⇧J`), and Achieve's `Pickup Row(s)` as **Cut and
+  Paste** — a move, so `moveNode` covers it and no mutation was added. Delete, the state changes
+  and Cut now act on the whole selection and print its size.
+
+  Three real defects surfaced while driving it. Five modules had **no Delete at all** — a task
+  made on `/tasks` could only be removed from the Outline. The tabs never handed over their first
+  "rows on screen" list, so Shift-arrow walked whole-tree order and could select 51 rows on a
+  six-row view. And that list was the rows passed _into_ the grid, before its own filters —
+  invisible while a selection only highlighted, not invisible once Delete acts on it. `DataGrid`
+  reports what it is showing now. The scope selects became `?scope=`, which both gives
+  `View tasks…` somewhere to land and makes a narrowed tab survive reload and Back. Amends
+  `components/navigation.md`, `components/data-grid.md` and `components/responsive.md` — where
+  the row menu is finally the bottom sheet that standard has always described. Follow-ups:
+  paste-as-duplicate, and Undo/Redo, which is now the largest missing safety net in the app.
 
 - **✅ Views across all modules.** `specs/2026-08-05-1059-views-across-modules`. Saved views
   stopped being a feature of three grids and became one of the app: **Outline, Projects, Goals,

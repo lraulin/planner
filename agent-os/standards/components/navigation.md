@@ -124,6 +124,59 @@ A command that cannot run right now — nothing selected, no groups to collapse 
 `disabled`, not filtered out, with `title` saying why. A command that vanishes teaches you it
 does not exist; a greyed one with "Select a row first" teaches you how to use it.
 
+**The reason has to be the specific one.** "Paste" greyed with no `title` is indistinguishable
+from a broken menu, and there are five separate reasons a paste can be refused. Where a helper
+computes the refusal, it returns _the sentence_, not a boolean — `pasteRefusal` and
+`GridSelectionCapability.moveReason` are both that shape, and both exist because the generic
+sentence sent people looking at the wrong thing.
+
+### A family folds behind one row
+
+A section named in `NESTED_SECTIONS` renders as a single row with a fly-out (desktop) or a
+drill-in with a Back row (touch), on **every** surface that shows it — the row menu and the menu
+bar alike. Nesting a family on one and not the other is two shapes for one thing.
+
+Which families fold is declared, not derived from how many rows they happen to have: `Convert to`
+has five entries on the Outline and two on a flat grid, and a length rule would nest it in one
+view and not the next. The single length condition is a floor of **two** — a fly-out onto one row
+is a hover you have to perform to learn there was nothing behind it.
+
+Fold the families where the _name_ is the useful thing and the members are a value picker: which
+kind, which letter, which state, which level. Do **not** fold the verbs someone opened the menu
+for. `Item`, `Move` and `Danger` stay flat, because burying `Delete` one hover deep is hiding it
+rather than organizing it.
+
+### Right-click reaches more than rows
+
+Three targets, all built from `Command`s and rendered by `menuItemsFor`:
+
+| Target                             | Menu                                                                                          |
+| ---------------------------------- | --------------------------------------------------------------------------------------------- |
+| **A row**                          | `rowMenuFor(capabilities)` — the registry's `rowMenu` commands, for the row under the pointer |
+| **Blank grid space**               | The same menu with **no selection**: item verbs greyed with their reason, creation live       |
+| **A calendar slot or appointment** | The week's own verbs, resolved by hit-testing the point                                       |
+
+The blank-area menu is deliberately not a second, shorter list. It is the row menu with `rowId`
+`null`, which is why it cannot drift from the row menu — and why `New` is on the row menu at all:
+without one live command, right-clicking an empty grid opens a menu of dead entries.
+
+A menu is **rebuilt on open**, never read from the registered command list. Right-clicking an
+unselected row selects it in the same event, so the registration still describes the previous
+selection at the moment the menu appears.
+
+### Plural where the verb is plural
+
+Delete, the state changes and Cut act on the whole selection and print its size (`Delete (3)`).
+Open, Rename, Indent, Outdent and Convert stay singular — opening three drawers is not a thing.
+
+Two things must hold before a command may act on a selection, and neither is free:
+
+1. **The selection is the rows on screen.** `DataGrid` reports them (`onNavigableIdsChange`); a
+   host must not derive them from the rows it passed _in_, which is the list before the grid's
+   own filters and search narrow it.
+2. **The list is reduced to roots** (`selectionMoveRoots`). A child selected alongside its parent
+   is already inside that parent's branch; acting on both does it twice and counts it twice.
+
 ### Where a control belongs
 
 Three tiers, and a control should sit in the lowest one that still works:

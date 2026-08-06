@@ -1,6 +1,6 @@
 # Right-Click Completion — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete (2026-08-06)**
 
 ## Scope
 

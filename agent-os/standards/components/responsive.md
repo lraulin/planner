@@ -121,6 +121,14 @@ installed PWA there is no browser chrome absorbing them.
 
 Rules:
 
+- **The row menu really is a sheet.** Pinned to the bottom edge, full width, capped at `85dvh`
+  with `pb-safe`, behind a tappable backdrop, rows at `min-h-tap`. The press coordinates are
+  deliberately ignored: opening at the press point puts the menu under the thumb that opened it,
+  and a long menu opens off the top of the screen. `ContextMenu` branches on `useIsCompact` and
+  writes this shape itself rather than borrowing `ModalShell`, because it owns its own Escape
+  (which backs out one level) and its own focus.
+- **A submenu drills in, it does not fly out.** There is nowhere to the side on a 390px screen.
+  The open family replaces the list with a `Back` row above it.
 - **Nothing is reachable only by hover, only by right-click, only by double-click, or only by a
   keyboard shortcut.** This generalises `modal-pattern.md`'s "a visible button always
   accompanies a keyboard shortcut." Before shipping a compact layout, list every action the
