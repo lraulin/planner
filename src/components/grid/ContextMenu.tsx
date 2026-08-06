@@ -5,6 +5,7 @@ import { CommandGlyph } from "@/components/icons/commandIcons";
 import { formatBindings } from "@/lib/commands/bindings";
 import type { MenuSection } from "@/lib/commands/menus";
 import type { CommandIcon } from "@/lib/commands/icons";
+import { useIsCompact } from "@/components/shell/useIsCompact";
 
 /**
  * The app's one menu renderer: row context menus, the command bar's menus, the `⋯` sheet, and the
@@ -282,6 +283,7 @@ export function ContextMenu({
   items: MenuItem[];
   onClose: () => void;
 }) {
+  const compact = useIsCompact();
   const ref = useRef<HTMLDivElement>(null);
   const subRef = useRef<HTMLDivElement>(null);
   const hoverTimer = useRef<number | undefined>(undefined);
@@ -292,6 +294,8 @@ export function ContextMenu({
 
   const openItem = openSub === null ? null : items[openSub];
   const subItems = openItem && isSubmenu(openItem) ? openItem.items : null;
+  /** On a phone an open submenu *replaces* the list rather than flying out beside it. */
+  const drilled = compact && subItems !== null;
 
   // A pending open must not fire into an unmounted menu — choosing a row closes the whole thing
   // while the timer from the hover that got you there is still counting down.
@@ -320,7 +324,9 @@ export function ContextMenu({
    */
   useLayoutEffect(() => {
     const el = ref.current;
-    if (!el) return;
+    // The sheet is placed by CSS — it is pinned to the bottom edge and spans the width, so
+    // there is nothing to measure and the press coordinates are deliberately ignored.
+    if (!el || compact) return;
     const margin = 4;
     const available = window.innerHeight - margin * 2;
     el.style.maxHeight = `${available}px`;
@@ -339,7 +345,7 @@ export function ContextMenu({
     el.style.top = `${top}px`;
     // preventScroll: focusing must not shift the grid under a menu that is already placed.
     el.focus({ preventScroll: true });
-  }, [x, y]);
+  }, [x, y, compact]);
 
   /**
    * Place the fly-out beside its parent row.
@@ -352,7 +358,8 @@ export function ContextMenu({
   useLayoutEffect(() => {
     const panel = subRef.current;
     const menu = ref.current;
-    if (!panel || !menu || openSub === null) return;
+    // No fly-out on a phone — a submenu drills into the sheet instead. See the compact branch.
+    if (!panel || !menu || openSub === null || compact) return;
 
     const row = menu.querySelector<HTMLElement>(`[data-menu-index="${openSub}"]`);
     if (!row) return;
@@ -381,7 +388,7 @@ export function ContextMenu({
 
     panel.style.left = `${left}px`;
     panel.style.top = `${top}px`;
-  }, [openSub, subItems]);
+  }, [openSub, subItems, compact]);
 
   useLayoutEffect(() => {
     function onPointerDown(event: MouseEvent) {
@@ -564,23 +571,75 @@ export function ContextMenu({
             break;
         }
       }}
-      // `overscroll-contain` so scrolling to the bottom of a long menu does not then start
-      // scrolling the grid underneath it.
-      className="fixed z-50 min-w-[13rem] overflow-y-auto overscroll-contain rounded border border-rule-strong bg-surface py-1 shadow-lg"
+      /*
+       * A **bottom sheet** below `md`, which is what `responsive.md` has always said the row
+       * menu is and what long-press was not doing: it opened this same popup at the press point,
+       * so a menu triggered near the bottom of a phone landed under the thumb that opened it and
+       * a long one opened off the top of the screen.
+       *
+       * Pinned to the bottom edge, full width, capped at 85dvh with `pb-safe` for the home
+       * indicator — the same shape `ModalShell` gives every dialog down there, written here
+       * rather than borrowed because this menu owns its own Escape (which backs out one level)
+       * and its own focus.
+       */
+      className={
+        compact
+          ? "pb-safe fixed inset-x-0 bottom-0 z-50 max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-xl border-t border-rule-strong bg-surface py-1 shadow-2xl"
+          : // `overscroll-contain` so scrolling to the bottom of a long menu does not then start
+            // scrolling the grid underneath it.
+            "fixed z-50 min-w-[13rem] overflow-y-auto overscroll-contain rounded border border-rule-strong bg-surface py-1 shadow-lg"
+      }
       // The menu takes focus only so it can own the keyboard; the highlighted item is the
       // visible cue, so the global :focus-visible ring would just draw a box around itself.
-      style={{ left: x, top: y, outline: "none" }}
+      style={compact ? { outline: "none" } : { left: x, top: y, outline: "none" }}
     >
+      {/*
+       * On a phone a submenu **drills in** rather than flying out — there is nowhere to the side
+       * for it to go. The back row is the way out, and it is a row rather than a chevron in a
+       * header because it has to be a 44px tap target like everything else here.
+       */}
+      {drilled && (
+        <button
+          type="button"
+          onClick={() => closeSubmenu()}
+          className="flex min-h-tap w-full items-center gap-3 border-b border-rule px-3 text-left text-[0.8125rem] text-ink-muted"
+        >
+          <span aria-hidden className="flex-none">
+            ‹
+          </span>
+          <span>Back</span>
+        </button>
+      )}
       <MenuList
-        items={items}
-        activeIndex={active}
-        openIndex={openSub}
-        onHover={hover}
+        items={drilled ? subItems : items}
+        activeIndex={drilled ? subActive : active}
+        // Both are indices into the *parent* list. Drilled in, the rows on screen are the
+        // child's, so applying either would light and open the wrong ones.
+        openIndex={drilled ? null : openSub}
+        onOpenSubmenu={drilled ? undefined : openSubmenu}
+        onHover={compact ? undefined : hover}
         onChoose={choose}
-        onOpenSubmenu={openSubmenu}
+        // 44px rows on touch (`responsive.md`); the desktop's 20px rows are a mouse target.
+        rowClassName={compact ? "min-h-tap" : ""}
       />
     </div>
   );
+
+  if (compact) {
+    return (
+      <>
+        {/* Tapping away closes it, the way the sheet's backdrop does everywhere else. The
+            `mousedown` listener above already covers this on desktop; touch needs something
+            to actually tap. */}
+        <div
+          aria-hidden
+          onClick={onClose}
+          className="fixed inset-0 z-40 bg-[color-mix(in_srgb,var(--ink)_28%,transparent)]"
+        />
+        {menu}
+      </>
+    );
+  }
 
   return subItems === null ? (
     menu
