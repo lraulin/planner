@@ -98,6 +98,26 @@ describe("grid command deck", () => {
     expect(calls).toEqual(["expand"]);
   });
 
+  // Both hosts pass the selected id straight to the server action and do nothing without
+  // one, so an enabled control here is a click that silently achieves nothing.
+  it("explains that priority repair needs a row to name the sibling group", () => {
+    const commands = buildGridCommands({
+      priorityMaintenance: true,
+      selection: { id: null },
+      actions: { onRemovePriorityGaps: () => {}, onReprioritizeUnique: () => {} },
+    });
+
+    for (const commandId of [
+      "record.remove-priority-gaps",
+      "record.reprioritize-unique",
+    ]) {
+      expect(commands.find((entry) => entry.id === commandId)).toMatchObject({
+        disabled: true,
+        title: "Select a row first",
+      });
+    }
+  });
+
   it("will not convert a row to the kind it already is", () => {
     let converted: string | null = null;
     const commands = buildGridCommands({

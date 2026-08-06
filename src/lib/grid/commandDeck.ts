@@ -314,6 +314,10 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
           group: "record",
           toolbarGroup: "more",
           keywords: "dense ranks renumber priority",
+          // Repair is scoped to one sibling group, and the selected row is what names it.
+          // Both hosts already no-op without a selection; saying so beats a dead click.
+          disabled: !hasSelection,
+          title: selectionTitle,
           run: actions.onRemovePriorityGaps,
         }),
       );
