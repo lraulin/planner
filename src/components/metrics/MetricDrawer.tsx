@@ -55,7 +55,14 @@ import { writeClipboardText } from "@/lib/tree/copyAsText";
 import type { OutlineNode } from "@/lib/tree/types";
 
 const inputClass =
-  "w-full rounded border border-rule bg-surface px-2 py-1.5 text-[0.875rem] text-ink outline-none focus:border-select-edge";
+  "min-h-tap w-full rounded border border-rule bg-surface px-2 py-1.5 text-[0.875rem] text-ink outline-none focus:border-select-edge md:min-h-0";
+
+/**
+ * The Tracking tab's secondary actions. Tap-sized below `md` (`responsive.md` — 44px, from
+ * `--tap-target`), back to the drawer's own 12px chrome above it.
+ */
+const trackingActionClass =
+  "min-h-tap flex-none rounded border border-rule px-3 py-1 text-[0.8125rem] text-ink-muted hover:bg-surface-raised md:min-h-0 md:px-2 md:text-[0.75rem]";
 
 const TYPE_HELP: Record<MetricType, string> = {
   instance: "Each entry is a separate reading (e.g. weight, score).",
@@ -447,7 +454,7 @@ function MetricForm({
             type="button"
             onClick={removeMetric}
             disabled={busy}
-            className="rounded px-2 py-1 text-[0.8125rem] text-danger hover:bg-surface-raised"
+            className="min-h-tap flex-none rounded px-2 py-1 text-[0.8125rem] text-danger hover:bg-surface-raised md:min-h-0"
           >
             Delete
           </button>
@@ -465,7 +472,7 @@ function MetricForm({
             key={id}
             type="button"
             onClick={() => setTab(id)}
-            className={`border-b-2 px-3 py-1.5 text-[0.8125rem] ${
+            className={`min-h-tap border-b-2 px-3 py-1.5 text-[0.8125rem] md:min-h-0 ${
               tab === id
                 ? "border-[var(--select-edge)] font-medium text-ink"
                 : "border-transparent text-ink-muted hover:text-ink"
@@ -568,11 +575,12 @@ function MetricForm({
 
         {tab === "tracking" && (
           <div className="flex flex-col gap-3">
-            <label className="flex items-center gap-2 text-[0.8125rem] text-ink">
+            <label className="flex min-h-tap items-center gap-2 text-[0.8125rem] text-ink md:min-h-0">
               <input
                 type="checkbox"
                 checked={draft.active}
                 onChange={(e) => patchDraft({ active: e.target.checked })}
+                className="h-5 w-5 accent-[var(--select-edge)] md:h-3.5 md:w-3.5"
               />
               Active
             </label>
@@ -620,14 +628,27 @@ function MetricForm({
               />
             </Field>
 
-            <div className="mt-2 flex items-center justify-between gap-2">
+            {/*
+              Logging a reading is what this tab is *for* on a phone, and it was previously the
+              last of five same-sized buttons in a wrapping row. Below `md` it leads the row at
+              full width; the file and column commands wrap underneath, tap-sized.
+            */}
+            <div className="mt-2 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
               <h3 className="text-[0.8125rem] font-medium text-ink">Tracking values</h3>
-              <div className="flex flex-wrap justify-end gap-2">
+              <div className="flex flex-wrap gap-2 md:justify-end">
+                <button
+                  type="button"
+                  onClick={addEntry}
+                  disabled={busy}
+                  className="min-h-tap w-full flex-none rounded border border-rule bg-surface-raised px-3 py-1 text-[0.8125rem] font-medium text-ink hover:border-rule-strong disabled:opacity-50 md:order-last md:min-h-0 md:w-auto md:bg-transparent md:px-2 md:text-[0.75rem] md:font-normal"
+                >
+                  + Entry
+                </button>
                 {selectedIds.size > 0 && (
                   <button
                     type="button"
                     onClick={() => void copySelectedEntries()}
-                    className="rounded border border-rule px-2 py-1 text-[0.75rem] text-ink-muted hover:bg-surface-raised"
+                    className={trackingActionClass}
                   >
                     Copy{selectedIds.size > 1 ? ` (${selectedIds.size})` : ""}
                   </button>
@@ -635,14 +656,14 @@ function MetricForm({
                 <button
                   type="button"
                   onClick={() => setShowFields(true)}
-                  className="rounded border border-rule px-2 py-1 text-[0.75rem] text-ink-muted hover:bg-surface-raised"
+                  className={trackingActionClass}
                 >
                   Show Fields…
                 </button>
                 <button
                   type="button"
                   onClick={exportCsv}
-                  className="rounded border border-rule px-2 py-1 text-[0.75rem] text-ink-muted hover:bg-surface-raised"
+                  className={trackingActionClass}
                 >
                   CSV Export…
                 </button>
@@ -650,7 +671,7 @@ function MetricForm({
                   type="button"
                   onClick={() => csvImportRef.current?.click()}
                   disabled={busy}
-                  className="rounded border border-rule px-2 py-1 text-[0.75rem] text-ink-muted hover:bg-surface-raised"
+                  className={trackingActionClass}
                 >
                   CSV Import…
                 </button>
@@ -661,14 +682,6 @@ function MetricForm({
                   className="hidden"
                   onChange={importCsv}
                 />
-                <button
-                  type="button"
-                  onClick={addEntry}
-                  disabled={busy}
-                  className="rounded border border-rule px-2 py-1 text-[0.75rem] text-ink hover:bg-surface-raised"
-                >
-                  + Entry
-                </button>
               </div>
             </div>
 
@@ -806,10 +819,15 @@ function MetricForm({
                           return null;
                         })}
                         <td className="px-1">
+                          {/*
+                            A bare `×` glyph is a ~10px target. Below `md` it gets a real one
+                            (`responsive.md`) — it sits beside a date field, and a mis-tap here
+                            deletes a reading.
+                          */}
                           <button
                             type="button"
                             onClick={() => removeEntry(entry.id)}
-                            className="text-ink-faint hover:text-danger"
+                            className="flex h-tap w-tap items-center justify-center rounded text-[1.125rem] leading-none text-ink-faint hover:text-danger md:h-6 md:w-6 md:text-[0.875rem]"
                             aria-label="Delete entry"
                           >
                             ×
@@ -822,9 +840,14 @@ function MetricForm({
               </table>
             </div>
             <p className="text-[0.6875rem] text-ink-faint">
-              Click Date to sort. Click a row to select; Shift-click for a range,
-              ⌘-click to multi-select; ⌘C copies. Show Fields chooses columns for every
-              metric.
+              {/* Shift-click, ⌘-click and ⌘C do not exist on a phone; the sentence about them
+                  is noise there, and the rest of the paragraph still applies. */}
+              Tap Date to sort.{" "}
+              <span className="hidden md:inline">
+                Click a row to select; Shift-click for a range, ⌘-click to multi-select;
+                ⌘C copies.{" "}
+              </span>
+              Show Fields chooses columns for every metric.
               {showTargetColumn
                 ? " Leave Target blank to use the metric objective on the graph."
                 : ""}
@@ -909,7 +932,7 @@ function MetricDateCell({
           (e.target as HTMLInputElement).blur();
         }
       }}
-      className="w-full rounded border border-transparent bg-transparent px-1 py-1 hover:border-rule focus:border-select-edge"
+      className="min-h-tap w-full rounded border border-transparent bg-transparent px-1 py-1 hover:border-rule focus:border-select-edge md:min-h-0"
     />
   );
 }
@@ -962,7 +985,7 @@ function MetricDecimalCell({
         }
       }}
       placeholder={placeholder}
-      className="w-full rounded border border-transparent bg-transparent px-1 py-1 hover:border-rule focus:border-select-edge"
+      className="min-h-tap w-full rounded border border-transparent bg-transparent px-1 py-1 hover:border-rule focus:border-select-edge md:min-h-0"
       inputMode="decimal"
     />
   );

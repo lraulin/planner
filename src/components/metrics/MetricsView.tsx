@@ -24,6 +24,7 @@ import { buildGridCommands } from "@/lib/grid/commandDeck";
 import { useRegisterCommands } from "@/components/shell/CommandProvider";
 import { OverflowMenu } from "@/components/shell/OverflowMenu";
 import { useSetting, type SettingCodec } from "@/components/settings/SettingsProvider";
+import { useIsCompact } from "@/components/shell/useIsCompact";
 import {
   ErrorBanner,
   TabToolbar,
@@ -31,8 +32,10 @@ import {
   ToolbarToggle,
 } from "@/components/tabs/tabChrome";
 import { isTypingTarget } from "@/lib/keyboard";
+import { metricPriorityText } from "@/lib/metrics/compactRow";
 import {
   clampPerformanceHeight,
+  COMPACT_PERFORMANCE_HEIGHT,
   DEFAULT_PERFORMANCE_HEIGHT,
   METRICS_LAYOUT_SCOPE,
   parseMetricsLayout,
@@ -43,6 +46,7 @@ import { formatMetricNumber } from "@/lib/metrics/parse";
 import type { MetricDetail, MetricListRow } from "@/lib/metrics/types";
 import type { OutlineNode } from "@/lib/tree/types";
 import { MetricChart } from "./MetricChart";
+import { MetricCompactList } from "./MetricCompactList";
 import { MetricDrawer } from "./MetricDrawer";
 
 const LAYOUT_CODEC: SettingCodec<MetricsLayoutSettings> = {
@@ -65,6 +69,7 @@ export function MetricsView({
   goals: OutlineNode[];
 }) {
   const router = useRouter();
+  const compact = useIsCompact();
   const [rows, setRows] = useState(initialMetrics);
   const [selectedId, setSelectedId] = useState<string | null>(
     initialMetrics[0]?.id ?? null,
@@ -342,6 +347,22 @@ export function MetricsView({
             onShowInactive={() => setActiveOnly(false)}
             busy={busy}
           />
+        ) : compact ? (
+          /*
+            Not the table at a smaller size — the table's own minimum is 48rem, which on a
+            390px screen is a sideways-scrolling wall (`responsive.md`). Tap opens the metric,
+            which also makes it the selection the performance pane graphs; long press is the
+            right-click menu, and on a phone the only route to New and Delete.
+          */
+          <MetricCompactList
+            groups={grouped}
+            selectedId={selected?.id ?? null}
+            onOpen={openDrawer}
+            onRowMenu={(rowId, x, y) => {
+              if (selectedId !== rowId) selectRow(rowId);
+              setMenu({ rowId, x, y });
+            }}
+          />
         ) : (
           <table className="w-full min-w-[48rem] border-collapse text-left text-[0.8125rem]">
             <thead className="sticky top-0 z-10 bg-surface-raised text-ink-muted">
@@ -378,16 +399,24 @@ export function MetricsView({
 
       {showPerformance && selected && (
         <>
-          <PerformanceResizeHandle
-            height={performanceHeight}
-            onResize={setPerformanceHeight}
-            onReset={() => setPerformanceHeight(DEFAULT_PERFORMANCE_HEIGHT)}
-          />
+          {/*
+            Drag is mouse-shaped (`responsive.md`), so below `md` the handle is gone and the
+            pane takes a fixed compact height instead. Growing the graph on a phone means
+            hiding the list it belongs to, which is what the Show Performance switch already
+            does — one control rather than a gesture with no touch equivalent.
+          */}
+          {!compact && (
+            <PerformanceResizeHandle
+              height={performanceHeight}
+              onResize={setPerformanceHeight}
+              onReset={() => setPerformanceHeight(DEFAULT_PERFORMANCE_HEIGHT)}
+            />
+          )}
           <div
             className="flex flex-none flex-col overflow-hidden border-t border-rule bg-surface"
-            style={{ height: performanceHeight }}
+            style={{ height: compact ? COMPACT_PERFORMANCE_HEIGHT : performanceHeight }}
           >
-            <div className="flex flex-none flex-wrap gap-4 px-3 pt-2">
+            <div className="flex flex-none flex-wrap items-center gap-x-4 px-3 pt-1 md:pt-2">
               <ToolbarToggle
                 checked={showLegend}
                 onChange={() => setShowLegend((v) => !v)}
@@ -401,14 +430,14 @@ export function MetricsView({
               {!chartSource && (
                 <button
                   type="button"
-                  className="text-[0.8125rem] text-ink-muted underline"
+                  className="min-h-tap text-[0.8125rem] text-ink-muted underline md:min-h-0"
                   onClick={() => loadChart(selected.id)}
                 >
                   Load graph
                 </button>
               )}
             </div>
-            <div className="min-h-0 flex-1 p-3 pt-2">
+            <div className="min-h-0 flex-1 p-3 pt-1 md:pt-2">
               <MetricChart
                 title={chartSource?.title ?? selected.title}
                 question={chartSource?.question ?? selected.question}
@@ -420,6 +449,7 @@ export function MetricsView({
                 metricType={chartSource?.metricType ?? selected.metricType}
                 showLegend={showLegend}
                 showObjective={showObjective}
+                compact={compact}
               />
             </div>
           </div>
@@ -626,12 +656,7 @@ function GroupRows({
       )}
       {rows.map((row) => {
         const selected = row.id === selectedId;
-        const priority =
-          row.priorityLetter == null
-            ? ""
-            : row.priorityRank != null
-              ? `${row.priorityLetter}${row.priorityRank}`
-              : row.priorityLetter;
+        const priority = metricPriorityText(row);
         return (
           <tr
             key={row.id}

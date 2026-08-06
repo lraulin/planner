@@ -6,9 +6,12 @@ import {
   getMetricDetailAction,
   listMetricsForOwnerAction,
 } from "@/app/metrics/actions";
+import { useIsCompact } from "@/components/shell/useIsCompact";
+import { metricPriorityText } from "@/lib/metrics/compactRow";
 import { formatMetricNumber } from "@/lib/metrics/parse";
 import type { MetricDetail, MetricListRow } from "@/lib/metrics/types";
 import type { OutlineNode } from "@/lib/tree/types";
+import { MetricCompactList } from "./MetricCompactList";
 import { MetricDrawer } from "./MetricDrawer";
 
 /**
@@ -27,6 +30,7 @@ export function GoalMetricsPanel({
   goals: OutlineNode[];
   initialRows?: MetricListRow[];
 }) {
+  const compact = useIsCompact();
   const [rows, setRows] = useState<MetricListRow[]>(initialRows);
   const [loaded, setLoaded] = useState(initialRows.length > 0);
   const [drawerDetail, setDrawerDetail] = useState<MetricDetail | null>(null);
@@ -79,24 +83,31 @@ export function GoalMetricsPanel({
     });
   };
 
+  const addMetricButton = (
+    <button
+      type="button"
+      onClick={create}
+      disabled={busy}
+      className="min-h-tap flex-none rounded border border-rule px-3 py-1 text-[0.8125rem] text-ink hover:bg-surface-raised disabled:opacity-50 md:min-h-0 md:px-2"
+    >
+      + Metric
+    </button>
+  );
+
   return (
     <div
       className="flex flex-col gap-3"
       onMouseEnter={ensureLoaded}
+      // A phone has no `mouseenter`, so the list would sit unloaded behind the fallback button
+      // below until something else fired. `pointerenter` covers the first touch on the panel.
+      onPointerEnter={ensureLoaded}
       onFocus={ensureLoaded}
     >
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-[0.8125rem] text-ink-muted">
           Metrics associated with this goal. They also appear on the Metrics tab.
         </p>
-        <button
-          type="button"
-          onClick={create}
-          disabled={busy}
-          className="rounded border border-rule px-2 py-1 text-[0.8125rem] text-ink hover:bg-surface-raised"
-        >
-          + Metric
-        </button>
+        <div className="flex justify-end">{addMetricButton}</div>
       </div>
 
       {error && (
@@ -109,73 +120,83 @@ export function GoalMetricsPanel({
         <button
           type="button"
           onClick={reload}
-          className="self-start text-[0.8125rem] text-ink-muted underline"
+          className="min-h-tap self-start text-[0.8125rem] text-ink-muted underline md:min-h-0"
         >
           Load metrics
         </button>
       )}
 
-      <div className="overflow-x-auto rounded border border-rule">
-        <table className="w-full min-w-[28rem] text-left text-[0.8125rem]">
-          <thead className="bg-surface-raised text-ink-muted">
-            <tr>
-              <th className="px-2 py-1.5 font-medium">Active</th>
-              <th className="px-2 py-1.5 font-medium">Priority</th>
-              <th className="px-2 py-1.5 font-medium">Title</th>
-              <th className="px-2 py-1.5 font-medium">Category</th>
-              <th className="px-2 py-1.5 font-medium">Question</th>
-              <th className="px-2 py-1.5 font-medium">Target</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loaded && rows.length === 0 && (
+      {compact ? (
+        /* The six-column table has a 28rem minimum — inside a drawer on a 390px screen that
+           is a scroller inside a scroller. Same card rows as the Metrics tab. */
+        <div className="overflow-hidden rounded border border-rule">
+          {loaded && rows.length === 0 ? (
+            <div className="px-3 py-6 text-center">
+              <p className="mb-3 text-[0.8125rem] text-ink-muted">
+                No metrics yet. How will you know whether this is working?
+              </p>
+              <div className="flex justify-center">{addMetricButton}</div>
+            </div>
+          ) : (
+            <MetricCompactList
+              groups={[{ key: "all", label: null, rows }]}
+              onOpen={openDrawer}
+            />
+          )}
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded border border-rule">
+          <table className="w-full min-w-[28rem] text-left text-[0.8125rem]">
+            <thead className="bg-surface-raised text-ink-muted">
               <tr>
-                <td colSpan={6} className="px-2 py-6 text-center">
-                  <p className="mb-2 text-ink-muted">
-                    No metrics yet. How will you know whether this is working?
-                  </p>
-                  <button
-                    type="button"
-                    onClick={create}
-                    disabled={busy}
-                    className="rounded border border-rule px-2 py-1 text-[0.8125rem] text-ink hover:bg-surface-raised"
-                  >
-                    + Metric
-                  </button>
-                </td>
+                <th className="px-2 py-1.5 font-medium">Active</th>
+                <th className="px-2 py-1.5 font-medium">Priority</th>
+                <th className="px-2 py-1.5 font-medium">Title</th>
+                <th className="px-2 py-1.5 font-medium">Category</th>
+                <th className="px-2 py-1.5 font-medium">Question</th>
+                <th className="px-2 py-1.5 font-medium">Target</th>
               </tr>
-            )}
-            {rows.map((row) => {
-              const priority =
-                row.priorityLetter == null
-                  ? ""
-                  : row.priorityRank != null
-                    ? `${row.priorityLetter}${row.priorityRank}`
-                    : row.priorityLetter;
-              return (
-                <tr
-                  key={row.id}
-                  className="cursor-pointer border-t border-rule hover:bg-surface-raised/60"
-                  onClick={() => openDrawer(row.id)}
-                >
-                  <td className="px-2 py-1.5 text-center">{row.active ? "✓" : ""}</td>
-                  <td className="px-2 py-1.5">{priority}</td>
-                  <td className="px-2 py-1.5 font-medium">{row.title || "Untitled"}</td>
-                  <td className="px-2 py-1.5 text-ink-muted">{row.category}</td>
-                  <td className="max-w-[12rem] truncate px-2 py-1.5 text-ink-muted">
-                    {row.question}
-                  </td>
-                  <td className="px-2 py-1.5 tabular-nums">
-                    {row.objectiveTarget != null
-                      ? formatMetricNumber(row.objectiveTarget)
-                      : "—"}
+            </thead>
+            <tbody>
+              {loaded && rows.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-2 py-6 text-center">
+                    <p className="mb-2 text-ink-muted">
+                      No metrics yet. How will you know whether this is working?
+                    </p>
+                    <div className="flex justify-center">{addMetricButton}</div>
                   </td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+              )}
+              {rows.map((row) => {
+                const priority = metricPriorityText(row);
+                return (
+                  <tr
+                    key={row.id}
+                    className="cursor-pointer border-t border-rule hover:bg-surface-raised/60"
+                    onClick={() => openDrawer(row.id)}
+                  >
+                    <td className="px-2 py-1.5 text-center">{row.active ? "✓" : ""}</td>
+                    <td className="px-2 py-1.5">{priority}</td>
+                    <td className="px-2 py-1.5 font-medium">
+                      {row.title || "Untitled"}
+                    </td>
+                    <td className="px-2 py-1.5 text-ink-muted">{row.category}</td>
+                    <td className="max-w-[12rem] truncate px-2 py-1.5 text-ink-muted">
+                      {row.question}
+                    </td>
+                    <td className="px-2 py-1.5 tabular-nums">
+                      {row.objectiveTarget != null
+                        ? formatMetricNumber(row.objectiveTarget)
+                        : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <MetricDrawer
         detail={drawerDetail}

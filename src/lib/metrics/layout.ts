@@ -14,6 +14,16 @@ export const MIN_PERFORMANCE_HEIGHT = 140;
 export const MAX_PERFORMANCE_HEIGHT = 720;
 export const DEFAULT_PERFORMANCE_HEIGHT = 280;
 
+/**
+ * The pane's height below `md`, where it is not resizable.
+ *
+ * Fixed rather than stored: the drag handle is mouse-shaped and gone on a phone
+ * (`responsive.md`), so a persisted height there could only ever be one inherited from a
+ * desktop session — 720px of graph on an 844px screen, with no way to get the list back.
+ * 200px is about six rows of list still visible under the toolbar on a 390 × 844 screen.
+ */
+export const COMPACT_PERFORMANCE_HEIGHT = 200;
+
 export type MetricsLayoutSettings = {
   /** Height of the performance pane under the metrics list (px). */
   performanceHeight: number;
