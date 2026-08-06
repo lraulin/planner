@@ -28,6 +28,21 @@ import { WeekCalendar } from "./WeekCalendar";
 import { ProjectsRail } from "./ProjectsRail";
 import { AppointmentDrawer } from "./AppointmentDrawer";
 import { MiniMonth } from "./MiniMonth";
+import {
+  ContextMenu,
+  menuItemsFor,
+  type MenuItem,
+} from "@/components/grid/ContextMenu";
+import { useSetting, type SettingCodec } from "@/components/settings/SettingsProvider";
+import { SCHEDULE_SCOPE } from "@/lib/settings/scopes";
+import {
+  parseScheduleView,
+  serializeScheduleView,
+  slotDurationOf,
+  SLOT_MINUTES,
+  type ScheduleViewSettings,
+} from "@/lib/settings/schedule";
+import type { CalendarTarget } from "@/lib/schedule/calendarTarget";
 import { defaultBlockRange } from "@/lib/schedule/blockDraft";
 import { owningProjectId } from "@/lib/tree/owningProject";
 import { CommandBar } from "@/components/grid/CommandBar";
@@ -77,6 +92,24 @@ function hydratePayload(initial: SchedulePayload) {
   };
 }
 
+/** Module constant: `useSetting` re-parses whenever the codec identity changes. */
+const SCHEDULE_VIEW_CODEC: SettingCodec<ScheduleViewSettings> = {
+  parse: parseScheduleView,
+  serialize: serializeScheduleView,
+};
+
+/**
+ * The three appointment states, as verbs.
+ *
+ * The checkbox on an event cycles open → done → missed; the menu is how you jump straight to
+ * one, which is the whole difference between a cycle and a picker.
+ */
+const CHECK_STATES = [
+  ["open", "Mark open"],
+  ["done", "Mark done"],
+  ["missed", "Mark missed"],
+] as const satisfies readonly (readonly [AppointmentCheck, string])[];
+
 /** `alert` is a free variable that does not exist under RSC SSR — look it up via window. */
 function reportError(message: string) {
   if (typeof window !== "undefined") window.alert(message);
@@ -116,6 +149,16 @@ export function ScheduleView({ initial, nodes, weekKey, blockNodeId = null }: Pr
   const [editingAppointment, setEditingAppointment] = useState<
     Appointment | DraftAppointment | null
   >(null);
+  /** Where the calendar's context menu is open, and what it is about. */
+  const [calendarMenuAt, setCalendarMenuAt] = useState<{
+    target: CalendarTarget;
+    x: number;
+    y: number;
+  } | null>(null);
+  const { value: view, patch: patchView } = useSetting(
+    SCHEDULE_SCOPE,
+    SCHEDULE_VIEW_CODEC,
+  );
 
   /*
    * `Schedule block…`, arriving from another module.
@@ -376,6 +419,171 @@ export function ScheduleView({ initial, nodes, weekKey, blockNodeId = null }: Pr
    * vanishing — `navigation.md`: a command that disappears teaches you it does not exist, a greyed
    * one teaches you how to get it.
    */
+  /**
+   * The calendar's own right-click, which it had none of at all.
+   *
+   * Built from `Command`s and rendered through `menuItemsFor` like every grid's row menu, so the
+   * labels and the shortcuts come from the same place the menu bar's do. What is *not* shared is
+   * the registry: these are about the appointment or the slot under the pointer, which is not
+   * something a registered command list can describe — the same reason `rowMenu` rebuilds rather
+   * than reading the registration.
+   */
+  function calendarMenu(target: CalendarTarget): MenuItem[] {
+    if (target.kind === "event") {
+      const occurrence = occurrences.find(
+        (entry) => entry.occurrenceKey === target.occurrenceKey,
+      );
+      const state = occurrence?.checkState ?? "open";
+      const id = target.appointmentId;
+
+      return menuItemsFor([
+        {
+          label: "Item",
+          commands: [
+            {
+              id: "appointment.open",
+              label: "Open appointment…",
+              group: "record",
+              icon: "open",
+              bindings: [{ key: "Enter" }],
+              run: () => occurrence && openOccurrence(occurrence),
+            },
+            {
+              id: "appointment.duplicate",
+              label: "Duplicate here",
+              group: "record",
+              icon: "copy",
+              run: asyncHandler(
+                () =>
+                  handleEventDrop(
+                    id,
+                    occurrence?.startAt ?? new Date(),
+                    occurrence?.endAt ?? new Date(),
+                    { duplicate: true },
+                  ),
+                reportError,
+              ),
+            },
+          ],
+        },
+        {
+          label: "State",
+          // Three rows behind one entry, the same fold the grids' `State ▸` uses.
+          submenu: true,
+          commands: CHECK_STATES.map(([next, label]) => ({
+            id: `appointment.state.${next}`,
+            label,
+            group: "record" as const,
+            icon: "state" as const,
+            disabled: state === next,
+            title: state === next ? `Already ${label.toLowerCase()}` : undefined,
+            run: asyncHandler(() => handleCycleCheck(id, next), reportError),
+          })),
+        },
+        {
+          label: "Danger",
+          commands: [
+            {
+              id: "appointment.delete",
+              label: "Delete appointment",
+              group: "record",
+              icon: "delete",
+              destructive: true,
+              bindings: [{ key: "Delete" }],
+              // The same `window.confirm` the drawer's Delete asks. Two ways to delete an
+              // appointment where one asks and one does not is worse than either alone, and
+              // there is no undo to fall back on.
+              run: asyncHandler(async () => {
+                if (!window.confirm("Delete this appointment?")) return;
+                await handleDeleteAppointment(id);
+              }, reportError),
+            },
+          ],
+        },
+      ]);
+    }
+
+    if (target.kind !== "slot") return [];
+
+    const { start, allDay } = target;
+    return menuItemsFor([
+      {
+        label: "New",
+        commands: [
+          {
+            id: "schedule.new-here",
+            label: allDay ? "New all-day event…" : "New appointment here…",
+            group: "record",
+            icon: "new",
+            run: () =>
+              setEditingAppointment(
+                allDay
+                  ? { subject: "", startAt: start, endAt: start }
+                  : {
+                      subject: "",
+                      startAt: start,
+                      endAt: new Date(start.getTime() + view.slotMinutes * 60_000),
+                    },
+              ),
+          },
+        ],
+      },
+      {
+        label: "Go to",
+        commands: [
+          {
+            id: "schedule.go-today",
+            label: "Today",
+            group: "view",
+            icon: "schedule",
+            run: () => navigateWeek(new Date()),
+          },
+          {
+            id: "schedule.go-week-of",
+            label: "Week of this day",
+            group: "view",
+            icon: "schedule",
+            // Only offered when it would move you — on the week you are already looking at,
+            // it is a row that does nothing.
+            disabled: toDateKey(startOfWeek(start, 0)) === weekKey,
+            title:
+              toDateKey(startOfWeek(start, 0)) === weekKey
+                ? "Already showing this week"
+                : undefined,
+            run: () => navigateWeek(start),
+          },
+        ],
+      },
+      {
+        label: "Slot size",
+        submenu: true,
+        commands: SLOT_MINUTES.map((minutes) => ({
+          id: `schedule.slot-${minutes}`,
+          label: `${minutes} minutes`,
+          group: "view" as const,
+          icon: "levels" as const,
+          disabled: view.slotMinutes === minutes,
+          title: view.slotMinutes === minutes ? "Current slot size" : undefined,
+          run: () => patchView((current) => ({ ...current, slotMinutes: minutes })),
+        })),
+      },
+      {
+        label: "Layout",
+        commands: [
+          {
+            id: "schedule.work-week",
+            label: view.workWeek ? "Show the weekend" : "Work week mode",
+            group: "view",
+            icon: "panel",
+            keywords: "weekend saturday sunday five days",
+            run: () =>
+              patchView((current) => ({ ...current, workWeek: !current.workWeek })),
+          },
+        ],
+      },
+    ]);
+  }
+
   const commands = useMemo<Command[]>(
     () => [
       {
@@ -589,7 +797,20 @@ export function ScheduleView({ initial, nodes, weekKey, blockNodeId = null }: Pr
             onEventDrop={asyncHandler(handleEventDrop, reportError)}
             onExternalDrop={asyncHandler(handleExternalProjectDrop, reportError)}
             onCycleCheck={asyncHandler(handleCycleCheck, reportError)}
+            onContextMenu={(target, x, y) => setCalendarMenuAt({ target, x, y })}
+            slotDuration={slotDurationOf(view.slotMinutes)}
+            weekends={!view.workWeek}
           />
+          {calendarMenuAt && (
+            // Built on open rather than held in state, so a state row greys itself against the
+            // appointment as it is now — the same rule the grids' row menus follow.
+            <ContextMenu
+              x={calendarMenuAt.x}
+              y={calendarMenuAt.y}
+              items={calendarMenu(calendarMenuAt.target)}
+              onClose={() => setCalendarMenuAt(null)}
+            />
+          )}
         </div>
 
         {/* The mini-month and the drag-a-project-onto-the-week rail are both mouse surfaces,

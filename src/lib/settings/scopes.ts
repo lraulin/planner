@@ -23,6 +23,7 @@ export const SCOPE_KINDS = [
   "notes",
   "drawer",
   "shell",
+  "schedule",
 ] as const;
 export type ScopeKind = (typeof SCOPE_KINDS)[number];
 
@@ -118,6 +119,9 @@ export function notesViewScope(viewId: string): string {
 export const DRAWER_SCOPE = "drawer";
 export const SHELL_SCOPE = "shell";
 
+/** The week calendar's own drawing settings — slot height and Work Week Mode. */
+export const SCHEDULE_SCOPE = "schedule";
+
 const KIND_LABELS: Record<ScopeKind, string> = {
   grid: "Grid",
   views: "Saved views",
@@ -126,6 +130,7 @@ const KIND_LABELS: Record<ScopeKind, string> = {
   notes: "Notes",
   drawer: "Detail drawer",
   shell: "App shell",
+  schedule: "Weekly Schedule",
 };
 
 /** `projects.active-status` → `Projects / Active status`. */

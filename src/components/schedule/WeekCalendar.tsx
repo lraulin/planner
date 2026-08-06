@@ -15,6 +15,7 @@ import type { AppointmentCheck } from "@/db/schema";
 import type { Occurrence } from "@/lib/schedule/recurrence";
 import type { ScheduleOccurrence } from "@/lib/schedule/queries";
 import { contrastText } from "@/lib/schedule/geometry";
+import { calendarTargetFrom, type CalendarTarget } from "@/lib/schedule/calendarTarget";
 import {
   checkStateLabel,
   checkStateMark,
@@ -52,6 +53,12 @@ type Props = {
     durationMinutes: number,
   ) => void;
   onCycleCheck: (id: string, next: AppointmentCheck) => void;
+  /** Right-click / long-press. `target` says whether it landed on an event or a slot. */
+  onContextMenu?: (target: CalendarTarget, x: number, y: number) => void;
+  /** Row height, from the calendar's own menu. See `lib/settings/schedule.ts`. */
+  slotDuration?: string;
+  /** Achieve's Work Week Mode — Monday to Friday. */
+  weekends?: boolean;
 };
 
 export function WeekCalendar({
@@ -64,6 +71,9 @@ export function WeekCalendar({
   onEventDrop,
   onExternalDrop,
   onCycleCheck,
+  onContextMenu,
+  slotDuration = "00:30:00",
+  weekends = true,
 }: Props) {
   const ctrlDown = useRef(false);
   // Keep latest callback for FullCalendar-held eventContent closures.
@@ -136,6 +146,29 @@ export function WeekCalendar({
   return (
     <div
       className="schedule-calendar h-full min-h-0"
+      /*
+       * The calendar's right-click, which it had none of.
+       *
+       * On the container rather than per element: FullCalendar owns everything inside and
+       * offers no `contextmenu` hook, so this hit-tests the point instead of reading
+       * `event.target` — the slot rows and the day columns are overlaid tables, and neither is
+       * an ancestor of the other. See `calendarTargetFrom`.
+       */
+      onContextMenu={
+        onContextMenu &&
+        ((event) => {
+          // Inside a field the browser's own cut/copy/paste menu is the useful one.
+          if ((event.target as HTMLElement).closest("input, select, textarea")) return;
+          const target = calendarTargetFrom(
+            document.elementsFromPoint(event.clientX, event.clientY),
+          );
+          // Chrome — the header row, the scrollbar — resolves to nothing, and a menu about no
+          // particular time is worse than no menu. Let the browser have it.
+          if (target.kind === "none") return;
+          event.preventDefault();
+          onContextMenu(target, event.clientX, event.clientY);
+        })
+      }
       onKeyDown={(e) => {
         if (e.key === "Control" || e.key === "Meta") ctrlDown.current = true;
       }}
@@ -149,7 +182,7 @@ export function WeekCalendar({
        * breakpoint remounts rather than leaving FullCalendar on the old one.
        */}
       <FullCalendar
-        key={`${singleDay ? "day" : "week"}:${(singleDay ?? weekStart).toISOString()}`}
+        key={`${singleDay ? "day" : "week"}:${(singleDay ?? weekStart).toISOString()}:${slotDuration}:${weekends}`}
         plugins={[timeGridPlugin, dayGridPlugin, interactionPlugin]}
         initialView={singleDay ? "timeGridDay" : "timeGridWeek"}
         initialDate={singleDay ?? weekStart}
@@ -165,10 +198,10 @@ export function WeekCalendar({
         eventDurationEditable
         slotMinTime="00:00:00"
         slotMaxTime="24:00:00"
-        slotDuration="00:30:00"
+        slotDuration={slotDuration}
         snapDuration="00:15:00"
         scrollTime="07:00:00"
-        weekends
+        weekends={weekends}
         firstDay={0}
         dayHeaderFormat={{ weekday: "long", month: "short", day: "numeric" }}
         events={events}
@@ -210,7 +243,17 @@ export function WeekCalendar({
           );
         }}
         eventDidMount={(info) => {
-          if (info.event.display !== "background") return;
+          if (info.event.display !== "background") {
+            // The handle the right-click resolver reads. FullCalendar puts nothing identifying
+            // in the DOM by itself, and hit-testing is the only way in from a `contextmenu`.
+            const appointmentId = info.event.extendedProps.appointmentId as
+              string | undefined;
+            if (appointmentId) {
+              info.el.dataset.appointmentId = appointmentId;
+              info.el.dataset.occurrenceKey = info.event.id;
+            }
+            return;
+          }
           const label =
             (info.event.extendedProps.labelColor as string | undefined) ??
             info.event.textColor ??
