@@ -107,6 +107,8 @@ export function CompactRow<TCtx, TRow>({
       <div
         ref={rowRef}
         role="row"
+        // Tells the grid's blank-area handler that this press was over a record. See `DataGrid`.
+        data-node-row=""
         aria-level={row.depth + 1}
         aria-selected={selected}
         aria-expanded={expanded}

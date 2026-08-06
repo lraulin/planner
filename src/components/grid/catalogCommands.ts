@@ -48,6 +48,9 @@ export function catalogCapabilities({
         section: "New",
         icon: "new",
         toolbar: 10,
+        // The one row-menu command that does not need a row, and therefore the only thing worth
+        // opening the blank-area menu for on an empty catalog. See `buildGridCommands`.
+        rowMenu: true,
         // Apple keyboards have no Insert key, so ⌘⏎ is bound alongside it. `Insert` is what gets
         // printed, which is what these views already showed.
         bindings: [{ key: "Insert" }, { key: "Enter", meta: true }],

@@ -39,7 +39,7 @@ export function useNodeCommandDeck({
   onCopyAsText: () => void;
 }): {
   capabilities: GridCommandCapabilities;
-  rowMenu: (nodeId: string) => MenuItem[];
+  rowMenu: (nodeId: string | null) => MenuItem[];
   conversionDialog: ReactNode;
 } {
   const [pendingConversion, setPendingConversion] = useState<{
@@ -101,20 +101,15 @@ export function useNodeCommandDeck({
   );
 
   const rowMenu = useCallback(
-    (nodeId: string): MenuItem[] => {
-      const node = byId.get(nodeId);
-      if (!node) return [];
+    // `null` is the blank area below the rows — the same menu with nothing selected.
+    (nodeId: string | null): MenuItem[] => {
       // Multi-select survives a right-click on a row already in the selection, so `Copy as text`
       // still says how many it is about to copy.
-      const count = selectedIds.has(nodeId) ? selectedIds.size : 1;
-      return rowMenuFor(capabilitiesFor(nodeId, count), {
-        id: nodeId,
-        count,
-        label: node.name,
-        kind: kindOfNode(node),
-      });
+      const count =
+        nodeId && selectedIds.has(nodeId) ? selectedIds.size : nodeId ? 1 : 0;
+      return rowMenuFor(capabilitiesFor(nodeId, count));
     },
-    [byId, capabilitiesFor, selectedIds],
+    [capabilitiesFor, selectedIds],
   );
 
   const conversionPlan = useMemo<ConversionPlan | null>(() => {

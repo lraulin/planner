@@ -180,16 +180,10 @@ export function TimeChartsView({
   );
 
   const rowMenu = useCallback(
-    (chartId: string): MenuItem[] => {
-      const row = rows.find((r) => r.id === chartId);
-      if (!row) return [];
-      return rowMenuFor(capabilitiesFor(chartId, 1), {
-        id: chartId,
-        count: 1,
-        label: row.name,
-      });
-    },
-    [rows, capabilitiesFor],
+    // `null` is the blank area below the rows — the same menu with nothing selected.
+    (chartId: string | null): MenuItem[] =>
+      rowMenuFor(capabilitiesFor(chartId, chartId ? 1 : 0)),
+    [capabilitiesFor],
   );
 
   /*

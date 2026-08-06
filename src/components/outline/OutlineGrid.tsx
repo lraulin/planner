@@ -47,8 +47,7 @@ import {
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import { DataGrid, type RowDrag } from "@/components/grid/DataGrid";
-import { menuItemsFor, type MenuItem } from "@/components/grid/ContextMenu";
-import { rowMenuSections } from "@/lib/commands/menus";
+import { type MenuItem } from "@/components/grid/ContextMenu";
 import type { GridDefaults } from "@/components/grid/useGridState";
 import { useModuleViews } from "@/components/grid/useModuleViews";
 import { GridToolbar, switchValue } from "@/components/grid/GridToolbar";
@@ -77,10 +76,8 @@ import {
 } from "./outlineColumns";
 import { isTypingTarget } from "@/lib/keyboard";
 import { zoomBranch, zoomOutRoot } from "@/lib/tree/zoom";
-import {
-  buildGridCommands,
-  type GridCommandCapabilities,
-} from "@/lib/grid/commandDeck";
+import { type GridCommandCapabilities } from "@/lib/grid/commandDeck";
+import { rowMenuFor } from "@/components/grid/rowMenu";
 import { planNodeConversion, type ConversionPlan } from "@/lib/tree/conversion";
 import { depthForOutlineLevel } from "@/lib/tree/outlineLevel";
 
@@ -429,101 +426,122 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     [commandsFor, selected, move, copySelectionAsText, setTreeCollapsed],
   );
 
-  const commandCapabilities = useMemo<GridCommandCapabilities>(() => {
-    const siblings = selected
-      ? nodes.filter((node) => node.parentId === selected.parentId)
-      : [];
-    const index = selected ? siblings.findIndex((node) => node.id === selected.id) : -1;
-    return {
-      createKinds: ["result_area", "goal", "dream", "project", "task"],
-      hierarchy: true,
-      priorityMaintenance: true,
-      conversionKinds: NODE_KINDS,
-      outlineZoom: true,
-      selection: {
-        id: selectedId,
-        count: selectedIds.size,
-        label: selected?.name ?? null,
-        kind: selected ? kindOfNode(selected) : undefined,
-        canMoveUp: index > 0,
-        canMoveDown: index >= 0 && index < siblings.length - 1,
-        canIndent: index > 0,
-        canOutdent: selected?.parentId !== null,
-        canExpand: selected?.hasChildren === true && selected.collapsed,
-        canCollapse: selected?.hasChildren === true && !selected.collapsed,
-      },
-      actions: {
-        onCreate: (kind, mode) => {
-          if (mode === "top") {
-            if (kind === "result_area") addResultArea();
-            else addTopKind(kind);
-          } else if (mode === "before" || mode === "after") {
-            addSibling(selected, mode);
-          } else {
-            addChild(selected);
-          }
+  /**
+   * Everything the command surfaces can do, stated for **one particular row**.
+   *
+   * Parameterised rather than closed over the selection, because the toolbar and the row menu
+   * are asking about different rows: right-clicking an unselected row selects it in the same
+   * event, so the registered commands still describe the previous selection when the menu opens.
+   * `useNodeCommandDeck` has had this shape all along; the Outline is the last host to adopt it,
+   * and it is what finally gets Convert to, Priority and Zoom onto its right-click menu.
+   */
+  const capabilitiesFor = useCallback(
+    (id: string | null, count: number): GridCommandCapabilities => {
+      const node = id ? (byId.get(id) ?? null) : null;
+      const siblings = node
+        ? nodes.filter((entry) => entry.parentId === node.parentId)
+        : [];
+      const index = node ? siblings.findIndex((entry) => entry.id === node.id) : -1;
+
+      return {
+        createKinds: ["result_area", "goal", "dream", "project", "task"],
+        hierarchy: true,
+        priorityMaintenance: true,
+        conversionKinds: NODE_KINDS,
+        outlineZoom: true,
+        selection: {
+          id,
+          count,
+          label: node?.name ?? null,
+          kind: node ? kindOfNode(node) : undefined,
+          canMoveUp: index > 0,
+          canMoveDown: index >= 0 && index < siblings.length - 1,
+          canIndent: index > 0,
+          canOutdent: node !== null && node.parentId !== null,
+          canExpand: node?.hasChildren === true && node.collapsed,
+          canCollapse: node?.hasChildren === true && !node.collapsed,
         },
-        onOpen: (id) => {
-          selectOne(id);
-          setDetailId(id);
+        actions: {
+          onCreate: (kind, mode) => {
+            if (mode === "top") {
+              if (kind === "result_area") addResultArea();
+              else addTopKind(kind);
+            } else if (mode === "before" || mode === "after") {
+              addSibling(node, mode);
+            } else {
+              addChild(node);
+            }
+          },
+          onOpen: (nodeId) => {
+            selectOne(nodeId);
+            setDetailId(nodeId);
+          },
+          onRename: (nodeId) => {
+            selectOne(nodeId);
+            setEditingId(nodeId);
+          },
+          onDelete: (nodeId) => {
+            const target = byId.get(nodeId);
+            if (target) setPendingDelete(target);
+          },
+          onCopyAsText: copySelectionAsText,
+          onMoveUp: (nodeId) => apply(() => moveNodeVerticallyAction(nodeId, "up")),
+          onMoveDown: (nodeId) => apply(() => moveNodeVerticallyAction(nodeId, "down")),
+          onIndent: (nodeId) => apply(() => indentNodeAction(nodeId)),
+          onOutdent: (nodeId) => apply(() => outdentNodeAction(nodeId)),
+          onExpand: (nodeId) => {
+            const target = byId.get(nodeId);
+            if (target) toggleCollapsed(target, false);
+          },
+          onCollapse: (nodeId) => {
+            const target = byId.get(nodeId);
+            if (target) toggleCollapsed(target, true);
+          },
+          onExpandAll: () => setTreeCollapsed(false),
+          onCollapseAll: () => setTreeCollapsed(true),
+          onExpandThroughLevel: (level) =>
+            apply(() => expandThroughDepthAction(depthForOutlineLevel(level))),
+          onChooseExpandThroughLevel: () => setExpandLevelPickerOpen(true),
+          // Priority repair is scoped to one sibling group and the row names it, so it takes the
+          // row rather than the selection — right-clicking an unselected row must not renumber
+          // the selected row's siblings.
+          onRemovePriorityGaps: () => {
+            if (id) apply(() => removePriorityGapsAction(id));
+          },
+          onReprioritizeUnique: (nodeId) =>
+            apply(() => reprioritizeUniqueAction(nodeId)),
+          onConvert: (nodeId, kind) => {
+            setPendingConversion({ nodeId, targetKind: kind });
+          },
+          onZoomIn: (nodeId) => setZoom(nodeId, "push"),
+          onZoomOut: () => setZoom(zoomOutRoot(nodes, zoom), "push"),
+          onClearZoom: () => setZoom(null, "push"),
+          onZoomToItem: () => setZoomPickerOpen(true),
         },
-        onRename: (id) => {
-          selectOne(id);
-          setEditingId(id);
-        },
-        onDelete: (id) => {
-          const node = byId.get(id);
-          if (node) setPendingDelete(node);
-        },
-        onCopyAsText: copySelectionAsText,
-        onMoveUp: (id) => apply(() => moveNodeVerticallyAction(id, "up")),
-        onMoveDown: (id) => apply(() => moveNodeVerticallyAction(id, "down")),
-        onIndent: (id) => apply(() => indentNodeAction(id)),
-        onOutdent: (id) => apply(() => outdentNodeAction(id)),
-        onExpand: (id) => {
-          const node = byId.get(id);
-          if (node) toggleCollapsed(node, false);
-        },
-        onCollapse: (id) => {
-          const node = byId.get(id);
-          if (node) toggleCollapsed(node, true);
-        },
-        onExpandAll: () => setTreeCollapsed(false),
-        onCollapseAll: () => setTreeCollapsed(true),
-        onExpandThroughLevel: (level) =>
-          apply(() => expandThroughDepthAction(depthForOutlineLevel(level))),
-        onChooseExpandThroughLevel: () => setExpandLevelPickerOpen(true),
-        onRemovePriorityGaps: () =>
-          selectedId && apply(() => removePriorityGapsAction(selectedId)),
-        onReprioritizeUnique: (id) => apply(() => reprioritizeUniqueAction(id)),
-        onConvert: (id, kind) => {
-          setPendingConversion({ nodeId: id, targetKind: kind });
-        },
-        onZoomIn: (id) => setZoom(id, "push"),
-        onZoomOut: () => setZoom(zoomOutRoot(nodes, zoom), "push"),
-        onClearZoom: () => setZoom(null, "push"),
-        onZoomToItem: () => setZoomPickerOpen(true),
-      },
-    };
-  }, [
-    selected,
-    nodes,
-    selectedId,
-    selectedIds,
-    byId,
-    addResultArea,
-    addTopKind,
-    addSibling,
-    addChild,
-    selectOne,
-    setDetailId,
-    copySelectionAsText,
-    apply,
-    toggleCollapsed,
-    setTreeCollapsed,
-    setZoom,
-    zoom,
-  ]);
+      };
+    },
+    [
+      nodes,
+      byId,
+      addResultArea,
+      addTopKind,
+      addSibling,
+      addChild,
+      selectOne,
+      setDetailId,
+      copySelectionAsText,
+      apply,
+      toggleCollapsed,
+      setTreeCollapsed,
+      setZoom,
+      zoom,
+    ],
+  );
+
+  const commandCapabilities = useMemo(
+    () => capabilitiesFor(selectedId, selectedIds.size),
+    [capabilitiesFor, selectedId, selectedIds.size],
+  );
 
   const suspended =
     detailId !== null ||
@@ -539,59 +557,23 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
    *
    * Not the toolbar's command list: the toolbar's is about the selected row, and right-clicking a
    * row that is not selected has to offer commands about the row under the pointer. So the same
-   * `buildGridCommands` runs again with that row's own legality flags, and `rowMenuSections` decides
-   * what appears and in what order.
+   * capabilities are restated for that row and `rowMenuSections` decides what appears.
    *
-   * There used to be a twelve-id allowlist here deciding which commands were menu-worthy. It was a
-   * second placement rule living a thousand lines from the first, and it is now the `rowMenu` flag
-   * on the command itself. Every entry is greyed out on exactly the conditions that would make it
-   * fail, so nothing here raises an error banner.
+   * This used to build a **second, narrower** capabilities object of its own — no
+   * `priorityMaintenance`, no `conversionKinds`, no `outlineZoom` — so the one view that has
+   * Convert to, priority repair and zoom offered none of them on right-click. The richest view
+   * had the poorest menu. Sharing `capabilitiesFor` is what fixed it, and is why there is now
+   * nowhere for the two to drift apart again.
    */
   const rowMenu = useCallback(
-    (nodeId: string): MenuItem[] => {
-      const node = byId.get(nodeId);
-      if (!node) return [];
-
-      const command = commandsFor(node);
-      const siblings = nodes.filter((n) => n.parentId === node.parentId);
-      const index = siblings.findIndex((n) => n.id === node.id);
-
-      const kind = kindOfNode(node);
-      const rowCommands = buildGridCommands({
-        createKinds: [kind],
-        hierarchy: true,
-        selection: {
-          id: nodeId,
-          count: selectedIds.has(nodeId) ? selectedIds.size : 1,
-          canMoveUp: index > 0,
-          canMoveDown: index < siblings.length - 1,
-          canIndent: index > 0,
-          canOutdent: node.parentId !== null,
-          canExpand: node.hasChildren && node.collapsed,
-          canCollapse: node.hasChildren && !node.collapsed,
-        },
-        actions: {
-          onCreate: (_kind, mode) => {
-            if (mode === "before") command.addSiblingBefore();
-            else if (mode === "after") command.addSiblingAfter();
-            else if (mode === "child") command.addChild();
-          },
-          onOpen: () => command.openDetail(),
-          onRename: () => command.rename(),
-          onCopyAsText: copySelectionAsText,
-          onDelete: () => command.remove(),
-          onMoveUp: () => command.moveUp(),
-          onMoveDown: () => command.moveDown(),
-          onIndent: () => command.indent(),
-          onOutdent: () => command.outdent(),
-          onExpand: () => command.expand(),
-          onCollapse: () => command.collapse(),
-        },
-      });
-
-      return menuItemsFor(rowMenuSections(rowCommands));
+    (nodeId: string | null): MenuItem[] => {
+      // Multi-select survives a right-click on a row already in the selection, so the plural
+      // commands still say how many they are about to act on.
+      const count =
+        nodeId && selectedIds.has(nodeId) ? selectedIds.size : nodeId ? 1 : 0;
+      return rowMenuFor(capabilitiesFor(nodeId, count));
     },
-    [byId, nodes, commandsFor, selectedIds, copySelectionAsText],
+    [capabilitiesFor, selectedIds],
   );
 
   /**

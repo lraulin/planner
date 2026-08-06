@@ -150,16 +150,9 @@ export function ResourcesView({
   );
 
   const rowMenu = useCallback(
-    (id: string): MenuItem[] => {
-      const row = rows.find((resource) => resource.id === id);
-      if (!row) return [];
-      return rowMenuFor(capabilitiesFor(id, 1), {
-        id: id,
-        count: 1,
-        label: row.shortName,
-      });
-    },
-    [rows, capabilitiesFor],
+    // `null` is the blank area below the rows — the same menu with nothing selected.
+    (id: string | null): MenuItem[] => rowMenuFor(capabilitiesFor(id, id ? 1 : 0)),
+    [capabilitiesFor],
   );
 
   useEffect(() => {

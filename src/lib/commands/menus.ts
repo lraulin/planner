@@ -43,10 +43,40 @@ export const MENU_SECTIONS: Record<CommandMenu, readonly string[]> = {
   tools: [],
 };
 
+/**
+ * The section families that collapse to a single row with a fly-out, on every surface that
+ * renders them.
+ *
+ * **Declared, not derived from length.** A rule like "nest once a section passes four commands"
+ * was the obvious alternative and is worse: `Convert to` has five rows on the Outline and two on
+ * a flat catalog grid, so the same family would nest in one view and lie flat in the next. A
+ * menu whose shape moves between views is one you re-read every time.
+ *
+ * These are the families where the *name* is the useful thing and the members are a
+ * value-picker: which kind, which letter, which state, which level. `Item`, `Move` and `Danger`
+ * are deliberately absent — those are the verbs you came for, and burying `Delete` one hover
+ * deep would be hiding it rather than organizing it.
+ */
+export const NESTED_SECTIONS: ReadonlySet<string> = new Set([
+  "Insert row",
+  "Convert to",
+  "Rank",
+  "State",
+  "Expand",
+  "Priority",
+  "Zoom",
+]);
+
 export type MenuSection = {
   /** The heading, or `null` for a leading section that does not get one. */
   label: string | null;
   commands: Command[];
+  /**
+   * Render as one row that opens a fly-out (desktop) or drills in (touch), rather than as a
+   * heading with its commands beneath it. Never set on an unlabelled section — there would be
+   * no row to open it with.
+   */
+  submenu?: boolean;
 };
 
 export type CommandMenuTree = {
@@ -88,14 +118,28 @@ function sectionsFor(menu: CommandMenu, commands: readonly Command[]): MenuSecti
   if (unlabelled) ordered.push({ label: null, commands: unlabelled });
   for (const label of declared) {
     const bucket = byLabel.get(label);
-    if (bucket) ordered.push({ label, commands: bucket });
+    if (bucket) ordered.push(section(label, bucket));
   }
   for (const [label, bucket] of byLabel) {
     if (label === null || declared.includes(label)) continue;
-    ordered.push({ label, commands: bucket });
+    ordered.push(section(label, bucket));
   }
 
   return ordered;
+}
+
+/**
+ * One labelled section, nested when its family is declared nestable.
+ *
+ * A **single** command never nests. `Convert to ▸` opening onto one row is a hover you have to
+ * perform to learn there was nothing behind it, and it happens for real: a grid with one
+ * conversion target, or a Rank section where three of the four letters are unavailable. Two is
+ * the floor at which the fly-out saves a row rather than costing one.
+ */
+function section(label: string, commands: Command[]): MenuSection {
+  return NESTED_SECTIONS.has(label) && commands.length > 1
+    ? { label, commands, submenu: true }
+    : { label, commands };
 }
 
 /**
@@ -188,8 +232,9 @@ function isDestructive(section: MenuSection): boolean {
  * of the same tree* — a command opts in with `rowMenu`, and it cannot end up called something
  * else here.
  *
- * Sections are flattened into one list with headings, rather than Achieve's submenus. Submenus are
- * the follow-on right-click spec's job.
+ * Sections nest exactly where `NESTED_SECTIONS` says they do, which is what finally lets
+ * `Convert to` onto this menu at all: its five rows were a third of the menu's height and were
+ * kept off entirely, so the one view with conversions offered them nowhere on right-click.
  */
 export function rowMenuSections(commands: readonly Command[]): MenuSection[] {
   const ordered = commandOrder(commands).filter((command) => command.rowMenu === true);

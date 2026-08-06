@@ -288,8 +288,13 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   /**
    * Right-click menu for a row. Omit to leave the browser's own menu alone. Called each
    * time the menu opens rather than memoised, so item state is never stale.
+   *
+   * **`null` means the pointer was not over a row** — blank space below the last one, or a group
+   * header. The same menu is returned with no selection, which greys every item verb with
+   * "Select a row first" rather than showing a second, shorter list. That is Achieve's behaviour
+   * and `navigation.md`'s: unavailable is not absent, and one menu cannot drift from itself.
    */
-  rowMenu?: (nodeId: string) => MenuItem[];
+  rowMenu?: (nodeId: string | null) => MenuItem[];
   /**
    * Swipe actions for a compact row. Ignored above `md`, where there is no gesture to make.
    * Reversible actions only — `responsive.md` keeps anything without a way back off a swipe.
@@ -305,9 +310,12 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
 
   const [dragIds, setDragIds] = useState<readonly string[] | null>(null);
   const [dropHint, setDropHint] = useState<DropHint | null>(null);
-  const [menu, setMenu] = useState<{ rowId: string; x: number; y: number } | null>(
-    null,
-  );
+  const [menu, setMenu] = useState<{
+    /** `null` when the pointer was over blank space rather than a row. */
+    rowId: string | null;
+    x: number;
+    y: number;
+  } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
   const gridRef = useRef<HTMLDivElement>(null);
   const handleWidth = rowNumbers ? HANDLE_WIDTH_NUMBERED : HANDLE_WIDTH_PLAIN;
@@ -682,6 +690,28 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
           role="treegrid"
           aria-label={ariaLabel}
           className="min-h-0 flex-1 overflow-auto outline-none"
+          /*
+           * The blank-area menu. Rows handle their own right-click and mark themselves with
+           * `data-node-row`, so this fires for everything else the grid covers: the empty space
+           * below the last row, the "Nothing to show" panel, and group headers — none of which
+           * name a record, which is exactly what a `null` row menu is for.
+           *
+           * Guarding on the marker rather than stopping propagation in the row keeps both of the
+           * row's early exits honest: inside a cell editor the browser's own cut/copy/paste menu
+           * is the useful one, and ⌃-click on macOS arrives here as a secondary click that means
+           * multi-select.
+           */
+          onContextMenu={
+            rowMenu &&
+            ((event) => {
+              const target = event.target as HTMLElement;
+              if (target.closest("[data-node-row]")) return;
+              if (target.closest("input, select, textarea")) return;
+              if (event.ctrlKey || event.metaKey) return;
+              event.preventDefault();
+              setMenu({ rowId: null, x: event.clientX, y: event.clientY });
+            })
+          }
         >
           {displayRows.length === 0
             ? (empty ?? (
@@ -869,6 +899,8 @@ function DataRow<TCtx, TRow>({
     <div
       ref={rowRef}
       role="row"
+      // Tells the grid's blank-area handler that this press was over a record. See `DataGrid`.
+      data-node-row=""
       aria-level={row.depth + 1}
       aria-selected={selected}
       aria-expanded={expanded}

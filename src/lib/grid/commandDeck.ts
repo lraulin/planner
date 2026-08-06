@@ -136,6 +136,11 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
         // and that menu are a default action and its variants rather than two ways to do one
         // thing.
         toolbar: TOOLBAR.create,
+        // The one command on the row menu that does not need a row, which is what makes the
+        // blank-area menu worth opening: right-clicking below the last row of an empty grid
+        // otherwise offers nothing but greyed item verbs. Achieve's blank menu had live
+        // creation on it for the same reason.
+        rowMenu: true,
         keywords: "add item capture",
         run: () => actions.onCreate?.(defaultKind, "top"),
       }),

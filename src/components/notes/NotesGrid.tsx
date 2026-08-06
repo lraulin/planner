@@ -550,18 +550,18 @@ export function NotesGrid({
   }, [canReorder, byId, apply, selectOne, headerSort, clearHeaderSort]);
 
   const rowMenu = useCallback(
-    (noteId: string): MenuItem[] => {
-      const note = byId.get(noteId);
-      if (!note) return [];
-      const count = selectedIds.has(noteId) ? selectedIds.size : 1;
-      return rowMenuFor(capabilitiesFor(noteId, count), {
-        id: noteId,
-        count,
-        label: note.title,
+    // `null` is the blank area below the rows — the same menu with nothing selected.
+    (noteId: string | null): MenuItem[] => {
+      const note = noteId ? (byId.get(noteId) ?? null) : null;
+      const count = note && selectedIds.has(note.id) ? selectedIds.size : note ? 1 : 0;
+      return rowMenuFor(capabilitiesFor(note?.id ?? null, count), {
+        // Notes' moves are legal only under manual order in nested mode — a property of the
+        // view's sort rather than of the row, which is why it is stated here and not in
+        // `capabilitiesFor`.
         canMoveUp: canReorder,
         canMoveDown: canReorder,
         canIndent: canReorder,
-        canOutdent: canReorder && note.parentId !== null,
+        canOutdent: canReorder && note?.parentId != null,
         moveReason: canReorder
           ? undefined
           : "Sort by Manual order in Nested mode to rearrange notes",

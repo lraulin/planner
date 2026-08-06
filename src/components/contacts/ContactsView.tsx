@@ -203,16 +203,10 @@ export function ContactsView({
   );
 
   const rowMenu = useCallback(
-    (contactId: string): MenuItem[] => {
-      const row = rows.find((r) => r.id === contactId);
-      if (!row) return [];
-      return rowMenuFor(capabilitiesFor(contactId, 1), {
-        id: contactId,
-        count: 1,
-        label: row.displayName,
-      });
-    },
-    [rows, capabilitiesFor],
+    // `null` is the blank area below the rows — the same menu with nothing selected.
+    (contactId: string | null): MenuItem[] =>
+      rowMenuFor(capabilitiesFor(contactId, contactId ? 1 : 0)),
+    [capabilitiesFor],
   );
 
   useEffect(() => {

@@ -260,16 +260,10 @@ export function MetricsView({
   useRegisterCommands(commands);
 
   const rowMenu = useCallback(
-    (metricId: string): MenuItem[] => {
-      const row = rows.find((r) => r.id === metricId);
-      if (!row) return [];
-      return rowMenuFor(capabilitiesFor(metricId, 1), {
-        id: metricId,
-        count: 1,
-        label: row.title,
-      });
-    },
-    [rows, capabilitiesFor],
+    // `null` is the blank area below the rows — the same menu with nothing selected.
+    (metricId: string | null): MenuItem[] =>
+      rowMenuFor(capabilitiesFor(metricId, metricId ? 1 : 0)),
+    [capabilitiesFor],
   );
 
   // Same document-level keys as Notes / Outline. Apple keyboards have no Insert, so

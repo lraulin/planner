@@ -124,8 +124,12 @@ describe("grid command deck", () => {
 
     // The Outline's full row menu: item verbs first, creation next, restructuring after, Delete
     // last wherever it appears.
+    //
+    // `New` is the one section here that does not need a row. It is what makes the blank-area
+    // menu — the same menu with no selection — worth opening rather than a list of greyed verbs.
     expect(rowMenuSections(commands).map((section) => section.label)).toEqual([
       "Item",
+      "New",
       "Insert row",
       "Move",
       "Expand",
@@ -133,6 +137,24 @@ describe("grid command deck", () => {
       "Zoom",
       "Danger",
     ]);
+  });
+
+  it("leaves the blank-area menu something it can actually do", () => {
+    // Right-clicking below the last row builds this same menu with no selection. Every item verb
+    // is correctly greyed there, so without a creation row it would be a menu of dead entries.
+    const sections = rowMenuSections(
+      buildGridCommands({
+        createKinds: ["task"],
+        hierarchy: true,
+        selection: { id: null },
+        actions: { onCreate: () => {}, onOpen: () => {}, onDelete: () => {} },
+      }),
+    );
+
+    const live = sections.flatMap((section) =>
+      section.commands.filter((command) => command.disabled !== true),
+    );
+    expect(live.map((command) => command.id)).toEqual(["grid.create"]);
   });
 
   it("prints the shortcut the binding actually fires", () => {

@@ -407,17 +407,13 @@ export function DailyItemsGrid({
   useRegisterCommands(commands);
 
   const rowMenu = useCallback(
-    (itemId: string): MenuItem[] => {
-      const item = items.find((entry) => entry.id === itemId);
-      if (!item) return [];
-      const count = selectedIds.has(itemId) ? selectedIds.size : 1;
-      return rowMenuFor(capabilitiesFor(itemId, count), {
-        id: itemId,
-        count,
-        label: item.title,
-      });
+    // `null` is the blank area below the rows — the same menu with nothing selected.
+    (itemId: string | null): MenuItem[] => {
+      const count =
+        itemId && selectedIds.has(itemId) ? selectedIds.size : itemId ? 1 : 0;
+      return rowMenuFor(capabilitiesFor(itemId, count));
     },
-    [items, selectedIds, capabilitiesFor],
+    [selectedIds, capabilitiesFor],
   );
 
   // Arrows only. ⌘C and Enter are `bindings` on the commands now — see `CommandKeys`.

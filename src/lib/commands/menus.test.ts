@@ -3,6 +3,7 @@ import {
   buildMenus,
   commandOrder,
   MENU_SECTIONS,
+  NESTED_SECTIONS,
   overflowMenus,
   rowMenuSections,
   toolbarCommands,
@@ -92,6 +93,82 @@ describe("buildMenus", () => {
       "first",
       "new",
     ]);
+  });
+});
+
+describe("nested sections", () => {
+  it("marks a declared family as a submenu wherever it renders", () => {
+    // Same flag on the bar and on the row menu: `Organize ▾ → Rank ▸` and a right-click's
+    // `Rank ▸` are the same family, so a user who learns one has learned the other.
+    const [organize] = buildMenus([
+      command("a", { menu: "organize", section: "Convert to" }),
+      command("b", { menu: "organize", section: "Convert to" }),
+    ]);
+
+    expect(organize.sections[0]).toMatchObject({ label: "Convert to", submenu: true });
+  });
+
+  it("leaves the verb families flat", () => {
+    // `Item`, `Move` and `Danger` are what you opened the menu for. Burying Delete one hover
+    // deep is hiding it, not organizing it.
+    const [item] = buildMenus([
+      command("open", { menu: "item", section: "Item" }),
+      command("rename", { menu: "item", section: "Item" }),
+    ]);
+
+    expect(item.sections[0].submenu).toBeUndefined();
+  });
+
+  it("does not nest a section holding a single command", () => {
+    // A fly-out onto one row is a hover you have to perform to learn there was nothing behind
+    // it — and it happens for real, on a grid with one conversion target.
+    const [item] = buildMenus([
+      command("only", { menu: "item", section: "Convert to" }),
+    ]);
+
+    expect(item.sections[0].submenu).toBeUndefined();
+    expect(item.sections[0].commands).toHaveLength(1);
+  });
+
+  it("never nests the leading unlabelled section", () => {
+    // There would be no row to open it with.
+    const [tools] = buildMenus([
+      command("bare", { menu: "tools" }),
+      command("also-bare", { menu: "tools" }),
+    ]);
+
+    expect(tools.sections[0]).toMatchObject({ label: null });
+    expect(tools.sections[0].submenu).toBeUndefined();
+  });
+
+  it("carries the flag into the row menu without disturbing its ordering", () => {
+    const sections = rowMenuSections([
+      command("convert-a", { menu: "item", section: "Convert to", rowMenu: true }),
+      command("convert-b", { menu: "item", section: "Convert to", rowMenu: true }),
+      command("open", { menu: "item", section: "Item", rowMenu: true }),
+      command("delete", {
+        menu: "item",
+        section: "Danger",
+        rowMenu: true,
+        destructive: true,
+      }),
+    ]);
+
+    expect(sections.map((s) => [s.label, s.submenu === true] as const)).toEqual([
+      ["Item", false],
+      ["Convert to", true],
+      ["Danger", false],
+    ]);
+  });
+
+  it("nests every family it names inside a menu that declares it", () => {
+    // A section can only nest if some menu actually orders it; one named here and listed in no
+    // `MENU_SECTIONS` entry would still render, but after the known sections, which is not
+    // where anyone put it on purpose.
+    const declared = new Set(Object.values(MENU_SECTIONS).flat());
+    for (const label of NESTED_SECTIONS) {
+      expect(declared.has(label), `${label} nests but no menu orders it`).toBe(true);
+    }
   });
 });
 

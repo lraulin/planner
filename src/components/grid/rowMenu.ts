@@ -25,9 +25,24 @@ import {
  */
 export function rowMenuFor(
   capabilities: GridCommandCapabilities,
-  selection: GridSelectionCapability,
+  /**
+   * Extra legality only the caller knows, merged over what `capabilities` already states.
+   *
+   * Almost every host builds its capabilities *for the row* and then has nothing to add — the
+   * selection inside them is already this row's. Notes is the exception worth the parameter: its
+   * moves are legal only under manual order in nested mode, which is a property of the view's
+   * sort, not of the row.
+   */
+  selection?: Partial<GridSelectionCapability>,
 ): MenuItem[] {
   return menuItemsFor(
-    rowMenuSections(buildGridCommands({ ...capabilities, selection })),
+    rowMenuSections(
+      buildGridCommands({
+        ...capabilities,
+        // `id: null` only supplies the required field when a host states no selection at all —
+        // the blank-area menu. A real one immediately overwrites it.
+        selection: { id: null, ...capabilities.selection, ...selection },
+      }),
+    ),
   );
 }

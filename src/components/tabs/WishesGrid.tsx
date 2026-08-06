@@ -274,17 +274,13 @@ export function WishesGrid({
   );
 
   const rowMenu = useCallback(
-    (wishId: string): MenuItem[] => {
-      const wish = rows.find((row) => row.id === wishId);
-      if (!wish) return [];
-      const count = selectedIds.has(wishId) ? selectedIds.size : 1;
-      return rowMenuFor(capabilitiesFor(wishId, count), {
-        id: wishId,
-        count,
-        label: wish.title,
-      });
+    // `null` is the blank area below the rows — the same menu with nothing selected.
+    (wishId: string | null): MenuItem[] => {
+      const count =
+        wishId && selectedIds.has(wishId) ? selectedIds.size : wishId ? 1 : 0;
+      return rowMenuFor(capabilitiesFor(wishId, count));
     },
-    [rows, selectedIds, capabilitiesFor],
+    [selectedIds, capabilitiesFor],
   );
 
   useEffect(() => {
