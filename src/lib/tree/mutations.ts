@@ -1143,8 +1143,11 @@ export async function setAllCollapsed(
  * Show the outline through a maximum depth (0 = roots only).
  *
  * Nodes shallower than `maxDepth` are expanded so their children can appear; nodes at
- * `maxDepth` are collapsed so deeper descendants hide. Matches Achieve's "Expand to Level N"
- * where Level 1 is the top row of result areas.
+ * `maxDepth` are collapsed so deeper descendants hide.
+ *
+ * `maxDepth` is the tree's own **0-based** `depth`, not Achieve's 1-based outline Level —
+ * "Expand to Level 1" is the top row of result areas, which is `maxDepth` 0. Callers
+ * showing a Level to the user convert with `depthForOutlineLevel`.
  */
 export async function expandThroughDepth(
   userId: string,

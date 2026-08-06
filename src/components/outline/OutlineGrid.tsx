@@ -81,6 +81,7 @@ import {
   type GridCommandCapabilities,
 } from "@/lib/grid/commandDeck";
 import { planNodeConversion, type ConversionPlan } from "@/lib/tree/conversion";
+import { depthForOutlineLevel } from "@/lib/tree/outlineLevel";
 
 /**
  * Achieve's Areas and Goals checkboxes: **on means the level exists.** Turning one off
@@ -488,7 +489,8 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         },
         onExpandAll: () => setTreeCollapsed(false),
         onCollapseAll: () => setTreeCollapsed(true),
-        onExpandThroughLevel: (level) => apply(() => expandThroughDepthAction(level)),
+        onExpandThroughLevel: (level) =>
+          apply(() => expandThroughDepthAction(depthForOutlineLevel(level))),
         onChooseExpandThroughLevel: () => setExpandLevelPickerOpen(true),
         onRemovePriorityGaps: () =>
           selectedId && apply(() => removePriorityGapsAction(selectedId)),
@@ -913,7 +915,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         open={expandLevelPickerOpen}
         onConfirm={(level) => {
           setExpandLevelPickerOpen(false);
-          apply(() => expandThroughDepthAction(level));
+          apply(() => expandThroughDepthAction(depthForOutlineLevel(level)));
         }}
         onCancel={() => setExpandLevelPickerOpen(false)}
       />
