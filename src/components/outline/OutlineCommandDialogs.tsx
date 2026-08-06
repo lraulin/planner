@@ -7,6 +7,9 @@ import { TypeIcon } from "@/components/icons/TypeIcon";
 import { ModalShell } from "@/components/detail/ModalShell";
 import { resolvePickerSelection } from "@/lib/grid/pickerSelection";
 
+/** How many rows the zoom picker renders at once before asking you to narrow the search. */
+const PICKER_LIMIT = 200;
+
 export function OutlineZoomDialog({
   open,
   nodes,
@@ -26,13 +29,18 @@ export function OutlineZoomDialog({
 
   const matches = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
-    return nodes
-      .filter((node) => !needle || node.name.toLocaleLowerCase().includes(needle))
-      .slice(0, 200);
+    return nodes.filter(
+      (node) => !needle || node.name.toLocaleLowerCase().includes(needle),
+    );
   }, [nodes, query]);
 
+  // Long lists are capped for rendering, but silently dropping matches would make a search
+  // look like it found everything it could. Say so instead, and keep narrowing available.
+  const shown = useMemo(() => matches.slice(0, PICKER_LIMIT), [matches]);
+  const hiddenCount = matches.length - shown.length;
+
   // Never confirm a row the query has filtered off screen — see `resolvePickerSelection`.
-  const selectedId = resolvePickerSelection(matches, pickedId);
+  const selectedId = resolvePickerSelection(shown, pickedId);
 
   return (
     <ModalShell open={open} onClose={onCancel} labelledBy={titleId} width="max-w-xl">
@@ -53,12 +61,12 @@ export function OutlineZoomDialog({
         />
 
         <div className="mt-3 max-h-[42dvh] overflow-y-auto rounded border border-rule">
-          {matches.length === 0 ? (
+          {shown.length === 0 ? (
             <p className="px-3 py-4 text-[0.8125rem] text-ink-muted">
               No matching items.
             </p>
           ) : (
-            matches.map((node) => {
+            shown.map((node) => {
               const kind = kindOfNode(node);
               const selected = node.id === selectedId;
               return (
@@ -82,6 +90,13 @@ export function OutlineZoomDialog({
             })
           )}
         </div>
+
+        {hiddenCount > 0 && (
+          <p className="mt-2 text-[0.75rem] text-ink-faint">
+            Showing the first {PICKER_LIMIT} of {matches.length} matches — keep typing
+            to narrow it down.
+          </p>
+        )}
 
         <div className="mt-4 flex justify-end gap-2">
           <button
