@@ -233,24 +233,27 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
     }
 
     if (actions.onExpand || actions.onCollapse) {
-      const expanded = selection?.canExpand === true;
-      const collapsed = selection?.canCollapse === true;
+      // Both flags describe what is *possible*, not what the row currently is: a row that
+      // can expand is collapsed. The command has to offer the verb that would change the
+      // row, so it follows `canExpand` rather than the row's state.
+      const canExpand = selection?.canExpand === true;
+      const canCollapse = selection?.canCollapse === true;
       out.push(
         command({
           id: "record.expand-collapse",
-          label: collapsed ? "Expand selected" : "Collapse selected",
+          label: canExpand ? "Expand selected" : "Collapse selected",
           group: "record",
           toolbarGroup: "more",
-          shortcut: collapsed ? "→" : "←",
-          disabled: !hasSelection || (!expanded && !collapsed),
+          shortcut: canExpand ? "→" : "←",
+          disabled: !hasSelection || (!canExpand && !canCollapse),
           title: !hasSelection
             ? SELECT_REASON
-            : !expanded && !collapsed
+            : !canExpand && !canCollapse
               ? "Selected row has no children"
               : undefined,
           run: () => {
             if (!id) return;
-            if (collapsed) actions.onExpand?.(id);
+            if (canExpand) actions.onExpand?.(id);
             else actions.onCollapse?.(id);
           },
         }),
