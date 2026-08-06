@@ -335,6 +335,81 @@ describe("grid command deck", () => {
     });
   });
 
+  describe("the row clipboard", () => {
+    const build = (clipboard?: {
+      pickedUp: number;
+      pasteAfterRefusal: string | null;
+      pasteChildRefusal: string | null;
+    }) =>
+      buildGridCommands({
+        clipboard,
+        selection: { id: "target" },
+        actions: { onCutRows: () => {}, onPasteRows: () => {} },
+      });
+
+    const at = (commands: ReturnType<typeof buildGridCommands>, id: string) =>
+      commands.find((entry) => entry.id === id);
+
+    it("enables a paste the host said is legal", () => {
+      // `null` means allowed. Coalescing it to a default greyed out exactly the pastes that
+      // were possible, which is what shipped until the browser showed "Paste row" next to
+      // "Nothing has been picked up".
+      const commands = build({
+        pickedUp: 1,
+        pasteAfterRefusal: null,
+        pasteChildRefusal: null,
+      });
+
+      expect(at(commands, "record.paste-rows")).toMatchObject({
+        label: "Paste row",
+        disabled: false,
+      });
+      expect(at(commands, "record.paste-child")?.disabled).toBe(false);
+    });
+
+    it("carries the host's reason onto the disabled row", () => {
+      const commands = build({
+        pickedUp: 2,
+        pasteAfterRefusal: null,
+        pasteChildRefusal: "Cannot paste a row inside itself",
+      });
+
+      expect(at(commands, "record.paste-rows")).toMatchObject({
+        label: "Paste 2 rows",
+        disabled: false,
+      });
+      expect(at(commands, "record.paste-child")).toMatchObject({
+        disabled: true,
+        title: "Cannot paste a row inside itself",
+      });
+    });
+
+    it("greys both when the host states no clipboard at all", () => {
+      expect(at(build(), "record.paste-rows")).toMatchObject({
+        label: "Paste",
+        disabled: true,
+        title: "Nothing has been picked up",
+      });
+    });
+
+    it("cuts the whole selection and says how many", () => {
+      let cut: readonly string[] = [];
+      const commands = buildGridCommands({
+        selection: { id: "a", count: 3, ids: ["a", "b", "c"] },
+        actions: {
+          onCutRows: (ids) => {
+            cut = ids;
+          },
+        },
+      });
+
+      const command = at(commands, "record.cut-rows");
+      expect(command?.label).toBe("Cut (3)");
+      command?.run();
+      expect(cut).toEqual(["a", "b", "c"]);
+    });
+  });
+
   it("prints the shortcut the binding actually fires", () => {
     // The vocabulary the app showed before bindings existed, now derived rather than typed.
     const commands = buildGridCommands({

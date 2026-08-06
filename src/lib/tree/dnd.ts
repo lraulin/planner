@@ -43,9 +43,14 @@ export type ResolvedDrop = {
   category?: string | null;
 };
 
-/** True when `nodeId` is `ancestorId` itself or sits somewhere beneath it. */
+/**
+ * True when `nodeId` is `ancestorId` itself or sits somewhere beneath it.
+ *
+ * Takes only what it walks — a parent link — rather than a whole `DropNode`, so the row
+ * clipboard's paste guard can reuse the app's one cycle check instead of writing a second.
+ */
 export function isSelfOrDescendant(
-  byId: Map<string, DropNode>,
+  byId: ReadonlyMap<string, { parentId: string | null }>,
   ancestorId: string,
   nodeId: string | null,
 ): boolean {

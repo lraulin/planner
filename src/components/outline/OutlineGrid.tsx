@@ -80,6 +80,8 @@ import { owningProjectId } from "@/lib/tree/owningProject";
 import { nodeDeleteMessage, nodeDeleteTitle } from "@/lib/tree/deleteMessage";
 import { type GridCommandCapabilities } from "@/lib/grid/commandDeck";
 import { rowMenuFor } from "@/components/grid/rowMenu";
+import { pasteMoves, pasteRefusal } from "@/lib/grid/rowClipboard";
+import { useRowClipboard } from "@/components/grid/RowClipboardProvider";
 import { planNodeConversion, type ConversionPlan } from "@/lib/tree/conversion";
 import { depthForOutlineLevel } from "@/lib/tree/outlineLevel";
 
@@ -152,6 +154,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const today = useToday();
   const router = useRouter();
   const stateChange = useStateChange({ nodes, patch, apply });
+  const { clipboard, pickUp, clear: clearClipboard } = useRowClipboard();
 
   const outlineColumns = useMemo(() => buildOutlineColumns(today), [today]);
   const views = useModuleViews({
@@ -470,6 +473,19 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
       return {
         createKinds: ["result_area", "goal", "dream", "project", "task"],
         hierarchy: true,
+        clipboard: {
+          pickedUp: clipboard?.count ?? 0,
+          pasteAfterRefusal: pasteRefusal(
+            nodes,
+            clipboard,
+            id ? { at: "after", targetId: id } : null,
+          ),
+          pasteChildRefusal: pasteRefusal(
+            nodes,
+            clipboard,
+            id ? { at: "child", targetId: id } : null,
+          ),
+        },
         priorityMaintenance: true,
         conversionKinds: NODE_KINDS,
         outlineZoom: true,
@@ -563,6 +579,23 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
               if (target) stateChange.request(target, state, setStateAction);
             }
           },
+          onCutRows: pickUp,
+          onPasteRows: (targetId, at) => {
+            const moves = pasteMoves(nodes, clipboard, { at, targetId });
+            if (!moves) return;
+            for (const move of moves) {
+              apply(() =>
+                moveNodeAction({
+                  nodeId: move.nodeId,
+                  parentId: move.parentId,
+                  position: move.afterSiblingId
+                    ? { at: "after", siblingId: move.afterSiblingId }
+                    : { at: "first" },
+                }),
+              );
+            }
+            clearClipboard();
+          },
           onScheduleBlock: (nodeId) => router.push(`/schedule?block=${nodeId}`),
           onViewTasks: (nodeId) => router.push(`/tasks?scope=${nodeId}`),
           onViewProject: (projectId) => router.push(`/projects?detail=${projectId}`),
@@ -592,6 +625,9 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
       zoom,
       router,
       stateChange,
+      clipboard,
+      pickUp,
+      clearClipboard,
     ],
   );
 

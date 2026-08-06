@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   convertNodeAction,
   deleteNodeAction,
+  moveNodeAction,
   removePriorityGapsAction,
   reprioritizeUniqueAction,
 } from "@/app/outline/actions";
@@ -14,6 +15,8 @@ import { nodeDeleteMessage, nodeDeleteTitle } from "@/lib/tree/deleteMessage";
 import { NODE_KINDS, kindOfNode, type NodeKind } from "@/lib/tree/hierarchy";
 import { owningProjectId } from "@/lib/tree/owningProject";
 import { selectionMoveRoots } from "@/lib/grid/selection";
+import { pasteMoves, pasteRefusal } from "@/lib/grid/rowClipboard";
+import { useRowClipboard } from "./RowClipboardProvider";
 import type { NodeState } from "@/db/schema";
 import { planNodeConversion, type ConversionPlan } from "@/lib/tree/conversion";
 import type { ActionResult } from "./useOptimisticNodes";
@@ -65,6 +68,7 @@ export function useNodeCommandDeck({
   const [pendingDelete, setPendingDelete] = useState<readonly OutlineNode[]>([]);
   const byId = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
   const router = useRouter();
+  const { clipboard, pickUp, clear: clearClipboard } = useRowClipboard();
 
   const onConvert = useCallback((id: string, targetKind: NodeKind) => {
     setPendingConversion({ nodeId: id, targetKind });
@@ -108,6 +112,30 @@ export function useNodeCommandDeck({
           ids.map((id) => byId.get(id)).filter((node) => node !== undefined),
         );
       },
+      onCutRows: pickUp,
+      /*
+       * Paste is `moveNode` per row and nothing else — Achieve's `Pickup Row(s)` marks rows to
+       * be *relocated*, and that mutation already exists with its cycle and nesting checks.
+       *
+       * The buffer is cleared on success: rows that have moved are no longer picked up, and a
+       * second paste would try to move them again from wherever they now are.
+       */
+      onPasteRows: (targetId: string, at: "after" | "child") => {
+        const moves = pasteMoves(nodes, clipboard, { at, targetId });
+        if (!moves) return;
+        for (const move of moves) {
+          apply(() =>
+            moveNodeAction({
+              nodeId: move.nodeId,
+              parentId: move.parentId,
+              position: move.afterSiblingId
+                ? { at: "after", siblingId: move.afterSiblingId }
+                : { at: "first" },
+            }),
+          );
+        }
+        clearClipboard();
+      },
       /*
        * The three cross-module verbs, implemented once here rather than five times in the hosts.
        *
@@ -121,7 +149,20 @@ export function useNodeCommandDeck({
       onViewProject: (projectId: string) =>
         router.push(`/projects?detail=${projectId}`),
     }),
-    [apply, byId, onConvert, onOpen, onRename, onCopyAsText, onStateChange, router],
+    [
+      apply,
+      byId,
+      nodes,
+      clipboard,
+      pickUp,
+      clearClipboard,
+      onConvert,
+      onOpen,
+      onRename,
+      onCopyAsText,
+      onStateChange,
+      router,
+    ],
   );
 
   const capabilitiesFor = useCallback(
@@ -130,6 +171,19 @@ export function useNodeCommandDeck({
       return {
         priorityMaintenance: true,
         conversionKinds: NODE_KINDS,
+        clipboard: {
+          pickedUp: clipboard?.count ?? 0,
+          pasteAfterRefusal: pasteRefusal(
+            nodes,
+            clipboard,
+            id ? { at: "after", targetId: id } : null,
+          ),
+          pasteChildRefusal: pasteRefusal(
+            nodes,
+            clipboard,
+            id ? { at: "child", targetId: id } : null,
+          ),
+        },
         selection: {
           id,
           count,
@@ -165,7 +219,7 @@ export function useNodeCommandDeck({
         },
       };
     },
-    [actions, apply, byId, nodes, selectedIds],
+    [actions, apply, byId, nodes, selectedIds, clipboard],
   );
 
   const capabilities = useMemo(

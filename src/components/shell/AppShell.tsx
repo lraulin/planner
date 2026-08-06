@@ -2,6 +2,7 @@ import { QuickCapture } from "@/components/capture/QuickCapture";
 import { CommandKeys } from "./CommandKeys";
 import { CommandPalette } from "./CommandPalette";
 import { CommandProvider } from "./CommandProvider";
+import { RowClipboardProvider } from "@/components/grid/RowClipboardProvider";
 import { CommandsPanel } from "./CommandsPanel";
 import { MobileHeader } from "./MobileHeader";
 import { MobileNav } from "./MobileNav";
@@ -38,18 +39,19 @@ export function AppShell({
 }) {
   return (
     <CommandProvider>
-      <div className="flex h-full min-h-0">
-        <Sidebar active={active} />
+      <RowClipboardProvider>
+        <div className="flex h-full min-h-0">
+          <Sidebar active={active} />
 
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <MobileHeader active={active} />
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <MobileHeader active={active} />
 
-          <div className="flex min-h-0 flex-1 flex-col">{children}</div>
+            <div className="flex min-h-0 flex-1 flex-col">{children}</div>
 
-          <MobileNav active={active} />
-        </div>
+            <MobileNav active={active} />
+          </div>
 
-        {/*
+          {/*
           The Commands panel is a column of this row, on the far edge from the sidebar — the two
           rails frame the grid the way Achieve's did. Here rather than in each module page because
           it reads `useCommands()`, and one mount gives all sixteen modules the panel at once,
@@ -59,12 +61,13 @@ export function AppShell({
           the drawer is a modal surface about one record, and two 208px+ panes competing for the
           right edge would leave the grid nothing.
         */}
-        <CommandsPanel />
+          <CommandsPanel />
 
-        <CommandKeys />
-        <CommandPalette />
-        <QuickCapture />
-      </div>
+          <CommandKeys />
+          <CommandPalette />
+          <QuickCapture />
+        </div>
+      </RowClipboardProvider>
     </CommandProvider>
   );
 }

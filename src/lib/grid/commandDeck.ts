@@ -64,6 +64,10 @@ export type GridCommandActions = {
   onViewTasks?: (id: string) => void;
   /** Achieve's `View Project…` — open the project this row belongs to. */
   onViewProject?: (projectId: string) => void;
+  /** Achieve's `Pickup Row(s)` — mark the selection for a move. See `rowClipboard.ts`. */
+  onCutRows?: (ids: readonly string[]) => void;
+  /** Drop the picked-up rows beside this one, or under it. */
+  onPasteRows?: (targetId: string, at: "after" | "child") => void;
   onRename?: (id: string) => void;
   onDelete?: (ids: readonly string[]) => void;
   onCopyAsText?: () => void;
@@ -89,6 +93,20 @@ export type GridCommandActions = {
 export type GridPageCommand = Omit<Command, "group"> & { group?: Command["group"] };
 
 export type GridCommandCapabilities = {
+  /**
+   * The row clipboard's state, as the host resolved it for *this* row: how many rows are
+   * picked up, and why a paste here would be refused.
+   *
+   * The reason is computed by the host rather than derived here, because only it holds the tree
+   * — `pasteRefusal` needs every row's parent and kind, and `commandDeck` deliberately knows
+   * about neither.
+   */
+  clipboard?: {
+    pickedUp: number;
+    /** `null` when a paste beside this row is legal. */
+    pasteAfterRefusal: string | null;
+    pasteChildRefusal: string | null;
+  };
   createKinds?: readonly NodeKind[];
   hierarchy?: boolean;
   priorityMaintenance?: boolean;
@@ -393,6 +411,72 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
         run: () => projectId && actions.onViewProject?.(projectId),
       }),
     );
+  }
+
+  if (actions.onCutRows) {
+    out.push(
+      command({
+        id: "record.cut-rows",
+        label: `Cut${suffix}`,
+        group: "record",
+        menu: "item",
+        section: "Item",
+        icon: "cut",
+        rowMenu: true,
+        bindings: [{ key: "x", meta: true }],
+        keywords: "pickup move relocate",
+        disabled: !hasSelection,
+        title: hasSelection
+          ? "Pick these rows up, then paste them somewhere else"
+          : SELECT_REASON,
+        run: () => actions.onCutRows?.(targetIds),
+      }),
+    );
+  }
+
+  if (actions.onPasteRows) {
+    const clipboard = capabilities.clipboard;
+    const picked = clipboard?.pickedUp ?? 0;
+    const pasted = picked > 1 ? ` ${picked} rows` : picked === 1 ? " row" : "";
+    // A branch, not `??`: the refusal is `string | null` and `null` is the *legal* value, so
+    // coalescing it would grey out exactly the pastes that are allowed. It did, until the
+    // browser said "Paste row" and "Nothing has been picked up" in the same row.
+    const noClipboard = "Nothing has been picked up";
+    const pastes: [string, string, "after" | "child", string | null][] = [
+      [
+        "record.paste-rows",
+        `Paste${pasted}`,
+        "after",
+        clipboard ? clipboard.pasteAfterRefusal : noClipboard,
+      ],
+      [
+        "record.paste-child",
+        `Paste${pasted} as child`,
+        "child",
+        clipboard ? clipboard.pasteChildRefusal : noClipboard,
+      ],
+    ];
+
+    for (const [commandId, label, at, refusal] of pastes) {
+      out.push(
+        command({
+          id: commandId,
+          label,
+          group: "record",
+          menu: "item",
+          section: "Item",
+          icon: "paste",
+          rowMenu: true,
+          bindings: at === "after" ? [{ key: "v", meta: true }] : undefined,
+          keywords: "drop move relocate",
+          // The refusal is the whole point: "Paste" greyed with no reason is
+          // indistinguishable from a broken menu, and there are five distinct reasons.
+          disabled: refusal !== null,
+          title: refusal ?? undefined,
+          run: () => id && actions.onPasteRows?.(id, at),
+        }),
+      );
+    }
   }
 
   if (actions.onCopyAsText) {
