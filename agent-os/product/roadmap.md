@@ -111,9 +111,9 @@ The core Achieve Planner loop — plan the week, block the time, work the outlin
   tree popover rather than a select; finer Show Fields multi-select / multi-move).
   Persistence, control uniformity and the shared control surface
   shipped above.
-- **Day-to-day friction from living with the MVP** — expand/collapse-all, find-in-outline,
-  seed goals for demos — pick off as they annoy. (Quick capture already shipped in Phase 2
-  capture track.)
+- **Day-to-day friction from living with the MVP** — find-in-outline, seed goals for demos
+  — pick off as they annoy. (Quick capture already shipped in Phase 2 capture track;
+  expand/collapse-all and expand-through-level shipped with the command deck below.)
 
 Phase 1's Achieve core is complete. Remaining Phase 1 items are residual chrome polish, not
 blockers for Phase 2 slices.
@@ -203,7 +203,20 @@ Features that complete or surround the original product, plus making it multi-de
   Overview, Focus Timer, Time Log and Reports remain reserved. Phone keeps its bottom nav;
   the More sheet is grouped the same way and `⋯` is the touch path to commands. New standard:
   `components/navigation.md`. Deferred: converting the six row context menus into registered
-  commands; `⋯` on the four views with no grid toolbar.
+  commands (the Outline's is done — see the command deck below); `⋯` on the four views with
+  no grid toolbar.
+- **✅ Shared command deck & item actions.**
+  `specs/2026-08-05-2121-command-deck-and-item-actions`. One capability-aware command
+  surface for every grid: a compact, selection-aware deck in `GridToolbar` plus the same
+  commands in the palette, `⋯` and row menus, all from one descriptor with shared labels
+  and disabled reasons. Eleven views pass capabilities today — Outline, Projects, Goals,
+  Tasks, Result Areas, Wish List, Notes, Day, Contacts, Resources, Time Charts; the Task
+  Chooser and Metrics are **not** on it yet. The Outline's persistent legacy command strip
+  is gone and its row menu is built from the same registry. Also lands: priority repair
+  against the complete persisted sibling set rather than the filtered rows, type
+  conversion with a loss/conflict preview and one transactional write, and Outline zoom as
+  shareable URL state. Deferred: Wish → Dream/Goal conversion, the scheduling / pickup /
+  drop command families, and a conversion dialog with server-loaded detail previews.
 - **✅ Views across all modules.** `specs/2026-08-05-1059-views-across-modules`. Saved views
   stopped being a feature of three grids and became one of the app: **Outline, Projects, Goals,
   Tasks, Wish List, Notes and the Task Chooser** all create, update, rename and delete named
