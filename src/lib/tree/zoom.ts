@@ -21,14 +21,34 @@ export function zoomBranch(
     }
   }
 
-  return {
-    stale: false,
-    nodes: nodes
-      .filter((node) => kept.has(node.id))
-      .map((node) =>
-        node.id === rootId ? { ...node, hidden: false, depth: 0 } : node,
-      ),
-  };
+  // Rebase the branch against its new root. Both `depth` and `hidden` are stated relative
+  // to the whole tree, and zoom removes everything above the root from the screen — so the
+  // levels above it must stop counting for indentation, and a collapsed ancestor up there
+  // must stop hiding rows. Without this, zooming to an item inside a collapsed area (which
+  // the item picker will happily find) renders the root alone with an empty branch under it.
+  // Rows arrive parents-first, so one pass is enough.
+  const depthById = new Map<string, number>();
+  const hiddenById = new Map<string, boolean>();
+  const out: OutlineNode[] = [];
+
+  for (const node of nodes) {
+    if (!kept.has(node.id)) continue;
+    const parent =
+      node.id === rootId || !node.parentId ? null : (byId.get(node.parentId) ?? null);
+    const depth = parent ? (depthById.get(parent.id) ?? 0) + 1 : 0;
+    const hidden = parent
+      ? (hiddenById.get(parent.id) ?? false) || parent.collapsed === true
+      : false;
+    depthById.set(node.id, depth);
+    hiddenById.set(node.id, hidden);
+    out.push(
+      depth === node.depth && hidden === node.hidden
+        ? node
+        : { ...node, depth, hidden },
+    );
+  }
+
+  return { nodes: out, stale: false };
 }
 
 /** The URL root for one level out, or null when the current zoom is already top-level. */
