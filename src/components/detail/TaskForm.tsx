@@ -81,11 +81,6 @@ export function taskTabs(props: DetailFormProps): FormTab[] {
             />
           </FieldGrid>
 
-          <TaskContactPanel
-            contactId={task.contactId ?? null}
-            onChange={(contactId) => patchTask({ contactId })}
-          />
-
           <Section title="Dates">
             <FieldGrid columns={3}>
               {/* Also the day-page plan. Achieve's target start date is "when you intend
@@ -333,6 +328,11 @@ export function taskTabs(props: DetailFormProps): FormTab[] {
           <TaskFitnessPanel
             exerciseId={task.exerciseId ?? null}
             onChange={(exerciseId) => patchTask({ exerciseId })}
+          />
+
+          <TaskContactPanel
+            contactId={task.contactId ?? null}
+            onChange={(contactId) => patchTask({ contactId })}
           />
 
           <FieldGrid>
