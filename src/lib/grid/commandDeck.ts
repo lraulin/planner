@@ -1,7 +1,11 @@
 import type { Command } from "@/lib/commands/registry";
 import type { KeyBinding } from "@/lib/commands/bindings";
 import { commandOrder } from "@/lib/commands/menus";
-import { KIND_LABELS, type NodeKind } from "@/lib/tree/hierarchy";
+import { KIND_LABELS, STATE_LABELS, type NodeKind } from "@/lib/tree/hierarchy";
+import type { NodeState } from "@/db/schema";
+
+/** The state vocabulary, in the order Achieve lists it — `STATE_LABELS`' own key order. */
+const NODE_STATES = Object.keys(STATE_LABELS) as NodeState[];
 
 export type CreateMode = "top" | "before" | "after" | "child";
 
@@ -10,6 +14,16 @@ export type GridSelectionCapability = {
   count?: number;
   label?: string | null;
   kind?: NodeKind;
+  /** Where the row sits now, so `Complete` can grey itself on a row that already is. */
+  state?: NodeState;
+  /**
+   * The project this row belongs to, for `View project…`. Stated by the host because only it
+   * knows how its rows relate to the tree — the Chooser's rows are tasks under projects, the
+   * Wish List's are items owned by a node.
+   */
+  projectId?: string | null;
+  /** This row has tasks under it, for `View tasks…`. */
+  hasTasks?: boolean;
   canMoveUp?: boolean;
   canMoveDown?: boolean;
   canIndent?: boolean;
@@ -27,6 +41,21 @@ export type GridSelectionCapability = {
 export type GridCommandActions = {
   onCreate?: (kind: NodeKind, mode: CreateMode) => void;
   onOpen?: (id: string) => void;
+  /**
+   * Move the row to a work state. Achieve's `Complete Item(s)…` (`Ctrl+L`) plus the rest of the
+   * vocabulary behind `State ▸`.
+   *
+   * Hosts route this through `useStateChange`, so the branch cascade and its one confirmation
+   * are unchanged — this adds a menu path to what the State cell already did, which is what the
+   * keyboard and a multi-row selection never had.
+   */
+  onSetState?: (id: string, state: NodeState) => void;
+  /** Put this row on the calendar. Achieve's `Schedule Block in Calendar…`. */
+  onScheduleBlock?: (id: string) => void;
+  /** Achieve's `View Tasks…` — the Tasks module scoped to this row. */
+  onViewTasks?: (id: string) => void;
+  /** Achieve's `View Project…` — open the project this row belongs to. */
+  onViewProject?: (projectId: string) => void;
   onRename?: (id: string) => void;
   onDelete?: (id: string) => void;
   onCopyAsText?: () => void;
@@ -233,6 +262,121 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
       }),
     );
   }
+  if (actions.onSetState) {
+    const settled = selection?.state === "completed";
+    out.push(
+      command({
+        id: "record.complete",
+        label: "Complete",
+        group: "record",
+        menu: "item",
+        section: "Item",
+        icon: "complete",
+        rowMenu: true,
+        // Achieve's Ctrl+L. The one state change common enough to be a verb of its own rather
+        // than a value in the picker below.
+        bindings: [{ key: "l", ctrl: true }],
+        keywords: "done finish tick",
+        disabled: !hasSelection || settled,
+        title: settled ? "Already completed" : selectionTitle,
+        run: () => id && actions.onSetState?.(id, "completed"),
+      }),
+    );
+
+    // The rest of the vocabulary, behind `State ▸`. Nine rows inline would be half the menu;
+    // the row's own State cell is the pointer path and this is the keyboard's.
+    for (const state of NODE_STATES) {
+      out.push(
+        command({
+          id: `record.state.${state}`,
+          label: STATE_LABELS[state],
+          group: "record",
+          menu: "organize",
+          section: "State",
+          icon: "state",
+          rowMenu: true,
+          keywords: "state status mark",
+          disabled: !hasSelection || selection?.state === state,
+          title:
+            selection?.state === state
+              ? `Already ${STATE_LABELS[state].toLowerCase()}`
+              : selectionTitle,
+          run: () => id && actions.onSetState?.(id, state),
+        }),
+      );
+    }
+  }
+
+  if (actions.onScheduleBlock) {
+    out.push(
+      command({
+        id: "record.schedule-block",
+        label: "Schedule block…",
+        group: "record",
+        menu: "item",
+        section: "Item",
+        icon: "schedule",
+        rowMenu: true,
+        // Achieve's Ctrl+Alt+Shift+B.
+        bindings: [{ key: "b", ctrl: true, alt: true, shift: true }],
+        keywords: "calendar appointment time week",
+        disabled: !hasSelection,
+        title: selectionTitle,
+        run: () => id && actions.onScheduleBlock?.(id),
+      }),
+    );
+  }
+
+  if (actions.onViewTasks) {
+    const hasTasks = selection?.hasTasks !== false;
+    out.push(
+      command({
+        id: "record.view-tasks",
+        label: "View tasks…",
+        group: "record",
+        menu: "item",
+        section: "Item",
+        icon: "go-to",
+        rowMenu: true,
+        // Achieve's Ctrl+T.
+        bindings: [{ key: "t", ctrl: true }],
+        keywords: "children subtasks scope",
+        disabled: !hasSelection || !hasTasks,
+        title: !hasSelection
+          ? SELECT_REASON
+          : hasTasks
+            ? undefined
+            : "Nothing is filed under this row",
+        run: () => id && actions.onViewTasks?.(id),
+      }),
+    );
+  }
+
+  if (actions.onViewProject) {
+    const projectId = selection?.projectId ?? null;
+    out.push(
+      command({
+        id: "record.view-project",
+        label: "View project…",
+        group: "record",
+        menu: "item",
+        section: "Item",
+        icon: "go-to",
+        rowMenu: true,
+        // Achieve's Ctrl+Shift+J.
+        bindings: [{ key: "j", ctrl: true, shift: true }],
+        keywords: "parent owner belongs",
+        disabled: !hasSelection || projectId === null,
+        title: !hasSelection
+          ? SELECT_REASON
+          : projectId === null
+            ? "This row is not under a project"
+            : undefined,
+        run: () => projectId && actions.onViewProject?.(projectId),
+      }),
+    );
+  }
+
   if (actions.onCopyAsText) {
     out.push(
       command({
@@ -494,9 +638,10 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
           menu: "item",
           section: "Convert to",
           icon: "convert",
-          // Menu-and-palette only. Five conversion rows would be a third of the row menu's
-          // height; Achieve put them behind `Actions ▸`, and a submenu is the follow-on
-          // right-click spec's job.
+          // On the row menu as one `Convert to ▸` row. Five inline rows were a third of the
+          // menu's height, which is why these were kept off it entirely and the one view with
+          // conversions offered them nowhere on right-click. `NESTED_SECTIONS` is the fix.
+          rowMenu: true,
           disabled: !hasSelection || alreadyThisKind,
           title: alreadyThisKind ? `Already a ${KIND_LABELS[kind]}` : selectionTitle,
           run: () => id && !alreadyThisKind && actions.onConvert?.(id, kind),

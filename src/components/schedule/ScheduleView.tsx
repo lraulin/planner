@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useIsCompact } from "@/components/shell/useIsCompact";
 import type { Appointment, AppointmentCheck, TimeChart } from "@/db/schema";
@@ -28,6 +28,8 @@ import { WeekCalendar } from "./WeekCalendar";
 import { ProjectsRail } from "./ProjectsRail";
 import { AppointmentDrawer } from "./AppointmentDrawer";
 import { MiniMonth } from "./MiniMonth";
+import { defaultBlockRange } from "@/lib/schedule/blockDraft";
+import { owningProjectId } from "@/lib/tree/owningProject";
 import { CommandBar } from "@/components/grid/CommandBar";
 import { useRegisterCommands } from "@/components/shell/CommandProvider";
 import { OverflowMenu } from "@/components/shell/OverflowMenu";
@@ -37,6 +39,8 @@ type Props = {
   initial: SchedulePayload;
   nodes: OutlineNode[];
   weekKey: string;
+  /** `?block=` — a row somewhere else asked for a calendar block. See below. */
+  blockNodeId?: string | null;
 };
 
 export type DraftAppointment = {
@@ -78,7 +82,7 @@ function reportError(message: string) {
   if (typeof window !== "undefined") window.alert(message);
 }
 
-export function ScheduleView({ initial, nodes, weekKey }: Props) {
+export function ScheduleView({ initial, nodes, weekKey, blockNodeId = null }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
 
@@ -112,6 +116,48 @@ export function ScheduleView({ initial, nodes, weekKey }: Props) {
   const [editingAppointment, setEditingAppointment] = useState<
     Appointment | DraftAppointment | null
   >(null);
+
+  /*
+   * `Schedule block…`, arriving from another module.
+   *
+   * A row on `/tasks` has no calendar under it, so the command navigates here with `?block=` and
+   * the week does the rest: find the node, propose a time, open the drawer already filled in.
+   * The alternative was a date/time dialog on the grid, which is the calendar with the calendar
+   * taken away.
+   *
+   * Opening the drawer adjusts state during render, the idiom this file already uses above —
+   * that is a component setting its own state and is allowed. Clearing the param is **not**:
+   * `router.replace` updates the Router, and updating another component mid-render is the error
+   * React names outright. So the two halves are split, and the effect runs after the drawer is
+   * on screen.
+   */
+  const [seenBlockNodeId, setSeenBlockNodeId] = useState<string | null>(null);
+  if (blockNodeId && blockNodeId !== seenBlockNodeId) {
+    setSeenBlockNodeId(blockNodeId);
+    const node = nodes.find((entry) => entry.id === blockNodeId);
+    if (node) {
+      const { start, end } = defaultBlockRange(
+        days,
+        new Date(),
+        node.effortLeftMinutes ?? node.effortMinutes ?? 60,
+      );
+      setEditingAppointment({
+        subject: node.name || "Untitled",
+        startAt: start,
+        endAt: end,
+        // The block is *about* this row, and an appointment can only point at a project — so a
+        // task's block is filed under the project the task lives in, which is also what
+        // dragging that project off the rail produces.
+        projectId: owningProjectId(nodes, blockNodeId),
+      });
+    }
+  }
+
+  // Drop `?block=` once it has been consumed. Left in place, Back or a refresh would re-open a
+  // drawer the user had deliberately closed.
+  useEffect(() => {
+    if (blockNodeId) router.replace(`/schedule?week=${weekKey}`, { scroll: false });
+  }, [blockNodeId, router, weekKey]);
 
   const [syncing, setSyncing] = useState(false);
   /**

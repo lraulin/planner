@@ -113,6 +113,7 @@ export function ChooserGrid({
     onOpen: tab.openDetail,
     onRename: tab.setEditingId,
     onCopyAsText: tab.copySelectionAsText,
+    onStateChange: tab.cellHandlers.onStateChange,
   });
   const [dateFilter, setDateFilter] = useState<ChooserDateFilter>("none");
   const [limit, setLimit] = useState(INITIAL_LIMIT);
@@ -391,7 +392,7 @@ export function ChooserGrid({
         commandCapabilities={nodeCommands.capabilities}
       />
 
-      {nodeCommands.conversionDialog}
+      {nodeCommands.dialogs}
 
       <div className="flex flex-none items-baseline gap-2 border-b border-rule bg-surface-raised/60 px-4 py-1.5">
         <span className="flex-none text-[0.6875rem] font-medium uppercase tracking-wider text-ink-faint">

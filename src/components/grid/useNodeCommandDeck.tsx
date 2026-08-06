@@ -1,13 +1,19 @@
 "use client";
 
 import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import {
   convertNodeAction,
+  deleteNodeAction,
   removePriorityGapsAction,
   reprioritizeUniqueAction,
 } from "@/app/outline/actions";
+import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { ConversionDialog } from "@/components/outline/ConversionDialog";
+import { nodeDeleteMessage, nodeDeleteTitle } from "@/lib/tree/deleteMessage";
 import { NODE_KINDS, kindOfNode, type NodeKind } from "@/lib/tree/hierarchy";
+import { owningProjectId } from "@/lib/tree/owningProject";
+import type { NodeState } from "@/db/schema";
 import { planNodeConversion, type ConversionPlan } from "@/lib/tree/conversion";
 import type { ActionResult } from "./useOptimisticNodes";
 import type { OutlineNode } from "@/lib/tree/types";
@@ -24,6 +30,7 @@ export function useNodeCommandDeck({
   onOpen,
   onRename,
   onCopyAsText,
+  onStateChange,
 }: {
   nodes: readonly OutlineNode[];
   selectedId: string | null;
@@ -37,16 +44,26 @@ export function useNodeCommandDeck({
    * from it instead of written out again.
    */
   onCopyAsText: () => void;
+  /**
+   * The host's `useStateChange` bridge — `useGridTab` already exposes exactly this shape as
+   * `cellHandlers.onStateChange`. Taking it rather than calling `setStateAction` here is what
+   * keeps `Complete` on the menu and the State cell on the same code path, cascade,
+   * confirmation and all.
+   */
+  onStateChange: (node: OutlineNode, state: NodeState) => void;
 }): {
   capabilities: GridCommandCapabilities;
   rowMenu: (nodeId: string | null) => MenuItem[];
-  conversionDialog: ReactNode;
+  /** The conversion and delete confirmations. Hosts render this once, anywhere in their tree. */
+  dialogs: ReactNode;
 } {
   const [pendingConversion, setPendingConversion] = useState<{
     nodeId: string;
     targetKind: NodeKind;
   } | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<OutlineNode | null>(null);
   const byId = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
+  const router = useRouter();
 
   const onConvert = useCallback((id: string, targetKind: NodeKind) => {
     setPendingConversion({ nodeId: id, targetKind });
@@ -68,8 +85,36 @@ export function useNodeCommandDeck({
       onRemovePriorityGaps: () => {},
       onReprioritizeUnique: (id: string) => apply(() => reprioritizeUniqueAction(id)),
       onConvert,
+      onSetState: (id: string, state: NodeState) => {
+        const node = byId.get(id);
+        if (node) onStateChange(node, state);
+      },
+      /*
+       * Delete. Five modules had none at all — no toolbar button, no menu row, no `⌘K` entry —
+       * so a task created on `/tasks` could only be removed by going to the Outline and finding
+       * it there. Every other item verb these grids offer (New, Rename, Convert) works in place.
+       *
+       * Owned here rather than by each host for the same reason the conversion dialog is: one
+       * confirmation, one branch warning, five callers.
+       */
+      onDelete: (id: string) => {
+        const node = byId.get(id);
+        if (node) setPendingDelete(node);
+      },
+      /*
+       * The three cross-module verbs, implemented once here rather than five times in the hosts.
+       *
+       * All three are plain navigations, which is the point: `?scope=` and `?detail=` are already
+       * the app's addressable state, so `View tasks…` is the Tasks module the user could have
+       * reached by hand — reload and Back both work — rather than a mode this grid pushes into
+       * another one.
+       */
+      onScheduleBlock: (id: string) => router.push(`/schedule?block=${id}`),
+      onViewTasks: (id: string) => router.push(`/tasks?scope=${id}`),
+      onViewProject: (projectId: string) =>
+        router.push(`/projects?detail=${projectId}`),
     }),
-    [apply, onConvert, onOpen, onRename, onCopyAsText],
+    [apply, byId, onConvert, onOpen, onRename, onCopyAsText, onStateChange, router],
   );
 
   const capabilitiesFor = useCallback(
@@ -83,6 +128,11 @@ export function useNodeCommandDeck({
           count,
           label: node?.name ?? null,
           kind: node ? kindOfNode(node) : undefined,
+          state: node?.state,
+          projectId: owningProjectId(nodes, id),
+          // `hasChildren` is the honest proxy: if nothing is filed under this row there are no
+          // tasks to scope to, whatever level the row sits at.
+          hasTasks: node?.hasChildren === true,
         },
         actions: {
           ...actions,
@@ -92,7 +142,7 @@ export function useNodeCommandDeck({
         },
       };
     },
-    [actions, apply, byId],
+    [actions, apply, byId, nodes],
   );
 
   const capabilities = useMemo(
@@ -124,6 +174,22 @@ export function useNodeCommandDeck({
     });
   }, [byId, nodes, pendingConversion]);
 
+  const deleteDialog = (
+    <ConfirmDialog
+      open={pendingDelete !== null}
+      title={nodeDeleteTitle(pendingDelete)}
+      message={nodeDeleteMessage(pendingDelete)}
+      confirmLabel="Delete"
+      destructive
+      onConfirm={() => {
+        const target = pendingDelete;
+        setPendingDelete(null);
+        if (target) apply(() => deleteNodeAction(target.id));
+      }}
+      onCancel={() => setPendingDelete(null)}
+    />
+  );
+
   const conversionDialog = pendingConversion ? (
     <ConversionDialog
       open
@@ -139,5 +205,14 @@ export function useNodeCommandDeck({
     />
   ) : null;
 
-  return { capabilities, rowMenu, conversionDialog };
+  return {
+    capabilities,
+    rowMenu,
+    dialogs: (
+      <>
+        {deleteDialog}
+        {conversionDialog}
+      </>
+    ),
+  };
 }

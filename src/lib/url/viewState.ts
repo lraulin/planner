@@ -5,6 +5,7 @@
  *   ?note=<noteId>     open note drawer (Notes)
  *   ?view=<viewId>     the selected view, built-in or saved (every module with a picker)
  *   ?mode=<modeId>     a module's own display mode (Notes nested/flat)
+ *   ?scope=<nodeId>    narrow a list tab to one branch (Tasks, Projects, Goals)
  *
  * `?view=` used to double as the Notes nested/flat mode, which stopped being tenable once
  * Notes gained real views: one param cannot name both which view you are on and how that view
@@ -19,6 +20,15 @@ export const VIEW_PARAM = "view";
 export const NOTE_PARAM = "note";
 export const MODE_PARAM = "mode";
 export const ZOOM_PARAM = "zoom";
+/**
+ * The branch a list tab is narrowed to — the Project select on Tasks, the Goal select on
+ * Projects, the Result Area select on Goals.
+ *
+ * These already existed as local `useState`, which meant the narrowing survived neither reload
+ * nor Back. Putting it in the URL fixes that *and* is what makes `View tasks…` a plain
+ * navigation rather than one grid reaching into another one's internals.
+ */
+export const SCOPE_PARAM = "scope";
 
 export type ViewStatePatch = {
   /** `null` clears the param; `undefined` leaves it alone. */
@@ -27,6 +37,7 @@ export type ViewStatePatch = {
   note?: string | null;
   mode?: string | null;
   zoom?: string | null;
+  scope?: string | null;
 };
 
 export type ViewState = {
@@ -35,6 +46,7 @@ export type ViewState = {
   note: string | null;
   mode: string | null;
   zoom: string | null;
+  scope: string | null;
 };
 
 /**
@@ -77,6 +89,7 @@ export function readViewState(params: URLSearchParams): ViewState {
     // Same shape as a view id — ours, lower-case, no spaces.
     mode: asViewId(firstParam(params, MODE_PARAM)),
     zoom: asRecordId(firstParam(params, ZOOM_PARAM)),
+    scope: asRecordId(firstParam(params, SCOPE_PARAM)),
   };
 }
 
@@ -134,6 +147,12 @@ export function writeViewState(
     const id = asRecordId(patch.zoom);
     if (id) next.set(ZOOM_PARAM, id);
     else next.delete(ZOOM_PARAM);
+  }
+
+  if (patch.scope !== undefined) {
+    const id = asRecordId(patch.scope);
+    if (id) next.set(SCOPE_PARAM, id);
+    else next.delete(SCOPE_PARAM);
   }
 
   return next;

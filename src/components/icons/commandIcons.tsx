@@ -315,6 +315,62 @@ function ScheduleBlockIcon() {
   );
 }
 
+/**
+ * Complete: a tick. The one state change with a verb of its own, so it gets the mark rather
+ * than the picker's box.
+ */
+function CompleteIcon() {
+  return (
+    <Glyph>
+      <path d="M4.5 10.5l4 4 7-9" strokeWidth={1.75} />
+    </Glyph>
+  );
+}
+
+/** The State family: a box with a mark in it — "set this row's state to…". */
+function StateIcon() {
+  return (
+    <Glyph>
+      <rect x="3.5" y="3.5" width="13" height="13" rx="2" />
+      <path d="M6.75 10.25l2.5 2.5 4-5" />
+    </Glyph>
+  );
+}
+
+/** Pickup rows: scissors. Achieve's Pickup Row(s) is a cut, and it reads as one. */
+function CutIcon() {
+  return (
+    <Glyph>
+      <path d="M6 3.5l8 9.5M14 3.5l-8 9.5" />
+      <circle cx="5.5" cy="15" r="1.75" />
+      <circle cx="14.5" cy="15" r="1.75" />
+    </Glyph>
+  );
+}
+
+/**
+ * Paste: a clipboard. Deliberately not `CopyIcon`'s two overlapping sheets — cut and paste are
+ * one round trip and the pair has to be told apart at a glance in the same section.
+ */
+function PasteIcon() {
+  return (
+    <Glyph>
+      <path d="M7.5 4.5H5.5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-10a1 1 0 0 0-1-1h-2" />
+      <rect x="7.5" y="3" width="5" height="3" rx="0.75" />
+    </Glyph>
+  );
+}
+
+/** Cross-navigation: an arrow leaving its box. "Show me this somewhere else." */
+function GoToIcon() {
+  return (
+    <Glyph>
+      <path d="M15.5 11v4.5a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1H10" />
+      <path d="M12.5 3.5h4v4M16.5 3.5l-6.5 6.5" />
+    </Glyph>
+  );
+}
+
 export const COMMAND_ICONS: Record<CommandIcon, () => React.ReactElement> = {
   new: NewIcon,
   "insert-before": InsertBeforeIcon,
@@ -343,6 +399,11 @@ export const COMMAND_ICONS: Record<CommandIcon, () => React.ReactElement> = {
   panel: PanelIcon,
   "view-save": ViewSaveIcon,
   schedule: ScheduleBlockIcon,
+  state: StateIcon,
+  complete: CompleteIcon,
+  cut: CutIcon,
+  paste: PasteIcon,
+  "go-to": GoToIcon,
 };
 
 /**

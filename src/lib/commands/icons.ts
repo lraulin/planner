@@ -38,6 +38,11 @@ export const COMMAND_ICON_IDS = [
   "panel",
   "view-save",
   "schedule",
+  "state",
+  "complete",
+  "cut",
+  "paste",
+  "go-to",
 ] as const;
 
 export type CommandIcon = (typeof COMMAND_ICON_IDS)[number];

@@ -129,6 +129,7 @@ describe("grid command deck", () => {
     // menu — the same menu with no selection — worth opening rather than a list of greyed verbs.
     expect(rowMenuSections(commands).map((section) => section.label)).toEqual([
       "Item",
+      "Convert to",
       "New",
       "Insert row",
       "Move",
@@ -155,6 +156,106 @@ describe("grid command deck", () => {
       section.commands.filter((command) => command.disabled !== true),
     );
     expect(live.map((command) => command.id)).toEqual(["grid.create"]);
+  });
+
+  describe("the cross-module verbs", () => {
+    const build = (selection: Parameters<typeof buildGridCommands>[0]["selection"]) =>
+      buildGridCommands({
+        selection,
+        actions: {
+          onSetState: () => {},
+          onScheduleBlock: () => {},
+          onViewTasks: () => {},
+          onViewProject: () => {},
+        },
+      });
+
+    const find = (
+      commands: ReturnType<typeof buildGridCommands>,
+      id: string,
+    ): (typeof commands)[number] => {
+      const found = commands.find((entry) => entry.id === id);
+      if (!found) throw new Error(`${id} is not in the deck`);
+      return found;
+    };
+
+    it("greys Complete on a row that already is, and says so", () => {
+      // Not hidden: a command that vanishes on exactly the rows where you look for it teaches
+      // you it does not exist.
+      expect(
+        find(build({ id: "n", state: "completed" }), "record.complete"),
+      ).toMatchObject({ disabled: true, title: "Already completed" });
+      expect(
+        find(build({ id: "n", state: "in_progress" }), "record.complete"),
+      ).toMatchObject({ disabled: false });
+    });
+
+    it("offers the whole state vocabulary, minus the one the row is already on", () => {
+      const commands = build({ id: "n", state: "waiting" });
+      const states = commands.filter((entry) => entry.id.startsWith("record.state."));
+
+      expect(states).toHaveLength(9);
+      expect(states.every((entry) => entry.section === "State")).toBe(true);
+      expect(find(commands, "record.state.waiting").disabled).toBe(true);
+      expect(find(commands, "record.state.completed").disabled).toBe(false);
+    });
+
+    it("folds the state vocabulary behind one row menu entry", () => {
+      // Nine inline rows would be more than half the menu. This is the reason submenus exist.
+      const sections = rowMenuSections(build({ id: "n", state: "waiting" }));
+      const state = sections.find((section) => section.label === "State");
+
+      expect(state?.submenu).toBe(true);
+      expect(state?.commands).toHaveLength(9);
+    });
+
+    it("explains a cross-navigation that has nowhere to go", () => {
+      const orphan = build({ id: "n", projectId: null, hasTasks: false });
+      expect(find(orphan, "record.view-project")).toMatchObject({
+        disabled: true,
+        title: "This row is not under a project",
+      });
+      expect(find(orphan, "record.view-tasks")).toMatchObject({
+        disabled: true,
+        title: "Nothing is filed under this row",
+      });
+
+      const filed = build({ id: "n", projectId: "p", hasTasks: true });
+      expect(find(filed, "record.view-project").disabled).toBe(false);
+      expect(find(filed, "record.view-tasks").disabled).toBe(false);
+    });
+
+    it("keeps Achieve's shortcuts on the verbs that had them", () => {
+      const commands = build({ id: "n", projectId: "p", hasTasks: true });
+      expect(formatBindings(find(commands, "record.complete").bindings)).toBe("⌃L");
+      expect(formatBindings(find(commands, "record.schedule-block").bindings)).toBe(
+        "⌃⌥⇧B",
+      );
+      expect(formatBindings(find(commands, "record.view-tasks").bindings)).toBe("⌃T");
+      expect(formatBindings(find(commands, "record.view-project").bindings)).toBe(
+        "⌃⇧J",
+      );
+    });
+
+    it("invents none of them for a grid that cannot do them", () => {
+      // A catalog of contacts has no state, no project and nothing to schedule.
+      const commands = buildGridCommands({
+        selection: { id: "c" },
+        actions: { onOpen: () => {} },
+      });
+      for (const id of [
+        "record.complete",
+        "record.state.completed",
+        "record.schedule-block",
+        "record.view-tasks",
+        "record.view-project",
+      ]) {
+        expect(
+          commands.some((entry) => entry.id === id),
+          id,
+        ).toBe(false);
+      }
+    });
   });
 
   it("prints the shortcut the binding actually fires", () => {

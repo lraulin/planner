@@ -34,7 +34,12 @@ import { isTypingTarget } from "@/lib/keyboard";
 export function useGridTab(initialNodes: OutlineNode[]) {
   const { nodes, byId, patch, apply, error, setError } =
     useOptimisticNodes(initialNodes);
-  const { detail: detailId, setDetail: setDetailId } = useViewStateUrl();
+  const {
+    detail: detailId,
+    setDetail: setDetailId,
+    scope,
+    setScope,
+  } = useViewStateUrl();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [navigableIds, setNavigableIds] = useState<readonly string[]>([]);
   const today = useToday();
@@ -210,5 +215,11 @@ export function useGridTab(initialNodes: OutlineNode[]) {
     /** Cascade confirmation state — the host renders the dialog. */
     stateChange,
     copySelectionAsText,
+    /**
+     * The branch this tab is narrowed to, from `?scope=`. Local state before, which meant the
+     * narrowing survived neither reload nor Back — and left `View tasks…` with nowhere to land.
+     */
+    scope,
+    setScope,
   };
 }

@@ -7,7 +7,7 @@ import { fromDateKey, startOfWeek, toDateKey } from "@/lib/schedule/geometry";
 
 export const dynamic = "force-dynamic";
 
-type SearchParams = Promise<{ week?: string; chart?: string }>;
+type SearchParams = Promise<{ week?: string; chart?: string; block?: string }>;
 
 export default async function SchedulePage({
   searchParams,
@@ -31,7 +31,13 @@ export default async function SchedulePage({
 
   return (
     <AppShell active="schedule">
-      <ScheduleView initial={schedule} nodes={nodes} weekKey={toDateKey(weekStart)} />
+      <ScheduleView
+        initial={schedule}
+        nodes={nodes}
+        weekKey={toDateKey(weekStart)}
+        // `Schedule block…` on any grid row lands here. See `ScheduleView`.
+        blockNodeId={params.block ?? null}
+      />
     </AppShell>
   );
 }

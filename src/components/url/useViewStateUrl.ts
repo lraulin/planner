@@ -79,16 +79,31 @@ export function useViewStateUrl() {
     [navigate],
   );
 
+  /**
+   * Narrowing a list tab to one branch. `replace` for the same reason as `setView`: a lens
+   * change is not a place you came from, so Back should leave the module rather than step
+   * through every scope you tried.
+   *
+   * `View tasks…` is the exception and navigates with `push` of its own — arriving from another
+   * module *is* a place you came from.
+   */
+  const setScope = useCallback(
+    (scope: string | null) => navigate({ scope }, "replace"),
+    [navigate],
+  );
+
   return {
     detail: state.detail,
     view: state.view,
     note: state.note,
     mode: state.mode,
     zoom: state.zoom,
+    scope: state.scope,
     setDetail,
     setView,
     setNote,
     setMode,
     setZoom,
+    setScope,
   };
 }

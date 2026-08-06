@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { ActionResult } from "@/app/outline/actions";
 import type { NodeState } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
@@ -93,7 +93,19 @@ export function useStateChange({
     setPending(null);
   }, []);
 
-  return { pending, request, confirm, cancel, prompt: promptFor(pending) };
+  /*
+   * Memoised, because this object's identity is now load-bearing.
+   *
+   * It used to feed only `cellHandlers`, which nothing downstream compared — so returning a
+   * fresh literal every render cost a little churn and showed as nothing. Then `Complete` and
+   * the `State ▸` family started reading it, and a command list rebuilt every render
+   * re-registers every render: `useRegisterCommands`' churn guard fired and React hit
+   * "Maximum update depth exceeded".
+   */
+  return useMemo(
+    () => ({ pending, request, confirm, cancel, prompt: promptFor(pending) }),
+    [pending, request, confirm, cancel],
+  );
 }
 
 /** What the confirmation says. Null when nothing is pending. */

@@ -41,13 +41,16 @@ Seven concrete gaps, all found by diffing the app against `visuals/`:
    being bespoke — per-row legality flags and per-row action closures — is precisely what
    `capabilitiesFor(id, count)` already gives `useNodeCommandDeck`'s five hosts.
 2. **Submenus are declared per section, not derived from length.** A section label in
-   `ROW_MENU_SUBMENUS` always nests, so `Convert to ▸` looks the same on the Outline and on
-   Tasks. A length threshold was considered and rejected: the same family nesting on one view
-   and lying flat on another is a menu you have to read every time.
+   `NESTED_SECTIONS` nests, so `Convert to ▸` looks the same on the Outline and on Tasks, and on
+   the menu bar as well as the row menu. A pure length threshold was considered and rejected: the
+   same family nesting on one view and lying flat on another is a menu you have to read every
+   time. The one length condition that survived is a floor of two — a fly-out onto a single row
+   is a hover you must perform to learn nothing was behind it.
 3. **The blank-area menu is the row menu with no row.** `rowMenu` becomes
    `(rowId: string | null) => MenuItem[]`. Every item verb is already `disabled` with
    "Select a row first", and `navigation.md` says unavailable is not absent — so the blank menu
-   is the same menu, greyed, and there is no second list to drift.
+   is the same menu, greyed, and there is no second list to drift. Creation is the one command
+   on it that does not need a row, which is what keeps it worth opening.
 4. **The calendar's menu is built from `Command`s.** Not a hand-written `MenuItem[]` — that is
    the exact drift the previous slice removed from eight views. Registering them also puts them
    in `⌘K`, the menu bar and `⋯` for free.

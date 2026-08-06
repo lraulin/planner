@@ -181,8 +181,12 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     onOpen: tab.openDetail,
     onRename: tab.setEditingId,
     onCopyAsText: tab.copySelectionAsText,
+    onStateChange: tab.cellHandlers.onStateChange,
   });
-  const [scopeId, setScopeId] = useState<string>("");
+  // From `?scope=` rather than local state, so the narrowing survives reload and Back —
+  // and so `View tasks…` from another module is a plain navigation into it.
+  const scopeId = tab.scope ?? "";
+  const setScopeId = tab.setScope;
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
   const [groupIds, setGroupIds] = useState<string[]>([]);
 
@@ -292,7 +296,7 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         commandCapabilities={nodeCommands.capabilities}
       />
 
-      {nodeCommands.conversionDialog}
+      {nodeCommands.dialogs}
 
       <DataGrid
         rows={rows}

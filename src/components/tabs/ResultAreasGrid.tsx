@@ -158,6 +158,7 @@ export function ResultAreasGrid({ initialNodes }: { initialNodes: OutlineNode[] 
     onOpen: tab.openDetail,
     onRename: tab.setEditingId,
     onCopyAsText: tab.copySelectionAsText,
+    onStateChange: tab.cellHandlers.onStateChange,
   });
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
   const [groupIds, setGroupIds] = useState<string[]>([]);
@@ -247,7 +248,7 @@ export function ResultAreasGrid({ initialNodes }: { initialNodes: OutlineNode[] 
         commandCapabilities={nodeCommands.capabilities}
       />
 
-      {nodeCommands.conversionDialog}
+      {nodeCommands.dialogs}
 
       <DataGrid
         rows={rows}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { OutlineNode } from "@/lib/tree/types";
 import {
   categoryLabelFromGroupId,
@@ -10,7 +11,6 @@ import {
 import {
   allowedChildKinds,
   defaultChildType,
-  KIND_LABELS,
   kindOfNode,
   NODE_KINDS,
   type NodeKind,
@@ -76,6 +76,8 @@ import {
 } from "./outlineColumns";
 import { isTypingTarget } from "@/lib/keyboard";
 import { zoomBranch, zoomOutRoot } from "@/lib/tree/zoom";
+import { owningProjectId } from "@/lib/tree/owningProject";
+import { nodeDeleteMessage, nodeDeleteTitle } from "@/lib/tree/deleteMessage";
 import { type GridCommandCapabilities } from "@/lib/grid/commandDeck";
 import { rowMenuFor } from "@/components/grid/rowMenu";
 import { planNodeConversion, type ConversionPlan } from "@/lib/tree/conversion";
@@ -148,6 +150,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   /** The row a new child is being added to, while its kind is being chosen. */
   const [pendingChildOf, setPendingChildOf] = useState<OutlineNode | null>(null);
   const today = useToday();
+  const router = useRouter();
   const stateChange = useStateChange({ nodes, patch, apply });
 
   const outlineColumns = useMemo(() => buildOutlineColumns(today), [today]);
@@ -454,6 +457,9 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
           count,
           label: node?.name ?? null,
           kind: node ? kindOfNode(node) : undefined,
+          state: node?.state,
+          projectId: owningProjectId(nodes, id),
+          hasTasks: node?.hasChildren === true,
           canMoveUp: index > 0,
           canMoveDown: index >= 0 && index < siblings.length - 1,
           canIndent: index > 0,
@@ -513,6 +519,15 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
           onConvert: (nodeId, kind) => {
             setPendingConversion({ nodeId, targetKind: kind });
           },
+          // Same three navigations `useNodeCommandDeck` gives the list tabs, and the same
+          // `useStateChange` bridge the State cell in this grid already uses.
+          onSetState: (nodeId, state) => {
+            const target = byId.get(nodeId);
+            if (target) stateChange.request(target, state, setStateAction);
+          },
+          onScheduleBlock: (nodeId) => router.push(`/schedule?block=${nodeId}`),
+          onViewTasks: (nodeId) => router.push(`/tasks?scope=${nodeId}`),
+          onViewProject: (projectId) => router.push(`/projects?detail=${projectId}`),
           onZoomIn: (nodeId) => setZoom(nodeId, "push"),
           onZoomOut: () => setZoom(zoomOutRoot(nodes, zoom), "push"),
           onClearZoom: () => setZoom(null, "push"),
@@ -535,6 +550,8 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
       setTreeCollapsed,
       setZoom,
       zoom,
+      router,
+      stateChange,
     ],
   );
 
@@ -891,8 +908,8 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
 
       <ConfirmDialog
         open={pendingDelete !== null}
-        title={`Delete this ${pendingDelete ? KIND_LABELS[kindOfNode(pendingDelete)].toLowerCase() : "row"}?`}
-        message={deleteMessage(pendingDelete)}
+        title={nodeDeleteTitle(pendingDelete)}
+        message={nodeDeleteMessage(pendingDelete)}
         confirmLabel="Delete"
         destructive
         onConfirm={() => {
@@ -915,14 +932,6 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
       )}
     </div>
   );
-}
-
-function deleteMessage(node: OutlineNode | null): string {
-  if (!node) return "";
-  const label = node.name || `This ${KIND_LABELS[kindOfNode(node)].toLowerCase()}`;
-  return node.hasChildren
-    ? `${label} and all ${node.childCount} items under it will be deleted. This cannot be undone.`
-    : `${label} will be deleted. This cannot be undone.`;
 }
 
 /**

@@ -47,6 +47,7 @@ describe("readViewState", () => {
       note: null,
       mode: null,
       zoom: null,
+      scope: null,
     });
   });
 
@@ -57,6 +58,7 @@ describe("readViewState", () => {
       note: "note-9",
       mode: "flat",
       zoom: "node-1",
+      scope: "project-3",
     });
     expect(readViewState(written)).toEqual({
       detail: "node-1",
@@ -64,7 +66,29 @@ describe("readViewState", () => {
       note: "note-9",
       mode: "flat",
       zoom: "node-1",
+      scope: "project-3",
     });
+  });
+
+  it("round-trips a scope, and clears it on an empty string", () => {
+    // The scope selects hand back `""` for "(all)", which has to delete the param rather than
+    // write an empty one — `View tasks…` reads what is there and an empty `?scope=` would look
+    // like a branch nobody can find.
+    const set = writeViewState(new URLSearchParams(), { scope: "project-3" });
+    expect(set.get("scope")).toBe("project-3");
+    expect(writeViewState(set, { scope: "" }).has("scope")).toBe(false);
+  });
+
+  it("keeps the scope through a view switch", () => {
+    // Unlike `mode`, a scope is not a property of the view you were on: narrowing Tasks to a
+    // project and then switching from Active Status to All is still that project's tasks.
+    const current = writeViewState(new URLSearchParams(), {
+      view: "active-status",
+      scope: "project-3",
+    });
+    expect(readViewState(writeViewState(current, { view: "all" })).scope).toBe(
+      "project-3",
+    );
   });
 
   it("treats multi-value and empty params as absent", () => {
@@ -99,6 +123,7 @@ describe("readViewState", () => {
       note: "note-1",
       mode: null,
       zoom: null,
+      scope: null,
     });
   });
 
