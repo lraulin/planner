@@ -98,6 +98,24 @@ describe("grid command deck", () => {
     expect(calls).toEqual(["expand"]);
   });
 
+  it("will not convert a row to the kind it already is", () => {
+    let converted: string | null = null;
+    const commands = buildGridCommands({
+      conversionKinds: ["project", "task"],
+      selection: { id: "node-1", kind: "project" },
+      actions: { onConvert: (_id, kind) => (converted = kind) },
+    });
+
+    const toProject = commands.find((entry) => entry.id === "record.convert.project");
+    expect(toProject).toMatchObject({ disabled: true, title: "Already a Project" });
+    toProject?.run();
+    expect(converted).toBeNull();
+
+    expect(commands.find((entry) => entry.id === "record.convert.task")).toMatchObject({
+      disabled: false,
+    });
+  });
+
   it("does not invent hierarchy commands for a flat grid", () => {
     const commands = buildGridCommands({
       selection: { id: "contact-1" },

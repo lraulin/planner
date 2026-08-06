@@ -335,15 +335,18 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
 
   if (capabilities.conversionKinds && actions.onConvert) {
     for (const kind of capabilities.conversionKinds) {
+      // The row's current kind stays listed so the menu keeps the same shape as you move
+      // between rows, but it is not a move you can make — and the server refuses it anyway.
+      const alreadyThisKind = hasSelection && selection?.kind === kind;
       out.push(
         command({
           id: `record.convert.${kind}`,
           label: `Convert to ${KIND_LABELS[kind]}`,
           group: "record",
           toolbarGroup: "more",
-          disabled: !hasSelection,
-          title: selectionTitle,
-          run: () => id && actions.onConvert?.(id, kind),
+          disabled: !hasSelection || alreadyThisKind,
+          title: alreadyThisKind ? `Already a ${KIND_LABELS[kind]}` : selectionTitle,
+          run: () => id && !alreadyThisKind && actions.onConvert?.(id, kind),
         }),
       );
     }

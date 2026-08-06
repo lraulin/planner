@@ -122,6 +122,50 @@ describeDb("shared command mutations", () => {
     ).toBe(1);
   });
 
+  // Every detail table is keyed by `nodeId`, so a conversion that does not change the type
+  // must not take the "insert a fresh detail row" branch — the row is already there. The
+  // More menu lists every kind, including the one the row already is, so this is two clicks
+  // away rather than a theoretical call.
+  it("treats converting a node to the kind it already is as a no-op", async () => {
+    const project = await createNode({
+      userId,
+      parentId: null,
+      type: "project",
+      name: "Same kind",
+    });
+
+    await expect(convertNode(userId, project, "project")).resolves.toBeUndefined();
+
+    const [row] = await db
+      .select()
+      .from(nodes)
+      .where(and(eq(nodes.userId, userId), eq(nodes.id, project)));
+    expect(row.type).toBe("project");
+  });
+
+  it("keeps a Goal's detail row when only the Dream flag changes", async () => {
+    const goal = await createNode({
+      userId,
+      parentId: null,
+      type: "goal",
+      name: "Ship it",
+    });
+
+    await convertNode(userId, goal, "dream");
+    const [asDream] = await db
+      .select()
+      .from(goalDetails)
+      .where(eq(goalDetails.nodeId, goal));
+    expect(asDream.isDream).toBe(true);
+
+    await convertNode(userId, goal, "goal");
+    const [backToGoal] = await db
+      .select()
+      .from(goalDetails)
+      .where(eq(goalDetails.nodeId, goal));
+    expect(backToGoal.isDream).toBe(false);
+  });
+
   it("does not let another user read, mutate, convert, or delete the first user's node", async () => {
     const otherUserId = await makeUser();
     const nodeId = await createNode({

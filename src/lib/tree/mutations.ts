@@ -330,6 +330,12 @@ export async function convertNode(
             )[0]?.isDream,
           })
         : source.type;
+
+    // Converting a row to the kind it already is has nothing to do — and must not fall
+    // through, because the detail tables are keyed by `nodeId` and the branch below would
+    // insert a second row for one that already exists.
+    if (sourceKind === targetKind) return;
+
     const tree = await tx
       .select({
         id: nodes.id,
