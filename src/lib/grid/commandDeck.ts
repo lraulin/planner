@@ -24,6 +24,14 @@ export type GridSelectionCapability = {
   projectId?: string | null;
   /** This row has tasks under it, for `View tasks…`. */
   hasTasks?: boolean;
+  /**
+   * The rows a **plural** command acts on, already reduced to selection roots by the host.
+   *
+   * Only Delete, the state changes and the row clipboard read it: those are the verbs you
+   * genuinely do to several rows at once. Open, Rename, Indent and Convert stay single —
+   * opening three drawers is not a thing. Absent means "just `id`".
+   */
+  ids?: readonly string[];
   canMoveUp?: boolean;
   canMoveDown?: boolean;
   canIndent?: boolean;
@@ -49,7 +57,7 @@ export type GridCommandActions = {
    * are unchanged — this adds a menu path to what the State cell already did, which is what the
    * keyboard and a multi-row selection never had.
    */
-  onSetState?: (id: string, state: NodeState) => void;
+  onSetState?: (ids: readonly string[], state: NodeState) => void;
   /** Put this row on the calendar. Achieve's `Schedule Block in Calendar…`. */
   onScheduleBlock?: (id: string) => void;
   /** Achieve's `View Tasks…` — the Tasks module scoped to this row. */
@@ -57,7 +65,7 @@ export type GridCommandActions = {
   /** Achieve's `View Project…` — open the project this row belongs to. */
   onViewProject?: (projectId: string) => void;
   onRename?: (id: string) => void;
-  onDelete?: (id: string) => void;
+  onDelete?: (ids: readonly string[]) => void;
   onCopyAsText?: () => void;
   onMoveUp?: (id: string) => void;
   onMoveDown?: (id: string) => void;
@@ -148,6 +156,16 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
   const id = selected(capabilities);
   const hasSelection = id !== null;
   const selectionTitle = hasSelection ? undefined : SELECT_REASON;
+  /**
+   * What a plural command acts on, and how many it says.
+   *
+   * `count` was already threaded through for `Copy as text (3)`; the rows themselves were not,
+   * so Delete on a three-row selection quietly removed one. `ids` is the honest answer and
+   * `count` is what gets printed, with the fallback keeping single-selection hosts unchanged.
+   */
+  const targetIds = selection?.ids ?? (id ? [id] : []);
+  const many = (selection?.count ?? targetIds.length) > 1;
+  const suffix = many ? ` (${selection?.count ?? targetIds.length})` : "";
   const kinds = capabilities.createKinds ?? [];
   const defaultKind = kinds[0];
   const out: Command[] = [];
@@ -267,7 +285,7 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
     out.push(
       command({
         id: "record.complete",
-        label: "Complete",
+        label: `Complete${suffix}`,
         group: "record",
         menu: "item",
         section: "Item",
@@ -279,7 +297,7 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
         keywords: "done finish tick",
         disabled: !hasSelection || settled,
         title: settled ? "Already completed" : selectionTitle,
-        run: () => id && actions.onSetState?.(id, "completed"),
+        run: () => actions.onSetState?.(targetIds, "completed"),
       }),
     );
 
@@ -289,7 +307,7 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
       out.push(
         command({
           id: `record.state.${state}`,
-          label: STATE_LABELS[state],
+          label: `${STATE_LABELS[state]}${suffix}`,
           group: "record",
           menu: "organize",
           section: "State",
@@ -301,7 +319,7 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
             selection?.state === state
               ? `Already ${STATE_LABELS[state].toLowerCase()}`
               : selectionTitle,
-          run: () => id && actions.onSetState?.(id, state),
+          run: () => actions.onSetState?.(targetIds, state),
         }),
       );
     }
@@ -381,10 +399,7 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
     out.push(
       command({
         id: "record.copy-as-text",
-        label:
-          selection?.count && selection.count > 1
-            ? `Copy as text (${selection.count})`
-            : "Copy as text",
+        label: `Copy as text${suffix}`,
         group: "record",
         menu: "item",
         section: "Item",
@@ -402,7 +417,7 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
     out.push(
       command({
         id: "record.delete",
-        label: "Delete",
+        label: `Delete${suffix}`,
         group: "record",
         menu: "item",
         section: "Danger",
@@ -414,7 +429,7 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
         destructive: true,
         disabled: !hasSelection,
         title: selectionTitle,
-        run: () => id && actions.onDelete?.(id),
+        run: () => actions.onDelete?.(targetIds),
       }),
     );
   }

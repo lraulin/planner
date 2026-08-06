@@ -13,6 +13,7 @@ import { ConversionDialog } from "@/components/outline/ConversionDialog";
 import { nodeDeleteMessage, nodeDeleteTitle } from "@/lib/tree/deleteMessage";
 import { NODE_KINDS, kindOfNode, type NodeKind } from "@/lib/tree/hierarchy";
 import { owningProjectId } from "@/lib/tree/owningProject";
+import { selectionMoveRoots } from "@/lib/grid/selection";
 import type { NodeState } from "@/db/schema";
 import { planNodeConversion, type ConversionPlan } from "@/lib/tree/conversion";
 import type { ActionResult } from "./useOptimisticNodes";
@@ -61,7 +62,7 @@ export function useNodeCommandDeck({
     nodeId: string;
     targetKind: NodeKind;
   } | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<OutlineNode | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<readonly OutlineNode[]>([]);
   const byId = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
   const router = useRouter();
 
@@ -85,9 +86,14 @@ export function useNodeCommandDeck({
       onRemovePriorityGaps: () => {},
       onReprioritizeUnique: (id: string) => apply(() => reprioritizeUniqueAction(id)),
       onConvert,
-      onSetState: (id: string, state: NodeState) => {
-        const node = byId.get(id);
-        if (node) onStateChange(node, state);
+      onSetState: (ids: readonly string[], state: NodeState) => {
+        // One `request` per row. `useStateChange` cascades each branch and asks once per row
+        // that would settle open work underneath it — which is the honest prompt: two projects
+        // with children are two separate "and everything under it?" questions.
+        for (const id of ids) {
+          const node = byId.get(id);
+          if (node) onStateChange(node, state);
+        }
       },
       /*
        * Delete. Five modules had none at all — no toolbar button, no menu row, no `⌘K` entry —
@@ -97,9 +103,10 @@ export function useNodeCommandDeck({
        * Owned here rather than by each host for the same reason the conversion dialog is: one
        * confirmation, one branch warning, five callers.
        */
-      onDelete: (id: string) => {
-        const node = byId.get(id);
-        if (node) setPendingDelete(node);
+      onDelete: (ids: readonly string[]) => {
+        setPendingDelete(
+          ids.map((id) => byId.get(id)).filter((node) => node !== undefined),
+        );
       },
       /*
        * The three cross-module verbs, implemented once here rather than five times in the hosts.
@@ -133,6 +140,22 @@ export function useNodeCommandDeck({
           // `hasChildren` is the honest proxy: if nothing is filed under this row there are no
           // tasks to scope to, whatever level the row sits at.
           hasTasks: node?.hasChildren === true,
+          // Roots only: a child selected alongside its parent is already inside that parent's
+          // branch, so deleting both would delete it twice and count it twice in the warning.
+          ids:
+            id && selectedIds.has(id)
+              ? selectionMoveRoots(
+                  selectedIds,
+                  // Tree order rather than screen order. These tabs re-base depth and filter
+                  // rows, so the on-screen list is not the tree — but the roots are a property
+                  // of ancestry, and the full tree is the one ordering that contains every
+                  // selected id whatever the view is showing.
+                  nodes.map((entry) => entry.id),
+                  (entry) => byId.get(entry)?.parentId ?? null,
+                )
+              : id
+                ? [id]
+                : [],
         },
         actions: {
           ...actions,
@@ -142,7 +165,7 @@ export function useNodeCommandDeck({
         },
       };
     },
-    [actions, apply, byId, nodes],
+    [actions, apply, byId, nodes, selectedIds],
   );
 
   const capabilities = useMemo(
@@ -176,17 +199,17 @@ export function useNodeCommandDeck({
 
   const deleteDialog = (
     <ConfirmDialog
-      open={pendingDelete !== null}
+      open={pendingDelete.length > 0}
       title={nodeDeleteTitle(pendingDelete)}
       message={nodeDeleteMessage(pendingDelete)}
       confirmLabel="Delete"
       destructive
       onConfirm={() => {
-        const target = pendingDelete;
-        setPendingDelete(null);
-        if (target) apply(() => deleteNodeAction(target.id));
+        const targets = pendingDelete;
+        setPendingDelete([]);
+        for (const target of targets) apply(() => deleteNodeAction(target.id));
       }}
-      onCancel={() => setPendingDelete(null)}
+      onCancel={() => setPendingDelete([])}
     />
   );
 

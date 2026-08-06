@@ -362,18 +362,6 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
     [allColumns, rows],
   );
 
-  const navigableIds = useMemo(
-    () => rows.flatMap((row) => (row.kind === "node" ? [row.id] : [])),
-    [rows],
-  );
-  // Shift-range and arrows walk the on-screen list, not the whole tree.
-  const navigableKey = navigableIds.join("\0");
-  const [seenNavigable, setSeenNavigable] = useState(navigableKey);
-  if (navigableKey !== seenNavigable) {
-    setSeenNavigable(navigableKey);
-    tab.setNavigableIds(navigableIds);
-  }
-
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
       <GridToolbar
@@ -422,6 +410,7 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
         onOpenDetail={tab.openDetail}
         ariaLabel="Projects"
         rowNumbers
+        onNavigableIdsChange={tab.setNavigableIds}
         rowMenu={nodeCommands.rowMenu}
         rowDrag={rowDrag}
         enableFilters

@@ -391,7 +391,7 @@ export function NotesGrid({
         actions: {
           onOpen: (id) => openDetail(id),
           onCopyAsText: copySelectionAsText,
-          onDelete: requestDelete,
+          onDelete: (ids) => ids.forEach(requestDelete),
           onIndent: (id) => apply(() => indentNoteAction(id)),
           onOutdent: (id) => apply(() => outdentNoteAction(id)),
           onMoveUp: (id) => apply(() => moveNoteVerticallyAction(id, "up")),

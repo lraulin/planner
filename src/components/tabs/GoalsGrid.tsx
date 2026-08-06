@@ -232,17 +232,6 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     [allColumns, rows],
   );
 
-  const navigableIds = useMemo(
-    () => rows.flatMap((row) => (row.kind === "node" ? [row.id] : [])),
-    [rows],
-  );
-  const navigableKey = navigableIds.join("\0");
-  const [seenNavigable, setSeenNavigable] = useState(navigableKey);
-  if (navigableKey !== seenNavigable) {
-    setSeenNavigable(navigableKey);
-    tab.setNavigableIds(navigableIds);
-  }
-
   const columnCtx: GoalsCtx = useMemo(
     () => ({
       ...tab.cellHandlers,
@@ -309,6 +298,7 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         onOpenDetail={tab.openDetail}
         ariaLabel="Goals"
         rowNumbers
+        onNavigableIdsChange={tab.setNavigableIds}
         rowMenu={nodeCommands.rowMenu}
         enableFilters
         enableSort

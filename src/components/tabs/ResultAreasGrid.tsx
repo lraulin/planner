@@ -195,17 +195,6 @@ export function ResultAreasGrid({ initialNodes }: { initialNodes: OutlineNode[] 
     [allColumns, rows],
   );
 
-  const navigableIds = useMemo(
-    () => rows.flatMap((row) => (row.kind === "node" ? [row.id] : [])),
-    [rows],
-  );
-  const navigableKey = navigableIds.join("\0");
-  const [seenNavigable, setSeenNavigable] = useState(navigableKey);
-  if (navigableKey !== seenNavigable) {
-    setSeenNavigable(navigableKey);
-    tab.setNavigableIds(navigableIds);
-  }
-
   const columnCtx: ResultAreasCtx = useMemo(
     () => ({
       ...tab.cellHandlers,
@@ -261,6 +250,7 @@ export function ResultAreasGrid({ initialNodes }: { initialNodes: OutlineNode[] 
         onOpenDetail={tab.openDetail}
         ariaLabel="Result Areas"
         rowNumbers
+        onNavigableIdsChange={tab.setNavigableIds}
         rowMenu={nodeCommands.rowMenu}
         enableFilters
         enableSort

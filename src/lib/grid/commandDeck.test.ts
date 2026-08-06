@@ -258,6 +258,83 @@ describe("grid command deck", () => {
     });
   });
 
+  describe("multi-row commands", () => {
+    const build = (
+      selection: Parameters<typeof buildGridCommands>[0]["selection"],
+      actions: Parameters<typeof buildGridCommands>[0]["actions"] = {},
+    ) =>
+      buildGridCommands({
+        selection,
+        actions: { onDelete: () => {}, onSetState: () => {}, ...actions },
+      });
+
+    it("says how many rows the plural verbs will act on", () => {
+      const commands = build({ id: "a", count: 3, ids: ["a", "b", "c"] });
+      const labels = new Map(commands.map((entry) => [entry.id, entry.label]));
+
+      expect(labels.get("record.delete")).toBe("Delete (3)");
+      expect(labels.get("record.complete")).toBe("Complete (3)");
+      expect(labels.get("record.state.waiting")).toBe("Waiting (3)");
+    });
+
+    it("stays singular on one row", () => {
+      const labels = new Map(
+        build({ id: "a", count: 1, ids: ["a"] }).map((e) => [e.id, e.label]),
+      );
+      expect(labels.get("record.delete")).toBe("Delete");
+      expect(labels.get("record.complete")).toBe("Complete");
+    });
+
+    it("hands the whole selection to the action, not just the focus row", () => {
+      // The bug this exists to prevent: `Delete (3)` removing one row. The label promised
+      // three and the old signature could only carry the focus id.
+      let deleted: readonly string[] = [];
+      const commands = build(
+        { id: "a", count: 3, ids: ["a", "b", "c"] },
+        {
+          onDelete: (ids) => {
+            deleted = ids;
+          },
+        },
+      );
+
+      commands.find((entry) => entry.id === "record.delete")?.run();
+      expect(deleted).toEqual(["a", "b", "c"]);
+    });
+
+    it("falls back to the focus row when the host states no id list", () => {
+      // Catalogs are single-selection and never set `ids`.
+      let deleted: readonly string[] = [];
+      const commands = build(
+        { id: "only" },
+        {
+          onDelete: (ids) => {
+            deleted = ids;
+          },
+        },
+      );
+
+      commands.find((entry) => entry.id === "record.delete")?.run();
+      expect(deleted).toEqual(["only"]);
+    });
+
+    it("leaves the single-row verbs singular however many rows are selected", () => {
+      // Opening three drawers is not a thing, and neither is renaming three rows at once.
+      const labels = new Map(
+        build(
+          { id: "a", count: 3, ids: ["a", "b", "c"] },
+          {
+            onOpen: () => {},
+            onRename: () => {},
+          },
+        ).map((e) => [e.id, e.label]),
+      );
+
+      expect(labels.get("record.open")).toBe("Open");
+      expect(labels.get("record.rename")).toBe("Rename");
+    });
+  });
+
   it("prints the shortcut the binding actually fires", () => {
     // The vocabulary the app showed before bindings existed, now derived rather than typed.
     const commands = buildGridCommands({

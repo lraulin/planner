@@ -181,6 +181,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   collapsedGroups,
   onToggleGroup,
   onGroupIdsChange,
+  onNavigableIdsChange,
   density = "comfortable",
   rowDrag,
   rowMenu,
@@ -277,6 +278,17 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
    * would only reopen one level per press.
    */
   onGroupIdsChange?: (groupIds: string[]) => void;
+  /**
+   * The node ids actually on screen, in screen order — after column filters, search, grouping
+   * and sort.
+   *
+   * Hosts used to derive this themselves from the rows they *passed in*, which is the list
+   * before this grid narrows it. Shift-arrow therefore walked rows that were filtered out: on
+   * the Outline, whose default view hides completed work, a three-row selection could include
+   * rows the user could not see — and the row menu now prints that number and Delete now acts
+   * on it.
+   */
+  onNavigableIdsChange?: (ids: string[]) => void;
   /**
    * Row height. Overrides `--row-height` on the grid's own subtree rather than setting a
    * height per row: the header, the data rows and the group headers all already read that
@@ -496,6 +508,17 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   useEffect(() => {
     onGroupIdsChange?.(groupIdKey === "" ? [] : groupIdKey.split("\0"));
   }, [onGroupIdsChange, groupIdKey]);
+
+  // Keyed on the joined string for the same reason as the group ids: a fresh array every
+  // render would re-notify every render.
+  const navigableKey = displayRows
+    .filter((row) => row.kind === "node")
+    .map((row) => row.id)
+    .join("\0");
+
+  useEffect(() => {
+    onNavigableIdsChange?.(navigableKey === "" ? [] : navigableKey.split("\0"));
+  }, [onNavigableIdsChange, navigableKey]);
 
   /**
    * Achieve's header cycle: unsorted → ascending → descending → unsorted.

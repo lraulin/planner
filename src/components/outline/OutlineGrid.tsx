@@ -140,7 +140,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const { nodes, byId, patch, apply, error } = useOptimisticNodes(initialNodes);
   const { detail: detailId, zoom, setDetail: setDetailId, setZoom } = useViewStateUrl();
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<OutlineNode | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<readonly OutlineNode[]>([]);
   const [pendingConversion, setPendingConversion] = useState<{
     nodeId: string;
     targetKind: NodeKind;
@@ -248,7 +248,20 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     return out;
   }, [byCategory, visible, gridRows, gridState.collapsedGroups]);
 
-  const orderedIds = useMemo(() => navigable.map((n) => n.id), [navigable]);
+  /**
+   * What ↑/↓ and Shift-range walk: the rows **the grid is actually showing**.
+   *
+   * `navigable` above is this tab's own list, before `DataGrid` applies the column filters and
+   * the search — and the Outline's default view filters out completed work. Stepping through
+   * that list therefore walked rows that were not on screen, and a Shift-range could pick up
+   * rows the user could not see. Harmless while the selection only highlighted; not harmless
+   * now that the row menu prints its size and Delete acts on it.
+   *
+   * Seeded from `navigable` so the very first keystroke has an order to walk, before the grid
+   * has rendered and reported.
+   */
+  const [screenIds, setScreenIds] = useState<readonly string[]>([]);
+  const orderedIds = screenIds.length > 0 ? screenIds : navigable.map((n) => n.id);
   const multi = useMultiSelect(orderedIds, detailId ?? initialNodes[0]?.id ?? null);
   const { selectedId, selectedIds, select, selectOne, move } = multi;
 
@@ -382,12 +395,20 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   );
 
   const confirmDelete = useCallback(
-    (node: OutlineNode) => {
-      const index = navigable.findIndex((n) => n.id === node.id);
+    (targets: readonly OutlineNode[]) => {
+      // Land on a row that will still be there. Taken from the *last* of the deleted rows so a
+      // block delete leaves the cursor below the hole rather than inside it.
+      const gone = new Set(targets.map((node) => node.id));
+      const last = navigable.findIndex((n) => n.id === targets[targets.length - 1]?.id);
       const nextSelection =
-        navigable[index + 1]?.id ?? navigable[index - 1]?.id ?? null;
+        navigable.slice(last + 1).find((n) => !gone.has(n.id))?.id ??
+        navigable
+          .slice(0, Math.max(last, 0))
+          .reverse()
+          .find((n) => !gone.has(n.id))?.id ??
+        null;
       selectOne(nextSelection);
-      apply(() => deleteNodeAction(node.id));
+      for (const node of targets) apply(() => deleteNodeAction(node.id));
     },
     [navigable, apply, selectOne],
   );
@@ -406,7 +427,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
       outdent: () => node && apply(() => outdentNodeAction(node.id)),
       moveUp: () => node && apply(() => moveNodeVerticallyAction(node.id, "up")),
       moveDown: () => node && apply(() => moveNodeVerticallyAction(node.id, "down")),
-      remove: () => node && setPendingDelete(node),
+      remove: () => node && setPendingDelete([node]),
       rename: () => node && setEditingId(node.id),
       openDetail: () => node && setDetailId(node.id),
       collapse: () => node && toggleCollapsed(node, true),
@@ -460,6 +481,18 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
           state: node?.state,
           projectId: owningProjectId(nodes, id),
           hasTasks: node?.hasChildren === true,
+          // Roots only: a child selected alongside its parent is already inside that parent's
+          // branch, so deleting both would delete it twice and count it twice in the warning.
+          // Same reduction the multi-row drag uses.
+          ids: selectedIds.has(id ?? "")
+            ? selectionMoveRoots(
+                selectedIds,
+                orderedIds,
+                (entry) => byId.get(entry)?.parentId ?? null,
+              )
+            : id
+              ? [id]
+              : [],
           canMoveUp: index > 0,
           canMoveDown: index >= 0 && index < siblings.length - 1,
           canIndent: index > 0,
@@ -486,9 +519,10 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
             selectOne(nodeId);
             setEditingId(nodeId);
           },
-          onDelete: (nodeId) => {
-            const target = byId.get(nodeId);
-            if (target) setPendingDelete(target);
+          onDelete: (nodeIds) => {
+            setPendingDelete(
+              nodeIds.map((nodeId) => byId.get(nodeId)).filter((n) => n !== undefined),
+            );
           },
           onCopyAsText: copySelectionAsText,
           onMoveUp: (nodeId) => apply(() => moveNodeVerticallyAction(nodeId, "up")),
@@ -521,9 +555,13 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
           },
           // Same three navigations `useNodeCommandDeck` gives the list tabs, and the same
           // `useStateChange` bridge the State cell in this grid already uses.
-          onSetState: (nodeId, state) => {
-            const target = byId.get(nodeId);
-            if (target) stateChange.request(target, state, setStateAction);
+          onSetState: (nodeIds, state) => {
+            // One `request` per row: `useStateChange` cascades each branch and asks once per
+            // row that would settle open work under it.
+            for (const nodeId of nodeIds) {
+              const target = byId.get(nodeId);
+              if (target) stateChange.request(target, state, setStateAction);
+            }
           },
           onScheduleBlock: (nodeId) => router.push(`/schedule?block=${nodeId}`),
           onViewTasks: (nodeId) => router.push(`/tasks?scope=${nodeId}`),
@@ -538,6 +576,8 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     [
       nodes,
       byId,
+      selectedIds,
+      orderedIds,
       addResultArea,
       addTopKind,
       addSibling,
@@ -562,7 +602,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
 
   const suspended =
     detailId !== null ||
-    pendingDelete !== null ||
+    pendingDelete.length > 0 ||
     pendingChildOf !== null ||
     pendingConversion !== null ||
     zoomPickerOpen ||
@@ -817,6 +857,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         }}
         ariaLabel="Outline"
         rowDrag={rowDrag}
+        onNavigableIdsChange={setScreenIds}
         rowMenu={rowMenu}
         enableFilters
         enableSort
@@ -907,17 +948,17 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
       />
 
       <ConfirmDialog
-        open={pendingDelete !== null}
+        open={pendingDelete.length > 0}
         title={nodeDeleteTitle(pendingDelete)}
         message={nodeDeleteMessage(pendingDelete)}
         confirmLabel="Delete"
         destructive
         onConfirm={() => {
-          const target = pendingDelete;
-          setPendingDelete(null);
-          if (target) confirmDelete(target);
+          const targets = pendingDelete;
+          setPendingDelete([]);
+          confirmDelete(targets);
         }}
-        onCancel={() => setPendingDelete(null)}
+        onCancel={() => setPendingDelete([])}
       />
 
       {stateChange.prompt && (

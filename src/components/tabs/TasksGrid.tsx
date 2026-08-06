@@ -391,17 +391,6 @@ export function TasksGrid({
     [allColumns, rows],
   );
 
-  const navigableIds = useMemo(
-    () => rows.flatMap((row) => (row.kind === "node" ? [row.id] : [])),
-    [rows],
-  );
-  const navigableKey = navigableIds.join("\0");
-  const [seenNavigable, setSeenNavigable] = useState(navigableKey);
-  if (navigableKey !== seenNavigable) {
-    setSeenNavigable(navigableKey);
-    tab.setNavigableIds(navigableIds);
-  }
-
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
       <GridToolbar
@@ -467,6 +456,7 @@ export function TasksGrid({
         onOpenDetail={tab.openDetail}
         ariaLabel="Tasks"
         rowNumbers
+        onNavigableIdsChange={tab.setNavigableIds}
         rowMenu={nodeCommands.rowMenu}
         rowDrag={rowDrag}
         enableFilters
