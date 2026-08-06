@@ -5,6 +5,7 @@ import { KIND_LABELS, kindOfNode } from "@/lib/tree/hierarchy";
 import type { OutlineNode } from "@/lib/tree/types";
 import { TypeIcon } from "@/components/icons/TypeIcon";
 import { ModalShell } from "@/components/detail/ModalShell";
+import { resolvePickerSelection } from "@/lib/grid/pickerSelection";
 
 export function OutlineZoomDialog({
   open,
@@ -21,9 +22,7 @@ export function OutlineZoomDialog({
 }) {
   const titleId = useId();
   const [query, setQuery] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(
-    initialId ?? nodes[0]?.id ?? null,
-  );
+  const [pickedId, setPickedId] = useState<string | null>(initialId ?? null);
 
   const matches = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
@@ -31,6 +30,9 @@ export function OutlineZoomDialog({
       .filter((node) => !needle || node.name.toLocaleLowerCase().includes(needle))
       .slice(0, 200);
   }, [nodes, query]);
+
+  // Never confirm a row the query has filtered off screen — see `resolvePickerSelection`.
+  const selectedId = resolvePickerSelection(matches, pickedId);
 
   return (
     <ModalShell open={open} onClose={onCancel} labelledBy={titleId} width="max-w-xl">
@@ -63,7 +65,7 @@ export function OutlineZoomDialog({
                 <button
                   key={node.id}
                   type="button"
-                  onClick={() => setSelectedId(node.id)}
+                  onClick={() => setPickedId(node.id)}
                   className={`flex min-h-tap w-full items-center gap-2 border-b border-rule px-3 py-2 text-left last:border-b-0 ${selected ? "bg-select/45" : "hover:bg-surface-raised"}`}
                   style={{ paddingLeft: `${0.75 + Math.min(node.depth, 8) * 0.75}rem` }}
                   aria-pressed={selected}
