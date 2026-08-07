@@ -389,6 +389,15 @@ say what it is doing:
 filters, advanced filter, search, sorts, group-by, group collapse, density, sub-view, and
 per-tab switches.
 
+**The rule is about the preference, not the hook.** A module that does not use `useGridState`
+still owes it: `useSetting` with a codec of its own, in a scope that already belongs to that
+module. Every view that escaped this rule escaped it the same way — by not going through
+`GridToolbar`, so nobody noticed there was a rule to follow. Metrics kept all five of its
+switches in `useState`, the Projects rail all four of its, and the Task Chooser's Date filter
+was never in `ChooserSettings` at all; each reset itself on every visit. When adding a key to an
+existing scope, parse it with a **per-key fallback** so a blob written before it keeps what it
+already holds, and treat `false` as a stored value rather than as absent.
+
 - **One hook owns the whole scope.** A write replaces the scope's value, so two hooks each
   persisting one field would clobber each other — changing a filter would reset the column
   layout. See the header comment on `useGridState.ts`.
@@ -445,9 +454,24 @@ Three callbacks, and the third is the one that is easy to get wrong:
 | `onNavigableIdsChange` | **The node ids actually on screen**, in screen order     |
 
 A host must not derive that third list itself. The rows it passes _in_ are the list before this
-grid applies the column filters, the advanced filter and the search — and the Outline's default
-view hides completed work, so stepping through the host's own list walks rows that are not there.
-Every host that keeps a selection reads this one instead.
+grid applies the column filters, the advanced filter, the search, the **multi-column sort** and
+**group collapse** — and the Outline's default view hides completed work, so stepping through the
+host's own list walks rows that are not there. Sort is the one that catches people out: it removes
+nothing, so the two lists stay the same length and only the order is wrong.
+
+Every host that keeps a selection reads this one instead, through **`useNavigableIds`**, which
+holds the reported list and falls back to the host's own ids for the first render. Do not inline
+that fallback: it builds a fresh array, and everything downstream keys off its identity, so an
+unmemoised order rebuilds every callback closing over it — which is how registering a command
+turned into a re-render loop once already.
+
+This is not cosmetic. `useMultiSelect` prunes ids that leave the list, so a selection built against
+the wrong order both highlights the wrong rows _and_ keeps rows the user cannot see. The toolbar
+then says `3 selected` over one highlighted row, and `Delete (3)` means it.
+
+**A surface that is not a `DataGrid` owes the same guarantee**: navigate the list you _render_.
+`MetricsView` renders its grouped list and stepped through the ungrouped one, so on the bottom row
+`ArrowDown` jumped to the top of the table.
 
 ### `rowMenu` takes a nullable row
 

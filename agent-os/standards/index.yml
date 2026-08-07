@@ -8,7 +8,7 @@ components:
   navigation:
     description: Getting around and finding commands — the grouped sidebar, the menu bar, the Commands panel, the ⌘K palette and the ⋯ sheet; one registry for views and one for commands; no command is palette-only; complete and sectioned everywhere; unavailable is disabled with the specific reason, never absent; declared families fold behind a submenu; right-click covers rows, blank grid space and the calendar; plural verbs act on the on-screen selection reduced to roots
   data-grid:
-    description: The one shared DataGrid — hierarchy survives sort/filter/group, drag-to-reorder is first-class, filtering and search reach hidden columns, three rungs of progressive filter disclosure, chips + "Showing N of M", the two-row verbs/lens toolbar, the grid reports its on-screen row ids rather than hosts guessing, rowMenu takes a nullable row, every preference persists through useGridState; and why no grid library
+    description: The one shared DataGrid — hierarchy survives sort/filter/group, drag-to-reorder is first-class, filtering and search reach hidden columns, three rungs of progressive filter disclosure, chips + "Showing N of M", the two-row verbs/lens toolbar, the grid reports its on-screen row ids rather than hosts guessing (via useNavigableIds — sort reorders without shortening, so the two lists look alike), rowMenu takes a nullable row, every preference persists — through useGridState, or through useSetting in the module's own scope where there is no GridToolbar; and why no grid library
   drawer-pattern:
     description: Right-sliding drawer for full-record editing — DrawerFooter Cancel|Save|Save & Close (or autosave for notes), sticky footer, unsaved-changes on leave, server actions
   modal-pattern:
