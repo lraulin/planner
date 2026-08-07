@@ -16,6 +16,7 @@ import { collectDistinctValues } from "@/lib/grid/distinct";
 import type { GridDefaults } from "@/components/grid/useGridState";
 import { useModuleViews } from "@/components/grid/useModuleViews";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
+import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { copyAsText, writeClipboardText } from "@/lib/tree/copyAsText";
 import { ToolbarSelect } from "./tabChrome";
@@ -166,11 +167,12 @@ export function WishesGrid({
     [gridRows],
   );
 
-  const orderedIds = useMemo(
+  const rowIds = useMemo(
     () => gridRows.flatMap((row) => (row.kind === "node" ? [row.id] : [])),
     [gridRows],
   );
-  const multi = useMultiSelect(orderedIds, null);
+  const { order, onIdsChange } = useNavigableIds(rowIds);
+  const multi = useMultiSelect(order, null);
   const { selectedId, selectedIds, select, move } = multi;
 
   const patchRow = useCallback((id: string, changes: Partial<WishListRow>) => {
@@ -223,14 +225,14 @@ export function WishesGrid({
 
   const copySelectionAsText = useCallback(() => {
     const text = copyAsText(
-      orderedIds
+      order
         .map((id) => rows.find((row) => row.id === id))
         .filter((row): row is WishListRow => row != null)
         .map((row) => ({ id: row.id, name: row.title, depth: 0 })),
       selectedIds,
     );
     void writeClipboardText(text);
-  }, [orderedIds, rows, selectedIds]);
+  }, [order, rows, selectedIds]);
 
   const capabilitiesFor = useCallback(
     (wishId: string | null, count: number): GridCommandCapabilities => {
@@ -347,6 +349,7 @@ export function WishesGrid({
         search={gridState.search}
         distinctValues={distinctValues}
         onCountsChange={setCounts}
+        onNavigableIdsChange={onIdsChange}
         widths={gridState.widths}
         onResizeColumn={gridState.setWidth}
         onResetColumnWidth={gridState.clearWidth}

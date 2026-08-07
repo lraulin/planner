@@ -7,6 +7,7 @@ import type { RowSwipe } from "@/components/grid/CompactRow";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 import { useGridState } from "@/components/grid/useGridState";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
+import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import type { GridRow } from "@/lib/tree/slice";
 import {
   DAY_LETTERS,
@@ -122,11 +123,12 @@ export function DailyItemsGrid({
 
   const gridState = useGridState("day", DAY_COLUMNS, { order: DAY_COLUMN_IDS });
   const rows = useMemo(() => buildRows(items), [items]);
-  const orderedIds = useMemo(
+  const rowIds = useMemo(
     () => rows.flatMap((row) => (row.kind === "node" ? [row.id] : [])),
     [rows],
   );
-  const multi = useMultiSelect(orderedIds, null);
+  const { order, onIdsChange } = useNavigableIds(rowIds);
+  const multi = useMultiSelect(order, null);
   const { selectedId, selectedIds, select, selectOne, move } = multi;
 
   const onAssignPriority = useCallback(
@@ -180,14 +182,14 @@ export function DailyItemsGrid({
 
   const copySelectionAsText = useCallback(() => {
     const text = copyAsText(
-      orderedIds
+      order
         .map((id) => items.find((item) => item.id === id))
         .filter((item): item is DailyItemView => item != null)
         .map((item) => ({ id: item.id, name: item.title, depth: 0 })),
       selectedIds,
     );
     void writeClipboardText(text);
-  }, [orderedIds, items, selectedIds]);
+  }, [order, items, selectedIds]);
 
   const focusDraft = useCallback(() => {
     document.querySelector<HTMLInputElement>("[data-day-quick-entry]")?.focus();
@@ -212,7 +214,7 @@ export function DailyItemsGrid({
       // A right-click inside the selection ranks the whole selection; outside it, just that row.
       const block =
         itemId && selectedIds.has(itemId)
-          ? orderedIds.filter((id) => selectedIds.has(id))
+          ? order.filter((id) => selectedIds.has(id))
           : itemId
             ? [itemId]
             : [];
@@ -381,7 +383,7 @@ export function DailyItemsGrid({
     },
     [
       items,
-      orderedIds,
+      order,
       selectedIds,
       copySelectionAsText,
       onOpenTask,
@@ -520,6 +522,7 @@ export function DailyItemsGrid({
           columnControls={gridState.columnControls}
           collapsedGroups={gridState.collapsedGroups}
           onToggleGroup={gridState.toggleGroup}
+          onNavigableIdsChange={onIdsChange}
           empty={<p className="p-4 text-[0.8125rem] text-ink-faint">{emptyHint}</p>}
         />
       </div>

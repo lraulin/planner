@@ -18,6 +18,7 @@ import { GridToolbar } from "@/components/grid/GridToolbar";
 import { useModuleViews } from "@/components/grid/useModuleViews";
 import type { GridDefaults } from "@/components/grid/useGridState";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
+import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import { isTypingTarget } from "@/lib/keyboard";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
@@ -76,8 +77,9 @@ export function ResourcesView({
       ),
     [gridRows],
   );
-  const orderedIds = useMemo(() => rows.map((row) => row.id), [rows]);
-  const multi = useMultiSelect(orderedIds, null);
+  const rowIds = useMemo(() => rows.map((row) => row.id), [rows]);
+  const { order, onIdsChange } = useNavigableIds(rowIds);
+  const multi = useMultiSelect(order, null);
   const { selectedId, selectedIds, select, move } = multi;
   const refresh = useCallback(() => {
     startTransition(async () => {
@@ -210,6 +212,7 @@ export function ResourcesView({
         search={gridState.search}
         distinctValues={distinctValues}
         onCountsChange={setCounts}
+        onNavigableIdsChange={onIdsChange}
         widths={gridState.widths}
         onResizeColumn={gridState.setWidth}
         onResetColumnWidth={gridState.clearWidth}

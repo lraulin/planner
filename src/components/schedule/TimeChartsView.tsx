@@ -19,6 +19,7 @@ import { collectDistinctValues } from "@/lib/grid/distinct";
 import type { GridDefaults } from "@/components/grid/useGridState";
 import { useModuleViews } from "@/components/grid/useModuleViews";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
+import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { isTypingTarget } from "@/lib/keyboard";
 import {
   timeChartsColumns,
@@ -87,8 +88,9 @@ export function TimeChartsView({
     [gridRows],
   );
 
-  const orderedIds = useMemo(() => rows.map((row) => row.id), [rows]);
-  const multi = useMultiSelect(orderedIds, null);
+  const rowIds = useMemo(() => rows.map((row) => row.id), [rows]);
+  const { order, onIdsChange } = useNavigableIds(rowIds);
+  const multi = useMultiSelect(order, null);
   const { selectedId, selectedIds, select, move } = multi;
   const apply = useCallback(
     (action: () => Promise<{ ok: true } | { ok: false; error: string }>) => {
@@ -249,6 +251,7 @@ export function TimeChartsView({
         search={gridState.search}
         distinctValues={distinctValues}
         onCountsChange={setCounts}
+        onNavigableIdsChange={onIdsChange}
         widths={gridState.widths}
         onResizeColumn={gridState.setWidth}
         onResetColumnWidth={gridState.clearWidth}

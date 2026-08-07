@@ -18,6 +18,7 @@ import { collectDistinctValues } from "@/lib/grid/distinct";
 import type { GridDefaults } from "@/components/grid/useGridState";
 import { useModuleViews } from "@/components/grid/useModuleViews";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
+import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { isTypingTarget } from "@/lib/keyboard";
 import { ContactDrawer } from "./ContactDrawer";
@@ -111,8 +112,9 @@ export function ContactsView({
     [gridRows],
   );
 
-  const orderedIds = useMemo(() => rows.map((row) => row.id), [rows]);
-  const multi = useMultiSelect(orderedIds, null);
+  const rowIds = useMemo(() => rows.map((row) => row.id), [rows]);
+  const { order, onIdsChange } = useNavigableIds(rowIds);
+  const multi = useMultiSelect(order, null);
   const { selectedId, selectedIds, select, move } = multi;
   const refreshList = useCallback(() => {
     startTransition(async () => {
@@ -271,6 +273,7 @@ export function ContactsView({
         search={gridState.search}
         distinctValues={distinctValues}
         onCountsChange={setCounts}
+        onNavigableIdsChange={onIdsChange}
         widths={gridState.widths}
         onResizeColumn={gridState.setWidth}
         onResetColumnWidth={gridState.clearWidth}

@@ -35,6 +35,7 @@ import { DataGrid, type RowDrag } from "@/components/grid/DataGrid";
 import type { GridDefaults } from "@/components/grid/useGridState";
 import { useModuleViews } from "@/components/grid/useModuleViews";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
+import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { GridToolbar } from "@/components/grid/GridToolbar";
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
@@ -237,8 +238,9 @@ export function NotesGrid({
     [rows],
   );
 
-  const orderedIds = useMemo(() => rows.map((row) => row.id), [rows]);
-  const multi = useMultiSelect(orderedIds, urlNoteId);
+  const rowIds = useMemo(() => rows.map((row) => row.id), [rows]);
+  const { order, onIdsChange } = useNavigableIds(rowIds);
+  const multi = useMultiSelect(order, urlNoteId);
   const { selectedId, selectedIds, select, selectOne, move: moveSelection } = multi;
 
   const selected = selectedId ? (byId.get(selectedId) ?? null) : null;
@@ -697,6 +699,7 @@ export function NotesGrid({
         search={gridState.search}
         distinctValues={distinctValues}
         onCountsChange={setCounts}
+        onNavigableIdsChange={onIdsChange}
         widths={gridState.widths}
         onResizeColumn={gridState.setWidth}
         onResetColumnWidth={gridState.clearWidth}
