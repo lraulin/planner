@@ -1,4 +1,5 @@
 import type { NodeState, PriorityLetter, ProgressReview } from "@/db/schema";
+import { daysInMonth } from "@/lib/dateMath";
 import type { AchPriority } from "./types";
 
 /**
@@ -138,9 +139,29 @@ export function encodeEffortFromMinutes(minutes: number | null): {
   return { amount: minutes, units: 0 };
 }
 
-/** Parse an Achieve dateTime string; empty/missing → null. */
+/** A leading calendar day, whether or not a time follows it. */
+const LEADING_DAY = /^(\d{4})-(\d{2})-(\d{2})(?=$|[T ])/;
+
+/**
+ * Parse an Achieve dateTime string; empty, missing or impossible → null.
+ *
+ * The impossible case is the one worth spelling out: `new Date("2011-02-31")` is not Invalid
+ * Date, it is March 3. Achieve itself will not emit that, but this also reads files a user
+ * hands the import panel, and a date that silently moves three days during an import is worse
+ * than a field that arrives empty — the empty one is visible. Same rule the agent API's
+ * `parseDate` applies; `rednotebook/parse.ts` has always done it.
+ */
 export function decodeDateTime(text: string | null | undefined): Date | null {
   if (!text || !text.trim()) return null;
+
+  const day = LEADING_DAY.exec(text.trim());
+  if (day) {
+    const [, year, month, date] = day.map(Number);
+    if (month < 1 || month > 12 || date < 1 || date > daysInMonth(year, month)) {
+      return null;
+    }
+  }
+
   const d = new Date(text);
   return Number.isNaN(d.getTime()) ? null : d;
 }

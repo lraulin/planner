@@ -134,4 +134,21 @@ describe("decodeDateTime", () => {
     expect(decodeDateTime(null)).toBeNull();
     expect(decodeDateTime("not-a-date")).toBeNull();
   });
+
+  /**
+   * `new Date("2011-02-31")` is not Invalid Date — it is March 3. Achieve will not emit that,
+   * but this also reads whatever file the import panel is handed, and a date that silently
+   * moves three days during an import is worse than a field that arrives empty: the empty one
+   * is visible.
+   */
+  it("returns null for a day the month does not have, rather than the day after", () => {
+    expect(decodeDateTime("2011-02-31")).toBeNull();
+    expect(decodeDateTime("2026-06-31T00:00:00+09:00")).toBeNull();
+    expect(decodeDateTime("2025-02-29")).toBeNull();
+  });
+
+  it("still accepts the days that do exist, leap years included", () => {
+    expect(decodeDateTime("2024-02-29")).toBeInstanceOf(Date);
+    expect(decodeDateTime("2011-02-28T00:00:00+09:00")).toBeInstanceOf(Date);
+  });
 });
