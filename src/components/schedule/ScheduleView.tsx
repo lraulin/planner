@@ -33,15 +33,10 @@ import {
   menuItemsFor,
   type MenuItem,
 } from "@/components/grid/ContextMenu";
-import { useSetting, type SettingCodec } from "@/components/settings/SettingsProvider";
+import { useSetting } from "@/components/settings/SettingsProvider";
 import { SCHEDULE_SCOPE } from "@/lib/settings/scopes";
-import {
-  parseScheduleView,
-  serializeScheduleView,
-  slotDurationOf,
-  SLOT_MINUTES,
-  type ScheduleViewSettings,
-} from "@/lib/settings/schedule";
+import { slotDurationOf, SLOT_MINUTES } from "@/lib/settings/schedule";
+import { SCHEDULE_VIEW_CODEC } from "./scheduleSetting";
 import type { CalendarTarget } from "@/lib/schedule/calendarTarget";
 import { defaultBlockRange } from "@/lib/schedule/blockDraft";
 import { owningProjectId } from "@/lib/tree/owningProject";
@@ -91,12 +86,6 @@ function hydratePayload(initial: SchedulePayload) {
     })),
   };
 }
-
-/** Module constant: `useSetting` re-parses whenever the codec identity changes. */
-const SCHEDULE_VIEW_CODEC: SettingCodec<ScheduleViewSettings> = {
-  parse: parseScheduleView,
-  serialize: serializeScheduleView,
-};
 
 /**
  * The three appointment states, as verbs.

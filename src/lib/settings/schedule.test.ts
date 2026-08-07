@@ -8,8 +8,37 @@ import {
 
 describe("parseScheduleView", () => {
   it("round-trips what it wrote", () => {
-    const settings = { slotMinutes: 6, workWeek: true } as const;
+    const settings = {
+      slotMinutes: 6,
+      workWeek: true,
+      railShowCompleted: true,
+      railGroupByArea: false,
+      railShowTasks: true,
+      railSortByPriority: false,
+    } as const;
     expect(parseScheduleView(serializeScheduleView(settings))).toEqual(settings);
+  });
+
+  /**
+   * The rail's switches joined this scope after `slotMinutes` / `workWeek` shipped, so blobs
+   * already stored carry neither. Per-key fallback is what stops the upgrade resetting a
+   * granularity someone chose.
+   */
+  it("keeps a stored granularity when the rail keys are absent", () => {
+    expect(parseScheduleView({ slotMinutes: 15, workWeek: true })).toEqual({
+      ...DEFAULT_SCHEDULE_VIEW,
+      slotMinutes: 15,
+      workWeek: true,
+    });
+  });
+
+  it("keeps a rail switch turned off rather than reading false as absent", () => {
+    const parsed = parseScheduleView({
+      railShowCompleted: false,
+      railShowTasks: true,
+    });
+    expect(parsed.railShowCompleted).toBe(false);
+    expect(parsed.railShowTasks).toBe(true);
   });
 
   it("returns the defaults for an unusable blob", () => {
@@ -29,6 +58,7 @@ describe("parseScheduleView", () => {
 
   it("keeps each field independent of the other being junk", () => {
     expect(parseScheduleView({ slotMinutes: 7, workWeek: true })).toEqual({
+      ...DEFAULT_SCHEDULE_VIEW,
       slotMinutes: 30,
       workWeek: true,
     });

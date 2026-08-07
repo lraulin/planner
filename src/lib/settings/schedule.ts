@@ -2,12 +2,14 @@ import { asBoolean, asRecord } from "./parse";
 import { SETTINGS_VERSION } from "./scopes";
 
 /**
- * How the week draws itself: slot height and whether the weekend is shown.
+ * How the Weekly Schedule is arranged: the week grid's slot height and weekend, and the four
+ * switches on the Projects rail beside it.
  *
- * Achieve put both on the calendar's own right-click menu (`visuals/achieve-schedule-menu.png`)
- * and nowhere else, which is exactly right — they are properties of the grid you are pointing
- * at, not of the app. Stored under `schedule` so the choice survives a reload; a granularity
- * you have to re-pick every visit is one you stop using.
+ * Achieve put the first two on the calendar's own right-click menu
+ * (`visuals/achieve-schedule-menu.png`) and nowhere else, which is exactly right — they are
+ * properties of the grid you are pointing at, not of the app. Stored under `schedule` so the
+ * choice survives a reload; a granularity you have to re-pick every visit is one you stop
+ * using, and the same is true of a rail that forgets you wanted tasks on it.
  */
 
 /**
@@ -24,6 +26,12 @@ export type ScheduleViewSettings = {
   slotMinutes: SlotMinutes;
   /** Achieve's Work Week Mode: Monday–Friday only. */
   workWeek: boolean;
+  /** Projects rail: include finished work in the drag source. */
+  railShowCompleted: boolean;
+  railGroupByArea: boolean;
+  /** Projects rail: tasks as well as projects, so a single task can be blocked out. */
+  railShowTasks: boolean;
+  railSortByPriority: boolean;
 };
 
 export const DEFAULT_SCHEDULE_VIEW: ScheduleViewSettings = {
@@ -31,6 +39,10 @@ export const DEFAULT_SCHEDULE_VIEW: ScheduleViewSettings = {
   // users see is a migration, not a default.
   slotMinutes: 30,
   workWeek: false,
+  railShowCompleted: false,
+  railGroupByArea: false,
+  railShowTasks: false,
+  railSortByPriority: false,
 };
 
 export function parseScheduleView(value: unknown): ScheduleViewSettings {
@@ -44,6 +56,19 @@ export function parseScheduleView(value: unknown): ScheduleViewSettings {
       ? record.slotMinutes
       : DEFAULT_SCHEDULE_VIEW.slotMinutes,
     workWeek: asBoolean(record.workWeek, DEFAULT_SCHEDULE_VIEW.workWeek),
+    railShowCompleted: asBoolean(
+      record.railShowCompleted,
+      DEFAULT_SCHEDULE_VIEW.railShowCompleted,
+    ),
+    railGroupByArea: asBoolean(
+      record.railGroupByArea,
+      DEFAULT_SCHEDULE_VIEW.railGroupByArea,
+    ),
+    railShowTasks: asBoolean(record.railShowTasks, DEFAULT_SCHEDULE_VIEW.railShowTasks),
+    railSortByPriority: asBoolean(
+      record.railSortByPriority,
+      DEFAULT_SCHEDULE_VIEW.railSortByPriority,
+    ),
   };
 }
 

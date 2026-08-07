@@ -1,21 +1,44 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { Draggable } from "@fullcalendar/interaction";
 import { useEffect, useRef } from "react";
 import type { OutlineNode } from "@/lib/tree/types";
 import { TypeIcon } from "@/components/icons/TypeIcon";
+import { useSetting } from "@/components/settings/SettingsProvider";
+import { SCHEDULE_SCOPE } from "@/lib/settings/scopes";
+import type { ScheduleViewSettings } from "@/lib/settings/schedule";
+import { SCHEDULE_VIEW_CODEC } from "./scheduleSetting";
 
 type Props = {
   nodes: OutlineNode[];
 };
 
+/** The four switches, which are the rail's whole configuration. */
+type RailSwitch =
+  "railShowCompleted" | "railGroupByArea" | "railShowTasks" | "railSortByPriority";
+
 export function ProjectsRail({ nodes }: Props) {
   const listRef = useRef<HTMLDivElement>(null);
-  const [showCompleted, setShowCompleted] = useState(false);
-  const [groupByArea, setGroupByArea] = useState(false);
-  const [showTasks, setShowTasks] = useState(false);
-  const [sortByPriority, setSortByPriority] = useState(false);
+  // The rail shares the calendar's scope rather than holding its own state: these are
+  // arrangement choices for the Weekly Schedule, and a rail that forgets you wanted tasks on
+  // it every time you open the week is one you stop switching on.
+  const { value: view, patch: patchView } = useSetting(
+    SCHEDULE_SCOPE,
+    SCHEDULE_VIEW_CODEC,
+  );
+  const {
+    railShowCompleted: showCompleted,
+    railGroupByArea: groupByArea,
+    railShowTasks: showTasks,
+    railSortByPriority: sortByPriority,
+  } = view;
+
+  const toggle = useCallback(
+    (key: RailSwitch & keyof ScheduleViewSettings) =>
+      patchView((current) => ({ ...current, [key]: !current[key] })),
+    [patchView],
+  );
 
   const projects = useMemo(() => {
     let list = nodes.filter(
@@ -90,7 +113,7 @@ export function ProjectsRail({ nodes }: Props) {
           <input
             type="checkbox"
             checked={showCompleted}
-            onChange={(e) => setShowCompleted(e.target.checked)}
+            onChange={() => toggle("railShowCompleted")}
           />
           Show Completed
         </label>
@@ -98,7 +121,7 @@ export function ProjectsRail({ nodes }: Props) {
           <input
             type="checkbox"
             checked={groupByArea}
-            onChange={(e) => setGroupByArea(e.target.checked)}
+            onChange={() => toggle("railGroupByArea")}
           />
           Group by Result Area
         </label>
@@ -106,7 +129,7 @@ export function ProjectsRail({ nodes }: Props) {
           <input
             type="checkbox"
             checked={showTasks}
-            onChange={(e) => setShowTasks(e.target.checked)}
+            onChange={() => toggle("railShowTasks")}
           />
           Show Tasks
         </label>
@@ -114,7 +137,7 @@ export function ProjectsRail({ nodes }: Props) {
           <input
             type="checkbox"
             checked={sortByPriority}
-            onChange={(e) => setSortByPriority(e.target.checked)}
+            onChange={() => toggle("railSortByPriority")}
           />
           Sort by Priority
         </label>
