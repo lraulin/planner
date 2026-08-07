@@ -22,6 +22,7 @@ import {
 } from "@/lib/schedule/geometry";
 import {
   clearConflictingDescendantPlans,
+  clearOpenDayLinesForNode,
   syncDayLineToTargetStart,
   syncDayLinesInSubtree,
 } from "@/lib/day/sync";
@@ -415,6 +416,13 @@ export async function convertNode(
       await tx.insert(projectDetails).values({ nodeId });
     } else {
       await tx.insert(taskDetails).values({ nodeId });
+    }
+
+    // A day page holds tasks. Leaving `task` without clearing open lines would list a
+    // Project (or Goal) among the day's work — `syncDayLineToTargetStart` only acts on
+    // tasks, so it cannot clean up the residue. Settled history is left alone.
+    if (source.type === "task" && targetType !== "task") {
+      await clearOpenDayLinesForNode(tx, userId, nodeId);
     }
     await syncDayLinesInSubtree(tx, userId, nodeId);
   });

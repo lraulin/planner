@@ -16,6 +16,7 @@ import {
   NODE_KINDS,
   STATE_CODES,
   STATE_LABELS,
+  stateRank,
   type NodeKind,
 } from "@/lib/tree/hierarchy";
 import {
@@ -158,7 +159,8 @@ export function abbrStateColumn(today: string | null): ColumnDef<OutlineColumnCt
     // already match on; the set filter spells it out via `filterLabel`.
     filterValue: (row) => STATE_CODES[stateOf(row.node)],
     filterLabel: (code) => STATE_LABEL_BY_CODE[code] ?? code,
-    sortValue: (row) => stateOf(row.node),
+    // Workflow order (Not started → … → Proposed), not alphabetical on the enum key.
+    sortValue: (row) => stateRank(stateOf(row.node)),
     render: (row, ctx) => (
       <AbbrStateCell
         state={stateOf(row.node)}
@@ -216,7 +218,9 @@ export function stateColumn(today: string | null): ColumnDef<OutlineColumnCtx> {
     width: "7rem",
     filterKind: "enum",
     filterValue: (row) => STATE_LABELS[stateOf(row.node)],
-    sortValue: (row) => stateOf(row.node),
+    // Same rank as the abbreviated twin and as group-by-State — a state column is a
+    // workflow, not a glossary.
+    sortValue: (row) => stateRank(stateOf(row.node)),
     render: (row, ctx) => (
       <StateCell
         state={stateOf(row.node)}

@@ -11,13 +11,22 @@
  */
 
 import type { Appointment } from "@/db/schema";
-import { deleteEvent, insertEvent, patchEvent } from "./client";
+import { deleteEvent, GoogleEventGoneError, insertEvent, patchEvent } from "./client";
 import {
   appointmentToGoogleEvent,
   type GoogleEvent,
   type GoogleEventWrite,
 } from "./mapping";
 import { pushTargetCalendarId } from "./queries";
+
+/**
+ * Shown when a patch hits a Google event that was deleted elsewhere (404/410). Deliberately
+ * does not delete the local row — planner-only fields (check state, priority, contexts,
+ * project) would be lost on what may be a transient 404. The user refreshes to drop the
+ * stale mirror.
+ */
+export const GOOGLE_EVENT_GONE_MESSAGE =
+  "This event no longer exists in Google Calendar. Refresh the schedule to drop the stale row.";
 
 /** The external columns a successful push writes back onto the local row. */
 export type ExternalStamp = {
@@ -88,6 +97,11 @@ export async function pushCreate(
  *
  * Only rows that carry an external ref are pushed; a local-only row stays local. Returns
  * the refreshed etag/updated stamp, or null when there was nothing to push.
+ *
+ * A 404/410 from Google means the event was deleted elsewhere. Unlike `pushDelete`, which
+ * treats gone as success (the goal was absence), a patch that cannot land must not write
+ * locally — the two would diverge. The error is rewritten to a clear user-facing sentence
+ * so the drawer does not surface a calendar-id blob or a bare "Internal error".
  */
 export async function pushUpdate(
   userId: string,
@@ -104,7 +118,15 @@ export async function pushUpdate(
   const { recurrence: _recurrence, ...instanceFields } = body;
   const patch: Partial<GoogleEventWrite> = instanceFields;
 
-  const event = await patchEvent(userId, row.externalCalendarId, row.externalId, patch);
+  let event;
+  try {
+    event = await patchEvent(userId, row.externalCalendarId, row.externalId, patch);
+  } catch (error) {
+    if (error instanceof GoogleEventGoneError) {
+      throw new Error(GOOGLE_EVENT_GONE_MESSAGE);
+    }
+    throw error;
+  }
   const updated = event.updated ? new Date(event.updated) : null;
   return {
     externalEtag: event.etag ?? null,

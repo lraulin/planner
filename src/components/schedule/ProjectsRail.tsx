@@ -83,7 +83,17 @@ export function ProjectsRail({ nodes }: Props) {
       arr.push(p);
       map.set(key, arr);
     }
-    return [...map.entries()].map(([label, items]) => ({ label, items }));
+    // Match Metrics' owner groups: pin the "none" bucket first, then alphabetical. Map
+    // insertion order followed whatever projects happened to appear first, which moved as
+    // the outline changed and disagreed with every other grouped list in the app.
+    const NONE = "(No Result Area)";
+    return [...map.entries()]
+      .sort(([a], [b]) => {
+        if (a === NONE) return -1;
+        if (b === NONE) return 1;
+        return a.localeCompare(b);
+      })
+      .map(([label, items]) => ({ label, items }));
   }, [projects, groupByArea, nodes]);
 
   // FullCalendar external drag source

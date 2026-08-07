@@ -569,10 +569,12 @@ describe("sliceTree — group by row fields", () => {
   const slice = (groupBy: GroupBy[], today: string | null = TODAY) =>
     sliceTree(sample, { keep: projectsOnly, groupBy, includeDeferred: true, today });
 
-  it("groups by state, spelled out", () => {
+  it("groups by state in Achieve workflow order, not first-seen", () => {
+    // Sample meets in_progress before not_started in DFS order; alphabetical would put
+    // Cancelled / Completed first. Workflow order is Not started → In progress → …
     expect(groups(slice(["state"])).map((g) => [g.label, g.count])).toEqual([
-      ["In progress", 2],
       ["Not started", 2],
+      ["In progress", 2],
     ]);
   });
 
@@ -649,13 +651,14 @@ describe("sliceTree — group by row fields", () => {
 
   it("nests two field dimensions with correct counts", () => {
     const rows = slice(["state", "priorityLetter"]);
+    // Outer State is workflow order; priority within each state is A→D→unprioritized.
     expect(groups(rows).map((g) => [g.label, g.count, g.depth])).toEqual([
-      ["In progress", 2, 0],
-      ["A", 1, 1],
-      ["(Unprioritized)", 1, 1],
       ["Not started", 2, 0],
       ["B", 1, 1],
       ["C", 1, 1],
+      ["In progress", 2, 0],
+      ["A", 1, 1],
+      ["(Unprioritized)", 1, 1],
     ]);
   });
 
@@ -687,8 +690,8 @@ describe("sliceTree — group by row fields", () => {
     const rows = slice(["category", "state"]);
     expect(groups(rows).map((g) => [g.label, g.depth])).toEqual([
       ["Personal", 0],
-      ["In progress", 1],
       ["Not started", 1],
+      ["In progress", 1],
     ]);
   });
 });

@@ -111,8 +111,15 @@ export function NameCell({
         aria-label={node.collapsed ? "Expand" : "Collapse"}
         tabIndex={-1}
         className={[
-          "mr-1 ml-0.5 flex w-4 flex-none items-center justify-center text-[0.625rem] text-ink-faint",
-          hasChildren ? "hover:text-ink" : "invisible",
+          // Layout width stays `w-4` so the name gutter and compact meta-line padding stay
+          // aligned (`--name-gutter`). Below `md`, a centred 44px `::before` grows the hit
+          // area without the glyph or the row density (`responsive.md`). Compact rows are
+          // already `min-h-tap`, so adjacent cards meet at the edge rather than overlap.
+          // Leaf rows keep the gutter for alignment but do not steal taps.
+          "relative mr-1 ml-0.5 flex w-4 flex-none items-center justify-center text-[0.625rem] text-ink-faint",
+          hasChildren
+            ? "hover:text-ink before:absolute before:top-1/2 before:left-1/2 before:h-tap before:w-tap before:-translate-x-1/2 before:-translate-y-1/2 before:content-[''] md:before:hidden"
+            : "pointer-events-none invisible",
         ].join(" ")}
       >
         {node.collapsed ? "▶" : "▼"}

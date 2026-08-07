@@ -1,8 +1,10 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
-import { goalDetails, nodes, taskDetails, users } from "@/db/schema";
+import { dailyItems, goalDetails, nodes, taskDetails, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { fromDateKey, localDateKey } from "@/lib/schedule/geometry";
+import { saveNodeDetail } from "@/lib/detail/mutations";
 import { loadOutline } from "./queries";
 import {
   convertNode,
@@ -188,5 +190,47 @@ describeDb("shared command mutations", () => {
       .where(and(eq(nodes.userId, userId), eq(nodes.id, nodeId)));
     expect(row.name).toBe("Private");
     expect(row.type).toBe("task");
+  });
+
+  // `syncDayLineToTargetStart` only acts on tasks, so converting a planned task to a
+  // project used to leave an open day line pointing at a non-task — the Day page listed a
+  // Project among the day's work.
+  it("clears an open day line when a task is converted to a project", async () => {
+    const task = await createNode({
+      userId,
+      parentId: null,
+      type: "task",
+      name: "Becomes a project",
+    });
+    // Tomorrow so the line stays on its plan day rather than being pulled to today by the
+    // Behind Schedule rule (which reads the real clock).
+    const planDay = localDateKey(new Date(Date.now() + 24 * 60 * 60 * 1000));
+    await saveNodeDetail(userId, task, { targetStartDate: fromDateKey(planDay) });
+
+    const before = await db
+      .select()
+      .from(dailyItems)
+      .where(
+        and(
+          eq(dailyItems.userId, userId),
+          eq(dailyItems.nodeId, task),
+          isNull(dailyItems.completedAt),
+        ),
+      );
+    expect(before).toHaveLength(1);
+
+    await convertNode(userId, task, "project");
+
+    const after = await db
+      .select()
+      .from(dailyItems)
+      .where(and(eq(dailyItems.userId, userId), eq(dailyItems.nodeId, task)));
+    expect(after).toHaveLength(0);
+
+    const [row] = await db
+      .select()
+      .from(nodes)
+      .where(and(eq(nodes.userId, userId), eq(nodes.id, task)));
+    expect(row.type).toBe("project");
   });
 });

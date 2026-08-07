@@ -1,5 +1,5 @@
 import { shiftDateKey, toDateKey } from "@/lib/schedule/geometry";
-import { STATE_LABELS } from "./hierarchy";
+import { STATE_LABELS, STATE_ORDER } from "./hierarchy";
 import { ownEffectiveState, shelfHolds } from "./shelving";
 import type { OutlineNode } from "./types";
 
@@ -643,7 +643,7 @@ function gatherByGroupKeys(
  * Header order within one level, in place.
  *
  * Most dimensions keep **first-seen** order, which is outline order — a result area stays
- * where the user put it. Three have an order that is meaningful rather than incidental, and
+ * where the user put it. Four have an order that is meaningful rather than incidental, and
  * leaving those to tree order would produce headers in an arbitrary sequence the user
  * cannot predict:
  *
@@ -651,6 +651,9 @@ function gatherByGroupKeys(
  * - **Priority** — A, B, C, D, then unprioritized. Not alphabetical by accident: the empty
  *   letter has to sort last, and "" sorts first.
  * - **Deadline band** — soonest first, undated last: the order you triage in.
+ * - **State** — Achieve workflow order (Not started → … → Proposed), matching the State
+ *   column sort and the dropdown. First-seen would put headers in whatever order those
+ *   states happened to appear in the outline.
  */
 function sortGroupKeys(
   dim: GroupBy,
@@ -678,6 +681,11 @@ function sortGroupKeys(
     order.sort(
       (a, b) => rankOf(a, DEADLINE_BAND_ORDER) - rankOf(b, DEADLINE_BAND_ORDER),
     );
+    return;
+  }
+
+  if (dim === "state") {
+    order.sort((a, b) => rankOf(a, STATE_ORDER) - rankOf(b, STATE_ORDER));
   }
 }
 

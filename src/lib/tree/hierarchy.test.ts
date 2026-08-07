@@ -11,6 +11,8 @@ import {
   NODE_KINDS,
   STATE_CODES,
   STATE_LABELS,
+  STATE_ORDER,
+  stateRank,
 } from "./hierarchy";
 import { nodeStateEnum } from "@/db/schema";
 
@@ -168,5 +170,21 @@ describe("state vocabulary", () => {
   it("keeps the codes distinct", () => {
     const codes = Object.values(STATE_CODES);
     expect(new Set(codes).size).toBe(codes.length);
+  });
+
+  // Alphabetical on the enum key would put Cancelled before Completed before In progress.
+  // The dropdown, the State column sort, and group-by-State all share this rank so a sorted
+  // column reads as a workflow rather than a glossary.
+  it("ranks states in Achieve workflow order, not alphabetically", () => {
+    expect(STATE_ORDER[0]).toBe("not_started");
+    expect(STATE_ORDER).toContain("cancelled");
+    expect(stateRank("not_started")).toBeLessThan(stateRank("in_progress"));
+    expect(stateRank("in_progress")).toBeLessThan(stateRank("waiting"));
+    expect(stateRank("waiting")).toBeLessThan(stateRank("completed"));
+    expect(stateRank("completed")).toBeLessThan(stateRank("cancelled"));
+    // Cancelled sorts after Completed alphabetically too — the trap is In progress vs
+    // Completed: "completed" < "in_progress" as strings, but workflow puts In progress first.
+    expect(stateRank("in_progress")).toBeLessThan(stateRank("completed"));
+    expect(stateRank("not_a_state")).toBe(STATE_ORDER.length);
   });
 });

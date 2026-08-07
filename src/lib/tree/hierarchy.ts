@@ -73,6 +73,9 @@ export function kindOfNode(node: { type: NodeType; isDream?: boolean }): NodeKin
  *
  * One definition rather than one per surface: the outline column, its row editor, and the
  * detail forms all read from here, so widening the enum cannot leave a dropdown behind.
+ *
+ * Key order is load-bearing: column sort and group-by-State use it as the workflow rank
+ * rather than sorting the labels alphabetically (Cancelled before Completed before …).
  */
 export const STATE_LABELS: Record<NodeState, string> = {
   not_started: "Not started",
@@ -85,6 +88,18 @@ export const STATE_LABELS: Record<NodeState, string> = {
   cancelled: "Cancelled",
   proposed: "Proposed",
 };
+
+/** Achieve's workflow order — same sequence as {@link STATE_LABELS}' key order. */
+export const STATE_ORDER = Object.keys(STATE_LABELS) as NodeState[];
+
+/**
+ * Rank for sorting / grouping by State. Unknown values sort last so a future enum member
+ * does not land at the top of a sorted column before its label exists.
+ */
+export function stateRank(state: string): number {
+  const index = (STATE_ORDER as readonly string[]).indexOf(state);
+  return index === -1 ? STATE_ORDER.length : index;
+}
 
 /**
  * The two-letter codes Achieve prints in the State column of its Projects and Tasks grids,

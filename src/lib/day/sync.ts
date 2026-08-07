@@ -267,6 +267,31 @@ export async function clearConflictingDescendantPlans(
   }
 }
 
+/**
+ * Drop every open day line for a node. Settled and forwarded lines stay — they are history.
+ *
+ * Used when a row **stops being a task** (convert to project/goal/…). `syncDayLineToTargetStart`
+ * early-returns for non-tasks without clearing leftovers, so a convert would otherwise leave
+ * a Project listed among the day's work. Completing or cancelling already settles the line
+ * through `applyStateTransition`; this is only for "this is no longer day work at all".
+ */
+export async function clearOpenDayLinesForNode(
+  tx: Executor,
+  userId: string,
+  nodeId: string,
+): Promise<void> {
+  await tx
+    .delete(dailyItems)
+    .where(
+      and(
+        eq(dailyItems.userId, userId),
+        eq(dailyItems.nodeId, nodeId),
+        isNull(dailyItems.completedAt),
+        isNull(dailyItems.forwardedTo),
+      ),
+    );
+}
+
 /** Re-sync every task under (and including) `rootId` — used after re-parenting into a shelf. */
 export async function syncDayLinesInSubtree(
   tx: Executor,
