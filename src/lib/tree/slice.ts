@@ -46,6 +46,16 @@ export type GridRow<T = OutlineNode> =
       depth: number;
       /** Ancestor context, for grouping. Only tree rows carry it. */
       context?: RowContext;
+      /**
+       * Children **within this row set**, which is not the same as the node's children in
+       * the tree: on Projects a project whose only children are tasks is a leaf, because
+       * tasks are not rows here. The expander reads this, so a row only offers to collapse
+       * something the grid can actually hide.
+       *
+       * Absent on row sets that *are* the tree (the Outline), where the node's own
+       * `hasChildren` / `childCount` are already the answer.
+       */
+      branch?: { hasChildren: boolean; childCount: number };
     };
 
 /**
@@ -162,7 +172,11 @@ export type SliceOpts = {
 type Prepared = {
   node: OutlineNode;
   depth: number;
+  /** Nearest ancestor that also survived `keep`, or null once re-based to the top. */
+  parentId: string | null;
   context: RowContext;
+  /** Direct children among the kept rows. Filled once the whole kept set is known. */
+  childCount: number;
 };
 
 /**
@@ -186,21 +200,58 @@ export function sliceTree(nodes: OutlineNode[], opts: SliceOpts): GridRow[] {
     kept.push({
       node,
       depth: 0, // filled after we know the full kept set
+      parentId: null,
       context: contextFor(node, byId),
+      childCount: 0,
     });
   }
 
   const keptIds = new Set(kept.map((k) => k.node.id));
+  const byKeptId = new Map(kept.map((entry) => [entry.node.id, entry]));
   for (const entry of kept) {
-    entry.depth = rebasedDepth(entry.node, keptIds, byId);
+    const rebased = rebase(entry.node, keptIds, byId);
+    entry.depth = rebased.depth;
+    entry.parentId = rebased.parentId;
+    if (rebased.parentId) {
+      const parent = byKeptId.get(rebased.parentId);
+      if (parent) parent.childCount += 1;
+    }
   }
+
+  const shown = expanded(kept, byKeptId);
 
   const groupBy = opts.groupBy ?? [];
   if (groupBy.length === 0) {
-    return kept.map(toNodeRow);
+    return shown.map(toNodeRow);
   }
 
-  return emitGrouped(kept, groupBy, opts.today);
+  return emitGrouped(shown, groupBy, opts.today);
+}
+
+/**
+ * Drop the rows sitting under a collapsed row.
+ *
+ * `collapsed` is a field on the record, not a per-tab toggle — Achieve calls it "Expanded"
+ * and it means the same thing wherever the row appears. So collapsing a project on the
+ * Projects tab hides its sub-projects there and its tasks on the Outline; one row, one
+ * disclosure state.
+ *
+ * Relies on parents preceding children in `kept`, which holds because the derived outline
+ * is in DFS order and `keep` only removes rows. One forward pass therefore sees every
+ * ancestor's verdict before it needs it.
+ */
+function expanded(kept: Prepared[], byKeptId: Map<string, Prepared>): Prepared[] {
+  const hidden = new Set<string>();
+
+  return kept.filter((entry) => {
+    const parent = entry.parentId ? byKeptId.get(entry.parentId) : undefined;
+    if (!parent) return true;
+    if (hidden.has(parent.node.id) || parent.node.collapsed) {
+      hidden.add(entry.node.id);
+      return false;
+    }
+    return true;
+  });
 }
 
 /** The label a blank or missing category groups under, in both grouping paths. */
@@ -342,6 +393,7 @@ function toNodeRow(entry: Prepared): GridRow {
     node: entry.node,
     depth: entry.depth,
     context: entry.context,
+    branch: { hasChildren: entry.childCount > 0, childCount: entry.childCount },
   };
 }
 
@@ -360,21 +412,28 @@ function inScope(
 }
 
 /**
- * Indentation among kept rows only. A project under a filtered-out goal sits at depth 0;
- * a sub-project under a kept project sits at depth 1.
+ * Position among kept rows only: how deep to indent, and which kept row is the parent.
+ *
+ * A project under a filtered-out goal sits at depth 0 with no parent; a sub-project under a
+ * kept project sits at depth 1 under it. Both answers come from the same walk, because they
+ * are the same question — the nearest kept ancestors.
  */
-function rebasedDepth(
+function rebase(
   node: OutlineNode,
   keptIds: Set<string>,
   byId: Map<string, OutlineNode>,
-): number {
+): { depth: number; parentId: string | null } {
   let depth = 0;
-  let parentId = node.parentId;
-  while (parentId) {
-    if (keptIds.has(parentId)) depth += 1;
-    parentId = byId.get(parentId)?.parentId ?? null;
+  let parentId: string | null = null;
+  let ancestorId = node.parentId;
+  while (ancestorId) {
+    if (keptIds.has(ancestorId)) {
+      depth += 1;
+      if (parentId === null) parentId = ancestorId;
+    }
+    ancestorId = byId.get(ancestorId)?.parentId ?? null;
   }
-  return depth;
+  return { depth, parentId };
 }
 
 /**

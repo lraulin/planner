@@ -699,6 +699,8 @@ export function nameColumn(
         node={row.node}
         depth={flat ? 0 : row.depth}
         selected={row.node.id === ctx.selectedId}
+        // Undefined on the Outline, where the tree *is* the row set.
+        branch={row.branch}
         editing={row.node.id === ctx.editingId}
         dragHandle={dragHandle}
         onToggleCollapsed={() => ctx.onToggleCollapsed(row.node)}

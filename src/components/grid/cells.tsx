@@ -56,6 +56,7 @@ export function NameCell({
   depth,
   selected,
   editing,
+  branch,
   onToggleCollapsed,
   onOpenDetail,
   onFinishEdit,
@@ -71,6 +72,11 @@ export function NameCell({
   depth: number;
   selected: boolean;
   editing: boolean;
+  /**
+   * Children in *this* row set, when that differs from the tree — see `GridRow.branch`.
+   * Omitted on the Outline, where the node's own counts are the answer.
+   */
+  branch?: { hasChildren: boolean; childCount: number };
   onToggleCollapsed: () => void;
   onOpenDetail: () => void;
   onFinishEdit: (name: string) => void;
@@ -78,6 +84,8 @@ export function NameCell({
   dragHandle?: boolean;
 }) {
   const done = node.state === "completed" || node.state === "cancelled";
+  const hasChildren = branch?.hasChildren ?? node.hasChildren;
+  const childCount = branch?.childCount ?? node.childCount;
   // A dream is typographically a goal — it differs only in its glyph and what it is called.
   const kind = kindOfNode(node);
   // Permanently draggable while the row wants drag: arming on mousedown is too late for
@@ -104,7 +112,7 @@ export function NameCell({
         tabIndex={-1}
         className={[
           "mr-1 ml-0.5 flex w-4 flex-none items-center justify-center text-[0.625rem] text-ink-faint",
-          node.hasChildren ? "hover:text-ink" : "invisible",
+          hasChildren ? "hover:text-ink" : "invisible",
         ].join(" ")}
       >
         {node.collapsed ? "▶" : "▼"}
@@ -177,9 +185,9 @@ export function NameCell({
         </span>
       )}
 
-      {node.collapsed && node.hasChildren && (
+      {node.collapsed && hasChildren && (
         <span className="tabular ml-2 flex-none self-center text-[0.6875rem] text-ink-faint">
-          {node.childCount}
+          {childCount}
         </span>
       )}
 

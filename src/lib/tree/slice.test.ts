@@ -172,6 +172,113 @@ describe("sliceTree — re-based depth", () => {
   });
 });
 
+describe("sliceTree — collapse and branch counts", () => {
+  /** Projects tab shape: a project with a sub-project and a task of its own. */
+  const nodes = (collapsed: boolean) =>
+    tree(
+      { id: "ra", type: "result_area" },
+      { id: "p", type: "project", parentId: "ra", depth: 1, collapsed },
+      { id: "sub", type: "project", parentId: "p", depth: 2 },
+      { id: "t", type: "task", parentId: "p", depth: 2 },
+      { id: "other", type: "project", parentId: "ra", depth: 1 },
+    );
+
+  function branchOf(rows: GridRow[], id: string) {
+    const found = rows.find((r) => r.kind === "node" && r.id === id);
+    return found?.kind === "node" ? found.branch : undefined;
+  }
+
+  it("hides a collapsed row's kept children", () => {
+    const rows = sliceTree(nodes(true), {
+      keep: projectsOnly,
+      includeDeferred: true,
+      today: null,
+    });
+
+    expect(nodeIds(rows)).toEqual(["p", "other"]);
+  });
+
+  it("shows them again when the row is expanded", () => {
+    const rows = sliceTree(nodes(false), {
+      keep: projectsOnly,
+      includeDeferred: true,
+      today: null,
+    });
+
+    expect(nodeIds(rows)).toEqual(["p", "sub", "other"]);
+  });
+
+  it("counts children in the row set, not in the tree", () => {
+    const rows = sliceTree(nodes(false), {
+      keep: projectsOnly,
+      includeDeferred: true,
+      today: null,
+    });
+
+    // `p` has two children in the tree — a sub-project and a task — but only the
+    // sub-project is a row here, so that is what its expander can hide.
+    expect(branchOf(rows, "p")).toEqual({ hasChildren: true, childCount: 1 });
+    // A project whose only children are tasks is a leaf on this tab.
+    expect(branchOf(rows, "other")).toEqual({ hasChildren: false, childCount: 0 });
+  });
+
+  it("counts a collapsed row's hidden children", () => {
+    const rows = sliceTree(nodes(true), {
+      keep: projectsOnly,
+      includeDeferred: true,
+      today: null,
+    });
+
+    expect(branchOf(rows, "p")).toEqual({ hasChildren: true, childCount: 1 });
+  });
+
+  it("hides a whole collapsed subtree, not just its first level", () => {
+    const deep = tree(
+      { id: "ra", type: "result_area" },
+      { id: "p", type: "project", parentId: "ra", depth: 1, collapsed: true },
+      { id: "sub", type: "project", parentId: "p", depth: 2 },
+      { id: "subsub", type: "project", parentId: "sub", depth: 3 },
+    );
+
+    const rows = sliceTree(deep, {
+      keep: projectsOnly,
+      includeDeferred: true,
+      today: null,
+    });
+
+    expect(nodeIds(rows)).toEqual(["p"]);
+  });
+
+  it("ignores collapse on a row that was filtered out of the slice", () => {
+    // The goal is collapsed but not kept, so it cannot hide the projects under it —
+    // they are top-level rows on this tab.
+    const underGoal = tree(
+      { id: "ra", type: "result_area" },
+      { id: "g", type: "goal", parentId: "ra", depth: 1, collapsed: true },
+      { id: "p", type: "project", parentId: "g", depth: 2 },
+    );
+
+    const rows = sliceTree(underGoal, {
+      keep: projectsOnly,
+      includeDeferred: true,
+      today: null,
+    });
+
+    expect(nodeIds(rows)).toEqual(["p"]);
+  });
+
+  it("leaves hidden rows out of group header counts", () => {
+    const rows = sliceTree(nodes(true), {
+      keep: projectsOnly,
+      groupBy: ["category"],
+      includeDeferred: true,
+      today: null,
+    });
+
+    expect(groups(rows).map((g) => g.count)).toEqual([2]);
+  });
+});
+
 describe("sliceTree — inherited context", () => {
   it("attaches the nearest result area and its category", () => {
     const nodes = tree(

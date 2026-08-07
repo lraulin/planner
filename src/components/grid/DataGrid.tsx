@@ -140,7 +140,10 @@ function rowExpansionFor<TRow>(
   if (rowExpansion) return rowExpansion(row);
   const node = row.node;
   if (!isOutlineNode(node)) return undefined;
-  return node.hasChildren ? !node.collapsed : undefined;
+  // `branch` when the row set is a slice of the tree: a project with only tasks under it is
+  // a leaf on the Projects tab and must not announce itself as expandable there.
+  const hasChildren = row.branch?.hasChildren ?? node.hasChildren;
+  return hasChildren ? !node.collapsed : undefined;
 }
 
 /**
