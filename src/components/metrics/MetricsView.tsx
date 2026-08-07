@@ -78,11 +78,6 @@ export function MetricsView({
   /** True while create/open is in flight so keyboard shortcuts do not double-fire. */
   const [drawerPending, setDrawerPending] = useState(false);
   const [chartDetail, setChartDetail] = useState<MetricDetail | null>(null);
-  const [activeOnly, setActiveOnly] = useState(true);
-  const [groupByOwner, setGroupByOwner] = useState(false);
-  const [showPerformance, setShowPerformance] = useState(true);
-  const [showLegend, setShowLegend] = useState(true);
-  const [showObjective, setShowObjective] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, startTransition] = useTransition();
   const [pendingDelete, setPendingDelete] = useState<MetricListRow | null>(null);
@@ -94,7 +89,14 @@ export function MetricsView({
     METRICS_LAYOUT_SCOPE,
     LAYOUT_CODEC,
   );
-  const performanceHeight = layout.performanceHeight;
+  const {
+    performanceHeight,
+    activeOnly,
+    groupByOwner,
+    showPerformance,
+    showLegend,
+    showObjective,
+  } = layout;
 
   const setPerformanceHeight = useCallback(
     (height: number) => {
@@ -103,6 +105,21 @@ export function MetricsView({
         performanceHeight: clampPerformanceHeight(height),
       }));
     },
+    [patchLayout],
+  );
+
+  /** Flip one switch. `patch` takes a recipe so the other keys in the scope survive. */
+  const toggle = useCallback(
+    (
+      key: keyof MetricsLayoutSettings &
+        (
+          | "activeOnly"
+          | "groupByOwner"
+          | "showPerformance"
+          | "showLegend"
+          | "showObjective"
+        ),
+    ) => patchLayout((current) => ({ ...current, [key]: !current[key] })),
     [patchLayout],
   );
 
@@ -323,22 +340,19 @@ export function MetricsView({
       >
         <ToolbarToggle
           checked={activeOnly}
-          onChange={() => setActiveOnly((v) => !v)}
+          onChange={() => toggle("activeOnly")}
           label="Active only"
         />
         <ToolbarToggle
           checked={groupByOwner}
-          onChange={() => setGroupByOwner((v) => !v)}
+          onChange={() => toggle("groupByOwner")}
           label="Group by Owner"
         />
         <ToolbarToggle
           checked={showPerformance}
           onChange={() => {
-            setShowPerformance((v) => {
-              const next = !v;
-              if (next && selected) loadChart(selected.id);
-              return next;
-            });
+            if (!showPerformance && selected) loadChart(selected.id);
+            toggle("showPerformance");
           }}
           label="Show Performance"
         />
@@ -351,7 +365,9 @@ export function MetricsView({
           <EmptyState
             filtered={emptyFiltered}
             onCreate={createNew}
-            onShowInactive={() => setActiveOnly(false)}
+            onShowInactive={() =>
+              patchLayout((current) => ({ ...current, activeOnly: false }))
+            }
             busy={busy}
           />
         ) : compact ? (
@@ -426,12 +442,12 @@ export function MetricsView({
             <div className="flex flex-none flex-wrap items-center gap-x-4 px-3 pt-1 md:pt-2">
               <ToolbarToggle
                 checked={showLegend}
-                onChange={() => setShowLegend((v) => !v)}
+                onChange={() => toggle("showLegend")}
                 label="Show Legend"
               />
               <ToolbarToggle
                 checked={showObjective}
-                onChange={() => setShowObjective((v) => !v)}
+                onChange={() => toggle("showObjective")}
                 label="Show Objective"
               />
               {!chartSource && (
