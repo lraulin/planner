@@ -163,6 +163,15 @@ function buildColumns(today: string | null): ColumnDef<GoalsCtx>[] {
   ];
 }
 
+/**
+ * Both kinds, because this tab shows both — a Dream is a Goal you have not committed to a date
+ * for, and it is filed here. Two kinds is also why the button stays `New` with the kinds behind
+ * it: which one you meant is worth asking at the moment the row is made.
+ *
+ * Module scope so the identity is stable — see the note in `useNodeCommandDeck`.
+ */
+const GOAL_CREATE_KINDS = ["goal", "dream"] as const;
+
 /** A goal has no project or deadline band worth grouping under; these are what remain. */
 const GOAL_GROUP_DIMENSIONS: GroupBy[] = [
   "resultArea",
@@ -178,6 +187,13 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     selectedId: tab.selectedId,
     selectedIds: tab.selectedIds,
     apply: tab.apply,
+    create: {
+      kinds: GOAL_CREATE_KINDS,
+      // Narrowed to a Result Area, a new goal belongs to it.
+      parentId: tab.scope ?? null,
+      child: true,
+      onCreated: tab.startNaming,
+    },
     onOpen: tab.openDetail,
     onRename: tab.setEditingId,
     onCopyAsText: tab.copySelectionAsText,

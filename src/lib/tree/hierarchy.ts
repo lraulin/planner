@@ -47,6 +47,20 @@ export const NODE_KINDS: NodeKind[] = [
 
 export const KIND_LABELS: Record<NodeKind, string> = { ...TYPE_LABELS, dream: "Dream" };
 
+/**
+ * What a row filed *under* another row of the same kind is called.
+ *
+ * Achieve has words for the two that matter — Subproject and Subtask — and none for the rest,
+ * so the broader kinds take the hyphenated form rather than inventing "Subresult area".
+ */
+export const SUB_KIND_LABELS: Record<NodeKind, string> = {
+  result_area: "Sub-area",
+  goal: "Sub-goal",
+  dream: "Sub-dream",
+  project: "Subproject",
+  task: "Subtask",
+};
+
 /** One line each, for the picker — what you would be choosing, not what it is called. */
 export const KIND_HINTS: Record<NodeKind, string> = {
   result_area: "A major dimension of your life; the roles everything else hangs from.",

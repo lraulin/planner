@@ -278,6 +278,15 @@ const PROJECT_SWITCHES: GridSwitch[] = [
  */
 const PROJECT_DEFAULT_GROUP_BY = ["category", "resultArea"];
 
+/**
+ * Module scope so the identity is stable — see the note in `useNodeCommandDeck`.
+ *
+ * One kind, so the button says `New project` rather than `New`. A project shown here can sit
+ * under a goal or a result area, but this module only ever *makes* projects; use the Outline (or
+ * the Goals tab) to originate the levels above.
+ */
+const PROJECT_CREATE_KINDS = ["project"] as const;
+
 /** Dimensions worth offering here. Goal is included; a project's goal is its natural home. */
 const PROJECT_GROUP_DIMENSIONS: GroupBy[] = [
   "category",
@@ -295,6 +304,14 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
     selectedId: tab.selectedId,
     selectedIds: tab.selectedIds,
     apply: tab.apply,
+    create: {
+      kinds: PROJECT_CREATE_KINDS,
+      // Narrowed to a Result Area, `New project` makes one *in* that area — otherwise the row
+      // would be filed where this view cannot show it, and naming it would never begin.
+      parentId: tab.scope ?? null,
+      child: true,
+      onCreated: tab.startNaming,
+    },
     onOpen: tab.openDetail,
     onRename: tab.setEditingId,
     onCopyAsText: tab.copySelectionAsText,

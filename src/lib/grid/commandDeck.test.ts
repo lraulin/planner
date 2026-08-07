@@ -523,6 +523,94 @@ describe("grid command deck", () => {
     });
   });
 
+  describe("creating from a module rather than the outline", () => {
+    /** What Projects/Tasks/Result Areas declare: one kind, sub-items, no outline surgery. */
+    const build = (
+      over: Partial<Parameters<typeof buildGridCommands>[0]> = {},
+    ): ReturnType<typeof buildGridCommands> =>
+      buildGridCommands({
+        createKinds: ["project"],
+        createChild: true,
+        selection: { id: "p1", kind: "project" },
+        actions: { onCreate: () => {}, onOpen: () => {} },
+        ...over,
+      });
+
+    it("names the kind on the button when the module only makes one", () => {
+      const commands = build();
+      expect(commands.find((entry) => entry.id === "grid.create")?.label).toBe(
+        "New project",
+      );
+      // …and does not then repeat itself: `New` above `New project` was one command twice.
+      expect(commands.some((entry) => entry.id === "grid.create.project")).toBe(false);
+    });
+
+    it("keeps the bare New where the kinds are a real choice", () => {
+      const commands = build({ createKinds: ["goal", "dream"] });
+      expect(commands.find((entry) => entry.id === "grid.create")?.label).toBe("New");
+      expect(
+        commands
+          .filter((entry) => entry.id.startsWith("grid.create."))
+          .map((entry) => entry.label),
+      ).toEqual(["New goal", "New dream", "New sub-goal"]);
+    });
+
+    it("files a sub-item under the row it was asked about, not beside it", () => {
+      let created: [string, string] | null = null;
+      const commands = build({
+        actions: { onCreate: (kind, mode) => (created = [kind, mode]) },
+      });
+
+      commands.find((entry) => entry.id === "grid.create.subitem")?.run();
+      expect(created).toEqual(["project", "child"]);
+
+      // And the top-level verb stays top-level — the whole point of diverging from Achieve,
+      // where `New` lands relative to the cursor.
+      commands.find((entry) => entry.id === "grid.create")?.run();
+      expect(created).toEqual(["project", "top"]);
+    });
+
+    it("continues the selected row's kind when this module makes it", () => {
+      // Projects with Goals shown: `New subproject` on a goal files a project under it.
+      expect(
+        build({ selection: { id: "g1", kind: "goal" } }).find(
+          (entry) => entry.id === "grid.create.subitem",
+        )?.label,
+      ).toBe("New subproject");
+      // Goals: a dream's sub-item is a dream, because the module makes those too.
+      expect(
+        build({
+          createKinds: ["goal", "dream"],
+          selection: { id: "d1", kind: "dream" },
+        }).find((entry) => entry.id === "grid.create.subitem")?.label,
+      ).toBe("New sub-dream");
+    });
+
+    it("leaves the outline's insert set to the outline", () => {
+      // The divergence from Achieve, which puts insert-before/after/child in every tab and
+      // resolves them against the outline's cursor — so `insert at top level` in the task
+      // chooser made a sibling of the first task.
+      const ids = build().map((entry) => entry.id);
+      expect(ids).not.toContain("grid.create.before");
+      expect(ids).not.toContain("grid.create.after");
+      expect(ids).not.toContain("grid.create.child");
+      expect(ids).not.toContain("record.indent");
+    });
+
+    it("greys the sub-item verb with nothing selected, and still offers New", () => {
+      const commands = build({ selection: { id: null } });
+      expect(
+        commands.find((entry) => entry.id === "grid.create.subitem"),
+      ).toMatchObject({
+        disabled: true,
+        title: "Select a row first",
+      });
+      expect(
+        commands.find((entry) => entry.id === "grid.create")?.disabled,
+      ).toBeFalsy();
+    });
+  });
+
   it("does not invent hierarchy commands for a flat grid", () => {
     const commands = buildGridCommands({
       selection: { id: "contact-1" },

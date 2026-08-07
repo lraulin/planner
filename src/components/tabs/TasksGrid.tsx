@@ -271,6 +271,9 @@ const TASK_SWITCHES: GridSwitch[] = [
   { id: "showPurpose", label: "Project's Purpose", defaultOn: false },
 ];
 
+/** Module scope so the identity is stable — see the note in `useNodeCommandDeck`. */
+const TASK_CREATE_KINDS = ["task"] as const;
+
 /** Same dimensions as Projects, plus Project — a task's home is its project. */
 const TASK_GROUP_DIMENSIONS: GroupBy[] = [
   "category",
@@ -296,6 +299,15 @@ export function TasksGrid({
     selectedId: tab.selectedId,
     selectedIds: tab.selectedIds,
     apply: tab.apply,
+    create: {
+      kinds: TASK_CREATE_KINDS,
+      // Scoped to a project, `New task` makes one *in* that project. `__none__` is the opposite
+      // filter — tasks with no project above them — so it creates at the top level, which is
+      // exactly the row that view is for.
+      parentId: tab.scope && tab.scope !== "__none__" ? tab.scope : null,
+      child: true,
+      onCreated: tab.startNaming,
+    },
     onOpen: tab.openDetail,
     onRename: tab.setEditingId,
     onCopyAsText: tab.copySelectionAsText,

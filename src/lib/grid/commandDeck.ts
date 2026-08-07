@@ -1,7 +1,12 @@
 import type { Command } from "@/lib/commands/registry";
 import type { KeyBinding } from "@/lib/commands/bindings";
 import { commandOrder } from "@/lib/commands/menus";
-import { KIND_LABELS, STATE_LABELS, type NodeKind } from "@/lib/tree/hierarchy";
+import {
+  KIND_LABELS,
+  STATE_LABELS,
+  SUB_KIND_LABELS,
+  type NodeKind,
+} from "@/lib/tree/hierarchy";
 import type { NodeState } from "@/db/schema";
 
 /** The state vocabulary, in the order Achieve lists it — `STATE_LABELS`' own key order. */
@@ -108,6 +113,16 @@ export type GridCommandCapabilities = {
     pasteChildRefusal: string | null;
   };
   createKinds?: readonly NodeKind[];
+  /**
+   * Offer `New subtask` / `New subproject` — one row filed under the selected one.
+   *
+   * Separate from {@link GridCommandCapabilities.hierarchy} on purpose. The module grids are
+   * *projections* of the tree, so they do not get the Outline's insert set (before / after /
+   * child relative to the cursor) — those read as outline surgery and belong where the outline
+   * is. But "this project needs a subproject" is a plain creation verb, and without it the only
+   * way to file work under something was to go to the Outline and find it there.
+   */
+  createChild?: boolean;
   hierarchy?: boolean;
   priorityMaintenance?: boolean;
   conversionKinds?: readonly NodeKind[];
@@ -189,10 +204,18 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
   const out: Command[] = [];
 
   if (actions.onCreate && defaultKind) {
+    /*
+     * A module that makes exactly one kind names it on the button: `New task`, not `New`.
+     *
+     * The bare `New` is for the Outline, where the label cannot say what it makes because the
+     * New menu beneath it offers five answers. Single-kind hosts have no such menu — and listing
+     * `New` above `New task` there was one command printed twice.
+     */
+    const single = kinds.length === 1;
     out.push(
       command({
         id: "grid.create",
-        label: "New",
+        label: single ? `New ${KIND_LABELS[defaultKind].toLowerCase()}` : "New",
         group: "record",
         menu: "new",
         section: "New",
@@ -211,17 +234,49 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
       }),
     );
 
-    for (const kind of kinds) {
+    if (!single) {
+      for (const kind of kinds) {
+        out.push(
+          command({
+            id: `grid.create.${kind}`,
+            label: `New ${KIND_LABELS[kind].toLowerCase()}`,
+            group: "record",
+            menu: "new",
+            section: "New",
+            icon: "new",
+            keywords: "add insert",
+            run: () => actions.onCreate?.(kind, "top"),
+          }),
+        );
+      }
+    }
+
+    if (capabilities.createChild) {
+      /*
+       * The kind continues the row it is filed under, when this module makes that kind — a
+       * sub-dream under a dream, a subtask under a task. Where it does not (a goal shown in the
+       * Projects tab), the module's own kind is the honest answer: `New subproject` on a goal
+       * files a project under it, which is both legal and what the label says.
+       */
+      const kind =
+        selection?.kind && kinds.includes(selection.kind)
+          ? selection.kind
+          : defaultKind;
       out.push(
         command({
-          id: `grid.create.${kind}`,
-          label: `New ${KIND_LABELS[kind].toLowerCase()}`,
+          id: "grid.create.subitem",
+          label: `New ${SUB_KIND_LABELS[kind].toLowerCase()}`,
           group: "record",
           menu: "new",
           section: "New",
-          icon: "new",
-          keywords: "add insert",
-          run: () => actions.onCreate?.(kind, "top"),
+          icon: "insert-child",
+          toolbar: TOOLBAR.insertChild,
+          rowMenu: true,
+          bindings: INSERT_CHILD,
+          keywords: "add child under subproject subtask",
+          disabled: !hasSelection,
+          title: selectionTitle,
+          run: () => actions.onCreate?.(kind, "child"),
         }),
       );
     }

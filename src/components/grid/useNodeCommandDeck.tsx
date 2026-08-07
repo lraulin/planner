@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   convertNodeAction,
+  createNodeAction,
   deleteNodeAction,
   moveNodeAction,
   removePriorityGapsAction,
@@ -21,7 +22,7 @@ import type { NodeState } from "@/db/schema";
 import { planNodeConversion, type ConversionPlan } from "@/lib/tree/conversion";
 import type { ActionResult } from "./useOptimisticNodes";
 import type { OutlineNode } from "@/lib/tree/types";
-import type { GridCommandCapabilities } from "@/lib/grid/commandDeck";
+import type { CreateMode, GridCommandCapabilities } from "@/lib/grid/commandDeck";
 import type { MenuItem } from "./ContextMenu";
 import { rowMenuFor } from "./rowMenu";
 
@@ -31,6 +32,7 @@ export function useNodeCommandDeck({
   selectedId,
   selectedIds,
   apply,
+  create,
   onOpen,
   onRename,
   onCopyAsText,
@@ -39,7 +41,33 @@ export function useNodeCommandDeck({
   nodes: readonly OutlineNode[];
   selectedId: string | null;
   selectedIds: ReadonlySet<string>;
-  apply: (action: () => Promise<ActionResult>) => void;
+  apply: (
+    action: () => Promise<ActionResult>,
+    onSuccess?: (id?: string) => void,
+  ) => void;
+  /**
+   * What this module can create, if anything. Omitted leaves the grid read-only in the sense
+   * that matters here — it can still edit and delete rows, it just cannot originate them.
+   *
+   * `New <kind>` files at the **top level** (or under `parentId`, see below) rather than beside
+   * the cursor: a module is a list of one kind of thing, and creating relative to whatever
+   * happened to be selected is Achieve's behaviour and its most-reported confusion. Filing a row
+   * under another is the separate, explicitly-named `New subtask`.
+   */
+  create?: {
+    /** The kinds offered. The first is what the toolbar button makes. */
+    kinds: readonly NodeKind[];
+    /**
+     * Where a top-level create lands, when the module is narrowed to a branch. Tasks scoped to
+     * a project makes tasks *in that project* — otherwise `New task` would file a row the view
+     * it was made from cannot show.
+     */
+    parentId?: string | null;
+    /** Offer `New subtask` / `New subproject` under the selected row. */
+    child?: boolean;
+    /** Select the new row and open its name for typing. `useGridTab.startNaming`. */
+    onCreated?: (id?: string) => void;
+  };
   onOpen: (id: string) => void;
   onRename: (id: string) => void;
   /**
@@ -73,6 +101,17 @@ export function useNodeCommandDeck({
   const onConvert = useCallback((id: string, targetKind: NodeKind) => {
     setPendingConversion({ nodeId: id, targetKind });
   }, []);
+
+  /*
+   * Read as fields rather than kept as one object, because everything downstream keys off
+   * identity: a `create={{ … }}` literal is a fresh object every render, and `capabilitiesFor`
+   * would rebuild the whole command list with it. The fields are primitives and stable
+   * references, so hosts can write the literal inline and nothing churns.
+   */
+  const createKinds = create?.kinds;
+  const createParentId = create?.parentId ?? null;
+  const createChild = create?.child;
+  const onCreated = create?.onCreated;
 
   /**
    * The actions, independent of which row is selected.
@@ -169,6 +208,8 @@ export function useNodeCommandDeck({
     (id: string | null, count: number): GridCommandCapabilities => {
       const node = id ? (byId.get(id) ?? null) : null;
       return {
+        createKinds,
+        createChild,
         priorityMaintenance: true,
         conversionKinds: NODE_KINDS,
         clipboard: {
@@ -216,10 +257,39 @@ export function useNodeCommandDeck({
           onRemovePriorityGaps: () => {
             if (id) apply(() => removePriorityGapsAction(id));
           },
+          /*
+           * Bound to the row this capability set is *about*, not to the selection: the row menu
+           * asks about the row that was right-clicked, and `New subtask` there has to file the
+           * task under that row.
+           *
+           * Undefined when the module declares no `create`, which is what keeps the New commands
+           * out of the deck entirely rather than greyed.
+           */
+          onCreate: createKinds
+            ? (kind: NodeKind, mode: CreateMode) => {
+                const parentId = mode === "child" ? id : createParentId;
+                if (mode === "child" && !parentId) return;
+                apply(
+                  () => createNodeAction({ parentId, kind, position: { at: "last" } }),
+                  onCreated,
+                );
+              }
+            : undefined,
         },
       };
     },
-    [actions, apply, byId, nodes, selectedIds, clipboard],
+    [
+      actions,
+      apply,
+      byId,
+      nodes,
+      selectedIds,
+      clipboard,
+      createKinds,
+      createChild,
+      createParentId,
+      onCreated,
+    ],
   );
 
   const capabilities = useMemo(

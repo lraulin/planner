@@ -140,6 +140,9 @@ function buildColumns(): ColumnDef<ResultAreasCtx>[] {
 /** Category is the only dimension a flat list of result areas can meaningfully group by. */
 const RESULT_AREA_GROUP_DIMENSIONS: GroupBy[] = ["category"];
 
+/** Module scope so the identity is stable — see the note in `useNodeCommandDeck`. */
+const RESULT_AREA_CREATE_KINDS = ["result_area"] as const;
+
 /**
  * Result Areas module — Achieve's `Go -> Result Areas` (manual §10.2).
  *
@@ -155,6 +158,13 @@ export function ResultAreasGrid({ initialNodes }: { initialNodes: OutlineNode[] 
     selectedId: tab.selectedId,
     selectedIds: tab.selectedIds,
     apply: tab.apply,
+    // Result areas are the outline's top level, so there is no scope to create into — and a
+    // sub-area is the one nesting this module can express, which `New sub-area` now does.
+    create: {
+      kinds: RESULT_AREA_CREATE_KINDS,
+      child: true,
+      onCreated: tab.startNaming,
+    },
     onOpen: tab.openDetail,
     onRename: tab.setEditingId,
     onCopyAsText: tab.copySelectionAsText,

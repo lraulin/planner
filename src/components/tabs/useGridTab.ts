@@ -75,6 +75,20 @@ export function useGridTab(initialNodes: OutlineNode[]) {
     [setDetailId, selectOne],
   );
 
+  /**
+   * Land on a freshly created row and open its name for typing — the same gesture the Outline
+   * makes, so a row created here is named where it was created rather than arriving blank and
+   * waiting to be found again.
+   */
+  const startNaming = useCallback(
+    (id?: string) => {
+      if (!id) return;
+      selectOne(id);
+      setEditingId(id);
+    },
+    [selectOne],
+  );
+
   const copySelectionAsText = useCallback(() => {
     const text = copyAsText(
       order
@@ -206,6 +220,7 @@ export function useGridTab(initialNodes: OutlineNode[]) {
     setNavigableIds,
     editingId,
     setEditingId,
+    startNaming,
     detailId,
     setDetailId,
     selected,
