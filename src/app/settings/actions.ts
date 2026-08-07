@@ -5,6 +5,7 @@ import { getCurrentUserId } from "@/lib/auth";
 import * as settings from "@/lib/settings/mutations";
 import { disconnectGoogle, setCalendarSyncEnabled } from "@/lib/google/mutations";
 import { refreshCalendarsFromGoogle } from "@/lib/google/sync";
+import { syncGoogleContacts } from "@/lib/google/contacts/sync";
 import { run as runAction, type ActionResult } from "../actionResult";
 
 /**
@@ -87,4 +88,31 @@ export async function setCalendarSyncEnabledAction(
   // Unlike the preference writes above, this one takes the default revalidation: turning a
   // calendar on or off changes what the schedule shows, not just how it is laid out.
   return runAction((userId) => setCalendarSyncEnabled(userId, calendarId, enabled));
+}
+
+// ── Google Contacts ──────────────────────────────────────────────────────────
+
+/** Enable on first success, then advance the existing People sync cursor on demand. */
+export async function syncGoogleContactsAction(): Promise<ActionResult> {
+  try {
+    const userId = await getCurrentUserId();
+    const status = await syncGoogleContacts(userId);
+    if (status.state !== "ok") {
+      return {
+        ok: false,
+        error:
+          status.state === "not_linked" || status.state === "failed"
+            ? status.message
+            : "Google Contacts sync did not run.",
+      };
+    }
+    revalidatePath("/contacts");
+    revalidatePath("/settings");
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Could not sync Google Contacts.",
+    };
+  }
 }

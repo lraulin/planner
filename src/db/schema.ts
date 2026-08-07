@@ -1065,6 +1065,26 @@ export const googleCalendarLinks = pgTable(
 );
 
 /**
+ * Incremental cursor for the user's inbound Google Contacts mirror.
+ *
+ * The row exists only after the first full sync succeeds; its presence is therefore also
+ * the enable flag. This is authoritative integration state rather than a display
+ * preference, so it deliberately does not live in `user_settings`.
+ */
+export const googleContactSyncs = pgTable("google_contact_syncs", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  /** Opaque `nextSyncToken` from `people.connections.list`. */
+  syncToken: text("sync_token").notNull(),
+  lastSyncedAt: timestamp("last_synced_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
  * One run of the weekly planning wizard — Achieve's Weekly Planning Wizard, minus its
  * per-resource loop (resource pools are out of scope; see the spec).
  *
@@ -1844,5 +1864,6 @@ export type NewContact = typeof contacts.$inferInsert;
 export type ContactItem = typeof contactItems.$inferSelect;
 export type NewContactItem = typeof contactItems.$inferInsert;
 export type ContactItemKind = (typeof contactItemKindEnum.enumValues)[number];
+export type GoogleContactSync = typeof googleContactSyncs.$inferSelect;
 export type Resource = typeof resources.$inferSelect;
 export type NewResource = typeof resources.$inferInsert;

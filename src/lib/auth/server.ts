@@ -5,13 +5,14 @@ import { db } from "@/db";
 import * as schema from "@/db/schema";
 
 /**
- * Google Calendar sync needs read/write on events plus the calendar list to populate the
- * picker. `calendar.events` alone cannot enumerate calendars, hence the readonly scope
- * alongside it.
+ * One Google grant serves Calendar and Contacts. Calendar needs read/write on events plus
+ * the calendar list to populate its picker; Contacts is deliberately inbound-only, so the
+ * least-privileged People scope is enough.
  */
 const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/calendar.events",
   "https://www.googleapis.com/auth/calendar.readonly",
+  "https://www.googleapis.com/auth/contacts.readonly",
 ];
 
 /**
@@ -45,7 +46,8 @@ export const googleConfigured = Boolean(googleProvider);
  * Self-run Better Auth. Tables live in our schema (see `users`, `sessions`, `accounts`,
  * `verifications`). Sign-up is disabled — the owner account is provisioned by seed/env.
  *
- * Google is here for **linking a calendar to an existing account**, not for signing in.
+ * Google is here for **linking Calendar and Contacts to an existing account**, not for
+ * signing in.
  * `disableSignUp` stays on, so connecting Google to the owner account grants calendar
  * access without opening a second way to create accounts.
  */

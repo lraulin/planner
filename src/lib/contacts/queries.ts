@@ -106,6 +106,7 @@ export async function loadContacts(userId: string): Promise<ContactListRow[]> {
 
     return {
       id: row.id,
+      externalSource: row.externalSource,
       // The email fallback is why items are loaded before names are derived: a contact
       // captured as nothing but an address still needs something to click on.
       displayName: displayNameOf(row, email?.value),

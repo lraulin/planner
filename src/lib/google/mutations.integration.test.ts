@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { accounts, appointments, users } from "@/db/schema";
+import { accounts, appointments, contacts, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import type { GoogleCalendarListEntry } from "./client";
 import {
@@ -286,12 +286,21 @@ describeDb("disconnectGoogle", () => {
     await linkGoogle(userId);
     await refreshCalendarLinks(userId, [entry({ id: "owner@x", primary: true })]);
     await makeAppointment(userId, { externalId: "event-1" });
+    await db.insert(contacts).values({
+      userId,
+      givenName: "Mirrored contact",
+      externalSource: "google",
+      externalId: "people/c1",
+    });
 
     await disconnectGoogle(userId);
 
     expect(await isGoogleLinked(userId)).toBe(false);
     expect(await listCalendarLinks(userId)).toEqual([]);
     expect(await appointmentSubjects(userId)).toEqual([]);
+    expect(await db.select().from(contacts).where(eq(contacts.userId, userId))).toEqual(
+      [],
+    );
   });
 
   it("keeps appointments that only ever existed in the planner", async () => {

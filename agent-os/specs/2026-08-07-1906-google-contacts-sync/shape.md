@@ -1,6 +1,6 @@
 # Shape — Google Contacts sync
 
-**Status: active**
+**Status: active — implementation complete; awaiting live Google reconnect**
 
 ## Outcome
 
@@ -44,3 +44,5 @@ The OAuth scope is read-only. Google-origin rows are an inbound mirror; local-on
 carry no external source and are outside every sweep. Repeated contact items are reconciled
 instead of replaced so their Planner-only notes survive. Every query and mutation takes a
 `userId`, and the database suite exercises a second user's read/update/delete attempts.
+Deleting a Google-origin contact is unavailable in Planner; the remote delete must happen
+in Google so its tombstone and the local mirror cannot drift.

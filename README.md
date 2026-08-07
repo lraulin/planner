@@ -163,8 +163,8 @@ Hosting targets the free tiers: Vercel Hobby for the app, Neon for Postgres.
    | `BETTER_AUTH_URL`          | Production origin, e.g. `https://planner-….vercel.app`                 |
    | `PLANNER_AGENT_API_KEY`    | Optional; for `/api/agent/*`                                           |
    | `PLANNER_AGENT_USER_EMAIL` | Account the agent key acts as. **Required** — no default in production |
-   | `GOOGLE_CLIENT_ID`         | Optional; Google Calendar sync                                         |
-   | `GOOGLE_CLIENT_SECRET`     | Optional; Google Calendar sync                                         |
+   | `GOOGLE_CLIENT_ID`         | Optional; Google Calendar + Contacts sync                              |
+   | `GOOGLE_CLIENT_SECRET`     | Optional; Google Calendar + Contacts sync                              |
 
    **The Google callback must match `BETTER_AUTH_URL`, not the URL you browse.** No
    `redirectURI` is set on the provider (`src/lib/auth/server.ts`), so Better Auth builds
@@ -181,6 +181,9 @@ Hosting targets the free tiers: Vercel Hobby for the app, Neon for Postgres.
 
    Put exactly that (URL-decoded) into Google Cloud Console → Credentials → your OAuth
    client → Authorised redirect URIs, alongside `http://localhost:3047/api/auth/callback/google`.
+   Enable both the **Google Calendar API** and **People API** in the same Cloud project.
+   Accounts linked before Contacts sync was added must use **Reconnect Google** in Settings
+   once to grant the new read-only Contacts scope.
 
 4. Production builds run pending migrations when `VERCEL_ENV=production` (see
    `scripts/migrate-on-deploy.mjs`). Create or update your account against Neon — this

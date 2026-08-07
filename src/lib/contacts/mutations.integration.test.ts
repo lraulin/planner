@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { contactItems, nodes, notes, taskDetails, users } from "@/db/schema";
+import { contactItems, contacts, nodes, notes, taskDetails, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { createNote } from "@/lib/notes/mutations";
 import {
@@ -60,6 +60,23 @@ describeDb("contacts mutations", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].displayName).toBe("Ada King");
     expect(rows[0].fileAs).toBe("King, Ada");
+  });
+
+  it("does not locally delete a Google-synced contact that would later reappear", async () => {
+    const [row] = await db
+      .insert(contacts)
+      .values({
+        userId,
+        givenName: "Ada",
+        externalSource: "google",
+        externalId: "people/c1",
+      })
+      .returning({ id: contacts.id });
+
+    await expect(deleteContact(userId, row.id)).rejects.toThrow(
+      "Delete this contact in Google Contacts",
+    );
+    expect(await getContactDetail(userId, row.id)).not.toBeNull();
   });
 
   it("uses a primary email as the option label for an otherwise unnamed contact", async () => {

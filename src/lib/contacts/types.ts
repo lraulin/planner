@@ -31,6 +31,7 @@ export type ContactItemView = {
  */
 export type ContactListRow = {
   id: string;
+  externalSource: string | null;
   displayName: string;
   /** What the list sorts by. */
   fileAs: string;

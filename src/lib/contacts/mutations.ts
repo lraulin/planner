@@ -133,6 +133,12 @@ export async function updateContact(
 }
 
 export async function deleteContact(userId: string, contactId: string): Promise<void> {
+  const contact = await requireContact(db, userId, contactId);
+  if (contact.externalSource === "google") {
+    throw new Error(
+      "Google-synced contacts are read-only here. Delete this contact in Google Contacts.",
+    );
+  }
   const deleted = await db
     .delete(contacts)
     .where(and(eq(contacts.id, contactId), eq(contacts.userId, userId)))

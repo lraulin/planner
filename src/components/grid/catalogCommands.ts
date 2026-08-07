@@ -16,6 +16,7 @@ export function catalogCapabilities({
   createLabel,
   openLabel,
   deleteLabel = "Delete",
+  deleteDisabled,
   selection,
   onCreate,
   onOpen,
@@ -27,6 +28,8 @@ export function catalogCapabilities({
   /** e.g. `"Open contact"` — Time Charts says `"Edit areas"`, which is what it really does. */
   openLabel: string;
   deleteLabel?: string;
+  /** Why the selected record cannot be deleted, when the domain owns that constraint. */
+  deleteDisabled?: string;
   selection: { id: string | null; count: number; label?: string | null };
   onCreate: () => void;
   onOpen: (id: string) => void;
@@ -35,6 +38,7 @@ export function catalogCapabilities({
   pageCommands?: readonly GridPageCommand[];
 }): GridCommandCapabilities {
   const noRow = selection.id === null ? "Select a row first" : undefined;
+  const cannotDelete = noRow ?? deleteDisabled;
 
   return {
     selection,
@@ -66,8 +70,8 @@ export function catalogCapabilities({
         toolbar: 50,
         rowMenu: true,
         bindings: [{ key: "Enter" }],
-        disabled: selection.id === null,
-        title: noRow,
+        disabled: Boolean(cannotDelete),
+        title: cannotDelete,
         run: () => selection.id && onOpen(selection.id),
       },
       {

@@ -71,12 +71,14 @@ function viewDefaults(id: string): GridDefaults {
  */
 export function ContactsView({
   initialContacts,
+  initialError = null,
 }: {
   initialContacts: ContactListRow[];
+  initialError?: string | null;
 }) {
   const [rows, setRows] = useState(initialContacts);
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError);
   const [pendingDelete, setPendingDelete] = useState<ContactListRow | null>(null);
   const { detail: openId, setDetail: setOpenId } = useViewStateUrl();
   const [, startTransition] = useTransition();
@@ -87,6 +89,11 @@ export function ContactsView({
   if (initialContacts !== seenServerRows) {
     setSeenServerRows(initialContacts);
     setRows(initialContacts);
+  }
+  const [seenServerError, setSeenServerError] = useState(initialError);
+  if (initialError !== seenServerError) {
+    setSeenServerError(initialError);
+    setError(initialError);
   }
 
   const views = useModuleViews({
@@ -187,6 +194,10 @@ export function ContactsView({
           count,
           label: rows.find((entry) => entry.id === rowId)?.displayName,
         },
+        deleteDisabled:
+          rows.find((entry) => entry.id === rowId)?.externalSource === "google"
+            ? "Delete Google-synced contacts in Google Contacts"
+            : undefined,
         onCreate: createNew,
         onOpen: openDrawer,
         onDelete: requestDelete,

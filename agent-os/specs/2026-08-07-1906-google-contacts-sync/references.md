@@ -1,6 +1,6 @@
 # References — Google Contacts sync
 
-**Status: active**
+**Status: active — implementation complete; awaiting live Google reconnect**
 
 ## Existing implementation
 

@@ -2,6 +2,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { accounts, appointments, googleCalendarLinks } from "@/db/schema";
 import type { GoogleCalendarListEntry } from "./client";
+import { clearGoogleContactMirror } from "./contacts/mutations";
 
 /**
  * Reconcile the stored calendar list against what Google reports.
@@ -148,8 +149,8 @@ export async function clearCalendarLinks(userId: string): Promise<void> {
 }
 
 /**
- * Detach this account from Google entirely: the OAuth grant, the calendar list, and the
- * mirror.
+ * Detach this account from Google entirely: the OAuth grant, the calendar list, both
+ * mirrors, and the Contacts cursor.
  *
  * The inverse of `linkSocial` in the settings panel, and the reason it exists is that
  * without it there was no way to *stop* an account from reaching a real calendar short of
@@ -176,6 +177,7 @@ export async function disconnectGoogle(userId: string): Promise<void> {
     );
 
   await clearCalendarLinks(userId);
+  await clearGoogleContactMirror(userId);
 
   await db
     .delete(accounts)

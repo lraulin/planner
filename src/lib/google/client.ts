@@ -19,7 +19,7 @@ const CALENDAR_API = "https://www.googleapis.com/calendar/v3";
  * because the fix is different: the user has to reconnect, and no amount of retrying helps.
  */
 export class GoogleNotLinkedError extends Error {
-  constructor(message = "Google Calendar is not connected.") {
+  constructor(message = "Google is not connected.") {
     super(message);
     this.name = "GoogleNotLinkedError";
   }
@@ -81,7 +81,7 @@ export async function getGoogleAccessToken(userId: string): Promise<string> {
     throw new GoogleNotLinkedError(
       error instanceof Error && /invalid_grant/i.test(error.message)
         ? "Google access was revoked. Reconnect to resume syncing."
-        : "Google Calendar is not connected.",
+        : "Google is not connected.",
     );
   }
 }

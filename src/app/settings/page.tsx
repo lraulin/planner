@@ -7,6 +7,7 @@ import { LogoutButton } from "@/components/auth/LogoutButton";
 import { getCurrentAccount } from "@/lib/auth";
 import { googleConfigured } from "@/lib/auth/server";
 import { isGoogleLinked, listCalendarLinks } from "@/lib/google/queries";
+import { getGoogleContactSync } from "@/lib/google/contacts/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -18,9 +19,10 @@ export const dynamic = "force-dynamic";
  */
 export default async function SettingsRoute() {
   const account = await getCurrentAccount();
-  const [linked, calendars] = await Promise.all([
+  const [linked, calendars, contactSync] = await Promise.all([
     isGoogleLinked(account.id),
     listCalendarLinks(account.id),
+    getGoogleContactSync(account.id),
   ]);
 
   return (
@@ -66,6 +68,7 @@ export default async function SettingsRoute() {
             configured={googleConfigured}
             linked={linked}
             calendars={calendars}
+            contactSyncLastSyncedAt={contactSync?.lastSyncedAt.toISOString() ?? null}
           />
           <AchieveTransferPanel />
           <RedNotebookImportPanel />

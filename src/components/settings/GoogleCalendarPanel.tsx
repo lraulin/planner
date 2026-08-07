@@ -8,12 +8,14 @@ import {
   disconnectGoogleAction,
   refreshGoogleCalendarsAction,
   setCalendarSyncEnabledAction,
+  syncGoogleContactsAction,
 } from "@/app/settings/actions";
 
 type Props = {
   configured: boolean;
   linked: boolean;
   calendars: GoogleCalendarLink[];
+  contactSyncLastSyncedAt: string | null;
 };
 
 /**
@@ -23,7 +25,12 @@ type Props = {
  * button and a sentence, and the calendar list only exists once there is an account to
  * list calendars for.
  */
-export function GoogleCalendarPanel({ configured, linked, calendars }: Props) {
+export function GoogleCalendarPanel({
+  configured,
+  linked,
+  calendars,
+  contactSyncLastSyncedAt,
+}: Props) {
   const headingId = useId();
   const [error, setError] = useState<string | null>(null);
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
@@ -76,6 +83,14 @@ export function GoogleCalendarPanel({ configured, linked, calendars }: Props) {
     });
   };
 
+  const syncContacts = () => {
+    setError(null);
+    startTransition(async () => {
+      const result = await syncGoogleContactsAction();
+      if (!result.ok) setError(result.error);
+    });
+  };
+
   const primary = calendars.find((c) => c.isPrimary);
 
   return (
@@ -85,7 +100,7 @@ export function GoogleCalendarPanel({ configured, linked, calendars }: Props) {
           id={headingId}
           className="text-[0.75rem] font-semibold uppercase tracking-wider text-ink-muted"
         >
-          Google Calendar
+          Google
         </h2>
         {linked && (
           <button
@@ -94,7 +109,7 @@ export function GoogleCalendarPanel({ configured, linked, calendars }: Props) {
             disabled={pending}
             className="rounded border border-rule px-2.5 py-1 text-[0.8125rem] text-ink transition-colors hover:border-rule-strong hover:bg-surface disabled:opacity-40"
           >
-            {pending ? "Refreshing…" : "Refresh list"}
+            {pending ? "Working…" : "Refresh calendars"}
           </button>
         )}
       </div>
@@ -110,7 +125,7 @@ export function GoogleCalendarPanel({ configured, linked, calendars }: Props) {
 
       {!configured ? (
         <p className="px-4 py-6 text-[0.875rem] leading-relaxed text-ink-muted">
-          Google Calendar is not configured on this server. Set{" "}
+          Google sync is not configured on this server. Set{" "}
           <code className="font-mono text-[0.8125rem]">GOOGLE_CLIENT_ID</code> and{" "}
           <code className="font-mono text-[0.8125rem]">GOOGLE_CLIENT_SECRET</code> and
           restart — see <code className="font-mono text-[0.8125rem]">.env.example</code>
@@ -119,19 +134,22 @@ export function GoogleCalendarPanel({ configured, linked, calendars }: Props) {
       ) : !linked ? (
         <div className="px-4 py-6">
           <p className="mb-3 text-[0.875rem] leading-relaxed text-ink-muted">
-            Connect Google to see your calendar in the weekly schedule. Appointments you
-            create here are created in Google, so they show up on your phone.
+            Connect Google to sync Calendar and Contacts. Calendar appointments can be
+            written back; Contacts uses read-only access and never changes Google.
           </p>
           <button
             type="button"
             onClick={connect}
             className="rounded border border-rule bg-surface-raised px-3 py-1.5 text-[0.875rem] font-medium text-ink transition-colors hover:border-rule-strong"
           >
-            Connect Google Calendar
+            Connect Google
           </button>
         </div>
       ) : (
         <>
+          <div className="border-b border-rule bg-surface-raised px-4 py-2 text-[0.6875rem] font-semibold uppercase tracking-wider text-ink-faint">
+            Calendar
+          </div>
           <p className="border-b border-rule px-4 py-2.5 text-[0.8125rem] leading-relaxed text-ink-muted">
             Showing the calendars ticked below.{" "}
             {primary ? (
@@ -194,27 +212,72 @@ export function GoogleCalendarPanel({ configured, linked, calendars }: Props) {
             </ul>
           )}
 
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-rule px-4 py-2.5">
-            <p className="text-[0.8125rem] text-ink-muted">
-              Disconnecting removes the connection and every mirrored event from the
-              planner. Your Google calendar is not changed.
+          <div className="border-y border-rule bg-surface-raised px-4 py-2 text-[0.6875rem] font-semibold uppercase tracking-wider text-ink-faint">
+            Contacts
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+            <p className="max-w-lg text-[0.8125rem] leading-relaxed text-ink-muted">
+              {contactSyncLastSyncedAt ? (
+                <>
+                  Google Contacts refresh automatically when you open Contacts. Last
+                  synced{" "}
+                  <time dateTime={contactSyncLastSyncedAt} suppressHydrationWarning>
+                    {new Date(contactSyncLastSyncedAt).toLocaleString()}
+                  </time>
+                  .
+                </>
+              ) : (
+                <>
+                  Import Google Contacts and keep them refreshed. Planner has read-only
+                  access and never changes or deletes contacts in Google.
+                </>
+              )}
             </p>
             <button
               type="button"
-              onClick={() => setConfirmingDisconnect(true)}
+              onClick={syncContacts}
               disabled={pending}
-              className="flex-none rounded border border-rule px-2.5 py-1 text-[0.8125rem] text-priority-a transition-colors hover:border-priority-a disabled:opacity-40"
+              className="flex-none rounded border border-rule px-2.5 py-1 text-[0.8125rem] font-medium text-ink transition-colors hover:border-rule-strong hover:bg-surface-raised disabled:opacity-40"
             >
-              Disconnect
+              {pending
+                ? "Syncing…"
+                : contactSyncLastSyncedAt
+                  ? "Sync contacts now"
+                  : "Enable contacts sync"}
             </button>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-rule px-4 py-2.5">
+            <p className="text-[0.8125rem] text-ink-muted">
+              Need to grant the new Contacts permission? Reconnect Google. Disconnecting
+              removes mirrored events and contacts from Planner; Google is not changed.
+            </p>
+            <div className="flex flex-none items-center gap-2">
+              <button
+                type="button"
+                onClick={connect}
+                disabled={pending}
+                className="rounded border border-rule px-2.5 py-1 text-[0.8125rem] text-ink transition-colors hover:border-rule-strong disabled:opacity-40"
+              >
+                Reconnect Google
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmingDisconnect(true)}
+                disabled={pending}
+                className="rounded border border-rule px-2.5 py-1 text-[0.8125rem] text-priority-a transition-colors hover:border-priority-a disabled:opacity-40"
+              >
+                Disconnect
+              </button>
+            </div>
           </div>
         </>
       )}
 
       <ConfirmDialog
         open={confirmingDisconnect}
-        title="Disconnect Google Calendar?"
-        message="Every event mirrored from Google will be removed from the planner, along with your calendar list. Nothing in Google Calendar itself is deleted, and you can reconnect at any time."
+        title="Disconnect Google?"
+        message="Every event and contact mirrored from Google will be removed from Planner, along with the calendar list and Contacts sync cursor. Nothing in Google is deleted, and local-only Planner contacts remain."
         confirmLabel="Disconnect"
         destructive
         onConfirm={disconnect}
