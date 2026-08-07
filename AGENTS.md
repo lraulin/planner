@@ -12,6 +12,10 @@ Personal project in Lee's personal GitHub (`lraulin/planner`).
 - Do not mention Claude or Anthropic in commit messages: no `Co-Authored-By` trailer, no
   "Generated with Claude Code" line, no references in the body.
 - The default branch is `master`.
+- **How to write the commit itself:** `agent-os/standards/development/commits.md`. One
+  logical change per commit; an imperative subject naming the effect, under 72 characters
+  and _not_ Conventional Commits; a body explaining why whenever the diff is not
+  self-evident. Since nobody reviews these before they land, the message is the record.
 
 ### Achieve Planner reference (how AP was meant to work)
 
