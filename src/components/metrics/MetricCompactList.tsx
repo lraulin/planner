@@ -26,20 +26,19 @@ export type MetricGroup = {
 };
 
 /**
- * The metrics list, on a phone.
+ * A metrics list on a phone, for the **Goal form's Metrics tab only**.
  *
- * The desktop list is an eight-column table with a 48rem minimum, which below `md` is a
- * sideways-scrolling wall rather than a list — `responsive.md`'s "adaptive, not shrunken". Here
- * each metric is a two-line card: priority as a colour bar, the title with the date of its last
+ * The Metrics tab itself no longer comes through here: it is a `DataGrid`, so below `md` it
+ * gets `CompactRow` like every other grid. What is left is the goal form's panel, which is a
+ * few rows inside a drawer rather than a module list — it has no columns, no filters and no
+ * grid state to hang them on, which is what `CompactRow` needs.
+ *
+ * The *shape* still deliberately matches `CompactRow` so the two lists feel like one app: each
+ * metric is a two-line card with priority as a colour bar, the title with the date of its last
  * reading, and a meta line of value / target / category beneath.
  *
- * Deliberately not `DataGrid`'s `CompactRow`: that one is bound to `NodeGridRow` and the column
- * machinery, and Metrics has never used the grid. The *shape* is copied on purpose so the two
- * lists feel like one app.
- *
  * Tap opens the metric and long press opens the row menu, translating the desktop double-click
- * and right-click. The row menu is the only place New / Delete exist on a phone, so the long
- * press is load-bearing rather than decorative.
+ * and right-click.
  */
 export function MetricCompactList({
   groups,

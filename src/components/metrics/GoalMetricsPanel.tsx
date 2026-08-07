@@ -18,6 +18,12 @@ import { MetricDrawer } from "./MetricDrawer";
  * Goal form Metrics tab: list metrics owned by this goal; create associates owner.
  * Same first-class store as the Metrics tab.
  *
+ * A plain `<table>` and **not** `DataGrid`, unlike the Metrics tab, which is a grid. This is a
+ * handful of rows inside a drawer, scoped to one goal: there is nothing to sort, filter, hide
+ * or save a view of, and a grid here would bring a toolbar, a command row and a settings scope
+ * for a list that is usually three rows long. The rule it is diverging from is
+ * `components/data-grid.md`; the reason is that this is a panel, not a module list.
+ *
  * Initial list is loaded when the parent mounts this panel (user opened the Metrics
  * form tab). Reloads run from button handlers, not effects.
  */

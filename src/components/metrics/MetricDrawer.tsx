@@ -107,6 +107,15 @@ function toDraft(m: MetricDetail): Draft {
 /**
  * Metric information drawer. Parent loads the detail and passes it in — no fetch-on-mount
  * effect (avoids set-state-in-effect lint and keeps the parent as the source of truth).
+ *
+ * The Tracking tab's list of readings is a plain `<table>`, **not** `DataGrid`, even though
+ * the Metrics tab behind it is a grid. It is a form sub-list, closer to the detail drawer's
+ * `ItemList` than to a module list: every cell is an inline editor writing one entry, and the
+ * order is deliberately frozen while focus is inside it (`ux-principles.md` — no re-sort while
+ * editing), which is the opposite of what a grid's sort is for. It does reuse the grid's column
+ * machinery where that fits — `useGridState` and `ShowFieldsDialog` drive which columns show,
+ * on the same persistence rail as everywhere else. The rule being diverged from is
+ * `components/data-grid.md`.
  */
 export function MetricDrawer({
   detail,
