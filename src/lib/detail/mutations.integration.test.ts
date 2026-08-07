@@ -10,7 +10,7 @@ import {
   toDateKey,
 } from "@/lib/schedule/geometry";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
-import { createNode } from "@/lib/tree/mutations";
+import { createNode, setState } from "@/lib/tree/mutations";
 import {
   TASK_KEYS,
   autofillAttachmentTitleFromUrl,
@@ -581,6 +581,102 @@ describeDb("detail mutations", () => {
 
     await saveNodeDetail(userId, projectId, { ...base, state: "in_progress" });
     expect(await completedAtOf(projectId)).toBeNull();
+  });
+
+  /**
+   * The drawer drives `applyStateTransition` itself rather than going through `setState`, so
+   * the cascade has to be wired in separately — and a parent left completed above open work
+   * is exactly the contradiction that made the Status column read Overdue on a Completed row.
+   */
+  describe("re-opening from the drawer re-opens what is above it", () => {
+    const base = {
+      priorityLetter: null,
+      priorityRank: null,
+      deadline: null,
+      focus: false,
+      notes: "",
+    };
+
+    async function stateById(id: string) {
+      const [row] = await db
+        .select({ state: nodes.state })
+        .from(nodes)
+        .where(eq(nodes.id, id))
+        .limit(1);
+      return row?.state;
+    }
+
+    it("re-opens a completed parent when a subtask is re-opened", async () => {
+      const taskId = await createNode({
+        userId,
+        parentId: projectId,
+        type: "task",
+        name: "Ship it",
+      });
+      await setState(userId, projectId, "completed");
+      expect(await stateById(taskId)).toBe("completed");
+
+      await saveNodeDetail(userId, taskId, {
+        ...base,
+        name: "Ship it",
+        state: "in_progress",
+      });
+
+      expect(await stateById(taskId)).toBe("in_progress");
+      expect(await stateById(projectId)).toBe("in_progress");
+    });
+
+    // The multi-level walk — skipping an open parent to reach a settled grandparent — is
+    // covered in `completionCascade.test.ts`, and cannot be set up here: `setState` re-opens
+    // the grandparent while arranging it, so an integration version would pass either way.
+
+    it("leaves the branch alone when the drawer settles a node", async () => {
+      // Upward only: the settling half is gated behind a confirmation the drawer does not
+      // have, so completing a parent here must not silently settle open work beneath it.
+      const taskId = await createNode({
+        userId,
+        parentId: projectId,
+        type: "task",
+        name: "Still open",
+      });
+
+      await saveNodeDetail(userId, projectId, {
+        ...base,
+        name: "Rebuild the planner",
+        state: "completed",
+      });
+
+      expect(await stateById(projectId)).toBe("completed");
+      expect(await stateById(taskId)).toBe("not_started");
+    });
+
+    it("does not re-open another user's ancestors", async () => {
+      const otherUser = await makeUser();
+      const otherProject = await createNode({
+        userId: otherUser,
+        parentId: null,
+        type: "project",
+        name: "Theirs",
+      });
+      const otherTask = await createNode({
+        userId: otherUser,
+        parentId: otherProject,
+        type: "task",
+        name: "Their task",
+      });
+      await setState(otherUser, otherProject, "completed");
+
+      await expect(
+        saveNodeDetail(userId, otherTask, {
+          ...base,
+          name: "Their task",
+          state: "in_progress",
+        }),
+      ).rejects.toThrow();
+
+      expect(await stateById(otherProject)).toBe("completed");
+      expect(await stateById(otherTask)).toBe("completed");
+    });
   });
 
   it("saves goal fields, including the Dream flag", async () => {

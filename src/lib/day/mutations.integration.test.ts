@@ -300,6 +300,84 @@ describeDb("completing from the day page", () => {
     expect(task.state).toBe("completed");
   });
 
+  /**
+   * The day page drives `applyStateTransition` itself, so the cascade is wired in
+   * separately — see `reopenSettledAncestors`. Un-ticking a line is putting the work back on
+   * your plate, and a completed project must not stay completed above it.
+   */
+  describe("un-ticking a line re-opens what is above it", () => {
+    async function stateById(id: string) {
+      const [row] = await db
+        .select({ state: nodes.state })
+        .from(nodes)
+        .where(eq(nodes.id, id))
+        .limit(1);
+      return row?.state;
+    }
+
+    async function lineFor(nodeId: string) {
+      const [row] = await db
+        .select({ id: dailyItems.id })
+        .from(dailyItems)
+        .where(and(eq(dailyItems.userId, userId), eq(dailyItems.nodeId, nodeId)));
+      return row.id;
+    }
+
+    it("re-opens the completed project above the task", async () => {
+      const nodeId = await makeTask(userId, "Draft memo");
+      const [task] = await db.select().from(nodes).where(eq(nodes.id, nodeId));
+      const projectId = task.parentId!;
+      await planNodeForDay(userId, nodeId, MON);
+      const itemId = await lineFor(nodeId);
+
+      await setDailyItemState(userId, itemId, "completed");
+      expect(await stateById(projectId)).toBe("not_started");
+      await setState(userId, projectId, "completed");
+      expect(await stateById(nodeId)).toBe("completed");
+
+      await setDailyItemState(userId, itemId, "in_progress");
+
+      expect(await stateById(nodeId)).toBe("in_progress");
+      expect(await stateById(projectId)).toBe("in_progress");
+    });
+
+    it("does not settle open subtasks when a line is ticked", async () => {
+      // Upward only. The day page has no confirmation for the settling half, and a parent
+      // task can reach a day list — the gate in `sync.ts` is `type = "task"`, not "leaf".
+      const nodeId = await makeTask(userId, "Draft memo");
+      const subtask = await createNode({
+        userId,
+        parentId: nodeId,
+        type: "task",
+        name: "Find the figures",
+      });
+      await planNodeForDay(userId, nodeId, MON);
+
+      await setDailyItemState(userId, await lineFor(nodeId), "completed");
+
+      expect(await stateById(nodeId)).toBe("completed");
+      expect(await stateById(subtask)).toBe("not_started");
+    });
+
+    it("does not re-open another user's ancestors", async () => {
+      const otherUser = await makeUser();
+      const otherTask = await makeTask(otherUser, "Theirs");
+      const [row] = await db.select().from(nodes).where(eq(nodes.id, otherTask));
+      const otherProject = row.parentId!;
+      await planNodeForDay(otherUser, otherTask, MON);
+      const [item] = await db
+        .select({ id: dailyItems.id })
+        .from(dailyItems)
+        .where(and(eq(dailyItems.userId, otherUser), eq(dailyItems.nodeId, otherTask)));
+      await setState(otherUser, otherProject, "completed");
+
+      await expect(setDailyItemState(userId, item.id, "in_progress")).rejects.toThrow();
+
+      expect(await stateById(otherProject)).toBe("completed");
+      expect(await stateById(otherTask)).toBe("completed");
+    });
+  });
+
   it("keeps the day's record when a recurring task resets itself", async () => {
     // The reason `completed_at` lives on the row: completing a recurring task shelves it
     // until next time (postponed + deferred date), and a derived checkmark would silently

@@ -25,7 +25,7 @@ import {
   syncDayLineToTargetStart,
   syncDayLinesInSubtree,
 } from "@/lib/day/sync";
-import { cascadeStateChange, type CascadeNode } from "./completionCascade";
+import { cascadeStateChange, isSettled, type CascadeNode } from "./completionCascade";
 import {
   assertCanNest,
   kindOfNode,
@@ -1007,6 +1007,45 @@ export async function setState(
 }
 
 /**
+ * Re-open the settled ancestors above a node that has just become un-settled — the upward
+ * half of the cascade, for callers that drive one node's state themselves instead of going
+ * through `setState`.
+ *
+ * The detail drawer and the day page both call `applyStateTransition` directly, because both
+ * have their own work to do around it (a whole draft of side-table fields; a day row whose
+ * own state is finer than the task's). Neither used to touch the branch, so re-opening a
+ * subtask from its drawer, or un-ticking it on the day page, left a completed project sitting
+ * above open work — the contradiction `completionCascade.ts` exists to prevent, reachable
+ * from every surface except the grids.
+ *
+ * **Upward only, and deliberately.** The downward half settles open work, which is the
+ * direction you cannot undo by reversing the gesture, and the grids gate it behind a
+ * confirmation naming the count (`useStateChange.ts`). Neither of these surfaces has that
+ * confirmation yet, so neither gets the settling half; re-opening needs no such gate.
+ *
+ * Reads the state the node **actually ended up in** rather than the one that was requested,
+ * for the same reason `setState` does — see the note there about recurrence.
+ *
+ * Call it inside the caller's transaction, after the transition, so the branch is never left
+ * half-changed by a failure between two statements.
+ */
+export async function reopenSettledAncestors(
+  tx: Executor,
+  userId: string,
+  nodeId: string,
+): Promise<void> {
+  const chain = await selfAndAncestors(tx, userId, nodeId);
+  const self = chain.find((node) => node.id === nodeId);
+  if (!self || isSettled(self.state)) return;
+
+  for (const change of cascadeStateChange(chain, nodeId, self.state)) {
+    await applyStateTransition(tx, userId, change.id, change.state);
+  }
+}
+
+const CASCADE_SELECT = { id: nodes.id, parentId: nodes.parentId, state: nodes.state };
+
+/**
  * The node's subtree and its ancestor chain, which between them are every node the cascade
  * can reach. Loading the whole outline would work and would also mean reading a few thousand
  * rows to settle one task.
@@ -1016,10 +1055,8 @@ async function branchStates(
   userId: string,
   nodeId: string,
 ): Promise<CascadeNode[]> {
-  const select = { id: nodes.id, parentId: nodes.parentId, state: nodes.state };
-
   const descendants = await tx
-    .select(select)
+    .select(CASCADE_SELECT)
     .from(nodes)
     .where(
       and(
@@ -1031,16 +1068,37 @@ async function branchStates(
   const out = [...descendants];
   const seen = new Set(out.map((node) => node.id));
 
-  let parentId = descendants.find((node) => node.id === nodeId)?.parentId ?? null;
-  while (parentId !== null && !seen.has(parentId)) {
-    const [parent] = await tx
-      .select(select)
+  for (const node of await selfAndAncestors(tx, userId, nodeId)) {
+    if (seen.has(node.id)) continue;
+    seen.add(node.id);
+    out.push(node);
+  }
+
+  return out;
+}
+
+/**
+ * The node and every ancestor above it, nearest first. One query per level rather than a
+ * recursive CTE: outlines are shallow, and this reads the same way the pure cascade does.
+ */
+async function selfAndAncestors(
+  tx: Executor,
+  userId: string,
+  nodeId: string,
+): Promise<CascadeNode[]> {
+  const out: CascadeNode[] = [];
+  const seen = new Set<string>();
+
+  let currentId: string | null = nodeId;
+  while (currentId !== null && !seen.has(currentId)) {
+    seen.add(currentId);
+    const [row] = await tx
+      .select(CASCADE_SELECT)
       .from(nodes)
-      .where(and(eq(nodes.userId, userId), eq(nodes.id, parentId)));
-    if (!parent) break;
-    out.push(parent);
-    seen.add(parent.id);
-    parentId = parent.parentId;
+      .where(and(eq(nodes.userId, userId), eq(nodes.id, currentId)));
+    if (!row) break;
+    out.push(row);
+    currentId = row.parentId;
   }
 
   return out;

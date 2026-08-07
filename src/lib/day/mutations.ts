@@ -9,7 +9,11 @@ import {
 } from "@/db/schema";
 import { ensureInbox } from "@/lib/capture/mutations";
 import { fromDateKey, localDateKey } from "@/lib/schedule/geometry";
-import { applyStateTransition, createNode } from "@/lib/tree/mutations";
+import {
+  applyStateTransition,
+  createNode,
+  reopenSettledAncestors,
+} from "@/lib/tree/mutations";
 import { between } from "@/lib/tree/sortKey";
 import { itemsToForward } from "./forward";
 import { effectiveShelfOf, setDayPlan } from "./sync";
@@ -178,6 +182,10 @@ export async function setDailyItemState(
       // settle helpers), so stamping here would race them. Intermediate states still need
       // the day row's own state column kept in sync.
       await applyStateTransition(tx, userId, item.nodeId, state);
+      // Un-ticking a line re-opens the settled work above it, the same as from the grids —
+      // a completed project must not sit above a task you have just put back on your plate.
+      // Upward only; see `reopenSettledAncestors`.
+      await reopenSettledAncestors(tx, userId, item.nodeId);
       if (!settling) {
         await tx
           .update(dailyItems)

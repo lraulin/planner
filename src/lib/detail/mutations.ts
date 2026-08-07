@@ -13,7 +13,7 @@ import {
   clearConflictingDescendantPlans,
   syncDayLineToTargetStart,
 } from "@/lib/day/sync";
-import { applyStateTransition } from "@/lib/tree/mutations";
+import { applyStateTransition, reopenSettledAncestors } from "@/lib/tree/mutations";
 import {
   asCalendarDay,
   fromDateKey,
@@ -555,6 +555,11 @@ export async function saveNodeDetail(
         transition.state,
         transition.at ?? undefined,
       );
+      // A parent's state is a claim about the work beneath it, so re-opening a subtask here
+      // has to re-open the completed project above it exactly as it does from the grids.
+      // Upward only — settling open descendants is gated behind a confirmation this drawer
+      // does not have yet. See `reopenSettledAncestors`.
+      await reopenSettledAncestors(tx, userId, nodeId);
     }
 
     // A deferred-date change on a row that is (or just became) postponed may newly conflict
