@@ -37,6 +37,7 @@ import {
   sortEntriesByDate,
   type EntryDateSort,
 } from "@/lib/metrics/derive";
+import { applySelect, selectOnly } from "@/lib/grid/selection";
 import { isTypingTarget } from "@/lib/keyboard";
 import {
   formatMetricNumber,
@@ -219,29 +220,36 @@ function MetricForm({
     }, 0);
   };
 
+  const orderedEntryIds = useMemo(
+    () => displayEntries.map((e) => e.id),
+    [displayEntries],
+  );
+
   const selectEntryRow = useCallback(
     (entryId: string, event: ReactMouseEvent) => {
-      setSelectedIds((prev) => {
-        if (event.shiftKey && selectionAnchor) {
-          const ids = displayEntries.map((e) => e.id);
-          const a = ids.indexOf(selectionAnchor);
-          const b = ids.indexOf(entryId);
-          if (a >= 0 && b >= 0) {
-            const [lo, hi] = a < b ? [a, b] : [b, a];
-            return new Set(ids.slice(lo, hi + 1));
-          }
-        }
-        if (event.metaKey || event.ctrlKey) {
-          const next = new Set(prev);
-          if (next.has(entryId)) next.delete(entryId);
-          else next.add(entryId);
-          return next;
-        }
-        return new Set([entryId]);
-      });
-      if (!event.shiftKey) setSelectionAnchor(entryId);
+      const toggle = event.metaKey || event.ctrlKey;
+      // The one place this table parts company with the grid: ⌘-clicking the only selected
+      // row clears the selection. `applySelect` refuses to go empty because a grid always
+      // needs a focus row for its keyboard commands; here selection is incidental — it
+      // exists to enable Copy — and starts empty, so being able to put it back is right.
+      if (toggle && selectedIds.size === 1 && selectedIds.has(entryId)) {
+        setSelectedIds(new Set());
+        setSelectionAnchor(null);
+        return;
+      }
+      const result = applySelect(
+        selectedIds,
+        selectionAnchor,
+        // The grid's focus row: this table has none, so the anchor stands in for it.
+        selectionAnchor,
+        entryId,
+        orderedEntryIds,
+        { extend: event.shiftKey, toggle },
+      );
+      setSelectedIds(result.selectedIds);
+      setSelectionAnchor(result.anchorId);
     },
-    [selectionAnchor, displayEntries],
+    [selectedIds, selectionAnchor, orderedEntryIds],
   );
 
   const copySelectedEntries = useCallback(async () => {
@@ -740,8 +748,9 @@ function MetricForm({
                     const selected = selectedIds.has(entry.id);
                     const focusRow = () => {
                       freezeDisplayOrder();
-                      setSelectedIds(new Set([entry.id]));
-                      setSelectionAnchor(entry.id);
+                      const result = selectOnly(entry.id);
+                      setSelectedIds(result.selectedIds);
+                      setSelectionAnchor(result.anchorId);
                     };
                     return (
                       <tr
