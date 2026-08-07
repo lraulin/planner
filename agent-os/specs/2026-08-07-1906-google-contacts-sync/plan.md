@@ -1,6 +1,6 @@
 # Google Contacts sync
 
-**Status: active — implementation complete and verified; awaiting live Google reconnect**
+**Status: frozen / complete** (2026-08-07)
 Spec folder: `agent-os/specs/2026-08-07-1906-google-contacts-sync/`
 
 ## Context
@@ -44,7 +44,7 @@ a Google Contact. Local-only contacts remain fully editable.
 ## Acceptance criteria
 
 - [x] Settings describes one Google connection covering Calendar and Contacts.
-- [ ] A signed-in user can enable Contacts sync and explicitly reconnect for the new scope.
+- [x] A signed-in user can enable Contacts sync and explicitly reconnect for the new scope.
 - [x] The initial sync imports all Google Contacts and subsequent stale/page/manual syncs
       apply only deltas when the cursor is valid.
 - [x] Expired cursors transparently fall back to a full sync.
@@ -83,11 +83,14 @@ a Google Contact. Local-only contacts remain fully editable.
 - Inspected unlinked and temporarily simulated linked/enabled Settings states at desktop
   and 390px phone widths; the temporary test account/cursor rows were removed afterward.
 - No live Google request was made from the deliberately unlinked dev account.
+- Production deployment completed successfully, including migration `0026`; the login
+  route returned HTTP 200.
+- The owner enabled People API, reconnected the real Google account for
+  `contacts.readonly`, enabled Contacts sync, and confirmed the first live sync worked on
+  2026-08-07.
 
-## Live completion still required
+## Completion
 
-1. Enable **People API** in the Google Cloud project that owns the existing OAuth client.
-2. After the pushed deployment is live, sign in to Planner and use **Reconnect Google** in
-   Settings to grant `contacts.readonly`.
-3. Use **Enable contacts sync** and verify the first real contact count. Then mark this spec
-   frozen / complete.
+The read-only Google Contacts mirror is implemented, deployed, and verified against the
+owner's real Google account. Future changes belong in a new delta-spec rather than edits to
+this frozen record.

@@ -407,8 +407,20 @@ Treat as one track with staged depth:
    **Operational note:** publish the OAuth consent screen — while it is in _Testing_,
    Google expires refresh tokens after 7 days.
 
-2. **Optional later** — Tasks/Keep-style capture only if calendar alone is not enough;
-   avoid boiling the ocean.
+2. **✅ Contacts sync.** `specs/2026-08-07-1906-google-contacts-sync`. The shared Google
+   grant now includes least-privilege, read-only Contacts access. Planner mirrors Google
+   Contacts through full and incremental People API sync while preserving Planner-only
+   contexts, item notes, task links, and history links. Google-origin contacts remain
+   remote-authoritative and cannot be deleted locally; local-only contacts are never
+   matched or swept. Settings owns reconnect, enable, manual sync, and disconnect, while
+   `/contacts` refreshes a stale mirror opportunistically.
+
+   Deferred: outbound/two-way contact writes, a pause-without-disconnect control,
+   background sync, multiple Google accounts, Other Contacts, and Workspace directory
+   profiles.
+
+3. **Optional later** — Tasks/Keep-style capture only if calendar and contacts are not
+   enough; avoid boiling the ocean.
 
 ### Attachments (files on projects / tasks / goals)
 

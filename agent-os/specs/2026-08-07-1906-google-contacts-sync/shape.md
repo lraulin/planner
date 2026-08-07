@@ -1,6 +1,6 @@
 # Shape — Google Contacts sync
 
-**Status: active — implementation complete; awaiting live Google reconnect**
+**Status: frozen / complete** (2026-08-07)
 
 ## Outcome
 
