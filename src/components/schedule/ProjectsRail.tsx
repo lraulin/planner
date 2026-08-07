@@ -63,9 +63,12 @@ export function ProjectsRail({ nodes }: Props) {
   const grouped = useMemo(() => {
     if (!groupByArea) return [{ label: null as string | null, items: projects }];
 
+    // Built once, not once per project: this was inside `areaName`, so grouping rebuilt the
+    // whole index for every row it grouped.
+    const byId = new Map(nodes.map((n) => [n.id, n]));
+
     function areaName(node: OutlineNode): string {
       let cur: OutlineNode | undefined = node;
-      const byId = new Map(nodes.map((n) => [n.id, n]));
       while (cur) {
         if (cur.type === "result_area") return cur.name || "Untitled";
         cur = cur.parentId ? byId.get(cur.parentId) : undefined;
