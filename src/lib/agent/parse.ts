@@ -1,4 +1,12 @@
-import type { NodeState, NodeType, PriorityLetter } from "@/db/schema";
+import {
+  nodeStateEnum,
+  nodeTypeEnum,
+  type NodeState,
+  type NodeType,
+  type PriorityLetter,
+} from "@/db/schema";
+import { daysInMonth } from "@/lib/dateMath";
+import { PRIORITY_LETTERS } from "@/lib/priority/letterRank";
 import { AgentError } from "./errors";
 
 export function asObject(body: unknown): Record<string, unknown> {
@@ -62,12 +70,38 @@ export function optionalNullableString(
   return obj[key];
 }
 
+/** A leading calendar day, whether the string is `2026-06-31` or `2026-06-31T09:00:00Z`. */
+const LEADING_DAY = /^(\d{4})-(\d{2})-(\d{2})(?=$|[T ])/;
+
+/**
+ * A date that does not exist is a *rejection*, not a date two days later.
+ *
+ * `new Date("2026-06-31")` is not Invalid Date — it is July 1. June has thirty days, so the
+ * extra one rolls over, and the caller is told nothing. That is the wrong answer for an
+ * interface driven by an agent: asked for a month-end deadline it will sometimes produce
+ * `06-31`, and silently getting July back is worse than being told to count again.
+ *
+ * Only the calendar day is checked. The time part is left to `Date`, which does clamp
+ * sensibly there and has no equivalent trap.
+ */
 export function parseDate(
   value: string | null | undefined,
   field: string,
 ): Date | null | undefined {
   if (value === undefined) return undefined;
   if (value === null || value === "") return null;
+
+  const day = LEADING_DAY.exec(value);
+  if (day) {
+    const [, year, month, date] = day.map(Number);
+    if (month < 1 || month > 12 || date < 1 || date > daysInMonth(year, month)) {
+      throw new AgentError(
+        "validation",
+        `${field} is not a date that exists: ${value}`,
+      );
+    }
+  }
+
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) {
     throw new AgentError("validation", `${field} must be a valid ISO date`);
@@ -75,19 +109,17 @@ export function parseDate(
   return d;
 }
 
-const NODE_TYPES: NodeType[] = ["result_area", "goal", "project", "task"];
-const NODE_STATES: NodeState[] = [
-  "not_started",
-  "in_progress",
-  "waiting",
-  "completed",
-  "cancelled",
-  "postponed",
-  "delegated",
-  "should_delegate",
-  "proposed",
-];
-const PRIORITY_LETTERS: PriorityLetter[] = ["A", "B", "C", "D"];
+/**
+ * Taken from the schema and from `letterRank`, never re-typed.
+ *
+ * These were three hand-written copies. They happened to agree, and that is the problem: the
+ * compiler cannot see a *missing* member, only a wrong one. Add a tenth state to
+ * `nodeStateEnum` and every grid, filter and form picks it up, while the agent API alone
+ * answers `state must be one of: …` and lists nine — a rejection that reads like the caller's
+ * mistake. Same reason `maintenance.ts` stopped carrying its own letters.
+ */
+const NODE_TYPES: readonly NodeType[] = nodeTypeEnum.enumValues;
+const NODE_STATES: readonly NodeState[] = nodeStateEnum.enumValues;
 
 export function parseNodeType(value: unknown, field = "type"): NodeType {
   if (typeof value !== "string" || !NODE_TYPES.includes(value as NodeType)) {
