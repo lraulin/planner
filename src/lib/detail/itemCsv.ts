@@ -1,6 +1,7 @@
 import type { NodeItem } from "@/db/schema";
 import { escapeCsvField, parseCsvRows } from "@/lib/csv/text";
 import type { NodeItemValues } from "@/lib/detail/types";
+import type { ItemField } from "./itemKinds";
 import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { formatPriority, parsePriority } from "@/lib/tree/format";
 
@@ -14,12 +15,13 @@ import { formatPriority, parsePriority } from "@/lib/tree/format";
  * Pure: no database. Callers append the parsed rows via `importNodeItems`.
  */
 
-/** Field shape the CSV layer needs — mirrors `itemKinds` without importing UI code. */
-export type ItemCsvField = {
-  key: string;
-  label: string;
-  kind: "text" | "textarea" | "priority" | "number" | "select" | "check" | "date";
-};
+/**
+ * The CSV layer reads the kind's own field definitions. This used to be a hand-copied
+ * subset ("mirrors `itemKinds` without importing UI code") from when `itemKinds` lived
+ * under `src/components`; a field kind added there and not here would have silently
+ * exported the wrong column.
+ */
+export type ItemCsvField = Pick<ItemField, "key" | "label" | "kind">;
 
 export type ParseItemsCsvResult = {
   rows: NodeItemValues[];

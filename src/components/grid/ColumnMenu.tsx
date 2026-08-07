@@ -34,7 +34,7 @@ import {
   usesSetFilter,
   type ColumnFilter,
   type FilterOption,
-} from "./filters";
+} from "@/lib/grid/filters";
 
 /**
  * One popover per column header, holding **everything that acts on that column**.

@@ -6,11 +6,16 @@ import { parsePriority } from "@/lib/tree/format";
  * by column kind. Checklist filters (presets / distinct values) live alongside as
  * `mode: "options"`; the two modes are mutually exclusive per column.
  *
- * `ColumnFilterKind` mirrors `components/grid/columns` `FilterKind` so this module stays
- * free of the React column layer.
  */
 
-export type ColumnFilterKind = "text" | "priority" | "date" | "enum";
+/**
+ * How a column's filter dropdown behaves. Semantic presets (priority ranks, deadline
+ * bands) hang off this; plain columns only get (All)/(Blanks)/(NonBlanks)/values.
+ *
+ * Defined here rather than on `ColumnDef` because it is filter vocabulary, not
+ * presentation — `components/grid/columns` re-exports it for the column definitions.
+ */
+export type FilterKind = "text" | "priority" | "date" | "enum";
 
 export type FilterJoin = "and" | "or";
 
@@ -138,7 +143,7 @@ const COMPARE_OPS: FilterOperator[] = [
 ];
 
 /** Operators legal for a column's filter kind. */
-export function operatorsForKind(kind: ColumnFilterKind | undefined): OperatorOption[] {
+export function operatorsForKind(kind: FilterKind | undefined): OperatorOption[] {
   const ops =
     kind === "priority" || kind === "date"
       ? COMPARE_OPS
@@ -160,7 +165,7 @@ export function operatorNeedsOperand(op: FilterOperator): boolean {
 export function matchesCustom(
   value: string | null,
   filter: CustomColumnFilter,
-  kind: ColumnFilterKind | undefined,
+  kind: FilterKind | undefined,
 ): boolean {
   if (filter.conditions.length === 0) return true;
 
@@ -173,7 +178,7 @@ export function matchesCustom(
 export function matchesCondition(
   value: string | null,
   condition: FilterCondition,
-  kind: ColumnFilterKind | undefined,
+  kind: FilterKind | undefined,
 ): boolean {
   const blank = value === null || value === "";
   const cell = value ?? "";
@@ -208,11 +213,7 @@ export function matchesCondition(
   }
 }
 
-function equals(
-  cell: string,
-  operand: string,
-  _kind: ColumnFilterKind | undefined,
-): boolean {
+function equals(cell: string, operand: string, _kind: FilterKind | undefined): boolean {
   // Case-fold so a typed "ns" matches "NS" on enum columns; accents still distinguish.
   void _kind;
   return cell.localeCompare(operand, undefined, { sensitivity: "accent" }) === 0;
@@ -243,7 +244,7 @@ function compare(
   cell: string,
   operand: string,
   op: "lt" | "lte" | "gt" | "gte",
-  kind: ColumnFilterKind | undefined,
+  kind: FilterKind | undefined,
 ): boolean {
   if (cell === "" || operand === "") return false;
 

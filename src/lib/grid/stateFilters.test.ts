@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchesFilter } from "@/components/grid/filters";
+import { matchesFilter } from "./filters";
 import { STATE_CODES, STATE_LABELS } from "@/lib/tree/hierarchy";
 import {
   OPEN_STATES,

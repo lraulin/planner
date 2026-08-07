@@ -29,7 +29,7 @@ export type SetFilterEntry = {
 
 export const BLANKS_OPTION_ID = "blanks";
 
-/** The option id a concrete value toggles. Mirrors `matchesOption` in `components/grid/filters`. */
+/** The option id a concrete value toggles. Mirrors `matchesOption` in `./filters`. */
 export function valueOptionId(value: string): string {
   return `value:${value}`;
 }

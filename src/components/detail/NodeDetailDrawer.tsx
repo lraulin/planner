@@ -41,7 +41,7 @@ import { DRAWER_SCOPE } from "@/lib/settings/scopes";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { Drawer, DrawerFooter, DrawerHeader } from "./Drawer";
 import { FormTabs } from "./FormTabs";
-import { ITEM_KINDS } from "./itemKinds";
+import { ITEM_KINDS } from "@/lib/detail/itemKinds";
 import { ItemList } from "./ItemList";
 import { goalTabs } from "./GoalForm";
 import { projectTabs } from "./ProjectForm";

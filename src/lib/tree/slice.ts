@@ -550,7 +550,7 @@ function groupKey(
  * target dates and priority — grouping by that would put a completed item due yesterday
  * under "Completed" while the user was asking to see what is overdue. These read the
  * deadline and nothing else, and reuse the same day boundaries as the deadline filter
- * presets in `components/grid/filters.ts` so the two controls agree.
+ * presets in `lib/grid/filters.ts` so the two controls agree.
  */
 export type DeadlineBand =
   "overdue" | "today" | "tomorrow" | "next7" | "next30" | "later" | "none";

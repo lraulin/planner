@@ -2,7 +2,7 @@ import {
   matchesCondition,
   operatorNeedsOperand,
   OPERATOR_META,
-  type ColumnFilterKind,
+  type FilterKind,
   type FilterJoin,
   type FilterOperator,
 } from "./customFilter";
@@ -24,7 +24,7 @@ import {
  *   builder labels such columns as hidden so the state is never invisible.
  * - A condition may name a column that **no longer exists** (renamed, or saved by a view
  *   that no longer offers it). Those are **inert**, never failing. Same rule and the same
- *   reason as `rowPassesFilters` in `components/grid/filters.ts`: treating a missing column
+ *   reason as `rowPassesFilters` in `./filters`: treating a missing column
  *   as a blank cell would empty the grid with nothing on screen to explain it.
  */
 
@@ -66,7 +66,7 @@ export function crossFilterActive(filter: CrossColumnFilter | null): boolean {
 export function rowPassesCrossFilter(
   values: Record<string, string | null>,
   filter: CrossColumnFilter | null,
-  kinds: Record<string, ColumnFilterKind | undefined>,
+  kinds: Record<string, FilterKind | undefined>,
 ): boolean {
   if (!crossFilterActive(filter) || filter === null) return true;
 

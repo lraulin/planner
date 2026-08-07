@@ -28,7 +28,7 @@ import {
   filterActive,
   rowPassesFilters,
   type ColumnFilter,
-} from "./filters";
+} from "@/lib/grid/filters";
 import {
   crossFilterActive,
   rowPassesCrossFilter,

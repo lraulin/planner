@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { buildGridChips, type GridChip } from "@/lib/grid/chips";
 import type { CrossColumnFilter } from "@/lib/grid/crossFilter";
-import { ALL_FILTER, filterOptions, type ColumnFilter } from "./filters";
+import { ALL_FILTER, filterOptions, type ColumnFilter } from "@/lib/grid/filters";
 import type { ColumnMeta } from "./columns";
 
 /**

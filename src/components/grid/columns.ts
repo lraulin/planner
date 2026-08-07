@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { GridRow } from "@/lib/tree/slice";
 import type { CompactRole } from "@/lib/grid/compactFields";
+import type { FilterKind } from "@/lib/grid/customFilter";
 
 /**
  * A data row the grid can render a cell for — group headers never reach `render`.
@@ -13,11 +14,8 @@ export type NodeGridRow<T = OutlineNode> = Extract<GridRow<T>, { kind: "node" }>
 
 export type ColumnAlign = "left" | "center" | "right";
 
-/**
- * How the column's filter dropdown behaves. Semantic presets (priority ranks, deadline
- * bands) hang off `filterKind`; plain columns only get (All)/(Blanks)/(NonBlanks)/values.
- */
-export type FilterKind = "text" | "priority" | "date" | "enum";
+/** Owned by `@/lib/grid/customFilter`; re-exported so `ColumnDef` reads in one place. */
+export type { FilterKind };
 
 /**
  * One column of a data grid. The grid builds its CSS `grid-template-columns` from `width`

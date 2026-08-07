@@ -6,8 +6,8 @@ import {
   optionsFilter,
   NONE_OPTION_ID,
   type ColumnFilter,
-} from "@/lib/grid/customFilter";
-import type { FilterKind } from "./columns";
+  type FilterKind,
+} from "./customFilter";
 
 /**
  * Per-column filter state and the pure matching rules that power the header dropdowns.
@@ -16,8 +16,8 @@ import type { FilterKind } from "./columns";
  * as pure functions so the Projects / Tasks tabs can unit-test them without a DOM, and so
  * the grid never reimplements "is this A or B?" in JSX.
  *
- * Custom multi-condition filters (`mode: "custom"`) live in `@/lib/grid/customFilter` and
- * are mutually exclusive with the checklist (`mode: "options"`) per column.
+ * Custom multi-condition filters (`mode: "custom"`) live in `./customFilter` and are
+ * mutually exclusive with the checklist (`mode: "options"`) per column.
  */
 
 export {
@@ -34,7 +34,7 @@ export {
   type FilterJoin,
   type FilterOperator,
   type OptionsColumnFilter,
-} from "@/lib/grid/customFilter";
+} from "./customFilter";
 
 export type FilterOption = {
   id: string;

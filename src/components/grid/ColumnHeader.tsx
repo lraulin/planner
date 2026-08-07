@@ -13,7 +13,7 @@ import { headerDropIndex } from "@/lib/grid/columnMenu";
 import { alignClass, type ColumnControls, type ColumnMeta } from "./columns";
 import { ColumnMenuButton } from "./ColumnMenu";
 import { ShowFieldsDialog } from "./ShowFieldsDialog";
-import { ALL_FILTER, type ColumnFilter } from "./filters";
+import { ALL_FILTER, type ColumnFilter } from "@/lib/grid/filters";
 
 /** Marks a header drag so a row drag (same HTML5 mechanism) is never mistaken for one. */
 const COLUMN_MIME = "application/x-planner-column";

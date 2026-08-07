@@ -7,7 +7,7 @@ import {
   describeCustom,
   operatorNeedsOperand,
   operatorsForKind,
-  type ColumnFilterKind,
+  type FilterKind,
   type CustomColumnFilter,
   type FilterCondition,
   type FilterJoin,
@@ -30,7 +30,7 @@ export function CustomFilterDialog({
 }: {
   open: boolean;
   columnLabel: string;
-  kind: ColumnFilterKind | undefined;
+  kind: FilterKind | undefined;
   /** Existing custom filter, or null to start a fresh one-condition draft. */
   filter: CustomColumnFilter | null;
   distinctValues: string[];
@@ -60,7 +60,7 @@ function CustomFilterDialogBody({
   onClose,
 }: {
   columnLabel: string;
-  kind: ColumnFilterKind | undefined;
+  kind: FilterKind | undefined;
   filter: CustomColumnFilter | null;
   distinctValues: string[];
   onApply: (filter: CustomColumnFilter) => void;

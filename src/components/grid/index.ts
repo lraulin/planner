@@ -39,5 +39,5 @@ export {
   PRIORITY_PRESETS,
   DATE_PRESETS,
   type ColumnFilter,
-} from "./filters";
+} from "@/lib/grid/filters";
 export { CustomFilterDialog } from "./CustomFilterDialog";

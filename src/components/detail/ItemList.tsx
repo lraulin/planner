@@ -28,7 +28,7 @@ import {
   ITEM_KINDS,
   type ItemColumnKey,
   type ItemField,
-} from "./itemKinds";
+} from "@/lib/detail/itemKinds";
 
 /**
  * One repeating list inside a detail form — objectives, risks, stakeholders, and the other

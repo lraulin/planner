@@ -787,7 +787,7 @@ export const projectDetails = pgTable("project_details", {
  * Every repeating row inside a detail form, of any kind — objectives, risks, stakeholders,
  * wish-list entries, and the rest. One table rather than fourteen: they all share priority,
  * title, description, and sibling ordering, and differ only in a handful of extra columns.
- * Which columns a kind actually uses is declared in `src/components/detail/itemKinds.ts`.
+ * Which columns a kind actually uses is declared in `src/lib/detail/itemKinds.ts`.
  *
  * Ordering uses the same lexicographic `sortKey` as the outline, so reordering a row
  * rewrites one row rather than renumbering the list.

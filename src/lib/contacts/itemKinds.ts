@@ -4,7 +4,7 @@ import type { ContactItemKind } from "@/db/schema";
  * What each repeating list on a contact is called, and which of `contact_items`' columns it
  * actually uses.
  *
- * The same idea as `src/components/detail/itemKinds.ts` — one config record driving one
+ * The same idea as `src/lib/detail/itemKinds.ts` — one config record driving one
  * renderer — but for a different table, and pure so it can be tested without a DOM. The
  * editor (`ContactItemList`) reads `fields`; the collapsed summary line reads `summary`.
  */
