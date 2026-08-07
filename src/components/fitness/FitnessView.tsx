@@ -213,10 +213,20 @@ export function FitnessView({
   }
 
   /**
-   * The two things this view makes. Both are always offered: which one is *primary* depends on the
-   * mode, but hiding the other would mean "Log session" vanishing from the palette whenever you
-   * happened to be looking at the exercise list, and a command that comes and goes is one you stop
-   * looking for.
+   * The two things this view makes. Both are always in the `New` menu, `⌘K` and `⋯` — hiding one
+   * would mean "Log session" vanishing whenever you happened to be looking at the exercise list,
+   * and a command that comes and goes is one you stop looking for.
+   *
+   * **Only the lens's own create gets the icon button**, though. Promoting both put two `⊕` glyphs
+   * side by side in one segment with nothing to tell them apart: `icons.ts` deliberately spends one
+   * id per *verb family*, so both creates draw the same plus, and an icon row where the answer to
+   * "which one is that" is "hover and find out" is a row you read twice. It also disagreed with the
+   * keyboard, which has always bound `Insert` to the mode's primary only.
+   *
+   * One button, matching `Insert`, is also what every other module does — `TOOLBAR.create` is a
+   * single weight, and the Outline's `New ▾` menu is where its *other* kinds live. `navigation.md`'s
+   * tier table agrees on which one is which: logging a session is every-session work and belongs on
+   * the bar; the catalog is built once and added to rarely, which is menu work.
    */
   const commands = useMemo<Command[]>(
     () => [
@@ -227,7 +237,7 @@ export function FitnessView({
         menu: "new",
         section: "New",
         icon: "new",
-        toolbar: mode === "sessions" ? 10 : 11,
+        toolbar: mode === "sessions" ? 10 : undefined,
         keywords: "workout training record",
         bindings:
           mode === "sessions"
@@ -242,7 +252,7 @@ export function FitnessView({
         menu: "new",
         section: "New",
         icon: "new",
-        toolbar: mode === "exercises" ? 10 : 11,
+        toolbar: mode === "exercises" ? 10 : undefined,
         keywords: "movement lift catalog",
         bindings:
           mode === "exercises"
