@@ -1,4 +1,4 @@
-import { encodePriority } from "@/lib/achieve/encodings";
+import { priorityOrderValue } from "@/lib/priority/order";
 import { parsePriority } from "@/lib/tree/format";
 
 /**
@@ -234,8 +234,10 @@ function endsInsensitive(cell: string, operand: string): boolean {
 }
 
 /**
- * Blank cells fail every comparison. Priority uses Achieve's int encoding so A1 < A10 < B;
- * dates compare as ISO day strings; everything else is locale string order.
+ * Blank cells fail every comparison. Priority uses the grid's own ordering so A1 < A10 <
+ * bare A < B — the same key the Pri column sorts on, or "greater than B1" would answer one
+ * thing in the filter and another in the sort. Dates compare as ISO day strings; everything
+ * else is locale string order.
  */
 function compare(
   cell: string,
@@ -284,8 +286,8 @@ function applyCompare(
 
 function priorityKey(raw: string): number | null {
   const parsed = parsePriority(raw);
-  if (!parsed || parsed.letter === null) return null;
-  return encodePriority({ letter: parsed.letter, rank: parsed.rank });
+  if (!parsed) return null;
+  return priorityOrderValue(parsed.letter, parsed.rank);
 }
 
 /** Human-readable expression for the dialog footer, e.g. `[State] ≠ 'Cn' AND …`. */

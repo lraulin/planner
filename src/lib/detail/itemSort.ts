@@ -1,5 +1,5 @@
 import type { NodeItem } from "@/db/schema";
-import { encodePriority } from "@/lib/achieve/encodings";
+import { priorityOrderValue } from "@/lib/priority/order";
 import {
   compareSortValues,
   type SortDirection,
@@ -46,16 +46,13 @@ export function cycleItemSort(
 }
 
 /**
- * Cell value used for comparison. Mirrors the main grid's priority encoding so A1 < A2
- * < A10 < B, blanks sort last, and dates / numbers / booleans compare as themselves.
+ * Cell value used for comparison. Mirrors the main grid's priority ordering so A1 < A2
+ * < A10 < bare A < B1, blanks sort last, and dates / numbers / booleans compare as
+ * themselves.
  */
 export function itemSortValue(item: NodeItem, column: ItemSortColumn): SortValue {
   if (column === "priority") {
-    if (!item.priorityLetter) return null;
-    return encodePriority({
-      letter: item.priorityLetter,
-      rank: item.priorityRank,
-    });
+    return priorityOrderValue(item.priorityLetter, item.priorityRank);
   }
 
   const value = item[column];

@@ -106,6 +106,18 @@ describe("itemSortValue / sortItems", () => {
     ).toEqual(["4", "3", "1", "2"]);
   });
 
+  it("puts a ranked item above the bare letter it shares", () => {
+    const rows = [
+      item({ id: "bare", priorityLetter: "B", priorityRank: null }),
+      item({ id: "b2", priorityLetter: "B", priorityRank: 2 }),
+      item({ id: "b1", priorityLetter: "B", priorityRank: 1 }),
+    ];
+
+    expect(
+      sortItems(rows, { column: "priority", direction: "asc" }).map((r) => r.id),
+    ).toEqual(["b1", "b2", "bare"]);
+  });
+
   it("keeps blanks last when sorting priority descending", () => {
     const rows = [
       item({ id: "blank" }),

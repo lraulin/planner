@@ -1,7 +1,7 @@
 "use client";
 
 import type { NodeState, NodeType, PriorityLetter } from "@/db/schema";
-import { encodePriority } from "@/lib/achieve/encodings";
+import { priorityOrderValue } from "@/lib/priority/order";
 import { localDateKey, toDateKey } from "@/lib/schedule/geometry";
 import type { OutlineNode } from "@/lib/tree/types";
 import {
@@ -98,14 +98,9 @@ export function priorityColumn(): ColumnDef<OutlineColumnCtx> {
     filterKind: "priority",
     filterValue: (row) =>
       formatPriority(row.node.priorityLetter, row.node.priorityRank) || null,
-    // Achieve's int encoding so A1 < A2 < A10 < B, and blank sorts last (null).
+    // A1 < A2 < A10 < bare A < B1, and blank sorts last (null) — see `lib/priority/order`.
     sortValue: (row) =>
-      row.node.priorityLetter
-        ? encodePriority({
-            letter: row.node.priorityLetter,
-            rank: row.node.priorityRank,
-          })
-        : null,
+      priorityOrderValue(row.node.priorityLetter, row.node.priorityRank),
     render: (row, ctx) => (
       <PriorityCell
         key={`priority:${formatPriority(row.node.priorityLetter, row.node.priorityRank)}`}
@@ -624,12 +619,7 @@ export function projectPriorityColumn(): ColumnDef<OutlineColumnCtx> {
       formatPriority(row.node.projectPriorityLetter, row.node.projectPriorityRank) ||
       null,
     sortValue: (row) =>
-      row.node.projectPriorityLetter
-        ? encodePriority({
-            letter: row.node.projectPriorityLetter,
-            rank: row.node.projectPriorityRank,
-          })
-        : null,
+      priorityOrderValue(row.node.projectPriorityLetter, row.node.projectPriorityRank),
     compact: "hidden",
     render: (row) => (
       <ReadOnlyCell
@@ -651,10 +641,7 @@ export function lapColumn(): ColumnDef<OutlineColumnCtx> {
     align: "center",
     filterKind: "priority",
     filterValue: (row) => formatPriority(row.node.lapLetter, row.node.lapRank) || null,
-    sortValue: (row) =>
-      row.node.lapLetter
-        ? encodePriority({ letter: row.node.lapLetter, rank: row.node.lapRank })
-        : null,
+    sortValue: (row) => priorityOrderValue(row.node.lapLetter, row.node.lapRank),
     compact: "hidden",
     render: (row) => (
       <ReadOnlyCell

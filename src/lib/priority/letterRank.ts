@@ -1,4 +1,5 @@
 import type { PriorityLetter } from "@/db/schema";
+import { comparePriorityOrder, rankOrderValue } from "./order";
 
 /**
  * A hand-maintained ABCD ranking over a flat list, in the spirit of a Franklin Covey
@@ -25,8 +26,6 @@ import type { PriorityLetter } from "@/db/schema";
 
 export const PRIORITY_LETTERS: PriorityLetter[] = ["A", "B", "C", "D"];
 
-const LETTER_INDEX: Record<PriorityLetter, number> = { A: 0, B: 1, C: 2, D: 3 };
-
 /** Where an item currently sits in the ranking. */
 export type LetterRank = {
   letter: PriorityLetter | null;
@@ -49,6 +48,18 @@ export function letterRankEngine<T extends { id: string }>(
   read: (item: T) => LetterRank,
 ) {
   /**
+   * Order inside one letter: by rank, with a **bare** letter last. Same rule the grids sort
+   * on (`lib/priority/order`), which is what keeps a drop pool in the order the user is
+   * looking at — put bare first here and dropping onto the top B would renumber the row
+   * displayed at the bottom of the Bs.
+   *
+   * A no-op for the Task Chooser and day lists, where a letter always carries a rank.
+   */
+  function byRank(a: T, b: T): number {
+    return rankOrderValue(read(a).rank) - rankOrderValue(read(b).rank);
+  }
+
+  /**
    * Every item carrying `letter`, in rank order, excluding `excludeId`.
    *
    * Reads the **whole** list rather than whatever the grid is showing. A date filter or a
@@ -58,7 +69,7 @@ export function letterRankEngine<T extends { id: string }>(
   function itemsInLetter(items: T[], letter: PriorityLetter, excludeId?: string): T[] {
     return items
       .filter((item) => read(item).letter === letter && item.id !== excludeId)
-      .sort((a, b) => (read(a).rank ?? 0) - (read(b).rank ?? 0));
+      .sort(byRank);
   }
 
   /**
@@ -115,7 +126,7 @@ export function letterRankEngine<T extends { id: string }>(
         ...renumber(
           items
             .filter((item) => read(item).letter === letter && !dragSet.has(item.id))
-            .sort((a, b) => (read(a).rank ?? 0) - (read(b).rank ?? 0)),
+            .sort(byRank),
           letter,
         ),
       );
@@ -156,7 +167,7 @@ export function letterRankEngine<T extends { id: string }>(
 
     const members = items
       .filter((item) => read(item).letter === destination && !dragSet.has(item.id))
-      .sort((a, b) => (read(a).rank ?? 0) - (read(b).rank ?? 0));
+      .sort(byRank);
     const targetIndex = members.findIndex((item) => item.id === targetId);
     if (targetIndex === -1) return [];
 
@@ -189,7 +200,7 @@ export function letterRankEngine<T extends { id: string }>(
 
     const members = items
       .filter((item) => read(item).letter === letter && !dragSet.has(item.id))
-      .sort((a, b) => (read(a).rank ?? 0) - (read(b).rank ?? 0));
+      .sort(byRank);
     members.unshift(...dragged);
 
     return [
@@ -219,7 +230,7 @@ export function letterRankEngine<T extends { id: string }>(
         ...renumber(
           items
             .filter((item) => read(item).letter === source && !dragSet.has(item.id))
-            .sort((a, b) => (read(a).rank ?? 0) - (read(b).rank ?? 0)),
+            .sort(byRank),
           source,
         ),
       );
@@ -259,22 +270,14 @@ export function letterRankEngine<T extends { id: string }>(
   }
 
   /**
-   * Order two items: letter first, then rank. Unranked items sort **after** every ranked
-   * one and tie with each other, leaving the caller free to break that tie however the view
-   * wants (the chooser uses score; a day list uses insertion order).
+   * Order two items: letter first, then rank, with a bare letter after that letter's ranked
+   * items — one rule, shared with the grids (`lib/priority/order`). Unlettered items sort
+   * **after** every lettered one and tie with each other, leaving the caller free to break
+   * that tie however the view wants (the chooser uses score; a day list uses insertion
+   * order).
    */
   function compare(a: T, b: T): number {
-    const left = read(a);
-    const right = read(b);
-
-    if (left.letter === null && right.letter === null) return 0;
-    if (left.letter === null) return 1;
-    if (right.letter === null) return -1;
-
-    if (left.letter !== right.letter) {
-      return LETTER_INDEX[left.letter] - LETTER_INDEX[right.letter];
-    }
-    return (left.rank ?? 0) - (right.rank ?? 0);
+    return comparePriorityOrder(read(a), read(b));
   }
 
   return { compare, itemsInLetter, planAssign, planClear, planDrop, planDropOnLetter };
