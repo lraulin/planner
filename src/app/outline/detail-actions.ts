@@ -1,7 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-import { getCurrentUserId } from "@/lib/auth";
 import type { NodeItemKind } from "@/db/schema";
 import * as detail from "@/lib/detail/mutations";
 import { loadNodeDetail } from "@/lib/detail/queries";
@@ -11,7 +9,15 @@ import type {
   NodeDetailValues,
   NodeItemValues,
 } from "@/lib/detail/types";
-import type { ActionResult } from "./actions";
+import { revalidatePath } from "next/cache";
+import { getCurrentUserId } from "@/lib/auth";
+import {
+  actionErrorMessage,
+  run,
+  runQuery,
+  type ActionResult,
+  type QueryResult,
+} from "../actionResult";
 
 /**
  * Server actions behind the detail drawer. Same contract as `./actions.ts`: each resolves
@@ -19,37 +25,7 @@ import type { ActionResult } from "./actions";
  * rejected save renders inline in the drawer rather than crashing the outline behind it.
  */
 
-export type QueryResult<T> = { ok: true; data: T } | { ok: false; error: string };
-
-function message(error: unknown): string {
-  return error instanceof Error ? error.message : "Something went wrong.";
-}
-
-async function run<T>(work: (userId: string) => Promise<T>): Promise<ActionResult> {
-  try {
-    const userId = await getCurrentUserId();
-    const result = await work(userId);
-    revalidatePath("/", "layout");
-    return typeof result === "string" ? { ok: true, id: result } : { ok: true };
-  } catch (error) {
-    return { ok: false, error: message(error) };
-  }
-}
-
-/**
- * The read counterpart of `run`. Carries a payload back and does **not** revalidate —
- * opening a drawer should not invalidate the page it is drawn over.
- */
-async function runQuery<T>(
-  work: (userId: string) => Promise<T>,
-): Promise<QueryResult<T>> {
-  try {
-    const userId = await getCurrentUserId();
-    return { ok: true, data: await work(userId) };
-  } catch (error) {
-    return { ok: false, error: message(error) };
-  }
-}
+export type { QueryResult };
 
 export async function loadNodeDetailAction(
   nodeId: string,
@@ -122,7 +98,7 @@ export async function importNodeItemsAction(params: {
     revalidatePath("/", "layout");
     return { ok: true, data: { created: data.created } };
   } catch (error) {
-    return { ok: false, error: message(error) };
+    return { ok: false, error: actionErrorMessage(error) };
   }
 }
 

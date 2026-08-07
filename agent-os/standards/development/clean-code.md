@@ -84,7 +84,7 @@ There is one of each thing here. Use it; do not build a second one.
 | Centered dialog      | `ModalShell` (`src/components/detail/`) — see `components/modal-pattern.md` |
 | Record editing       | `Drawer` + `DrawerFooter` — see `components/drawer-pattern.md`              |
 | Views and commands   | the registries in `src/components/shell/` — see `components/navigation.md`  |
-| Server action result | the `run()` / `ActionResult` shape in `actions.ts`                          |
+| Server action result | `run()` / `runQuery()` / `ActionResult` in `src/app/actionResult.ts`        |
 | HTTP responses       | `{ ok, data }` / `{ ok, error }` — see `api/response-format.md`             |
 | Calendar dates       | `fromDateKey` / `toDateKey` — see `development/dates.md`                    |
 

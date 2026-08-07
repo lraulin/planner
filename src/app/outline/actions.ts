@@ -1,11 +1,10 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-import { getCurrentUserId } from "@/lib/auth";
 import type { NodeState, PriorityLetter } from "@/db/schema";
 import type { Position } from "@/lib/tree/types";
 import { nodeFromKind, type NodeKind } from "@/lib/tree/hierarchy";
 import * as tree from "@/lib/tree/mutations";
+import { run, type ActionResult } from "../actionResult";
 
 /**
  * Server actions wrapping the tree mutations. Each resolves the user itself, so no caller
@@ -13,23 +12,7 @@ import * as tree from "@/lib/tree/mutations";
  * is a normal outcome the grid reports inline, not a crash.
  */
 
-export type ActionResult = { ok: true; id?: string } | { ok: false; error: string };
-
-async function run<T>(work: (userId: string) => Promise<T>): Promise<ActionResult> {
-  try {
-    const userId = await getCurrentUserId();
-    const result = await work(userId);
-    // Layout-wide: mutations from /projects, /tasks, etc. must refresh the page the user
-    // is actually on, not only /outline.
-    revalidatePath("/", "layout");
-    return typeof result === "string" ? { ok: true, id: result } : { ok: true };
-  } catch (error) {
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : "Something went wrong.",
-    };
-  }
-}
+export type { ActionResult };
 
 /**
  * Creates a row from the kind the user picked. Dream is a kind and not a type, so this is

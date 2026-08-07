@@ -1,7 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-import { getCurrentUserId } from "@/lib/auth";
 import type {
   AppointmentCheck,
   PriorityLetter,
@@ -17,26 +15,9 @@ import type {
 } from "@/lib/schedule/mutations";
 import { startOfWeek } from "@/lib/schedule/geometry";
 import { syncWindow } from "@/lib/google/sync";
+import { run, type ActionResult } from "../actionResult";
 
-export type ActionResult = { ok: true; id?: string } | { ok: false; error: string };
-
-async function run<T>(work: (userId: string) => Promise<T>): Promise<ActionResult> {
-  try {
-    const userId = await getCurrentUserId();
-    const result = await work(userId);
-    revalidatePath("/", "layout");
-    return typeof result === "string"
-      ? { ok: true, id: result }
-      : result && typeof result === "object" && "id" in result
-        ? { ok: true, id: (result as { id: string }).id }
-        : { ok: true };
-  } catch (error) {
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : "Something went wrong.",
-    };
-  }
-}
+export type { ActionResult };
 
 // ── Time charts ──────────────────────────────────────────────────────────────
 

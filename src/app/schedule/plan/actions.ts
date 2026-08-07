@@ -1,32 +1,14 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { nodes, resultAreaDetails } from "@/db/schema";
-import { getCurrentUserId } from "@/lib/auth";
 import { fromDateKey } from "@/lib/schedule/geometry";
 import * as planning from "@/lib/planning/mutations";
 import type { PlanEntryPatch, WeeklyPlanPatch } from "@/lib/planning/mutations";
+import { run, type ActionResult } from "../../actionResult";
 
-export type ActionResult = { ok: true; id?: string } | { ok: false; error: string };
-
-/** Same wrapper as `src/app/schedule/actions.ts`: resolve the user, delegate, revalidate. */
-async function run<T>(work: (userId: string) => Promise<T>): Promise<ActionResult> {
-  try {
-    const userId = await getCurrentUserId();
-    const result = await work(userId);
-    revalidatePath("/", "layout");
-    return result && typeof result === "object" && "id" in result
-      ? { ok: true, id: (result as { id: string }).id }
-      : { ok: true };
-  } catch (error) {
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : "Something went wrong.",
-    };
-  }
-}
+export type { ActionResult };
 
 export async function startWeeklyPlanAction(input: {
   weekKey: string;

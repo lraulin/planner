@@ -5,11 +5,12 @@ import { getCurrentUserId } from "@/lib/auth";
 import * as settings from "@/lib/settings/mutations";
 import { disconnectGoogle, setCalendarSyncEnabled } from "@/lib/google/mutations";
 import { refreshCalendarsFromGoogle } from "@/lib/google/sync";
+import { run as runAction, type ActionResult } from "../actionResult";
 
 /**
  * Thin wrappers: resolve the user, delegate, and return `{ ok: false, error }` rather than
- * throwing. Same `run()` shape as `src/app/day/actions.ts`, with one deliberate omission —
- * **no `revalidatePath`**.
+ * throwing. Same `run()` as everywhere else, with one deliberate omission —
+ * **no `revalidatePath`**, which is why every call here passes `revalidate: []`.
  *
  * These fire on every filter change, sort click, and column drag. Revalidating the layout
  * for each one would refetch the entire page tree to deliver state the client already
@@ -17,19 +18,10 @@ import { refreshCalendarsFromGoogle } from "@/lib/google/sync";
  * page load reads, and every page is `force-dynamic`, so it re-reads on navigation anyway.
  */
 
-export type ActionResult = { ok: true } | { ok: false; error: string };
+export type { ActionResult };
 
-async function run(work: (userId: string) => Promise<void>): Promise<ActionResult> {
-  try {
-    const userId = await getCurrentUserId();
-    await work(userId);
-    return { ok: true };
-  } catch (error) {
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : "Something went wrong.",
-    };
-  }
+function run(work: (userId: string) => Promise<void>): Promise<ActionResult> {
+  return runAction(work, { revalidate: [] });
 }
 
 /**
@@ -94,17 +86,7 @@ export async function setCalendarSyncEnabledAction(
   calendarId: string,
   enabled: boolean,
 ): Promise<ActionResult> {
-  try {
-    const userId = await getCurrentUserId();
-    await setCalendarSyncEnabled(userId, calendarId, enabled);
-    // Unlike the preference writes above, this one does revalidate: turning a calendar on
-    // or off changes what the schedule shows, not just how it is laid out.
-    revalidatePath("/", "layout");
-    return { ok: true };
-  } catch (error) {
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : "Something went wrong.",
-    };
-  }
+  // Unlike the preference writes above, this one takes the default revalidation: turning a
+  // calendar on or off changes what the schedule shows, not just how it is laid out.
+  return runAction((userId) => setCalendarSyncEnabled(userId, calendarId, enabled));
 }

@@ -1,7 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-import { getCurrentUserId } from "@/lib/auth";
 import * as fitness from "@/lib/fitness/mutations";
 import {
   getSessionDetail,
@@ -11,26 +9,26 @@ import {
   loadLatestForExercise,
 } from "@/lib/fitness/queries";
 import type { ExercisePrefs, SessionInput } from "@/lib/fitness/types";
+import {
+  runWithData,
+  type DataActionResult,
+  type RevalidateTarget,
+} from "../actionResult";
 
-export type ActionResult =
-  { ok: true; id?: string; data?: unknown } | { ok: false; error: string };
+export type ActionResult = DataActionResult<unknown>;
 
-async function run<T>(work: (userId: string) => Promise<T>): Promise<ActionResult> {
-  try {
-    const userId = await getCurrentUserId();
-    const result = await work(userId);
-    revalidatePath("/fitness");
-    revalidatePath("/fitness", "layout");
-    revalidatePath("/", "layout");
-    if (typeof result === "string") return { ok: true, id: result };
-    if (result === undefined || result === null) return { ok: true };
-    return { ok: true, data: result };
-  } catch (error) {
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : "Something went wrong.",
-    };
-  }
+/**
+ * Fitness reads through its action surface as well as writing to it, so results carry
+ * `data`. The extra `/fitness` targets are belt-and-braces on top of the root layout.
+ */
+const FITNESS_REVALIDATE: readonly RevalidateTarget[] = [
+  { path: "/fitness" },
+  { path: "/fitness", type: "layout" },
+  { path: "/", type: "layout" },
+];
+
+function run<T>(work: (userId: string) => Promise<T>): Promise<ActionResult> {
+  return runWithData(work, { revalidate: FITNESS_REVALIDATE });
 }
 
 export async function createExerciseAction(name: string, prefs?: ExercisePrefs) {

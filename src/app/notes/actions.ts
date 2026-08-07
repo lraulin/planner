@@ -1,32 +1,17 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-import { getCurrentUserId } from "@/lib/auth";
 import * as notes from "@/lib/notes/mutations";
 import type { NoteInput } from "@/lib/notes/mutations";
 import type { NotePosition } from "@/lib/notes/types";
+import { run, type ActionResult } from "../actionResult";
 
 /**
  * Thin wrappers: resolve the user, delegate, and return `{ ok: false, error }` rather than
  * throwing, so a rejected save renders inline instead of crashing the view
- * (`drawer-pattern.md`). Same `run()` shape as `src/app/schedule/actions.ts`.
+ * (`drawer-pattern.md`).
  */
 
-export type ActionResult = { ok: true; id?: string } | { ok: false; error: string };
-
-async function run<T>(work: (userId: string) => Promise<T>): Promise<ActionResult> {
-  try {
-    const userId = await getCurrentUserId();
-    const result = await work(userId);
-    revalidatePath("/", "layout");
-    return typeof result === "string" ? { ok: true, id: result } : { ok: true };
-  } catch (error) {
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : "Something went wrong.",
-    };
-  }
-}
+export type { ActionResult };
 
 export async function createNoteAction(params: {
   parentId?: string | null;

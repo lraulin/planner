@@ -6,6 +6,7 @@ import { captureItems, type CaptureDefaults } from "@/lib/capture/mutations";
 import { parseCapture } from "@/lib/capture/parse";
 import { loadOutline } from "@/lib/tree/queries";
 import type { NodeType } from "@/db/schema";
+import { actionErrorMessage } from "../actionResult";
 
 /**
  * Server actions for quick capture. Thin wrappers, as elsewhere: resolve the user, delegate
@@ -38,10 +39,7 @@ export async function captureAction(input: {
     revalidatePath("/", "layout");
     return { ok: true, count: nodeIds.length };
   } catch (error) {
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : "Something went wrong.",
-    };
+    return { ok: false, error: actionErrorMessage(error) };
   }
 }
 

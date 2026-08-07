@@ -3,6 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUserId } from "@/lib/auth";
 import {
+  actionErrorMessage,
+  runWithData,
+  type DataActionResult,
+} from "../actionResult";
+import {
   createMetric,
   createMetricEntry,
   deleteMetric,
@@ -20,27 +25,19 @@ import {
 } from "@/lib/metrics/queries";
 import type { MetricDetail, MetricListRow } from "@/lib/metrics/types";
 
-export type ActionResult =
-  | { ok: true; id?: string; data?: MetricDetail | MetricListRow[] }
-  | { ok: false; error: string };
+/**
+ * Metrics reads through its action surface as well as writing to it, so results carry
+ * `data` and the clients discriminate on it at runtime (`Array.isArray`).
+ */
+export type ActionResult = DataActionResult<MetricDetail | MetricListRow[]>;
 
 export type ImportActionResult =
   { ok: true; data: ImportMetricEntriesResult } | { ok: false; error: string };
 
-async function run<T>(work: (userId: string) => Promise<T>): Promise<ActionResult> {
-  try {
-    const userId = await getCurrentUserId();
-    const result = await work(userId);
-    revalidatePath("/", "layout");
-    if (typeof result === "string") return { ok: true, id: result };
-    if (result === undefined || result === null) return { ok: true };
-    return { ok: true, data: result as MetricDetail | MetricListRow[] };
-  } catch (error) {
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : "Something went wrong.",
-    };
-  }
+function run(
+  work: (userId: string) => Promise<MetricDetail | MetricListRow[] | string | void>,
+): Promise<ActionResult> {
+  return runWithData(work);
 }
 
 export async function listMetricsAction(): Promise<ActionResult> {
@@ -105,10 +102,7 @@ export async function importMetricEntriesAction(
     revalidatePath("/", "layout");
     return { ok: true, data };
   } catch (error) {
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : "Something went wrong.",
-    };
+    return { ok: false, error: actionErrorMessage(error) };
   }
 }
 

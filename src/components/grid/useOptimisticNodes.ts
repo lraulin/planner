@@ -2,8 +2,10 @@
 
 import { useCallback, useMemo, useState, useTransition } from "react";
 import type { OutlineNode } from "@/lib/tree/types";
+// The contract a server action returns; components may import the type, never the runner.
+import type { ActionResult } from "@/app/actionResult";
 
-export type ActionResult = { ok: true; id?: string } | { ok: false; error: string };
+export type { ActionResult };
 
 /**
  * Layers optimistic patches on top of the server-provided tree. The server remains the

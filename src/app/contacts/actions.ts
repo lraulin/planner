@@ -1,7 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
-import { getCurrentUserId } from "@/lib/auth";
 import type { ContactItemKind, PriorityLetter } from "@/db/schema";
 import {
   createContact,
@@ -27,41 +25,9 @@ import type {
   ContactOption,
 } from "@/lib/contacts/types";
 
-export type ActionResult = { ok: true; id?: string } | { ok: false; error: string };
+import { run, runQuery, type ActionResult, type QueryResult } from "../actionResult";
 
-/**
- * Errors are returned rather than thrown, so a rejected save renders inline in the drawer
- * instead of taking the page down — `drawer-pattern.md`.
- */
-async function run<T>(work: (userId: string) => Promise<T>): Promise<ActionResult> {
-  try {
-    const userId = await getCurrentUserId();
-    const result = await work(userId);
-    revalidatePath("/", "layout");
-    return typeof result === "string" ? { ok: true, id: result } : { ok: true };
-  } catch (error) {
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : "Something went wrong.",
-    };
-  }
-}
-
-type QueryResult<T> = { ok: true; data: T } | { ok: false; error: string };
-
-async function runQuery<T>(
-  work: (userId: string) => Promise<T>,
-): Promise<QueryResult<T>> {
-  try {
-    const userId = await getCurrentUserId();
-    return { ok: true, data: await work(userId) };
-  } catch (error) {
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : "Something went wrong.",
-    };
-  }
-}
+export type { ActionResult };
 
 // ── Contacts ─────────────────────────────────────────────────────────────────
 
