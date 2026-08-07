@@ -10,8 +10,6 @@ import { run, type ActionResult } from "../actionResult";
  * throwing, so a rejected save renders inline instead of crashing the view.
  */
 
-export type { ActionResult };
-
 export async function createDailyItemAction(params: {
   day: string;
   title: string;

@@ -25,8 +25,6 @@ import {
  * rejected save renders inline in the drawer rather than crashing the outline behind it.
  */
 
-export type { QueryResult };
-
 export async function loadNodeDetailAction(
   nodeId: string,
 ): Promise<QueryResult<NodeDetail | null>> {

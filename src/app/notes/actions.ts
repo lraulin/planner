@@ -11,8 +11,6 @@ import { run, type ActionResult } from "../actionResult";
  * (`drawer-pattern.md`).
  */
 
-export type { ActionResult };
-
 export async function createNoteAction(params: {
   parentId?: string | null;
   position?: NotePosition;

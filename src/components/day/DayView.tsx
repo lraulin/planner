@@ -19,8 +19,8 @@ import {
   setDailyItemStateAction,
   setDailyPrioritiesAction,
   updateDailyItemTitleAction,
-  type ActionResult,
 } from "@/app/day/actions";
+import type { ActionResult } from "@/app/actionResult";
 import { AppointmentsPane, type DayAppointment } from "./AppointmentsPane";
 import { DailyItemsGrid } from "./DailyItemsGrid";
 import { DailyNotesPane } from "./DailyNotesPane";

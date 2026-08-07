@@ -12,8 +12,6 @@ import { run, type ActionResult } from "../actionResult";
  * is a normal outcome the grid reports inline, not a crash.
  */
 
-export type { ActionResult };
-
 /**
  * Creates a row from the kind the user picked. Dream is a kind and not a type, so this is
  * where it becomes a goal with the box ticked — the one translation between what the UI

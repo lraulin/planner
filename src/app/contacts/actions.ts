@@ -27,8 +27,6 @@ import type {
 
 import { run, runQuery, type ActionResult, type QueryResult } from "../actionResult";
 
-export type { ActionResult };
-
 // ── Contacts ─────────────────────────────────────────────────────────────────
 
 export async function createContactAction(input?: ContactInput): Promise<ActionResult> {

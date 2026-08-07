@@ -18,8 +18,6 @@ import { run as runAction, type ActionResult } from "../actionResult";
  * page load reads, and every page is `force-dynamic`, so it re-reads on navigation anyway.
  */
 
-export type { ActionResult };
-
 function run(work: (userId: string) => Promise<void>): Promise<ActionResult> {
   return runAction(work, { revalidate: [] });
 }

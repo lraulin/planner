@@ -13,8 +13,6 @@ import type {
 } from "@/lib/resources/types";
 import { run, runQuery, type ActionResult, type QueryResult } from "../actionResult";
 
-export type { ActionResult };
-
 export async function createResourceAction(
   input?: ResourceInput,
 ): Promise<ActionResult> {

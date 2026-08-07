@@ -17,8 +17,6 @@ import { startOfWeek } from "@/lib/schedule/geometry";
 import { syncWindow } from "@/lib/google/sync";
 import { run, type ActionResult } from "../actionResult";
 
-export type { ActionResult };
-
 // ── Time charts ──────────────────────────────────────────────────────────────
 
 export async function createTimeChartAction(name: string): Promise<ActionResult> {

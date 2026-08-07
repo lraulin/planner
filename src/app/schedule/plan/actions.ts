@@ -8,8 +8,6 @@ import * as planning from "@/lib/planning/mutations";
 import type { PlanEntryPatch, WeeklyPlanPatch } from "@/lib/planning/mutations";
 import { run, type ActionResult } from "../../actionResult";
 
-export type { ActionResult };
-
 export async function startWeeklyPlanAction(input: {
   weekKey: string;
   weekStartsOn?: number;

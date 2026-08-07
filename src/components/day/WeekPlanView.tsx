@@ -8,11 +8,8 @@ import { buildChooserItems, defaultSettings } from "@/lib/chooser/views";
 import { formatPriority } from "@/lib/tree/format";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { DailyItemView, WeekPayload } from "@/lib/day/types";
-import {
-  moveDailyItemToDayAction,
-  planNodeForDayAction,
-  type ActionResult,
-} from "@/app/day/actions";
+import { moveDailyItemToDayAction, planNodeForDayAction } from "@/app/day/actions";
+import type { ActionResult } from "@/app/actionResult";
 import { WideSurface } from "@/components/shell/WideSurface";
 import { DayHeader } from "./DayHeader";
 

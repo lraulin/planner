@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState } from "react";
-import type { ActionResult } from "@/app/outline/actions";
+import type { ActionResult } from "@/app/actionResult";
 import type { NodeState } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
 import { cascadeStateChange, openDescendantCount } from "@/lib/tree/completionCascade";
