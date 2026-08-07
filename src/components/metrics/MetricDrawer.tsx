@@ -225,6 +225,26 @@ function MetricForm({
     [displayEntries],
   );
 
+  /**
+   * The selection as it applies to what is on screen.
+   *
+   * Deleting an entry leaves its id in `selectedIds` — nothing removes it — which used to
+   * make "Copy (N)" count rows that were gone. Derived rather than synced: the grid's
+   * `pruneSelection` would do this, but it also selects the first row whenever the set
+   * comes back empty, which here would light up a row every time an entry was deleted.
+   * A stale anchor is dropped for the same reason: `applySelect` keeps an anchor it cannot
+   * find, so Shift-click would stay stuck on the missing row instead of re-anchoring.
+   */
+  const liveSelectedIds = useMemo(() => {
+    const visible = new Set(orderedEntryIds);
+    return new Set([...selectedIds].filter((id) => visible.has(id)));
+  }, [selectedIds, orderedEntryIds]);
+
+  const liveAnchor =
+    selectionAnchor && orderedEntryIds.includes(selectionAnchor)
+      ? selectionAnchor
+      : null;
+
   const selectEntryRow = useCallback(
     (entryId: string, event: ReactMouseEvent) => {
       const toggle = event.metaKey || event.ctrlKey;
@@ -232,16 +252,16 @@ function MetricForm({
       // row clears the selection. `applySelect` refuses to go empty because a grid always
       // needs a focus row for its keyboard commands; here selection is incidental — it
       // exists to enable Copy — and starts empty, so being able to put it back is right.
-      if (toggle && selectedIds.size === 1 && selectedIds.has(entryId)) {
+      if (toggle && liveSelectedIds.size === 1 && liveSelectedIds.has(entryId)) {
         setSelectedIds(new Set());
         setSelectionAnchor(null);
         return;
       }
       const result = applySelect(
-        selectedIds,
-        selectionAnchor,
+        liveSelectedIds,
+        liveAnchor,
         // The grid's focus row: this table has none, so the anchor stands in for it.
-        selectionAnchor,
+        liveAnchor,
         entryId,
         orderedEntryIds,
         { extend: event.shiftKey, toggle },
@@ -249,29 +269,29 @@ function MetricForm({
       setSelectedIds(result.selectedIds);
       setSelectionAnchor(result.anchorId);
     },
-    [selectedIds, selectionAnchor, orderedEntryIds],
+    [liveSelectedIds, liveAnchor, orderedEntryIds],
   );
 
   const copySelectedEntries = useCallback(async () => {
-    const rows = pickEntriesInOrder(displayEntries, selectedIds);
+    const rows = pickEntriesInOrder(displayEntries, liveSelectedIds);
     if (rows.length === 0) return;
     const text = entriesToClipboardTsv(rows, { includeTarget: showTargetColumn });
     await writeClipboardText(text);
-  }, [displayEntries, selectedIds, showTargetColumn]);
+  }, [displayEntries, liveSelectedIds, showTargetColumn]);
 
   useEffect(() => {
     if (tab !== "tracking") return;
     function onKeyDown(event: KeyboardEvent) {
       if (isTypingTarget(event.target)) return;
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "c") {
-        if (selectedIds.size === 0) return;
+        if (liveSelectedIds.size === 0) return;
         event.preventDefault();
         void copySelectedEntries();
       }
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [tab, selectedIds, copySelectedEntries]);
+  }, [tab, liveSelectedIds, copySelectedEntries]);
 
   const reloadDetail = () => {
     startTransition(async () => {
@@ -652,13 +672,14 @@ function MetricForm({
                 >
                   + Entry
                 </button>
-                {selectedIds.size > 0 && (
+                {liveSelectedIds.size > 0 && (
                   <button
                     type="button"
                     onClick={() => void copySelectedEntries()}
                     className={trackingActionClass}
                   >
-                    Copy{selectedIds.size > 1 ? ` (${selectedIds.size})` : ""}
+                    Copy
+                    {liveSelectedIds.size > 1 ? ` (${liveSelectedIds.size})` : ""}
                   </button>
                 )}
                 <button
@@ -745,7 +766,7 @@ function MetricForm({
                     </tr>
                   )}
                   {displayEntries.map((entry) => {
-                    const selected = selectedIds.has(entry.id);
+                    const selected = liveSelectedIds.has(entry.id);
                     const focusRow = () => {
                       freezeDisplayOrder();
                       const result = selectOnly(entry.id);
