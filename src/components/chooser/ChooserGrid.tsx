@@ -115,7 +115,6 @@ export function ChooserGrid({
     onCopyAsText: tab.copySelectionAsText,
     onStateChange: tab.cellHandlers.onStateChange,
   });
-  const [dateFilter, setDateFilter] = useState<ChooserDateFilter>("none");
   const [limit, setLimit] = useState(INITIAL_LIMIT);
   const [showSettings, setShowSettings] = useState(false);
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
@@ -139,6 +138,7 @@ export function ChooserGrid({
    */
   const { settings, update, reset } = useChooserSettings(views.viewId, views.base);
   const view = chooserView(views.base);
+  const dateFilter = settings.dateFilter;
 
   /**
    * Scoring needs a day to measure against, and on the server there isn't one. `null` is
@@ -345,7 +345,7 @@ export function ChooserGrid({
               label="Date"
               value={dateFilter}
               onChange={(value) => {
-                setDateFilter(value as ChooserDateFilter);
+                update({ dateFilter: value as ChooserDateFilter });
                 setLimit(INITIAL_LIMIT);
               }}
               options={DATE_FILTERS.map((entry) => ({

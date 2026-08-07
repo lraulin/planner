@@ -56,6 +56,17 @@ export type ChooserSettings = {
    * Purely a display filter. It changes nothing about the task and never touches the score.
    */
   hidePlanned: boolean;
+  /**
+   * Achieve's Date Filter dropdown (manual §8) — Current, Overdue, Behind Schedule, Due
+   * Soon, the next-N-days bands, and Group By Deadline.
+   *
+   * Per view like everything else here, because the views ask different questions: Urgent
+   * narrowed to Overdue and Best Overall showing everything is a coherent pair, and one
+   * shared value would make picking a view silently re-narrow the list. Defaults to `none`
+   * everywhere — a view's own `keep` and weights already say what it is about, and a
+   * default that hides work would be a filter nobody chose.
+   */
+  dateFilter: ChooserDateFilter;
 };
 
 /** One scored candidate, with the ancestor facts gathered on the way. */

@@ -3,12 +3,17 @@ import {
   asBoolean,
   asFiniteNumber,
   asKnownStringArray,
+  asOneOf,
   asRecord,
 } from "@/lib/settings/parse";
 import { SETTINGS_VERSION } from "@/lib/settings/scopes";
 import { DEFAULT_WEIGHTS, type ChooserWeights } from "./score";
-import type { ChooserSettings, ChooserViewId } from "./types";
-import { defaultSettings } from "./views";
+import type { ChooserDateFilter, ChooserSettings, ChooserViewId } from "./types";
+import { DATE_FILTERS, defaultSettings } from "./views";
+
+const DATE_FILTER_IDS: readonly ChooserDateFilter[] = DATE_FILTERS.map(
+  (entry) => entry.id,
+);
 
 /**
  * Reading and writing the Task Chooser's per-view settings blob.
@@ -56,6 +61,11 @@ export function parseChooserSettings(
      */
     states: asKnownStringArray(stored.states, ALL_STATES, base.states) as NodeState[],
     hidePlanned: asBoolean(stored.hidePlanned, base.hidePlanned),
+    /**
+     * Membership-checked against the list the dropdown offers, so a band we later rename or
+     * drop degrades to "no date filter" rather than to a filter that quietly matches nothing.
+     */
+    dateFilter: asOneOf(stored.dateFilter, DATE_FILTER_IDS, base.dateFilter),
   };
 }
 

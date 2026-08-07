@@ -83,4 +83,31 @@ describe("parseChooserSettings", () => {
       parseChooserSettings({ states: "not_started" }, "best-overall").states,
     ).toEqual(defaultSettings("best-overall").states);
   });
+
+  it("keeps a stored date filter", () => {
+    expect(parseChooserSettings({ dateFilter: "overdue" }, "urgent").dateFilter).toBe(
+      "overdue",
+    );
+  });
+
+  /**
+   * A band that has been renamed or dropped must degrade to "no date filter". Passing the
+   * unknown id straight through would give `applyDateFilter` a value none of its cases
+   * match, and its switch returns `undefined` — every row filtered out, an empty Chooser
+   * with a filter nobody can see the meaning of.
+   */
+  it("falls back for a band that is not on the dropdown", () => {
+    for (const bad of ["next-90", "", 3, null, ["overdue"]]) {
+      expect(parseChooserSettings({ dateFilter: bad }, "urgent").dateFilter).toBe(
+        "none",
+      );
+    }
+  });
+
+  /** The field was added after the scope shipped, so every stored blob is missing it. */
+  it("leaves an older blob unfiltered rather than guessing", () => {
+    expect(parseChooserSettings({ hidePlanned: true }, "todo-list").dateFilter).toBe(
+      "none",
+    );
+  });
 });

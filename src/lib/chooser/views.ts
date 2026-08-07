@@ -211,6 +211,7 @@ export function defaultSettings(id: ChooserViewId): ChooserSettings {
     // The To-do List *is* the master list, so planning something takes it off. The scoring
     // views are answering a different question and keep showing everything.
     hidePlanned: id === "todo-list",
+    dateFilter: "none",
   };
 }
 
