@@ -1,3 +1,4 @@
+import { daysInMonth } from "@/lib/dateMath";
 import { localDateKey as wallClockDay } from "@/lib/schedule/geometry";
 
 /** Parse a DB `numeric` string (or number) into a finite number, else null. */
@@ -43,7 +44,19 @@ export function localDateKey(d: Date = new Date()): string {
   return wallClockDay(d);
 }
 
-/** True when s looks like `YYYY-MM-DD`. */
+/**
+ * True when `s` is `YYYY-MM-DD` **and names a day that exists**.
+ *
+ * The shape alone is not enough. This guards three untrusted inputs — the agent API's
+ * `entryDate`, the tracking CSV import, and `createMetricEntry` — and all three write a
+ * Postgres `date`, which rejects `2026-06-31` outright. Shape-only, that rejection arrived as
+ * a swallowed driver error: `log_metric_entry` answered `{"code":"internal","message":
+ * "Internal error"}`, and the CSV importer accepted the row and then failed the whole file.
+ * Deciding it here means the caller is told which day it got wrong.
+ */
 export function isDateKey(s: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(s);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!match) return false;
+  const [, year, month, day] = match.map(Number);
+  return month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth(year, month);
 }

@@ -798,7 +798,14 @@ function parseDateKey(
   if (value === undefined) return undefined;
   if (value === null || value === "") return null;
   if (!isDateKey(value)) {
-    throw new AgentError("validation", `${field} must be YYYY-MM-DD`);
+    // Two different mistakes, and telling them apart is the difference between "reformat it"
+    // and "count the days in that month again". `2026-06-31` is the right shape.
+    throw new AgentError(
+      "validation",
+      /^\d{4}-\d{2}-\d{2}$/.test(value)
+        ? `${field} is not a date that exists: ${value}`
+        : `${field} must be YYYY-MM-DD`,
+    );
   }
   return value;
 }
