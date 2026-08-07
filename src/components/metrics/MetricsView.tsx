@@ -156,8 +156,6 @@ export function MetricsView({
     return list;
   }, [rows, activeOnly]);
 
-  const navigableIds = useMemo(() => visible.map((r) => r.id), [visible]);
-
   // Fall back to the first visible row when the selection is filtered out (e.g. Active only).
   const selected = visible.find((r) => r.id === selectedId) ?? visible[0] ?? null;
 
@@ -186,6 +184,15 @@ export function MetricsView({
         rows: groupRows,
       }));
   }, [visible, groupByOwner]);
+
+  // Taken from `grouped`, which is what both the table and the compact list render. `visible`
+  // is the pre-grouping order, and Group by Owner reorders: the ownerless group is hoisted to
+  // the front and the rest go alphabetically by owner, while `sortKey` interleaves them. Arrow
+  // keys walking that order jump somewhere other than the next row down.
+  const navigableIds = useMemo(
+    () => grouped.flatMap((group) => group.rows.map((row) => row.id)),
+    [grouped],
+  );
 
   const createNew = useCallback(() => {
     setDrawerPending(true);
