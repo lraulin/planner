@@ -41,6 +41,31 @@ const eslintConfig = defineConfig([
     },
   },
 
+  // `"use server"` files may only export async functions. A type-only *re-export*
+  // (`export type { X }` / `export type { X } from "…"`) looks like it disappears at compile
+  // time, and under `tsc` it does — but Turbopack emits a runtime reference to the binding
+  // and the server chunk dies with `ReferenceError: X is not defined` the moment it is
+  // evaluated. Nothing else catches it: tsc erases the type, the unit tests never import a
+  // `"use server"` module, and `next build` compiles these files without evaluating them
+  // because every route is `force-dynamic`. It reached production once already.
+  //
+  // Declaring a type is fine (`export type ActionResult = …`), which is why this matches only
+  // an export with specifiers and no declaration. Components that want the shared type should
+  // import it from `@/app/actionResult` rather than through an action module.
+  {
+    files: ["src/app/**/*actions.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: 'ExportNamedDeclaration[declaration=null][exportKind="type"]',
+          message:
+            'No type re-exports from a "use server" file — Turbopack emits a runtime reference and the server chunk throws ReferenceError. Import the type from @/app/actionResult instead.',
+        },
+      ],
+    },
+  },
+
   // Warn-by-default rules worth failing on. With --max-warnings=0 the severity is
   // moot, but the intent should be explicit rather than implied by a CLI flag.
   {

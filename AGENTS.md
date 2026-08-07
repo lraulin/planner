@@ -52,6 +52,14 @@ are the one gate that cannot be automated into a hook:
 - `npm run test:unit` passing does **not** mean the database tests ran — they skip when
   Postgres is down. Check for the skip warning after changing `mutations.ts` or
   `queries.ts`.
+- **A green gate is not proof the app runs.** Nothing above evaluates a `"use server"`
+  module: the tests never import one, and `next build` compiles the routes without
+  rendering them because every page is `force-dynamic`. That gap once shipped a
+  `ReferenceError` on every page with lint, typecheck, 2000 tests and the build all
+  passing. After touching anything under `src/app/**`, start the dev server and run
+  **`npm run smoke`** — it loads all 23 routes and fails on any that will not render. It is
+  not in a git hook because it needs a server running; it is a step you take, not one that
+  takes itself.
 
 ### Agent OS & spec-driven development
 
