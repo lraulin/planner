@@ -48,4 +48,25 @@ describe("requireAgentApiKey", () => {
     process.env.PLANNER_AGENT_API_KEY = "secret";
     expect(() => requireAgentApiKey(requestWithAuth("Bearer secret"))).not.toThrow();
   });
+
+  /**
+   * The comparison hashes both sides so `timingSafeEqual` always gets equal lengths. These
+   * pin the two ways that could go wrong: a token of a different length must still be
+   * rejected rather than throwing out of `timingSafeEqual`, and a token that merely shares a
+   * prefix must not pass.
+   */
+  it("rejects tokens of every wrong shape without throwing something else", () => {
+    process.env.PLANNER_AGENT_API_KEY = "secret";
+    for (const token of ["", "s", "secre", "secrets", "SECRET", "x".repeat(500)]) {
+      expect(() => requireAgentApiKey(requestWithAuth(`Bearer ${token}`))).toThrow(
+        /Invalid API key|Authorization must be Bearer/,
+      );
+    }
+  });
+
+  it("accepts a key long enough to be a real one", () => {
+    const key = "k".repeat(64);
+    process.env.PLANNER_AGENT_API_KEY = key;
+    expect(() => requireAgentApiKey(requestWithAuth(`Bearer ${key}`))).not.toThrow();
+  });
 });
