@@ -228,7 +228,21 @@ export function buildRecurrenceRule(fields: RecurrenceFields): string[] | undefi
   return [`RRULE:${parts.join(";")}`];
 }
 
-/** The machine's IANA zone — this is a single-user app running in its owner's timezone. */
+/**
+ * The **server process's** IANA zone, which is not necessarily anybody's.
+ *
+ * This was written as "the machine's zone — this is a single-user app running in its owner's
+ * timezone", and both halves have since stopped being true: `specs/2026-08-01-1042-multi-user-accounts`
+ * made the app multi-user, and a Vercel function runs in UTC. Nothing passes a zone in, so
+ * every event Planner writes to Google from the deployed app is stamped `UTC` — which for a
+ * recurring event is exactly the case `writeEventTime` below says the field exists for, since
+ * Google expands the RRULE in the named zone.
+ *
+ * Left as-is deliberately rather than half-fixed: where the zone should come from (the
+ * browser at write time, or a timezone stored on the account) is a product decision, and
+ * guessing here would only move the wrongness somewhere harder to find. See the
+ * 2026-08-07 overnight report.
+ */
 export function localTimeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 }
