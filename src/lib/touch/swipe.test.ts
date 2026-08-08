@@ -6,6 +6,7 @@ import {
   swipeAction,
   swipeAxis,
   swipeOffset,
+  swipeProgress,
 } from "@/lib/touch/swipe";
 
 describe("swipeAxis", () => {
@@ -39,19 +40,68 @@ describe("swipeAxis", () => {
 });
 
 describe("swipeOffset", () => {
-  it("follows the finger while horizontal", () => {
+  it("follows the finger exactly up to the trigger", () => {
     expect(swipeOffset(40, "horizontal")).toBe(40);
     expect(swipeOffset(-40, "horizontal")).toBe(-40);
+    expect(swipeOffset(SWIPE_TRIGGER_PX, "horizontal")).toBe(SWIPE_TRIGGER_PX);
   });
 
-  it("clamps in both directions so the gesture has a ceiling", () => {
-    expect(swipeOffset(500, "horizontal")).toBe(SWIPE_MAX_PX);
-    expect(swipeOffset(-500, "horizontal")).toBe(-SWIPE_MAX_PX);
+  it("resists past the trigger without ever reaching the ceiling", () => {
+    const far = swipeOffset(500, "horizontal");
+    expect(far).toBeGreaterThan(SWIPE_TRIGGER_PX);
+    expect(far).toBeLessThan(SWIPE_MAX_PX);
+    expect(swipeOffset(-500, "horizontal")).toBe(-far);
+  });
+
+  it("keeps resisting rather than stopping dead, however far the finger goes", () => {
+    // The point of the curve: a row that stops moving under a finger that has not reads as
+    // a broken page. Each further pixel still moves it, by less.
+    const near = swipeOffset(120, "horizontal");
+    const far = swipeOffset(400, "horizontal");
+    const further = swipeOffset(4000, "horizontal");
+    expect(far).toBeGreaterThan(near);
+    expect(further).toBeGreaterThan(far);
+    expect(further).toBeLessThan(SWIPE_MAX_PX);
+  });
+
+  it("hands over from tracking to resistance without a jump", () => {
+    // Slope 1 on both sides of the trigger, so there is no visible kink where the finger
+    // crosses it.
+    const before = swipeOffset(SWIPE_TRIGGER_PX - 0.5, "horizontal");
+    const after = swipeOffset(SWIPE_TRIGGER_PX + 0.5, "horizontal");
+    expect(after - before).toBeGreaterThan(0.9);
+    expect(after - before).toBeLessThan(1.01);
   });
 
   it("never moves the row for a vertical or uncommitted gesture", () => {
     expect(swipeOffset(40, "vertical")).toBe(0);
     expect(swipeOffset(40, "none")).toBe(0);
+  });
+
+  it("degrades to a clamp when the caller leaves no slack to stretch into", () => {
+    expect(swipeOffset(500, "horizontal", 40, 40)).toBe(40);
+    expect(swipeOffset(-500, "horizontal", 40, 40)).toBe(-40);
+  });
+});
+
+describe("swipeProgress", () => {
+  it("runs from nothing to armed across the trigger distance", () => {
+    expect(swipeProgress(0, "horizontal")).toBe(0);
+    expect(swipeProgress(SWIPE_TRIGGER_PX / 2, "horizontal")).toBeCloseTo(0.5);
+    expect(swipeProgress(SWIPE_TRIGGER_PX, "horizontal")).toBe(1);
+  });
+
+  it("reads the same in both directions", () => {
+    expect(swipeProgress(-30, "horizontal")).toBe(swipeProgress(30, "horizontal"));
+  });
+
+  it("stays at 1 past the trigger, since there is no more commitment to show", () => {
+    expect(swipeProgress(500, "horizontal")).toBe(1);
+  });
+
+  it("is nothing at all for a vertical or uncommitted gesture", () => {
+    expect(swipeProgress(500, "vertical")).toBe(0);
+    expect(swipeProgress(500, "none")).toBe(0);
   });
 });
 

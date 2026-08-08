@@ -454,13 +454,21 @@ export function DailyItemsGrid({
       return {
         right: {
           label: cancelled || done ? "Reopen" : "Complete",
+          tone: "positive",
+          icon: "complete",
           run: () => {
             if (cancelled) onSetState(itemId, "not_started");
             else onToggleComplete(itemId, !done);
           },
         },
         left: {
+          // Not the list tabs' Delete. Pushing an item to tomorrow is what you do to a day
+          // that did not go to plan, it is reversible, and removing an item from a day is
+          // not the same act as deleting the task — so this view keeps its own left action
+          // and the neutral-to-positive rail that goes with a reschedule.
           label: "Tomorrow",
+          tone: "positive",
+          icon: "schedule",
           run: () => onMoveToDay(itemId, tomorrow),
         },
       };

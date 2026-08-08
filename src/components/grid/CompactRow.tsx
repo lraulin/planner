@@ -11,16 +11,38 @@ import {
   pressUp,
   type PressState,
 } from "@/lib/touch/longPress";
-import { swipeAction, swipeAxis, swipeOffset, type SwipeAxis } from "@/lib/touch/swipe";
+import {
+  swipeAction,
+  swipeAxis,
+  swipeOffset,
+  swipeProgress,
+  type SwipeAxis,
+} from "@/lib/touch/swipe";
+import { haptic } from "@/lib/touch/haptics";
+import { CommandGlyph } from "@/components/icons/commandIcons";
+import type { CommandIcon } from "@/lib/commands/icons";
 import type { CompactFields } from "@/lib/grid/compactFields";
 import type { ColumnDef, NodeGridRow } from "./columns";
 
 /**
  * Opt-in row swipe, in the shape of `RowDrag`: the grid owns the gesture, the host owns the
- * meaning. Only reversible actions belong here (`responsive.md`) — nothing that deletes
- * without a way back.
+ * meaning.
+ *
+ * A direction either does something reversible, or it opens the same confirmation the row
+ * menu would (`responsive.md`). Nothing here fires an irreversible mutation on release.
  */
-export type RowSwipeAction = { label: string; run: () => void };
+export type RowSwipeAction = {
+  label: string;
+  /**
+   * What the rail looks like. `positive` is the affirmative half — complete, done — and
+   * `danger` is the half you have to mean, which in this app is always followed by a
+   * confirmation.
+   */
+  tone: "positive" | "danger";
+  /** Drawn above the label, from the same vocabulary the menus and toolbar use. */
+  icon: CommandIcon;
+  run: () => void;
+};
 
 export type RowSwipe = {
   /** Swiping the row leftwards. */
@@ -73,12 +95,22 @@ export function CompactRow<TCtx, TRow>({
 
   const origin = useRef<{ x: number; y: number } | null>(null);
   const axis = useRef<SwipeAxis>("none");
-  const [offset, setOffset] = useState(0);
+  /**
+   * How far the finger has travelled sideways, not how far the row has moved.
+   *
+   * Storing the input rather than the output is what lets the offset, the rail's fill and
+   * the armed state all be derived below by the pure functions in `lib/touch/swipe` — one
+   * piece of state, and a render that is a function of where the finger is.
+   */
+  const [travel, setTravel] = useState(0);
+  /** Whether releasing would fire, as of the last move. Drives the haptic edge, not a render. */
+  const armed = useRef(false);
 
   const endSwipe = useCallback(() => {
     origin.current = null;
     axis.current = "none";
-    setOffset(0);
+    armed.current = false;
+    setTravel(0);
   }, []);
 
   useEffect(() => {
@@ -100,9 +132,16 @@ export function CompactRow<TCtx, TRow>({
     ...fields.meta.map((column) => textOf(column, row, columnCtx)),
   ].filter((text): text is string => Boolean(text));
 
+  const offset = swipeOffset(travel, "horizontal");
+  const action = travel < 0 ? swipe?.left : travel > 0 ? swipe?.right : undefined;
+
   return (
     <div className="relative overflow-hidden">
-      <SwipeTrack offset={offset} swipe={swipe} />
+      <SwipeRail
+        action={action}
+        progress={swipeProgress(travel, "horizontal")}
+        fromLeft={travel > 0}
+      />
 
       <div
         ref={rowRef}
@@ -144,7 +183,29 @@ export function CompactRow<TCtx, TRow>({
             origin.current = null;
             return;
           }
-          setOffset(swipeOffset(dx, axis.current));
+
+          // A direction with no action configured does not move at all. Sliding a row open
+          // onto a blank rail promises something and then delivers nothing on release,
+          // which reads as a bug rather than as "there is nothing over here".
+          if (dx < 0 ? !swipe.left : !swipe.right) {
+            setTravel(0);
+            return;
+          }
+
+          setTravel(dx);
+
+          /*
+           * The arming edge, felt rather than read.
+           *
+           * A phone gesture has no cursor and no hover, so the only way to know a swipe has
+           * gone far enough without watching the rail is a tick at the moment it does. Fired
+           * on the crossing in both directions — backing off below the threshold is news too.
+           */
+          const nowArmed = swipeAction(dx, axis.current) !== "none";
+          if (nowArmed !== armed.current) {
+            armed.current = nowArmed;
+            haptic(nowArmed ? 12 : 6);
+          }
         }}
         onPointerUp={(event) => {
           clearTimer();
@@ -152,9 +213,9 @@ export function CompactRow<TCtx, TRow>({
 
           if (!swipe || !origin.current) return endSwipe();
           const dx = event.clientX - origin.current.x;
-          const action = swipeAction(dx, axis.current);
+          const fired = swipeAction(dx, axis.current);
           const handler =
-            action === "left" ? swipe.left : action === "right" ? swipe.right : null;
+            fired === "left" ? swipe.left : fired === "right" ? swipe.right : null;
           endSwipe();
           if (handler) {
             consumedTap.current = true;
@@ -170,7 +231,22 @@ export function CompactRow<TCtx, TRow>({
         // us. Without it a horizontal drag can be swallowed before any pointermove arrives.
         style={
           swipe
-            ? { touchAction: "pan-y", transform: `translateX(${offset}px)` }
+            ? {
+                touchAction: "pan-y",
+                transform: `translateX(${offset}px)`,
+                /*
+                 * Animated on the way home, never on the way out.
+                 *
+                 * `travel` is zero only between gestures, so this switches itself on for
+                 * exactly the render that releases the row and off again the moment the
+                 * next one starts — a row that eased towards a finger already somewhere
+                 * else would feel like it was being dragged through mud.
+                 *
+                 * `prefers-reduced-motion` zeroes this globally in `globals.css`.
+                 */
+                transition:
+                  travel === 0 ? "transform 180ms cubic-bezier(.2,.9,.3,1)" : "none",
+              }
             : undefined
         }
         onClick={(event) => {
@@ -190,6 +266,15 @@ export function CompactRow<TCtx, TRow>({
           "relative flex min-h-tap w-full items-center gap-2.5 border-b border-rule/60 py-2 pr-3 pl-2.5 text-left",
           // Opaque so the swipe track behind it stays hidden until the row actually moves.
           selected ? "bg-select" : "bg-surface",
+          /*
+           * A drag across a row is a swipe, not a text selection.
+           *
+           * Without this the gesture leaves a word highlighted behind it — and on a phone,
+           * dragging across text is also what raises the selection handles and the copy
+           * callout, so the row would arrive at the end of a swipe wearing UI nobody asked
+           * for. Inputs opt back in: renaming a row in place still has to select its text.
+           */
+          swipe ? "select-none [&_input]:select-text" : "",
         ].join(" ")}
       >
         <AccentBar text={accentText} />
@@ -244,25 +329,58 @@ export function CompactRow<TCtx, TRow>({
 /**
  * What the swipe is about to do, revealed as the row slides off it.
  *
- * Both labels are rendered and the offset picks which edge is visible, so the answer to
- * "what happens if I let go" is on screen the whole time the finger is down.
+ * The answer to "what happens if I let go" is on screen the whole time the finger is down,
+ * in three registers at once: the colour says which half of the vocabulary this is, the
+ * glyph says which verb, and the word says it outright. Colour alone would fail anyone who
+ * cannot tell the two hues apart, and a glyph alone asks you to have learned it.
+ *
+ * **The rail is at full strength from the first pixel.** An earlier pass faded it in with
+ * the gesture, which is prettier for the first ten pixels and unreadable for them: white on
+ * a 30%-alpha green over the row surface has no contrast to speak of, in either scheme. So
+ * the *content* is what ramps — it fades and grows into place, and pops once at the point
+ * releasing would fire. That is the same information, carried by the layer that can afford
+ * to be faint.
  */
-function SwipeTrack({ offset, swipe }: { offset: number; swipe?: RowSwipe }) {
-  if (!swipe || offset === 0) return null;
+function SwipeRail({
+  action,
+  progress,
+  fromLeft,
+}: {
+  action: RowSwipeAction | undefined;
+  /** 0 to 1, where 1 means releasing fires. */
+  progress: number;
+  /** Which edge the rail is anchored to — the one the row is sliding away from. */
+  fromLeft: boolean;
+}) {
+  if (!action || progress === 0) return null;
 
-  const action = offset < 0 ? swipe.left : swipe.right;
-  if (!action) return null;
+  const armed = progress >= 1;
 
   return (
     <div
       aria-hidden
-      // `px-3` and 12px type so a one-word label fits inside the trigger distance — at `px-4`
-      // and 13px, "Tomorrow" was still clipped at the point where releasing would fire it.
-      className={`absolute inset-0 flex items-center bg-select-edge/15 px-3 text-[0.75rem] font-medium whitespace-nowrap text-ink ${
-        offset < 0 ? "justify-end" : "justify-start"
-      }`}
+      className={`absolute inset-0 flex items-center ${
+        action.tone === "danger" ? "bg-priority-a" : "bg-swipe-done"
+      } ${fromLeft ? "justify-start" : "justify-end"}`}
     >
-      {action.label}
+      <div
+        // `px-2.5` and 11px type so the glyph and a word like "Complete" both sit inside the
+        // trigger distance. At `px-4` and 13px the label was still sliding into view at the
+        // point where letting go would already have fired it, which is the one moment it has
+        // to be readable.
+        className="flex flex-col items-center gap-0.5 px-2.5 text-white [&_svg]:h-5 [&_svg]:w-5"
+        style={{
+          opacity: 0.55 + 0.45 * progress,
+          // The pop at the threshold. Small — this is a confirmation, not an animation.
+          transform: `scale(${armed ? 1.08 : 0.85 + 0.15 * progress})`,
+          transition: "transform 120ms ease-out",
+        }}
+      >
+        <CommandGlyph icon={action.icon} />
+        <span className="text-[0.6875rem] font-semibold whitespace-nowrap">
+          {action.label}
+        </span>
+      </div>
     </div>
   );
 }

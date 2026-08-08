@@ -26,6 +26,16 @@
   --priority-none: #c8ccd6;
 
   /*
+   * The affirmative half of a swipe rail. Its opposite is `--priority-a`, which is already
+   * the app's destructive hue — see `ConfirmDialog`'s destructive button — so there is one
+   * red in the app rather than a second one that means the same thing.
+   *
+   * Deliberately not `--type-result-area`, the app's other green: that one says "this row is
+   * a result area", and borrowing it here would make the two greens mean two things.
+   */
+  --swipe-done: #2e7d5b;
+
+  /*
    * One hue per node type, so a column of icons is scannable the way Achieve's painted
    * icons were. These are chosen to separate from each other rather than to dodge the
    * priority hues — priority now lives entirely in its own column, two columns away.
@@ -78,6 +88,8 @@
     --priority-d: #9b93a9;
     --priority-none: #3d4250;
 
+    --swipe-done: #3d9c74;
+
     --type-result-area: #57bd9a;
     --type-goal: #f08a7c;
     --type-project: #93a4f2;
@@ -105,6 +117,8 @@
   --color-priority-c: var(--priority-c);
   --color-priority-d: var(--priority-d);
   --color-priority-none: var(--priority-none);
+
+  --color-swipe-done: var(--swipe-done);
 
   --color-type-result-area: var(--type-result-area);
   --color-type-goal: var(--type-goal);
