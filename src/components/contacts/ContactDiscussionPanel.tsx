@@ -195,7 +195,10 @@ function ItemList({
                 dateTime={toDateKey(item.deadline)}
                 className="tabular flex-none text-[0.75rem] text-ink-muted"
               >
-                {item.deadline.toLocaleDateString()}
+                {/* `timeZone: "UTC"` because a deadline is a stored calendar day (UTC
+                    noon). Without it the visible text uses local getters while the
+                    `dateTime` above uses `toDateKey`, so the two can name different days. */}
+                {item.deadline.toLocaleDateString(undefined, { timeZone: "UTC" })}
               </time>
             )}
           </li>

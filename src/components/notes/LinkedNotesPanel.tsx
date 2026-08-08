@@ -112,6 +112,11 @@ function toIso(value: Date | string): string {
   return Number.isNaN(date.getTime()) ? "" : date.toISOString();
 }
 
+/**
+ * A note's Date, which is a stored calendar day (UTC noon) — so read it with `timeZone:
+ * "UTC"`, the same way `formatNoteDate` does for the Notes grid. Local getters would let the
+ * same note read one day here and another in the grid. See `standards/development/dates.md`.
+ */
 function formatDate(value: Date | string): string {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return "";
@@ -119,5 +124,6 @@ function formatDate(value: Date | string): string {
     year: "numeric",
     month: "short",
     day: "numeric",
+    timeZone: "UTC",
   });
 }
