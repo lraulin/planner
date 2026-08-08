@@ -155,12 +155,12 @@ export function useModuleViews<TCol extends ColumnMeta, TView extends string>({
      * from a saved view never nests.
      *
      * Two forks ride along so the new view opens on what you could see, not on defaults:
-     * 1. The live **grid** scope (widths, sort, search, and anything else not in the catalogue).
+     * 1. The live **grid** scope — same values the catalogue just captured, already written
+     *    so the first paint does not depend on default resolution.
      * 2. The module's own per-view scopes (`viewScopes`) — Chooser weights, Notes mode, etc.
      *
-     * Without (1), a Filter… expression lived only in the source grid scope and vanished the
-     * moment the empty new scope took over — even after the catalogue started capturing it for
-     * Reset. Without (2), the Chooser's date filter and Notes' Nested/Flat snapped back.
+     * Without (2), the Chooser's date filter and Notes' Nested/Flat snapped back even though
+     * the grid half of the view was intact.
      */
     saveAs: (name: string) => {
       const id = saved.save(name, { base, ...snapshotOf(grid) });

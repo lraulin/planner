@@ -136,6 +136,14 @@ describe("parseGridSettings", () => {
     });
   });
 
+  it("follows the view when sorts were never written", () => {
+    // Absent is not "unsorted" — that would make every fresh grid drop the priority default
+    // a saved view (or DEFAULT_SORTS) is supposed to supply.
+    expect(parseGridSettings({}).sorts).toBeNull();
+    expect(parseGridSettings({}).widths).toBeNull();
+    expect(parseGridSettings({}).collapsedGroups).toBeNull();
+  });
+
   it("discards a sort with no column, and defaults an unknown direction", () => {
     expect(parseGridSettings({ sorts: [{ direction: "asc" }] }).sorts).toEqual([]);
     expect(parseGridSettings({ sorts: ["deadline"] }).sorts).toEqual([]);
@@ -214,8 +222,10 @@ describe("parseGridSettings", () => {
     }
   });
 
-  it("defaults density and rejects an unknown one", () => {
-    expect(parseGridSettings({}).density).toBe("comfortable");
+  it("follows the view when density was never written", () => {
+    // null = follow the view (or comfortable at the far end of resolution). A concrete
+    // value, including a garbage one remapped to comfortable, is a deliberate choice.
+    expect(parseGridSettings({}).density).toBeNull();
     expect(parseGridSettings({ density: "compact" }).density).toBe("compact");
     expect(parseGridSettings({ density: "tiny" }).density).toBe("comfortable");
   });
@@ -228,8 +238,10 @@ describe("parseGridSettings", () => {
     expect(parseGridSettings({ switches: "on" }).switches).toEqual({});
   });
 
-  it("reads search as text", () => {
+  it("reads search as text, with absent following the view", () => {
+    expect(parseGridSettings({}).search).toBeNull();
     expect(parseGridSettings({ search: "report" }).search).toBe("report");
+    expect(parseGridSettings({ search: "" }).search).toBe("");
     expect(parseGridSettings({ search: 7 }).search).toBe("");
   });
 

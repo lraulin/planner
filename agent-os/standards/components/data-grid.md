@@ -267,15 +267,16 @@ is the whole integration.
 - The **catalogue** lives in `views:{tabId}`; how you have since adjusted a saved view lives in
   its own `grid:{tab}.{id}` scope, exactly as a built-in view's does. `Reset this grid` returns
   to what you saved.
-- A saved view captures **order, column filters, the advanced filter, grouping and switch
-  positions**. The first three already distinguish "not chosen" from "chosen" (the nullable
-  fields in `grid.ts`); switches need no such distinction because each is its own key —
-  `resolveSwitches` falls back per id (stored → view → the tab's `defaultOn`), so there is no
-  whole-map "cleared" state and no migration. Sort and density stay out of the catalogue:
-  every blob carries a concrete `sorts`, so a view default could never win against one — but
-  **Save still forks the live grid scope**, so the sort (and widths, search, …) you can see
-  is what the new view opens on. Without that fork, anything not in the catalogue vanished
-  the moment the empty new scope took over.
+- A saved view captures **everything customizable on the grid**: order, widths, column
+  filters, the advanced filter, search, sort, grouping, collapsed groups, density and switch
+  positions. Fields that already distinguish "not chosen" from "chosen" (nullable in
+  `grid.ts`) use that; switches need no such distinction because each is its own key —
+  `resolveSwitches` falls back per id (stored → view → the tab's `defaultOn`). Sort, density,
+  search, widths and collapsed groups gained the same null-follows-view contract (settings
+  version 3) so Reset can restore them. What stays out on purpose: `includeDeferred` (tab-
+  wide) and which view is selected. **Save also forks the live grid scope** and any module
+  `viewScopes`, so the new view opens on what you can see even before catalogue defaults
+  resolve, and Chooser weights / Notes mode travel with it.
 - **A view recording a switch does not make the switch a property of the view.** The rule above
   — a view may not carry behaviour reachable no other way — is intact: every switch stays on
   the toolbar, toggleable and combinable. Only its _position_ travels, as a column's

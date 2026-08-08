@@ -1,32 +1,36 @@
 import { parseCrossColumnFilter, type CrossColumnFilter } from "@/lib/grid/crossFilter";
 import { parseColumnFilter, type ColumnFilter } from "@/lib/grid/customFilter";
-import { asMap, asRecord, asString, asStringArray } from "./parse";
+import {
+  asClampedNumber,
+  asMap,
+  asOneOf,
+  asRecord,
+  asString,
+  asStringArray,
+} from "./parse";
+import {
+  DEFAULT_DENSITY,
+  GRID_DENSITIES,
+  MAX_COLUMN_WIDTH,
+  MAX_SORT_KEYS,
+  MIN_COLUMN_WIDTH,
+  SORT_DIRECTIONS,
+  type GridDensity,
+  type GridSort,
+} from "./grid";
 import { SETTINGS_VERSION } from "./scopes";
 
 /**
  * Views the user saved, for one tab. Stored under `views:{tabId}`.
  *
- * This became worth building the moment a view stopped being a mode. `data-grid.md` used to
- * list user-saved views under "what we deliberately do not do", with the condition *revisit
- * when the presets demonstrably do not cover it* — and the honest reading now is that a saved
- * view is not a new feature at all. A view is already nothing but a column order, a set of
- * filters and a grouping; saving one is copying three values the grid is holding anyway.
+ * A view is the full set of **customizable** grid settings under a name. Saving one is
+ * naming the grid in front of you; Reset this grid returns to that snapshot. The fields
+ * that deliberately stay out are the ones that are not per-view by design:
+ * `includeDeferred` (tab-wide) and `view` (which view is selected).
  *
- * **What a saved view captures, and what it deliberately does not.** Order, column filters,
- * the advanced filter, grouping and switches. The first three already distinguish "the user
- * has not chosen" from "the user chose this" — see the nullable fields in `grid.ts`. Switches
- * join them without needing that distinction at all, because each switch is its own key:
- * `resolveSwitches` falls back per id, so there is no whole-map "cleared" state to represent
- * and no migration to pay for.
- *
- * Sort and density stay out. Every stored blob carries a concrete `sorts` array, so a view
- * default could never win against one, and `sorts: []` legitimately means "unsorted" rather
- * than "unset". Capturing them *would* need the nullable treatment and a migration. (Saving
- * still **forks** the live grid scope so the sort you can see is what the new view opens on;
- * it just is not part of the Reset baseline.)
- *
- * `includeDeferred` stays out for a different reason: `data-grid.md` keeps it on the tab scope
- * on purpose, so it is not a per-view setting to capture.
+ * Module-owned settings that no column can hold (Chooser weights, Notes mode) hang off the
+ * view id in their own scopes and are forked on save via `viewScopes` — they are not in this
+ * blob because their shape is the module's, not the grid's.
  */
 
 /**
@@ -39,16 +43,19 @@ import { SETTINGS_VERSION } from "./scopes";
 export type SavedViewSettings = {
   /** Visible column ids in order. Null follows the tab's preset, as everywhere else. */
   order: string[] | null;
+  /** Column widths at save time. Empty means every column uses its declared track. */
+  widths: Record<string, number>;
   filters: Record<string, ColumnFilter>;
-  /**
-   * Cross-column advanced filter the view opens with. Null / absent means none — same as a
-   * built-in view, which has no advanced filter of its own.
-   *
-   * Captured because it *is* a filter: Save used to name the grid in front of you and then
-   * drop the Filter… expression the moment the new view's empty grid scope took over.
-   */
+  /** Cross-column advanced filter. Null / absent means none — same as a built-in view. */
   advancedFilter: CrossColumnFilter | null;
+  /** Quick-search text. Empty means inactive. */
+  search: string;
+  /** Sort keys, primary first. Empty means unsorted. */
+  sorts: GridSort[];
   groupBy: string[];
+  /** Which group headers were collapsed. */
+  collapsedGroups: string[];
+  density: GridDensity;
   /**
    * Toolbar switch positions, by the id the tab declares. Merged *under* the grid's own
    * stored switches — see `resolveSwitches` in `grid.ts`.
@@ -128,14 +135,42 @@ function parseSavedView(value: unknown): SavedView | null {
     // the module's default. Views outlive the presets they were saved from.
     base: isValidViewId(asString(record.base, "")) ? asString(record.base, "") : null,
     order: Array.isArray(record.order) ? asStringArray(record.order, []) : null,
+    widths: asMap(record.widths, (entry) =>
+      typeof entry === "number" && Number.isFinite(entry)
+        ? asClampedNumber(entry, MIN_COLUMN_WIDTH, MIN_COLUMN_WIDTH, MAX_COLUMN_WIDTH)
+        : null,
+    ),
     filters: asMap(record.filters, (entry) => parseColumnFilter(entry)),
-    // Absent on views saved before the advanced filter was captured — same as "none".
+    // Absent on views saved before a field was captured — degrades to the empty / none choice.
     advancedFilter: parseCrossColumnFilter(record.advancedFilter),
+    search: typeof record.search === "string" ? record.search : "",
+    sorts: parseViewSorts(record),
     groupBy: asStringArray(record.groupBy, []),
+    collapsedGroups: asStringArray(record.collapsedGroups, []),
+    density: asOneOf(record.density, GRID_DENSITIES, DEFAULT_DENSITY),
     switches: asMap(record.switches, (entry) =>
       typeof entry === "boolean" ? entry : null,
     ),
   };
+}
+
+function parseViewSorts(record: Record<string, unknown>): GridSort[] {
+  if (!Array.isArray(record.sorts)) return [];
+  const seen = new Set<string>();
+  const out: GridSort[] = [];
+  for (const entry of record.sorts) {
+    const row = asRecord(entry);
+    if (!row) continue;
+    const columnId = asString(row.columnId, "");
+    if (!columnId || seen.has(columnId)) continue;
+    seen.add(columnId);
+    out.push({
+      columnId,
+      direction: asOneOf(row.direction, SORT_DIRECTIONS, "asc"),
+    });
+    if (out.length >= MAX_SORT_KEYS) break;
+  }
+  return out;
 }
 
 export function serializeSavedViews(saved: SavedViews): unknown {

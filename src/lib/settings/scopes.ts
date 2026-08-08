@@ -12,8 +12,13 @@
  * **2** — grid `filters` became nullable, so a stored `{}` could finally mean "the user
  * cleared everything" rather than "untouched". `parseGridSettings` reads this to tell the two
  * apart in blobs written before the change; nothing else reads it.
+ *
+ * **3** — sorts, density, search, widths and collapsedGroups became nullable so a saved view
+ * can supply them as defaults. Absent still means "follow the view"; a concrete value
+ * (including `[]` / `{}` / `""`) is a deliberate choice. Older blobs always carried concrete
+ * values and keep behaving as before.
  */
-export const SETTINGS_VERSION = 2;
+export const SETTINGS_VERSION = 3;
 
 export const SCOPE_KINDS = [
   "grid",

@@ -23,9 +23,14 @@ function view(id: string, name = id): SavedView {
     name,
     base: null,
     order: null,
+    widths: {},
     filters: {},
     advancedFilter: null,
+    search: "",
+    sorts: [],
     groupBy: [],
+    collapsedGroups: [],
+    density: "comfortable",
     switches: {},
   };
 }
@@ -66,12 +71,17 @@ describe("parseSavedViews", () => {
       name: "This week",
       base: "active-status",
       order: ["name", "deadline"],
+      widths: { name: 280 },
       filters: { state: { mode: "options", ids: ["value:NS"] } },
       advancedFilter: {
         join: "and",
         conditions: [{ columnId: "purpose", op: "contains", value: "q1" }],
       },
+      search: "report",
+      sorts: [{ columnId: "deadline", direction: "desc" }],
       groupBy: ["project"],
+      collapsedGroups: ["project:health"],
+      density: "compact",
       switches: { nextActions: true, showPurpose: false },
     });
     expect(parseSavedViews(serializeSavedViews(source))).toEqual(source);
@@ -91,8 +101,6 @@ describe("parseSavedViews", () => {
   });
 
   it("drops a base that could never name a view", () => {
-    // A base is fed to code expecting a preset id. `baseViewId` degrades an unknown one to the
-    // module's default, but a malformed one should not survive parsing at all.
     expect(
       parseSavedViews({ views: [{ id: "a", name: "A", base: "has.dot" }] }).views[0]
         .base,
@@ -135,12 +143,18 @@ describe("parseSavedViews", () => {
     ).toBeNull();
   });
 
-  it("keeps an advanced filter and treats its absence as none", () => {
-    // Views saved before advanced filters were captured must still open, as "no Filter…".
-    expect(
-      parseSavedViews({ views: [{ id: "a", name: "A" }] }).views[0].advancedFilter,
-    ).toBeNull();
+  it("fills in empty defaults for fields older views never stored", () => {
+    // Views saved before sort/density/search/widths were captured must still open.
+    const parsed = parseSavedViews({ views: [{ id: "a", name: "A" }] }).views[0];
+    expect(parsed.advancedFilter).toBeNull();
+    expect(parsed.search).toBe("");
+    expect(parsed.sorts).toEqual([]);
+    expect(parsed.widths).toEqual({});
+    expect(parsed.collapsedGroups).toEqual([]);
+    expect(parsed.density).toBe("comfortable");
+  });
 
+  it("keeps an advanced filter when present", () => {
     const filter = {
       join: "or",
       conditions: [{ columnId: "state", op: "eq", value: "NS" }],
@@ -200,8 +214,6 @@ describe("addSavedView / removeSavedView / renameSavedView", () => {
   });
 
   it("lets a view keep its own name when renamed to itself", () => {
-    // Comparing against the list *including* the view being renamed would push it to
-    // "One (2)" for changing nothing.
     const all = saved(view("a", "One"));
     expect(renameSavedView(all, "a", "One").views[0].name).toBe("One");
   });
@@ -216,12 +228,17 @@ describe("findSavedView", () => {
 describe("updateSavedView", () => {
   const settings = {
     order: ["name"],
+    widths: { name: 200 },
     filters: { state: { mode: "options", ids: ["value:CO"] } } as SavedView["filters"],
     advancedFilter: {
       join: "and" as const,
       conditions: [{ columnId: "purpose", op: "contains" as const, value: "q1" }],
     },
+    search: "q1",
+    sorts: [{ columnId: "priority", direction: "asc" as const }],
     groupBy: ["project"],
+    collapsedGroups: [] as string[],
+    density: "compact" as const,
     switches: { nextActions: true },
   };
 
@@ -237,6 +254,9 @@ describe("updateSavedView", () => {
     expect(after.groupBy).toEqual(["project"]);
     expect(after.switches).toEqual({ nextActions: true });
     expect(after.advancedFilter).toEqual(settings.advancedFilter);
+    expect(after.sorts).toEqual(settings.sorts);
+    expect(after.density).toBe("compact");
+    expect(after.search).toBe("q1");
   });
 
   it("leaves other views alone", () => {
@@ -263,15 +283,15 @@ describe("baseViewId", () => {
   });
 
   it("falls back to the default for a view saved before base existed", () => {
-    expect(
-      baseViewId(saved(view("saved-1")).views, "saved-1", builtIn, "active-status"),
-    ).toBe("active-status");
+    const all = saved({ ...view("saved-1"), base: null });
+    expect(baseViewId(all.views, "saved-1", builtIn, "active-status")).toBe(
+      "active-status",
+    );
   });
 
   it("falls back for a base naming a preset this build no longer has", () => {
-    // Views outlive presets. Feeding a retired id to `chooserView` would be worse than opening
-    // on the default.
-    const all = saved({ ...view("saved-1"), base: "active-schedule" });
+    const all = saved({ ...view("saved-1"), base: "retired-view" });
+    // baseViewId follows base to "retired-view", which is not built-in and has no entry.
     expect(baseViewId(all.views, "saved-1", builtIn, "active-status")).toBe(
       "active-status",
     );
@@ -279,21 +299,14 @@ describe("baseViewId", () => {
 
   it("follows a chain from a hand-edited blob through to a built-in", () => {
     const all = saved(
-      { ...view("saved-1"), base: "saved-2" },
-      { ...view("saved-2"), base: "completed" },
+      { ...view("mid"), base: "completed" },
+      { ...view("leaf"), base: "mid" },
     );
-    expect(baseViewId(all.views, "saved-1", builtIn, "active-status")).toBe(
-      "completed",
-    );
+    expect(baseViewId(all.views, "leaf", builtIn, "active-status")).toBe("completed");
   });
 
   it("terminates on a cycle instead of hanging", () => {
-    const all = saved(
-      { ...view("saved-1"), base: "saved-2" },
-      { ...view("saved-2"), base: "saved-1" },
-    );
-    expect(baseViewId(all.views, "saved-1", builtIn, "active-status")).toBe(
-      "active-status",
-    );
+    const all = saved({ ...view("a"), base: "b" }, { ...view("b"), base: "a" });
+    expect(baseViewId(all.views, "a", builtIn, "active-status")).toBe("active-status");
   });
 });

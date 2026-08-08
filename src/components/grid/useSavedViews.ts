@@ -104,14 +104,24 @@ export type SavedViewsApi = ReturnType<typeof useSavedViews>;
  * explicitly stored. That is the point: you are naming the grid in front of you, so a switch
  * left at its default is captured at the position you can see it in.
  */
+/**
+ * What a saved view captures, read off a live grid.
+ *
+ * Every customizable value is the **resolved** one — what the grid is showing — so naming
+ * the grid names what you can see. `includeDeferred` and the selected view id stay out:
+ * they are not per-view.
+ */
 export function snapshotOf(grid: GridState): SavedViewSettings {
   return {
     order: grid.order,
+    widths: grid.widths,
     filters: grid.filters,
-    // The effective advanced filter — what is narrowing the rows right now. Saving names
-    // the grid in front of you; dropping this was the bug that made Save undo a Filter….
     advancedFilter: grid.advancedFilter,
+    search: grid.search,
+    sorts: grid.sorts,
     groupBy: grid.groupBy,
+    collapsedGroups: [...grid.collapsedGroups],
+    density: grid.density,
     switches: grid.switches,
   };
 }
@@ -128,9 +138,14 @@ export function savedViewDefaults(
   if (!view) return fallback;
   return {
     order: view.order ?? fallback.order,
+    widths: view.widths,
     filters: view.filters,
     advancedFilter: view.advancedFilter,
+    search: view.search,
+    sorts: view.sorts,
     groupBy: view.groupBy,
+    collapsedGroups: view.collapsedGroups,
+    density: view.density,
     switches: view.switches,
   };
 }

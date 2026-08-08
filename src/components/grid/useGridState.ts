@@ -4,7 +4,9 @@ import { useCallback, useMemo } from "react";
 import { useSetting, type SettingCodec } from "@/components/settings/SettingsProvider";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import {
+  DEFAULT_DENSITY,
   DEFAULT_GRID_SETTINGS,
+  DEFAULT_SORTS,
   hasActiveFilters,
   hasAnyNarrowing,
   MAX_SORT_KEYS,
@@ -19,12 +21,14 @@ import {
 } from "@/lib/settings/grid";
 import { EMPTY_CROSS_FILTER, type CrossColumnFilter } from "@/lib/grid/crossFilter";
 import type { ColumnFilter } from "@/lib/grid/customFilter";
-
-/** Module-level so the default `defaults` object cannot churn the memos below. */
-const EMPTY_GROUP_BY: string[] = [];
 import { hideField, moveField, placeField, showField } from "@/lib/grid/fieldOrder";
 import { gridScope } from "@/lib/settings/scopes";
 import type { ColumnControls, ColumnMeta } from "./columns";
+
+/** Module-level so the default `defaults` object cannot churn the memos below. */
+const EMPTY_GROUP_BY: string[] = [];
+const EMPTY_WIDTHS: Record<string, number> = {};
+const EMPTY_COLLAPSED: string[] = [];
 
 /**
  * Everything one grid tab remembers: which columns are shown and in what order and width,
@@ -127,6 +131,8 @@ export type GridDefaults = {
    * default value on the field.
    */
   order: string[];
+  /** Column widths the view opens with. Absent / empty → every column's declared track. */
+  widths?: Record<string, number>;
   /**
    * How this tab groups before the user chooses — Projects opens on Achieve's
    * Category → Result Area arrangement, most tabs on nothing.
@@ -147,6 +153,14 @@ export type GridDefaults = {
    * view's Filter… expression is a default, not a mode, and Reset this grid puts it back.
    */
   advancedFilter?: CrossColumnFilter | null;
+  /** Quick-search text the view opens with. */
+  search?: string;
+  /** Sort keys the view opens with. Absent → `DEFAULT_SORTS` (priority). */
+  sorts?: GridSort[];
+  /** Collapsed group ids the view opens with. */
+  collapsedGroups?: string[];
+  /** Row density the view opens with. Absent → comfortable. */
+  density?: GridDensity;
   /**
    * Toolbar switch positions the view opens with, by the id the tab declared.
    *
@@ -169,9 +183,14 @@ export function useGridState<TCol extends ColumnMeta>(
   defaults: GridDefaults,
 ) {
   const defaultOrder = defaults.order;
+  const defaultWidths = defaults.widths ?? EMPTY_WIDTHS;
   const defaultGroupBy = defaults.groupBy ?? EMPTY_GROUP_BY;
   const defaultFilters = defaults.filters ?? NO_FILTERS;
   const defaultAdvancedFilter = defaults.advancedFilter ?? null;
+  const defaultSearch = defaults.search ?? "";
+  const defaultSorts = defaults.sorts ?? DEFAULT_SORTS;
+  const defaultCollapsedGroups = defaults.collapsedGroups ?? EMPTY_COLLAPSED;
+  const defaultDensity = defaults.density ?? DEFAULT_DENSITY;
   const defaultSwitches = defaults.switches;
   const { value: settings, patch, reset } = useSetting(gridScope(tabId), CODEC);
 
@@ -222,11 +241,6 @@ export function useGridState<TCol extends ColumnMeta>(
     [allColumns, order],
   );
 
-  const collapsedGroups = useMemo(
-    () => new Set(settings.collapsedGroups),
-    [settings.collapsedGroups],
-  );
-
   /**
    * Stored filters, or the view's defaults while the user has not touched them. Everything
    * downstream — the grid, the chips, the funnels, `narrowing` — reads this, so a default
@@ -248,6 +262,16 @@ export function useGridState<TCol extends ColumnMeta>(
   const advancedFilter = resolveAdvancedFilter(
     settings.advancedFilter,
     defaultAdvancedFilter,
+  );
+
+  const widths = settings.widths ?? defaultWidths;
+  const search = settings.search ?? defaultSearch;
+  const sorts = settings.sorts ?? defaultSorts;
+  const density = settings.density ?? defaultDensity;
+  const collapsedGroupList = settings.collapsedGroups ?? defaultCollapsedGroups;
+  const collapsedGroups = useMemo(
+    () => new Set(collapsedGroupList),
+    [collapsedGroupList],
   );
 
   const setOrder = useCallback(
@@ -305,21 +329,22 @@ export function useGridState<TCol extends ColumnMeta>(
     (columnId: string, width: number) => {
       patch((current) => ({
         ...current,
-        widths: { ...current.widths, [columnId]: width },
+        // Materialise the view's other widths so resizing one column does not drop the rest.
+        widths: { ...(current.widths ?? defaultWidths), [columnId]: width },
       }));
     },
-    [patch],
+    [patch, defaultWidths],
   );
 
   const clearWidth = useCallback(
     (columnId: string) => {
       patch((current) => {
-        const widths = { ...current.widths };
-        delete widths[columnId];
-        return { ...current, widths };
+        const next = { ...(current.widths ?? defaultWidths) };
+        delete next[columnId];
+        return { ...current, widths: next };
       });
     },
-    [patch],
+    [patch, defaultWidths],
   );
 
   const setFilter = useCallback(
@@ -350,6 +375,8 @@ export function useGridState<TCol extends ColumnMeta>(
       search: "",
     }));
   }, [patch]);
+
+  // search clear is "" (deliberate), not null (follow view) — same contract as filters.
 
   const setAdvancedFilter = useCallback(
     (filter: CrossColumnFilter | null) => {
@@ -383,8 +410,10 @@ export function useGridState<TCol extends ColumnMeta>(
   );
 
   const setSearch = useCallback(
-    (search: string) => {
-      patch((current) => ({ ...current, search }));
+    (next: string) => {
+      // Always store a concrete string so clearing the box is "" (inactive), not null
+      // (follow the view's saved search).
+      patch((current) => ({ ...current, search: next }));
     },
     [patch],
   );
@@ -399,8 +428,8 @@ export function useGridState<TCol extends ColumnMeta>(
   );
 
   const setDensity = useCallback(
-    (density: GridDensity) => {
-      patch((current) => ({ ...current, density }));
+    (next: GridDensity) => {
+      patch((current) => ({ ...current, density: next }));
     },
     [patch],
   );
@@ -430,12 +459,14 @@ export function useGridState<TCol extends ColumnMeta>(
   const toggleSort = useCallback(
     (columnId: string, additive = false) => {
       patch((current) => {
-        const existing = current.sorts.find((entry) => entry.columnId === columnId);
+        // Materialise the view's sort so the first click does not drop a saved multi-key.
+        const base = current.sorts ?? defaultSorts;
+        const existing = base.find((entry) => entry.columnId === columnId);
 
         if (!additive) {
           // Cycle only when this column is already the sole key; otherwise start fresh at
           // ascending, so clicking a new header never lands on "unsorted".
-          const isSoleKey = current.sorts.length === 1 && existing !== undefined;
+          const isSoleKey = base.length === 1 && existing !== undefined;
           if (!isSoleKey)
             return { ...current, sorts: [{ columnId, direction: "asc" }] };
           return {
@@ -448,26 +479,26 @@ export function useGridState<TCol extends ColumnMeta>(
         }
 
         if (!existing) {
-          if (current.sorts.length >= MAX_SORT_KEYS) return current;
+          if (base.length >= MAX_SORT_KEYS) return current;
           return {
             ...current,
-            sorts: [...current.sorts, { columnId, direction: "asc" }],
+            sorts: [...base, { columnId, direction: "asc" }],
           };
         }
 
-        const sorts: GridSort[] =
+        const next: GridSort[] =
           existing.direction === "asc"
-            ? current.sorts.map((entry) =>
+            ? base.map((entry) =>
                 entry.columnId === columnId
                   ? { columnId, direction: "desc" as const }
                   : entry,
               )
-            : current.sorts.filter((entry) => entry.columnId !== columnId);
+            : base.filter((entry) => entry.columnId !== columnId);
 
-        return { ...current, sorts };
+        return { ...current, sorts: next };
       });
     },
-    [patch],
+    [patch, defaultSorts],
   );
 
   /**
@@ -481,32 +512,35 @@ export function useGridState<TCol extends ColumnMeta>(
    */
   const setSort = useCallback(
     (columnId: string, direction: SortDirection | null) => {
-      patch((current) =>
-        direction === null
+      patch((current) => {
+        const base = current.sorts ?? defaultSorts;
+        return direction === null
           ? {
               ...current,
-              sorts: current.sorts.filter((entry) => entry.columnId !== columnId),
+              sorts: base.filter((entry) => entry.columnId !== columnId),
             }
-          : { ...current, sorts: [{ columnId, direction }] },
-      );
+          : { ...current, sorts: [{ columnId, direction }] };
+      });
     },
-    [patch],
+    [patch, defaultSorts],
   );
 
   const clearSort = useCallback(() => {
+    // Explicit empty, not null: "unsorted" must survive a reload on a view that defaults
+    // to priority sort.
     patch((current) => ({ ...current, sorts: [] }));
   }, [patch]);
 
   const toggleGroup = useCallback(
     (groupId: string) => {
       patch((current) => {
-        const next = new Set(current.collapsedGroups);
+        const next = new Set(current.collapsedGroups ?? defaultCollapsedGroups);
         if (next.has(groupId)) next.delete(groupId);
         else next.add(groupId);
         return { ...current, collapsedGroups: [...next] };
       });
     },
-    [patch],
+    [patch, defaultCollapsedGroups],
   );
 
   /**
@@ -555,7 +589,7 @@ export function useGridState<TCol extends ColumnMeta>(
     resetColumns,
     columnControls,
 
-    widths: settings.widths,
+    widths,
     setWidth,
     clearWidth,
 
@@ -570,18 +604,18 @@ export function useGridState<TCol extends ColumnMeta>(
     /** A blank builder to seed the dialog with when nothing is stored yet. */
     emptyAdvancedFilter: EMPTY_CROSS_FILTER,
 
-    search: settings.search,
+    search,
     setSearch,
 
     /** True when column filters, the advanced filter or the search are narrowing rows. */
-    narrowing: hasAnyNarrowing(filters, advancedFilter, settings.search),
+    narrowing: hasAnyNarrowing(filters, advancedFilter, search),
 
-    sorts: settings.sorts,
+    sorts,
     /**
      * The primary key, for the callers that only ask "is this grid sorted at all?" —
      * manual-order grids disable drag on any sort, and do not care which.
      */
-    sort: settings.sorts[0] ?? null,
+    sort: sorts[0] ?? null,
     toggleSort,
     setSort,
     clearSort,
@@ -593,7 +627,7 @@ export function useGridState<TCol extends ColumnMeta>(
     toggleGroup,
     setAllGroupsCollapsed,
 
-    density: settings.density,
+    density,
     setDensity,
 
     switches: resolvedSwitches,
