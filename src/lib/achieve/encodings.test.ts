@@ -21,6 +21,12 @@ describe("decodePriority / encodePriority", () => {
     expect(decodePriority(null)).toEqual({ letter: null, rank: null });
   });
 
+  it("drops values beyond D2499 instead of inventing larger D ranks", () => {
+    expect(decodePriority(9999)).toEqual({ letter: "D", rank: 2499 });
+    expect(decodePriority(10000)).toEqual({ letter: null, rank: null });
+    expect(decodePriority(99999)).toEqual({ letter: null, rank: null });
+  });
+
   it("reads A ranks as the bare int (A1 = 1)", () => {
     expect(decodePriority(1)).toEqual({ letter: "A", rank: 1 });
     expect(decodePriority(2)).toEqual({ letter: "A", rank: 2 });

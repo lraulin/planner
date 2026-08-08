@@ -7,7 +7,9 @@ import type { AchPriority } from "./types";
  * the offset inside the band is the rank (1-based). Bare letter is offset 0 for B/C/D;
  * for A, rank starts at 1 (A1 = 1) and there is no bare-A zero in real files.
  *
- * `100000` (and anything at or above it) means no priority — the schema default.
+ * Values from `10000` through `99999` are outside the four bands. Real exports can
+ * contain them, but they do not name an ABCD priority; drop them rather than clamping
+ * them into an impossible rank such as D2500. `100000` is the usual no-priority value.
  */
 export const ACH_PRIORITY_NONE = 100000;
 const BAND = 2500;
@@ -18,13 +20,13 @@ export function decodePriority(value: number | null | undefined): AchPriority {
   if (
     value === null ||
     value === undefined ||
-    value >= ACH_PRIORITY_NONE ||
+    value >= BAND * LETTERS.length ||
     value < 0
   ) {
     return { letter: null, rank: null };
   }
 
-  const letterIndex = Math.min(Math.floor(value / BAND), LETTERS.length - 1);
+  const letterIndex = Math.floor(value / BAND);
   const letter = LETTERS[letterIndex];
   const offset = value - letterIndex * BAND;
 
