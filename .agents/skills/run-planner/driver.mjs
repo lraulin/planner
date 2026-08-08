@@ -159,6 +159,8 @@ let touchEmulated = false;
 
 /** Where a `swipe … | hold` left the button down, so `release` knows where to let go. */
 let held = null;
+/** The same, for `tswipe` — a finger is lifted with `touchEnd`, not `mouseReleased`. */
+let heldTouch = null;
 
 async function applyViewport(spec) {
   const [w, h] = String(spec)
@@ -312,6 +314,21 @@ async function mouse(type, x, y, { button = "left", clickCount = 0 } = {}) {
     button,
     buttons: type === "mouseReleased" ? 0 : button === "left" ? 1 : 2,
     clickCount,
+  });
+}
+
+/**
+ * A real finger, not a mouse pretending to be one.
+ *
+ * `Input.dispatchMouseEvent` produces pointer events of type `mouse` even with touch
+ * emulation on, so it never consults `touch-action` — the browser's own decision about
+ * whether a gesture belongs to the page or to the scroller. That is exactly the arbitration
+ * a swipe lives or dies by, so a swipe checked only with `mouse` is a swipe not checked.
+ */
+async function touch(type, points) {
+  await send("Input.dispatchTouchEvent", {
+    type,
+    touchPoints: points.map((p) => ({ x: p.x, y: p.y, id: 1 })),
   });
 }
 
@@ -568,8 +585,44 @@ const COMMANDS = {
     console.log(`  → swiped "${a.text}" ${way} ${Math.abs(dx)}px`);
   },
 
+  /**
+   * The same swipe with a real finger. See {@link touch} for why both exist.
+   *
+   * Takes the same `hold` third argument, and `release` finishes either kind.
+   */
+  async tswipe(rest) {
+    const parts = rest.split("|").map((part) => part.trim());
+    const [sel, dxRaw, mode] = parts;
+    const dx = Number(dxRaw);
+    if (!Number.isFinite(dx))
+      throw new Error(`tswipe needs a pixel distance, got ${dxRaw}`);
+    const a = await find(sel);
+    await touch("touchStart", [{ x: a.x, y: a.y }]);
+    await sleep(60);
+    const count = 12;
+    for (let i = 1; i <= count; i++) {
+      await touch("touchMove", [{ x: Math.round(a.x + (dx * i) / count), y: a.y }]);
+      await sleep(25);
+    }
+    heldTouch = { x: Math.round(a.x + dx), y: a.y };
+    const way = dx > 0 ? "right" : "left";
+    if (mode === "hold") {
+      console.log(`  → holding (touch) "${a.text}" swiped ${way} ${Math.abs(dx)}px`);
+      return;
+    }
+    await COMMANDS.release();
+    console.log(`  → touch-swiped "${a.text}" ${way} ${Math.abs(dx)}px`);
+  },
+
   /** Let go of a `swipe … | hold`. No-op if nothing is held, so it is safe to over-call. */
   async release() {
+    if (heldTouch) {
+      const { x, y } = heldTouch;
+      heldTouch = null;
+      await touch("touchEnd", [{ x, y }]);
+      await sleep(600);
+      return;
+    }
     if (!held) return;
     const { x, y } = held;
     held = null;

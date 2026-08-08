@@ -72,7 +72,8 @@ step passing only means the click landed, not that the page looks right.
 | `drag <src> \| <dst> [\| before\|inside\|after]` | HTML5 drag — **outline row reorder**                                                                                                 |
 | `pdrag <src> \| <dst>`                           | pointer drag — **schedule rail → calendar**                                                                                          |
 | `swipe <sel> \| <dx> [\| hold]`                  | horizontal row swipe, signed px (-120 left, 120 right); `hold` keeps the button down so `shot` catches the open rail                 |
-| `release`                                        | let go of a held swipe                                                                                                               |
+| `tswipe <sel> \| <dx> [\| hold]`                 | the same with **real touch events** — the only way `touch-action` is exercised                                                       |
+| `release`                                        | let go of a held swipe, either kind                                                                                                  |
 | `fill <sel> \| <value>`                          | triple-click, then insert                                                                                                            |
 | `select <sel> \| <value>`                        | `<option>` by value or visible text                                                                                                  |
 | `type <text>` / `key <Name>`                     | `Enter Tab Escape Delete Insert F2 Arrow* Home End`, e.g. `key Shift+Tab`                                                            |
@@ -218,6 +219,14 @@ npm run smoke     # loads all 23 static routes; needs the dev server (see below)
   only toggles it when the value actually changes. If you add a step that touches the
   Emulation domain, re-check `drag` at 1280x800 afterwards; this failed silently once and
   looked like a regression in the grid.
+- **To look at a rail, swipe 60px, not 100px.** Anything past 72px arms, and releasing an
+  armed swipe **fires the action for real** — completions and deletions land in the dev
+  database. 60px shows the rail at full colour with the content still ramping and commits to
+  nothing. Several rows were completed the hard way before this was written down.
+- **`swipe` is a mouse; `tswipe` is a finger.** `Input.dispatchMouseEvent` produces pointer
+  events of type `mouse` even under touch emulation, so it never consults `touch-action` —
+  the browser's own call on whether a gesture belongs to the page or the scroller, which is
+  the arbitration a swipe lives or dies by. Check a new gesture with `tswipe` at least once.
 - **A swipe needs the row on screen and needs its intermediate moves.** `swipe` presses,
   steps across in 12 moves, and releases — the row locks its axis at 12px and arms at 72px,
   so a single jump to the end would skip every state worth looking at. `find` returns
