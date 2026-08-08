@@ -98,6 +98,14 @@ _times_ and intermediate math. After stepping a **calendar** field, re-encode wi
 Calendar fixtures: `fromDateKey("2026-08-01")`. Assert with `toDateKey`. Do **not** assert
 `getHours() === 0` (values are UTC noon).
 
+**The suite runs in a pinned zone** — `TZ: "America/New_York"` in `vitest.config.ts`. Some
+tests are _about_ local wall clock (the DST spring-forward in `recurrence.test.ts`, the
+Aug 1 → Jul 31 story below) and only mean anything in a named zone; the rest must not care.
+That is the point of the pin: a test that changes its answer with the machine's zone is
+either testing the wrong thing or using a local-midnight fixture where the standard above
+says `fromDateKey`. Do not remove it to "fix" a failure — the pin is what makes CI, a Vercel
+build (UTC) and a laptop agree.
+
 Must keep green:
 
 1. **Round-trip:** `toDateKey(fromDateKey(k)) === k` for several keys.
