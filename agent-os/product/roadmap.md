@@ -378,7 +378,8 @@ View · Tools`) with an icon gutter and shortcut column; an **icon row** for the
   layout and density are unchanged. Codified as `standards/components/responsive.md`.
 - **Import/export.** Achieve data import, full export (own-your-data mandate in
   `mission.md`). Outline core + appointments / time charts / wishes / notes / **metrics**
-  ship; remaining Tier A–C tables still grow with product surfaces.
+  ship; RedNotebook journals and Tomboy note archives also import from Settings. Remaining
+  Tier A–C tables still grow with product surfaces.
 
 ### Google integration
 

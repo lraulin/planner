@@ -3,6 +3,7 @@ import { SettingsPage } from "@/components/settings/SettingsPage";
 import { GoogleCalendarPanel } from "@/components/settings/GoogleCalendarPanel";
 import { AchieveTransferPanel } from "@/components/settings/AchieveTransferPanel";
 import { RedNotebookImportPanel } from "@/components/settings/RedNotebookImportPanel";
+import { TomboyImportPanel } from "@/components/settings/TomboyImportPanel";
 import { LogoutButton } from "@/components/auth/LogoutButton";
 import { getCurrentAccount } from "@/lib/auth";
 import { googleConfigured } from "@/lib/auth/server";
@@ -72,6 +73,7 @@ export default async function SettingsRoute() {
           />
           <AchieveTransferPanel />
           <RedNotebookImportPanel />
+          <TomboyImportPanel />
         </div>
       </div>
     </div>

@@ -1199,6 +1199,10 @@ export const notes = pgTable(
     contactId: uuid("contact_id").references(() => contacts.id, {
       onDelete: "set null",
     }),
+    /** Import provenance, currently `tomboy` plus the note file's stable UUID. */
+    externalSource: text("external_source"),
+    /** Opaque source id used only to make repeated imports update instead of duplicate. */
+    externalId: text("external_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -1206,6 +1210,11 @@ export const notes = pgTable(
     index("notes_user_parent_sort_idx").on(table.userId, table.parentId, table.sortKey),
     index("notes_user_node_idx").on(table.userId, table.nodeId),
     index("notes_user_contact_idx").on(table.userId, table.contactId),
+    // Same Tomboy archive can be imported by different users, but one source note may
+    // create at most one note per user. Ordinary notes have no external id and opt out.
+    uniqueIndex("notes_external_ref_uq")
+      .on(table.userId, table.externalSource, table.externalId)
+      .where(sql`${table.externalId} is not null`),
     // Same shape as `nodes_sibling_sort_key_uq`: NULLS NOT DISTINCT so the constraint also
     // covers root notes, whose parent_id is null.
     unique("notes_sibling_sort_key_uq")

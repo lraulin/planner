@@ -52,16 +52,16 @@ export function useGlobalCommands(): readonly Command[] {
       },
       {
         /*
-         * One entry, not four. The import and export panels (Achieve transfer, RedNotebook,
-         * Google Calendar) all live on this page and none has a stable anchor to deep-link
-         * to — their headings use `useId`. Keywords make them findable; the page is where
-         * they are.
+         * One entry, not five. The import and export panels (Achieve transfer, RedNotebook,
+         * Tomboy, Google Calendar) all live on this page and none has a stable anchor to
+         * deep-link to — their headings use `useId`. Keywords make them findable; the page
+         * is where they are.
          */
         id: "app.settings",
         label: "Settings",
         group: "app",
         keywords:
-          "options preferences import export achieve rednotebook google calendar reset backup",
+          "options preferences import export achieve rednotebook tomboy google calendar reset backup",
         run: () => router.push("/settings"),
       },
       {
