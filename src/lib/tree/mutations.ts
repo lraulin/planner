@@ -39,6 +39,7 @@ import {
   removePriorityGaps as planRemovePriorityGaps,
   reprioritizeUnique as planReprioritizeUnique,
 } from "@/lib/priority/maintenance";
+import { promoteUrlsFromTaskName } from "@/lib/url/taskNameLinks";
 import { loadOutline } from "./queries";
 import { between } from "./sortKey";
 import type { Position } from "./types";
@@ -170,7 +171,8 @@ export async function createNode(params: {
     position = { at: "last" },
   } = params;
 
-  return db.transaction(async (tx) => {
+  // Network title fetch must not run inside the insert transaction.
+  const id = await db.transaction(async (tx) => {
     const parentType = parentId ? (await requireNode(tx, userId, parentId)).type : null;
     assertCanNest(type, parentType);
 
@@ -210,6 +212,14 @@ export async function createNode(params: {
 
     return created.id;
   });
+
+  // Capture, agent create, and any create-with-name path: URLs in a task name become
+  // attachments and the name is rewritten to page titles when fetch succeeds.
+  if (type === "task" && name.trim()) {
+    await promoteUrlsFromTaskName(userId, id);
+  }
+
+  return id;
 }
 
 /** Deletes a node. Descendants and detail rows cascade. */
@@ -226,6 +236,8 @@ export async function renameNode(
     .update(nodes)
     .set({ name, updatedAt: new Date() })
     .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+  // Outline create is blank-then-rename; promote is a no-op for non-tasks and URL-free names.
+  await promoteUrlsFromTaskName(userId, nodeId);
 }
 
 export async function setPriority(
