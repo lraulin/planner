@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import type { Command } from "@/lib/commands/registry";
+import { advanceCommandChurn, initialCommandChurnState } from "@/lib/commands/churn";
 
 /**
  * Where a view publishes what it can do, and where the two renderers read it.
@@ -134,24 +135,24 @@ export function useRegisterCommands(commands: readonly Command[]): void {
   // One key per mounted caller, so two grids on one screen do not overwrite each other.
   const [key] = useState(() => nextKey++);
 
-  const churn = useRef({ signature: "", count: 0, warned: false });
+  const churn = useRef(initialCommandChurnState());
 
   useEffect(() => {
     if (!register || !unregister) return;
 
     if (process.env.NODE_ENV !== "production") {
-      // A new array whose rendered signature is identical means the caller rebuilt it
-      // without anything changing — the exact shape of the runaway loop.
+      // A rapid burst of new arrays with the same rendered signature is the shape of the
+      // runaway loop. This is deliberately windowed: selecting another row can legitimately
+      // replace handlers without changing ids or labels, and normal interactions must not
+      // accumulate into a false alarm.
       const signature = signatureOf(commands);
-      const state = churn.current;
-      state.count = signature === state.signature ? state.count + 1 : 0;
-      state.signature = signature;
+      const result = advanceCommandChurn(churn.current, signature, performance.now());
+      churn.current = result.state;
 
-      if (state.count > 20 && !state.warned) {
-        state.warned = true;
+      if (result.shouldWarn) {
         console.error(
-          "useRegisterCommands: the commands array is being rebuilt on every render, " +
-            "which re-registers on every render. Wrap it in useMemo at the call site. " +
+          "useRegisterCommands: the commands array was rebuilt more than 20 times in " +
+            "one second without changing shape. Wrap it in useMemo at the call site. " +
             `Commands: ${signature}`,
         );
       }
