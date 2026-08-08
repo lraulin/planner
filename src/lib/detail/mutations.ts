@@ -20,6 +20,7 @@ import {
   localDateKey,
   toDateKey,
 } from "@/lib/schedule/geometry";
+import { isStateEdit } from "./formState";
 import { stateFromDates } from "./stateFromDates";
 import { between } from "@/lib/tree/sortKey";
 import { fetchPageTitle, shouldAutofillAttachmentTitle } from "@/lib/url/pageTitle";
@@ -387,6 +388,19 @@ export async function saveNodeDetail(
       }
     }
 
+    // The form shows *effective* state (expired shelf → Not started) while the row may still
+    // store `postponed`. A full-draft re-save therefore posts `not_started` without the user
+    // having touched State — that is not an edit; writing it would sweep the residue the
+    // shelving model deliberately leaves. See `isStateEdit`.
+    const today = localDateKey(new Date());
+    if (
+      "state" in core &&
+      core.state !== undefined &&
+      !isStateEdit(node, core.state, today)
+    ) {
+      delete (core as { state?: unknown }).state;
+    }
+
     // A plan may not precede availability (`nodes_start_not_before_deferred`). Setting a
     // deferred date past an existing target start would trip the constraint; clear the plan
     // rather than fail the save — same principle as clearing conflicting descendant plans.
@@ -513,7 +527,7 @@ export async function saveNodeDetail(
       completedAt,
       deferredUntil: changedTo(node.deferredDate, core.deferredDate),
       startedAt: newlySet(before?.actualStartDate, startedRaw),
-      today: localDateKey(new Date()),
+      today,
     });
 
     // Last, deliberately. The state write above set the column; this stamps `completedAt`
@@ -535,6 +549,10 @@ export async function saveNodeDetail(
     // change *is* a completion, still honour a Date completed in the same save as the
     // instant it happened — otherwise setting State to C and backdating the date would step
     // a series from now instead of from the day you actually did it.
+    //
+    // `core.state` has already been dropped when the draft only restated the effective
+    // state of an expired shelf (see above), so a due-again routine completed from the
+    // form still reaches this branch — draft was `completed`, which *is* an edit.
     const explicit =
       "state" in core && core.state !== undefined && core.state !== node.state
         ? {

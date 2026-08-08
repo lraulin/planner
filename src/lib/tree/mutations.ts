@@ -513,16 +513,26 @@ async function recurrenceOf(tx: Executor, userId: string, nodeId: string) {
 type Recurrence = NonNullable<Awaited<ReturnType<typeof recurrenceOf>>>;
 
 /**
- * The date the pattern is *about*: the deadline if there is one, else the deferred date,
- * else the target start.
+ * The date the pattern is *about*: the deadline if there is one, else a *still-holding*
+ * deferred date, else the target start.
  *
  * A deadline is the date a repeating task is named for — "the report is due every Friday"
  * means Friday is the deadline, not the day you start. Only when there is no deadline does
- * the defer date take over as the thing the schedule moves, and it is what a routine with
- * no dates at all ends up using.
+ * the defer date take over as the thing the schedule moves.
+ *
+ * An **expired** deferred date is shelf residue (expiry is derived, never swept) and must
+ * not be the shift origin. Using it turned "complete the routine that came back today"
+ * into a multi-year jump of every other date — target start leapt to 2033 from a 2020
+ * residue in one case. Fall through to target start, or to null so `nextAnchor` can stand
+ * on the completion day.
+ *
+ * `asOfDay` is the completion's local `YYYY-MM-DD` — the same day key the shelf itself
+ * compares against.
  */
-function anchorOf(r: Recurrence): Date | null {
-  return r.deadline ?? r.deferredDate ?? r.targetStartDate;
+function anchorOf(r: Recurrence, asOfDay: string): Date | null {
+  if (r.deadline) return r.deadline;
+  if (r.deferredDate && toDateKey(r.deferredDate) > asOfDay) return r.deferredDate;
+  return r.targetStartDate;
 }
 
 /**
@@ -580,13 +590,18 @@ function nextAnchor(
  * otherwise daily routines fill the file with completed clones (the failure mode in large
  * Achieve data files).
  */
-function moveDates(r: Recurrence, shift: number, next: Date) {
+function moveDates(r: Recurrence, shift: number, next: Date, asOfDay: string) {
   // Calendar columns must leave as UTC noon, not process-local midnight after addDays.
   const move = (date: Date | null) =>
     date ? asCalendarDay(addDays(date, shift)) : null;
   const nextDay = asCalendarDay(next);
 
-  const deferredDate = move(r.deferredDate) ?? nextDay;
+  // Shift what was set; create target start / deferred when empty. A shifted deferred that
+  // still does not hold (stale residue, shift 0 from a regenerating complete) cannot hide
+  // the task — land the shelf on `next` so the new cycle actually defers.
+  let deferredDate = move(r.deferredDate) ?? nextDay;
+  if (toDateKey(deferredDate) <= asOfDay) deferredDate = nextDay;
+
   const targetStartDate = move(r.targetStartDate) ?? nextDay;
 
   return {
@@ -711,7 +726,8 @@ export async function applyStateTransition(
   // key, then encode as UTC noon. Using `toDateKey`/`asCalendarDay` on a live instant is
   // wrong after ~20:00 in the Americas — UTC has already rolled to tomorrow.
   // See agent-os/standards/development/dates.md.
-  const completedDay = fromDateKey(localDateKey(now));
+  const completedDayKey = localDateKey(now);
+  const completedDay = fromDateKey(completedDayKey);
 
   async function finish() {
     await tx
@@ -730,7 +746,7 @@ export async function applyStateTransition(
     return;
   }
 
-  const anchor = anchorOf(recurrence);
+  const anchor = anchorOf(recurrence, completedDayKey);
   const next = nextAnchor(recurrence, anchor, now);
 
   // Counted before the insert below, or "end after N occurrences" is off by one.
@@ -786,7 +802,7 @@ export async function applyStateTransition(
   // Which fields get *created* when they were empty is the part that matters. See
   // `moveDates` below.
   const shift = anchor ? daysBetween(anchor, next!) : 0;
-  const dates = moveDates(recurrence, shift, next!);
+  const dates = moveDates(recurrence, shift, next!, completedDayKey);
 
   await tx
     .update(nodes)
@@ -1143,7 +1159,7 @@ export async function skipRecurrence(userId: string, nodeId: string): Promise<vo
     if (!recurrence) throw new Error("That task does not repeat.");
 
     const now = new Date();
-    const anchor = anchorOf(recurrence);
+    const anchor = anchorOf(recurrence, localDateKey(now));
     const next = nextAnchor(recurrence, anchor, now);
 
     // Skipping cannot exhaust an "end after N" series, because it never counted toward
@@ -1161,7 +1177,13 @@ export async function skipRecurrence(userId: string, nodeId: string): Promise<vo
 
     // The same date rule as a completion, from the same function — skipping is a
     // completion with the "you did it" half removed, and the two must not drift.
-    const dates = moveDates(recurrence, anchor ? daysBetween(anchor, next) : 0, next);
+    const asOfDay = localDateKey(now);
+    const dates = moveDates(
+      recurrence,
+      anchor ? daysBetween(anchor, next) : 0,
+      next,
+      asOfDay,
+    );
 
     await tx
       .update(nodes)

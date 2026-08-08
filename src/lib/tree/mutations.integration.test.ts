@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { nodes, taskCompletions, taskDetails, users } from "@/db/schema";
 import type { RecurrenceFrequency } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
+import { fromDateKey } from "@/lib/schedule/geometry";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { saveNodeDetail } from "@/lib/detail/mutations";
 import {
@@ -960,6 +961,39 @@ describeDb("tree mutations", () => {
       expect(await completionsOf(userId, task)).toHaveLength(1);
     });
 
+    it("cycles a due-again routine from the drawer without leaping other dates", async () => {
+      // After cycle 1 the row stores postponed + deferred. Expiry is derived, so when that
+      // date has passed the list shows Not started while the form (seeded from effective
+      // state) also shows Not started and the user picks Completed. Completing must not use
+      // the expired deferred residue as the shift origin — that once jumped target start
+      // years into the future and made the save look like it did nothing useful.
+      const task = await recurringTask({ frequency: "daily", interval: 1 });
+      await db
+        .update(taskDetails)
+        .set({ recurrenceMode: "regenerate" })
+        .where(eq(taskDetails.nodeId, task));
+      await setState(userId, task, "completed");
+      const yesterday = daysFromToday(-1);
+      await db
+        .update(nodes)
+        .set({
+          deferredDate: fromDateKey(yesterday),
+          // A far-future residue on the wrong field used to be the shift origin; leave a
+          // realistic target start so the leap would be visible if it returned.
+          targetStartDate: fromDateKey(yesterday),
+        })
+        .where(eq(nodes.id, task));
+
+      await saveNodeDetail(userId, task, { state: "completed" });
+
+      const row = await nodeRow(task);
+      expect(row.state).toBe("postponed");
+      // Regeneration: one day after this completion, not "one day after the stale residue".
+      expect(localKey(row.deferredDate!)).toBe(daysFromToday(1));
+      expect(localKey(row.targetStartDate!)).toBe(daysFromToday(1));
+      expect(await completionsOf(userId, task)).toHaveLength(2);
+    });
+
     it("is not undone by progress values submitted in the same drawer save", async () => {
       // The form posts its whole draft at once. A 100% / completed submit must not leave
       // the regenerated task looking already finished.
@@ -1258,6 +1292,29 @@ describeDb("tree mutations", () => {
       expect(node.state).toBe("completed");
       expect(await completionsOf(userId, task)).toHaveLength(0);
       expect((await nodeRow(task)).deferredDate).toBeNull();
+    });
+
+    it("does not collapse an expired shelf when the drawer re-saves effective Not started", async () => {
+      // The form shows ownEffectiveState, so a due-again routine posts `not_started` on a
+      // notes-only save. That must not rewrite the stored postponed residue — expiry stays
+      // derived. Without the guard, every drawer Save on a due-again routine would sweep it.
+      const task = await recurringTask({ frequency: "daily", interval: 1 });
+      await setState(userId, task, "completed");
+      await db
+        .update(nodes)
+        .set({ deferredDate: fromDateKey(daysFromToday(-1)) })
+        .where(eq(nodes.id, task));
+
+      await saveNodeDetail(userId, task, {
+        state: "not_started",
+        notes: "just a note",
+      });
+
+      const row = await nodeRow(task);
+      expect(row.state).toBe("postponed");
+      expect(localKey(row.deferredDate!)).toBe(daysFromToday(-1));
+      expect(row.notes).toBe("just a note");
+      expect(await completionsOf(userId, task)).toHaveLength(1);
     });
   });
 

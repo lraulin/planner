@@ -49,6 +49,8 @@ import { resultAreaTabs } from "./ResultAreaForm";
 import { taskTabs } from "./TaskForm";
 import type { DetailFormProps } from "./formShared";
 import { categoryOptions } from "@/lib/tree/slice";
+import { formState } from "@/lib/detail/formState";
+import { useToday } from "@/components/grid/useToday";
 
 const DRAWER_CODEC: SettingCodec<DrawerSettings> = {
   parse: parseDrawerSettings,
@@ -189,7 +191,12 @@ function DetailForm({
   /** Parent chrome calls this while the form is mounted. */
   formCloseRef: MutableRefObject<(() => void) | null>;
 }) {
-  const [values, setValues] = useState<NodeDetailValues>(() => initialValues(detail));
+  // Effective state so a due-again routine opens as Not started (matching the grid), not
+  // as the stored Postponed residue of its last cycle — see `formState`.
+  const today = useToday();
+  const [values, setValues] = useState<NodeDetailValues>(() =>
+    initialValues(detail, today),
+  );
   const [items, setItems] = useState<NodeItem[]>(detail.items);
   const { value: drawerSettings, patch: patchDrawer } = useSetting(
     DRAWER_SCOPE,
@@ -201,6 +208,20 @@ function DetailForm({
   const [confirmingClose, setConfirmingClose] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<NodeItem | null>(null);
   const [busy, startTransition] = useTransition();
+
+  // `useToday` is null on the server and the first client paint so nothing flashes the wrong
+  // shelf; once it resolves, re-derive State from the effective value — but only while the
+  // form is still clean, so a half-edited draft is not rewritten under the user's thumb.
+  const [seenToday, setSeenToday] = useState(today);
+  if (today !== seenToday) {
+    setSeenToday(today);
+    if (!dirty) {
+      setValues((current) => ({
+        ...current,
+        state: formState(detail, today),
+      }));
+    }
+  }
 
   const markDirty = useCallback(() => {
     setDirty(true);
@@ -276,14 +297,14 @@ function DetailForm({
     try {
       const result = await loadNodeDetailAction(detail.id);
       if (result.ok && result.data) {
-        setValues(initialValues(result.data));
+        setValues(initialValues(result.data, today));
         setItems(result.data.items);
         onReload(result.data);
       }
     } catch {
       setError("Saved, but the record could not be re-read. Reopen to see it.");
     }
-  }, [detail.id, onReload]);
+  }, [detail.id, onReload, today]);
 
   const runItemAction = useCallback(
     (action: () => Promise<{ ok: true } | { ok: false; error: string }>) => {
@@ -514,12 +535,12 @@ function DetailForm({
  * Seeds the draft from the loaded record. The side tables start as the stored row minus its
  * key, so a form reads `values.project.company` whether or not the user has touched it.
  */
-function initialValues(detail: NodeDetail): NodeDetailValues {
+function initialValues(detail: NodeDetail, today: string | null): NodeDetailValues {
   return {
     name: detail.name,
     priorityLetter: detail.priorityLetter,
     priorityRank: detail.priorityRank,
-    state: detail.state,
+    state: formState(detail, today),
     deadline: detail.deadline,
     targetStartDate: detail.targetStartDate,
     targetEndDate: detail.targetEndDate,
