@@ -4,4 +4,4 @@ interface:
   default_prompt: "Use $index-standards to rebuild the index."
 
 policy:
-  allow_implicit_invocation: false
+  allow_implicit_invocation: true

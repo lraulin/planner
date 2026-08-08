@@ -5,8 +5,8 @@
 // package.json.
 //
 // Usage (steps as args, or on stdin — see SKILL.md):
-//   node .claude/skills/run-planner/driver.mjs 'goto /outline' 'shot outline'
-//   node .claude/skills/run-planner/driver.mjs <<'EOF'
+//   node .agents/skills/run-planner/driver.mjs 'goto /outline' 'shot outline'
+//   node .agents/skills/run-planner/driver.mjs <<'EOF'
 //   goto /outline
 //   shot outline
 //   EOF
@@ -356,7 +356,8 @@ async function pressKey(name) {
           text: base,
         }
       : null);
-  if (!k) throw new Error(`unknown key: ${base} (known: ${Object.keys(KEYS).join(", ")})`);
+  if (!k)
+    throw new Error(`unknown key: ${base} (known: ${Object.keys(KEYS).join(", ")})`);
   const common = {
     key: k.key,
     code: k.code,
@@ -457,7 +458,8 @@ const COMMANDS = {
     const a = await find(from);
     const b = await find(to);
     const frac = { before: 0.15, inside: 0.5, after: 0.85 }[zone];
-    if (frac === undefined) throw new Error(`zone must be before|inside|after, got ${zone}`);
+    if (frac === undefined)
+      throw new Error(`zone must be before|inside|after, got ${zone}`);
     const tx = b.x;
     const ty = Math.round(b.top + b.height * frac);
 
@@ -468,7 +470,11 @@ const COMMANDS = {
     // The row only sets draggable=true in its mousedown handler, so React has to render
     // once before the gesture starts. Without this pause the drag never begins.
     await sleep(150);
-    for (const [dx, dy] of [[6, 3], [18, 9], [30, 15]]) {
+    for (const [dx, dy] of [
+      [6, 3],
+      [18, 9],
+      [30, 15],
+    ]) {
       await mouse("mouseMoved", a.x + dx, a.y + dy);
       await sleep(40);
     }
@@ -562,7 +568,9 @@ const COMMANDS = {
   // Flip how the next native dialogs are answered ('dialogs dismiss' to cancel a delete).
   async dialogs(rest) {
     dialogAccept = rest.trim() !== "dismiss";
-    console.log(`  → window.confirm() will be ${dialogAccept ? "accepted" : "dismissed"}`);
+    console.log(
+      `  → window.confirm() will be ${dialogAccept ? "accepted" : "dismissed"}`,
+    );
   },
 
   async wait(rest) {
@@ -690,7 +698,9 @@ async function main() {
     }
   }
 
-  const errors = consoleLog.filter((l) => l.startsWith("[error") || l.startsWith("[exception"));
+  const errors = consoleLog.filter(
+    (l) => l.startsWith("[error") || l.startsWith("[exception"),
+  );
   if (errors.length) console.log(`\npage errors:\n${errors.join("\n")}`);
   await shutdown(0);
 }

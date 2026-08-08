@@ -8,7 +8,7 @@ description: Build, run, screenshot and drive the planner Next.js app — start 
 Next.js 16 (App Router) + Postgres via Drizzle, served on **port 3047**. Data lives in a
 local Docker Postgres; there is no auth, so every page renders as the hardcoded dev user.
 
-The agent path is **`.claude/skills/run-planner/driver.mjs`** — a zero-dependency Chrome
+The agent path is **`.agents/skills/run-planner/driver.mjs`** — a zero-dependency Chrome
 DevTools Protocol driver. It launches the Chrome already installed on the machine, runs a
 list of steps, writes screenshots, and exits. Nothing is added to `package.json`.
 
@@ -47,37 +47,37 @@ exits with instructions if 3047 is not answering.
 Steps come from stdin (one per line, `#` comments allowed) or from argv:
 
 ```sh
-node .claude/skills/run-planner/driver.mjs <<'EOF'
+node .agents/skills/run-planner/driver.mjs <<'EOF'
 goto /outline
 shot outline
 rightclick text=ACME Account
 shot row-menu
 EOF
 
-node .claude/skills/run-planner/driver.mjs 'goto /schedule' 'shot week'
+node .agents/skills/run-planner/driver.mjs 'goto /schedule' 'shot week'
 ```
 
 Screenshots land in **`.artifacts/planner-shots/`** (gitignored). Read them — a driver
 step passing only means the click landed, not that the page looks right.
 
-`node .claude/skills/run-planner/driver.mjs help` prints the command list:
+`node .agents/skills/run-planner/driver.mjs help` prints the command list:
 
-| Step | Notes |
-| --- | --- |
-| `goto <path>` | joined to `$PLANNER_URL` (default `http://localhost:3047`) |
-| `shot <name>` | PNG into `.artifacts/planner-shots/` |
-| `viewport <w>x<h>` | resize; **below 768 wide also turns on touch emulation**. `390x844` is the iPhone 12. Also settable up front via `PLANNER_VIEWPORT`. |
-| `scheme light\|dark` | emulate `prefers-color-scheme` |
-| `click` / `dblclick` / `rightclick <sel>` | real mouse events; `dblclick` a grid row opens its detail drawer |
-| `drag <src> \| <dst> [\| before\|inside\|after]` | HTML5 drag — **outline row reorder** |
-| `pdrag <src> \| <dst>` | pointer drag — **schedule rail → calendar** |
-| `fill <sel> \| <value>` | triple-click, then insert |
-| `select <sel> \| <value>` | `<option>` by value or visible text |
-| `type <text>` / `key <Name>` | `Enter Tab Escape Delete Insert F2 Arrow* Home End`, e.g. `key Shift+Tab` |
-| `wait <sel> [\| ms]` | poll, default 8000ms |
-| `text <css>` / `count <css>` / `eval <js>` | read page state back |
-| `dialogs accept\|dismiss` | how `window.confirm()` is answered (default accept) |
-| `console` | dump collected console output + dialogs |
+| Step                                             | Notes                                                                                                                                |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `goto <path>`                                    | joined to `$PLANNER_URL` (default `http://localhost:3047`)                                                                           |
+| `shot <name>`                                    | PNG into `.artifacts/planner-shots/`                                                                                                 |
+| `viewport <w>x<h>`                               | resize; **below 768 wide also turns on touch emulation**. `390x844` is the iPhone 12. Also settable up front via `PLANNER_VIEWPORT`. |
+| `scheme light\|dark`                             | emulate `prefers-color-scheme`                                                                                                       |
+| `click` / `dblclick` / `rightclick <sel>`        | real mouse events; `dblclick` a grid row opens its detail drawer                                                                     |
+| `drag <src> \| <dst> [\| before\|inside\|after]` | HTML5 drag — **outline row reorder**                                                                                                 |
+| `pdrag <src> \| <dst>`                           | pointer drag — **schedule rail → calendar**                                                                                          |
+| `fill <sel> \| <value>`                          | triple-click, then insert                                                                                                            |
+| `select <sel> \| <value>`                        | `<option>` by value or visible text                                                                                                  |
+| `type <text>` / `key <Name>`                     | `Enter Tab Escape Delete Insert F2 Arrow* Home End`, e.g. `key Shift+Tab`                                                            |
+| `wait <sel> [\| ms]`                             | poll, default 8000ms                                                                                                                 |
+| `text <css>` / `count <css>` / `eval <js>`       | read page state back                                                                                                                 |
+| `dialogs accept\|dismiss`                        | how `window.confirm()` is answered (default accept)                                                                                  |
+| `console`                                        | dump collected console output + dialogs                                                                                              |
 
 Selectors:
 
@@ -95,7 +95,7 @@ by hand.
 Edit a record and confirm it persisted (drawer → save → reload):
 
 ```sh
-node .claude/skills/run-planner/driver.mjs <<'EOF'
+node .agents/skills/run-planner/driver.mjs <<'EOF'
 goto /outline
 dblclick text=Steve's retirement party
 wait label=Priority
@@ -111,7 +111,7 @@ EOF
 Reorder a row, and read the order back:
 
 ```sh
-node .claude/skills/run-planner/driver.mjs <<'EOF'
+node .agents/skills/run-planner/driver.mjs <<'EOF'
 goto /outline
 drag text=Steve's retirement party | text=Some are complex multi-step projects | before
 eval [...document.querySelectorAll('[role="row"]')].map(r=>r.getAttribute('aria-label'))
@@ -121,7 +121,7 @@ EOF
 Schedule a project block, then delete it:
 
 ```sh
-node .claude/skills/run-planner/driver.mjs <<'EOF'
+node .agents/skills/run-planner/driver.mjs <<'EOF'
 goto /schedule
 count .fc-event
 pdrag text=Someday/Maybe | css=.fc-timegrid-col[data-date$="-29"]
@@ -136,7 +136,7 @@ EOF
 Keyboard-driven outline (this app is keyboard-first — see the hint bar at the bottom):
 
 ```sh
-node .claude/skills/run-planner/driver.mjs <<'EOF'
+node .agents/skills/run-planner/driver.mjs <<'EOF'
 goto /outline
 click text=ACME Account
 key ArrowDown
@@ -188,7 +188,7 @@ npm run smoke     # loads all 23 static routes; needs the dev server (see below)
 - **`npm run build` and `npm run dev` fight over `.next`.** Running a build while the dev
   server is up corrupts the running server's output. Stop dev first, or build in a
   throwaway worktree.
-- **A worktree needs a *copied* `node_modules`, not a symlink.** Turbopack panics with
+- **A worktree needs a _copied_ `node_modules`, not a symlink.** Turbopack panics with
   `Symlink [project]/node_modules is invalid, it points out of the filesystem root`. On
   APFS `cp -Rc` clones it in ~4s:
   ```sh
@@ -196,7 +196,7 @@ npm run smoke     # loads all 23 static routes; needs the dev server (see below)
   cp -Rc node_modules /tmp/planner-build/node_modules
   cp .env.local /tmp/planner-build/.env.local
   (cd /tmp/planner-build && npm run build && npx next start -p 3057)
-  PLANNER_URL=http://localhost:3057 node .claude/skills/run-planner/driver.mjs 'goto /outline' 'shot prod'
+  PLANNER_URL=http://localhost:3057 node .agents/skills/run-planner/driver.mjs 'goto /outline' 'shot prod'
   ```
 - **The outline uses HTML5 drag-and-drop, not pointer drags.** Synthesized mouse events
   cannot start it; the driver's `drag` uses `Input.setInterceptDrags` and replays the
@@ -223,7 +223,7 @@ npm run smoke     # loads all 23 static routes; needs the dev server (see below)
 - **`window.confirm()` freezes everything.** Deleting an appointment
   (`AppointmentDrawer`) or a Time Chart area (`TimeChartEditorView`) opens a native
   dialog; while it is up, every CDP call times out (`CDP timeout:
-  Input.dispatchMouseEvent`). The driver auto-answers via
+Input.dispatchMouseEvent`). The driver auto-answers via
   `Page.javascriptDialogOpening` — use `dialogs dismiss` to take the cancel branch. Do
   not remove that handler.
 - **Form fields have React-generated ids** (`_r_0_`, unstable across renders), and no
@@ -236,7 +236,7 @@ npm run smoke     # loads all 23 static routes; needs the dev server (see below)
   `isModalOpen()` uses to suppress the `c` shortcut.
 - **`text=` matches substrings, so `text=Save` used to hit "Unsaved changes".** Exact
   matches now win, but when a label legitimately appears twice — a project in the
-  schedule rail *and* on the calendar — the last one in document order wins. Scope it:
+  schedule rail _and_ on the calendar — the last one in document order wins. Scope it:
   `.fc-timegrid-body >> text=Someday/Maybe`.
 - **The browser driver runs as the dev/test account, not a real one.** `AUTH_DEV_BYPASS`
   skips the login screen and serves requests as `AUTH_DEV_USER_EMAIL` (default
@@ -272,13 +272,13 @@ npm run smoke     # loads all 23 static routes; needs the dev server (see below)
 
 ## Troubleshooting
 
-| Symptom | Fix |
-| --- | --- |
-| `Dev server not reachable at http://localhost:3047` | `npm run db:up && npm run dev` in another shell |
-| `Cannot launch Chrome at /Applications/…` | set `PLANNER_CHROME` to the real binary path |
-| `CDP timeout: Input.dispatchMouseEvent` | a native dialog is open — the click before it triggered `window.confirm()`; the driver handles this, so suspect a hand-rolled `Runtime.evaluate` that opened one |
-| `selector not found after 8000ms` | the element renders but is invisible/zero-size (collapsed row, closed drawer), or the text is split across nodes — check with `eval` and `count` first |
-| `no drag started from …` | that row is not draggable (only the outline grid is), or you wanted `pdrag` |
-| `Top-level await is currently not supported with the "cjs" output format` | rename the script `.mts` |
-| `TurbopackInternalError: Symlink [project]/node_modules is invalid` | copy `node_modules` into the worktree instead of symlinking |
-| Blank/error screenshot after a mutation | `console` — server action errors surface there, not in the driver's exit code |
+| Symptom                                                                   | Fix                                                                                                                                                              |
+| ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Dev server not reachable at http://localhost:3047`                       | `npm run db:up && npm run dev` in another shell                                                                                                                  |
+| `Cannot launch Chrome at /Applications/…`                                 | set `PLANNER_CHROME` to the real binary path                                                                                                                     |
+| `CDP timeout: Input.dispatchMouseEvent`                                   | a native dialog is open — the click before it triggered `window.confirm()`; the driver handles this, so suspect a hand-rolled `Runtime.evaluate` that opened one |
+| `selector not found after 8000ms`                                         | the element renders but is invisible/zero-size (collapsed row, closed drawer), or the text is split across nodes — check with `eval` and `count` first           |
+| `no drag started from …`                                                  | that row is not draggable (only the outline grid is), or you wanted `pdrag`                                                                                      |
+| `Top-level await is currently not supported with the "cjs" output format` | rename the script `.mts`                                                                                                                                         |
+| `TurbopackInternalError: Symlink [project]/node_modules is invalid`       | copy `node_modules` into the worktree instead of symlinking                                                                                                      |
+| Blank/error screenshot after a mutation                                   | `console` — server action errors surface there, not in the driver's exit code                                                                                    |

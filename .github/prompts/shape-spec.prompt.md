@@ -4,7 +4,7 @@ argument-hint: "Feature scope (optional)"
 agent: "plan"
 ---
 
-Follow the canonical workflow in [shape-spec](../../.claude/commands/agent-os/shape-spec.md).
+Follow the canonical workflow in [shape-spec](../../.agents/skills/shape-spec/SKILL.md).
 
 Treat any extra text the user included with this prompt as initial scope context.
 

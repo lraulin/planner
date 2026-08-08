@@ -11,7 +11,7 @@
  *
  * Deliberately shallow: it asks each route for its HTML and checks the status. It does not
  * click anything. Interaction bugs, hydration errors and client-only exceptions are out of
- * scope — those need a browser, which is what `.claude/skills/run-planner/driver.mjs` is
+ * scope — those need a browser, which is what `.agents/skills/run-planner/driver.mjs` is
  * for. What this catches is "the server cannot render this page at all", which is the
  * expensive kind to discover in production.
  *

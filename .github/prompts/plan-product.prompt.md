@@ -3,7 +3,7 @@ description: "Use when creating or updating product docs in agent-os/product (mi
 agent: "agent"
 ---
 
-Follow the canonical workflow in [plan-product](../../.claude/commands/agent-os/plan-product.md).
+Follow the canonical workflow in [plan-product](../../.agents/skills/plan-product/SKILL.md).
 
 Goal:
 

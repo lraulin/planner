@@ -4,4 +4,4 @@ interface:
   default_prompt: "Use $discover-standards for this area."
 
 policy:
-  allow_implicit_invocation: false
+  allow_implicit_invocation: true

@@ -4,7 +4,7 @@ argument-hint: "Optional standards path(s), e.g. api or api/response-format"
 agent: "agent"
 ---
 
-Follow the canonical workflow in [inject-standards](../../.claude/commands/agent-os/inject-standards.md).
+Follow the canonical workflow in [inject-standards](../../.agents/skills/inject-standards/SKILL.md).
 
 Treat any extra text the user included with this prompt as explicit mode arguments.
 

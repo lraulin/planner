@@ -1,1 +1,12 @@
-agent-os/shape-spec.md
+---
+description: Shape significant work into a saved Agent OS spec. Run in plan mode.
+argument-hint: feature scope (optional)
+---
+
+Read and follow the canonical workflow in `.agents/skills/shape-spec/SKILL.md`. It is the single
+source of truth for this command across Claude Code, Grok, Codex, and Copilot — do not
+work from this file alone.
+
+Treat the text below as the initial feature description (it may be empty):
+
+$ARGUMENTS

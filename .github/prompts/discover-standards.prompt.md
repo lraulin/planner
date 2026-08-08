@@ -4,7 +4,7 @@ argument-hint: "Focus area (optional), e.g. api or database"
 agent: "agent"
 ---
 
-Follow the canonical workflow in [discover-standards](../../.claude/commands/agent-os/discover-standards.md).
+Follow the canonical workflow in [discover-standards](../../.agents/skills/discover-standards/SKILL.md).
 
 Treat any extra text the user included with this prompt as the requested focus area.
 

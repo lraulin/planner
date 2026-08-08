@@ -4,4 +4,4 @@ interface:
   default_prompt: "Use $fix-bug to investigate this bug before fixing it."
 
 policy:
-  allow_implicit_invocation: false
+  allow_implicit_invocation: true

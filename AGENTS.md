@@ -63,8 +63,8 @@ are the one gate that cannot be automated into a hook:
 
 ### Fixing bugs
 
-Full protocol: `/fix-bug` (`.claude/commands/agent-os/fix-bug.md`). Invoke it for anything
-non-trivial. The part that applies even when it isn't invoked:
+Full protocol: `/fix-bug` (`.agents/skills/fix-bug/SKILL.md`). It applies to anything
+non-trivial whether or not it was invoked by name. The part that always applies:
 
 - **Fix the cause, not the symptom.** The line that threw is where the damage surfaced.
   Never reach for a swallowed `catch`, an `as any`, a `!`, or a `?? fallback` covering a
@@ -87,16 +87,30 @@ meant to build and why — not every line of implementation detail.
 
 #### Agent OS workflows (Claude Code, Grok, Copilot, and Codex)
 
-Canonical command docs live in `.claude/commands/agent-os/`.
+**Every workflow lives, in full, in `.agents/skills/<name>/SKILL.md`.** That is the one
+file to read and the one file to edit. No harness owns the canonical copy; the three
+locations below are pointers into it, so a change made in one place is a change everywhere.
 
-- Claude Code + Grok discover them from `.claude/commands/` (with flat symlinks for short names).
-- Copilot discovers equivalent slash commands from `.github/prompts/*.prompt.md`, each of
-  which references the same canonical docs above.
-- Codex discovers the thin wrappers in `.agents/skills/`; invoke them as `$shape-spec`,
-  `$fix-bug`, `$inject-standards`, `$discover-standards`, `$index-standards`,
-  `$plan-product`, or `$overnight`. Its user-local aliases, when installed, are
-  `/prompts:shape-spec`, `/prompts:inject-standards`, and the corresponding
-  `/prompts:<workflow>` names.
+- **Codex** reads `.agents/skills/` natively — invoke as `$shape-spec`, `$fix-bug`,
+  `$inject-standards`, `$discover-standards`, `$index-standards`, `$plan-product`, or
+  `$overnight`. Its user-local aliases, when installed, are `/prompts:<workflow>`.
+- **Claude Code** reads the same folder through the directory symlink `.claude/skills`
+  → `../.agents/skills`, which is what makes these auto-apply when relevant. The flat
+  one-line shims in `.claude/commands/*.md` provide the explicit `/<name>` slash commands,
+  and are what **Grok** discovers (it does not descend into subdirectories).
+- **Copilot** reads `.github/prompts/*.prompt.md`, each a thin pointer to the same
+  `SKILL.md`.
+
+**These are meant to fire on their own.** A feature request should pull in `/shape-spec`,
+a bug report `/fix-bug`, and coding work the relevant standards, without being asked. The
+sole exception is **`/overnight`**, which runs only when explicitly invoked by name —
+`allow_implicit_invocation: false` in its `agents/openai.yaml`, and its skill description
+forbids inferring it.
+
+Adding a workflow means: write `.agents/skills/<name>/SKILL.md` (with `name` and a
+trigger-shaped `description` in frontmatter), then add the two pointers —
+`.claude/commands/<name>.md` and `.github/prompts/<name>.prompt.md` — plus
+`agents/openai.yaml` if Codex needs display metadata.
 
 | Command               | Purpose                                                        |
 | --------------------- | -------------------------------------------------------------- |

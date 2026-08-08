@@ -4,4 +4,4 @@ interface:
   default_prompt: "Use $plan-product to establish product context."
 
 policy:
-  allow_implicit_invocation: false
+  allow_implicit_invocation: true

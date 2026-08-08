@@ -4,7 +4,7 @@ argument-hint: "Optional focus area"
 agent: "agent"
 ---
 
-Follow the canonical workflow in [overnight](../../.claude/commands/agent-os/overnight.md).
+Follow the canonical workflow in [overnight](../../.agents/skills/overnight/SKILL.md).
 
 Treat any extra text the user included with this prompt as the focus area.
 

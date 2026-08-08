@@ -3,7 +3,7 @@ description: "Use when a bug, error, or wrong behavior is reported and you are a
 agent: "agent"
 ---
 
-Follow the canonical workflow in [fix-bug](../../.claude/commands/agent-os/fix-bug.md).
+Follow the canonical workflow in [fix-bug](../../.agents/skills/fix-bug/SKILL.md).
 
 Treat the text supplied with this prompt as the bug report.
 

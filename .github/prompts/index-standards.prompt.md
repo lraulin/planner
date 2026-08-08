@@ -3,7 +3,7 @@ description: "Use when rebuilding or cleaning agent-os/standards/index.yml after
 agent: "agent"
 ---
 
-Follow the canonical workflow in [index-standards](../../.claude/commands/agent-os/index-standards.md).
+Follow the canonical workflow in [index-standards](../../.agents/skills/index-standards/SKILL.md).
 
 Goal:
 
