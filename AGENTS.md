@@ -61,6 +61,20 @@ are the one gate that cannot be automated into a hook:
   not in a git hook because it needs a server running; it is a step you take, not one that
   takes itself.
 
+### Fixing bugs
+
+Full protocol: `/fix-bug` (`.claude/commands/agent-os/fix-bug.md`). Invoke it for anything
+non-trivial. The part that applies even when it isn't invoked:
+
+- **Fix the cause, not the symptom.** The line that threw is where the damage surfaced.
+  Never reach for a swallowed `catch`, an `as any`, a `!`, or a `?? fallback` covering a
+  value that should not have been missing — those are the tempting moves precisely when
+  the cause hasn't been found.
+- **Check whether the same pattern repeats** before fixing one site. This code is mostly
+  agent-written, so a mistake generated once was usually generated more than once. If it
+  repeats, a tight single-cause refactor beats N copies of the same patch.
+- **Say what the root cause was** in the report and in the commit body.
+
 ### Agent OS & spec-driven development
 
 This repo uses [Agent OS](https://buildermethods.com/agent-os): product docs under
@@ -79,13 +93,15 @@ Canonical command docs live in `.claude/commands/agent-os/`.
 - Copilot discovers equivalent slash commands from `.github/prompts/*.prompt.md`, each of
   which references the same canonical docs above.
 - Codex discovers the thin wrappers in `.agents/skills/`; invoke them as `$shape-spec`,
-  `$inject-standards`, `$discover-standards`, `$index-standards`, `$plan-product`, or
-  `$overnight`. Its user-local aliases, when installed, are `/prompts:shape-spec`,
-  `/prompts:inject-standards`, and the corresponding `/prompts:<workflow>` names.
+  `$fix-bug`, `$inject-standards`, `$discover-standards`, `$index-standards`,
+  `$plan-product`, or `$overnight`. Its user-local aliases, when installed, are
+  `/prompts:shape-spec`, `/prompts:inject-standards`, and the corresponding
+  `/prompts:<workflow>` names.
 
 | Command               | Purpose                                                        |
 | --------------------- | -------------------------------------------------------------- |
 | `/shape-spec`         | Plan-mode shaping → `agent-os/specs/...` folder                |
+| `/fix-bug`            | Root-cause a reported bug, then size the fix deliberately      |
 | `/inject-standards`   | Pull relevant `agent-os/standards/` into context               |
 | `/discover-standards` | Extract patterns into new standards                            |
 | `/index-standards`    | Rebuild `agent-os/standards/index.yml`                         |
