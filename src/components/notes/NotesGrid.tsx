@@ -103,6 +103,12 @@ export function NotesGrid({
   contacts: ContactOption[];
 }) {
   const [patches, setPatches] = useState<Record<string, Partial<NoteNode>>>({});
+  // Keep patches until server props refresh — clearing on action settle flickers the old tree.
+  const [baselineNotes, setBaselineNotes] = useState(initialNotes);
+  if (initialNotes !== baselineNotes) {
+    setBaselineNotes(initialNotes);
+    if (Object.keys(patches).length > 0) setPatches({});
+  }
   const {
     note: urlNoteId,
     setNote: setUrlNoteId,
@@ -230,9 +236,11 @@ export function NotesGrid({
       setError(null);
       startTransition(async () => {
         const result = await action();
-        if (!result.ok) setError(result.error);
-        // Server props refresh on success; drop the optimistic layer either way.
-        setPatches({});
+        if (!result.ok) {
+          setError(result.error);
+          // Rejected: revert immediately. Success waits for `initialNotes` above.
+          setPatches({});
+        }
       });
     },
     [],

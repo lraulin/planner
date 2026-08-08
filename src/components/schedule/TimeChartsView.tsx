@@ -52,6 +52,12 @@ export function TimeChartsView({
 }) {
   const router = useRouter();
   const [patches, setPatches] = useState<Record<string, Partial<TimeChartListRow>>>({});
+  // Keep patches until server props refresh — clearing on action settle flickers the old list.
+  const [baselineCharts, setBaselineCharts] = useState(initialCharts);
+  if (initialCharts !== baselineCharts) {
+    setBaselineCharts(initialCharts);
+    if (Object.keys(patches).length > 0) setPatches({});
+  }
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<TimeChartListRow | null>(null);
@@ -97,9 +103,11 @@ export function TimeChartsView({
       setError(null);
       startTransition(async () => {
         const result = await action();
-        if (!result.ok) setError(result.error);
-        // Server props refresh on success; drop the optimistic layer either way.
-        setPatches({});
+        if (!result.ok) {
+          setError(result.error);
+          // Rejected: revert immediately. Success waits for `initialCharts` above.
+          setPatches({});
+        }
       });
     },
     [],

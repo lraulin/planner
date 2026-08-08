@@ -56,6 +56,12 @@ export function WishesGrid({
 }) {
   /** Optimistic patches on top of the server list — same idea as the node grids. */
   const [patches, setPatches] = useState<Record<string, Partial<WishListRow>>>({});
+  // Keep patches until server props refresh — clearing on action settle flickers the old list.
+  const [baselineWishes, setBaselineWishes] = useState(initialWishes);
+  if (initialWishes !== baselineWishes) {
+    setBaselineWishes(initialWishes);
+    if (Object.keys(patches).length > 0) setPatches({});
+  }
   const [scopeId, setScopeId] = useState("");
   const { detail: detailNodeId, setDetail: setDetailNodeId } = useViewStateUrl();
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
@@ -187,9 +193,11 @@ export function WishesGrid({
       setError(null);
       startTransition(async () => {
         const result = await action();
-        if (!result.ok) setError(result.error);
-        // Server props refresh on success; drop the optimistic layer either way.
-        setPatches({});
+        if (!result.ok) {
+          setError(result.error);
+          // Rejected: revert immediately. Success waits for `initialWishes` above.
+          setPatches({});
+        }
       });
     },
     [],

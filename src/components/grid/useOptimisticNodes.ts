@@ -11,11 +11,25 @@ export type { ActionResult };
  * Layers optimistic patches on top of the server-provided tree. The server remains the
  * source of truth: accepted changes arrive via `initialNodes` on the next render, and
  * rejected ones visibly revert when the patch layer is cleared.
+ *
+ * Patches stay until `initialNodes` refreshes (or the action fails). Clearing them when
+ * the action Promise settles races the RSC re-render — one frame shows the pre-mutation
+ * tree with no overlay, which is the complete/priority flicker.
  */
 export function useOptimisticNodes(initialNodes: OutlineNode[]) {
   const [patches, setPatches] = useState<Record<string, Partial<OutlineNode>>>({});
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+
+  // Same compare-props idiom as DayView / ScheduleView: drop the overlay in the same
+  // render that receives the refreshed tree, not in an effect after paint.
+  const [baseline, setBaseline] = useState(initialNodes);
+  if (initialNodes !== baseline) {
+    setBaseline(initialNodes);
+    if (Object.keys(patches).length > 0) {
+      setPatches({});
+    }
+  }
 
   const nodes = useMemo(
     () => initialNodes.map((n) => (patches[n.id] ? { ...n, ...patches[n.id] } : n)),
@@ -41,8 +55,11 @@ export function useOptimisticNodes(initialNodes: OutlineNode[]) {
       startTransition(async () => {
         const result = await action();
         if (result.ok) onSuccess?.(result.id);
-        else setError(result.error);
-        setPatches({});
+        else {
+          setError(result.error);
+          // Rejected: revert immediately. Success waits for `initialNodes` above.
+          setPatches({});
+        }
       });
     },
     [],
