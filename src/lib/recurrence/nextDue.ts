@@ -79,8 +79,10 @@ export function nextDue(
  */
 export function isDeferred(deferredDate: Date | null, today: string | null): boolean {
   if (!deferredDate || !today) return false;
-  // Local calendar day — same key space as `toDateKey` / DateField / `useToday`. UTC day
-  // keys made a local-midnight deferral in Asia look a day early, and a late-evening stamp
-  // in the Americas look a day late.
+  // `deferredDate` is a stored calendar day, so it decodes with `toDateKey` (UTC components
+  // of the UTC-noon encoding); `today` is the reader's own day from `useToday`
+  // (`localDateKey`). Both are `YYYY-MM-DD` labels, which is the only footing on which the
+  // two can be compared — reading the stored day with local getters is what made a deferral
+  // look a day early in Asia and a day late late-evening in the Americas.
   return toDateKey(deferredDate) > today;
 }

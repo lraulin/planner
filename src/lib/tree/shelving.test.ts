@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { derive } from "./derive";
 import { row } from "./fixtures";
+import { fromDateKey } from "@/lib/schedule/geometry";
 import {
   effectiveState,
   laterShelf,
@@ -12,11 +13,14 @@ import {
 
 const TODAY = "2026-03-08";
 
-/** Local midnight — same key space as `toDateKey` / DateField. */
-function at(key: string): Date {
-  const [y, m, d] = key.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
+/**
+ * A stored calendar day, encoded the way every writer encodes one (UTC noon) — not
+ * `new Date(y, m - 1, d)`, which is process-local midnight and reads back as the previous
+ * day anywhere east of Greenwich. These three cases were the ones failing outside the
+ * Americas before `vitest.config.ts` pinned the zone; the pin keeps the wall-clock tests
+ * honest, and this makes these ones not need it. See `standards/development/dates.md`.
+ */
+const at = fromDateKey;
 
 function shelf(until: string | null, sourceId = "n"): Shelf {
   return { until: until === null ? null : at(until), sourceId };

@@ -64,8 +64,9 @@ export function shelfHolds(shelf: Shelf | null, today: string | null): boolean {
   if (!shelf) return false;
   if (shelf.until === null) return true;
   if (!today) return true;
-  // Local calendar days, matching `isDeferred` / `toDateKey`: a shelf expiring today is
-  // already open all day.
+  // Day labels, not instants, matching `isDeferred`: `until` is a stored calendar day so it
+  // decodes with `toDateKey` (UTC components), while `today` is the reader's local day from
+  // `useToday`. Comparing the two labels is what makes a shelf expiring today open all day.
   return toDateKey(shelf.until) > today;
 }
 

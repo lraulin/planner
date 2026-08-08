@@ -48,8 +48,9 @@ export function stateFromDates(opts: {
   }
 
   // A date already gone by is not a shelf — it is the residue of one that has expired, and
-  // re-shelving on it would hide nothing while making the State column lie. Compared as a
-  // local calendar day (not UTC), matching `toDateKey` and DateField.
+  // re-shelving on it would hide nothing while making the State column lie. Compared as day
+  // labels: the stored day through `toDateKey` (UTC components), against the caller's local
+  // `today`.
   if (
     deferredUntil &&
     (!today || toDateKey(deferredUntil) > today) &&

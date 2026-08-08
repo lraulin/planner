@@ -451,7 +451,8 @@ export function DateField({
   min?: string;
 }) {
   const id = useId();
-  // Local calendar day via `toDateKey` — never `toISOString().slice(0, 10)`.
+  // Stored calendar day, decoded with `toDateKey` (UTC components of the UTC-noon
+  // encoding) — never `toISOString().slice(0, 10)`, and never local getters.
   const text = value ? toDateKey(value) : "";
 
   return (

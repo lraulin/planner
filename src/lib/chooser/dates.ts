@@ -7,7 +7,8 @@ import { daysBetweenKeys, toDateKey } from "@/lib/schedule/geometry";
  * Everything here works in **calendar days as `YYYY-MM-DD` strings**, the same convention
  * `src/lib/tree/status.ts` already established for the Status column: a deadline at 09:00
  * is not "past" at 17:00, and no module calls `new Date()` on its own so the whole chooser
- * stays directly testable. Day keys are **local** (`toDateKey`), not UTC.
+ * stays directly testable. Stored days decode with `toDateKey` (UTC components of the
+ * UTC-noon encoding); the `today` handed in is the reader's local day.
  */
 
 /** The local calendar day a timestamp falls on, as `YYYY-MM-DD`. */
