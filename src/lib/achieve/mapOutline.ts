@@ -14,6 +14,25 @@ import { tableRows } from "./parseXml";
 import { rtfToPlainText } from "./rtf";
 import type { AchDocument, AchMappedNode, AchOutlineMap, AchRow } from "./types";
 
+/** Category namespace that keeps imported result areas behind the live outline. */
+export const IMPORTED_CATEGORY_PREFIX = "~ Imported";
+
+/** Preserve Achieve's old category as provenance without mixing it into live categories. */
+export function importedCategoryName(category: string | null | undefined): string {
+  const oldCategory = category?.trim();
+  if (!oldCategory) return IMPORTED_CATEGORY_PREFIX;
+
+  // Planner exports can be imported again; do not stack the quarantine prefix each time.
+  if (
+    oldCategory === IMPORTED_CATEGORY_PREFIX ||
+    oldCategory.startsWith(`${IMPORTED_CATEGORY_PREFIX}:`)
+  ) {
+    return oldCategory;
+  }
+
+  return `${IMPORTED_CATEGORY_PREFIX}: ${oldCategory}`;
+}
+
 /**
  * Tables we know about but do not map yet. Grouped by product area so the import summary
  * and roadmap stay honest about what Full XML still carries that we ignore.
@@ -140,7 +159,9 @@ export function mapOutline(doc: AchDocument): AchOutlineMap {
         name: row.Name ?? "",
         ordinal: intField(row, "__ORDINAL__") ?? 0,
         row,
-        categoryName: categoryId ? (categories.get(categoryId) ?? null) : null,
+        categoryName: importedCategoryName(
+          categoryId ? categories.get(categoryId) : null,
+        ),
         importance: intField(row, "Importance"),
         // Result areas use Priority + Importance; no effort.
         effortMinutes: null,

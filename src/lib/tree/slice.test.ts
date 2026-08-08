@@ -751,6 +751,22 @@ describe("groupByCategory", () => {
     ]);
   });
 
+  it("puts tilde-prefixed quarantine categories after ordinary named categories", () => {
+    const withImported = tree(...sample, {
+      id: "ra-imported",
+      type: "result_area",
+      name: "Old work",
+      category: "~ Imported: Work",
+    });
+
+    expect(groups(rows(withImported)).map((g) => g.label)).toEqual([
+      "Personal",
+      "Work",
+      "~ Imported: Work",
+      "(No Category)",
+    ]);
+  });
+
   it("moves each top-level subtree whole, keeping tree order inside a category", () => {
     // Two Work areas appear in tree order under one header — not interleaved by node type.
     const withTwoWork = tree(
@@ -848,6 +864,16 @@ describe("categoryOptions", () => {
       { id: "p", type: "project", parentId: "a", depth: 1 },
     );
     expect(categoryOptions(nodes)).toEqual(["Family", "Personal", "Work"]);
+  });
+
+  it("offers tilde-prefixed categories after ordinary names", () => {
+    const nodes = tree({
+      id: "old",
+      type: "result_area",
+      name: "Old work",
+      category: "~ Imported: Work",
+    });
+    expect(categoryOptions(nodes)).toEqual(["Personal", "Work", "~ Imported: Work"]);
   });
 });
 

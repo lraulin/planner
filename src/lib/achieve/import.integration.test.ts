@@ -226,7 +226,7 @@ describeDb("importAchieveXml", () => {
     await importAchieveXml({ userId, xml, mode: "replace" });
     const outline = await loadOutline(userId);
     const career = outline.find((n) => n.name === "Career");
-    expect(career?.category).toBe("Work");
+    expect(career?.category).toBe("~ Imported: Work");
     expect(career?.importance).toBe(70);
 
     const task = outline.find((n) => n.name === "T");
@@ -236,7 +236,7 @@ describeDb("importAchieveXml", () => {
       .select()
       .from(resultAreaDetails)
       .where(eq(resultAreaDetails.nodeId, career!.id));
-    expect(rad.category).toBe("Work");
+    expect(rad.category).toBe("~ Imported: Work");
 
     const [td] = await db
       .select()

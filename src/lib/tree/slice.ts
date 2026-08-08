@@ -319,11 +319,17 @@ export function groupByCategory(
   return out;
 }
 
-/** Uncategorised sits last; everything else is alphabetical. */
+/**
+ * Uncategorised sits last. `~` is the explicit sort-last namespace for named categories;
+ * locale collation normally puts punctuation before letters, so make the convention real.
+ */
 function compareCategories(a: string, b: string): number {
   if (a === b) return 0;
   if (a === NO_CATEGORY) return 1;
   if (b === NO_CATEGORY) return -1;
+  const aSortsLast = a.startsWith("~");
+  const bSortsLast = b.startsWith("~");
+  if (aSortsLast !== bSortsLast) return aSortsLast ? 1 : -1;
   return a.localeCompare(b, undefined, { numeric: true });
 }
 
@@ -360,9 +366,7 @@ export function categoryOptions(nodes: readonly OutlineNode[]): string[] {
     const trimmed = node.category?.trim();
     if (trimmed) seen.add(trimmed);
   }
-  return Array.from(seen).sort((a, b) =>
-    a.localeCompare(b, undefined, { numeric: true }),
-  );
+  return Array.from(seen).sort(compareCategories);
 }
 
 /** Group row id for a category label, matching {@link groupByCategory}. */

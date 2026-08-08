@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { mapOutline } from "./mapOutline";
+import { importedCategoryName, mapOutline } from "./mapOutline";
 import { parseAchXml } from "./parseXml";
 
 const fixture = readFileSync(
@@ -11,6 +11,13 @@ const fixture = readFileSync(
 );
 
 describe("mapOutline", () => {
+  it("quarantines imported categories while preserving their old names", () => {
+    expect(importedCategoryName("Work")).toBe("~ Imported: Work");
+    expect(importedCategoryName("  Personal  ")).toBe("~ Imported: Personal");
+    expect(importedCategoryName(null)).toBe("~ Imported");
+    expect(importedCategoryName("~ Imported: Work")).toBe("~ Imported: Work");
+  });
+
   it("maps result areas, projects, and tasks with parent links", () => {
     const mapped = mapOutline(parseAchXml(fixture));
 
@@ -74,6 +81,7 @@ describe("mapOutline", () => {
     expect(mapped.skippedTables).toContain("Contacts");
     expect(mapped.warnings.filter((w) => w.includes("Contacts"))).toHaveLength(0);
     expect(mapped.counts.result_area).toBe(1);
+    expect(mapped.nodes[0]?.categoryName).toBe("~ Imported");
   });
 
   it("maps goals under a result area and links a project association", () => {
