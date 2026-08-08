@@ -26,6 +26,11 @@ function mapEntry(row: {
 /**
  * All metrics for the user, with owner name and last value derived from entries.
  * Ordered by sortKey.
+ *
+ * The owner join carries `userId` as well as the id. `assertOwnerOk` is the only thing that
+ * writes `owner_node_id` and it already refuses another user's node — but that is a guard in
+ * a different file, and a join that reads a foreign row correctly is the wrong shape to
+ * leave lying around next to a query layer where every other read scopes itself.
  */
 export async function listMetrics(userId: string): Promise<MetricListRow[]> {
   const rows = await db
@@ -45,7 +50,7 @@ export async function listMetrics(userId: string): Promise<MetricListRow[]> {
       ownerName: nodes.name,
     })
     .from(metrics)
-    .leftJoin(nodes, eq(nodes.id, metrics.ownerNodeId))
+    .leftJoin(nodes, and(eq(nodes.id, metrics.ownerNodeId), eq(nodes.userId, userId)))
     .where(eq(metrics.userId, userId))
     .orderBy(asc(metrics.sortKey));
 
@@ -152,7 +157,7 @@ export async function getMetricDetail(
       ownerName: nodes.name,
     })
     .from(metrics)
-    .leftJoin(nodes, eq(nodes.id, metrics.ownerNodeId))
+    .leftJoin(nodes, and(eq(nodes.id, metrics.ownerNodeId), eq(nodes.userId, userId)))
     .where(and(eq(metrics.id, metricId), eq(metrics.userId, userId)))
     .limit(1);
 

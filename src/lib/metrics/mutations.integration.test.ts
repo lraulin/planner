@@ -217,6 +217,38 @@ describeDb("metrics mutations", () => {
   });
 });
 
+describeDb("metrics owner join", () => {
+  /**
+   * `assertOwnerOk` refuses another user's node, so this row cannot be reached through the
+   * mutations — which is exactly why the *query* needs its own guard. Written straight into
+   * the table so the assertion is about the join and nothing else: drop `userId` from the
+   * `leftJoin` in `queries.ts` and both reads start reporting a stranger's goal name.
+   */
+  it("never reads an owner name belonging to another user", async () => {
+    const owner = await makeUser();
+    const stranger = await makeUser();
+
+    const strangerGoal = await createNode({
+      userId: stranger,
+      parentId: null,
+      type: "goal",
+      name: "Stranger's Private Goal",
+    });
+
+    const metricId = await createMetric(owner, { title: "Waist" });
+    await db
+      .update(metrics)
+      .set({ ownerNodeId: strangerGoal })
+      .where(eq(metrics.id, metricId));
+
+    const [listed] = await listMetrics(owner);
+    expect(listed.ownerName).toBeNull();
+
+    const detail = await getMetricDetail(owner, metricId);
+    expect(detail!.ownerName).toBeNull();
+  });
+});
+
 describeDb("metrics cascade from user", () => {
   it("removing the user removes their metrics", async () => {
     const userId = await makeUser();
