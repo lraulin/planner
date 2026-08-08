@@ -3,6 +3,8 @@ import { db } from "@/db";
 import { nodeItems, nodes, users } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { captureItems } from "@/lib/capture/mutations";
+import { parseCapture } from "@/lib/capture/parse";
 import { createNode, renameNode } from "@/lib/tree/mutations";
 import { promoteUrlsFromTaskName } from "./taskNameLinks";
 
@@ -190,6 +192,21 @@ describeDb("promoteUrlsFromTaskName", () => {
 
     expect(await nodeName(userId, id)).toBe("https://example.com/proj");
     expect(await attachmentsOf(userId, id)).toEqual([]);
+  });
+
+  it("promotes URLs from quick capture (create with name)", async () => {
+    mockTitleFetch({ "https://example.com/capture": "Captured Page" });
+
+    const { nodeIds } = await captureItems({
+      userId,
+      items: parseCapture("https://example.com/capture"),
+    });
+    expect(nodeIds).toHaveLength(1);
+
+    expect(await nodeName(userId, nodeIds[0])).toBe("Captured Page");
+    expect(await attachmentsOf(userId, nodeIds[0])).toEqual([
+      { title: "Captured Page", url: "https://example.com/capture" },
+    ]);
   });
 
   it("will not promote URLs onto another user's task", async () => {
