@@ -71,8 +71,8 @@ export type GridSettings = {
    */
   sorts: GridSort[];
   /**
-   * Group dimension ids, outer first (see `GroupBy` in `@/lib/tree/slice`), or null to
-   * follow the tab's own default.
+   * Group dimension ids, outer first (see `GridGroupBy` in `@/lib/grid/grouping`), or null
+   * to follow the tab's own default.
    *
    * Nullable for the same reason `order` is, and it is the same distinction: null means
    * "whatever this tab groups by out of the box", `[]` means "the user turned grouping

@@ -85,6 +85,10 @@ rank among the destination parent's children (`useTreeRowDrag`, `lib/tree/outlin
   shows the current state.
 - This is why `groupBy` is `string[] | null`: null follows the tab's default, `[]` is the
   user having turned grouping off. Same distinction as `order`, and for the same reason.
+- **Notes has two mutually exclusive hierarchies.** Its real parent/child tree is Nested
+  mode; its Year → Month → Day calendar outline is grouping over Flat mode. Choosing a date
+  group switches to Flat, and choosing Nested clears grouping. Grouping therefore never
+  rewrites or visually competes with stored note ancestry.
 
 ## Inherited values are computed once, in `derive`
 
@@ -582,7 +586,9 @@ knowing about:
 | `lib/grid/chips.ts`             | What the chip bar says                                       |
 | `lib/grid/distinct.ts`          | Distinct values, shared by funnel and builder                |
 | `lib/settings/grid.ts`          | The persisted shape, its defaults and its migrations         |
-| `lib/tree/slice.ts`             | Row slice, group dimensions and header counts                |
+| `lib/grid/grouping.ts`          | Shared group dimensions and progressive-level state          |
+| `lib/tree/slice.ts`             | Outline row slices and tree-tab group headers/counts         |
+| `lib/notes/grouping.ts`         | Notes calendar parts and Year/Month/Day group headers        |
 
 A test earns its place if it would fail on a plausible mistake. The mistakes this area
 actually makes are: a filter that silently matches nothing, a sort that lifts a child above

@@ -2,12 +2,12 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import {
-  asGroupBy,
+  asGridGroupBy,
   GROUP_BY_LABELS,
   MAX_GROUP_LEVELS,
   setGroupLevel,
-  type GroupBy,
-} from "@/lib/tree/slice";
+  type GridGroupBy,
+} from "@/lib/grid/grouping";
 import type { GridDensity } from "@/lib/settings/grid";
 import {
   ErrorBanner,
@@ -35,7 +35,7 @@ import type { ColumnMeta } from "./columns";
 import type { GridState } from "./useGridState";
 import type { ModuleViewsApi } from "./useModuleViews";
 
-const EMPTY_GROUP_DIMENSIONS: readonly GroupBy[] = [];
+const EMPTY_GROUP_DIMENSIONS: readonly GridGroupBy[] = [];
 const EMPTY_GROUP_IDS: readonly string[] = [];
 const EMPTY_SWITCHES: readonly GridSwitch[] = [];
 
@@ -95,7 +95,7 @@ export function GridToolbar({
    * Dimensions this tab offers in Group by. Empty hides the control entirely — the Day and
    * Wish List grids have nothing meaningful to group by.
    */
-  groupDimensions?: readonly GroupBy[];
+  groupDimensions?: readonly GridGroupBy[];
   /** Group ids currently in the row set, from `DataGrid`'s `onGroupIdsChange`. */
   groupIds?: readonly string[];
   switches?: readonly GridSwitch[];
@@ -129,7 +129,11 @@ export function GridToolbar({
   const [fieldsOpen, setFieldsOpen] = useState(false);
   const { open: panelOpen, setOpen: setPanelOpen } = useCommandsPanel();
 
-  const activeGroupBy = asGroupBy(grid.groupBy);
+  // A grid scope may outlive a dimension. Keep only dimensions this tab currently offers,
+  // so a retired or cross-module value degrades to ungrouped instead of occupying a picker.
+  const activeGroupBy = asGridGroupBy(grid.groupBy).filter((dimension) =>
+    groupDimensions.includes(dimension),
+  );
   const allCollapsed =
     groupIds.length > 0 && groupIds.every((id) => grid.collapsedGroups.has(id));
 
@@ -471,9 +475,9 @@ function GroupByLevels({
   levels,
   onChange,
 }: {
-  dimensions: readonly GroupBy[];
-  levels: readonly GroupBy[];
-  onChange: (index: number, value: GroupBy | null) => void;
+  dimensions: readonly GridGroupBy[];
+  levels: readonly GridGroupBy[];
+  onChange: (index: number, value: GridGroupBy | null) => void;
 }) {
   // One select per set level, and a trailing empty one while there is room to add another.
   const slots = Math.min(levels.length + 1, MAX_GROUP_LEVELS, dimensions.length);
@@ -492,7 +496,7 @@ function GroupByLevels({
             label={index === 0 ? "Group by" : "then by"}
             value={current}
             onChange={(value) =>
-              onChange(index, value === "" ? null : (value as GroupBy))
+              onChange(index, value === "" ? null : (value as GridGroupBy))
             }
             options={[
               // Clearing a level drops the ones under it — there would be nothing for them

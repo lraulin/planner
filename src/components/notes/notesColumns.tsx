@@ -2,10 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { NoteFlag } from "@/db/schema";
+import { GROUP_BY_LABELS, type NoteGroupBy } from "@/lib/grid/grouping";
 import type { NoteNode } from "@/lib/notes/types";
+import { noteDatePart, noteDatePartLabel } from "@/lib/notes/grouping";
 import { noteSnippet } from "@/lib/notes/snippet";
+import { toDateKey } from "@/lib/schedule/geometry";
 import { TYPE_LABELS } from "@/lib/tree/hierarchy";
-import type { ColumnDef } from "@/components/grid/columns";
+import type { ColumnAlign, ColumnDef } from "@/components/grid/columns";
 import { FLAG_LABELS, FlagCell } from "./flags";
 
 /**
@@ -16,6 +19,8 @@ import { FLAG_LABELS, FlagCell } from "./flags";
 export type NotesColumnCtx = {
   selectedId: string | null;
   editingId: string | null;
+  /** False in Flat mode, where the stored note tree is deliberately not on screen. */
+  showHierarchy: boolean;
   onToggleCollapsed: (note: NoteNode) => void;
   onOpenDetail: (note: NoteNode) => void;
   onFinishEdit: (note: NoteNode, title: string) => void;
@@ -23,6 +28,7 @@ export type NotesColumnCtx = {
   onFlagChange: (note: NoteNode, flag: NoteFlag) => void;
 };
 
+/** Default visible fields. Calendar parts stay available through Show Fields and Group by. */
 export const NOTES_COLUMN_IDS = [
   "flag",
   "title",
@@ -33,12 +39,8 @@ export const NOTES_COLUMN_IDS = [
   "linked",
 ] as const;
 
-/** `YYYY-MM-DD` in local time — `toISOString` shifts the date across a timezone. */
 function dateKey(date: Date | null): string | null {
-  if (!date) return null;
-  const month = `${date.getMonth() + 1}`.padStart(2, "0");
-  const day = `${date.getDate()}`.padStart(2, "0");
-  return `${date.getFullYear()}-${month}-${day}`;
+  return date ? toDateKey(date) : null;
 }
 
 function formatDate(date: Date | null): string {
@@ -47,7 +49,35 @@ function formatDate(date: Date | null): string {
     year: "2-digit",
     month: "numeric",
     day: "numeric",
+    // Note Date is a stored calendar day encoded at UTC noon. Reading it in a local zone
+    // can move the label in UTC+13/14; the UTC components are the durable day.
+    timeZone: "UTC",
   });
+}
+
+function datePartColumn(
+  dimension: NoteGroupBy,
+  width: string,
+  align?: ColumnAlign,
+): ColumnDef<NotesColumnCtx, NoteNode> {
+  return {
+    id: dimension,
+    label: GROUP_BY_LABELS[dimension],
+    width,
+    align,
+    filterKind: "enum",
+    filterValue: (row) => noteDatePart(row.node.noteDate, dimension)?.key ?? null,
+    filterLabel: (value) => noteDatePartLabel(value, dimension),
+    sortValue: (row) => noteDatePart(row.node.noteDate, dimension)?.rank ?? null,
+    render: (row) => {
+      const part = noteDatePart(row.node.noteDate, dimension);
+      return (
+        <span className="tabular truncate text-[0.8125rem] text-ink-muted">
+          {part?.label ?? ""}
+        </span>
+      );
+    },
+  };
 }
 
 export const notesColumns: ColumnDef<NotesColumnCtx, NoteNode>[] = [
@@ -79,6 +109,7 @@ export const notesColumns: ColumnDef<NotesColumnCtx, NoteNode>[] = [
       <TitleCell
         note={row.node}
         depth={row.depth}
+        showHierarchy={ctx.showHierarchy}
         selected={row.node.id === ctx.selectedId}
         editing={row.node.id === ctx.editingId}
         onToggleCollapsed={() => ctx.onToggleCollapsed(row.node)}
@@ -125,6 +156,12 @@ export const notesColumns: ColumnDef<NotesColumnCtx, NoteNode>[] = [
       </span>
     ),
   },
+  // These are intentionally optional fields rather than three more defaults beside Date.
+  // Their main job is to make the Year → Month → Day grouping accountable: each header
+  // value can also be shown, sorted, or filtered as an ordinary column.
+  datePartColumn("year", "4.5rem", "right"),
+  datePartColumn("month", "6rem"),
+  datePartColumn("day", "3.75rem", "right"),
   {
     id: "contexts",
     label: "Contexts",
@@ -219,6 +256,7 @@ function FlagPicker({
 function TitleCell({
   note,
   depth,
+  showHierarchy,
   selected,
   editing,
   onToggleCollapsed,
@@ -228,6 +266,7 @@ function TitleCell({
 }: {
   note: NoteNode;
   depth: number;
+  showHierarchy: boolean;
   selected: boolean;
   editing: boolean;
   onToggleCollapsed: () => void;
@@ -251,7 +290,7 @@ function TitleCell({
         tabIndex={-1}
         className={[
           "mr-1 ml-0.5 flex w-4 flex-none items-center justify-center text-[0.625rem] text-ink-faint",
-          note.hasChildren ? "hover:text-ink" : "invisible",
+          showHierarchy && note.hasChildren ? "hover:text-ink" : "invisible",
         ].join(" ")}
       >
         {note.collapsed ? "▶" : "▼"}
@@ -275,7 +314,7 @@ function TitleCell({
         </span>
       )}
 
-      {note.collapsed && note.hasChildren && (
+      {showHierarchy && note.collapsed && note.hasChildren && (
         <span className="tabular ml-2 flex-none self-center text-[0.6875rem] text-ink-faint">
           {note.childCount}
         </span>

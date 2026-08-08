@@ -1,3 +1,11 @@
+import {
+  GROUP_BY_LABELS,
+  MAX_GROUP_LEVELS,
+  TREE_GROUP_BY_VALUES,
+  knownGroupBy,
+  setGroupLevel,
+  type TreeGroupBy,
+} from "@/lib/grid/grouping";
 import { shiftDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { STATE_LABELS, STATE_ORDER } from "./hierarchy";
 import { ownEffectiveState, shelfHolds } from "./shelving";
@@ -64,84 +72,15 @@ export type GridRow<T = OutlineNode> =
  * grouping is a control the user drives rather than a per-tab arrangement baked into each
  * grid's `sliceTree` call.
  */
-export type GroupBy =
-  | "category"
-  | "resultArea"
-  | "goal"
-  | "project"
-  | "state"
-  | "priorityLetter"
-  | "deadlineBand";
+export type GroupBy = TreeGroupBy;
 
-export const GROUP_BY_VALUES: readonly GroupBy[] = [
-  "category",
-  "resultArea",
-  "goal",
-  "project",
-  "state",
-  "priorityLetter",
-  "deadlineBand",
-];
+export const GROUP_BY_VALUES: readonly GroupBy[] = TREE_GROUP_BY_VALUES;
 
-export const GROUP_BY_LABELS: Record<GroupBy, string> = {
-  category: "Category",
-  resultArea: "Result Area",
-  goal: "Goal",
-  project: "Project",
-  state: "State",
-  priorityLetter: "Priority",
-  deadlineBand: "Deadline",
-};
+export { GROUP_BY_LABELS, MAX_GROUP_LEVELS, setGroupLevel };
 
 /** Narrow stored strings to legal dimensions, dropping any retired in a later build. */
 export function asGroupBy(values: readonly string[]): GroupBy[] {
-  return values.filter((value): value is GroupBy =>
-    (GROUP_BY_VALUES as readonly string[]).includes(value),
-  );
-}
-
-/**
- * How many dimensions may be stacked. Three already nests headers three deep before the
- * first row; a fourth is a tree with no leaves left to read.
- */
-export const MAX_GROUP_LEVELS = 3;
-
-/**
- * Set one level of a grouping, returning the new list.
- *
- * The rules that make the picker behave the way people expect:
- *
- * - **Clearing a level truncates the ones below it.** "Group by Result Area, then State"
- *   with Result Area cleared cannot mean "group by State at level two" — there is no level
- *   one left for it to sit under.
- * - **A dimension may appear once.** Choosing one that is already used elsewhere *moves*
- *   it rather than duplicating it, because grouping by State inside State is a no-op that
- *   looks like a broken control.
- * - **Setting a level past the end appends**, so the "then by…" select the UI shows at the
- *   end does not need to know its own index.
- */
-export function setGroupLevel(
-  levels: readonly GroupBy[],
-  index: number,
-  value: GroupBy | null,
-): GroupBy[] {
-  if (index < 0 || index >= MAX_GROUP_LEVELS) return [...levels];
-
-  if (value === null) return levels.slice(0, index);
-
-  const next = levels.slice(0, Math.min(index, levels.length));
-  next[index] = value;
-
-  // Drop any later duplicate of the dimension just chosen, and any hole a sparse write
-  // could have left.
-  const seen = new Set<GroupBy>();
-  const out: GroupBy[] = [];
-  for (const level of [...next, ...levels.slice(index + 1)]) {
-    if (level === undefined || seen.has(level)) continue;
-    seen.add(level);
-    out.push(level);
-  }
-  return out.slice(0, MAX_GROUP_LEVELS);
+  return knownGroupBy(values, GROUP_BY_VALUES);
 }
 
 export type SliceOpts = {

@@ -38,6 +38,7 @@ import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { GridToolbar } from "@/components/grid/GridToolbar";
 import { collectDistinctValues } from "@/lib/grid/distinct";
+import { asNoteGroupBy, groupNotes, NOTE_GROUP_BY_VALUES } from "@/lib/notes/grouping";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 import { rowMenuFor } from "@/components/grid/rowMenu";
@@ -67,9 +68,9 @@ const NOTES_VIEW_CODEC: SettingCodec<NotesViewSettings> = {
 const NOTES_MODES: readonly NotesMode[] = ["nested", "flat"];
 
 /**
- * One built-in view. Notes' three controls — Nested/Flat, Sort, Filter — are a *lot* of state
- * to rebuild by hand, which is exactly what makes saved views worth having here: "Flat, by
- * date, only meeting notes" is a view, not three settings you set again every Monday.
+ * One built-in view. Notes' mode, sort, grouping, and filter are a *lot* of state to rebuild
+ * by hand, which is exactly what makes saved views worth having here: "By year and month,
+ * only journal notes" is a view, not four settings you set again every Monday.
  */
 const NOTES_VIEWS = [{ id: "notes", label: "All Notes" }] as const;
 
@@ -86,9 +87,9 @@ function notesScopes(viewId: string): readonly string[] {
  * The Notes tab.
  *
  * Achieve's View dropdown bundled panel orientation, sort, and (falsely) hierarchy into one
- * control. Here they are three: **Nested | Flat**, **Sort**, and **Filter…**, each doing
- * one thing. Manual sort is only offered when nested, because "the order you dragged them
- * into" is a statement about a tree.
+ * control. Here **Nested | Flat**, **Sort**, **Group by**, and **Filter…** each do one
+ * thing. Manual sort is only offered when nested, because "the order you dragged them
+ * into" is a statement about a tree; date grouping is a flat display hierarchy.
  */
 export function NotesGrid({
   initialNotes,
@@ -120,6 +121,7 @@ export function NotesGrid({
     viewScopes: notesScopes,
   });
   const gridState = views.grid;
+  const setGridGroupBy = gridState.setGroupBy;
 
   /**
    * Notes' own settings, **per view**.
@@ -157,8 +159,30 @@ export function NotesGrid({
     (next: NoteFilter) => patchView((current) => ({ ...current, filter: next })),
     [patchView],
   );
+  const noteGroupBy = useMemo(
+    () => asNoteGroupBy(gridState.groupBy),
+    [gridState.groupBy],
+  );
+  const showHierarchy = mode === "nested" && noteGroupBy.length === 0;
+
+  /**
+   * Calendar headers and the stored parent/child tree are two competing arrangements.
+   * Choosing one of Notes' date groups therefore moves to Flat and uses Date order; the
+   * database hierarchy is untouched and returns when the user chooses Nested again.
+   */
+  const setNoteGroupBy = useCallback(
+    (next: string[]) => {
+      if (next.length > 0 && mode !== "flat") {
+        setMode("flat");
+        if (sort === "manual") setSort("date");
+      }
+      setGridGroupBy(next);
+    },
+    [mode, setGridGroupBy, setMode, setSort, sort],
+  );
   const [filterOpen, setFilterOpen] = useState(false);
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
+  const [groupIds, setGroupIds] = useState<readonly string[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<NoteNode | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -221,13 +245,15 @@ export function NotesGrid({
       ? undefined
       : (note: NoteNode) => notePassesFilter(note, filter);
 
-    return sliceNotes(notes, { mode, sort, keep }).map((row) => ({
-      kind: "node" as const,
-      id: row.id,
-      node: row.note,
-      depth: row.depth,
-    }));
-  }, [notes, mode, sort, filter]);
+    const sliced = sliceNotes(notes, {
+      // Defensive as well as intentional: a saved view written by an older build cannot
+      // make date groups fight a nested tree even if its Notes-specific mode says Nested.
+      mode: noteGroupBy.length > 0 ? "flat" : mode,
+      sort,
+      keep,
+    });
+    return groupNotes(sliced, noteGroupBy);
+  }, [notes, mode, sort, filter, noteGroupBy]);
 
   const distinctValues = useMemo(
     () =>
@@ -238,7 +264,10 @@ export function NotesGrid({
     [rows],
   );
 
-  const rowIds = useMemo(() => rows.map((row) => row.id), [rows]);
+  const rowIds = useMemo(
+    () => rows.flatMap((row) => (row.kind === "node" ? [row.id] : [])),
+    [rows],
+  );
   const { order, onIdsChange } = useNavigableIds(rowIds);
   const multi = useMultiSelect(order, urlNoteId);
   const { selectedId, selectedIds, select, selectOne, move: moveSelection } = multi;
@@ -324,8 +353,9 @@ export function NotesGrid({
     () => ({
       selectedId,
       editingId,
+      showHierarchy,
       onToggleCollapsed: (note) => {
-        if (!note.hasChildren) return;
+        if (!showHierarchy || !note.hasChildren) return;
         const collapsed = !note.collapsed;
         patch(note.id, { collapsed });
         apply(() => setNoteCollapsedAction(note.id, collapsed));
@@ -344,7 +374,7 @@ export function NotesGrid({
         apply(() => updateNoteAction(note.id, { flag }));
       },
     }),
-    [selectedId, editingId, patch, apply, openDetail],
+    [selectedId, editingId, showHierarchy, patch, apply, openDetail],
   );
 
   // Show / hide / move now travel to Show Fields through `GridToolbar`, not from here.
@@ -359,7 +389,7 @@ export function NotesGrid({
    * sort stays on during the drag; a successful drop clears it so the written tree order
    * is what you see (same as Outline / Achieve).
    */
-  const canReorder = mode === "nested" && sort === "manual";
+  const canReorder = showHierarchy && sort === "manual";
 
   /**
    * Everything a note row can do, for one row.
@@ -377,7 +407,7 @@ export function NotesGrid({
       const note = noteId ? (byId.get(noteId) ?? null) : null;
 
       return {
-        hierarchy: mode === "nested",
+        hierarchy: showHierarchy,
         selection: {
           id: noteId,
           count,
@@ -458,7 +488,7 @@ export function NotesGrid({
       };
     },
     [
-      mode,
+      showHierarchy,
       byId,
       canReorder,
       openDetail,
@@ -607,10 +637,12 @@ export function NotesGrid({
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
       <GridToolbar
-        grid={gridState}
+        grid={{ ...gridState, setGroupBy: setNoteGroupBy }}
         gridLabel="Notes"
         allColumns={notesColumns}
         distinctValues={distinctValues}
+        groupDimensions={NOTE_GROUP_BY_VALUES}
+        groupIds={groupIds}
         counts={counts}
         error={error}
         views={views}
@@ -621,6 +653,11 @@ export function NotesGrid({
               value={mode}
               onChange={(next) => {
                 const nextMode = next as NotesMode;
+                // The note tree and calendar grouping are alternate arrangements, not two
+                // independent indentation systems.
+                if (nextMode === "nested" && noteGroupBy.length > 0) {
+                  setGridGroupBy([]);
+                }
                 setMode(nextMode);
                 // Manual order is a statement about a tree; a flat list has none to show.
                 if (nextMode === "flat" && sort === "manual") setSort("title");
@@ -704,11 +741,16 @@ export function NotesGrid({
         onResizeColumn={gridState.setWidth}
         onResetColumnWidth={gridState.clearWidth}
         columnControls={gridState.columnControls}
+        collapsedGroups={gridState.collapsedGroups}
+        onToggleGroup={gridState.toggleGroup}
+        onGroupIdsChange={setGroupIds}
         rowDrag={rowDrag}
         rowMenu={rowMenu}
         rowNumbers
         rowLabel={(row) => `Note: ${row.node.title || "Untitled"}`}
-        rowExpansion={(row) => (row.node.hasChildren ? !row.node.collapsed : undefined)}
+        rowExpansion={(row) =>
+          showHierarchy && row.node.hasChildren ? !row.node.collapsed : undefined
+        }
         empty={
           <EmptyState
             filtered={notes.length > 0}
