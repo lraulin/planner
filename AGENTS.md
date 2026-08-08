@@ -117,16 +117,6 @@ Git refuses to process a path "beyond a symbolic link", so staging a file by its
 `.claude/skills/` path fails — and it fails inside lint-staged's backup step, which
 reports it as an unexplained "git error" during `git commit` rather than as a bad path.
 
-| Command               | Purpose                                                        |
-| --------------------- | -------------------------------------------------------------- |
-| `/shape-spec`         | Plan-mode shaping → `agent-os/specs/...` folder                |
-| `/fix-bug`            | Root-cause a reported bug, then size the fix deliberately      |
-| `/inject-standards`   | Pull relevant `agent-os/standards/` into context               |
-| `/discover-standards` | Extract patterns into new standards                            |
-| `/index-standards`    | Rebuild `agent-os/standards/index.yml`                         |
-| `/plan-product`       | Mission / roadmap / tech-stack in `agent-os/product/`          |
-| `/overnight`          | Unattended self-directed work; report in `agent-os/overnight/` |
-
 When asking the user structured questions from these flows, use the native facility:
 `AskUserQuestion` (Claude), `ask_user_question` (Grok), `vscode_askQuestions` (Copilot),
 or `request_user_input` in Codex plan mode. If Codex has no structured-question facility
@@ -135,48 +125,12 @@ forbids questions entirely** — nobody is awake to answer.
 
 #### Spec lifecycle
 
-1. **Shape (plan mode)** — `/shape-spec` creates `agent-os/specs/{YYYY-MM-DD-HHMM-slug}/`
-   with `plan.md`, `shape.md`, `standards.md`, `references.md`, and optional `visuals/`.
-   New specs start as **active** working documents.
-2. **Implement** — Execute the plan. Keep the active feature’s spec current with _material_
-   refinements that emerge from implementation or user feedback (see below).
-3. **Freeze** — When the feature is done and verified, mark the spec **frozen / complete**.
-   It becomes a historical decision record of what was actually built. Future work in the
-   same area should open a **new delta-spec** (or a dated change section), not treat the
-   frozen folder as a living control plane.
+`/shape-spec` (plan mode) → active `agent-os/specs/{YYYY-MM-DD-HHMM-slug}/` → implement →
+freeze when verified. **Standing rule:** while a spec is active, keep `plan.md` / `shape.md`
+current with _material_ changes to requirements, design decisions, or scope — including
+developer feedback on what was actually built — and append a row to **Changes from original
+plan**. Skip pure implementation details. Once frozen it is a historical as-built record;
+further change opens a **new delta-spec**, not an edit to the frozen folder.
 
-Details and templates: `agent-os/specs/README.md`. Exemplar frozen spec:
-`agent-os/specs/2026-07-28-1234-weekly-schedule/`.
-
-#### Keep the active spec current (selective)
-
-While implementing against an **active** (not frozen) feature spec, whenever we make a
-**material** change to requirements, design decisions, or scope — including from developer
-feedback on what was actually built — update the relevant sections of that feature’s
-`plan.md` / `shape.md` so they reflect the **final agreed intent**.
-
-Also append a short row to **Changes from original plan** in `plan.md` (what changed and
-why). Prefer that changelog for incremental refinements; rewrite main sections when the
-canonical “what/why” would otherwise mislead a future reader.
-
-**Do update for:**
-
-- Clarified or newly discovered requirements / acceptance criteria
-- Important architectural or design decisions made during implementation
-- Scope adjustments (what was cut or added, and why)
-- Non-obvious constraints or invariants future agents should know
-
-**Do not update for:**
-
-- Minor implementation details that don’t affect the “what” or the “why”
-- Temporary debugging notes
-- Pure code-level refactorings that don’t change behavior or contracts
-
-When freezing: set **Status: frozen / complete** (with date) on the main files, align
-scope/decisions/acceptance criteria with as-built reality, list follow-ups as _new work_
-(not open edits to the frozen spec), and update `agent-os/product/roadmap.md` if needed.
-
-## Notes
-
-`CLAUDE.md` is a symlink to this file, so Claude Code and other agents read the same
-instructions.
+Full lifecycle, freeze procedure, and templates: `agent-os/specs/README.md`. Exemplar frozen
+spec: `agent-os/specs/2026-07-28-1234-weekly-schedule/`.
