@@ -112,6 +112,11 @@ trigger-shaped `description` in frontmatter), then add the two pointers —
 `.claude/commands/<name>.md` and `.github/prompts/<name>.prompt.md` — plus
 `agents/openai.yaml` if Codex needs display metadata.
 
+**Always edit at the real `.agents/skills/...` path, never through `.claude/skills/...`.**
+Git refuses to process a path "beyond a symbolic link", so staging a file by its
+`.claude/skills/` path fails — and it fails inside lint-staged's backup step, which
+reports it as an unexplained "git error" during `git commit` rather than as a bad path.
+
 | Command               | Purpose                                                        |
 | --------------------- | -------------------------------------------------------------- |
 | `/shape-spec`         | Plan-mode shaping → `agent-os/specs/...` folder                |
