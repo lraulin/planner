@@ -104,6 +104,23 @@ on everything distinguishes nothing; it would only add four lines of noise to 30
 and counting. The transparency argument for attribution assumes a reader deciding which
 changes to scrutinise harder. Here, the answer is all of them.
 
+## The one part of this that is enforced
+
+`.husky/commit-msg` rejects two things, and only two, because they are the ones that cannot
+be repaired afterwards:
+
+- **A subject over 72 characters.** The hard maximum above.
+- **A body line over 120 characters.** Not the 72-column wrap — that is a preference the log
+  breaks 637 times in 200 commits and is none of a hook's business. 120 catches a different
+  failure: an entire body arriving as **one line**, which is what happens when the blank line
+  between paragraphs is written as a literal `\n` inside `-m "…"` by a shell that does not
+  interpret it. Seven commits in two days landed that way, one of them a single
+  583-character line. Use a heredoc or repeated `-m` flags.
+
+Measured before it was written: of the last 200 commits, 189 pass untouched and every
+rejection is a real violation of a rule already on this page. `--no-verify` skips it for the
+message that genuinely needs a long line.
+
 ## Before committing
 
 - Run the gates from `clean-code.md` — `npm test`, `npm run lint`, the typecheck — and read

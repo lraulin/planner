@@ -1,0 +1,45 @@
+# The commit message is the record — nobody reviews these before they land, so there is no
+# later chance to fix one (`commits.md`: never rewrite published history). This checks the
+# two things that are cheap to get wrong and impossible to get back.
+#
+# Both limits are measured against the log rather than invented. Over the last 305 commits
+# the subject has crossed 72 exactly five times, and over the last 200 only ten body lines
+# have crossed 100 — nine of them in the seven commits before this hook existed, where a
+# whole paragraph arrived as one 583-character line, sometimes with the blank line between
+# paragraphs written as a literal `\n`. A 120 column limit catches every one of those and
+# would not have fired on anything else.
+#
+# `git commit --no-verify` skips it, for the rare message that genuinely needs a long line.
+
+msg_file="$1"
+
+# Drop comments and everything below the `--verbose` scissors line — none of it is kept.
+body_and_subject=$(sed -e '/^# ------------------------ >8/,$d' -e '/^#/d' "$msg_file")
+
+subject=$(printf '%s\n' "$body_and_subject" | sed -n '1p')
+
+# Merges, reverts and fixups carry generated subjects that are not ours to hold to a limit.
+case "$subject" in
+  Merge\ * | Revert\ * | fixup!\ * | squash!\ *) exit 0 ;;
+esac
+
+fail=0
+
+subject_length=$(printf '%s' "$subject" | wc -c | tr -d ' ')
+if [ "$subject_length" -gt 72 ]; then
+  echo "commit-msg: subject is $subject_length characters, over the 72 hard maximum."
+  echo "  $subject"
+  echo "  Aim for 50–60. Name the effect, not the files — agent-os/standards/development/commits.md"
+  fail=1
+fi
+
+long_lines=$(printf '%s\n' "$body_and_subject" | sed -n '2,$p' | awk 'length($0) > 120 { print NR + 1 ": " length($0) " chars" }')
+if [ -n "$long_lines" ]; then
+  echo "commit-msg: body lines over 120 characters:"
+  printf '%s\n' "$long_lines" | sed 's/^/  line /'
+  echo "  Wrap the body at 72. A single very long line usually means the paragraph breaks"
+  printf '  were written as a literal \\n instead of real newlines — use a heredoc or repeated -m.\n'
+  fail=1
+fi
+
+exit $fail
