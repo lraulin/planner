@@ -113,11 +113,11 @@ installed PWA there is no browser chrome absorbing them.
 
 ## Touch gestures
 
-| Gesture        | Meaning below `md`                  | Desktop equivalent |
-| -------------- | ----------------------------------- | ------------------ |
-| Single tap     | Open the record                     | Double-click       |
-| Long press     | Row context menu, as a bottom sheet | Right-click        |
-| Swipe on a row | One reversible action per direction | (none)             |
+| Gesture        | Meaning below `md`                                       | Desktop equivalent |
+| -------------- | -------------------------------------------------------- | ------------------ |
+| Single tap     | Open the record                                          | Double-click       |
+| Long press     | Row context menu, as a bottom sheet                      | Right-click        |
+| Swipe on a row | One action per direction — right completes, left deletes | (none)             |
 
 Rules:
 
@@ -134,13 +134,41 @@ Rules:
   accompanies a keyboard shortcut." Before shipping a compact layout, list every action the
   desktop view offers and confirm each has a tappable path. The commands most likely to be
   missed are the ones that exist _only_ in a right-click menu.
-- **Swipe is for reversible actions only** — complete, reschedule, archive. Never delete
-  without a confirmation, and never bind a swipe to something with no undo.
+- **A swipe either does something reversible, or it opens the confirmation the menu would.**
+  Complete, reschedule and archive fire on release. Delete does not: `deleteNodeAction` is a
+  hard delete that takes the whole branch, so the gesture raises the same `ConfirmDialog`, with
+  the same child-count warning, that the row menu's Delete raises. Nothing fires irreversibly
+  on release, and no gesture gets a shorter, gentler confirmation than the menu path to the
+  same mutation.
+- **Right completes, left deletes**, on every list that offers both. Reminders, Todoist and
+  TickTick all put complete on the right; a view that inverts it to be clever is fighting
+  muscle memory built somewhere else on the same phone.
+- **A swipe is aimed at one row.** Build the gesture for the row under the finger, never for
+  the selection — a multi-select left over from an earlier tap must not widen what a
+  one-finger gesture does. Plural verbs belong on long press, where the menu can say how many.
 - **A swipe must not fight the scroll.** Lock to the horizontal axis only after the pointer has
   moved further horizontally than vertically past a threshold; until then, let the list scroll.
+  An exact diagonal goes to the list: a crooked scroll is far more common than an aimed swipe,
+  and stealing a scroll is the worse failure.
+- **The rail says what will happen, three ways.** Colour for which half of the vocabulary,
+  a glyph for which verb, and the word itself — colour alone fails anyone who cannot separate
+  the hues, and a glyph alone assumes it has been learned. It is legible from the first pixel
+  of travel, not faded in; what ramps with the gesture is the content, which can afford to be
+  faint, not the background it sits on.
+- **The threshold is felt.** A short `navigator.vibrate` on the arming edge, in both
+  directions, via `src/lib/touch/haptics.ts`. There is no hover and no cursor on a phone, so
+  without it the only way to know a swipe has gone far enough is to watch the rail instead of
+  the row. iOS implements no `vibrate`; that is a silent no-op, not a reason to skip it.
+- **The row tracks the finger, then resists.** 1:1 up to the trigger — inside that range the
+  gesture is still a question — then rubber-banded towards a ceiling it never reaches. A row
+  that stops dead under a finger that is still moving reads as a broken page.
 - Long-press and swipe thresholds are **pure logic and live in `src/lib/touch/`** with tests
   (`development/testing.md`) — an off-by-one in a slop threshold is invisible until it is
   infuriating.
+- **Wire the gesture once, at the capabilities layer**, the way `rowMenuFor` is
+  (`src/components/grid/rowSwipe.ts`). Six hosts hand-wiring their own swipes drift apart the
+  way eight hand-written context menus did, and a wrong swipe is worse than a wrong menu row:
+  there is no label to read before you commit.
 
 ### Drag is mouse-shaped
 

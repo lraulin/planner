@@ -71,6 +71,8 @@ step passing only means the click landed, not that the page looks right.
 | `click` / `dblclick` / `rightclick <sel>`        | real mouse events; `dblclick` a grid row opens its detail drawer                                                                     |
 | `drag <src> \| <dst> [\| before\|inside\|after]` | HTML5 drag — **outline row reorder**                                                                                                 |
 | `pdrag <src> \| <dst>`                           | pointer drag — **schedule rail → calendar**                                                                                          |
+| `swipe <sel> \| <dx> [\| hold]`                  | horizontal row swipe, signed px (-120 left, 120 right); `hold` keeps the button down so `shot` catches the open rail                 |
+| `release`                                        | let go of a held swipe                                                                                                               |
 | `fill <sel> \| <value>`                          | triple-click, then insert                                                                                                            |
 | `select <sel> \| <value>`                        | `<option>` by value or visible text                                                                                                  |
 | `type <text>` / `key <Name>`                     | `Enter Tab Escape Delete Insert F2 Arrow* Home End`, e.g. `key Shift+Tab`                                                            |
@@ -216,6 +218,15 @@ npm run smoke     # loads all 23 static routes; needs the dev server (see below)
   only toggles it when the value actually changes. If you add a step that touches the
   Emulation domain, re-check `drag` at 1280x800 afterwards; this failed silently once and
   looked like a regression in the grid.
+- **A swipe needs the row on screen and needs its intermediate moves.** `swipe` presses,
+  steps across in 12 moves, and releases — the row locks its axis at 12px and arms at 72px,
+  so a single jump to the end would skip every state worth looking at. `find` returns
+  coordinates for rows below the fold too, and the synthesized mouse events then land on
+  whatever _is_ at those coordinates, so the gesture silently does nothing; scroll the row
+  into view first. And remember a released swipe past 72px **fires the action** — several
+  rows got completed for real while checking that six grids had rails.
+- **`swipe … | hold` is how you see the rail at all.** Release springs the row home in
+  180ms, long before a screenshot lands.
 - **Below 768px wide the grids render as compact card rows, not a column grid.** `role="row"`
   still works, but there are no `role="gridcell"` children and no column header, so a
   selector written against the desktop layout finds nothing at `390x844`. Tap (`click`)

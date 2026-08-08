@@ -376,6 +376,9 @@ View · Tools`) with an icon gutter and shortcut column; an **icon row** for the
   the list tabs and Notes get first-class phone treatment; Outline, Weekly Schedule, Task
   Chooser and the planning surfaces degrade gracefully rather than being redesigned. Desktop
   layout and density are unchanged. Codified as `standards/components/responsive.md`.
+  Row swipe now carries the two most common actions on every node grid — right completes,
+  left deletes behind the usual confirmation — derived once from a view's capabilities the
+  way its row menu is (`specs/2026-08-08-1757-mobile-swipe-row-actions`).
 - **Import/export.** Achieve data import, full export (own-your-data mandate in
   `mission.md`). Outline core + appointments / time charts / wishes / notes / **metrics**
   ship; RedNotebook journals and Tomboy note archives also import from Settings. Remaining

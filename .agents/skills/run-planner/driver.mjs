@@ -157,6 +157,9 @@ async function launch() {
  */
 let touchEmulated = false;
 
+/** Where a `swipe … | hold` left the button down, so `release` knows where to let go. */
+let held = null;
+
 async function applyViewport(spec) {
   const [w, h] = String(spec)
     .toLowerCase()
@@ -519,6 +522,61 @@ const COMMANDS = {
     console.log(`  → pointer-dragged "${a.text}" onto "${b.text}"`);
   },
 
+  /*
+   * Horizontal row swipe, by a signed pixel distance rather than onto a target.
+   *
+   * Separate from `pdrag` because a swipe has no destination element — what it means is
+   * entirely "how far, which way", and `CompactRow` reads exactly that. The intermediate
+   * moves are the point: the row locks its axis at 12px and arms at 72px, so a press
+   * followed by one jump to the end would skip every state worth looking at.
+   *
+   * Negative dx swipes left, positive right. Stopping short of the trigger is a legitimate
+   * thing to ask for — that is how you check the row springs back.
+   *
+   * A third argument of `hold` leaves the button down at the end of the travel, so a `shot`
+   * can catch the rail while it is still open. `release` finishes the gesture. Without it
+   * the row is back home before any screenshot can be taken, and the rail — which is the
+   * whole point of looking — is never on screen.
+   *
+   * **This drives pointer events with a mouse.** The app's handlers are `onPointer*`, so
+   * the gesture logic is genuinely exercised, but `touch-action: pan-y` — the browser's own
+   * scroll arbitration — is not. That one still needs a finger.
+   */
+  async swipe(rest) {
+    const parts = rest.split("|").map((part) => part.trim());
+    const [sel, dxRaw, mode] = parts;
+    const dx = Number(dxRaw);
+    if (!Number.isFinite(dx))
+      throw new Error(`swipe needs a pixel distance, got ${dxRaw}`);
+    if (mode && mode !== "hold") throw new Error(`swipe: unknown mode ${mode}`);
+    const a = await find(sel);
+    await mouse("mouseMoved", a.x, a.y, { button: "none" });
+    await mouse("mousePressed", a.x, a.y, { clickCount: 1 });
+    await sleep(60);
+    const steps = 12;
+    for (let i = 1; i <= steps; i++) {
+      await mouse("mouseMoved", Math.round(a.x + (dx * i) / steps), a.y);
+      await sleep(25);
+    }
+    held = { x: Math.round(a.x + dx), y: a.y };
+    const way = dx > 0 ? "right" : "left";
+    if (mode === "hold") {
+      console.log(`  → holding "${a.text}" swiped ${way} ${Math.abs(dx)}px`);
+      return;
+    }
+    await COMMANDS.release();
+    console.log(`  → swiped "${a.text}" ${way} ${Math.abs(dx)}px`);
+  },
+
+  /** Let go of a `swipe … | hold`. No-op if nothing is held, so it is safe to over-call. */
+  async release() {
+    if (!held) return;
+    const { x, y } = held;
+    held = null;
+    await mouse("mouseReleased", x, y, { clickCount: 1 });
+    await sleep(600);
+  },
+
   async type(rest) {
     await send("Input.insertText", { text: rest });
     await sleep(150);
@@ -634,6 +692,10 @@ const HELP = `planner driver — commands (one per line on stdin, or one per arg
   drag <selA> | <selB> [| before|inside|after]
                            HTML5 drag-and-drop — outline row reorder (default zone: after)
   pdrag <selA> | <selB>    pointer drag — FullCalendar rail → calendar
+  swipe <sel> | <dx> [| hold]
+                           horizontal row swipe, signed px (-120 = left, 120 = right);
+                           "hold" keeps the button down so shot catches the open rail
+  release                  let go of a held swipe
   type <text>              insert text into the focused element
   key <Name>               Enter Tab Escape Backspace Delete Insert F2 Home End Space
                            Arrow{Up,Down,Left,Right}; modifiers as 'Shift+Tab'
