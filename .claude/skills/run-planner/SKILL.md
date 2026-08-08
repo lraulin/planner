@@ -146,8 +146,10 @@ key Escape
 EOF
 ```
 
-Routes: `/outline` (also `/`), `/projects`, `/tasks`, `/goals`, `/wishes`, `/schedule`,
-`/schedule/time-chart/[chartId]`.
+Routes: 26 pages — 23 with no dynamic segment, which `npm run smoke` walks and prints, plus
+`/fitness/exercises/[exerciseId]`, `/fitness/sessions/[sessionId]` and
+`/schedule/time-chart/[chartId]`, which need a real id. Run `npm run smoke` for the current
+list rather than trusting one written down here.
 
 ## Direct invocation — internal code, no browser
 
@@ -173,10 +175,12 @@ Pure logic (`src/lib/tree/*`, `src/lib/schedule/*`) has no DB dependency — for
 ## Test / typecheck / lint / build
 
 ```sh
-npm test          # vitest, 166 tests in 14 files — passes
+npm test          # vitest — 143 files, 2056 tests; needs Postgres up or 22 files skip
+npm run test:unit # 121 files, 1583 tests; no database
 npm run typecheck # tsc --noEmit — clean
-npm run lint      # FAILS on master: 5 errors, 2 warnings (see Gotchas)
+npm run lint      # eslint --max-warnings=0 — clean, and that is the bar
 npm run build     # passes; do not run it while `npm run dev` is up (see Gotchas)
+npm run smoke     # loads all 23 static routes; needs the dev server (see below)
 ```
 
 ## Gotchas
@@ -252,11 +256,15 @@ npm run build     # passes; do not run it while `npm run dev` is up (see Gotchas
   This works because **an exported `DATABASE_URL` beats `--env-file=.env.local`** — Node
   does not let the file override an existing environment variable. Same reason a stale
   exported `DATABASE_URL` will quietly send `db:migrate` at the wrong database.
-- **`npm run lint` fails on master** — 5 errors, all pre-existing, all in the schedule
-  components (`AppointmentDrawer.tsx:82`, `ScheduleView.tsx:57`,
-  `TimeChartEditorView.tsx:63,67` "setState synchronously within an effect";
-  `WeekCalendar.tsx:70` "Cannot access refs during render"). A clean lint is not the bar
-  for "my change works"; compare the count instead.
+- **The gate is clean, and a husky pre-commit hook runs it** — lint, typecheck and
+  `test:unit` on every commit, the full suite on every push. So a lint error is yours and it
+  will block the commit; do not go looking for a pre-existing count to compare against.
+- **`npm run test:unit` passing does not mean the database tests ran.** They skip when
+  Postgres is down, with a warning that is easy to scroll past — `npm run db:up` first, and
+  check for it after touching `mutations.ts` or `queries.ts`.
+- **The suite pins `TZ` to `America/New_York`** (`vitest.config.ts`). Some tests are about
+  local wall clock and only mean something in a named zone. A date test that fails is a real
+  failure, not your machine.
 - **`/goals` and `/wishes` are empty with the stock seed** — "No goals match this view."
   is the correct render, not a failure.
 - **Static-looking pages are `force-dynamic`.** Every tab hits Postgres on each request,
