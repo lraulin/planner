@@ -2,14 +2,20 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { NoteFlag } from "@/db/schema";
-import { GROUP_BY_LABELS, type NoteGroupBy } from "@/lib/grid/grouping";
+import { GROUP_BY_LABELS, type CalendarNoteGroupBy } from "@/lib/grid/grouping";
 import type { NoteNode } from "@/lib/notes/types";
-import { noteDatePart, noteDatePartLabel } from "@/lib/notes/grouping";
+import {
+  formatNoteDate,
+  noteContextsLabel,
+  noteDatePart,
+  noteDatePartLabel,
+} from "@/lib/notes/grouping";
+import { FLAG_LABELS } from "@/lib/notes/flags";
 import { noteSnippet } from "@/lib/notes/snippet";
 import { toDateKey } from "@/lib/schedule/geometry";
 import { TYPE_LABELS } from "@/lib/tree/hierarchy";
 import type { ColumnAlign, ColumnDef } from "@/components/grid/columns";
-import { FLAG_LABELS, FlagCell } from "./flags";
+import { FlagCell } from "./flags";
 
 /**
  * Callbacks and rendering context the notes columns close over. Same shape as
@@ -43,20 +49,8 @@ function dateKey(date: Date | null): string | null {
   return date ? toDateKey(date) : null;
 }
 
-function formatDate(date: Date | null): string {
-  if (!date) return "";
-  return date.toLocaleDateString(undefined, {
-    year: "2-digit",
-    month: "numeric",
-    day: "numeric",
-    // Note Date is a stored calendar day encoded at UTC noon. Reading it in a local zone
-    // can move the label in UTC+13/14; the UTC components are the durable day.
-    timeZone: "UTC",
-  });
-}
-
 function datePartColumn(
-  dimension: NoteGroupBy,
+  dimension: Exclude<CalendarNoteGroupBy, "date">,
   width: string,
   align?: ColumnAlign,
 ): ColumnDef<NotesColumnCtx, NoteNode> {
@@ -152,7 +146,7 @@ export const notesColumns: ColumnDef<NotesColumnCtx, NoteNode>[] = [
     sortValue: (row) => dateKey(row.node.noteDate),
     render: (row) => (
       <span className="tabular text-[0.8125rem] text-ink-muted">
-        {formatDate(row.node.noteDate)}
+        {formatNoteDate(row.node.noteDate)}
       </span>
     ),
   },
@@ -167,10 +161,10 @@ export const notesColumns: ColumnDef<NotesColumnCtx, NoteNode>[] = [
     label: "Contexts",
     width: "9rem",
     filterKind: "text",
-    filterValue: (row) => row.node.contexts.join(", ") || null,
+    filterValue: (row) => noteContextsLabel(row.node.contexts) || null,
     render: (row) => (
       <span className="truncate text-[0.8125rem] text-ink-muted">
-        {row.node.contexts.join(", ")}
+        {noteContextsLabel(row.node.contexts)}
       </span>
     ),
   },

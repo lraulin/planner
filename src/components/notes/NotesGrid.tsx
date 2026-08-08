@@ -89,7 +89,7 @@ function notesScopes(viewId: string): readonly string[] {
  * Achieve's View dropdown bundled panel orientation, sort, and (falsely) hierarchy into one
  * control. Here **Nested | Flat**, **Sort**, **Group by**, and **Filter…** each do one
  * thing. Manual sort is only offered when nested, because "the order you dragged them
- * into" is a statement about a tree; date grouping is a flat display hierarchy.
+ * into" is a statement about a tree; grouping is a flat display hierarchy.
  */
 export function NotesGrid({
   initialNotes,
@@ -166,9 +166,10 @@ export function NotesGrid({
   const showHierarchy = mode === "nested" && noteGroupBy.length === 0;
 
   /**
-   * Calendar headers and the stored parent/child tree are two competing arrangements.
-   * Choosing one of Notes' date groups therefore moves to Flat and uses Date order; the
-   * database hierarchy is untouched and returns when the user chooses Nested again.
+   * Group headers and the stored parent/child tree are two competing arrangements.
+   * Choosing a group therefore moves to Flat; the database hierarchy is untouched and
+   * returns when the user chooses Nested again. Date is the safest replacement for Manual
+   * because it preserves the journal-focused ordering that Notes already defaults to.
    */
   const setNoteGroupBy = useCallback(
     (next: string[]) => {

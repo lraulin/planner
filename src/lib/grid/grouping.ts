@@ -16,7 +16,10 @@ export type TreeGroupBy =
   | "priorityLetter"
   | "deadlineBand";
 
-export type NoteGroupBy = "year" | "month" | "day";
+export type CalendarNoteGroupBy = "date" | "year" | "month" | "day";
+
+export type NoteGroupBy =
+  "subject" | "contexts" | "flag" | CalendarNoteGroupBy | "linked";
 
 export type GridGroupBy = TreeGroupBy | NoteGroupBy;
 
@@ -30,7 +33,16 @@ export const TREE_GROUP_BY_VALUES: readonly TreeGroupBy[] = [
   "deadlineBand",
 ];
 
-export const NOTE_GROUP_BY_VALUES: readonly NoteGroupBy[] = ["year", "month", "day"];
+export const NOTE_GROUP_BY_VALUES: readonly NoteGroupBy[] = [
+  "subject",
+  "contexts",
+  "flag",
+  "date",
+  "year",
+  "month",
+  "day",
+  "linked",
+];
 
 const GRID_GROUP_BY_VALUES: readonly GridGroupBy[] = [
   ...TREE_GROUP_BY_VALUES,
@@ -45,9 +57,14 @@ export const GROUP_BY_LABELS: Record<GridGroupBy, string> = {
   state: "State",
   priorityLetter: "Priority",
   deadlineBand: "Deadline",
+  subject: "Subject",
+  contexts: "Contexts",
+  flag: "Flag",
+  date: "Date",
   year: "Year",
   month: "Month",
   day: "Day",
+  linked: "Linked to",
 };
 
 /** How many dimensions may be stacked before the headers overwhelm the rows. */

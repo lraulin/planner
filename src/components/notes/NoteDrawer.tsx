@@ -12,7 +12,8 @@ import { updateNoteAction } from "@/app/notes/actions";
 import { Drawer, DrawerHeader } from "@/components/detail/Drawer";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { useAutosave, type SaveStatus } from "./useAutosave";
-import { FLAG_LABELS, FlagSwatch } from "./flags";
+import { FLAG_LABELS } from "@/lib/notes/flags";
+import { FlagSwatch } from "./flags";
 
 /**
  * The full note record, in the same right-sliding drawer every other tab uses.

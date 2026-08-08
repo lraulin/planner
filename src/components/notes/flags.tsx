@@ -1,23 +1,7 @@
 "use client";
 
 import type { NoteFlag } from "@/db/schema";
-
-/**
- * Achieve's note flags. Eight are pure colours with no meaning attached — that is the
- * point of them; the meaning is whatever the user decides this week — plus `done`, its one
- * semantic entry, and `none`.
- */
-export const FLAG_LABELS: Record<NoteFlag, string> = {
-  none: "None",
-  done: "Done",
-  blue: "Blue",
-  cyan: "Cyan",
-  green: "Green",
-  orange: "Orange",
-  purple: "Purple",
-  red: "Red",
-  yellow: "Yellow",
-};
+import { FLAG_CODES, FLAG_LABELS } from "@/lib/notes/flags";
 
 /**
  * Colours are given directly rather than through the theme tokens: a flag named "Red" has
@@ -34,19 +18,6 @@ const FLAG_COLORS: Record<NoteFlag, string | null> = {
   purple: "#a855f7",
   red: "#e2503f",
   yellow: "#d4b106",
-};
-
-/** Achieve shows a single letter in the Flag column; the dot carries it for scanning. */
-export const FLAG_CODES: Record<NoteFlag, string> = {
-  none: "",
-  done: "D",
-  blue: "B",
-  cyan: "C",
-  green: "G",
-  orange: "O",
-  purple: "P",
-  red: "R",
-  yellow: "Y",
 };
 
 export function FlagSwatch({ flag }: { flag: NoteFlag }) {
