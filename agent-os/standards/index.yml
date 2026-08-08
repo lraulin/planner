@@ -22,9 +22,9 @@ development:
   testing:
     description: What to test and what not to — pure logic and DB mutations yes (always with a cross-user case), React components no; tests as a tripwire against silent breakage rather than a coverage target
   commits:
-    description: How to record a change for the agent that reads it in six months — one logical change per commit, imperative effect-naming subject under 72 chars (deliberately not Conventional Commits and why), a body whenever the diff is not self-evident (including what was left alone and what was verified), the Spec trailer, and no AI attribution
+    description: How to record a change for the agent that reads it in six months — one logical change per commit, imperative effect-naming subject under 72 chars (deliberately not Conventional Commits and why), a body whenever the diff is not self-evident (including what was left alone and what was verified), the Spec trailer, no AI attribution, and the two limits .husky/commit-msg actually enforces
   dates:
-    description: Calendar day vs instant — UTC noon encoding (fromDateKey/toDateKey/asCalendarDay), localDateKey for wall-clock today, never startOfDay on calendar fields (Aug 1→Jul 31 regression)
+    description: Calendar day vs instant — UTC noon encoding (fromDateKey/toDateKey/asCalendarDay), localDateKey for wall-clock today, never startOfDay on calendar fields (Aug 1→Jul 31 regression), and why the test suite pins TZ
 
 product:
   date-model:
