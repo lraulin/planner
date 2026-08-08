@@ -80,6 +80,8 @@ import { owningProjectId } from "@/lib/tree/owningProject";
 import { nodeDeleteMessage, nodeDeleteTitle } from "@/lib/tree/deleteMessage";
 import { type GridCommandCapabilities } from "@/lib/grid/commandDeck";
 import { rowMenuFor } from "@/components/grid/rowMenu";
+import { rowSwipeFor } from "@/components/grid/rowSwipe";
+import type { RowSwipe } from "@/components/grid/CompactRow";
 import { pasteMoves, pasteRefusal } from "@/lib/grid/rowClipboard";
 import { useRowClipboard } from "@/components/grid/RowClipboardProvider";
 import { planNodeConversion, type ConversionPlan } from "@/lib/tree/conversion";
@@ -670,6 +672,19 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   );
 
   /**
+   * Swipe, from the same capabilities — right completes, left deletes behind the confirmation
+   * this view already owns. `1` rather than the selection size: see `useNodeCommandDeck`, one
+   * finger aims at one row.
+   *
+   * Drag-to-reorder is off below `md` (`responsive.md`), so the compact Outline row has a free
+   * horizontal axis and nothing to fight over.
+   */
+  const rowSwipe = useCallback(
+    (nodeId: string): RowSwipe => rowSwipeFor(capabilitiesFor(nodeId, 1)),
+    [capabilitiesFor],
+  );
+
+  /**
    * Drag-to-move. `resolveDrop` runs against the whole tree rather than the visible rows,
    * so hovering beside a row still resolves through ancestors that filters have hidden.
    * With "By category" on, group headers and root-level placements can also reassign a
@@ -895,6 +910,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         rowDrag={rowDrag}
         onNavigableIdsChange={setScreenIds}
         rowMenu={rowMenu}
+        rowSwipe={rowSwipe}
         enableFilters
         enableSort
         sorts={gridState.sorts}

@@ -429,6 +429,7 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
         rowNumbers
         onNavigableIdsChange={tab.setNavigableIds}
         rowMenu={nodeCommands.rowMenu}
+        rowSwipe={nodeCommands.rowSwipe}
         rowDrag={rowDrag}
         enableFilters
         enableSort

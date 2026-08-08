@@ -24,7 +24,9 @@ import type { ActionResult } from "./useOptimisticNodes";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { CreateMode, GridCommandCapabilities } from "@/lib/grid/commandDeck";
 import type { MenuItem } from "./ContextMenu";
+import type { RowSwipe } from "./CompactRow";
 import { rowMenuFor } from "./rowMenu";
+import { rowSwipeFor } from "./rowSwipe";
 
 /** Shared non-structural commands for list views that are projections of the outline. */
 export function useNodeCommandDeck({
@@ -86,6 +88,11 @@ export function useNodeCommandDeck({
 }): {
   capabilities: GridCommandCapabilities;
   rowMenu: (nodeId: string | null) => MenuItem[];
+  /**
+   * Swipe gestures for a compact row: right completes, left deletes behind the confirmation
+   * this hook already renders. Hosts pass it straight to `DataGrid`; it is ignored above `md`.
+   */
+  rowSwipe: (nodeId: string) => RowSwipe;
   /** The conversion and delete confirmations. Hosts render this once, anywhere in their tree. */
   dialogs: ReactNode;
 } {
@@ -309,6 +316,19 @@ export function useNodeCommandDeck({
     [capabilitiesFor, selectedIds],
   );
 
+  /**
+   * `1`, deliberately, where `rowMenu` passes the selection size.
+   *
+   * A swipe is aimed at one row with one finger. Reading the selection would let a gesture on
+   * a row that happens to still be in a multi-select delete five rows, with a rail that said
+   * "Delete" in the singular — the gesture would have been honest about the row and lied
+   * about the scope.
+   */
+  const rowSwipe = useCallback(
+    (nodeId: string): RowSwipe => rowSwipeFor(capabilitiesFor(nodeId, 1)),
+    [capabilitiesFor],
+  );
+
   const conversionPlan = useMemo<ConversionPlan | null>(() => {
     if (!pendingConversion) return null;
     const source = byId.get(pendingConversion.nodeId);
@@ -355,6 +375,7 @@ export function useNodeCommandDeck({
   return {
     capabilities,
     rowMenu,
+    rowSwipe,
     dialogs: (
       <>
         {deleteDialog}

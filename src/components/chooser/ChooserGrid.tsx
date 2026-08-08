@@ -408,6 +408,7 @@ export function ChooserGrid({
         ariaLabel="Task Chooser"
         onNavigableIdsChange={tab.setNavigableIds}
         rowMenu={nodeCommands.rowMenu}
+        rowSwipe={nodeCommands.rowSwipe}
         rowDrag={rowDrag}
         rowNumbers
         enableFilters={advancedFilters}

@@ -262,6 +262,7 @@ export function ResultAreasGrid({ initialNodes }: { initialNodes: OutlineNode[] 
         rowNumbers
         onNavigableIdsChange={tab.setNavigableIds}
         rowMenu={nodeCommands.rowMenu}
+        rowSwipe={nodeCommands.rowSwipe}
         enableFilters
         enableSort
         sorts={gridState.sorts}
