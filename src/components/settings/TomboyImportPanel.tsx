@@ -88,8 +88,9 @@ export function TomboyImportPanel() {
         <p>
           Import Tomboy notes from a file-sync repository. Each ordinary note becomes a
           flat note with subject <span className="font-medium text-ink">Tomboy</span>;
-          Tomboy notebooks become contexts and original creation/change times are kept.
-          Re-importing updates by Tomboy UUID without overwriting newer Planner edits.
+          Tomboy notebooks become contexts, the creation day appears in Date, and the
+          original creation/change times are kept. Re-importing updates by Tomboy UUID
+          without overwriting newer Planner edits.
         </p>
 
         <div>

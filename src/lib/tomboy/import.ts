@@ -27,6 +27,7 @@ type ImportedRow = {
   subject: string;
   body: string;
   contexts: string[];
+  noteDate: Date | null;
   updatedAt: Date;
 };
 
@@ -42,6 +43,7 @@ async function findImportedNote(
       subject: notes.subject,
       body: notes.body,
       contexts: notes.contexts,
+      noteDate: notes.noteDate,
       updatedAt: notes.updatedAt,
     })
     .from(notes)
@@ -120,6 +122,7 @@ export async function importTomboyFiles(params: {
             subject: TOMBOY_SUBJECT,
             body: incoming.body,
             contexts: incoming.contexts,
+            noteDate: incoming.noteDate,
             updatedAt: incoming.updatedAt,
           })
           .where(and(eq(notes.id, existing.id), eq(notes.userId, userId)));
@@ -135,7 +138,7 @@ export async function importTomboyFiles(params: {
         title: incoming.title,
         subject: TOMBOY_SUBJECT,
         body: incoming.body,
-        noteDate: null,
+        noteDate: incoming.noteDate,
         contexts: incoming.contexts,
         externalSource: TOMBOY_SOURCE,
         externalId: incoming.sourceId,
@@ -167,6 +170,7 @@ function sameImportedValues(
     existing.subject === TOMBOY_SUBJECT &&
     existing.body === incoming.body &&
     arraysEqual(existing.contexts, incoming.contexts) &&
+    existing.noteDate?.getTime() === incoming.noteDate.getTime() &&
     existing.updatedAt.getTime() === incoming.updatedAt.getTime()
   );
 }

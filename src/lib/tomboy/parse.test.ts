@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { toDateKey } from "@/lib/schedule/geometry";
 import { mapTomboyFiles } from "./map";
 import { parseTomboyNote, tomboyIdFromFilename } from "./parse";
 
@@ -38,13 +39,14 @@ describe("tomboyIdFromFilename", () => {
 });
 
 describe("parseTomboyNote", () => {
-  it("maps title, body, notebooks and source instants without inventing a note date", () => {
+  it("maps title, body, notebooks, source instants and the creation day", () => {
     const parsed = parseTomboyNote({ name: `${ID}.note`, text: noteXml() });
 
     expect(parsed.sourceId).toBe(ID);
     expect(parsed.title).toBe("Reading list");
     expect(parsed.body).toBe("**One**");
     expect(parsed.contexts).toEqual(["Books"]);
+    expect(toDateKey(parsed.noteDate)).toBe("2017-09-21");
     expect(parsed.createdAt.toISOString()).toBe("2017-09-21T21:53:47.881Z");
     // Metadata changes (such as notebook moves) can be later than content changes.
     expect(parsed.updatedAt.toISOString()).toBe("2017-10-25T06:37:26.885Z");

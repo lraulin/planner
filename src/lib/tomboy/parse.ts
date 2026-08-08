@@ -1,4 +1,5 @@
 import { tomboyToMarkdown, tomboyXmlText } from "./markup";
+import { fromDateKey } from "@/lib/schedule/geometry";
 
 export type TomboyFile = {
   name: string;
@@ -10,6 +11,8 @@ export type ParsedTomboyNote = {
   title: string;
   body: string;
   contexts: string[];
+  /** Tomboy's creation calendar day, for Planner's visible note Date field. */
+  noteDate: Date;
   createdAt: Date;
   updatedAt: Date;
   isTemplate: boolean;
@@ -42,7 +45,9 @@ export function parseTomboyNote(file: TomboyFile): ParsedTomboyNote {
   if (content === null) throw new Error("missing <note-content>");
   const converted = tomboyToMarkdown(content);
 
-  const createdAt = instant(scalar(xml, "create-date"), "create-date");
+  const createdValue = scalar(xml, "create-date").trim();
+  const createdAt = instant(createdValue, "create-date");
+  const noteDate = calendarDay(createdValue, "create-date");
   const changedAt = optionalInstant(xml, "last-change-date") ?? createdAt;
   const metadataChangedAt =
     optionalInstant(xml, "last-metadata-change-date") ?? changedAt;
@@ -66,11 +71,18 @@ export function parseTomboyNote(file: TomboyFile): ParsedTomboyNote {
     title,
     body: removeDuplicatedTitle(converted.markdown, title),
     contexts,
+    noteDate,
     createdAt,
     updatedAt,
     isTemplate: tags.includes("system:template"),
     unknownMarkup: converted.unknownTags,
   };
+}
+
+function calendarDay(value: string, field: string): Date {
+  const match = /^(\d{4}-\d{2}-\d{2})T/.exec(value);
+  if (!match) throw new Error(`invalid <${field}> timestamp`);
+  return fromDateKey(match[1]);
 }
 
 function elementBody(xml: string, name: string): string | null {

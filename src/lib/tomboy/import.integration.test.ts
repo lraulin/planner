@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { notes, users } from "@/db/schema";
 import { deleteNote, updateNote } from "@/lib/notes/mutations";
+import { toDateKey } from "@/lib/schedule/geometry";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { importTomboyFiles, TOMBOY_SOURCE, TOMBOY_SUBJECT } from "./import";
 
@@ -100,9 +101,9 @@ describeDb("importTomboyFiles", () => {
       title: "Imported thought",
       subject: TOMBOY_SUBJECT,
       body: "Original body",
-      noteDate: null,
       contexts: ["Thoughts"],
     });
+    expect(toDateKey(row.noteDate!)).toBe("2017-09-20");
     expect(row.createdAt.toISOString()).toBe("2017-09-20T21:53:47.881Z");
     expect(row.updatedAt.toISOString()).toBe("2017-09-21T21:53:52.191Z");
   });
@@ -130,6 +131,23 @@ describeDb("importTomboyFiles", () => {
       .where(and(eq(notes.userId, userId), eq(notes.externalId, NOTE_ID)));
     expect(rows).toHaveLength(1);
     expect(rows[0].body).toBe("Changed in Tomboy");
+  });
+
+  it("backfills the creation day on notes made by the original importer", async () => {
+    await importTomboyFiles({ userId, files: [noteFile()] });
+    await db
+      .update(notes)
+      .set({ noteDate: null })
+      .where(and(eq(notes.userId, userId), eq(notes.externalId, NOTE_ID)));
+
+    const result = await importTomboyFiles({ userId, files: [noteFile()] });
+
+    expect(result).toMatchObject({ created: 0, updated: 1, skipped: 0 });
+    const [row] = await db
+      .select({ noteDate: notes.noteDate })
+      .from(notes)
+      .where(and(eq(notes.userId, userId), eq(notes.externalId, NOTE_ID)));
+    expect(toDateKey(row.noteDate!)).toBe("2017-09-20");
   });
 
   it("does not overwrite a Planner edit with an older Tomboy archive", async () => {
