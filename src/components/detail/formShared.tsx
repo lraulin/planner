@@ -9,13 +9,7 @@ import type {
 } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { NodeDetail, NodeDetailValues } from "@/lib/detail/types";
-import {
-  CheckboxField,
-  DateField,
-  FieldGrid,
-  PriorityField,
-  TextField,
-} from "./fields";
+import { FieldGrid, PriorityField, TextField } from "./fields";
 
 /**
  * What every detail form is handed. The drawer owns the draft and the item wiring; a form
@@ -75,28 +69,5 @@ export function CoreHeaderFields({
         }
       />
     </FieldGrid>
-  );
-}
-
-/** Deadline and focus, which every type also shares. */
-export function CoreScheduleFields({
-  values,
-  patch,
-}: Pick<DetailFormProps, "values" | "patch">) {
-  return (
-    <>
-      <DateField
-        label="Deadline"
-        value={values.deadline}
-        onChange={(deadline) => patch({ deadline })}
-      />
-      <CheckboxField
-        label="Focus"
-        checked={values.focus}
-        onChange={(focus) => patch({ focus })}
-        hint="Shows in the outline's focus-only view."
-        className="self-end pb-2"
-      />
-    </>
   );
 }

@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { buildGridChips, type GridChip } from "@/lib/grid/chips";
 import type { CrossColumnFilter } from "@/lib/grid/crossFilter";
-import { ALL_FILTER, filterOptions, type ColumnFilter } from "@/lib/grid/filters";
+import { filterOptions, type ColumnFilter } from "@/lib/grid/filters";
 import type { ColumnMeta } from "./columns";
 
 /**
@@ -151,6 +151,3 @@ function Chip({ chip, onRemove }: { chip: GridChip; onRemove: () => void }) {
     </span>
   );
 }
-
-/** Reset one column's funnel to (All). Exported so hosts do not re-derive the empty shape. */
-export const CLEARED_COLUMN_FILTER: ColumnFilter = ALL_FILTER;

@@ -23,12 +23,7 @@ import {
 } from "./columns";
 import { ColumnHeaderRow } from "./ColumnHeader";
 import { ContextMenu, type MenuItem } from "./ContextMenu";
-import {
-  ALL_FILTER,
-  filterActive,
-  rowPassesFilters,
-  type ColumnFilter,
-} from "@/lib/grid/filters";
+import { filterActive, rowPassesFilters, type ColumnFilter } from "@/lib/grid/filters";
 import {
   crossFilterActive,
   rowPassesCrossFilter,
@@ -1333,5 +1328,3 @@ function applyGroupCollapse<TRow>(
   }
   return out;
 }
-
-export { ALL_FILTER };

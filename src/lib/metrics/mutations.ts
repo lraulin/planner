@@ -327,9 +327,4 @@ export async function deleteMetricEntry(
   });
 }
 
-/** Re-export for tests that assert numeric parsing through mutations. */
-export function parseMetricNumeric(raw: string | number | null | undefined) {
-  return parseNumeric(raw);
-}
-
 export type { PriorityLetter };
