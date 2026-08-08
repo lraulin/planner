@@ -212,7 +212,7 @@ function NameViewDialog({
           <p className="text-[0.75rem] text-ink-muted">
             {renaming
               ? "The view keeps its columns, filters and everything else — only the name changes."
-              : "Keeps the columns you are showing, the filters on them, how they are grouped, and where the toolbar switches are set. Sort and density stay with the grid."}
+              : "Keeps the columns you are showing, the filters on them (including Filter…), how they are grouped, and where the toolbar switches are set."}
           </p>
         </div>
 

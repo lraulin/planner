@@ -58,7 +58,12 @@ export type GridSettings = {
   filters: Record<string, ColumnFilter> | null;
   /**
    * Cross-column And/Or expression from the advanced filter builder, ANDed with the
-   * per-column filters above. Null when the user has never opened the builder.
+   * per-column filters above.
+   *
+   * **Null means "use the view's default"** (same contract as `filters`). An empty
+   * expression (`conditions: []`) is the deliberate clear — "no advanced filter", even when
+   * the view was saved with one. Without that distinction, Clear all on a saved view would
+   * either be impossible to persist or would restore the view's Filter… on the next read.
    */
   advancedFilter: CrossColumnFilter | null;
   /** Quick-search text, matched across every filterable column. Empty means inactive. */
@@ -266,6 +271,21 @@ export function resolveSwitches(
 ): Record<string, boolean> {
   if (!viewSwitches) return stored;
   return { ...viewSwitches, ...stored };
+}
+
+/**
+ * Effective advanced filter from a stored blob and a view default.
+ *
+ * `null` follows the view (same as column `filters`). An empty expression is the deliberate
+ * "cleared" state so Clear all can beat a saved view's Filter… without Reset. The three
+ * states are easy to collapse into two by accident — this is the whole function.
+ */
+export function resolveAdvancedFilter(
+  stored: CrossColumnFilter | null,
+  viewDefault: CrossColumnFilter | null,
+): CrossColumnFilter | null {
+  if (stored === null) return viewDefault;
+  return crossFilterActive(stored) ? stored : null;
 }
 
 /**

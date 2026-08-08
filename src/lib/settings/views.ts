@@ -1,3 +1,4 @@
+import { parseCrossColumnFilter, type CrossColumnFilter } from "@/lib/grid/crossFilter";
 import { parseColumnFilter, type ColumnFilter } from "@/lib/grid/customFilter";
 import { asMap, asRecord, asString, asStringArray } from "./parse";
 import { SETTINGS_VERSION } from "./scopes";
@@ -11,15 +12,18 @@ import { SETTINGS_VERSION } from "./scopes";
  * view is not a new feature at all. A view is already nothing but a column order, a set of
  * filters and a grouping; saving one is copying three values the grid is holding anyway.
  *
- * **What a saved view captures, and what it deliberately does not.** Order, filters, grouping
- * and switches. The first three already distinguish "the user has not chosen" from "the user
- * chose this" — see the nullable fields in `grid.ts`. Switches join them without needing that
- * distinction at all, because each switch is its own key: `resolveSwitches` falls back per id,
- * so there is no whole-map "cleared" state to represent and no migration to pay for.
+ * **What a saved view captures, and what it deliberately does not.** Order, column filters,
+ * the advanced filter, grouping and switches. The first three already distinguish "the user
+ * has not chosen" from "the user chose this" — see the nullable fields in `grid.ts`. Switches
+ * join them without needing that distinction at all, because each switch is its own key:
+ * `resolveSwitches` falls back per id, so there is no whole-map "cleared" state to represent
+ * and no migration to pay for.
  *
  * Sort and density stay out. Every stored blob carries a concrete `sorts` array, so a view
  * default could never win against one, and `sorts: []` legitimately means "unsorted" rather
- * than "unset". Capturing them *would* need the nullable treatment and a migration.
+ * than "unset". Capturing them *would* need the nullable treatment and a migration. (Saving
+ * still **forks** the live grid scope so the sort you can see is what the new view opens on;
+ * it just is not part of the Reset baseline.)
  *
  * `includeDeferred` stays out for a different reason: `data-grid.md` keeps it on the tab scope
  * on purpose, so it is not a per-view setting to capture.
@@ -36,6 +40,14 @@ export type SavedViewSettings = {
   /** Visible column ids in order. Null follows the tab's preset, as everywhere else. */
   order: string[] | null;
   filters: Record<string, ColumnFilter>;
+  /**
+   * Cross-column advanced filter the view opens with. Null / absent means none — same as a
+   * built-in view, which has no advanced filter of its own.
+   *
+   * Captured because it *is* a filter: Save used to name the grid in front of you and then
+   * drop the Filter… expression the moment the new view's empty grid scope took over.
+   */
+  advancedFilter: CrossColumnFilter | null;
   groupBy: string[];
   /**
    * Toolbar switch positions, by the id the tab declares. Merged *under* the grid's own
@@ -117,6 +129,8 @@ function parseSavedView(value: unknown): SavedView | null {
     base: isValidViewId(asString(record.base, "")) ? asString(record.base, "") : null,
     order: Array.isArray(record.order) ? asStringArray(record.order, []) : null,
     filters: asMap(record.filters, (entry) => parseColumnFilter(entry)),
+    // Absent on views saved before the advanced filter was captured — same as "none".
+    advancedFilter: parseCrossColumnFilter(record.advancedFilter),
     groupBy: asStringArray(record.groupBy, []),
     switches: asMap(record.switches, (entry) =>
       typeof entry === "boolean" ? entry : null,

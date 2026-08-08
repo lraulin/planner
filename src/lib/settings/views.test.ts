@@ -18,7 +18,16 @@ import {
 } from "./views";
 
 function view(id: string, name = id): SavedView {
-  return { id, name, base: null, order: null, filters: {}, groupBy: [], switches: {} };
+  return {
+    id,
+    name,
+    base: null,
+    order: null,
+    filters: {},
+    advancedFilter: null,
+    groupBy: [],
+    switches: {},
+  };
 }
 
 function saved(...views: SavedView[]): SavedViews {
@@ -58,6 +67,10 @@ describe("parseSavedViews", () => {
       base: "active-status",
       order: ["name", "deadline"],
       filters: { state: { mode: "options", ids: ["value:NS"] } },
+      advancedFilter: {
+        join: "and",
+        conditions: [{ columnId: "purpose", op: "contains", value: "q1" }],
+      },
       groupBy: ["project"],
       switches: { nextActions: true, showPurpose: false },
     });
@@ -120,6 +133,23 @@ describe("parseSavedViews", () => {
     expect(
       parseSavedViews({ views: [{ id: "a", name: "A" }] }).views[0].order,
     ).toBeNull();
+  });
+
+  it("keeps an advanced filter and treats its absence as none", () => {
+    // Views saved before advanced filters were captured must still open, as "no Filter…".
+    expect(
+      parseSavedViews({ views: [{ id: "a", name: "A" }] }).views[0].advancedFilter,
+    ).toBeNull();
+
+    const filter = {
+      join: "or",
+      conditions: [{ columnId: "state", op: "eq", value: "NS" }],
+    };
+    expect(
+      parseSavedViews({
+        views: [{ id: "a", name: "A", advancedFilter: filter }],
+      }).views[0].advancedFilter,
+    ).toEqual(filter);
   });
 });
 
@@ -187,6 +217,10 @@ describe("updateSavedView", () => {
   const settings = {
     order: ["name"],
     filters: { state: { mode: "options", ids: ["value:CO"] } } as SavedView["filters"],
+    advancedFilter: {
+      join: "and" as const,
+      conditions: [{ columnId: "purpose", op: "contains" as const, value: "q1" }],
+    },
     groupBy: ["project"],
     switches: { nextActions: true },
   };
@@ -202,6 +236,7 @@ describe("updateSavedView", () => {
     expect(after.base).toBe("active-status");
     expect(after.groupBy).toEqual(["project"]);
     expect(after.switches).toEqual({ nextActions: true });
+    expect(after.advancedFilter).toEqual(settings.advancedFilter);
   });
 
   it("leaves other views alone", () => {

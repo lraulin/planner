@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { EMPTY_CROSS_FILTER } from "@/lib/grid/crossFilter";
 import {
   DEFAULT_GRID_SETTINGS,
   hasActiveFilters,
@@ -7,6 +8,7 @@ import {
   MAX_SORT_KEYS,
   MIN_COLUMN_WIDTH,
   parseGridSettings,
+  resolveAdvancedFilter,
   resolveSwitches,
   serializeGridSettings,
 } from "./grid";
@@ -386,5 +388,32 @@ describe("resolveSwitches", () => {
 
   it("keeps switches from both sides", () => {
     expect(resolveSwitches({ a: true }, { b: true })).toEqual({ a: true, b: true });
+  });
+});
+
+describe("resolveAdvancedFilter", () => {
+  const viewDefault = {
+    join: "and" as const,
+    conditions: [{ columnId: "purpose", op: "contains" as const, value: "q1" }],
+  };
+  const stored = {
+    join: "or" as const,
+    conditions: [{ columnId: "state", op: "eq" as const, value: "NS" }],
+  };
+
+  it("follows the view when the grid scope has never set one", () => {
+    // Same contract as column filters: null means "not chosen", not "cleared".
+    expect(resolveAdvancedFilter(null, viewDefault)).toEqual(viewDefault);
+    expect(resolveAdvancedFilter(null, null)).toBeNull();
+  });
+
+  it("lets an explicit clear beat the view's default", () => {
+    // Clear all stores an empty expression so a saved view's Filter… can be turned off
+    // without Reset. Collapsing empty into null would bounce the default back on.
+    expect(resolveAdvancedFilter(EMPTY_CROSS_FILTER, viewDefault)).toBeNull();
+  });
+
+  it("uses a stored expression when it actually narrows", () => {
+    expect(resolveAdvancedFilter(stored, viewDefault)).toEqual(stored);
   });
 });

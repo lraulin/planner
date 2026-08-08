@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { useCopyScope, useResetScope } from "@/components/settings/SettingsProvider";
+import { gridScope } from "@/lib/settings/scopes";
 import { baseViewId } from "@/lib/settings/views";
 import type { ColumnMeta } from "./columns";
 import { useGridState, useTabView, type GridDefaults } from "./useGridState";
@@ -153,18 +154,31 @@ export function useModuleViews<TCol extends ColumnMeta, TView extends string>({
      * so the new view inherits the behaviour of the preset it was made from, and so that saving
      * from a saved view never nests.
      *
-     * The module's own per-view scopes are forked at the same time, so the new view opens on the
-     * weights / mode / filter you could see rather than on the module's defaults.
+     * Two forks ride along so the new view opens on what you could see, not on defaults:
+     * 1. The live **grid** scope (widths, sort, search, and anything else not in the catalogue).
+     * 2. The module's own per-view scopes (`viewScopes`) — Chooser weights, Notes mode, etc.
+     *
+     * Without (1), a Filter… expression lived only in the source grid scope and vanished the
+     * moment the empty new scope took over — even after the catalogue started capturing it for
+     * Reset. Without (2), the Chooser's date filter and Notes' Nested/Flat snapped back.
      */
     saveAs: (name: string) => {
       const id = saved.save(name, { base, ...snapshotOf(grid) });
 
+      const fromGrid = gridScope(scope);
+      const toGrid = gridScope(
+        defaultViewSharesModuleScope && id === defaultViewId
+          ? moduleId
+          : `${moduleId}.${id}`,
+      );
+      if (toGrid !== fromGrid) copyScope(fromGrid, toGrid);
+
       if (viewScopes) {
         const from = viewScopes(viewId);
         const to = viewScopes(id);
-        from.forEach((scope, index) => {
+        from.forEach((scopeName, index) => {
           const target = to[index];
-          if (target && target !== scope) copyScope(scope, target);
+          if (target && target !== scopeName) copyScope(scopeName, target);
         });
       }
 

@@ -108,6 +108,9 @@ export function snapshotOf(grid: GridState): SavedViewSettings {
   return {
     order: grid.order,
     filters: grid.filters,
+    // The effective advanced filter — what is narrowing the rows right now. Saving names
+    // the grid in front of you; dropping this was the bug that made Save undo a Filter….
+    advancedFilter: grid.advancedFilter,
     groupBy: grid.groupBy,
     switches: grid.switches,
   };
@@ -126,6 +129,7 @@ export function savedViewDefaults(
   return {
     order: view.order ?? fallback.order,
     filters: view.filters,
+    advancedFilter: view.advancedFilter,
     groupBy: view.groupBy,
     switches: view.switches,
   };

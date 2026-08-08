@@ -9,6 +9,7 @@ import {
   hasAnyNarrowing,
   MAX_SORT_KEYS,
   parseGridSettings,
+  resolveAdvancedFilter,
   resolveSwitches,
   serializeGridSettings,
   type GridDensity,
@@ -142,6 +143,11 @@ export type GridDefaults = {
    */
   filters?: Record<string, ColumnFilter>;
   /**
+   * Advanced (cross-column) filter the view opens with. Same contract as `filters`: a saved
+   * view's Filter… expression is a default, not a mode, and Reset this grid puts it back.
+   */
+  advancedFilter?: CrossColumnFilter | null;
+  /**
    * Toolbar switch positions the view opens with, by the id the tab declared.
    *
    * A saved view records where the switches were; this is how they come back. It does **not**
@@ -165,6 +171,7 @@ export function useGridState<TCol extends ColumnMeta>(
   const defaultOrder = defaults.order;
   const defaultGroupBy = defaults.groupBy ?? EMPTY_GROUP_BY;
   const defaultFilters = defaults.filters ?? NO_FILTERS;
+  const defaultAdvancedFilter = defaults.advancedFilter ?? null;
   const defaultSwitches = defaults.switches;
   const { value: settings, patch, reset } = useSetting(gridScope(tabId), CODEC);
 
@@ -226,6 +233,22 @@ export function useGridState<TCol extends ColumnMeta>(
    * filter is indistinguishable from one the user set. That is the point.
    */
   const filters = settings.filters ?? defaultFilters;
+
+  /**
+   * Advanced filter with the same "null follows the view" contract as column filters.
+   *
+   * - `null` in the grid scope → view default (or none).
+   * - An empty expression (`conditions: []`) → explicitly cleared, so Clear all can turn a
+   *   saved view's advanced filter off without Reset.
+   * - A non-empty expression → that filter.
+   *
+   * Empty expressions are inactive (`crossFilterActive`), so callers still see `null` when
+   * nothing is narrowing — one shape for the chip bar and `hasAnyNarrowing`.
+   */
+  const advancedFilter = resolveAdvancedFilter(
+    settings.advancedFilter,
+    defaultAdvancedFilter,
+  );
 
   const setOrder = useCallback(
     (next: string[]) => {
@@ -320,18 +343,20 @@ export function useGridState<TCol extends ColumnMeta>(
     patch((current) => ({
       ...current,
       // Explicitly empty, not null: "show me everything" has to survive a reload. Reset this
-      // grid is how you get the view's defaults back.
+      // grid is how you get the view's defaults back. The advanced filter uses an empty
+      // expression for the same reason — null would follow the view's default again.
       filters: {},
-      advancedFilter: null,
+      advancedFilter: EMPTY_CROSS_FILTER,
       search: "",
     }));
   }, [patch]);
 
   const setAdvancedFilter = useCallback(
     (filter: CrossColumnFilter | null) => {
-      // An empty condition list is stored as null rather than an empty expression, so the
-      // chip bar and `hasAnyNarrowing` have one shape to test instead of two.
-      const next = filter && filter.conditions.length > 0 ? filter : null;
+      // Active filters store as themselves. Clearing stores an empty expression rather than
+      // null: null means "follow the view's default", and a user who just cleared a saved
+      // view's Filter… must not see it bounce back.
+      const next = filter && filter.conditions.length > 0 ? filter : EMPTY_CROSS_FILTER;
       patch((current) => ({ ...current, advancedFilter: next }));
     },
     [patch],
@@ -340,18 +365,21 @@ export function useGridState<TCol extends ColumnMeta>(
   const removeAdvancedCondition = useCallback(
     (index: number) => {
       patch((current) => {
-        if (!current.advancedFilter) return current;
-        const conditions = current.advancedFilter.conditions.filter(
+        // When the scope still follows the view default (`null`), edit the effective filter
+        // so removing a chip materialises the rest rather than wiping the default entirely.
+        const source = current.advancedFilter ?? defaultAdvancedFilter;
+        if (!source || source.conditions.length === 0) return current;
+        const conditions = source.conditions.filter(
           (_, position) => position !== index,
         );
         return {
           ...current,
           advancedFilter:
-            conditions.length > 0 ? { ...current.advancedFilter, conditions } : null,
+            conditions.length > 0 ? { ...source, conditions } : EMPTY_CROSS_FILTER,
         };
       });
     },
-    [patch],
+    [patch, defaultAdvancedFilter],
   );
 
   const setSearch = useCallback(
@@ -536,7 +564,7 @@ export function useGridState<TCol extends ColumnMeta>(
     clearFilters,
     filtersActive: hasActiveFilters(filters),
 
-    advancedFilter: settings.advancedFilter,
+    advancedFilter,
     setAdvancedFilter,
     removeAdvancedCondition,
     /** A blank builder to seed the dialog with when nothing is stored yet. */
@@ -546,7 +574,7 @@ export function useGridState<TCol extends ColumnMeta>(
     setSearch,
 
     /** True when column filters, the advanced filter or the search are narrowing rows. */
-    narrowing: hasAnyNarrowing(filters, settings.advancedFilter, settings.search),
+    narrowing: hasAnyNarrowing(filters, advancedFilter, settings.search),
 
     sorts: settings.sorts,
     /**
