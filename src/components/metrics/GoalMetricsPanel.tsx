@@ -117,7 +117,7 @@ export function GoalMetricsPanel({
       </div>
 
       {error && (
-        <p className="text-[0.8125rem] text-danger" role="alert">
+        <p className="text-[0.8125rem] text-priority-a" role="alert">
           {error}
         </p>
       )}

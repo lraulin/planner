@@ -491,7 +491,7 @@ function MetricForm({
             type="button"
             onClick={removeMetric}
             disabled={busy}
-            className="min-h-tap flex-none rounded px-2 py-1 text-[0.8125rem] text-danger hover:bg-surface-raised md:min-h-0"
+            className="min-h-tap flex-none rounded px-2 py-1 text-[0.8125rem] text-priority-a hover:bg-surface-raised md:min-h-0"
           >
             Delete
           </button>
@@ -522,7 +522,7 @@ function MetricForm({
 
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
         {error && (
-          <p className="mb-3 rounded border border-danger/40 bg-danger/10 px-3 py-2 text-[0.8125rem] text-danger">
+          <p className="mb-3 rounded border border-priority-a/40 bg-priority-a/10 px-3 py-2 text-[0.8125rem] text-priority-a">
             {error}
           </p>
         )}
@@ -866,7 +866,7 @@ function MetricForm({
                           <button
                             type="button"
                             onClick={() => removeEntry(entry.id)}
-                            className="flex h-tap w-tap items-center justify-center rounded text-[1.125rem] leading-none text-ink-faint hover:text-danger md:h-6 md:w-6 md:text-[0.875rem]"
+                            className="flex h-tap w-tap items-center justify-center rounded text-[1.125rem] leading-none text-ink-faint hover:text-priority-a md:h-6 md:w-6 md:text-[0.875rem]"
                             aria-label="Delete entry"
                           >
                             ×
