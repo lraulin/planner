@@ -24,6 +24,7 @@ import {
   STATUS_LABELS,
   type ScheduleStatus,
 } from "@/lib/tree/status";
+import { displayPercentComplete } from "@/lib/tree/percent";
 import { ownEffectiveState } from "@/lib/tree/shelving";
 import { TypeIcon } from "@/components/icons/TypeIcon";
 import type { ColumnDef } from "./columns";
@@ -200,10 +201,14 @@ export function percentColumn(): ColumnDef<OutlineColumnCtx> {
     label: "%",
     width: "3rem",
     align: "right",
-    sortValue: (row) => row.node.percentCompleteRollup,
+    // Match PercentCell: leaf own %, parent effort-weighted rollup. The rollup alone
+    // is 0 for any leaf without an effort estimate, which is most tasks.
+    sortValue: (row) => displayPercentComplete(row.node),
     // 0% on every untouched row would be noise; only progress is worth a chip.
-    compactText: (row) =>
-      row.node.percentCompleteRollup > 0 ? `${row.node.percentCompleteRollup}%` : null,
+    compactText: (row) => {
+      const value = displayPercentComplete(row.node);
+      return value > 0 ? `${value}%` : null;
+    },
     render: (row) => <PercentCell node={row.node} />,
   };
 }

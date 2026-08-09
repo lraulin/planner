@@ -153,6 +153,15 @@ describe("derive — effort rollups", () => {
     ]);
     expect(nodes[0].percentCompleteRollup).toBe(75);
   });
+
+  it("reports percent rollup 0 on a leaf with no effort estimate", () => {
+    // Weighted rollup needs a denominator. Display must use the stored value instead —
+    // see displayPercentComplete / percentColumn, which used to sort and chip from the
+    // rollup alone and silently hid progress on every un-estimated task.
+    const [leaf] = derive([row({ id: "t", type: "task", percentComplete: 40 })]);
+    expect(leaf?.percentComplete).toBe(40);
+    expect(leaf?.percentCompleteRollup).toBe(0);
+  });
 });
 
 describe("derive — structure", () => {

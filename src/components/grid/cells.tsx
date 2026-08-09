@@ -9,6 +9,7 @@ import {
   parseEffort,
   parsePriority,
 } from "@/lib/tree/format";
+import { displayPercentComplete } from "@/lib/tree/percent";
 import {
   KIND_LABELS,
   kindOfNode,
@@ -566,9 +567,7 @@ export function StatusCell({
 }
 
 export function PercentCell({ node }: { node: OutlineNode }) {
-  const value = node.hasChildren
-    ? node.percentCompleteRollup
-    : (node.percentComplete ?? 0);
+  const value = displayPercentComplete(node);
   return (
     <span className="tabular text-right text-[0.75rem] text-ink-muted">
       {value > 0 ? `${value}%` : ""}
