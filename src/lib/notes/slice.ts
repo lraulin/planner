@@ -91,8 +91,14 @@ export function sliceNotes(notes: NoteNode[], opts: SliceNotesOpts): NoteRowView
   const effectiveParent = new Map<string, string | null>();
 
   for (const note of kept) {
+    const seen = new Set<string>();
     let parentId = note.parentId;
     while (parentId !== null && !keptIds.has(parentId)) {
+      if (seen.has(parentId)) {
+        parentId = null;
+        break;
+      }
+      seen.add(parentId);
       parentId = byId.get(parentId)?.parentId ?? null;
     }
     effectiveParent.set(note.id, parentId);

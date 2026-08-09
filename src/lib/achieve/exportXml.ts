@@ -439,8 +439,11 @@ function nearestExportAncestor(
   parentId: string | null,
   byId: Map<string, ExportOutlineRow>,
 ): string | null {
+  const seen = new Set<string>();
   let cur = parentId;
   while (cur) {
+    if (seen.has(cur)) return null;
+    seen.add(cur);
     const p = byId.get(cur);
     if (!p) return null;
     if (EXPORT_TYPES.has(p.type)) {
@@ -456,8 +459,11 @@ function nearestOfType(
   type: NodeType,
   byId: Map<string, ExportOutlineRow>,
 ): string | null {
+  const seen = new Set<string>();
   let cur: string | null = startId;
   while (cur) {
+    if (seen.has(cur)) return null;
+    seen.add(cur);
     const n = byId.get(cur);
     if (!n) return null;
     if (n.type === type) return cur;

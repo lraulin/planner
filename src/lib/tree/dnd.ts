@@ -54,9 +54,12 @@ export function isSelfOrDescendant(
   ancestorId: string,
   nodeId: string | null,
 ): boolean {
+  const seen = new Set<string>();
   let current = nodeId;
   while (current !== null) {
     if (current === ancestorId) return true;
+    if (seen.has(current)) return false;
+    seen.add(current);
     current = byId.get(current)?.parentId ?? null;
   }
   return false;

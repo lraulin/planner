@@ -1,5 +1,6 @@
 import type { NodeDetail } from "@/lib/detail/types";
 import type { OutlineNode } from "@/lib/tree/types";
+import { walkUp } from "@/lib/tree/walkUp";
 import type { NoteNode } from "@/lib/notes/types";
 
 /** Compact node row for agent responses. */
@@ -112,10 +113,8 @@ export function buildPathMap(outline: OutlineNode[]): Map<string, string> {
 
   for (const node of outline) {
     const parts: string[] = [];
-    let current: OutlineNode | undefined = node;
-    while (current) {
+    for (const current of walkUp(node, byId)) {
       parts.unshift(current.name || `(unnamed ${current.type})`);
-      current = current.parentId ? byId.get(current.parentId) : undefined;
     }
     paths.set(node.id, parts.join(" / "));
   }

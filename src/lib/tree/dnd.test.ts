@@ -170,6 +170,16 @@ describe("isSelfOrDescendant", () => {
   it("handles the root", () => {
     expect(isSelfOrDescendant(tree(), "area", null)).toBe(false);
   });
+
+  it("terminates on a parent cycle rather than hanging", () => {
+    // Clipboard paste and drag both call this; a corrupt cycle must not spin the tab.
+    const cyclic = new Map([
+      ["a", { parentId: "b" }],
+      ["b", { parentId: "a" }],
+    ]);
+    expect(isSelfOrDescendant(cyclic, "x", "a")).toBe(false);
+    expect(isSelfOrDescendant(cyclic, "a", "b")).toBe(true);
+  });
 });
 
 describe("resolveCategoryGroupDrop", () => {

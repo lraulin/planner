@@ -116,7 +116,13 @@ function placementFor(
   let ancestor = currentParent.parentId
     ? (byId.get(currentParent.parentId) ?? null)
     : null;
+  const seen = new Set<string>();
   while (ancestor && !canNest(targetType, ancestor.type)) {
+    if (seen.has(ancestor.id)) {
+      ancestor = null;
+      break;
+    }
+    seen.add(ancestor.id);
     childOnBranch = ancestor;
     ancestor = ancestor.parentId ? (byId.get(ancestor.parentId) ?? null) : null;
   }

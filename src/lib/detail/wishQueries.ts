@@ -58,8 +58,11 @@ export async function loadWishList(userId: string): Promise<WishListRow[]> {
   const rows: WishListRow[] = items.map((item) => {
     let resultAreaId: string | null = null;
     let resultAreaName: string | null = null;
+    const seen = new Set<string>();
     let cur = byId.get(item.nodeId) ?? null;
     while (cur) {
+      if (seen.has(cur.id)) break;
+      seen.add(cur.id);
       if (cur.type === "result_area") {
         resultAreaId = cur.id;
         resultAreaName = cur.name;

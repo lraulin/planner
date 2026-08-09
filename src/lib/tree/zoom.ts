@@ -1,4 +1,5 @@
 import type { OutlineNode } from "./types";
+import { walkUp } from "./walkUp";
 
 /** Return the selected root and its complete descendant branch, or mark a stale root. */
 export function zoomBranch(
@@ -11,13 +12,12 @@ export function zoomBranch(
 
   const kept = new Set<string>([rootId]);
   for (const node of nodes) {
-    let parentId = node.parentId;
-    while (parentId) {
-      if (parentId === rootId) {
+    if (node.id === rootId) continue;
+    for (const ancestor of walkUp(node, byId)) {
+      if (ancestor.id === rootId) {
         kept.add(node.id);
         break;
       }
-      parentId = byId.get(parentId)?.parentId ?? null;
     }
   }
 
