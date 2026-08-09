@@ -1,6 +1,7 @@
 "use client";
 
 import type { ColumnDef } from "@/components/grid/columns";
+import { formatShortDate } from "@/lib/dateFormat";
 import { metricPriorityText } from "@/lib/metrics/compactRow";
 import { formatMetricNumber } from "@/lib/metrics/parse";
 import { priorityOrderValue } from "@/lib/priority/order";
@@ -158,7 +159,9 @@ export const metricsColumns: ColumnDef<MetricsColumnCtx, MetricListRow>[] = [
     filterValue: (row) => row.node.lastDate,
     sortValue: (row) => row.node.lastDate,
     render: (row) => (
-      <span className="tabular-nums text-ink-muted">{row.node.lastDate ?? "—"}</span>
+      <span className="tabular-nums text-ink-muted">
+        {row.node.lastDate ? formatShortDate(row.node.lastDate) : "—"}
+      </span>
     ),
   },
 ];

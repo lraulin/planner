@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import type { ColumnDef } from "@/components/grid/columns";
+import { formatShortDate } from "@/lib/dateFormat";
+import { localDateKey } from "@/lib/schedule/geometry";
 import type { TimeChartListRow } from "@/lib/schedule/queries";
 
 /**
@@ -75,11 +77,11 @@ export const timeChartsColumns: ColumnDef<TimeChartsColumnCtx, TimeChartListRow>
     label: "Updated",
     width: "7rem",
     filterKind: "date",
-    filterValue: (row) => row.node.updatedAt.toISOString().slice(0, 10),
+    filterValue: (row) => localDateKey(row.node.updatedAt),
     sortValue: (row) => row.node.updatedAt.getTime(),
     render: (row) => (
       <span className="tabular text-[0.8125rem] text-ink-muted">
-        {row.node.updatedAt.toLocaleDateString()}
+        {formatShortDate(localDateKey(row.node.updatedAt))}
       </span>
     ),
   },

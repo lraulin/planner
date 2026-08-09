@@ -1,3 +1,4 @@
+import { formatShortDate } from "@/lib/dateFormat";
 import type { MetricChartPoint, MetricEntryView, MetricType } from "./types";
 import { METRIC_TYPES } from "./types";
 
@@ -525,10 +526,5 @@ export function plotPoint(
 
 /** Short chart label for a `YYYY-MM-DD` key (e.g. 1/5/16). */
 export function formatChartDate(dateKey: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey.trim());
-  if (!m) return dateKey;
-  const year = m[1].slice(2);
-  const month = String(Number(m[2]));
-  const day = String(Number(m[3]));
-  return `${month}/${day}/${year}`;
+  return formatShortDate(dateKey) || dateKey;
 }

@@ -2,6 +2,7 @@
 
 import { useContext, useEffect, useRef, useState } from "react";
 import type { NodeState, PriorityLetter } from "@/db/schema";
+import { formatShortDate } from "@/lib/dateFormat";
 import type { OutlineNode } from "@/lib/tree/types";
 import {
   formatEffort,
@@ -417,21 +418,35 @@ export function DeadlineCell({
     value !== "" && today !== null && value < today && node.state !== "completed";
 
   return (
-    <input
-      type="date"
-      value={value}
-      onClick={(event) => event.stopPropagation()}
-      onChange={(event) => onChange(event.target.value || null)}
-      aria-label="Deadline"
-      className={[
-        "tabular w-full border-none bg-transparent text-right text-[0.75rem] outline-none",
-        overdue ? "text-priority-a" : "text-ink-muted",
-        // Unset fields stay blank until hover/focus so every row is not "mm/dd/yyyy".
-        value
-          ? ""
-          : "[&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-datetime-edit]:opacity-0 hover:[&::-webkit-calendar-picker-indicator]:opacity-40 hover:[&::-webkit-datetime-edit]:opacity-40 focus:[&::-webkit-calendar-picker-indicator]:opacity-100 focus:[&::-webkit-datetime-edit]:opacity-100",
-      ].join(" ")}
-    />
+    <span className="relative block w-full">
+      <input
+        type="date"
+        value={value}
+        onClick={(event) => {
+          event.stopPropagation();
+          event.currentTarget.showPicker();
+        }}
+        onChange={(event) => onChange(event.target.value || null)}
+        aria-label="Deadline"
+        className={[
+          "peer tabular w-full border-none bg-transparent text-right text-[0.75rem] outline-none",
+          overdue ? "text-priority-a" : "text-ink-muted",
+          // A set date reads like every other grid date until the native editor has focus.
+          value
+            ? "opacity-0 focus:opacity-100"
+            : "[&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-datetime-edit]:opacity-0 hover:[&::-webkit-calendar-picker-indicator]:opacity-40 hover:[&::-webkit-datetime-edit]:opacity-40 focus:[&::-webkit-calendar-picker-indicator]:opacity-100 focus:[&::-webkit-datetime-edit]:opacity-100",
+        ].join(" ")}
+      />
+      {value ? (
+        <span
+          className={`pointer-events-none absolute inset-0 flex items-center justify-end tabular text-[0.75rem] peer-focus:hidden ${
+            overdue ? "text-priority-a" : "text-ink-muted"
+          }`}
+        >
+          {formatShortDate(value)}
+        </span>
+      ) : null}
+    </span>
   );
 }
 

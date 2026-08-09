@@ -4,6 +4,7 @@ import {
   type CalendarNoteGroupBy,
   type NoteGroupBy,
 } from "@/lib/grid/grouping";
+import { formatShortDate } from "@/lib/dateFormat";
 import { toDateKey } from "@/lib/schedule/geometry";
 import type { GridRow } from "@/lib/tree/slice";
 import { FLAG_LABELS } from "./flags";
@@ -88,13 +89,7 @@ export function noteDatePartLabel(
 
 /** Display a stored calendar day from its UTC components, never a process-local day. */
 export function formatNoteDate(date: Date | null): string {
-  if (!date) return "";
-  return date.toLocaleDateString(undefined, {
-    year: "2-digit",
-    month: "numeric",
-    day: "numeric",
-    timeZone: "UTC",
-  });
+  return date ? formatShortDate(toDateKey(date)) : "";
 }
 
 /** Contexts form a set: normalize their display order before using the set as a bucket. */

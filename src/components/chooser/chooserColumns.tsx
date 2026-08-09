@@ -2,6 +2,7 @@ import type { ColumnDef } from "@/components/grid/columns";
 import { EffortCell, FocusCell, StatusCell } from "@/components/grid/cells";
 import type { OutlineColumnCtx } from "@/components/outline/outlineColumns";
 import type { PriorityLetter } from "@/db/schema";
+import { formatShortDate } from "@/lib/dateFormat";
 import type { OutlineNode } from "@/lib/tree/types";
 import { formatEffort, formatPriority } from "@/lib/tree/format";
 import { toDateKey } from "@/lib/schedule/geometry";
@@ -193,7 +194,7 @@ export function buildChooserColumns(
             title={inherited ? "Inherited from a parent" : undefined}
             className={`tabular text-[0.75rem] ${inherited ? "text-ink-faint italic" : "text-ink-muted"}`}
           >
-            {value}
+            {formatShortDate(value)}
           </span>
         );
       },

@@ -1,6 +1,7 @@
 "use client";
 
 import type { NodeState, NodeType, PriorityLetter } from "@/db/schema";
+import { formatShortDate } from "@/lib/dateFormat";
 import { priorityOrderValue } from "@/lib/priority/order";
 import { localDateKey, toDateKey } from "@/lib/schedule/geometry";
 import type { OutlineNode } from "@/lib/tree/types";
@@ -352,7 +353,12 @@ function calendarDateColumn(
     compact: "hidden",
     render: (row) => {
       const date = value(row.node);
-      return <ReadOnlyCell value={date ? toDateKey(date) : ""} align="right" />;
+      return (
+        <ReadOnlyCell
+          value={date ? formatShortDate(toDateKey(date)) : ""}
+          align="right"
+        />
+      );
     },
   };
 }
@@ -376,7 +382,12 @@ function instantDateColumn(
     compact: "hidden",
     render: (row) => {
       const date = value(row.node);
-      return <ReadOnlyCell value={date ? localDateKey(date) : ""} align="right" />;
+      return (
+        <ReadOnlyCell
+          value={date ? formatShortDate(localDateKey(date)) : ""}
+          align="right"
+        />
+      );
     },
   };
 }
@@ -400,7 +411,7 @@ export function dateCompletedColumn(): ColumnDef<OutlineColumnCtx> {
     sortValue: (row) => completedDateKey(row.node),
     compact: "hidden",
     render: (row) => (
-      <ReadOnlyCell value={completedDateKey(row.node) ?? ""} align="right" />
+      <ReadOnlyCell value={formatShortDate(completedDateKey(row.node))} align="right" />
     ),
   };
 }

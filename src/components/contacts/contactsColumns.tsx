@@ -2,6 +2,8 @@
 
 import type { ColumnDef } from "@/components/grid/columns";
 import type { ContactListRow } from "@/lib/contacts/types";
+import { formatShortDate } from "@/lib/dateFormat";
+import { localDateKey } from "@/lib/schedule/geometry";
 
 /**
  * The Contacts grid's columns. Read-only, unlike the other list grids: a contact's fields
@@ -162,12 +164,12 @@ export const contactsColumns: ColumnDef<ContactsColumnCtx, ContactListRow>[] = [
     label: "Updated",
     width: "7rem",
     filterKind: "date",
-    filterValue: (row) => row.node.updatedAt.toISOString().slice(0, 10),
+    filterValue: (row) => localDateKey(row.node.updatedAt),
     sortValue: (row) => row.node.updatedAt.getTime(),
     compact: "hidden",
     render: (row) => (
       <span className="tabular text-[0.8125rem] text-ink-muted">
-        {row.node.updatedAt.toLocaleDateString()}
+        {formatShortDate(localDateKey(row.node.updatedAt))}
       </span>
     ),
   },
