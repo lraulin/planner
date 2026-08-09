@@ -2,6 +2,7 @@ import type { NodeState } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { GridRow } from "@/lib/tree/slice";
 import { effectiveState } from "@/lib/tree/shelving";
+import { walkUp } from "@/lib/tree/walkUp";
 import { dayString, daysBetween, effectiveDeadline } from "./dates";
 import { DEFAULT_WEIGHTS, scoreItem, type ChooserWeights } from "./score";
 import { compareTcPriority, TC_LETTERS } from "./tcPriority";
@@ -34,17 +35,14 @@ function ancestryOf(node: OutlineNode, byId: Map<string, OutlineNode>): Ancestry
   let areaImportance = 0;
   const names: string[] = [];
 
-  let cur: OutlineNode | undefined = node.parentId
-    ? byId.get(node.parentId)
-    : undefined;
-  while (cur) {
+  const start = node.parentId ? byId.get(node.parentId) : undefined;
+  for (const cur of walkUp(start, byId)) {
     if (projectId === null && cur.type === "project") projectId = cur.id;
     if (cur.type === "result_area" && cur.importance !== null) {
       // Nearest result area wins; nested areas above it do not stack.
       if (areaImportance === 0) areaImportance = cur.importance;
     }
     names.push(cur.name || "Untitled");
-    cur = cur.parentId ? byId.get(cur.parentId) : undefined;
   }
 
   return {
@@ -337,10 +335,8 @@ function inScope(
   byId: Map<string, OutlineNode>,
 ): boolean {
   if (!scopeId) return true;
-  let cur: OutlineNode | undefined = node;
-  while (cur) {
+  for (const cur of walkUp(node, byId)) {
     if (cur.id === scopeId) return true;
-    cur = cur.parentId ? byId.get(cur.parentId) : undefined;
   }
   return false;
 }

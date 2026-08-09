@@ -10,6 +10,7 @@ import { shiftDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { STATE_LABELS, STATE_ORDER } from "./hierarchy";
 import { ownEffectiveState, shelfHolds } from "./shelving";
 import type { OutlineNode } from "./types";
+import { walkUp } from "./walkUp";
 
 /**
  * Context a grid row inherits from its ancestors — the nearest result area (and that
@@ -346,10 +347,8 @@ function inScope(
   byId: Map<string, OutlineNode>,
 ): boolean {
   if (!scopeId) return true;
-  let cur: OutlineNode | undefined = node;
-  while (cur) {
+  for (const cur of walkUp(node, byId)) {
     if (cur.id === scopeId) return true;
-    cur = cur.parentId ? byId.get(cur.parentId) : undefined;
   }
   return false;
 }
@@ -368,13 +367,13 @@ function rebase(
 ): { depth: number; parentId: string | null } {
   let depth = 0;
   let parentId: string | null = null;
-  let ancestorId = node.parentId;
-  while (ancestorId) {
-    if (keptIds.has(ancestorId)) {
+  // Skip self — depth is "how many kept ancestors", not including the row.
+  const start = node.parentId ? byId.get(node.parentId) : undefined;
+  for (const ancestor of walkUp(start, byId)) {
+    if (keptIds.has(ancestor.id)) {
       depth += 1;
-      if (parentId === null) parentId = ancestorId;
+      if (parentId === null) parentId = ancestor.id;
     }
-    ancestorId = byId.get(ancestorId)?.parentId ?? null;
   }
   return { depth, parentId };
 }
@@ -393,8 +392,7 @@ function contextFor(node: OutlineNode, byId: Map<string, OutlineNode>): RowConte
   let projectId: string | null = null;
   let projectName: string | null = null;
 
-  let cur: OutlineNode | undefined = node;
-  while (cur) {
+  for (const cur of walkUp(node, byId)) {
     if (cur.type === "project" && projectId === null) {
       projectId = cur.id;
       projectName = cur.name;
@@ -408,7 +406,6 @@ function contextFor(node: OutlineNode, byId: Map<string, OutlineNode>): RowConte
       goalId = cur.id;
       goalName = cur.name;
     }
-    cur = cur.parentId ? byId.get(cur.parentId) : undefined;
   }
 
   return {

@@ -1,4 +1,5 @@
 import type { OutlineNode } from "./types";
+import { walkUp } from "./walkUp";
 
 /**
  * The nearest project at or above a row — what `View project…` opens.
@@ -21,12 +22,8 @@ export function owningProjectId(
   if (!id) return null;
   const byId = new Map(nodes.map((node) => [node.id, node]));
 
-  let current = byId.get(id);
-  // A cycle cannot happen — `moveNode` rejects them server-side — but a bounded walk means a
-  // corrupt row costs a wrong answer rather than a hung tab.
-  for (let depth = 0; current && depth <= nodes.length; depth++) {
+  for (const current of walkUp(byId.get(id), byId)) {
     if (current.type === "project") return current.id;
-    current = current.parentId ? byId.get(current.parentId) : undefined;
   }
   return null;
 }

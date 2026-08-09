@@ -248,4 +248,22 @@ describe("effectiveDeadline", () => {
     const byId = byIdOf(nodes);
     expect(effectiveDeadline(byId.get("t")!, byId)).toBeNull();
   });
+
+  it("terminates on a parent cycle rather than hanging", () => {
+    // moveNode refuses cycles; this is the corrupt-row insurance shared with walkUp.
+    const [aBase] = derive([
+      row({ id: "a", type: "task", deadline: dayOut(1), sortKey: "a" }),
+    ]);
+    const [bBase] = derive([
+      row({ id: "b", type: "task", deadline: dayOut(5), sortKey: "a" }),
+    ]);
+    if (!aBase || !bBase) throw new Error("fixture");
+    const a = { ...aBase, parentId: "b" };
+    const b = { ...bBase, parentId: "a" };
+    const byId = new Map([
+      [a.id, a],
+      [b.id, b],
+    ]);
+    expect(effectiveDeadline(a, byId)).toEqual(dayOut(1));
+  });
 });

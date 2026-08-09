@@ -1,4 +1,5 @@
 import type { OutlineNode } from "@/lib/tree/types";
+import { walkUp } from "@/lib/tree/walkUp";
 import { daysBetweenKeys, toDateKey } from "@/lib/schedule/geometry";
 
 /**
@@ -35,13 +36,11 @@ export function effectiveDeadline(
   byId: Map<string, OutlineNode>,
 ): Date | null {
   let earliest: Date | null = null;
-  let cur: OutlineNode | undefined = node;
 
-  while (cur) {
+  for (const cur of walkUp(node, byId)) {
     if (cur.deadline && (earliest === null || cur.deadline < earliest)) {
       earliest = cur.deadline;
     }
-    cur = cur.parentId ? byId.get(cur.parentId) : undefined;
   }
 
   return earliest;
