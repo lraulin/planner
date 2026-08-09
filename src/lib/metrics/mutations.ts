@@ -79,7 +79,28 @@ export async function createMetric(
   userId: string,
   input: MetricInput = {},
 ): Promise<string> {
+  return (await createMetricOnce(userId, input)).id;
+}
+
+export async function createMetricOnce(
+  userId: string,
+  input: MetricInput = {},
+): Promise<{ id: string; created: boolean }> {
   return db.transaction(async (tx) => {
+    if (input.external) {
+      const [existing] = await tx
+        .select({ id: metrics.id })
+        .from(metrics)
+        .where(
+          and(
+            eq(metrics.userId, userId),
+            eq(metrics.externalSource, input.external.source),
+            eq(metrics.externalId, input.external.id),
+          ),
+        )
+        .limit(1);
+      if (existing) return { id: existing.id, created: false };
+    }
     await assertOwnerOk(tx, userId, input.ownerNodeId ?? null);
     const sortKey = await nextSortKey(tx, userId);
     const title = (input.title ?? "").trim() || "New Metric";
@@ -102,10 +123,27 @@ export async function createMetric(
         metricType: requireMetricType(input.metricType, "total"),
         objectiveTarget: numericString(input.objectiveTarget),
         sortKey,
+        externalSource: input.external?.source ?? null,
+        externalId: input.external?.id ?? null,
       })
+      .onConflictDoNothing()
       .returning({ id: metrics.id });
 
-    return row.id;
+    if (row) return { id: row.id, created: true };
+    if (!input.external) throw new Error("Metric could not be created.");
+    const [existing] = await tx
+      .select({ id: metrics.id })
+      .from(metrics)
+      .where(
+        and(
+          eq(metrics.userId, userId),
+          eq(metrics.externalSource, input.external.source),
+          eq(metrics.externalId, input.external.id),
+        ),
+      )
+      .limit(1);
+    if (!existing) throw new Error("Metric could not be created.");
+    return { id: existing.id, created: false };
   });
 }
 
@@ -170,7 +208,29 @@ export async function createMetricEntry(
   metricId: string,
   input: MetricEntryInput,
 ): Promise<string> {
+  return (await createMetricEntryOnce(userId, metricId, input)).id;
+}
+
+export async function createMetricEntryOnce(
+  userId: string,
+  metricId: string,
+  input: MetricEntryInput,
+): Promise<{ id: string; created: boolean }> {
   return db.transaction(async (tx) => {
+    if (input.external) {
+      const [existing] = await tx
+        .select({ id: metricEntries.id })
+        .from(metricEntries)
+        .where(
+          and(
+            eq(metricEntries.userId, userId),
+            eq(metricEntries.externalSource, input.external.source),
+            eq(metricEntries.externalId, input.external.id),
+          ),
+        )
+        .limit(1);
+      if (existing) return { id: existing.id, created: false };
+    }
     await requireMetric(tx, userId, metricId);
     if (!isDateKey(input.entryDate)) {
       throw new Error("entryDate must be YYYY-MM-DD.");
@@ -188,15 +248,35 @@ export async function createMetricEntry(
         entryType: input.entryType ?? "new_total",
         target: numericString(input.target),
         value: numericString(input.value)!,
+        externalSource: input.external?.source ?? null,
+        externalId: input.external?.id ?? null,
       })
+      .onConflictDoNothing()
       .returning({ id: metricEntries.id });
+
+    if (!row) {
+      if (!input.external) throw new Error("Metric entry could not be created.");
+      const [existing] = await tx
+        .select({ id: metricEntries.id })
+        .from(metricEntries)
+        .where(
+          and(
+            eq(metricEntries.userId, userId),
+            eq(metricEntries.externalSource, input.external.source),
+            eq(metricEntries.externalId, input.external.id),
+          ),
+        )
+        .limit(1);
+      if (!existing) throw new Error("Metric entry could not be created.");
+      return { id: existing.id, created: false };
+    }
 
     await tx
       .update(metrics)
       .set({ updatedAt: new Date() })
       .where(and(eq(metrics.id, metricId), eq(metrics.userId, userId)));
 
-    return row.id;
+    return { id: row.id, created: true };
   });
 }
 

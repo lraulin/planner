@@ -328,6 +328,13 @@ function coerceField(value: unknown, key: string, path: string): unknown {
 export function stripCreateOnlyArgs(
   args: Record<string, unknown>,
 ): Record<string, unknown> {
-  const { type: _t, parentId: _p, id: _i, ...rest } = args;
+  const {
+    type: _t,
+    parentId: _p,
+    id: _i,
+    externalSource: _s,
+    externalId: _e,
+    ...rest
+  } = args;
   return rest;
 }

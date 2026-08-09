@@ -5,6 +5,7 @@ import {
   type NodeType,
   type PriorityLetter,
 } from "@/db/schema";
+import type { ExternalRef } from "@/db/schema";
 import { daysInMonth } from "@/lib/dateMath";
 import { PRIORITY_LETTERS } from "@/lib/priority/letterRank";
 import { AgentError } from "./errors";
@@ -165,4 +166,26 @@ export function optionalStringArray(
     throw new AgentError("validation", `${key} must be an array of strings`);
   }
   return v;
+}
+
+/** An external id is meaningful only together with the source that qualifies it. */
+export function optionalExternalRef(
+  obj: Record<string, unknown>,
+): ExternalRef | undefined {
+  const source = optionalString(obj, "externalSource")?.trim();
+  const id = optionalString(obj, "externalId")?.trim();
+  if ((source && !id) || (id && !source)) {
+    throw new AgentError(
+      "validation",
+      "externalSource and externalId must be provided together",
+    );
+  }
+  if (!source && !id) return undefined;
+  if (!source || !id) {
+    throw new AgentError(
+      "validation",
+      "externalSource and externalId must be non-empty strings",
+    );
+  }
+  return { source, id };
 }

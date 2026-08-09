@@ -138,7 +138,7 @@ async function isSelfOrDescendant(
   return false;
 }
 
-export async function createNode(params: {
+export type CreateNodeParams = {
   userId: string;
   parentId: string | null;
   type: NodeType;
@@ -160,7 +160,24 @@ export async function createNode(params: {
    */
   external?: ExternalRef;
   position?: Position;
-}): Promise<string> {
+};
+
+export type CreateOnceResult = { id: string; created: boolean };
+
+export async function createNode(params: CreateNodeParams): Promise<string> {
+  return (await createNodeOnce(params)).id;
+}
+
+/**
+ * Create once by the optional per-user external reference.
+ *
+ * The pre-read gives ordinary retries the cheap path; conflict-do-nothing plus a second
+ * read closes the race where two deliveries first arrive together. A replay returns before
+ * parent/detail validation so it cannot mutate or reject an item that has since been filed.
+ */
+export async function createNodeOnce(
+  params: CreateNodeParams,
+): Promise<CreateOnceResult> {
   const {
     userId,
     parentId,
@@ -174,7 +191,22 @@ export async function createNode(params: {
   } = params;
 
   // Network title fetch must not run inside the insert transaction.
-  const id = await db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx): Promise<CreateOnceResult> => {
+    if (external) {
+      const [existing] = await tx
+        .select({ id: nodes.id })
+        .from(nodes)
+        .where(
+          and(
+            eq(nodes.userId, userId),
+            eq(nodes.externalSource, external.source),
+            eq(nodes.externalId, external.id),
+          ),
+        )
+        .limit(1);
+      if (existing) return { id: existing.id, created: false };
+    }
+
     const parentType = parentId ? (await requireNode(tx, userId, parentId)).type : null;
     assertCanNest(type, parentType);
 
@@ -194,7 +226,25 @@ export async function createNode(params: {
         externalSource: external?.source ?? null,
         externalId: external?.id ?? null,
       })
+      .onConflictDoNothing()
       .returning({ id: nodes.id });
+
+    if (!created) {
+      if (!external) throw new Error("Node could not be created.");
+      const [existing] = await tx
+        .select({ id: nodes.id })
+        .from(nodes)
+        .where(
+          and(
+            eq(nodes.userId, userId),
+            eq(nodes.externalSource, external.source),
+            eq(nodes.externalId, external.id),
+          ),
+        )
+        .limit(1);
+      if (!existing) throw new Error("Node could not be created.");
+      return { id: existing.id, created: false };
+    }
 
     // Detail rows are created up front so later edits are plain updates.
     if (type === "task") {
@@ -213,16 +263,16 @@ export async function createNode(params: {
       await tx.insert(goalDetails).values({ nodeId: created.id, isDream });
     }
 
-    return created.id;
+    return { id: created.id, created: true };
   });
 
   // Capture, agent create, and any create-with-name path: URLs in a task name become
   // attachments and the name is rewritten to page titles when fetch succeeds.
-  if (type === "task" && name.trim()) {
-    await promoteUrlsFromTaskName(userId, id);
+  if (result.created && type === "task" && name.trim()) {
+    await promoteUrlsFromTaskName(userId, result.id);
   }
 
-  return id;
+  return result;
 }
 
 /** Deletes a node. Descendants and detail rows cascade. */

@@ -1,6 +1,7 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { notes, type NewNote, type NoteFlag } from "@/db/schema";
+import type { ExternalRef } from "@/db/schema";
 import { between } from "@/lib/tree/sortKey";
 import type { NotePosition } from "./types";
 
@@ -112,10 +113,42 @@ export async function createNote(params: {
   parentId?: string | null;
   position?: NotePosition;
   values?: Partial<NoteInput>;
+  external?: ExternalRef;
 }): Promise<string> {
-  const { userId, parentId = null, position = { at: "last" }, values = {} } = params;
+  return (await createNoteOnce(params)).id;
+}
+
+export async function createNoteOnce(params: {
+  userId: string;
+  parentId?: string | null;
+  position?: NotePosition;
+  values?: Partial<NoteInput>;
+  external?: ExternalRef;
+}): Promise<{ id: string; created: boolean }> {
+  const {
+    userId,
+    parentId = null,
+    position = { at: "last" },
+    values = {},
+    external,
+  } = params;
 
   return db.transaction(async (tx) => {
+    if (external) {
+      const [existing] = await tx
+        .select({ id: notes.id })
+        .from(notes)
+        .where(
+          and(
+            eq(notes.userId, userId),
+            eq(notes.externalSource, external.source),
+            eq(notes.externalId, external.id),
+          ),
+        )
+        .limit(1);
+      if (existing) return { id: existing.id, created: false };
+    }
+
     // Reaching under another user's note must not be possible even with a valid id.
     if (parentId !== null) await requireNote(tx, userId, parentId);
 
@@ -136,10 +169,30 @@ export async function createNote(params: {
       contexts: values.contexts ?? [],
       nodeId: values.nodeId ?? null,
       contactId: values.contactId ?? null,
+      externalSource: external?.source ?? null,
+      externalId: external?.id ?? null,
     };
 
-    const [created] = await tx.insert(notes).values(row).returning({ id: notes.id });
-    return created.id;
+    const [created] = await tx
+      .insert(notes)
+      .values(row)
+      .onConflictDoNothing()
+      .returning({ id: notes.id });
+    if (created) return { id: created.id, created: true };
+    if (!external) throw new Error("Note could not be created.");
+    const [existing] = await tx
+      .select({ id: notes.id })
+      .from(notes)
+      .where(
+        and(
+          eq(notes.userId, userId),
+          eq(notes.externalSource, external.source),
+          eq(notes.externalId, external.id),
+        ),
+      )
+      .limit(1);
+    if (!existing) throw new Error("Note could not be created.");
+    return { id: existing.id, created: false };
   });
 }
 

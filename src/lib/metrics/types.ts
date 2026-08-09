@@ -1,4 +1,4 @@
-import type { PriorityLetter } from "@/db/schema";
+import type { ExternalRef, PriorityLetter } from "@/db/schema";
 
 /**
  * How entry values are interpreted for Last Value and the performance graph.
@@ -89,6 +89,7 @@ export type MetricInput = {
   objectiveTarget?: number | null;
   /** Pass `null` to make standalone. */
   ownerNodeId?: string | null;
+  external?: ExternalRef;
 };
 
 export type MetricEntryInput = {
@@ -96,6 +97,7 @@ export type MetricEntryInput = {
   entryType?: string;
   target?: number | null;
   value: number;
+  external?: ExternalRef;
 };
 
 /** One point for the performance graph. */

@@ -536,8 +536,11 @@ flavor; optional palette thinning).
   planner** — `specs/2026-07-29-1500-ai-interoperability`. Bearer-keyed
   `POST /api/agent/{tool}` for context, outline mutate, notes, light schedule,
   weekly-plan tools, and metrics (list/get/create/update + log entry); thin
-  **`planner-agent`** instruction repo (skills + `call-tool.sh`) for Grok Build /
-  Claude Code. Prefer summary tools over dumping the tree.
+  **`planner-agent`** instruction repo (skills + `call-tool.sh`) for coding-agent clients.
+  Hardened by `specs/2026-08-09-1130-agent-tool-contracts`: one typed registry now drives
+  strict runtime and JSON Schemas, focused live discovery, effects/retry metadata,
+  decision-ready pagination, natural-key replays, and atomic weekly-plan batches. The
+  HTTP surface is MCP-ready without adding an MCP transport or a second write path.
 - **Medium-term — MCP + chat clients:** Package the same agent tools as a **remote MCP
   server** (thin wrapper over `POST /api/agent/*`, not a second write path) so Grok web
   (connectors / Bring Your Own MCP), Claude, and other MCP clients can operate the planner

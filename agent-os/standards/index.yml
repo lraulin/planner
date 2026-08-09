@@ -38,4 +38,4 @@ api:
   agent-auth:
     description: Bearer API key auth for agent routes (PLANNER_AGENT_API_KEY)
   agent-tools:
-    description: Tool-oriented POST /api/agent/{tool} conventions and design rules
+    description: Agent-oriented tool contracts — canonical registry, intent descriptions, strict schemas, focused discovery, compact outputs, retry safety, and evaluation

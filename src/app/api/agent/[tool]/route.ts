@@ -44,12 +44,12 @@ export async function GET(
     requireAgentApiKey(request);
     const { tool } = await context.params;
     if (tool === "health" || tool === "list_tools") {
-      const data = await dispatchAgentTool("health", {});
+      const data = await dispatchAgentTool(tool, {});
       return successResponse(data);
     }
     throw new AgentError(
       "validation",
-      "Use POST with a JSON body for tool calls. GET is only supported for health.",
+      "Use POST with a JSON body for tool calls. GET is only supported for health and list_tools.",
     );
   } catch (err) {
     return errorResponse(err);

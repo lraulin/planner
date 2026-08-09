@@ -1,5 +1,6 @@
 import type { NodeState, NodeType } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
+import { pageBounds, paginate, type PageInfo } from "./pagination";
 import { buildPathMap, nodeSummary, type AgentNodeSummary } from "./serialize";
 
 export type SearchNodesFilter = {
@@ -11,6 +12,7 @@ export type SearchNodesFilter = {
   parentId?: string | null;
   /** When false (default), completed and cancelled rows are omitted. */
   includeCompleted?: boolean;
+  offset?: number;
   limit?: number;
 };
 
@@ -29,11 +31,20 @@ export function filterOutline(
   outline: OutlineNode[],
   filter: SearchNodesFilter = {},
 ): AgentNodeSummary[] {
+  return filterOutlinePage(outline, filter).nodes;
+}
+
+export function filterOutlinePage(
+  outline: OutlineNode[],
+  filter: SearchNodesFilter = {},
+): {
+  nodes: AgentNodeSummary[];
+  pageInfo: PageInfo;
+} {
   const types = asList(filter.type);
   const states = asList(filter.state);
   const q = filter.query?.trim().toLowerCase() ?? "";
   const includeCompleted = filter.includeCompleted ?? false;
-  const limit = Math.min(Math.max(filter.limit ?? 50, 1), 200);
   const paths = buildPathMap(outline);
 
   const rows: AgentNodeSummary[] = [];
@@ -51,7 +62,7 @@ export function filterOutline(
     if (q && !node.name.toLowerCase().includes(q)) continue;
 
     rows.push(nodeSummary(node, paths));
-    if (rows.length >= limit) break;
   }
-  return rows;
+  const page = paginate(rows, pageBounds(filter.offset, filter.limit));
+  return { nodes: page.items, pageInfo: page.pageInfo };
 }

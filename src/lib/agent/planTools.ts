@@ -7,6 +7,7 @@ import {
   setFocusArea,
   setWeeklyPlanCompleted,
   updateWeeklyPlan,
+  updateWeeklyPlanEntries,
   upsertPlanEntry,
   type PlanEntryPatch,
   type WeeklyPlanInput,
@@ -152,6 +153,61 @@ export async function setFocusAreaTool(userId: string, args: Record<string, unkn
       nodeId: entry.nodeId,
       focus: entry.focus,
     },
+  };
+}
+
+export async function updateWeeklyPlanEntriesTool(
+  userId: string,
+  args: Record<string, unknown>,
+) {
+  const planId = requireString(args, "planId");
+  if (!Array.isArray(args.entries) || args.entries.length === 0) {
+    throw new AgentError("validation", "entries must contain at least one item");
+  }
+  if (args.entries.length > 100) {
+    throw new AgentError("validation", "entries must contain at most 100 items");
+  }
+  const entries = args.entries.map((value, index) => {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) {
+      throw new AgentError("validation", `entries[${index}] must be an object`);
+    }
+    const entryArgs = value as Record<string, unknown>;
+    const nodeId = requireString(entryArgs, "nodeId");
+    const patch: PlanEntryPatch = {};
+    if (entryArgs.focus !== undefined) {
+      patch.focus = optionalBoolean(entryArgs, "focus");
+    }
+    if (entryArgs.reviewed !== undefined) {
+      patch.reviewed = optionalBoolean(entryArgs, "reviewed");
+    }
+    if (entryArgs.rewrite !== undefined) {
+      patch.rewrite = optionalString(entryArgs, "rewrite") ?? "";
+    }
+    if (entryArgs.committedMinutes !== undefined) {
+      const minutes = entryArgs.committedMinutes;
+      if (minutes !== null && typeof minutes !== "number") {
+        throw new AgentError(
+          "validation",
+          `entries[${index}].committedMinutes must be a number or null`,
+        );
+      }
+      patch.committedMinutes = minutes;
+    }
+    return { nodeId, ...patch };
+  });
+
+  const rows = await updateWeeklyPlanEntries(userId, planId, entries);
+  return {
+    entries: rows.map((entry) => ({
+      id: entry.id,
+      planId: entry.planId,
+      nodeId: entry.nodeId,
+      focus: entry.focus,
+      reviewed: entry.reviewed,
+      rewrite: entry.rewrite,
+      committedMinutes: entry.committedMinutes,
+    })),
+    applied: rows.length,
   };
 }
 

@@ -12,7 +12,7 @@ import type { NodeDetailPatch } from "@/lib/detail/types";
 import { getWeeklyPlan } from "@/lib/planning/queries";
 import { loadSchedule } from "@/lib/schedule/queries";
 import { startOfWeek, toDateKey } from "@/lib/schedule/geometry";
-import { createNode } from "@/lib/tree/mutations";
+import { createNodeOnce } from "@/lib/tree/mutations";
 import { loadOutline } from "@/lib/tree/queries";
 import { parseCaptureArgs } from "./captureArgs";
 import {
@@ -28,8 +28,9 @@ import {
   parseNodeState,
   parseNodeType,
   requireString,
+  optionalExternalRef,
 } from "./parse";
-import { filterOutline, type SearchNodesFilter } from "./search";
+import { filterOutlinePage, type SearchNodesFilter } from "./search";
 import { buildPathMap, iso, nodeDetailForAgent, nodeSummary } from "./serialize";
 import { RESULT_AREA_STATE_REFUSAL } from "@/lib/tree/lifecycle";
 
@@ -56,7 +57,11 @@ export async function getContext(userId: string, args: Record<string, unknown>) 
     .filter((n) => n.focus && n.state !== "completed" && n.state !== "cancelled")
     .map((n) => nodeSummary(n, paths));
 
-  const openWork = outline
+  const topOpenWorkLimit = Math.min(
+    Math.max(optionalNumber(args, "topOpenWorkLimit") ?? 25, 1),
+    100,
+  );
+  const allOpenWork = outline
     .filter(
       (n) =>
         (n.type === "task" || n.type === "project") &&
@@ -69,8 +74,8 @@ export async function getContext(userId: string, args: Record<string, unknown>) 
         x.priorityLetter === "A" ? 0 : x.priorityLetter === "B" ? 1 : 2;
       return letter(a) - letter(b) || (a.priorityRank ?? 99) - (b.priorityRank ?? 99);
     })
-    .slice(0, 25)
     .map((n) => nodeSummary(n, paths));
+  const openWork = allOpenWork.slice(0, topOpenWorkLimit);
 
   const weekStart = startOfWeek(now, weekStartsOn);
   const plan = await getWeeklyPlan(userId, weekStart, weekStartsOn);
@@ -81,6 +86,11 @@ export async function getContext(userId: string, args: Record<string, unknown>) 
     weekStart: toDateKey(weekStart),
     focus,
     topOpenWork: openWork,
+    topOpenWorkInfo: {
+      returned: openWork.length,
+      total: allOpenWork.length,
+      hasMore: openWork.length < allOpenWork.length,
+    },
     weeklyPlan: plan
       ? {
           id: plan.id,
@@ -100,6 +110,7 @@ export async function searchNodes(userId: string, args: Record<string, unknown>)
     includeCompleted: optionalBoolean(args, "includeCompleted"),
     focus: optionalBoolean(args, "focus"),
     query: optionalString(args, "query"),
+    offset: optionalNumber(args, "offset"),
     limit: optionalNumber(args, "limit"),
   };
 
@@ -126,7 +137,7 @@ export async function searchNodes(userId: string, args: Record<string, unknown>)
     }
   }
 
-  return { nodes: filterOutline(outline, filter) };
+  return filterOutlinePage(outline, filter);
 }
 
 export async function getNode(userId: string, args: Record<string, unknown>) {
@@ -160,19 +171,21 @@ export async function createNodeTool(userId: string, args: Record<string, unknow
   assertResultAreaLifecyclePatch(type, patch);
   // Name is also passed into createNode so the row is not briefly untitled if the patch
   // write fails; saveNodeDetail will re-apply it when present.
-  const id = await createNode({
+  const result = await createNodeOnce({
     userId,
     parentId,
     type,
     name: patch.name ?? name,
     notes: patch.notes ?? "",
+    external: optionalExternalRef(args),
   });
 
-  if (detailPatchHasWrites(patch)) {
-    await saveNodeDetail(userId, id, patch);
+  if (result.created && detailPatchHasWrites(patch)) {
+    await saveNodeDetail(userId, result.id, patch);
   }
 
-  return getNode(userId, { id });
+  const payload = (await getNode(userId, { id: result.id })) as Record<string, unknown>;
+  return { ...payload, created: result.created };
 }
 
 /**

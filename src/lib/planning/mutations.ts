@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { nodes, weeklyPlanEntries, weeklyPlans } from "@/db/schema";
 import { startOfWeek } from "@/lib/schedule/geometry";
@@ -136,6 +136,11 @@ export type PlanEntryPatch = {
   committedMinutes?: number | null;
 };
 
+export type PlanEntryBatchItem = PlanEntryPatch & { nodeId: string };
+
+type Db = typeof db;
+type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+
 /**
  * Record what this plan decided about one node, creating the row on first write.
  *
@@ -163,6 +168,16 @@ export async function upsertPlanEntry(
     .limit(1);
   if (!node) throw new Error("Item not found.");
 
+  return upsertPlanEntryInTransaction(db, userId, planId, nodeId, patch);
+}
+
+async function upsertPlanEntryInTransaction(
+  tx: Db | Tx,
+  userId: string,
+  planId: string,
+  nodeId: string,
+  patch: PlanEntryPatch,
+) {
   const values: Record<string, unknown> = { updatedAt: new Date() };
   if (patch.focus !== undefined) values.focus = patch.focus;
   if (patch.reviewed !== undefined) values.reviewed = patch.reviewed;
@@ -172,7 +187,7 @@ export async function upsertPlanEntry(
       patch.committedMinutes === null ? null : Math.max(0, patch.committedMinutes);
   }
 
-  const [row] = await db
+  const [row] = await tx
     .insert(weeklyPlanEntries)
     .values({
       userId,
@@ -189,6 +204,44 @@ export async function upsertPlanEntry(
     })
     .returning();
   return row;
+}
+
+/** Apply one approved weekly-review stage as an all-or-nothing ordered batch. */
+export async function updateWeeklyPlanEntries(
+  userId: string,
+  planId: string,
+  entries: readonly PlanEntryBatchItem[],
+) {
+  return db.transaction(async (tx) => {
+    const [plan] = await tx
+      .select({ id: weeklyPlans.id })
+      .from(weeklyPlans)
+      .where(and(eq(weeklyPlans.id, planId), eq(weeklyPlans.userId, userId)))
+      .limit(1);
+    if (!plan) throw new Error("Weekly plan not found.");
+
+    const nodeIds = [...new Set(entries.map((entry) => entry.nodeId))];
+    const owned = await tx
+      .select({ id: nodes.id })
+      .from(nodes)
+      .where(and(eq(nodes.userId, userId), inArray(nodes.id, nodeIds)));
+    const ownedIds = new Set(owned.map((row) => row.id));
+    const missing = nodeIds.find((id) => !ownedIds.has(id));
+    if (missing) throw new Error(`Item not found: ${missing}`);
+
+    const rows = [];
+    for (const { nodeId, ...patch } of entries) {
+      const row = await upsertPlanEntryInTransaction(tx, userId, planId, nodeId, patch);
+      if (patch.focus !== undefined) {
+        await tx
+          .update(nodes)
+          .set({ focus: patch.focus, updatedAt: new Date() })
+          .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+      }
+      rows.push(row);
+    }
+    return rows;
+  });
 }
 
 /**

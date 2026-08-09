@@ -3,8 +3,8 @@
  */
 
 import {
-  createMetric,
-  createMetricEntry,
+  createMetricOnce,
+  createMetricEntryOnce,
   updateMetric as updateMetricMutation,
   updateMetricEntry as updateMetricEntryMutation,
 } from "@/lib/metrics/mutations";
@@ -20,7 +20,9 @@ import {
   optionalString,
   parsePriorityLetter,
   requireString,
+  optionalExternalRef,
 } from "./parse";
+import { pageBounds, paginate } from "./pagination";
 
 function parseMetricType(value: unknown, field = "metricType"): MetricType {
   if (typeof value !== "string" || !isMetricType(value)) {
@@ -86,8 +88,10 @@ function metricListSummary(m: Awaited<ReturnType<typeof listMetrics>>[number]) {
 function metricDetailSummary(
   m: NonNullable<Awaited<ReturnType<typeof getMetricDetail>>>,
   entryLimit: number,
+  entryOffset = 0,
 ) {
-  const entries = m.entries.slice(0, entryLimit).map((e) => ({
+  const entryPage = paginate(m.entries, { offset: entryOffset, limit: entryLimit });
+  const entries = entryPage.items.map((e) => ({
     id: e.id,
     entryDate: e.entryDate,
     value: e.value,
@@ -113,11 +117,15 @@ function metricDetailSummary(
     lastDate: m.lastDate,
     entries,
     entryCount: m.entries.length,
+    entryPageInfo: entryPage.pageInfo,
   };
 }
 
 export async function listMetricsTool(userId: string, args: Record<string, unknown>) {
-  const limit = Math.min(Math.max(optionalNumber(args, "limit") ?? 50, 1), 200);
+  const bounds = pageBounds(
+    optionalNumber(args, "offset"),
+    optionalNumber(args, "limit"),
+  );
   const activeOnly = optionalBoolean(args, "activeOnly") ?? false;
   const query = optionalString(args, "query")?.trim().toLowerCase();
   const ownerNodeId = optionalNullableString(args, "ownerNodeId");
@@ -138,7 +146,8 @@ export async function listMetricsTool(userId: string, args: Record<string, unkno
     });
   }
 
-  return { metrics: rows.slice(0, limit).map(metricListSummary) };
+  const page = paginate(rows, bounds);
+  return { metrics: page.items.map(metricListSummary), pageInfo: page.pageInfo };
 }
 
 export async function getMetricTool(userId: string, args: Record<string, unknown>) {
@@ -147,9 +156,10 @@ export async function getMetricTool(userId: string, args: Record<string, unknown
     Math.max(optionalNumber(args, "entryLimit") ?? 30, 1),
     200,
   );
+  const entryOffset = Math.max(optionalNumber(args, "entryOffset") ?? 0, 0);
   const detail = await getMetricDetail(userId, id);
   if (!detail) throw new AgentError("not_found", `Metric not found: ${id}`);
-  return { metric: metricDetailSummary(detail, entryLimit) };
+  return { metric: metricDetailSummary(detail, entryLimit, entryOffset) };
 }
 
 export async function createMetricTool(userId: string, args: Record<string, unknown>) {
@@ -179,9 +189,14 @@ export async function createMetricTool(userId: string, args: Record<string, unkn
   if (args.ownerNodeId !== undefined) {
     input.ownerNodeId = optionalNullableString(args, "ownerNodeId") ?? null;
   }
+  input.external = optionalExternalRef(args);
 
-  const id = await createMetric(userId, input);
-  return getMetricTool(userId, { id, entryLimit: 5 });
+  const result = await createMetricOnce(userId, input);
+  const payload = (await getMetricTool(userId, {
+    id: result.id,
+    entryLimit: 5,
+  })) as Record<string, unknown>;
+  return { ...payload, created: result.created };
 }
 
 export async function updateMetricTool(userId: string, args: Record<string, unknown>) {
@@ -253,6 +268,7 @@ export async function logMetricEntryTool(
   const input: MetricEntryInput = {
     entryDate,
     value,
+    external: optionalExternalRef(args),
   };
   if (args.target !== undefined) {
     input.target = optionalNullableNumber(args, "target") ?? null;
@@ -261,15 +277,22 @@ export async function logMetricEntryTool(
     input.entryType = requireString(args, "entryType");
   }
 
-  const entryId = await createMetricEntry(userId, metricId, input);
-  const result = (await getMetricTool(userId, { id: metricId, entryLimit: 10 })) as {
+  const created = await createMetricEntryOnce(userId, metricId, input);
+  const entry = await getMetricEntry(userId, created.id);
+  if (!entry)
+    throw new AgentError("internal", "Created metric entry missing on reload");
+  const result = (await getMetricTool(userId, {
+    id: entry.metricId,
+    entryLimit: 10,
+  })) as {
     metric: { entries: { id: string }[] };
   };
   return {
-    entryId,
-    entryDate,
-    value,
+    entryId: entry.id,
+    entryDate: entry.entryDate,
+    value: entry.value,
     metric: result.metric,
+    created: created.created,
   };
 }
 
