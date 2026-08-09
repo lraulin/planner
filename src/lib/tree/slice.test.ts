@@ -15,6 +15,7 @@ import {
   groupByCategory,
   NO_CATEGORY,
   sliceTree,
+  treeGridRows,
   type GridRow,
   type GroupBy,
 } from "./slice";
@@ -206,6 +207,24 @@ describe("sliceTree — collapse and branch counts", () => {
     });
 
     expect(nodeIds(rows)).toEqual(["p", "sub", "other"]);
+  });
+
+  it("keeps the same narrowing candidates whether branches are collapsed or expanded", () => {
+    const opts = {
+      keep: projectsOnly,
+      includeDeferred: true,
+      today: null,
+    };
+
+    const collapsed = treeGridRows(nodes(true), opts);
+    const expanded = treeGridRows(nodes(false), opts);
+
+    // `rows` changes because collapse rolls the sub-project under its parent; the rows a
+    // filter evaluates do not. Applying a filter before Expand all must therefore produce
+    // the same result as expanding before applying it.
+    expect(nodeIds(collapsed.rows)).toEqual(["p", "other"]);
+    expect(nodeIds(collapsed.narrowingRows)).toEqual(["p", "sub", "other"]);
+    expect(nodeIds(collapsed.narrowingRows)).toEqual(nodeIds(expanded.narrowingRows));
   });
 
   it("counts children in the row set, not in the tree", () => {

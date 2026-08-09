@@ -3,11 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { OutlineNode } from "@/lib/tree/types";
-import {
-  categoryLabelFromGroupId,
-  groupByCategory,
-  type GridRow,
-} from "@/lib/tree/slice";
+import { categoryLabelFromGroupId } from "@/lib/tree/slice";
+import { outlineGridRows } from "@/lib/tree/outlineRows";
 import {
   allowedChildKinds,
   defaultChildType,
@@ -209,8 +206,8 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     if (zoomed.stale) setZoom(null, "replace");
   }, [zoomed.stale, setZoom]);
 
-  const visible = useMemo(
-    () => flattenLevels(zoomed.nodes, hiddenLevels).filter((node) => !node.hidden),
+  const flattened = useMemo(
+    () => flattenLevels(zoomed.nodes, hiddenLevels),
     [zoomed.nodes, hiddenLevels],
   );
 
@@ -224,26 +221,19 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
    */
   const byCategory = gridState.groupBy.includes("category");
 
-  const gridRows: GridRow[] = useMemo(
-    () =>
-      byCategory
-        ? groupByCategory(visible, byId)
-        : visible.map((node) => ({
-            kind: "node" as const,
-            id: node.id,
-            node,
-            depth: node.depth,
-          })),
-    [visible, byCategory, byId],
+  const preparedRows = useMemo(
+    () => outlineGridRows(flattened, byCategory, byId),
+    [flattened, byCategory, byId],
   );
+  const { rows: gridRows, narrowingRows, visibleNodes: visible } = preparedRows;
 
   const distinctValues = useMemo(
     () =>
       collectDistinctValues(
         outlineColumns,
-        gridRows.flatMap((row) => (row.kind === "node" ? [row] : [])),
+        narrowingRows.flatMap((row) => (row.kind === "node" ? [row] : [])),
       ),
-    [outlineColumns, gridRows],
+    [outlineColumns, narrowingRows],
   );
 
   /**
@@ -888,6 +878,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
 
       <DataGrid
         rows={gridRows}
+        narrowingRows={narrowingRows}
         columns={gridState.columns}
         allColumns={outlineColumns}
         columnCtx={columnCtx}

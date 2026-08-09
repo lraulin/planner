@@ -109,6 +109,19 @@ export type SliceOpts = {
   today: string | null;
 };
 
+/**
+ * The two row sets a tree grid needs.
+ *
+ * `rows` is what the host can render now, after tree collapse. `narrowingRows` also keeps
+ * descendants rolled up under collapsed parents, because collapse is presentation state:
+ * filters, search, value lists and counts must still know those rows are there. It stays
+ * ungrouped so ancestor closure can read the original depth-first tree order.
+ */
+export type TreeGridRows = {
+  rows: GridRow[];
+  narrowingRows: GridRow[];
+};
+
 type Prepared = {
   node: OutlineNode;
   depth: number;
@@ -128,6 +141,11 @@ type Prepared = {
  * be unit-tested without mounting a grid.
  */
 export function sliceTree(nodes: OutlineNode[], opts: SliceOpts): GridRow[] {
+  return treeGridRows(nodes, opts).rows;
+}
+
+/** Prepare both the rendered and filter-candidate row sets for a tree-backed grid. */
+export function treeGridRows(nodes: OutlineNode[], opts: SliceOpts): TreeGridRows {
   const byId = new Map<string, OutlineNode>();
   for (const node of nodes) byId.set(node.id, node);
 
@@ -158,14 +176,15 @@ export function sliceTree(nodes: OutlineNode[], opts: SliceOpts): GridRow[] {
     }
   }
 
+  const narrowingRows = kept.map(toNodeRow);
   const shown = expanded(kept, byKeptId);
 
   const groupBy = opts.groupBy ?? [];
   if (groupBy.length === 0) {
-    return shown.map(toNodeRow);
+    return { rows: shown.map(toNodeRow), narrowingRows };
   }
 
-  return emitGrouped(shown, groupBy, opts.today);
+  return { rows: emitGrouped(shown, groupBy, opts.today), narrowingRows };
 }
 
 /**

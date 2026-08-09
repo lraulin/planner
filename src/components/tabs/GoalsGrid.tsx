@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { OutlineNode } from "@/lib/tree/types";
-import { asGroupBy, sliceTree, type GridRow, type GroupBy } from "@/lib/tree/slice";
+import { asGroupBy, treeGridRows, type GroupBy } from "@/lib/tree/slice";
 import { formatPriority } from "@/lib/tree/format";
 import { toDateKey } from "@/lib/schedule/geometry";
 import type { ColumnDef } from "@/components/grid/columns";
@@ -222,9 +222,9 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const gridState = views.grid;
   const [includeDeferred, setIncludeDeferred] = useIncludeDeferred("goals");
 
-  const rows: GridRow[] = useMemo(
+  const preparedRows = useMemo(
     () =>
-      sliceTree(tab.nodes, {
+      treeGridRows(tab.nodes, {
         // Structural only — which states a view shows is its default State filter.
         keep: (node) => node.type === "goal",
         // Result Area is the arrangement Achieve ships; Group by overrides it on request.
@@ -238,14 +238,15 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
       }),
     [tab.nodes, tab.today, scopeId, gridState.groupBy, includeDeferred],
   );
+  const { rows, narrowingRows } = preparedRows;
 
   const distinctValues = useMemo(
     () =>
       collectDistinctValues(
         allColumns,
-        rows.flatMap((row) => (row.kind === "node" ? [row] : [])),
+        narrowingRows.flatMap((row) => (row.kind === "node" ? [row] : [])),
       ),
-    [allColumns, rows],
+    [allColumns, narrowingRows],
   );
 
   const columnCtx: GoalsCtx = useMemo(
@@ -305,6 +306,7 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
 
       <DataGrid
         rows={rows}
+        narrowingRows={narrowingRows}
         columns={gridState.columns}
         allColumns={allColumns}
         columnCtx={columnCtx}

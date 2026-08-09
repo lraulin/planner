@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { ContactOption } from "@/lib/contacts/types";
-import { asGroupBy, sliceTree, type GroupBy, type GridRow } from "@/lib/tree/slice";
+import { asGroupBy, treeGridRows, type GroupBy, type GridRow } from "@/lib/tree/slice";
 import { formatEffort, formatPriority } from "@/lib/tree/format";
 import {
   scheduleStatusById,
@@ -372,9 +372,9 @@ export function TasksGrid({
     [nextActions, tab.nodes],
   );
 
-  const rows: GridRow[] = useMemo(() => {
+  const preparedRows = useMemo(() => {
     const groupBy = asGroupBy(gridState.groupBy);
-    return sliceTree(sourceNodes, {
+    const prepared = treeGridRows(sourceNodes, {
       // Structural only. Which *states* a view shows is its default State filter, which
       // the user can see and change; being a task is what makes this the Tasks tab.
       keep: (node) => node.type === "task",
@@ -383,7 +383,8 @@ export function TasksGrid({
       scopeId: scopeId && scopeId !== "__none__" ? scopeId : null,
       includeDeferred,
       today: tab.today,
-    }).filter((row) => {
+    });
+    const inScope = (row: GridRow) => {
       if (scopeId !== "__none__" || row.kind !== "node") return true;
       // No project in the ancestor chain.
       let cur: OutlineNode | undefined = row.node;
@@ -392,16 +393,21 @@ export function TasksGrid({
         cur = cur.parentId ? tab.byId.get(cur.parentId) : undefined;
       }
       return true;
-    });
+    };
+    return {
+      rows: prepared.rows.filter(inScope),
+      narrowingRows: prepared.narrowingRows.filter(inScope),
+    };
   }, [sourceNodes, tab.byId, tab.today, gridState.groupBy, includeDeferred, scopeId]);
+  const { rows, narrowingRows } = preparedRows;
 
   const distinctValues = useMemo(
     () =>
       collectDistinctValues(
         allColumns,
-        rows.flatMap((row) => (row.kind === "node" ? [row] : [])),
+        narrowingRows.flatMap((row) => (row.kind === "node" ? [row] : [])),
       ),
-    [allColumns, rows],
+    [allColumns, narrowingRows],
   );
 
   return (
@@ -460,6 +466,7 @@ export function TasksGrid({
 
       <DataGrid
         rows={rows}
+        narrowingRows={narrowingRows}
         columns={gridState.columns}
         allColumns={allColumns}
         columnCtx={tab.cellHandlers}

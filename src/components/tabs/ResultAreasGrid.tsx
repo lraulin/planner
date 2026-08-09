@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { OutlineNode } from "@/lib/tree/types";
-import { asGroupBy, sliceTree, type GridRow, type GroupBy } from "@/lib/tree/slice";
+import { asGroupBy, treeGridRows, type GroupBy } from "@/lib/tree/slice";
 import type { ColumnDef } from "@/components/grid/columns";
 import { DataGrid } from "@/components/grid/DataGrid";
 import type { GridDefaults } from "@/components/grid/useGridState";
@@ -180,9 +180,9 @@ export function ResultAreasGrid({ initialNodes }: { initialNodes: OutlineNode[] 
     defaultsFor: viewDefaults,
   });
   const gridState = views.grid;
-  const rows: GridRow[] = useMemo(
+  const preparedRows = useMemo(
     () =>
-      sliceTree(tab.nodes, {
+      treeGridRows(tab.nodes, {
         keep: (node) => node.type === "result_area",
         groupBy: asGroupBy(gridState.groupBy),
         scopeId: null,
@@ -191,14 +191,15 @@ export function ResultAreasGrid({ initialNodes }: { initialNodes: OutlineNode[] 
       }),
     [tab.nodes, tab.today, gridState.groupBy],
   );
+  const { rows, narrowingRows } = preparedRows;
 
   const distinctValues = useMemo(
     () =>
       collectDistinctValues(
         allColumns,
-        rows.flatMap((row) => (row.kind === "node" ? [row] : [])),
+        narrowingRows.flatMap((row) => (row.kind === "node" ? [row] : [])),
       ),
-    [allColumns, rows],
+    [allColumns, narrowingRows],
   );
 
   const columnCtx: ResultAreasCtx = useMemo(
@@ -240,6 +241,7 @@ export function ResultAreasGrid({ initialNodes }: { initialNodes: OutlineNode[] 
 
       <DataGrid
         rows={rows}
+        narrowingRows={narrowingRows}
         columns={gridState.columns}
         allColumns={allColumns}
         columnCtx={columnCtx}

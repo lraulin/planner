@@ -152,6 +152,7 @@ function rowExpansionFor<TRow>(
  */
 export function DataGrid<TCtx, TRow = OutlineNode>({
   rows,
+  narrowingRows,
   columns,
   allColumns,
   columnCtx,
@@ -193,6 +194,12 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   rowNumbers = false,
 }: {
   rows: GridRow<TRow>[];
+  /**
+   * Rows filters, search, value lists and counts inspect. Tree hosts include descendants
+   * rolled up under collapsed parents here even though `rows` omits them from the current
+   * presentation. Defaults to `rows` for flat grids and already-expanded row sets.
+   */
+  narrowingRows?: GridRow<TRow>[];
   /** Visible columns, in order. These are the only ones that get a track and a cell. */
   columns: ColumnDef<TCtx, TRow>[];
   /**
@@ -366,9 +373,9 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
     return map;
   }, [filterColumns]);
 
-  const nodeRows = useMemo(
-    () => rows.filter((row): row is Row => row.kind === "node"),
-    [rows],
+  const narrowingNodeRows = useMemo(
+    () => (narrowingRows ?? rows).filter((row): row is Row => row.kind === "node"),
+    [narrowingRows, rows],
   );
 
   /**
@@ -378,8 +385,8 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
    * offering different values for the same column.
    */
   const columnValues = useMemo(
-    () => collectColumnValues(filterColumns, nodeRows),
-    [filterColumns, nodeRows],
+    () => collectColumnValues(filterColumns, narrowingNodeRows),
+    [filterColumns, narrowingNodeRows],
   );
   const ownDistinctValues = useMemo(
     () => distinctValuesOf(columnValues),
@@ -422,7 +429,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
     if (!narrowing) return null;
 
     const pass = new Set<string>();
-    for (const row of nodeRows) {
+    for (const row of narrowingNodeRows) {
       const values: Record<string, string | null> = {};
       for (const column of filterColumns) {
         if (column.filterValue) values[column.id] = column.filterValue(row);
@@ -439,10 +446,10 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
     // Hierarchy survives filtering: a row that matched keeps the rows it is indented under,
     // or it would sit three levels in claiming a parent that is not on screen. Flat grids
     // get the same set back untouched. See `lib/grid/ancestors.ts`.
-    return withAncestors(nodeRows, pass);
+    return withAncestors(narrowingNodeRows, pass);
   }, [
     narrowing,
-    nodeRows,
+    narrowingNodeRows,
     filterColumns,
     filters,
     advancedFilter,
@@ -489,11 +496,11 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
    * the denominator holds still as the user types — a fraction whose bottom half also moves
    * says nothing about how much has been filtered out.
    */
-  const shownCount = passIds ? passIds.size : nodeRows.length;
+  const shownCount = passIds ? passIds.size : narrowingNodeRows.length;
 
   useEffect(() => {
-    onCountsChange?.({ shown: shownCount, total: nodeRows.length });
-  }, [onCountsChange, shownCount, nodeRows.length]);
+    onCountsChange?.({ shown: shownCount, total: narrowingNodeRows.length });
+  }, [onCountsChange, shownCount, narrowingNodeRows.length]);
 
   // Taken from `rows`, not `displayRows`: collapsing an outer group removes the nested
   // headers beneath it from the visible list, and a toolbar working off that could only

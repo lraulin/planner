@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { OutlineNode } from "@/lib/tree/types";
-import { asGroupBy, sliceTree, type GroupBy, type GridRow } from "@/lib/tree/slice";
+import { asGroupBy, treeGridRows, type GroupBy } from "@/lib/tree/slice";
 import { formatEffort } from "@/lib/tree/format";
 import {
   scheduleStatusById,
@@ -358,10 +358,10 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
   // When the view changes, reset to that view's preset (still overridable via Show Fields).
   const columns = gridState.columns;
 
-  const rows: GridRow[] = useMemo(() => {
+  const preparedRows = useMemo(() => {
     const groupBy = asGroupBy(gridState.groupBy);
 
-    return sliceTree(tab.nodes, {
+    return treeGridRows(tab.nodes, {
       // Structural only — which states a view shows is its default State filter.
       keep: (node) => node.type === "project" || (includeGoals && node.type === "goal"),
       groupBy,
@@ -370,14 +370,15 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
       today: tab.today,
     });
   }, [tab.nodes, tab.today, gridState.groupBy, includeGoals, includeDeferred, scopeId]);
+  const { rows, narrowingRows } = preparedRows;
 
   const distinctValues = useMemo(
     () =>
       collectDistinctValues(
         allColumns,
-        rows.flatMap((row) => (row.kind === "node" ? [row] : [])),
+        narrowingRows.flatMap((row) => (row.kind === "node" ? [row] : [])),
       ),
-    [allColumns, rows],
+    [allColumns, narrowingRows],
   );
 
   return (
@@ -419,6 +420,7 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
 
       <DataGrid
         rows={rows}
+        narrowingRows={narrowingRows}
         columns={columns}
         allColumns={allColumns}
         columnCtx={tab.cellHandlers}
