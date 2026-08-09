@@ -36,10 +36,6 @@ export async function setWeeklyPlanCompletedAction(
   return run((userId) => planning.setWeeklyPlanCompleted(userId, id, completed));
 }
 
-export async function deleteWeeklyPlanAction(id: string): Promise<ActionResult> {
-  return run((userId) => planning.deleteWeeklyPlan(userId, id));
-}
-
 export async function upsertPlanEntryAction(
   planId: string,
   nodeId: string,
