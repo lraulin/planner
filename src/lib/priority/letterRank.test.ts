@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { PriorityLetter } from "@/db/schema";
-import { letterRankEngine, type LetterAssignment } from "./letterRank";
+import {
+  assertRankedLetterPriorities,
+  letterRankEngine,
+  type LetterAssignment,
+  type LetterRank,
+} from "./letterRank";
 
 type Item = {
   id: string;
@@ -27,6 +32,37 @@ const engine = letterRankEngine<Item>((item) => ({
   letter: item.letter,
   rank: item.rank,
 }));
+
+describe("assertRankedLetterPriorities", () => {
+  it("accepts blank and positively ranked priorities", () => {
+    expect(() =>
+      assertRankedLetterPriorities([
+        { letter: null, rank: null },
+        { letter: "A", rank: 1 },
+        { letter: "D", rank: 9 },
+      ]),
+    ).not.toThrow();
+  });
+
+  it("rejects a bare letter and a non-positive or fractional rank", () => {
+    const invalid: LetterRank[] = [
+      { letter: "A", rank: null },
+      { letter: "A", rank: 0 },
+      { letter: "A", rank: 1.5 },
+    ];
+    for (const priority of invalid) {
+      expect(() => assertRankedLetterPriorities([priority])).toThrow(
+        /positive integer rank/i,
+      );
+    }
+  });
+
+  it("rejects a rank without a letter", () => {
+    expect(() => assertRankedLetterPriorities([{ letter: null, rank: 1 }])).toThrow(
+      /positive integer rank/i,
+    );
+  });
+});
 
 /**
  * Apply assignments and return lettered items in engine order. Asserts on resulting order

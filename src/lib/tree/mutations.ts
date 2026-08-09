@@ -39,6 +39,7 @@ import {
   removePriorityGaps as planRemovePriorityGaps,
   reprioritizeUnique as planReprioritizeUnique,
 } from "@/lib/priority/maintenance";
+import { assertRankedLetterPriorities } from "@/lib/priority/letterRank";
 import { promoteUrlsFromTaskName } from "@/lib/url/taskNameLinks";
 import { loadOutline } from "./queries";
 import { between } from "./sortKey";
@@ -1518,6 +1519,7 @@ export async function setTcPriorities(
   }[],
 ): Promise<void> {
   if (assignments.length === 0) return;
+  assertRankedLetterPriorities(assignments);
 
   await db.transaction(async (tx) => {
     for (const assignment of assignments) {
@@ -1525,8 +1527,7 @@ export async function setTcPriorities(
         .update(nodes)
         .set({
           tcPriorityLetter: assignment.letter,
-          // A rank without a letter would be unorderable, so it never survives alone.
-          tcPriorityRank: assignment.letter === null ? null : assignment.rank,
+          tcPriorityRank: assignment.rank,
           updatedAt: new Date(),
         })
         .where(and(eq(nodes.id, assignment.nodeId), eq(nodes.userId, userId)));

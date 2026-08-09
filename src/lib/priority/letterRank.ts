@@ -2,23 +2,26 @@ import type { PriorityLetter } from "@/db/schema";
 import { comparePriorityOrder, rankOrderValue } from "./order";
 
 /**
- * A hand-maintained ABCD ranking over a flat list, in the spirit of a Franklin Covey
- * priority column.
+ * Hand-maintained ABCD placement over a caller-supplied list, in the spirit of a Franklin
+ * Covey priority column.
  *
- * Two lists in this app rank things this way and they are not the same list: the Task
- * Chooser's To-do view ranks everything you *could* do (`nodes.tcPriorityLetter`), and a
- * day's task list ranks what you have decided to do *today* (`dailyItems.priorityLetter`).
- * The rules are identical — the fields they live in are not — so the rules live here once
- * and each caller binds its own accessor.
+ * Three callers share these placement mechanics without sharing one priority value:
  *
- * Two invariants callers can rely on:
+ * - the Outline supplies one immediate parent's children; its stored priority may be a bare
+ *   `A`, and this engine incorporates that row when a sibling drag next assigns ranks;
+ * - the Task Chooser supplies its global TC ranking over everything you *could* do; and
+ * - the Day list supplies what you have decided to do on one particular day.
  *
- * 1. **Ranks are dense.** Within a letter they run 1..n with no gaps and no ties. Gaps do
- *    appear when a ranked item is completed — nothing renumbers under you while you work —
- *    and the next drop into that letter cleans them up.
- * 2. **A letter always carries a rank.** There is no bare "A" here, unlike the outline's
- *    priority. Assigning a letter places the item somewhere in that letter's order, so
- *    there is always a number to show.
+ * The fields and ranking pools differ because they answer different questions. The placement
+ * rules live here once, and each caller binds its own accessor and complete pool.
+ *
+ * Two guarantees apply to assignments emitted by this engine:
+ *
+ * 1. **A touched letter is dense.** Its supplied members are assigned 1..n with no gaps or
+ *    ties. Existing gaps can remain until that letter is touched; nothing renumbers merely
+ *    because an item was completed or hidden.
+ * 2. **An emitted letter always carries a rank.** Input may contain a bare Outline letter,
+ *    but assigning or dragging places the item somewhere and therefore emits a number.
  *
  * Pure: every function takes the items it needs and returns assignments to persist. No
  * database, no `Date`.
@@ -34,6 +37,29 @@ export type LetterRank = {
 
 /** One item's new place in the ranking, ready to persist. */
 export type LetterAssignment = LetterRank & { id: string };
+
+/**
+ * Enforce the stronger representation used by TC and Day rankings at their write boundary.
+ * They may be blank, but once a letter is assigned it must name a real numeric position.
+ * Outline priority deliberately does not call this: a bare `A` is meaningful there.
+ */
+export function assertRankedLetterPriorities(priorities: readonly LetterRank[]): void {
+  for (const priority of priorities) {
+    const isBlank = priority.letter === null && priority.rank === null;
+    const isRanked =
+      priority.letter !== null &&
+      PRIORITY_LETTERS.includes(priority.letter) &&
+      priority.rank !== null &&
+      Number.isInteger(priority.rank) &&
+      priority.rank > 0;
+
+    if (!isBlank && !isRanked) {
+      throw new Error(
+        "Ranked-list priorities must be blank or include an A-D letter with a positive integer rank.",
+      );
+    }
+  }
+}
 
 /** Where a drop lands relative to the target row. Mirrors the grid's own drop zones. */
 export type LetterDropZone = "before" | "after";
@@ -53,7 +79,8 @@ export function letterRankEngine<T extends { id: string }>(
    * looking at — put bare first here and dropping onto the top B would renumber the row
    * displayed at the bottom of the Bs.
    *
-   * A no-op for the Task Chooser and day lists, where a letter always carries a rank.
+   * The bare branch is exercised by Outline pools; TC and Day writes reject that stored
+   * shape at their mutation boundaries.
    */
   function byRank(a: T, b: T): number {
     return rankOrderValue(read(a).rank) - rankOrderValue(read(b).rank);

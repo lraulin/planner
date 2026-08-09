@@ -8,6 +8,7 @@ import {
   type PriorityLetter,
 } from "@/db/schema";
 import { ensureInbox } from "@/lib/capture/mutations";
+import { assertRankedLetterPriorities } from "@/lib/priority/letterRank";
 import { fromDateKey, localDateKey } from "@/lib/schedule/geometry";
 import {
   applyStateTransition,
@@ -95,6 +96,8 @@ export async function createDailyItem(params: {
     priorityLetter = null,
     priorityRank = null,
   } = params;
+
+  assertRankedLetterPriorities([{ letter: priorityLetter, rank: priorityRank }]);
 
   return db.transaction(async (tx) => {
     // A task already sitting on another day moves rather than being duplicated — the
@@ -216,6 +219,7 @@ export async function setDailyPriorities(
   assignments: DayAssignment[],
 ): Promise<void> {
   if (assignments.length === 0) return;
+  assertRankedLetterPriorities(assignments);
 
   await db.transaction(async (tx) => {
     for (const { id, letter, rank } of assignments) {

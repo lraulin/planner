@@ -143,6 +143,30 @@ describeDb("daily item basics", () => {
     expect(c).toBeDefined();
   });
 
+  it("rejects a bare daily priority through both write paths", async () => {
+    const itemId = await createDailyItem({ userId, day: MON, title: "Essential" });
+
+    await expect(
+      setDailyPriorities(userId, [{ id: itemId, letter: "A", rank: null }]),
+    ).rejects.toThrow(/positive integer rank/i);
+    await expect(
+      createDailyItem({
+        userId,
+        day: MON,
+        title: "Bare",
+        priorityLetter: "B",
+        priorityRank: null,
+      }),
+    ).rejects.toThrow(/positive integer rank/i);
+
+    const row = await itemById(itemId);
+    expect(row.priorityLetter).toBeNull();
+    expect(row.priorityRank).toBeNull();
+    expect((await loadDay(userId, MON, WED)).items.map((item) => item.title)).toEqual([
+      "Essential",
+    ]);
+  });
+
   it("moves a checked or cancelled line below open work", async () => {
     // Settled lines (done or cancelled) drop to the bottom so the list still reads as
     // what you mean to do, with crossed-off work after. Cancel shares that placement;

@@ -89,12 +89,25 @@ describeDb("setTcPriorities", () => {
     const task = await makeTask(userId, "task");
 
     await setTcPriorities(userId, [{ nodeId: task, letter: "A", rank: 1 }]);
-    await setTcPriorities(userId, [{ nodeId: task, letter: null, rank: 7 }]);
+    await setTcPriorities(userId, [{ nodeId: task, letter: null, rank: null }]);
 
     const [row] = await db.select().from(nodes).where(eq(nodes.id, task));
     expect(row.tcPriorityLetter).toBeNull();
-    // A rank without a letter would be unorderable — it must not survive.
     expect(row.tcPriorityRank).toBeNull();
+  });
+
+  it("rejects a letter without a rank instead of storing a bare TC priority", async () => {
+    const userId = await makeUser();
+    const task = await makeTask(userId, "task");
+
+    await setTcPriorities(userId, [{ nodeId: task, letter: "A", rank: 1 }]);
+    await expect(
+      setTcPriorities(userId, [{ nodeId: task, letter: "B", rank: null }]),
+    ).rejects.toThrow(/positive integer rank/i);
+
+    const [row] = await db.select().from(nodes).where(eq(nodes.id, task));
+    expect(row.tcPriorityLetter).toBe("A");
+    expect(row.tcPriorityRank).toBe(1);
   });
 
   it("does nothing on an empty batch", async () => {
