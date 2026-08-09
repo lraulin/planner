@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
   exercises,
@@ -146,15 +146,6 @@ export async function updateExercise(
   if (result.length === 0) throw new Error("Exercise not found.");
 }
 
-/** @deprecated prefer updateExercise — kept for call sites during transition. */
-export async function updateExercisePrefs(
-  userId: string,
-  exerciseId: string,
-  prefs: ExercisePrefs,
-): Promise<void> {
-  return updateExercise(userId, exerciseId, prefs);
-}
-
 async function resolveExerciseId(
   tx: Executor,
   userId: string,
@@ -208,22 +199,6 @@ export async function findOrCreateExercise(
   if (existing) return existing.id;
 
   return createExercise(userId, trimmed);
-}
-
-export async function renameExercise(
-  userId: string,
-  exerciseId: string,
-  name: string,
-): Promise<void> {
-  return updateExercise(userId, exerciseId, { name });
-}
-
-export async function updateExerciseNotes(
-  userId: string,
-  exerciseId: string,
-  notes: string,
-): Promise<void> {
-  return updateExercise(userId, exerciseId, { notes });
 }
 
 /**
@@ -393,21 +368,4 @@ export async function deleteSession(userId: string, sessionId: string): Promise<
     .returning({ id: workoutSessions.id });
 
   if (result.length === 0) throw new Error("Session not found.");
-}
-
-export async function exerciseHasHistory(
-  userId: string,
-  exerciseId: string,
-): Promise<boolean> {
-  const [row] = await db
-    .select({ n: sql<number>`1` })
-    .from(workoutSessionExercises)
-    .where(
-      and(
-        eq(workoutSessionExercises.userId, userId),
-        eq(workoutSessionExercises.exerciseId, exerciseId),
-      ),
-    )
-    .limit(1);
-  return Boolean(row);
 }

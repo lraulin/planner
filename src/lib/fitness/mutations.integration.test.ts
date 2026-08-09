@@ -11,7 +11,6 @@ import {
   deleteExercise,
   deleteSession,
   findOrCreateExercise,
-  renameExercise,
   updateExercise,
 } from "./mutations";
 import {
@@ -250,7 +249,9 @@ describeDb("fitness sessions", () => {
       exercises: [{ exerciseId, sets: [{ reps: 1, weight: 1 }] }],
     });
 
-    await expect(renameExercise(intruder, exerciseId, "Hijacked")).rejects.toThrow();
+    await expect(
+      updateExercise(intruder, exerciseId, { name: "Hijacked" }),
+    ).rejects.toThrow();
     await expect(deleteSession(intruder, sessionId)).rejects.toThrow();
     expect(await getSessionDetail(intruder, sessionId)).toBeNull();
     expect(await listExercises(intruder)).toHaveLength(0);
