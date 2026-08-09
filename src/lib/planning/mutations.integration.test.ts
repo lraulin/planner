@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { nodes, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { initialStateForType } from "@/lib/tree/lifecycle";
 import {
   deleteWeeklyPlan,
   ensureWeeklyPlan,
@@ -53,7 +54,13 @@ async function makeNode(
   const sortKey = `V${sortKeyCounter++}`;
   const [node] = await db
     .insert(nodes)
-    .values({ userId, type, name: `${type} ${sortKey}`, sortKey })
+    .values({
+      userId,
+      type,
+      state: initialStateForType(type),
+      name: `${type} ${sortKey}`,
+      sortKey,
+    })
     .returning({ id: nodes.id });
   return node.id;
 }

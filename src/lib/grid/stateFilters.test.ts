@@ -30,6 +30,15 @@ describe("stateFilter", () => {
     const filter = stateFilter(["not_started"], "label");
     expect(filter).toEqual({ mode: "options", ids: ["value:Not started"] });
   });
+
+  it("can include state-less Result Areas as the ordinary blank option", () => {
+    const filter = stateFilter(["not_started"], "label", { includeBlanks: true });
+    expect(filter).toEqual({
+      mode: "options",
+      ids: ["value:Not started", "blanks"],
+    });
+    expect(matchesFilter(null, filter, "enum", null)).toBe(true);
+  });
 });
 
 describe("matching against the real filter engine", () => {

@@ -16,7 +16,9 @@ import {
  *         subtask
  *     project-2
  */
-function tree(overrides: Record<string, NodeState> = {}): CascadeNode[] {
+function tree(
+  overrides: Partial<Record<string, NodeState | null>> = {},
+): CascadeNode[] {
   const shape: [string, string | null][] = [
     ["area", null],
     ["goal", "area"],
@@ -26,11 +28,14 @@ function tree(overrides: Record<string, NodeState> = {}): CascadeNode[] {
     ["subtask", "task-b"],
     ["project-2", "goal"],
   ];
-  return shape.map(([id, parentId]) => ({
-    id,
-    parentId,
-    state: overrides[id] ?? "not_started",
-  }));
+  return shape.map(([id, parentId]) => {
+    const override = overrides[id];
+    return {
+      id,
+      parentId,
+      state: override === undefined ? (id === "area" ? null : "not_started") : override,
+    };
+  });
 }
 
 function changes(nodes: CascadeNode[], id: string, next: NodeState) {
@@ -93,9 +98,8 @@ describe("cascadeStateChange — settling", () => {
     ]);
   });
 
-  it("settles a whole branch from the top", () => {
-    expect(changes(tree(), "area", "cancelled")).toEqual([
-      "goal=cancelled",
+  it("settles a whole stateful branch from the top", () => {
+    expect(changes(tree(), "goal", "cancelled")).toEqual([
       "project-2=cancelled",
       "project=cancelled",
       "subtask=cancelled",
@@ -118,13 +122,11 @@ describe("cascadeStateChange — settling", () => {
 describe("cascadeStateChange — re-opening", () => {
   it("reopens settled ancestors as in progress, not not-started", () => {
     const settled = tree({
-      area: "completed",
       goal: "completed",
       project: "completed",
       "task-a": "completed",
     });
     expect(changes(settled, "task-a", "in_progress")).toEqual([
-      "area=in_progress",
       "goal=in_progress",
       "project=in_progress",
     ]);
@@ -134,14 +136,10 @@ describe("cascadeStateChange — re-opening", () => {
     // A grandparent can be completed while the parent between them is not; leaving it
     // settled would put open work under a completed goal.
     const mixed = tree({
-      area: "completed",
       goal: "in_progress",
       project: "completed",
     });
-    expect(changes(mixed, "task-a", "waiting")).toEqual([
-      "area=in_progress",
-      "project=in_progress",
-    ]);
+    expect(changes(mixed, "task-a", "waiting")).toEqual(["project=in_progress"]);
   });
 
   it("leaves already-open ancestors alone", () => {
@@ -168,7 +166,13 @@ describe("cascadeStateChange — re-opening", () => {
   });
 
   it("stops at the root without looping", () => {
-    expect(changes(tree({ area: "completed" }), "area", "in_progress")).toEqual([]);
+    expect(changes(tree({ goal: "completed" }), "goal", "in_progress")).toEqual([]);
+  });
+
+  it("walks through a state-less Result Area without trying to reopen it", () => {
+    const settled = tree({ goal: "completed", project: "completed" });
+    expect(changes(settled, "project", "in_progress")).toEqual(["goal=in_progress"]);
+    expect(changes(settled, "project", "in_progress").join(" ")).not.toContain("area");
   });
 });
 

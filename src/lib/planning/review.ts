@@ -30,7 +30,7 @@ export function isAtLeastPriority(
 }
 
 function isOpen(node: OutlineNode): boolean {
-  return REVIEW_STATES.includes(node.state);
+  return node.state !== null && REVIEW_STATES.includes(node.state);
 }
 
 /**
@@ -39,7 +39,7 @@ function isOpen(node: OutlineNode): boolean {
  * prioritised is exactly the one worth being asked about.
  */
 export function selectResultAreasForReview(nodes: OutlineNode[]): OutlineNode[] {
-  return nodes.filter((n) => n.type === "result_area" && isOpen(n));
+  return nodes.filter((n) => n.type === "result_area");
 }
 
 /**

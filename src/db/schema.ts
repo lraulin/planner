@@ -314,7 +314,12 @@ export const nodes = pgTable(
      */
     tcPriorityLetter: priorityLetterEnum("tc_priority_letter"),
     tcPriorityRank: smallint("tc_priority_rank"),
-    state: nodeStateEnum("state").notNull().default("not_started"),
+    /**
+     * Achieve lifecycle state. Result Areas are enduring roles rather than finite work, so
+     * they deliberately store no state; the type-aware CHECK below enforces both halves.
+     * Creation code supplies `not_started` explicitly for every stateful node type.
+     */
+    state: nodeStateEnum("state"),
     deadline: timestamp("deadline", { withTimezone: true }),
     /**
      * The day you intend to do this — **the day plan**, and the single source of truth for
@@ -421,6 +426,10 @@ export const nodes = pgTable(
     check(
       "nodes_start_not_before_deferred",
       sql`${table.targetStartDate} is null or ${table.deferredDate} is null or ${table.targetStartDate} >= ${table.deferredDate}`,
+    ),
+    check(
+      "nodes_lifecycle_state_by_type",
+      sql`(${table.type} = 'result_area'::node_type and ${table.state} is null and ${table.completedAt} is null and ${table.deferredDate} is null) or (${table.type} <> 'result_area'::node_type and ${table.state} is not null)`,
     ),
   ],
 );

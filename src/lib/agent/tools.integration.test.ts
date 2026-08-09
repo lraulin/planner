@@ -84,6 +84,39 @@ describeDb("agent tools", () => {
     expect(done.node.state).toBe("completed");
   });
 
+  it("returns null state for Result Areas and rejects state before create or update", async () => {
+    const created = (await dispatchAgentTool(
+      "create_node",
+      { type: "result_area", name: "Health" },
+      userId,
+    )) as { node: { id: string; state: string | null } };
+    expect(created.node.state).toBeNull();
+
+    await expect(
+      dispatchAgentTool(
+        "create_node",
+        { type: "result_area", name: "Orphan", state: "completed" },
+        userId,
+      ),
+    ).rejects.toMatchObject({
+      code: "validation",
+      message: "Result Areas do not have a state",
+    });
+    expect((await loadOutline(userId)).map((node) => node.name)).not.toContain(
+      "Orphan",
+    );
+
+    await expect(
+      dispatchAgentTool(
+        "update_node",
+        { id: created.node.id, state: "in_progress" },
+        userId,
+      ),
+    ).rejects.toMatchObject({ code: "validation" });
+    const [area] = await loadOutline(userId);
+    expect(area.state).toBeNull();
+  });
+
   // Full form fields (notes, project purpose/vision, task description) go through the
   // same allowlist as the drawer — the agent is not limited to outline basics.
   it("creates a project with notes and detail fields, and get_node returns them", async () => {

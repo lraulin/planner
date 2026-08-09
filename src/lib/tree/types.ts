@@ -21,7 +21,8 @@ export type OutlineRow = {
    */
   tcPriorityLetter: PriorityLetter | null;
   tcPriorityRank: number | null;
-  state: NodeState;
+  /** Null only for Result Areas, which are enduring roles and have no lifecycle state. */
+  state: NodeState | null;
   deadline: Date | null;
   focus: boolean;
   collapsed: boolean;

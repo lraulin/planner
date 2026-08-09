@@ -468,7 +468,9 @@ function groupKey(
       // on — a header saying "Postponed" over a routine whose shelf ran out yesterday
       // would be the same stale reading in a second place.
       const state = ownEffectiveState(node, today);
-      return { key: state, label: STATE_LABELS[state] };
+      return state === null
+        ? { key: "", label: "(No State)" }
+        : { key: state, label: STATE_LABELS[state] };
     }
     case "priorityLetter":
       return {

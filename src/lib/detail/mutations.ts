@@ -23,6 +23,7 @@ import {
 import { isStateEdit } from "./formState";
 import { stateFromDates } from "./stateFromDates";
 import { between } from "@/lib/tree/sortKey";
+import { RESULT_AREA_STATE_REFUSAL } from "@/lib/tree/lifecycle";
 import { fetchPageTitle, shouldAutofillAttachmentTitle } from "@/lib/url/pageTitle";
 import type { ItemPosition, NodeDetailPatch, NodeItemValues } from "./types";
 
@@ -374,6 +375,20 @@ export async function saveNodeDetail(
         : undefined;
 
     const core = pick(values, CORE_KEYS);
+    if (node.type === "result_area") {
+      if (core.state !== undefined && core.state !== null) {
+        throw new Error(`${RESULT_AREA_STATE_REFUSAL}.`);
+      }
+      if (core.deferredDate != null) {
+        throw new Error("Result Areas cannot be postponed.");
+      }
+      // Full drawer drafts carry the shared keys even though the Result Area form does not
+      // render them. Do not let those inert nulls become a second lifecycle write path.
+      delete core.state;
+      delete core.deferredDate;
+    } else if (core.state === null) {
+      throw new Error("Goals, Projects, and Tasks require a state.");
+    }
     // Plan/shelf dates are calendar days: coerce the wire value then force UTC-noon encoding
     // so a UTC server never rewrites the day the picker chose.
     for (const key of [
@@ -396,6 +411,7 @@ export async function saveNodeDetail(
     if (
       "state" in core &&
       core.state !== undefined &&
+      core.state !== null &&
       !isStateEdit(node, core.state, today)
     ) {
       delete (core as { state?: unknown }).state;
@@ -522,13 +538,16 @@ export async function saveNodeDetail(
       values.task?.actualStartDate === undefined
         ? undefined
         : recordDate(values.task.actualStartDate);
-    const implied = stateFromDates({
-      current: node.state,
-      completedAt,
-      deferredUntil: changedTo(node.deferredDate, core.deferredDate),
-      startedAt: newlySet(before?.actualStartDate, startedRaw),
-      today,
-    });
+    const implied =
+      node.state === null
+        ? null
+        : stateFromDates({
+            current: node.state,
+            completedAt,
+            deferredUntil: changedTo(node.deferredDate, core.deferredDate),
+            startedAt: newlySet(before?.actualStartDate, startedRaw),
+            today,
+          });
 
     // Last, deliberately. The state write above set the column; this stamps `completedAt`
     // to match — and, for a recurring task, cycles it instead: logs the completion, pushes
@@ -554,7 +573,10 @@ export async function saveNodeDetail(
     // state of an expired shelf (see above), so a due-again routine completed from the
     // form still reaches this branch — draft was `completed`, which *is* an edit.
     const explicit =
-      "state" in core && core.state !== undefined && core.state !== node.state
+      "state" in core &&
+      core.state !== undefined &&
+      core.state !== null &&
+      core.state !== node.state
         ? {
             state: core.state,
             at:

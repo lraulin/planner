@@ -63,6 +63,27 @@ describe("mapOutline", () => {
     expect(mapped.nodes[0]?.state).toBe("completed");
   });
 
+  it("ignores lifecycle fields on Result Areas", () => {
+    const xml = `<?xml version="1.0"?>
+<AchieveDB>
+  <ResultAreas>
+    <ResultAreaId>11111111-2222-3333-4444-555555555555</ResultAreaId>
+    <Name>Family</Name>
+    <Status>3</Status>
+    <IsCompleted>true</IsCompleted>
+    <DateCompleted>2026-07-01T12:00:00</DateCompleted>
+    <DeferredDate>2026-08-01T12:00:00</DeferredDate>
+  </ResultAreas>
+</AchieveDB>`;
+    const [area] = mapOutline(parseAchXml(xml)).nodes;
+    expect(area).toMatchObject({
+      type: "result_area",
+      state: null,
+      completedAt: null,
+      deferredDate: null,
+    });
+  });
+
   it("lists non-outline tables as skipped without warning when known", () => {
     const xml = `<?xml version="1.0"?>
 <AchieveDB>

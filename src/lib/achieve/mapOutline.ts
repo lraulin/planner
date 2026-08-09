@@ -497,9 +497,10 @@ function baseNode(args: {
 }): AchMappedNode {
   const { row } = args;
   const isCompleted = boolField(row, "IsCompleted", false);
-  let state = decodeStatus(intField(row, "Status"));
+  let state =
+    args.type === "result_area" ? null : decodeStatus(intField(row, "Status"));
   // Prefer the explicit completed flag when it disagrees with a stale Status code.
-  if (isCompleted) state = "completed";
+  if (isCompleted && state !== null) state = "completed";
 
   const deadline = args.deadlineField
     ? decodeDateTime(row[args.deadlineField])
@@ -537,7 +538,7 @@ function baseNode(args: {
     deadline,
     targetStart,
     targetEnd,
-    deferredDate,
+    deferredDate: state === null ? null : deferredDate,
     completedAt: state === "completed" ? completedAt : null,
     effortMinutes: args.effortMinutes,
     effortLeftMinutes: args.effortLeftMinutes,

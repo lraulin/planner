@@ -35,7 +35,7 @@ export type Shelf = { until: Date | null; sourceId: string };
 /** The shelf a row carries on its own, ignoring its ancestors. */
 export function ownShelf(row: {
   id: string;
-  state: NodeState;
+  state: NodeState | null;
   deferredDate: Date | null;
 }): Shelf | null {
   // The state is what shelves a row. A deferred date on a row that is *not* postponed is the
@@ -80,10 +80,11 @@ export function shelfHolds(shelf: Shelf | null, today: string | null): boolean {
  * written to the row.
  */
 export function effectiveState(
-  state: NodeState,
+  state: NodeState | null,
   shelf: Shelf | null,
   today: string | null,
-): NodeState {
+): NodeState | null {
+  if (state === null) return null;
   if (state === "completed" || state === "cancelled") return state;
   if (shelfHolds(shelf, today)) return "postponed";
   return state === "postponed" ? "not_started" : state;
@@ -108,8 +109,8 @@ export function effectiveState(
  * and hides with.
  */
 export function ownEffectiveState(
-  row: { id: string; state: NodeState; deferredDate: Date | null },
+  row: { id: string; state: NodeState | null; deferredDate: Date | null },
   today: string | null,
-): NodeState {
+): NodeState | null {
   return effectiveState(row.state, ownShelf(row), today);
 }

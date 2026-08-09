@@ -190,6 +190,35 @@ describe("grid command deck", () => {
       ).toMatchObject({ disabled: false });
     });
 
+    it("keeps lifecycle commands visible but disabled for Result Areas", () => {
+      const reason = "Result Areas do not have a state";
+      const commands = build({ id: "ra", state: null, stateReason: reason });
+      expect(find(commands, "record.complete")).toMatchObject({
+        disabled: true,
+        title: reason,
+      });
+      expect(find(commands, "record.state.in_progress")).toMatchObject({
+        disabled: true,
+        title: reason,
+      });
+    });
+
+    it("refuses the whole lifecycle action for a mixed selection", () => {
+      const reason = "Result Areas do not have a state; remove them from the selection";
+      const commands = build({
+        id: "task",
+        ids: ["task", "ra"],
+        count: 2,
+        state: "not_started",
+        stateReason: reason,
+      });
+      expect(find(commands, "record.complete")).toMatchObject({
+        label: "Complete (2)",
+        disabled: true,
+        title: reason,
+      });
+    });
+
     it("offers the whole state vocabulary, minus the one the row is already on", () => {
       const commands = build({ id: "n", state: "waiting" });
       const states = commands.filter((entry) => entry.id.startsWith("record.state."));

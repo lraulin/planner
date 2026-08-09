@@ -20,7 +20,7 @@ export function row(
     priorityRank: null,
     tcPriorityLetter: null,
     tcPriorityRank: null,
-    state: "not_started",
+    state: partial.type === "result_area" ? null : "not_started",
     deadline: null,
     focus: false,
     collapsed: false,

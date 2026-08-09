@@ -39,7 +39,7 @@ export function filterOutline(
   const rows: AgentNodeSummary[] = [];
   for (const node of outline) {
     if (types && !types.includes(node.type)) continue;
-    if (states && !states.includes(node.state)) continue;
+    if (states && (node.state === null || !states.includes(node.state))) continue;
     if (filter.focus !== undefined && node.focus !== filter.focus) continue;
     if (filter.parentId !== undefined && node.parentId !== filter.parentId) continue;
     if (

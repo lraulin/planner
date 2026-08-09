@@ -41,9 +41,15 @@ export function ConversionDialog({
         ) : (
           <>
             <p className="mt-3 text-[0.8125rem] leading-relaxed text-ink-muted">
-              The item keeps its id, name, state, priority, planning dates, focus,
-              notes, and completion state where they apply.
+              The item keeps its id, name, priority, deadline and target dates, focus,
+              and notes.
             </p>
+
+            {plan.lifecycleChange && (
+              <div className="mt-3 border-l-2 border-select-edge bg-select/40 px-3 py-2 text-[0.8125rem] text-ink">
+                {plan.lifecycleChange}
+              </div>
+            )}
 
             {plan.placement.hoisted && (
               <div className="mt-3 border-l-2 border-select-edge bg-select/40 px-3 py-2 text-[0.8125rem] text-ink">

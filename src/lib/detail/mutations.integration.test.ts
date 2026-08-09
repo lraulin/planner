@@ -118,6 +118,7 @@ describeDb("detail mutations", () => {
     focus: false,
     notes: "",
   };
+  const resultAreaCore = { ...core, state: null };
 
   describe("state follows the dates", () => {
     async function task(name: string) {
@@ -433,7 +434,7 @@ describeDb("detail mutations", () => {
       name: "Career & Craft",
       priorityLetter: "A",
       priorityRank: 1,
-      state: "in_progress",
+      state: null,
       deadline: null,
       focus: true,
       notes: "Reviewed in January.",
@@ -447,12 +448,27 @@ describeDb("detail mutations", () => {
     expect(detail?.resultArea?.importance).toBe(80);
   });
 
+  it("rejects lifecycle fields on a Result Area and leaves it state-less", async () => {
+    await expect(
+      saveNodeDetail(userId, areaId, { state: "completed" }),
+    ).rejects.toThrow("Result Areas do not have a state");
+    await expect(
+      saveNodeDetail(userId, areaId, {
+        deferredDate: new Date("2027-02-15T12:00:00Z"),
+      }),
+    ).rejects.toThrow("Result Areas cannot be postponed");
+
+    const detail = await loadNodeDetail(userId, areaId);
+    expect(detail?.state).toBeNull();
+    expect(detail?.deferredDate).toBeNull();
+  });
+
   it("promotes a nested result area to the root when its category changes", async () => {
     // Achieve: category is top-level organisation. Nesting inherits the parent's
     // category; editing the child's category un-nests it rather than forking a
     // second Personal/Work header under a parent that still claims the old one.
     await saveNodeDetail(userId, areaId, {
-      ...core,
+      ...resultAreaCore,
       name: "Career",
       resultArea: { category: "Personal" },
     });
@@ -468,7 +484,7 @@ describeDb("detail mutations", () => {
     );
 
     await saveNodeDetail(userId, nested, {
-      ...core,
+      ...resultAreaCore,
       name: "Side project area",
       resultArea: { category: "Work" },
     });
@@ -490,7 +506,7 @@ describeDb("detail mutations", () => {
       name: "Nested",
     });
     await saveNodeDetail(userId, areaId, {
-      ...core,
+      ...resultAreaCore,
       name: "Career",
       resultArea: { category: "Work" },
     });
@@ -510,7 +526,7 @@ describeDb("detail mutations", () => {
       name: "Career",
       priorityLetter: null,
       priorityRank: null,
-      state: "not_started",
+      state: null,
       deadline: null,
       focus: false,
       notes: "",

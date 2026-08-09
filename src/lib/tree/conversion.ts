@@ -12,15 +12,18 @@ export type ConversionTreeNode = {
 
 export const COMMON_CONVERSION_FIELDS = [
   "name",
-  "state",
   "priority",
   "deadline",
   "targetStartDate",
   "targetEndDate",
-  "deferredDate",
   "focus",
   "notes",
-  "completion state",
+] as const;
+
+export const LIFECYCLE_CONVERSION_FIELDS = [
+  "state",
+  "deferred date",
+  "completion time",
 ] as const;
 
 export const TYPE_DETAIL_FIELDS: Record<NodeKind, readonly string[]> = {
@@ -82,6 +85,7 @@ export type ConversionPlan = {
   placement: ConversionPlacement;
   retainedFields: string[];
   discardedFields: string[];
+  lifecycleChange: string | null;
   descendantConflicts: ConversionConflict[];
 };
 
@@ -148,6 +152,7 @@ export function planNodeConversion(params: {
   if (!node) throw new Error("The selected item no longer exists.");
 
   const targetType = typeOf(params.targetKind);
+  const sourceType = typeOf(params.sourceKind);
   const children = params.nodes.filter((entry) => entry.parentId === node.id);
   const descendantConflicts = children
     .filter((child) => !canNest(child.type, targetType))
@@ -162,11 +167,23 @@ export function planNodeConversion(params: {
   ];
   const retainedFields = [
     ...COMMON_CONVERSION_FIELDS,
+    ...(sourceType !== "result_area" && targetType !== "result_area"
+      ? LIFECYCLE_CONVERSION_FIELDS
+      : []),
     ...(sameDetailShape(params.sourceKind, params.targetKind) ? sourceFields : []),
   ];
-  const discardedFields = sameDetailShape(params.sourceKind, params.targetKind)
-    ? []
-    : sourceFields;
+  const discardedFields = [
+    ...(sameDetailShape(params.sourceKind, params.targetKind) ? [] : sourceFields),
+    ...(sourceType !== "result_area" && targetType === "result_area"
+      ? LIFECYCLE_CONVERSION_FIELDS
+      : []),
+  ];
+  const lifecycleChange =
+    targetType === "result_area"
+      ? "State, completion time, and deferred date will be cleared because Result Areas have no lifecycle state."
+      : sourceType === "result_area"
+        ? "State will be initialized to Not started."
+        : null;
 
   return {
     sourceKind: params.sourceKind,
@@ -175,6 +192,7 @@ export function planNodeConversion(params: {
     placement: placementFor(node, targetType, params.nodes),
     retainedFields,
     discardedFields,
+    lifecycleChange,
     descendantConflicts,
   };
 }

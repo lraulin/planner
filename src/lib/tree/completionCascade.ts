@@ -28,13 +28,13 @@ import type { NodeState } from "@/db/schema";
 export type CascadeNode = {
   id: string;
   parentId: string | null;
-  state: NodeState;
+  state: NodeState | null;
 };
 
 export type StateChange = { id: string; state: NodeState };
 
 /** Completed and cancelled both mean settled: the work is not coming back. */
-export function isSettled(state: NodeState): boolean {
+export function isSettled(state: NodeState | null): boolean {
   return state === "completed" || state === "cancelled";
 }
 
@@ -93,7 +93,9 @@ function settleDescendants(
     if (!node) continue;
     // Descend through a settled node anyway: it may sit above open work, and leaving that
     // work open under a settled parent is the state this whole rule exists to prevent.
-    if (!isSettled(node.state)) out.push({ id: node.id, state: next });
+    if (node.state !== null && !isSettled(node.state)) {
+      out.push({ id: node.id, state: next });
+    }
     queue.push(...(childrenOf.get(node.id) ?? []));
   }
 
@@ -118,7 +120,9 @@ function reopenAncestors(all: readonly CascadeNode[], nodeId: string): StateChan
     seen.add(parentId);
     const parent = byId.get(parentId);
     if (!parent) break;
-    if (isSettled(parent.state)) out.push({ id: parent.id, state: "in_progress" });
+    if (parent.state !== null && isSettled(parent.state)) {
+      out.push({ id: parent.id, state: "in_progress" });
+    }
     parentId = parent.parentId;
   }
 

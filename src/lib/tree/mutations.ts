@@ -44,6 +44,7 @@ import { promoteUrlsFromTaskName } from "@/lib/url/taskNameLinks";
 import { loadOutline } from "./queries";
 import { between } from "./sortKey";
 import type { Position } from "./types";
+import { assertSupportsLifecycleState, initialStateForType } from "./lifecycle";
 
 /**
  * Every mutation takes a `userId` and scopes on it, so a caller cannot reach another
@@ -185,6 +186,7 @@ export async function createNode(params: {
         userId,
         parentId,
         type,
+        state: initialStateForType(type),
         name,
         notes,
         isInbox,
@@ -408,6 +410,9 @@ export async function convertNode(
       .update(nodes)
       .set({
         type: targetType,
+        state: initialStateForType(targetType),
+        completedAt: null,
+        deferredDate: null,
         parentId: placement.parentId,
         sortKey,
         updatedAt: new Date(),
@@ -691,6 +696,15 @@ export async function applyStateTransition(
   state: NodeState,
   at: Date = new Date(),
 ): Promise<void> {
+  const [node] = await tx
+    .select({ type: nodes.type })
+    .from(nodes)
+    .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)))
+    .limit(1);
+  // Mutations in this module historically no-op for a missing/foreign id. Preserve that
+  // user-isolation contract while still rejecting an owned Result Area explicitly.
+  if (!node) return;
+  assertSupportsLifecycleState(node.type);
   const now = at;
 
   // Cancelled is a settled decision not to do the work — the day keeps a crossed-off line
@@ -1073,7 +1087,7 @@ export async function reopenSettledAncestors(
 ): Promise<void> {
   const chain = await selfAndAncestors(tx, userId, nodeId);
   const self = chain.find((node) => node.id === nodeId);
-  if (!self || isSettled(self.state)) return;
+  if (!self || self.state === null || isSettled(self.state)) return;
 
   for (const change of cascadeStateChange(chain, nodeId, self.state)) {
     await applyStateTransition(tx, userId, change.id, change.state);

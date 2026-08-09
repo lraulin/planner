@@ -189,10 +189,11 @@ function buildColumns(
       label: "Status",
       width: "7.5rem",
       filterKind: "enum",
-      filterValue: (row) =>
-        STATUS_LABELS[
-          statuses.get(row.node.id) ?? scheduleStatusForNode(row.node, today)
-        ],
+      filterValue: (row) => {
+        const status =
+          statuses.get(row.node.id) ?? scheduleStatusForNode(row.node, today);
+        return status === null ? null : STATUS_LABELS[status];
+      },
       // Derived from dates + state (manual §3.8 bands), with child→parent roll-up.
       compact: "hidden",
       render: (row, ctx) => (

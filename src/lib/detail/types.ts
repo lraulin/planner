@@ -36,7 +36,7 @@ export type NodeDetail = {
   name: string;
   priorityLetter: PriorityLetter | null;
   priorityRank: number | null;
-  state: NodeState;
+  state: NodeState | null;
   deadline: Date | null;
   targetStartDate: Date | null;
   targetEndDate: Date | null;
@@ -72,7 +72,7 @@ export type CoreValues = {
   name: string;
   priorityLetter: PriorityLetter | null;
   priorityRank: number | null;
-  state: NodeState;
+  state: NodeState | null;
   deadline: Date | null;
   targetStartDate: Date | null;
   targetEndDate: Date | null;

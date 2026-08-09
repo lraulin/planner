@@ -4,9 +4,8 @@ import { useMemo, useState } from "react";
 import type { OutlineNode } from "@/lib/tree/types";
 import { asGroupBy, sliceTree, type GridRow, type GroupBy } from "@/lib/tree/slice";
 import type { ColumnDef } from "@/components/grid/columns";
-import { CascadeConfirm } from "@/components/grid/CascadeConfirm";
 import { DataGrid } from "@/components/grid/DataGrid";
-import { useIncludeDeferred, type GridDefaults } from "@/components/grid/useGridState";
+import type { GridDefaults } from "@/components/grid/useGridState";
 import { useModuleViews } from "@/components/grid/useModuleViews";
 import { GridToolbar } from "@/components/grid/GridToolbar";
 import { collectDistinctValues } from "@/lib/grid/distinct";
@@ -23,7 +22,6 @@ import {
 import { NameCell, TextCell } from "@/components/grid/cells";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import { setResultAreaFieldsAction } from "@/app/outline/detail-actions";
-import { ToolbarToggle } from "./tabChrome";
 import { useGridTab } from "./useGridTab";
 import { useNodeCommandDeck } from "@/components/grid/useNodeCommandDeck";
 import type { OutlineColumnCtx } from "@/components/outline/outlineColumns";
@@ -182,18 +180,16 @@ export function ResultAreasGrid({ initialNodes }: { initialNodes: OutlineNode[] 
     defaultsFor: viewDefaults,
   });
   const gridState = views.grid;
-  const [includeDeferred, setIncludeDeferred] = useIncludeDeferred("result-areas");
-
   const rows: GridRow[] = useMemo(
     () =>
       sliceTree(tab.nodes, {
         keep: (node) => node.type === "result_area",
         groupBy: asGroupBy(gridState.groupBy),
         scopeId: null,
-        includeDeferred,
+        includeDeferred: true,
         today: tab.today,
       }),
-    [tab.nodes, tab.today, gridState.groupBy, includeDeferred],
+    [tab.nodes, tab.today, gridState.groupBy],
   );
 
   const distinctValues = useMemo(
@@ -237,13 +233,6 @@ export function ResultAreasGrid({ initialNodes }: { initialNodes: OutlineNode[] 
         counts={counts}
         error={tab.error}
         views={views}
-        left={
-          <ToolbarToggle
-            checked={includeDeferred}
-            onChange={() => setIncludeDeferred(!includeDeferred)}
-            label="Postponed"
-          />
-        }
         commandCapabilities={nodeCommands.capabilities}
       />
 
@@ -288,8 +277,6 @@ export function ResultAreasGrid({ initialNodes }: { initialNodes: OutlineNode[] 
           </div>
         }
       />
-
-      <CascadeConfirm state={tab.stateChange} />
 
       <NodeDetailDrawer
         node={tab.detailNode}

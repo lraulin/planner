@@ -233,7 +233,8 @@ export function isChooserCandidate(
   states: NodeState[],
   today: string | null = null,
 ): boolean {
-  if (!states.includes(effectiveState(node.state, node.shelf, today))) return false;
+  const state = effectiveState(node.state, node.shelf, today);
+  if (state === null || !states.includes(state)) return false;
   // Achieve: leaf work is tasks/projects with no children **or only completed children**.
   // Structural `hasChildren` still true when kids are finished; `hasActiveChildren` is the
   // chooser rule.

@@ -219,17 +219,22 @@ export async function loadDiscussionItems(
     .where(and(eq(nodes.userId, userId), eq(taskDetails.contactId, contactId)))
     .orderBy(asc(nodes.priorityLetter), asc(nodes.priorityRank), asc(nodes.name));
 
-  return rows.map((row) => ({
-    nodeId: row.nodeId,
-    name: row.name,
-    priorityLetter: row.priorityLetter,
-    priorityRank: row.priorityRank,
-    state: row.state,
-    deadline: row.deadline,
-    contexts: row.contexts ?? [],
-    description: row.description ?? "",
-    resolved: (SETTLED_STATES as readonly string[]).includes(row.state),
-  }));
+  return rows.map((row) => {
+    if (row.state === null) {
+      throw new Error(`Task ${row.nodeId} violates the lifecycle-state invariant.`);
+    }
+    return {
+      nodeId: row.nodeId,
+      name: row.name,
+      priorityLetter: row.priorityLetter,
+      priorityRank: row.priorityRank,
+      state: row.state,
+      deadline: row.deadline,
+      contexts: row.contexts ?? [],
+      description: row.description ?? "",
+      resolved: (SETTLED_STATES as readonly string[]).includes(row.state),
+    };
+  });
 }
 
 /**

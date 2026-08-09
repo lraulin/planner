@@ -203,7 +203,10 @@ export function buildChooserColumns(
       label: "Status",
       width: "7.5rem",
       filterKind: "enum",
-      filterValue: (row) => STATUS_LABELS[scheduleStatusForNode(row.node, today)],
+      filterValue: (row) => {
+        const status = scheduleStatusForNode(row.node, today);
+        return status === null ? null : STATUS_LABELS[status];
+      },
       render: (row, ctx) => <StatusCell node={row.node} today={ctx.today} />,
     },
     {

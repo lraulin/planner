@@ -186,10 +186,11 @@ function buildColumns(
       filterKind: "enum",
       // Derived from the state and deadline chips already on the line.
       compact: "hidden",
-      filterValue: (row) =>
-        STATUS_LABELS[
-          statuses.get(row.node.id) ?? scheduleStatusForNode(row.node, today)
-        ],
+      filterValue: (row) => {
+        const status =
+          statuses.get(row.node.id) ?? scheduleStatusForNode(row.node, today);
+        return status === null ? null : STATUS_LABELS[status];
+      },
       sortValue: (row) =>
         statuses.get(row.node.id) ?? scheduleStatusForNode(row.node, today),
       render: (row, ctx) => (

@@ -67,8 +67,41 @@ describeDb("tree mutations", () => {
   });
 
   it("creates a root result area", async () => {
-    await createNode({ userId, parentId: null, type: "result_area", name: "Work" });
+    const id = await createNode({
+      userId,
+      parentId: null,
+      type: "result_area",
+      name: "Work",
+    });
     expect(await outlineOf(userId)).toEqual(["Work"]);
+    const [area] = await db
+      .select({
+        state: nodes.state,
+        completedAt: nodes.completedAt,
+        deferredDate: nodes.deferredDate,
+      })
+      .from(nodes)
+      .where(eq(nodes.id, id));
+    expect(area).toEqual({ state: null, completedAt: null, deferredDate: null });
+  });
+
+  it("enforces the lifecycle-state invariant in the database", async () => {
+    await expect(
+      db.insert(nodes).values({
+        userId,
+        type: "result_area",
+        state: "completed",
+        sortKey: "invalid-area",
+      }),
+    ).rejects.toThrow();
+    await expect(
+      db.insert(nodes).values({
+        userId,
+        type: "task",
+        state: null,
+        sortKey: "invalid-task",
+      }),
+    ).rejects.toThrow();
   });
 
   // Capturing an idea must never require deciding where it lives first, so the top level
@@ -1378,7 +1411,7 @@ describeDb("tree mutations", () => {
         subtask: "completed",
         // Ancestors are a claim about work below them, and that claim has not changed.
         goal: "not_started",
-        area: "not_started",
+        area: null,
       });
     });
 
@@ -1411,7 +1444,7 @@ describeDb("tree mutations", () => {
 
     it("reopens settled ancestors as in progress when a child is re-opened", async () => {
       const ids = await branch();
-      await setState(userId, ids.area, "completed");
+      await setState(userId, ids.goal, "completed");
       await setState(userId, ids.subtask, "in_progress");
 
       expect(await statesOf(ids)).toMatchObject({
@@ -1419,7 +1452,7 @@ describeDb("tree mutations", () => {
         taskB: "in_progress",
         project: "in_progress",
         goal: "in_progress",
-        area: "in_progress",
+        area: null,
         // Re-opening never reaches sideways or down: Task A really was finished.
         taskA: "completed",
       });
@@ -1439,9 +1472,14 @@ describeDb("tree mutations", () => {
 
     it("leaves the whole branch settled or open, never half of each", async () => {
       const ids = await branch();
-      await setState(userId, ids.area, "completed");
+      await setState(userId, ids.goal, "completed");
       const states = await statesOf(ids);
-      expect(Object.values(states).every((state) => state === "completed")).toBe(true);
+      expect(states.area).toBeNull();
+      expect(
+        Object.entries(states)
+          .filter(([name]) => name !== "area")
+          .every(([, state]) => state === "completed"),
+      ).toBe(true);
     });
 
     it("cannot cascade across users", async () => {
@@ -1463,9 +1501,8 @@ describeDb("tree mutations", () => {
         name: "Their task",
       });
 
-      await setState(userId, ids.area, "completed");
+      await setState(userId, ids.goal, "completed");
       // Reading, changing and clearing the other user's rows from this user all fail.
-      await setState(other, theirs, "in_progress");
 
       const theirRows = new Map((await loadOutline(other)).map((n) => [n.id, n]));
       expect(theirRows.get(theirTask)!.state).toBe("not_started");
@@ -1477,6 +1514,19 @@ describeDb("tree mutations", () => {
 
       await deleteNode(userId, theirs);
       expect((await loadOutline(other)).map((n) => n.id)).toContain(theirs);
+    });
+
+    it("rejects completion on a Result Area without touching its descendants", async () => {
+      const ids = await branch();
+      await expect(setState(userId, ids.area, "completed")).rejects.toThrow(
+        "Result Areas do not have a state",
+      );
+      expect(await statesOf(ids)).toMatchObject({
+        area: null,
+        goal: "not_started",
+        project: "not_started",
+        taskA: "not_started",
+      });
     });
   });
 

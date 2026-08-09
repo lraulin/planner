@@ -1,7 +1,6 @@
 "use client";
 
-import { ComboboxField, FieldGrid, NumberField, SelectField, TextArea } from "./fields";
-import { STATE_OPTIONS } from "@/lib/tree/hierarchy";
+import { ComboboxField, FieldGrid, NumberField, TextArea } from "./fields";
 import { DEFAULT_CATEGORIES } from "@/lib/tree/slice";
 import { LinkedNotesPanel } from "@/components/notes/LinkedNotesPanel";
 import type { FormTab } from "./FormTabs";
@@ -41,12 +40,6 @@ export function resultAreaTabs(props: DetailFormProps): FormTab[] {
               options={categoryChoices}
               placeholder="Personal or Work"
               hint="Personal or Work by default — type another name to add one. Nested areas inherit their parent's category; changing a nested area's category promotes it to the top level."
-            />
-            <SelectField
-              label="State"
-              value={values.state}
-              options={STATE_OPTIONS}
-              onChange={(state) => state && patch({ state })}
             />
           </FieldGrid>
 

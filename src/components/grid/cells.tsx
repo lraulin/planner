@@ -546,8 +546,11 @@ export function StatusCell({
   node: OutlineNode;
   today: string | null;
   /** Precomputed (e.g. with child→parent propagation). Defaults to local status. */
-  status?: ScheduleStatus;
+  status?: ScheduleStatus | null;
 }) {
+  if (node.state === null || status === null) {
+    return <span className="truncate text-[0.75rem] text-ink-muted" />;
+  }
   const resolved =
     status ??
     scheduleStatus({

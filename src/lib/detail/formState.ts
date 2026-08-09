@@ -15,9 +15,9 @@ import { effectiveState, ownShelf } from "@/lib/tree/shelving";
  * editing this row's own field (inherited shelves stay out of the State select).
  */
 export function formState(
-  row: { id?: string; state: NodeState; deferredDate: Date | null },
+  row: { id?: string; state: NodeState | null; deferredDate: Date | null },
   today: string | null,
-): NodeState {
+): NodeState | null {
   return effectiveState(row.state, ownShelf({ id: row.id ?? "", ...row }), today);
 }
 
@@ -30,7 +30,7 @@ export function formState(
  * shelf residue and fight the model that expiry is derived, never swept.
  */
 export function isStateEdit(
-  stored: { state: NodeState; deferredDate: Date | null },
+  stored: { state: NodeState | null; deferredDate: Date | null },
   draft: NodeState,
   today: string | null,
 ): boolean {

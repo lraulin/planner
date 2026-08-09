@@ -158,16 +158,27 @@ export function abbrStateColumn(today: string | null): ColumnDef<OutlineColumnCt
     filterKind: "enum",
     // Filters on the code, because that is what the cell shows and what stored filters
     // already match on; the set filter spells it out via `filterLabel`.
-    filterValue: (row) => STATE_CODES[stateOf(row.node)],
+    filterValue: (row) => {
+      const state = stateOf(row.node);
+      return state === null ? null : STATE_CODES[state];
+    },
     filterLabel: (code) => STATE_LABEL_BY_CODE[code] ?? code,
     // Workflow order (Not started → … → Proposed), not alphabetical on the enum key.
-    sortValue: (row) => stateRank(stateOf(row.node)),
-    render: (row, ctx) => (
-      <AbbrStateCell
-        state={stateOf(row.node)}
-        onChange={(state) => ctx.onStateChange(row.node, state)}
-      />
-    ),
+    sortValue: (row) => {
+      const state = stateOf(row.node);
+      return state === null ? null : stateRank(state);
+    },
+    render: (row, ctx) => {
+      const state = stateOf(row.node);
+      return state === null ? (
+        <ReadOnlyCell value="" />
+      ) : (
+        <AbbrStateCell
+          state={state}
+          onChange={(next) => ctx.onStateChange(row.node, next)}
+        />
+      );
+    },
   };
 }
 
@@ -222,16 +233,27 @@ export function stateColumn(today: string | null): ColumnDef<OutlineColumnCtx> {
     label: "State",
     width: "7rem",
     filterKind: "enum",
-    filterValue: (row) => STATE_LABELS[stateOf(row.node)],
+    filterValue: (row) => {
+      const state = stateOf(row.node);
+      return state === null ? null : STATE_LABELS[state];
+    },
     // Same rank as the abbreviated twin and as group-by-State — a state column is a
     // workflow, not a glossary.
-    sortValue: (row) => stateRank(stateOf(row.node)),
-    render: (row, ctx) => (
-      <StateCell
-        state={stateOf(row.node)}
-        onChange={(state) => ctx.onStateChange(row.node, state)}
-      />
-    ),
+    sortValue: (row) => {
+      const state = stateOf(row.node);
+      return state === null ? null : stateRank(state);
+    },
+    render: (row, ctx) => {
+      const state = stateOf(row.node);
+      return state === null ? (
+        <ReadOnlyCell value="" />
+      ) : (
+        <StateCell
+          state={state}
+          onChange={(next) => ctx.onStateChange(row.node, next)}
+        />
+      );
+    },
   };
 }
 
@@ -244,8 +266,13 @@ export function completedColumn(): ColumnDef<OutlineColumnCtx> {
     align: "center",
     filterKind: "enum",
     filterValue: (row) =>
-      row.node.state === "completed" ? "Completed" : "Not completed",
-    sortValue: (row) => (row.node.state === "completed" ? 1 : 0),
+      row.node.state === null
+        ? null
+        : row.node.state === "completed"
+          ? "Completed"
+          : "Not completed",
+    sortValue: (row) =>
+      row.node.state === null ? null : row.node.state === "completed" ? 1 : 0,
     compact: "hidden",
     render: (row) => (
       <ReadOnlyCell value={row.node.state === "completed" ? "✓" : ""} align="center" />
@@ -370,7 +397,7 @@ export function dateCompletedColumn(): ColumnDef<OutlineColumnCtx> {
     align: "right",
     filterKind: "date",
     filterValue: (row) => completedDateKey(row.node),
-    sortValue: (row) => row.node.dateCompleted?.getTime() ?? null,
+    sortValue: (row) => completedDateKey(row.node),
     compact: "hidden",
     render: (row) => (
       <ReadOnlyCell value={completedDateKey(row.node) ?? ""} align="right" />
@@ -379,6 +406,7 @@ export function dateCompletedColumn(): ColumnDef<OutlineColumnCtx> {
 }
 
 function completedDateKey(node: OutlineNode): string | null {
+  if (node.state === null) return null;
   if (!node.dateCompleted) return null;
   // Task `date_completed` is a calendar field; other types only have a true completion
   // instant, which belongs to the user's local day rather than its UTC date.
@@ -665,20 +693,30 @@ export function scheduleStatusColumn(
   statuses: ReadonlyMap<string, ScheduleStatus>,
   today: string | null,
 ): ColumnDef<OutlineColumnCtx> {
-  const statusFor = (node: OutlineNode) =>
-    statuses.get(node.id) ?? scheduleStatusForNode(node, today);
+  const statusFor = (node: OutlineNode): ScheduleStatus | null => {
+    if (node.state === null) return null;
+    return statuses.get(node.id) ?? scheduleStatusForNode(node, today);
+  };
 
   return {
     id: "status",
     label: "Status",
     width: "7.5rem",
     filterKind: "enum",
-    filterValue: (row) => STATUS_LABELS[statusFor(row.node)],
+    filterValue: (row) => {
+      const status = statusFor(row.node);
+      return status === null ? null : STATUS_LABELS[status];
+    },
     sortValue: (row) => statusFor(row.node),
     compact: "hidden",
-    render: (row, ctx) => (
-      <StatusCell node={row.node} today={ctx.today} status={statusFor(row.node)} />
-    ),
+    render: (row, ctx) => {
+      const status = statusFor(row.node);
+      return status === null ? (
+        <ReadOnlyCell value="" />
+      ) : (
+        <StatusCell node={row.node} today={ctx.today} status={status} />
+      );
+    },
   };
 }
 

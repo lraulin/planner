@@ -161,7 +161,8 @@ export function scheduleStatusForNode(
     "deadline" | "targetStart" | "targetEnd" | "state" | "shelf" | "priorityLetter"
   >,
   today: string | null,
-): ScheduleStatus {
+): ScheduleStatus | null {
+  if (node.state === null) return null;
   return scheduleStatus({
     deadline: node.deadline,
     targetStart: node.targetStart,
@@ -233,19 +234,24 @@ export function scheduleStatusById(
 
   const local = new Map<string, ScheduleStatus>();
   for (const n of nodes) {
-    local.set(n.id, scheduleStatusForNode(n, today));
+    const status = scheduleStatusForNode(n, today);
+    if (status !== null) local.set(n.id, status);
   }
 
   const result = new Map<string, ScheduleStatus>();
 
-  function visit(id: string): ScheduleStatus {
+  function visit(id: string): ScheduleStatus | null {
     const cached = result.get(id);
     if (cached) return cached;
 
-    let best = local.get(id) ?? "on_schedule";
+    const own = local.get(id);
+    // Result Areas deliberately terminate status rollup: their children keep their own
+    // statuses, but an enduring role never becomes Overdue because work beneath it did.
+    if (!own) return null;
+    let best = own;
     for (const childId of childIds.get(id) ?? []) {
       const childStatus = visit(childId);
-      if (PROPAGATES.has(childStatus)) {
+      if (childStatus !== null && PROPAGATES.has(childStatus)) {
         best = moreUrgent(best, childStatus);
       }
     }

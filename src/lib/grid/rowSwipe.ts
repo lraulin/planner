@@ -1,8 +1,6 @@
-"use client";
-
 import { isSettled } from "@/lib/tree/completionCascade";
-import type { GridCommandCapabilities } from "@/lib/grid/commandDeck";
-import type { RowSwipe } from "./CompactRow";
+import type { RowSwipe } from "@/components/grid/CompactRow";
+import type { GridCommandCapabilities } from "./commandDeck";
 
 /**
  * A row's swipe gestures, from the grid's own capabilities.
@@ -19,16 +17,21 @@ import type { RowSwipe } from "./CompactRow";
  * the whole selection when the row is part of one.
  *
  * A direction whose action the host does not offer is omitted, so a read-only view gets no
- * gesture rather than a rail that does nothing.
+ * gesture rather than a rail that does nothing. A Result Area can still be deleted, but its
+ * lifecycle refusal removes the right-hand Complete/Reopen rail.
  */
 export function rowSwipeFor(capabilities: GridCommandCapabilities): RowSwipe {
   const { actions, selection } = capabilities;
-  const id = selection?.id ?? null;
-  if (!id) return {};
-
+  if (!selection?.id) return {};
+  const id = selection.id;
   const swipe: RowSwipe = {};
 
-  if (actions.onSetState) {
+  if (
+    actions.onSetState &&
+    selection.state !== null &&
+    selection.state !== undefined &&
+    !selection.stateReason
+  ) {
     /*
      * Right completes — and completes *back*, which the menu's `Complete` deliberately does
      * not: it greys itself on a settled row, because a menu is a list of what you can do and
@@ -40,7 +43,7 @@ export function rowSwipeFor(capabilities: GridCommandCapabilities): RowSwipe {
      * ancestors to exactly that state. Two answers to one question is how a tree ends up
      * disagreeing with itself.
      */
-    const settled = selection?.state !== undefined && isSettled(selection.state);
+    const settled = isSettled(selection.state);
     swipe.right = {
       label: settled ? "Reopen" : "Complete",
       tone: "positive",

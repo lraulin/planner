@@ -13,6 +13,7 @@ import {
   removePriorityGaps,
   reprioritizeUnique,
   setPriority,
+  setState,
 } from "./mutations";
 
 const reachable = await databaseReachable();
@@ -166,6 +167,37 @@ describeDb("shared command mutations", () => {
       .from(goalDetails)
       .where(eq(goalDetails.nodeId, goal));
     expect(backToGoal.isDream).toBe(false);
+  });
+
+  it("clears lifecycle data when converting to a Result Area and initializes it on exit", async () => {
+    const project = await createNode({
+      userId,
+      parentId: null,
+      type: "project",
+      name: "Long-running concern",
+    });
+    await setState(userId, project, "completed");
+    await saveNodeDetail(userId, project, {
+      deferredDate: fromDateKey("2027-02-15"),
+    });
+
+    await convertNode(userId, project, "result_area");
+    let [row] = await db.select().from(nodes).where(eq(nodes.id, project));
+    expect(row).toMatchObject({
+      type: "result_area",
+      state: null,
+      completedAt: null,
+      deferredDate: null,
+    });
+
+    await convertNode(userId, project, "project");
+    [row] = await db.select().from(nodes).where(eq(nodes.id, project));
+    expect(row).toMatchObject({
+      type: "project",
+      state: "not_started",
+      completedAt: null,
+      deferredDate: null,
+    });
   });
 
   it("does not let another user read, mutate, convert, or delete the first user's node", async () => {

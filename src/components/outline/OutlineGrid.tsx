@@ -80,12 +80,13 @@ import { owningProjectId } from "@/lib/tree/owningProject";
 import { nodeDeleteMessage, nodeDeleteTitle } from "@/lib/tree/deleteMessage";
 import { type GridCommandCapabilities } from "@/lib/grid/commandDeck";
 import { rowMenuFor } from "@/components/grid/rowMenu";
-import { rowSwipeFor } from "@/components/grid/rowSwipe";
+import { rowSwipeFor } from "@/lib/grid/rowSwipe";
 import type { RowSwipe } from "@/components/grid/CompactRow";
 import { pasteMoves, pasteRefusal } from "@/lib/grid/rowClipboard";
 import { useRowClipboard } from "@/components/grid/RowClipboardProvider";
 import { planNodeConversion, type ConversionPlan } from "@/lib/tree/conversion";
 import { depthForOutlineLevel } from "@/lib/tree/outlineLevel";
+import { lifecycleStateRefusal } from "@/lib/tree/lifecycle";
 
 /**
  * Achieve's Areas and Goals checkboxes: **on means the level exists.** Turning one off
@@ -128,7 +129,7 @@ function viewDefaults(): GridDefaults {
      * chip bar, `Clear all` removes it, and `Reset this grid` brings it back. That is the
      * whole difference between a default and a mode.
      */
-    filters: openStateFilters("state", "label"),
+    filters: openStateFilters("state", "label", { includeBlanks: true }),
   };
 }
 
@@ -471,6 +472,15 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         ? nodes.filter((entry) => entry.parentId === node.parentId)
         : [];
       const index = node ? siblings.findIndex((entry) => entry.id === node.id) : -1;
+      const selectionIds = selectedIds.has(id ?? "")
+        ? selectionMoveRoots(
+            selectedIds,
+            orderedIds,
+            (entry) => byId.get(entry)?.parentId ?? null,
+          )
+        : id
+          ? [id]
+          : [];
 
       return {
         createKinds: ["result_area", "goal", "dream", "project", "task"],
@@ -497,20 +507,18 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
           label: node?.name ?? null,
           kind: node ? kindOfNode(node) : undefined,
           state: node?.state,
+          stateReason: lifecycleStateRefusal(
+            selectionIds.flatMap((entry) => {
+              const type = byId.get(entry)?.type;
+              return type ? [type] : [];
+            }),
+          ),
           projectId: owningProjectId(nodes, id),
           hasTasks: node?.hasChildren === true,
           // Roots only: a child selected alongside its parent is already inside that parent's
           // branch, so deleting both would delete it twice and count it twice in the warning.
           // Same reduction the multi-row drag uses.
-          ids: selectedIds.has(id ?? "")
-            ? selectionMoveRoots(
-                selectedIds,
-                orderedIds,
-                (entry) => byId.get(entry)?.parentId ?? null,
-              )
-            : id
-              ? [id]
-              : [],
+          ids: selectionIds,
           canMoveUp: index > 0,
           canMoveDown: index >= 0 && index < siblings.length - 1,
           canIndent: index > 0,

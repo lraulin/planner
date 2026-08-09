@@ -8,6 +8,7 @@
 import { captureItems } from "@/lib/capture/mutations";
 import { saveNodeDetail } from "@/lib/detail/mutations";
 import { loadNodeDetail } from "@/lib/detail/queries";
+import type { NodeDetailPatch } from "@/lib/detail/types";
 import { getWeeklyPlan } from "@/lib/planning/queries";
 import { loadSchedule } from "@/lib/schedule/queries";
 import { startOfWeek, toDateKey } from "@/lib/schedule/geometry";
@@ -30,6 +31,20 @@ import {
 } from "./parse";
 import { filterOutline, type SearchNodesFilter } from "./search";
 import { buildPathMap, iso, nodeDetailForAgent, nodeSummary } from "./serialize";
+import { RESULT_AREA_STATE_REFUSAL } from "@/lib/tree/lifecycle";
+
+function assertResultAreaLifecyclePatch(
+  type: "result_area" | "goal" | "project" | "task",
+  patch: NodeDetailPatch,
+): void {
+  if (type !== "result_area") return;
+  if (patch.state !== undefined && patch.state !== null) {
+    throw new AgentError("validation", RESULT_AREA_STATE_REFUSAL);
+  }
+  if (patch.deferredDate != null) {
+    throw new AgentError("validation", "Result Areas cannot be postponed");
+  }
+}
 
 export async function getContext(userId: string, args: Record<string, unknown>) {
   const weekStartsOn = optionalNumber(args, "weekStartsOn") ?? 0;
@@ -141,6 +156,8 @@ export async function createNodeTool(userId: string, args: Record<string, unknow
   // Full form fields (notes, purpose, dates, …) go through the same allowlisted save as
   // the drawer. Type / parentId only apply at create time.
   const patch = parseNodeDetailPatch(stripCreateOnlyArgs(args));
+  // Validate before insertion so a rejected create cannot leave an empty Result Area behind.
+  assertResultAreaLifecyclePatch(type, patch);
   // Name is also passed into createNode so the row is not briefly untitled if the patch
   // write fails; saveNodeDetail will re-apply it when present.
   const id = await createNode({
@@ -203,9 +220,10 @@ export async function captureTool(userId: string, args: Record<string, unknown>)
 export async function updateNodeTool(userId: string, args: Record<string, unknown>) {
   const id = requireString(args, "id");
   // Prove ownership first so a missing id is `not_found` before we parse a large patch.
-  await getNode(userId, { id });
+  const current = await getNode(userId, { id });
 
   const patch = parseNodeDetailPatch(stripCreateOnlyArgs(args));
+  assertResultAreaLifecyclePatch(current.node.type, patch);
   if (detailPatchHasWrites(patch)) {
     await saveNodeDetail(userId, id, patch);
   }

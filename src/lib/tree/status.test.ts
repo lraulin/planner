@@ -191,12 +191,29 @@ describe("scheduleStatusById — propagation", () => {
     // Parent has no dates of its own and no propagating child status.
     expect(map.get("p")).toBe("not_scheduled");
   });
+
+  it("does not calculate or roll child status into a Result Area", () => {
+    const nodes = derive([
+      row({ id: "ra", type: "result_area", state: null, deadline: day(-5) }),
+      row({ id: "p", type: "project", parentId: "ra", deadline: day(-1) }),
+    ]);
+    const map = scheduleStatusById(nodes, TODAY);
+    expect(map.has("ra")).toBe(false);
+    expect(map.get("p")).toBe("overdue");
+  });
 });
 
 describe("scheduleStatusForNode", () => {
   it("reads dates off the outline node", () => {
     const [node] = derive([row({ id: "t", type: "task", targetStart: day(-1) })]);
     expect(scheduleStatusForNode(node, TODAY)).toBe("behind_schedule");
+  });
+
+  it("returns no status for a Result Area even when it has dates", () => {
+    const [node] = derive([
+      row({ id: "ra", type: "result_area", state: null, deadline: day(-1) }),
+    ]);
+    expect(scheduleStatusForNode(node, TODAY)).toBeNull();
   });
 });
 

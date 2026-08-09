@@ -2,6 +2,7 @@ import type { NodeState } from "@/db/schema";
 import { STATE_CODES, STATE_LABELS } from "@/lib/tree/hierarchy";
 import { isSettled } from "@/lib/tree/completionCascade";
 import { optionsFilter, type ColumnFilter } from "./customFilter";
+import { BLANKS_OPTION_ID } from "./setFilter";
 
 /**
  * The State filters a view opens with, built the way the user would build them.
@@ -44,8 +45,11 @@ export function encodeState(state: NodeState, encoding: StateEncoding): string {
 export function stateFilter(
   states: readonly NodeState[],
   encoding: StateEncoding,
+  options: { includeBlanks?: boolean } = {},
 ): ColumnFilter {
-  return optionsFilter(states.map((state) => `value:${encodeState(state, encoding)}`));
+  const ids = states.map((state) => `value:${encodeState(state, encoding)}`);
+  if (options.includeBlanks) ids.push(BLANKS_OPTION_ID);
+  return optionsFilter(ids);
 }
 
 /**
@@ -55,8 +59,9 @@ export function stateFilter(
 export function openStateFilters(
   columnId: string,
   encoding: StateEncoding,
+  options: { includeBlanks?: boolean } = {},
 ): Record<string, ColumnFilter> {
-  return { [columnId]: stateFilter(OPEN_STATES, encoding) };
+  return { [columnId]: stateFilter(OPEN_STATES, encoding, options) };
 }
 
 /** The mirror image: a "Completed" view. Cancelled counts, for the reason `isSettled` says. */

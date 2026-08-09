@@ -15,6 +15,7 @@ import { ConversionDialog } from "@/components/outline/ConversionDialog";
 import { nodeDeleteMessage, nodeDeleteTitle } from "@/lib/tree/deleteMessage";
 import { NODE_KINDS, kindOfNode, type NodeKind } from "@/lib/tree/hierarchy";
 import { owningProjectId } from "@/lib/tree/owningProject";
+import { lifecycleStateRefusal } from "@/lib/tree/lifecycle";
 import { selectionMoveRoots } from "@/lib/grid/selection";
 import { pasteMoves, pasteRefusal } from "@/lib/grid/rowClipboard";
 import { useRowClipboard } from "./RowClipboardProvider";
@@ -26,7 +27,7 @@ import type { CreateMode, GridCommandCapabilities } from "@/lib/grid/commandDeck
 import type { MenuItem } from "./ContextMenu";
 import type { RowSwipe } from "./CompactRow";
 import { rowMenuFor } from "./rowMenu";
-import { rowSwipeFor } from "./rowSwipe";
+import { rowSwipeFor } from "@/lib/grid/rowSwipe";
 
 /** Shared non-structural commands for list views that are projections of the outline. */
 export function useNodeCommandDeck({
@@ -214,6 +215,19 @@ export function useNodeCommandDeck({
   const capabilitiesFor = useCallback(
     (id: string | null, count: number): GridCommandCapabilities => {
       const node = id ? (byId.get(id) ?? null) : null;
+      const selectionIds =
+        id && selectedIds.has(id)
+          ? selectionMoveRoots(
+              selectedIds,
+              // Tree order rather than screen order. These tabs re-base depth and filter
+              // rows, so the on-screen list is not the tree — but roots are a property of
+              // ancestry, and the full tree contains every selected id whatever the view.
+              nodes.map((entry) => entry.id),
+              (entry) => byId.get(entry)?.parentId ?? null,
+            )
+          : id
+            ? [id]
+            : [];
       return {
         createKinds,
         createChild,
@@ -238,26 +252,19 @@ export function useNodeCommandDeck({
           label: node?.name ?? null,
           kind: node ? kindOfNode(node) : undefined,
           state: node?.state,
+          stateReason: lifecycleStateRefusal(
+            selectionIds.flatMap((entry) => {
+              const type = byId.get(entry)?.type;
+              return type ? [type] : [];
+            }),
+          ),
           projectId: owningProjectId(nodes, id),
           // `hasChildren` is the honest proxy: if nothing is filed under this row there are no
           // tasks to scope to, whatever level the row sits at.
           hasTasks: node?.hasChildren === true,
           // Roots only: a child selected alongside its parent is already inside that parent's
           // branch, so deleting both would delete it twice and count it twice in the warning.
-          ids:
-            id && selectedIds.has(id)
-              ? selectionMoveRoots(
-                  selectedIds,
-                  // Tree order rather than screen order. These tabs re-base depth and filter
-                  // rows, so the on-screen list is not the tree — but the roots are a property
-                  // of ancestry, and the full tree is the one ordering that contains every
-                  // selected id whatever the view is showing.
-                  nodes.map((entry) => entry.id),
-                  (entry) => byId.get(entry)?.parentId ?? null,
-                )
-              : id
-                ? [id]
-                : [],
+          ids: selectionIds,
         },
         actions: {
           ...actions,

@@ -1,4 +1,4 @@
-import type { NodeType, ProgressReview } from "@/db/schema";
+import type { NodeState, NodeType, ProgressReview } from "@/db/schema";
 import {
   encodeEffortFromMinutes,
   encodePercentComplete,
@@ -21,7 +21,7 @@ export type ExportOutlineRow = {
   priorityRank: AchPriority["rank"];
   tcPriorityLetter: AchPriority["letter"];
   tcPriorityRank: AchPriority["rank"];
-  state: Parameters<typeof encodeStatus>[0];
+  state: Parameters<typeof encodeStatus>[0] | null;
   focus: boolean;
   collapsed: boolean;
   notes: string;
@@ -82,6 +82,15 @@ export type ExportMetricEntryRow = {
   target: number | null;
   value: number;
 };
+
+function requiredState(row: ExportOutlineRow): NodeState {
+  if (row.state === null) {
+    throw new Error(
+      `${row.type} "${row.name}" violates the lifecycle-state invariant.`,
+    );
+  }
+  return row.state;
+}
 
 export type ExportResult = {
   xml: string;
@@ -244,7 +253,7 @@ export function buildAchieveXml(
         Priority: String(
           encodePriority({ letter: row.priorityLetter, rank: row.priorityRank }),
         ),
-        Status: String(encodeStatus(row.state)),
+        Status: String(encodeStatus(requiredState(row))),
         IsCompleted: completed ? "true" : "false",
         DateCompleted: completed ? formatAchDate(row.completedAt) : undefined,
         Deadline: formatAchDate(row.deadline),
@@ -287,7 +296,7 @@ export function buildAchieveXml(
         Purpose: row.purpose,
         ParentProjectId: parentProject,
         Expanded: row.collapsed ? "false" : "true",
-        Status: String(encodeStatus(row.state)),
+        Status: String(encodeStatus(requiredState(row))),
         PercentCompleted: String(
           encodePercentComplete(row.percentComplete ?? (completed ? 100 : 0)),
         ),
@@ -346,7 +355,7 @@ export function buildAchieveXml(
         Description: row.description ?? "",
         ParentTaskId: parentTask,
         Expanded: row.collapsed ? "false" : "true",
-        Status: String(encodeStatus(row.state)),
+        Status: String(encodeStatus(requiredState(row))),
         PercentCompleted: String(
           encodePercentComplete(row.percentComplete ?? (completed ? 100 : 0)),
         ),

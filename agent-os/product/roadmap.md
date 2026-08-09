@@ -27,9 +27,11 @@ The core Achieve Planner loop — plan the week, block the time, work the outlin
   tree set on the Outline, open/rename on Projects / Tasks / Goals, open owner on Wish
   List. Its three deferrals — Priority/State submenus and multi-select actions — closed under
   "Right-click completion" below; `Shift+F10` is still out.
-- **✅ Priorities & scheduling fields.** Priority (A/B/C/D + rank), deadline, state, focus,
-  effort (with rollups). Effort Left, Actual Effort, and % complete editable in the Task
-  form (`specs/2026-07-27-1318-per-type-detail-forms`).
+- **✅ Priorities & scheduling fields.** Priority (A/B/C/D + rank), deadline, focus, effort
+  (with rollups), plus lifecycle state for Goals, Projects, and Tasks. Result Areas are
+  enduring roles and deliberately have no state (see the delta below). Effort Left, Actual
+  Effort, and % complete are editable in the Task form
+  (`specs/2026-07-27-1318-per-type-detail-forms`).
 - **✅ Per-type detail forms.** Same spec — Result Area / Goal / Project / Task drawers at
   Achieve parity for the in-scope fields and 24 repeating child lists. Recurrence,
   templates, labels, resource pools, file upload, and the welcome wizard stayed out of
@@ -105,6 +107,11 @@ The core Achieve Planner loop — plan the week, block the time, work the outlin
   history into notes, and Resources supplies an editable weekly capacity budget. File
   Organizer and Life Plan are permanently out: the former needs file storage, and the latter
   is already a better note.
+- **✅ Result Areas without lifecycle state.**
+  `specs/2026-08-09-0915-result-areas-without-state`. Result Areas now model enduring roles
+  directly: state, completion, postponement, and derived Status are absent. Shared Outline
+  lifecycle columns leave their cells blank, lifecycle commands explain why they are
+  disabled, and the dedicated Result Areas module has no lifecycle controls.
 
 ### Still in Phase 1
 
@@ -189,8 +196,9 @@ Features that complete or surround the original product, plus making it multi-de
   `deferred`) live on `nodes` so projects can be shelved; a CHECK forbids a plan before
   availability; shelving inherits down the tree at read time; day lines suppress only while
   the planned day falls inside the shelf; state and dates couple both ways (including
-  backdated completions). Grids' "Postponed" toggle defaults to showing and is persisted.
-  Follow-ups: grid states-list like the Chooser; project recurrence.
+  backdated completions). Applicable grids' "Postponed" toggle defaults to showing and is
+  persisted; Result Areas have no shelving lifecycle. Follow-ups: grid states-list like the
+  Chooser; project recurrence.
 - **✅ Navigation & command surface.**
   `specs/2026-08-05-0838-navigation-and-command-surface`. The eleven-tab strip is gone,
   replaced by a grouped, collapsible **sidebar** (Plan / Do / Track, with Library reserved)

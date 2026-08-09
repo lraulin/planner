@@ -20,7 +20,9 @@ export type GridSelectionCapability = {
   label?: string | null;
   kind?: NodeKind;
   /** Where the row sits now, so `Complete` can grey itself on a row that already is. */
-  state?: NodeState;
+  state?: NodeState | null;
+  /** Specific reason lifecycle commands cannot act on this selection. */
+  stateReason?: string | null;
   /**
    * The project this row belongs to, for `View project…`. Stated by the host because only it
    * knows how its rows relate to the tree — the Chooser's rows are tasks under projects, the
@@ -355,6 +357,7 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
   }
   if (actions.onSetState) {
     const settled = selection?.state === "completed";
+    const stateReason = selection?.stateReason ?? null;
     out.push(
       command({
         id: "record.complete",
@@ -368,8 +371,10 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
         // than a value in the picker below.
         bindings: [{ key: "l", ctrl: true }],
         keywords: "done finish tick",
-        disabled: !hasSelection || settled,
-        title: settled ? "Already completed" : selectionTitle,
+        disabled: !hasSelection || stateReason !== null || settled,
+        title: !hasSelection
+          ? selectionTitle
+          : (stateReason ?? (settled ? "Already completed" : undefined)),
         run: () => actions.onSetState?.(targetIds, "completed"),
       }),
     );
@@ -387,11 +392,13 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
           icon: "state",
           rowMenu: true,
           keywords: "state status mark",
-          disabled: !hasSelection || selection?.state === state,
-          title:
-            selection?.state === state
-              ? `Already ${STATE_LABELS[state].toLowerCase()}`
-              : selectionTitle,
+          disabled: !hasSelection || stateReason !== null || selection?.state === state,
+          title: !hasSelection
+            ? selectionTitle
+            : (stateReason ??
+              (selection?.state === state
+                ? `Already ${STATE_LABELS[state].toLowerCase()}`
+                : undefined)),
           run: () => actions.onSetState?.(targetIds, state),
         }),
       );

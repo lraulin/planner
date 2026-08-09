@@ -44,7 +44,7 @@ export function ResultAreasStep({ ctx, onFocus, onMission }: Props) {
   if (areas.length === 0) {
     return (
       <div className="p-6 text-[0.875rem] text-ink-muted">
-        No open Result Areas to review. Add one on the Outline, then come back.
+        No Result Areas to review. Add one on the Outline, then come back.
       </div>
     );
   }

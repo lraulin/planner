@@ -31,6 +31,21 @@ describe("node conversion planner", () => {
       position: { at: "after", siblingId: "project" },
     });
     expect(plan.discardedFields).toContain("recurrence");
+    expect(plan.discardedFields).toEqual(
+      expect.arrayContaining(["state", "deferred date", "completion time"]),
+    );
+    expect(plan.lifecycleChange).toContain("will be cleared");
+  });
+
+  it("explains that conversion out of a Result Area initializes state", () => {
+    const plan = planNodeConversion({
+      nodeId: "area",
+      sourceKind: "result_area",
+      targetKind: "project",
+      nodes: [{ id: "area", parentId: null, type: "result_area", name: "Work" }],
+    });
+    expect(plan.lifecycleChange).toBe("State will be initialized to Not started.");
+    expect(plan.retainedFields).not.toContain("state");
   });
 
   it("blocks a conversion when a direct child would become illegal", () => {

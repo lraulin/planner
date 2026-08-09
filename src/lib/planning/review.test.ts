@@ -30,10 +30,10 @@ describe("isAtLeastPriority", () => {
 });
 
 describe("selectResultAreasForReview", () => {
-  it("lists open result areas in outline order and nothing else", () => {
+  it("lists every result area in outline order and nothing else", () => {
     const nodes = tree([
-      row({ id: "a", type: "result_area", name: "Career", sortKey: "V" }),
-      row({ id: "b", type: "result_area", name: "Health", sortKey: "W" }),
+      row({ id: "a", type: "result_area", name: "Career", sortKey: "V", state: null }),
+      row({ id: "b", type: "result_area", name: "Health", sortKey: "W", state: null }),
       row({ id: "c", type: "goal", parentId: "a", sortKey: "V" }),
     ]);
     expect(selectResultAreasForReview(nodes).map((n) => n.name)).toEqual([
@@ -42,16 +42,20 @@ describe("selectResultAreasForReview", () => {
     ]);
   });
 
-  it("drops a completed area from the weekly walk-through", () => {
-    const nodes = tree([
-      row({ id: "a", type: "result_area", name: "Career", state: "completed" }),
-    ]);
-    expect(selectResultAreasForReview(nodes)).toHaveLength(0);
+  it("does not require a lifecycle state for the weekly walk-through", () => {
+    const nodes = tree([row({ id: "a", type: "result_area", state: null })]);
+    expect(selectResultAreasForReview(nodes)).toHaveLength(1);
   });
 
   it("keeps an unprioritised area — that is the one worth being asked about", () => {
     const nodes = tree([
-      row({ id: "a", type: "result_area", name: "Career", priorityLetter: null }),
+      row({
+        id: "a",
+        type: "result_area",
+        name: "Career",
+        priorityLetter: null,
+        state: null,
+      }),
     ]);
     expect(selectResultAreasForReview(nodes)).toHaveLength(1);
   });

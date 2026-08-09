@@ -614,6 +614,26 @@ describe("sliceTree — group by row fields", () => {
     ]);
   });
 
+  it("puts state-less Result Areas in the final No State group", () => {
+    const nodes = tree(
+      { id: "ra", type: "result_area", name: "Health", state: null },
+      {
+        id: "p",
+        type: "project",
+        parentId: "ra",
+        depth: 1,
+        name: "Run a race",
+      },
+    );
+    const rows = sliceTree(nodes, {
+      keep: () => true,
+      groupBy: ["state"],
+      includeDeferred: true,
+      today: TODAY,
+    });
+    expect(groups(rows).map((g) => g.label)).toEqual(["Not started", "(No State)"]);
+  });
+
   /**
    * Rank is ignored on purpose. Grouping by A1, A2, A3 would give one header per row, which
    * is not grouping at all.

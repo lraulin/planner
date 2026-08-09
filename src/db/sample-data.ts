@@ -12,6 +12,7 @@ import {
 import type { NodeType } from "./schema";
 import { parsePriority } from "@/lib/tree/format";
 import { assertCanNest } from "@/lib/tree/hierarchy";
+import { initialStateForType } from "@/lib/tree/lifecycle";
 import { between } from "@/lib/tree/sortKey";
 
 /**
@@ -245,6 +246,7 @@ async function insertLevel(
         userId,
         parentId,
         type: item.type,
+        state: initialStateForType(item.type),
         name: item.name,
         sortKey,
         priorityLetter: letter,

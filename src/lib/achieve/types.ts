@@ -35,7 +35,8 @@ export type AchMappedNode = {
   ordinal: number;
   priority: AchPriority;
   tcPriority: AchPriority;
-  state: NodeState;
+  /** Result Areas have no lifecycle state; every other mapped node has one. */
+  state: NodeState | null;
   focus: boolean;
   collapsed: boolean;
   notes: string;
