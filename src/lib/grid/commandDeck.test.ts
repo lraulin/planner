@@ -1,12 +1,28 @@
 import { describe, expect, it } from "vitest";
 import { buildGridCommands } from "./commandDeck";
-import { formatBindings } from "@/lib/commands/bindings";
+import {
+  formatBindings,
+  matchBindings,
+  type KeyEventLike,
+} from "@/lib/commands/bindings";
 import {
   buildMenus,
+  commandOrder,
   rowMenuSections,
   toolbarCommands,
   toolbarSegments,
 } from "@/lib/commands/menus";
+
+function press(key: string, held: Partial<KeyEventLike> = {}): KeyEventLike {
+  return {
+    key,
+    metaKey: false,
+    ctrlKey: false,
+    altKey: false,
+    shiftKey: false,
+    ...held,
+  };
+}
 
 describe("grid command deck", () => {
   it("keeps selection commands visible but explains why they are disabled", () => {
@@ -473,6 +489,35 @@ describe("grid command deck", () => {
     expect(printed.get("grid.create.after")).toBe("Insert");
     expect(printed.get("grid.create.child")).toBe("⌃Insert");
     expect(printed.get("record.expand-collapse")).toBe("→");
+  });
+
+  /*
+   * ⌘⏎ is the Mac stand-in for Insert. CommandKeys runs the first matching binding once.
+   * The Outline used to also fire create-after from its own document listener, so one chord
+   * created two rows. One owner, one create — if a second command ever also matches ⌘⏎,
+   * this is the test that fails before another host reintroduces the double.
+   */
+  it("gives ⌘⏎ to exactly one create-after command", () => {
+    const creates: string[] = [];
+    const commands = buildGridCommands({
+      createKinds: ["task"],
+      hierarchy: true,
+      selection: { id: "task-1" },
+      actions: {
+        onCreate: (_kind, mode) => {
+          creates.push(mode);
+        },
+        onOpen: () => {},
+      },
+    });
+
+    const chord = press("Enter", { metaKey: true });
+    const matches = commandOrder(commands).filter((entry) =>
+      matchBindings(chord, entry.bindings),
+    );
+    expect(matches.map((entry) => entry.id)).toEqual(["grid.create.after"]);
+    matches[0]?.run();
+    expect(creates).toEqual(["after"]);
   });
 
   // `canCollapse` means the row is currently expanded, so the useful verb is Collapse.

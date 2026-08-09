@@ -74,7 +74,8 @@ import {
   OUTLINE_COLUMN_IDS,
   type OutlineColumnCtx,
 } from "./outlineColumns";
-import { isTypingTarget } from "@/lib/keyboard";
+import { isModalOpen, isTypingTarget } from "@/lib/keyboard";
+import { useSuspendCommandKeys } from "@/components/shell/CommandProvider";
 import { zoomBranch, zoomOutRoot } from "@/lib/tree/zoom";
 import { owningProjectId } from "@/lib/tree/owningProject";
 import { nodeDeleteMessage, nodeDeleteTitle } from "@/lib/tree/deleteMessage";
@@ -279,8 +280,6 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     if (detailId) selectOne(detailId);
   }
 
-  const selected = selectedId ? (byId.get(selectedId) ?? null) : null;
-
   const conversionPlan = useMemo<ConversionPlan | null>(() => {
     if (!pendingConversion) return null;
     const source = byId.get(pendingConversion.nodeId);
@@ -420,43 +419,6 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   );
 
   /**
-   * The tree commands, bound to whichever node they are asked about. The keyboard and
-   * toolbar bind them to the selection; the right-click menu binds them to the row that was
-   * clicked, which is not always the same thing at the moment the menu opens.
-   */
-  const commandsFor = useCallback(
-    (node: OutlineNode | null) => ({
-      addSiblingAfter: () => addSibling(node, "after"),
-      addSiblingBefore: () => addSibling(node, "before"),
-      addChild: () => addChild(node),
-      indent: () => node && apply(() => indentNodeAction(node.id)),
-      outdent: () => node && apply(() => outdentNodeAction(node.id)),
-      moveUp: () => node && apply(() => moveNodeVerticallyAction(node.id, "up")),
-      moveDown: () => node && apply(() => moveNodeVerticallyAction(node.id, "down")),
-      remove: () => node && setPendingDelete([node]),
-      rename: () => node && setEditingId(node.id),
-      openDetail: () => node && setDetailId(node.id),
-      collapse: () => node && toggleCollapsed(node, true),
-      expand: () => node && toggleCollapsed(node, false),
-    }),
-    [addSibling, addChild, apply, toggleCollapsed, setDetailId],
-  );
-
-  const commands = useMemo(
-    () => ({
-      ...commandsFor(selected),
-      selectUp: () => move(-1, false),
-      selectDown: () => move(1, false),
-      extendUp: () => move(-1, true),
-      extendDown: () => move(1, true),
-      copyAsText: copySelectionAsText,
-      collapseAll: () => setTreeCollapsed(true),
-      expandAll: () => setTreeCollapsed(false),
-    }),
-    [commandsFor, selected, move, copySelectionAsText, setTreeCollapsed],
-  );
-
-  /**
    * Everything the command surfaces can do, stated for **one particular row**.
    *
    * Parameterised rather than closed over the selection, because the toolbar and the row menu
@@ -464,6 +426,9 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
    * event, so the registered commands still describe the previous selection when the menu opens.
    * `useNodeCommandDeck` has had this shape all along; the Outline is the last host to adopt it,
    * and it is what finally gets Convert to, Priority and Zoom onto its right-click menu.
+   *
+   * Insert / open / rename / delete / move / indent / expand are commands with `bindings` —
+   * `CommandKeys` fires them. This host only keeps selection navigation (arrows).
    */
   const capabilitiesFor = useCallback(
     (id: string | null, count: number): GridCommandCapabilities => {
@@ -646,14 +611,17 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     [capabilitiesFor, selectedId, selectedIds.size],
   );
 
-  const suspended =
-    detailId !== null ||
-    pendingDelete.length > 0 ||
-    pendingChildOf !== null ||
-    pendingConversion !== null ||
-    zoomPickerOpen ||
-    expandLevelPickerOpen;
-  useOutlineKeyboard({ commands, editingId, suspended });
+  /*
+   * Selection navigation only. Insert (⌘⏎), Enter, F2, Delete, Tab, ⌥↑/↓, collapse and the
+   * rest used to live in a second `document` listener here; after the command surface work
+   * they are also `bindings` on registered commands, so both listeners fired and ⌘⏎ created
+   * two rows. Notes / list tabs already dropped the command half — the Outline was the hold-out.
+   *
+   * Dialogs are `role="dialog"` / `alertdialog`, so `isModalOpen` covers them. The inline
+   * rename is not, so it suspends the dispatcher the same way the other grids do.
+   */
+  useSuspendCommandKeys(editingId !== null);
+  useOutlineSelectionKeys({ move, editingId });
 
   /**
    * Right-click menu, built from the registry for *this* row.
@@ -1036,105 +1004,40 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
 }
 
 /**
- * Keyboard control. Achieve's bindings, with Cmd+Return standing in for Insert — Apple
- * keyboards have no Insert key, but Insert still works for anyone with one.
+ * Selection navigation for the outline.
  *
  * Bound to the document rather than the grid: the outline is the whole page, so arrows
- * and inserts should work immediately instead of requiring a click to focus the list
- * first. Anything typed into a field is left alone.
+ * should work immediately instead of requiring a click to focus the list first. Anything
+ * typed into a field is left alone. Command chords (Insert, ⌘⏎, Enter, Tab, …) belong to
+ * `CommandKeys` — keeping a second copy here was what made ⌘⏎ create two rows.
  */
-function useOutlineKeyboard({
-  commands,
+function useOutlineSelectionKeys({
+  move,
   editingId,
-  suspended,
 }: {
-  commands: Record<string, () => void>;
+  move: (delta: number, extend: boolean) => void;
   editingId: string | null;
-  suspended: boolean;
 }) {
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (editingId || suspended) return;
-
+      if (editingId) return;
+      if (isModalOpen()) return;
       if (isTypingTarget(event.target)) return;
+      // ⌥↑/↓ is Move up / Move down — a registered command. Leave it for the dispatcher.
+      if (event.altKey) return;
 
-      const insert = event.key === "Insert" || (event.key === "Enter" && event.metaKey);
-
-      if (insert) {
+      if (event.key === "ArrowUp") {
         event.preventDefault();
-        if (event.ctrlKey) commands.addChild();
-        else if (event.shiftKey) commands.addSiblingBefore();
-        else commands.addSiblingAfter();
-        return;
-      }
-
-      if (
-        (event.metaKey || event.ctrlKey) &&
-        !event.altKey &&
-        (event.key === "c" || event.key === "C")
-      ) {
-        // Copy selected rows as indented plain text. The browser's own copy still wins
-        // inside a field (isTypingTarget above); here the grid owns the clipboard.
+        move(-1, event.shiftKey);
+      } else if (event.key === "ArrowDown") {
         event.preventDefault();
-        commands.copyAsText();
-        return;
-      }
-
-      switch (event.key) {
-        case "ArrowUp":
-          event.preventDefault();
-          if (event.altKey) commands.moveUp();
-          else if (event.shiftKey) commands.extendUp();
-          else commands.selectUp();
-          break;
-        case "ArrowDown":
-          event.preventDefault();
-          if (event.altKey) commands.moveDown();
-          else if (event.shiftKey) commands.extendDown();
-          else commands.selectDown();
-          break;
-        case "ArrowLeft":
-          event.preventDefault();
-          if (event.metaKey || event.ctrlKey) {
-            if (typeof commands.collapseAll === "function") commands.collapseAll();
-            else commands.collapse();
-          } else {
-            commands.collapse();
-          }
-          break;
-        case "ArrowRight":
-          event.preventDefault();
-          if (event.metaKey || event.ctrlKey) {
-            if (typeof commands.expandAll === "function") commands.expandAll();
-            else commands.expand();
-          } else {
-            commands.expand();
-          }
-          break;
-        case "Tab":
-          event.preventDefault();
-          if (event.shiftKey) commands.outdent();
-          else commands.indent();
-          break;
-        case "Enter":
-          event.preventDefault();
-          commands.openDetail();
-          break;
-        case "F2":
-          event.preventDefault();
-          commands.rename();
-          break;
-        case "Delete":
-        case "Backspace":
-          event.preventDefault();
-          commands.remove();
-          break;
+        move(1, event.shiftKey);
       }
     }
 
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [commands, editingId, suspended]);
+  }, [move, editingId]);
 }
 
 function Command({
