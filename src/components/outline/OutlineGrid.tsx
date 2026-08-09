@@ -50,10 +50,11 @@ import { DataGrid, type RowDrag } from "@/components/grid/DataGrid";
 import { type MenuItem } from "@/components/grid/ContextMenu";
 import type { GridDefaults } from "@/components/grid/useGridState";
 import { useModuleViews } from "@/components/grid/useModuleViews";
-import { GridToolbar, switchValue } from "@/components/grid/GridToolbar";
+import { GridToolbar } from "@/components/grid/GridToolbar";
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import { openStateFilters } from "@/lib/grid/stateFilters";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
+import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { useOptimisticNodes } from "@/components/grid/useOptimisticNodes";
 import { useStateChange } from "@/components/grid/useStateChange";
 import { useToday } from "@/components/grid/useToday";
@@ -173,17 +174,23 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   });
   const gridState = views.grid;
   const { sort: headerSort, clearSort: clearHeaderSort } = gridState;
+  // `useGridState` returns a fresh object every render. Depend on the stable pieces it
+  // memoises inside, not on `gridState` itself — a Set rebuilt every render was cascading
+  // into `visible` → `navigable` → `copySelectionAsText` → command re-registration until
+  // React hit max update depth and the sidebar stopped navigating.
+  const switches = gridState.switches;
+  const collapsedGroups = gridState.collapsedGroups;
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
   const [groupIds, setGroupIds] = useState<readonly string[]>([]);
 
   const hiddenLevels = useMemo(
     () =>
       new Set(
-        LEVEL_SWITCHES.filter((entry) => !switchValue(gridState, entry)).map(
-          (entry) => entry.level,
-        ),
+        LEVEL_SWITCHES.filter(
+          (entry) => !(switches[entry.id] ?? entry.defaultOn ?? false),
+        ).map((entry) => entry.level),
       ),
-    [gridState],
+    [switches],
   );
 
   /**
@@ -249,11 +256,11 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     const out: OutlineNode[] = [];
     let insideCollapsed = false;
     for (const row of gridRows) {
-      if (row.kind === "group") insideCollapsed = gridState.collapsedGroups.has(row.id);
+      if (row.kind === "group") insideCollapsed = collapsedGroups.has(row.id);
       else if (!insideCollapsed) out.push(row.node);
     }
     return out;
-  }, [byCategory, visible, gridRows, gridState.collapsedGroups]);
+  }, [byCategory, visible, gridRows, collapsedGroups]);
 
   /**
    * What ↑/↓ and Shift-range walk: the rows **the grid is actually showing**.
@@ -265,10 +272,13 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
    * now that the row menu prints its size and Delete acts on it.
    *
    * Seeded from `navigable` so the very first keystroke has an order to walk, before the grid
-   * has rendered and reported.
+   * has rendered and reported. **Must be memoised** — an unmemoised fallback is a new array
+   * every render, `capabilitiesFor` keys off its identity, and `useRegisterCommands` re-registers
+   * until React hits max update depth and the sidebar stops navigating. That is why
+   * `useNavigableIds` exists; every other host already uses it.
    */
-  const [screenIds, setScreenIds] = useState<readonly string[]>([]);
-  const orderedIds = screenIds.length > 0 ? screenIds : navigable.map((n) => n.id);
+  const fallbackIds = useMemo(() => navigable.map((n) => n.id), [navigable]);
+  const { order: orderedIds, onIdsChange: setScreenIds } = useNavigableIds(fallbackIds);
   const multi = useMultiSelect(orderedIds, detailId ?? initialNodes[0]?.id ?? null);
   const { selectedId, selectedIds, select, selectOne, move } = multi;
 
@@ -302,16 +312,22 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   );
 
   const copySelectionAsText = useCallback(() => {
+    // Walk the same order the arrows do (`orderedIds`), not a pre-filter list. Depend on
+    // `byId` + ids rather than `navigable` so a transient row-array identity cannot rebuild
+    // the command list every render (see `hiddenLevels` / `useRegisterCommands` above).
     const text = copyAsText(
-      navigable.map((node) => ({
-        id: node.id,
-        name: node.name,
-        depth: node.depth,
-      })),
+      orderedIds
+        .map((id) => byId.get(id))
+        .filter((node): node is OutlineNode => node != null)
+        .map((node) => ({
+          id: node.id,
+          name: node.name,
+          depth: node.depth,
+        })),
       selectedIds,
     );
     void writeClipboardText(text);
-  }, [navigable, selectedIds]);
+  }, [orderedIds, byId, selectedIds]);
 
   const addSibling = useCallback(
     (node: OutlineNode | null, where: "before" | "after") => {
