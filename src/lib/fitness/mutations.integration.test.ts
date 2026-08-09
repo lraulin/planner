@@ -125,14 +125,21 @@ describeDb("fitness sessions", () => {
     const id = await createExercise(userId, "Curl", {
       equipment: "barbell",
       barWeight: 15,
+      notes: "elbows in",
     });
     await updateExercise(userId, id, {
       equipment: "dumbbell",
       unilateral: true,
     });
+    // A patch that names only equipment and unilateral must merge against the stored row.
+    // Dropping that merge reads as working — equipment and unilateral are still right —
+    // while silently resetting the EZ bar to the 45lb default and blanking the notes.
     expect(await getExercise(userId, id)).toMatchObject({
+      name: "Curl",
       equipment: "dumbbell",
       unilateral: true,
+      barWeight: 15,
+      notes: "elbows in",
     });
   });
 

@@ -96,7 +96,7 @@ export async function updateExercise(
   exerciseId: string,
   prefs: ExercisePrefs,
 ): Promise<void> {
-  await requireExercise(db, userId, exerciseId);
+  const current = await requireExercise(db, userId, exerciseId);
 
   const patch: {
     name?: string;
@@ -119,11 +119,6 @@ export async function updateExercise(
     prefs.barWeight !== undefined ||
     prefs.unilateral !== undefined
   ) {
-    const [current] = await db
-      .select()
-      .from(exercises)
-      .where(and(eq(exercises.id, exerciseId), eq(exercises.userId, userId)))
-      .limit(1);
     const coerced = coerceExercisePrefs({
       equipment: normaliseEquipment(prefs.equipment ?? current.equipment),
       barWeight: parseBarWeight(
