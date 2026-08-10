@@ -19,6 +19,7 @@ import {
   pushUpdate,
   type PushableAppointment,
 } from "@/lib/google/writeThrough";
+import { normalizeColorId } from "@/lib/google/eventColors";
 import { sortDays, startOfWeek } from "./geometry";
 
 /** The week containing `at`, the unit `loadSchedule` mirrors. */
@@ -46,6 +47,7 @@ function pushableFrom(
     endAt: merged.endAt,
     allDay: merged.allDay,
     showAs: merged.showAs,
+    colorId: merged.colorId ?? null,
     recurrenceFrequency: merged.recurrenceFrequency,
     recurrenceInterval: merged.recurrenceInterval,
     recurrenceByWeekday: merged.recurrenceByWeekday,
@@ -189,6 +191,8 @@ export type AppointmentInput = {
   checkState?: AppointmentCheck;
   reminderMinutes?: number | null;
   showAs?: ShowAs;
+  /** Google event colour id `"1"`–`"11"`, or null for calendar default. */
+  colorId?: string | null;
   priorityLetter?: PriorityLetter | null;
   priorityRank?: number | null;
   projectId?: string | null;
@@ -201,6 +205,8 @@ export type AppointmentInput = {
   recurrenceEnd?: RecurrenceEnd;
   recurrenceCount?: number | null;
   recurrenceUntil?: Date | null;
+  /** Idempotency receipt for a one-shot Inbox → Calendar classification. */
+  organizerSourceNodeId?: string | null;
 };
 
 function assertRange(startAt: Date, endAt: Date) {
@@ -236,6 +242,7 @@ export async function createAppointment(
     checkState: input.checkState ?? "open",
     reminderMinutes: input.reminderMinutes ?? null,
     showAs: input.showAs ?? "busy",
+    colorId: normalizeColorId(input.colorId),
     priorityLetter: input.priorityLetter ?? null,
     priorityRank: input.priorityRank ?? null,
     projectId: input.projectId ?? null,
@@ -250,6 +257,7 @@ export async function createAppointment(
     recurrenceEnd: input.recurrenceEnd ?? "never",
     recurrenceCount: input.recurrenceCount ?? null,
     recurrenceUntil: input.recurrenceUntil ?? null,
+    organizerSourceNodeId: input.organizerSourceNodeId ?? null,
   };
 
   // Write through to Google before storing anything, so a rejected event never leaves a
@@ -315,6 +323,7 @@ export async function updateAppointment(
   if (input.reminderMinutes !== undefined)
     patch.reminderMinutes = input.reminderMinutes;
   if (input.showAs !== undefined) patch.showAs = input.showAs;
+  if (input.colorId !== undefined) patch.colorId = normalizeColorId(input.colorId);
   if (input.priorityLetter !== undefined) patch.priorityLetter = input.priorityLetter;
   if (input.priorityRank !== undefined) patch.priorityRank = input.priorityRank;
   if (input.projectId !== undefined) patch.projectId = input.projectId;

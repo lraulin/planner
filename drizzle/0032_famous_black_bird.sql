@@ -1,0 +1,1 @@
+ALTER TABLE "appointments" ADD COLUMN "color_id" text;

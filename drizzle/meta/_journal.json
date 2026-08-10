@@ -218,6 +218,20 @@
       "when": 1786282373366,
       "tag": "0030_rich_crusher_hogan",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1786326705434,
+      "tag": "0031_tough_loki",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1786369363587,
+      "tag": "0032_famous_black_bird",
+      "breakpoints": true
     }
   ]
 }

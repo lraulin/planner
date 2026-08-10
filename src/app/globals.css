@@ -314,10 +314,18 @@ body {
   border-width: 1.5px !important;
   border-radius: 2px;
   box-shadow: 0 1px 1px rgb(0 0 0 / 8%);
+}
+
+/*
+ * Default ink for plain (white) appointments. Event-coloured blocks skip this so
+ * FullCalendar's per-event `textColor` (from contrastText) can win without fighting
+ * `!important`.
+ */
+.schedule-calendar .fc-appointment:not(.fc-appointment-event-color) {
   color: #1b1d23 !important;
 }
 
-.schedule-calendar .fc-appointment .fc-event-title {
+.schedule-calendar .fc-appointment:not(.fc-appointment-event-color) .fc-event-title {
   color: #1b1d23 !important;
 }
 

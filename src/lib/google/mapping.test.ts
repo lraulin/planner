@@ -291,6 +291,7 @@ describe("appointmentToGoogleEvent", () => {
     endAt: new Date("2026-07-27T16:00:00Z"),
     allDay: false,
     showAs: "busy" as const,
+    colorId: null as string | null,
     recurrenceFrequency: "weekly" as const,
     recurrenceInterval: 2,
     recurrenceByWeekday: [1, 3],
@@ -308,6 +309,9 @@ describe("appointmentToGoogleEvent", () => {
       end: { dateTime: "2026-07-27T16:00:00.000Z", timeZone: "America/New_York" },
       transparency: "opaque",
       eventType: "default",
+      // Empty string clears / means calendar default — omitting would leave a prior colour
+      // on PATCH.
+      colorId: "",
       recurrence: ["RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE;COUNT=10"],
     });
   });
@@ -330,5 +334,37 @@ describe("appointmentToGoogleEvent", () => {
     });
     expect(body.start.date).toBe("2026-07-27");
     expect(body.end.date).toBe("2026-07-28");
+  });
+
+  it("writes a known event colour id", () => {
+    const body = appointmentToGoogleEvent({ ...appointment, colorId: "11" });
+    expect(body.colorId).toBe("11");
+  });
+
+  it("clears an unknown colour id rather than sending it to Google", () => {
+    const body = appointmentToGoogleEvent({ ...appointment, colorId: "99" });
+    expect(body.colorId).toBe("");
+  });
+});
+
+describe("googleEventToFields colorId", () => {
+  const base: GoogleEvent = {
+    id: "evt123",
+    etag: '"abc"',
+    summary: "Standup",
+    start: { dateTime: "2026-07-27T09:00:00Z" },
+    end: { dateTime: "2026-07-27T09:15:00Z" },
+  };
+
+  it("stores a known palette id", () => {
+    expect(googleEventToFields({ ...base, colorId: "5" }, "c")?.colorId).toBe("5");
+  });
+
+  it("treats a missing colour as calendar default (null)", () => {
+    expect(googleEventToFields(base, "c")?.colorId).toBeNull();
+  });
+
+  it("drops an unknown colour id instead of mirroring garbage", () => {
+    expect(googleEventToFields({ ...base, colorId: "99" }, "c")?.colorId).toBeNull();
   });
 });

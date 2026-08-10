@@ -70,6 +70,8 @@ export type AppointmentFormPayload = {
   checkState?: AppointmentCheck;
   reminderMinutes?: number | null;
   showAs?: ShowAs;
+  /** Google event colour id `"1"`–`"11"`, or null for calendar default. */
+  colorId?: string | null;
   priorityLetter?: PriorityLetter | null;
   priorityRank?: number | null;
   projectId?: string | null;

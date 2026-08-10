@@ -17,12 +17,14 @@ import {
   TextField,
   TextArea,
   CheckboxField,
+  ContextsInput,
 } from "@/components/detail/fields";
 import {
   createAppointmentAction,
   updateAppointmentAction,
   type AppointmentFormPayload,
 } from "@/app/schedule/actions";
+import { GOOGLE_EVENT_COLORS } from "@/lib/google/eventColors";
 import { toDateKey, WEEKDAY_LABELS } from "@/lib/schedule/geometry";
 import {
   checkStateLabel,
@@ -132,6 +134,9 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
     full && value.reminderMinutes != null ? String(value.reminderMinutes) : "",
   );
   const [showAs, setShowAs] = useState<ShowAs>(full ? value.showAs : "busy");
+  const [colorId, setColorId] = useState<string | null>(
+    full ? (value.colorId ?? null) : null,
+  );
   const [projectId, setProjectId] = useState(value.projectId ?? "");
   const [notes, setNotes] = useState(full ? value.notes : "");
   const [contexts, setContexts] = useState(full ? value.contexts.join(", ") : "");
@@ -199,6 +204,7 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
       checkState,
       reminderMinutes: reminderMinutes === "" ? null : Number(reminderMinutes),
       showAs,
+      colorId,
       projectId: projectId || null,
       notes,
       contexts: contexts
@@ -382,6 +388,65 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
                   </select>
                 </label>
               </FieldGrid>
+              <div className="mt-2 flex flex-col gap-1.5">
+                <span className="text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
+                  Colour
+                </span>
+                <div
+                  className="flex flex-wrap items-center gap-1.5"
+                  role="radiogroup"
+                  aria-label="Event colour"
+                >
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={colorId === null}
+                    title="Calendar default"
+                    aria-label="Calendar default colour"
+                    className={`h-6 w-6 rounded-full border-2 bg-surface ${
+                      colorId === null ? "border-ink ring-1 ring-ink/30" : "border-rule"
+                    }`}
+                    style={{
+                      backgroundImage:
+                        "linear-gradient(135deg, #e8e8e8 45%, transparent 45%, transparent 55%, #e8e8e8 55%), linear-gradient(45deg, #ccc 25%, transparent 25%)",
+                      backgroundSize: "100% 100%, 6px 6px",
+                    }}
+                    onClick={() => {
+                      setColorId(null);
+                      markDirty();
+                    }}
+                  />
+                  {GOOGLE_EVENT_COLORS.map((c) => {
+                    const selected = colorId === c.id;
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        title={c.name}
+                        aria-label={c.name}
+                        className={`h-6 w-6 rounded-full border-2 ${
+                          selected ? "border-ink ring-1 ring-ink/30" : "border-black/10"
+                        }`}
+                        style={{ backgroundColor: c.background }}
+                        onClick={() => {
+                          setColorId(c.id);
+                          markDirty();
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+                <span className="text-[0.75rem] text-ink-faint">
+                  {colorId == null
+                    ? "Calendar default"
+                    : (GOOGLE_EVENT_COLORS.find((c) => c.id === colorId)?.name ??
+                      "Custom")}
+                  {" · "}
+                  Google Calendar palette
+                </span>
+              </div>
               <label className="mt-2 flex flex-col gap-1 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
                 Project
                 <select
@@ -401,11 +466,16 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
                 </select>
               </label>
               <div className="mt-2">
-                <TextField
-                  label="Contexts (comma-separated)"
-                  value={contexts}
-                  onChange={mark(setContexts)}
-                />
+                <label className="flex flex-col gap-1 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
+                  Contexts
+                  <ContextsInput
+                    value={contexts
+                      .split(",")
+                      .map((part) => part.trim())
+                      .filter(Boolean)}
+                    onChange={(values) => mark(setContexts)(values.join(", "))}
+                  />
+                </label>
               </div>
               <div className="mt-2">
                 <TextArea

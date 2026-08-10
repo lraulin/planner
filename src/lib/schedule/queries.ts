@@ -1,6 +1,7 @@
 import { and, asc, eq, gte, lt, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { appointments, timeChartAreas, timeCharts } from "@/db/schema";
+import { eventColorHex } from "@/lib/google/eventColors";
 import { syncWindow, syncWindowIfStale, type SyncStatus } from "@/lib/google/sync";
 import { listCalendarLinks } from "@/lib/google/queries";
 import {
@@ -116,10 +117,14 @@ export async function getAppointment(userId: string, id: string) {
 }
 
 /**
- * An occurrence plus the colour of the Google calendar it came from — null for a
- * planner-native appointment, which is exactly the distinction the week grid draws.
+ * An occurrence plus colours for the week grid:
+ * - `calendarColor` — source calendar tint (left edge); null for planner-native rows
+ * - `eventColor` — resolved Google event palette hex when `colorId` is set; null otherwise
  */
-export type ScheduleOccurrence = Occurrence & { calendarColor: string | null };
+export type ScheduleOccurrence = Occurrence & {
+  calendarColor: string | null;
+  eventColor: string | null;
+};
 
 export type SchedulePayload = {
   charts: Awaited<ReturnType<typeof listTimeCharts>>;
@@ -193,10 +198,9 @@ export async function loadSchedule(
   const appts = await listAppointmentsInRange(userId, weekStart, weekEnd);
 
   /**
-   * Tint each Google event with its source calendar's colour, so "Work" and "Personal" are
-   * distinguishable at a glance and both are distinguishable from a planner appointment.
-   * Resolved here rather than inside `expandRecurrence`, which stays free of display
-   * concerns.
+   * Resolve display colours outside `expandRecurrence`, which stays free of presentation
+   * concerns. Calendar colour is the left-edge cue for multi-calendar distinction; event
+   * colour (when set) fills the block — see event-colours delta spec.
    */
   const colorByCalendarId = new Map(
     (await listCalendarLinks(userId)).map((link) => [
@@ -204,12 +208,15 @@ export async function loadSchedule(
       link.backgroundColor,
     ]),
   );
-  const colorByAppointmentId = new Map(
+  const colorsByAppointmentId = new Map(
     appts.map((a) => [
       a.id,
-      a.externalCalendarId
-        ? (colorByCalendarId.get(a.externalCalendarId) ?? null)
-        : null,
+      {
+        calendarColor: a.externalCalendarId
+          ? (colorByCalendarId.get(a.externalCalendarId) ?? null)
+          : null,
+        eventColor: eventColorHex(a.colorId),
+      },
     ]),
   );
 
@@ -217,7 +224,14 @@ export async function loadSchedule(
     .flatMap((a) =>
       expandRecurrence(appointmentToRecurrenceInput(a), weekStart, weekEnd),
     )
-    .map((o) => ({ ...o, calendarColor: colorByAppointmentId.get(o.id) ?? null }));
+    .map((o) => {
+      const colors = colorsByAppointmentId.get(o.id);
+      return {
+        ...o,
+        calendarColor: colors?.calendarColor ?? null,
+        eventColor: colors?.eventColor ?? null,
+      };
+    });
 
   return {
     charts,

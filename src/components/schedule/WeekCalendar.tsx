@@ -108,34 +108,47 @@ export function WeekCalendar({
 
     const appts: EventInput[] = occurrences.map((o) => {
       const doneOrMissed = o.checkState !== "open";
-      // A Google event wears its source calendar's colour on the left edge, so two
-      // calendars are told apart from each other and both from a planner appointment.
-      // Missed still wins — that is a state you need to notice.
-      const googleColor = o.calendarColor || null;
+      // Calendar colour on the left edge distinguishes calendars; event colour (when set)
+      // fills the block like Google Calendar. Missed still wins on the border — that is a
+      // state you need to notice. Done/missed grey out the fill.
+      const calendarColor = o.calendarColor || null;
+      const eventColor = o.eventColor || null;
+      // Thick left edge is the multi-calendar cue (calendar colour only). Event fill is
+      // independent — a local row can have a palette colour without looking Google-mirrored.
+      const fromGoogle = Boolean(calendarColor);
       const borderColor =
-        o.checkState === "missed" ? "#a05050" : (googleColor ?? "#2a5a8a");
+        o.checkState === "missed"
+          ? "#a05050"
+          : (calendarColor ?? eventColor ?? "#2a5a8a");
+      const fill = doneOrMissed ? "#e8e8e8" : (eventColor ?? "#ffffff");
+      const textColor = doneOrMissed
+        ? "#1b1d23"
+        : eventColor
+          ? contrastText(eventColor)
+          : "#1b1d23";
       return {
         id: o.occurrenceKey,
         title: o.subject || "(no subject)",
         start: o.startAt,
         end: o.endAt,
         allDay: o.allDay,
-        backgroundColor: doneOrMissed ? "#e8e8e8" : "#ffffff",
+        backgroundColor: fill,
         borderColor,
-        textColor: "#1b1d23",
+        textColor,
         classNames: [
           "fc-appointment",
           o.checkState === "done" ? "fc-appointment-done" : "",
           o.checkState === "missed" ? "fc-appointment-missed" : "",
           o.projectId ? "fc-appointment-project" : "",
-          googleColor ? "fc-appointment-google" : "",
+          fromGoogle ? "fc-appointment-google" : "",
+          eventColor && !doneOrMissed ? "fc-appointment-event-color" : "",
         ].filter(Boolean),
         extendedProps: {
           appointmentId: o.id,
           projectId: o.projectId,
           isRecurring: o.isRecurring,
           checkState: o.checkState,
-          fromGoogle: Boolean(googleColor),
+          fromGoogle,
         },
       };
     });

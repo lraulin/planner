@@ -14,6 +14,7 @@ import type {
   ShowAs,
 } from "@/db/schema";
 import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
+import { normalizeColorId } from "./eventColors";
 
 /** The subset of Google's Event resource we read. */
 export type GoogleEvent = {
@@ -30,6 +31,11 @@ export type GoogleEvent = {
   eventType?: string;
   visibility?: string;
   updated?: string;
+  /**
+   * Google's event colour palette id (`"1"`–`"11"`). Absent means the calendar default.
+   * See `src/lib/google/eventColors.ts`.
+   */
+  colorId?: string | null;
 };
 
 export type GoogleEventTime = {
@@ -49,6 +55,8 @@ export type GoogleOwnedFields = {
   endAt: Date;
   allDay: boolean;
   showAs: ShowAs;
+  /** Null = calendar default colour. */
+  colorId: string | null;
   externalSource: "google";
   externalId: string;
   externalSeriesId: string | null;
@@ -67,6 +75,11 @@ export type GoogleEventWrite = {
   transparency: "opaque" | "transparent";
   eventType?: "default" | "outOfOffice";
   recurrence?: string[];
+  /**
+   * Palette id, or empty string to clear back to the calendar default.
+   * Google's PATCH treats `""` as clear; omitting the field leaves the prior colour.
+   */
+  colorId?: string;
 };
 
 const WEEKDAY_CODES = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"] as const;
@@ -155,6 +168,7 @@ export function googleEventToFields(
     endAt,
     allDay,
     showAs: showAsFromGoogle(event),
+    colorId: normalizeColorId(event.colorId),
     externalSource: "google",
     externalId: event.id,
     externalSeriesId: event.recurringEventId ?? null,
@@ -278,6 +292,7 @@ export function appointmentToGoogleEvent(
     | "endAt"
     | "allDay"
     | "showAs"
+    | "colorId"
     | "recurrenceFrequency"
     | "recurrenceInterval"
     | "recurrenceByWeekday"
@@ -288,6 +303,7 @@ export function appointmentToGoogleEvent(
   timeZone: string = localTimeZone(),
 ): GoogleEventWrite {
   const { transparency, eventType } = showAsToGoogle(appointment.showAs);
+  const colorId = normalizeColorId(appointment.colorId);
 
   return {
     summary: appointment.subject,
@@ -297,6 +313,9 @@ export function appointmentToGoogleEvent(
     end: writeEventTime(appointment.endAt, appointment.allDay, timeZone),
     transparency,
     eventType,
+    // Always send: an omitted field on PATCH would leave a prior colour when the user
+    // chose "default". Empty string is Google's documented clear for optional strings.
+    colorId: colorId ?? "",
     recurrence: buildRecurrenceRule({
       recurrenceFrequency: appointment.recurrenceFrequency,
       recurrenceInterval: appointment.recurrenceInterval,

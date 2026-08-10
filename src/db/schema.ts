@@ -219,6 +219,32 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * The per-user context suggestion catalog.
+ *
+ * Contexts remain free text on records. This table only owns the curated names offered by
+ * autocomplete, matching Achieve's Master Context List: removing a suggestion must never
+ * rewrite historical record tags.
+ */
+export const masterContexts = pgTable(
+  "master_contexts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    normalizedName: text("normalized_name").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("master_contexts_user_normalized_uq").on(
+      table.userId,
+      table.normalizedName,
+    ),
+  ],
+);
+
 /** Better Auth sessions (cookie-backed browser login). */
 export const sessions = pgTable(
   "sessions",
@@ -978,6 +1004,12 @@ export const appointments = pgTable(
     /** Minutes before start; null = no reminder. */
     reminderMinutes: integer("reminder_minutes"),
     showAs: showAsEnum("show_as").notNull().default("busy"),
+    /**
+     * Google Calendar event colour id (`"1"`–`"11"`), or null for the calendar default.
+     * Google-owned — mirrored and write-through. See
+     * `agent-os/specs/2026-08-10-0937-google-event-colors/`.
+     */
+    colorId: text("color_id"),
     priorityLetter: priorityLetterEnum("priority_letter"),
     priorityRank: smallint("priority_rank"),
     projectId: uuid("project_id").references(() => nodes.id, { onDelete: "set null" }),
@@ -998,9 +1030,10 @@ export const appointments = pgTable(
      * Null means the row only ever existed here, which after the sync work is either a
      * pre-Google leftover or a row whose write to Google failed.
      *
-     * Google is the source of truth for the columns above `checkState`; the columns below
-     * it (`checkState`, `priority*`, `contexts`, `private`, `projectId`) are ours and the
-     * mirror never writes them. See `agent-os/specs/2026-07-31-2046-google-calendar-sync/`.
+     * Google is the source of truth for the columns above `checkState` (including
+     * `colorId`); the columns below it (`checkState`, `priority*`, `contexts`, `private`,
+     * `projectId`) are ours and the mirror never writes them. See
+     * `agent-os/specs/2026-07-31-2046-google-calendar-sync/` and the event-colours delta.
      */
     externalSource: text("external_source"),
     /**
@@ -1024,6 +1057,11 @@ export const appointments = pgTable(
     externalEtag: text("external_etag"),
     /** Google's `updated` timestamp, kept for debugging a stale mirror. */
     externalUpdatedAt: timestamp("external_updated_at", { withTimezone: true }),
+    /**
+     * Inbox leaf that produced this appointment. Kept after the source node is deleted and
+     * intentionally has no foreign key: it is an idempotency receipt, not a live relation.
+     */
+    organizerSourceNodeId: uuid("organizer_source_node_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -1036,6 +1074,9 @@ export const appointments = pgTable(
     uniqueIndex("appointments_external_ref_uq")
       .on(table.userId, table.externalSource, table.externalId)
       .where(sql`${table.externalId} is not null`),
+    uniqueIndex("appointments_organizer_source_uq")
+      .on(table.userId, table.organizerSourceNodeId)
+      .where(sql`${table.organizerSourceNodeId} is not null`),
   ],
 );
 
@@ -1233,6 +1274,7 @@ export const notes = pgTable(
 );
 
 export type User = typeof users.$inferSelect;
+export type MasterContext = typeof masterContexts.$inferSelect;
 export type Node = typeof nodes.$inferSelect;
 export type NewNode = typeof nodes.$inferInsert;
 export type TaskDetails = typeof taskDetails.$inferSelect;
