@@ -37,6 +37,7 @@ function localRow(over: Partial<LocalMirrorRow> = {}): LocalMirrorRow {
     externalId: "evt1",
     externalCalendarId: CAL,
     externalEtag: '"v1"',
+    colorId: null,
     startAt: new Date(2026, 6, 28, 9, 0),
     endAt: new Date(2026, 6, 28, 9, 15),
     ...over,
@@ -65,11 +66,38 @@ describe("planMirror — pulling", () => {
     expect(plan.toInsert).toEqual([]);
   });
 
-  it("skips the write entirely when the etag is unchanged", () => {
-    const plan = planMirror([localRow()], [remoteEvent()], window, [CAL]);
+  it("skips the write entirely when the etag and colour are unchanged", () => {
+    const plan = planMirror([localRow({ colorId: null })], [remoteEvent()], window, [
+      CAL,
+    ]);
     expect(plan.toUpdate).toEqual([]);
     expect(plan.toInsert).toEqual([]);
     expect(plan.toDelete).toEqual([]);
+  });
+
+  it("backfills colorId when the etag is unchanged but the local column is empty", () => {
+    // Regression: colour shipped after rows were already mirrored. Google's etag never
+    // moved, so a pure-etag skip left color_id null forever. A schedule refresh must
+    // still write the newly tracked Google-owned field.
+    const plan = planMirror(
+      [localRow({ externalEtag: '"v1"', colorId: null })],
+      [remoteEvent({ etag: '"v1"', colorId: "11" })],
+      window,
+      [CAL],
+    );
+    expect(plan.toUpdate).toHaveLength(1);
+    expect(plan.toUpdate[0].fields.colorId).toBe("11");
+  });
+
+  it("updates when a known colour is cleared on Google", () => {
+    const plan = planMirror(
+      [localRow({ externalEtag: '"v1"', colorId: "5" })],
+      [remoteEvent({ etag: '"v1"' /* no colorId → calendar default */ })],
+      window,
+      [CAL],
+    );
+    expect(plan.toUpdate).toHaveLength(1);
+    expect(plan.toUpdate[0].fields.colorId).toBeNull();
   });
 
   it("updates when the local row has no etag to compare", () => {

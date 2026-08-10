@@ -108,23 +108,19 @@ export function WeekCalendar({
 
     const appts: EventInput[] = occurrences.map((o) => {
       const doneOrMissed = o.checkState !== "open";
-      // Calendar colour on the left edge distinguishes calendars; event colour (when set)
-      // fills the block like Google Calendar. Missed still wins on the border — that is a
-      // state you need to notice. Done/missed grey out the fill.
+      // Match Google Calendar: event palette colour fills when set, otherwise the source
+      // calendar colour fills. White is only for planner-native rows with no colour at all.
+      // Thick left edge still marks multi-calendar Google rows. Missed wins on the border.
       const calendarColor = o.calendarColor || null;
       const eventColor = o.eventColor || null;
-      // Thick left edge is the multi-calendar cue (calendar colour only). Event fill is
-      // independent — a local row can have a palette colour without looking Google-mirrored.
       const fromGoogle = Boolean(calendarColor);
-      const borderColor =
-        o.checkState === "missed"
-          ? "#a05050"
-          : (calendarColor ?? eventColor ?? "#2a5a8a");
-      const fill = doneOrMissed ? "#e8e8e8" : (eventColor ?? "#ffffff");
+      const tint = eventColor ?? calendarColor;
+      const borderColor = o.checkState === "missed" ? "#a05050" : (tint ?? "#2a5a8a");
+      const fill = doneOrMissed ? "#e8e8e8" : (tint ?? "#ffffff");
       const textColor = doneOrMissed
         ? "#1b1d23"
-        : eventColor
-          ? contrastText(eventColor)
+        : tint
+          ? contrastText(tint)
           : "#1b1d23";
       return {
         id: o.occurrenceKey,
@@ -141,7 +137,7 @@ export function WeekCalendar({
           o.checkState === "missed" ? "fc-appointment-missed" : "",
           o.projectId ? "fc-appointment-project" : "",
           fromGoogle ? "fc-appointment-google" : "",
-          eventColor && !doneOrMissed ? "fc-appointment-event-color" : "",
+          tint && !doneOrMissed ? "fc-appointment-event-color" : "",
         ].filter(Boolean),
         extendedProps: {
           appointmentId: o.id,

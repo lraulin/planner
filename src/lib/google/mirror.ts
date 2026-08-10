@@ -23,6 +23,11 @@ export type LocalMirrorRow = {
   externalId: string | null;
   externalCalendarId: string | null;
   externalEtag: string | null;
+  /**
+   * Google event palette id. Compared even when the etag matches so a newly tracked
+   * Google-owned column (or a prior sync that never stored it) still backfills.
+   */
+  colorId: string | null;
   startAt: Date;
   endAt: Date;
 };
@@ -88,10 +93,14 @@ export function planMirror(
       toInsert.push(fields);
       continue;
     }
-    // An unchanged etag means Google's copy is byte-identical to what we already stored.
-    // Skipping the write keeps a no-op refresh from touching `updatedAt` on every row.
-    if (existing.externalEtag && existing.externalEtag === fields.externalEtag)
-      continue;
+    // An unchanged etag means Google's event body is the same *as Google sees it*. That is
+    // not enough to skip: we may still be missing a Google-owned column we only started
+    // storing later (colorId after event-colours shipped). Compare those fields too so a
+    // schedule refresh backfills without waiting for the user to edit the event in Google.
+    const etagUnchanged =
+      Boolean(existing.externalEtag) && existing.externalEtag === fields.externalEtag;
+    const colorIdMatches = (existing.colorId ?? null) === (fields.colorId ?? null);
+    if (etagUnchanged && colorIdMatches) continue;
     toUpdate.push({ id: existing.id, fields });
   }
 

@@ -48,6 +48,7 @@ async function loadLocalRows(
       externalId: appointments.externalId,
       externalCalendarId: appointments.externalCalendarId,
       externalEtag: appointments.externalEtag,
+      colorId: appointments.colorId,
       startAt: appointments.startAt,
       endAt: appointments.endAt,
     })

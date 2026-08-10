@@ -55,6 +55,8 @@ This slice:
 | #   | Change                                                                               | Why                                                                                         |
 | --- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
 | 1   | Thick left-edge class stays calendar-colour-only (not when only event colour is set) | A local appointment with a palette colour should fill without looking multi-calendar Google |
+| 2   | Mirror updates when etag matches but local `colorId` differs                         | Rows mirrored before `color_id` never backfilled; etag-only skip left them white forever    |
+| 3   | Fill uses event colour, else calendar colour (not white)                             | Matches Google Calendar defaults; white only for uncoloured planner-native rows             |
 
 ## Follow-ups (new work — not amendments to this frozen spec)
 
