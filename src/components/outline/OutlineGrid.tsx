@@ -50,6 +50,7 @@ import { useModuleViews } from "@/components/grid/useModuleViews";
 import { GridToolbar } from "@/components/grid/GridToolbar";
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import { openStateFilters } from "@/lib/grid/stateFilters";
+import { shouldDiscardVirginInsert } from "@/lib/grid/virginInsert";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { useOptimisticNodes } from "@/components/grid/useOptimisticNodes";
@@ -144,6 +145,11 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const { nodes, byId, patch, apply, error } = useOptimisticNodes(initialNodes);
   const { detail: detailId, zoom, setDetail: setDetailId, setZoom } = useViewStateUrl();
   const [editingId, setEditingId] = useState<string | null>(null);
+  /**
+   * Row id opened for naming immediately after create. Escape with an empty draft discards
+   * that insert (Achieve cancel-blank-row). F2 rename never sets this.
+   */
+  const [virginInsertId, setVirginInsertId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<readonly OutlineNode[]>([]);
   const [pendingConversion, setPendingConversion] = useState<{
     nodeId: string;
@@ -297,6 +303,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
       if (!id) return;
       selectOne(id);
       setEditingId(id);
+      setVirginInsertId(id);
     },
     [selectOne],
   );
@@ -802,12 +809,36 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
       },
       onFinishEdit: (node, name) => {
         setEditingId(null);
+        setVirginInsertId(null);
         if (name !== node.name) {
           patch(node.id, { name });
           apply(() => renameNodeAction(node.id, name));
         }
       },
-      onCancelEdit: () => setEditingId(null),
+      onCancelEdit: (draft: string) => {
+        const id = editingId;
+        const discard =
+          id != null &&
+          shouldDiscardVirginInsert({
+            virginInsertId,
+            editingId: id,
+            committedName: byId.get(id)?.name ?? "",
+            draftName: draft,
+          });
+        setEditingId(null);
+        setVirginInsertId(null);
+        if (!discard || !id) return;
+        const index = orderedIds.indexOf(id);
+        const nextSelection =
+          orderedIds.slice(index + 1).find((entry) => entry !== id) ??
+          orderedIds
+            .slice(0, Math.max(index, 0))
+            .reverse()
+            .find((entry) => entry !== id) ??
+          null;
+        selectOne(nextSelection);
+        apply(() => deleteNodeAction(id));
+      },
       onPriorityChange: (node, letter, rank) => {
         patch(node.id, { priorityLetter: letter, priorityRank: rank });
         apply(() => setPriorityAction(node.id, letter, rank));
@@ -835,6 +866,9 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
       today,
       selectedId,
       editingId,
+      virginInsertId,
+      byId,
+      orderedIds,
       toggleCollapsed,
       patch,
       apply,

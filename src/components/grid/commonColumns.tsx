@@ -62,7 +62,8 @@ export type OutlineColumnCtx = {
   onToggleCollapsed: (node: OutlineNode) => void;
   onOpenDetail: (node: OutlineNode) => void;
   onFinishEdit: (node: OutlineNode, name: string) => void;
-  onCancelEdit: () => void;
+  /** Escape passes the uncommitted draft so a virgin empty insert can be discarded. */
+  onCancelEdit: (draft: string) => void;
   onPriorityChange: (
     node: OutlineNode,
     letter: PriorityLetter | null,

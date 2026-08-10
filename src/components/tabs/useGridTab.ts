@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { OutlineNode } from "@/lib/tree/types";
 import {
+  deleteNodeAction,
   renameNodeAction,
   setDeadlineAction,
   setEffortAction,
@@ -17,6 +18,7 @@ import { useStateChange } from "@/components/grid/useStateChange";
 import { useToday } from "@/components/grid/useToday";
 import { useSuspendCommandKeys } from "@/components/shell/CommandProvider";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
+import { shouldDiscardVirginInsert } from "@/lib/grid/virginInsert";
 import { copyAsText, writeClipboardText } from "@/lib/tree/copyAsText";
 import { isTypingTarget } from "@/lib/keyboard";
 
@@ -41,6 +43,11 @@ export function useGridTab(initialNodes: OutlineNode[]) {
     setScope,
   } = useViewStateUrl();
   const [editingId, setEditingId] = useState<string | null>(null);
+  /**
+   * Row id opened for naming immediately after create. Escape with an empty draft discards
+   * that insert (Achieve cancel-blank-row). F2 rename never sets this.
+   */
+  const [virginInsertId, setVirginInsertId] = useState<string | null>(null);
   const [navigableIds, setNavigableIds] = useState<readonly string[]>([]);
   const today = useToday();
 
@@ -78,13 +85,14 @@ export function useGridTab(initialNodes: OutlineNode[]) {
   /**
    * Land on a freshly created row and open its name for typing — the same gesture the Outline
    * makes, so a row created here is named where it was created rather than arriving blank and
-   * waiting to be found again.
+   * waiting to be found again. Marks the row as a virgin insert so Esc can cancel it.
    */
   const startNaming = useCallback(
     (id?: string) => {
       if (!id) return;
       selectOne(id);
       setEditingId(id);
+      setVirginInsertId(id);
     },
     [selectOne],
   );
@@ -122,12 +130,37 @@ export function useGridTab(initialNodes: OutlineNode[]) {
       onOpenDetail: (node: OutlineNode) => openDetail(node.id),
       onFinishEdit: (node: OutlineNode, name: string) => {
         setEditingId(null);
+        setVirginInsertId(null);
         if (name !== node.name) {
           patch(node.id, { name });
           apply(() => renameNodeAction(node.id, name));
         }
       },
-      onCancelEdit: () => setEditingId(null),
+      onCancelEdit: (draft: string) => {
+        const id = editingId;
+        const discard =
+          id != null &&
+          shouldDiscardVirginInsert({
+            virginInsertId,
+            editingId: id,
+            committedName: byId.get(id)?.name ?? "",
+            draftName: draft,
+          });
+        setEditingId(null);
+        setVirginInsertId(null);
+        if (!discard || !id) return;
+        // Same neighbor pick as Outline delete: land below the hole when possible.
+        const index = order.indexOf(id);
+        const nextSelection =
+          order.slice(index + 1).find((entry) => entry !== id) ??
+          order
+            .slice(0, Math.max(index, 0))
+            .reverse()
+            .find((entry) => entry !== id) ??
+          null;
+        selectOne(nextSelection);
+        apply(() => deleteNodeAction(id));
+      },
       onPriorityChange: (
         node: OutlineNode,
         letter: Parameters<typeof setPriorityAction>[1],
@@ -156,7 +189,19 @@ export function useGridTab(initialNodes: OutlineNode[]) {
         apply(() => setEffortAction(node.id, minutes));
       },
     }),
-    [today, selectedId, editingId, patch, apply, openDetail, stateChange],
+    [
+      today,
+      selectedId,
+      editingId,
+      virginInsertId,
+      byId,
+      order,
+      patch,
+      apply,
+      openDetail,
+      selectOne,
+      stateChange,
+    ],
   );
 
   /*

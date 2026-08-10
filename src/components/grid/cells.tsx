@@ -83,7 +83,8 @@ export function NameCell({
   onToggleCollapsed: () => void;
   onOpenDetail: () => void;
   onFinishEdit: (name: string) => void;
-  onCancelEdit: () => void;
+  /** Escape passes the uncommitted draft so a virgin empty insert can be discarded. */
+  onCancelEdit: (draft: string) => void;
   dragHandle?: boolean;
 }) {
   const done = node.state === "completed" || node.state === "cancelled";
@@ -227,10 +228,13 @@ function NameEditor({
 }: {
   initial: string;
   onCommit: (name: string) => void;
-  onCancel: () => void;
+  onCancel: (draft: string) => void;
 }) {
   const [value, setValue] = useState(initial);
   const ref = useRef<HTMLInputElement>(null);
+  // Escape unmounts this input; blur can still fire and would re-commit the draft. Guard so
+  // cancel (including discard of a virgin empty insert) is the only outcome.
+  const cancelledRef = useRef(false);
 
   useEffect(() => {
     ref.current?.focus();
@@ -242,14 +246,18 @@ function NameEditor({
       ref={ref}
       value={value}
       onChange={(event) => setValue(event.target.value)}
-      onBlur={() => onCommit(value.trim())}
+      onBlur={() => {
+        if (cancelledRef.current) return;
+        onCommit(value.trim());
+      }}
       onKeyDown={(event) => {
         if (event.key === "Enter") {
           event.preventDefault();
           onCommit(value.trim());
         } else if (event.key === "Escape") {
           event.preventDefault();
-          onCancel();
+          cancelledRef.current = true;
+          onCancel(value);
         }
       }}
       className="min-w-0 flex-1 self-center rounded-sm border border-select-edge bg-surface px-1 text-[0.875rem] text-ink outline-none"
