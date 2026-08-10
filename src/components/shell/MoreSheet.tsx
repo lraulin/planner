@@ -15,11 +15,11 @@ import { sectionsWithModules, MODULES, type ModuleId } from "./modules";
  * bottom sheet below `md` — the list lands under the thumb rather than in the middle of the
  * screen.
  *
- * It lists **every** module, grouped by the same `sectionsWithModules()` the desktop sidebar
- * renders, including the three already in the bar. Showing only the other eight was the
- * older behaviour and it made the section headings lie: a `Do` group with Chooser and
- * Schedule but no Day reads as though Day is somewhere else. The duplication costs three
- * rows in a sheet that scrolls; the missing rows cost you the map.
+ * It lists **every built** module, grouped by the same `sectionsWithModules()` the desktop
+ * sidebar renders, including the three already in the bar. Showing only the non-primary
+ * ones made the section headings lie: a `Do` group with Schedule but no Chooser reads as
+ * though Chooser is somewhere else. The duplication costs three rows in a sheet that
+ * scrolls; the missing rows cost you the map.
  *
  * There is no command palette here. `⌘K` has no touch equivalent, and commands reach the
  * phone through the `⋯` overflow on each module's own toolbar instead.

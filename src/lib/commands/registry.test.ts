@@ -173,7 +173,7 @@ describe("modules as command sources", () => {
   it("marks exactly the three modules the phone bottom bar has slots for", () => {
     expect(MODULES.filter((entry) => entry.primary).map((m) => m.id)).toEqual([
       "tasks",
-      "day",
+      "chooser",
       "notes",
     ]);
   });

@@ -64,10 +64,11 @@ type ModuleEntry = {
   /** Bottom-nav slot on the phone. Three of them, plus capture and More, make five. */
   primary: boolean;
   /**
-   * `reserved` is a module we have decided the home of but not built. It renders nowhere and
-   * is not a navigation target — it exists so that adding it later is a one-word edit rather
-   * than another argument about navigation. Deliberately *not* shown as a disabled entry: a
-   * menu full of dead rows teaches you to stop reading the menu.
+   * `reserved` is a module that should not appear in navigation — either not built yet, or
+   * temporarily shelved. It renders nowhere and is not a navigation target; the route and
+   * code may still exist. Adding or restoring it later is a one-word edit rather than another
+   * argument about navigation. Deliberately *not* shown as a disabled entry: a menu full of
+   * dead rows teaches you to stop reading the menu.
    */
   status: "built" | "reserved";
   /** Required on a built module; the collapsed rail is icons only. */
@@ -140,13 +141,18 @@ export const MODULES = [
     icon: ResultAreasIcon,
   },
   // Do — what you are working on now, this day, this week.
+  //
+  // Day is shelved for now: Task Chooser covers the same daily-pick job better, and Day
+  // still feels half-finished. Keep the entry (and `/day` + `/day/week`) so restoring or
+  // folding it into Schedule is a status flip, not a rebuild. Flip `status` to `"built"`
+  // and `primary` to `true` (and put it back on `MobileNav`) when that decision lands.
   {
     id: "day",
     label: "Day",
     href: "/day",
     section: "do",
-    primary: true,
-    status: "built",
+    primary: false,
+    status: "reserved",
     icon: DayIcon,
   },
   {
@@ -154,7 +160,7 @@ export const MODULES = [
     label: "Task Chooser",
     href: "/chooser",
     section: "do",
-    primary: false,
+    primary: true,
     status: "built",
     icon: ChooserIcon,
   },

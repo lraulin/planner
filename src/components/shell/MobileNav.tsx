@@ -3,15 +3,24 @@
 import Link from "next/link";
 import { requestQuickCapture } from "@/components/capture/event";
 import { MoreSheet } from "./MoreSheet";
-import { CaptureIcon, DayIcon, NotesIcon, OrganizeIcon, TasksIcon } from "./navIcons";
+import {
+  CaptureIcon,
+  ChooserIcon,
+  NotesIcon,
+  OrganizeIcon,
+  TasksIcon,
+} from "./navIcons";
 import type { ModuleId } from "./modules";
 
 /**
  * Phone navigation: a bottom tab bar, standing in for the desktop `Sidebar` below `md`.
  *
  * A two-action utility band keeps Quick capture and Process Inbox visible. Beneath it,
- * `Day · Tasks · Notes · More` keeps the primary destinations within four equal slots; the
- * rest live in the More sheet, grouped by the same sections the sidebar uses.
+ * `Chooser · Tasks · Notes · More` keeps the primary destinations within four equal slots;
+ * the rest live in the More sheet, grouped by the same sections the sidebar uses.
+ *
+ * Day used to own the first slot; it is shelved in `modules.ts` for now, and Task Chooser
+ * took its place as the daily "what am I working on" surface.
  *
  * A normal flex child of `AppShell` rather than `position: fixed`, so the scroll container
  * above it ends where the bar begins and the last row is never hidden underneath.
@@ -40,7 +49,12 @@ export function MobileNav({ active }: { active: ModuleId | null }) {
         </Link>
       </div>
       <div className="flex items-stretch">
-        <NavLink href="/day" label="Day" icon={<DayIcon />} active={active === "day"} />
+        <NavLink
+          href="/chooser"
+          label="Chooser"
+          icon={<ChooserIcon />}
+          active={active === "chooser"}
+        />
         <NavLink
           href="/tasks"
           label="Tasks"
