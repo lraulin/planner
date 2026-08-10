@@ -11,8 +11,8 @@ import {
   type ReactNode,
 } from "react";
 import {
-  resetAllSettingsAction,
   resetSettingScopeAction,
+  resetSettingScopesAction,
   saveSettingsAction,
 } from "@/app/settings/actions";
 import {
@@ -22,6 +22,9 @@ import {
   type PendingWrite,
 } from "@/lib/settings/queue";
 import type { SettingsSnapshot } from "@/lib/settings/queries";
+import { formatDateKey } from "@/lib/dateFormat";
+import { parseDisplaySettings, serializeDisplaySettings } from "@/lib/settings/display";
+import { DISPLAY_SCOPE } from "@/lib/settings/scopes";
 
 /**
  * The app's single client-side store, and its only React context.
@@ -138,15 +141,15 @@ function queueReset(scope: string): void {
   emit();
 }
 
-/**
- * Tombstone every scope currently on screen, rather than emptying the overlay. Clearing it
- * would expose the base snapshot again, which still holds every row until the next server
- * render — "Reset everything" would appear to do nothing.
- */
-function queueResetAll(scopes: string[]): void {
+function queueResetScopes(scopes: readonly string[]): void {
   ensureSeeded();
-  overlay = scopes.map((scope) => ({ scope, value: undefined }));
-  unflushed = NO_WRITES;
+  const selected = new Set(scopes);
+  if (selected.size === 0) return;
+  overlay = coalesceWrites([
+    ...overlay,
+    ...[...selected].map((scope) => ({ scope, value: undefined })),
+  ]);
+  unflushed = unflushed.filter((write) => !selected.has(write.scope));
   mirrorUnflushed();
   emit();
 }
@@ -156,11 +159,16 @@ export type SettingCodec<T> = {
   serialize: (value: T) => unknown;
 };
 
+const DISPLAY_CODEC = {
+  parse: parseDisplaySettings,
+  serialize: serializeDisplaySettings,
+} satisfies SettingCodec<ReturnType<typeof parseDisplaySettings>>;
+
 type SettingsContextValue = {
   snapshot: SettingsSnapshot;
   write: (scope: string, value: unknown) => void;
   resetScope: (scope: string) => void;
-  resetAll: () => void;
+  resetScopes: (scopes: readonly string[]) => void;
   /** Set when the server refused or failed a save; the change is still queued locally. */
   saveError: string | null;
 };
@@ -240,16 +248,18 @@ export function SettingsProvider({
     });
   }, []);
 
-  const resetAll = useCallback(() => {
-    queueResetAll(Object.keys(snapshot));
-    void resetAllSettingsAction().then((result) => {
+  const resetScopes = useCallback((scopes: readonly string[]) => {
+    const selected = [...new Set(scopes)];
+    if (selected.length === 0) return;
+    queueResetScopes(selected);
+    void resetSettingScopesAction(selected).then((result) => {
       setSaveError(result.ok ? null : result.error);
     });
-  }, [snapshot]);
+  }, []);
 
   const value = useMemo(
-    () => ({ snapshot, write, resetScope, resetAll, saveError }),
-    [snapshot, write, resetScope, resetAll, saveError],
+    () => ({ snapshot, write, resetScope, resetScopes, saveError }),
+    [snapshot, write, resetScope, resetScopes, saveError],
   );
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
@@ -295,7 +305,26 @@ export function useSetting<T>(scope: string, codec: SettingCodec<T>) {
   return { value, update, patch, reset };
 }
 
-/** The reset page's view: which scopes are stored, and how to clear them. */
+/** The editable singleton display preference, including its immediate reset path. */
+export function useDisplaySettings() {
+  return useSetting(DISPLAY_SCOPE, DISPLAY_CODEC);
+}
+
+/**
+ * Per-user standalone date formatter derived from this provider's server-loaded snapshot.
+ *
+ * The returned function is stable until the preference changes. Keeping the selected format
+ * in React context — rather than mutable module state — also keeps concurrent server renders
+ * for different users isolated by construction.
+ */
+export function useDateFormatter() {
+  const { value } = useDisplaySettings();
+  return useCallback(
+    (dateKey: string | null | undefined) => formatDateKey(dateKey, value.dateFormat),
+    [value.dateFormat],
+  );
+}
+
 /**
  * Clear any scope by id, for the caller that is deleting the thing a scope belongs to
  * rather than editing it — `useSetting(...).reset` only reaches its own.
@@ -331,7 +360,7 @@ export function useCopyScope() {
 }
 
 export function useAllSettings() {
-  const { snapshot, resetScope, resetAll, saveError } = useSettingsContext();
+  const { snapshot, resetScope, resetScopes, saveError } = useSettingsContext();
 
   const scopes = useMemo(
     () =>
@@ -341,5 +370,5 @@ export function useAllSettings() {
     [snapshot],
   );
 
-  return { scopes, resetScope, resetAll, saveError };
+  return { snapshot, scopes, resetScope, resetScopes, saveError };
 }

@@ -2,10 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { NoteFlag } from "@/db/schema";
+import { DateText } from "@/components/date/DateText";
 import { GROUP_BY_LABELS, type CalendarNoteGroupBy } from "@/lib/grid/grouping";
 import type { NoteNode } from "@/lib/notes/types";
 import {
-  formatNoteDate,
   noteContextsLabel,
   noteDatePart,
   noteDatePartLabel,
@@ -145,9 +145,10 @@ export const notesColumns: ColumnDef<NotesColumnCtx, NoteNode>[] = [
     filterValue: (row) => dateKey(row.node.noteDate),
     sortValue: (row) => dateKey(row.node.noteDate),
     render: (row) => (
-      <span className="tabular text-[0.8125rem] text-ink-muted">
-        {formatNoteDate(row.node.noteDate)}
-      </span>
+      <DateText
+        dateKey={dateKey(row.node.noteDate)}
+        className="tabular text-right text-[0.8125rem] text-ink-muted"
+      />
     ),
   },
   // These are intentionally optional fields rather than three more defaults beside Date.

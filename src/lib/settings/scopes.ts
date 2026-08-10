@@ -29,6 +29,7 @@ export const SCOPE_KINDS = [
   "drawer",
   "shell",
   "schedule",
+  "display",
 ] as const;
 export type ScopeKind = (typeof SCOPE_KINDS)[number];
 
@@ -127,6 +128,9 @@ export const SHELL_SCOPE = "shell";
 /** The week calendar's own drawing settings — slot height and Work Week Mode. */
 export const SCHEDULE_SCOPE = "schedule";
 
+/** Cross-module display policy, currently the standalone calendar-day format. */
+export const DISPLAY_SCOPE = "display";
+
 const KIND_LABELS: Record<ScopeKind, string> = {
   grid: "Grid",
   views: "Saved views",
@@ -136,6 +140,7 @@ const KIND_LABELS: Record<ScopeKind, string> = {
   drawer: "Detail drawer",
   shell: "App shell",
   schedule: "Weekly Schedule",
+  display: "Display",
 };
 
 /** `projects.active-status` → `Projects / Active status`. */

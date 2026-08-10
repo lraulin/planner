@@ -1,4 +1,3 @@
-import { formatShortDate } from "@/lib/dateFormat";
 import type { MetricChartPoint, MetricEntryView, MetricType } from "./types";
 import { METRIC_TYPES } from "./types";
 
@@ -306,7 +305,7 @@ export function niceTimeTicks(
     return [
       {
         dateKey: minDate,
-        label: formatChartDate(minDate),
+        label: formatDayLabel(minDate, true),
         major: true,
       },
     ];
@@ -372,12 +371,12 @@ export function niceTimeTicks(
     return [
       {
         dateKey: minKey,
-        label: formatChartDate(minKey),
+        label: formatDayLabel(minKey, true),
         major: true,
       },
       {
         dateKey: maxKey,
-        label: formatChartDate(maxKey),
+        label: formatDayLabel(maxKey, true),
         major: true,
       },
     ];
@@ -522,9 +521,4 @@ export function plotPoint(
   const x = padding.left + f * innerW;
   const y = padding.top + innerH - ((value - yMin) / span) * innerH;
   return { x, y };
-}
-
-/** Short chart label for a `YYYY-MM-DD` key (e.g. 1/5/16). */
-export function formatChartDate(dateKey: string): string {
-  return formatShortDate(dateKey) || dateKey;
 }

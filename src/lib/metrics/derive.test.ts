@@ -5,7 +5,6 @@ import {
   dateKeyOrdinal,
   dateXFraction,
   displayValue,
-  formatChartDate,
   latestEntry,
   niceTicks,
   niceTimeTicks,
@@ -359,12 +358,5 @@ describe("plotPoint", () => {
   it("maps xFraction 0 and 1 to the plot edges", () => {
     expect(plotPoint(0, 0, 100, 100, pad, 0, 100).x).toBe(10);
     expect(plotPoint(1, 0, 100, 100, pad, 0, 100).x).toBe(90);
-  });
-});
-
-describe("formatChartDate", () => {
-  it("formats YYYY-MM-DD as m/d/yy", () => {
-    expect(formatChartDate("2016-01-05")).toBe("1/5/16");
-    expect(formatChartDate("2025-12-31")).toBe("12/31/25");
   });
 });

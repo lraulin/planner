@@ -35,6 +35,7 @@ import {
   type ColumnFilter,
   type FilterOption,
 } from "@/lib/grid/filters";
+import { useDateFormatter } from "@/components/settings/SettingsProvider";
 
 /**
  * One popover per column header, holding **everything that acts on that column**.
@@ -106,6 +107,7 @@ export function ColumnMenuButton({
   /** Opens the Show Fields dialog, which the header row owns one of. */
   onOpenFields?: () => void;
 }) {
+  const formatDate = useDateFormatter();
   const [tab, setTab] = useState<MenuTab>("menu");
   const [customOpen, setCustomOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -120,6 +122,7 @@ export function ColumnMenuButton({
   // The *field* name, not the header: a header can be a tick box with no word in it (the
   // Day tab's Done column), and "▾ column menu" names nothing.
   const name = fieldNameOf(column);
+  const filterLabel = column.filterKind === "date" ? formatDate : column.filterLabel;
 
   // Measured before the popover's first paint, so it never renders off screen and then
   // jumps. Also picks the opening tab: the funnel is what this button used to be, and on a
@@ -297,7 +300,7 @@ export function ColumnMenuButton({
             <FilterPanel
               label={name}
               kind={column.filterKind}
-              filterLabel={column.filterLabel}
+              filterLabel={filterLabel}
               filter={filter}
               active={active}
               values={values}

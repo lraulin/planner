@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { signOut } from "@/lib/auth/client";
 
-export function LogoutButton() {
+export function LogoutButton({ className = "" }: { className?: string }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
 
@@ -26,7 +26,7 @@ export function LogoutButton() {
         void onClick();
       }}
       disabled={pending}
-      className="text-[0.75rem] text-ink-muted hover:text-ink disabled:opacity-50"
+      className={`text-[0.75rem] text-ink-muted hover:text-ink disabled:opacity-50 ${className}`}
     >
       {pending ? "…" : "Sign out"}
     </button>

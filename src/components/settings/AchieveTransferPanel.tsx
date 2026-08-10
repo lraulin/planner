@@ -33,7 +33,9 @@ type ImportFail = { ok: false; error: string };
  * Large files go through `/api/achieve/*` route handlers (multipart / raw response), not
  * Server Actions — Flight serialization rejects multi-MB XML with nesting/body errors.
  */
-export function AchieveTransferPanel() {
+export function AchieveTransferPanel({
+  embedded = false,
+}: { embedded?: boolean } = {}) {
   const headingId = useId();
   const fileRef = useRef<HTMLInputElement>(null);
   /** Hold the File until the user confirms replace — avoid parking multi-MB XML in React state. */
@@ -147,15 +149,21 @@ export function AchieveTransferPanel() {
   };
 
   return (
-    <section aria-labelledby={headingId} className="mt-8 rounded border border-rule">
-      <div className="border-b border-rule bg-surface-raised px-4 py-2.5">
-        <h2
-          id={headingId}
-          className="text-[0.75rem] font-semibold uppercase tracking-wider text-ink-muted"
-        >
-          Achieve Planner (XML)
-        </h2>
-      </div>
+    <section
+      aria-label={embedded ? "Achieve Planner XML" : undefined}
+      aria-labelledby={embedded ? undefined : headingId}
+      className={embedded ? "" : "mt-8 rounded border border-rule"}
+    >
+      {!embedded && (
+        <div className="border-b border-rule bg-surface-raised px-4 py-2.5">
+          <h2
+            id={headingId}
+            className="text-[0.75rem] font-semibold uppercase tracking-wider text-ink-muted"
+          >
+            Achieve Planner (XML)
+          </h2>
+        </div>
+      )}
 
       <div className="space-y-4 px-4 py-4 text-[0.875rem] leading-relaxed text-ink-muted">
         <p>

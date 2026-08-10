@@ -81,10 +81,12 @@ describe("metricMetaChips", () => {
 
 describe("metricTrailingDate", () => {
   it("is null when nothing has been logged", () => {
-    expect(metricTrailingDate({ lastDate: null })).toBeNull();
+    expect(metricTrailingDate({ lastDate: null }, "M/D/YYYY")).toBeNull();
   });
 
-  it("formats the date key short", () => {
-    expect(metricTrailingDate({ lastDate: "2026-08-04" })).toBe("8/4/26");
+  it("formats the date key with the supplied display preference", () => {
+    expect(metricTrailingDate({ lastDate: "2026-08-04" }, "D MMMM YYYY")).toBe(
+      "4 August 2026",
+    );
   });
 });

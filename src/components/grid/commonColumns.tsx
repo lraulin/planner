@@ -1,16 +1,11 @@
 "use client";
 
 import type { NodeState, NodeType, PriorityLetter } from "@/db/schema";
-import { formatShortDate } from "@/lib/dateFormat";
+import { DateText } from "@/components/date/DateText";
 import { priorityOrderValue } from "@/lib/priority/order";
 import { localDateKey, toDateKey } from "@/lib/schedule/geometry";
 import type { OutlineNode } from "@/lib/tree/types";
-import {
-  formatCompactDate,
-  formatEffort,
-  formatMoney,
-  formatPriority,
-} from "@/lib/tree/format";
+import { formatEffort, formatMoney, formatPriority } from "@/lib/tree/format";
 import {
   kindOfNode,
   KIND_LABELS,
@@ -123,13 +118,7 @@ export function deadlineColumn(): ColumnDef<OutlineColumnCtx> {
     filterKind: "date",
     filterValue: (row) => (row.node.deadline ? toDateKey(row.node.deadline) : null),
     sortValue: (row) => (row.node.deadline ? toDateKey(row.node.deadline) : null),
-    // The filter's day key is the wrong shape for a meta chip; "12 Sep" is the same
-    // information in a third of the width.
-    compactText: (row) =>
-      formatCompactDate(
-        row.node.deadline ? toDateKey(row.node.deadline) : null,
-        new Date().getFullYear(),
-      ),
+    // CompactRow formats this canonical filter value through the user's display preference.
     render: (row, ctx) => (
       <DeadlineCell
         node={row.node}
@@ -354,9 +343,9 @@ function calendarDateColumn(
     render: (row) => {
       const date = value(row.node);
       return (
-        <ReadOnlyCell
-          value={date ? formatShortDate(toDateKey(date)) : ""}
-          align="right"
+        <DateText
+          dateKey={date ? toDateKey(date) : null}
+          className="text-right text-[0.75rem] text-ink-muted"
         />
       );
     },
@@ -383,9 +372,9 @@ function instantDateColumn(
     render: (row) => {
       const date = value(row.node);
       return (
-        <ReadOnlyCell
-          value={date ? formatShortDate(localDateKey(date)) : ""}
-          align="right"
+        <DateText
+          dateKey={date ? localDateKey(date) : null}
+          className="text-right text-[0.75rem] text-ink-muted"
         />
       );
     },
@@ -411,7 +400,10 @@ export function dateCompletedColumn(): ColumnDef<OutlineColumnCtx> {
     sortValue: (row) => completedDateKey(row.node),
     compact: "hidden",
     render: (row) => (
-      <ReadOnlyCell value={formatShortDate(completedDateKey(row.node))} align="right" />
+      <DateText
+        dateKey={completedDateKey(row.node)}
+        className="text-right text-[0.75rem] text-ink-muted"
+      />
     ),
   };
 }

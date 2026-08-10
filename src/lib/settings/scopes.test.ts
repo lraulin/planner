@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   chooserScope,
   describeScope,
+  DISPLAY_SCOPE,
   DRAWER_SCOPE,
   gridScope,
   isValidScope,
@@ -22,10 +23,11 @@ describe("parseScope", () => {
 
   it("accepts the singleton scopes with no key", () => {
     expect(parseScope(DRAWER_SCOPE)).toEqual({ kind: "drawer", key: null });
+    expect(parseScope(DISPLAY_SCOPE)).toEqual({ kind: "display", key: null });
   });
 
   it("accepts the constants this app actually writes", () => {
-    for (const scope of [NOTES_FILTER_SCOPE, DRAWER_SCOPE]) {
+    for (const scope of [NOTES_FILTER_SCOPE, DRAWER_SCOPE, DISPLAY_SCOPE]) {
       expect(isValidScope(scope)).toBe(true);
     }
   });

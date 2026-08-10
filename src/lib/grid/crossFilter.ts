@@ -88,10 +88,16 @@ export function rowPassesCrossFilter(
 export function describeCrossCondition(
   columnLabel: string,
   condition: CrossCondition,
+  valueLabel?: (value: string) => string,
 ): string {
   const meta = OPERATOR_META[condition.op];
   if (!operatorNeedsOperand(condition.op)) return `${columnLabel} ${meta.label}`;
-  const shown = condition.value === "" ? "''" : condition.value;
+  const shown =
+    condition.value === ""
+      ? "''"
+      : valueLabel
+        ? valueLabel(condition.value)
+        : condition.value;
   return `${columnLabel} ${meta.symbol} ${shown}`;
 }
 

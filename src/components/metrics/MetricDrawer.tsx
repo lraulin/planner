@@ -54,6 +54,8 @@ import type { MetricDetail, MetricEntryView, MetricType } from "@/lib/metrics/ty
 import { METRIC_TYPE_LABELS, METRIC_TYPES } from "@/lib/metrics/types";
 import { writeClipboardText } from "@/lib/tree/copyAsText";
 import type { OutlineNode } from "@/lib/tree/types";
+import { useDateFormatter } from "@/components/settings/SettingsProvider";
+import { formatFullDateKey } from "@/lib/dateFormat";
 
 const inputClass =
   "min-h-tap w-full rounded border border-rule bg-surface px-2 py-1.5 text-[0.875rem] text-ink outline-none focus:border-select-edge md:min-h-0";
@@ -159,6 +161,7 @@ function MetricForm({
   onClose: () => void;
   onChanged: (metricId: string) => void;
 }) {
+  const formatDate = useDateFormatter();
   const [detail, setDetail] = useState(initial);
   const [draft, setDraft] = useState(() => toDraft(initial));
   const [tab, setTab] = useState<"general" | "tracking">("general");
@@ -899,7 +902,11 @@ function MetricForm({
               <span className="font-medium text-ink">
                 {detail.lastValue != null ? formatMetricNumber(detail.lastValue) : "—"}
               </span>
-              {detail.lastDate ? ` (${detail.lastDate})` : ""}
+              {detail.lastDate ? (
+                <span title={formatFullDateKey(detail.lastDate)}>
+                  {` (${formatDate(detail.lastDate)})`}
+                </span>
+              ) : null}
             </p>
           </div>
         )}

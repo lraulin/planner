@@ -24,7 +24,7 @@ const directoryAttributes = {
 };
 
 /** Import Tomboy `.note` XML as flat notes with subject `Tomboy`. */
-export function TomboyImportPanel() {
+export function TomboyImportPanel({ embedded = false }: { embedded?: boolean } = {}) {
   const headingId = useId();
   const filesRef = useRef<HTMLInputElement>(null);
   const folderRef = useRef<HTMLInputElement>(null);
@@ -74,15 +74,21 @@ export function TomboyImportPanel() {
   };
 
   return (
-    <section aria-labelledby={headingId} className="mt-8 rounded border border-rule">
-      <div className="border-b border-rule bg-surface-raised px-4 py-2.5">
-        <h2
-          id={headingId}
-          className="text-[0.75rem] font-semibold uppercase tracking-wider text-ink-muted"
-        >
-          Tomboy
-        </h2>
-      </div>
+    <section
+      aria-label={embedded ? "Tomboy" : undefined}
+      aria-labelledby={embedded ? undefined : headingId}
+      className={embedded ? "" : "mt-8 rounded border border-rule"}
+    >
+      {!embedded && (
+        <div className="border-b border-rule bg-surface-raised px-4 py-2.5">
+          <h2
+            id={headingId}
+            className="text-[0.75rem] font-semibold uppercase tracking-wider text-ink-muted"
+          >
+            Tomboy
+          </h2>
+        </div>
+      )}
 
       <div className="space-y-4 px-4 py-4 text-[0.875rem] leading-relaxed text-ink-muted">
         <p>

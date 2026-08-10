@@ -1,4 +1,4 @@
-import { formatChartDate } from "./derive";
+import { formatDateKey, type DateFormatId } from "@/lib/dateFormat";
 import { formatMetricNumber } from "./parse";
 import type { MetricListRow } from "./types";
 
@@ -83,6 +83,7 @@ export function metricMetaChips(
  */
 export function metricTrailingDate(
   row: Pick<MetricListRow, "lastDate">,
+  dateFormat: DateFormatId,
 ): string | null {
-  return row.lastDate ? formatChartDate(row.lastDate) : null;
+  return row.lastDate ? formatDateKey(row.lastDate, dateFormat) : null;
 }

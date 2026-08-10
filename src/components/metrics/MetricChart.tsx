@@ -4,13 +4,13 @@ import { useMemo, useState } from "react";
 import {
   chartPoints,
   dateXFraction,
-  formatChartDate,
   niceTicks,
   niceTimeTicks,
   plotPoint,
   seriesPolyline,
   yDomain,
 } from "@/lib/metrics/derive";
+import { useDateFormatter } from "@/components/settings/SettingsProvider";
 import { formatMetricNumber } from "@/lib/metrics/parse";
 import type { MetricEntryView, MetricType } from "@/lib/metrics/types";
 
@@ -60,6 +60,7 @@ export function MetricChart({
   showObjective?: boolean;
   compact?: boolean;
 }) {
+  const formatDate = useDateFormatter();
   const [hover, setHover] = useState<{
     index: number;
     x: number;
@@ -289,7 +290,7 @@ export function MetricChart({
                 strokeWidth={1}
               />
               <title>
-                {formatChartDate(pt.date)}: {formatMetricNumber(pt.value)}
+                {formatDate(pt.date)}: {formatMetricNumber(pt.value)}
                 {units ? ` ${units}` : ""}
                 {pt.target != null ? ` (target ${formatMetricNumber(pt.target)})` : ""}
               </title>
@@ -308,7 +309,7 @@ export function MetricChart({
               marginTop: -8,
             }}
           >
-            <div className="font-medium">{formatChartDate(hoverPoint.date)}</div>
+            <div className="font-medium">{formatDate(hoverPoint.date)}</div>
             <div>
               {formatMetricNumber(hoverPoint.value)}
               {units ? ` ${units}` : ""}

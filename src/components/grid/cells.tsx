@@ -2,7 +2,8 @@
 
 import { useContext, useEffect, useRef, useState } from "react";
 import type { NodeState, PriorityLetter } from "@/db/schema";
-import { formatShortDate } from "@/lib/dateFormat";
+import { useDateFormatter } from "@/components/settings/SettingsProvider";
+import { formatFullDateKey } from "@/lib/dateFormat";
 import type { OutlineNode } from "@/lib/tree/types";
 import {
   formatEffort,
@@ -413,6 +414,7 @@ export function DeadlineCell({
   today: string | null;
   onChange: (deadline: string | null) => void;
 }) {
+  const formatDate = useDateFormatter();
   const value = node.deadline ? toDateKey(node.deadline) : "";
   const overdue =
     value !== "" && today !== null && value < today && node.state !== "completed";
@@ -439,11 +441,12 @@ export function DeadlineCell({
       />
       {value ? (
         <span
-          className={`pointer-events-none absolute inset-0 flex items-center justify-end tabular text-[0.75rem] peer-focus:hidden ${
+          title={formatFullDateKey(value)}
+          className={`pointer-events-none absolute inset-0 flex min-w-0 items-center justify-end tabular text-[0.75rem] peer-focus:hidden ${
             overdue ? "text-priority-a" : "text-ink-muted"
           }`}
         >
-          {formatShortDate(value)}
+          <span className="min-w-0 truncate">{formatDate(value)}</span>
         </span>
       ) : null}
     </span>

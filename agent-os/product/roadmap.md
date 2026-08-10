@@ -306,9 +306,10 @@ View · Tools`) with an icon gutter and shortcut column; an **icon row** for the
   behaviour and not just defaults from the view id. **Terminology:** the eleven navigation
   destinations are now **modules**, freeing "View" for the in-grid thing Achieve called a View;
   storage keys still say `tab`, deliberately. Dropped from scope: the Metrics tracking grid
-  (four columns, two unhideable — a view there would carry two booleans). Deferred: unifying
-  the settings UI so a module's own settings stop looking distinct from grid settings;
-  capturing sort and density.
+  (four columns, two unhideable — a view there would carry two booleans). The settings
+  unification later shipped in `specs/2026-08-09-1956-settings-workspace-date-format`: module,
+  grid, and named-view preferences share one grouped reset surface while saved-view settings
+  remain protected from bulk reset. Deferred: capturing sort and density.
 - Any remaining Achieve chrome that earns its keep.
 - **Pomodoro → time tracking.** Effort, Effort Left, Actual Effort, and % complete
   already live on tasks (and roll up); what’s missing is a way to _earn_ those numbers

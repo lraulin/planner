@@ -295,6 +295,7 @@ function priorityKey(raw: string): number | null {
 export function describeCustom(
   columnLabel: string,
   filter: CustomColumnFilter,
+  valueLabel?: (value: string) => string,
 ): string {
   if (filter.conditions.length === 0) return "";
 
@@ -303,7 +304,8 @@ export function describeCustom(
     if (!operatorNeedsOperand(condition.op)) {
       return `[${columnLabel}] ${meta.symbol}`;
     }
-    const shown = condition.value === "" ? "''" : `'${condition.value}'`;
+    const value = valueLabel ? valueLabel(condition.value) : condition.value;
+    const shown = condition.value === "" ? "''" : `'${value}'`;
     return `[${columnLabel}] ${meta.symbol} ${shown}`;
   });
 

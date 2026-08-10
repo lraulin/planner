@@ -1479,7 +1479,7 @@ export const userSettings = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    /** `grid:{tabId}`, `chooser:{viewId}`, `outline:filters`, `notes:filter`, `drawer`. */
+    /** `grid:{tabId}`, `chooser:{viewId}`, `outline:filters`, `notes:filter`, `display`. */
     scope: text("scope").notNull(),
     /** Scope-specific payload, always carrying a `v` for future migrations. */
     value: jsonb("value").notNull(),

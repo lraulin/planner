@@ -4,7 +4,11 @@ import {
   type CalendarNoteGroupBy,
   type NoteGroupBy,
 } from "@/lib/grid/grouping";
-import { formatShortDate } from "@/lib/dateFormat";
+import {
+  DEFAULT_DATE_FORMAT,
+  formatDateKey,
+  type DateFormatId,
+} from "@/lib/dateFormat";
 import { toDateKey } from "@/lib/schedule/geometry";
 import type { GridRow } from "@/lib/tree/slice";
 import { FLAG_LABELS } from "./flags";
@@ -88,8 +92,11 @@ export function noteDatePartLabel(
 }
 
 /** Display a stored calendar day from its UTC components, never a process-local day. */
-export function formatNoteDate(date: Date | null): string {
-  return date ? formatShortDate(toDateKey(date)) : "";
+export function formatNoteDate(
+  date: Date | null,
+  dateFormat: DateFormatId = DEFAULT_DATE_FORMAT,
+): string {
+  return date ? formatDateKey(toDateKey(date), dateFormat) : "";
 }
 
 /** Contexts form a set: normalize their display order before using the set as a bucket. */
@@ -122,6 +129,7 @@ function textPart(value: string | null | undefined): NoteGroupPart | null {
 export function noteGroupPart(
   note: NoteNode,
   dimension: NoteGroupBy,
+  dateFormat: DateFormatId = DEFAULT_DATE_FORMAT,
 ): NoteGroupPart | null {
   switch (dimension) {
     case "subject":
@@ -141,7 +149,7 @@ export function noteGroupPart(
     case "date": {
       if (!note.noteDate) return null;
       const key = toDateKey(note.noteDate);
-      return { key, label: formatNoteDate(note.noteDate), sort: key };
+      return { key, label: formatNoteDate(note.noteDate, dateFormat), sort: key };
     }
     case "year":
     case "month":
@@ -200,6 +208,7 @@ function compareParts(
 export function groupNotes(
   rows: NoteRowView[],
   dimensions: readonly NoteGroupBy[],
+  dateFormat: DateFormatId = DEFAULT_DATE_FORMAT,
 ): GridRow<NoteRowView["note"]>[] {
   const groupBy = asNoteGroupBy(dimensions);
   if (groupBy.length === 0) return rows.map(toGridRow);
@@ -208,8 +217,8 @@ export function groupNotes(
   indexed.sort((left, right) => {
     for (const dimension of groupBy) {
       const compared = compareParts(
-        noteGroupPart(left.row.note, dimension),
-        noteGroupPart(right.row.note, dimension),
+        noteGroupPart(left.row.note, dimension, dateFormat),
+        noteGroupPart(right.row.note, dimension, dateFormat),
         dimension,
       );
       if (compared !== 0) return compared;
@@ -237,7 +246,7 @@ export function groupNotes(
   for (const { row } of indexed) {
     for (let level = 0; level < groupBy.length; level++) {
       const dimension = groupBy[level];
-      const part = noteGroupPart(row.note, dimension);
+      const part = noteGroupPart(row.note, dimension, dateFormat);
       const key = part?.key ?? "";
       const frame = stack[level];
 

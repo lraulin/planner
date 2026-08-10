@@ -5,8 +5,8 @@ import { users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import {
   InvalidSettingError,
-  resetAllUserSettings,
   resetUserSetting,
+  resetUserSettings,
   writeUserSetting,
   writeUserSettings,
 } from "./mutations";
@@ -136,13 +136,16 @@ describeDb("resetting settings", () => {
     expect(Object.keys(await loadUserSettings(userId))).toEqual([gridScope("goals")]);
   });
 
-  it("forgets every scope", async () => {
+  it("forgets only a requested batch and preserves every other scope", async () => {
     await writeUserSetting(userId, gridScope("tasks"), { v: 1 });
+    await writeUserSetting(userId, gridScope("goals"), { v: 1 });
     await writeUserSetting(userId, chooserScope("tc-priority"), { v: 1 });
 
-    await resetAllUserSettings(userId);
+    await resetUserSettings(userId, [gridScope("tasks"), chooserScope("tc-priority")]);
 
-    expect(await loadUserSettings(userId)).toEqual({});
+    expect(await loadUserSettings(userId)).toEqual({
+      [gridScope("goals")]: { v: 1 },
+    });
   });
 
   it("can clear a row whose scope this build no longer recognises", async () => {
@@ -183,7 +186,7 @@ describeDb("cross-user isolation", () => {
 
   it("does not let one user delete another's settings", async () => {
     await resetUserSetting(intruder, scope);
-    await resetAllUserSettings(intruder);
+    await resetUserSettings(intruder, [scope]);
 
     const ownerSnapshot = await loadUserSettings(owner);
     expect(ownerSnapshot[scope]).toEqual({ v: 1, view: "owner" });

@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { userSettings } from "@/db/schema";
 import { isValidScope } from "./scopes";
@@ -96,7 +96,14 @@ export async function resetUserSetting(userId: string, scope: string): Promise<v
     .where(and(eq(userSettings.userId, userId), eq(userSettings.scope, scope)));
 }
 
-/** Forget every scope for one user. Never touches another user's rows. */
-export async function resetAllUserSettings(userId: string): Promise<void> {
-  await db.delete(userSettings).where(eq(userSettings.userId, userId));
+/** Forget a chosen set of scopes in one user-scoped database round trip. */
+export async function resetUserSettings(
+  userId: string,
+  scopes: readonly string[],
+): Promise<void> {
+  const unique = [...new Set(scopes)];
+  if (unique.length === 0) return;
+  await db
+    .delete(userSettings)
+    .where(and(eq(userSettings.userId, userId), inArray(userSettings.scope, unique)));
 }

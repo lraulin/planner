@@ -94,7 +94,7 @@ export function GoogleCalendarPanel({
   const primary = calendars.find((c) => c.isPrimary);
 
   return (
-    <section aria-labelledby={headingId} className="mt-6 rounded border border-rule">
+    <section aria-labelledby={headingId} className="rounded border border-rule">
       <div className="flex items-center justify-between gap-3 border-b border-rule bg-surface-raised px-4 py-2.5">
         <h2
           id={headingId}

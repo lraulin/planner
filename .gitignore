@@ -17,7 +17,8 @@
 # Achieve Planner reference captures. Kept on disk as the source material for the
 # reimplementation, but out of git — they are large, numerous, and never built against.
 /screenshots
-agent-os/specs/**/visuals/
+agent-os/specs/**/visuals/*
+!agent-os/specs/**/visuals/approved-wireframe.md
 
 # next.js
 /.next/
@@ -46,4 +47,3 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 todo.tmp.md
-

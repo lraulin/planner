@@ -7,6 +7,8 @@ import { createDiscussionItemAction } from "@/app/contacts/actions";
 import { setStateAction } from "@/app/outline/actions";
 import { formatPriority } from "@/lib/tree/format";
 import { toDateKey } from "@/lib/schedule/geometry";
+import { useDateFormatter } from "@/components/settings/SettingsProvider";
+import { formatFullDateKey } from "@/lib/dateFormat";
 
 /**
  * Achieve's Discussion Items tab — the things to raise next time you talk to this person.
@@ -157,6 +159,7 @@ function ItemList({
   onToggle: (item: DiscussionItemSummary) => void;
   emptyText?: string;
 }) {
+  const formatDate = useDateFormatter();
   if (items.length === 0) {
     return emptyText ? (
       <p className="text-[0.8125rem] italic text-ink-faint">{emptyText}</p>
@@ -190,17 +193,19 @@ function ItemList({
             >
               {item.name}
             </Link>
-            {item.deadline && (
-              <time
-                dateTime={toDateKey(item.deadline)}
-                className="tabular flex-none text-[0.75rem] text-ink-muted"
-              >
-                {/* `timeZone: "UTC"` because a deadline is a stored calendar day (UTC
-                    noon). Without it the visible text uses local getters while the
-                    `dateTime` above uses `toDateKey`, so the two can name different days. */}
-                {item.deadline.toLocaleDateString(undefined, { timeZone: "UTC" })}
-              </time>
-            )}
+            {item.deadline &&
+              (() => {
+                const dateKey = toDateKey(item.deadline);
+                return (
+                  <time
+                    dateTime={dateKey}
+                    title={formatFullDateKey(dateKey)}
+                    className="tabular max-w-[9rem] flex-none truncate text-[0.75rem] text-ink-muted"
+                  >
+                    {formatDate(dateKey)}
+                  </time>
+                );
+              })()}
           </li>
         );
       })}

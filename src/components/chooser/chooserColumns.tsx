@@ -2,7 +2,7 @@ import type { ColumnDef } from "@/components/grid/columns";
 import { EffortCell, FocusCell, StatusCell } from "@/components/grid/cells";
 import type { OutlineColumnCtx } from "@/components/outline/outlineColumns";
 import type { PriorityLetter } from "@/db/schema";
-import { formatShortDate } from "@/lib/dateFormat";
+import { DateText } from "@/components/date/DateText";
 import type { OutlineNode } from "@/lib/tree/types";
 import { formatEffort, formatPriority } from "@/lib/tree/format";
 import { toDateKey } from "@/lib/schedule/geometry";
@@ -190,11 +190,11 @@ export function buildChooserColumns(
         const value = toDateKey(due);
         const inherited = row.node.deadline === null;
         return (
-          <span
-            title={inherited ? "Inherited from a parent" : undefined}
-            className={`tabular text-[0.75rem] ${inherited ? "text-ink-faint italic" : "text-ink-muted"}`}
-          >
-            {formatShortDate(value)}
+          <span title={inherited ? "Inherited from a parent" : undefined}>
+            <DateText
+              dateKey={value}
+              className={`tabular text-right text-[0.75rem] ${inherited ? "text-ink-faint italic" : "text-ink-muted"}`}
+            />
           </span>
         );
       },

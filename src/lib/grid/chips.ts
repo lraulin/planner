@@ -39,6 +39,8 @@ export type ChipContext = {
    * in rather than imported.
    */
   optionLabelOf: (columnId: string, optionId: string) => string;
+  /** Standalone presentation for custom-filter operands such as canonical date keys. */
+  operandLabelOf?: (columnId: string, value: string) => string;
   /**
    * Every option id a column's set filter could tick, so a chip can describe a mostly-ticked
    * list by what it *excludes*. Omit it (or return `[]`) and chips fall back to counting.
@@ -76,7 +78,13 @@ export function buildGridChips(context: ChipContext): GridChip[] {
         kind: "condition",
         key: `condition:${index}`,
         index,
-        label: describeCrossCondition(context.labelOf(condition.columnId), condition),
+        label: describeCrossCondition(
+          context.labelOf(condition.columnId),
+          condition,
+          context.operandLabelOf
+            ? (value) => context.operandLabelOf?.(condition.columnId, value) ?? value
+            : undefined,
+        ),
       });
     });
   }
@@ -114,7 +122,13 @@ function describeColumnFilter(
 
   if (filter.mode === "custom") {
     // The expression already names the column in brackets, so it stands alone.
-    return describeCustom(columnLabel, filter);
+    return describeCustom(
+      columnLabel,
+      filter,
+      context.operandLabelOf
+        ? (value) => context.operandLabelOf?.(columnId, value) ?? value
+        : undefined,
+    );
   }
 
   const ids = filter.ids.filter((id) => id !== "all");

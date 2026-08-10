@@ -107,6 +107,25 @@ describe("buildGridChips", () => {
     expect(chips[0].label).toBe("[State] ≠ 'C' AND [State] ≠ 'Cn'");
   });
 
+  it("uses the presentation label supplied for exact date operands", () => {
+    const chips = buildGridChips(
+      context({
+        filters: {
+          deadline: {
+            mode: "custom",
+            join: "and",
+            conditions: [{ op: "eq", value: "2026-01-05" }],
+          },
+        },
+        labelOf: (id) => (id === "deadline" ? "Deadline" : id),
+        operandLabelOf: (columnId, value) =>
+          columnId === "deadline" && value === "2026-01-05" ? "January 5, 2026" : value,
+      }),
+    );
+
+    expect(chips[0].label).toBe("[Deadline] = 'January 5, 2026'");
+  });
+
   /**
    * One chip per condition, not one per advanced filter: removing a single criterion
    * without rebuilding the whole expression is the point of having chips at all.
@@ -138,6 +157,22 @@ describe("buildGridChips", () => {
         label: "Purpose ∌ archive",
       },
     ]);
+  });
+
+  it("uses the presentation label for advanced-filter date operands", () => {
+    const chips = buildGridChips(
+      context({
+        advancedFilter: {
+          join: "and",
+          conditions: [{ columnId: "deadline", op: "lt", value: "2026-01-05" }],
+        },
+        labelOf: (id) => (id === "deadline" ? "Deadline" : id),
+        operandLabelOf: (_columnId, value) =>
+          value === "2026-01-05" ? "5 Jan 2026" : value,
+      }),
+    );
+
+    expect(chips[0].label).toBe("Deadline < 5 Jan 2026");
   });
 
   it("omits the operand for an operator that has none", () => {

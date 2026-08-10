@@ -5,6 +5,7 @@ import { buildGridChips, type GridChip } from "@/lib/grid/chips";
 import type { CrossColumnFilter } from "@/lib/grid/crossFilter";
 import { filterOptions, type ColumnFilter } from "@/lib/grid/filters";
 import type { ColumnMeta } from "./columns";
+import { useDateFormatter } from "@/components/settings/SettingsProvider";
 
 /**
  * What is currently narrowing the grid, and how many rows survived it.
@@ -43,6 +44,7 @@ export function GridFilterChips({
   onClearSearch: () => void;
   onClearAll: () => void;
 }) {
+  const formatDate = useDateFormatter();
   const byId = useMemo(
     () => new Map(columns.map((column) => [column.id, column])),
     [columns],
@@ -57,6 +59,9 @@ export function GridFilterChips({
         labelOf: (columnId) => byId.get(columnId)?.label ?? columnId,
         optionLabelOf: (columnId, optionId) => {
           const column = byId.get(columnId);
+          if (column?.filterKind === "date" && optionId.startsWith("value:")) {
+            return formatDate(optionId.slice("value:".length));
+          }
           // A value entry reads through the column's own `filterLabel`, so a chip says
           // "Not started" wherever the set filter said "Not started" — the State column
           // stores Achieve's two-letter code, and a chip showing `NS` beside a list
@@ -70,12 +75,14 @@ export function GridFilterChips({
           );
           return options.find((option) => option.id === optionId)?.label ?? optionId;
         },
+        operandLabelOf: (columnId, value) =>
+          byId.get(columnId)?.filterKind === "date" ? formatDate(value) : value,
         // Only the values a column actually holds, so "all but Completed" means all but the
         // ones on screen — not all but every state the enum could ever have.
         domainOf: (columnId) =>
           (distinctValues[columnId] ?? []).map((value) => `value:${value}`),
       }),
-    [filters, advancedFilter, search, byId, distinctValues],
+    [filters, advancedFilter, search, byId, distinctValues, formatDate],
   );
 
   // Renders for the count alone when something other than a filter is holding rows back —

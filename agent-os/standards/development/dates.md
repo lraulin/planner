@@ -91,7 +91,19 @@ _times_ and intermediate math. After stepping a **calendar** field, re-encode wi
 
 - Grid date columns: `toDateKey(date)`.
 - Overdue / “today” comparisons: field’s `toDateKey` vs `useToday()` (`localDateKey`).
-- Compact labels: `formatCompactDate(toDateKey(date))`.
+- Standalone exact values (grid cells, compact rows, filter labels, linked-record dates):
+  format the canonical key through `useDateFormatter()` in components, or pass the user's
+  `DateFormatId` into pure `src/lib/**` helpers. The Achieve-compatible default is
+  `M/D/YYYY`.
+- `formatDateKey` reads written `YYYY-MM-DD` components and uses a closed English preset
+  catalogue. It never parses the key as an instant and invalid keys render blank.
+- Formatting is presentation only. Sorting, filtering, comparisons, native date inputs,
+  route keys, and stored values remain canonical `YYYY-MM-DD`.
+- Long values keep their existing column tracks and truncate with a full-date tooltip.
+  Partial formats also expose the full date on hover.
+- Contextual calendar labels keep their own purpose-specific format: day and week headings,
+  ranges, mini-month labels, chart axes, timestamps, and planning prose do not follow the
+  standalone preference.
 
 ## Testing (required regressions)
 
@@ -134,6 +146,7 @@ Must keep green:
 | Local wall-clock arithmetic   | `src/lib/dateMath.ts`                               |
 | DateField                     | `src/components/detail/fields.tsx`                  |
 | Today hook                    | `src/components/grid/useToday.ts`                   |
+| Standalone display formats    | `src/lib/dateFormat.ts`, `SettingsProvider.tsx`     |
 | Detail save / record dates    | `src/lib/detail/mutations.ts`                       |
 | Completion + recurrence moves | `src/lib/tree/mutations.ts`, `src/lib/recurrence/*` |
 | Domain meanings               | `agent-os/standards/product/date-model.md`          |

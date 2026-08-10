@@ -17,6 +17,8 @@ import {
   metricTrailingDate,
 } from "@/lib/metrics/compactRow";
 import type { MetricListRow } from "@/lib/metrics/types";
+import { useDisplaySettings } from "@/components/settings/SettingsProvider";
+import { formatFullDateKey, type DateFormatId } from "@/lib/dateFormat";
 
 export type MetricGroup = {
   key: string;
@@ -53,6 +55,7 @@ export function MetricCompactList({
   /** Long-press menu. Omitted where the surface has no row commands. */
   onRowMenu?: (id: string, x: number, y: number) => void;
 }) {
+  const { value: displaySettings } = useDisplaySettings();
   return (
     <div className="flex flex-col" role="listbox" aria-label="Metrics">
       {groups.map((group) => (
@@ -71,6 +74,7 @@ export function MetricCompactList({
             <MetricCompactRow
               key={row.id}
               row={row}
+              dateFormat={displaySettings.dateFormat}
               selected={row.id === (selectedId ?? null)}
               onOpen={() => onOpen(row.id)}
               onLongPress={onRowMenu ? (x, y) => onRowMenu(row.id, x, y) : undefined}
@@ -84,11 +88,13 @@ export function MetricCompactList({
 
 function MetricCompactRow({
   row,
+  dateFormat,
   selected,
   onOpen,
   onLongPress,
 }: {
   row: MetricListRow;
+  dateFormat: DateFormatId;
   selected: boolean;
   onOpen: () => void;
   onLongPress?: (x: number, y: number) => void;
@@ -117,7 +123,7 @@ function MetricCompactRow({
   // The bar carries the letter as a hue; the rank ("A1" versus "A3") is only legible as text,
   // so it leads the meta line — the same split `CompactRow` makes.
   const chips = [priority, ...metricMetaChips(row)].filter((chip) => chip !== "");
-  const lastDate = metricTrailingDate(row);
+  const lastDate = metricTrailingDate(row, dateFormat);
 
   return (
     <button
@@ -171,7 +177,10 @@ function MetricCompactRow({
             {row.title || "Untitled"}
           </span>
           {lastDate && (
-            <span className="flex-none text-[0.75rem] tabular-nums text-ink-faint">
+            <span
+              title={formatFullDateKey(row.lastDate)}
+              className="max-w-[9rem] flex-none truncate text-[0.75rem] tabular-nums text-ink-faint"
+            >
               {lastDate}
             </span>
           )}

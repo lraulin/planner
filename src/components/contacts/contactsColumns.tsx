@@ -2,7 +2,7 @@
 
 import type { ColumnDef } from "@/components/grid/columns";
 import type { ContactListRow } from "@/lib/contacts/types";
-import { formatShortDate } from "@/lib/dateFormat";
+import { DateText } from "@/components/date/DateText";
 import { localDateKey } from "@/lib/schedule/geometry";
 
 /**
@@ -168,9 +168,10 @@ export const contactsColumns: ColumnDef<ContactsColumnCtx, ContactListRow>[] = [
     sortValue: (row) => row.node.updatedAt.getTime(),
     compact: "hidden",
     render: (row) => (
-      <span className="tabular text-[0.8125rem] text-ink-muted">
-        {formatShortDate(localDateKey(row.node.updatedAt))}
-      </span>
+      <DateText
+        dateKey={localDateKey(row.node.updatedAt)}
+        className="tabular text-[0.8125rem] text-ink-muted"
+      />
     ),
   },
 ];

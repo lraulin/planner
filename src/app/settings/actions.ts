@@ -37,8 +37,10 @@ export async function resetSettingScopeAction(scope: string): Promise<ActionResu
   return run((userId) => settings.resetUserSetting(userId, scope));
 }
 
-export async function resetAllSettingsAction(): Promise<ActionResult> {
-  return run((userId) => settings.resetAllUserSettings(userId));
+export async function resetSettingScopesAction(
+  scopes: string[],
+): Promise<ActionResult> {
+  return run((userId) => settings.resetUserSettings(userId, scopes));
 }
 
 // ── Google Calendar ──────────────────────────────────────────────────────────

@@ -44,7 +44,11 @@ import type { MenuItem } from "@/components/grid/ContextMenu";
 import { rowMenuFor } from "@/components/grid/rowMenu";
 import type { GridCommandCapabilities } from "@/lib/grid/commandDeck";
 import { useSuspendCommandKeys } from "@/components/shell/CommandProvider";
-import { useSetting, type SettingCodec } from "@/components/settings/SettingsProvider";
+import {
+  useDisplaySettings,
+  useSetting,
+  type SettingCodec,
+} from "@/components/settings/SettingsProvider";
 import { ToolbarButton, ToolbarSelect } from "@/components/tabs/tabChrome";
 import {
   parseNotesView,
@@ -102,6 +106,7 @@ export function NotesGrid({
   /** People a note can be filed against, as Contact History. */
   contacts: ContactOption[];
 }) {
+  const { value: displaySettings } = useDisplaySettings();
   const [patches, setPatches] = useState<Record<string, Partial<NoteNode>>>({});
   // Keep patches until server props refresh — clearing on action settle flickers the old tree.
   const [baselineNotes, setBaselineNotes] = useState(initialNotes);
@@ -261,8 +266,8 @@ export function NotesGrid({
       sort,
       keep,
     });
-    return groupNotes(sliced, noteGroupBy);
-  }, [notes, mode, sort, filter, noteGroupBy]);
+    return groupNotes(sliced, noteGroupBy, displaySettings.dateFormat);
+  }, [notes, mode, sort, filter, noteGroupBy, displaySettings.dateFormat]);
 
   const distinctValues = useMemo(
     () =>

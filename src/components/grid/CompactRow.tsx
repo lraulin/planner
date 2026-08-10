@@ -22,6 +22,8 @@ import { haptic } from "@/lib/touch/haptics";
 import { CommandGlyph } from "@/components/icons/commandIcons";
 import type { CommandIcon } from "@/lib/commands/icons";
 import type { CompactFields } from "@/lib/grid/compactFields";
+import { useDateFormatter } from "@/components/settings/SettingsProvider";
+import { formatFullDateKey } from "@/lib/dateFormat";
 import type { ColumnDef, NodeGridRow } from "./columns";
 
 /**
@@ -86,6 +88,7 @@ export function CompactRow<TCtx, TRow>({
   label?: string;
   expanded?: boolean;
 }) {
+  const formatDate = useDateFormatter();
   const rowRef = useRef<HTMLDivElement>(null);
   const press = useRef<PressState>(IDLE);
   const timer = useRef<number | null>(null);
@@ -126,11 +129,15 @@ export function CompactRow<TCtx, TRow>({
 
   useEffect(() => clearTimer, [clearTimer]);
 
-  const accentText = textOf(fields.accent, row, columnCtx);
+  const accentText = textOf(fields.accent, row, columnCtx, formatDate);
   const chips = [
     accentText,
-    ...fields.meta.map((column) => textOf(column, row, columnCtx)),
+    ...fields.meta.map((column) => textOf(column, row, columnCtx, formatDate)),
   ].filter((text): text is string => Boolean(text));
+  const chipTitle = [fields.accent, ...fields.meta]
+    .map((column) => fullTextOf(column, row, columnCtx))
+    .filter((text): text is string => Boolean(text))
+    .join(" · ");
 
   const offset = swipeOffset(travel, "horizontal");
   const action = travel < 0 ? swipe?.left : travel > 0 ? swipe?.right : undefined;
@@ -306,6 +313,7 @@ export function CompactRow<TCtx, TRow>({
           </div>
           {chips.length > 0 && (
             <div
+              title={chipTitle || undefined}
               className="truncate text-[0.75rem] text-ink-muted"
               // The name cell puts an expander and a type icon before its text, so a meta line
               // flush with the card would sit visibly left of the title it belongs to. Other
@@ -389,12 +397,27 @@ function textOf<TCtx, TRow>(
   column: ColumnDef<TCtx, TRow> | null,
   row: NodeGridRow<TRow>,
   _ctx: TCtx,
+  formatDate: (dateKey: string | null | undefined) => string,
 ): string | null {
   if (!column) return null;
-  const text = column.compactText
+  const raw = column.compactText
     ? column.compactText(row)
     : (column.filterValue?.(row) ?? null);
+  const text = column.filterKind === "date" ? formatDate(raw) : raw;
   return text && text.trim() !== "" ? text : null;
+}
+
+function fullTextOf<TCtx, TRow>(
+  column: ColumnDef<TCtx, TRow> | null,
+  row: NodeGridRow<TRow>,
+  _ctx: TCtx,
+): string | null {
+  if (!column) return null;
+  const raw = column.compactText
+    ? column.compactText(row)
+    : (column.filterValue?.(row) ?? null);
+  if (!raw || raw.trim() === "") return null;
+  return column.filterKind === "date" ? formatFullDateKey(raw) : raw;
 }
 
 /**

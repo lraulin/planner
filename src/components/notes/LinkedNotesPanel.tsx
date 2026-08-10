@@ -6,6 +6,9 @@ import { useState, useTransition } from "react";
 import type { LinkedNoteSummary } from "@/lib/detail/types";
 import { notesPath } from "@/lib/url/viewState";
 import { createNoteAction } from "@/app/notes/actions";
+import { useDateFormatter } from "@/components/settings/SettingsProvider";
+import { formatFullDateKey } from "@/lib/dateFormat";
+import { toDateKey } from "@/lib/schedule/geometry";
 
 /**
  * What a note can be filed against. A node — a project, a task — or a contact, which is
@@ -33,6 +36,7 @@ export function LinkedNotesPanel({
   title?: string;
   emptyText?: string;
 }) {
+  const formatDate = useDateFormatter();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [busy, startTransition] = useTransition();
@@ -89,11 +93,19 @@ export function LinkedNotesPanel({
                   {note.title.trim() || "Untitled note"}
                 </span>
                 <span className="flex gap-2 text-[0.75rem] text-ink-muted">
-                  {note.noteDate && (
-                    <time dateTime={toIso(note.noteDate)}>
-                      {formatDate(note.noteDate)}
-                    </time>
-                  )}
+                  {note.noteDate &&
+                    (() => {
+                      const dateKey = toCalendarDateKey(note.noteDate);
+                      return (
+                        <time
+                          dateTime={dateKey}
+                          title={formatFullDateKey(dateKey)}
+                          className="max-w-[10rem] flex-none truncate"
+                        >
+                          {formatDate(dateKey)}
+                        </time>
+                      );
+                    })()}
                   {note.snippet && (
                     <span className="truncate text-ink-faint">{note.snippet}</span>
                   )}
@@ -107,23 +119,7 @@ export function LinkedNotesPanel({
   );
 }
 
-function toIso(value: Date | string): string {
+function toCalendarDateKey(value: Date | string): string {
   const date = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
-}
-
-/**
- * A note's Date, which is a stored calendar day (UTC noon) — so read it with `timeZone:
- * "UTC"`, the same way `formatNoteDate` does for the Notes grid. Local getters would let the
- * same note read one day here and another in the grid. See `standards/development/dates.md`.
- */
-function formatDate(value: Date | string): string {
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
+  return Number.isNaN(date.getTime()) ? "" : toDateKey(date);
 }

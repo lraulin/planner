@@ -16,7 +16,9 @@ type ImportFail = { ok: false; error: string };
  * Import RedNotebook month files (`YYYY-MM.txt` from `.rednotebook/data/`) as flat notes
  * with subject "Rednotebook".
  */
-export function RedNotebookImportPanel() {
+export function RedNotebookImportPanel({
+  embedded = false,
+}: { embedded?: boolean } = {}) {
   const headingId = useId();
   const fileRef = useRef<HTMLInputElement>(null);
   const [pending, startTransition] = useTransition();
@@ -54,15 +56,21 @@ export function RedNotebookImportPanel() {
   };
 
   return (
-    <section aria-labelledby={headingId} className="mt-8 rounded border border-rule">
-      <div className="border-b border-rule bg-surface-raised px-4 py-2.5">
-        <h2
-          id={headingId}
-          className="text-[0.75rem] font-semibold uppercase tracking-wider text-ink-muted"
-        >
-          RedNotebook
-        </h2>
-      </div>
+    <section
+      aria-label={embedded ? "RedNotebook" : undefined}
+      aria-labelledby={embedded ? undefined : headingId}
+      className={embedded ? "" : "mt-8 rounded border border-rule"}
+    >
+      {!embedded && (
+        <div className="border-b border-rule bg-surface-raised px-4 py-2.5">
+          <h2
+            id={headingId}
+            className="text-[0.75rem] font-semibold uppercase tracking-wider text-ink-muted"
+          >
+            RedNotebook
+          </h2>
+        </div>
+      )}
 
       <div className="space-y-4 px-4 py-4 text-[0.875rem] leading-relaxed text-ink-muted">
         <p>

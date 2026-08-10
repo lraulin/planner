@@ -131,6 +131,15 @@ describe("note grouping", () => {
     ]);
   });
 
+  it("threads the user's exact-date format into group labels", () => {
+    const grouped = groupNotes([row("dated", "2026-08-07")], ["date"], "MMMM D, YYYY");
+
+    expect(grouped[0]).toMatchObject({
+      kind: "group",
+      label: "August 7, 2026",
+    });
+  });
+
   it("derives every non-calendar bucket from the value shown by its column", () => {
     const note = row("bucket", "2026-08-07", {
       subject: " Work ",

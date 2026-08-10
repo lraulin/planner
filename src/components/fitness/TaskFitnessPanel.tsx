@@ -9,6 +9,9 @@ import {
 import { formatSetsLabel } from "@/lib/fitness/format";
 import type { ExerciseHistoryEntry, ExerciseSummary } from "@/lib/fitness/types";
 import { FieldGrid, Section } from "@/components/detail/fields";
+import { useDateFormatter } from "@/components/settings/SettingsProvider";
+import { formatFullDateKey } from "@/lib/dateFormat";
+import { localDateKey } from "@/lib/schedule/geometry";
 
 /**
  * Task form strip: link this plan task to a catalog exercise, show last logged sets,
@@ -21,6 +24,7 @@ export function TaskFitnessPanel({
   exerciseId: string | null | undefined;
   onChange: (exerciseId: string | null) => void;
 }) {
+  const formatDate = useDateFormatter();
   const [catalog, setCatalog] = useState<ExerciseSummary[]>([]);
   const [latestById, setLatestById] = useState<
     Record<string, ExerciseHistoryEntry | null>
@@ -88,8 +92,11 @@ export function TaskFitnessPanel({
           {latest ? (
             <>
               <div className="text-[0.75rem] text-ink-faint">Last logged</div>
-              <div className="font-mono text-[0.8125rem] text-ink">
-                {new Date(latest.performedAt).toLocaleDateString()} ·{" "}
+              <div
+                title={formatFullDateKey(localDateKey(new Date(latest.performedAt)))}
+                className="truncate font-mono text-[0.8125rem] text-ink"
+              >
+                {formatDate(localDateKey(new Date(latest.performedAt)))} ·{" "}
                 {formatSetsLabel(latest.sets)}
               </div>
             </>
