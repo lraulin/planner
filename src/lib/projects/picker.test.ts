@@ -12,6 +12,7 @@ function node(values: {
   type: OutlineNode["type"];
   name: string;
   isInbox?: boolean;
+  isDream?: boolean;
   state?: OutlineNode["state"];
   shelf?: OutlineNode["shelf"];
 }): OutlineNode {
@@ -19,6 +20,7 @@ function node(values: {
     ...values,
     parentId: values.parentId ?? null,
     isInbox: values.isInbox ?? false,
+    isDream: values.isDream ?? false,
     state: values.state ?? (values.type === "result_area" ? null : "not_started"),
     shelf: values.shelf ?? null,
     sortKey: values.id,
@@ -31,6 +33,13 @@ const rows = [
   node({ id: "area", type: "result_area", name: "Work" }),
   node({ id: "empty", type: "result_area", name: "Health" }),
   node({ id: "goal", parentId: "area", type: "goal", name: "Grow" }),
+  node({
+    id: "dream",
+    parentId: "area",
+    type: "goal",
+    name: "Learn Italian",
+    isDream: true,
+  }),
   node({ id: "alpha", parentId: "goal", type: "project", name: "Alpha" }),
   node({ id: "beta", parentId: "alpha", type: "project", name: "Beta" }),
   node({ id: "inbox", type: "project", name: "Inbox", isInbox: true }),
@@ -60,27 +69,31 @@ describe("projectPickerRows", () => {
         groupByResultArea: true,
         includeDeferred: false,
         today: "2026-08-09",
-      }).map((row) => [row.name, row.type, row.selectable]),
+      }).map((row) => [row.name, row.type, row.selectable, row.isDream]),
     ).toEqual([
-      ["Work", "result_area", true],
-      ["Health", "result_area", true],
-      ["Grow", "goal", true],
-      ["Alpha", "project", true],
-      ["Beta", "project", true],
+      ["Work", "result_area", true, false],
+      ["Health", "result_area", true, false],
+      ["Grow", "goal", true, false],
+      ["Learn Italian", "goal", true, true],
+      ["Alpha", "project", true, false],
+      ["Beta", "project", true, false],
     ]);
   });
 
-  it("flattens result-area headings while retaining project nesting", () => {
+  it("treats goals and dreams as project peers when result areas are ungrouped", () => {
+    // Achieve's Tasks picker: goals/dreams are interchangeable with projects as scopes.
     expect(
       projectPickerRows(rows, {
         query: "",
         groupByResultArea: false,
         includeDeferred: false,
         today: "2026-08-09",
-      }).map((row) => [row.name, row.depth, row.parentId]),
+      }).map((row) => [row.name, row.depth, row.parentId, row.isDream]),
     ).toEqual([
-      ["Alpha", 0, null],
-      ["Beta", 1, "alpha"],
+      ["Grow", 0, null, false],
+      ["Learn Italian", 0, null, true],
+      ["Alpha", 1, "goal", false],
+      ["Beta", 2, "alpha", false],
     ]);
   });
 
@@ -111,6 +124,7 @@ describe("visiblePickerRows", () => {
       "Work",
       "Health",
       "Grow",
+      "Learn Italian",
     ]);
   });
 

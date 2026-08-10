@@ -116,7 +116,7 @@ export function ProjectPicker({
         )}
         {visible.map((row) => {
           const selected = value.kind === "node" && value.nodeId === row.id;
-          const kind = kindOfNode({ type: row.type });
+          const kind = kindOfNode({ type: row.type, isDream: row.isDream });
           const filtering = Boolean(query.trim());
           return (
             <div

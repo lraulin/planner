@@ -57,6 +57,7 @@ Material refinements during implementation. Pure implementation details are omit
 | 1   | Destination tree selects result areas and goals as well as projects; empty result areas appear even with no projects under them. | Achieve files tasks/projects under result areas; the first picker only marked `type === "project"` selectable and only listed RAs that already had projects, so the organizer could not put work under an RA. |
 | 2   | Shared picker is a collapsible name-only tree (expand/collapse), not a flat always-expanded list.                                | This is the one Achieve surface that shows hierarchy as a plain node tree; expand/collapse was missing.                                                                                                       |
 | 3   | Tasks scope and Overview also accept result-area (and goal) selection from the same tree.                                        | Subtree scope already works for any node via `?scope=`; blocking RA selection only made the tree less navigable.                                                                                              |
+| 4   | Flat (ungrouped) picker lists goals and dreams as peers of projects; dream rows keep the dream kind.                             | In Achieve's Tasks picker, goals/dreams are interchangeable with projects as the scope for "show this branch's tasks."                                                                                        |
 
 ## Verification
 

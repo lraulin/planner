@@ -14,7 +14,7 @@ export function ProjectPickerDialog({
   allowAll = false,
   allowNone = false,
   title = "Choose project",
-  description = "Choose a project, result area, or goal to focus on.",
+  description = "Choose a project, goal, dream, or result area whose tasks you want to see.",
 }: {
   open: boolean;
   nodes: readonly OutlineNode[];

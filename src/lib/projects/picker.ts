@@ -4,15 +4,16 @@ import { effectiveState } from "@/lib/tree/shelving";
 /**
  * One row in the hierarchy-aware destination picker (Tasks scope, Overview, organizer).
  *
- * When grouped by result area the tree includes result areas, goals, and projects so a
- * task or project can be filed under any of them — Achieve's rule, and ours. Flat mode
- * lists projects only.
+ * Goals and dreams are peers of projects here — Achieve's Tasks picker treats them as
+ * interchangeable scopes for "show me this branch's tasks." Result areas appear only when
+ * grouping by result area (and remain valid filing destinations for the organizer).
  */
 export type ProjectPickerRow = {
   id: string;
   parentId: string | null;
   name: string;
   type: OutlineNode["type"];
+  isDream: boolean;
   depth: number;
   selectable: boolean;
   disabled: boolean;
@@ -33,32 +34,11 @@ export function projectPickerRows(
   const byId = new Map(nodes.map((node) => [node.id, node]));
   const needle = options.query.trim().toLowerCase();
 
-  if (!options.groupByResultArea) {
-    const projects = nodes.filter(
-      (node) => isOpenProject(node, options) && matchesQuery(node, needle),
-    );
-    const available = new Set(projects.map((project) => project.id));
-    const rows = projects.map((project) => {
-      let depth = 0;
-      let parentId: string | null = null;
-      let parent = project.parentId ? byId.get(project.parentId) : undefined;
-      while (parent) {
-        if (parent.type === "project" && available.has(parent.id)) {
-          if (!parentId) parentId = parent.id;
-          depth += 1;
-        }
-        parent = parent.parentId ? byId.get(parent.parentId) : undefined;
-      }
-      return asRow(project, parentId, depth, options.excludedIds, true);
-    });
-    return withChildFlags(rows);
-  }
-
-  // Destination candidates: result areas always, plus open goals and projects. Empty
-  // result areas must appear so the organizer can file under them before any project
-  // exists.
+  // Projects, goals, and dreams always. Result areas only when grouping by them —
+  // unchecking that checkbox is the flat list Achieve uses for project/goal peers.
   const candidates = nodes.filter((node) => {
     if (!isDestinationNode(node, options)) return false;
+    if (!options.groupByResultArea && node.type === "result_area") return false;
     return matchesQuery(node, needle);
   });
 
@@ -66,7 +46,9 @@ export function projectPickerRows(
   for (const candidate of candidates) {
     let parent = candidate.parentId ? byId.get(candidate.parentId) : undefined;
     while (parent) {
-      if (parent.type !== "task" && !parent.isInbox) shownIds.add(parent.id);
+      if (shouldShowAncestor(parent, options.groupByResultArea)) {
+        shownIds.add(parent.id);
+      }
       parent = parent.parentId ? byId.get(parent.parentId) : undefined;
     }
   }
@@ -77,7 +59,7 @@ export function projectPickerRows(
   const parents = new Map<string, string | null>();
   for (const node of shown) {
     // Rebase onto the nearest *shown* ancestor so a project under a hidden goal still
-    // sits under its result area when the goal was filtered out of the tree.
+    // sits under its result area (or under nothing in flat mode).
     let parentId: string | null = null;
     let walk = node.parentId ? byId.get(node.parentId) : undefined;
     while (walk) {
@@ -99,7 +81,7 @@ export function projectPickerRows(
       depths.get(node.id) ?? 0,
       options.excludedIds,
       // Open destinations stay selectable even when only shown as ancestors of a
-      // name match (filter "beta" still lets you pick Alpha or Work). Completed
+      // name match (filter "beta" still lets you pick Alpha or Grow). Completed
       // structural ancestors remain visible but not selectable.
       isDestinationNode(node, options),
     ),
@@ -143,6 +125,7 @@ function isDestinationNode(
 ): boolean {
   if (node.isInbox || node.type === "task") return false;
   if (node.type === "result_area") return true;
+  // Goal covers Dream (isDream is a flag on the same type).
   if (node.type !== "goal" && node.type !== "project") return false;
   if (node.state === "completed" || node.state === "cancelled") return false;
   if (
@@ -154,11 +137,11 @@ function isDestinationNode(
   return true;
 }
 
-function isOpenProject(
-  node: OutlineNode,
-  options: { includeDeferred: boolean; today: string | null },
-): boolean {
-  return node.type === "project" && isDestinationNode(node, options);
+/** Ancestors kept only to hold the tree — skip RAs in flat mode. */
+function shouldShowAncestor(parent: OutlineNode, groupByResultArea: boolean): boolean {
+  if (parent.isInbox || parent.type === "task") return false;
+  if (parent.type === "result_area") return groupByResultArea;
+  return parent.type === "goal" || parent.type === "project";
 }
 
 function matchesQuery(node: OutlineNode, needle: string): boolean {
@@ -181,6 +164,7 @@ function asRow(
     parentId,
     name: node.name,
     type: node.type,
+    isDream: Boolean(node.isDream),
     depth,
     selectable: selectable && !disabled,
     disabled,
