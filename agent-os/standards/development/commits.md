@@ -13,6 +13,16 @@ The division of labour with `agent-os/specs/` is: a spec says what we meant to b
 why we wanted it. A commit says what this diff does to the code and why _this_ shape. They
 answer different questions, and `git blame` only reaches one of them.
 
+Use them in that order and only as far as the work needs:
+
+- For established behavior, read the governing spec's decisions and acceptance criteria,
+  following only deltas that affect the same concern.
+- Read commits when implementation history matters — a regression, a non-obvious line, an
+  earlier rejected approach, or verification that cannot be inferred from the tree. Start
+  with `git log -- <paths>`, then inspect the few matching commits or blame lines.
+- If a spec, the code, and history disagree, report it. A commit explains a change; it does
+  not create a requirement or silently supersede a spec.
+
 ## One logical change per commit
 
 This is the rule that pays for all the others, and the one agents break by default. An
@@ -93,9 +103,16 @@ Things worth putting in a body that are easy to forget:
 
 ## Trailers
 
-`Spec: agent-os/specs/{folder}` when the work implements a shaped spec. That is the link
-from a line of code back to the intent behind it, and it is the only way `git blame`
-reaches the spec folder.
+Use this exact trailer when the work implements a shaped spec:
+
+```
+Spec: agent-os/specs/YYYY-MM-DD-HHMM-feature-slug
+```
+
+No trailing slash and no bare folder name. Cite the current implementing spec or delta,
+not its whole predecessor chain; the delta owns those relationships. Repeat `Spec:` only
+when one logical change is genuinely governed by more than one spec. Unshaped maintenance
+does not need a trailer. This is the link from a blamed line back to intent.
 
 **No AI attribution.** No `Co-Authored-By`, no "Generated with", no tool names — this is
 already a hard rule in `CLAUDE.md`, and the reason it makes sense here rather than being
@@ -106,8 +123,7 @@ changes to scrutinise harder. Here, the answer is all of them.
 
 ## The one part of this that is enforced
 
-`.husky/commit-msg` rejects two things, and only two, because they are the ones that cannot
-be repaired afterwards:
+`.husky/commit-msg` rejects three things because they cannot be repaired after push:
 
 - **A subject over 72 characters.** The hard maximum above.
 - **A body line over 120 characters.** Not the 72-column wrap — that is a preference the log
@@ -116,10 +132,13 @@ be repaired afterwards:
   between paragraphs is written as a literal `\n` inside `-m "…"` by a shell that does not
   interpret it. Seven commits in two days landed that way, one of them a single
   583-character line. Use a heredoc or repeated `-m` flags.
+- **A malformed or nonexistent `Spec:` path when the trailer is present.** The hook accepts
+  only the canonical form above and checks that its directory exists. It does not require
+  every commit to cite a spec.
 
-Measured before it was written: of the last 200 commits, 189 pass untouched and every
-rejection is a real violation of a rule already on this page. `--no-verify` skips it for the
-message that genuinely needs a long line.
+The two length thresholds were measured against the existing log; the trailer check is
+forward-only, and older spelling variants remain in immutable history. `--no-verify` skips
+the hook for a message that genuinely needs an exception.
 
 ## Before committing
 

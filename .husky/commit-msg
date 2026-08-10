@@ -1,6 +1,6 @@
 # The commit message is the record — nobody reviews these before they land, so there is no
 # later chance to fix one (`commits.md`: never rewrite published history). This checks the
-# two things that are cheap to get wrong and impossible to get back.
+# three things that are cheap to get wrong and impossible to get back.
 #
 # Both limits are measured against the log rather than invented. Over the last 305 commits
 # the subject has crossed 72 exactly five times, and over the last 200 only ten body lines
@@ -39,6 +39,41 @@ if [ -n "$long_lines" ]; then
   printf '%s\n' "$long_lines" | sed 's/^/  line /'
   echo "  Wrap the body at 72. A single very long line usually means the paragraph breaks"
   printf '  were written as a literal \\n instead of real newlines — use a heredoc or repeated -m.\n'
+  fail=1
+fi
+
+canonical_spec_pattern='^Spec: agent-os/specs/'
+canonical_spec_pattern="${canonical_spec_pattern}[0-9][0-9][0-9][0-9]-[0-9][0-9]-"
+canonical_spec_pattern="${canonical_spec_pattern}[0-9][0-9]-[0-9][0-9][0-9][0-9]-"
+canonical_spec_pattern="${canonical_spec_pattern}[a-z0-9][a-z0-9-]*$"
+invalid_spec_lines=$(printf '%s\n' "$body_and_subject" | awk -v pattern="$canonical_spec_pattern" '
+  /^Spec:/ && $0 !~ pattern { print NR ": " $0 }
+')
+if [ -n "$invalid_spec_lines" ]; then
+  echo "commit-msg: malformed Spec trailer(s):"
+  printf '%s\n' "$invalid_spec_lines" | sed 's/^/  line /'
+  echo "  Use: Spec: agent-os/specs/YYYY-MM-DD-HHMM-feature-slug"
+  fail=1
+fi
+
+repo_root=$(git rev-parse --show-toplevel)
+valid_spec_paths=$(printf '%s\n' "$body_and_subject" | awk -v pattern="$canonical_spec_pattern" '
+  $0 ~ pattern { sub(/^Spec: /, ""); print }
+')
+missing_specs=""
+while IFS= read -r spec_path; do
+  [ -z "$spec_path" ] && continue
+  if [ ! -d "$repo_root/$spec_path" ]; then
+    missing_specs="${missing_specs}${missing_specs:+
+}$spec_path"
+  fi
+done <<EOF
+$valid_spec_paths
+EOF
+
+if [ -n "$missing_specs" ]; then
+  echo "commit-msg: Spec trailer path(s) do not exist:"
+  printf '%s\n' "$missing_specs" | sed 's/^/  /'
   fail=1
 fi
 

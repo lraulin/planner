@@ -75,8 +75,8 @@ Based on their response, ask 1-2 clarifying questions if the scope is unclear. E
 - "What's the expected outcome when this is done?"
 - "Are there any constraints or requirements I should know about?"
 
-If this is a **delta** on a frozen spec, note which folder it extends and what remains
-out of scope for the new slice.
+If this may be a **delta**, identify its governing prior specs in Step 3 rather than relying
+on the user to remember them.
 
 ### Step 2: Gather Visuals
 
@@ -94,23 +94,40 @@ Do you have any visuals to reference?
 
 If visuals are provided, note them for inclusion in the spec folder.
 
-### Step 3: Identify Reference Implementations
+### Step 3: Find Governing Specs and Reference Implementations
+
+Search `agent-os/specs/*/{plan,shape,references}.md` by feature terms and likely touched
+paths. Read matching `plan.md` files first, then only the shaping/reference sections needed
+to resolve rationale and relationships. For each relevant frozen spec, search whether a
+later spec cites its folder. Follow only links whose decisions overlap this work; the graph
+may branch. Do not preload `standards.md`, visuals, unrelated specs, or broad git history.
+
+Use specs for intended behavior and rationale. Use path-scoped commits only when the plan
+depends on implementation history that the specs do not answer. If specs, code, and history
+disagree, surface the mismatch rather than silently choosing one.
 
 Use AskUserQuestion:
 
 ```
-Is there similar code in this codebase I should reference?
+I found these governing specs and likely code references:
 
-Examples:
-- "The comments feature is similar to what we're building"
-- "Look at how src/features/notifications/ handles real-time updates"
-- "No existing references"
+- [spec/path — relevance, including extends/supersedes]
+- [code/path — relevance]
 
-(Point me to files, folders, or features to study)
+Did I miss a governing decision or similar implementation?
 ```
 
-If references are provided, read and analyze them to inform the plan. Prefer citing
-related **frozen** specs under `agent-os/specs/` when they document prior decisions.
+Record the confirmed relationships near the top of a delta's `plan.md`:
+
+```markdown
+## Spec relationships
+
+- **Extends:** `agent-os/specs/{folder}/`
+- **Supersedes:** `agent-os/specs/{folder}/` — {specific decision or scope}
+```
+
+Use **Extends** for decisions that carry forward and **Supersedes** only for the named
+decision being replaced. Omit this block for a root spec.
 
 ### Step 4: Check Product Context
 
@@ -184,7 +201,7 @@ Create `agent-os/specs/{folder-name}/` with:
 - **plan.md** — This full plan (**Status: active**), including empty **Changes from original plan**
 - **shape.md** — Shaping notes (scope, decisions, context from our conversation)
 - **standards.md** — Relevant standards that apply to this work
-- **references.md** — Pointers to reference implementations studied
+- **references.md** — Governing specs and reference implementations studied
 - **visuals/** — Any mockups or screenshots provided
 
 ## Task 2: [First implementation task]
@@ -212,7 +229,7 @@ Does this plan structure look right? I'll fill in the implementation tasks next.
 After Task 1 is confirmed, continue building out the remaining implementation tasks based on:
 
 - The feature scope from Step 1
-- Patterns from reference implementations (Step 3)
+- Governing decisions and patterns from Step 3
 - Constraints from standards (Step 5)
 
 Each task should be specific and actionable.
@@ -258,6 +275,11 @@ agent-os/specs/{YYYY-MM-DD-HHMM-feature-slug}/
 
 **Status: active**  
 Spec folder: `agent-os/specs/{folder-name}/`
+
+## Spec relationships
+
+[Omit for a root spec. For a delta, list each **Extends** / **Supersedes** relationship
+using the canonical folder path; name the scope of every supersession.]
 
 ## Context
 
@@ -350,6 +372,13 @@ The following standards apply to this work.
 
 ```markdown
 # References for {Feature Name}
+
+## Governing specs
+
+### `agent-os/specs/{folder}/`
+
+- **Relationship:** Extends / supersedes {specific decision}
+- **Relevant decisions:** [What carries forward or changes]
 
 ## Similar Implementations
 

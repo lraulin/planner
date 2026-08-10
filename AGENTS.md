@@ -82,6 +82,15 @@ implemented against the saved spec folder.
 **Clear, durable intent is the scarce asset; code is regenerable.** Specs capture what we
 meant to build and why — not every line of implementation detail.
 
+**Retrieve context narrowly.** Before changing established behavior, find the smallest
+governing spec set: search by feature or touched path, then follow only relevant
+`Extends` / `Supersedes` relationships. Specs say what must be true; commits say how and
+why the code arrived there. Read path-scoped history (`git log -- <paths>`, then
+`git blame` when needed) only when implementation history could affect the change. A later
+delta overrides only the decisions it explicitly supersedes. If specs, code, and history
+disagree, surface the mismatch — never infer a new requirement from a commit or silently
+rewrite a frozen spec.
+
 #### Agent OS workflows (Claude Code, Grok, Copilot, and Codex)
 
 **Every workflow lives, in full, in `.agents/skills/<name>/SKILL.md`.** That is the one

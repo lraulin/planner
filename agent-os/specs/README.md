@@ -18,6 +18,24 @@ agent-os/specs/{YYYY-MM-DD-HHMM-feature-slug}/
 └── visuals/          # Mockups / screenshots (optional; often gitignored)
 ```
 
+## Finding the governing intent
+
+Use the smallest useful context, not the whole specs tree:
+
+1. Search `plan.md`, `shape.md`, and `references.md` by feature name or touched path.
+2. Read matching `plan.md` decisions and acceptance criteria first. Open `shape.md` for
+   rationale and `references.md` for related specs/code only when needed; do not preload
+   copied `standards.md` files or visuals.
+3. Follow relevant **Extends** / **Supersedes** links, including later specs that cite a
+   matched folder. The governing set can branch; a later delta replaces only the decisions
+   it explicitly supersedes.
+4. Use commits second, for implementation-level history: start with `git log -- <paths>`;
+   inspect a matching commit or `git blame` only when the change depends on it. A commit
+   explains the implementation but does not create a requirement.
+
+If the governing specs, code, and history disagree, surface the mismatch. Do not silently
+choose the code, infer intent from a commit, or edit a frozen spec.
+
 ## Lifecycle
 
 ```
@@ -54,6 +72,21 @@ spec in the same cycle as the code.
 2. Append a row under **Changes from original plan** — short “what / why” table. That
    preserves the planning-time guess vs as-built path without rewriting history line by
    line.
+
+### Delta relationships
+
+Put a canonical relationship block near the top of every delta `plan.md`:
+
+```markdown
+## Spec relationships
+
+- **Extends:** `agent-os/specs/{folder}/`
+- **Supersedes:** `agent-os/specs/{folder}/` — {specific decision or scope}
+```
+
+Use **Extends** when earlier decisions carry forward and **Supersedes** when this delta
+replaces a named decision. Omit either line when it does not apply; repeat lines when the
+delta relates to several specs. Explain nuance in the body rather than bloating this index.
 
 ### Freeze phase
 
