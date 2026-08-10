@@ -1088,6 +1088,12 @@ describeDb("tree mutations", () => {
       it("moves every set date by the same number of days, and leaves nulls null", async () => {
         // Start Mon, deadline Fri, no target end. A week on, the four-day window survives
         // and the empty field is still empty.
+        //
+        // Anchored in September so the +7 shelf lands after wall-clock "today" in the
+        // test suite: when this fixture lived in early August, completing on 10 Aug made
+        // the shifted deferred equal today, and moveDates re-anchored start+defer onto
+        // the next Friday — failing the equal-shift assertion for a calendar reason,
+        // not a recurrence one.
         const task = await ruleTask(
           {
             recurrenceFrequency: "weekly",
@@ -1096,9 +1102,9 @@ describeDb("tree mutations", () => {
             recurrenceByWeekday: [5],
           },
           {
-            deadline: day("2026-08-07"),
-            targetStartDate: day("2026-08-03"),
-            deferredDate: day("2026-08-03"),
+            deadline: day("2026-09-11"),
+            targetStartDate: day("2026-09-07"),
+            deferredDate: day("2026-09-07"),
           },
         );
 
@@ -1106,9 +1112,9 @@ describeDb("tree mutations", () => {
 
         const detail = await nodeRow(task);
         const [node] = await loadOutline(userId);
-        expect(localKey(node.deadline!)).toBe("2026-08-14");
-        expect(localKey(detail.targetStartDate!)).toBe("2026-08-10");
-        expect(localKey(detail.deferredDate!)).toBe("2026-08-10");
+        expect(localKey(node.deadline!)).toBe("2026-09-18");
+        expect(localKey(detail.targetStartDate!)).toBe("2026-09-14");
+        expect(localKey(detail.deferredDate!)).toBe("2026-09-14");
         expect(detail.targetEndDate).toBeNull();
       });
 
