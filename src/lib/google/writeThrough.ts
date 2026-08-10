@@ -105,7 +105,10 @@ export async function pushCreate(
  */
 export async function pushUpdate(
   userId: string,
-  row: Pick<Appointment, "externalSource" | "externalId" | "externalCalendarId">,
+  row: Pick<
+    Appointment,
+    "externalSource" | "externalId" | "externalCalendarId" | "externalSeriesId"
+  >,
   merged: PushableAppointment,
 ): Promise<Partial<ExternalStamp> | null> {
   if (row.externalSource !== "google" || !row.externalId || !row.externalCalendarId) {
@@ -118,9 +121,11 @@ export async function pushUpdate(
   const { recurrence: _recurrence, ...instanceFields } = body;
   const patch: Partial<GoogleEventWrite> = instanceFields;
 
+  const targetEventId = row.externalSeriesId || row.externalId;
+
   let event;
   try {
-    event = await patchEvent(userId, row.externalCalendarId, row.externalId, patch);
+    event = await patchEvent(userId, row.externalCalendarId, targetEventId, patch);
   } catch (error) {
     if (error instanceof GoogleEventGoneError) {
       throw new Error(GOOGLE_EVENT_GONE_MESSAGE);
