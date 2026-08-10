@@ -12,6 +12,7 @@ import { and, count, eq } from "drizzle-orm";
 import { captureItems } from "@/lib/capture/mutations";
 import { parseCapture } from "@/lib/capture/parse";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { createNode } from "@/lib/tree/mutations";
 import { loadOutline } from "@/lib/tree/queries";
 import { toDateKey } from "@/lib/schedule/geometry";
 import { organizerQueue } from "./queue";
@@ -117,6 +118,89 @@ describeDb("organizeInboxItem", () => {
     });
     expect(toDateKey(item.deadline!)).toBe("2026-08-20");
     expect(organizerQueue(outline, "2026-08-09")).toEqual([]);
+  });
+
+  it("files a task directly under a result area", async () => {
+    const areaId = await createNode({
+      userId,
+      parentId: null,
+      type: "result_area",
+      name: "Health",
+    });
+    const itemId = await capture(userId, "Buy vitamins");
+    await organizeInboxItem(
+      userId,
+      itemId,
+      taskOutcome({ destinationProjectId: areaId, name: "Buy vitamins" }),
+      "2026-08-09",
+    );
+
+    const item = (await loadOutline(userId)).find((node) => node.id === itemId)!;
+    expect(item).toMatchObject({
+      parentId: areaId,
+      type: "task",
+      name: "Buy vitamins",
+    });
+  });
+
+  it("creates a new project under a result area for a task", async () => {
+    const areaId = await createNode({
+      userId,
+      parentId: null,
+      type: "result_area",
+      name: "Career",
+    });
+    const itemId = await capture(userId, "Ship the feature");
+    await organizeInboxItem(
+      userId,
+      itemId,
+      taskOutcome({
+        destinationProjectId: areaId,
+        newProject: { name: "Q3 release", priorityLetter: "A", priorityRank: 1 },
+      }),
+      "2026-08-09",
+    );
+
+    const outline = await loadOutline(userId);
+    const item = outline.find((node) => node.id === itemId)!;
+    const project = outline.find((node) => node.id === item.parentId)!;
+    expect(project).toMatchObject({
+      type: "project",
+      parentId: areaId,
+      name: "Q3 release",
+    });
+  });
+
+  it("converts an inbox item into a project under a result area", async () => {
+    const areaId = await createNode({
+      userId,
+      parentId: null,
+      type: "result_area",
+      name: "Home",
+    });
+    const itemId = await capture(userId, "Kitchen remodel");
+    await organizeInboxItem(
+      userId,
+      itemId,
+      {
+        kind: "project",
+        name: "Kitchen remodel",
+        priorityLetter: "B",
+        priorityRank: 1,
+        parentProjectId: areaId,
+        deadline: null,
+        contexts: [],
+        notes: "",
+      },
+      "2026-08-09",
+    );
+
+    const project = (await loadOutline(userId)).find((node) => node.id === itemId)!;
+    expect(project).toMatchObject({
+      type: "project",
+      parentId: areaId,
+      name: "Kitchen remodel",
+    });
   });
 
   it("converts the root to a project without losing its subtask branch", async () => {

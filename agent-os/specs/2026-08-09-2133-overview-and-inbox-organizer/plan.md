@@ -52,9 +52,11 @@ shared project/context tools their links require.
 
 Material refinements during implementation. Pure implementation details are omitted.
 
-| #   | Change                           | Why |
-| --- | -------------------------------- | --- |
-|     | _(filled during implementation)_ |     |
+| #   | Change                                                                                                                           | Why                                                                                                                                                                                                           |
+| --- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Destination tree selects result areas and goals as well as projects; empty result areas appear even with no projects under them. | Achieve files tasks/projects under result areas; the first picker only marked `type === "project"` selectable and only listed RAs that already had projects, so the organizer could not put work under an RA. |
+| 2   | Shared picker is a collapsible name-only tree (expand/collapse), not a flat always-expanded list.                                | This is the one Achieve surface that shows hierarchy as a plain node tree; expand/collapse was missing.                                                                                                       |
+| 3   | Tasks scope and Overview also accept result-area (and goal) selection from the same tree.                                        | Subtree scope already works for any node via `?scope=`; blocking RA selection only made the tree less navigable.                                                                                              |
 
 ## Verification
 

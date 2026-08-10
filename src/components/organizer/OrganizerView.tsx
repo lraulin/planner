@@ -150,8 +150,7 @@ function OrganizerItemForm({
   const [error, setError] = useState<string | null>(null);
 
   const lossyBlocked = item.hasChildren;
-  const selectedProjectId =
-    destination.kind === "project" ? destination.projectId : null;
+  const selectedParentId = destination.kind === "node" ? destination.nodeId : null;
 
   function buildOutcome(): OrganizerOutcome {
     const priority = { priorityLetter, priorityRank };
@@ -163,7 +162,7 @@ function OrganizerItemForm({
           name,
           ...priority,
           effortMinutes,
-          destinationProjectId: selectedProjectId,
+          destinationProjectId: selectedParentId,
           deadline: deadlineKey,
           contexts,
           notes,
@@ -181,7 +180,7 @@ function OrganizerItemForm({
           kind,
           name,
           ...priority,
-          parentProjectId: selectedProjectId,
+          parentProjectId: selectedParentId,
           deadline: deadlineKey,
           contexts,
           notes,
@@ -200,7 +199,7 @@ function OrganizerItemForm({
           endAt: endAt.toISOString(),
           allDay,
           ...priority,
-          projectId: selectedProjectId,
+          projectId: selectedParentId,
           contexts,
           notes,
         };
@@ -329,7 +328,11 @@ function OrganizerItemForm({
                 />
               </FieldGrid>
               <ProjectDestination
-                label={createProject ? "Parent for new project" : "Destination project"}
+                label={
+                  createProject
+                    ? "Parent for new project"
+                    : "Destination (result area, goal, or project)"
+                }
                 nodes={nodes}
                 value={destination}
                 onChange={setDestination}
@@ -390,7 +393,7 @@ function OrganizerItemForm({
                 />
               </FieldGrid>
               <ProjectDestination
-                label="Parent project"
+                label="Parent (result area, goal, or project)"
                 nodes={nodes}
                 value={destination}
                 onChange={setDestination}

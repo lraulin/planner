@@ -14,7 +14,7 @@ export function ProjectPickerDialog({
   allowAll = false,
   allowNone = false,
   title = "Choose project",
-  description = "Choose the project whose tasks you want to see.",
+  description = "Choose a project, result area, or goal to focus on.",
 }: {
   open: boolean;
   nodes: readonly OutlineNode[];
@@ -64,7 +64,7 @@ function OpenProjectPickerDialog({
   const [draft, setDraft] = useState(value);
 
   const valid =
-    (draft.kind === "project" && Boolean(draft.projectId)) ||
+    (draft.kind === "node" && Boolean(draft.nodeId)) ||
     (allowAll && draft.kind === "all") ||
     (allowNone && draft.kind === "none");
 

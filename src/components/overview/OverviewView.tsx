@@ -175,12 +175,16 @@ export function OverviewView({
       <ProjectPickerDialog
         open={projectPickerOpen}
         nodes={nodes}
-        value={{ kind: "project", projectId: "" }}
+        value={{ kind: "all" }}
+        allowAll
         onCancel={() => setProjectPickerOpen(false)}
         onConfirm={(value: ProjectPickerValue) => {
-          if (value.kind !== "project") return;
           setProjectPickerOpen(false);
-          router.push(`/tasks?scope=${value.projectId}`);
+          if (value.kind === "node") {
+            router.push(`/tasks?scope=${value.nodeId}`);
+            return;
+          }
+          if (value.kind === "all") router.push("/tasks");
         }}
       />
       <MasterContextsDialog

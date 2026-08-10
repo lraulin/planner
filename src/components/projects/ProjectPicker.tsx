@@ -5,10 +5,15 @@ import { TypeIcon } from "@/components/icons/TypeIcon";
 import { useToday } from "@/components/grid/useToday";
 import { KIND_LABELS, kindOfNode } from "@/lib/tree/hierarchy";
 import type { OutlineNode } from "@/lib/tree/types";
-import { projectPickerRows } from "@/lib/projects/picker";
+import {
+  defaultExpandedPickerIds,
+  projectPickerRows,
+  visiblePickerRows,
+} from "@/lib/projects/picker";
 
+/** Shared value for Tasks scope, Overview, and the organizer destination field. */
 export type ProjectPickerValue =
-  { kind: "all" } | { kind: "none" } | { kind: "project"; projectId: string };
+  { kind: "all" } | { kind: "none" } | { kind: "node"; nodeId: string };
 
 export function ProjectPicker({
   nodes,
@@ -42,6 +47,36 @@ export function ProjectPicker({
       }),
     [nodes, query, groupByResultArea, includeDeferred, today, excludedIds],
   );
+
+  // Fully expanded by default — same as Achieve's dialog when it opens. Collapsing is
+  // optional navigation, not a filter. Reset when the filter/grouping reshapes the tree
+  // (React's "adjust state when a prop changes" pattern — not an effect).
+  const rowsKey = useMemo(
+    () => expandKey(rows, query, groupByResultArea),
+    [rows, query, groupByResultArea],
+  );
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() =>
+    defaultExpandedPickerIds(rows),
+  );
+  const [expandedForKey, setExpandedForKey] = useState(rowsKey);
+  if (rowsKey !== expandedForKey) {
+    setExpandedForKey(rowsKey);
+    setExpandedIds(defaultExpandedPickerIds(rows));
+  }
+
+  const visible = useMemo(
+    () => (query.trim() ? rows : visiblePickerRows(rows, expandedIds)),
+    [rows, expandedIds, query],
+  );
+
+  function toggleExpanded(id: string) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   return (
     <div className="min-w-0">
@@ -79,51 +114,69 @@ export function ProjectPicker({
             onClick={() => onChange({ kind: "none" })}
           />
         )}
-        {rows.map((row) => {
-          const selected = value.kind === "project" && value.projectId === row.id;
+        {visible.map((row) => {
+          const selected = value.kind === "node" && value.nodeId === row.id;
           const kind = kindOfNode({ type: row.type });
+          const filtering = Boolean(query.trim());
           return (
-            <button
+            <div
               key={row.id}
-              type="button"
-              onClick={() =>
-                row.selectable && onChange({ kind: "project", projectId: row.id })
-              }
-              disabled={!row.selectable}
-              aria-pressed={selected}
-              className={`flex min-h-tap w-full items-center gap-2 border-b border-rule px-3 py-2 text-left last:border-b-0 ${
+              className={`flex min-h-tap w-full items-center gap-1 border-b border-rule last:border-b-0 ${
                 selected
                   ? "bg-select/60"
                   : row.selectable
                     ? "hover:bg-surface-raised"
                     : "bg-surface-raised/35"
               } ${row.disabled ? "opacity-45" : ""}`}
-              style={{ paddingLeft: `${0.75 + Math.min(row.depth, 7) * 0.75}rem` }}
+              style={{ paddingLeft: `${0.35 + Math.min(row.depth, 7) * 0.75}rem` }}
             >
-              <TypeIcon kind={kind} className="h-4 w-4 flex-none" />
-              <span
-                className={`min-w-0 flex-1 truncate text-[0.8125rem] ${
-                  row.selectable ? "text-ink" : "font-medium text-ink-muted"
-                }`}
+              {row.hasChildren && !filtering ? (
+                <button
+                  type="button"
+                  aria-label={expandedIds.has(row.id) ? "Collapse" : "Expand"}
+                  aria-expanded={expandedIds.has(row.id)}
+                  onClick={() => toggleExpanded(row.id)}
+                  className="flex h-7 w-7 flex-none items-center justify-center rounded text-[0.6875rem] text-ink-muted hover:bg-surface-raised hover:text-ink"
+                >
+                  {expandedIds.has(row.id) ? "▾" : "▸"}
+                </button>
+              ) : (
+                <span className="w-7 flex-none" aria-hidden />
+              )}
+              <button
+                type="button"
+                onClick={() =>
+                  row.selectable && onChange({ kind: "node", nodeId: row.id })
+                }
+                disabled={!row.selectable}
+                aria-pressed={selected}
+                className="flex min-h-tap min-w-0 flex-1 items-center gap-2 py-2 pr-3 text-left disabled:cursor-default"
               >
-                {row.name || "Untitled project"}
-              </span>
-              {row.priority && (
-                <span className="tabular flex-none font-mono text-[0.6875rem] text-ink-faint">
-                  {row.priority}
+                <TypeIcon kind={kind} className="h-4 w-4 flex-none" />
+                <span
+                  className={`min-w-0 flex-1 truncate text-[0.8125rem] ${
+                    row.selectable ? "text-ink" : "font-medium text-ink-muted"
+                  }`}
+                >
+                  {row.name || "Untitled"}
                 </span>
-              )}
-              {!row.selectable && (
-                <span className="flex-none text-[0.625rem] uppercase tracking-wide text-ink-faint">
-                  {KIND_LABELS[kind]}
-                </span>
-              )}
-            </button>
+                {row.priority && (
+                  <span className="tabular flex-none font-mono text-[0.6875rem] text-ink-faint">
+                    {row.priority}
+                  </span>
+                )}
+                {row.type !== "project" && (
+                  <span className="flex-none text-[0.625rem] uppercase tracking-wide text-ink-faint">
+                    {KIND_LABELS[kind]}
+                  </span>
+                )}
+              </button>
+            </div>
           );
         })}
         {rows.length === 0 && !allowAll && !allowNone && (
           <p className="px-3 py-5 text-[0.8125rem] text-ink-muted">
-            No projects match.
+            No destinations match.
           </p>
         )}
       </div>
@@ -148,6 +201,14 @@ export function ProjectPicker({
       </div>
     </div>
   );
+}
+
+function expandKey(
+  rows: readonly { id: string; hasChildren: boolean }[],
+  query: string,
+  groupByResultArea: boolean,
+): string {
+  return `${groupByResultArea}|${query}|${rows.map((row) => `${row.id}:${row.hasChildren ? 1 : 0}`).join(",")}`;
 }
 
 function PickerRow({

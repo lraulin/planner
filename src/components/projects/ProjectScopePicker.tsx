@@ -18,7 +18,7 @@ export function ProjectScopePicker({
   const value: ProjectPickerValue = scopeId
     ? scopeId === "__none__"
       ? { kind: "none" }
-      : { kind: "project", projectId: scopeId }
+      : { kind: "node", nodeId: scopeId }
     : { kind: "all" };
   const label = useMemo(() => {
     if (!scopeId) return "All Projects";
@@ -50,11 +50,7 @@ export function ProjectScopePicker({
         onConfirm={(next) => {
           setOpen(false);
           onChange(
-            next.kind === "all"
-              ? ""
-              : next.kind === "none"
-                ? "__none__"
-                : next.projectId,
+            next.kind === "all" ? "" : next.kind === "none" ? "__none__" : next.nodeId,
           );
         }}
       />

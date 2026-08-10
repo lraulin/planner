@@ -16,8 +16,10 @@ import {
 } from "@/lib/day/sync";
 import { createAppointment } from "@/lib/schedule/mutations";
 import { fromDateKey, localDateKey } from "@/lib/schedule/geometry";
+import { assertCanNest } from "@/lib/tree/hierarchy";
 import { applyStateTransition } from "@/lib/tree/mutations";
 import { between } from "@/lib/tree/sortKey";
+import type { NodeType } from "@/db/schema";
 import { organizerOutcomeError, type OrganizerOutcome } from "./types";
 
 type Db = typeof db;
@@ -92,22 +94,26 @@ async function isSelfOrDescendant(
   return false;
 }
 
-async function requireDestinationProject(
+/**
+ * Validate a filing destination. Tasks and projects may sit under a result area, goal,
+ * or project (Achieve's hierarchy, and ours) — not only under projects.
+ */
+async function requireDestinationParent(
   tx: Db | Tx,
   userId: string,
-  projectId: string | null,
+  parentId: string | null,
   sourceId: string,
+  childType: NodeType,
 ): Promise<void> {
-  if (!projectId) return;
-  const [project] = await tx
-    .select({ id: nodes.id, isInbox: nodes.isInbox })
+  if (!parentId) return;
+  const [parent] = await tx
+    .select({ id: nodes.id, type: nodes.type, isInbox: nodes.isInbox })
     .from(nodes)
-    .where(
-      and(eq(nodes.id, projectId), eq(nodes.userId, userId), eq(nodes.type, "project")),
-    )
+    .where(and(eq(nodes.id, parentId), eq(nodes.userId, userId)))
     .limit(1);
-  if (!project || project.isInbox) throw new Error("Project not found.");
-  if (await isSelfOrDescendant(tx, userId, sourceId, projectId)) {
+  if (!parent || parent.isInbox) throw new Error("Destination not found.");
+  assertCanNest(childType, parent.type);
+  if (await isSelfOrDescendant(tx, userId, sourceId, parentId)) {
     throw new Error("A branch cannot be filed inside itself.");
   }
 }
@@ -148,7 +154,15 @@ async function organizeAsTask(
   item: InboxItem,
   outcome: Extract<OrganizerOutcome, { kind: "task" }>,
 ): Promise<void> {
-  await requireDestinationProject(tx, userId, outcome.destinationProjectId, item.id);
+  // When creating a new project, the destination is that project's parent; the task
+  // then nests under the new project. Otherwise the destination is the task's parent.
+  await requireDestinationParent(
+    tx,
+    userId,
+    outcome.destinationProjectId,
+    item.id,
+    outcome.newProject ? "project" : "task",
+  );
 
   let parentId = outcome.destinationProjectId;
   if (outcome.newProject) {
@@ -208,7 +222,13 @@ async function organizeAsProject(
   item: InboxItem,
   outcome: Extract<OrganizerOutcome, { kind: "project" }>,
 ): Promise<void> {
-  await requireDestinationProject(tx, userId, outcome.parentProjectId, item.id);
+  await requireDestinationParent(
+    tx,
+    userId,
+    outcome.parentProjectId,
+    item.id,
+    "project",
+  );
 
   await clearOpenDayLinesForNode(tx, userId, item.id);
   await tx.delete(taskDetails).where(eq(taskDetails.nodeId, item.id));
@@ -316,7 +336,9 @@ async function organizeAsCalendar(
     hasChildren: item.hasChildren,
   });
   if (validation) throw new Error(validation);
-  await requireDestinationProject(db, userId, outcome.projectId, itemId);
+  // Calendar keeps an optional project association; result areas/goals are valid too
+  // when the user picks them from the shared destination tree.
+  await requireDestinationParent(db, userId, outcome.projectId, itemId, "task");
 
   const [existing] = await db
     .select({ id: appointments.id })
