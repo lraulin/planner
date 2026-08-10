@@ -11,9 +11,8 @@ import type { MasterContextOption } from "@/lib/contexts/queries";
 import type { OutlineNode } from "@/lib/tree/types";
 
 type Action =
-  | { label: string; href: string }
-  | { label: string; command: "capture" | "projects" | "contexts" }
-  | { label: string; count: number };
+  | { label: string; href: string; count?: number }
+  | { label: string; command: "capture" | "projects" | "contexts" };
 
 const STEP_STYLES = [
   "border-priority-b/55 text-priority-b",
@@ -51,8 +50,7 @@ export function OverviewView({
       actions: [
         { label: "Organize Projects", href: "/projects" },
         { label: "Organize Tasks", command: "projects" },
-        { label: "New Task Organizer", href: "/organize" },
-        { label: "New Tasks", count: inboxCount },
+        { label: "New Task Organizer", href: "/organize", count: inboxCount },
         { label: "Define Contexts", command: "contexts" },
       ],
     },
@@ -135,24 +133,18 @@ export function OverviewView({
                 </p>
                 <div className="mt-4 border-t border-rule pt-2">
                   {step.actions.map((action) => {
-                    if ("count" in action) {
-                      return (
-                        <div
-                          key={action.label}
-                          className="flex min-h-9 items-center justify-between gap-2 border-b border-rule/70 py-1.5 text-[0.8125rem] last:border-b-0"
-                        >
-                          <span className="text-ink-muted">{action.label}</span>
-                          <span className="tabular rounded-full bg-priority-a/12 px-2 py-0.5 font-mono text-[0.75rem] font-semibold text-priority-a">
-                            {action.count}
-                          </span>
-                        </div>
-                      );
-                    }
                     const className =
-                      "flex min-h-9 w-full items-center border-b border-rule/70 py-1.5 text-left text-[0.8125rem] font-medium text-select-edge last:border-b-0 hover:text-ink";
+                      "flex min-h-9 w-full items-center justify-between gap-2 border-b border-rule/70 py-1.5 text-left text-[0.8125rem] font-medium text-select-edge last:border-b-0 hover:text-ink";
+                    const badge =
+                      "count" in action && action.count != null ? (
+                        <span className="tabular rounded-full bg-priority-a/12 px-2 py-0.5 font-mono text-[0.75rem] font-semibold text-priority-a">
+                          {action.count}
+                        </span>
+                      ) : null;
                     return "href" in action ? (
                       <Link key={action.label} href={action.href} className={className}>
-                        {action.label}
+                        <span>{action.label}</span>
+                        {badge}
                       </Link>
                     ) : (
                       <button
@@ -161,7 +153,7 @@ export function OverviewView({
                         onClick={() => run(action)}
                         className={className}
                       >
-                        {action.label}
+                        <span>{action.label}</span>
                       </button>
                     );
                   })}
