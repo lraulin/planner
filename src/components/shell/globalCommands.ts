@@ -44,6 +44,13 @@ export function useGlobalCommands(): readonly Command[] {
         run: requestQuickCapture,
       },
       {
+        id: "app.process-inbox",
+        label: "Process Inbox",
+        group: "app",
+        keywords: "organize triage gtd new tasks",
+        run: () => router.push("/organize"),
+      },
+      {
         id: "app.plan-week",
         label: "Plan Week…",
         group: "app",
@@ -93,6 +100,7 @@ export function useGlobalCommands(): readonly Command[] {
  * for "calendar" should not have to know we called it Weekly Schedule.
  */
 const GO_KEYWORDS: Record<string, string> = {
+  overview: "home productivity process capture organize prioritize plan do",
   outline: "tree result areas dreams hierarchy",
   "result-areas": "result area roles life dimensions importance weighting",
   projects: "project list",

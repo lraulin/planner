@@ -6,7 +6,7 @@ import { CaptureButton } from "@/components/capture/CaptureButton";
 import { useSetting } from "@/components/settings/SettingsProvider";
 import { parseShellSettings, serializeShellSettings } from "@/lib/settings/shell";
 import { SHELL_SCOPE } from "@/lib/settings/scopes";
-import { ChevronIcon, SettingsIcon } from "./navIcons";
+import { ChevronIcon, OrganizeIcon, SettingsIcon } from "./navIcons";
 import { openCommandPalette } from "./commandEvent";
 import { sectionsWithModules, type ModuleId } from "./modules";
 
@@ -31,7 +31,7 @@ const SHELL_CODEC = {
   serialize: serializeShellSettings,
 };
 
-export function Sidebar({ active }: { active: ModuleId }) {
+export function Sidebar({ active }: { active: ModuleId | null }) {
   const { value, patch } = useSetting(SHELL_SCOPE, SHELL_CODEC);
   const collapsed = value.sidebarCollapsed;
 
@@ -137,6 +137,19 @@ export function Sidebar({ active }: { active: ModuleId }) {
 
       <div className="flex flex-none flex-col gap-2 border-t border-rule px-2 py-2">
         <CaptureButton compact={collapsed} />
+
+        <Link
+          href="/organize"
+          title={collapsed ? "Process Inbox" : undefined}
+          className={`flex items-center gap-2 rounded border border-rule px-2 py-1 text-[0.8125rem] leading-none text-ink-muted hover:border-rule-strong hover:bg-surface-raised hover:text-ink ${
+            collapsed ? "justify-center" : ""
+          }`}
+        >
+          <span className="flex-none">
+            <OrganizeIcon />
+          </span>
+          {!collapsed && <span className="truncate">Process Inbox</span>}
+        </Link>
 
         <Link
           href="/settings"

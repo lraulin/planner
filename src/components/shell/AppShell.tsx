@@ -32,9 +32,11 @@ import type { ModuleId } from "./modules";
  */
 export function AppShell({
   active,
+  pageTitle,
   children,
 }: {
-  active: ModuleId;
+  active: ModuleId | null;
+  pageTitle?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -44,7 +46,7 @@ export function AppShell({
           <Sidebar active={active} />
 
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <MobileHeader active={active} />
+            <MobileHeader active={active} title={pageTitle} />
 
             <div className="flex min-h-0 flex-1 flex-col">{children}</div>
 

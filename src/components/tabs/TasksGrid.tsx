@@ -50,7 +50,8 @@ import {
 } from "@/components/grid/commonColumns";
 import { EffortCell, StatusCell } from "@/components/grid/cells";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
-import { ToolbarSelect, ToolbarToggle } from "./tabChrome";
+import { ProjectScopePicker } from "@/components/projects/ProjectScopePicker";
+import { ToolbarToggle } from "./tabChrome";
 import { openStateFilters, settledStateFilters } from "@/lib/grid/stateFilters";
 import { nextActionsOnly } from "@/lib/tree/nextActions";
 import { useGridTab } from "./useGridTab";
@@ -322,10 +323,6 @@ export function TasksGrid({
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
   const [groupIds, setGroupIds] = useState<string[]>([]);
 
-  const projects = useMemo(
-    () => tab.nodes.filter((n) => n.type === "project"),
-    [tab.nodes],
-  );
   const contactById = useMemo(
     () => new Map(contactOptions.map((contact) => [contact.id, contact.displayName])),
     [contactOptions],
@@ -425,18 +422,10 @@ export function TasksGrid({
         views={views}
         left={
           <>
-            <ToolbarSelect
-              label="Project"
-              value={scopeId}
+            <ProjectScopePicker
+              nodes={tab.nodes}
+              scopeId={scopeId}
               onChange={setScopeId}
-              options={[
-                { value: "", label: "<All Projects>" },
-                { value: "__none__", label: "<No Project>" },
-                ...projects.map((project) => ({
-                  value: project.id,
-                  label: project.name || "Untitled project",
-                })),
-              ]}
             />
             {/* Tab-scoped, not per-view: one Postponed setting covers every sub-view. */}
             <ToolbarToggle

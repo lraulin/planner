@@ -12,6 +12,31 @@
  */
 import { GLYPH as BASE } from "@/components/icons/glyph";
 
+/** Overview: the five linked phases of the productivity process. */
+export function OverviewIcon() {
+  return (
+    <svg {...BASE} className="h-5 w-5">
+      <circle cx="4" cy="5" r="1.5" />
+      <circle cx="10" cy="3.5" r="1.5" />
+      <circle cx="16" cy="5" r="1.5" />
+      <circle cx="14" cy="14.5" r="1.5" />
+      <circle cx="6" cy="14.5" r="1.5" />
+      <path d="m5.5 4.6 3-.7m3 0 3 .7m.9 1.8-.9 6.6m-2 .8-5 0M5.5 13 4.6 6.4" />
+    </svg>
+  );
+}
+
+/** Inbox processing: a tray whose one current item is ready to be classified. */
+export function OrganizeIcon() {
+  return (
+    <svg {...BASE} className="h-5 w-5">
+      <path d="M3.25 10.5 5 4h10l1.75 6.5v5.25a1.5 1.5 0 0 1-1.5 1.5H4.75a1.5 1.5 0 0 1-1.5-1.5Z" />
+      <path d="M3.5 10.5h4l1.25 2h2.5l1.25-2h4" />
+      <path d="m8 7 1.35 1.35L12.5 5.2" />
+    </svg>
+  );
+}
+
 export function DayIcon() {
   return (
     <svg {...BASE} className="h-5 w-5">

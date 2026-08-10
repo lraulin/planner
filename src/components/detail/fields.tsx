@@ -10,6 +10,8 @@ import {
   parsePriority,
 } from "@/lib/tree/format";
 import { MarkdownEditor } from "@/components/notes/MarkdownEditor";
+import { useMasterContexts } from "@/components/contexts/useMasterContexts";
+import { contextSuggestions } from "@/lib/contexts/catalog";
 
 /**
  * Form primitives for the detail drawer.
@@ -732,7 +734,6 @@ export function ContextsField({
   className?: string;
 }) {
   const id = useId();
-  const [text, setText] = useState(value.join(", "));
 
   return (
     <Field
@@ -741,21 +742,89 @@ export function ContextsField({
       hint="Comma separated — @home, @calls, errands."
       className={className}
     >
+      <ContextsInput
+        id={id}
+        value={value}
+        onChange={onChange}
+        inputClassName={INPUT_CLASS}
+      />
+    </Field>
+  );
+}
+
+/** Context entry without its label, for drawers that already provide a field row. */
+export function ContextsInput({
+  id,
+  value,
+  onChange,
+  inputClassName = INPUT_CLASS,
+}: {
+  id?: string;
+  value: string[];
+  onChange: (value: string[]) => void;
+  inputClassName?: string;
+}) {
+  const catalog = useMasterContexts();
+  const [text, setText] = useState(value.join(", "));
+  const [focused, setFocused] = useState(false);
+  const suggestions = contextSuggestions(catalog, text)
+    .filter(
+      (suggestion) =>
+        !text
+          .split(",")
+          .slice(0, -1)
+          .some((part) => part.trim().toLowerCase() === suggestion.toLowerCase()),
+    )
+    .slice(0, 8);
+
+  function valuesOf(next: string): string[] {
+    return next
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean);
+  }
+
+  function choose(suggestion: string) {
+    const parts = text.split(",");
+    parts[parts.length - 1] = ` ${suggestion}`;
+    const next = `${parts.join(",").trimStart()}, `;
+    setText(next);
+    onChange(valuesOf(next));
+  }
+
+  return (
+    <div className="relative">
       <input
         id={id}
         value={text}
-        onChange={(event) => setText(event.target.value)}
-        onBlur={() =>
-          onChange(
-            text
-              .split(",")
-              .map((part) => part.trim())
-              .filter(Boolean),
-          )
-        }
-        className={INPUT_CLASS}
+        onChange={(event) => {
+          const next = event.target.value;
+          setText(next);
+          onChange(valuesOf(next));
+        }}
+        onFocus={() => setFocused(true)}
+        onBlur={() => {
+          setFocused(false);
+          onChange(valuesOf(text));
+        }}
+        className={inputClassName}
       />
-    </Field>
+      {focused && suggestions.length > 0 && (
+        <div className="absolute left-0 right-0 top-full z-40 mt-1 overflow-hidden rounded border border-rule-strong bg-surface shadow-lg">
+          {suggestions.map((suggestion) => (
+            <button
+              key={suggestion}
+              type="button"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => choose(suggestion)}
+              className="flex min-h-tap w-full items-center border-b border-rule px-3 text-left text-[0.8125rem] text-ink last:border-b-0 hover:bg-surface-raised md:min-h-0 md:py-2"
+            >
+              {suggestion}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

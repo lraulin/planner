@@ -7,6 +7,7 @@ import {
   GoalsIcon,
   MetricsIcon,
   NotesIcon,
+  OverviewIcon,
   OutlineIcon,
   ProjectsIcon,
   ResultAreasIcon,
@@ -75,6 +76,15 @@ type ModuleEntry = {
 
 export const MODULES = [
   // Plan — the outline and the things in it, in Achieve's own order.
+  {
+    id: "overview",
+    label: "Overview",
+    href: "/overview",
+    section: "plan",
+    primary: false,
+    status: "built",
+    icon: OverviewIcon,
+  },
   {
     id: "outline",
     label: "Outline",

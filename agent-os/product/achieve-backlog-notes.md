@@ -39,17 +39,19 @@ From Outline / Edit / View menus — useful without matching every shortcut:
 
 ## Explicitly low priority or out
 
-| Achieve item                                                       | Why skip for now                                                                 |
-| ------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
-| Daily Planning Wizard, Next Action / Advanced Task Capture wizards | Overlap weekly wizard + Task Chooser; don’t multiply wizards yet                 |
-| Motivational Images / Thought Master / Wish Brainstorming          | Nice-to-have coaching chrome                                                     |
-| Outlook Synchronization                                            | Microsoft lock-in; CSV/export first                                              |
-| Automated Scheduling (chapter 7)                                   | Explicitly out of weekly-wizard scope                                            |
-| Contacts and Resources tabs                                        | ✅ Shipped in `2026-08-05-1458-remaining-go-menu-modules`                        |
-| File Organizer                                                     | Permanently out: without file storage, it would be a different product           |
-| Overview tab as productivity process dashboard                     | Optional later; tabs already navigable                                           |
-| Notes tab                                                          | Placeholder in TabStrip; needs a product decision (plain notes vs project notes) |
-| Customize Keyboard / Options dialogs                               | Ship defaults first                                                              |
+| Achieve item                                              | Why skip for now                                                                 |
+| --------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Daily Planning Wizard                                     | Overlaps the weekly wizard + Day; don’t multiply wizards yet                     |
+| Motivational Images / Thought Master / Wish Brainstorming | Nice-to-have coaching chrome                                                     |
+| Outlook Synchronization                                   | Microsoft lock-in; CSV/export first                                              |
+| Automated Scheduling (chapter 7)                          | Explicitly out of weekly-wizard scope                                            |
+| Contacts and Resources tabs                               | ✅ Shipped in `2026-08-05-1458-remaining-go-menu-modules`                        |
+| File Organizer                                            | Permanently out: without file storage, it would be a different product           |
+| Overview tab as productivity process dashboard            | ✅ Shipped in `2026-08-09-2133-overview-and-inbox-organizer`                     |
+| Advanced Task Capture / Organizer                         | ✅ Shipped as the one-item Inbox Organizer in the same spec                      |
+| Project picker + Master Contexts                          | ✅ Shared picker and context catalog shipped in the same spec                    |
+| Notes tab                                                 | Placeholder in TabStrip; needs a product decision (plain notes vs project notes) |
+| Customize Keyboard / Options dialogs                      | Ship defaults first                                                              |
 
 ## Manual concepts worth keeping in mind
 

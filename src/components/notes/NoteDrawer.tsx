@@ -10,6 +10,7 @@ import type { OutlineNode } from "@/lib/tree/types";
 import { TYPE_LABELS } from "@/lib/tree/hierarchy";
 import { updateNoteAction } from "@/app/notes/actions";
 import { Drawer, DrawerHeader } from "@/components/detail/Drawer";
+import { ContextsInput } from "@/components/detail/fields";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { useAutosave, type SaveStatus } from "./useAutosave";
 import { FLAG_LABELS } from "@/lib/notes/flags";
@@ -227,10 +228,13 @@ function NoteForm({
           </FieldRow>
 
           <FieldRow label="Contexts" hint="Comma separated — @home, @calls, errands.">
-            <input
-              value={draft.contexts}
-              onChange={(event) => patch({ contexts: event.target.value })}
-              className={INPUT_CLASS}
+            <ContextsInput
+              value={draft.contexts
+                .split(",")
+                .map((part) => part.trim())
+                .filter(Boolean)}
+              onChange={(values) => patch({ contexts: values.join(", ") })}
+              inputClassName={INPUT_CLASS}
             />
           </FieldRow>
         </div>

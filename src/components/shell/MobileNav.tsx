@@ -1,25 +1,44 @@
+"use client";
+
 import Link from "next/link";
-import { CaptureNavButton } from "./CaptureNavButton";
+import { requestQuickCapture } from "@/components/capture/event";
 import { MoreSheet } from "./MoreSheet";
-import { DayIcon, NotesIcon, TasksIcon } from "./navIcons";
+import { CaptureIcon, DayIcon, NotesIcon, OrganizeIcon, TasksIcon } from "./navIcons";
 import type { ModuleId } from "./modules";
 
 /**
  * Phone navigation: a bottom tab bar, standing in for the desktop `Sidebar` below `md`.
  *
- * Five slots, because that is what fits at 44px on a 390px screen — `Day · Tasks · ＋ ·
- * Notes · More`. The three named ones are those marked `primary` in the module registry; the
+ * A two-action utility band keeps Quick capture and Process Inbox visible. Beneath it,
+ * `Day · Tasks · Notes · More` keeps the primary destinations within four equal slots; the
  * rest live in the More sheet, grouped by the same sections the sidebar uses.
  *
  * A normal flex child of `AppShell` rather than `position: fixed`, so the scroll container
  * above it ends where the bar begins and the last row is never hidden underneath.
  */
-export function MobileNav({ active }: { active: ModuleId }) {
+export function MobileNav({ active }: { active: ModuleId | null }) {
   return (
     <nav
       aria-label="Modules"
       className="pb-safe flex-none border-t border-rule bg-shell shadow-[var(--elev-1)] md:hidden"
     >
+      <div className="grid grid-cols-2 gap-px border-b border-rule bg-rule">
+        <button
+          type="button"
+          onClick={requestQuickCapture}
+          className="flex min-h-tap items-center justify-center gap-2 bg-shell text-[0.75rem] font-medium text-ink"
+        >
+          <CaptureIcon />
+          Quick capture
+        </button>
+        <Link
+          href="/organize"
+          className="flex min-h-tap items-center justify-center gap-2 bg-shell text-[0.75rem] font-medium text-ink"
+        >
+          <OrganizeIcon />
+          Process Inbox
+        </Link>
+      </div>
       <div className="flex items-stretch">
         <NavLink href="/day" label="Day" icon={<DayIcon />} active={active === "day"} />
         <NavLink
@@ -28,7 +47,6 @@ export function MobileNav({ active }: { active: ModuleId }) {
           icon={<TasksIcon />}
           active={active === "tasks"}
         />
-        <CaptureNavButton />
         <NavLink
           href="/notes"
           label="Notes"

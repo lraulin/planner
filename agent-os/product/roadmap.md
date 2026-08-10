@@ -40,8 +40,10 @@ The core Achieve Planner loop — plan the week, block the time, work the outlin
   schedule status, tree slice, and four list tabs — **Projects**, **Tasks**, **Goals**,
   **Wish List** — with scope pickers, built-in Views, grouping, column filters, and Show
   Fields. Outline migrated onto the same grid. Known polish (not blockers for “spec done”):
-  Project scope is a select rather than a filtered tree popover; Show Fields move
-  up/down is coarse. **Column layout originally used `localStorage` with an explicit "no
+  Show Fields move up/down is coarse. The original flat Project scope select was replaced
+  by the shared hierarchy-aware picker in
+  `specs/2026-08-09-2133-overview-and-inbox-organizer`. **Column layout originally used
+  `localStorage` with an explicit "no
   user-settings table" decision — superseded by** `specs/2026-07-31-1520-persistent-ui-state`
   (see Phase 1 Delivered below).
 - **✅ Weekly calendar + time blocking.** `specs/2026-07-28-1234-weekly-schedule`. Week
@@ -112,11 +114,21 @@ The core Achieve Planner loop — plan the week, block the time, work the outlin
   directly: state, completion, postponement, and derived Status are absent. Shared Outline
   lifecycle columns leave their cells blank, lifecycle commands explain why they are
   disabled, and the dedicated Result Areas module has no lifecycle controls.
+- **✅ Overview + Inbox processing workflow.**
+  `specs/2026-08-09-2133-overview-and-inbox-organizer`. Overview is now the home surface
+  and presents Achieve's Capture → Organize → Prioritize → Plan → Do process as direct
+  routes into the app. Organize Tasks opens a shared hierarchy-aware Project picker that
+  is also used by Tasks scope and the one-item-at-a-time Inbox Organizer. The Organizer
+  can turn each Inbox task into a Task, Project, calendar event, dated deferral, deleted
+  branch, or reference Note; it preserves child branches where that outcome is meaningful
+  and blocks lossy Calendar/Note conversions. Master Contexts supplies a reusable catalog
+  without rewriting contexts already stored on records. The Inbox processor is an
+  intentional first-class workflow; broader Someday/Maybe ontology remains open.
 
 ### Still in Phase 1
 
-- **Residual grid chrome polish** if needed after daily use (Project scope as a filtered
-  tree popover rather than a select; finer Show Fields multi-select / multi-move).
+- **Residual grid chrome polish** if needed after daily use (finer Show Fields multi-select /
+  multi-move).
   Persistence, control uniformity and the shared control surface
   shipped above.
 - **Day-to-day friction from living with the MVP** — find-in-outline, seed goals for demos
@@ -209,7 +221,8 @@ Features that complete or surround the original product, plus making it multi-de
   alone. `Show Fields` and `Reset this grid` moved off the always-visible toolbar into `⋯`.
   Library was initially reserved, then gained Time Charts, Resources and Contacts through
   `specs/2026-08-05-1458-remaining-go-menu-modules`; Result Areas is also built under Plan.
-  Overview, Focus Timer, Time Log and Reports remain reserved. Phone keeps its bottom nav;
+  Overview was later delivered by `specs/2026-08-09-2133-overview-and-inbox-organizer`;
+  Focus Timer, Time Log and Reports remain reserved. Phone keeps its bottom nav;
   the More sheet is grouped the same way and `⋯` is the touch path to commands. New standard:
   `components/navigation.md`. Its two deferred items — converting the remaining row context menus
   into registered commands, and a command surface on the views with no grid toolbar — are both
@@ -474,11 +487,12 @@ Product lines that use the outline/goals as a hub. Each has its own MVP → medi
 horizon. Ship vertical slices; do not wait for full Achieve parity to start an MVP if the
 core loop is already useful.
 
-### GTD as first-class (open questions, not a rewrite plan)
+### GTD as first-class
 
-**Status: future product thinking — not shaped, not scheduled.** Intent only. Do not treat
-today's design as a bug; do not invent more filter workarounds as if they were the end
-state either.
+**Status: Inbox processing shipped; Someday/Maybe remains product thinking.**
+`specs/2026-08-09-2133-overview-and-inbox-organizer` makes capture processing an explicit
+one-item-at-a-time workflow without replacing the outline model. Do not invent more filter
+workarounds for the remaining ontology questions or treat them as already scheduled.
 
 Achieve (and our Phase 1/2 port) **can** do GTD: Inbox project, `proposed` (PR) for
 uncommitted work, deferred tickler, Next Actions via Chooser. That was right when AP
@@ -486,19 +500,21 @@ fidelity was the scarce asset. Owning the model means we _may_ promote some of t
 first-class concepts — but only where the tree genuinely hurts, and only after living with
 what already works.
 
-#### What already works (keep these strengths)
+#### What is now intentional product behavior
 
 - **Inbox items as real tasks** under an Inbox project: capture can attach notes, links,
-  imports from elsewhere; processing to "Next Action" is often just **dragging into the
-  right place in the hierarchy**. That is a feature of "everything is a node," not only a
-  hack.
+  imports from elsewhere. The Inbox Organizer presents one item at a time and processes it
+  into a Task, Project, calendar event, dated deferral, deletion, or reference Note. Moving
+  an actionable item uses the same hierarchy-aware Project picker as the Tasks view.
+  Processing to "Next Action" can still be **dragging into the right place in the
+  hierarchy**. That is a feature of "everything is a node," not only a hack.
 - **Someday/Maybe as Proposed projects** (`proposed` state — **not** Postponed):
   uncommitted incubation with room to collect links, notes, child ideas **before** you
   decide to commit. Postponed is the shelf/tickler axis (interrupted or dated hide);
   Proposed is "I have not signed up for this yet." Conflating them is a doc/agent mistake.
 - **Deferred + postponed shelf** already maps cleanly to GTD tickler (see date-model).
 
-#### Where it still feels wrong
+#### What remains unresolved
 
 - Inbox as a **sibling of Result Areas** in the committed hierarchy (a project whose job is
   "not yet decided") can feel ontologically off even when drag-to-process works well.
@@ -506,17 +522,16 @@ what already works.
   can fill with incubation noise — but those rows _are_ useful as containers for reference
   material. Tension, not a free fix.
 
-#### Open questions for a future shape-spec (if any)
+#### Open questions for a future Someday/Maybe shape-spec (if any)
 
-1. Keep Inbox-as-tasks + drag-to-process, but change **where** the queue lives (not a peer
-   of Work/Personal RAs)?
-2. Is Someday first-class **list membership**, a **state** (`proposed` promoted in UI), or
+1. Is Someday first-class **list membership**, a **state** (`proposed` promoted in UI), or
    still "just projects with PR"?
-3. How do notes/links/attachments on proposed projects stay first-class either way?
-4. Do not half-implement with more filters that only paper over the tree.
+2. How do notes/links/attachments on proposed projects stay first-class either way?
+3. Do not half-implement with more filters that only paper over the tree.
 
-**Why not yet:** daily value still comes from the Achieve loop + current capture. This is
-exploratory product direction, not a commitment to rip out `is_inbox` or `proposed`.
+**Why this stays open:** the processing workflow no longer needs an ontology rewrite.
+Someday/Maybe is still exploratory product direction, not a commitment to rip out
+`is_inbox` or `proposed`.
 
 Related: state vocabulary in `standards/product/date-model.md` (Postponed vs Proposed
 flavor; optional palette thinning).

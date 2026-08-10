@@ -10,8 +10,8 @@ import { sectionsWithModules, MODULES, type ModuleId } from "./modules";
 /**
  * The rest of the app, one tap below the bottom nav.
  *
- * The bar has five slots and the app has eleven modules plus Settings and Sign out, so this is
- * where the rest live. Built on `ModalShell` per `modal-pattern.md`, which renders it as a
+ * The primary bar has four slots and the app has many more modules plus Settings and Sign out,
+ * so this is where the rest live. Built on `ModalShell` per `modal-pattern.md`, which renders it as a
  * bottom sheet below `md` — the list lands under the thumb rather than in the middle of the
  * screen.
  *
@@ -24,7 +24,7 @@ import { sectionsWithModules, MODULES, type ModuleId } from "./modules";
  * There is no command palette here. `⌘K` has no touch equivalent, and commands reach the
  * phone through the `⋯` overflow on each module's own toolbar instead.
  */
-export function MoreSheet({ active }: { active: ModuleId }) {
+export function MoreSheet({ active }: { active: ModuleId | null }) {
   const [open, setOpen] = useState(false);
   const titleId = useId();
 
