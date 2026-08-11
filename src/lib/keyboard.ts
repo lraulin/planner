@@ -8,13 +8,18 @@
 
 /** True when the event landed in something the user is typing into. */
 export function isTypingTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
+  // Duck-type rather than `instanceof HTMLElement`: unit tests (and any non-browser
+  // call) have no DOM globals, and `x instanceof HTMLElement` throws when the
+  // constructor is missing even for `null`.
+  if (target == null || typeof target !== "object") return false;
+  const el = target as { tagName?: unknown; isContentEditable?: unknown };
+  if (typeof el.tagName !== "string") return false;
 
   return (
-    target.tagName === "INPUT" ||
-    target.tagName === "SELECT" ||
-    target.tagName === "TEXTAREA" ||
-    target.isContentEditable
+    el.tagName === "INPUT" ||
+    el.tagName === "SELECT" ||
+    el.tagName === "TEXTAREA" ||
+    el.isContentEditable === true
   );
 }
 
