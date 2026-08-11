@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { useRouter } from "next/navigation";
 import { useIsCompact } from "@/components/shell/useIsCompact";
 import type { Appointment, AppointmentCheck, TimeChart } from "@/db/schema";
@@ -214,6 +221,19 @@ export function ScheduleView({ initial, nodes, weekKey, blockNodeId = null }: Pr
       setSyncing(false);
     }
   }, [router, weekKey]);
+
+  // Local-first: when the mirror is stale, pull Google once in the background and refresh
+  // after success. Idempotent per mount of this stale payload — not on every re-render.
+  const autoSyncStarted = useRef(false);
+  useEffect(() => {
+    if (initial.sync.state !== "stale") {
+      autoSyncStarted.current = false;
+      return;
+    }
+    if (autoSyncStarted.current) return;
+    autoSyncStarted.current = true;
+    void handleSyncGoogle();
+  }, [initial.sync, handleSyncGoogle]);
 
   // `useCallback` on these three because they are dependencies of the registered command list, and
   // `useRegisterCommands` re-registers on identity — a handler rebuilt every render would make the

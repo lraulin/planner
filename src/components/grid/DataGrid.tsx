@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  memo,
   useCallback,
   useContext,
   useEffect,
@@ -39,6 +40,7 @@ import { CompactRow, type RowSwipe } from "./CompactRow";
 import type { SelectMods } from "@/lib/grid/selection";
 import { NameIconContext } from "./nameIconContext";
 import { RowDragHandleContext, type RowDragHandleApi } from "./rowDragContext";
+import { RowSelectedContext } from "./rowSelectedContext";
 
 export type GridSortKey = { columnId: string; direction: "asc" | "desc" };
 
@@ -853,22 +855,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   );
 }
 
-function DataRow<TCtx, TRow>({
-  row,
-  columns,
-  columnCtx,
-  gridTemplate,
-  handleWidth,
-  selected,
-  focused = selected,
-  rowNumber,
-  onSelect,
-  onOpenDetail,
-  drag,
-  onContextMenu,
-  rowLabel,
-  rowExpansion,
-}: {
+type DataRowProps<TCtx, TRow> = {
   row: NodeGridRow<TRow>;
   columns: ColumnDef<TCtx, TRow>[];
   columnCtx: TCtx;
@@ -883,158 +870,211 @@ function DataRow<TCtx, TRow>({
   onOpenDetail?: () => void;
   drag?: RowDragBinding;
   onContextMenu?: (x: number, y: number) => void;
-} & RowMeta<TRow>) {
-  const rowRef = useRef<HTMLDivElement>(null);
+} & RowMeta<TRow>;
 
-  const label = rowLabelFor(row, rowLabel);
-  const expanded = rowExpansionFor(row, rowExpansion);
-
-  useEffect(() => {
-    if (focused) {
-      rowRef.current?.scrollIntoView({ block: "nearest" });
-    }
-  }, [focused]);
-
-  // Stable enough for the provider: rebuilt when `drag` identity changes (per-row binding).
-  const handleApi: RowDragHandleApi | null = drag
-    ? {
-        onHandleMouseDown: () => {
-          drag.onHandleMouseDown();
-        },
-        onDragStart: (event) => {
-          // Modifier-click is multi-select, not a drag.
-          if (event.shiftKey || event.metaKey || event.ctrlKey) {
-            event.preventDefault();
-            return;
-          }
-          // Some drop targets ignore a drag carrying no data at all.
-          event.dataTransfer.setData("text/plain", row.id);
-          event.dataTransfer.effectAllowed = "move";
-          // Ghost the whole row, not the tiny handle the press started on.
-          if (rowRef.current) {
-            event.dataTransfer.setDragImage(
-              rowRef.current,
-              24,
-              Math.round(rowRef.current.offsetHeight / 2),
-            );
-          }
-          drag.onStart();
-        },
-      }
-    : null;
-
+/** Drag bindings rebuild every render; only dragging/hint state should bust the row memo. */
+function dragBindingEqual(a?: RowDragBinding, b?: RowDragBinding): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
   return (
-    <div
-      ref={rowRef}
-      role="row"
-      // Tells the grid's blank-area handler that this press was over a record. See `DataGrid`.
-      data-node-row=""
-      aria-level={row.depth + 1}
-      aria-selected={selected}
-      aria-expanded={expanded}
-      aria-label={label}
-      onClick={(event) => {
-        // The handle owns its own click. Cell editors and expanders handle theirs.
-        if ((event.target as HTMLElement).closest("[data-row-handle]")) return;
-        if ((event.target as HTMLElement).closest("input, select, textarea, button")) {
-          // Still mark the row selected when focusing a cell control, but without multi
-          // modifiers — a click on a date picker should not toggle ⌘-selection.
-          onSelect();
-          return;
+    a.dragging === b.dragging &&
+    a.hint?.zone === b.hint?.zone &&
+    a.hint?.depth === b.hint?.depth
+  );
+}
+
+const DataRow = memo(
+  function DataRow<TCtx, TRow>({
+    row,
+    columns,
+    columnCtx,
+    gridTemplate,
+    handleWidth,
+    selected,
+    focused = selected,
+    rowNumber,
+    onSelect,
+    onOpenDetail,
+    drag,
+    onContextMenu,
+    rowLabel,
+    rowExpansion,
+  }: DataRowProps<TCtx, TRow>) {
+    const rowRef = useRef<HTMLDivElement>(null);
+
+    const label = rowLabelFor(row, rowLabel);
+    const expanded = rowExpansionFor(row, rowExpansion);
+
+    useEffect(() => {
+      if (focused) {
+        rowRef.current?.scrollIntoView({ block: "nearest" });
+      }
+    }, [focused]);
+
+    // Stable enough for the provider: rebuilt when `drag` identity changes (per-row binding).
+    const handleApi: RowDragHandleApi | null = drag
+      ? {
+          onHandleMouseDown: () => {
+            drag.onHandleMouseDown();
+          },
+          onDragStart: (event) => {
+            // Modifier-click is multi-select, not a drag.
+            if (event.shiftKey || event.metaKey || event.ctrlKey) {
+              event.preventDefault();
+              return;
+            }
+            // Some drop targets ignore a drag carrying no data at all.
+            event.dataTransfer.setData("text/plain", row.id);
+            event.dataTransfer.effectAllowed = "move";
+            // Ghost the whole row, not the tiny handle the press started on.
+            if (rowRef.current) {
+              event.dataTransfer.setDragImage(
+                rowRef.current,
+                24,
+                Math.round(rowRef.current.offsetHeight / 2),
+              );
+            }
+            drag.onStart();
+          },
         }
-        // Shift = range, Ctrl (Windows) / ⌘ (Mac) = add/remove one row. Both are standard.
-        onSelect({
-          extend: event.shiftKey,
-          toggle: event.metaKey || event.ctrlKey,
-        });
-      }}
-      onDoubleClick={onOpenDetail}
-      onContextMenu={
-        onContextMenu &&
-        ((event) => {
-          // Inside a cell's editor the browser's own cut/copy/paste menu is the useful one.
-          if ((event.target as HTMLElement).closest("input, select, textarea")) return;
-          // On macOS, Ctrl+click is often synthesised as a secondary click and never reaches
-          // `click` — only `contextmenu`. Treat Ctrl/⌘+click as multi-select, not the menu.
-          if (event.ctrlKey || event.metaKey) {
-            event.preventDefault();
-            onSelect({ toggle: true });
+      : null;
+
+    return (
+      <div
+        ref={rowRef}
+        role="row"
+        // Tells the grid's blank-area handler that this press was over a record. See `DataGrid`.
+        data-node-row=""
+        aria-level={row.depth + 1}
+        aria-selected={selected}
+        aria-expanded={expanded}
+        aria-label={label}
+        onClick={(event) => {
+          // The handle owns its own click. Cell editors and expanders handle theirs.
+          if ((event.target as HTMLElement).closest("[data-row-handle]")) return;
+          if (
+            (event.target as HTMLElement).closest("input, select, textarea, button")
+          ) {
+            // Still mark the row selected when focusing a cell control, but without multi
+            // modifiers — a click on a date picker should not toggle ⌘-selection.
+            onSelect();
             return;
           }
-          event.preventDefault();
-          onContextMenu(event.clientX, event.clientY);
-        })
-      }
-      onDragOver={
-        drag &&
-        ((event) => {
-          if (!drag.onOver(dropZoneFor(event))) return;
-          // Only an accepted hover is prevented — refusing lets the browser show the
-          // no-drop cursor and stops the drop event from firing at all.
-          event.preventDefault();
-          event.dataTransfer.dropEffect = "move";
-        })
-      }
-      onDragLeave={drag && (() => drag.onLeave())}
-      onDrop={
-        drag &&
-        ((event) => {
-          event.preventDefault();
-          drag.onDrop(dropZoneFor(event));
-        })
-      }
-      onDragEnd={drag && (() => drag.onEnd())}
-      className={[
-        "relative grid items-center border-b border-rule/60 pr-3 text-[0.875rem]",
-        selected ? "bg-select" : "hover:bg-surface-raised/60",
-        drag?.dragging ? "opacity-40" : "",
-        // Child-drop: whole row framed so it is not confused with the thin sibling line.
-        drag?.hint?.zone === "inside"
-          ? "bg-select-edge/10 ring-2 ring-select-edge ring-inset"
-          : "",
-      ].join(" ")}
-      style={{
-        gridTemplateColumns: gridTemplate,
-        columnGap: "0.75rem",
-        height: "var(--row-height)",
-      }}
-    >
-      {/*
+          // Shift = range, Ctrl (Windows) / ⌘ (Mac) = add/remove one row. Both are standard.
+          onSelect({
+            extend: event.shiftKey,
+            toggle: event.metaKey || event.ctrlKey,
+          });
+        }}
+        onDoubleClick={onOpenDetail}
+        onContextMenu={
+          onContextMenu &&
+          ((event) => {
+            // Inside a cell's editor the browser's own cut/copy/paste menu is the useful one.
+            if ((event.target as HTMLElement).closest("input, select, textarea"))
+              return;
+            // On macOS, Ctrl+click is often synthesised as a secondary click and never reaches
+            // `click` — only `contextmenu`. Treat Ctrl/⌘+click as multi-select, not the menu.
+            if (event.ctrlKey || event.metaKey) {
+              event.preventDefault();
+              onSelect({ toggle: true });
+              return;
+            }
+            event.preventDefault();
+            onContextMenu(event.clientX, event.clientY);
+          })
+        }
+        onDragOver={
+          drag &&
+          ((event) => {
+            if (!drag.onOver(dropZoneFor(event))) return;
+            // Only an accepted hover is prevented — refusing lets the browser show the
+            // no-drop cursor and stops the drop event from firing at all.
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "move";
+          })
+        }
+        onDragLeave={drag && (() => drag.onLeave())}
+        onDrop={
+          drag &&
+          ((event) => {
+            event.preventDefault();
+            drag.onDrop(dropZoneFor(event));
+          })
+        }
+        onDragEnd={drag && (() => drag.onEnd())}
+        className={[
+          "relative grid items-center border-b border-rule/60 pr-3 text-[0.875rem]",
+          selected ? "bg-select" : "hover:bg-surface-raised/60",
+          drag?.dragging ? "opacity-40" : "",
+          // Child-drop: whole row framed so it is not confused with the thin sibling line.
+          drag?.hint?.zone === "inside"
+            ? "bg-select-edge/10 ring-2 ring-select-edge ring-inset"
+            : "",
+        ].join(" ")}
+        style={{
+          gridTemplateColumns: gridTemplate,
+          columnGap: "0.75rem",
+          height: "var(--row-height)",
+        }}
+      >
+        {/*
         Handles (gutter + type icon) are permanently `draggable` when row drag is on, and
         own their own dragstart. Arming the row on mousedown is too late for HTML5 DnD —
         the browser falls through to text selection. The row itself stays undraggable so
         cell inputs keep click-and-drag text selection.
       */}
-      <RowDragHandleContext.Provider value={handleApi}>
-        <RowHandle number={rowNumber} selected={selected} onSelect={onSelect} />
+        <RowSelectedContext.Provider value={selected}>
+          <RowDragHandleContext.Provider value={handleApi}>
+            <RowHandle number={rowNumber} selected={selected} onSelect={onSelect} />
 
-        {columns.map((column) => (
-          <div
-            key={column.id}
-            role="gridcell"
-            className={`flex min-w-0 items-center self-stretch ${alignClass(column.align)}`}
-          >
-            {column.render(row, columnCtx)}
-          </div>
-        ))}
-      </RowDragHandleContext.Provider>
+            {columns.map((column) => (
+              <div
+                key={column.id}
+                role="gridcell"
+                className={`flex min-w-0 items-center self-stretch ${alignClass(column.align)}`}
+              >
+                {column.render(row, columnCtx)}
+              </div>
+            ))}
+          </RowDragHandleContext.Provider>
+        </RowSelectedContext.Provider>
 
-      {drag?.hint &&
-        (drag.hint.zone === "inside" ? (
-          <ChildDropMark
-            depth={drag.hint.depth}
-            nameColumnLeft={nameColumnLeft(columns, handleWidth)}
-          />
-        ) : (
-          <DropLine
-            zone={drag.hint.zone}
-            depth={drag.hint.depth}
-            nameColumnLeft={nameColumnLeft(columns, handleWidth)}
-          />
-        ))}
-    </div>
-  );
-}
+        {drag?.hint &&
+          (drag.hint.zone === "inside" ? (
+            <ChildDropMark
+              depth={drag.hint.depth}
+              nameColumnLeft={nameColumnLeft(columns, handleWidth)}
+            />
+          ) : (
+            <DropLine
+              zone={drag.hint.zone}
+              depth={drag.hint.depth}
+              nameColumnLeft={nameColumnLeft(columns, handleWidth)}
+            />
+          ))}
+      </div>
+    );
+  },
+  (prev, next) => {
+    return (
+      prev.row === next.row &&
+      prev.columns === next.columns &&
+      prev.columnCtx === next.columnCtx &&
+      prev.gridTemplate === next.gridTemplate &&
+      prev.handleWidth === next.handleWidth &&
+      prev.selected === next.selected &&
+      prev.focused === next.focused &&
+      prev.rowNumber === next.rowNumber &&
+      prev.onSelect === next.onSelect &&
+      prev.onOpenDetail === next.onOpenDetail &&
+      prev.onContextMenu === next.onContextMenu &&
+      prev.rowLabel === next.rowLabel &&
+      prev.rowExpansion === next.rowExpansion &&
+      dragBindingEqual(prev.drag, next.drag)
+    );
+  },
+) as <TCtx, TRow>(props: DataRowProps<TCtx, TRow>) => React.ReactElement;
 
 /**
  * Left gutter shared by every desktop row: select (with multi modifiers) and drag handle.
@@ -1188,7 +1228,7 @@ function nameColumnLeft(
   return `calc(${parts.join(" + ")})`;
 }
 
-function GroupHeader({
+const GroupHeader = memo(function GroupHeader({
   row,
   gridTemplate,
   columnCount,
@@ -1271,7 +1311,7 @@ function GroupHeader({
       </div>
     </div>
   );
-}
+});
 
 /**
  * Drop filtered-out rows, drop group headers left with nothing under them, and **restate

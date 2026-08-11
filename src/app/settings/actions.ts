@@ -94,7 +94,12 @@ export async function setCalendarSyncEnabledAction(
 
 // ── Google Contacts ──────────────────────────────────────────────────────────
 
-/** Enable on first success, then advance the existing People sync cursor on demand. */
+/**
+ * Enable on first success, then advance the existing People sync cursor on demand.
+ *
+ * No path revalidation — callers refresh once after success (settings panel, or Contacts
+ * local-first background sync) so a background pull does not thrash open drawers.
+ */
 export async function syncGoogleContactsAction(): Promise<ActionResult> {
   try {
     const userId = await getCurrentUserId();
@@ -108,8 +113,6 @@ export async function syncGoogleContactsAction(): Promise<ActionResult> {
             : "Google Contacts sync did not run.",
       };
     }
-    revalidatePath("/contacts");
-    revalidatePath("/settings");
     return { ok: true };
   } catch (error) {
     return {

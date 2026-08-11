@@ -1,11 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useId, useState } from "react";
 import { LogoutButton } from "@/components/auth/LogoutButton";
 import { ModalShell } from "@/components/detail/ModalShell";
 import { MoreIcon } from "./navIcons";
 import { sectionsWithModules, MODULES, type ModuleId } from "./modules";
+import { NavLink } from "./NavLink";
 
 /**
  * The rest of the app, one tap below the bottom nav.
@@ -69,7 +69,7 @@ export function MoreSheet({ active }: { active: ModuleId | null }) {
                 </h3>
 
                 {section.modules.map((entry) => (
-                  <Link
+                  <NavLink
                     key={entry.id}
                     href={entry.href}
                     onClick={() => setOpen(false)}
@@ -81,20 +81,20 @@ export function MoreSheet({ active }: { active: ModuleId | null }) {
                     }`}
                   >
                     {entry.label}
-                  </Link>
+                  </NavLink>
                 ))}
               </div>
             ))}
           </nav>
 
           <div className="mt-2 flex items-center justify-between border-t border-rule px-3 pt-2">
-            <Link
+            <NavLink
               href="/settings"
               onClick={() => setOpen(false)}
               className="flex min-h-tap items-center text-[0.9375rem] text-ink"
             >
               Settings
-            </Link>
+            </NavLink>
             <LogoutButton />
           </div>
         </div>

@@ -1,4 +1,7 @@
-import type { NoteNode } from "./types";
+import type { NoteNode, NoteSummary } from "./types";
+
+/** List rows are summaries; detail rows keep a body. Slice only needs shared fields. */
+type SliceNote = NoteNode | NoteSummary;
 
 /**
  * Turns the loaded note tree into the flat row list the grid renders.
@@ -17,22 +20,22 @@ export type NotesMode = "nested" | "flat";
 /** `manual` is the stored sibling order, and is only meaningful when nested. */
 export type NotesSort = "manual" | "title" | "date";
 
-export type NoteRowView = {
+export type NoteRowView<T extends SliceNote = NoteNode> = {
   id: string;
-  note: NoteNode;
+  note: T;
   /** Indentation level. Always 0 in flat mode. */
   depth: number;
 };
 
-export type SliceNotesOpts = {
+export type SliceNotesOpts<T extends SliceNote = NoteNode> = {
   mode: NotesMode;
   sort: NotesSort;
   direction?: "asc" | "desc";
   /** Which notes survive. Applied before nesting, so a kept child re-bases its indent. */
-  keep?: (note: NoteNode) => boolean;
+  keep?: (note: T) => boolean;
 };
 
-function compareTitles(a: NoteNode, b: NoteNode): number {
+function compareTitles(a: SliceNote, b: SliceNote): number {
   const left = a.title.trim();
   const right = b.title.trim();
   // An untitled note sorts last either way rather than leading the list as "".
@@ -41,7 +44,7 @@ function compareTitles(a: NoteNode, b: NoteNode): number {
   return left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" });
 }
 
-function compareDates(a: NoteNode, b: NoteNode): number {
+function compareDates(a: SliceNote, b: SliceNote): number {
   // Undated notes sort last, for the same reason untitled ones do.
   if (a.noteDate === null && b.noteDate === null) return 0;
   if (a.noteDate === null) return 1;
@@ -49,7 +52,9 @@ function compareDates(a: NoteNode, b: NoteNode): number {
   return a.noteDate.getTime() - b.noteDate.getTime();
 }
 
-function comparatorFor(sort: NotesSort): ((a: NoteNode, b: NoteNode) => number) | null {
+function comparatorFor(
+  sort: NotesSort,
+): ((a: SliceNote, b: SliceNote) => number) | null {
   switch (sort) {
     case "title":
       return compareTitles;
@@ -72,7 +77,10 @@ function comparatorFor(sort: NotesSort): ((a: NoteNode, b: NoteNode) => number) 
  * `collapsed` is honoured in nested mode only: a collapsed note in a flat list would hide
  * rows for a hierarchy that is not on screen.
  */
-export function sliceNotes(notes: NoteNode[], opts: SliceNotesOpts): NoteRowView[] {
+export function sliceNotes<T extends SliceNote>(
+  notes: T[],
+  opts: SliceNotesOpts<T>,
+): NoteRowView<T>[] {
   const { mode, sort, direction = "asc", keep } = opts;
   const kept = keep ? notes.filter(keep) : notes;
   const comparator = comparatorFor(sort);
@@ -104,7 +112,7 @@ export function sliceNotes(notes: NoteNode[], opts: SliceNotesOpts): NoteRowView
     effectiveParent.set(note.id, parentId);
   }
 
-  const childrenOf = new Map<string | null, NoteNode[]>();
+  const childrenOf = new Map<string | null, T[]>();
   for (const note of kept) {
     const parentId = effectiveParent.get(note.id) ?? null;
     const siblings = childrenOf.get(parentId);
@@ -118,7 +126,7 @@ export function sliceNotes(notes: NoteNode[], opts: SliceNotesOpts): NoteRowView
     }
   }
 
-  const rows: NoteRowView[] = [];
+  const rows: NoteRowView<T>[] = [];
 
   function walk(parentId: string | null, depth: number): void {
     for (const note of childrenOf.get(parentId) ?? []) {
@@ -134,7 +142,7 @@ export function sliceNotes(notes: NoteNode[], opts: SliceNotesOpts): NoteRowView
 }
 
 /** Distinct subjects across the notes, for the Subject combobox. "General" is always offered. */
-export function subjectOptions(notes: NoteNode[]): string[] {
+export function subjectOptions(notes: readonly { subject: string }[]): string[] {
   const seen = new Set<string>(["General"]);
   for (const note of notes) {
     const subject = note.subject.trim();

@@ -34,6 +34,17 @@ export type NoteNode = NoteRow & {
   hidden: boolean;
 };
 
+/**
+ * List-row note: metadata and a plain-text snippet, never the Markdown body.
+ *
+ * The Notes grid ships hundreds of rows in the RSC payload; bodies were the bulk of that
+ * transfer. Detail (with `body`) loads only for the open drawer / deep-link.
+ */
+export type NoteSummary = Omit<NoteNode, "body"> & {
+  /** One-line plain-text preview of the body, computed server-side. */
+  snippet: string;
+};
+
 /** Where a note goes among its new siblings. Mirrors `src/lib/tree/types.ts`. */
 export type NotePosition =
   | { at: "first" }

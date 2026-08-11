@@ -25,6 +25,7 @@ import type { CompactFields } from "@/lib/grid/compactFields";
 import { useDateFormatter } from "@/components/settings/SettingsProvider";
 import { formatFullDateKey } from "@/lib/dateFormat";
 import type { ColumnDef, NodeGridRow } from "./columns";
+import { RowSelectedContext } from "./rowSelectedContext";
 
 /**
  * Opt-in row swipe, in the shape of `RowDrag`: the grid owns the gesture, the host owns the
@@ -284,51 +285,53 @@ export function CompactRow<TCtx, TRow>({
           swipe ? "select-none [&_input]:select-text" : "",
         ].join(" ")}
       >
-        <AccentBar text={accentText} />
+        <RowSelectedContext.Provider value={selected}>
+          <AccentBar text={accentText} />
 
-        {/* The one column rendered as a live control rather than text — a Day item's check
+          {/* The one column rendered as a live control rather than text — a Day item's check
           box. Sized here rather than in the cell, so the desktop grid keeps its 14px one. */}
-        {fields.leading && (
-          <span className="flex h-tap w-8 flex-none items-center justify-center [&_input]:h-5 [&_input]:w-5">
-            {fields.leading.render(row, columnCtx)}
-          </span>
-        )}
-
-        {/*
-         * Indent the whole card rather than the name cell, and hand the primary column a row at
-         * depth 0 so it draws no spines. Left to itself the name cell indents only the title,
-         * and the meta line beneath it starts back at the card edge — the two lines of one row
-         * visibly disagreeing about where the row begins.
-         */}
-        <div
-          className="flex min-w-0 flex-1 flex-col gap-0.5"
-          style={
-            row.depth > 0
-              ? { marginLeft: `calc(${row.depth} * var(--indent-step))` }
-              : undefined
-          }
-        >
-          <div className="flex min-w-0 items-center text-[0.9375rem] leading-snug">
-            {fields.primary?.render({ ...row, depth: 0 }, columnCtx)}
-          </div>
-          {chips.length > 0 && (
-            <div
-              title={chipTitle || undefined}
-              className="truncate text-[0.75rem] text-ink-muted"
-              // The name cell puts an expander and a type icon before its text, so a meta line
-              // flush with the card would sit visibly left of the title it belongs to. Other
-              // primary columns have no such gutter. `name` is already special-cased this way
-              // in `DataGrid`'s `nameColumnLeft`.
-              style={
-                fields.primary?.id === "name"
-                  ? { paddingLeft: "var(--name-gutter)" }
-                  : undefined
-              }
-            >
-              {chips.join(" · ")}
-            </div>
+          {fields.leading && (
+            <span className="flex h-tap w-8 flex-none items-center justify-center [&_input]:h-5 [&_input]:w-5">
+              {fields.leading.render(row, columnCtx)}
+            </span>
           )}
-        </div>
+
+          {/*
+           * Indent the whole card rather than the name cell, and hand the primary column a row at
+           * depth 0 so it draws no spines. Left to itself the name cell indents only the title,
+           * and the meta line beneath it starts back at the card edge — the two lines of one row
+           * visibly disagreeing about where the row begins.
+           */}
+          <div
+            className="flex min-w-0 flex-1 flex-col gap-0.5"
+            style={
+              row.depth > 0
+                ? { marginLeft: `calc(${row.depth} * var(--indent-step))` }
+                : undefined
+            }
+          >
+            <div className="flex min-w-0 items-center text-[0.9375rem] leading-snug">
+              {fields.primary?.render({ ...row, depth: 0 }, columnCtx)}
+            </div>
+            {chips.length > 0 && (
+              <div
+                title={chipTitle || undefined}
+                className="truncate text-[0.75rem] text-ink-muted"
+                // The name cell puts an expander and a type icon before its text, so a meta line
+                // flush with the card would sit visibly left of the title it belongs to. Other
+                // primary columns have no such gutter. `name` is already special-cased this way
+                // in `DataGrid`'s `nameColumnLeft`.
+                style={
+                  fields.primary?.id === "name"
+                    ? { paddingLeft: "var(--name-gutter)" }
+                    : undefined
+                }
+              >
+                {chips.join(" · ")}
+              </div>
+            )}
+          </div>
+        </RowSelectedContext.Provider>
       </div>
     </div>
   );

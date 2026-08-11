@@ -1,6 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
+import { useRouter } from "next/navigation";
 import type { GridRow } from "@/lib/tree/slice";
 import type { ContactListRow } from "@/lib/contacts/types";
 import {
@@ -8,6 +16,8 @@ import {
   deleteContactAction,
   listContactsAction,
 } from "@/app/contacts/actions";
+import { syncGoogleContactsAction } from "@/app/settings/actions";
+import type { GoogleContactSyncStatus } from "@/lib/google/contacts/sync";
 import { DataGrid } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 import { rowMenuFor } from "@/components/grid/rowMenu";
@@ -71,17 +81,29 @@ function viewDefaults(id: string): GridDefaults {
  */
 export function ContactsView({
   initialContacts,
+  initialSync = { state: "off" },
   initialError = null,
 }: {
   initialContacts: ContactListRow[];
+  /** Freshness of the Google mirror; `stale` triggers one background sync. */
+  initialSync?: GoogleContactSyncStatus;
   initialError?: string | null;
 }) {
+  const router = useRouter();
   const [rows, setRows] = useState(initialContacts);
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
-  const [error, setError] = useState<string | null>(initialError);
+  const [error, setError] = useState<string | null>(
+    initialError ??
+      (initialSync.state === "failed" || initialSync.state === "not_linked"
+        ? initialSync.message
+        : null),
+  );
+  const [backgroundSyncing, setBackgroundSyncing] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<ContactListRow | null>(null);
   const { detail: openId, setDetail: setOpenId } = useViewStateUrl();
   const [, startTransition] = useTransition();
+  // Stale paint + in-flight pull both count as "syncing" without setState on the stale path.
+  const syncing = initialSync.state === "stale" || backgroundSyncing;
 
   // Adjust state during render rather than in an effect — the same idiom the node grids use
   // for `navigableIds`. An effect here would render the stale list once before correcting it.
@@ -95,6 +117,27 @@ export function ContactsView({
     setSeenServerError(initialError);
     setError(initialError);
   }
+
+  const autoSyncStarted = useRef(false);
+  useEffect(() => {
+    if (initialSync.state !== "stale") {
+      autoSyncStarted.current = false;
+      return;
+    }
+    if (autoSyncStarted.current) return;
+    autoSyncStarted.current = true;
+    startTransition(async () => {
+      setBackgroundSyncing(true);
+      const result = await syncGoogleContactsAction();
+      setBackgroundSyncing(false);
+      if (!result.ok) setError(result.error);
+      else {
+        const list = await listContactsAction();
+        if (list.ok) setRows(list.data);
+        router.refresh();
+      }
+    });
+  }, [initialSync, router]);
 
   const views = useModuleViews({
     moduleId: "contacts",
@@ -255,7 +298,7 @@ export function ContactsView({
         distinctValues={distinctValues}
         groupDimensions={[]}
         counts={counts}
-        error={error}
+        error={error ?? (syncing ? "Syncing Google Contacts…" : null)}
         views={views}
         commandCapabilities={commandCapabilities}
       />

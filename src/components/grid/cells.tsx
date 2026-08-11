@@ -24,6 +24,7 @@ import { scheduleStatus, STATUS_LABELS, type ScheduleStatus } from "@/lib/tree/s
 import { TypeIcon } from "@/components/icons/TypeIcon";
 import { NameIconContext } from "./nameIconContext";
 import { RowDragHandleContext } from "./rowDragContext";
+import { useRowSelected } from "./rowSelectedContext";
 
 const PRIORITY_COLOR: Record<PriorityLetter, string> = {
   A: "text-priority-a",
@@ -57,7 +58,6 @@ const TYPE_STYLE: Record<OutlineNode["type"], string> = {
 export function NameCell({
   node,
   depth,
-  selected,
   editing,
   branch,
   onToggleCollapsed,
@@ -73,7 +73,6 @@ export function NameCell({
 }: {
   node: OutlineNode;
   depth: number;
-  selected: boolean;
   editing: boolean;
   /**
    * Children in *this* row set, when that differs from the tree — see `GridRow.branch`.
@@ -87,6 +86,7 @@ export function NameCell({
   onCancelEdit: (draft: string) => void;
   dragHandle?: boolean;
 }) {
+  const selected = useRowSelected();
   const done = node.state === "completed" || node.state === "cancelled";
   const hasChildren = branch?.hasChildren ?? node.hasChildren;
   const childCount = branch?.childCount ?? node.childCount;

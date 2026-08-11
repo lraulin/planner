@@ -4,34 +4,36 @@ import { useEffect, useRef, useState } from "react";
 import type { NoteFlag } from "@/db/schema";
 import { DateText } from "@/components/date/DateText";
 import { GROUP_BY_LABELS, type CalendarNoteGroupBy } from "@/lib/grid/grouping";
-import type { NoteNode } from "@/lib/notes/types";
+import type { NoteSummary } from "@/lib/notes/types";
 import {
   noteContextsLabel,
   noteDatePart,
   noteDatePartLabel,
 } from "@/lib/notes/grouping";
 import { FLAG_LABELS } from "@/lib/notes/flags";
-import { noteSnippet } from "@/lib/notes/snippet";
 import { toDateKey } from "@/lib/schedule/geometry";
 import { TYPE_LABELS } from "@/lib/tree/hierarchy";
 import type { ColumnAlign, ColumnDef } from "@/components/grid/columns";
+import { useRowSelected } from "@/components/grid/rowSelectedContext";
 import { FlagCell } from "./flags";
 
 /**
  * Callbacks and rendering context the notes columns close over. Same shape as
  * `OutlineColumnCtx` — column defs stay pure data plus render, and the host swaps handlers
  * freely.
+ *
+ * Selection is not here: the shared grid paints selection on the row and cells that need
+ * "selected" chrome read it from row state (see DataGrid RowSelectedContext).
  */
 export type NotesColumnCtx = {
-  selectedId: string | null;
   editingId: string | null;
   /** False in Flat mode, where the stored note tree is deliberately not on screen. */
   showHierarchy: boolean;
-  onToggleCollapsed: (note: NoteNode) => void;
-  onOpenDetail: (note: NoteNode) => void;
-  onFinishEdit: (note: NoteNode, title: string) => void;
+  onToggleCollapsed: (note: NoteSummary) => void;
+  onOpenDetail: (note: NoteSummary) => void;
+  onFinishEdit: (note: NoteSummary, title: string) => void;
   onCancelEdit: () => void;
-  onFlagChange: (note: NoteNode, flag: NoteFlag) => void;
+  onFlagChange: (note: NoteSummary, flag: NoteFlag) => void;
 };
 
 /** Default visible fields. Calendar parts stay available through Show Fields and Group by. */
@@ -53,7 +55,7 @@ function datePartColumn(
   dimension: Exclude<CalendarNoteGroupBy, "date">,
   width: string,
   align?: ColumnAlign,
-): ColumnDef<NotesColumnCtx, NoteNode> {
+): ColumnDef<NotesColumnCtx, NoteSummary> {
   return {
     id: dimension,
     label: GROUP_BY_LABELS[dimension],
@@ -74,7 +76,7 @@ function datePartColumn(
   };
 }
 
-export const notesColumns: ColumnDef<NotesColumnCtx, NoteNode>[] = [
+export const notesColumns: ColumnDef<NotesColumnCtx, NoteSummary>[] = [
   {
     id: "flag",
     label: "Flag",
@@ -104,7 +106,6 @@ export const notesColumns: ColumnDef<NotesColumnCtx, NoteNode>[] = [
         note={row.node}
         depth={row.depth}
         showHierarchy={ctx.showHierarchy}
-        selected={row.node.id === ctx.selectedId}
         editing={row.node.id === ctx.editingId}
         onToggleCollapsed={() => ctx.onToggleCollapsed(row.node)}
         onOpenDetail={() => ctx.onOpenDetail(row.node)}
@@ -120,8 +121,8 @@ export const notesColumns: ColumnDef<NotesColumnCtx, NoteNode>[] = [
     label: "Preview",
     width: "minmax(12rem,1.4fr)",
     filterKind: "text",
-    filterValue: (row) => noteSnippet(row.node.body, 60) || null,
-    render: (row) => <SnippetCell body={row.node.body} />,
+    filterValue: (row) => row.node.snippet.slice(0, 60) || null,
+    render: (row) => <SnippetCell snippet={row.node.snippet} />,
   },
   {
     id: "subject",
@@ -201,15 +202,13 @@ export const notesColumns: ColumnDef<NotesColumnCtx, NoteNode>[] = [
   },
 ];
 
-function SnippetCell({ body }: { body: string }) {
-  const text = noteSnippet(body);
-
+function SnippetCell({ snippet }: { snippet: string }) {
   return (
     <span
-      className={`truncate text-[0.8125rem] ${text ? "text-ink-muted" : "text-ink-faint italic"}`}
-      title={text || undefined}
+      className={`truncate text-[0.8125rem] ${snippet ? "text-ink-muted" : "text-ink-faint italic"}`}
+      title={snippet || undefined}
     >
-      {text || "Empty"}
+      {snippet || "Empty"}
     </span>
   );
 }
@@ -252,23 +251,23 @@ function TitleCell({
   note,
   depth,
   showHierarchy,
-  selected,
   editing,
   onToggleCollapsed,
   onOpenDetail,
   onFinishEdit,
   onCancelEdit,
 }: {
-  note: NoteNode;
+  note: NoteSummary;
   depth: number;
   showHierarchy: boolean;
-  selected: boolean;
   editing: boolean;
   onToggleCollapsed: () => void;
   onOpenDetail: () => void;
   onFinishEdit: (title: string) => void;
   onCancelEdit: () => void;
 }) {
+  const selected = useRowSelected();
+
   return (
     <div className="flex min-w-0 items-stretch self-stretch">
       {Array.from({ length: depth }, (_, level) => (

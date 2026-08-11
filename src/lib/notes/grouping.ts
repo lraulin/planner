@@ -13,7 +13,9 @@ import { toDateKey } from "@/lib/schedule/geometry";
 import type { GridRow } from "@/lib/tree/slice";
 import { FLAG_LABELS } from "./flags";
 import type { NoteRowView } from "./slice";
-import type { NoteNode } from "./types";
+import type { NoteNode, NoteSummary } from "./types";
+
+type GroupableNote = NoteNode | NoteSummary;
 
 export { NOTE_GROUP_BY_VALUES };
 export type { CalendarNoteGroupBy, NoteGroupBy };
@@ -127,7 +129,7 @@ function textPart(value: string | null | undefined): NoteGroupPart | null {
 
 /** Derive the bucket represented by one Notes column. */
 export function noteGroupPart(
-  note: NoteNode,
+  note: GroupableNote,
   dimension: NoteGroupBy,
   dateFormat: DateFormatId = DEFAULT_DATE_FORMAT,
 ): NoteGroupPart | null {
@@ -205,11 +207,11 @@ function compareParts(
  * come last in both cases. Rows within the leaf group retain the Notes sort chosen by the
  * user.
  */
-export function groupNotes(
-  rows: NoteRowView[],
+export function groupNotes<T extends GroupableNote>(
+  rows: NoteRowView<T>[],
   dimensions: readonly NoteGroupBy[],
   dateFormat: DateFormatId = DEFAULT_DATE_FORMAT,
-): GridRow<NoteRowView["note"]>[] {
+): GridRow<T>[] {
   const groupBy = asNoteGroupBy(dimensions);
   if (groupBy.length === 0) return rows.map(toGridRow);
 
@@ -226,7 +228,7 @@ export function groupNotes(
     return left.index - right.index;
   });
 
-  const out: GridRow<NoteRowView["note"]>[] = [];
+  const out: GridRow<T>[] = [];
   type Frame = {
     dimension: NoteGroupBy;
     key: string;
@@ -277,7 +279,7 @@ export function groupNotes(
   return out;
 }
 
-function toGridRow(row: NoteRowView): GridRow<NoteRowView["note"]> {
+function toGridRow<T extends GroupableNote>(row: NoteRowView<T>): GridRow<T> {
   return {
     kind: "node",
     id: row.id,

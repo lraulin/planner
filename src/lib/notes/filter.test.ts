@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   contextOptions,
   EMPTY_NOTE_FILTER,
+  filterRequiresBody,
   isEmptyNoteFilter,
   notePassesFilter,
   type NoteFilter,
@@ -50,6 +51,19 @@ describe("isEmptyNoteFilter", () => {
     expect(isEmptyNoteFilter(filter({ search: "x" }))).toBe(false);
     expect(isEmptyNoteFilter(filter({ subjects: ["Work"] }))).toBe(false);
     expect(isEmptyNoteFilter(filter({ contexts: ["@home"] }))).toBe(false);
+  });
+});
+
+describe("filterRequiresBody", () => {
+  it("is false when search is empty or body is not searched", () => {
+    expect(filterRequiresBody(EMPTY_NOTE_FILTER)).toBe(false);
+    expect(filterRequiresBody(filter({ search: "flask", searchInBody: false }))).toBe(
+      false,
+    );
+  });
+
+  it("is true only when there are terms and body is ticked", () => {
+    expect(filterRequiresBody(filter({ search: "flask" }))).toBe(true);
   });
 });
 

@@ -184,15 +184,20 @@ export async function duplicateAppointmentAction(
  * Refresh button; the automatic pull happens inside `loadSchedule`.
  */
 export async function syncGoogleAction(weekStartIso: string): Promise<ActionResult> {
-  return run(async (userId) => {
-    const start = startOfWeek(new Date(weekStartIso), 0);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 7);
-    const status = await syncWindow(userId, { start, end });
-    // The mirror reports failure rather than throwing, so surface it as an action error —
-    // otherwise a refresh that reached nothing would look like it succeeded.
-    if (status.state === "failed" || status.state === "not_linked") {
-      throw new Error(status.message);
-    }
-  });
+  // No layout revalidate: the client calls `router.refresh()` once on success so a
+  // background stale-sync does not thrash the page while the user is editing.
+  return run(
+    async (userId) => {
+      const start = startOfWeek(new Date(weekStartIso), 0);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 7);
+      const status = await syncWindow(userId, { start, end });
+      // The mirror reports failure rather than throwing, so surface it as an action error —
+      // otherwise a refresh that reached nothing would look like it succeeded.
+      if (status.state === "failed" || status.state === "not_linked") {
+        throw new Error(status.message);
+      }
+    },
+    { revalidate: [] },
+  );
 }

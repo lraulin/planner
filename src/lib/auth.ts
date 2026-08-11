@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth/server";
 import { devAuthBypassEnabled } from "@/lib/auth/dev-bypass";
@@ -31,11 +32,14 @@ export type CurrentAccount = {
 /**
  * Who this request is acting as, and how it got there.
  *
+ * Request-scoped via React `cache`: layout + page + actions in one render share one session
+ * lookup instead of repeating Better Auth work for every `getCurrentUserId` call.
+ *
  * The `viaDevBypass` flag is the part worth having: "signed in as X" is reassuring and
  * wrong when nobody signed in at all. Surfaces that show the account should say which of
  * the two happened.
  */
-export async function getCurrentAccount(): Promise<CurrentAccount> {
+export const getCurrentAccount = cache(async (): Promise<CurrentAccount> => {
   const session = await auth.api.getSession({
     headers: await headers(),
   });
@@ -50,7 +54,7 @@ export async function getCurrentAccount(): Promise<CurrentAccount> {
   }
 
   throw new Error("Unauthorized: no session. Sign in at /login.");
-}
+});
 
 let warnedAboutBypass = false;
 

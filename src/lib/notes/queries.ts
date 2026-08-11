@@ -1,7 +1,10 @@
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { sql } from "drizzle-orm";
+import { notes } from "@/db/schema";
 import { deriveNotes } from "./derive";
-import type { NoteNode, NoteRow } from "./types";
+import { filterRequiresBody, notePassesFilter, type NoteFilter } from "./filter";
+import { noteSnippet } from "./snippet";
+import type { NoteNode, NoteRow, NoteSummary } from "./types";
 
 /**
  * Loads a user's whole note tree in one round trip.
@@ -13,8 +16,170 @@ import type { NoteNode, NoteRow } from "./types";
  * The join to `nodes` is for the "Linked to" column. It is a left join on a nullable
  * column, so an unlinked note — the common case — costs nothing. Contact labels are joined
  * in `NotesGrid` from `loadContactOptions`, which keeps their name derivation in one place.
+ *
+ * Prefer `loadNoteSummaries` for the Notes list route — full bodies are for detail loads
+ * and server-side body filters only.
  */
 export async function loadNotes(userId: string): Promise<NoteNode[]> {
+  const rows = await loadNoteRows(userId);
+  return deriveNotes(rows);
+}
+
+/**
+ * List payload: tree metadata + snippet, never the Markdown body.
+ *
+ * Bodies are the bulk of the Notes RSC transfer. Snippets are computed once on the server
+ * so the grid does not re-strip markdown for every row on every render.
+ */
+export async function loadNoteSummaries(userId: string): Promise<NoteSummary[]> {
+  const nodes = await loadNotes(userId);
+  return nodes.map(toSummary);
+}
+
+/** One note with full body, user-scoped. Null when missing or not owned. */
+export async function loadNote(
+  userId: string,
+  noteId: string,
+): Promise<NoteNode | null> {
+  const result = await db.execute(sql`
+    SELECT
+      n.id, n.parent_id, n.sort_key, n.title, n.subject, n.body,
+      n.note_date, n.flag, n.contexts, n.collapsed, n.node_id, n.contact_id,
+      n.created_at, n.updated_at,
+      (
+        SELECT count(*)::int FROM notes c
+        WHERE c.parent_id = n.id AND c.user_id = ${userId}
+      ) AS child_count,
+      linked.name AS node_name,
+      linked.type AS node_type
+    FROM notes n
+    LEFT JOIN nodes linked ON linked.id = n.node_id AND linked.user_id = ${userId}
+    WHERE n.user_id = ${userId} AND n.id = ${noteId}
+    LIMIT 1
+  `);
+
+  const raw = (result as unknown as Record<string, unknown>[])[0];
+  if (!raw) return null;
+
+  const childCount = Number(raw.child_count);
+  return {
+    id: raw.id as string,
+    parentId: (raw.parent_id as string | null) ?? null,
+    sortKey: raw.sort_key as string,
+    title: raw.title as string,
+    subject: raw.subject as string,
+    body: raw.body as string,
+    noteDate: raw.note_date ? new Date(raw.note_date as string) : null,
+    flag: raw.flag as NoteRow["flag"],
+    contexts: (raw.contexts as string[] | null) ?? [],
+    collapsed: Boolean(raw.collapsed),
+    depth: 0,
+    nodeId: (raw.node_id as string | null) ?? null,
+    contactId: (raw.contact_id as string | null) ?? null,
+    contactName: null,
+    nodeName: (raw.node_name as string | null) ?? null,
+    nodeType: (raw.node_type as NoteRow["nodeType"]) ?? null,
+    createdAt: new Date(raw.created_at as string),
+    updatedAt: new Date(raw.updated_at as string),
+    childCount,
+    hasChildren: childCount > 0,
+    // Detail load is for the drawer; collapse-hiding is a list concern.
+    hidden: false,
+  };
+}
+
+/**
+ * Ids of notes that survive `filter`, including body text when needed.
+ *
+ * Used when the list has only summaries: the client asks the server for the matching set
+ * and intersects it with the list rows. Preserves exact `notePassesFilter` semantics.
+ */
+export async function loadNoteIdsMatchingFilter(
+  userId: string,
+  filter: NoteFilter,
+): Promise<string[]> {
+  const nodes = await loadNotes(userId);
+  return nodes.filter((note) => notePassesFilter(note, filter)).map((note) => note.id);
+}
+
+/**
+ * Summaries for the Notes page, plus optional server body-match ids when the active filter
+ * searches bodies. When the filter does not need bodies, `bodyMatchIds` is null and the
+ * client may filter locally. One tree load covers both when body matching is required.
+ */
+export async function loadNotesListPayload(
+  userId: string,
+  filter: NoteFilter | null,
+): Promise<{ summaries: NoteSummary[]; bodyMatchIds: string[] | null }> {
+  if (!filter || !filterRequiresBody(filter)) {
+    return { summaries: await loadNoteSummaries(userId), bodyMatchIds: null };
+  }
+  const nodes = await loadNotes(userId);
+  return {
+    summaries: nodes.map(toSummary),
+    bodyMatchIds: nodes
+      .filter((note) => notePassesFilter(note, filter))
+      .map((note) => note.id),
+  };
+}
+
+/** Summary fields after a successful autosave — patch the list without a route refresh. */
+export async function loadNoteSummary(
+  userId: string,
+  noteId: string,
+): Promise<NoteSummary | null> {
+  const note = await loadNote(userId, noteId);
+  return note ? toSummary(note) : null;
+}
+
+/** Every note linked to one record, newest first. Direct SQL — not a full-tree scan. */
+export async function loadNotesForNode(
+  userId: string,
+  nodeId: string,
+): Promise<NoteNode[]> {
+  const result = await db.execute(sql`
+    SELECT
+      n.id, n.parent_id, n.sort_key, n.title, n.subject, n.body,
+      n.note_date, n.flag, n.contexts, n.collapsed, n.node_id, n.contact_id,
+      n.created_at, n.updated_at,
+      linked.name AS node_name,
+      linked.type AS node_type
+    FROM notes n
+    LEFT JOIN nodes linked ON linked.id = n.node_id AND linked.user_id = ${userId}
+    WHERE n.user_id = ${userId} AND n.node_id = ${nodeId}
+    ORDER BY n.updated_at DESC
+  `);
+
+  return mapFlatNoteRows(result);
+}
+
+/** Every note filed against one contact, newest first. Direct SQL — not a full-tree scan. */
+export async function loadNotesForContact(
+  userId: string,
+  contactId: string,
+): Promise<NoteNode[]> {
+  const result = await db.execute(sql`
+    SELECT
+      n.id, n.parent_id, n.sort_key, n.title, n.subject, n.body,
+      n.note_date, n.flag, n.contexts, n.collapsed, n.node_id, n.contact_id,
+      n.created_at, n.updated_at,
+      linked.name AS node_name,
+      linked.type AS node_type
+    FROM notes n
+    LEFT JOIN nodes linked ON linked.id = n.node_id AND linked.user_id = ${userId}
+    WHERE n.user_id = ${userId} AND n.contact_id = ${contactId}
+    ORDER BY n.updated_at DESC
+  `);
+
+  return mapFlatNoteRows(result);
+}
+
+function toSummary(note: NoteNode): NoteSummary {
+  const { body, ...rest } = note;
+  return { ...rest, snippet: noteSnippet(body) };
+}
+
+async function loadNoteRows(userId: string): Promise<NoteRow[]> {
   const result = await db.execute(sql`
     WITH RECURSIVE note_tree AS (
       SELECT
@@ -49,7 +214,11 @@ export async function loadNotes(userId: string): Promise<NoteNode[]> {
     ORDER BY t.path
   `);
 
-  const rows: NoteRow[] = (result as unknown as Record<string, unknown>[]).map((r) => ({
+  return (result as unknown as Record<string, unknown>[]).map(mapTreeRow);
+}
+
+function mapTreeRow(r: Record<string, unknown>): NoteRow {
+  return {
     id: r.id as string,
     parentId: (r.parent_id as string | null) ?? null,
     sortKey: r.sort_key as string,
@@ -68,29 +237,27 @@ export async function loadNotes(userId: string): Promise<NoteNode[]> {
     nodeType: (r.node_type as NoteRow["nodeType"]) ?? null,
     createdAt: new Date(r.created_at as string),
     updatedAt: new Date(r.updated_at as string),
-  }));
-
-  return deriveNotes(rows);
+  };
 }
 
-/** Every note linked to one record, newest first. Backs the Notes tab on a node's drawer. */
-export async function loadNotesForNode(
-  userId: string,
-  nodeId: string,
-): Promise<NoteNode[]> {
-  const all = await loadNotes(userId);
-  return all
-    .filter((note) => note.nodeId === nodeId)
-    .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+function mapFlatNoteRows(rows: unknown): NoteNode[] {
+  return (rows as Record<string, unknown>[]).map((r) => {
+    const row = mapTreeRow({ ...r, depth: 0 });
+    return {
+      ...row,
+      childCount: 0,
+      hasChildren: false,
+      hidden: false,
+    };
+  });
 }
 
-/** Every note filed against one contact, newest first. Backs the contact drawer's History. */
-export async function loadNotesForContact(
-  userId: string,
-  contactId: string,
-): Promise<NoteNode[]> {
-  const all = await loadNotes(userId);
-  return all
-    .filter((note) => note.contactId === contactId)
-    .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+/** Exists so callers that only need ownership can avoid the full tree. */
+export async function noteOwnedBy(userId: string, noteId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: notes.id })
+    .from(notes)
+    .where(and(eq(notes.id, noteId), eq(notes.userId, userId)))
+    .limit(1);
+  return Boolean(row);
 }

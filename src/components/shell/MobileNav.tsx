@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { requestQuickCapture } from "@/components/capture/event";
 import { MoreSheet } from "./MoreSheet";
 import {
@@ -11,6 +10,7 @@ import {
   TasksIcon,
 } from "./navIcons";
 import type { ModuleId } from "./modules";
+import { NavLink } from "./NavLink";
 
 /**
  * Phone navigation: a bottom tab bar, standing in for the desktop `Sidebar` below `md`.
@@ -40,28 +40,28 @@ export function MobileNav({ active }: { active: ModuleId | null }) {
           <CaptureIcon />
           Quick capture
         </button>
-        <Link
+        <NavLink
           href="/organize"
           className="flex min-h-tap items-center justify-center gap-2 bg-shell text-[0.75rem] font-medium text-ink"
         >
           <OrganizeIcon />
           Process Inbox
-        </Link>
+        </NavLink>
       </div>
       <div className="flex items-stretch">
-        <NavLink
+        <TabLink
           href="/chooser"
           label="Chooser"
           icon={<ChooserIcon />}
           active={active === "chooser"}
         />
-        <NavLink
+        <TabLink
           href="/tasks"
           label="Tasks"
           icon={<TasksIcon />}
           active={active === "tasks"}
         />
-        <NavLink
+        <TabLink
           href="/notes"
           label="Notes"
           icon={<NotesIcon />}
@@ -73,7 +73,7 @@ export function MobileNav({ active }: { active: ModuleId | null }) {
   );
 }
 
-function NavLink({
+function TabLink({
   href,
   label,
   icon,
@@ -85,7 +85,7 @@ function NavLink({
   active: boolean;
 }) {
   return (
-    <Link
+    <NavLink
       href={href}
       aria-current={active ? "page" : undefined}
       className={`flex min-h-tap flex-1 flex-col items-center justify-center gap-0.5 py-1.5 ${
@@ -94,6 +94,6 @@ function NavLink({
     >
       {icon}
       <span className="text-[0.625rem] leading-none">{label}</span>
-    </Link>
+    </NavLink>
   );
 }

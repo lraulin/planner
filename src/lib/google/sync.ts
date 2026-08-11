@@ -30,6 +30,8 @@ export type SyncStatus =
   | { state: "off" }
   | { state: "ok"; inserted: number; updated: number; deleted: number }
   | { state: "skipped" }
+  /** Local mirror is ready; a background pull should run without blocking paint. */
+  | { state: "stale" }
   | { state: "not_linked"; message: string }
   | { state: "failed"; message: string };
 
@@ -81,21 +83,36 @@ export async function syncWindow(
   const fetchedCalendarIds: string[] = [];
   let firstError: unknown = null;
 
-  for (const link of links) {
-    try {
-      const events = await listEvents(
-        userId,
-        link.calendarId,
-        window.start,
-        window.end,
-      );
-      for (const event of events) {
-        remote.push({ event, calendarId: link.calendarId });
+  // Independent calendar fetches in parallel — one slow calendar must not serialise the rest.
+  // Failures stay per-calendar: a rejected promise never becomes "delete everything on it".
+  const results = await Promise.all(
+    links.map(async (link) => {
+      try {
+        const events = await listEvents(
+          userId,
+          link.calendarId,
+          window.start,
+          window.end,
+        );
+        return { ok: true as const, link, events };
+      } catch (error) {
+        return { ok: false as const, link, error };
       }
-      fetchedCalendarIds.push(link.calendarId);
-    } catch (error) {
-      firstError ??= error;
-      if (error instanceof GoogleNotLinkedError) break;
+    }),
+  );
+
+  for (const result of results) {
+    if (result.ok) {
+      for (const event of result.events) {
+        remote.push({ event, calendarId: result.link.calendarId });
+      }
+      fetchedCalendarIds.push(result.link.calendarId);
+      continue;
+    }
+    firstError ??= result.error;
+    if (result.error instanceof GoogleNotLinkedError) {
+      // Token revoked — stop treating later calendars as independent successes for messaging.
+      break;
     }
   }
 

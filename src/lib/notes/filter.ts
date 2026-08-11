@@ -56,6 +56,16 @@ export function isEmptyNoteFilter(filter: NoteFilter): boolean {
   );
 }
 
+/**
+ * True when matching needs note bodies that the list payload deliberately omits.
+ *
+ * List rows carry snippets and metadata only. A text search with "in body" ticked has to
+ * run on the server (or against a body-bearing load) rather than against summaries.
+ */
+export function filterRequiresBody(filter: NoteFilter): boolean {
+  return terms(filter.search).length > 0 && filter.searchInBody;
+}
+
 function terms(search: string): string[] {
   return search
     .trim()
@@ -129,7 +139,7 @@ export function notePassesFilter(note: NoteNode, filter: NoteFilter): boolean {
 }
 
 /** Distinct contexts across the notes, for the filter dialog's Contexts picker. */
-export function contextOptions(notes: NoteNode[]): string[] {
+export function contextOptions(notes: readonly { contexts: string[] }[]): string[] {
   const seen = new Set<string>();
   for (const note of notes) {
     for (const context of note.contexts) {
@@ -138,4 +148,34 @@ export function contextOptions(notes: NoteNode[]): string[] {
     }
   }
   return Array.from(seen).sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Client-side match against a summary when the filter does not need bodies.
+ *
+ * Title / subject / context criteria use the fields present on the list row. Body search
+ * is a no-op here — call `filterRequiresBody` first and use server matching instead.
+ */
+export function summaryPassesFilter(
+  note: {
+    title: string;
+    subject: string;
+    contexts: string[];
+    nodeName?: string | null;
+    snippet?: string;
+  },
+  filter: NoteFilter,
+): boolean {
+  // Snippet is not a substitute for body matching: it is truncated and stripped. Force
+  // body off so we never pretend a list row can satisfy a body search.
+  return notePassesFilter(
+    {
+      title: note.title,
+      subject: note.subject,
+      body: "",
+      contexts: note.contexts,
+      nodeName: note.nodeName ?? null,
+    } as NoteNode,
+    { ...filter, searchInBody: false },
+  );
 }

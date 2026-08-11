@@ -125,6 +125,15 @@ The core Achieve Planner loop — plan the week, block the time, work the outlin
   without rewriting contexts already stored on records. The Inbox processor is an
   intentional first-class workflow; broader Someday/Maybe ontology remains open.
 
+- **✅ Daily-use performance & responsiveness.**
+  `specs/2026-08-10-1940-daily-use-performance`. Notes list ships summaries and snippets
+  (not Markdown bodies); body search matches on the server; drawer/detail load on demand;
+  autosave patches the list without an RSC refresh; Markdown parser loads only on Preview.
+  Shared grid rows/headers are memoized with selection in row render state. Session and
+  settings reads are request-cached; nav links show immediate pending feedback. Calendar and
+  Contacts paint the local Google mirror first and sync stale data once in the background.
+  Virtualization remains deferred until a measured miss.
+
 ### Still in Phase 1
 
 - **Residual grid chrome polish** if needed after daily use (finer Show Fields multi-select /

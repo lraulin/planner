@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { LogoutButton } from "@/components/auth/LogoutButton";
 import { CaptureButton } from "@/components/capture/CaptureButton";
 import { useSetting } from "@/components/settings/SettingsProvider";
@@ -9,6 +8,7 @@ import { SHELL_SCOPE } from "@/lib/settings/scopes";
 import { ChevronIcon, OrganizeIcon, SettingsIcon } from "./navIcons";
 import { openCommandPalette } from "./commandEvent";
 import { sectionsWithModules, type ModuleId } from "./modules";
+import { NavLink } from "./NavLink";
 
 /**
  * Desktop navigation: a grouped, collapsible left rail, replacing the tab strip.
@@ -111,7 +111,7 @@ export function Sidebar({ active }: { active: ModuleId | null }) {
               const isActive = entry.id === active;
 
               return (
-                <Link
+                <NavLink
                   key={entry.id}
                   href={entry.href}
                   aria-current={isActive ? "page" : undefined}
@@ -128,7 +128,7 @@ export function Sidebar({ active }: { active: ModuleId | null }) {
                     <Icon />
                   </span>
                   {!collapsed && <span className="truncate">{entry.label}</span>}
-                </Link>
+                </NavLink>
               );
             })}
           </div>
@@ -138,7 +138,7 @@ export function Sidebar({ active }: { active: ModuleId | null }) {
       <div className="flex flex-none flex-col gap-2 border-t border-rule px-2 py-2">
         <CaptureButton compact={collapsed} />
 
-        <Link
+        <NavLink
           href="/organize"
           title={collapsed ? "Process Inbox" : undefined}
           className={`flex items-center gap-2 rounded border border-rule px-2 py-1 text-[0.8125rem] leading-none text-ink-muted hover:border-rule-strong hover:bg-surface-raised hover:text-ink ${
@@ -149,9 +149,9 @@ export function Sidebar({ active }: { active: ModuleId | null }) {
             <OrganizeIcon />
           </span>
           {!collapsed && <span className="truncate">Process Inbox</span>}
-        </Link>
+        </NavLink>
 
-        <Link
+        <NavLink
           href="/settings"
           title={collapsed ? "Settings" : undefined}
           className={`flex items-center gap-2 rounded px-2 py-1 text-[0.8125rem] leading-6 text-ink-muted hover:bg-surface-raised hover:text-ink ${
@@ -162,7 +162,7 @@ export function Sidebar({ active }: { active: ModuleId | null }) {
             <SettingsIcon />
           </span>
           {!collapsed && <span className="truncate">Settings</span>}
-        </Link>
+        </NavLink>
 
         {!collapsed && (
           <div className="px-2">

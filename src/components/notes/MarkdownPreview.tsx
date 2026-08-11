@@ -1,19 +1,24 @@
 "use client";
 
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import dynamic from "next/dynamic";
 
 /**
- * Renders markdown source as formatted text.
+ * Lazy Markdown preview shell.
  *
- * **`rehype-raw` is deliberately absent.** Without it `react-markdown` never renders raw
- * HTML found in the source — it escapes it — which is why a note can hold a pasted
- * `<script>` tag without that being a problem, and why no sanitizer is needed here. Adding
- * `rehype-raw` would turn every note body into an XSS vector. Do not.
- *
- * Styling lives in the `.md-body` block in `globals.css` rather than on the elements here,
- * so the same rules cover this component and the markdown fields on the node forms.
+ * `react-markdown` + `remark-gfm` are ~55 KB compressed and only needed when Preview is
+ * selected. The heavy module loads on first Preview click; Edit mode never pays for it.
  */
+
+const MarkdownPreviewBody = dynamic(
+  () => import("./MarkdownPreviewBody").then((mod) => mod.MarkdownPreviewBody),
+  {
+    ssr: false,
+    loading: () => (
+      <p className="text-[0.875rem] italic text-ink-faint">Loading preview…</p>
+    ),
+  },
+);
+
 export function MarkdownPreview({
   source,
   className,
@@ -33,7 +38,7 @@ export function MarkdownPreview({
 
   return (
     <div className={`md-body ${className ?? ""}`}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{source}</ReactMarkdown>
+      <MarkdownPreviewBody source={source} />
     </div>
   );
 }

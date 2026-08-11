@@ -1,9 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import type { NoteFlag } from "@/db/schema";
 import { JOURNAL_SUBJECT } from "@/lib/day/types";
-import type { NoteNode, NotePosition } from "@/lib/notes/types";
+import type { NoteNode, NotePosition, NoteSummary } from "@/lib/notes/types";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { ContactOption } from "@/lib/contacts/types";
 import type { GridRow } from "@/lib/tree/slice";
@@ -16,14 +23,17 @@ import {
 import {
   contextOptions,
   EMPTY_NOTE_FILTER,
+  filterRequiresBody,
   isEmptyNoteFilter,
-  notePassesFilter,
+  summaryPassesFilter,
   type NoteFilter,
 } from "@/lib/notes/filter";
 import {
   createNoteAction,
   deleteNoteAction,
+  getNoteAction,
   indentNoteAction,
+  matchNoteFilterAction,
   moveNoteAction,
   moveNoteVerticallyAction,
   outdentNoteAction,
@@ -97,23 +107,47 @@ function notesScopes(viewId: string): readonly string[] {
  */
 export function NotesGrid({
   initialNotes,
+  initialBodyMatchIds = null,
+  initialOpenNote = null,
   nodes,
   contacts,
 }: {
-  initialNotes: NoteNode[];
+  /** List rows: metadata + snippet, never Markdown bodies. */
+  initialNotes: NoteSummary[];
+  /**
+   * When the saved filter searches bodies, the server precomputes matching ids so first
+   * paint is correct without shipping every body. Null means filter client-side.
+   */
+  initialBodyMatchIds?: string[] | null;
+  /** Deep-linked note detail from the server, if `?note=` was present. */
+  initialOpenNote?: NoteNode | null;
   /** Records a note can be linked to. */
   nodes: OutlineNode[];
   /** People a note can be filed against, as Contact History. */
   contacts: ContactOption[];
 }) {
   const { value: displaySettings } = useDisplaySettings();
-  const [patches, setPatches] = useState<Record<string, Partial<NoteNode>>>({});
+  const [patches, setPatches] = useState<Record<string, Partial<NoteSummary>>>({});
   // Keep patches until server props refresh — clearing on action settle flickers the old tree.
   const [baselineNotes, setBaselineNotes] = useState(initialNotes);
   if (initialNotes !== baselineNotes) {
     setBaselineNotes(initialNotes);
     if (Object.keys(patches).length > 0) setPatches({});
   }
+  /** Server body-match ids for the active filter; null = local filter is enough. */
+  const [bodyMatchIds, setBodyMatchIds] = useState<string[] | null>(
+    initialBodyMatchIds,
+  );
+  const [bodyMatchPending, setBodyMatchPending] = useState(false);
+  const [baselineBodyMatch, setBaselineBodyMatch] = useState(initialBodyMatchIds);
+  if (initialBodyMatchIds !== baselineBodyMatch) {
+    setBaselineBodyMatch(initialBodyMatchIds);
+    setBodyMatchIds(initialBodyMatchIds);
+  }
+  /** Full notes loaded for the drawer, keyed by id. */
+  const [details, setDetails] = useState<Record<string, NoteNode>>(() =>
+    initialOpenNote ? { [initialOpenNote.id]: initialOpenNote } : {},
+  );
   const {
     note: urlNoteId,
     setNote: setUrlNoteId,
@@ -196,7 +230,7 @@ export function NotesGrid({
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
   const [groupIds, setGroupIds] = useState<readonly string[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<NoteNode | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<NoteSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
@@ -227,12 +261,12 @@ export function NotesGrid({
   );
 
   const byId = useMemo(() => {
-    const map = new Map<string, NoteNode>();
+    const map = new Map<string, NoteSummary>();
     for (const note of notes) map.set(note.id, note);
     return map;
   }, [notes]);
 
-  const patch = useCallback((id: string, changes: Partial<NoteNode>) => {
+  const patch = useCallback((id: string, changes: Partial<NoteSummary>) => {
     setPatches((current) => ({ ...current, [id]: { ...current[id], ...changes } }));
   }, []);
 
@@ -251,13 +285,60 @@ export function NotesGrid({
     [],
   );
 
+  /**
+   * When the filter starts needing bodies, ask the server for matching ids. Local title /
+   * subject / context criteria still run client-side on summaries. The server already
+   * resolved the saved filter on first paint — skip that first body fetch.
+   *
+   * When the filter does not need bodies, `activeBodyMatchIds` is null without clearing
+   * stored ids (avoids setState-in-effect on every filter tweak that drops body search).
+   */
+  const needsBody = filterRequiresBody(filter);
+  const skipInitialBodyFetch = useRef(
+    initialBodyMatchIds !== null && filterRequiresBody(filter),
+  );
+  useEffect(() => {
+    if (!filterRequiresBody(filter)) return;
+    if (skipInitialBodyFetch.current) {
+      skipInitialBodyFetch.current = false;
+      return;
+    }
+    let cancelled = false;
+    startTransition(async () => {
+      setBodyMatchPending(true);
+      const result = await matchNoteFilterAction(filter);
+      if (cancelled) return;
+      setBodyMatchPending(false);
+      if (result.ok) setBodyMatchIds(result.data);
+      else setError(result.error);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [filter]);
+
   const subjects = useMemo(() => subjectOptions(notes), [notes]);
   const contexts = useMemo(() => contextOptions(notes), [notes]);
 
-  const rows: GridRow<NoteNode>[] = useMemo(() => {
+  const activeBodyMatchIds = needsBody ? bodyMatchIds : null;
+  const bodyMatchSet = useMemo(
+    () => (activeBodyMatchIds ? new Set(activeBodyMatchIds) : null),
+    [activeBodyMatchIds],
+  );
+
+  const rows: GridRow<NoteSummary>[] = useMemo(() => {
     const keep = isEmptyNoteFilter(filter)
       ? undefined
-      : (note: NoteNode) => notePassesFilter(note, filter);
+      : (note: NoteSummary) => {
+          if (filterRequiresBody(filter)) {
+            // While reconciling an unsaved body filter, keep previous matches rather than
+            // flashing an empty grid.
+            if (bodyMatchPending && !bodyMatchSet) return true;
+            if (!bodyMatchSet) return false;
+            return bodyMatchSet.has(note.id);
+          }
+          return summaryPassesFilter(note, filter);
+        };
 
     const sliced = sliceNotes(notes, {
       // Defensive as well as intentional: a saved view written by an older build cannot
@@ -267,7 +348,16 @@ export function NotesGrid({
       keep,
     });
     return groupNotes(sliced, noteGroupBy, displaySettings.dateFormat);
-  }, [notes, mode, sort, filter, noteGroupBy, displaySettings.dateFormat]);
+  }, [
+    notes,
+    mode,
+    sort,
+    filter,
+    noteGroupBy,
+    displaySettings.dateFormat,
+    bodyMatchSet,
+    bodyMatchPending,
+  ]);
 
   const distinctValues = useMemo(
     () =>
@@ -287,7 +377,7 @@ export function NotesGrid({
   const { selectedId, selectedIds, select, selectOne, move: moveSelection } = multi;
 
   const selected = selectedId ? (byId.get(selectedId) ?? null) : null;
-  const drawerNote = drawerId ? (byId.get(drawerId) ?? null) : null;
+  const drawerNote = drawerId ? (details[drawerId] ?? null) : null;
 
   // Back / forward and deep-links change `?note=`. Sync selection during render.
   const [seenNoteId, setSeenNoteId] = useState(urlNoteId);
@@ -296,12 +386,60 @@ export function NotesGrid({
     if (urlNoteId) selectOne(urlNoteId);
   }
 
+  // Load full body when the drawer opens on a summary-only row.
+  useEffect(() => {
+    if (!drawerId) return;
+    if (details[drawerId]) return;
+    let cancelled = false;
+    startTransition(async () => {
+      const result = await getNoteAction(drawerId);
+      if (cancelled) return;
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      if (result.data) {
+        setDetails((current) => ({ ...current, [result.data!.id]: result.data! }));
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [drawerId, details]);
+
   const openDetail = useCallback(
     (id: string) => {
       selectOne(id);
       setUrlNoteId(id);
     },
     [setUrlNoteId, selectOne],
+  );
+
+  const onSummaryPatched = useCallback(
+    (summary: NoteSummary) => {
+      patch(summary.id, summary);
+      setDetails((current) => {
+        const existing = current[summary.id];
+        if (!existing) return current;
+        return {
+          ...current,
+          [summary.id]: {
+            ...existing,
+            title: summary.title,
+            subject: summary.subject,
+            noteDate: summary.noteDate,
+            flag: summary.flag,
+            contexts: summary.contexts,
+            nodeId: summary.nodeId,
+            contactId: summary.contactId,
+            nodeName: summary.nodeName,
+            nodeType: summary.nodeType,
+            updatedAt: summary.updatedAt,
+          },
+        };
+      });
+    },
+    [patch],
   );
 
   const copySelectionAsText = useCallback(() => {
@@ -365,7 +503,6 @@ export function NotesGrid({
 
   const columnCtx: NotesColumnCtx = useMemo(
     () => ({
-      selectedId,
       editingId,
       showHierarchy,
       onToggleCollapsed: (note) => {
@@ -379,16 +516,24 @@ export function NotesGrid({
         setEditingId(null);
         if (title !== note.title) {
           patch(note.id, { title });
-          apply(() => updateNoteAction(note.id, { title }));
+          apply(async () => {
+            const result = await updateNoteAction(note.id, { title });
+            if (result.ok && result.data) onSummaryPatched(result.data);
+            return result;
+          });
         }
       },
       onCancelEdit: () => setEditingId(null),
       onFlagChange: (note, flag: NoteFlag) => {
         patch(note.id, { flag });
-        apply(() => updateNoteAction(note.id, { flag }));
+        apply(async () => {
+          const result = await updateNoteAction(note.id, { flag });
+          if (result.ok && result.data) onSummaryPatched(result.data);
+          return result;
+        });
       },
     }),
-    [selectedId, editingId, showHierarchy, patch, apply, openDetail],
+    [editingId, showHierarchy, patch, apply, openDetail, onSummaryPatched],
   );
 
   // Show / hide / move now travel to Show Fields through `GridToolbar`, not from here.
@@ -789,6 +934,7 @@ export function NotesGrid({
         contacts={contacts}
         subjects={subjects}
         onClose={closeDetail}
+        onSaved={onSummaryPatched}
       />
 
       <ConfirmDialog
@@ -810,7 +956,7 @@ export function NotesGrid({
   );
 }
 
-function deleteMessage(note: NoteNode | null): string {
+function deleteMessage(note: NoteSummary | null): string {
   if (!note) return "This note will be removed. This cannot be undone.";
   const name = note.title ? `"${note.title}"` : "This untitled note";
   // Say what else goes with it — the subtree cascades, and that is not obvious from a row.

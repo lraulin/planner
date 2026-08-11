@@ -2,8 +2,12 @@ import { and, asc, eq, gte, lt, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { appointments, timeChartAreas, timeCharts } from "@/db/schema";
 import { eventColorHex } from "@/lib/google/eventColors";
-import { syncWindow, syncWindowIfStale, type SyncStatus } from "@/lib/google/sync";
-import { listCalendarLinks } from "@/lib/google/queries";
+import { SYNC_MAX_AGE_MS, syncWindow, type SyncStatus } from "@/lib/google/sync";
+import {
+  enabledCalendarLinks,
+  listCalendarLinks,
+  syncIsStale,
+} from "@/lib/google/queries";
 import {
   appointmentToRecurrenceInput,
   expandRecurrence,
@@ -154,16 +158,25 @@ export async function loadSchedule(
   weekEnd.setDate(weekEnd.getDate() + 7);
 
   /**
-   * Mirror Google before reading, and never let it take the page down: a revoked token or
-   * a Google outage degrades to "the schedule you already had, plus a banner". Throwing
-   * here would turn a third-party hiccup into a 500 on the most-used route in the app.
+   * Local-first: paint the mirrored schedule immediately. Stale Google pulls run in the
+   * client after paint (`state: "stale"`). Manual force-sync still awaits Google so the
+   * Refresh button means what it says. Never let a revoked token 500 the route.
    */
   let sync: SyncStatus = { state: "off" };
+  const window = { start: weekStart, end: weekEnd };
   try {
-    const window = { start: weekStart, end: weekEnd };
-    sync = options.forceSync
-      ? await syncWindow(userId, window)
-      : await syncWindowIfStale(userId, window);
+    if (options.forceSync) {
+      sync = await syncWindow(userId, window);
+    } else {
+      const links = await enabledCalendarLinks(userId);
+      if (links.length === 0) {
+        sync = { state: "off" };
+      } else if (await syncIsStale(userId, SYNC_MAX_AGE_MS)) {
+        sync = { state: "stale" };
+      } else {
+        sync = { state: "skipped" };
+      }
+    }
   } catch (error) {
     sync = {
       state: "failed",
@@ -171,7 +184,12 @@ export async function loadSchedule(
     };
   }
 
-  const charts = await listTimeCharts(userId);
+  // Local reads run together — they never waited on Google once paint is local-first.
+  const [charts, appts, calendarLinks] = await Promise.all([
+    listTimeCharts(userId),
+    listAppointmentsInRange(userId, weekStart, weekEnd),
+    listCalendarLinks(userId),
+  ]);
   let selectedChartId = options.timeChartId ?? charts[0]?.id ?? null;
   if (selectedChartId && !charts.some((c) => c.id === selectedChartId)) {
     selectedChartId = charts[0]?.id ?? null;
@@ -195,18 +213,13 @@ export async function loadSchedule(
     weekStart,
   );
 
-  const appts = await listAppointmentsInRange(userId, weekStart, weekEnd);
-
   /**
    * Resolve display colours outside `expandRecurrence`, which stays free of presentation
    * concerns. Calendar colour is the left-edge cue for multi-calendar distinction; event
    * colour (when set) fills the block — see event-colours delta spec.
    */
   const colorByCalendarId = new Map(
-    (await listCalendarLinks(userId)).map((link) => [
-      link.calendarId,
-      link.backgroundColor,
-    ]),
+    calendarLinks.map((link) => [link.calendarId, link.backgroundColor]),
   );
   const colorsByAppointmentId = new Map(
     appts.map((a) => [

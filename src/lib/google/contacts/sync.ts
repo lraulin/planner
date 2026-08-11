@@ -13,6 +13,8 @@ export const CONTACT_SYNC_MAX_AGE_MS = 5 * 60_000;
 export type GoogleContactSyncStatus =
   | { state: "off" }
   | { state: "skipped" }
+  /** Local mirror is ready; a background pull should run without blocking paint. */
+  | { state: "stale" }
   | { state: "ok"; inserted: number; updated: number; deleted: number }
   | { state: "not_linked"; message: string }
   | { state: "failed"; message: string };

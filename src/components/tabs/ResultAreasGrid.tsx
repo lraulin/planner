@@ -86,7 +86,6 @@ function buildColumns(): ColumnDef<ResultAreasCtx>[] {
         <NameCell
           node={row.node}
           depth={0}
-          selected={row.node.id === ctx.selectedId}
           editing={row.node.id === ctx.editingId}
           onToggleCollapsed={() => ctx.onToggleCollapsed(row.node)}
           onOpenDetail={() => ctx.onOpenDetail(row.node)}

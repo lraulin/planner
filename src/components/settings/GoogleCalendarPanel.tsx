@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import type { GoogleCalendarLink } from "@/db/schema";
 import { linkSocial } from "@/lib/auth/client";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
@@ -32,6 +33,7 @@ export function GoogleCalendarPanel({
   contactSyncLastSyncedAt,
 }: Props) {
   const headingId = useId();
+  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -88,6 +90,7 @@ export function GoogleCalendarPanel({
     startTransition(async () => {
       const result = await syncGoogleContactsAction();
       if (!result.ok) setError(result.error);
+      else router.refresh();
     });
   };
 

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import type { NoteFlag } from "@/db/schema";
-import type { NoteNode } from "@/lib/notes/types";
+import type { NoteNode, NoteSummary } from "@/lib/notes/types";
 import type { NoteInput } from "@/lib/notes/mutations";
 import type { ContactOption } from "@/lib/contacts/types";
 import { fromDateKey } from "@/lib/schedule/geometry";
@@ -25,6 +25,7 @@ import { FlagSwatch } from "./flags";
  * prompt would be pure friction while writing.
  *
  * A failed autosave keeps the text on screen, keeps the drawer open, and offers Retry.
+ * Successful saves do not refresh the route — they patch the list summary via `onSaved`.
  */
 export function NoteDrawer({
   note,
@@ -32,8 +33,9 @@ export function NoteDrawer({
   contacts,
   subjects,
   onClose,
+  onSaved,
 }: {
-  /** The note the drawer is open on, or null when closed. */
+  /** The note the drawer is open on, or null when closed / still loading detail. */
   note: NoteNode | null;
   /** Records a note can be linked to. */
   nodes: OutlineNode[];
@@ -42,6 +44,8 @@ export function NoteDrawer({
   /** Existing subjects, for the combobox. Always includes "General". */
   subjects: string[];
   onClose: () => void;
+  /** Patch the Notes list after a successful field write without an RSC refresh. */
+  onSaved?: (summary: NoteSummary) => void;
 }) {
   const titleId = useId();
 
@@ -58,6 +62,7 @@ export function NoteDrawer({
           contacts={contacts}
           subjects={subjects}
           onClose={onClose}
+          onSaved={onSaved}
         />
       )}
     </Drawer>
@@ -121,6 +126,7 @@ function NoteForm({
   contacts,
   subjects,
   onClose,
+  onSaved,
 }: {
   titleId: string;
   note: NoteNode;
@@ -128,13 +134,18 @@ function NoteForm({
   contacts: ContactOption[];
   subjects: string[];
   onClose: () => void;
+  onSaved?: (summary: NoteSummary) => void;
 }) {
   const [draft, setDraft] = useState<Draft>(() => toDraft(note));
   const subjectListId = useId();
 
   const save = useCallback(
-    (values: Draft) => updateNoteAction(note.id, toInput(values)),
-    [note.id],
+    async (values: Draft) => {
+      const result = await updateNoteAction(note.id, toInput(values));
+      if (result.ok && result.data) onSaved?.(result.data);
+      return result;
+    },
+    [note.id, onSaved],
   );
 
   const { status, schedule, flush, retry } = useAutosave(save);
