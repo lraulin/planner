@@ -13,6 +13,7 @@ import { getWeeklyPlan } from "@/lib/planning/queries";
 import { loadSchedule } from "@/lib/schedule/queries";
 import { startOfWeek, toDateKey } from "@/lib/schedule/geometry";
 import { createNodeOnce } from "@/lib/tree/mutations";
+import { formatNodePath, loadNodeChain } from "@/lib/tree/path";
 import { loadOutline } from "@/lib/tree/queries";
 import { parseCaptureArgs } from "./captureArgs";
 import {
@@ -144,10 +145,25 @@ export async function getNode(userId: string, args: Record<string, unknown>) {
   const id = requireString(args, "id");
   const detail = await loadNodeDetail(userId, id);
   if (!detail) throw new AgentError("not_found", `Node not found: ${id}`);
-  const outline = await loadOutline(userId);
-  const row = outline.find((n) => n.id === id);
-  const paths = buildPathMap(outline);
-  return { node: nodeDetailForAgent(detail, row, paths) };
+
+  // Path only needs the ancestor chain — not every outline row and rollup.
+  const chain = await loadNodeChain(userId, id);
+  if (!chain || chain.length === 0) {
+    throw new AgentError("not_found", `Node not found: ${id}`);
+  }
+  const leaf = chain[chain.length - 1];
+  const path = formatNodePath(chain);
+  // nodeDetailForAgent prefers an OutlineNode for depth/parentId/path when present. We do
+  // not have rollups here (detail forms never did either); effort comes from the side table.
+  const base = nodeDetailForAgent(detail, undefined, new Map([[id, path]]));
+  return {
+    node: {
+      ...base,
+      parentId: leaf.parentId,
+      depth: chain.length - 1,
+      path,
+    },
+  };
 }
 
 export async function createNodeTool(userId: string, args: Record<string, unknown>) {
