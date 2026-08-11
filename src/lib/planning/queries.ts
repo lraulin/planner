@@ -9,7 +9,7 @@ import {
   type WeeklyPlan,
   type WeeklyPlanEntry,
 } from "@/db/schema";
-import { startOfWeek } from "@/lib/schedule/geometry";
+import { localDateKey, startOfWeek } from "@/lib/schedule/geometry";
 import { loadSchedule, type SchedulePayload } from "@/lib/schedule/queries";
 import { loadOutline } from "@/lib/tree/queries";
 import type { OutlineNode } from "@/lib/tree/types";
@@ -231,7 +231,13 @@ export async function loadWeeklyPlanPayload(
     resultAreaReviews: [...reviews.entries()],
     previousRewrites: [...previous.entries()].map(([nodeId, value]) => [
       nodeId,
-      { rewrite: value.rewrite, weekStart: value.weekStart.toISOString() },
+      {
+        rewrite: value.rewrite,
+        // Calendar-day label, not an ISO instant. week_start is process-local midnight of
+        // the plan's first day; toISOString + client toLocaleDateString shifts that label a
+        // day earlier for anyone west of the server (UTC production + Americas).
+        weekStart: localDateKey(value.weekStart),
+      },
     ]),
     resources,
     weekStart: weekStart.toISOString(),

@@ -84,4 +84,21 @@ describe("formatDateKey", () => {
     expect(formatDateKey("2000-01-01", "DDDD")).toBe("Saturday");
     expect(formatFullDateKey("2026-01-05")).toBe("Monday, January 5, 2026");
   });
+
+  /**
+   * Weekly-plan "last week's rewrite" used to ship weekStart as ISO midnight and format
+   * it with `toLocaleDateString`. Under America/New_York a UTC-midnight Sunday paints as
+   * Saturday. Day keys + formatDateKey never re-parse an instant, so the label sticks.
+   */
+  it("keeps a plan-week day label on the written day west of UTC", () => {
+    expect(formatDateKey("2026-07-26", "MMM D")).toBe("Jul 26");
+
+    const utcMidnightSunday = new Date("2026-07-26T00:00:00.000Z");
+    expect(
+      utcMidnightSunday.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+      }),
+    ).toBe("Jul 25");
+  });
 });

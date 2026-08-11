@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { formatDateKey } from "@/lib/dateFormat";
 import { selectGoalsForReview } from "@/lib/planning/review";
 import type { StepContext } from "./types";
 
@@ -108,12 +109,7 @@ export function GoalsStep({ ctx }: Props) {
           <div className="mb-1 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
             Last week&apos;s rewrite
             <span className="ml-2 font-normal normal-case text-ink-faint">
-              (
-              {new Date(previous.weekStart).toLocaleDateString(undefined, {
-                month: "short",
-                day: "numeric",
-              })}
-              )
+              ({formatDateKey(previous.weekStart, "MMM D")})
             </span>
           </div>
           <p className="whitespace-pre-wrap text-ink-muted">{previous.rewrite}</p>

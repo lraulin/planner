@@ -663,7 +663,10 @@ export const outputSchemas = {
     goals: z.array(nodeSummarySchema),
     projects: z.array(nodeSummarySchema),
     previousRewrites: z.array(
-      z.tuple([id, z.strictObject({ rewrite: z.string(), weekStart: isoDate })]),
+      // Calendar day of the prior plan week — not an instant. ISO midnight was one day
+      // early when agents (or the wizard) formatted it with local getters west of the
+      // server.
+      z.tuple([id, z.strictObject({ rewrite: z.string(), weekStart: dateKey })]),
     ),
     schedule: z.strictObject({
       weekStart: isoDate,
