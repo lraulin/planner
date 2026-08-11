@@ -76,10 +76,11 @@ export type GoogleEventWrite = {
   eventType?: "default" | "outOfOffice";
   recurrence?: string[];
   /**
-   * Palette id, or empty string to clear back to the calendar default.
-   * Google's PATCH treats `""` as clear; omitting the field leaves the prior colour.
+   * Palette id `"1"`–`"11"`, or `null` for calendar default / clear.
+   * Never `""` — Google rejects empty string as "Invalid color id value" on insert and
+   * patch. Null is what the API accepts for "no event colour" (calendar default).
    */
-  colorId?: string;
+  colorId: string | null;
 };
 
 const WEEKDAY_CODES = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"] as const;
@@ -303,6 +304,8 @@ export function appointmentToGoogleEvent(
   timeZone: string = localTimeZone(),
 ): GoogleEventWrite {
   const { transparency, eventType } = showAsToGoogle(appointment.showAs);
+  // Always include: an omitted field on PATCH would leave a prior colour when the user
+  // chose "default". Null means calendar default — never empty string (Google 400s).
   const colorId = normalizeColorId(appointment.colorId);
 
   return {
@@ -313,9 +316,7 @@ export function appointmentToGoogleEvent(
     end: writeEventTime(appointment.endAt, appointment.allDay, timeZone),
     transparency,
     eventType,
-    // Always send: an omitted field on PATCH would leave a prior colour when the user
-    // chose "default". Empty string is Google's documented clear for optional strings.
-    colorId: colorId ?? "",
+    colorId,
     recurrence: buildRecurrenceRule({
       recurrenceFrequency: appointment.recurrenceFrequency,
       recurrenceInterval: appointment.recurrenceInterval,

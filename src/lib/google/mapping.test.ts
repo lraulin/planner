@@ -309,9 +309,8 @@ describe("appointmentToGoogleEvent", () => {
       end: { dateTime: "2026-07-27T16:00:00.000Z", timeZone: "America/New_York" },
       transparency: "opaque",
       eventType: "default",
-      // Empty string clears / means calendar default — omitting would leave a prior colour
-      // on PATCH.
-      colorId: "",
+      // Null = calendar default. Empty string is rejected by Google as invalid color id.
+      colorId: null,
       recurrence: ["RRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE;COUNT=10"],
     });
   });
@@ -341,9 +340,26 @@ describe("appointmentToGoogleEvent", () => {
     expect(body.colorId).toBe("11");
   });
 
+  it("sends null for calendar default (no colour chosen)", () => {
+    // Creating without a colour must not send "". Google returns
+    // 400 "Invalid color id value" for empty string on insert and patch.
+    const body = appointmentToGoogleEvent({ ...appointment, colorId: null });
+    expect(body.colorId).toBeNull();
+    expect(body.colorId).not.toBe("");
+  });
+
   it("clears an unknown colour id rather than sending it to Google", () => {
     const body = appointmentToGoogleEvent({ ...appointment, colorId: "99" });
-    expect(body.colorId).toBe("");
+    expect(body.colorId).toBeNull();
+  });
+
+  it("never emits empty-string colorId for any default-ish input", () => {
+    // Plausible mistake: `colorId ?? ""` "to clear" — that is exactly what Google 400s.
+    for (const id of [null, ""] as const) {
+      const body = appointmentToGoogleEvent({ ...appointment, colorId: id });
+      expect(body.colorId).not.toBe("");
+      expect(body.colorId).toBeNull();
+    }
   });
 });
 
