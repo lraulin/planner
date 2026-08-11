@@ -965,7 +965,7 @@ async function settleDayLine(
     await tx
       .update(dailyItems)
       .set({ state, completedAt: at, updatedAt: at })
-      .where(eq(dailyItems.id, open.id));
+      .where(and(eq(dailyItems.id, open.id), eq(dailyItems.userId, userId)));
   } else if (!settledToday) {
     await addDayLine(tx, userId, nodeId, today, {
       state,
@@ -1045,7 +1045,7 @@ async function reopenDayLine(
   await tx
     .update(dailyItems)
     .set({ state: "not_started", completedAt: null, updatedAt: now })
-    .where(eq(dailyItems.id, doneToday.id));
+    .where(and(eq(dailyItems.id, doneToday.id), eq(dailyItems.userId, userId)));
 
   // The line is open again on today, so the task's target start date has to say today —
   // that column is what decides which day a task sits on, and reopening something you

@@ -162,7 +162,9 @@ export async function syncDayLineToTargetStart(
 
   if (!wanted) {
     if (open) {
-      await tx.delete(dailyItems).where(eq(dailyItems.id, open.id));
+      await tx
+        .delete(dailyItems)
+        .where(and(eq(dailyItems.id, open.id), eq(dailyItems.userId, userId)));
     }
     return;
   }
@@ -181,7 +183,7 @@ export async function syncDayLineToTargetStart(
         sortKey: await endOfDay(tx, userId, wanted),
         updatedAt: new Date(),
       })
-      .where(eq(dailyItems.id, open.id));
+      .where(and(eq(dailyItems.id, open.id), eq(dailyItems.userId, userId)));
     return;
   }
 
