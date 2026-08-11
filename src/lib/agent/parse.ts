@@ -8,6 +8,7 @@ import {
 import type { ExternalRef } from "@/db/schema";
 import { daysInMonth } from "@/lib/dateMath";
 import { PRIORITY_LETTERS } from "@/lib/priority/letterRank";
+import { fromDateKey } from "@/lib/schedule/geometry";
 import { AgentError } from "./errors";
 
 export function asObject(body: unknown): Record<string, unknown> {
@@ -82,8 +83,10 @@ const LEADING_DAY = /^(\d{4})-(\d{2})-(\d{2})(?=$|[T ])/;
  * interface driven by an agent: asked for a month-end deadline it will sometimes produce
  * `06-31`, and silently getting July back is worse than being told to count again.
  *
- * Only the calendar day is checked. The time part is left to `Date`, which does clamp
- * sensibly there and has no equivalent trap.
+ * Bare `YYYY-MM-DD` calendar days are encoded as **UTC noon** (`fromDateKey`), not
+ * `new Date("YYYY-MM-DD")` (UTC midnight). Midnight Z is the previous evening in the
+ * Americas; noteDate and other fields that store the Date as-is would then display a day
+ * early when read with local getters. Full ISO timestamps stay true instants.
  */
 export function parseDate(
   value: string | null | undefined,
@@ -92,7 +95,8 @@ export function parseDate(
   if (value === undefined) return undefined;
   if (value === null || value === "") return null;
 
-  const day = LEADING_DAY.exec(value);
+  const trimmed = value.trim();
+  const day = LEADING_DAY.exec(trimmed);
   if (day) {
     const [, year, month, date] = day.map(Number);
     if (month < 1 || month > 12 || date < 1 || date > daysInMonth(year, month)) {
@@ -101,9 +105,13 @@ export function parseDate(
         `${field} is not a date that exists: ${value}`,
       );
     }
+    // Day label only — no time. Use the same calendar encoding as the rest of the app.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      return fromDateKey(trimmed);
+    }
   }
 
-  const d = new Date(value);
+  const d = new Date(trimmed);
   if (Number.isNaN(d.getTime())) {
     throw new AgentError("validation", `${field} must be a valid ISO date`);
   }

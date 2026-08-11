@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { nodeStateEnum, nodeTypeEnum, priorityLetterEnum } from "@/db/schema";
+import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { AgentError } from "./errors";
 import {
   asObject,
@@ -135,16 +136,27 @@ describe("parseDate", () => {
     for (const bad of ["2026-06-31", "2026-02-30", "2026-04-31", "2025-02-29"]) {
       expect(() => parseDate(bad, "deadline")).toThrow(/not a date that exists/);
     }
-    // …and does not over-reject: these days all exist.
-    expect(parseDate("2026-06-30", "deadline")).toEqual(new Date("2026-06-30"));
-    expect(parseDate("2024-02-29", "deadline")).toEqual(new Date("2024-02-29"));
-    expect(parseDate("2026-12-31", "deadline")).toEqual(new Date("2026-12-31"));
+    // …and does not over-reject: these days all exist, as UTC-noon calendar days.
+    expect(parseDate("2026-06-30", "deadline")).toEqual(fromDateKey("2026-06-30"));
+    expect(parseDate("2024-02-29", "deadline")).toEqual(fromDateKey("2024-02-29"));
+    expect(parseDate("2026-12-31", "deadline")).toEqual(fromDateKey("2026-12-31"));
+  });
+
+  it("encodes bare day keys as UTC noon, not UTC midnight", () => {
+    // new Date("YYYY-MM-DD") is midnight Z — the previous evening in America/New_York.
+    // fromDateKey keeps toDateKey stable on every machine (dates.md).
+    const parsed = parseDate("2026-08-01", "deadline");
+    expect(parsed).toEqual(fromDateKey("2026-08-01"));
+    expect(toDateKey(parsed!)).toBe("2026-08-01");
+    expect(parsed!.getUTCHours()).toBe(12);
+    expect(new Date("2026-08-01").getUTCHours()).toBe(0);
   });
 
   it("applies the same rule to the date half of a timestamp", () => {
     expect(() => parseDate("2026-06-31T09:00:00.000Z", "deadline")).toThrow(
       /not a date that exists/,
     );
+    // Full timestamps remain instants — appointments need the clock.
     expect(parseDate("2026-06-30T09:00:00.000Z", "deadline")).toEqual(
       new Date("2026-06-30T09:00:00.000Z"),
     );
