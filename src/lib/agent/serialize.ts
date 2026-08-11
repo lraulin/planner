@@ -1,7 +1,8 @@
 import type { NodeDetail } from "@/lib/detail/types";
+import { noteSnippet } from "@/lib/notes/snippet";
+import type { NoteNode } from "@/lib/notes/types";
 import type { OutlineNode } from "@/lib/tree/types";
 import { walkUp } from "@/lib/tree/walkUp";
-import type { NoteNode } from "@/lib/notes/types";
 
 /** Compact node row for agent responses. */
 export type AgentNodeSummary = {
@@ -138,10 +139,6 @@ export function noteSummary(note: NoteNode) {
 
 /** Compact note row for search/list responses. Full markdown is only returned by get_note. */
 export function noteSearchSummary(note: NoteNode) {
-  const plain = note.body
-    .replace(/[#>*_`~\[\]]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
   return {
     id: note.id,
     parentId: note.parentId,
@@ -152,7 +149,9 @@ export function noteSearchSummary(note: NoteNode) {
     contexts: note.contexts,
     nodeId: note.nodeId,
     depth: note.depth,
-    snippet: plain.length > 240 ? `${plain.slice(0, 237)}...` : plain,
+    // Same prose stripper the Notes grid uses — a naive character delete left fence
+    // markers and table pipes in the agent snippet.
+    snippet: noteSnippet(note.body, 240),
   };
 }
 
