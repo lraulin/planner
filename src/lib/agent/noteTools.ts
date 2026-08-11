@@ -7,7 +7,7 @@ import {
   createNoteOnce,
   updateNote as updateNoteMutation,
 } from "@/lib/notes/mutations";
-import { loadNotes, loadNotesForNode } from "@/lib/notes/queries";
+import { loadNote, loadNotes, loadNotesForNode } from "@/lib/notes/queries";
 import { AgentError } from "./errors";
 import {
   optionalNullableString,
@@ -47,8 +47,7 @@ export async function createNoteTool(userId: string, args: Record<string, unknow
     },
   });
 
-  const notes = await loadNotes(userId);
-  const note = notes.find((n) => n.id === result.id);
+  const note = await loadNote(userId, result.id);
   if (!note) throw new AgentError("internal", "Created note missing on reload");
   return { note: noteSummary(note), created: result.created };
 }
@@ -74,8 +73,7 @@ export async function updateNoteTool(userId: string, args: Record<string, unknow
   }
 
   await updateNoteMutation(userId, id, patch);
-  const notes = await loadNotes(userId);
-  const note = notes.find((n) => n.id === id);
+  const note = await loadNote(userId, id);
   if (!note) throw new AgentError("not_found", "Note not found.");
   return { note: noteSummary(note) };
 }
@@ -134,7 +132,8 @@ export async function searchNotesTool(userId: string, args: Record<string, unkno
 
 export async function getNoteTool(userId: string, args: Record<string, unknown>) {
   const id = requireString(args, "id");
-  const note = (await loadNotes(userId)).find((candidate) => candidate.id === id);
+  // One note, not the whole tree — loadNotes would pull every body just to pick one.
+  const note = await loadNote(userId, id);
   if (!note) throw new AgentError("not_found", `Note not found: ${id}`);
   return { note: noteSummary(note) };
 }
