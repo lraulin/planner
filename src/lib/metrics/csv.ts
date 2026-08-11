@@ -1,4 +1,4 @@
-import { escapeCsvField, splitCsvLine } from "@/lib/csv/text";
+import { escapeCsvField, parseCsvRows, splitCsvLine } from "@/lib/csv/text";
 import { sortEntriesByDate } from "./derive";
 import { formatMetricNumber, isDateKey, parseMetricInput } from "./parse";
 import type { MetricEntryInput, MetricEntryView } from "./types";
@@ -39,19 +39,18 @@ function normalizeHeader(h: string): string {
  * Parse a tracking CSV produced by {@link entriesToCsv} (or a compatible sheet).
  * Header must include Date and Value; Type and Target are optional.
  * Blank value cells are skipped (not errors). Invalid dates/numbers are errors.
+ *
+ * Uses the whole-document CSV walker so a quoted cell with a newline (what
+ * {@link escapeCsvField} writes) does not split into two broken rows.
  */
 export function parseEntriesCsv(text: string): ParseCsvEntriesResult {
-  const lines = text
-    .replace(/^\uFEFF/, "")
-    .split(/\r?\n/)
-    .map((l) => l.trimEnd())
-    .filter((l) => l.trim() !== "");
+  const rows = parseCsvRows(text);
 
-  if (lines.length === 0) {
+  if (rows.length === 0) {
     return { entries: [], errors: [{ row: 1, message: "File is empty." }] };
   }
 
-  const headerCells = splitCsvLine(lines[0]).map(normalizeHeader);
+  const headerCells = rows[0].map(normalizeHeader);
   const dateIdx = headerCells.findIndex((h) => h === "date");
   const valueIdx = headerCells.findIndex((h) => h === "value");
   const typeIdx = headerCells.findIndex((h) => h === "type");
@@ -72,9 +71,10 @@ export function parseEntriesCsv(text: string): ParseCsvEntriesResult {
   const entries: ParsedMetricEntry[] = [];
   const errors: { row: number; message: string }[] = [];
 
-  for (let i = 1; i < lines.length; i++) {
+  for (let i = 1; i < rows.length; i++) {
+    // 1-based data row numbers count the header as row 1 (same as a spreadsheet).
     const rowNum = i + 1;
-    const cells = splitCsvLine(lines[i]);
+    const cells = rows[i];
     const dateRaw = (cells[dateIdx] ?? "").trim();
     const valueRaw = (cells[valueIdx] ?? "").trim();
     const typeRaw = typeIdx >= 0 ? cells[typeIdx] : undefined;

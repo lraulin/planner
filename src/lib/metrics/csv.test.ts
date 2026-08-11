@@ -183,4 +183,22 @@ describe("parseEntriesCsv", () => {
     expect(entries).toEqual([]);
     expect(errors[0]?.message).toMatch(/Date/);
   });
+
+  it("accepts a quoted multi-line cell without inventing a broken next row", () => {
+    // Tracking columns today never hold newlines, but escapeCsvField will write them and
+    // a hand-edited sheet can too — split-on-newline used to turn one row into two errors.
+    const csv = ["Date,Type,Target,Value", '2025-10-29,"Custom\nType",80,93', ""].join(
+      "\n",
+    );
+    const { entries, errors } = parseEntriesCsv(csv);
+    expect(errors).toEqual([]);
+    expect(entries).toEqual([
+      {
+        entryDate: "2025-10-29",
+        entryType: "Custom\nType",
+        target: 80,
+        value: 93,
+      },
+    ]);
+  });
 });
