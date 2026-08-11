@@ -17,6 +17,7 @@ import {
   planDayDropOnLetter,
   type DayAssignment,
 } from "@/lib/day/priority";
+import { INSERT_AFTER, OPEN_RECORD } from "@/lib/commands/chords";
 import type { DailyItemView } from "@/lib/day/types";
 import { shiftDateKey } from "@/lib/schedule/geometry";
 import { copyAsText, writeClipboardText } from "@/lib/tree/copyAsText";
@@ -238,7 +239,7 @@ export function DailyItemsGrid({
             section: "New",
             icon: "new",
             toolbar: 10,
-            bindings: [{ key: "Insert" }, { key: "Enter", meta: true }],
+            bindings: INSERT_AFTER,
             run: focusDraft,
           },
           /*
@@ -256,7 +257,7 @@ export function DailyItemsGrid({
             icon: "open",
             toolbar: 50,
             rowMenu: true,
-            bindings: [{ key: "Enter" }],
+            bindings: OPEN_RECORD,
             disabled: nodeId === null,
             title:
               noRow ??

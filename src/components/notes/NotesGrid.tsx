@@ -9,6 +9,7 @@ import {
   useTransition,
 } from "react";
 import type { NoteFlag } from "@/db/schema";
+import { INSERT_AFTER, INSERT_CHILD } from "@/lib/commands/chords";
 import { JOURNAL_SUBJECT } from "@/lib/day/types";
 import type { NoteNode, NotePosition, NoteSummary } from "@/lib/notes/types";
 import type { OutlineNode } from "@/lib/tree/types";
@@ -605,7 +606,7 @@ export function NotesGrid({
             section: "New",
             icon: "new",
             toolbar: 10,
-            bindings: [{ key: "Insert" }, { key: "Enter", meta: true }],
+            bindings: INSERT_AFTER,
             run: () => addNote("sibling"),
           },
           {
@@ -617,10 +618,7 @@ export function NotesGrid({
             icon: "insert-child",
             toolbar: 22,
             rowMenu: true,
-            bindings: [
-              { key: "Insert", ctrl: true },
-              { key: "Enter", meta: true, ctrl: true },
-            ],
+            bindings: INSERT_CHILD,
             disabled: note === null,
             title: note ? undefined : "Select a note first",
             run: () => addNote("child"),
@@ -762,7 +760,7 @@ export function NotesGrid({
   );
 
   /*
-   * Selection navigation only. Insert, ⌘C, Enter, F2, Delete, Tab, ⇧Tab and ⌥↑/↓ were all here as a
+   * Selection navigation only. The insert chords, ⌘C, ⏎, ⇧⏎, ⌫, Tab, ⇧Tab and ⌥↑/↓ were all here as a
    * `switch`; they are `bindings` on the commands now and `CommandKeys` fires them. This grid is
    * where that mattered most — it printed `Ctrl+Insert` and `Shift+Tab` in its row menu while
    * matching on `event.ctrlKey` and `event.shiftKey`, and nothing connected the two.

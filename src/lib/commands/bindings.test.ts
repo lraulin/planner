@@ -61,9 +61,9 @@ describe("matchBinding", () => {
   });
 
   it("does not let Ctrl stand in for ⌘ when the chord wants both", () => {
-    // `⌃⌘⏎` is Achieve's `⌃Insert` on a keyboard with no Insert key. If `meta` accepted Ctrl
-    // here, plain Ctrl+Return would fire it and "new child" would happen on a chord the user
-    // meant as "new sibling".
+    // `meta` accepts either ⌘ or Ctrl, so a chord naming *both* has to demand both keys — or
+    // plain Ctrl+Return would fire it, and the user who meant "new sibling" would get whatever
+    // the two-modifier chord does.
     const child: KeyBinding = { key: "Enter", meta: true, ctrl: true };
     expect(matchBinding(press("Enter", { metaKey: true, ctrlKey: true }), child)).toBe(
       true,
@@ -90,8 +90,8 @@ describe("matchBinding", () => {
 
 describe("matchBindings", () => {
   it("fires on any of a command's chords", () => {
-    // Apple keyboards have no Insert key, so ⌘⏎ stands in for it.
-    const insertAfter: KeyBinding[] = [{ key: "Insert" }, { key: "Enter", meta: true }];
+    // Apple keyboards have no Insert key, so ⌘⏎ replaced it — Insert still fires on a full one.
+    const insertAfter: KeyBinding[] = [{ key: "Enter", meta: true }, { key: "Insert" }];
     expect(matchBindings(press("Insert"), insertAfter)).toBe(true);
     expect(matchBindings(press("Enter", { metaKey: true }), insertAfter)).toBe(true);
     expect(matchBindings(press("Enter"), insertAfter)).toBe(false);
@@ -115,6 +115,8 @@ describe("formatBinding", () => {
       [{ key: "F2" }, "F2"],
       [{ key: "c", meta: true }, "⌘C"],
       [{ key: "Delete" }, "Delete"],
+      // The MacBook key labelled *delete*. It prints as its glyph, not as "Backspace".
+      [{ key: "Backspace" }, "⌫"],
       [{ key: "Insert" }, "Insert"],
       [{ key: "Insert", shift: true }, "⇧Insert"],
       [{ key: "Insert", ctrl: true }, "⌃Insert"],
@@ -138,8 +140,8 @@ describe("formatBinding", () => {
   });
 
   it("prints the first binding, since that is the chord being taught", () => {
-    expect(formatBindings([{ key: "Insert" }, { key: "Enter", meta: true }])).toBe(
-      "Insert",
+    expect(formatBindings([{ key: "Enter", meta: true }, { key: "Insert" }])).toBe(
+      "⌘⏎",
     );
     expect(formatBindings(undefined)).toBeUndefined();
     expect(formatBindings([])).toBeUndefined();

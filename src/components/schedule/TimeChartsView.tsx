@@ -197,7 +197,7 @@ export function TimeChartsView({
   );
 
   /*
-   * Selection navigation only — Insert, Enter and Delete are `bindings` on the commands.
+   * Selection navigation only — the create, open and delete chords are `bindings` on the commands.
    *
    * Arrows come before any "needs a selection" guard on purpose: `moveSelection` treats a null focus
    * as "start at the end you are heading towards", so ArrowDown is how you pick the first row.

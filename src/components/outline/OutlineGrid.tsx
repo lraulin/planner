@@ -625,7 +625,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   );
 
   /*
-   * Selection navigation only. Insert (⌘⏎), Enter, F2, Delete, Tab, ⌥↑/↓, collapse and the
+   * Selection navigation only. The insert chords, ⏎, ⇧⏎, ⌫, Tab, ⌥↑/↓, collapse and the
    * rest used to live in a second `document` listener here; after the command surface work
    * they are also `bindings` on registered commands, so both listeners fired and ⌘⏎ created
    * two rows. Notes / list tabs already dropped the command half — the Outline was the hold-out.
@@ -1049,7 +1049,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
  *
  * Bound to the document rather than the grid: the outline is the whole page, so arrows
  * should work immediately instead of requiring a click to focus the list first. Anything
- * typed into a field is left alone. Command chords (Insert, ⌘⏎, Enter, Tab, …) belong to
+ * typed into a field is left alone. Command chords (⌘⏎, ⏎, Tab, …) belong to
  * `CommandKeys` — keeping a second copy here was what made ⌘⏎ create two rows.
  */
 function useOutlineSelectionKeys({

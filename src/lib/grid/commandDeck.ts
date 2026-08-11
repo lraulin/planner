@@ -1,5 +1,13 @@
 import type { Command } from "@/lib/commands/registry";
 import type { KeyBinding } from "@/lib/commands/bindings";
+import {
+  DELETE_ROW,
+  INSERT_AFTER,
+  INSERT_BEFORE,
+  INSERT_CHILD,
+  OPEN_RECORD,
+  RENAME,
+} from "@/lib/commands/chords";
 import { commandOrder } from "@/lib/commands/menus";
 import {
   KIND_LABELS,
@@ -153,21 +161,6 @@ const TOOLBAR = {
   open: 50,
   rename: 51,
 } as const;
-
-/**
- * Achieve's bindings. `Insert` is paired with `⌘⏎` throughout because Apple keyboards have no
- * Insert key — the first binding in each list is the one printed, which keeps the labels the app
- * has always shown while the second one is what actually gets used on this hardware.
- */
-const INSERT_BEFORE: KeyBinding[] = [
-  { key: "Insert", shift: true },
-  { key: "Enter", meta: true, shift: true },
-];
-const INSERT_AFTER: KeyBinding[] = [{ key: "Insert" }, { key: "Enter", meta: true }];
-const INSERT_CHILD: KeyBinding[] = [
-  { key: "Insert", ctrl: true },
-  { key: "Enter", meta: true, ctrl: true },
-];
 
 function selected(capabilities: GridCommandCapabilities) {
   return capabilities.selection?.id ?? null;
@@ -330,7 +323,7 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
         icon: "open",
         toolbar: TOOLBAR.open,
         rowMenu: true,
-        bindings: [{ key: "Enter" }],
+        bindings: OPEN_RECORD,
         disabled: !hasSelection,
         title: selectionTitle,
         run: () => id && actions.onOpen?.(id),
@@ -348,7 +341,7 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
         icon: "rename",
         toolbar: TOOLBAR.rename,
         rowMenu: true,
-        bindings: [{ key: "F2" }],
+        bindings: RENAME,
         disabled: !hasSelection,
         title: selectionTitle,
         run: () => id && actions.onRename?.(id),
@@ -569,9 +562,7 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
         section: "Danger",
         icon: "delete",
         rowMenu: true,
-        // Backspace is not printed. It fires the same command, but a menu offering two ways to
-        // delete reads as two different deletions.
-        bindings: [{ key: "Delete" }, { key: "Backspace" }],
+        bindings: DELETE_ROW,
         destructive: true,
         disabled: !hasSelection,
         title: selectionTitle,

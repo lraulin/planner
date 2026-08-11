@@ -20,6 +20,8 @@ import { DataGrid } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 import { rowMenuFor } from "@/components/grid/rowMenu";
 import { catalogCapabilities } from "@/components/grid/catalogCommands";
+import { formatBindings } from "@/lib/commands/bindings";
+import { INSERT_AFTER } from "@/lib/commands/chords";
 import { GridToolbar } from "@/components/grid/GridToolbar";
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import type { GridDefaults } from "@/components/grid/useGridState";
@@ -54,6 +56,13 @@ const LAYOUT_CODEC: SettingCodec<MetricsLayoutSettings> = {
   parse: parseMetricsLayout,
   serialize: serializeMetricsLayout,
 };
+
+/**
+ * The empty state's buttons are the only place in Metrics that names a key, and it named `Insert`
+ * — hand-typed, and a key this keyboard does not have. `catalogCapabilities` binds the create
+ * command, so ask the binding what it is rather than restating it.
+ */
+const CREATE_CHORD = formatBindings(INSERT_AFTER);
 
 /**
  * One built-in view. Metrics is a single list by nature; what views add is somewhere to keep
@@ -598,7 +607,7 @@ function EmptyState({
           </p>
           <div className="flex flex-wrap justify-center gap-2">
             <ToolbarButton onClick={onShowInactive}>Show inactive</ToolbarButton>
-            <ToolbarButton onClick={onCreate} disabled={busy} title="Insert">
+            <ToolbarButton onClick={onCreate} disabled={busy} title={CREATE_CHORD}>
               New Metric
             </ToolbarButton>
           </div>
@@ -608,7 +617,7 @@ function EmptyState({
           <p className="max-w-sm text-[0.9375rem] text-ink-muted">
             No metrics yet. Create one here, or add metrics on a goal form.
           </p>
-          <ToolbarButton onClick={onCreate} disabled={busy} title="Insert">
+          <ToolbarButton onClick={onCreate} disabled={busy} title={CREATE_CHORD}>
             New Metric
           </ToolbarButton>
         </>

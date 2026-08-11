@@ -2,24 +2,29 @@
  * Achieve put its keyboard hints in a banner above the grid. They belong at the bottom:
  * persistent reference, not an announcement, and out of the way of the first row.
  *
- * Apple keyboards have no Insert key, so ⌘Return is bound alongside it. Both are listed
- * rather than detected, which keeps this a server component and tells the whole truth.
+ * One chord per row — the one that works on this keyboard. Achieve's Insert family and `F2` are
+ * still bound (`lib/commands/chords.ts`) but are not listed: a reference that teaches a key the
+ * machine does not have is worse than no reference. Listing both was the previous compromise, and
+ * it made the top three rows read as though Insert were the real answer and ⌘Return the fallback.
+ *
+ * Kept in sync by hand with `chords.ts`, which is the one thing here a test cannot check — this is
+ * prose about keys, not the keys themselves.
  */
 const HINTS: { keys: string[]; label: string }[] = [
-  { keys: ["Insert", "⌘Return"], label: "add after" },
-  { keys: ["⇧Insert"], label: "add before" },
-  { keys: ["⌃Insert"], label: "add child" },
-  { keys: ["Enter"], label: "open record" },
-  { keys: ["F2"], label: "rename" },
+  { keys: ["⌥⌘⏎"], label: "add child" },
+  { keys: ["⌘⏎"], label: "add after" },
+  { keys: ["⇧⌘⏎"], label: "add before" },
+  { keys: ["⏎"], label: "open record" },
+  { keys: ["⇧⏎"], label: "rename" },
   { keys: ["↑", "↓"], label: "move selection" },
   { keys: ["⇧↑", "⇧↓", "⇧click"], label: "extend selection" },
-  { keys: ["⌘click", "Ctrl+click"], label: "add/remove row" },
+  { keys: ["⌘click"], label: "add/remove row" },
   { keys: ["⌘C"], label: "copy as text" },
   { keys: ["Tab", "⇧Tab"], label: "indent / outdent" },
   { keys: ["⌥↑", "⌥↓"], label: "move row" },
   { keys: ["←", "→"], label: "collapse / expand" },
   { keys: ["⌘←", "⌘→"], label: "collapse / expand all" },
-  { keys: ["Delete"], label: "delete" },
+  { keys: ["⌫"], label: "delete" },
   { keys: ["Drag"], label: "move onto or between rows" },
   { keys: ["Right-click"], label: "row menu" },
 ];

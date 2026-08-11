@@ -21,6 +21,7 @@ import {
   toDateKey,
   weekDays,
 } from "@/lib/schedule/geometry";
+import { DELETE_ROW, OPEN_RECORD } from "@/lib/commands/chords";
 import { asyncHandler } from "@/lib/eventHandler";
 import {
   createAppointmentAction,
@@ -454,7 +455,7 @@ export function ScheduleView({ initial, nodes, weekKey, blockNodeId = null }: Pr
               label: "Open appointment…",
               group: "record",
               icon: "open",
-              bindings: [{ key: "Enter" }],
+              bindings: OPEN_RECORD,
               run: () => occurrence && openOccurrence(occurrence),
             },
             {
@@ -498,7 +499,7 @@ export function ScheduleView({ initial, nodes, weekKey, blockNodeId = null }: Pr
               group: "record",
               icon: "delete",
               destructive: true,
-              bindings: [{ key: "Delete" }],
+              bindings: DELETE_ROW,
               // The same `window.confirm` the drawer's Delete asks. Two ways to delete an
               // appointment where one asks and one does not is worse than either alone, and
               // there is no undo to fall back on.

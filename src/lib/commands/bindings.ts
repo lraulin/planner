@@ -24,7 +24,8 @@ export type KeyBinding = {
   meta?: boolean;
   /**
    * The physical Control key, as distinct from `meta`. Achieve used it for "as child"
-   * (`⌃Insert`), and on a Mac that is a different chord from `⌘Insert`.
+   * (`⌃Insert`), and on a Mac that is a different chord from `⌘Insert`. The chords the app
+   * teaches now live in `chords.ts`.
    */
   ctrl?: boolean;
   alt?: boolean;
@@ -47,9 +48,9 @@ function sameKey(eventKey: string, bindingKey: string): boolean {
 /**
  * Modifiers are matched **exactly**, not as a minimum.
  *
- * `Insert`, `⇧Insert` and `⌃Insert` are three different commands — insert after, before, and as
- * child. A binding that ignored the modifiers it did not name would make plain `Insert` fire on
- * all three, and the one that fires would be whichever the dispatcher happened to test first.
+ * `⌘⏎`, `⇧⌘⏎` and `⌥⌘⏎` are three different commands — insert after, before, and as child, all on
+ * one key. A binding that ignored the modifiers it did not name would make plain `⌘⏎` fire on all
+ * three, and the one that fires would be whichever the dispatcher happened to test first.
  */
 export function matchBinding(event: KeyEventLike, binding: KeyBinding): boolean {
   if (!sameKey(event.key, binding.key)) return false;
@@ -57,7 +58,7 @@ export function matchBinding(event: KeyEventLike, binding: KeyBinding): boolean 
   if (Boolean(binding.shift) !== event.shiftKey) return false;
 
   // Ctrl cannot stand in for `⌘` here: it is already spoken for by `ctrl`, so the chord needs
-  // both keys down. `⌃⌘⏎` is Achieve's `⌃Insert` on a keyboard with no Insert key.
+  // both keys down.
   if (binding.meta && binding.ctrl) return event.metaKey && event.ctrlKey;
   if (binding.meta) return event.metaKey || event.ctrlKey;
   if (binding.ctrl) return event.ctrlKey && !event.metaKey;
@@ -82,8 +83,8 @@ const MODIFIERS: readonly [keyof KeyBinding, string][] = [
 
 /**
  * Keys that print as a glyph. Everything absent here prints its own name, so `F2`, `Insert`,
- * `Delete` and `Tab` come out as themselves — which is what the app printed before this existed
- * and what its `HintBar` still teaches.
+ * `Delete` and `Tab` come out as themselves. Those four are alternates now rather than the chord
+ * being taught (`chords.ts`), but they still have to print correctly wherever they are first.
  */
 const KEY_LABELS: Record<string, string> = {
   ArrowUp: "↑",
@@ -93,6 +94,9 @@ const KEY_LABELS: Record<string, string> = {
   Enter: "⏎",
   Escape: "Esc",
   " ": "Space",
+  // The key a MacBook labels *delete* sends `Backspace`; the glyph is what is engraved on it, and
+  // printing the word would name a key this keyboard does not have.
+  Backspace: "⌫",
 };
 
 export function formatBinding(binding: KeyBinding): string {

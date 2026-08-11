@@ -479,20 +479,20 @@ describe("grid command deck", () => {
     );
 
     expect(printed.get("record.open")).toBe("⏎");
-    expect(printed.get("record.rename")).toBe("F2");
+    expect(printed.get("record.rename")).toBe("⇧⏎");
     expect(printed.get("record.copy-as-text")).toBe("⌘C");
-    expect(printed.get("record.delete")).toBe("Delete");
+    expect(printed.get("record.delete")).toBe("⌫");
     expect(printed.get("record.move-up")).toBe("⌥↑");
     expect(printed.get("record.indent")).toBe("Tab");
     expect(printed.get("record.outdent")).toBe("⇧Tab");
-    expect(printed.get("grid.create.before")).toBe("⇧Insert");
-    expect(printed.get("grid.create.after")).toBe("Insert");
-    expect(printed.get("grid.create.child")).toBe("⌃Insert");
+    expect(printed.get("grid.create.before")).toBe("⇧⌘⏎");
+    expect(printed.get("grid.create.after")).toBe("⌘⏎");
+    expect(printed.get("grid.create.child")).toBe("⌥⌘⏎");
     expect(printed.get("record.expand-collapse")).toBe("→");
   });
 
   /*
-   * ⌘⏎ is the Mac stand-in for Insert. CommandKeys runs the first matching binding once.
+   * ⌘⏎ is create-after. CommandKeys runs the first matching binding once.
    * The Outline used to also fire create-after from its own document listener, so one chord
    * created two rows. One owner, one create — if a second command ever also matches ⌘⏎,
    * this is the test that fails before another host reintroduces the double.

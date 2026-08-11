@@ -10,8 +10,8 @@ import { CAPTURE_EVENT } from "./event";
  * and on no unauthenticated page.
  *
  * `c` follows the Gmail/GitHub convention for "create". It is safe as a bare letter here
- * because every other binding in the app is a named key — Insert, arrows, Tab, Enter, F2,
- * Delete — so nothing else wants it.
+ * because every other binding in the app is a named key — Return and its chords, arrows, Tab,
+ * ⌫ — so nothing else wants it.
  *
  * This is the first handler that is not owned by the surface it fires on, so it cannot see
  * whether a grid is mid-rename or has a drawer open. It asks the DOM instead: a dialog

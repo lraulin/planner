@@ -1,5 +1,6 @@
 "use client";
 
+import { DELETE_ROW, INSERT_AFTER, OPEN_RECORD } from "@/lib/commands/chords";
 import type { GridCommandCapabilities, GridPageCommand } from "@/lib/grid/commandDeck";
 
 /**
@@ -8,7 +9,7 @@ import type { GridCommandCapabilities, GridPageCommand } from "@/lib/grid/comman
  * Three views with the same three verbs — make one, open one, delete one — and, before this, three
  * copies of the same capabilities block plus three hand-written row menus. They had already drifted:
  * one printed `New Time Chart` where its own toolbar said `New time chart`, and each spelled out
- * `Insert` / `Enter` / `Delete` again beside the labels.
+ * its own create / open / delete shortcuts again beside the labels.
  *
  * Only the nouns differ, so only the nouns are arguments.
  */
@@ -55,9 +56,7 @@ export function catalogCapabilities({
         // The one row-menu command that does not need a row, and therefore the only thing worth
         // opening the blank-area menu for on an empty catalog. See `buildGridCommands`.
         rowMenu: true,
-        // Apple keyboards have no Insert key, so ⌘⏎ is bound alongside it. `Insert` is what gets
-        // printed, which is what these views already showed.
-        bindings: [{ key: "Insert" }, { key: "Enter", meta: true }],
+        bindings: INSERT_AFTER,
         run: onCreate,
       },
       {
@@ -69,7 +68,7 @@ export function catalogCapabilities({
         icon: "open",
         toolbar: 50,
         rowMenu: true,
-        bindings: [{ key: "Enter" }],
+        bindings: OPEN_RECORD,
         disabled: Boolean(cannotDelete),
         title: cannotDelete,
         run: () => selection.id && onOpen(selection.id),
@@ -83,7 +82,7 @@ export function catalogCapabilities({
         icon: "delete",
         rowMenu: true,
         destructive: true,
-        bindings: [{ key: "Delete" }, { key: "Backspace" }],
+        bindings: DELETE_ROW,
         disabled: selection.id === null,
         title: noRow,
         run: () => selection.id && onDelete(selection.id),

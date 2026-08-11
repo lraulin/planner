@@ -47,8 +47,8 @@ import {
  * and extras, not only the summary columns. Import appends; export follows the on-screen
  * order (including the active sort).
  *
- * Keyboard follows the outline's conventions, since the two sit inches apart: `Insert` (or
- * `Cmd+Enter`) adds a row, `Enter` opens the selected one, `Delete` removes it.
+ * Keyboard follows the outline's conventions, since the two sit inches apart: `⌘⏎` adds a row,
+ * `⏎` opens the selected one, `⌫` removes it.
  */
 export function ItemList({
   kind,

@@ -5,6 +5,7 @@ import type { PriorityLetter } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { GridRow } from "@/lib/tree/slice";
 import type { WishListRow } from "@/lib/detail/wishTypes";
+import { OPEN_RECORD } from "@/lib/commands/chords";
 import { updateNodeItemAction } from "@/app/outline/detail-actions";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import { DataGrid } from "@/components/grid/DataGrid";
@@ -266,7 +267,7 @@ export function WishesGrid({
             icon: "open",
             toolbar: 50,
             rowMenu: true,
-            bindings: [{ key: "Enter" }],
+            bindings: OPEN_RECORD,
             keywords: "goal parent node",
             disabled: wish === null,
             title: wish ? undefined : "Select a row first",
