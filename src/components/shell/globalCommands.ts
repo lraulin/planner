@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useMemo } from "react";
 import { requestQuickCapture } from "@/components/capture/event";
 import { signOut } from "@/lib/auth/client";
+import { QUICK_CAPTURE } from "@/lib/commands/chords";
 import type { Command } from "@/lib/commands/registry";
 import { BUILT_MODULES } from "./modules";
 
@@ -37,9 +38,9 @@ export function useGlobalCommands(): readonly Command[] {
         group: "app",
         // The binding stays where it is — `QuickCapture` owns a document listener with the
         // `isModalOpen` guard, which the shared dispatcher deliberately does not do. Declaring it
-        // here is what makes the palette print `C`, and `bindings.ts` is what makes the printed
+        // here is what makes the palette print `C`, and `chords.ts` is what makes the printed
         // string and that listener agree on which key it is.
-        bindings: [{ key: "c" }],
+        bindings: QUICK_CAPTURE,
         keywords: "new task inbox add",
         run: requestQuickCapture,
       },

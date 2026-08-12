@@ -1,12 +1,31 @@
 import { describe, expect, it } from "vitest";
 import { formatBindings, matchBindings, type KeyEventLike } from "./bindings";
 import {
+  COLLAPSE_ALL,
+  COLLAPSE_SELECTED,
+  COMMIT_FORM,
+  COMPLETE,
+  COPY_AS_TEXT,
+  CUT_ROWS,
   DELETE_ROW,
+  EXPAND_ALL,
+  EXPAND_SELECTED,
+  INDENT,
   INSERT_AFTER,
   INSERT_BEFORE,
   INSERT_CHILD,
+  MOVE_DOWN,
+  MOVE_UP,
+  OPEN_PALETTE,
   OPEN_RECORD,
+  OUTDENT,
+  PASTE_ROWS,
+  QUICK_CAPTURE,
   RENAME,
+  SAVE,
+  SCHEDULE_BLOCK,
+  VIEW_PROJECT,
+  VIEW_TASKS,
 } from "./chords";
 
 function press(key: string, modifiers: Partial<KeyEventLike> = {}): KeyEventLike {
@@ -64,5 +83,40 @@ describe("the Return family", () => {
     expect(matchBindings(press("Insert", { ctrlKey: true }), INSERT_CHILD)).toBe(true);
     expect(matchBindings(press("F2"), RENAME)).toBe(true);
     expect(matchBindings(press("Delete"), DELETE_ROW)).toBe(true);
+  });
+});
+
+/**
+ * The rest of the scheme — movement, clipboard, expand — lives next to the Return family so a
+ * rebind changes every menu *and* the outline HintBar in one place. Printing is the
+ * contract the HintBar reads; a wrong glyph there is how a scheme change ships half-done.
+ */
+describe("the shared grid chords", () => {
+  it("prints the glyphs the HintBar and menus already teach", () => {
+    expect(formatBindings(COPY_AS_TEXT)).toBe("⌘C");
+    expect(formatBindings(CUT_ROWS)).toBe("⌘X");
+    expect(formatBindings(PASTE_ROWS)).toBe("⌘V");
+    expect(formatBindings(MOVE_UP)).toBe("⌥↑");
+    expect(formatBindings(MOVE_DOWN)).toBe("⌥↓");
+    expect(formatBindings(INDENT)).toBe("Tab");
+    expect(formatBindings(OUTDENT)).toBe("⇧Tab");
+    expect(formatBindings(EXPAND_SELECTED)).toBe("→");
+    expect(formatBindings(COLLAPSE_SELECTED)).toBe("←");
+    expect(formatBindings(EXPAND_ALL)).toBe("⌘→");
+    expect(formatBindings(COLLAPSE_ALL)).toBe("⌘←");
+    expect(formatBindings(COMPLETE)).toBe("⌃L");
+    expect(formatBindings(SCHEDULE_BLOCK)).toBe("⌃⌥⇧B");
+    expect(formatBindings(VIEW_TASKS)).toBe("⌃T");
+    expect(formatBindings(VIEW_PROJECT)).toBe("⌃⇧J");
+    expect(formatBindings(SAVE)).toBe("⌘S");
+    expect(formatBindings(COMMIT_FORM)).toBe("⌘⏎");
+    expect(formatBindings(OPEN_PALETTE)).toBe("⌘K");
+    expect(formatBindings(QUICK_CAPTURE)).toBe("C");
+  });
+
+  it("keeps form commit and insert-after on the same primary chord", () => {
+    // A rebind of one without the other is how a form footer teaches a key that no longer
+    // saves — or a create command that steals Save & Close. They share META_ENTER.
+    expect(COMMIT_FORM[0]).toBe(INSERT_AFTER[0]);
   });
 });

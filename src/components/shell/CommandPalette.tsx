@@ -9,7 +9,8 @@ import {
   mergeCommands,
   type Command,
 } from "@/lib/commands/registry";
-import { formatBindings } from "@/lib/commands/bindings";
+import { formatBindings, matchBindings } from "@/lib/commands/bindings";
+import { OPEN_PALETTE } from "@/lib/commands/chords";
 import { COMMAND_PALETTE_EVENT } from "./commandEvent";
 import { useCommands } from "./CommandProvider";
 import { useGlobalCommands } from "./globalCommands";
@@ -35,7 +36,7 @@ export function CommandPalette() {
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key !== "k" || !(event.metaKey || event.ctrlKey)) return;
+      if (!matchBindings(event, OPEN_PALETTE)) return;
       // The same two guards `QuickCapture` uses: never steal a keystroke from something the
       // user is typing into, and never open on top of a drawer or a confirmation.
       if (isTypingTarget(event.target) || isModalOpen()) return;

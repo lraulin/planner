@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { matchBindings } from "@/lib/commands/bindings";
+import { QUICK_CAPTURE } from "@/lib/commands/chords";
 import { isModalOpen, isTypingTarget } from "@/lib/keyboard";
 import { QuickCaptureDialog } from "./QuickCaptureDialog";
 import { CAPTURE_EVENT } from "./event";
@@ -9,9 +11,9 @@ import { CAPTURE_EVENT } from "./event";
  * The app-wide capture shortcut, mounted by `AppShell` so it exists on every signed-in view
  * and on no unauthenticated page.
  *
- * `c` follows the Gmail/GitHub convention for "create". It is safe as a bare letter here
- * because every other binding in the app is a named key — Return and its chords, arrows, Tab,
- * ⌫ — so nothing else wants it.
+ * Bare `C` follows the Gmail/GitHub convention for "create" — `QUICK_CAPTURE` in
+ * `chords.ts`. It is safe as a bare letter here because every other binding in the app is a
+ * named key — Return and its chords, arrows, Tab, ⌫ — so nothing else wants it.
  *
  * This is the first handler that is not owned by the surface it fires on, so it cannot see
  * whether a grid is mid-rename or has a drawer open. It asks the DOM instead: a dialog
@@ -26,7 +28,7 @@ export function QuickCapture() {
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key !== "c" || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (!matchBindings(event, QUICK_CAPTURE)) return;
       if (isTypingTarget(event.target) || isModalOpen()) return;
 
       event.preventDefault();

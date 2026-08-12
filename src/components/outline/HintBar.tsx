@@ -1,30 +1,64 @@
+import { formatBindings } from "@/lib/commands/bindings";
+import type { KeyBinding } from "@/lib/commands/bindings";
+import {
+  COLLAPSE_ALL,
+  COLLAPSE_SELECTED,
+  COPY_AS_TEXT,
+  DELETE_ROW,
+  EXPAND_ALL,
+  EXPAND_SELECTED,
+  INDENT,
+  INSERT_AFTER,
+  INSERT_BEFORE,
+  INSERT_CHILD,
+  MOVE_DOWN,
+  MOVE_UP,
+  OPEN_RECORD,
+  OUTDENT,
+  RENAME,
+} from "@/lib/commands/chords";
+
 /**
  * Achieve put its keyboard hints in a banner above the grid. They belong at the bottom:
  * persistent reference, not an announcement, and out of the way of the first row.
  *
- * One chord per row — the one that works on this keyboard. Achieve's Insert family and `F2` are
- * still bound (`lib/commands/chords.ts`) but are not listed: a reference that teaches a key the
- * machine does not have is worse than no reference. Listing both was the previous compromise, and
- * it made the top three rows read as though Insert were the real answer and ⌘Return the fallback.
+ * Chords come from `lib/commands/chords.ts` via `formatBindings` — the same source every menu,
+ * tooltip and palette row uses. The previous hand-typed list was how Insert stayed on the
+ * banner after the scheme moved to Return: nothing here failed, it just kept teaching the
+ * key the machine does not have. Achieve's Insert family and `F2` are still bound as
+ * alternates but are not listed — a reference that teaches an unpressable key is worse
+ * than no reference.
  *
- * Kept in sync by hand with `chords.ts`, which is the one thing here a test cannot check — this is
- * prose about keys, not the keys themselves.
+ * Selection gestures (`⇧click`, `⌘click`) and the pointer verbs have no binding to ask, so
+ * they stay as prose.
  */
+function print(bindings: readonly KeyBinding[]): string {
+  // Every chord constant has at least one entry; formatBindings only returns undefined for
+  // empty / missing lists.
+  return formatBindings(bindings) ?? "";
+}
+
 const HINTS: { keys: string[]; label: string }[] = [
-  { keys: ["⌥⌘⏎"], label: "add child" },
-  { keys: ["⌘⏎"], label: "add after" },
-  { keys: ["⇧⌘⏎"], label: "add before" },
-  { keys: ["⏎"], label: "open record" },
-  { keys: ["⇧⏎"], label: "rename" },
+  { keys: [print(INSERT_CHILD)], label: "add child" },
+  { keys: [print(INSERT_AFTER)], label: "add after" },
+  { keys: [print(INSERT_BEFORE)], label: "add before" },
+  { keys: [print(OPEN_RECORD)], label: "open record" },
+  { keys: [print(RENAME)], label: "rename" },
   { keys: ["↑", "↓"], label: "move selection" },
   { keys: ["⇧↑", "⇧↓", "⇧click"], label: "extend selection" },
   { keys: ["⌘click"], label: "add/remove row" },
-  { keys: ["⌘C"], label: "copy as text" },
-  { keys: ["Tab", "⇧Tab"], label: "indent / outdent" },
-  { keys: ["⌥↑", "⌥↓"], label: "move row" },
-  { keys: ["←", "→"], label: "collapse / expand" },
-  { keys: ["⌘←", "⌘→"], label: "collapse / expand all" },
-  { keys: ["⌫"], label: "delete" },
+  { keys: [print(COPY_AS_TEXT)], label: "copy as text" },
+  { keys: [print(INDENT), print(OUTDENT)], label: "indent / outdent" },
+  { keys: [print(MOVE_UP), print(MOVE_DOWN)], label: "move row" },
+  {
+    keys: [print(COLLAPSE_SELECTED), print(EXPAND_SELECTED)],
+    label: "collapse / expand",
+  },
+  {
+    keys: [print(COLLAPSE_ALL), print(EXPAND_ALL)],
+    label: "collapse / expand all",
+  },
+  { keys: [print(DELETE_ROW)], label: "delete" },
   { keys: ["Drag"], label: "move onto or between rows" },
   { keys: ["Right-click"], label: "row menu" },
 ];

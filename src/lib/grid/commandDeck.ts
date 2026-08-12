@@ -1,12 +1,27 @@
 import type { Command } from "@/lib/commands/registry";
 import type { KeyBinding } from "@/lib/commands/bindings";
 import {
+  COLLAPSE_ALL,
+  COLLAPSE_SELECTED,
+  COMPLETE,
+  COPY_AS_TEXT,
+  CUT_ROWS,
   DELETE_ROW,
+  EXPAND_ALL,
+  EXPAND_SELECTED,
+  INDENT,
   INSERT_AFTER,
   INSERT_BEFORE,
   INSERT_CHILD,
+  MOVE_DOWN,
+  MOVE_UP,
   OPEN_RECORD,
+  OUTDENT,
+  PASTE_ROWS,
   RENAME,
+  SCHEDULE_BLOCK,
+  VIEW_PROJECT,
+  VIEW_TASKS,
 } from "@/lib/commands/chords";
 import { commandOrder } from "@/lib/commands/menus";
 import {
@@ -362,7 +377,7 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
         rowMenu: true,
         // Achieve's Ctrl+L. The one state change common enough to be a verb of its own rather
         // than a value in the picker below.
-        bindings: [{ key: "l", ctrl: true }],
+        bindings: COMPLETE,
         keywords: "done finish tick",
         disabled: !hasSelection || stateReason !== null || settled,
         title: !hasSelection
@@ -409,7 +424,7 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
         icon: "schedule",
         rowMenu: true,
         // Achieve's Ctrl+Alt+Shift+B.
-        bindings: [{ key: "b", ctrl: true, alt: true, shift: true }],
+        bindings: SCHEDULE_BLOCK,
         keywords: "calendar appointment time week",
         disabled: !hasSelection,
         title: selectionTitle,
@@ -430,7 +445,7 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
         icon: "go-to",
         rowMenu: true,
         // Achieve's Ctrl+T.
-        bindings: [{ key: "t", ctrl: true }],
+        bindings: VIEW_TASKS,
         keywords: "children subtasks scope",
         disabled: !hasSelection || !hasTasks,
         title: !hasSelection
@@ -455,7 +470,7 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
         icon: "go-to",
         rowMenu: true,
         // Achieve's Ctrl+Shift+J.
-        bindings: [{ key: "j", ctrl: true, shift: true }],
+        bindings: VIEW_PROJECT,
         keywords: "parent owner belongs",
         disabled: !hasSelection || projectId === null,
         title: !hasSelection
@@ -478,7 +493,7 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
         section: "Item",
         icon: "cut",
         rowMenu: true,
-        bindings: [{ key: "x", meta: true }],
+        bindings: CUT_ROWS,
         keywords: "pickup move relocate",
         disabled: !hasSelection,
         title: hasSelection
@@ -522,7 +537,7 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
           section: "Item",
           icon: "paste",
           rowMenu: true,
-          bindings: at === "after" ? [{ key: "v", meta: true }] : undefined,
+          bindings: at === "after" ? PASTE_ROWS : undefined,
           keywords: "drop move relocate",
           // The refusal is the whole point: "Paste" greyed with no reason is
           // indistinguishable from a broken menu, and there are five distinct reasons.
@@ -544,7 +559,7 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
         section: "Item",
         icon: "copy",
         rowMenu: true,
-        bindings: [{ key: "c", meta: true }],
+        bindings: COPY_AS_TEXT,
         keywords: "clipboard export outline",
         disabled: !hasSelection,
         title: selectionTitle,
@@ -588,7 +603,7 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
         "canMoveUp",
         "move-up",
         TOOLBAR.moveUp,
-        [{ key: "ArrowUp", alt: true }],
+        MOVE_UP,
       ],
       [
         "record.move-down",
@@ -597,7 +612,7 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
         "canMoveDown",
         "move-down",
         TOOLBAR.moveDown,
-        [{ key: "ArrowDown", alt: true }],
+        MOVE_DOWN,
       ],
       [
         "record.indent",
@@ -606,7 +621,7 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
         "canIndent",
         "indent",
         TOOLBAR.indent,
-        [{ key: "Tab" }],
+        INDENT,
       ],
       [
         "record.outdent",
@@ -615,7 +630,7 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
         "canOutdent",
         "outdent",
         TOOLBAR.outdent,
-        [{ key: "Tab", shift: true }],
+        OUTDENT,
       ],
     ];
     for (const [
@@ -667,7 +682,7 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
           section: "Expand",
           icon: canExpand ? "expand" : "collapse",
           rowMenu: true,
-          bindings: [{ key: canExpand ? "ArrowRight" : "ArrowLeft" }],
+          bindings: canExpand ? EXPAND_SELECTED : COLLAPSE_SELECTED,
           disabled: !hasSelection || (!canExpand && !canCollapse),
           title: !hasSelection
             ? SELECT_REASON
@@ -691,7 +706,7 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
           menu: "organize",
           section: "Expand",
           icon: "expand",
-          bindings: [{ key: "ArrowRight", meta: true }],
+          bindings: EXPAND_ALL,
           run: actions.onExpandAll,
         }),
       );
@@ -705,7 +720,7 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
           menu: "organize",
           section: "Expand",
           icon: "collapse",
-          bindings: [{ key: "ArrowLeft", meta: true }],
+          bindings: COLLAPSE_ALL,
           run: actions.onCollapseAll,
         }),
       );

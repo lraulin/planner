@@ -3,12 +3,16 @@
 import { LogoutButton } from "@/components/auth/LogoutButton";
 import { CaptureButton } from "@/components/capture/CaptureButton";
 import { useSetting } from "@/components/settings/SettingsProvider";
+import { formatBindings } from "@/lib/commands/bindings";
+import { OPEN_PALETTE } from "@/lib/commands/chords";
 import { parseShellSettings, serializeShellSettings } from "@/lib/settings/shell";
 import { SHELL_SCOPE } from "@/lib/settings/scopes";
 import { ChevronIcon, OrganizeIcon, SettingsIcon } from "./navIcons";
 import { openCommandPalette } from "./commandEvent";
 import { sectionsWithModules, type ModuleId } from "./modules";
 import { NavLink } from "./NavLink";
+
+const PALETTE_CHORD = formatBindings(OPEN_PALETTE) ?? "⌘K";
 
 /**
  * Desktop navigation: a grouped, collapsible left rail, replacing the tab strip.
@@ -73,12 +77,13 @@ export function Sidebar({ active }: { active: ModuleId | null }) {
 
       {/*
         The palette is the Go menu, and a keyboard-only Go menu is the thing
-        `ux-principles.md` calls not-a-discoverable-action. This row is what teaches ⌘K.
+        `ux-principles.md` calls not-a-discoverable-action. This row is what teaches the
+        palette chord from `chords.ts`.
       */}
       <button
         type="button"
         onClick={openCommandPalette}
-        title="Search modules and commands (⌘K)"
+        title={`Search modules and commands (${PALETTE_CHORD})`}
         className={`mx-2 mb-2 flex flex-none items-center gap-2 rounded border border-rule px-2 py-1 text-[0.75rem] text-ink-faint hover:border-rule-strong hover:bg-surface-raised hover:text-ink ${
           collapsed ? "justify-center" : ""
         }`}
@@ -87,7 +92,7 @@ export function Sidebar({ active }: { active: ModuleId | null }) {
         {!collapsed && (
           <>
             <span className="flex-1 text-left">Search…</span>
-            <span className="tabular flex-none text-[0.6875rem]">⌘K</span>
+            <span className="tabular flex-none text-[0.6875rem]">{PALETTE_CHORD}</span>
           </>
         )}
       </button>

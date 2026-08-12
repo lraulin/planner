@@ -30,11 +30,14 @@ import type { KeyBinding } from "./bindings";
  * many ways there are to reach it.
  */
 
+/**
+ * The primary chord shared by "new row after" and "commit form and leave". One object so a
+ * rebind of the platform command+Return cannot leave the two surfaces disagreeing.
+ */
+const META_ENTER: KeyBinding = { key: "Enter", meta: true };
+
 /** `⌘⏎` — new sibling below the selection. Achieve's `Insert`. */
-export const INSERT_AFTER: KeyBinding[] = [
-  { key: "Enter", meta: true },
-  { key: "Insert" },
-];
+export const INSERT_AFTER: KeyBinding[] = [META_ENTER, { key: "Insert" }];
 
 /** `⇧⌘⏎` — new sibling above the selection. Achieve's `⇧Insert`. */
 export const INSERT_BEFORE: KeyBinding[] = [
@@ -73,3 +76,66 @@ export const RENAME: KeyBinding[] = [{ key: "Enter", shift: true }, { key: "F2" 
  * two ways to delete reads as two different deletions.
  */
 export const DELETE_ROW: KeyBinding[] = [{ key: "Backspace" }, { key: "Delete" }];
+
+/** `⌘C` — copy the selection as plain text. */
+export const COPY_AS_TEXT: KeyBinding[] = [{ key: "c", meta: true }];
+
+/** `⌘X` — pick rows up for paste elsewhere. */
+export const CUT_ROWS: KeyBinding[] = [{ key: "x", meta: true }];
+
+/** `⌘V` — drop the pickup after the selection. */
+export const PASTE_ROWS: KeyBinding[] = [{ key: "v", meta: true }];
+
+/** `⌥↑` / `⌥↓` — reorder among siblings. */
+export const MOVE_UP: KeyBinding[] = [{ key: "ArrowUp", alt: true }];
+export const MOVE_DOWN: KeyBinding[] = [{ key: "ArrowDown", alt: true }];
+
+/** `Tab` / `⇧Tab` — indent and outdent. */
+export const INDENT: KeyBinding[] = [{ key: "Tab" }];
+export const OUTDENT: KeyBinding[] = [{ key: "Tab", shift: true }];
+
+/** `→` / `←` — expand or collapse the selected branch. */
+export const EXPAND_SELECTED: KeyBinding[] = [{ key: "ArrowRight" }];
+export const COLLAPSE_SELECTED: KeyBinding[] = [{ key: "ArrowLeft" }];
+
+/** `⌘→` / `⌘←` — expand or collapse every branch. */
+export const EXPAND_ALL: KeyBinding[] = [{ key: "ArrowRight", meta: true }];
+export const COLLAPSE_ALL: KeyBinding[] = [{ key: "ArrowLeft", meta: true }];
+
+/** `⌃L` — complete the selection (Achieve). */
+export const COMPLETE: KeyBinding[] = [{ key: "l", ctrl: true }];
+
+/** `⌃⌥⇧B` — schedule a block (Achieve). */
+export const SCHEDULE_BLOCK: KeyBinding[] = [
+  { key: "b", ctrl: true, alt: true, shift: true },
+];
+
+/** `⌃T` — view the selection's tasks (Achieve). */
+export const VIEW_TASKS: KeyBinding[] = [{ key: "t", ctrl: true }];
+
+/** `⌃⇧J` — jump to the owning project (Achieve). */
+export const VIEW_PROJECT: KeyBinding[] = [{ key: "j", ctrl: true, shift: true }];
+
+/**
+ * `⌘S` — save without leaving. Same chord the drawer footer teaches; named once so a
+ * hand-typed tooltip cannot drift from the listener that actually fires.
+ */
+export const SAVE: KeyBinding[] = [{ key: "s", meta: true }];
+
+/**
+ * `⌘⏎` — commit a form and leave (drawer Save & Close, organizer Process).
+ *
+ * Same primary key as `INSERT_AFTER` (via `META_ENTER`). Named separately so a form footer
+ * does not import a create chord by name; the binding object is shared.
+ */
+export const COMMIT_FORM: KeyBinding[] = [META_ENTER];
+
+/** `⌘K` — open the command palette. Owned by `CommandPalette`, taught by the sidebar Search row. */
+export const OPEN_PALETTE: KeyBinding[] = [{ key: "k", meta: true }];
+
+/**
+ * Bare `C` — quick capture. Owned by `QuickCaptureDialog`'s own listener (it has to stand
+ * down while a modal is open); declared here so the palette and any chrome that print it
+ * ask the same binding.
+ */
+export const QUICK_CAPTURE: KeyBinding[] = [{ key: "c" }];

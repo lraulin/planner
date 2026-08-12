@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { formatBindings, matchBindings } from "@/lib/commands/bindings";
+import { COMMIT_FORM, SAVE } from "@/lib/commands/chords";
 import { useModalFocus } from "./focus";
+
+const SAVE_CHORD = formatBindings(SAVE) ?? "⌘S";
+const COMMIT_CHORD = formatBindings(COMMIT_FORM) ?? "⌘⏎";
 
 /**
  * The right-sliding drawer from `standards/components/drawer-pattern.md`.
@@ -140,8 +145,8 @@ export function DrawerHeader({
  * arrangement changes; the set does not. `drawer-pattern.md` is explicit that dropping a
  * button to save room on a phone is not an option.
  *
- * Shortcuts: ⌘/Ctrl+S → Save · ⌘/Ctrl+Enter → Save & Close · Esc → Cancel
- * (Esc is handled by `Drawer`, which must call the same dirty-aware close path).
+ * Shortcuts: Save and Save & Close chords come from `chords.ts` so tooltips cannot
+ * drift from the listener. Esc is handled by `Drawer` on the same dirty-aware close path.
  *
  * `justSaved` is set after a successful stay-open Save and cleared on the next edit.
  */
@@ -169,23 +174,20 @@ export function DrawerFooter({
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      const mod = event.metaKey || event.ctrlKey;
-      if (!mod) return;
-
-      // Don't steal shortcuts from a textarea / contenteditable mid-edit — except ⌘S,
+      // Don't steal shortcuts from a textarea / contenteditable mid-edit — except Save,
       // which should always mean "save progress" rather than the browser's Save Page.
       const target = event.target;
       const inText =
         target instanceof HTMLTextAreaElement ||
         (target instanceof HTMLElement && target.isContentEditable);
 
-      if (event.key === "s" || event.key === "S") {
+      if (matchBindings(event, SAVE)) {
         event.preventDefault();
         if (!saving) onSave();
         return;
       }
 
-      if (event.key === "Enter") {
+      if (matchBindings(event, COMMIT_FORM)) {
         if (inText) return;
         event.preventDefault();
         if (!saving) onSaveAndClose();
@@ -235,7 +237,7 @@ export function DrawerFooter({
             type="button"
             onClick={onSave}
             disabled={saving}
-            title="⌘/Ctrl+S"
+            title={SAVE_CHORD}
             className="min-h-tap flex-1 rounded border border-rule px-3 py-1.5 text-[0.8125rem] text-ink transition-colors hover:border-rule-strong hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-50 md:min-h-0 md:flex-none"
           >
             {saving ? "Saving…" : "Save"}
@@ -245,7 +247,7 @@ export function DrawerFooter({
             type="button"
             onClick={onSaveAndClose}
             disabled={saving}
-            title="⌘/Ctrl+Enter"
+            title={COMMIT_CHORD}
             className="min-h-tap flex-1 rounded border border-select-edge bg-select px-3 py-1.5 text-[0.8125rem] font-medium text-ink transition-colors hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50 md:min-h-0 md:flex-none"
           >
             Save & Close

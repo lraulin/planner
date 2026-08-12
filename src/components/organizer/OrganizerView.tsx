@@ -20,9 +20,13 @@ import {
   ProjectPicker,
   type ProjectPickerValue,
 } from "@/components/projects/ProjectPicker";
+import { formatBindings, matchBindings } from "@/lib/commands/bindings";
+import { COMMIT_FORM } from "@/lib/commands/chords";
 import type { OrganizerOutcome } from "@/lib/organizer/types";
 import { fromDateKey, shiftDateKey, toDateKey } from "@/lib/schedule/geometry";
 import type { OutlineNode } from "@/lib/tree/types";
+
+const PROCESS_CHORD = formatBindings(COMMIT_FORM) ?? "⌘⏎";
 
 type OutcomeKind = OrganizerOutcome["kind"];
 
@@ -240,10 +244,9 @@ function OrganizerItemForm({
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-        event.preventDefault();
-        void process();
-      }
+      if (!matchBindings(event, COMMIT_FORM)) return;
+      event.preventDefault();
+      void process();
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
@@ -537,11 +540,14 @@ function OrganizerItemForm({
             Exit
           </Link>
           <div className="flex items-center gap-3">
-            <span className="hidden text-[0.6875rem] text-ink-faint sm:block">⌘↵</span>
+            <span className="hidden text-[0.6875rem] text-ink-faint sm:block">
+              {PROCESS_CHORD}
+            </span>
             <button
               type="button"
               onClick={() => void process()}
               disabled={saving}
+              title={PROCESS_CHORD}
               className="min-h-tap rounded bg-select-edge px-5 text-[0.8125rem] font-semibold text-white hover:brightness-95 disabled:opacity-50 md:min-h-0 md:py-2"
             >
               {saving ? "Processing…" : "Process"}
