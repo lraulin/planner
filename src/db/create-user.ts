@@ -10,13 +10,13 @@ import { seedSampleData } from "./sample-data";
  * was worse than a flag that can be read back in shell history.
  *
  * Usage:
- *   npm run user:create -- --email lee@example.com --password 'secret123'
- *   npm run user:create -- --email new@example.com --rename-from old@example.com --password 'secret123'
- *   npm run user:create -- --email test@example.com --password 'password123' --sample-data
+ *   npm run user:create -- --email lee@example.com --password 'secret1234567890'
+ *   npm run user:create -- --email new@example.com --rename-from old@example.com --password 'secret1234567890'
+ *   npm run user:create -- --email test@example.com --password 'password12345678' --sample-data
  *
  * Flags:
  *   --email        (required) the account's address
- *   --password     (or the USER_PASSWORD env var) at least 8 characters
+ *   --password     (or the USER_PASSWORD env var) at least 16 characters
  *   --name         display name; defaults to the address's local part
  *   --rename-from  rename this existing account instead of creating a new one, keeping its id
  *   --sample-data  replace this user's outline/schedule with the demo data (destructive)

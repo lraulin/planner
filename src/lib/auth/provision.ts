@@ -23,7 +23,7 @@ import { normalizeEmail } from "@/lib/auth/identity";
  * Better Auth then refuses to sign in, and the failure surfaces at the login screen rather
  * than at the command that caused it.
  */
-export const MIN_PASSWORD_LENGTH = 8;
+export const MIN_PASSWORD_LENGTH = 16;
 
 export type UpsertUserInput = {
   email: string;

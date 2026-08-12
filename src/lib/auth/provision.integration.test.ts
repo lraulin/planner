@@ -51,7 +51,7 @@ afterAll(async () => {
 describeDb("upsertUser", () => {
   it("creates an account that can actually sign in", async () => {
     const email = freshEmail("create");
-    const result = await provision(email, "password123", "Someone");
+    const result = await provision(email, "password12345678", "Someone");
 
     expect(result.outcome).toBe("created");
 
@@ -63,12 +63,14 @@ describeDb("upsertUser", () => {
     // row it cannot verify produces an account that exists and cannot be used.
     const hash = await credentialHash(result.id);
     expect(hash).toBeTruthy();
-    expect(await verifyPassword({ hash: hash!, password: "password123" })).toBe(true);
+    expect(await verifyPassword({ hash: hash!, password: "password12345678" })).toBe(
+      true,
+    );
   });
 
   it("stores the address lowercased, because that is how sign-in looks it up", async () => {
     const email = freshEmail("case");
-    const result = await provision(email.toUpperCase(), "password123");
+    const result = await provision(email.toUpperCase(), "password12345678");
 
     expect(result.email).toBe(email.toLowerCase());
     const [user] = await db.select().from(users).where(eq(users.id, result.id));
@@ -77,27 +79,31 @@ describeDb("upsertUser", () => {
 
   it("is idempotent, and resets the password on a rerun", async () => {
     const email = freshEmail("idempotent");
-    const first = await provision(email, "password123");
-    const second = await upsertUser({ email, password: "different456" });
+    const first = await provision(email, "password12345678");
+    const second = await upsertUser({ email, password: "different4567890" });
 
     expect(second.id).toBe(first.id);
     expect(second.outcome).toBe("updated");
 
     const hash = await credentialHash(first.id);
-    expect(await verifyPassword({ hash: hash!, password: "different456" })).toBe(true);
-    expect(await verifyPassword({ hash: hash!, password: "password123" })).toBe(false);
+    expect(await verifyPassword({ hash: hash!, password: "different4567890" })).toBe(
+      true,
+    );
+    expect(await verifyPassword({ hash: hash!, password: "password12345678" })).toBe(
+      false,
+    );
   });
 
   it("rejects a password Better Auth would refuse at sign-in", async () => {
     await expect(
       upsertUser({ email: freshEmail("short"), password: "short" }),
-    ).rejects.toThrow(/at least 8/);
+    ).rejects.toThrow(/at least 16/);
   });
 
   it("rejects an address Better Auth's validator would refuse", async () => {
     // The reason this project's original `dev@localhost` user had to be renamed.
     await expect(
-      upsertUser({ email: "someone@localhost", password: "password123" }),
+      upsertUser({ email: "someone@localhost", password: "password12345678" }),
     ).rejects.toThrow(/example\.com/);
   });
 });
@@ -106,7 +112,7 @@ describeDb("upsertUser with renameFrom", () => {
   it("keeps the same users.id, so the account's data survives", async () => {
     const before = freshEmail("rename-before");
     const after = freshEmail("rename-after");
-    const created = await provision(before, "password123");
+    const created = await provision(before, "password12345678");
 
     await db.insert(nodes).values({
       userId: created.id,
@@ -118,7 +124,7 @@ describeDb("upsertUser with renameFrom", () => {
 
     const renamed = await upsertUser({
       email: after,
-      password: "password123",
+      password: "password12345678",
       renameFrom: before,
     });
 
@@ -135,14 +141,14 @@ describeDb("upsertUser with renameFrom", () => {
     const email = freshEmail("rename-converge");
     const first = await upsertUser({
       email,
-      password: "password123",
+      password: "password12345678",
       renameFrom: freshEmail("never-existed"),
     });
     createdUserIds.push(first.id);
 
     const second = await upsertUser({
       email,
-      password: "password123",
+      password: "password12345678",
       renameFrom: freshEmail("never-existed"),
     });
 
@@ -154,11 +160,11 @@ describeDb("one account cannot reach another", () => {
   it("refuses to rename onto an address another account holds", async () => {
     const mine = freshEmail("victim");
     const theirs = freshEmail("attacker");
-    const victim = await provision(mine, "password123", "Victim");
-    const attacker = await provision(theirs, "password123", "Attacker");
+    const victim = await provision(mine, "password12345678", "Victim");
+    const attacker = await provision(theirs, "password12345678", "Attacker");
 
     await expect(
-      upsertUser({ email: mine, password: "password123", renameFrom: theirs }),
+      upsertUser({ email: mine, password: "password12345678", renameFrom: theirs }),
     ).rejects.toThrow(/already uses that address/);
 
     // Neither account moved.
@@ -173,7 +179,7 @@ describeDb("one account cannot reach another", () => {
 
   it("leaves every other account untouched when provisioning one", async () => {
     const mine = freshEmail("bystander");
-    const bystander = await provision(mine, "password123", "Bystander");
+    const bystander = await provision(mine, "password12345678", "Bystander");
     const bystanderHash = await credentialHash(bystander.id);
 
     await db.insert(nodes).values({
@@ -184,7 +190,7 @@ describeDb("one account cannot reach another", () => {
       sortKey: "a0",
     });
 
-    await provision(freshEmail("newcomer"), "password123", "Newcomer");
+    await provision(freshEmail("newcomer"), "password12345678", "Newcomer");
 
     const [row] = await db.select().from(users).where(eq(users.id, bystander.id));
     expect(row).toBeDefined();

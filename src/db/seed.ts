@@ -18,7 +18,7 @@ import { seedSampleData } from "./sample-data";
  *
  * Env:
  * - AUTH_DEV_USER_EMAIL     (default test@example.com)
- * - AUTH_DEV_USER_PASSWORD  (default "password123" — local only)
+ * - AUTH_DEV_USER_PASSWORD  (default "password12345678" — local only)
  * - AUTH_DEV_USER_NAME      (default "Test User")
  * - SEED_SAMPLE_DATA=0      credentials only, no sample outline
  */
@@ -35,7 +35,7 @@ async function main() {
   const email = devUserEmail();
   const user = await upsertUser({
     email,
-    password: process.env.AUTH_DEV_USER_PASSWORD?.trim() || "password123",
+    password: process.env.AUTH_DEV_USER_PASSWORD?.trim() || "password12345678",
     name: process.env.AUTH_DEV_USER_NAME?.trim() || "Test User",
   });
 

@@ -40,8 +40,9 @@ npm run db:seed              # local test account + sample data
 npm run dev                  # http://localhost:3047 → redirects to /login
 ```
 
-Default local login after seed: email `test@example.com`, password `password123` (override
-with `AUTH_DEV_USER_EMAIL` / `AUTH_DEV_USER_PASSWORD`). Public sign-up is disabled.
+Default local login after seed: email `test@example.com`, password `password12345678`
+(override with `AUTH_DEV_USER_EMAIL` / `AUTH_DEV_USER_PASSWORD`). Public sign-up is
+disabled.
 
 `db:seed` provisions **only the local test account**, and refuses to run in production. Real
 accounts — yours, or a second person's — are created with:

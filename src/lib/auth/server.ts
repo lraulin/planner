@@ -64,7 +64,7 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     disableSignUp: true,
-    minPasswordLength: 8,
+    minPasswordLength: 16,
   },
   ...(googleProvider ? { socialProviders: googleProvider } : {}),
   user: {
