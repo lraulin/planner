@@ -196,6 +196,20 @@ describe("parseCapitalOne360Statement", () => {
     ]);
     expect(parsed.accounts[2].transactions[1].description).toContain("CD Close-Out");
     expect(parsed.errors).toEqual([]);
+    expect(parsed.statements).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          externalKey: "2322",
+          openingBalanceCents: 1000,
+          closingBalanceCents: 1010,
+          rates: [],
+        }),
+        expect.objectContaining({
+          externalKey: "2957",
+          closingBalanceCents: 0,
+        }),
+      ]),
+    );
   });
 
   it("uses the period year so Jul 8 is not a Date-parsed local midnight", () => {

@@ -1,8 +1,19 @@
-import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { financeAccounts, financeTransactions } from "@/db/schema";
+import {
+  financeAccounts,
+  financeStatementRates,
+  financeStatements,
+  financeTransactions,
+} from "@/db/schema";
 import { numericStringToCents } from "./money";
-import type { FinanceAccountRow, TransactionFilter, TransactionListRow } from "./types";
+import type {
+  FinanceAccountRow,
+  ParsedStatementRate,
+  StatementListRow,
+  TransactionFilter,
+  TransactionListRow,
+} from "./types";
 
 /**
  * Reads for the register. Every one takes `userId` and scopes on it.
@@ -179,4 +190,103 @@ export async function getTransaction(
     notes: row.notes,
     balanceAfterCents: numericStringToCents(row.balanceAfter),
   };
+}
+
+/** Statement snapshots, newest period first. Always scoped by userId. */
+export async function listStatements(
+  userId: string,
+  filter: { accountId?: string } = {},
+): Promise<StatementListRow[]> {
+  const conditions = [eq(financeStatements.userId, userId)];
+  if (filter.accountId) {
+    conditions.push(eq(financeStatements.accountId, filter.accountId));
+  }
+
+  const rows = await db
+    .select({
+      id: financeStatements.id,
+      accountId: financeStatements.accountId,
+      accountName: financeAccounts.name,
+      periodStart: financeStatements.periodStart,
+      periodEnd: financeStatements.periodEnd,
+      statementDate: financeStatements.statementDate,
+      openingBalance: financeStatements.openingBalance,
+      closingBalance: financeStatements.closingBalance,
+      paymentDueDate: financeStatements.paymentDueDate,
+      minimumPayment: financeStatements.minimumPayment,
+      pastDueAmount: financeStatements.pastDueAmount,
+      creditLimit: financeStatements.creditLimit,
+      availableCredit: financeStatements.availableCredit,
+      paymentsCredits: financeStatements.paymentsCredits,
+      purchases: financeStatements.purchases,
+      cashAdvances: financeStatements.cashAdvances,
+      balanceTransfers: financeStatements.balanceTransfers,
+      feesCharged: financeStatements.feesCharged,
+      interestCharged: financeStatements.interestCharged,
+      ytdFees: financeStatements.ytdFees,
+      ytdInterest: financeStatements.ytdInterest,
+      rewardsPoints: financeStatements.rewardsPoints,
+    })
+    .from(financeStatements)
+    .innerJoin(financeAccounts, eq(financeAccounts.id, financeStatements.accountId))
+    .where(and(...conditions))
+    .orderBy(desc(financeStatements.periodEnd), asc(financeStatements.id));
+
+  const ratesByStatement = new Map<string, ParsedStatementRate[]>();
+  if (rows.length > 0) {
+    const rateRows = await db
+      .select({
+        statementId: financeStatementRates.statementId,
+        balanceType: financeStatementRates.balanceType,
+        aprPercent: financeStatementRates.aprPercent,
+        balanceSubject: financeStatementRates.balanceSubject,
+        interestCharged: financeStatementRates.interestCharged,
+      })
+      .from(financeStatementRates)
+      .where(
+        and(
+          eq(financeStatementRates.userId, userId),
+          inArray(
+            financeStatementRates.statementId,
+            rows.map((row) => row.id),
+          ),
+        ),
+      );
+    for (const rate of rateRows) {
+      const list = ratesByStatement.get(rate.statementId) ?? [];
+      list.push({
+        balanceType: rate.balanceType,
+        aprPercent: Number(rate.aprPercent),
+        balanceSubjectCents: numericStringToCents(rate.balanceSubject),
+        interestChargedCents: numericStringToCents(rate.interestCharged),
+      });
+      ratesByStatement.set(rate.statementId, list);
+    }
+  }
+
+  return rows.map((row) => ({
+    id: row.id,
+    accountId: row.accountId,
+    accountName: row.accountName,
+    periodStart: row.periodStart,
+    periodEnd: row.periodEnd,
+    statementDate: row.statementDate,
+    openingBalanceCents: numericStringToCents(row.openingBalance) ?? 0,
+    closingBalanceCents: numericStringToCents(row.closingBalance) ?? 0,
+    paymentDueDate: row.paymentDueDate,
+    minimumPaymentCents: numericStringToCents(row.minimumPayment),
+    pastDueAmountCents: numericStringToCents(row.pastDueAmount),
+    creditLimitCents: numericStringToCents(row.creditLimit),
+    availableCreditCents: numericStringToCents(row.availableCredit),
+    paymentsCreditsCents: numericStringToCents(row.paymentsCredits),
+    purchasesCents: numericStringToCents(row.purchases),
+    cashAdvancesCents: numericStringToCents(row.cashAdvances),
+    balanceTransfersCents: numericStringToCents(row.balanceTransfers),
+    feesChargedCents: numericStringToCents(row.feesCharged),
+    interestChargedCents: numericStringToCents(row.interestCharged),
+    ytdFeesCents: numericStringToCents(row.ytdFees),
+    ytdInterestCents: numericStringToCents(row.ytdInterest),
+    rewardsPoints: row.rewardsPoints,
+    rates: ratesByStatement.get(row.id) ?? [],
+  }));
 }

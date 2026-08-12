@@ -39,6 +39,7 @@ import { importFinanceCsvFiles } from "@/lib/finances/import";
 import {
   getTransaction,
   listAccounts,
+  listStatements,
   listTransactions,
   transactionTotalCents,
 } from "@/lib/finances/queries";
@@ -122,6 +123,7 @@ type Owned = {
   resourceId: string;
   financeAccountId: string;
   financeTransactionId: string;
+  financeStatementId: string;
   planId: string;
   exerciseId: string;
   sessionId: string;
@@ -186,10 +188,39 @@ async function seedOwner(): Promise<Owned> {
           "Transaction Date,Post Date,Description,Category,Type,Amount,Memo\n" +
           "08/10/2026,08/11/2026,OWNER PURCHASE,Shopping,Sale,-10.59,\n",
       },
+      {
+        name: "20260818-statements-9910-.pdf",
+        text: [
+          "Payment Due Date: 09/15/26",
+          "New Balance: $10.59",
+          "Minimum Payment Due: $35.00",
+          "www.chase.com/cardhelp",
+          "Previous Balance $0.00",
+          "Payment, Credits $0.00",
+          "Purchases +$10.59",
+          "Cash Advances $0.00",
+          "Balance Transfers $0.00",
+          "Fees Charged $0.00",
+          "Interest Charged $0.00",
+          "Opening/Closing Date 07/19/26 - 08/18/26",
+          "Credit Access Line $7,900",
+          "Available Credit $7,889",
+          "ACCOUNT ACTIVITY",
+          "Statement Date: 08/18/26",
+          "08/10 OWNER PURCHASE Amzn.com/bill WA 10.59",
+          "Purchases 23.24%(v)(d) - 0 - - 0 -",
+        ].join("\n"),
+      },
     ],
   });
   const [financeAccount] = await listAccounts(userId);
   const [financeTransaction] = await listTransactions(userId);
+  const [financeStatement] = await listStatements(userId);
+  if (!financeAccount || !financeTransaction || !financeStatement) {
+    throw new Error(
+      "expected the finance seed to create an account, row, and statement",
+    );
+  }
 
   const plan = await ensureWeeklyPlan(userId, { weekStart: WEEK_START });
   await upsertPlanEntry(userId, plan.id, goalId, { focus: true });
@@ -225,6 +256,7 @@ async function seedOwner(): Promise<Owned> {
     resourceId,
     financeAccountId: financeAccount.id,
     financeTransactionId: financeTransaction.id,
+    financeStatementId: financeStatement.id,
     planId: plan.id,
     exerciseId,
     sessionId,
@@ -259,6 +291,7 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect((await listResources(owner.userId)).length).toBeGreaterThan(0);
     expect((await listAccounts(owner.userId)).length).toBeGreaterThan(0);
     expect((await listTransactions(owner.userId)).length).toBeGreaterThan(0);
+    expect((await listStatements(owner.userId)).length).toBeGreaterThan(0);
     expect(await getWeeklyPlanById(owner.userId, owner.planId)).toBeTruthy();
     expect((await listExercises(owner.userId)).length).toBeGreaterThan(0);
     expect((await listSessions(owner.userId)).length).toBeGreaterThan(0);
@@ -321,6 +354,7 @@ describeDb("a second user reads none of the first user's rows", () => {
   it("finance accounts and transactions", async () => {
     expect(await listAccounts(intruder)).toEqual([]);
     expect(await listTransactions(intruder)).toEqual([]);
+    expect(await listStatements(intruder)).toEqual([]);
     expect(await getTransaction(intruder, owner.financeTransactionId)).toBeNull();
     // The filtered read takes an account id the intruder can guess; it must refuse by user
     // rather than trusting that the id belongs to the caller.

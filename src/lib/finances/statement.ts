@@ -3,6 +3,7 @@ import { parseAmountCents } from "./money";
 import type {
   ParsedAccount,
   ParsedFinanceCsv,
+  ParsedStatement,
   ParsedTransaction,
   RowError,
 } from "./types";
@@ -242,10 +243,40 @@ type WorkingAccount = {
   inFees: boolean;
 };
 
+function emptyCardFields(): Omit<
+  ParsedStatement,
+  | "externalKey"
+  | "periodStart"
+  | "periodEnd"
+  | "statementDate"
+  | "openingBalanceCents"
+  | "closingBalanceCents"
+> {
+  return {
+    paymentDueDate: null,
+    minimumPaymentCents: null,
+    pastDueAmountCents: null,
+    creditLimitCents: null,
+    availableCreditCents: null,
+    paymentsCreditsCents: null,
+    purchasesCents: null,
+    cashAdvancesCents: null,
+    balanceTransfersCents: null,
+    feesChargedCents: null,
+    interestChargedCents: null,
+    ytdFeesCents: null,
+    ytdInterestCents: null,
+    rewardsPoints: null,
+    rates: [],
+  };
+}
+
 function finishAccount(
   fileName: string,
   working: WorkingAccount,
+  period: Period,
   errors: RowError[],
+  statements: ParsedStatement[],
 ): ParsedAccount {
   if (working.openingCents !== null && working.closingCents !== null) {
     const activity = working.transactions.reduce(
@@ -257,6 +288,19 @@ function finishAccount(
       errors.push({
         row: 0,
         message: `${fileName} ${working.meta.name}: opening plus activity does not equal the statement closing balance.`,
+      });
+    }
+    const periodStart = toDateKey(period.startYear, period.startMonth, period.startDay);
+    const periodEnd = toDateKey(period.endYear, period.endMonth, period.endDay);
+    if (periodStart && periodEnd) {
+      statements.push({
+        externalKey: working.meta.externalKey,
+        periodStart,
+        periodEnd,
+        statementDate: periodEnd,
+        openingBalanceCents: working.openingCents,
+        closingBalanceCents: working.closingCents,
+        ...emptyCardFields(),
       });
     }
   }
@@ -305,11 +349,12 @@ export function parseCapitalOne360Statement(
   const lines = text.split(/\r?\n/).map((line) => line.trim());
   const errors: RowError[] = [];
   const accounts: ParsedAccount[] = [];
+  const statements: ParsedStatement[] = [];
   let current: WorkingAccount | null = null;
 
   const flush = () => {
     if (!current) return;
-    accounts.push(finishAccount(fileName, current, errors));
+    accounts.push(finishAccount(fileName, current, period, errors, statements));
     current = null;
   };
 
@@ -438,6 +483,6 @@ export function parseCapitalOne360Statement(
 
   return {
     ok: true,
-    parsed: { feed: "csv:capitalone-bank", accounts, errors },
+    parsed: { feed: "csv:capitalone-bank", accounts, statements, errors },
   };
 }

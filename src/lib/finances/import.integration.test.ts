@@ -5,7 +5,7 @@ import { users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { importFinanceCsvFiles, type ImportFile } from "./import";
 import { updateAccount, updateTransaction } from "./mutations";
-import { listAccounts, listTransactions } from "./queries";
+import { listAccounts, listStatements, listTransactions } from "./queries";
 
 const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
@@ -492,5 +492,194 @@ describeDb("finance statement import user isolation", () => {
   it("does not let a second user read the first user's CD", async () => {
     expect(await listAccounts(intruderId)).toEqual([]);
     expect(await listTransactions(intruderId)).toEqual([]);
+    expect(await listStatements(intruderId)).toEqual([]);
+  });
+});
+
+function chaseCardStatement(rows: string[], newBalance = "$60.59"): ImportFile {
+  return {
+    name: "20260818-statements-9910-.pdf",
+    text: [
+      "Payment Due Date: 09/15/26",
+      `New Balance: ${newBalance}`,
+      "Minimum Payment Due: $35.00",
+      "www.chase.com/cardhelp",
+      "Previous Balance $0.00",
+      "Payment, Credits $0.00",
+      "Purchases +$60.59",
+      "Cash Advances $0.00",
+      "Balance Transfers $0.00",
+      "Fees Charged $0.00",
+      "Interest Charged $0.00",
+      "Opening/Closing Date 07/19/26 - 08/18/26",
+      "Credit Access Line $7,900",
+      "Available Credit $7,839",
+      "Total points available for",
+      "redemption 400",
+      "ACCOUNT ACTIVITY",
+      "Page 2 of 2 Statement Date: 08/18/26",
+      ...rows,
+      "Purchases 23.24%(v)(d) - 0 - - 0 -",
+    ].join("\n"),
+  };
+}
+
+const chaseOverlapStatement = chaseCardStatement([
+  "07/20 AMAZON MKTPL*BACKFILL Amzn.com/bill WA 50.00",
+  "08/10 AMAZON MKTPL*5H1YV8C82 Amzn.com/bill WA 10.59",
+]);
+
+describeDb("finance Chase card statement import", () => {
+  let userId: string;
+
+  beforeEach(async () => {
+    userId = await makeUser();
+  });
+
+  it("lands on the existing Chase CSV account and skips overlap", async () => {
+    await importFinanceCsvFiles({ userId, files: [chaseFile] });
+    const before = await listAccounts(userId);
+    expect(before).toHaveLength(1);
+
+    const result = await importFinanceCsvFiles({
+      userId,
+      files: [chaseOverlapStatement],
+    });
+
+    expect(result).toMatchObject({
+      created: 1,
+      skipped: 1,
+      accountsCreated: 0,
+      statementsCreated: 1,
+    });
+    expect(await listAccounts(userId)).toEqual([
+      expect.objectContaining({ id: before[0].id, externalKey: "9910" }),
+    ]);
+    const rows = await listTransactions(userId);
+    expect(rows).toHaveLength(3);
+    expect(rows.map((r) => r.description)).toEqual(
+      expect.arrayContaining([
+        "AMAZON MKTPL*5H1YV8C82",
+        "Payment Thank You-Mobile",
+        "AMAZON MKTPL*BACKFILL",
+      ]),
+    );
+    const snapshots = await listStatements(userId);
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0]).toEqual(
+      expect.objectContaining({
+        periodStart: "2026-07-19",
+        periodEnd: "2026-08-18",
+        closingBalanceCents: -6059,
+        creditLimitCents: 790000,
+        rewardsPoints: 400,
+      }),
+    );
+    expect(snapshots[0].rates[0]).toEqual(
+      expect.objectContaining({ balanceType: "Purchases", aprPercent: 23.24 }),
+    );
+  });
+
+  it("skips the CSV row when the statement landed first", async () => {
+    await importFinanceCsvFiles({ userId, files: [chaseOverlapStatement] });
+    const result = await importFinanceCsvFiles({ userId, files: [chaseFile] });
+    expect(result).toMatchObject({ created: 1, skipped: 1, accountsCreated: 0 });
+    expect(await listTransactions(userId)).toHaveLength(3);
+  });
+
+  it("creates no transactions or statements on re-import", async () => {
+    await importFinanceCsvFiles({ userId, files: [chaseOverlapStatement] });
+    const again = await importFinanceCsvFiles({
+      userId,
+      files: [chaseOverlapStatement],
+    });
+    expect(again).toMatchObject({
+      created: 0,
+      skipped: 2,
+      statementsCreated: 0,
+      statementsSkipped: 1,
+    });
+    expect(await listTransactions(userId)).toHaveLength(2);
+    expect(await listStatements(userId)).toHaveLength(1);
+  });
+
+  it("does not overwrite a category on a CSV row a later statement also contains", async () => {
+    await importFinanceCsvFiles({ userId, files: [chaseFile] });
+    const amazon = (await listTransactions(userId)).find((r) =>
+      r.description.includes("5H1YV8C82"),
+    );
+    if (!amazon) throw new Error("expected the CSV Amazon row");
+    await updateTransaction(userId, amazon.id, { category: "Household" });
+
+    await importFinanceCsvFiles({ userId, files: [chaseOverlapStatement] });
+    const after = (await listTransactions(userId)).find((r) => r.id === amazon.id);
+    expect(after?.category).toBe("Household");
+  });
+
+  it("rejects an unknown PDF without sending it through the 360 parser", async () => {
+    const result = await importFinanceCsvFiles({
+      userId,
+      files: [{ name: "taxes.pdf", text: "Form 1040\nDepartment of the Treasury\n" }],
+    });
+    expect(result.created).toBe(0);
+    expect(result.warnings.join(" ")).toMatch(/not a recognised statement/);
+    expect(result.warnings.join(" ")).toMatch(/Chase Prime Visa/);
+  });
+});
+
+describeDb("finance 360 statement snapshots", () => {
+  let userId: string;
+
+  beforeEach(async () => {
+    userId = await makeUser();
+  });
+
+  it("writes a snapshot on first import and skips it on the second", async () => {
+    const file = checkingStatement([
+      "Aug 12 Deposit from OLD TRANSFER Credit + $50.00 $50.00",
+      "Aug 31 Closing Balance $50.00",
+    ]);
+    const first = await importFinanceCsvFiles({ userId, files: [file] });
+    expect(first).toMatchObject({
+      created: 1,
+      statementsCreated: 1,
+      statementsSkipped: 0,
+    });
+    const again = await importFinanceCsvFiles({ userId, files: [file] });
+    expect(again).toMatchObject({
+      created: 0,
+      skipped: 1,
+      statementsCreated: 0,
+      statementsSkipped: 1,
+    });
+    expect(await listStatements(userId)).toEqual([
+      expect.objectContaining({
+        openingBalanceCents: 0,
+        closingBalanceCents: 5000,
+        paymentDueDate: null,
+        rates: [],
+      }),
+    ]);
+  });
+});
+
+describeDb("finance Chase statement user isolation", () => {
+  let ownerId: string;
+  let intruderId: string;
+
+  beforeEach(async () => {
+    ownerId = await makeUser();
+    intruderId = await makeUser();
+    await importFinanceCsvFiles({ userId: ownerId, files: [chaseOverlapStatement] });
+  });
+
+  it("does not let a second user read the first user's statements or rates", async () => {
+    expect(await listStatements(ownerId)).toHaveLength(1);
+    expect(await listStatements(intruderId)).toEqual([]);
+    expect(
+      await listStatements(intruderId, {
+        accountId: (await listAccounts(ownerId))[0]?.id,
+      }),
+    ).toEqual([]);
   });
 });

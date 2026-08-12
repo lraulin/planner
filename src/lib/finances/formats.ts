@@ -393,5 +393,5 @@ export function parseFinanceCsv(
     ...accountNaming(feed, externalKey, fileName),
   }));
 
-  return { ok: true, parsed: { feed, accounts, errors } };
+  return { ok: true, parsed: { feed, accounts, statements: [], errors } };
 }

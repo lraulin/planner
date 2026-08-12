@@ -9,14 +9,16 @@ type ImportOk = {
   created: number;
   skipped: number;
   accountsCreated: number;
+  statementsCreated: number;
+  statementsSkipped: number;
   warnings: string[];
 };
 
 type ImportFail = { ok: false; error: string };
 
 /**
- * Import bank/card CSV exports and Capital One 360 monthly statement PDFs. Format is
- * detected per file, so every file can go up in one selection.
+ * Import bank/card CSV exports, Chase Prime Visa monthly statements, and Capital One
+ * 360 monthly statement PDFs. Format is detected per file.
  *
  * Re-importing an overlapping file is the normal case — you download the last N days each
  * time, and statements overlap the bank CSV — so the result line leads with created and
@@ -82,17 +84,18 @@ export function FinanceImportPanel({ embedded = false }: { embedded?: boolean } 
 
       <div className="space-y-4 px-4 py-4 text-[0.875rem] leading-relaxed text-ink-muted">
         <p>
-          Import transaction CSVs or Capital One 360 monthly statement PDFs. Chase
-          credit card, Capital One card, and Capital One 360 Checking and Savings CSVs,
-          plus the combined 360 statements, are recognised automatically, so you can
-          select all of them at once. Accounts are created the first time they are seen
-          and matched by account number after that — rename them freely.
+          Import transaction CSVs or monthly statement PDFs. Chase credit card, Capital
+          One card, and Capital One 360 Checking and Savings CSVs, plus Chase Prime Visa
+          and Capital One 360 monthly statements, are recognised automatically, so you
+          can select all of them at once. Accounts are created the first time they are
+          seen and matched by account number after that — rename them freely.
         </p>
         <p>
           Re-importing a file that overlaps one you already loaded is expected and safe:
           transactions you already have are skipped, and any category or note you have
-          written is never overwritten. Statement rows that also appear in a bank CSV
-          land on the same account and are skipped the same way.
+          written is never overwritten. A Chase statement that overlaps the Chase CSV
+          lands on the same card and is skipped the same way. Each statement also stores
+          a snapshot (closing balance, due date, credit line) for later reconciliation.
         </p>
 
         <div>
@@ -107,9 +110,10 @@ export function FinanceImportPanel({ embedded = false }: { embedded?: boolean } 
             className="block w-full text-[0.8125rem] text-ink file:mr-3 file:rounded file:border file:border-rule file:bg-surface-raised file:px-3 file:py-1.5 file:text-[0.8125rem] file:font-medium file:text-ink"
           />
           <p className="mt-2 text-[0.8125rem] text-ink-faint">
-            Keep the bank&rsquo;s original filenames on CSVs. Chase does not put the
-            account number inside the file — it is only in the name. Statement PDFs
-            carry the account number inside, so their names are not load-bearing.
+            Keep the bank&rsquo;s original filenames on Chase files. Chase does not put
+            a stable account number inside the CSV, and the printed last four on a
+            statement PDF changes when the card is reissued — the <code>9910</code> in
+            the filename is the identity.
           </p>
         </div>
 
@@ -130,6 +134,8 @@ export function FinanceImportPanel({ embedded = false }: { embedded?: boolean } 
               {`Imported ${result.created}, skipped ${result.skipped} already stored.`}
               {result.accountsCreated > 0 &&
                 ` ${result.accountsCreated} new account${result.accountsCreated === 1 ? "" : "s"}.`}
+              {(result.statementsCreated > 0 || result.statementsSkipped > 0) &&
+                ` ${result.statementsCreated} statement snapshot${result.statementsCreated === 1 ? "" : "s"}, ${result.statementsSkipped} already stored.`}
             </p>
             {result.warnings.length > 0 && (
               <details className="mt-2">

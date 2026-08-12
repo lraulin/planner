@@ -72,9 +72,49 @@ export type ParsedAccount = {
 /** 1-based row numbers count the header as row 1, the way a spreadsheet does. */
 export type RowError = { row: number; message: string };
 
+export type ParsedStatementRate = {
+  balanceType: string;
+  /** 24.24, not basis points. */
+  aprPercent: number;
+  balanceSubjectCents: number | null;
+  /** Module sign. */
+  interestChargedCents: number | null;
+};
+
+/**
+ * One official monthly statement, before it has an account id.
+ *
+ * Ledger totals (`opening`, `closing`, activity) are in the module sign. Facts that are
+ * not ledger direction (min payment, credit line, YTD fees) are magnitudes as printed.
+ */
+export type ParsedStatement = {
+  externalKey: string;
+  periodStart: string;
+  periodEnd: string;
+  statementDate: string | null;
+  openingBalanceCents: number;
+  closingBalanceCents: number;
+  paymentDueDate: string | null;
+  minimumPaymentCents: number | null;
+  pastDueAmountCents: number | null;
+  creditLimitCents: number | null;
+  availableCreditCents: number | null;
+  paymentsCreditsCents: number | null;
+  purchasesCents: number | null;
+  cashAdvancesCents: number | null;
+  balanceTransfersCents: number | null;
+  feesChargedCents: number | null;
+  interestChargedCents: number | null;
+  ytdFeesCents: number | null;
+  ytdInterestCents: number | null;
+  rewardsPoints: number | null;
+  rates: ParsedStatementRate[];
+};
+
 export type ParsedFinanceCsv = {
   feed: FinanceFeed;
   accounts: ParsedAccount[];
+  statements: ParsedStatement[];
   errors: RowError[];
 };
 
@@ -82,6 +122,8 @@ export type ImportResult = {
   created: number;
   skipped: number;
   accountsCreated: number;
+  statementsCreated: number;
+  statementsSkipped: number;
   warnings: string[];
 };
 
@@ -119,4 +161,31 @@ export type TransactionFilter = {
   /** Inclusive `YYYY-MM-DD` bounds. */
   from?: string;
   to?: string;
+};
+
+/** One stored statement snapshot, for tests and a later UI. */
+export type StatementListRow = {
+  id: string;
+  accountId: string;
+  accountName: string;
+  periodStart: string;
+  periodEnd: string;
+  statementDate: string | null;
+  openingBalanceCents: number;
+  closingBalanceCents: number;
+  paymentDueDate: string | null;
+  minimumPaymentCents: number | null;
+  pastDueAmountCents: number | null;
+  creditLimitCents: number | null;
+  availableCreditCents: number | null;
+  paymentsCreditsCents: number | null;
+  purchasesCents: number | null;
+  cashAdvancesCents: number | null;
+  balanceTransfersCents: number | null;
+  feesChargedCents: number | null;
+  interestChargedCents: number | null;
+  ytdFeesCents: number | null;
+  ytdInterestCents: number | null;
+  rewardsPoints: number | null;
+  rates: ParsedStatementRate[];
 };

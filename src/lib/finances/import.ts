@@ -1,16 +1,32 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, gte, isNull, lte } from "drizzle-orm";
 import { db } from "@/db";
-import { financeAccounts, financeTransactions } from "@/db/schema";
+import {
+  financeAccounts,
+  financeStatementRates,
+  financeStatements,
+  financeTransactions,
+} from "@/db/schema";
 import { fromDateKey } from "@/lib/schedule/geometry";
+import {
+  looksLikeChaseCreditStatement,
+  parseChaseCreditStatement,
+} from "./chaseStatement";
 import { fingerprintAll } from "./fingerprint";
 import { parseFinanceCsv } from "./formats";
-import { centsToNumericString } from "./money";
+import { selectNewTransactions } from "./matchExisting";
+import { centsToNumericString, numericStringToCents } from "./money";
 import { extractPdfText, isPdfBytes } from "./pdf";
 import {
   looksLikeCapitalOne360Statement,
   parseCapitalOne360Statement,
 } from "./statement";
-import { FEED_LABELS, type ImportResult, type ParsedAccount } from "./types";
+import {
+  FEED_LABELS,
+  type ImportResult,
+  type ParsedAccount,
+  type ParsedFinanceCsv,
+  type ParsedStatement,
+} from "./types";
 
 /**
  * Writing parsed CSV or statement rows into the register.
@@ -118,7 +134,102 @@ async function markClosedIfNeeded(
 
 export type ImportFile = { name: string; text?: string; bytes?: Uint8Array };
 
-type ParsedFile = ReturnType<typeof parseFinanceCsv>;
+type ParsedFile = { ok: false; error: string } | { ok: true; parsed: ParsedFinanceCsv };
+
+function optionalCents(cents: number | null | undefined): string | null {
+  return cents === null || cents === undefined ? null : centsToNumericString(cents);
+}
+
+async function persistStatements(
+  tx: Executor,
+  userId: string,
+  accountId: string,
+  feed: string,
+  snapshots: readonly ParsedStatement[],
+): Promise<{ created: number; skipped: number }> {
+  let created = 0;
+  let skipped = 0;
+  for (const snapshot of snapshots) {
+    const [row] = await tx
+      .insert(financeStatements)
+      .values({
+        userId,
+        accountId,
+        periodStart: snapshot.periodStart,
+        periodEnd: snapshot.periodEnd,
+        statementDate: snapshot.statementDate,
+        openingBalance: centsToNumericString(snapshot.openingBalanceCents),
+        closingBalance: centsToNumericString(snapshot.closingBalanceCents),
+        paymentDueDate: snapshot.paymentDueDate,
+        minimumPayment: optionalCents(snapshot.minimumPaymentCents),
+        pastDueAmount: optionalCents(snapshot.pastDueAmountCents),
+        creditLimit: optionalCents(snapshot.creditLimitCents),
+        availableCredit: optionalCents(snapshot.availableCreditCents),
+        paymentsCredits: optionalCents(snapshot.paymentsCreditsCents),
+        purchases: optionalCents(snapshot.purchasesCents),
+        cashAdvances: optionalCents(snapshot.cashAdvancesCents),
+        balanceTransfers: optionalCents(snapshot.balanceTransfersCents),
+        feesCharged: optionalCents(snapshot.feesChargedCents),
+        interestCharged: optionalCents(snapshot.interestChargedCents),
+        ytdFees: optionalCents(snapshot.ytdFeesCents),
+        ytdInterest: optionalCents(snapshot.ytdInterestCents),
+        rewardsPoints: snapshot.rewardsPoints,
+        externalSource: feed,
+        externalId: `${snapshot.periodStart}|${snapshot.periodEnd}`,
+      })
+      .onConflictDoNothing()
+      .returning({ id: financeStatements.id });
+    if (!row) {
+      skipped += 1;
+      continue;
+    }
+    created += 1;
+    if (snapshot.rates.length === 0) continue;
+    await tx.insert(financeStatementRates).values(
+      snapshot.rates.map((rate) => ({
+        userId,
+        statementId: row.id,
+        balanceType: rate.balanceType,
+        aprPercent: rate.aprPercent.toFixed(3),
+        balanceSubject: optionalCents(rate.balanceSubjectCents),
+        interestCharged: optionalCents(rate.interestChargedCents),
+      })),
+    );
+  }
+  return { created, skipped };
+}
+
+async function existingOnAccount(
+  tx: Executor,
+  userId: string,
+  accountId: string,
+  incoming: readonly { transactionDate: string }[],
+): Promise<{ transactionDate: string; amountCents: number; description: string }[]> {
+  if (incoming.length === 0) return [];
+  const dates = incoming.map((row) => row.transactionDate);
+  const from = dates.reduce((min, d) => (d < min ? d : min));
+  const to = dates.reduce((max, d) => (d > max ? d : max));
+  const rows = await tx
+    .select({
+      transactionDate: financeTransactions.transactionDate,
+      amount: financeTransactions.amount,
+      description: financeTransactions.description,
+    })
+    .from(financeTransactions)
+    .where(
+      and(
+        eq(financeTransactions.userId, userId),
+        eq(financeTransactions.accountId, accountId),
+        gte(financeTransactions.transactionDate, from),
+        lte(financeTransactions.transactionDate, to),
+      ),
+    );
+  return rows.map((row) => ({
+    transactionDate: row.transactionDate,
+    amountCents: numericStringToCents(row.amount) ?? 0,
+    description: row.description,
+  }));
+}
 
 async function parseImportFile(file: ImportFile): Promise<ParsedFile> {
   let text = file.text ?? "";
@@ -140,15 +251,25 @@ async function parseImportFile(file: ImportFile): Promise<ParsedFile> {
   if (text.trim() === "") {
     return { ok: false, error: `"${file.name}" is empty.` };
   }
-  if (looksLikeCapitalOne360Statement(text) || /\.pdf$/i.test(file.name)) {
+  const isPdf = isPdfBytes(file.bytes ?? new Uint8Array()) || /\.pdf$/i.test(file.name);
+  if (looksLikeChaseCreditStatement(text)) {
+    return parseChaseCreditStatement(file.name, text);
+  }
+  if (looksLikeCapitalOne360Statement(text)) {
     return parseCapitalOne360Statement(file.name, text);
+  }
+  if (isPdf) {
+    return {
+      ok: false,
+      error: `"${file.name}" is not a recognised statement. Supported PDFs are Chase Prime Visa monthly statements and Capital One 360 monthly bank statements.`,
+    };
   }
   return parseFinanceCsv(file.name, text);
 }
 
 /**
- * Import one or more bank/card CSV exports or Capital One 360 statement PDFs. Each file's
- * format is detected on its own, so a single upload can mix them.
+ * Import one or more bank/card CSV exports, Chase Prime Visa monthly statements, or
+ * Capital One 360 statement PDFs. Each file's format is detected on its own.
  *
  * A file that cannot be identified becomes a warning and is skipped; the rest still import.
  * Individual unparseable rows become warnings too. Only a call with no usable file at all
@@ -165,6 +286,8 @@ export async function importFinanceCsvFiles({
   let created = 0;
   let skipped = 0;
   let accountsCreated = 0;
+  let statementsCreated = 0;
+  let statementsSkipped = 0;
 
   for (const file of files) {
     const parsed = await parseImportFile(file);
@@ -173,7 +296,7 @@ export async function importFinanceCsvFiles({
       continue;
     }
 
-    const { feed, accounts, errors } = parsed.parsed;
+    const { feed, accounts, statements, errors } = parsed.parsed;
     for (const error of errors) {
       warnings.push(
         error.row > 0
@@ -190,12 +313,33 @@ export async function importFinanceCsvFiles({
     }
 
     for (const account of accounts) {
+      const snapshots = statements.filter(
+        (snapshot) => snapshot.externalKey === account.externalKey,
+      );
       const outcome = await db.transaction(async (tx) => {
         const resolved = await resolveAccount(tx, userId, feed, account);
         await markClosedIfNeeded(tx, userId, resolved.id, account.closedOn);
-        const ids = fingerprintAll(resolved.id, account.transactions);
+        const snapshotCounts = await persistStatements(
+          tx,
+          userId,
+          resolved.id,
+          feed,
+          snapshots,
+        );
 
-        const values = account.transactions.map((transaction, i) => ({
+        const already = await existingOnAccount(
+          tx,
+          userId,
+          resolved.id,
+          account.transactions,
+        );
+        const { keep, skipCount } = selectNewTransactions(
+          already,
+          account.transactions,
+        );
+        const ids = fingerprintAll(resolved.id, keep);
+
+        const values = keep.map((transaction, i) => ({
           userId,
           accountId: resolved.id,
           transactionDate: transaction.transactionDate,
@@ -228,15 +372,26 @@ export async function importFinanceCsvFiles({
         return {
           accountCreated: resolved.created,
           inserted,
-          skipped: values.length - inserted,
+          skipped: skipCount + (values.length - inserted),
+          statementsCreated: snapshotCounts.created,
+          statementsSkipped: snapshotCounts.skipped,
         };
       });
 
       if (outcome.accountCreated) accountsCreated += 1;
       created += outcome.inserted;
       skipped += outcome.skipped;
+      statementsCreated += outcome.statementsCreated;
+      statementsSkipped += outcome.statementsSkipped;
     }
   }
 
-  return { created, skipped, accountsCreated, warnings };
+  return {
+    created,
+    skipped,
+    accountsCreated,
+    statementsCreated,
+    statementsSkipped,
+    warnings,
+  };
 }

@@ -6,12 +6,12 @@ import { isPdfBytes } from "@/lib/finances/pdf";
 import { safeErrorMessage } from "@/lib/security/safeError";
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
-const MAX_TOTAL_BYTES = 25 * 1024 * 1024;
-const MAX_FILES = 60;
+const MAX_TOTAL_BYTES = 40 * 1024 * 1024;
+const MAX_FILES = 80;
 
 /**
- * POST multipart form: one or more `files` fields — bank/card CSV exports or Capital One
- * 360 monthly statement PDFs.
+ * POST multipart form: one or more `files` fields — bank/card CSV exports, Chase Prime
+ * Visa monthly statements, or Capital One 360 monthly statement PDFs.
  *
  * Route handler rather than a Server Action so a multi-file upload is not forced through
  * the React Flight serializer (same pattern as the Achieve, RedNotebook and Tomboy imports).
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
       total += file.size;
       if (total > MAX_TOTAL_BYTES) {
         return NextResponse.json(
-          { ok: false, error: "Total upload is larger than 25 MB." },
+          { ok: false, error: "Total upload is larger than 40 MB." },
           { status: 400 },
         );
       }
@@ -89,6 +89,8 @@ export async function POST(request: Request) {
       created: result.created,
       skipped: result.skipped,
       accountsCreated: result.accountsCreated,
+      statementsCreated: result.statementsCreated,
+      statementsSkipped: result.statementsSkipped,
       warnings,
     });
   } catch (error) {
