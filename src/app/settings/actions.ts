@@ -6,6 +6,7 @@ import * as settings from "@/lib/settings/mutations";
 import { disconnectGoogle, setCalendarSyncEnabled } from "@/lib/google/mutations";
 import { refreshCalendarsFromGoogle } from "@/lib/google/sync";
 import { syncGoogleContacts } from "@/lib/google/contacts/sync";
+import { safeErrorMessage } from "@/lib/security/safeError";
 import { run as runAction, type ActionResult } from "../actionResult";
 
 /**
@@ -59,8 +60,11 @@ export async function refreshGoogleCalendarsAction(): Promise<ActionResult> {
   } catch (error) {
     return {
       ok: false,
-      error:
-        error instanceof Error ? error.message : "Could not reach Google Calendar.",
+      error: safeErrorMessage(
+        error,
+        "refreshGoogleCalendars",
+        "Could not reach Google Calendar.",
+      ),
     };
   }
 }
@@ -78,7 +82,11 @@ export async function disconnectGoogleAction(): Promise<ActionResult> {
   } catch (error) {
     return {
       ok: false,
-      error: error instanceof Error ? error.message : "Could not disconnect Google.",
+      error: safeErrorMessage(
+        error,
+        "disconnectGoogle",
+        "Could not disconnect Google.",
+      ),
     };
   }
 }
@@ -117,7 +125,11 @@ export async function syncGoogleContactsAction(): Promise<ActionResult> {
   } catch (error) {
     return {
       ok: false,
-      error: error instanceof Error ? error.message : "Could not sync Google Contacts.",
+      error: safeErrorMessage(
+        error,
+        "syncGoogleContacts",
+        "Could not sync Google Contacts.",
+      ),
     };
   }
 }

@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { getCurrentUserId } from "@/lib/auth";
 import { importTomboyFiles } from "@/lib/tomboy/import";
+import { safeErrorMessage } from "@/lib/security/safeError";
 
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 25 * 1024 * 1024;
@@ -71,7 +72,7 @@ export async function POST(request: Request) {
           code: unauthorized ? "unauthorized" : "internal",
           message: unauthorized
             ? "Sign in to import Tomboy notes."
-            : "Tomboy import failed.",
+            : safeErrorMessage(error, "tomboy.import", "Tomboy import failed."),
         },
       },
       { status: unauthorized ? 401 : 500 },

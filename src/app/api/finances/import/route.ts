@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { getCurrentUserId } from "@/lib/auth";
 import { importFinanceCsvFiles } from "@/lib/finances/import";
+import { safeErrorMessage } from "@/lib/security/safeError";
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 25 * 1024 * 1024;
@@ -83,7 +84,10 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message : "Import failed." },
+      {
+        ok: false,
+        error: safeErrorMessage(error, "finances.import", "Import failed."),
+      },
       { status: 500 },
     );
   }

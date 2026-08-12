@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUserId } from "@/lib/auth";
 import { exportAchieveXmlForUser } from "@/lib/achieve/exportLoad";
+import { safeErrorMessage } from "@/lib/security/safeError";
 
 /**
  * GET Achieve Full XML for the signed-in account as a downloadable file.
@@ -34,7 +35,7 @@ export async function GET() {
     return NextResponse.json(
       {
         ok: false,
-        error: error instanceof Error ? error.message : "Export failed.",
+        error: safeErrorMessage(error, "achieve.export", "Export failed."),
       },
       { status: 500 },
     );

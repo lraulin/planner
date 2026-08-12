@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { getCurrentUserId } from "@/lib/auth";
 import { importRedNotebookFiles } from "@/lib/rednotebook/import";
+import { safeErrorMessage } from "@/lib/security/safeError";
 
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 15 * 1024 * 1024;
@@ -84,7 +85,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         ok: false,
-        error: error instanceof Error ? error.message : "Import failed.",
+        error: safeErrorMessage(error, "rednotebook.import", "Import failed."),
       },
       { status: 500 },
     );

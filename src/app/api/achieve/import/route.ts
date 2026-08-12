@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { getCurrentUserId } from "@/lib/auth";
 import { importAchieveXml, type ImportMode } from "@/lib/achieve/import";
+import { safeErrorMessage } from "@/lib/security/safeError";
 
 const MAX_BYTES = 25 * 1024 * 1024;
 
@@ -71,7 +72,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         ok: false,
-        error: error instanceof Error ? error.message : "Import failed.",
+        error: safeErrorMessage(error, "achieve.import", "Import failed."),
       },
       { status: 500 },
     );

@@ -1,5 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { getCurrentUserId } from "@/lib/auth";
+import { safeErrorMessage } from "@/lib/security/safeError";
 
 /**
  * How every server action reports its outcome, and the wrappers that produce it.
@@ -28,9 +29,16 @@ export type DataActionResult<T> =
 /** A read. The payload is required, so callers do not have to test for it. */
 export type QueryResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
-/** Never leak an internal exception string to the client. */
+/**
+ * The message an action is allowed to hand back to the browser.
+ *
+ * Deliberate throws ("Transaction not found.") are the inline validation the drawers and
+ * grid render, so they pass through. Anything the database, the network or the filesystem
+ * threw is logged and replaced — see `@/lib/security/safeError` for how the two are told
+ * apart and why that distinction is drawn where it is.
+ */
 export function actionErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Something went wrong.";
+  return safeErrorMessage(error, "action");
 }
 
 export type RevalidateTarget = { path: string; type?: "layout" | "page" };
