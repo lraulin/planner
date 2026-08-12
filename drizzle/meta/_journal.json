@@ -239,6 +239,13 @@
       "when": 1786546381621,
       "tag": "0033_remarkable_hulk",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1786563886018,
+      "tag": "0034_naive_maximus",
+      "breakpoints": true
     }
   ]
 }

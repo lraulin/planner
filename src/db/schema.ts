@@ -2040,6 +2040,106 @@ export const financeTransactions = pgTable(
   ],
 );
 
+/**
+ * One official monthly statement for an account — the bookend a later reconcile compares
+ * the register against.
+ *
+ * Separate from `finance_transactions` because a statement is not a money movement. It is
+ * the bank's summary of a billing period (opening, closing, due date, credit line, APR).
+ * CSV imports have no statement; 360 PDFs fill opening/closing only; Chase card PDFs fill
+ * the rest.
+ *
+ * **Money that is a ledger total uses the module sign** (positive = money into the
+ * account). A card's printed New Balance of $239.34 is stored as `-239.34`, so
+ * `opening + sum(rows) = closing` is the same check for bank and card. Amounts that are
+ * facts rather than ledger direction — minimum payment, credit line, YTD fees — stay
+ * non-negative as printed.
+ *
+ * Import inserts or skips. There is no user-editable field, so a re-import of the same
+ * period is a no-op rather than a merge.
+ */
+export const financeStatements = pgTable(
+  "finance_statements",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => financeAccounts.id, { onDelete: "cascade" }),
+    periodStart: date("period_start", { mode: "string" }).notNull(),
+    periodEnd: date("period_end", { mode: "string" }).notNull(),
+    statementDate: date("statement_date", { mode: "string" }),
+    /** Module sign. */
+    openingBalance: numeric("opening_balance", { precision: 14, scale: 2 }).notNull(),
+    /** Module sign. Card New Balance is negative. */
+    closingBalance: numeric("closing_balance", { precision: 14, scale: 2 }).notNull(),
+    paymentDueDate: date("payment_due_date", { mode: "string" }),
+    minimumPayment: numeric("minimum_payment", { precision: 14, scale: 2 }),
+    pastDueAmount: numeric("past_due_amount", { precision: 14, scale: 2 }),
+    creditLimit: numeric("credit_limit", { precision: 14, scale: 2 }),
+    availableCredit: numeric("available_credit", { precision: 14, scale: 2 }),
+    /** Module sign. */
+    paymentsCredits: numeric("payments_credits", { precision: 14, scale: 2 }),
+    purchases: numeric("purchases", { precision: 14, scale: 2 }),
+    cashAdvances: numeric("cash_advances", { precision: 14, scale: 2 }),
+    balanceTransfers: numeric("balance_transfers", { precision: 14, scale: 2 }),
+    feesCharged: numeric("fees_charged", { precision: 14, scale: 2 }),
+    interestCharged: numeric("interest_charged", { precision: 14, scale: 2 }),
+    ytdFees: numeric("ytd_fees", { precision: 14, scale: 2 }),
+    ytdInterest: numeric("ytd_interest", { precision: 14, scale: 2 }),
+    rewardsPoints: integer("rewards_points"),
+    externalSource: text("external_source"),
+    externalId: text("external_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("finance_statements_period_uq").on(
+      table.userId,
+      table.accountId,
+      table.periodStart,
+      table.periodEnd,
+    ),
+    uniqueIndex("finance_statements_external_ref_uq")
+      .on(table.userId, table.externalSource, table.externalId)
+      .where(sql`${table.externalId} is not null`),
+    index("finance_statements_account_end_idx").on(
+      table.userId,
+      table.accountId,
+      table.periodEnd,
+    ),
+  ],
+);
+
+/**
+ * APR / interest row on a credit-card statement. A cycle can have more than one purchase
+ * rate ("Purchases prior to 07/09/2025" plus "Purchases"), so these are not columns.
+ */
+export const financeStatementRates = pgTable(
+  "finance_statement_rates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    statementId: uuid("statement_id")
+      .notNull()
+      .references(() => financeStatements.id, { onDelete: "cascade" }),
+    /** "Purchases", "Cash Advances", "Balance Transfers", or a dated variant. */
+    balanceType: text("balance_type").notNull(),
+    aprPercent: numeric("apr_percent", { precision: 6, scale: 3 }).notNull(),
+    balanceSubject: numeric("balance_subject", { precision: 14, scale: 2 }),
+    /** Module sign. Card interest is negative. */
+    interestCharged: numeric("interest_charged", { precision: 14, scale: 2 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("finance_statement_rates_statement_idx").on(table.userId, table.statementId),
+  ],
+);
+
 export type DailyItem = typeof dailyItems.$inferSelect;
 export type NewDailyItem = typeof dailyItems.$inferInsert;
 export type WorkoutSet = typeof workoutSets.$inferSelect;
@@ -2061,3 +2161,7 @@ export type NewFinanceAccount = typeof financeAccounts.$inferInsert;
 export type FinanceAccountKind = (typeof financeAccountKindEnum.enumValues)[number];
 export type FinanceTransaction = typeof financeTransactions.$inferSelect;
 export type NewFinanceTransaction = typeof financeTransactions.$inferInsert;
+export type FinanceStatement = typeof financeStatements.$inferSelect;
+export type NewFinanceStatement = typeof financeStatements.$inferInsert;
+export type FinanceStatementRate = typeof financeStatementRates.$inferSelect;
+export type NewFinanceStatementRate = typeof financeStatementRates.$inferInsert;
