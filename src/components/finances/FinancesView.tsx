@@ -85,6 +85,7 @@ export function FinancesView({
   const [accounts, setAccounts] = useState(initialAccounts);
   const [seenServerRows, setSeenServerRows] = useState(initialTransactions);
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
+  const [groupIds, setGroupIds] = useState<readonly string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<TransactionListRow | null>(null);
   const [importOpen, setImportOpen] = useState(false);
@@ -234,6 +235,7 @@ export function FinancesView({
         views={views}
         commandCapabilities={commandCapabilities}
         groupDimensions={FINANCE_GROUP_BY_VALUES}
+        groupIds={groupIds}
       />
 
       <AccountBalances accounts={accounts} />
@@ -269,6 +271,7 @@ export function FinancesView({
         columnControls={gridState.columnControls}
         collapsedGroups={gridState.collapsedGroups}
         onToggleGroup={gridState.toggleGroup}
+        onGroupIdsChange={setGroupIds}
         density={gridState.density}
         empty={
           <div className="mx-auto w-full max-w-2xl p-6">
