@@ -1,6 +1,6 @@
 # Chase card statements + statement snapshots — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-08-12)
 
 ## Scope
 

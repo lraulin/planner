@@ -580,13 +580,18 @@ flavor; optional palette thinning).
 
 YNAB-like, but simpler — and connected to goals over time.
 
-- **MVP:** ✅ Import CSVs; ✅ 360 statement PDF backfill; ✅ basic register and
-  balances; **envelopes** for known expenses and contingencies still outstanding.
+- **MVP:** ✅ Import CSVs; ✅ 360 statement PDF backfill; ✅ Chase Prime Visa
+  statement PDFs + statement snapshots; ✅ basic register and balances; **envelopes**
+  for known expenses and contingencies still outstanding.
   CSV import and the register shipped 2026-08-12 —
   `agent-os/specs/2026-08-12-1048-finances-csv-import-register/`. Capital One 360
   monthly statement PDFs shipped 2026-08-12 —
   `agent-os/specs/2026-08-12-1356-capitalone-360-statement-import/` — filling Jul 2023
   through the CSV window onto the same checking/savings accounts, plus the matured CD.
+  Chase Prime Visa monthly statements and a `finance_statements` snapshot store shipped
+  2026-08-12 — `agent-os/specs/2026-08-12-1540-chase-statement-import/` — backfilling
+  Dec 2023–Aug 2024 onto Chase `•••9910` without duplicating the CSV, and keeping
+  closing balances / due dates / APRs off the transaction table.
   Envelopes were deliberately deferred until there is real spending data to design them
   against; that is the next piece of this MVP.
 - **Next:** Envelopes; analyze past spending; light categorization (the register stores a

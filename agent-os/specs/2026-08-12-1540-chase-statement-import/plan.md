@@ -1,6 +1,6 @@
 # Chase card statements + statement snapshots
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-12)  
 Spec folder: `agent-os/specs/2026-08-12-1540-chase-statement-import/`
 
 ## Spec relationships
@@ -108,27 +108,52 @@ Dates on the ledger are `MM/DD`; year comes from the opening/closing period (Dec
 
 ## Acceptance criteria
 
-- [ ] All 31 Chase `*-statements-9910-.pdf` files import in one multi-file upload (alone
+- [x] All 31 Chase `*-statements-9910-.pdf` files import in one multi-file upload (alone
       or mixed with CSVs / 360 PDFs)
-- [ ] They land on the existing Chase `•••9910` account — account count for that feed/key
+- [x] They land on the existing Chase `•••9910` account — account count for that feed/key
       stays 1; no `4903` or `8570` account
-- [ ] Months already in the CSV are skipped as transactions; Dec 2023–early Aug 2024 (and
+- [x] Months already in the CSV are skipped as transactions; Dec 2023–early Aug 2024 (and
       any statement-only rows) are created
-- [ ] Re-importing the same PDFs creates 0 transactions and 0 new statements
-- [ ] CSV after statements (or statements after CSV) does not duplicate overlap
-- [ ] User category/notes on overlapping CSV rows survive
-- [ ] Each Chase file writes one `finance_statements` row with period, opening/closing
+- [x] Re-importing the same PDFs creates 0 transactions and 0 new statements
+- [x] CSV after statements (or statements after CSV) does not duplicate overlap
+- [x] User category/notes on overlapping CSV rows survive
+- [x] Each Chase file writes one `finance_statements` row with period, opening/closing
       (module sign), due date, min pay, credit line, available credit, activity totals,
       YTD fees/interest, rewards points, and APR rate rows
-- [ ] Re-importing the 37 360 PDFs creates statement snapshots for checking/savings/CD
+- [x] Re-importing the 37 360 PDFs creates statement snapshots for checking/savings/CD
       and 0 transactions
-- [ ] A statement whose opening + activity ≠ closing warns (file + account); the rest of
+- [x] A statement whose opening + activity ≠ closing warns (file + account); the rest of
       the batch still imports
-- [ ] Wrapped order numbers, page-break reprints, Shop-with-Points rows, LATE FEE /
+- [x] Wrapped order numbers, page-break reprints, Shop-with-Points rows, LATE FEE /
       interest, and the Dec–Jan year wrap parse correctly
-- [ ] Unknown PDFs fail that file with a supported-formats message
-- [ ] Cross-user isolation: a second user cannot read the first user's statements or rates
-- [ ] Register UI unchanged aside from import-panel copy and summary counts
+- [x] Unknown PDFs fail that file with a supported-formats message
+- [x] Cross-user isolation: a second user cannot read the first user's statements or rates
+- [x] Register UI unchanged aside from import-panel copy and summary counts
+
+## Verified as built
+
+- 31 real Chase PDFs against the existing CSV register: **created 495, skipped 662,
+  0 new accounts, 31 statement snapshots, 0 warnings.** Chase account count stayed 1
+  (`•••9910`). Transactions 722 → 1,217. Earliest row 2023-12-21. No `Order Number`
+  in descriptions. Overlap `AMAZON MKTPL*0W88L1N43` kept the CSV post date and
+  `Shopping` category.
+- Re-import of the 31 files: **created 0, skipped 1,157, statements skipped 31.**
+- 37 Capital One 360 PDFs: **created 0 transactions**, snapshots
+  checking 37 / savings 37 / CD 13 (CD closed Jul 2024).
+- Dec 2024 snapshot: closing −$1,345.90, late fee, interest, YTD $28.00 / $14.58,
+  rewards 3,585, purchase APR 24.24%. All 31 files reconciled at parse time
+  (including a `.10` amount with no leading zero).
+- Register still shows checking $471.45, savings $1,792.34, CD $0.00; Chase
+  `•••9910` $738.86. Settings → Import & export copy names Prime Visa and the
+  filename last-four.
+- `npm test` 2,443 passing with no database-skip warning; lint, typecheck clean;
+  `npm run smoke` renders all 26 routes.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- Statements UI / reconciliation screen (data is stored; nothing lists it yet).
+- Capital One **card** statement PDFs.
+- Hide closed accounts in the register picker.
 
 ## Changes from original plan
 
