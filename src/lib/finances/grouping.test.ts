@@ -2,17 +2,21 @@ import { describe, expect, it } from "vitest";
 import { groupTransactions, transactionDatePart } from "./grouping";
 import type { TransactionListRow } from "./types";
 
-function row(id: string, date: string, description = id): TransactionListRow {
+function row(
+  id: string,
+  date: string,
+  extras: Partial<TransactionListRow> = {},
+): TransactionListRow {
   return {
     id,
     accountId: "acct",
-    accountName: "Checking",
+    accountName: extras.accountName ?? "Checking",
     transactionDate: date,
     postedDate: null,
-    description,
-    amountCents: -100,
+    description: extras.description ?? id,
+    amountCents: extras.amountCents ?? -100,
     sourceCategory: "",
-    category: null,
+    category: extras.category ?? null,
     notes: "",
     balanceAfterCents: null,
   };
@@ -76,5 +80,26 @@ describe("groupTransactions", () => {
     );
     expect(year?.kind === "group" && year.count).toBe(3);
     expect(december?.kind === "group" && december.count).toBe(2);
+  });
+
+  it("groups by account alphabetically and category with empties last", () => {
+    const grouped = groupTransactions(
+      [
+        row("a", "2024-01-01", { accountName: "Savings", category: "Rent" }),
+        row("b", "2024-01-02", { accountName: "Checking", category: null }),
+        row("c", "2024-01-03", { accountName: "Checking", category: "Groceries" }),
+      ],
+      ["account", "category"],
+    );
+    const headers = grouped
+      .filter((entry) => entry.kind === "group")
+      .map((entry) => (entry.kind === "group" ? `${entry.depth}:${entry.label}` : ""));
+    expect(headers).toEqual([
+      "0:Checking",
+      "1:Groceries",
+      "1:(No Category)",
+      "0:Savings",
+      "1:Rent",
+    ]);
   });
 });

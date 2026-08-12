@@ -7,13 +7,16 @@ import type { GridRow } from "@/lib/tree/slice";
 import type { TransactionListRow } from "./types";
 
 /**
- * Group dimensions the register can turn into headers. Year and month come from the
- * transaction date (a calendar-day string) — the same calendar parts Notes uses, so a
- * missing month is a missing header rather than a silent hole in a flat list.
+ * Group dimensions the register offers in the shared Group by picker. Year and month
+ * come from the transaction date so a skipped statement is a missing header; account
+ * and category are the columns already on the grid (data-grid.md — a group dimension
+ * must also be a column).
  */
 export const FINANCE_GROUP_BY_VALUES = [
   "year",
   "month",
+  "account",
+  "category",
 ] as const satisfies readonly GridGroupBy[];
 
 export type FinanceGroupBy = (typeof FINANCE_GROUP_BY_VALUES)[number];
@@ -58,17 +61,55 @@ export function transactionDatePart(
   };
 }
 
-function partOf(row: TransactionListRow, dimension: FinanceGroupBy): DatePart | null {
-  return transactionDatePart(row.transactionDate, dimension);
+type GroupPart = { key: string; label: string; sort: string | number };
+
+const EMPTY_LABELS: Record<FinanceGroupBy, string> = {
+  year: "(No Year)",
+  month: "(No Month)",
+  account: "(No Account)",
+  category: "(No Category)",
+};
+
+function isCalendar(dimension: FinanceGroupBy): boolean {
+  return dimension === "year" || dimension === "month";
 }
 
-function compareParts(left: DatePart | null, right: DatePart | null): number {
+function partOf(row: TransactionListRow, dimension: FinanceGroupBy): GroupPart | null {
+  if (dimension === "year" || dimension === "month") {
+    const part = transactionDatePart(row.transactionDate, dimension);
+    return part && { key: part.key, label: part.label, sort: part.rank };
+  }
+  if (dimension === "account") {
+    const name = row.accountName.trim();
+    return name === "" ? null : { key: name, label: name, sort: name };
+  }
+  const name = row.category?.trim() ?? "";
+  return name === "" ? null : { key: name, label: name, sort: name };
+}
+
+function compareText(left: string, right: string): number {
+  const readable = left.localeCompare(right, undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+  return readable || left.localeCompare(right, undefined, { numeric: true });
+}
+
+function compareParts(
+  left: GroupPart | null,
+  right: GroupPart | null,
+  dimension: FinanceGroupBy,
+): number {
   if (left === null && right === null) return 0;
   if (left === null) return 1;
   if (right === null) return -1;
-  // Newest year / month first, so a missing December sits as a gap between January
-  // and November rather than buried at the bottom of a flat date sort.
-  return right.rank - left.rank;
+  if (typeof left.sort === "number" && typeof right.sort === "number") {
+    // Newest year / month first, so a missing December sits as a gap between January
+    // and November rather than buried at the bottom of a flat date sort.
+    return isCalendar(dimension) ? right.sort - left.sort : left.sort - right.sort;
+  }
+  const compared = compareText(String(left.sort), String(right.sort));
+  return isCalendar(dimension) ? -compared : compared;
 }
 
 function toGridRow(row: TransactionListRow): GridRow<TransactionListRow> {
@@ -76,10 +117,10 @@ function toGridRow(row: TransactionListRow): GridRow<TransactionListRow> {
 }
 
 /**
- * Nest register rows under year / month headers.
+ * Nest register rows under the chosen headers (year, month, account, category).
  *
- * Calendar groups run newest first. Empty buckets are omitted — that is the point:
- * a month that never imported does not get a header, so Nov → Jan is the tell.
+ * Calendar groups run newest first. Categorical groups run alphabetically, empty
+ * last. A month that never imported does not get a header, so Nov → Jan is the tell.
  */
 export function groupTransactions(
   rows: readonly TransactionListRow[],
@@ -94,6 +135,7 @@ export function groupTransactions(
       const compared = compareParts(
         partOf(left.row, dimension),
         partOf(right.row, dimension),
+        dimension,
       );
       if (compared !== 0) return compared;
     }
@@ -134,7 +176,7 @@ export function groupTransactions(
       out.push({
         kind: "group",
         id: `group:${path.join("|")}`,
-        label: part?.label ?? (dimension === "year" ? "(No Year)" : "(No Month)"),
+        label: part?.label ?? EMPTY_LABELS[dimension],
         count: 0,
         depth: level,
         collapsed: false,

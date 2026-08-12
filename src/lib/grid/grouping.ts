@@ -21,7 +21,7 @@ export type CalendarNoteGroupBy = "date" | "year" | "month" | "day";
 export type NoteGroupBy =
   "subject" | "contexts" | "flag" | CalendarNoteGroupBy | "linked";
 
-export type GridGroupBy = TreeGroupBy | NoteGroupBy;
+export type GridGroupBy = TreeGroupBy | NoteGroupBy | "account";
 
 export const TREE_GROUP_BY_VALUES: readonly TreeGroupBy[] = [
   "category",
@@ -47,9 +47,11 @@ export const NOTE_GROUP_BY_VALUES: readonly NoteGroupBy[] = [
 const GRID_GROUP_BY_VALUES: readonly GridGroupBy[] = [
   ...TREE_GROUP_BY_VALUES,
   ...NOTE_GROUP_BY_VALUES,
+  "account",
 ];
 
 export const GROUP_BY_LABELS: Record<GridGroupBy, string> = {
+  account: "Account",
   category: "Category",
   resultArea: "Result Area",
   goal: "Goal",

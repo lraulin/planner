@@ -26,9 +26,10 @@ describe("knownGroupBy", () => {
 
 describe("asGridGroupBy", () => {
   it("accepts tree and note dimensions and drops the rest", () => {
-    expect(asGridGroupBy(["category", "year", "not-a-dim"])).toEqual([
+    expect(asGridGroupBy(["category", "year", "account", "not-a-dim"])).toEqual([
       "category",
       "year",
+      "account",
     ]);
   });
 });
