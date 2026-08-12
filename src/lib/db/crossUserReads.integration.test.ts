@@ -35,6 +35,13 @@ import {
 } from "@/lib/contacts/queries";
 import { createResource } from "@/lib/resources/mutations";
 import { getResourceDetail, listResources } from "@/lib/resources/queries";
+import { importFinanceCsvFiles } from "@/lib/finances/import";
+import {
+  getTransaction,
+  listAccounts,
+  listTransactions,
+  transactionTotalCents,
+} from "@/lib/finances/queries";
 import { ensureWeeklyPlan, upsertPlanEntry } from "@/lib/planning/mutations";
 import {
   getWeeklyPlan,
@@ -113,6 +120,8 @@ type Owned = {
   timeChartId: string;
   contactId: string;
   resourceId: string;
+  financeAccountId: string;
+  financeTransactionId: string;
   planId: string;
   exerciseId: string;
   sessionId: string;
@@ -168,6 +177,20 @@ async function seedOwner(): Promise<Owned> {
 
   const resourceId = await createResource(userId, { shortName: "Owner resource" });
 
+  await importFinanceCsvFiles({
+    userId,
+    files: [
+      {
+        name: "Chase9910_Activity.csv",
+        text:
+          "Transaction Date,Post Date,Description,Category,Type,Amount,Memo\n" +
+          "08/10/2026,08/11/2026,OWNER PURCHASE,Shopping,Sale,-10.59,\n",
+      },
+    ],
+  });
+  const [financeAccount] = await listAccounts(userId);
+  const [financeTransaction] = await listTransactions(userId);
+
   const plan = await ensureWeeklyPlan(userId, { weekStart: WEEK_START });
   await upsertPlanEntry(userId, plan.id, goalId, { focus: true });
 
@@ -200,6 +223,8 @@ async function seedOwner(): Promise<Owned> {
     timeChartId: timeChart.id,
     contactId,
     resourceId,
+    financeAccountId: financeAccount.id,
+    financeTransactionId: financeTransaction.id,
     planId: plan.id,
     exerciseId,
     sessionId,
@@ -232,6 +257,8 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect((await listTimeCharts(owner.userId)).length).toBeGreaterThan(0);
     expect((await loadContacts(owner.userId)).length).toBeGreaterThan(0);
     expect((await listResources(owner.userId)).length).toBeGreaterThan(0);
+    expect((await listAccounts(owner.userId)).length).toBeGreaterThan(0);
+    expect((await listTransactions(owner.userId)).length).toBeGreaterThan(0);
     expect(await getWeeklyPlanById(owner.userId, owner.planId)).toBeTruthy();
     expect((await listExercises(owner.userId)).length).toBeGreaterThan(0);
     expect((await listSessions(owner.userId)).length).toBeGreaterThan(0);
@@ -289,6 +316,22 @@ describeDb("a second user reads none of the first user's rows", () => {
   it("resources", async () => {
     expect(await listResources(intruder)).toEqual([]);
     expect(await getResourceDetail(intruder, owner.resourceId)).toBeNull();
+  });
+
+  it("finance accounts and transactions", async () => {
+    expect(await listAccounts(intruder)).toEqual([]);
+    expect(await listTransactions(intruder)).toEqual([]);
+    expect(await getTransaction(intruder, owner.financeTransactionId)).toBeNull();
+    // The filtered read takes an account id the intruder can guess; it must refuse by user
+    // rather than trusting that the id belongs to the caller.
+    expect(
+      await listTransactions(intruder, { accountId: owner.financeAccountId }),
+    ).toEqual([]);
+    // A total is a read too — a dropped userId here leaks the balance without any row.
+    expect(await transactionTotalCents(intruder)).toBe(0);
+    expect(
+      await transactionTotalCents(intruder, { accountId: owner.financeAccountId }),
+    ).toBe(0);
   });
 
   it("weekly plans and their entries", async () => {
