@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useMemo, useState, useTransition } from "react";
 import type { GridRow } from "@/lib/tree/slice";
 import { formatUsd } from "@/lib/finances/money";
+import { FINANCE_GROUP_BY_VALUES, groupTransactions } from "@/lib/finances/grouping";
 import type { FinanceAccountRow, TransactionListRow } from "@/lib/finances/types";
 import {
   deleteTransactionAction,
@@ -38,6 +39,8 @@ function viewDefaults(): GridDefaults {
     order: [...FINANCE_COLUMN_IDS],
     // A register is read newest first; anything else is a deliberate choice the user makes.
     sorts: [{ columnId: "date", direction: "desc" }],
+    // Year then month so a skipped statement is a missing header, not a hole in a flat list.
+    groupBy: ["year", "month"],
   };
 }
 
@@ -105,8 +108,8 @@ export function FinancesView({
   const gridState = views.grid;
 
   const gridRows: GridRow<TransactionListRow>[] = useMemo(
-    () => rows.map((row) => ({ kind: "node", id: row.id, node: row, depth: 0 })),
-    [rows],
+    () => groupTransactions(rows, gridState.groupBy),
+    [rows, gridState.groupBy],
   );
   const distinctValues = useMemo(
     () =>
@@ -230,6 +233,7 @@ export function FinancesView({
         error={error}
         views={views}
         commandCapabilities={commandCapabilities}
+        groupDimensions={FINANCE_GROUP_BY_VALUES}
       />
 
       <AccountBalances accounts={accounts} />
