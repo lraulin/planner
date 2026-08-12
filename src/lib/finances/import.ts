@@ -175,7 +175,8 @@ async function persistStatements(
         ytdInterest: optionalCents(snapshot.ytdInterestCents),
         rewardsPoints: snapshot.rewardsPoints,
         externalSource: feed,
-        externalId: `${snapshot.periodStart}|${snapshot.periodEnd}`,
+        // Include the last-four: a 360 PDF has three accounts in the same period.
+        externalId: `${snapshot.externalKey}|${snapshot.periodStart}|${snapshot.periodEnd}`,
       })
       .onConflictDoNothing()
       .returning({ id: financeStatements.id });

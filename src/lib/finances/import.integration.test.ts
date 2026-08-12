@@ -634,6 +634,34 @@ describeDb("finance 360 statement snapshots", () => {
     userId = await makeUser();
   });
 
+  it("writes a snapshot per account on a combined 360 statement", async () => {
+    const file: ImportFile = {
+      name: "Statement_2024-07.pdf",
+      text: [
+        "Here's your bank statement.July 2024 STATEMENT PERIOD",
+        "Jul 1 - Jul 31, 2024",
+        "360 Checking - 111111112322",
+        "DATE DESCRIPTION CATEGORY AMOUNT BALANCE",
+        "Jul 1 Opening Balance $10.00",
+        "Jul 31 Monthly Interest Paid Credit + $0.10 $10.10",
+        "Jul 31 Closing Balance $10.10",
+        "360 Performance Savings - 111111112603",
+        "DATE DESCRIPTION CATEGORY AMOUNT BALANCE",
+        "Jul 1 Opening Balance $20.00",
+        "Jul 31 Closing Balance $20.00",
+        "If anything in your statement looks incorrect, please let us know immediately.",
+      ].join("\n"),
+    };
+    const result = await importFinanceCsvFiles({ userId, files: [file] });
+    expect(result.statementsCreated).toBe(2);
+    const snapshots = await listStatements(userId);
+    expect(snapshots).toHaveLength(2);
+    expect(snapshots.map((s) => s.accountName).sort()).toEqual([
+      "360 Checking •••2322",
+      "360 Performance Savings •••2603",
+    ]);
+  });
+
   it("writes a snapshot on first import and skips it on the second", async () => {
     const file = checkingStatement([
       "Aug 12 Deposit from OLD TRANSFER Credit + $50.00 $50.00",

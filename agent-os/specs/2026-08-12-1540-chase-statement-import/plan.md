@@ -92,7 +92,9 @@ Dates on the ledger are `MM/DD`; year comes from the opening/closing period (Dec
    37 360 PDFs fills snapshots and creates 0 transactions. Does not change 360 transaction
    parse.
 10. **Insert-or-skip statements.** Unique on `(userId, accountId, periodStart, periodEnd)`.
-    No user-editable statement fields this spec, so skip is enough. Do not update.
+    `externalId` is `lastFour|periodStart|periodEnd` so a combined 360 PDF's three
+    accounts in the same month do not collide. No user-editable statement fields this
+    spec, so skip is enough. Do not update.
 11. **PDF dispatch is fail-closed.** Chase vs 360 vs unknown. An unknown PDF names the
     file and lists the supported formats. Detection must not send a Chase file through
     the 360 parser.
@@ -133,9 +135,9 @@ Dates on the ledger are `MM/DD`; year comes from the opening/closing period (Dec
 Material refinements during implementation (requirements, design, scope). Omit pure
 code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                            | Why                                                                                                                                        |
+| --- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | Statement `externalId` is `lastFour\|periodStart\|periodEnd`, not just the period | A 360 PDF has checking, savings, and CD in the same month. Period-only identity made the unique index skip the second and third snapshots. |
 
 ## Task 1: Save Spec Documentation
 
