@@ -1,7 +1,11 @@
 # Finances MVP — CSV import + transaction register
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-12)  
 Spec folder: `agent-os/specs/2026-08-12-1048-finances-csv-import-register/`
+
+This document is the durable record of **what was built and why**. Further work on the
+Finances module — envelopes first — should open a new delta-spec rather than treating this
+file as a living control plane.
 
 ## Context
 
@@ -102,23 +106,29 @@ so it does not bite today. Mitigation is a manual row delete, which the register
 
 ## Acceptance criteria
 
-- [ ] All four CSV formats import in one multi-file upload, format auto-detected per file
-- [ ] Accounts auto-created and matched on re-import; renameable
-- [ ] Signs normalised so positive is money into the account, across all three formats
-- [ ] Quoted commas, all three date shapes, and blank lines survive parsing
-- [ ] Re-importing the same files creates 0 rows and skips all of them
-- [ ] Both identical SBARRO rows persist — one import, not a silent drop; no third on re-import
-- [ ] User edits to `category` / `notes` survive re-import
-- [ ] Register rides the shared DataGrid with sort, filter, search and saved views
-- [ ] Cross-user isolation: a second user cannot read, change or delete another's rows
+- [x] All four CSV formats import in one multi-file upload, format auto-detected per file
+- [x] Accounts auto-created and matched on re-import; renameable
+- [x] Signs normalised so positive is money into the account, across all three formats
+- [x] Quoted commas, all three date shapes, and blank lines survive parsing
+- [x] Re-importing the same files creates 0 rows and skips all of them
+- [x] Both identical SBARRO rows persist — one import, not a silent drop; no third on re-import
+- [x] User edits to `category` / `notes` survive re-import
+- [x] Register rides the shared DataGrid with sort, filter, search and saved views
+- [x] Cross-user isolation: a second user cannot read, change or delete another's rows
 
 ## Changes from original plan
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                       | Why                                                                                                                                                                                                                                                  |
+| --- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Register rides the shared `DataGrid` instead of a purpose-built table        | Shaping first recommended a custom table on the mistaken reading that `DataGrid` was typed to `OutlineNode`. It is `DataGrid<TCtx, TRow = OutlineNode>`, and `components/data-grid.md` requires reuse.                                               |
+| 2   | No server-side date window; the whole register loads and the grid narrows it | The window was planned as a scope picker needing a new settings scope kind. 2,033 rows load fine, and the grid's own date and account filters already persist through `grid:finances`. `listTransactions` still takes a window if it is ever needed. |
+| 3   | Chase's Memo goes to `notes` at creation, not appended to the description    | Folding it into the description would put it in the dedup fingerprint, so editing a memo at the bank and re-exporting would import the row a second time.                                                                                            |
+| 4   | Parsing groups rows by account key rather than assuming one account per file | The bank formats repeat an account number on every row; a combined export would otherwise pile two accounts into one.                                                                                                                                |
+| 5   | Added `formatUsd` in `finances/money.ts` rather than reusing `formatMoney`   | `formatMoney` serves the never-negative cost fields and renders a negative as `$-10.59`. A register is half negative rows, so the sign has to lead.                                                                                                  |
+| 6   | The catalog's create verb maps to "Import transactions…"                     | A transaction is not typed in — it arrives from the bank. `catalogCapabilities` is reused unchanged with import in the create slot.                                                                                                                  |
+| 7   | Also added `deleteAccount` / `updateAccount` and a transaction drawer        | Auto-created accounts need renaming and reclassifying to be usable, and "user edits survive re-import" needed somewhere to actually make an edit.                                                                                                    |
 
-## Tasks
+## Implementation tasks (historical)
 
 1. **Save spec documentation** — this folder.
 2. **Schema + migration** — `finance_accounts`, `finance_transactions`, account-kind enum;
@@ -133,9 +143,38 @@ so it does not bite today. Mitigation is a manual row delete, which the register
 7. **Import the real data** — verify counts and signs, then re-import and verify dedup.
 8. **Verify, freeze spec, update roadmap** — mark Financial planning partially delivered.
 
-> While this spec is **active**, material changes to requirements, design or scope go into
-> the sections above plus a row in **Changes from original plan**. Pure implementation
-> detail does not. Freeze when verified.
+All eight completed. Shipped 2026-08-12; roadmap § Financial planning marked partially
+delivered (CSV import + register done, envelopes outstanding).
+
+## Verified as built
+
+- All four real exports imported through the running app: **2,033 transactions, 4
+  auto-created accounts, zero warnings, zero row errors.**
+- Re-importing the same four files: **created 0, skipped 2,033.**
+- Both byte-identical SBARRO rows present after import and still exactly two after
+  re-import — the occurrence ordinal works in both directions.
+- A category set in the drawer survived re-importing its own file.
+- Signs cross-check between accounts: checking's `−$481.20` "CHASE CREDIT CRD EPAY" pairs
+  with the Chase card's `+$481.20` "Payment Thank You", and the paycheck transfer pairs
+  `+$693.36` savings against `−$693.36` checking.
+- Bank feeds reconcile against their own running-balance column exactly, which is the test
+  that proves Debit/Credit are the right way round.
+- `npm test` 2,377 passing with no database-skip warning; lint, typecheck and
+  `next build` clean; `npm run smoke` renders all 26 routes.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- **Envelopes / budgeting** — the rest of the roadmap's Financial-planning MVP.
+- Categorization rules, so a merchant categorises itself on import.
+- Transfer matching: the paired rows above are visibly two halves of one movement and
+  nothing yet knows that.
+- Splits, reconciliation, reporting, multi-currency.
+- Goal linkage (`nodes.id` with `on delete set null`, the way `metrics.ownerNodeId` does it).
+- Plaid or SimpleFIN as an additional `externalSource`. **Verify current pricing first** —
+  the assumption of a free personal tier is unconfirmed.
+- A server-side date window if the register outgrows a single load.
+- Account management UI: `updateAccount` and `deleteAccount` exist and are tested, but
+  nothing in the register calls them yet.
 
 ## Out of scope (this spec)
 

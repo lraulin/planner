@@ -1,6 +1,6 @@
 # Standards applied — Finances CSV import + register
 
-**Status: active**
+**Status: frozen / complete** (2026-08-12)
 
 - **Clean code** (`development/clean-code.md`): app → components → lib → db. Real logic in
   `src/lib/finances/**`; `src/app/finances/actions.ts` stays one line per action over

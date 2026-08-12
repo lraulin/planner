@@ -1,6 +1,7 @@
 # Shaping — Finances CSV import + register
 
-**Status: active**
+**Status: frozen / complete** (2026-08-12)  
+Authoritative as-built detail: `plan.md` (including **Changes from original plan**).
 
 ## The ask (refined)
 
