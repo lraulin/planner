@@ -7,6 +7,7 @@ import { ErrorBanner } from "@/components/tabs/tabChrome";
 import { buildChooserItems, defaultSettings } from "@/lib/chooser/views";
 import { formatPriority } from "@/lib/tree/format";
 import type { OutlineNode } from "@/lib/tree/types";
+import { isDayItemSettled } from "@/lib/day/priority";
 import type { DailyItemView, WeekPayload } from "@/lib/day/types";
 import { moveDailyItemToDayAction, planNodeForDayAction } from "@/app/day/actions";
 import type { ActionResult } from "@/app/actionResult";
@@ -208,7 +209,7 @@ export function WeekPlanView({
 
 function WeekItem({ item }: { item: DailyItemView }) {
   // Cancelled settles like completed (strikethrough); only the day list's X distinguishes it.
-  const settled = item.completedAt !== null || item.state === "cancelled";
+  const settled = isDayItemSettled(item);
   const forwarded = item.forwardedTo !== null;
 
   return (

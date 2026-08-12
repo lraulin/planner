@@ -32,6 +32,12 @@ describe("isDayItemSettled", () => {
     expect(isDayItemSettled({ state: "cancelled", completedAt: null })).toBe(true);
   });
 
+  it("treats completed state as settled even if completedAt was never stamped", () => {
+    // The day grid and week planner used to only check completedAt and cancelled, so a
+    // completed line missing the stamp would keep its full-weight typography.
+    expect(isDayItemSettled({ state: "completed", completedAt: null })).toBe(true);
+  });
+
   it("leaves open work unsettled", () => {
     expect(isDayItemSettled({ state: "in_progress", completedAt: null })).toBe(false);
   });

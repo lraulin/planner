@@ -33,7 +33,8 @@ export type ForwardCandidate = {
  *
  * `cancelled` is a deliberate decision not to do the thing (not the same as deleting the
  * row or the task), which forwarding would silently reverse. `completed` is belt-and-braces
- * alongside the `completedAt` check.
+ * alongside the `completedAt` check. Same pair as `isSettled` — listed for the SQL-style
+ * `.includes` below rather than calling that helper so the candidate type can stay thin.
  */
 const SETTLED: NodeState[] = ["cancelled", "completed"];
 

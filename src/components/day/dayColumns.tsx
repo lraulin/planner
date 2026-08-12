@@ -3,8 +3,9 @@
 import type { NodeState, PriorityLetter } from "@/db/schema";
 import { LetterRankCell } from "@/components/grid/LetterRankCell";
 import type { ColumnDef } from "@/components/grid/columns";
-import { STATE_LABELS, STATE_OPTIONS } from "@/lib/tree/hierarchy";
+import { isDayItemSettled } from "@/lib/day/priority";
 import type { DailyItemView } from "@/lib/day/types";
+import { STATE_LABELS, STATE_OPTIONS } from "@/lib/tree/hierarchy";
 
 /**
  * Columns for a day's task list.
@@ -87,9 +88,9 @@ function CheckCell({ item, ctx }: { item: DailyItemView; ctx: DayColumnCtx }) {
 
 /** Free-text title. Node-backed rows show the task's live name and are not edited here. */
 function TitleCell({ item, ctx }: { item: DailyItemView; ctx: DayColumnCtx }) {
-  // Settled lines (completed or cancelled) share strikethrough; state alone is not enough
-  // for completed, because a recurring task may already be `not_started` again.
-  const settled = item.completedAt !== null || item.state === "cancelled";
+  // Settled lines share strikethrough. State alone is not enough for completed: a recurring
+  // task may already be `not_started` again while this day line still has completedAt.
+  const settled = isDayItemSettled(item);
   const forwarded = item.forwardedTo !== null;
 
   const className = [
