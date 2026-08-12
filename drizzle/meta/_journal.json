@@ -232,6 +232,13 @@
       "when": 1786369363587,
       "tag": "0032_famous_black_bird",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1786546381621,
+      "tag": "0033_remarkable_hulk",
+      "breakpoints": true
     }
   ]
 }

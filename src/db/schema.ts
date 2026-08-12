@@ -1911,6 +1911,135 @@ export const resources = pgTable(
   ],
 );
 
+/**
+ * What kind of account a finance account is. The sign convention does not branch on this —
+ * positive is always money into the account — so this drives labelling and, later, whether
+ * a balance reads as an asset or a debt.
+ *
+ * Seeded with the full set up front rather than grown later: `ALTER TYPE ... ADD VALUE`
+ * fails outright on Neon's transaction-mode pooler, the same reason `contact_item_kind`
+ * carries values nothing renders yet.
+ */
+export const financeAccountKindEnum = pgEnum("finance_account_kind", [
+  "checking",
+  "savings",
+  "credit_card",
+  "cash",
+  "investment",
+  "loan",
+  "other",
+]);
+
+/**
+ * One account a transaction feed lands in — a bank account, a card, later whatever Plaid
+ * calls an item.
+ *
+ * **`externalSource` + `externalKey` are the identity the importer matches on**, not the
+ * name. `externalKey` is whatever the feed can supply stably: a card's last four from the
+ * `Card No.` column, a bank's `Account Number`, later a Plaid account id. `name` is yours to
+ * change and the importer never touches it after creating the row, so renaming an account
+ * cannot orphan its history.
+ *
+ * A feed is a string rather than an enum precisely because adding one must not be a
+ * migration — see the pooler note on `finance_account_kind`.
+ */
+export const financeAccounts = pgTable(
+  "finance_accounts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Display name. Seeded from the file on first import, then owned by the user. */
+    name: text("name").notNull(),
+    kind: financeAccountKindEnum("kind").notNull().default("other"),
+    /** Free text — "Chase", "Capital One". Display only; identity lives in the key. */
+    institution: text("institution").notNull().default(""),
+    /** The feed that created this account: `csv:chase-credit`, later `plaid`. */
+    externalSource: text("external_source").notNull(),
+    /** Stable per-feed account identifier — last four, account number, Plaid id. */
+    externalKey: text("external_key").notNull(),
+    /** Set when the account stops being live. Rows stay; the register can hide them. */
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("finance_accounts_external_uq").on(
+      table.userId,
+      table.externalSource,
+      table.externalKey,
+    ),
+    index("finance_accounts_user_name_idx").on(table.userId, table.name),
+  ],
+);
+
+/**
+ * One posted transaction.
+ *
+ * **Sign convention: positive is money into the account.** A card purchase is negative and a
+ * payment to that card positive; a deposit is positive and a withdrawal negative. Chase
+ * already exports this way; the Capital One formats are normalised onto it at parse time
+ * (`src/lib/finances/formats.ts`). One rule for every account kind means sums and balances
+ * never branch — a credit card is simply a liability whose balance runs negative.
+ *
+ * **`externalId` is a dedup fingerprint, not a bank-supplied id** — none of these CSV feeds
+ * supply one. It hashes account, both dates, description, signed amount, **and an
+ * occurrence ordinal**; see `src/lib/finances/fingerprint.ts`. The ordinal is what keeps two
+ * byte-identical rows in one file (the real Capital One export has a pair) from collapsing
+ * into one, while still letting a re-import of that same file recognise both. The partial
+ * unique index below makes the database the arbiter, so a double-submitted upload cannot
+ * duplicate rows even if the caller miscounts.
+ *
+ * The running `balanceAfter` and the bank's `sourceCategory` are deliberately **outside**
+ * the fingerprint: banks restate balances and recategorise merchants, and neither should
+ * make an already-imported transaction look new.
+ *
+ * **Import never updates an existing row** — it inserts or skips. That is what makes the
+ * user-owned `category` and `notes` durable across re-imports without a merge policy.
+ */
+export const financeTransactions = pgTable(
+  "finance_transactions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => financeAccounts.id, { onDelete: "cascade" }),
+    /** Calendar day the transaction happened (date-only string `YYYY-MM-DD`). */
+    transactionDate: date("transaction_date", { mode: "string" }).notNull(),
+    /** Calendar day it posted. Absent in some feeds; falls back to the transaction date. */
+    postedDate: date("posted_date", { mode: "string" }),
+    description: text("description").notNull(),
+    /** Signed; positive is money into the account. */
+    amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
+    /** What the bank called it. Never overwritten by a later import, never user-edited. */
+    sourceCategory: text("source_category").notNull().default(""),
+    /** Yours. Null means uncategorised — distinct from the bank's blank string. */
+    category: text("category"),
+    notes: text("notes").notNull().default(""),
+    /** Running balance where the feed supplies one (the 360 exports do; cards do not). */
+    balanceAfter: numeric("balance_after", { precision: 14, scale: 2 }),
+    externalSource: text("external_source"),
+    externalId: text("external_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("finance_transactions_account_date_idx").on(
+      table.userId,
+      table.accountId,
+      table.transactionDate,
+    ),
+    index("finance_transactions_user_date_idx").on(table.userId, table.transactionDate),
+    uniqueIndex("finance_transactions_external_ref_uq")
+      .on(table.userId, table.externalSource, table.externalId)
+      .where(sql`${table.externalId} is not null`),
+  ],
+);
+
 export type DailyItem = typeof dailyItems.$inferSelect;
 export type NewDailyItem = typeof dailyItems.$inferInsert;
 export type WorkoutSet = typeof workoutSets.$inferSelect;
@@ -1927,3 +2056,8 @@ export type ContactItemKind = (typeof contactItemKindEnum.enumValues)[number];
 export type GoogleContactSync = typeof googleContactSyncs.$inferSelect;
 export type Resource = typeof resources.$inferSelect;
 export type NewResource = typeof resources.$inferInsert;
+export type FinanceAccount = typeof financeAccounts.$inferSelect;
+export type NewFinanceAccount = typeof financeAccounts.$inferInsert;
+export type FinanceAccountKind = (typeof financeAccountKindEnum.enumValues)[number];
+export type FinanceTransaction = typeof financeTransactions.$inferSelect;
+export type NewFinanceTransaction = typeof financeTransactions.$inferInsert;
