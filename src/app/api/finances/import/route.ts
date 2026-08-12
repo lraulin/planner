@@ -1,22 +1,23 @@
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { getCurrentUserId } from "@/lib/auth";
-import { importFinanceCsvFiles } from "@/lib/finances/import";
+import { importFinanceCsvFiles, type ImportFile } from "@/lib/finances/import";
+import { isPdfBytes } from "@/lib/finances/pdf";
 import { safeErrorMessage } from "@/lib/security/safeError";
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 25 * 1024 * 1024;
-const MAX_FILES = 40;
+const MAX_FILES = 60;
 
 /**
- * POST multipart form: one or more `files` fields, each a bank or card CSV export.
+ * POST multipart form: one or more `files` fields — bank/card CSV exports or Capital One
+ * 360 monthly statement PDFs.
  *
  * Route handler rather than a Server Action so a multi-file upload is not forced through
  * the React Flight serializer (same pattern as the Achieve, RedNotebook and Tomboy imports).
  *
- * Each file's format is detected from its own header, so all four exports can go up in one
- * request. A file that cannot be read becomes a warning rather than failing the batch — the
- * point of a bulk import is that one bad file does not cost you the other three.
+ * Each file's format is detected on its own, so CSVs and statements can go up in one
+ * request. A file that cannot be read becomes a warning rather than failing the batch.
  */
 export async function POST(request: Request) {
   try {
@@ -26,7 +27,10 @@ export async function POST(request: Request) {
     const rawFiles = form.getAll("files").filter((v): v is File => v instanceof File);
     if (rawFiles.length === 0) {
       return NextResponse.json(
-        { ok: false, error: "Choose one or more transaction CSV files." },
+        {
+          ok: false,
+          error: "Choose one or more transaction CSV or statement PDF files.",
+        },
         { status: 400 },
       );
     }
@@ -38,7 +42,7 @@ export async function POST(request: Request) {
     }
 
     let total = 0;
-    const files: { name: string; text: string }[] = [];
+    const files: ImportFile[] = [];
     for (const file of rawFiles) {
       if (file.size === 0) continue;
       if (file.size > MAX_FILE_BYTES) {
@@ -54,7 +58,12 @@ export async function POST(request: Request) {
           { status: 400 },
         );
       }
-      files.push({ name: file.name, text: await file.text() });
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      if (isPdfBytes(bytes) || /\.pdf$/i.test(file.name)) {
+        files.push({ name: file.name, bytes });
+      } else {
+        files.push({ name: file.name, text: new TextDecoder("utf-8").decode(bytes) });
+      }
     }
 
     if (files.length === 0) {

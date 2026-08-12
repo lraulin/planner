@@ -580,13 +580,15 @@ flavor; optional palette thinning).
 
 YNAB-like, but simpler — and connected to goals over time.
 
-- **MVP:** ✅ Import CSVs; ✅ basic register and balances; **envelopes** for known
-  expenses and contingencies still outstanding.
+- **MVP:** ✅ Import CSVs; ✅ 360 statement PDF backfill; ✅ basic register and
+  balances; **envelopes** for known expenses and contingencies still outstanding.
   CSV import and the register shipped 2026-08-12 —
-  `agent-os/specs/2026-08-12-1048-finances-csv-import-register/`. Chase credit, Capital
-  One card and Capital One 360 bank exports, auto-created accounts, dedup on re-import,
-  and a register on the shared grid. Envelopes were deliberately deferred until there is
-  real spending data to design them against; that is the next piece of this MVP.
+  `agent-os/specs/2026-08-12-1048-finances-csv-import-register/`. Capital One 360
+  monthly statement PDFs shipped 2026-08-12 —
+  `agent-os/specs/2026-08-12-1356-capitalone-360-statement-import/` — filling Jul 2023
+  through the CSV window onto the same checking/savings accounts, plus the matured CD.
+  Envelopes were deliberately deferred until there is real spending data to design them
+  against; that is the next piece of this MVP.
 - **Next:** Envelopes; analyze past spending; light categorization (the register stores a
   user-editable category alongside the bank's, with no taxonomy or rules yet).
 - **Then:** AI assistance/advice on top of that data; **integration with Goals**

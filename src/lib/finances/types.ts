@@ -62,6 +62,11 @@ export type ParsedAccount = {
   institution: string;
   kind: FinanceAccountKind;
   transactions: ParsedTransaction[];
+  /**
+   * Calendar day the account closed, when this file shows a close-out (the 360 CD).
+   * Import sets `closedAt` only if it is currently null — it never un-closes.
+   */
+  closedOn?: string | null;
 };
 
 /** 1-based row numbers count the header as row 1, the way a spreadsheet does. */

@@ -367,3 +367,130 @@ describeDb("finance import user isolation", () => {
     expect(await listTransactions(intruderId)).toHaveLength(8);
   });
 });
+
+/** Invented 360 statement text — same last-four as the bank CSV fixture, so they meet. */
+function checkingStatement(rows: string[]): ImportFile {
+  return {
+    name: "Statement_2026-08.pdf",
+    text: [
+      "Here's your bank statement.August 2026 STATEMENT PERIOD",
+      "Aug 1 - Aug 31, 2026",
+      "360 Checking - 111111112322",
+      "DATE DESCRIPTION CATEGORY AMOUNT BALANCE",
+      "Aug 1 Opening Balance $0.00",
+      ...rows,
+      "If anything in your statement looks incorrect, please let us know immediately.",
+    ].join("\n"),
+  };
+}
+
+const cdStatement: ImportFile = {
+  name: "Statement_2024-07.pdf",
+  text: [
+    "Here's your bank statement.July 2024 STATEMENT PERIOD",
+    "Jul 1 - Jul 31, 2024",
+    "CD - 111111112957",
+    "DATE DESCRIPTION CATEGORY AMOUNT BALANCE",
+    "Jul 1 Opening Balance $100.00",
+    "Jul 25 Interest Paid Credit + $1.00 $101.00",
+    "Jul 25 CD Close-Out to 360 Performance Savings XXXXXXX2603 Debit - $101.00 $0.00",
+    "Jul 25 Closing Balance $0.00",
+    "If anything in your statement looks incorrect, please let us know immediately.",
+  ].join("\n"),
+};
+
+describeDb("finance statement import", () => {
+  let userId: string;
+
+  beforeEach(async () => {
+    userId = await makeUser();
+  });
+
+  it("lands statement rows on the account the bank CSV already created", async () => {
+    await importFinanceCsvFiles({ userId, files: [caponeBankFile] });
+    const before = await listAccounts(userId);
+    expect(before).toHaveLength(1);
+
+    const result = await importFinanceCsvFiles({
+      userId,
+      files: [
+        checkingStatement([
+          "Aug 5 Deposit from GA8248 TRUSTEDQA PAYROLL Credit + $2,311.21 $2,311.21",
+          "Aug 12 Deposit from OLD TRANSFER Credit + $50.00 $2,361.21",
+          "Aug 31 Closing Balance $2,361.21",
+        ]),
+      ],
+    });
+
+    // Payroll is the same identity as the CSV row; the Aug 12 transfer is new.
+    expect(result).toMatchObject({ created: 1, skipped: 1, accountsCreated: 0 });
+    expect(await listAccounts(userId)).toHaveLength(1);
+    expect(await listAccounts(userId)).toEqual([
+      expect.objectContaining({ id: before[0].id, externalKey: "2322" }),
+    ]);
+    expect(await listTransactions(userId)).toHaveLength(3);
+  });
+
+  it("skips every row when the same statement is imported again", async () => {
+    const file = checkingStatement([
+      "Aug 12 Deposit from OLD TRANSFER Credit + $50.00 $50.00",
+      "Aug 31 Closing Balance $50.00",
+    ]);
+    await importFinanceCsvFiles({ userId, files: [file] });
+    const again = await importFinanceCsvFiles({ userId, files: [file] });
+    expect(again).toMatchObject({ created: 0, skipped: 1, accountsCreated: 0 });
+    expect(await listTransactions(userId)).toHaveLength(1);
+  });
+
+  it("creates the matured CD as a closed investment account", async () => {
+    const result = await importFinanceCsvFiles({ userId, files: [cdStatement] });
+    expect(result).toMatchObject({ created: 2, skipped: 0, accountsCreated: 1 });
+
+    const accounts = await listAccounts(userId);
+    expect(accounts).toHaveLength(1);
+    expect(accounts[0]).toMatchObject({
+      name: "CD •••2957",
+      kind: "investment",
+      externalKey: "2957",
+    });
+    expect(accounts[0].closedAt).not.toBeNull();
+  });
+
+  it("does not overwrite a category on a CSV row that a later statement also contains", async () => {
+    await importFinanceCsvFiles({ userId, files: [caponeBankFile] });
+    const payroll = (await listTransactions(userId)).find((r) =>
+      r.description.includes("TRUSTEDQA"),
+    );
+    if (!payroll) throw new Error("expected the CSV payroll row");
+    await updateTransaction(userId, payroll.id, { category: "Pay" });
+
+    await importFinanceCsvFiles({
+      userId,
+      files: [
+        checkingStatement([
+          "Aug 5 Deposit from GA8248 TRUSTEDQA PAYROLL Credit + $2,311.21 $2,311.21",
+          "Aug 31 Closing Balance $2,311.21",
+        ]),
+      ],
+    });
+
+    const after = (await listTransactions(userId)).find((r) => r.id === payroll.id);
+    expect(after?.category).toBe("Pay");
+  });
+});
+
+describeDb("finance statement import user isolation", () => {
+  let ownerId: string;
+  let intruderId: string;
+
+  beforeEach(async () => {
+    ownerId = await makeUser();
+    intruderId = await makeUser();
+    await importFinanceCsvFiles({ userId: ownerId, files: [cdStatement] });
+  });
+
+  it("does not let a second user read the first user's CD", async () => {
+    expect(await listAccounts(intruderId)).toEqual([]);
+    expect(await listTransactions(intruderId)).toEqual([]);
+  });
+});

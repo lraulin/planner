@@ -14,12 +14,12 @@ type ImportOk = {
 type ImportFail = { ok: false; error: string };
 
 /**
- * Import bank and card CSV exports. Format is detected per file, so every export can go up
- * in one selection.
+ * Import bank/card CSV exports and Capital One 360 monthly statement PDFs. Format is
+ * detected per file, so every file can go up in one selection.
  *
  * Re-importing an overlapping file is the normal case — you download the last N days each
- * time — so the result line leads with created and skipped rather than treating skips as a
- * problem.
+ * time, and statements overlap the bank CSV — so the result line leads with created and
+ * skipped rather than treating skips as a problem.
  */
 export function FinanceImportPanel({ embedded = false }: { embedded?: boolean } = {}) {
   const headingId = useId();
@@ -81,32 +81,34 @@ export function FinanceImportPanel({ embedded = false }: { embedded?: boolean } 
 
       <div className="space-y-4 px-4 py-4 text-[0.875rem] leading-relaxed text-ink-muted">
         <p>
-          Import transaction CSVs downloaded from your bank. Chase credit card, Capital
-          One card, and Capital One 360 Checking and Savings are recognised
-          automatically, so you can select all of them at once. Accounts are created the
-          first time they are seen and matched by account number after that — rename
-          them freely.
+          Import transaction CSVs or Capital One 360 monthly statement PDFs. Chase
+          credit card, Capital One card, and Capital One 360 Checking and Savings CSVs,
+          plus the combined 360 statements, are recognised automatically, so you can
+          select all of them at once. Accounts are created the first time they are seen
+          and matched by account number after that — rename them freely.
         </p>
         <p>
           Re-importing a file that overlaps one you already loaded is expected and safe:
           transactions you already have are skipped, and any category or note you have
-          written is never overwritten.
+          written is never overwritten. Statement rows that also appear in a bank CSV
+          land on the same account and are skipped the same way.
         </p>
 
         <div>
-          <p className="mb-2 font-medium text-ink">Choose CSV files</p>
+          <p className="mb-2 font-medium text-ink">Choose CSV or PDF files</p>
           <input
             ref={fileRef}
             type="file"
-            accept=".csv,text/csv"
+            accept=".csv,.pdf,text/csv,application/pdf"
             multiple
             disabled={pending}
             onChange={(e) => runImport(e.target.files)}
             className="block w-full text-[0.8125rem] text-ink file:mr-3 file:rounded file:border file:border-rule file:bg-surface-raised file:px-3 file:py-1.5 file:text-[0.8125rem] file:font-medium file:text-ink"
           />
           <p className="mt-2 text-[0.8125rem] text-ink-faint">
-            Keep the bank&rsquo;s original filenames. Chase does not put the account
-            number inside the file — it is only in the name.
+            Keep the bank&rsquo;s original filenames on CSVs. Chase does not put the
+            account number inside the file — it is only in the name. Statement PDFs
+            carry the account number inside, so their names are not load-bearing.
           </p>
         </div>
 

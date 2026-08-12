@@ -1,19 +1,27 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { financeAccounts, financeTransactions } from "@/db/schema";
+import { fromDateKey } from "@/lib/schedule/geometry";
 import { fingerprintAll } from "./fingerprint";
 import { parseFinanceCsv } from "./formats";
 import { centsToNumericString } from "./money";
+import { extractPdfText, isPdfBytes } from "./pdf";
+import {
+  looksLikeCapitalOne360Statement,
+  parseCapitalOne360Statement,
+} from "./statement";
 import { FEED_LABELS, type ImportResult, type ParsedAccount } from "./types";
 
 /**
- * Writing parsed CSV rows into the register.
+ * Writing parsed CSV or statement rows into the register.
  *
  * Two rules shape everything here:
  *
- * 1. **Import inserts or skips. It never updates.** That is what makes the user-owned
- *    `category` and `notes` durable across re-imports without any field-level merge policy —
- *    an overlapping export simply cannot touch a row that already exists.
+ * 1. **Import inserts or skips transactions. It never updates them.** That is what makes
+ *    the user-owned `category` and `notes` durable across re-imports without any field-level
+ *    merge policy — an overlapping export simply cannot touch a row that already exists.
+ *    The one exception is `closedAt` on an account: a 360 CD close-out sets it when it is
+ *    still null, and never un-closes.
  * 2. **The database decides what is a duplicate**, via the partial unique index on
  *    `(user_id, external_source, external_id)`. `onConflictDoNothing` plus a count of what
  *    actually came back from `returning` means a double-submitted upload cannot duplicate
@@ -63,6 +71,7 @@ async function resolveAccount(
       institution: account.institution,
       externalSource,
       externalKey: account.externalKey,
+      closedAt: account.closedOn ? fromDateKey(account.closedOn) : null,
     })
     // Two uploads racing on a brand-new account: let the index win, then read the winner.
     .onConflictDoNothing()
@@ -84,11 +93,62 @@ async function resolveAccount(
   return { id: raced.id, created: false };
 }
 
-export type ImportFile = { name: string; text: string };
+/**
+ * Set `closedAt` from a statement close-out, but only if nobody has closed it already.
+ * Import still never un-closes, and it never touches name / kind / institution.
+ */
+async function markClosedIfNeeded(
+  tx: Executor,
+  userId: string,
+  accountId: string,
+  closedOn: string | null | undefined,
+): Promise<void> {
+  if (!closedOn) return;
+  await tx
+    .update(financeAccounts)
+    .set({ closedAt: fromDateKey(closedOn), updatedAt: new Date() })
+    .where(
+      and(
+        eq(financeAccounts.id, accountId),
+        eq(financeAccounts.userId, userId),
+        isNull(financeAccounts.closedAt),
+      ),
+    );
+}
+
+export type ImportFile = { name: string; text?: string; bytes?: Uint8Array };
+
+type ParsedFile = ReturnType<typeof parseFinanceCsv>;
+
+async function parseImportFile(file: ImportFile): Promise<ParsedFile> {
+  let text = file.text ?? "";
+  if (
+    file.bytes &&
+    file.bytes.length > 0 &&
+    (isPdfBytes(file.bytes) || /\.pdf$/i.test(file.name))
+  ) {
+    try {
+      text = await extractPdfText(file.bytes);
+    } catch {
+      return {
+        ok: false,
+        error: `"${file.name}" could not be read as a PDF.`,
+      };
+    }
+  }
+
+  if (text.trim() === "") {
+    return { ok: false, error: `"${file.name}" is empty.` };
+  }
+  if (looksLikeCapitalOne360Statement(text) || /\.pdf$/i.test(file.name)) {
+    return parseCapitalOne360Statement(file.name, text);
+  }
+  return parseFinanceCsv(file.name, text);
+}
 
 /**
- * Import one or more CSV exports. Each file's format is detected from its own header, so a
- * single upload can mix all four.
+ * Import one or more bank/card CSV exports or Capital One 360 statement PDFs. Each file's
+ * format is detected on its own, so a single upload can mix them.
  *
  * A file that cannot be identified becomes a warning and is skipped; the rest still import.
  * Individual unparseable rows become warnings too. Only a call with no usable file at all
@@ -107,7 +167,7 @@ export async function importFinanceCsvFiles({
   let accountsCreated = 0;
 
   for (const file of files) {
-    const parsed = parseFinanceCsv(file.name, file.text);
+    const parsed = await parseImportFile(file);
     if (!parsed.ok) {
       warnings.push(parsed.error);
       continue;
@@ -115,7 +175,11 @@ export async function importFinanceCsvFiles({
 
     const { feed, accounts, errors } = parsed.parsed;
     for (const error of errors) {
-      warnings.push(`${file.name} row ${error.row}: ${error.message}`);
+      warnings.push(
+        error.row > 0
+          ? `${file.name} row ${error.row}: ${error.message}`
+          : error.message,
+      );
     }
 
     if (accounts.length === 0) {
@@ -128,6 +192,7 @@ export async function importFinanceCsvFiles({
     for (const account of accounts) {
       const outcome = await db.transaction(async (tx) => {
         const resolved = await resolveAccount(tx, userId, feed, account);
+        await markClosedIfNeeded(tx, userId, resolved.id, account.closedOn);
         const ids = fingerprintAll(resolved.id, account.transactions);
 
         const values = account.transactions.map((transaction, i) => ({
