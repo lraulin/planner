@@ -19,6 +19,8 @@ components:
 development:
   clean-code:
     description: How code should read here — the app→components→lib→db dependency direction (lib never imports app, components never touch the db, actions.ts stays thin, every mutation takes userId), naming for the concept, small single-purpose lib modules, one shared implementation per concern (DataGrid, ModalShell, Drawer, run()), explicit over clever, no speculative generality, DRY only for business rules, and reviewing agent-written diffs
+  security:
+    description: Why every mutation takes userId and proves ownership before writing, why the proxy is not the auth gate, why session/dev/agent identities stay separate, what an error is allowed to say, the CSP nonce rules (no nonce in style-src, unsafe-eval only in dev), why HSTS is not ours to set, and when in-memory rate limiting stops being enough
   testing:
     description: What to test and what not to — pure logic and DB mutations yes (always with a cross-user case), React components no; tests as a tripwire against silent breakage rather than a coverage target
   commits:
