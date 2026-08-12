@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useRef, useState, useTransition } from "react";
+import { readJsonResponse } from "@/lib/http/readJson";
 
 type ImportData = {
   created: number;
@@ -58,7 +59,7 @@ export function TomboyImportPanel({ embedded = false }: { embedded?: boolean } =
           method: "POST",
           body: form,
         });
-        const envelope = (await response.json()) as ImportEnvelope;
+        const envelope = await readJsonResponse<ImportEnvelope>(response);
         if (!envelope.ok) {
           setError(envelope.error.message);
           return;

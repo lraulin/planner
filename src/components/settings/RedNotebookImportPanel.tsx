@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useRef, useState, useTransition } from "react";
+import { readJsonResponse } from "@/lib/http/readJson";
 
 type ImportOk = {
   ok: true;
@@ -41,7 +42,7 @@ export function RedNotebookImportPanel({
           method: "POST",
           body: form,
         });
-        const body = (await res.json()) as ImportOk | ImportFail;
+        const body = await readJsonResponse<ImportOk | ImportFail>(res);
         if (!body.ok) {
           setError(body.error);
           return;

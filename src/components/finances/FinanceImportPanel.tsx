@@ -2,6 +2,7 @@
 
 import { useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { readJsonResponse } from "@/lib/http/readJson";
 
 type ImportOk = {
   ok: true;
@@ -45,7 +46,7 @@ export function FinanceImportPanel({ embedded = false }: { embedded?: boolean } 
           method: "POST",
           body: form,
         });
-        const body = (await res.json()) as ImportOk | ImportFail;
+        const body = await readJsonResponse<ImportOk | ImportFail>(res);
         if (!body.ok) {
           setError(body.error);
           return;

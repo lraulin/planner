@@ -27,13 +27,20 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  // Achieve Full XML dumps are often multi-MB (schema + years of data). Import passes the
-  // file body through a Server Action; the default 1 MB cap rejects those before our own
-  // 25 MB guard in importAchieveXmlAction can run.
+  // Import routes accept up to 25 MB (Achieve Full XML, a folder of 360 statements).
+  // Two Next.js caps sit in front of those guards and must be at least as large, or
+  // the request never reaches our JSON error:
+  //
+  // - serverActions.bodySizeLimit (default 1 MB) — leftover Server Action imports.
+  // - proxyClientMaxBodySize (default 10 MB) — `proxy.ts` clones every body so the
+  //   route can still read it. Above the cap Next truncates; `formData()` then throws
+  //   and the client sees `Unexpected token 'R', "Request En"...` from a 413 page.
+  //   30 MB is a little above 25 MB so the application guard fires first.
   experimental: {
     serverActions: {
       bodySizeLimit: "25mb",
     },
+    proxyClientMaxBodySize: "30mb",
   },
   headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
