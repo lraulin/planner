@@ -10,6 +10,7 @@ import { ErrorBanner } from "@/components/tabs/tabChrome";
 import type { DayAssignment } from "@/lib/day/priority";
 import { sortDayItems } from "@/lib/day/priority";
 import type { DailyItemView, DayPayload } from "@/lib/day/types";
+import { isSettled } from "@/lib/tree/completionCascade";
 import type { OutlineNode } from "@/lib/tree/types";
 import {
   createDailyItemAction,
@@ -115,7 +116,7 @@ export function DayView({
 
   const onSetState = useCallback(
     (itemId: string, state: NodeState) => {
-      const settling = state === "completed" || state === "cancelled";
+      const settling = isSettled(state);
       patch(itemId, {
         state,
         completedAt: settling ? new Date() : null,

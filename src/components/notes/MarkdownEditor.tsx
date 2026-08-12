@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { formatBindings, matchBindings } from "@/lib/commands/bindings";
+import { MARKDOWN_BOLD, MARKDOWN_ITALIC } from "@/lib/commands/chords";
 import {
   continueListOnEnter,
   indentOnTab,
@@ -8,6 +10,10 @@ import {
   type EditResult,
 } from "@/lib/notes/editing";
 import { MarkdownPreview } from "./MarkdownPreview";
+
+const BOLD_CHORD = formatBindings(MARKDOWN_BOLD) ?? "⌘B";
+const ITALIC_CHORD = formatBindings(MARKDOWN_ITALIC) ?? "⌘I";
+const INDENT_HINT = formatBindings([{ key: "Tab" }]) ?? "Tab";
 
 /**
  * A markdown textarea with an Edit / Preview toggle.
@@ -86,17 +92,14 @@ export function MarkdownEditor({
         return;
       }
 
-      if ((event.metaKey || event.ctrlKey) && !event.altKey) {
-        const marker =
-          event.key === "b" || event.key === "B"
-            ? "**"
-            : event.key === "i" || event.key === "I"
-              ? "_"
-              : null;
-        if (marker) {
-          event.preventDefault();
-          applyEdit(toggleWrap(target.value, selection, marker));
-        }
+      if (matchBindings(event, MARKDOWN_BOLD)) {
+        event.preventDefault();
+        applyEdit(toggleWrap(target.value, selection, "**"));
+        return;
+      }
+      if (matchBindings(event, MARKDOWN_ITALIC)) {
+        event.preventDefault();
+        applyEdit(toggleWrap(target.value, selection, "_"));
       }
     },
     [applyEdit],
@@ -131,7 +134,7 @@ export function MarkdownEditor({
 
         {mode === "edit" && (
           <span className="hidden text-[0.6875rem] text-ink-faint sm:inline">
-            ⌘B bold · ⌘I italic · Tab indent
+            {BOLD_CHORD} bold · {ITALIC_CHORD} italic · {INDENT_HINT} indent
           </span>
         )}
 

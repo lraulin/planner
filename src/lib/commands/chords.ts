@@ -139,3 +139,7 @@ export const OPEN_PALETTE: KeyBinding[] = [{ key: "k", meta: true }];
  * ask the same binding.
  */
 export const QUICK_CAPTURE: KeyBinding[] = [{ key: "c" }];
+
+/** `⌘B` / `⌘I` — markdown wrap toggles in the note editor. */
+export const MARKDOWN_BOLD: KeyBinding[] = [{ key: "b", meta: true }];
+export const MARKDOWN_ITALIC: KeyBinding[] = [{ key: "i", meta: true }];

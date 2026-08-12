@@ -3,6 +3,7 @@ import { nodes } from "@/db/schema";
 import type { ExternalRef, PriorityLetter } from "@/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { saveNodeDetail } from "@/lib/detail/mutations";
+import { isSettled } from "@/lib/tree/completionCascade";
 import { createNode, createNodeOnce } from "@/lib/tree/mutations";
 import type { CapturedItem } from "./parse";
 
@@ -45,7 +46,7 @@ export async function ensureInbox(userId: string): Promise<string> {
     .limit(1);
 
   if (existing) {
-    if (existing.state === "completed" || existing.state === "cancelled") {
+    if (isSettled(existing.state)) {
       await db
         .update(nodes)
         .set({ state: "in_progress", completedAt: null, updatedAt: new Date() })

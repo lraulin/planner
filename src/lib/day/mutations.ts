@@ -10,6 +10,7 @@ import {
 import { ensureInbox } from "@/lib/capture/mutations";
 import { assertRankedLetterPriorities } from "@/lib/priority/letterRank";
 import { fromDateKey, localDateKey } from "@/lib/schedule/geometry";
+import { isSettled } from "@/lib/tree/completionCascade";
 import {
   applyStateTransition,
   createNode,
@@ -168,7 +169,7 @@ export async function setDailyItemState(
     // Completed *and* cancelled settle the day's record. Cancel is not a soft open state —
     // it is the deliberate "not doing this" mark, and it must stamp `completedAt` so the
     // line stays crossed off and does not forward or re-enter the open-day unique index.
-    const settling = state === "completed" || state === "cancelled";
+    const settling = isSettled(state);
 
     // Re-opening a settled row puts it back into the "one open day per task" index. If
     // the task has since been planned somewhere else, say so plainly rather than letting a

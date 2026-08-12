@@ -14,6 +14,8 @@ import {
   INSERT_AFTER,
   INSERT_BEFORE,
   INSERT_CHILD,
+  MARKDOWN_BOLD,
+  MARKDOWN_ITALIC,
   MOVE_DOWN,
   MOVE_UP,
   OPEN_PALETTE,
@@ -112,6 +114,8 @@ describe("the shared grid chords", () => {
     expect(formatBindings(COMMIT_FORM)).toBe("⌘⏎");
     expect(formatBindings(OPEN_PALETTE)).toBe("⌘K");
     expect(formatBindings(QUICK_CAPTURE)).toBe("C");
+    expect(formatBindings(MARKDOWN_BOLD)).toBe("⌘B");
+    expect(formatBindings(MARKDOWN_ITALIC)).toBe("⌘I");
   });
 
   it("keeps form commit and insert-after on the same primary chord", () => {

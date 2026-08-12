@@ -1,5 +1,6 @@
 import type { NodeState } from "@/db/schema";
 import { toDateKey } from "@/lib/schedule/geometry";
+import { isSettled } from "./completionCascade";
 
 /**
  * One concept for "not on my plate right now", replacing two that used to disagree.
@@ -85,7 +86,7 @@ export function effectiveState(
   today: string | null,
 ): NodeState | null {
   if (state === null) return null;
-  if (state === "completed" || state === "cancelled") return state;
+  if (isSettled(state)) return state;
   if (shelfHolds(shelf, today)) return "postponed";
   return state === "postponed" ? "not_started" : state;
 }

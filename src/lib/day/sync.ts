@@ -40,6 +40,7 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { dailyItems, nodes } from "@/db/schema";
 import { localDateKey, fromDateKey, toDateKey } from "@/lib/schedule/geometry";
+import { isSettled } from "@/lib/tree/completionCascade";
 import { laterShelf, ownShelf, shelfHolds, type Shelf } from "@/lib/tree/shelving";
 import { between } from "@/lib/tree/sortKey";
 
@@ -135,21 +136,16 @@ export async function syncDayLineToTargetStart(
     .limit(1);
 
   // A finished task does not belong on a list of things to do, whatever date it carries.
-  let wanted: string | null =
-    task.state === "completed" || task.state === "cancelled"
-      ? null
-      : task.targetStartDate
-        ? toDateKey(task.targetStartDate)
-        : null;
+  const settled = isSettled(task.state);
+  let wanted: string | null = settled
+    ? null
+    : task.targetStartDate
+      ? toDateKey(task.targetStartDate)
+      : null;
 
   // Past plan date: keep the work on today's page without rewriting target start (Behind
   // Schedule). Future plans stay on their day; today is unchanged.
-  if (
-    wanted &&
-    wanted < today &&
-    task.state !== "completed" &&
-    task.state !== "cancelled"
-  ) {
+  if (wanted && wanted < today && !settled) {
     wanted = today;
   }
 

@@ -98,6 +98,8 @@ export function isDayItemSettled(item: {
   state?: string;
   completedAt?: Date | null;
 }): boolean {
+  // Day lines can stamp completedAt without a node state, so this is wider than
+  // `isSettled` — a crossed-off line with no linked task still sorts as done.
   return (
     item.completedAt != null || item.state === "completed" || item.state === "cancelled"
   );

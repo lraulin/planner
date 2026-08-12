@@ -1,5 +1,6 @@
 import type { NodeState, PriorityLetter } from "@/db/schema";
 import { daysBetweenKeys, toDateKey } from "@/lib/schedule/geometry";
+import { isSettled } from "./completionCascade";
 import { effectiveState, type Shelf } from "./shelving";
 import type { OutlineNode } from "./types";
 
@@ -88,7 +89,7 @@ export function scheduleStatus(input: ScheduleStatusInput): ScheduleStatus {
     priorityLetter = null,
   } = input;
 
-  if (state === "completed" || state === "cancelled") return "completed";
+  if (isSettled(state)) return "completed";
 
   // Every band below reads the *effective* state, not the stored one. A shelf that ran out
   // is not swept, so `state` stays `postponed` long after the row came back — and reading
