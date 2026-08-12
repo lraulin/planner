@@ -24,6 +24,7 @@ import {
   loadSchedule,
 } from "./queries";
 import { fromDateKey } from "./geometry";
+import { scheduleRange, weekRange } from "./range";
 
 /**
  * Integration tests against the local Postgres (`npm run db:up`), following the harness in
@@ -403,7 +404,7 @@ describeDb("loadSchedule", () => {
     await createTimeChart(userId, "B chart");
     await createTimeChart(userId, "A chart");
     const payload = await loadSchedule(userId, {
-      weekStart: fromDateKey("2026-03-02"),
+      range: weekRange(fromDateKey("2026-03-02")),
     });
     // listTimeCharts orders by name, so "A chart" leads.
     expect(payload.charts[0].name).toBe("A chart");
@@ -416,7 +417,7 @@ describeDb("loadSchedule", () => {
     const mine = await createTimeChart(userId, "Mine");
 
     const payload = await loadSchedule(userId, {
-      weekStart: fromDateKey("2026-03-02"),
+      range: weekRange(fromDateKey("2026-03-02")),
       timeChartId: foreign.id,
     });
     expect(payload.selectedChartId).toBe(mine.id);
@@ -431,7 +432,7 @@ describeDb("loadSchedule", () => {
       durationMinutes: 6 * 60,
     });
     const payload = await loadSchedule(userId, {
-      weekStart: fromDateKey("2026-03-02"),
+      range: weekRange(fromDateKey("2026-03-02")),
     });
     expect(payload.backgroundEvents).toHaveLength(7);
   });
@@ -444,7 +445,7 @@ describeDb("loadSchedule", () => {
       recurrenceFrequency: "weekly",
     });
     const payload = await loadSchedule(userId, {
-      weekStart: fromDateKey("2026-03-01"), // Sunday
+      range: weekRange(fromDateKey("2026-03-01")), // Sunday
     });
     expect(payload.appointments).toHaveLength(1);
     expect(payload.occurrences).toHaveLength(1);
@@ -458,9 +459,42 @@ describeDb("loadSchedule", () => {
       ...hourAt("2026-06-10"),
     });
     const payload = await loadSchedule(userId, {
-      weekStart: fromDateKey("2026-03-01"),
+      range: weekRange(fromDateKey("2026-03-01")),
     });
     expect(payload.occurrences).toEqual([]);
+  });
+
+  it("covers a twenty-day range, not just the first week of it", async () => {
+    // The regression this guards: `loadSchedule` used to hardcode `weekStart + 7`, so a
+    // wider range would have drawn thirteen empty columns.
+    await createAppointment(userId, { subject: "Day 18", ...hourAt("2026-03-19") });
+    await createAppointment(userId, { subject: "Day 21", ...hourAt("2026-03-22") });
+
+    const payload = await loadSchedule(userId, {
+      range: scheduleRange(fromDateKey("2026-03-02"), {
+        dayCount: 20,
+        anchorMode: "rolling",
+        workWeek: false,
+      }),
+    });
+    expect(payload.occurrences.map((o) => o.subject)).toEqual(["Day 18"]);
+    expect(payload.days).toHaveLength(20);
+  });
+
+  it("skips the weekend in Work Week Mode instead of narrowing the range", async () => {
+    // 2026-03-07 is a Saturday; five *visible* days from Monday the 2nd reach Friday the
+    // 6th, and the weekend is not drawn at all.
+    await createAppointment(userId, { subject: "Friday", ...hourAt("2026-03-06") });
+    await createAppointment(userId, { subject: "Saturday", ...hourAt("2026-03-07") });
+
+    const payload = await loadSchedule(userId, {
+      range: scheduleRange(fromDateKey("2026-03-02"), {
+        dayCount: 5,
+        anchorMode: "rolling",
+        workWeek: true,
+      }),
+    });
+    expect(payload.occurrences.map((o) => o.subject)).toEqual(["Friday"]);
   });
 
   it("never returns another user's appointments", async () => {
@@ -470,7 +504,7 @@ describeDb("loadSchedule", () => {
       ...hourAt("2026-03-02"),
     });
     const payload = await loadSchedule(userId, {
-      weekStart: fromDateKey("2026-03-01"),
+      range: weekRange(fromDateKey("2026-03-01")),
     });
     expect(payload.appointments).toEqual([]);
     expect(payload.occurrences).toEqual([]);

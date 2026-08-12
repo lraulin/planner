@@ -22,6 +22,13 @@ import {
   nextCheckState,
 } from "@/lib/schedule/checkState";
 
+/** Exclusive end of a single day, for the compact layout's `visibleRange`. */
+function nextDay(day: Date): Date {
+  const next = new Date(day);
+  next.setDate(next.getDate() + 1);
+  return next;
+}
+
 type BackgroundEvent = {
   id: string;
   title: string;
@@ -33,8 +40,13 @@ type BackgroundEvent = {
 };
 
 type Props = {
-  weekStart: Date;
-  /** Set to render a single day instead of the week — the compact layout. */
+  /** The visible day columns, from `lib/schedule/range.ts`. */
+  days: Date[];
+  /** Local midnight of the first visible day. */
+  rangeStart: Date;
+  /** Exclusive end — past the hidden weekend when Work Week Mode trails one. */
+  rangeEnd: Date;
+  /** Set to render a single day instead of the range — the compact layout. */
   singleDay?: Date;
   backgroundEvents: BackgroundEvent[];
   occurrences: ScheduleOccurrence[];
@@ -62,7 +74,9 @@ type Props = {
 };
 
 export function WeekCalendar({
-  weekStart,
+  days,
+  rangeStart,
+  rangeEnd,
   singleDay,
   backgroundEvents,
   occurrences,
@@ -186,15 +200,29 @@ export function WeekCalendar({
       }}
     >
       {/*
-       * `singleDay` switches to a one-day column below `md`. Seven days × 24 hours at 390px
-       * is 55px per day — not a calendar, a texture. The key carries the view so a change of
-       * breakpoint remounts rather than leaving FullCalendar on the old one.
+       * One custom view with an explicit `visibleRange`, rather than `timeGridWeek` and
+       * `timeGridDay`.
+       *
+       * FullCalendar can size a range itself (`dayCount`), but the server has already
+       * decided which days it loaded, and a grid that computes its own columns will
+       * eventually draw one the payload does not cover. Handing it the range makes that
+       * impossible. See `lib/schedule/range.ts`.
+       *
+       * `singleDay` still switches to a one-day column below `md`: seven days × 24 hours at
+       * 390px is 55px per day — not a calendar, a texture — and twenty is worse. The key
+       * carries the range so a change of width or breakpoint remounts rather than leaving
+       * FullCalendar on the old one.
        */}
       <FullCalendar
-        key={`${singleDay ? "day" : "week"}:${(singleDay ?? weekStart).toISOString()}:${slotDuration}:${weekends}`}
+        key={`${singleDay ? `day:${singleDay.toISOString()}` : `range:${rangeStart.toISOString()}:${days.length}`}:${slotDuration}:${weekends}`}
         plugins={[timeGridPlugin, dayGridPlugin, interactionPlugin]}
-        initialView={singleDay ? "timeGridDay" : "timeGridWeek"}
-        initialDate={singleDay ?? weekStart}
+        initialView="plannerRange"
+        views={{ plannerRange: { type: "timeGrid" } }}
+        visibleRange={
+          singleDay
+            ? { start: singleDay, end: nextDay(singleDay) }
+            : { start: rangeStart, end: rangeEnd }
+        }
         headerToolbar={false}
         height="100%"
         allDaySlot
@@ -212,7 +240,14 @@ export function WeekCalendar({
         scrollTime="07:00:00"
         weekends={weekends}
         firstDay={0}
-        dayHeaderFormat={{ weekday: "long", month: "short", day: "numeric" }}
+        // Past a week the long weekday no longer fits the column, and twenty columns of
+        // "Wednesday" would wrap before they would inform. The compact layout keeps the long
+        // form — one column across the whole phone has room for it.
+        dayHeaderFormat={
+          !singleDay && days.length > 7
+            ? { weekday: "short", day: "numeric" }
+            : { weekday: "long", month: "short", day: "numeric" }
+        }
         events={events}
         eventContent={(arg) => {
           if (arg.event.display === "background") {

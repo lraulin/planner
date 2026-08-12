@@ -2,6 +2,7 @@ import { getCurrentUserId } from "@/lib/auth";
 import { loadDay } from "@/lib/day/queries";
 import { loadSchedule } from "@/lib/schedule/queries";
 import { fromDateKey, localDateKey, toDateKey } from "@/lib/schedule/geometry";
+import { weekRange } from "@/lib/schedule/range";
 import { AppShell } from "@/components/shell/AppShell";
 import { DayView } from "@/components/day/DayView";
 
@@ -24,7 +25,7 @@ export default async function DayPage({
   // it client-side rather than adding a second query path for one day.
   const [payload, schedule] = await Promise.all([
     loadDay(userId, day, today),
-    loadSchedule(userId, { weekStart: fromDateKey(day) }),
+    loadSchedule(userId, { range: weekRange(fromDateKey(day)) }),
   ]);
 
   const appointments = schedule.occurrences

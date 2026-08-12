@@ -7,6 +7,7 @@ import type { SchedulePayload } from "@/lib/schedule/queries";
 import type { Occurrence } from "@/lib/schedule/recurrence";
 import type { WeeklyPlanPatch } from "@/lib/planning/mutations";
 import { fromDateKey } from "@/lib/schedule/geometry";
+import { weekRange } from "@/lib/schedule/range";
 import { asyncHandler } from "@/lib/eventHandler";
 import {
   createTimeChartAction,
@@ -68,7 +69,8 @@ export function FixedTimeStep({
   onScheduleChange,
   onError,
 }: Props) {
-  const weekStart = fromDateKey(weekKey);
+  // The wizard is always about one whole week, whatever width the calendar tab is on.
+  const week = weekRange(fromDateKey(weekKey));
   const hydrated = hydrate(schedule);
   const [occurrences, setOccurrences] = useState(hydrated.occurrences);
   const [masters, setMasters] = useState(hydrated.masters);
@@ -206,7 +208,9 @@ export function FixedTimeStep({
 
       <div className="min-h-0 flex-1">
         <WeekCalendar
-          weekStart={weekStart}
+          days={week.days}
+          rangeStart={week.start}
+          rangeEnd={week.end}
           backgroundEvents={backgroundEvents}
           occurrences={occurrences}
           onSelectRange={handleCreateRange}

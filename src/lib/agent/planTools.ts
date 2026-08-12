@@ -261,7 +261,9 @@ export async function loadWeeklyPlanTool(
       .map((n) => nodeSummary(n, paths)),
     previousRewrites: payload.previousRewrites,
     schedule: {
-      weekStart: payload.schedule.weekStart,
+      // The wizard always loads a week, so the range's start *is* the week start. The
+      // contract keeps the week name because that is what this tool is about.
+      weekStart: payload.schedule.rangeStart,
       appointmentCount: payload.schedule.occurrences.length,
       occurrences: payload.schedule.occurrences.map((o) => ({
         id: o.id,

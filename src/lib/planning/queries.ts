@@ -11,6 +11,7 @@ import {
 } from "@/db/schema";
 import { localDateKey, startOfWeek } from "@/lib/schedule/geometry";
 import { loadSchedule, type SchedulePayload } from "@/lib/schedule/queries";
+import { weekRange } from "@/lib/schedule/range";
 import { loadOutline } from "@/lib/tree/queries";
 import type { OutlineNode } from "@/lib/tree/types";
 import { listResources } from "@/lib/resources/queries";
@@ -214,8 +215,7 @@ export async function loadWeeklyPlanPayload(
     plan ? listPlanEntries(userId, plan.id) : Promise.resolve([]),
     loadOutline(userId),
     loadSchedule(userId, {
-      weekStart,
-      weekStartsOn,
+      range: weekRange(weekStart, weekStartsOn),
       timeChartId: plan?.timeChartId ?? null,
     }),
     loadResultAreaReviews(userId),

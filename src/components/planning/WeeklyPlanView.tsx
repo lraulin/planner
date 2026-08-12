@@ -124,7 +124,7 @@ export function WeeklyPlanView({ payload, weekKey, step }: Props) {
 
   const goBack = useCallback(() => {
     if (stepIndex <= 0) {
-      router.push(`/schedule?week=${weekKey}`);
+      router.push(`/schedule?start=${weekKey}`);
       return;
     }
     goToStep(activeSteps[stepIndex - 1]);
@@ -211,11 +211,11 @@ export function WeeklyPlanView({ payload, weekKey, step }: Props) {
       setError(result.error);
       return;
     }
-    router.push(`/schedule?week=${weekKey}`);
+    router.push(`/schedule?start=${weekKey}`);
   }, [plan, router, weekKey, setError]);
 
   const handleSaveAndClose = useCallback(() => {
-    router.push(`/schedule?week=${weekKey}`);
+    router.push(`/schedule?start=${weekKey}`);
   }, [router, weekKey]);
 
   const handleFocus = useCallback(

@@ -11,6 +11,9 @@ describe("parseScheduleView", () => {
     const settings = {
       slotMinutes: 6,
       workWeek: true,
+      dayCount: 20,
+      anchorMode: "aligned",
+      viewMode: "agenda",
       railShowCompleted: true,
       railGroupByArea: false,
       railShowTasks: true,
@@ -54,6 +57,33 @@ describe("parseScheduleView", () => {
     expect(parseScheduleView({ slotMinutes: 7 }).slotMinutes).toBe(30);
     expect(parseScheduleView({ slotMinutes: "30" }).slotMinutes).toBe(30);
     expect(parseScheduleView({ slotMinutes: 5 }).slotMinutes).toBe(5);
+  });
+
+  /**
+   * Every blob written before day counts existed carries none of these three keys, and the
+   * calendar those blobs describe is a seven-day one — so the fallback has to be the new
+   * default rather than "whatever this blob was doing", which is nothing.
+   */
+  it("gives a pre-day-count blob the new defaults", () => {
+    const parsed = parseScheduleView({ slotMinutes: 15, workWeek: true });
+    expect(parsed.dayCount).toBe(7);
+    expect(parsed.anchorMode).toBe("rolling");
+    expect(parsed.viewMode).toBe("calendar");
+  });
+
+  it("refuses a day count that is not one of Achieve's", () => {
+    // Google Calendar's 4-day view is the tempting one to store; it is not on the list.
+    expect(parseScheduleView({ dayCount: 4 }).dayCount).toBe(7);
+    expect(parseScheduleView({ dayCount: "20" }).dayCount).toBe(7);
+    expect(parseScheduleView({ dayCount: 20 }).dayCount).toBe(20);
+    expect(parseScheduleView({ dayCount: 1 }).dayCount).toBe(1);
+  });
+
+  it("refuses an unknown anchor or view mode", () => {
+    expect(parseScheduleView({ anchorMode: "today" }).anchorMode).toBe("rolling");
+    expect(parseScheduleView({ anchorMode: "aligned" }).anchorMode).toBe("aligned");
+    expect(parseScheduleView({ viewMode: "list" }).viewMode).toBe("calendar");
+    expect(parseScheduleView({ viewMode: "agenda" }).viewMode).toBe("agenda");
   });
 
   it("keeps each field independent of the other being junk", () => {

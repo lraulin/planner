@@ -221,7 +221,7 @@ export function DayView({
       <div className="flex min-h-0 flex-1">
         <AppointmentsPane
           appointments={appointments}
-          weekKey={initial.day}
+          dayKey={initial.day}
           className={paneClass("appointments")}
         />
 

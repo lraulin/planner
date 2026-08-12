@@ -39,7 +39,7 @@ export const MENU_SECTIONS: Record<CommandMenu, readonly string[]> = {
   // listed here rather than left to first-appearance order so the Day's Organize menu reads the same
   // way the Outline's does — moves, then ranking, then state.
   organize: ["Move", "Rank", "State", "Expand", "Priority", "Zoom"],
-  view: ["Saved views", "Layout", "Panels"],
+  view: ["Saved views", "Days", "Layout", "Panels"],
   tools: [],
 };
 
@@ -59,6 +59,9 @@ export const MENU_SECTIONS: Record<CommandMenu, readonly string[]> = {
  */
 export const NESTED_SECTIONS: ReadonlySet<string> = new Set([
   "Insert row",
+  // The Weekly Schedule's One / Three / Five / Seven / Ten / Twenty Days — a width picker,
+  // exactly the "the name is the useful thing" shape this set is for.
+  "Days",
   "Convert to",
   "Rank",
   "State",

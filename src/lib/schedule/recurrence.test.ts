@@ -5,6 +5,7 @@ import {
   type RecurrenceInput,
 } from "./recurrence";
 import { fromDateKey, startOfWeek, toDateKey } from "./geometry";
+import { scheduleRange, weekRange } from "./range";
 
 function master(
   partial: Partial<RecurrenceInput> & Pick<RecurrenceInput, "startAt" | "endAt">,
@@ -272,7 +273,7 @@ describe("expandRecurrence — bounds", () => {
 
 describe("expandTimeChartAreas", () => {
   it("places multi-day areas on each selected weekday", () => {
-    const weekStart = fromDateKey("2026-07-26"); // Sunday
+    const week = weekRange(fromDateKey("2026-07-26")); // Sunday
     const events = expandTimeChartAreas(
       [
         {
@@ -296,9 +297,40 @@ describe("expandTimeChartAreas", () => {
           labelEnabled: true,
         },
       ],
-      weekStart,
+      week.days,
     );
     expect(events.filter((e) => e.areaId === "sleep")).toHaveLength(7);
     expect(events.filter((e) => e.areaId === "workout")).toHaveLength(5);
+  });
+
+  it("covers whatever days it is given, not seven", () => {
+    // A three-day view draws three background blocks, and Work Week Mode draws none on the
+    // weekend it is hiding — both fall out of taking the days rather than a week start.
+    const areas = [
+      {
+        id: "sleep",
+        name: "Sleep",
+        daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+        startMinute: 0,
+        durationMinutes: 6 * 60,
+        backColor: "#000080",
+        foreColor: "#ffffff",
+        labelEnabled: true,
+      },
+    ];
+    const options = { anchorMode: "rolling", workWeek: false } as const;
+    const three = scheduleRange(fromDateKey("2026-07-26"), { ...options, dayCount: 3 });
+    expect(expandTimeChartAreas(areas, three.days)).toHaveLength(3);
+
+    const twenty = scheduleRange(fromDateKey("2026-07-26"), {
+      ...options,
+      dayCount: 20,
+      workWeek: true,
+    });
+    const events = expandTimeChartAreas(areas, twenty.days);
+    expect(events).toHaveLength(20);
+    expect(events.every((e) => e.start.getDay() !== 0 && e.start.getDay() !== 6)).toBe(
+      true,
+    );
   });
 });

@@ -12,6 +12,7 @@ import type { NodeDetailPatch } from "@/lib/detail/types";
 import { getWeeklyPlan } from "@/lib/planning/queries";
 import { loadSchedule } from "@/lib/schedule/queries";
 import { startOfWeek, toDateKey } from "@/lib/schedule/geometry";
+import { weekRange } from "@/lib/schedule/range";
 import { createNodeOnce } from "@/lib/tree/mutations";
 import { formatNodePath, loadNodeChain } from "@/lib/tree/path";
 import { loadOutline } from "@/lib/tree/queries";
@@ -80,7 +81,9 @@ export async function getContext(userId: string, args: Record<string, unknown>) 
 
   const weekStart = startOfWeek(now, weekStartsOn);
   const plan = await getWeeklyPlan(userId, weekStart, weekStartsOn);
-  const schedule = await loadSchedule(userId, { weekStart, weekStartsOn });
+  const schedule = await loadSchedule(userId, {
+    range: weekRange(weekStart, weekStartsOn),
+  });
 
   return {
     asOf: now.toISOString(),

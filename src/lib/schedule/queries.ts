@@ -2,6 +2,7 @@ import { and, asc, eq, gte, lt, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { appointments, timeChartAreas, timeCharts } from "@/db/schema";
 import { eventColorHex } from "@/lib/google/eventColors";
+import { syncWindowFor } from "@/lib/google/mirror";
 import { SYNC_MAX_AGE_MS, syncWindow, type SyncStatus } from "@/lib/google/sync";
 import {
   enabledCalendarLinks,
@@ -14,7 +15,7 @@ import {
   expandTimeChartAreas,
   type Occurrence,
 } from "./recurrence";
-import { startOfWeek } from "./geometry";
+import { weekRange, type ScheduleRange } from "./range";
 
 export async function listTimeCharts(userId: string) {
   return db
@@ -137,25 +138,36 @@ export type SchedulePayload = {
   backgroundEvents: ReturnType<typeof expandTimeChartAreas>;
   appointments: Awaited<ReturnType<typeof listAppointmentsInRange>>;
   occurrences: ScheduleOccurrence[];
-  weekStart: string; // ISO date key
-  /** Outcome of the Google mirror pass for this week; drives the toolbar banner. */
+  /** First visible day, ISO. Named for the range because the calendar is not always a week. */
+  rangeStart: string;
+  /** Exclusive end of the visible range, ISO. */
+  rangeEnd: string;
+  /**
+   * The visible day columns as ISO instants (local midnights). Sent with the data rather
+   * than recomputed on the client so the grid can only ever draw days this payload covers —
+   * a client that derived them from settings would widen the moment you picked Twenty Days,
+   * before the twenty days had been loaded.
+   */
+  days: string[];
+  /** Outcome of the Google mirror pass; drives the toolbar banner. */
   sync: SyncStatus;
 };
 
 export async function loadSchedule(
   userId: string,
   options: {
-    weekStart?: Date;
+    /**
+     * Which days are on screen, from `lib/schedule/range.ts`. Defaults to the Sunday-aligned
+     * week containing today, which is what every caller wanted before day counts existed.
+     */
+    range?: ScheduleRange;
     timeChartId?: string | null;
-    weekStartsOn?: number;
     /** Force a Google pull even if the window is still fresh — the ⟳ Refresh path. */
     forceSync?: boolean;
   } = {},
 ): Promise<SchedulePayload> {
-  const weekStartsOn = options.weekStartsOn ?? 0;
-  const weekStart = startOfWeek(options.weekStart ?? new Date(), weekStartsOn);
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekEnd.getDate() + 7);
+  const range = options.range ?? weekRange(new Date());
+  const { start: rangeStart, end: rangeEnd } = range;
 
   /**
    * Local-first: paint the mirrored schedule immediately. Stale Google pulls run in the
@@ -163,7 +175,8 @@ export async function loadSchedule(
    * Refresh button means what it says. Never let a revoked token 500 the route.
    */
   let sync: SyncStatus = { state: "off" };
-  const window = { start: weekStart, end: weekEnd };
+  // Wider than the visible range, and independent of the day count — see `syncWindowFor`.
+  const window = syncWindowFor(range);
   try {
     if (options.forceSync) {
       sync = await syncWindow(userId, window);
@@ -187,7 +200,7 @@ export async function loadSchedule(
   // Local reads run together — they never waited on Google once paint is local-first.
   const [charts, appts, calendarLinks] = await Promise.all([
     listTimeCharts(userId),
-    listAppointmentsInRange(userId, weekStart, weekEnd),
+    listAppointmentsInRange(userId, rangeStart, rangeEnd),
     listCalendarLinks(userId),
   ]);
   let selectedChartId = options.timeChartId ?? charts[0]?.id ?? null;
@@ -210,7 +223,7 @@ export async function loadSchedule(
       foreColor: a.foreColor,
       labelEnabled: a.labelEnabled,
     })),
-    weekStart,
+    range.days,
   );
 
   /**
@@ -235,7 +248,7 @@ export async function loadSchedule(
 
   const occurrences: ScheduleOccurrence[] = appts
     .flatMap((a) =>
-      expandRecurrence(appointmentToRecurrenceInput(a), weekStart, weekEnd),
+      expandRecurrence(appointmentToRecurrenceInput(a), rangeStart, rangeEnd),
     )
     .map((o) => {
       const colors = colorsByAppointmentId.get(o.id);
@@ -253,7 +266,9 @@ export async function loadSchedule(
     backgroundEvents,
     appointments: appts,
     occurrences,
-    weekStart: weekStart.toISOString(),
+    rangeStart: rangeStart.toISOString(),
+    rangeEnd: rangeEnd.toISOString(),
+    days: range.days.map((day) => day.toISOString()),
     sync,
   };
 }

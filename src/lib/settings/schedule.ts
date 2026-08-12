@@ -1,4 +1,10 @@
-import { asBoolean, asRecord } from "./parse";
+import {
+  ANCHOR_MODES,
+  isDayCount,
+  type AnchorMode,
+  type DayCount,
+} from "@/lib/schedule/range";
+import { asBoolean, asOneOf, asRecord } from "./parse";
 import { SETTINGS_VERSION } from "./scopes";
 
 /**
@@ -22,10 +28,19 @@ import { SETTINGS_VERSION } from "./scopes";
 export const SLOT_MINUTES = [5, 6, 10, 15, 30, 60] as const;
 export type SlotMinutes = (typeof SLOT_MINUTES)[number];
 
+/** Calendar grid or the same range as a list of rows. See `AgendaGrid`. */
+export const SCHEDULE_VIEW_MODES = ["calendar", "agenda"] as const;
+export type ScheduleViewMode = (typeof SCHEDULE_VIEW_MODES)[number];
+
 export type ScheduleViewSettings = {
   slotMinutes: SlotMinutes;
   /** Achieve's Work Week Mode: Monday–Friday only. */
   workWeek: boolean;
+  /** How many day columns, from Achieve's View menu. See `lib/schedule/range.ts`. */
+  dayCount: DayCount;
+  /** Whether the range starts on today or on the week boundary. */
+  anchorMode: AnchorMode;
+  viewMode: ScheduleViewMode;
   /** Projects rail: include finished work in the drag source. */
   railShowCompleted: boolean;
   railGroupByArea: boolean;
@@ -39,6 +54,17 @@ export const DEFAULT_SCHEDULE_VIEW: ScheduleViewSettings = {
   // users see is a migration, not a default.
   slotMinutes: 30,
   workWeek: false,
+  dayCount: 7,
+  /*
+   * The one default here that *does* change what an existing stored blob renders: the
+   * calendar used to open on the week containing today, and now opens on today itself.
+   *
+   * That is the feature, not an oversight — a schedule whose left-hand third is already
+   * spent is a schedule you read around. `aligned` restores the Sunday-anchored week
+   * exactly, so nothing was taken away; it just stopped being the assumption.
+   */
+  anchorMode: "rolling",
+  viewMode: "calendar",
   railShowCompleted: false,
   railGroupByArea: false,
   railShowTasks: false,
@@ -56,6 +82,21 @@ export function parseScheduleView(value: unknown): ScheduleViewSettings {
       ? record.slotMinutes
       : DEFAULT_SCHEDULE_VIEW.slotMinutes,
     workWeek: asBoolean(record.workWeek, DEFAULT_SCHEDULE_VIEW.workWeek),
+    // Membership-checked for the same reason as `slotMinutes`: two days is drawable and is
+    // not one of Achieve's widths, so a stray value has to fall back rather than render.
+    dayCount: isDayCount(record.dayCount)
+      ? record.dayCount
+      : DEFAULT_SCHEDULE_VIEW.dayCount,
+    anchorMode: asOneOf(
+      record.anchorMode,
+      ANCHOR_MODES,
+      DEFAULT_SCHEDULE_VIEW.anchorMode,
+    ),
+    viewMode: asOneOf(
+      record.viewMode,
+      SCHEDULE_VIEW_MODES,
+      DEFAULT_SCHEDULE_VIEW.viewMode,
+    ),
     railShowCompleted: asBoolean(
       record.railShowCompleted,
       DEFAULT_SCHEDULE_VIEW.railShowCompleted,

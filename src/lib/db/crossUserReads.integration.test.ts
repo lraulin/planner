@@ -26,6 +26,7 @@ import {
   listTimeCharts,
   loadSchedule,
 } from "@/lib/schedule/queries";
+import { weekRange } from "@/lib/schedule/range";
 import { createContact, createDiscussionItem } from "@/lib/contacts/mutations";
 import {
   getContactDetail,
@@ -333,7 +334,9 @@ describeDb("a second user reads none of the first user's rows", () => {
 
     // The one query that assembles a whole page rather than a table: appointments, charts
     // and the project tree all reach it through separate calls.
-    const schedule = await loadSchedule(intruder, { weekStart: owner.weekStart });
+    const schedule = await loadSchedule(intruder, {
+      range: weekRange(owner.weekStart),
+    });
     expect(schedule.appointments).toEqual([]);
     expect(schedule.charts).toEqual([]);
     expect(schedule.occurrences).toEqual([]);

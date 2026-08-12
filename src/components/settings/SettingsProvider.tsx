@@ -167,6 +167,14 @@ const DISPLAY_CODEC = {
 type SettingsContextValue = {
   snapshot: SettingsSnapshot;
   write: (scope: string, value: unknown) => void;
+  /**
+   * Send whatever is queued now instead of waiting out the debounce.
+   *
+   * For the writes the **server** has to see before the next render — the Weekly
+   * Schedule's day count decides which days get loaded, so refreshing before the write
+   * lands would re-render against the old width. Ordinary preferences do not need this.
+   */
+  flush: () => Promise<void>;
   resetScope: (scope: string) => void;
   resetScopes: (scopes: readonly string[]) => void;
   /** Set when the server refused or failed a save; the change is still queued locally. */
@@ -258,8 +266,8 @@ export function SettingsProvider({
   }, []);
 
   const value = useMemo(
-    () => ({ snapshot, write, resetScope, resetScopes, saveError }),
-    [snapshot, write, resetScope, resetScopes, saveError],
+    () => ({ snapshot, write, flush, resetScope, resetScopes, saveError }),
+    [snapshot, write, flush, resetScope, resetScopes, saveError],
   );
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
@@ -280,7 +288,7 @@ function useSettingsContext(): SettingsContextValue {
  * a codec rebuilt inline would re-parse the blob on every render of every grid.
  */
 export function useSetting<T>(scope: string, codec: SettingCodec<T>) {
-  const { snapshot, write, resetScope } = useSettingsContext();
+  const { snapshot, write, flush, resetScope } = useSettingsContext();
 
   const raw = snapshot[scope];
   const value = useMemo(() => codec.parse(raw), [codec, raw]);
@@ -302,7 +310,7 @@ export function useSetting<T>(scope: string, codec: SettingCodec<T>) {
 
   const reset = useCallback(() => resetScope(scope), [resetScope, scope]);
 
-  return { value, update, patch, reset };
+  return { value, update, patch, reset, flush };
 }
 
 /** The editable singleton display preference, including its immediate reset path. */

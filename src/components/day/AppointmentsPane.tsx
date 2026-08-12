@@ -29,11 +29,12 @@ function timeLabel(date: Date): string {
 
 export function AppointmentsPane({
   appointments,
-  weekKey,
+  dayKey,
   className = "flex",
 }: {
   appointments: DayAppointment[];
-  weekKey: string;
+  /** Anchors the Schedule link on this day rather than on whatever it last showed. */
+  dayKey: string;
   /** How `DayView` shows or hides this pane below `md` — `flex` or `hidden`. */
   className?: string;
 }) {
@@ -49,7 +50,7 @@ export function AppointmentsPane({
           Appointments
         </h2>
         <Link
-          href={`/schedule?week=${weekKey}`}
+          href={`/schedule?start=${dayKey}`}
           className="text-[0.6875rem] text-ink-faint hover:text-ink"
         >
           Schedule

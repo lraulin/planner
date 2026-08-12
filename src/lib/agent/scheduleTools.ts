@@ -11,6 +11,7 @@ import {
 import { getWeeklyPlan } from "@/lib/planning/queries";
 import { loadSchedule } from "@/lib/schedule/queries";
 import { startOfWeek, toDateKey } from "@/lib/schedule/geometry";
+import { weekRange } from "@/lib/schedule/range";
 import { AgentError } from "./errors";
 import {
   optionalBoolean,
@@ -30,7 +31,9 @@ export async function getWeekTool(userId: string, args: Record<string, unknown>)
     weekStartArg ? (parseDate(weekStartArg, "weekStart") ?? new Date()) : new Date(),
     weekStartsOn,
   );
-  const schedule = await loadSchedule(userId, { weekStart, weekStartsOn });
+  const schedule = await loadSchedule(userId, {
+    range: weekRange(weekStart, weekStartsOn),
+  });
   const plan = await getWeeklyPlan(userId, weekStart, weekStartsOn);
 
   return {

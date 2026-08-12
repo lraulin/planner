@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { GoogleEvent } from "./mapping";
 import {
+  MIN_SYNC_DAYS,
   planMirror,
+  syncWindowFor,
   type LocalMirrorRow,
   type MirrorWindow,
   type RemoteEvent,
 } from "./mirror";
+import { dayRange, scheduleRange, weekRange } from "@/lib/schedule/range";
+import { localDateKey } from "@/lib/schedule/geometry";
 
 const CAL = "cal@example.com";
 const OTHER_CAL = "work@example.com";
@@ -257,5 +261,71 @@ describe("planMirror — the deletion sweep", () => {
     // inert even though `remote` is empty and every row looks unseen.
     const plan = planMirror([localRow()], [], window, []);
     expect(plan).toEqual({ toInsert: [], toUpdate: [], toDelete: [], skipped: 0 });
+  });
+});
+
+describe("syncWindowFor", () => {
+  const wednesday = new Date(2026, 7, 12);
+
+  it("starts on a week boundary and runs at least four weeks", () => {
+    const window = syncWindowFor(dayRange(wednesday));
+    expect(localDateKey(window.start)).toBe("2026-08-09"); // the Sunday
+    expect(localDateKey(window.end)).toBe("2026-09-06"); // four weeks on
+  });
+
+  /**
+   * The reason this function exists. Freshness is time-based, so if the window tracked the
+   * day count, flipping from One Day to Twenty Days inside the five-minute throttle would
+   * leave nineteen days unfetched and drawn empty.
+   */
+  it("does not move when only the day count changes", () => {
+    const options = { anchorMode: "rolling", workWeek: false } as const;
+    const one = syncWindowFor(scheduleRange(wednesday, { ...options, dayCount: 1 }));
+    const seven = syncWindowFor(scheduleRange(wednesday, { ...options, dayCount: 7 }));
+    expect(seven).toEqual(one);
+  });
+
+  it("widens past the floor for a range that needs it", () => {
+    const twenty = syncWindowFor(
+      scheduleRange(wednesday, {
+        dayCount: 20,
+        anchorMode: "rolling",
+        workWeek: false,
+      }),
+    );
+    // Twenty days from the 12th reaches 31 August; the floor's 6 September already covers
+    // it, so the window is unchanged — the floor is what keeps short views honest.
+    expect(localDateKey(twenty.end)).toBe("2026-09-06");
+
+    const wide = syncWindowFor({
+      start: new Date(2026, 7, 12),
+      end: new Date(2026, 9, 1),
+    });
+    expect(wide.end.getTime()).toBeGreaterThan(new Date(2026, 9, 1).getTime());
+    expect(wide.start.getDay()).toBe(0);
+  });
+
+  it("always covers the range it was given", () => {
+    for (const dayCount of [1, 3, 5, 7, 10, 20] as const) {
+      for (const workWeek of [false, true]) {
+        const range = scheduleRange(wednesday, {
+          dayCount,
+          anchorMode: "rolling",
+          workWeek,
+        });
+        const window = syncWindowFor(range);
+        expect(window.start.getTime()).toBeLessThanOrEqual(range.start.getTime());
+        expect(window.end.getTime()).toBeGreaterThanOrEqual(range.end.getTime());
+      }
+    }
+  });
+
+  it("keeps whole weeks, so the floor is a multiple of seven days", () => {
+    const window = syncWindowFor(weekRange(wednesday));
+    const span = Math.round(
+      (window.end.getTime() - window.start.getTime()) / (24 * 60 * 60 * 1000),
+    );
+    expect(span % 7).toBe(0);
+    expect(span).toBeGreaterThanOrEqual(MIN_SYNC_DAYS);
   });
 });

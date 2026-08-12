@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import { localDateKey, startOfWeek, weekDays } from "./geometry";
 import {
   DAY_COUNTS,
+  dayRange,
   isAnchorMode,
   isDayCount,
   scheduleRange,
   stepAnchor,
+  weekRange,
   type DayCount,
   type RangeOptions,
 } from "./range";
@@ -209,6 +211,35 @@ describe("stepAnchor — aligned", () => {
     for (let i = 0; i < 5; i++) anchor = stepAnchor(anchor, 1, options);
     expect(localDateKey(anchor)).toBe("2026-09-13");
     expect(anchor.getDay()).toBe(0);
+  });
+});
+
+describe("scheduleRange — bad input", () => {
+  it("throws on an invalid anchor rather than searching for a weekday forever", () => {
+    expect(() => scheduleRange(new Date("nonsense"), opts({ workWeek: true }))).toThrow(
+      /valid date/,
+    );
+  });
+});
+
+describe("weekRange / dayRange", () => {
+  it("gives the Sunday-aligned week whatever day it is handed", () => {
+    expect(keys(weekRange(WEDNESDAY).days)).toEqual(
+      keys(weekDays(startOfWeek(WEDNESDAY, 0))),
+    );
+    expect(keys(weekRange(SUNDAY).days)).toEqual(keys(weekRange(WEDNESDAY).days));
+  });
+
+  it("keeps weekends even though the calendar may be hiding them", () => {
+    // Work Week Mode is a property of the calendar, not of "a week" — the planning wizard
+    // and the agent's week tools would otherwise silently lose two days.
+    expect(weekRange(WEDNESDAY).days).toHaveLength(7);
+  });
+
+  it("gives exactly the day asked for", () => {
+    const range = dayRange(SUNDAY);
+    expect(keys(range.days)).toEqual(["2026-08-09"]);
+    expect(localDateKey(range.end)).toBe("2026-08-10");
   });
 });
 

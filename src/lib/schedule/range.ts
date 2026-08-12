@@ -78,6 +78,13 @@ export function scheduleRange(anchor: Date, opts: RangeOptions): ScheduleRange {
       ? startOfWeek(anchor, weekStartsOn)
       : localMidnight(anchor);
 
+  // An invalid anchor has no weekday, so in Work Week Mode the loop below would search for
+  // a Monday forever. Fail loudly instead of hanging the render; callers reading a date out
+  // of a URL validate it first.
+  if (Number.isNaN(base.getTime())) {
+    throw new Error("scheduleRange: anchor is not a valid date");
+  }
+
   const days: Date[] = [];
   const cursor = new Date(base);
   while (days.length < dayCount) {
@@ -113,6 +120,26 @@ export function stepAnchor(anchor: Date, direction: -1 | 1, opts: RangeOptions):
   return direction === 1
     ? shiftVisible(days[days.length - 1], 1, opts.workWeek)
     : shiftVisible(days[0], -opts.dayCount, opts.workWeek);
+}
+
+/**
+ * The seven-day, week-aligned range the app drew before day counts existed.
+ *
+ * For the surfaces that genuinely mean "a week" — the planning wizard, the agent's
+ * `schedule.week` tools — rather than "whatever the calendar is currently showing".
+ */
+export function weekRange(anchor: Date, weekStartsOn = 0): ScheduleRange {
+  return scheduleRange(anchor, {
+    dayCount: 7,
+    anchorMode: "aligned",
+    workWeek: false,
+    weekStartsOn,
+  });
+}
+
+/** A single calendar day, for the Day tab. */
+export function dayRange(day: Date): ScheduleRange {
+  return scheduleRange(day, { dayCount: 1, anchorMode: "rolling", workWeek: false });
 }
 
 /** Local midnight of a date's own calendar day. Same idiom as `startOfWeek`. */

@@ -13,7 +13,9 @@ import type {
   TimeChartAreaInput,
   TimeChartInput,
 } from "@/lib/schedule/mutations";
-import { startOfWeek } from "@/lib/schedule/geometry";
+import { fromDateKey } from "@/lib/schedule/geometry";
+import { loadScheduleView, rangeForView } from "@/lib/schedule/viewRange";
+import { syncWindowFor } from "@/lib/google/mirror";
 import { syncWindow } from "@/lib/google/sync";
 import { run, type ActionResult } from "../actionResult";
 
@@ -180,18 +182,20 @@ export async function duplicateAppointmentAction(
 // ── Google Calendar ──────────────────────────────────────────────────────────
 
 /**
- * Force a mirror pass for one week, bypassing the staleness throttle. This is the ⟳
- * Refresh button; the automatic pull happens inside `loadSchedule`.
+ * Force a mirror pass over the window behind the range on screen, bypassing the staleness
+ * throttle. This is the ⟳ Refresh button; the automatic pull happens inside `loadSchedule`.
+ *
+ * Takes the anchor day and rebuilds the range from stored settings rather than trusting a
+ * window from the client — the automatic pull derives it the same way, and a Refresh that
+ * fetched a different window than the page loads would leave "refreshed" days empty.
  */
-export async function syncGoogleAction(weekStartIso: string): Promise<ActionResult> {
+export async function syncGoogleAction(anchorKey: string): Promise<ActionResult> {
   // No layout revalidate: the client calls `router.refresh()` once on success so a
   // background stale-sync does not thrash the page while the user is editing.
   return run(
     async (userId) => {
-      const start = startOfWeek(new Date(weekStartIso), 0);
-      const end = new Date(start);
-      end.setDate(end.getDate() + 7);
-      const status = await syncWindow(userId, { start, end });
+      const range = rangeForView(fromDateKey(anchorKey), await loadScheduleView());
+      const status = await syncWindow(userId, syncWindowFor(range));
       // The mirror reports failure rather than throwing, so surface it as an action error —
       // otherwise a refresh that reached nothing would look like it succeeded.
       if (status.state === "failed" || status.state === "not_linked") {

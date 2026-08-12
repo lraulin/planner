@@ -8,6 +8,7 @@
  * without a network or a database.
  */
 
+import { startOfWeek } from "@/lib/schedule/geometry";
 import {
   googleEventToFields,
   type GoogleEvent,
@@ -15,6 +16,36 @@ import {
 } from "./mapping";
 
 export type MirrorWindow = { start: Date; end: Date };
+
+/** Never mirror a narrower slice than this, however few days are on screen. */
+export const MIN_SYNC_DAYS = 28;
+
+/**
+ * The window to mirror while looking at a given range of days.
+ *
+ * Deliberately **not** the visible range. Freshness is time-based only — `syncIsStale`
+ * records when each calendar was last read and nothing about what was read — so a window
+ * that shrank to match a one-day view would report "fresh" five minutes later over the
+ * nineteen days a twenty-day view had just asked for, and those days would draw empty.
+ *
+ * Rounding out to whole weeks with a four-week floor makes the window a function of
+ * roughly *where* you are looking rather than *how much*, so changing the day count does
+ * not change what has been fetched. Wider is cheap: it is one list request per calendar
+ * either way, and `planMirror`'s sweep is correct for any window it is actually given.
+ */
+export function syncWindowFor(range: { start: Date; end: Date }): MirrorWindow {
+  const start = startOfWeek(range.start, 0);
+  const end = new Date(start);
+  while (end < range.end || daysBetween(start, end) < MIN_SYNC_DAYS) {
+    end.setDate(end.getDate() + 7);
+  }
+  return { start, end };
+}
+
+function daysBetween(from: Date, to: Date): number {
+  // Rounded, not floored: local midnights are 23 or 25 hours apart across a DST boundary.
+  return Math.round((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000));
+}
 
 /** The columns the planner needs to reason about an existing row. */
 export type LocalMirrorRow = {

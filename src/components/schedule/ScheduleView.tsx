@@ -14,13 +14,13 @@ import type { Appointment, AppointmentCheck, TimeChart } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { SchedulePayload, ScheduleOccurrence } from "@/lib/schedule/queries";
 import type { Occurrence } from "@/lib/schedule/recurrence";
+import { fromDateKey, localDateKey } from "@/lib/schedule/geometry";
 import {
-  fromDateKey,
-  localDateKey,
-  startOfWeek,
-  toDateKey,
-  weekDays,
-} from "@/lib/schedule/geometry";
+  DAY_COUNTS,
+  scheduleRange,
+  stepAnchor,
+  type RangeOptions,
+} from "@/lib/schedule/range";
 import { DELETE_ROW, OPEN_RECORD } from "@/lib/commands/chords";
 import { asyncHandler } from "@/lib/eventHandler";
 import {
@@ -56,9 +56,27 @@ import type { Command } from "@/lib/commands/registry";
 type Props = {
   initial: SchedulePayload;
   nodes: OutlineNode[];
-  weekKey: string;
+  /** The day the visible range is anchored on — `?start=`, or today. */
+  anchorKey: string;
   /** `?block=` — a row somewhere else asked for a calendar block. See below. */
   blockNodeId?: string | null;
+};
+
+/** Achieve spelled these out, and "Twenty Days" reads as a choice where "20" reads as data. */
+const DAY_COUNT_WORDS: Record<number, string> = {
+  1: "One",
+  3: "Three",
+  5: "Five",
+  7: "Seven",
+  10: "Ten",
+  20: "Twenty",
+};
+
+/** The pager's label for a single day: "Wed, Aug 12". */
+const DAY_LABEL: Intl.DateTimeFormatOptions = {
+  weekday: "short",
+  month: "short",
+  day: "numeric",
 };
 
 export type DraftAppointment = {
@@ -74,6 +92,8 @@ function hydratePayload(initial: SchedulePayload) {
   return {
     charts: initial.charts,
     selectedChartId: initial.selectedChartId,
+    days: initial.days.map((day) => new Date(day)),
+    rangeEnd: new Date(initial.rangeEnd),
     backgroundEvents: initial.backgroundEvents.map((e) => ({
       ...e,
       start: new Date(e.start),
@@ -112,7 +132,7 @@ function reportError(message: string) {
   if (typeof window !== "undefined") window.alert(message);
 }
 
-export function ScheduleView({ initial, nodes, weekKey, blockNodeId = null }: Props) {
+export function ScheduleView({ initial, nodes, anchorKey, blockNodeId = null }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
 
@@ -140,8 +160,28 @@ export function ScheduleView({ initial, nodes, weekKey, blockNodeId = null }: Pr
     setMasters(next.masters);
   }
 
-  const weekStart = fromDateKey(weekKey);
-  const days = weekDays(weekStart);
+  /*
+   * The days on screen come from the payload, not from the settings.
+   *
+   * Both would usually agree, but picking Twenty Days patches the setting first and reloads
+   * after: a range derived on the client would widen to twenty columns immediately, with
+   * only the old days' appointments to put in them. Following the payload means the grid can
+   * only ever draw days that were actually loaded.
+   */
+  const anchor = fromDateKey(anchorKey);
+  const days = hydrated.days;
+  const rangeStart = days[0];
+  const rangeEnd = hydrated.rangeEnd;
+  const rangeLabel =
+    days.length === 1
+      ? days[0].toLocaleDateString(undefined, DAY_LABEL)
+      : `${days[0].toLocaleDateString(undefined, { month: "short", day: "numeric" })} – ${days[
+          days.length - 1
+        ].toLocaleDateString(undefined, {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        })}`;
 
   const [editingAppointment, setEditingAppointment] = useState<
     Appointment | DraftAppointment | null
@@ -152,10 +192,11 @@ export function ScheduleView({ initial, nodes, weekKey, blockNodeId = null }: Pr
     x: number;
     y: number;
   } | null>(null);
-  const { value: view, patch: patchView } = useSetting(
-    SCHEDULE_SCOPE,
-    SCHEDULE_VIEW_CODEC,
-  );
+  const {
+    value: view,
+    patch: patchView,
+    flush: flushView,
+  } = useSetting(SCHEDULE_SCOPE, SCHEDULE_VIEW_CODEC);
 
   /*
    * `Schedule block…`, arriving from another module.
@@ -196,8 +237,8 @@ export function ScheduleView({ initial, nodes, weekKey, blockNodeId = null }: Pr
   // Drop `?block=` once it has been consumed. Left in place, Back or a refresh would re-open a
   // drawer the user had deliberately closed.
   useEffect(() => {
-    if (blockNodeId) router.replace(`/schedule?week=${weekKey}`, { scroll: false });
-  }, [blockNodeId, router, weekKey]);
+    if (blockNodeId) router.replace(`/schedule?start=${anchorKey}`, { scroll: false });
+  }, [blockNodeId, router, anchorKey]);
 
   const [syncing, setSyncing] = useState(false);
   /**
@@ -215,13 +256,13 @@ export function ScheduleView({ initial, nodes, weekKey, blockNodeId = null }: Pr
     setSyncing(true);
     setSyncError(null);
     try {
-      const result = await syncGoogleAction(weekKey);
+      const result = await syncGoogleAction(anchorKey);
       if (!result.ok) setSyncError(result.error);
       else router.refresh();
     } finally {
       setSyncing(false);
     }
-  }, [router, weekKey]);
+  }, [router, anchorKey]);
 
   // Local-first: when the mirror is stale, pull Google once in the background and refresh
   // after success. Idempotent per mount of this stale payload — not on every re-render.
@@ -242,58 +283,70 @@ export function ScheduleView({ initial, nodes, weekKey, blockNodeId = null }: Pr
   const openTimeChartEditor = useCallback(
     (chartId: string) => {
       const returnTo = encodeURIComponent(
-        `/schedule?week=${weekKey}${chartId ? `&chart=${chartId}` : ""}`,
+        `/schedule?start=${anchorKey}${chartId ? `&chart=${chartId}` : ""}`,
       );
       router.push(`/schedule/time-chart/${chartId}?returnTo=${returnTo}`);
     },
-    [router, weekKey],
+    [router, anchorKey],
   );
 
-  const navigateWeek = useCallback(
+  /** The day count and anchor mode the pagers step by. */
+  const rangeOptions = useMemo<RangeOptions>(
+    () => ({
+      dayCount: view.dayCount,
+      anchorMode: view.anchorMode,
+      workWeek: view.workWeek,
+    }),
+    [view.dayCount, view.anchorMode, view.workWeek],
+  );
+
+  const navigateTo = useCallback(
     (next: Date) => {
-      const key = toDateKey(startOfWeek(next, 0));
       const chart = selectedChartId ? `&chart=${selectedChartId}` : "";
-      router.push(`/schedule?week=${key}${chart}`);
+      router.push(`/schedule?start=${localDateKey(next)}${chart}`);
     },
     [router, selectedChartId],
   );
 
+  /** Previous / next range. Rolling tiles by the day count; aligned pages by the week. */
+  const stepRange = useCallback(
+    (direction: -1 | 1) => navigateTo(stepAnchor(anchor, direction, rangeOptions)),
+    [anchor, navigateTo, rangeOptions],
+  );
+
   const compact = useIsCompact();
   /**
-   * Which day the compact layout shows, as an index into the week already loaded. The week
-   * stays in the URL — this only picks a column out of it — so stepping past either end
-   * navigates to the neighbouring week and lands on its far day.
+   * Which day the compact layout shows, as an index into the range already loaded. The
+   * anchor stays in the URL — this only picks a column out of what was loaded — so stepping
+   * past either end navigates to the neighbouring range and lands on its far day.
    */
   const [dayOffset, setDayOffset] = useState(() => {
-    // Open on today when the loaded week contains it — landing on Sunday because that is
-    // where the week starts is technically correct and never what you wanted.
+    // Open on today when the loaded range contains it — landing on the range's first day
+    // because that is where it starts is technically correct and never what you wanted.
     const todayKey = localDateKey(new Date());
-    const index = weekDays(fromDateKey(weekKey)).findIndex(
-      (day) => toDateKey(day) === todayKey,
-    );
+    const index = days.findIndex((day) => localDateKey(day) === todayKey);
     return index === -1 ? 0 : index;
   });
   const compactDay = days[dayOffset] ?? days[0];
 
   function stepDay(delta: number) {
     const next = dayOffset + delta;
-    if (next >= 0 && next <= 6) {
+    if (next >= 0 && next < days.length) {
       setDayOffset(next);
       return;
     }
-    const target = new Date(weekStart);
-    target.setDate(target.getDate() + next);
-    setDayOffset(next < 0 ? 6 : 0);
-    navigateWeek(target);
+    // Off the end: the neighbouring range, landing on the day next to the one you were on.
+    setDayOffset(next < 0 ? days.length - 1 : 0);
+    stepRange(next < 0 ? -1 : 1);
   }
 
   const selectChart = useCallback(
     (id: string) => {
       setSelectedChartId(id);
       const chart = id ? `&chart=${id}` : "";
-      router.push(`/schedule?week=${weekKey}${chart}`);
+      router.push(`/schedule?start=${anchorKey}${chart}`);
     },
-    [router, weekKey],
+    [router, anchorKey],
   );
 
   const refresh = useCallback(() => {
@@ -430,6 +483,63 @@ export function ScheduleView({ initial, nodes, weekKey, blockNodeId = null }: Pr
    * one teaches you how to get it.
    */
   /**
+   * Achieve's View menu, verbatim: One / Three / Five / Seven / Ten / Twenty Days.
+   *
+   * Registered as commands rather than built only for the right-click, because that is where
+   * Achieve put them and because a width you can only reach by right-clicking the grid is one
+   * you have to already know about. Changing the count reloads — unlike slot size, it changes
+   * which days the server has to fetch.
+   */
+  const dayCountCommands = useMemo<Command[]>(
+    () =>
+      DAY_COUNTS.map((count) => ({
+        id: `schedule.days-${count}`,
+        label: `${DAY_COUNT_WORDS[count]} Day${count === 1 ? "" : "s"}`,
+        group: "view" as const,
+        menu: "view" as const,
+        section: "Days",
+        icon: "levels" as const,
+        keywords: `columns width ${count} day range`,
+        disabled: view.dayCount === count,
+        title: view.dayCount === count ? "Currently showing" : undefined,
+        // Flushed before the refresh, not after the usual debounce: the day count decides
+        // which days the *server* loads, so refreshing first would re-render the old width.
+        run: asyncHandler(async () => {
+          patchView((current) => ({ ...current, dayCount: count }));
+          await flushView();
+          refresh();
+        }, reportError),
+      })),
+    [view.dayCount, patchView, flushView, refresh],
+  );
+
+  const anchorModeCommand = useMemo<Command>(
+    () => ({
+      id: "schedule.anchor-mode",
+      label:
+        view.anchorMode === "rolling" ? "Align to the week" : "Start on today instead",
+      group: "view",
+      menu: "view",
+      section: "Layout",
+      icon: "panel",
+      keywords: "anchor rolling week start today past",
+      title:
+        view.anchorMode === "rolling"
+          ? "Show whole calendar weeks instead of starting on today"
+          : "Start the range on today rather than on the week boundary",
+      run: asyncHandler(async () => {
+        patchView((current) => ({
+          ...current,
+          anchorMode: current.anchorMode === "rolling" ? "aligned" : "rolling",
+        }));
+        await flushView();
+        refresh();
+      }, reportError),
+    }),
+    [view.anchorMode, patchView, flushView, refresh],
+  );
+
+  /**
    * The calendar's own right-click, which it had none of at all.
    *
    * Built from `Command`s and rendered through `menuItemsFor` like every grid's row menu, so the
@@ -516,6 +626,11 @@ export function ScheduleView({ initial, nodes, weekKey, blockNodeId = null }: Pr
     if (target.kind !== "slot") return [];
 
     const { start, allDay } = target;
+    // Whether anchoring on this day would move anything, which depends on the mode: aligned
+    // snaps back to the week, rolling starts exactly here.
+    const startsHere =
+      localDateKey(scheduleRange(start, rangeOptions).start) ===
+      localDateKey(rangeStart);
     return menuItemsFor([
       {
         label: "New",
@@ -546,23 +661,28 @@ export function ScheduleView({ initial, nodes, weekKey, blockNodeId = null }: Pr
             label: "Today",
             group: "view",
             icon: "schedule",
-            run: () => navigateWeek(new Date()),
+            run: () => navigateTo(new Date()),
           },
           {
-            id: "schedule.go-week-of",
-            label: "Week of this day",
+            id: "schedule.go-anchor-here",
+            // In aligned mode this jumps to the week around the day; in rolling mode the
+            // day becomes the first column. Naming it after the mode is the difference
+            // between a menu that describes the app and one that describes your app.
+            label: view.anchorMode === "aligned" ? "Week of this day" : "Start here",
             group: "view",
             icon: "schedule",
-            // Only offered when it would move you — on the week you are already looking at,
-            // it is a row that does nothing.
-            disabled: toDateKey(startOfWeek(start, 0)) === weekKey,
-            title:
-              toDateKey(startOfWeek(start, 0)) === weekKey
-                ? "Already showing this week"
-                : undefined,
-            run: () => navigateWeek(start),
+            // Only offered when it would move you — on the range you are already looking
+            // at, it is a row that does nothing.
+            disabled: startsHere,
+            title: startsHere ? "Already the first day shown" : undefined,
+            run: () => navigateTo(start),
           },
         ],
+      },
+      {
+        label: "Days",
+        submenu: true,
+        commands: dayCountCommands,
       },
       {
         label: "Slot size",
@@ -586,9 +706,15 @@ export function ScheduleView({ initial, nodes, weekKey, blockNodeId = null }: Pr
             group: "view",
             icon: "panel",
             keywords: "weekend saturday sunday five days",
-            run: () =>
-              patchView((current) => ({ ...current, workWeek: !current.workWeek })),
+            // Reloads like the day count does: hiding the weekend does not just hide two
+            // columns, it moves the range on by two days to keep the count you asked for.
+            run: asyncHandler(async () => {
+              patchView((current) => ({ ...current, workWeek: !current.workWeek }));
+              await flushView();
+              refresh();
+            }, reportError),
           },
+          anchorModeCommand,
         ],
       },
     ]);
@@ -622,14 +748,15 @@ export function ScheduleView({ initial, nodes, weekKey, blockNodeId = null }: Pr
       },
       {
         id: "schedule.today",
-        label: "Go to this week",
+        // Not "this week" any more: the range is seven days only one time in six.
+        label: "Go to today",
         group: "view",
         menu: "view",
         section: "Layout",
         icon: "schedule",
         toolbar: 60,
-        keywords: "today now current",
-        run: () => navigateWeek(new Date()),
+        keywords: "today now current week",
+        run: () => navigateTo(new Date()),
       },
       {
         id: "schedule.sync-google",
@@ -646,15 +773,19 @@ export function ScheduleView({ initial, nodes, weekKey, blockNodeId = null }: Pr
             : "Pull the latest from Google Calendar",
         run: asyncHandler(handleSyncGoogle, reportError),
       },
+      ...dayCountCommands,
+      anchorModeCommand,
     ],
     [
+      dayCountCommands,
+      anchorModeCommand,
       selectedChartId,
       syncing,
       initial.sync.state,
       handleEditChart,
       handleNewChart,
       handleSyncGoogle,
-      navigateWeek,
+      navigateTo,
     ],
   );
 
@@ -712,7 +843,7 @@ export function ScheduleView({ initial, nodes, weekKey, blockNodeId = null }: Pr
         <button
           type="button"
           className="rounded border border-select-edge bg-select px-2 py-1 text-[0.8125rem] font-medium text-ink hover:opacity-90"
-          onClick={() => router.push(`/schedule/plan?week=${weekKey}&step=0`)}
+          onClick={() => router.push(`/schedule/plan?week=${anchorKey}&step=0`)}
         >
           Plan Week…
         </button>
@@ -722,12 +853,12 @@ export function ScheduleView({ initial, nodes, weekKey, blockNodeId = null }: Pr
           because this row is short enough not to pan on a phone.
         */}
         <span className="flex-none md:hidden">
-          <OverflowMenu label="More commands for this week" />
+          <OverflowMenu label="More commands for this schedule" />
         </span>
         {/*
-         * A day pager below `md`, stepping across week boundaries by navigating the week and
-         * landing on the right end of it. The week pager beside it is hidden there — a
-         * seven-column grid on a phone is not something to page through.
+         * A day pager below `md`, stepping across the range boundary by navigating and landing
+         * on the far end of the neighbouring one. The range pager beside it is hidden there —
+         * even seven columns on a phone is not something to page through, let alone twenty.
          */}
         <div className="ml-auto flex items-center gap-1 md:hidden">
           <button
@@ -739,11 +870,7 @@ export function ScheduleView({ initial, nodes, weekKey, blockNodeId = null }: Pr
             ‹
           </button>
           <span className="tabular min-w-[8rem] text-center text-ink">
-            {compactDay.toLocaleDateString(undefined, {
-              weekday: "short",
-              month: "short",
-              day: "numeric",
-            })}
+            {compactDay.toLocaleDateString(undefined, DAY_LABEL)}
           </span>
           <button
             type="button"
@@ -758,37 +885,20 @@ export function ScheduleView({ initial, nodes, weekKey, blockNodeId = null }: Pr
         <div className="ml-auto hidden items-center gap-1 md:flex">
           <button
             type="button"
-            aria-label="Previous week"
+            aria-label="Previous days"
             className="rounded border border-rule bg-surface px-2 py-1 text-ink hover:bg-surface-raised"
-            onClick={() => {
-              const d = new Date(weekStart);
-              d.setDate(d.getDate() - 7);
-              navigateWeek(d);
-            }}
+            onClick={() => stepRange(-1)}
           >
             ‹
           </button>
           <span className="min-w-[12rem] text-center tabular text-ink">
-            {days[0].toLocaleDateString(undefined, {
-              month: "short",
-              day: "numeric",
-            })}
-            {" – "}
-            {days[6].toLocaleDateString(undefined, {
-              month: "short",
-              day: "numeric",
-              year: "numeric",
-            })}
+            {rangeLabel}
           </span>
           <button
             type="button"
-            aria-label="Next week"
+            aria-label="Next days"
             className="rounded border border-rule bg-surface px-2 py-1 text-ink hover:bg-surface-raised"
-            onClick={() => {
-              const d = new Date(weekStart);
-              d.setDate(d.getDate() + 7);
-              navigateWeek(d);
-            }}
+            onClick={() => stepRange(1)}
           >
             ›
           </button>
@@ -798,7 +908,9 @@ export function ScheduleView({ initial, nodes, weekKey, blockNodeId = null }: Pr
       <div className="flex min-h-0 flex-1">
         <div className="min-h-0 min-w-0 flex-1">
           <WeekCalendar
-            weekStart={weekStart}
+            days={days}
+            rangeStart={rangeStart}
+            rangeEnd={rangeEnd}
             singleDay={compact ? compactDay : undefined}
             backgroundEvents={backgroundEvents}
             occurrences={occurrences}
@@ -828,10 +940,10 @@ export function ScheduleView({ initial, nodes, weekKey, blockNodeId = null }: Pr
         <aside className="hidden w-56 flex-none flex-col border-l border-rule bg-shell md:flex">
           <div className="border-b border-rule p-2">
             <MiniMonth
-              month={weekStart}
-              selected={weekStart}
-              onSelectDay={(d) => navigateWeek(d)}
-              onChangeMonth={(d) => navigateWeek(d)}
+              month={rangeStart}
+              selected={rangeStart}
+              onSelectDay={(d) => navigateTo(d)}
+              onChangeMonth={(d) => navigateTo(d)}
             />
           </div>
           <ProjectsRail nodes={nodes} />

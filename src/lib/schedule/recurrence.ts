@@ -236,8 +236,11 @@ export function appointmentToRecurrenceInput(a: Appointment): RecurrenceInput {
 }
 
 /**
- * Expand Time Chart areas into dated background instances for a week.
+ * Expand Time Chart areas into dated background instances for the days on screen.
  * Areas use daysOfWeek (0=Sun…6=Sat) and startMinute/durationMinutes.
+ *
+ * Takes the visible days rather than a start date and a length: the calendar's range can be
+ * one day or twenty, and in Work Week Mode the days it draws are not consecutive.
  */
 export function expandTimeChartAreas(
   areas: Array<{
@@ -250,7 +253,7 @@ export function expandTimeChartAreas(
     foreColor: string;
     labelEnabled: boolean;
   }>,
-  weekStart: Date,
+  days: readonly Date[],
 ): Array<{
   id: string;
   areaId: string;
@@ -272,9 +275,8 @@ export function expandTimeChartAreas(
     display: "background";
   }> = [];
 
-  for (let i = 0; i < 7; i++) {
-    const day = new Date(weekStart);
-    day.setDate(weekStart.getDate() + i);
+  for (const visible of days) {
+    const day = new Date(visible);
     day.setHours(0, 0, 0, 0);
     const weekday = day.getDay();
 
