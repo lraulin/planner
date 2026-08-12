@@ -37,6 +37,8 @@ import {
   sortEntriesByDate,
   type EntryDateSort,
 } from "@/lib/metrics/derive";
+import { formatBindings } from "@/lib/commands/bindings";
+import { COPY_AS_TEXT } from "@/lib/commands/chords";
 import { applySelect, selectOnly } from "@/lib/grid/selection";
 import { isTypingTarget } from "@/lib/keyboard";
 import {
@@ -886,8 +888,8 @@ function MetricForm({
                   is noise there, and the rest of the paragraph still applies. */}
               Tap Date to sort.{" "}
               <span className="hidden md:inline">
-                Click a row to select; Shift-click for a range, ⌘-click to multi-select;
-                ⌘C copies.{" "}
+                Click a row to select; Shift-click for a range, ⌘-click to multi-select;{" "}
+                {formatBindings(COPY_AS_TEXT) ?? "⌘C"} copies.{" "}
               </span>
               Show Fields chooses columns for every metric.
               {showTargetColumn

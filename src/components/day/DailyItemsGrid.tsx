@@ -11,6 +11,7 @@ import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import type { GridRow } from "@/lib/tree/slice";
 import {
   DAY_LETTERS,
+  isDayItemSettled,
   planDayAssign,
   planDayClear,
   planDayDrop,
@@ -449,17 +450,17 @@ export function DailyItemsGrid({
 
       const tomorrow = shiftDateKey(item.day, 1);
 
-      const done = item.completedAt !== null || item.state === "completed";
+      const settled = isDayItemSettled(item);
       const cancelled = item.state === "cancelled";
 
       return {
         right: {
-          label: cancelled || done ? "Reopen" : "Complete",
+          label: settled ? "Reopen" : "Complete",
           tone: "positive",
           icon: "complete",
           run: () => {
             if (cancelled) onSetState(itemId, "not_started");
-            else onToggleComplete(itemId, !done);
+            else onToggleComplete(itemId, !settled);
           },
         },
         left: {
