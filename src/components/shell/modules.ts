@@ -3,6 +3,7 @@ import {
   ChooserIcon,
   ContactsIcon,
   DayIcon,
+  FinancesIcon,
   FitnessIcon,
   GoalsIcon,
   MetricsIcon,
@@ -200,6 +201,15 @@ export const MODULES = [
     primary: false,
     status: "built",
     icon: FitnessIcon,
+  },
+  {
+    id: "finances",
+    label: "Finances",
+    href: "/finances",
+    section: "track",
+    primary: false,
+    status: "built",
+    icon: FinancesIcon,
   },
   {
     id: "notes",

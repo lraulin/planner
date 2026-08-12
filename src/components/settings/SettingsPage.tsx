@@ -22,6 +22,7 @@ import {
 } from "@/lib/settings/management";
 import { AchieveTransferPanel } from "./AchieveTransferPanel";
 import { GoogleCalendarPanel } from "./GoogleCalendarPanel";
+import { FinanceImportPanel } from "@/components/finances/FinanceImportPanel";
 import { RedNotebookImportPanel } from "./RedNotebookImportPanel";
 import { TomboyImportPanel } from "./TomboyImportPanel";
 
@@ -430,6 +431,12 @@ function TransferPanels() {
         description="Import a Tomboy sync folder or selected .note files."
       >
         <TomboyImportPanel embedded />
+      </TransferDisclosure>
+      <TransferDisclosure
+        title="Transactions"
+        description="Import bank and card CSV exports into the Finances register."
+      >
+        <FinanceImportPanel embedded />
       </TransferDisclosure>
     </div>
   );

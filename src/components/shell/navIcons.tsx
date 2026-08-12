@@ -179,6 +179,17 @@ export function FitnessIcon() {
   );
 }
 
+/** Finances: a banknote. Money as a thing you hold, not a chart of it. */
+export function FinancesIcon() {
+  return (
+    <svg {...BASE} className="h-5 w-5">
+      <rect x="2.75" y="5.25" width="14.5" height="9.5" rx="1.25" />
+      <circle cx="10" cy="10" r="2" />
+      <path d="M5.5 10h.01M14.5 10h.01" />
+    </svg>
+  );
+}
+
 /** Contacts: a person. The only glyph in the app that is a human being. */
 export function ContactsIcon() {
   return (
