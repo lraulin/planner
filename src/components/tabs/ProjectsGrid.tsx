@@ -9,6 +9,7 @@ import {
   scheduleStatusForNode,
   STATUS_LABELS,
 } from "@/lib/tree/status";
+import { taskRatio } from "@/lib/tree/taskRatio";
 import type { ColumnDef } from "@/components/grid/columns";
 import { CascadeConfirm } from "@/components/grid/CascadeConfirm";
 import { DataGrid } from "@/components/grid/DataGrid";
@@ -96,32 +97,6 @@ const STATUS_COLUMNS = [
   "status",
   "lap",
 ] as const;
-
-function isActive(node: OutlineNode): boolean {
-  return node.state !== "completed" && node.state !== "cancelled";
-}
-
-function taskRatio(projectId: string, nodes: OutlineNode[]): string {
-  let total = 0;
-  let active = 0;
-  const byParent = new Map<string | null, OutlineNode[]>();
-  for (const node of nodes) {
-    const list = byParent.get(node.parentId) ?? [];
-    list.push(node);
-    byParent.set(node.parentId, list);
-  }
-  const stack = [...(byParent.get(projectId) ?? [])];
-  while (stack.length) {
-    const node = stack.pop()!;
-    if (node.type === "task") {
-      total += 1;
-      if (isActive(node)) active += 1;
-    }
-    for (const child of byParent.get(node.id) ?? []) stack.push(child);
-  }
-  if (total === 0) return "";
-  return `${active}/${total}`;
-}
 
 function buildColumns(
   allNodes: OutlineNode[],

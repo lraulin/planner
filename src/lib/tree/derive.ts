@@ -1,3 +1,4 @@
+import { isSettled } from "./completionCascade";
 import { laterShelf, ownShelf, type Shelf } from "./shelving";
 import type { OutlineNode, OutlineRow } from "./types";
 
@@ -215,7 +216,7 @@ export function derive(rows: OutlineRow[]): OutlineNode[] {
       hasChildren: children.length > 0,
       hasActiveChildren: children.some((id) => {
         const child = byId.get(id)!;
-        return child.state !== "completed" && child.state !== "cancelled";
+        return !isSettled(child.state);
       }),
       hidden: parentHidden,
       shelf: shelfFor(row.id),

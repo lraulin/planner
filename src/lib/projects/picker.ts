@@ -1,3 +1,4 @@
+import { isSettled } from "@/lib/tree/completionCascade";
 import type { OutlineNode } from "@/lib/tree/types";
 import { effectiveState } from "@/lib/tree/shelving";
 
@@ -127,7 +128,7 @@ function isDestinationNode(
   if (node.type === "result_area") return true;
   // Goal covers Dream (isDream is a flag on the same type).
   if (node.type !== "goal" && node.type !== "project") return false;
-  if (node.state === "completed" || node.state === "cancelled") return false;
+  if (isSettled(node.state)) return false;
   if (
     !options.includeDeferred &&
     effectiveState(node.state, node.shelf, options.today) === "postponed"

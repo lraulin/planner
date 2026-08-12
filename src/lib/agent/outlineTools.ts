@@ -33,6 +33,7 @@ import {
 } from "./parse";
 import { filterOutlinePage, type SearchNodesFilter } from "./search";
 import { buildPathMap, iso, nodeDetailForAgent, nodeSummary } from "./serialize";
+import { isSettled } from "@/lib/tree/completionCascade";
 import { RESULT_AREA_STATE_REFUSAL } from "@/lib/tree/lifecycle";
 
 function assertResultAreaLifecyclePatch(
@@ -55,7 +56,7 @@ export async function getContext(userId: string, args: Record<string, unknown>) 
   const paths = buildPathMap(outline);
 
   const focus = outline
-    .filter((n) => n.focus && n.state !== "completed" && n.state !== "cancelled")
+    .filter((n) => n.focus && !isSettled(n.state))
     .map((n) => nodeSummary(n, paths));
 
   const topOpenWorkLimit = Math.min(
@@ -66,8 +67,7 @@ export async function getContext(userId: string, args: Record<string, unknown>) 
     .filter(
       (n) =>
         (n.type === "task" || n.type === "project") &&
-        n.state !== "completed" &&
-        n.state !== "cancelled" &&
+        !isSettled(n.state) &&
         (n.priorityLetter === "A" || n.priorityLetter === "B" || n.focus),
     )
     .sort((a, b) => {

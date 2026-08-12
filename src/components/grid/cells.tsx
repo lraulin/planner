@@ -4,6 +4,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import type { NodeState, PriorityLetter } from "@/db/schema";
 import { useDateFormatter } from "@/components/settings/SettingsProvider";
 import { formatFullDateKey } from "@/lib/dateFormat";
+import { isSettled } from "@/lib/tree/completionCascade";
 import type { OutlineNode } from "@/lib/tree/types";
 import {
   formatEffort,
@@ -87,7 +88,7 @@ export function NameCell({
   dragHandle?: boolean;
 }) {
   const selected = useRowSelected();
-  const done = node.state === "completed" || node.state === "cancelled";
+  const done = isSettled(node.state);
   const hasChildren = branch?.hasChildren ?? node.hasChildren;
   const childCount = branch?.childCount ?? node.childCount;
   // A dream is typographically a goal — it differs only in its glyph and what it is called.

@@ -15,6 +15,7 @@ import {
 } from "@/lib/planning/mutations";
 import { loadWeeklyPlanPayload } from "@/lib/planning/queries";
 import { startOfWeek } from "@/lib/schedule/geometry";
+import { isSettled } from "@/lib/tree/completionCascade";
 import { AgentError } from "./errors";
 import {
   optionalBoolean,
@@ -256,10 +257,7 @@ export async function loadWeeklyPlanTool(
       )
       .map((n) => nodeSummary(n, paths)),
     projects: payload.nodes
-      .filter(
-        (n) =>
-          n.type === "project" && n.state !== "completed" && n.state !== "cancelled",
-      )
+      .filter((n) => n.type === "project" && !isSettled(n.state))
       .map((n) => nodeSummary(n, paths)),
     previousRewrites: payload.previousRewrites,
     schedule: {

@@ -3,6 +3,7 @@
 import { useCallback, useMemo } from "react";
 import { Draggable } from "@fullcalendar/interaction";
 import { useEffect, useRef } from "react";
+import { isSettled } from "@/lib/tree/completionCascade";
 import type { OutlineNode } from "@/lib/tree/types";
 import { TypeIcon } from "@/components/icons/TypeIcon";
 import { useSetting } from "@/components/settings/SettingsProvider";
@@ -45,7 +46,7 @@ export function ProjectsRail({ nodes }: Props) {
       (n) =>
         !n.hidden &&
         (n.type === "project" || (showTasks && n.type === "task")) &&
-        (showCompleted || (n.state !== "completed" && n.state !== "cancelled")),
+        (showCompleted || !isSettled(n.state)),
     );
 
     if (sortByPriority) {

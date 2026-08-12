@@ -1,4 +1,5 @@
 import type { NodeState, NodeType } from "@/db/schema";
+import { isSettled } from "@/lib/tree/completionCascade";
 import type { OutlineNode } from "@/lib/tree/types";
 import { pageBounds, paginate, type PageInfo } from "./pagination";
 import { buildPathMap, nodeSummary, type AgentNodeSummary } from "./serialize";
@@ -53,10 +54,7 @@ export function filterOutlinePage(
     if (states && (node.state === null || !states.includes(node.state))) continue;
     if (filter.focus !== undefined && node.focus !== filter.focus) continue;
     if (filter.parentId !== undefined && node.parentId !== filter.parentId) continue;
-    if (
-      !includeCompleted &&
-      (node.state === "completed" || node.state === "cancelled")
-    ) {
+    if (!includeCompleted && isSettled(node.state)) {
       continue;
     }
     if (q && !node.name.toLowerCase().includes(q)) continue;
