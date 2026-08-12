@@ -170,6 +170,87 @@ describeDb("finance CSV import", () => {
     expect(await listTransactions(userId)).toHaveLength(3);
   });
 
+  it("builds the same register from overlapping downloads as from one big one", async () => {
+    // This is the workflow the module exists for: download a window from the bank every so
+    // often, each one reaching back over ground the last one already covered, and import it.
+    // The invariant is that N overlapping imports land exactly where one full import would.
+    const day = (d: string, desc: string, amount: string) =>
+      `2026-${d},2026-${d},3448,${desc},Dining,${amount},`;
+    const rows = [
+      day("07-01", "SBARRO", "6.59"),
+      // The identical pair, deliberately sitting inside the overlap.
+      day("07-01", "SBARRO", "6.59"),
+      day("07-10", "POTBELLY", "24.55"),
+      day("07-20", "WAL-MART", "158.24"),
+      day("07-28", "PIZZA HUT", "33.07"),
+    ];
+    const window = (from: number, to: number): ImportFile => ({
+      name: "2026-08-12_transaction_download.csv",
+      text: [CAPONE_CARD_HEADER, ...rows.slice(from, to), ""].join("\n"),
+    });
+
+    // Three pulls that overlap each other, the middle one re-covering the identical pair.
+    await importFinanceCsvFiles({ userId, files: [window(0, 3)] });
+    const second = await importFinanceCsvFiles({ userId, files: [window(0, 4)] });
+    const third = await importFinanceCsvFiles({ userId, files: [window(2, 5)] });
+
+    expect(second).toMatchObject({ created: 1, skipped: 3 });
+    expect(third).toMatchObject({ created: 1, skipped: 2 });
+
+    const got = await listTransactions(userId);
+    expect(got).toHaveLength(rows.length);
+    // Both SBARROs survived every overlap — not collapsed to one, not multiplied to four.
+    expect(got.filter((r) => r.description === "SBARRO")).toHaveLength(2);
+  });
+
+  it("does not care what order the bank listed the rows in", async () => {
+    // Ordinals are assigned by position in the file, so a feed that changes its sort order
+    // between downloads must not start looking like a set of new transactions.
+    const rows = [
+      "2026-07-01,2026-07-02,3448,SBARRO,Dining,6.59,",
+      "2026-07-01,2026-07-02,3448,SBARRO,Dining,6.59,",
+      "2026-07-10,2026-07-11,3448,POTBELLY,Dining,24.55,",
+    ];
+    const file = (order: string[]): ImportFile => ({
+      name: "2026-08-12_transaction_download.csv",
+      text: [CAPONE_CARD_HEADER, ...order, ""].join("\n"),
+    });
+
+    await importFinanceCsvFiles({ userId, files: [file(rows)] });
+    const reversed = await importFinanceCsvFiles({
+      userId,
+      files: [file([...rows].reverse())],
+    });
+
+    expect(reversed).toMatchObject({ created: 0, skipped: 3 });
+    expect(await listTransactions(userId)).toHaveLength(3);
+  });
+
+  it("imports a restated transaction twice — the one case overlap cannot absorb", async () => {
+    // Pinning the known limitation rather than pretending it is not there. If a bank
+    // revises an already-posted row (a tip settling into a different amount, a merchant
+    // name normalised), the fingerprint changes and the row arrives as a new one.
+    //
+    // It does not bite these four feeds: their exports are posted-only — every card row
+    // carries a posted date, and the 360 exports are a settled ledger with running
+    // balances — so a transaction first appears only once its values are final. The
+    // register's row delete is the fix if a feed ever does restate one.
+    const posted: ImportFile = {
+      name: "2026-08-12_transaction_download.csv",
+      text: `${CAPONE_CARD_HEADER}\n2026-08-09,2026-08-10,3448,POTBELLY,Dining,24.55,\n`,
+    };
+    const restated: ImportFile = {
+      name: "2026-08-12_transaction_download.csv",
+      text: `${CAPONE_CARD_HEADER}\n2026-08-09,2026-08-10,3448,POTBELLY,Dining,29.55,\n`,
+    };
+
+    await importFinanceCsvFiles({ userId, files: [posted] });
+    const after = await importFinanceCsvFiles({ userId, files: [restated] });
+
+    expect(after).toMatchObject({ created: 1, skipped: 0 });
+    expect(await listTransactions(userId)).toHaveLength(2);
+  });
+
   it("does not overwrite an edited category or note on re-import", async () => {
     await importFinanceCsvFiles({ userId, files: [chaseFile] });
     const [row] = await listTransactions(userId);
