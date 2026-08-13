@@ -1,5 +1,7 @@
 # Standards for Remote MCP transport
 
+**Status: frozen / complete** (2026-08-13)
+
 Full files stay in `agent-os/standards/`. This spec references them rather than copying
 their bodies.
 

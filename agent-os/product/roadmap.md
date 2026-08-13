@@ -646,15 +646,15 @@ flavor; optional palette thinning).
   **`planner-agent`** instruction repo (skills + `call-tool.sh`) for coding-agent clients.
   Hardened by `specs/2026-08-09-1130-agent-tool-contracts`: one typed registry now drives
   strict runtime and JSON Schemas, focused live discovery, effects/retry metadata,
-  decision-ready pagination, natural-key replays, and atomic weekly-plan batches. The
-  HTTP surface is MCP-ready without adding an MCP transport or a second write path.
-- **Medium-term — MCP + chat clients:** Package the same agent tools as a **remote MCP
-  server** (thin wrapper over `POST /api/agent/*`, not a second write path) so Grok web
-  (connectors / Bring Your Own MCP), Claude, and other MCP clients can operate the planner
-  without opening a coding-agent workspace. Needs a **public HTTPS endpoint** + auth that
-  works for remote MCP (Bearer / API key at minimum; map to a real user after Better Auth).
-  Skills/prompts from `planner-agent` still apply as system instructions where the client
-  allows them.
+  decision-ready pagination, natural-key replays, and atomic weekly-plan batches.
+- **✅ Medium-term — MCP + chat clients:** Same registry as a remote MCP server —
+  `specs/2026-08-13-1730-remote-mcp-transport`. Stateless Streamable HTTP at
+  `POST /api/mcp` (production `https://planner-lee-5344.vercel.app/api/mcp`), Bearer
+  `PLANNER_AGENT_API_KEY`, no second write path. `tools/list` exposes the 26 core and
+  domain tools so Grok.com / other chat clients do not need HTTP two-step discovery.
+  Still open: OAuth, per-user keys, mapping the key to a real user beyond
+  `PLANNER_AGENT_USER_EMAIL`. Skills/prompts from `planner-agent` still apply as system
+  instructions where the client allows them.
 - **Long-term:** Possible **custom AI** (e.g. AWS Bedrock) with durable memory, calling
   those same tools. Prefer tools over “dump the whole tree into the prompt.”
 
