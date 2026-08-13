@@ -4,9 +4,18 @@ import { useEffect, useId, useState, useTransition } from "react";
 import { getTransactionAction, updateTransactionAction } from "@/app/finances/actions";
 import { DateText } from "@/components/date/DateText";
 import { Drawer, DrawerFooter, DrawerHeader } from "@/components/detail/Drawer";
-import { Section, TextArea, TextField } from "@/components/detail/fields";
+import {
+  CheckboxField,
+  Section,
+  SelectField,
+  TextArea,
+  TextField,
+} from "@/components/detail/fields";
+import { effectiveCategory, effectiveFlow } from "@/lib/finances/analytics";
+import { FLOW_KINDS, flowLabel } from "@/lib/finances/flowLabels";
 import { formatUsd } from "@/lib/finances/money";
 import type { TransactionListRow } from "@/lib/finances/types";
+import type { FinanceFlowKind } from "@/db/schema";
 
 /**
  * Edit the user-owned half of a transaction.
@@ -115,13 +124,17 @@ function TransactionForm({
   const [draft, setDraft] = useState(() => ({
     category: row.category ?? "",
     notes: row.notes,
+    flowOverride: row.flowOverride,
+    excludeFromBaseline: row.excludeFromBaseline,
+    eventLabel: row.eventLabel,
   }));
   const [dirty, setDirty] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, startTransition] = useTransition();
 
-  function patch(key: "category" | "notes", value: string) {
+  type Draft = typeof draft;
+  function patch<K extends keyof Draft>(key: K, value: Draft[K]) {
     setJustSaved(false);
     setDirty(true);
     setDraft((current) => ({ ...current, [key]: value }));
@@ -135,6 +148,10 @@ function TransactionForm({
           // Blank means uncategorised, which the mutation stores as null.
           category: draft.category,
           notes: draft.notes,
+          flowOverride: draft.flowOverride,
+          excludeFromBaseline: draft.excludeFromBaseline,
+          // Clearing the flag clears the name with it, the same rule `setOneOff` follows.
+          eventLabel: draft.excludeFromBaseline ? draft.eventLabel : "",
         });
         if (!result.ok) {
           setError(result.error);
@@ -157,8 +174,12 @@ function TransactionForm({
               label="Category"
               value={draft.category}
               onChange={(value) => patch("category", value)}
-              placeholder="Groceries, Utilities, …"
-              hint="Yours to set. Re-importing this file will never overwrite it."
+              placeholder={effectiveCategory(row)}
+              hint={
+                row.derivedCategory
+                  ? `Blank uses the classifier's answer, ${row.derivedCategory}. Anything you type wins and survives a reclassify.`
+                  : "Yours to set. Re-importing this file will never overwrite it."
+              }
             />
             <TextArea
               label="Notes"
@@ -166,6 +187,36 @@ function TransactionForm({
               value={draft.notes}
               onChange={(value) => patch("notes", value)}
             />
+          </Section>
+
+          <Section title="Classification">
+            <SelectField<FinanceFlowKind>
+              label="Flow"
+              value={draft.flowOverride}
+              options={FLOW_KINDS.map((kind) => ({
+                value: kind,
+                label: flowLabel(kind),
+              }))}
+              onChange={(value) => patch("flowOverride", value)}
+              allowEmpty
+              emptyLabel={`Classifier: ${flowLabel(effectiveFlow({ ...row, flowOverride: null }))}`}
+              hint="Only set this where the classifier is wrong. Your choice wins over every future reclassify."
+            />
+            <CheckboxField
+              label="One-off — keep out of the baseline"
+              checked={draft.excludeFromBaseline}
+              onChange={(checked) => patch("excludeFromBaseline", checked)}
+              hint="For real money that says nothing about what next month costs. An annual premium is not one of these."
+            />
+            {draft.excludeFromBaseline && (
+              <TextField
+                label="Event"
+                value={draft.eventLabel}
+                onChange={(value) => patch("eventLabel", value)}
+                placeholder="Wedding, House move"
+                hint="Names the event so its charges total together on the dashboard."
+              />
+            )}
           </Section>
 
           <Section title="From the bank">

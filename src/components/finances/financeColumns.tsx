@@ -2,6 +2,8 @@
 
 import type { ColumnDef } from "@/components/grid/columns";
 import { DateText } from "@/components/date/DateText";
+import { effectiveCategory, effectiveFlow } from "@/lib/finances/analytics";
+import { flowLabel } from "@/lib/finances/flowLabels";
 import { formatUsd } from "@/lib/finances/money";
 import type { TransactionListRow } from "@/lib/finances/types";
 
@@ -12,10 +14,13 @@ export const FINANCE_COLUMN_IDS = [
   "account",
   "description",
   "category",
+  "flow",
   "sourceCategory",
   "amount",
   "posted",
   "balance",
+  "oneOff",
+  "event",
   "notes",
 ] as const;
 
@@ -113,11 +118,34 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, TransactionListRow>[] =
     id: "category",
     label: "Category",
     width: "minmax(8rem,0.7fr)",
+    // The **effective** category, so filtering and grouping reach the classifier's answer.
+    // A column showing only the hand-typed value would be blank on 2,844 of 2,845 rows while
+    // the dashboard reported categories for all of them, and the register is exactly where
+    // you go to check whether the classifier got one right.
     filterKind: "enum",
-    filterValue: (row) => row.node.category,
-    sortValue: (row) => row.node.category?.toLowerCase() ?? null,
+    filterValue: (row) => effectiveCategory(row.node),
+    sortValue: (row) => effectiveCategory(row.node).toLowerCase(),
     compact: "meta",
-    render: (row) => <Text value={row.node.category ?? ""} />,
+    render: (row) => (
+      // Muted where the classifier supplied it, full ink where you did — the difference
+      // matters, because only one of the two survives a reclassify by right.
+      <Text value={effectiveCategory(row.node)} muted={!row.node.category?.trim()} />
+    ),
+  },
+  {
+    id: "flow",
+    label: "Flow",
+    width: "minmax(9rem,0.6fr)",
+    filterKind: "enum",
+    filterValue: (row) => flowLabel(effectiveFlow(row.node)),
+    sortValue: (row) => flowLabel(effectiveFlow(row.node)),
+    compact: "hidden",
+    render: (row) => (
+      <Text
+        value={flowLabel(effectiveFlow(row.node))}
+        muted={row.node.flowOverride === null}
+      />
+    ),
   },
   {
     id: "sourceCategory",
@@ -171,6 +199,29 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, TransactionListRow>[] =
     sortValue: (row) => row.node.balanceAfterCents,
     compact: "hidden",
     render: (row) => <Amount cents={row.node.balanceAfterCents} />,
+  },
+  {
+    id: "oneOff",
+    label: "One-off",
+    width: "5.5rem",
+    // An enum rather than a boolean so the set-filter offers both sides by name: "show me
+    // everything still in the baseline" is the more useful of the two questions.
+    filterKind: "enum",
+    filterValue: (row) => (row.node.excludeFromBaseline ? "One-off" : "Baseline"),
+    sortValue: (row) => (row.node.excludeFromBaseline ? 1 : 0),
+    compact: "hidden",
+    render: (row) =>
+      row.node.excludeFromBaseline ? <Text value="One-off" muted={false} /> : null,
+  },
+  {
+    id: "event",
+    label: "Event",
+    width: "minmax(8rem,0.6fr)",
+    filterKind: "enum",
+    filterValue: (row) => row.node.eventLabel || null,
+    sortValue: (row) => row.node.eventLabel.toLowerCase(),
+    compact: "hidden",
+    render: (row) => <Text value={row.node.eventLabel} />,
   },
   {
     id: "notes",

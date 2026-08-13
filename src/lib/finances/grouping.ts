@@ -4,19 +4,25 @@ import {
   type GridGroupBy,
 } from "@/lib/grid/grouping";
 import type { GridRow } from "@/lib/tree/slice";
+import { effectiveCategory, effectiveFlow } from "./analytics";
+import { flowLabel } from "./flowLabels";
 import type { TransactionListRow } from "./types";
 
 /**
  * Group dimensions the register offers in the shared Group by picker. Year and month
- * come from the transaction date so a skipped statement is a missing header; account
- * and category are the columns already on the grid (data-grid.md — a group dimension
+ * come from the transaction date so a skipped statement is a missing header; account,
+ * category and flow are the columns already on the grid (data-grid.md — a group dimension
  * must also be a column).
+ *
+ * Grouping by flow is how you audit the classifier: open `Transfer (own accounts)` and every
+ * row that got taken out of spending is in one list.
  */
 export const FINANCE_GROUP_BY_VALUES = [
   "year",
   "month",
   "account",
   "category",
+  "flow",
 ] as const satisfies readonly GridGroupBy[];
 
 export type FinanceGroupBy = (typeof FINANCE_GROUP_BY_VALUES)[number];
@@ -68,6 +74,7 @@ const EMPTY_LABELS: Record<FinanceGroupBy, string> = {
   month: "(No Month)",
   account: "(No Account)",
   category: "(No Category)",
+  flow: "(No Flow)",
 };
 
 function isCalendar(dimension: FinanceGroupBy): boolean {
@@ -83,8 +90,14 @@ function partOf(row: TransactionListRow, dimension: FinanceGroupBy): GroupPart |
     const name = row.accountName.trim();
     return name === "" ? null : { key: name, label: name, sort: name };
   }
-  const name = row.category?.trim() ?? "";
-  return name === "" ? null : { key: name, label: name, sort: name };
+  if (dimension === "flow") {
+    const label = flowLabel(effectiveFlow(row));
+    return { key: label, label, sort: label };
+  }
+  // The effective category, matching the column — grouping on the raw user field would
+  // file every classified row under "(No Category)".
+  const name = effectiveCategory(row);
+  return { key: name, label: name, sort: name };
 }
 
 function compareText(left: string, right: string): number {

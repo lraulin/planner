@@ -53,13 +53,31 @@ export type AnalyticsRow = {
 };
 
 /**
+ * The three fields that decide a flow. Structural rather than `AnalyticsRow` so the register
+ * can resolve the same value from its own row type — one implementation of the rule, which
+ * is the whole point of it being a rule.
+ */
+export type FlowFields = {
+  flowOverride: FinanceFlowKind | null;
+  derivedFlow: FinanceFlowKind | null;
+  amountCents: number;
+};
+
+/** The fields that decide a category, on the same terms as {@link FlowFields}. */
+export type CategoryFields = {
+  category: string | null;
+  derivedCategory: string | null;
+  sourceCategory: string;
+};
+
+/**
  * The flow to report this row as.
  *
  * The fallback is not dead code: a row imported since the last reclassify has no derived
  * flow at all, and a dashboard that silently dropped it would under-report spending without
  * saying so.
  */
-export function effectiveFlow(row: AnalyticsRow): FinanceFlowKind {
+export function effectiveFlow(row: FlowFields): FinanceFlowKind {
   return (
     row.flowOverride ?? row.derivedFlow ?? (row.amountCents > 0 ? "refund" : "spend")
   );
@@ -70,7 +88,7 @@ export function effectiveFlow(row: AnalyticsRow): FinanceFlowKind {
  * implies: the user's own, then the classifier's, then the bank's vocabulary mapped onto
  * our taxonomy, then an honest admission.
  */
-export function effectiveCategory(row: AnalyticsRow): string {
+export function effectiveCategory(row: CategoryFields): string {
   const own = row.category?.trim();
   if (own) return own;
   if (row.derivedCategory) return row.derivedCategory;
@@ -78,7 +96,7 @@ export function effectiveCategory(row: AnalyticsRow): string {
 }
 
 /** Merchant identity for grouping — a rule's canonical name when one claimed the row. */
-export function effectiveMerchant(row: AnalyticsRow): string {
+export function effectiveMerchant(row: { description: string }): string {
   const normalized = normalizeMerchant(row.description);
   return matchRule(normalized)?.merchant ?? normalized;
 }
@@ -96,11 +114,11 @@ export function isSpending(flow: FinanceFlowKind): boolean {
  * A refund is a negative cost, which is why it is in `SPENDING_FLOWS` rather than dropped:
  * returning the couch has to reduce what the couch cost.
  */
-export function spendCentsOf(row: AnalyticsRow): number {
+export function spendCentsOf(row: FlowFields): number {
   return isSpending(effectiveFlow(row)) ? -row.amountCents : 0;
 }
 
-export function incomeCentsOf(row: AnalyticsRow): number {
+export function incomeCentsOf(row: FlowFields): number {
   return effectiveFlow(row) === "income" ? row.amountCents : 0;
 }
 

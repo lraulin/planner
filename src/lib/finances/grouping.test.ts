@@ -17,6 +17,11 @@ function row(
     amountCents: extras.amountCents ?? -100,
     sourceCategory: "",
     category: extras.category ?? null,
+    derivedCategory: extras.derivedCategory ?? null,
+    derivedFlow: extras.derivedFlow ?? null,
+    flowOverride: extras.flowOverride ?? null,
+    excludeFromBaseline: extras.excludeFromBaseline ?? false,
+    eventLabel: extras.eventLabel ?? "",
     notes: "",
     balanceAfterCents: null,
   };
@@ -82,12 +87,20 @@ describe("groupTransactions", () => {
     expect(december?.kind === "group" && december.count).toBe(2);
   });
 
-  it("groups by account alphabetically and category with empties last", () => {
+  it("groups by account alphabetically and category by its effective value", () => {
     const grouped = groupTransactions(
       [
         row("a", "2024-01-01", { accountName: "Savings", category: "Rent" }),
+        // No category of its own and nothing derived: `Uncategorized` is a real bucket
+        // rather than an empty one, and it is the same word the dashboard uses.
         row("b", "2024-01-02", { accountName: "Checking", category: null }),
-        row("c", "2024-01-03", { accountName: "Checking", category: "Groceries" }),
+        // The classifier's answer groups too — otherwise every classified row would pile
+        // up under one header while the dashboard reported categories for all of them.
+        row("c", "2024-01-03", {
+          accountName: "Checking",
+          category: null,
+          derivedCategory: "Groceries",
+        }),
       ],
       ["account", "category"],
     );
@@ -97,9 +110,25 @@ describe("groupTransactions", () => {
     expect(headers).toEqual([
       "0:Checking",
       "1:Groceries",
-      "1:(No Category)",
+      "1:Uncategorized",
       "0:Savings",
       "1:Rent",
     ]);
+  });
+
+  it("groups by flow, so a reclassify can be audited in one list", () => {
+    const grouped = groupTransactions(
+      [
+        row("a", "2024-01-01", { derivedFlow: "spend" }),
+        row("b", "2024-01-02", { derivedFlow: "internal_transfer" }),
+        // The user disagreed; the override is what groups.
+        row("c", "2024-01-03", { derivedFlow: "spend", flowOverride: "refund" }),
+      ],
+      ["flow"],
+    );
+    const headers = grouped
+      .filter((entry) => entry.kind === "group")
+      .map((entry) => (entry.kind === "group" ? entry.label : ""));
+    expect(headers).toEqual(["Refund", "Spend", "Transfer (own accounts)"]);
   });
 });

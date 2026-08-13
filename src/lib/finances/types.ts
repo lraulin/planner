@@ -1,4 +1,4 @@
-import type { FinanceAccountKind } from "@/db/schema";
+import type { FinanceAccountKind, FinanceFlowKind } from "@/db/schema";
 
 /**
  * Which feed a row came from. A string union rather than a database enum because adding a
@@ -141,7 +141,14 @@ export type FinanceAccountRow = {
   transactionCount: number;
 };
 
-/** One register row. */
+/**
+ * One register row.
+ *
+ * Carries both halves of the classification split: `derived*` is what the classifier worked
+ * out and is rewritten by every reclassify, while `category`, `flowOverride`,
+ * `excludeFromBaseline` and `eventLabel` are yours and survive one. The register shows the
+ * effective value of each and marks which is which.
+ */
 export type TransactionListRow = {
   id: string;
   accountId: string;
@@ -152,6 +159,11 @@ export type TransactionListRow = {
   amountCents: number;
   sourceCategory: string;
   category: string | null;
+  derivedCategory: string | null;
+  derivedFlow: FinanceFlowKind | null;
+  flowOverride: FinanceFlowKind | null;
+  excludeFromBaseline: boolean;
+  eventLabel: string;
   notes: string;
   balanceAfterCents: number | null;
 };
