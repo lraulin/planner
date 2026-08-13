@@ -640,6 +640,14 @@ YNAB-like, but simpler — and connected to goals over time.
      discretionary merchants uninformative. Fixing that needs item-level purpose (or a
      person), not another merchant alias. Split-across-categories stays out of the
      current spec for the same reason.
+  3. **Itemized receipts** — the data that would make (1) and (2) real. One bank row
+     is a lump; the receipt is groceries + formula + cat food. Likely sources, none
+     chosen: Amazon order history / invoice export; crawl order-confirmation email
+     (Amazon already sends line items; others may); Walmart is harder from the bank
+     feed but purchases go through the app, so receipts may be exportable from there.
+     A later spec would have to attach line items to an existing
+     `finance_transactions` row without changing `amount` or inventing spend. Do not
+     start until the register's lumps are already classified honestly.
 
 - **Eventually:** **Plaid** (or equivalent) to pull bank data by API — only after
   CSV + envelopes are trustworthy, given lock-in and security cost.

@@ -28,11 +28,12 @@ layer required to make its numbers true.
 - Plaid / live feeds, multi-currency, goal linkage — unchanged from the founding spec.
 - Editing the pre-2025-08 blind spot away by estimating the missing itemization. It is
   disclosed, not modelled.
-- **AI classification**, and categorising by **purpose rather than merchant** (Amazon
-  vs Walmart selling the same goods; PayPal naming only itself). Roadmap § Financial
-  planning, "Later — classification that isn't the merchant's name." The rules list in
-  this spec will keep filing Walmart as Groceries and Amazon as Shopping; that is a
-  known ceiling, not a bug to patch with more aliases.
+- **AI classification**, categorising by **purpose rather than merchant**, and
+  **itemized receipts** (Amazon order history, email confirmations, Walmart app
+  receipts). Roadmap § Financial planning, "Later — classification that isn't the
+  merchant's name." The rules list in this spec will keep filing Walmart as Groceries
+  and Amazon as Shopping; that is a known ceiling, not a bug to patch with more
+  aliases.
 
 ## Decisions
 
