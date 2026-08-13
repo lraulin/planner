@@ -5,6 +5,7 @@ import type { NodeState, PriorityLetter } from "@/db/schema";
 import { useDateFormatter } from "@/components/settings/SettingsProvider";
 import { formatFullDateKey } from "@/lib/dateFormat";
 import { isSettled } from "@/lib/tree/completionCascade";
+import { isDeadlineOverdue } from "@/lib/tree/status";
 import type { OutlineNode } from "@/lib/tree/types";
 import {
   formatEffort,
@@ -426,8 +427,7 @@ export function DeadlineCell({
 }) {
   const formatDate = useDateFormatter();
   const value = node.deadline ? toDateKey(node.deadline) : "";
-  const overdue =
-    value !== "" && today !== null && value < today && node.state !== "completed";
+  const overdue = isDeadlineOverdue(value, today, node.state);
 
   return (
     <span className="relative block w-full">

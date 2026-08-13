@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentUserId } from "@/lib/auth";
 import { captureItems, type CaptureDefaults } from "@/lib/capture/mutations";
 import { parseCapture } from "@/lib/capture/parse";
+import { isSettled } from "@/lib/tree/completionCascade";
 import { loadOutline } from "@/lib/tree/queries";
 import type { NodeType } from "@/db/schema";
 import { actionErrorMessage } from "../actionResult";
@@ -54,7 +55,7 @@ export async function listCaptureTargetsAction(): Promise<CaptureTarget[]> {
   const nodes = await loadOutline(userId);
 
   return nodes
-    .filter((node) => node.type !== "task" && node.state !== "completed")
+    .filter((node) => node.type !== "task" && !isSettled(node.state))
     .map((node) => ({
       id: node.id,
       name: node.name || "(untitled)",

@@ -128,6 +128,34 @@ describe("visiblePickerRows", () => {
     ]);
   });
 
+  it("excludes settled projects so they cannot be a filing destination", () => {
+    const withSettled = [
+      ...rows,
+      node({
+        id: "done",
+        parentId: "goal",
+        type: "project",
+        name: "Shipped",
+        state: "completed",
+      }),
+      node({
+        id: "killed",
+        parentId: "goal",
+        type: "project",
+        name: "Scrapped",
+        state: "cancelled",
+      }),
+    ];
+    expect(
+      projectPickerRows(withSettled, {
+        query: "",
+        groupByResultArea: true,
+        includeDeferred: false,
+        today: "2026-08-09",
+      }).map((row) => row.name),
+    ).toEqual(["Work", "Health", "Grow", "Learn Italian", "Alpha", "Beta"]);
+  });
+
   it("defaultExpandedPickerIds expands every parent", () => {
     const tree = projectPickerRows(rows, {
       query: "",

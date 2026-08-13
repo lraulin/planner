@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { fromDateKey, shiftDateKey } from "@/lib/schedule/geometry";
 import {
+  isDeadlineOverdue,
   scheduleStatus,
   scheduleStatusById,
   scheduleStatusForNode,
@@ -238,5 +239,28 @@ describe("STATUS_LABELS", () => {
     for (const s of statuses) {
       expect(STATUS_LABELS[s]).toBeTruthy();
     }
+  });
+});
+
+describe("isDeadlineOverdue", () => {
+  it("paints a past deadline on open work", () => {
+    expect(isDeadlineOverdue("2026-07-27", TODAY, "not_started")).toBe(true);
+    expect(isDeadlineOverdue("2026-07-28", TODAY, "not_started")).toBe(false);
+  });
+
+  it("does not paint settled work, even when the date is long past", () => {
+    // The deadline cell used `state !== "completed"`, so cancelled kept the overdue colour
+    // after the rest of the app had already treated cancelled as finished.
+    expect(isDeadlineOverdue("2026-07-01", TODAY, "completed")).toBe(false);
+    expect(isDeadlineOverdue("2026-07-01", TODAY, "cancelled")).toBe(false);
+  });
+
+  it("still paints a postponed row whose deadline has passed", () => {
+    expect(isDeadlineOverdue("2026-07-01", TODAY, "postponed")).toBe(true);
+  });
+
+  it("stays quiet when today is unknown or the cell is empty", () => {
+    expect(isDeadlineOverdue("2026-07-01", null, "not_started")).toBe(false);
+    expect(isDeadlineOverdue("", TODAY, "not_started")).toBe(false);
   });
 });

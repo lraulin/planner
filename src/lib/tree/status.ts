@@ -155,6 +155,25 @@ export function scheduleStatus(input: ScheduleStatusInput): ScheduleStatus {
   return "on_schedule";
 }
 
+/**
+ * Whether a deadline cell should paint as overdue.
+ *
+ * Date-only grouping still buckets a cancelled item's past deadline under Overdue
+ * (`deadlineBandOf`) because the question there is "when is the date". The cell
+ * colour is a status cue, so settled work stays quiet — the same pair
+ * `scheduleStatus` already treats as completed. A postponed row with a past
+ * deadline still paints: the date is past; the shelf is a different column.
+ */
+export function isDeadlineOverdue(
+  deadlineKey: string,
+  today: string | null,
+  state: NodeState | null,
+): boolean {
+  if (deadlineKey === "" || today === null) return false;
+  if (isSettled(state)) return false;
+  return deadlineKey < today;
+}
+
 /** Convenience: local status from an outline node. */
 export function scheduleStatusForNode(
   node: Pick<
