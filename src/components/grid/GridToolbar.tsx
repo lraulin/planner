@@ -84,6 +84,7 @@ export function GridToolbar({
   left,
   right,
   commandCapabilities,
+  hostCommands,
 }: {
   grid: GridState;
   /** Names the grid in the filter dialog title, e.g. "Tasks". */
@@ -111,6 +112,15 @@ export function GridToolbar({
    * instead and let every grid have it."
    */
   views?: ModuleViewsApi;
+  /**
+   * Commands belonging to the surface *around* this grid, merged into its command row.
+   *
+   * For a grid that is one mode of a larger tab rather than a module of its own — the
+   * Weekly Schedule's Agenda. That tab already draws a command row; a second one below it
+   * would be two menu bars stacked, and dropping the tab's own row instead would leave
+   * `New Time Chart…` with no visible path on a desktop.
+   */
+  hostCommands?: readonly Command[];
   /** Tab-specific selects that come first: Result Area, Project scope. */
   left?: ReactNode;
   /** Tab-specific actions that come last: Rename, Open, New note. */
@@ -165,6 +175,7 @@ export function GridToolbar({
    */
   const commands = useMemo<Command[]>(() => {
     const list: Command[] = [
+      ...(hostCommands ?? []),
       ...deckCommands,
       {
         id: "view.filter",
@@ -227,6 +238,7 @@ export function GridToolbar({
 
     return list;
   }, [
+    hostCommands,
     deckCommands,
     resetGrid,
     setAllGroupsCollapsed,

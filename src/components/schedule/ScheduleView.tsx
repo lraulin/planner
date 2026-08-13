@@ -33,6 +33,7 @@ import {
   syncGoogleAction,
 } from "@/app/schedule/actions";
 import { WeekCalendar } from "./WeekCalendar";
+import { AgendaGrid } from "./AgendaGrid";
 import { ProjectsRail } from "./ProjectsRail";
 import { AppointmentDrawer } from "./AppointmentDrawer";
 import { MiniMonth } from "./MiniMonth";
@@ -47,6 +48,8 @@ import { slotDurationOf, SLOT_MINUTES } from "@/lib/settings/schedule";
 import { SCHEDULE_VIEW_CODEC } from "./scheduleSetting";
 import type { CalendarTarget } from "@/lib/schedule/calendarTarget";
 import { defaultBlockRange } from "@/lib/schedule/blockDraft";
+import type { AgendaRow } from "@/lib/schedule/agenda";
+import { nextCheckState } from "@/lib/schedule/checkState";
 import { owningProjectId } from "@/lib/tree/owningProject";
 import { CommandBar } from "@/components/grid/CommandBar";
 import { useRegisterCommands } from "@/components/shell/CommandProvider";
@@ -186,6 +189,8 @@ export function ScheduleView({ initial, nodes, anchorKey, blockNodeId = null }: 
   const [editingAppointment, setEditingAppointment] = useState<
     Appointment | DraftAppointment | null
   >(null);
+  /** The agenda's focused row, by occurrence key. Selection is per-mode, not shared. */
+  const [selectedAgendaId, setSelectedAgendaId] = useState<string | null>(null);
   /** Where the calendar's context menu is open, and what it is about. */
   const [calendarMenuAt, setCalendarMenuAt] = useState<{
     target: CalendarTarget;
@@ -443,6 +448,24 @@ export function ScheduleView({ initial, nodes, anchorKey, blockNodeId = null }: 
       });
     }
   }
+
+  /**
+   * The agenda's row actions, expressed through the calendar's own handlers.
+   *
+   * An agenda row *is* an occurrence — the same appointment drawn as a line instead of a
+   * block — so opening one and cycling its check state must be the same operations, not a
+   * second implementation that can disagree about what "done" means.
+   */
+  function openAgendaRow(row: AgendaRow) {
+    const occurrence = occurrences.find((entry) => entry.occurrenceKey === row.id);
+    if (occurrence) openOccurrence(occurrence);
+  }
+
+  const cycleAgendaRow = asyncHandler(
+    (row: AgendaRow) =>
+      handleCycleCheck(row.appointmentId, nextCheckState(row.checkState)),
+    reportError,
+  );
 
   const handleNewChart = useCallback(async () => {
     const name = window.prompt("Time Chart name", "New Time Chart");
@@ -791,6 +814,123 @@ export function ScheduleView({ initial, nodes, anchorKey, blockNodeId = null }: 
 
   useRegisterCommands(commands);
 
+  /**
+   * The lens: what am I looking at. Rendered on this view's own bar in Calendar mode and
+   * handed to the agenda grid's toolbar in Agenda mode, so that either way there is exactly
+   * one command row and one lens row.
+   */
+  const lensControls = (
+    <>
+      <label className="flex items-center gap-1.5 text-ink-muted">
+        Time Chart:
+        <select
+          className="rounded border border-rule bg-surface px-2 py-1 text-ink"
+          value={selectedChartId ?? ""}
+          onChange={(e) => selectChart(e.target.value)}
+        >
+          {charts.length === 0 && <option value="">(none)</option>}
+          {charts.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name || "Untitled"}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button
+        type="button"
+        className="rounded border border-select-edge bg-select px-2 py-1 text-[0.8125rem] font-medium text-ink hover:opacity-90"
+        onClick={() => router.push(`/schedule/plan?week=${anchorKey}&step=0`)}
+      >
+        Plan Week…
+      </button>
+      {/*
+       * Calendar | Agenda. A lens control, not a command — it answers "what am I looking
+       * at", so it belongs on this row rather than among the verbs above (`data-grid.md`).
+       * Two options visible at a glance is a segmented control, the same shape the grids'
+       * density switch uses.
+       */}
+      <div
+        role="group"
+        aria-label="Schedule view"
+        className="flex flex-none overflow-hidden rounded border border-rule"
+      >
+        {(
+          [
+            ["calendar", "Calendar", "Time blocks on a grid"],
+            ["agenda", "Agenda", "The same days as a list, with days left"],
+          ] as const
+        ).map(([mode, label, title]) => (
+          <button
+            key={mode}
+            type="button"
+            aria-pressed={view.viewMode === mode}
+            title={title}
+            onClick={() => patchView((current) => ({ ...current, viewMode: mode }))}
+            className={[
+              "min-h-tap px-2 py-1 text-[0.8125rem] leading-none whitespace-nowrap transition-colors md:min-h-0",
+              view.viewMode === mode
+                ? "bg-select text-ink"
+                : "text-ink-muted hover:bg-surface-raised hover:text-ink",
+            ].join(" ")}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+    </>
+  );
+
+  /**
+   * A day pager below `md`, stepping across the range boundary by navigating and landing on
+   * the far end of the neighbouring one. The range pager beside it is hidden there — even
+   * seven columns on a phone is not something to page through, let alone twenty.
+   */
+  const rangePagers = (
+    <>
+      <div className="ml-auto flex items-center gap-1 md:hidden">
+        <button
+          type="button"
+          aria-label="Previous day"
+          className="min-h-tap rounded border border-rule bg-surface px-3 text-ink"
+          onClick={() => stepDay(-1)}
+        >
+          ‹
+        </button>
+        <span className="tabular min-w-[8rem] text-center text-ink">
+          {compactDay.toLocaleDateString(undefined, DAY_LABEL)}
+        </span>
+        <button
+          type="button"
+          aria-label="Next day"
+          className="min-h-tap rounded border border-rule bg-surface px-3 text-ink"
+          onClick={() => stepDay(1)}
+        >
+          ›
+        </button>
+      </div>
+
+      <div className="ml-auto hidden items-center gap-1 md:flex">
+        <button
+          type="button"
+          aria-label="Previous days"
+          className="rounded border border-rule bg-surface px-2 py-1 text-ink hover:bg-surface-raised"
+          onClick={() => stepRange(-1)}
+        >
+          ‹
+        </button>
+        <span className="min-w-[12rem] text-center tabular text-ink">{rangeLabel}</span>
+        <button
+          type="button"
+          aria-label="Next days"
+          className="rounded border border-rule bg-surface px-2 py-1 text-ink hover:bg-surface-raised"
+          onClick={() => stepRange(1)}
+        >
+          ›
+        </button>
+      </div>
+    </>
+  );
+
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
       {/* The week below is still fully usable — it just may be behind Google. Saying so
@@ -821,117 +961,76 @@ export function ScheduleView({ initial, nodes, anchorKey, blockNodeId = null }: 
         `Refresh` existed as bordered buttons and nowhere else, and `Refresh` disappeared entirely
         when sync was off rather than saying why.
       */}
-      <div className="hidden flex-none items-center gap-2 border-b border-rule bg-shell px-3 py-1.5 md:flex">
-        <CommandBar commands={commands} />
-      </div>
-      <div className="flex flex-none flex-nowrap items-center gap-2 overflow-x-auto border-b border-rule bg-shell px-3 py-1.5 text-[0.8125rem] md:flex-wrap md:overflow-x-visible">
-        <label className="flex items-center gap-1.5 text-ink-muted">
-          Time Chart:
-          <select
-            className="rounded border border-rule bg-surface px-2 py-1 text-ink"
-            value={selectedChartId ?? ""}
-            onChange={(e) => selectChart(e.target.value)}
-          >
-            {charts.length === 0 && <option value="">(none)</option>}
-            {charts.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name || "Untitled"}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          type="button"
-          className="rounded border border-select-edge bg-select px-2 py-1 text-[0.8125rem] font-medium text-ink hover:opacity-90"
-          onClick={() => router.push(`/schedule/plan?week=${anchorKey}&step=0`)}
-        >
-          Plan Week…
-        </button>
-        {/*
-          `⋯` on the lens row, phone-only: the command row above is `md:flex`, so without this the
-          week's verbs would exist on a desktop and nowhere else. Not pinned outside a scroller here
-          because this row is short enough not to pan on a phone.
-        */}
-        <span className="flex-none md:hidden">
-          <OverflowMenu label="More commands for this schedule" />
-        </span>
-        {/*
-         * A day pager below `md`, stepping across the range boundary by navigating and landing
-         * on the far end of the neighbouring one. The range pager beside it is hidden there —
-         * even seven columns on a phone is not something to page through, let alone twenty.
-         */}
-        <div className="ml-auto flex items-center gap-1 md:hidden">
-          <button
-            type="button"
-            aria-label="Previous day"
-            className="min-h-tap rounded border border-rule bg-surface px-3 text-ink"
-            onClick={() => stepDay(-1)}
-          >
-            ‹
-          </button>
-          <span className="tabular min-w-[8rem] text-center text-ink">
-            {compactDay.toLocaleDateString(undefined, DAY_LABEL)}
-          </span>
-          <button
-            type="button"
-            aria-label="Next day"
-            className="min-h-tap rounded border border-rule bg-surface px-3 text-ink"
-            onClick={() => stepDay(1)}
-          >
-            ›
-          </button>
-        </div>
-
-        <div className="ml-auto hidden items-center gap-1 md:flex">
-          <button
-            type="button"
-            aria-label="Previous days"
-            className="rounded border border-rule bg-surface px-2 py-1 text-ink hover:bg-surface-raised"
-            onClick={() => stepRange(-1)}
-          >
-            ‹
-          </button>
-          <span className="min-w-[12rem] text-center tabular text-ink">
-            {rangeLabel}
-          </span>
-          <button
-            type="button"
-            aria-label="Next days"
-            className="rounded border border-rule bg-surface px-2 py-1 text-ink hover:bg-surface-raised"
-            onClick={() => stepRange(1)}
-          >
-            ›
-          </button>
-        </div>
-      </div>
+      {/*
+        In Agenda mode the grid's own toolbar carries both rows instead: these commands are
+        merged into its command row and the lens controls below become its `left` and
+        `right`. Two menu bars stacked is one too many, and two lens rows is worse.
+      */}
+      {view.viewMode === "calendar" && (
+        <>
+          <div className="hidden flex-none items-center gap-2 border-b border-rule bg-shell px-3 py-1.5 md:flex">
+            <CommandBar commands={commands} />
+          </div>
+          <div className="flex flex-none flex-nowrap items-center gap-2 overflow-x-auto border-b border-rule bg-shell px-3 py-1.5 text-[0.8125rem] md:flex-wrap md:overflow-x-visible">
+            {lensControls}
+            {/*
+              `⋯` on the lens row, phone-only: the command row above is `md:flex`, so without
+              this the schedule's verbs would exist on a desktop and nowhere else. Not pinned
+              outside a scroller here because this row is short enough not to pan on a phone.
+            */}
+            <span className="flex-none md:hidden">
+              <OverflowMenu label="More commands for this schedule" />
+            </span>
+            {rangePagers}
+          </div>
+        </>
+      )}
 
       <div className="flex min-h-0 flex-1">
-        <div className="min-h-0 min-w-0 flex-1">
-          <WeekCalendar
-            days={days}
-            rangeStart={rangeStart}
-            rangeEnd={rangeEnd}
-            singleDay={compact ? compactDay : undefined}
-            backgroundEvents={backgroundEvents}
-            occurrences={occurrences}
-            onSelectRange={handleCreateRange}
-            onEventClick={openOccurrence}
-            onEventDrop={asyncHandler(handleEventDrop, reportError)}
-            onExternalDrop={asyncHandler(handleExternalProjectDrop, reportError)}
-            onCycleCheck={asyncHandler(handleCycleCheck, reportError)}
-            onContextMenu={(target, x, y) => setCalendarMenuAt({ target, x, y })}
-            slotDuration={slotDurationOf(view.slotMinutes)}
-            weekends={!view.workWeek}
-          />
-          {calendarMenuAt && (
-            // Built on open rather than held in state, so a state row greys itself against the
-            // appointment as it is now — the same rule the grids' row menus follow.
-            <ContextMenu
-              x={calendarMenuAt.x}
-              y={calendarMenuAt.y}
-              items={calendarMenu(calendarMenuAt.target)}
-              onClose={() => setCalendarMenuAt(null)}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          {view.viewMode === "agenda" ? (
+            <AgendaGrid
+              occurrences={occurrences}
+              days={days}
+              nodes={nodes}
+              hostCommands={commands}
+              lensLeft={lensControls}
+              lensRight={rangePagers}
+              selectedId={selectedAgendaId}
+              onSelect={setSelectedAgendaId}
+              onOpenAppointment={openAgendaRow}
+              onCycleCheck={cycleAgendaRow}
             />
+          ) : (
+            <>
+              <WeekCalendar
+                days={days}
+                rangeStart={rangeStart}
+                rangeEnd={rangeEnd}
+                singleDay={compact ? compactDay : undefined}
+                backgroundEvents={backgroundEvents}
+                occurrences={occurrences}
+                onSelectRange={handleCreateRange}
+                onEventClick={openOccurrence}
+                onEventDrop={asyncHandler(handleEventDrop, reportError)}
+                onExternalDrop={asyncHandler(handleExternalProjectDrop, reportError)}
+                onCycleCheck={asyncHandler(handleCycleCheck, reportError)}
+                onContextMenu={(target, x, y) => setCalendarMenuAt({ target, x, y })}
+                slotDuration={slotDurationOf(view.slotMinutes)}
+                weekends={!view.workWeek}
+              />
+              {calendarMenuAt && (
+                // Built on open rather than held in state, so a state row greys itself
+                // against the appointment as it is now — the same rule the grids' row menus
+                // follow.
+                <ContextMenu
+                  x={calendarMenuAt.x}
+                  y={calendarMenuAt.y}
+                  items={calendarMenu(calendarMenuAt.target)}
+                  onClose={() => setCalendarMenuAt(null)}
+                />
+              )}
+            </>
           )}
         </div>
 
@@ -946,7 +1045,7 @@ export function ScheduleView({ initial, nodes, anchorKey, blockNodeId = null }: 
               onChangeMonth={(d) => navigateTo(d)}
             />
           </div>
-          <ProjectsRail nodes={nodes} />
+          {view.viewMode === "calendar" && <ProjectsRail nodes={nodes} />}
         </aside>
       </div>
 
