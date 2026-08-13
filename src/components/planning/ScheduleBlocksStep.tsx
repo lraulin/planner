@@ -13,7 +13,7 @@ import {
   scheduledMinutesForProject,
 } from "@/lib/planning/blocks";
 import { selectProjectsForCommitment } from "@/lib/planning/review";
-import { atMinutes, fromDateKey } from "@/lib/schedule/geometry";
+import { atMinutes, fromDateKey, parseFloatingDateTime } from "@/lib/schedule/geometry";
 import { weekRange } from "@/lib/schedule/range";
 import { formatEffort } from "@/lib/tree/format";
 import { asyncHandler } from "@/lib/eventHandler";
@@ -48,8 +48,8 @@ function hydrate(schedule: SchedulePayload) {
     charts: schedule.charts,
     backgroundEvents: schedule.backgroundEvents.map((e) => ({
       ...e,
-      start: new Date(e.start),
-      end: new Date(e.end),
+      start: parseFloatingDateTime(e.start),
+      end: parseFloatingDateTime(e.end),
     })),
     occurrences: schedule.occurrences.map((o) => ({
       ...o,

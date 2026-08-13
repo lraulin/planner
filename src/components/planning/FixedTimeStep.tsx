@@ -6,7 +6,7 @@ import type { OutlineNode } from "@/lib/tree/types";
 import type { SchedulePayload } from "@/lib/schedule/queries";
 import type { Occurrence } from "@/lib/schedule/recurrence";
 import type { WeeklyPlanPatch } from "@/lib/planning/mutations";
-import { fromDateKey } from "@/lib/schedule/geometry";
+import { fromDateKey, parseFloatingDateTime } from "@/lib/schedule/geometry";
 import { weekRange } from "@/lib/schedule/range";
 import { asyncHandler } from "@/lib/eventHandler";
 import {
@@ -37,8 +37,8 @@ function hydrate(schedule: SchedulePayload) {
     selectedChartId: schedule.selectedChartId,
     backgroundEvents: schedule.backgroundEvents.map((e) => ({
       ...e,
-      start: new Date(e.start),
-      end: new Date(e.end),
+      start: parseFloatingDateTime(e.start),
+      end: parseFloatingDateTime(e.end),
     })),
     occurrences: schedule.occurrences.map((o) => ({
       ...o,

@@ -213,6 +213,7 @@ export async function loadSchedule(
     ? await listTimeChartAreas(userId, selectedChartId)
     : [];
 
+  const keys = serializeRange(range);
   const backgroundEvents = expandTimeChartAreas(
     areas.map((a) => ({
       id: a.id,
@@ -224,7 +225,7 @@ export async function loadSchedule(
       foreColor: a.foreColor,
       labelEnabled: a.labelEnabled,
     })),
-    range.days,
+    keys.days,
   );
 
   /**
@@ -260,7 +261,6 @@ export async function loadSchedule(
       };
     });
 
-  const keys = serializeRange(range);
   return {
     charts,
     selectedChartId,

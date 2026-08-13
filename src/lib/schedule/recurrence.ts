@@ -10,7 +10,7 @@ import type {
   RecurrenceFrequency,
 } from "@/db/schema";
 import { addDays, addMonths, addYears } from "@/lib/dateMath";
-import { toDateKey } from "./geometry";
+import { floatingDateTime, toDateKey, weekdayOfDateKey } from "./geometry";
 
 export type Occurrence = {
   /** Master appointment id. */
@@ -236,11 +236,31 @@ export function appointmentToRecurrenceInput(a: Appointment): RecurrenceInput {
 }
 
 /**
+ * One Time Chart area, placed on a calendar day.
+ *
+ * `start` / `end` are floating local datetimes (`YYYY-MM-DDTHH:mm:00`), not instants.
+ * The server must not turn startMinute into a `Date` — that stamps the process zone
+ * and is how a 9am block became 5am Eastern on Vercel. The client parses these with
+ * `parseFloatingDateTime` in the user's zone.
+ */
+export type TimeChartBackgroundEvent = {
+  id: string;
+  areaId: string;
+  title: string;
+  start: string;
+  end: string;
+  backgroundColor: string;
+  textColor: string;
+  display: "background";
+};
+
+/**
  * Expand Time Chart areas into dated background instances for the days on screen.
  * Areas use daysOfWeek (0=Sun…6=Sat) and startMinute/durationMinutes.
  *
- * Takes the visible days rather than a start date and a length: the calendar's range can be
- * one day or twenty, and in Work Week Mode the days it draws are not consecutive.
+ * Takes the visible day keys rather than `Date`s: the calendar's range can be one day
+ * or twenty, Work Week Mode skips weekends, and a Date's weekday/`setHours` follow
+ * the process timezone. Keys do not.
  */
 export function expandTimeChartAreas(
   areas: Array<{
@@ -253,45 +273,21 @@ export function expandTimeChartAreas(
     foreColor: string;
     labelEnabled: boolean;
   }>,
-  days: readonly Date[],
-): Array<{
-  id: string;
-  areaId: string;
-  title: string;
-  start: Date;
-  end: Date;
-  backgroundColor: string;
-  textColor: string;
-  display: "background";
-}> {
-  const out: Array<{
-    id: string;
-    areaId: string;
-    title: string;
-    start: Date;
-    end: Date;
-    backgroundColor: string;
-    textColor: string;
-    display: "background";
-  }> = [];
+  dayKeys: readonly string[],
+): TimeChartBackgroundEvent[] {
+  const out: TimeChartBackgroundEvent[] = [];
 
-  for (const visible of days) {
-    const day = new Date(visible);
-    day.setHours(0, 0, 0, 0);
-    const weekday = day.getDay();
+  for (const dayKey of dayKeys) {
+    const weekday = weekdayOfDateKey(dayKey);
 
     for (const area of areas) {
       if (!area.daysOfWeek.includes(weekday)) continue;
-      const start = new Date(day);
-      start.setHours(0, 0, 0, 0);
-      start.setMinutes(area.startMinute);
-      const end = new Date(start.getTime() + area.durationMinutes * 60_000);
       out.push({
-        id: `tca:${area.id}:${toDateKey(day)}`,
+        id: `tca:${area.id}:${dayKey}`,
         areaId: area.id,
         title: area.labelEnabled ? area.name : "",
-        start,
-        end,
+        start: floatingDateTime(dayKey, area.startMinute),
+        end: floatingDateTime(dayKey, area.startMinute + area.durationMinutes),
         backgroundColor: area.backColor,
         textColor: area.foreColor,
         display: "background",

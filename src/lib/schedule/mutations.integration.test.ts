@@ -458,6 +458,10 @@ describeDb("loadSchedule", () => {
       range: weekRange(fromDateKey("2026-03-02")),
     });
     expect(payload.backgroundEvents).toHaveLength(7);
+    // Floating wall-clock, not a server-zone instant. A Date.toISOString() would
+    // carry Z and, on UTC, still look like midnight — the missing Z is the tripwire.
+    expect(payload.backgroundEvents[0].start).toMatch(/T00:00:00$/);
+    expect(payload.backgroundEvents[0].start).not.toMatch(/Z/);
   });
 
   it("expands a recurring master into occurrences inside the week", async () => {

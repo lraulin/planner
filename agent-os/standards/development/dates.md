@@ -129,14 +129,15 @@ Must keep green:
 
 ## Common pitfalls
 
-| Pitfall                                             | Why it hurts                                | Do instead                           |
-| --------------------------------------------------- | ------------------------------------------- | ------------------------------------ |
-| `startOfDay` on calendar fields on the server       | Server TZ rewrites the day (Aug 1 → Jul 31) | `asCalendarDay` / `fromDateKey`      |
-| Local midnight encoding                             | Client TZ ≠ server TZ                       | `fromDateKey` (UTC noon)             |
-| Local getters for stored field keys                 | Off-by-one after evening / SSR              | `toDateKey` (UTC)                    |
-| `localDateKey` for stored deadlines                 | Wrong near zone boundaries                  | `toDateKey`                          |
-| `toDateKey(new Date())` for picker max / “today” UI | UTC “today” on the server                   | `localDateKey` / `useToday`          |
-| Asserting `getHours() === 0` on calendar fields     | Fails; stored as UTC noon                   | `toDateKey` / `getUTCHours() === 12` |
+| Pitfall                                                                     | Why it hurts                                                           | Do instead                                                               |
+| --------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `startOfDay` on calendar fields on the server                               | Server TZ rewrites the day (Aug 1 → Jul 31)                            | `asCalendarDay` / `fromDateKey`                                          |
+| Local midnight encoding                                                     | Client TZ ≠ server TZ                                                  | `fromDateKey` (UTC noon)                                                 |
+| Local getters for stored field keys                                         | Off-by-one after evening / SSR                                         | `toDateKey` (UTC)                                                        |
+| `localDateKey` for stored deadlines                                         | Wrong near zone boundaries                                             | `toDateKey`                                                              |
+| `toDateKey(new Date())` for picker max / “today” UI                         | UTC “today” on the server                                              | `localDateKey` / `useToday`                                              |
+| Asserting `getHours() === 0` on calendar fields                             | Fails; stored as UTC noon                                              | `toDateKey` / `getUTCHours() === 12`                                     |
+| `setHours` / `setMinutes` on the server to place a Time Chart `startMinute` | Vercel is UTC, so a 9am block becomes 5am Eastern against appointments | `floatingDateTime` on the day key; `parseFloatingDateTime` on the client |
 
 ## Where things live
 

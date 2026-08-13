@@ -124,6 +124,56 @@ export function atMinutes(day: Date, minute: number): Date {
   );
 }
 
+/**
+ * Weekday of a `YYYY-MM-DD` key: 0=Sun…6=Sat.
+ *
+ * Reads UTC components of the UTC-noon encoding, so the answer does not depend on the
+ * process timezone. `new Date(key).getDay()` would — UTC midnight of a Sunday is Saturday
+ * evening in the Americas.
+ */
+export function weekdayOfDateKey(key: string): number {
+  return fromDateKey(key).getUTCDay();
+}
+
+const MINUTES_IN_DAY = 24 * 60;
+
+/**
+ * Floating local datetime `YYYY-MM-DDTHH:mm:00` for a day key plus minutes from midnight.
+ *
+ * Not an instant: there is no `Z` and no offset. Time Chart areas are wall-clock ("9am
+ * every weekday"), and baking them into a `Date` on the server stamps the *server's*
+ * zone. On Vercel that is UTC, so a 9am block becomes 5am Eastern on the calendar.
+ * Minutes past 24:00 roll into the next key.
+ */
+export function floatingDateTime(dayKey: string, minute: number): string {
+  const dayShift = Math.floor(minute / MINUTES_IN_DAY);
+  const mins = ((minute % MINUTES_IN_DAY) + MINUTES_IN_DAY) % MINUTES_IN_DAY;
+  const key = dayShift === 0 ? dayKey : shiftDateKey(dayKey, dayShift);
+  const hours = Math.floor(mins / 60);
+  const minutes = mins % 60;
+  return `${key}T${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:00`;
+}
+
+/**
+ * Read a floating `YYYY-MM-DDTHH:mm[:ss]` as a process-local instant.
+ *
+ * Pair of `floatingDateTime`: the server sends the wall-clock string, and the client
+ * (whose zone is the user's) turns it into a `Date` FullCalendar can place. Do not use
+ * `new Date(iso)` — a missing offset is implementation-defined, and an ISO-with-Z from
+ * a leftover instant would shift by the server's offset.
+ */
+export function parseFloatingDateTime(value: string): Date {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/.exec(value);
+  if (!match) return new Date(Number.NaN);
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hours = Number(match[4]);
+  const minutes = Number(match[5]);
+  const seconds = Number(match[6] ?? 0);
+  return new Date(year, month - 1, day, hours, minutes, seconds, 0);
+}
+
 /** Minutes from local midnight. */
 export function minutesOfDay(date: Date): number {
   return date.getHours() * 60 + date.getMinutes();

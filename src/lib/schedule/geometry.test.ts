@@ -4,16 +4,19 @@ import {
   atMinutes,
   contrastText,
   daysBetweenKeys,
+  floatingDateTime,
   fromDateKey,
   localDateKey,
   minutesOfDay,
   normalizeTimeRange,
+  parseFloatingDateTime,
   shiftDateKey,
   snapMinutes,
   sortDays,
   startOfWeek,
   toDateKey,
   weekDays,
+  weekdayOfDateKey,
 } from "./geometry";
 
 describe("snapMinutes", () => {
@@ -95,6 +98,40 @@ describe("toDateKey / fromDateKey", () => {
   it("localDateKey follows the wall clock for instants", () => {
     const evening = new Date(2026, 7, 1, 20, 0, 0);
     expect(localDateKey(evening)).toBe("2026-08-01");
+  });
+});
+
+describe("weekdayOfDateKey / floatingDateTime", () => {
+  it("reads the weekday off the key, not the process-local midnight", () => {
+    // 2026-07-26 is a Sunday. UTC midnight of that day is Saturday evening in New York;
+    // getDay() on new Date("2026-07-26") would report Saturday here.
+    expect(weekdayOfDateKey("2026-07-26")).toBe(0);
+    expect(weekdayOfDateKey("2026-07-27")).toBe(1);
+  });
+
+  it("writes a wall-clock time that is the same string in every zone", () => {
+    expect(floatingDateTime("2026-08-13", 9 * 60)).toBe("2026-08-13T09:00:00");
+    expect(floatingDateTime("2026-08-13", 9 * 60 + 30)).toBe("2026-08-13T09:30:00");
+  });
+
+  it("rolls minutes past midnight onto the next key", () => {
+    expect(floatingDateTime("2026-08-13", 24 * 60)).toBe("2026-08-14T00:00:00");
+    expect(floatingDateTime("2026-08-13", 22 * 60 + 8 * 60)).toBe(
+      "2026-08-14T06:00:00",
+    );
+  });
+
+  it("parses a floating string as local wall clock, not UTC", () => {
+    const at = parseFloatingDateTime("2026-08-13T09:00:00");
+    expect(at.getFullYear()).toBe(2026);
+    expect(at.getMonth()).toBe(7);
+    expect(at.getDate()).toBe(13);
+    expect(at.getHours()).toBe(9);
+    expect(at.getMinutes()).toBe(0);
+  });
+
+  it("returns an invalid Date rather than rolling a garbage string", () => {
+    expect(Number.isNaN(parseFloatingDateTime("not a time").getTime())).toBe(true);
   });
 });
 

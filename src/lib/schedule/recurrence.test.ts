@@ -4,8 +4,8 @@ import {
   expandTimeChartAreas,
   type RecurrenceInput,
 } from "./recurrence";
-import { fromDateKey, startOfWeek, toDateKey } from "./geometry";
-import { scheduleRange, weekRange } from "./range";
+import { fromDateKey, startOfWeek, toDateKey, weekdayOfDateKey } from "./geometry";
+import { scheduleRange, serializeRange, weekRange } from "./range";
 
 function master(
   partial: Partial<RecurrenceInput> & Pick<RecurrenceInput, "startAt" | "endAt">,
@@ -273,7 +273,7 @@ describe("expandRecurrence — bounds", () => {
 
 describe("expandTimeChartAreas", () => {
   it("places multi-day areas on each selected weekday", () => {
-    const week = weekRange(fromDateKey("2026-07-26")); // Sunday
+    const week = serializeRange(weekRange(fromDateKey("2026-07-26"))); // Sunday
     const events = expandTimeChartAreas(
       [
         {
@@ -303,6 +303,50 @@ describe("expandTimeChartAreas", () => {
     expect(events.filter((e) => e.areaId === "workout")).toHaveLength(5);
   });
 
+  it("emits floating wall-clock times, not process-local instants", () => {
+    // Regression: setHours/setMinutes on the server stamped Vercel's UTC zone, so a
+    // 9am Time Chart block arrived on the calendar as 5am Eastern. The string has no
+    // Z; a Date.toISOString() from either zone would fail this.
+    const events = expandTimeChartAreas(
+      [
+        {
+          id: "deep",
+          name: "Deep Work",
+          daysOfWeek: [1],
+          startMinute: 9 * 60,
+          durationMinutes: 3 * 60,
+          backColor: "#c8e0f0",
+          foreColor: "#000000",
+          labelEnabled: true,
+        },
+      ],
+      ["2026-07-27"],
+    );
+    expect(events).toHaveLength(1);
+    expect(events[0].start).toBe("2026-07-27T09:00:00");
+    expect(events[0].end).toBe("2026-07-27T12:00:00");
+  });
+
+  it("rolls a block that crosses midnight onto the next day key", () => {
+    const [event] = expandTimeChartAreas(
+      [
+        {
+          id: "sleep",
+          name: "Sleep",
+          daysOfWeek: [1],
+          startMinute: 22 * 60,
+          durationMinutes: 8 * 60,
+          backColor: "#000080",
+          foreColor: "#ffffff",
+          labelEnabled: true,
+        },
+      ],
+      ["2026-07-27"],
+    );
+    expect(event.start).toBe("2026-07-27T22:00:00");
+    expect(event.end).toBe("2026-07-28T06:00:00");
+  });
+
   it("covers whatever days it is given, not seven", () => {
     // A three-day view draws three background blocks, and Work Week Mode draws none on the
     // weekend it is hiding — both fall out of taking the days rather than a week start.
@@ -319,18 +363,25 @@ describe("expandTimeChartAreas", () => {
       },
     ];
     const options = { anchorMode: "rolling", workWeek: false } as const;
-    const three = scheduleRange(fromDateKey("2026-07-26"), { ...options, dayCount: 3 });
+    const three = serializeRange(
+      scheduleRange(fromDateKey("2026-07-26"), { ...options, dayCount: 3 }),
+    );
     expect(expandTimeChartAreas(areas, three.days)).toHaveLength(3);
 
-    const twenty = scheduleRange(fromDateKey("2026-07-26"), {
-      ...options,
-      dayCount: 20,
-      workWeek: true,
-    });
+    const twenty = serializeRange(
+      scheduleRange(fromDateKey("2026-07-26"), {
+        ...options,
+        dayCount: 20,
+        workWeek: true,
+      }),
+    );
     const events = expandTimeChartAreas(areas, twenty.days);
     expect(events).toHaveLength(20);
-    expect(events.every((e) => e.start.getDay() !== 0 && e.start.getDay() !== 6)).toBe(
-      true,
-    );
+    expect(
+      events.every((e) => {
+        const weekday = weekdayOfDateKey(e.start.slice(0, 10));
+        return weekday !== 0 && weekday !== 6;
+      }),
+    ).toBe(true);
   });
 });

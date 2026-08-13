@@ -14,7 +14,11 @@ import type { Appointment, AppointmentCheck, TimeChart } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { SchedulePayload, ScheduleOccurrence } from "@/lib/schedule/queries";
 import type { Occurrence } from "@/lib/schedule/recurrence";
-import { fromDateKey, localDateKey } from "@/lib/schedule/geometry";
+import {
+  fromDateKey,
+  localDateKey,
+  parseFloatingDateTime,
+} from "@/lib/schedule/geometry";
 import { isDateKey } from "@/lib/metrics/parse";
 import {
   DAY_COUNTS,
@@ -117,8 +121,8 @@ function hydratePayload(initial: SchedulePayload) {
     rangeEnd: hydrateDay(initial.rangeEnd),
     backgroundEvents: initial.backgroundEvents.map((e) => ({
       ...e,
-      start: new Date(e.start),
-      end: new Date(e.end),
+      start: parseFloatingDateTime(e.start),
+      end: parseFloatingDateTime(e.end),
     })),
     occurrences: initial.occurrences.map((o) => ({
       ...o,
