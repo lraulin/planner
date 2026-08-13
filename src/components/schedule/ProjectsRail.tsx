@@ -64,22 +64,11 @@ export function ProjectsRail({ nodes }: Props) {
   const grouped = useMemo(() => {
     if (!groupByArea) return [{ label: null as string | null, items: projects }];
 
-    // Built once, not once per project: this was inside `areaName`, so grouping rebuilt the
-    // whole index for every row it grouped.
-    const byId = new Map(nodes.map((n) => [n.id, n]));
-
-    function areaName(node: OutlineNode): string {
-      let cur: OutlineNode | undefined = node;
-      while (cur) {
-        if (cur.type === "result_area") return cur.name || "Untitled";
-        cur = cur.parentId ? byId.get(cur.parentId) : undefined;
-      }
-      return "(No Result Area)";
-    }
-
+    // derive already walked this (`resultAreaName`). A second parent walk here would
+    // hang on a cycle and could disagree with the Outline about the name.
     const map = new Map<string, OutlineNode[]>();
     for (const p of projects) {
-      const key = areaName(p);
+      const key = p.resultAreaName || "(No Result Area)";
       const arr = map.get(key) ?? [];
       arr.push(p);
       map.set(key, arr);
@@ -95,7 +84,7 @@ export function ProjectsRail({ nodes }: Props) {
         return a.localeCompare(b);
       })
       .map(([label, items]) => ({ label, items }));
-  }, [projects, groupByArea, nodes]);
+  }, [projects, groupByArea]);
 
   // FullCalendar external drag source
   useEffect(() => {

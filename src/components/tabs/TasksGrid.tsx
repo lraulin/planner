@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { ContactOption } from "@/lib/contacts/types";
+import { owningProjectId } from "@/lib/tree/owningProject";
 import { asGroupBy, treeGridRows, type GroupBy, type GridRow } from "@/lib/tree/slice";
 import { formatEffort, formatPriority } from "@/lib/tree/format";
 import {
@@ -383,19 +384,15 @@ export function TasksGrid({
     });
     const inScope = (row: GridRow) => {
       if (scopeId !== "__none__" || row.kind !== "node") return true;
-      // No project in the ancestor chain.
-      let cur: OutlineNode | undefined = row.node;
-      while (cur) {
-        if (cur.type === "project") return false;
-        cur = cur.parentId ? tab.byId.get(cur.parentId) : undefined;
-      }
-      return true;
+      // The full tree, not the next-actions slice: a hidden project ancestor still
+      // files the task.
+      return owningProjectId(tab.nodes, row.node.id) === null;
     };
     return {
       rows: prepared.rows.filter(inScope),
       narrowingRows: prepared.narrowingRows.filter(inScope),
     };
-  }, [sourceNodes, tab.byId, tab.today, gridState.groupBy, includeDeferred, scopeId]);
+  }, [sourceNodes, tab.nodes, tab.today, gridState.groupBy, includeDeferred, scopeId]);
   const { rows, narrowingRows } = preparedRows;
 
   const distinctValues = useMemo(
