@@ -1,28 +1,14 @@
-import { AppShell } from "@/components/shell/AppShell";
-import { OverviewView } from "@/components/overview/OverviewView";
-import { getCurrentUserId } from "@/lib/auth";
-import { listMasterContexts } from "@/lib/contexts/queries";
-import { organizerQueue } from "@/lib/organizer/queue";
-import { localDateKey } from "@/lib/schedule/geometry";
-import { loadOutline } from "@/lib/tree/queries";
+import { legacyRedirect } from "@/components/shell/legacyRedirect";
 
 export const dynamic = "force-dynamic";
 
-export default async function OverviewPage() {
-  const userId = await getCurrentUserId();
-  const [nodes, masterContexts] = await Promise.all([
-    loadOutline(userId),
-    listMasterContexts(userId),
-  ]);
-  const inboxCount = organizerQueue(nodes, localDateKey(new Date())).length;
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
-  return (
-    <AppShell active="overview">
-      <OverviewView
-        nodes={nodes}
-        inboxCount={inboxCount}
-        masterContexts={masterContexts}
-      />
-    </AppShell>
-  );
+/** `/overview` is `/plan/overview` now. See `legacyRedirect`. */
+export default async function OverviewRedirect({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  await legacyRedirect("/plan/overview", searchParams);
 }

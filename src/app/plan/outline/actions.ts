@@ -4,7 +4,7 @@ import type { NodeState, PriorityLetter } from "@/db/schema";
 import type { Position } from "@/lib/tree/types";
 import { nodeFromKind, type NodeKind } from "@/lib/tree/hierarchy";
 import * as tree from "@/lib/tree/mutations";
-import { run, type ActionResult } from "../actionResult";
+import { run, type ActionResult } from "../../actionResult";
 
 /**
  * Server actions wrapping the tree mutations. Each resolves the user itself, so no caller

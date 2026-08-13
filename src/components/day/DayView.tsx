@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { NodeState } from "@/db/schema";
-import { deleteNodeAction } from "@/app/outline/actions";
+import { deleteNodeAction } from "@/app/plan/outline/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import { ErrorBanner } from "@/components/tabs/tabChrome";

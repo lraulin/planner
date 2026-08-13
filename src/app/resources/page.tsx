@@ -1,24 +1,14 @@
-import { Suspense } from "react";
-import { getCurrentUserId } from "@/lib/auth";
-import { loadContactOptions } from "@/lib/contacts/queries";
-import { listResources } from "@/lib/resources/queries";
-import { AppShell } from "@/components/shell/AppShell";
-import { ResourcesView } from "@/components/resources/ResourcesView";
+import { legacyRedirect } from "@/components/shell/legacyRedirect";
 
 export const dynamic = "force-dynamic";
 
-export default async function ResourcesPage() {
-  const userId = await getCurrentUserId();
-  const [resources, contacts] = await Promise.all([
-    listResources(userId),
-    loadContactOptions(userId),
-  ]);
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
-  return (
-    <AppShell active="resources">
-      <Suspense fallback={<div className="min-h-0 flex-1" />}>
-        <ResourcesView initialResources={resources} contacts={contacts} />
-      </Suspense>
-    </AppShell>
-  );
+/** `/resources` is `/library/resources` now. See `legacyRedirect`. */
+export default async function ResourcesRedirect({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  await legacyRedirect("/library/resources", searchParams);
 }

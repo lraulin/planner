@@ -120,7 +120,7 @@ export function TimeChartsView({
   const openEditor = useCallback(
     (chartId: string) => {
       router.push(
-        `/schedule/time-chart/${chartId}?returnTo=${encodeURIComponent("/time-charts")}`,
+        `/schedule/time-chart/${chartId}?returnTo=${encodeURIComponent("/schedule/time-charts")}`,
       );
     },
     [router],

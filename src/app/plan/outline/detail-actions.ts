@@ -17,7 +17,7 @@ import {
   runQuery,
   type ActionResult,
   type QueryResult,
-} from "../actionResult";
+} from "../../actionResult";
 
 /**
  * Server actions behind the detail drawer. Same contract as `./actions.ts`: each resolves

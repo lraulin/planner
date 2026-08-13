@@ -1,8 +1,8 @@
-import { redirect } from "next/navigation";
+import { legacyRedirect } from "@/components/shell/legacyRedirect";
 
 export const dynamic = "force-dynamic";
 
-type SearchParams = Promise<{ week?: string }>;
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 /** `/day/week` is `/schedule/week-plan` now. See `../page.tsx`. */
 export default async function WeekPlanRedirect({
@@ -10,10 +10,5 @@ export default async function WeekPlanRedirect({
 }: {
   searchParams: SearchParams;
 }) {
-  const { week } = await searchParams;
-  redirect(
-    week
-      ? `/schedule/week-plan?week=${encodeURIComponent(week)}`
-      : "/schedule/week-plan",
-  );
+  await legacyRedirect("/schedule/week-plan", searchParams);
 }

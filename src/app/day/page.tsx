@@ -1,8 +1,8 @@
-import { redirect } from "next/navigation";
+import { legacyRedirect } from "@/components/shell/legacyRedirect";
 
 export const dynamic = "force-dynamic";
 
-type SearchParams = Promise<{ date?: string }>;
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 /**
  * Day used to be its own module. It is two pages of Schedule now — the Task Chooser covers the
@@ -17,6 +17,5 @@ export default async function DayRedirect({
 }: {
   searchParams: SearchParams;
 }) {
-  const { date } = await searchParams;
-  redirect(date ? `/schedule/day?date=${encodeURIComponent(date)}` : "/schedule/day");
+  await legacyRedirect("/schedule/day", searchParams);
 }

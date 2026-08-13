@@ -40,7 +40,7 @@ import {
   setFocusAction,
   setPriorityAction,
   setStateAction,
-} from "@/app/outline/actions";
+} from "@/app/plan/outline/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import { DataGrid, type RowDrag } from "@/components/grid/DataGrid";

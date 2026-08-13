@@ -50,11 +50,83 @@ export type PageEntry = {
 };
 
 /**
- * Keyed by module id. A module absent from this map has no pages and renders no bar — which is
- * most of them, and the reason Tasks, Projects, Goals, Outline, Chooser, Metrics, Resources and
- * Contacts pay nothing for this feature.
+ * Keyed by module id. A module absent from this map has no pages and renders no bar — Chooser,
+ * Metrics and Fitness's siblings pay nothing for this feature.
  */
 const PAGES = {
+  /*
+   * Plan is the outline, drawn seven ways.
+   *
+   * These were seven **modules** until the sidebar was re-sorted. Every one of their route
+   * files called the same `loadOutline(userId)` and differed only in which grid received the
+   * result — one dataset, seven presentations, which is the shape this registry exists to
+   * hold. Achieve reached them the same way: sibling tabs behind one Go-menu entry.
+   *
+   * Task Chooser is deliberately *not* here. Taxonomically it is a variant of Tasks, but it is
+   * where you go to decide what to do next, several times a day, from anywhere — and it holds
+   * a scoring surface rather than an outline grid, so it would be the one tab in the set that
+   * did not belong to it.
+   *
+   * Order is `modules.ts`'s old sidebar order, which was already chosen as Achieve's own.
+   */
+  plan: [
+    {
+      id: "overview",
+      label: "Overview",
+      segment: "overview",
+      status: "built",
+      /*
+       * The hub, and the default — but reached through `lastPage`, so it is where a session
+       * with no history lands rather than where every session lands. `/` used to redirect here
+       * unconditionally, which meant someone who lives in Tasks re-picked Tasks every morning.
+       */
+      isDefault: true,
+      keywords: "home productivity process capture organize prioritize plan do",
+    },
+    {
+      id: "outline",
+      label: "Outline",
+      segment: "outline",
+      status: "built",
+      keywords: "tree result areas dreams hierarchy",
+    },
+    {
+      id: "projects",
+      label: "Projects",
+      segment: "projects",
+      status: "built",
+      keywords: "project list",
+    },
+    {
+      id: "tasks",
+      label: "Tasks",
+      segment: "tasks",
+      status: "built",
+      keywords: "task list todo",
+    },
+    {
+      id: "goals",
+      label: "Goals",
+      segment: "goals",
+      status: "built",
+      keywords: "goal dreams objectives",
+    },
+    {
+      id: "wishes",
+      label: "Wish List",
+      segment: "wishes",
+      status: "built",
+      keywords: "wish list someday maybe",
+    },
+    {
+      id: "result-areas",
+      label: "Result Areas",
+      segment: "result-areas",
+      status: "built",
+      keywords: "result area roles life dimensions importance weighting",
+    },
+  ],
+
   /*
    * Schedule holds Day and Week Plan because Day stopped being a module. It was shelved —
    * Task Chooser covers the daily-pick job better and Day still feels half-finished — and
@@ -93,6 +165,26 @@ const PAGES = {
       segment: "week-plan",
       status: "built",
       keywords: "weekly planning assign tasks to days",
+    },
+    /*
+     * Last, and the only one that is not a week you are looking at: Time Charts is the
+     * configuration behind the Calendar's background, edited rarely.
+     *
+     * It was its own Library module while its editor already lived at
+     * `/schedule/time-chart/[chartId]` — which is the split that made `destinationLabel` need
+     * a hardcoded ternary to name the place a Back link returned to.
+     *
+     * **The editor stays singular and does not move under this segment.** `pageForPathname`
+     * matches a declared segment's whole subtree, so `/schedule/time-charts/abc` would resolve
+     * to this page and the shell would draw the page bar on a focused flow that has its own
+     * exit. The one-letter difference is the whole mechanism; do not tidy it away.
+     */
+    {
+      id: "time-charts",
+      label: "Time Charts",
+      segment: "time-charts",
+      status: "built",
+      keywords: "time chart ideal week template background blocks",
     },
   ],
 
@@ -152,6 +244,34 @@ const PAGES = {
       segment: "insights",
       status: "reserved",
       keywords: "spending baseline lumpy cashflow charts dashboard",
+    },
+  ],
+
+  /*
+   * Reference data you maintain but rarely sit in — the `Library` *section* turned into a
+   * module, since a section holding two entries that were never places you work was spending
+   * three sidebar rows to say so.
+   *
+   * Master contexts belong with these conceptually and are deliberately absent: their only UI
+   * is `MasterContextsDialog`, and giving them a page is a new surface rather than a move.
+   * Categories look like they belong too and do not exist as a thing to manage — `category` is
+   * free text inherited down the tree, not a table.
+   */
+  library: [
+    {
+      id: "contacts",
+      label: "Contacts",
+      segment: "contacts",
+      status: "built",
+      isDefault: true,
+      keywords: "people address book phone email rolodex who discussion items",
+    },
+    {
+      id: "resources",
+      label: "Resources",
+      segment: "resources",
+      status: "built",
+      keywords: "capacity availability workload hours overhead effectiveness team",
     },
   ],
 } as const satisfies Record<string, readonly PageEntry[]>;

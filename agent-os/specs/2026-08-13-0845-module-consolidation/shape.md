@@ -1,6 +1,6 @@
 # Module consolidation — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-08-13)
 
 ## Scope
 

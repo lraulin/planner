@@ -48,7 +48,7 @@ export function AppShell({
           <Sidebar active={active} />
 
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <MobileHeader active={active} title={pageTitle} />
+            <MobileHeader title={pageTitle} />
 
             {/*
               Here rather than inside each module for the same reason the sidebar is: five

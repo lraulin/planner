@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { listContactOptionsAction } from "@/app/contacts/actions";
+import { listContactOptionsAction } from "@/app/library/contacts/actions";
 import type { ContactOption } from "@/lib/contacts/types";
 import { FieldGrid, Section } from "@/components/detail/fields";
 

@@ -13,7 +13,7 @@ import {
   setPrimaryContactItemAction,
   updateContactAction,
   updateContactItemAction,
-} from "@/app/contacts/actions";
+} from "@/app/library/contacts/actions";
 import { Drawer, DrawerFooter, DrawerHeader } from "@/components/detail/Drawer";
 import { FormTabs } from "@/components/detail/FormTabs";
 import {

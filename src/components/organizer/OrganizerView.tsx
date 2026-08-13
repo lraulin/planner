@@ -94,7 +94,7 @@ function OrganizerEmpty() {
             Quick capture
           </button>
           <Link
-            href="/overview"
+            href="/plan/overview"
             className="flex min-h-tap items-center justify-center rounded border border-rule px-4 text-[0.8125rem] text-ink hover:bg-surface-raised"
           >
             Back to Overview
@@ -534,7 +534,7 @@ function OrganizerItemForm({
       <footer className="pb-safe sticky bottom-0 border-t border-rule bg-shell/95 px-4 py-3 backdrop-blur sm:px-6 md:px-8">
         <div className="mx-auto flex max-w-[72rem] items-center justify-between gap-3">
           <Link
-            href="/overview"
+            href="/plan/overview"
             className="flex min-h-tap items-center rounded border border-rule px-4 text-[0.8125rem] text-ink hover:bg-surface-raised md:min-h-0 md:py-2"
           >
             Exit

@@ -1,24 +1,14 @@
-import { Suspense } from "react";
-import { getCurrentUserId } from "@/lib/auth";
-import { loadOutline } from "@/lib/tree/queries";
-import { loadContactOptions } from "@/lib/contacts/queries";
-import { AppShell } from "@/components/shell/AppShell";
-import { TasksGrid } from "@/components/tabs/TasksGrid";
+import { legacyRedirect } from "@/components/shell/legacyRedirect";
 
 export const dynamic = "force-dynamic";
 
-export default async function TasksPage() {
-  const userId = await getCurrentUserId();
-  const [nodes, contacts] = await Promise.all([
-    loadOutline(userId),
-    loadContactOptions(userId),
-  ]);
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
-  return (
-    <AppShell active="tasks">
-      <Suspense fallback={<div className="min-h-0 flex-1" />}>
-        <TasksGrid initialNodes={nodes} contactOptions={contacts} />
-      </Suspense>
-    </AppShell>
-  );
+/** `/tasks` is `/plan/tasks` now. See `legacyRedirect`. */
+export default async function TasksRedirect({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  await legacyRedirect("/plan/tasks", searchParams);
 }

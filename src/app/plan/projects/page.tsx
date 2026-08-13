@@ -1,0 +1,20 @@
+import { Suspense } from "react";
+import { getCurrentUserId } from "@/lib/auth";
+import { loadOutline } from "@/lib/tree/queries";
+import { AppShell } from "@/components/shell/AppShell";
+import { ProjectsGrid } from "@/components/tabs/ProjectsGrid";
+
+export const dynamic = "force-dynamic";
+
+export default async function ProjectsPage() {
+  const userId = await getCurrentUserId();
+  const nodes = await loadOutline(userId);
+
+  return (
+    <AppShell active="plan">
+      <Suspense fallback={<div className="min-h-0 flex-1" />}>
+        <ProjectsGrid initialNodes={nodes} />
+      </Suspense>
+    </AppShell>
+  );
+}

@@ -27,7 +27,7 @@ import {
   TextCell,
 } from "@/components/grid/cells";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
-import { setGoalFieldAction } from "@/app/outline/detail-actions";
+import { setGoalFieldAction } from "@/app/plan/outline/detail-actions";
 import { ToolbarSelect, ToolbarToggle } from "./tabChrome";
 import { useGridTab } from "./useGridTab";
 import { useNodeCommandDeck } from "@/components/grid/useNodeCommandDeck";

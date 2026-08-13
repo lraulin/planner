@@ -21,7 +21,7 @@ import {
 } from "@/components/grid/commonColumns";
 import { NameCell, TextCell } from "@/components/grid/cells";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
-import { setResultAreaFieldsAction } from "@/app/outline/detail-actions";
+import { setResultAreaFieldsAction } from "@/app/plan/outline/detail-actions";
 import { useGridTab } from "./useGridTab";
 import { useNodeCommandDeck } from "@/components/grid/useNodeCommandDeck";
 import type { OutlineColumnCtx } from "@/components/outline/outlineColumns";

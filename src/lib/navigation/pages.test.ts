@@ -9,7 +9,14 @@ import {
   pagesForModule,
 } from "./pages";
 
-const PAGED_MODULES = ["schedule", "fitness", "notes", "finances"] as const;
+const PAGED_MODULES = [
+  "plan",
+  "schedule",
+  "fitness",
+  "notes",
+  "finances",
+  "library",
+] as const;
 
 describe("the registry itself", () => {
   /**
@@ -35,9 +42,9 @@ describe("the registry itself", () => {
   });
 
   it("returns nothing for a module that has no pages", () => {
-    expect(pagesForModule("tasks")).toEqual([]);
-    expect(defaultPageFor("tasks")).toBeNull();
-    expect(hasPageBar("tasks")).toBe(false);
+    expect(pagesForModule("chooser")).toEqual([]);
+    expect(defaultPageFor("chooser")).toBeNull();
+    expect(hasPageBar("chooser")).toBe(false);
   });
 });
 
@@ -51,9 +58,42 @@ describe("hasPageBar", () => {
   });
 
   it("is true for the modules with two or more built pages", () => {
+    expect(hasPageBar("plan")).toBe(true);
     expect(hasPageBar("schedule")).toBe(true);
     expect(hasPageBar("fitness")).toBe(true);
     expect(hasPageBar("notes")).toBe(true);
+    expect(hasPageBar("library")).toBe(true);
+  });
+});
+
+describe("the consolidated modules", () => {
+  it("gives Plan the seven outline destinations, in Achieve's order", () => {
+    expect(builtPagesForModule("plan").map((page) => page.id)).toEqual([
+      "overview",
+      "outline",
+      "projects",
+      "tasks",
+      "goals",
+      "wishes",
+      "result-areas",
+    ]);
+  });
+
+  it("gives Library the two reference lists", () => {
+    expect(builtPagesForModule("library").map((page) => page.id)).toEqual([
+      "contacts",
+      "resources",
+    ]);
+  });
+
+  it("puts Time Charts last in Schedule, after the three week surfaces and Day", () => {
+    expect(builtPagesForModule("schedule").map((page) => page.id)).toEqual([
+      "day",
+      "calendar",
+      "agenda",
+      "week-plan",
+      "time-charts",
+    ]);
   });
 });
 
@@ -96,10 +136,25 @@ describe("pageForPathname", () => {
    */
   it("matches nothing for an undeclared segment", () => {
     expect(pageForPathname("schedule", "/schedule", "/schedule/plan")).toBeNull();
+    expect(pageForPathname("fitness", "/fitness", "/fitness/log")).toBeNull();
+  });
+
+  /**
+   * The whole reason the time-chart editor kept its **singular** segment when its list moved
+   * into Schedule as the plural one. A declared segment matches its own subtree, so
+   * `/schedule/time-charts/abc` would resolve to the Time Charts page and the shell would draw
+   * the page bar on a focused flow that already has its own exit.
+   *
+   * These two assertions are one letter apart on purpose. Anyone "fixing" the inconsistency
+   * fails here rather than shipping a bar onto the editor.
+   */
+  it("keeps the time-chart editor out of the Time Charts page's subtree", () => {
+    expect(pageForPathname("schedule", "/schedule", "/schedule/time-charts")?.id).toBe(
+      "time-charts",
+    );
     expect(
       pageForPathname("schedule", "/schedule", "/schedule/time-chart/abc123"),
     ).toBeNull();
-    expect(pageForPathname("fitness", "/fitness", "/fitness/log")).toBeNull();
   });
 
   it("does not let one segment claim another that merely starts the same way", () => {
@@ -118,23 +173,27 @@ describe("pageForPathname", () => {
   });
 
   it("returns null for a pathname outside the module", () => {
-    expect(pageForPathname("notes", "/notes", "/tasks")).toBeNull();
+    expect(pageForPathname("notes", "/notes", "/chooser")).toBeNull();
     // `/notesomething` shares a prefix with `/notes` and is a different route entirely.
     expect(pageForPathname("notes", "/notes", "/notesomething/grid")).toBeNull();
   });
 
   it("returns null for a module with no pages", () => {
-    expect(pageForPathname("tasks", "/tasks", "/tasks")).toBeNull();
-    expect(pageForPathname("tasks", "/tasks", "/tasks/anything")).toBeNull();
+    expect(pageForPathname("chooser", "/chooser", "/chooser")).toBeNull();
+    expect(pageForPathname("chooser", "/chooser", "/chooser/anything")).toBeNull();
   });
 });
 
 describe("defaultPageFor and builtPageById", () => {
   it("resolves the declared default", () => {
+    // Plan's is Overview because `/` redirects here: the hub is where a session with no
+    // history lands, not where every session lands.
+    expect(defaultPageFor("plan")?.id).toBe("overview");
     expect(defaultPageFor("schedule")?.id).toBe("calendar");
     expect(defaultPageFor("fitness")?.id).toBe("sessions");
     expect(defaultPageFor("notes")?.id).toBe("grid");
     expect(defaultPageFor("finances")?.id).toBe("register");
+    expect(defaultPageFor("library")?.id).toBe("contacts");
   });
 
   /**
@@ -146,7 +205,12 @@ describe("defaultPageFor and builtPageById", () => {
     expect(builtPageById("notes", "diary")).toBeNull();
     expect(builtPageById("schedule", "week")).toBeNull();
     expect(builtPageById("notes", null)).toBeNull();
-    expect(builtPageById("tasks", "grid")).toBeNull();
+    expect(builtPageById("chooser", "grid")).toBeNull();
+    // The consolidation's own case: `shell.lastPage` still holds keys written when these were
+    // modules, and they have to fall out rather than resolve against the module that absorbed
+    // them.
+    expect(builtPageById("plan", "chooser")).toBeNull();
+    expect(builtPageById("library", "time-charts")).toBeNull();
   });
 
   it("returns the page when the id is still good", () => {

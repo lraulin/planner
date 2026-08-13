@@ -1,20 +1,14 @@
-import { Suspense } from "react";
-import { getCurrentUserId } from "@/lib/auth";
-import { loadOutline } from "@/lib/tree/queries";
-import { AppShell } from "@/components/shell/AppShell";
-import { ResultAreasGrid } from "@/components/tabs/ResultAreasGrid";
+import { legacyRedirect } from "@/components/shell/legacyRedirect";
 
 export const dynamic = "force-dynamic";
 
-export default async function ResultAreasPage() {
-  const userId = await getCurrentUserId();
-  const nodes = await loadOutline(userId);
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
-  return (
-    <AppShell active="result-areas">
-      <Suspense fallback={<div className="min-h-0 flex-1" />}>
-        <ResultAreasGrid initialNodes={nodes} />
-      </Suspense>
-    </AppShell>
-  );
+/** `/result-areas` is `/plan/result-areas` now. See `legacyRedirect`. */
+export default async function ResultAreasRedirect({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  await legacyRedirect("/plan/result-areas", searchParams);
 }

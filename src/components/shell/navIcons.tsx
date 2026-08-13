@@ -12,20 +12,6 @@
  */
 import { GLYPH as BASE } from "@/components/icons/glyph";
 
-/** Overview: the five linked phases of the productivity process. */
-export function OverviewIcon() {
-  return (
-    <svg {...BASE} className="h-5 w-5">
-      <circle cx="4" cy="5" r="1.5" />
-      <circle cx="10" cy="3.5" r="1.5" />
-      <circle cx="16" cy="5" r="1.5" />
-      <circle cx="14" cy="14.5" r="1.5" />
-      <circle cx="6" cy="14.5" r="1.5" />
-      <path d="m5.5 4.6 3-.7m3 0 3 .7m.9 1.8-.9 6.6m-2 .8-5 0M5.5 13 4.6 6.4" />
-    </svg>
-  );
-}
-
 /** Inbox processing: a tray whose one current item is ready to be classified. */
 export function OrganizeIcon() {
   return (
@@ -33,16 +19,6 @@ export function OrganizeIcon() {
       <path d="M3.25 10.5 5 4h10l1.75 6.5v5.25a1.5 1.5 0 0 1-1.5 1.5H4.75a1.5 1.5 0 0 1-1.5-1.5Z" />
       <path d="M3.5 10.5h4l1.25 2h2.5l1.25-2h4" />
       <path d="m8 7 1.35 1.35L12.5 5.2" />
-    </svg>
-  );
-}
-
-export function DayIcon() {
-  return (
-    <svg {...BASE} className="h-5 w-5">
-      <rect x="2.75" y="4" width="14.5" height="13.25" rx="2" />
-      <path d="M2.75 8h14.5M6.5 2.75v2.5M13.5 2.75v2.5" />
-      <path d="m7.25 12.25 1.75 1.75 3.75-3.75" />
     </svg>
   );
 }
@@ -84,56 +60,19 @@ export function MoreIcon() {
   );
 }
 
-/** The outline: a tree, because that is literally what the view is. */
-export function OutlineIcon() {
+/**
+ * Plan: a tree, because the module *is* the outline — Overview, Outline, Projects, Tasks,
+ * Goals, Wish List and Result Areas are one hierarchy drawn seven ways.
+ *
+ * This was `OutlineIcon` while those seven were seven sidebar rows with a glyph each. The
+ * other six are gone rather than parked: a page bar is text, so nothing renders them, and git
+ * has them if a future module wants a target or a star.
+ */
+export function PlanIcon() {
   return (
     <svg {...BASE} className="h-5 w-5">
       <path d="M3.25 4.5h4M6 4.5v9.5h3.5M6 9.25h3.5" />
       <path d="M11.25 3h5.5M11.25 9.25h5.5M11.25 15.5h5.5" />
-    </svg>
-  );
-}
-
-/** Projects: stacked layers — a project is a container of tasks. */
-export function ProjectsIcon() {
-  return (
-    <svg {...BASE} className="h-5 w-5">
-      <path d="m10 2.75 6.75 3.5L10 9.75 3.25 6.25Z" />
-      <path d="m3.25 10 6.75 3.5L16.75 10" />
-      <path d="m3.25 13.75 6.75 3.5 6.75-3.5" />
-    </svg>
-  );
-}
-
-/** Goals: a target. Distinct from Wish List's star at a glance. */
-export function GoalsIcon() {
-  return (
-    <svg {...BASE} className="h-5 w-5">
-      <circle cx="10" cy="10" r="7.25" />
-      <circle cx="10" cy="10" r="3.75" />
-      <circle cx="10" cy="10" r="1" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-
-/** Wish List: a star — someday/maybe, not committed to. */
-export function WishesIcon() {
-  return (
-    <svg {...BASE} className="h-5 w-5">
-      <path d="m10 2.75 2.28 4.62 5.1.74-3.69 3.6.87 5.08L10 14.39l-4.56 2.4.87-5.08-3.69-3.6 5.1-.74Z" />
-    </svg>
-  );
-}
-
-/**
- * Result Areas: a pie, because an area's Importance is its slice of a fixed hundred. The
- * one glyph in Plan that is about proportion rather than structure.
- */
-export function ResultAreasIcon() {
-  return (
-    <svg {...BASE} className="h-5 w-5">
-      <circle cx="10" cy="10" r="7.25" />
-      <path d="M10 2.75V10l6.4 3.4" />
     </svg>
   );
 }
@@ -190,41 +129,18 @@ export function FinancesIcon() {
   );
 }
 
-/** Contacts: a person. The only glyph in the app that is a human being. */
-export function ContactsIcon() {
-  return (
-    <svg {...BASE} className="h-5 w-5">
-      <circle cx="10" cy="6.75" r="3.25" />
-      <path d="M3.75 17.25a6.25 6.25 0 0 1 12.5 0" />
-    </svg>
-  );
-}
-
-/** Resources: three joined capacity blocks, rather than a person or a project tree. */
-export function ResourcesIcon() {
-  return (
-    <svg {...BASE} className="h-5 w-5">
-      <rect x="3" y="4" width="5" height="5" rx="1" />
-      <rect x="12" y="4" width="5" height="5" rx="1" />
-      <rect x="7.5" y="12" width="5" height="5" rx="1" />
-      <path d="M8 6.5h4M10 9v3" />
-    </svg>
-  );
-}
-
 /**
- * Time Charts: a week's worth of painted blocks. Deliberately unlike `ScheduleIcon`'s empty
- * week grid — a time chart is the week you *intended*, which is why it has fill and the
- * schedule does not.
+ * Library: books on a shelf — reference you keep and consult, not a place you work.
+ *
+ * Shelved volumes rather than Contacts' person or Resources' capacity blocks, because the
+ * module holds both of those and a glyph for either half would misname the whole.
  */
-export function TimeChartsIcon() {
+export function LibraryIcon() {
   return (
     <svg {...BASE} className="h-5 w-5">
-      <rect x="2.75" y="3.75" width="14.5" height="12.5" rx="1.5" />
-      <path d="M7.5 3.75v12.5M12.5 3.75v12.5" />
-      <rect x="3.5" y="6" width="3.25" height="3.5" fill="currentColor" stroke="none" />
-      <rect x="8.25" y="10" width="3.5" height="5" fill="currentColor" stroke="none" />
-      <rect x="13.25" y="5" width="3.25" height="3" fill="currentColor" stroke="none" />
+      <path d="M3.5 3.75h3v12.5h-3ZM7.75 3.75h3v12.5h-3Z" />
+      <path d="m12.25 4.75 2.9-.78 2.6 11.6-2.9.78Z" />
+      <path d="M2.75 17.25h14.5" />
     </svg>
   );
 }

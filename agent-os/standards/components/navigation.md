@@ -36,29 +36,62 @@ go-to entries.
 phone and the desktop from disagreeing about what the app contains — the previous version of
 this file was four surfaces reading `TABS`, and that was already the reason it worked.
 
-### Sections, and reserved modules
+The rule has already been broken once, quietly: `MobileNav` wrote out its three hrefs while this
+section listed it among the readers. It went unnoticed until Tasks became a page and `/tasks`
+stopped being a destination at all. **A surface that hard-codes agrees with the registry right
+up until the registry changes**, which is the only moment the rule was for.
 
-Modules are grouped into ordered sections (`Plan`, `Do`, `Track`, `Library`). Both the sidebar
-and the More sheet render `sectionsWithModules()`, so the two group the app identically.
+### The list is flat
+
+There are no sections. Modules were grouped under `Plan` / `Do` / `Track` / `Library` while
+there were fifteen of them, and nine turned out to be pages: seven Plan modules that were one
+`loadOutline` drawn seven ways, plus Contacts and Resources. Eight rows do not need headings,
+and `Plan` and `Library` would each have been a heading over one row of the same name — the
+chrome-that-teaches-nothing the page bar's two-page floor rejects one tier down.
+
+If the sidebar grows back past a dozen, grouping returns as a field and a `groupBy`. It is not
+a decision that needs defending in advance, which is why the `section` field went rather than
+being kept warm.
+
+### Reserved modules
 
 A module we have decided the home of but not built is marked `status: "reserved"`. It renders
-nowhere and is not a navigation target; a section holding only reserved modules does not render
-at all.
+nowhere and is not a navigation target.
 
-- **Do** decide a future module's section when you know it. It costs a line and it stops the
+- **Do** add the entry as soon as the module is decided on. It costs a line and it stops the
   next person re-arguing navigation.
 - **Do not** render a reserved module as a disabled or "coming soon" entry. A menu full of dead
   rows teaches the reader to stop reading the menu, and then the live rows stop working too.
+
+### The phone's primary destinations are a registry list, and one of them is a page
+
+`PRIMARY_DESTINATIONS` in `modules.ts` holds the bottom bar's three slots in order, each naming
+a module and _optionally_ a page. `primaryDestinations()` resolves each to an `href` and an
+`isActive(pathname)` predicate.
+
+This replaced a `primary: boolean` on the module entry, and the reason is worth keeping: **a
+flag can only point at a module.** The Tasks slot has to open `/plan/tasks`, and a module-level
+`primary` would send it to `/plan`, which resolves to `lastPage` — a button labelled Tasks
+opening Goals. The predicate is the other half: comparing module ids would light Tasks on all
+seven Plan pages.
+
+Icons live with this list rather than in `pages.ts`, which stays React-free so it can be
+unit-tested. That split is why the two registries exist at different altitudes at all.
 
 ## Pages live in one registry too
 
 Three words, three different things, and they are not interchangeable:
 
-| Word       | Means                                                       | Registry                  |
-| ---------- | ----------------------------------------------------------- | ------------------------- |
-| **Module** | A sidebar destination — Tasks, Fitness, Schedule            | `shell/modules.ts`        |
-| **Page**   | A destination _within_ a module — Sessions, Journal, Agenda | `lib/navigation/pages.ts` |
-| **View**   | A saved collection of filter / column / sort settings       | `lib/settings/views.ts`   |
+| Word       | Means                                                    | Registry                  |
+| ---------- | -------------------------------------------------------- | ------------------------- |
+| **Module** | A sidebar destination — Plan, Fitness, Schedule          | `shell/modules.ts`        |
+| **Page**   | A destination _within_ a module — Tasks, Journal, Agenda | `lib/navigation/pages.ts` |
+| **View**   | A saved collection of filter / column / sort settings    | `lib/settings/views.ts`   |
+
+Tasks moved from the first row to the second when the consolidation ran, which is the useful
+thing about the example: **the tier a destination belongs to is a fact about the data behind
+it, not about how important it is.** Seven grids over one `loadOutline` are seven pages no
+matter how much time you spend in them.
 
 A fourth word, **pane**, is a layout region that collapses below `md` (Day's appointments /
 list / journal). It is responsive layout, not navigation, and does not belong in any registry.
@@ -132,6 +165,13 @@ nothing.**
 
 Both wrong answers fail silently on a real route, which is why `pageForPathname` is tested and
 the bar is not.
+
+**The worked example lives in Schedule and is one letter wide.** The Time Charts list is the
+page `/schedule/time-charts`; the editor is the focused flow `/schedule/time-chart/[chartId]`.
+The list moved into Schedule and the editor deliberately did not move with it, because a
+declared segment owns its subtree — `/schedule/time-charts/abc` would resolve to the page and
+put the bar on an editor that already has its own exit. Anyone tidying the singular into the
+plural is removing the mechanism, and `pages.test.ts` asserts both halves so they find out.
 
 ## Commands live in one registry
 

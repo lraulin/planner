@@ -14,7 +14,7 @@ import {
   moveNodeAction,
   setCollapsedAction,
   setPriorityAction,
-} from "@/app/outline/actions";
+} from "@/app/plan/outline/actions";
 
 type ApplyResult = { ok: true } | { ok: false; error: string };
 

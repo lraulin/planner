@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { builtPageById, defaultPageFor, pageHref } from "@/lib/navigation/pages";
+import { withQuery } from "@/lib/navigation/query";
 import { SHELL_SCOPE } from "@/lib/settings/scopes";
 import { loadSettingsForSession } from "@/lib/settings/session";
 import { parseShellSettings } from "@/lib/settings/shell";
@@ -49,25 +50,4 @@ async function rememberedPage(id: ModuleId) {
   const settings = await loadSettingsForSession();
   const stored = parseShellSettings(settings[SHELL_SCOPE]).lastPage[id];
   return builtPageById(id, stored ?? null);
-}
-
-/**
- * Next hands repeated params as arrays. Both shapes are re-encoded rather than stringified, so
- * a date key or a node id with a reserved character survives the hop.
- */
-function withQuery(
-  href: string,
-  params: Record<string, string | string[] | undefined>,
-): string {
-  const query = new URLSearchParams();
-
-  for (const [key, value] of Object.entries(params)) {
-    if (value === undefined) continue;
-    for (const entry of Array.isArray(value) ? value : [value]) {
-      query.append(key, entry);
-    }
-  }
-
-  const search = query.toString();
-  return search ? `${href}?${search}` : href;
 }

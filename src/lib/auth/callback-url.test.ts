@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { safeCallbackPath } from "./callback-url";
 
 describe("safeCallbackPath", () => {
-  it("defaults to outline when missing", () => {
-    expect(safeCallbackPath(undefined)).toBe("/outline");
-    expect(safeCallbackPath(null)).toBe("/outline");
-    expect(safeCallbackPath("")).toBe("/outline");
+  it("defaults to the Plan entry point when missing", () => {
+    expect(safeCallbackPath(undefined)).toBe("/plan");
+    expect(safeCallbackPath(null)).toBe("/plan");
+    expect(safeCallbackPath("")).toBe("/plan");
   });
 
   it("allows relative app paths", () => {
@@ -14,8 +14,8 @@ describe("safeCallbackPath", () => {
   });
 
   it("rejects open redirects", () => {
-    expect(safeCallbackPath("https://evil.example")).toBe("/outline");
-    expect(safeCallbackPath("//evil.example")).toBe("/outline");
-    expect(safeCallbackPath("/\\evil")).toBe("/outline");
+    expect(safeCallbackPath("https://evil.example")).toBe("/plan");
+    expect(safeCallbackPath("//evil.example")).toBe("/plan");
+    expect(safeCallbackPath("/\\evil")).toBe("/plan");
   });
 });

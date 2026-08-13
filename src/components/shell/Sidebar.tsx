@@ -9,21 +9,23 @@ import { parseShellSettings, serializeShellSettings } from "@/lib/settings/shell
 import { SHELL_SCOPE } from "@/lib/settings/scopes";
 import { ChevronIcon, OrganizeIcon, SettingsIcon } from "./navIcons";
 import { openCommandPalette } from "./commandEvent";
-import { sectionsWithModules, type ModuleId } from "./modules";
+import { BUILT_MODULES, type ModuleId } from "./modules";
 import { NavLink } from "./NavLink";
 
 const PALETTE_CHORD = formatBindings(OPEN_PALETTE) ?? "⌘K";
 
 /**
- * Desktop navigation: a grouped, collapsible left rail, replacing the tab strip.
+ * Desktop navigation: a collapsible left rail, replacing the tab strip.
  *
- * The strip held eleven modules in one non-wrapping row and had nowhere to put a twelfth.
- * Sections turn that into a problem of vertical space, which is the space this app has —
- * eleven entries under four headings fit comfortably where eleven tabs across did not.
+ * The strip held eleven modules in one non-wrapping row and had nowhere to put a twelfth. This
+ * turns that into a problem of vertical space, which is the space this app has.
  *
- * Sections come from `sectionsWithModules()`, shared with the phone's More sheet so the two
- * cannot group the app differently. Settings and Sign out sit below the sections because
- * they are chrome, not modules.
+ * **Flat, since the module consolidation.** The rail spent a cycle grouped under `Plan` / `Do`
+ * / `Track` / `Library` headings, which was the right answer to fifteen modules. Nine of those
+ * turned out to be pages of three, and eight rows do not need headings — `Plan` and `Library`
+ * would each have become a heading over a single row bearing the same word.
+ *
+ * Settings and Sign out sit below the list because they are chrome, not modules.
  */
 
 /**
@@ -38,8 +40,6 @@ const SHELL_CODEC = {
 export function Sidebar({ active }: { active: ModuleId | null }) {
   const { value, patch } = useSetting(SHELL_SCOPE, SHELL_CODEC);
   const collapsed = value.sidebarCollapsed;
-
-  const sections = sectionsWithModules();
 
   return (
     <nav
@@ -98,46 +98,31 @@ export function Sidebar({ active }: { active: ModuleId | null }) {
       </button>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
-        {sections.map((section) => (
-          <div key={section.id} className="mb-3 last:mb-0">
-            {/*
-              A collapsed rail has no room for a heading, and a heading truncated to two
-              characters is worse than none — the gap between groups still carries the
-              grouping.
-            */}
-            {!collapsed && (
-              <h2 className="px-2 pb-1 text-[0.625rem] font-semibold uppercase tracking-wider text-ink-faint">
-                {section.label}
-              </h2>
-            )}
+        {BUILT_MODULES.map((entry) => {
+          const Icon = entry.icon;
+          const isActive = entry.id === active;
 
-            {section.modules.map((entry) => {
-              const Icon = entry.icon;
-              const isActive = entry.id === active;
-
-              return (
-                <NavLink
-                  key={entry.id}
-                  href={entry.href}
-                  aria-current={isActive ? "page" : undefined}
-                  title={collapsed ? entry.label : undefined}
-                  className={`flex items-center gap-2 rounded px-2 py-1 text-[0.8125rem] leading-6 ${
-                    collapsed ? "justify-center" : ""
-                  } ${
-                    isActive
-                      ? "bg-select font-medium text-ink"
-                      : "text-ink-muted hover:bg-surface-raised hover:text-ink"
-                  }`}
-                >
-                  <span className="flex-none">
-                    <Icon />
-                  </span>
-                  {!collapsed && <span className="truncate">{entry.label}</span>}
-                </NavLink>
-              );
-            })}
-          </div>
-        ))}
+          return (
+            <NavLink
+              key={entry.id}
+              href={entry.href}
+              aria-current={isActive ? "page" : undefined}
+              title={collapsed ? entry.label : undefined}
+              className={`flex items-center gap-2 rounded px-2 py-1 text-[0.8125rem] leading-6 ${
+                collapsed ? "justify-center" : ""
+              } ${
+                isActive
+                  ? "bg-select font-medium text-ink"
+                  : "text-ink-muted hover:bg-surface-raised hover:text-ink"
+              }`}
+            >
+              <span className="flex-none">
+                <Icon />
+              </span>
+              {!collapsed && <span className="truncate">{entry.label}</span>}
+            </NavLink>
+          );
+        })}
       </div>
 
       <div className="flex flex-none flex-col gap-2 border-t border-rule px-2 py-2">

@@ -30,7 +30,7 @@ import {
   moveNodeItemAction,
   saveNodeDetailAction,
   updateNodeItemAction,
-} from "@/app/outline/detail-actions";
+} from "@/app/plan/outline/detail-actions";
 import { useSetting, type SettingCodec } from "@/components/settings/SettingsProvider";
 import {
   parseDrawerSettings,

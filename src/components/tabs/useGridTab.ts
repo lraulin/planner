@@ -11,7 +11,7 @@ import {
   setPriorityAction,
   setStateAction,
   setCollapsedAction,
-} from "@/app/outline/actions";
+} from "@/app/plan/outline/actions";
 import { useOptimisticNodes } from "@/components/grid/useOptimisticNodes";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useStateChange } from "@/components/grid/useStateChange";

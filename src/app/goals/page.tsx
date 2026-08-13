@@ -1,20 +1,14 @@
-import { Suspense } from "react";
-import { getCurrentUserId } from "@/lib/auth";
-import { loadOutline } from "@/lib/tree/queries";
-import { AppShell } from "@/components/shell/AppShell";
-import { GoalsGrid } from "@/components/tabs/GoalsGrid";
+import { legacyRedirect } from "@/components/shell/legacyRedirect";
 
 export const dynamic = "force-dynamic";
 
-export default async function GoalsPage() {
-  const userId = await getCurrentUserId();
-  const nodes = await loadOutline(userId);
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
-  return (
-    <AppShell active="goals">
-      <Suspense fallback={<div className="min-h-0 flex-1" />}>
-        <GoalsGrid initialNodes={nodes} />
-      </Suspense>
-    </AppShell>
-  );
+/** `/goals` is `/plan/goals` now. See `legacyRedirect`. */
+export default async function GoalsRedirect({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  await legacyRedirect("/plan/goals", searchParams);
 }

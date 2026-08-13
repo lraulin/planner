@@ -1,10 +1,11 @@
 "use client";
 
 import { useId, useState } from "react";
+import { usePathname } from "next/navigation";
 import { LogoutButton } from "@/components/auth/LogoutButton";
 import { ModalShell } from "@/components/detail/ModalShell";
 import { MoreIcon } from "./navIcons";
-import { sectionsWithModules, MODULES, type ModuleId } from "./modules";
+import { BUILT_MODULES, primaryDestinations, type ModuleId } from "./modules";
 import { NavLink } from "./NavLink";
 
 /**
@@ -15,11 +16,10 @@ import { NavLink } from "./NavLink";
  * bottom sheet below `md` — the list lands under the thumb rather than in the middle of the
  * screen.
  *
- * It lists **every built** module, grouped by the same `sectionsWithModules()` the desktop
- * sidebar renders, including the three already in the bar. Showing only the non-primary
- * ones made the section headings lie: a `Do` group with Schedule but no Chooser reads as
- * though Chooser is somewhere else. The duplication costs three rows in a sheet that
- * scrolls; the missing rows cost you the map.
+ * It lists **every built** module in the same order the desktop sidebar does, including the
+ * ones already in the bar. Showing only the others used to make the section headings lie — a
+ * `Do` group with Schedule but no Chooser reads as though Chooser is somewhere else — and the
+ * argument outlived the headings: a list missing three entries is not the map of the app.
  *
  * There is no command palette here. `⌘K` has no touch equivalent, and commands reach the
  * phone through the `⋯` overflow on each module's own toolbar instead.
@@ -27,11 +27,15 @@ import { NavLink } from "./NavLink";
 export function MoreSheet({ active }: { active: ModuleId | null }) {
   const [open, setOpen] = useState(false);
   const titleId = useId();
+  const pathname = usePathname();
 
-  const sections = sectionsWithModules();
-
-  // "More" is the current section whenever the bar itself is not showing where you are.
-  const inBottomBar = MODULES.some((entry) => entry.id === active && entry.primary);
+  /*
+   * "More" is where you are whenever the bar itself is not showing it — and that is now a
+   * pathname question, because the Tasks slot means one page of Plan. On `/plan/goals` no slot
+   * is lit, so More is, which a module-level comparison got wrong: it would have dimmed More
+   * on all seven Plan pages while pointing at none of them.
+   */
+  const inBottomBar = primaryDestinations().some((slot) => slot.isActive(pathname));
 
   return (
     <>
@@ -62,28 +66,18 @@ export function MoreSheet({ active }: { active: ModuleId | null }) {
           </h2>
 
           <nav aria-label="All modules">
-            {sections.map((section) => (
-              <div key={section.id} className="mb-2 last:mb-0">
-                <h3 className="px-3 pb-0.5 pt-1 text-[0.625rem] font-semibold uppercase tracking-wider text-ink-faint">
-                  {section.label}
-                </h3>
-
-                {section.modules.map((entry) => (
-                  <NavLink
-                    key={entry.id}
-                    href={entry.href}
-                    onClick={() => setOpen(false)}
-                    aria-current={entry.id === active ? "page" : undefined}
-                    className={`flex min-h-tap items-center rounded px-3 text-[0.9375rem] ${
-                      entry.id === active
-                        ? "bg-select font-medium text-ink"
-                        : "text-ink"
-                    }`}
-                  >
-                    {entry.label}
-                  </NavLink>
-                ))}
-              </div>
+            {BUILT_MODULES.map((entry) => (
+              <NavLink
+                key={entry.id}
+                href={entry.href}
+                onClick={() => setOpen(false)}
+                aria-current={entry.id === active ? "page" : undefined}
+                className={`flex min-h-tap items-center rounded px-3 text-[0.9375rem] ${
+                  entry.id === active ? "bg-select font-medium text-ink" : "text-ink"
+                }`}
+              >
+                {entry.label}
+              </NavLink>
             ))}
           </nav>
 

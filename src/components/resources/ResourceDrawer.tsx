@@ -4,7 +4,10 @@ import { useEffect, useId, useState, useTransition } from "react";
 import type { ContactOption } from "@/lib/contacts/types";
 import { weeklyAvailableMinutes, weeklyWorkingMinutes } from "@/lib/resources/capacity";
 import type { ResourceDetail, ResourceInput } from "@/lib/resources/types";
-import { getResourceDetailAction, updateResourceAction } from "@/app/resources/actions";
+import {
+  getResourceDetailAction,
+  updateResourceAction,
+} from "@/app/library/resources/actions";
 import { Drawer, DrawerFooter, DrawerHeader } from "@/components/detail/Drawer";
 import {
   EffortField,

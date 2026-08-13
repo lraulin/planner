@@ -25,7 +25,7 @@ import type {
   ContactOption,
 } from "@/lib/contacts/types";
 
-import { run, runQuery, type ActionResult, type QueryResult } from "../actionResult";
+import { run, runQuery, type ActionResult, type QueryResult } from "../../actionResult";
 
 // ── Contacts ─────────────────────────────────────────────────────────────────
 

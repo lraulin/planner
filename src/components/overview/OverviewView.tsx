@@ -40,7 +40,7 @@ export function OverviewView({
       phase: "Capture",
       prompt: "What has your attention?",
       actions: [
-        { label: "Define Projects / Tasks", href: "/outline" },
+        { label: "Define Projects / Tasks", href: "/plan/outline" },
         { label: "Quick Task Entry", command: "capture" },
       ],
     },
@@ -48,7 +48,7 @@ export function OverviewView({
       phase: "Organize",
       prompt: "What is it, and where does it belong?",
       actions: [
-        { label: "Organize Projects", href: "/projects" },
+        { label: "Organize Projects", href: "/plan/projects" },
         { label: "Organize Tasks", command: "projects" },
         { label: "New Task Organizer", href: "/organize", count: inboxCount },
         { label: "Define Contexts", command: "contexts" },
@@ -58,9 +58,9 @@ export function OverviewView({
       phase: "Prioritize",
       prompt: "What matters most?",
       actions: [
-        { label: "Review / Prioritize Projects", href: "/projects" },
+        { label: "Review / Prioritize Projects", href: "/plan/projects" },
         { label: "Prioritize Tasks", command: "projects" },
-        { label: "Outline", href: "/outline" },
+        { label: "Outline", href: "/plan/outline" },
       ],
     },
     {
@@ -69,7 +69,7 @@ export function OverviewView({
       actions: [
         { label: "Weekly Planning Wizard", href: "/schedule/plan" },
         { label: "Weekly Schedule", href: "/schedule" },
-        { label: "Outline", href: "/outline" },
+        { label: "Outline", href: "/plan/outline" },
       ],
     },
     {
@@ -78,7 +78,7 @@ export function OverviewView({
       actions: [
         { label: "Specific Project", command: "projects" },
         { label: "Task Chooser", href: "/chooser" },
-        { label: "Outline", href: "/outline" },
+        { label: "Outline", href: "/plan/outline" },
       ],
     },
   ];
@@ -176,7 +176,7 @@ export function OverviewView({
             router.push(`/tasks?scope=${value.nodeId}`);
             return;
           }
-          if (value.kind === "all") router.push("/tasks");
+          if (value.kind === "all") router.push("/plan/tasks");
         }}
       />
       <MasterContextsDialog

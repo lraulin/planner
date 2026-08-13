@@ -6,7 +6,7 @@ import type { OutlineNode } from "@/lib/tree/types";
 import type { GridRow } from "@/lib/tree/slice";
 import type { WishListRow } from "@/lib/detail/wishTypes";
 import { OPEN_RECORD } from "@/lib/commands/chords";
-import { updateNodeItemAction } from "@/app/outline/detail-actions";
+import { updateNodeItemAction } from "@/app/plan/outline/detail-actions";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import { DataGrid } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";

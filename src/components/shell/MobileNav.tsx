@@ -1,15 +1,10 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { requestQuickCapture } from "@/components/capture/event";
 import { MoreSheet } from "./MoreSheet";
-import {
-  CaptureIcon,
-  ChooserIcon,
-  NotesIcon,
-  OrganizeIcon,
-  TasksIcon,
-} from "./navIcons";
-import type { ModuleId } from "./modules";
+import { CaptureIcon, OrganizeIcon } from "./navIcons";
+import { primaryDestinations, type ModuleId } from "./modules";
 import { NavLink } from "./NavLink";
 
 /**
@@ -17,15 +12,22 @@ import { NavLink } from "./NavLink";
  *
  * A two-action utility band keeps Quick capture and Process Inbox visible. Beneath it,
  * `Chooser · Tasks · Notes · More` keeps the primary destinations within four equal slots;
- * the rest live in the More sheet, grouped by the same sections the sidebar uses.
+ * the rest live in the More sheet, in the same order the sidebar uses.
  *
- * Day used to own the first slot; it is shelved in `modules.ts` for now, and Task Chooser
- * took its place as the daily "what am I working on" surface.
+ * Day used to own the first slot; it is two pages of Schedule now, and Task Chooser took its
+ * place as the daily "what am I working on" surface.
+ *
+ * **The three slots come from `primaryDestinations()`**, not from hrefs written here. They were
+ * hard-coded while `navigation.md` was already counting this file among the surfaces that read
+ * the registry, and the consolidation is what made that bill come due: Tasks is a page of Plan,
+ * so `/tasks` is no longer even a real destination and `/plan` would open the wrong page.
  *
  * A normal flex child of `AppShell` rather than `position: fixed`, so the scroll container
  * above it ends where the bar begins and the last row is never hidden underneath.
  */
 export function MobileNav({ active }: { active: ModuleId | null }) {
+  const pathname = usePathname();
+
   return (
     <nav
       aria-label="Modules"
@@ -49,24 +51,17 @@ export function MobileNav({ active }: { active: ModuleId | null }) {
         </NavLink>
       </div>
       <div className="flex items-stretch">
-        <TabLink
-          href="/chooser"
-          label="Chooser"
-          icon={<ChooserIcon />}
-          active={active === "chooser"}
-        />
-        <TabLink
-          href="/tasks"
-          label="Tasks"
-          icon={<TasksIcon />}
-          active={active === "tasks"}
-        />
-        <TabLink
-          href="/notes"
-          label="Notes"
-          icon={<NotesIcon />}
-          active={active === "notes"}
-        />
+        {primaryDestinations().map(
+          ({ moduleId, label, icon: Icon, href, isActive }) => (
+            <TabLink
+              key={moduleId}
+              href={href}
+              label={label}
+              icon={<Icon />}
+              active={isActive(pathname)}
+            />
+          ),
+        )}
         <MoreSheet active={active} />
       </div>
     </nav>

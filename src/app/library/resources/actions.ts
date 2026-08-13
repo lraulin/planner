@@ -11,7 +11,7 @@ import type {
   ResourceInput,
   ResourceListRow,
 } from "@/lib/resources/types";
-import { run, runQuery, type ActionResult, type QueryResult } from "../actionResult";
+import { run, runQuery, type ActionResult, type QueryResult } from "../../actionResult";
 
 export async function createResourceAction(
   input?: ResourceInput,

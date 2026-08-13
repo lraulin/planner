@@ -122,24 +122,22 @@ export function useGlobalCommands(): readonly Command[] {
 }
 
 /**
- * Names the label does not carry. Achieve's own vocabulary belongs here — someone reaching
- * for "calendar" should not have to know we called it Weekly Schedule.
+ * Names the label does not carry, for the **module** entries. Achieve's own vocabulary belongs
+ * here — someone reaching for "calendar" should not have to know we called it Weekly Schedule.
+ *
+ * A page's own terms live on its `PageEntry` in `pages.ts` and are merged in above, which is
+ * where the seven Plan destinations' keywords went when they stopped being modules. What stays
+ * here is deliberately broad: `plan` lists what is *inside* it, because the module label alone
+ * would not match anyone typing "outline".
  */
 const GO_KEYWORDS: Record<string, string> = {
-  overview: "home productivity process capture organize prioritize plan do",
-  outline: "tree result areas dreams hierarchy",
-  "result-areas": "result area roles life dimensions importance weighting",
-  projects: "project list",
-  tasks: "task list todo",
-  goals: "goal dreams objectives",
-  wishes: "wish list someday maybe",
+  plan: "outline overview projects tasks goals wish list result areas hierarchy",
   chooser: "task chooser next action best overall urgent",
   schedule:
-    "calendar week weekly time blocking appointments day today daily page franklin covey",
+    "calendar week weekly time blocking appointments day today daily page franklin covey time charts",
   metrics: "measures tracking numbers graph",
   fitness: "workout exercise log",
+  finances: "money accounts transactions register spending",
   notes: "note journal markdown",
-  "time-charts": "time chart ideal week template background blocks",
-  resources: "capacity availability workload hours overhead effectiveness team",
-  contacts: "people address book phone email rolodex who discussion items",
+  library: "reference contacts resources address book capacity",
 };

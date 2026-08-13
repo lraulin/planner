@@ -1,6 +1,6 @@
 # Module consolidation — Plan, Library, and Time Charts
 
-**Status: active**
+**Status: frozen / complete** (2026-08-13)
 Spec folder: `agent-os/specs/2026-08-13-0845-module-consolidation/`
 
 ## Context
@@ -87,15 +87,19 @@ Design decisions that follow from the code:
 - [ ] The phone header names the **page** (`Tasks`), not the module (`Plan`).
 - [ ] `⌘K` finds every collapsed destination: `Plan: Tasks`, `Library: Contacts`,
       `Schedule: Time Charts`.
-- [ ] The time-chart editor still shows **no** page bar and returns to
-      `/schedule/time-charts`.
+- [ ] The time-chart editor gets no page **tab** and returns to `/schedule/time-charts`.
 - [ ] `npm run smoke` passes on the grown route list.
 
 ## Changes from original plan
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                                               | Why                                                                                                                                                                                                                                                                                                                                                           |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **The time-chart editor now renders the Schedule page bar** (with no tab active). The plan's acceptance criterion said it would show no bar at all.  | The old "no bar" was an accident, not a decision: the editor passed `active="time-charts"`, and that module had no pages. With `active="schedule"` the bar appears — exactly as it already does on `/schedule/plan`, the sibling focused flow. The rule that matters is unchanged and is what the criterion should have said: a focused flow gets no **tab**. |
+| 2   | **`destinationLabel` took a `fallback` parameter.** Not in the plan.                                                                                 | `MobileHeader` reuses it for the phone title, and its no-module answer must be "Planner", not the back-link's "Back". Only `/organize` hits that branch today and it passes an explicit title, so this is guarding the next `active={null}` page rather than fixing a live bug.                                                                               |
+| 3   | **`MoreSheet`'s "you are here" became a pathname test.** The plan only listed its `inBottomBar` check as moving to the new helper.                   | Same cause as the `primary` flag: comparing module ids would dim More on all seven Plan pages while the bar pointed at none of them.                                                                                                                                                                                                                          |
+| 4   | **`/day` and `/day/week` were converted to the shared redirect helper** as well, so it is twelve callers rather than ten.                            | They were the hand-rolled precedent the helper was extracted from. Leaving them hand-rolled would have kept the copy the extraction existed to remove.                                                                                                                                                                                                        |
+| 5   | **Nine nav icons were deleted and `OutlineIcon` was renamed `PlanIcon`;** `DayIcon` went with them, having been dead since Day folded into Schedule. | A page bar is text, so nothing renders a page's icon. Planned as "grep and delete"; recorded because the rename is the part a reader would otherwise look for in git.                                                                                                                                                                                         |
+| 6   | **The phone layout was not verified locally.** Desktop was checked in the browser; the bottom bar, More sheet and header title were not.             | `resize_window` reported success without changing the viewport. Per the standing workflow this is validated on the deployed iPhone, which is why the work is pushed to `master` rather than parked.                                                                                                                                                           |
 
 ---
 

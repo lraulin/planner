@@ -9,7 +9,7 @@ import {
   moveNodeAction,
   removePriorityGapsAction,
   reprioritizeUniqueAction,
-} from "@/app/outline/actions";
+} from "@/app/plan/outline/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { ConversionDialog } from "@/components/outline/ConversionDialog";
 import { nodeDeleteMessage, nodeDeleteTitle } from "@/lib/tree/deleteMessage";

@@ -6,7 +6,11 @@ import {
   mergeCommands,
   type Command,
 } from "./registry";
-import { BUILT_MODULES, MODULES } from "@/components/shell/modules";
+import {
+  BUILT_MODULES,
+  MODULES,
+  primaryDestinations,
+} from "@/components/shell/modules";
 
 function command(id: string, label: string, extra: Partial<Command> = {}): Command {
   return { id, label, group: "app", run: () => {}, ...extra };
@@ -169,12 +173,40 @@ describe("modules as command sources", () => {
     expect(new Set(MODULES.map((m) => m.id)).size).toBe(MODULES.length);
     expect(new Set(MODULES.map((m) => m.href)).size).toBe(MODULES.length);
   });
+});
 
-  it("marks exactly the three modules the phone bottom bar has slots for", () => {
-    expect(MODULES.filter((entry) => entry.primary).map((m) => m.id)).toEqual([
-      "tasks",
-      "chooser",
-      "notes",
+describe("the phone bottom bar's slots", () => {
+  it("fills exactly the three the bar has room for, in slot order", () => {
+    expect(primaryDestinations().map((slot) => slot.label)).toEqual([
+      "Chooser",
+      "Tasks",
+      "Notes",
     ]);
+  });
+
+  /**
+   * The reason a `primary: boolean` on the module entry could not survive the consolidation:
+   * Tasks is a page of Plan, and a flag can only point at `/plan` — which resolves to whatever
+   * page you were last on, so a button labelled Tasks would open Goals.
+   */
+  it("points the Tasks slot at the page, not at the module", () => {
+    const tasks = primaryDestinations().find((slot) => slot.label === "Tasks");
+    expect(tasks?.href).toBe("/plan/tasks");
+  });
+
+  it("lights the Tasks slot on its own page and on nothing else in Plan", () => {
+    const tasks = primaryDestinations().find((slot) => slot.label === "Tasks");
+    expect(tasks?.isActive("/plan/tasks")).toBe(true);
+    expect(tasks?.isActive("/plan/goals")).toBe(false);
+    expect(tasks?.isActive("/plan/overview")).toBe(false);
+    expect(tasks?.isActive("/plan")).toBe(false);
+  });
+
+  /** A module slot still matches its whole subtree — Notes is lit on Grid and on Journal. */
+  it("lights a module slot anywhere inside that module", () => {
+    const notes = primaryDestinations().find((slot) => slot.label === "Notes");
+    expect(notes?.isActive("/notes")).toBe(true);
+    expect(notes?.isActive("/notes/journal")).toBe(true);
+    expect(notes?.isActive("/notesomething")).toBe(false);
   });
 });

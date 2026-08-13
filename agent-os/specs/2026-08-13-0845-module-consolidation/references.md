@@ -1,6 +1,6 @@
 # References for Module consolidation
 
-**Status: active**
+**Status: frozen / complete** (2026-08-13)
 
 ## Governing specs
 

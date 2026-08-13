@@ -1,20 +1,14 @@
-import { Suspense } from "react";
-import { getCurrentUserId } from "@/lib/auth";
-import { loadOutline } from "@/lib/tree/queries";
-import { AppShell } from "@/components/shell/AppShell";
-import { ProjectsGrid } from "@/components/tabs/ProjectsGrid";
+import { legacyRedirect } from "@/components/shell/legacyRedirect";
 
 export const dynamic = "force-dynamic";
 
-export default async function ProjectsPage() {
-  const userId = await getCurrentUserId();
-  const nodes = await loadOutline(userId);
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
-  return (
-    <AppShell active="projects">
-      <Suspense fallback={<div className="min-h-0 flex-1" />}>
-        <ProjectsGrid initialNodes={nodes} />
-      </Suspense>
-    </AppShell>
-  );
+/** `/projects` is `/plan/projects` now. See `legacyRedirect`. */
+export default async function ProjectsRedirect({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  await legacyRedirect("/plan/projects", searchParams);
 }

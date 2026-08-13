@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import type { DiscussionItemSummary } from "@/lib/contacts/types";
-import { createDiscussionItemAction } from "@/app/contacts/actions";
-import { setStateAction } from "@/app/outline/actions";
+import { createDiscussionItemAction } from "@/app/library/contacts/actions";
+import { setStateAction } from "@/app/plan/outline/actions";
 import { formatPriority } from "@/lib/tree/format";
 import { toDateKey } from "@/lib/schedule/geometry";
 import { useDateFormatter } from "@/components/settings/SettingsProvider";

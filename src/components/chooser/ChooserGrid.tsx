@@ -40,7 +40,7 @@ import {
 import type { ChooserDateFilter, ChooserViewId } from "@/lib/chooser/types";
 import type { PriorityLetter } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
-import { setTcPrioritiesAction } from "@/app/outline/actions";
+import { setTcPrioritiesAction } from "@/app/plan/outline/actions";
 import {
   buildChooserColumns,
   CHOOSER_DEFAULT_ORDER,

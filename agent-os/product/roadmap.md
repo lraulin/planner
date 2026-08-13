@@ -362,6 +362,27 @@ View · Tools`) with an icon gutter and shortcut column; an **icon row** for the
   toolbars and spends 232px of chrome before its first row on a phone; three week-shaped
   surfaces (Calendar at seven days, Week Plan, the planning wizard) now sit within one bar of
   each other; Finances Insights flips its reserved page to built and makes that bar appear.
+- **✅ Module consolidation.** `specs/2026-08-13-0845-module-consolidation`. Having built the
+  Page tier, the obvious next question was which destinations should have been modules at all.
+  Nine of fifteen should not: **Overview, Outline, Projects, Tasks, Goals, Wish List and Result
+  Areas each called the same `loadOutline(userId)` and differed only in which grid rendered it**
+  — one dataset, seven presentations, which is exactly what a Page is — and Contacts and
+  Resources were reference lists rather than places you work. They became the pages of **Plan**
+  and **Library**, and the Time Charts list joined Schedule beside the editor that had always
+  lived at `/schedule/time-chart/[chartId]`. Fifteen modules became eight, and **sections went
+  with them**: they existed so a sidebar could reach twenty destinations, and after the collapse
+  `Plan` and `Library` would each have been a heading over one row of the same name. `/` now
+  redirects to `/plan` rather than to Overview, so you return to the page you left and the hub
+  is where a first visit lands. Two mechanisms changed rather than moved: `primary: boolean` on
+  a module became `PRIMARY_DESTINATIONS`, because the phone's Tasks slot must open one page of
+  Plan and a flag can only point at a module; and `MobileNav`, which had hard-coded its three
+  hrefs in violation of the registry rule since it was written, finally reads the registry. The
+  trap worth knowing about: **the Time Charts list is the plural segment and its editor is the
+  singular one**, because a declared segment owns its subtree and merging them would put the
+  page bar on a focused flow — `pages.test.ts` asserts both halves so nobody tidies it away.
+  Twelve legacy paths redirect with their query strings intact. Follow-ups: a Contexts page if
+  `MasterContextsDialog` starts to chafe; folding Projects / Goals / Result Areas into one Items
+  page with Views if seven tabs read as cluttered in daily use.
 - **✅ Schedule day counts + agenda mode.**
   `specs/2026-08-12-1910-schedule-day-counts-agenda`. The Weekly Schedule stopped being a
   week: Achieve's **One / Three / Five / Seven / Ten / Twenty Days** widths from its View

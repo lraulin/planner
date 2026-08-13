@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import {
+  builtPageById,
   builtPagesForModule,
   defaultPageFor,
   hasPageBar,
@@ -11,21 +12,14 @@ import {
 } from "@/lib/navigation/pages";
 import {
   ChooserIcon,
-  ContactsIcon,
   FinancesIcon,
   FitnessIcon,
-  GoalsIcon,
+  LibraryIcon,
   MetricsIcon,
   NotesIcon,
-  OverviewIcon,
-  OutlineIcon,
-  ProjectsIcon,
-  ResultAreasIcon,
-  ResourcesIcon,
+  PlanIcon,
   ScheduleIcon,
   TasksIcon,
-  TimeChartsIcon,
-  WishesIcon,
 } from "./navIcons";
 
 /**
@@ -48,31 +42,21 @@ import {
  * meaning and the destinations were renamed. Storage keys still say `tab`; renaming a persisted
  * scope key would be a migration bought for nothing.
  *
- * `primary` still marks the modules that earn a slot in the phone bottom nav's five —
- * unchanged from `TABS`, and unrelated to `section`, which is a desktop grouping.
+ * **There are no sections any more.** Modules were grouped into `Plan` / `Do` / `Track` /
+ * `Library` so a sidebar could reach twenty destinations — _"vertical space is what we have and
+ * horizontal space is what ran out"_. Then nine of those destinations turned out to be pages:
+ * the seven Plan modules were one `loadOutline` drawn seven ways, and Library held two
+ * reference lists and a Time Charts list whose editor already lived under Schedule. Eight
+ * modules do not need headings, and `Plan` and `Library` would each have become a section
+ * containing one module of the same name — the same chrome-that-teaches-nothing that the page
+ * bar's two-page floor rejects one tier down. Re-grouping later is a field and a `groupBy`,
+ * not a rebuild.
  */
-
-/**
- * Section order is display order. A section renders only when it holds at least one
- * **built** module. That rule let `Library` sit here fully specified and completely
- * invisible for a cycle; Time Charts is what finally made it appear.
- */
-export const SECTIONS = [
-  { id: "plan", label: "Plan" },
-  { id: "do", label: "Do" },
-  { id: "track", label: "Track" },
-  { id: "library", label: "Library" },
-] as const;
-
-export type SectionId = (typeof SECTIONS)[number]["id"];
 
 type ModuleEntry = {
   id: string;
   label: string;
   href: string;
-  section: SectionId;
-  /** Bottom-nav slot on the phone. Three of them, plus capture and More, make five. */
-  primary: boolean;
   /**
    * `reserved` is a module that should not appear in navigation — either not built yet, or
    * temporarily shelved. It renders nowhere and is not a navigation target; the route and
@@ -85,96 +69,44 @@ type ModuleEntry = {
   icon?: ComponentType;
 };
 
+/**
+ * Display order, top to bottom. Roughly: what you plan with, what you do today, what you
+ * record, and what you look things up in.
+ */
 export const MODULES = [
-  // Plan — the outline and the things in it, in Achieve's own order.
   {
-    id: "overview",
-    label: "Overview",
-    href: "/overview",
-    section: "plan",
-    primary: false,
+    /*
+     * The outline and everything in it — Overview, Outline, Projects, Tasks, Goals, Wish List
+     * and Result Areas, which were seven modules until it became clear they were seven
+     * `pages.ts` entries: one `loadOutline(userId)`, seven grids.
+     *
+     * Not to be confused with `/schedule/plan`, the weekly planning wizard. Different verb.
+     */
+    id: "plan",
+    label: "Plan",
+    href: "/plan",
     status: "built",
-    icon: OverviewIcon,
+    icon: PlanIcon,
   },
   {
-    id: "outline",
-    label: "Outline",
-    href: "/outline",
-    section: "plan",
-    primary: false,
-    status: "built",
-    icon: OutlineIcon,
-  },
-  {
-    id: "projects",
-    label: "Projects",
-    href: "/projects",
-    section: "plan",
-    primary: false,
-    status: "built",
-    icon: ProjectsIcon,
-  },
-  {
-    id: "tasks",
-    label: "Tasks",
-    href: "/tasks",
-    section: "plan",
-    primary: true,
-    status: "built",
-    icon: TasksIcon,
-  },
-  {
-    id: "goals",
-    label: "Goals",
-    href: "/goals",
-    section: "plan",
-    primary: false,
-    status: "built",
-    icon: GoalsIcon,
-  },
-  {
-    id: "wishes",
-    label: "Wish List",
-    href: "/wishes",
-    section: "plan",
-    primary: false,
-    status: "built",
-    icon: WishesIcon,
-  },
-  {
-    id: "result-areas",
-    label: "Result Areas",
-    href: "/result-areas",
-    section: "plan",
-    primary: false,
-    status: "built",
-    icon: ResultAreasIcon,
-  },
-  // Do — what you are working on now, this day, this week.
-  //
-  // Day is not here: it folded into Schedule as two of its pages (`/schedule/day`,
-  // `/schedule/week-plan`). It had been shelved because Task Chooser covers the daily-pick
-  // job better and Day still feels half-finished, and this comment used to say folding it in
-  // was the alternative to deleting it. That is what happened. Its future is still open; what
-  // changed is that an unfinished surface beside Calendar and Agenda does not read as a broken
-  // top-level destination the way a shelved module did.
-  {
+    /*
+     * A variant of Tasks taxonomically, and deliberately not one of Plan's pages: it is where
+     * you go to decide what to do next, several times a day, and burying a most-used
+     * destination one level down to satisfy a category boundary trades daily cost for tidiness.
+     */
     id: "chooser",
     label: "Task Chooser",
     href: "/chooser",
-    section: "do",
-    primary: true,
     status: "built",
     icon: ChooserIcon,
   },
   {
-    // "Weekly Schedule" while it was one week drawn one way. It holds a Day page and a Week
-    // Plan page now, and a name that promised a week would be wrong on half of them.
+    // "Weekly Schedule" while it was one week drawn one way. It holds Day, Calendar, Agenda,
+    // Week Plan and now the Time Charts list, and a name promising a week would be wrong on
+    // most of them. Day folded in here rather than being deleted; its future is still open.
     id: "schedule",
     label: "Schedule",
     href: "/schedule",
-    section: "do",
-    primary: false,
     status: "built",
     icon: ScheduleIcon,
   },
@@ -182,18 +114,12 @@ export const MODULES = [
     id: "focus",
     label: "Focus Timer",
     href: "/focus",
-    section: "do",
-    primary: false,
     status: "reserved",
   },
-
-  // Track — the record of what happened.
   {
     id: "metrics",
     label: "Metrics",
     href: "/metrics",
-    section: "track",
-    primary: false,
     status: "built",
     icon: MetricsIcon,
   },
@@ -201,8 +127,6 @@ export const MODULES = [
     id: "fitness",
     label: "Fitness",
     href: "/fitness",
-    section: "track",
-    primary: false,
     status: "built",
     icon: FitnessIcon,
   },
@@ -210,8 +134,6 @@ export const MODULES = [
     id: "finances",
     label: "Finances",
     href: "/finances",
-    section: "track",
-    primary: false,
     status: "built",
     icon: FinancesIcon,
   },
@@ -219,8 +141,6 @@ export const MODULES = [
     id: "notes",
     label: "Notes",
     href: "/notes",
-    section: "track",
-    primary: true,
     status: "built",
     icon: NotesIcon,
   },
@@ -228,46 +148,23 @@ export const MODULES = [
     id: "time-log",
     label: "Time Log",
     href: "/time-log",
-    section: "track",
-    primary: false,
     status: "reserved",
   },
   {
     id: "reports",
     label: "Reports",
     href: "/reports",
-    section: "track",
-    primary: false,
     status: "reserved",
   },
-
-  // Library — reference data you maintain but rarely sit in.
   {
-    id: "time-charts",
-    label: "Time Charts",
-    href: "/time-charts",
-    section: "library",
-    primary: false,
+    // Reference you keep and consult: Contacts and Resources. Was the `Library` *section*
+    // holding those two plus the Time Charts list, which went to Schedule to join the editor
+    // that had always lived there.
+    id: "library",
+    label: "Library",
+    href: "/library",
     status: "built",
-    icon: TimeChartsIcon,
-  },
-  {
-    id: "resources",
-    label: "Resources",
-    href: "/resources",
-    section: "library",
-    primary: false,
-    status: "built",
-    icon: ResourcesIcon,
-  },
-  {
-    id: "contacts",
-    label: "Contacts",
-    href: "/contacts",
-    section: "library",
-    primary: false,
-    status: "built",
-    icon: ContactsIcon,
+    icon: LibraryIcon,
   },
 ] as const satisfies readonly ModuleEntry[];
 
@@ -284,12 +181,6 @@ export function moduleLabel(id: ModuleId): string {
   return MODULES.find((entry) => entry.id === id)?.label ?? "Planner";
 }
 
-/**
- * Sections paired with their built modules, skipping any section that has none.
- *
- * Both the sidebar and the More sheet render from this, so the phone and the desktop group
- * the app identically — the one thing a second grouping implementation would get wrong.
- */
 /**
  * Compile-time proof that every module id keying the page registry is a real module.
  *
@@ -351,27 +242,86 @@ export function moduleDeclaredPages(id: ModuleId): readonly PageEntry[] {
  * `returnTo === "/time-charts" ? "Time Charts" : "Schedule"`, which was already wrong for one
  * destination and would silently mislabel every one added after it.
  *
- * Falls back to the module's own name, and then to "Back" for a path in no module at all.
+ * Falls back to the module's own name, and then to `fallback` for a path in no module at all —
+ * "Back" for the back-links this was written for, "Planner" for `MobileHeader`, which asks the
+ * same question ("what is this place called?") and would look absurd answering it with a verb.
  */
-export function destinationLabel(path: string): string {
+export function destinationLabel(path: string, fallback = "Back"): string {
   const pathname = path.split(/[?#]/)[0] ?? path;
 
   const entry = MODULES.filter((item) => item.status === "built").find(
     (item) => pathname === item.href || pathname.startsWith(`${item.href}/`),
   );
-  if (!entry) return "Back";
+  if (!entry) return fallback;
 
   const page = pageForPathname(entry.id, entry.href, pathname);
   return page && hasPageBar(entry.id) ? page.label : entry.label;
 }
 
-export function sectionsWithModules(): {
-  id: SectionId;
+/**
+ * The phone bottom bar's three destinations, in slot order.
+ *
+ * **A slot may name a page, and Tasks does.** This replaced a `primary: boolean` on the module
+ * entry, which could no longer say what it needed to: Tasks is a page of Plan now, and pointing
+ * the slot at `/plan` would open whatever page you last used — a button labelled Tasks landing
+ * on Goals. A flag cannot express "this module, that page".
+ *
+ * It also closes a hole `navigation.md` did not know it had. The standard lists the bottom nav
+ * among the surfaces reading this registry and says never hard-code a module elsewhere;
+ * `MobileNav` hard-coded all three hrefs, so this list is where they were always supposed to be.
+ *
+ * Icons live here rather than in `pages.ts` for the reason the registries are split at all:
+ * `pages.ts` stays React-free so it can be unit-tested, and a bottom bar is icons.
+ */
+type PrimarySlot = {
+  moduleId: ModuleId;
+  /** Omitted for a module you enter at its remembered page; named where the slot means one page. */
+  pageId?: string;
   label: string;
-  modules: readonly BuiltModule[];
-}[] {
-  return SECTIONS.map((section) => ({
-    ...section,
-    modules: BUILT_MODULES.filter((entry) => entry.section === section.id),
-  })).filter((section) => section.modules.length > 0);
+  icon: ComponentType;
+};
+
+const PRIMARY_DESTINATIONS: readonly PrimarySlot[] = [
+  { moduleId: "chooser", label: "Chooser", icon: ChooserIcon },
+  { moduleId: "plan", pageId: "tasks", label: "Tasks", icon: TasksIcon },
+  { moduleId: "notes", label: "Notes", icon: NotesIcon },
+];
+
+export type PrimaryDestination = {
+  moduleId: ModuleId;
+  label: string;
+  icon: ComponentType;
+  href: string;
+  /** Whether the current pathname is this destination — page-precise where a page is named. */
+  isActive: (pathname: string) => boolean;
+};
+
+/**
+ * The bottom bar's slots, resolved to hrefs and to a "you are here" test.
+ *
+ * A page slot is active only on its own page, so Tasks does not light up while you are on
+ * Plan's other six — the failure a module-level comparison would produce, and the reason this
+ * returns a predicate rather than a module id for the caller to compare.
+ */
+export function primaryDestinations(): PrimaryDestination[] {
+  return PRIMARY_DESTINATIONS.map((slot) => {
+    const entry = moduleById(slot.moduleId);
+    if (!entry) throw new Error(`Unknown module "${slot.moduleId}"`);
+
+    const page = slot.pageId ? builtPageById(slot.moduleId, slot.pageId) : null;
+    if (slot.pageId && !page) {
+      throw new Error(`Unknown page "${slot.moduleId}/${slot.pageId}"`);
+    }
+
+    return {
+      moduleId: slot.moduleId,
+      label: slot.label,
+      icon: slot.icon,
+      href: page ? pageHref(entry.href, page) : entry.href,
+      isActive: (pathname: string) =>
+        page
+          ? pageForPathname(slot.moduleId, entry.href, pathname)?.id === page.id
+          : pathname === entry.href || pathname.startsWith(`${entry.href}/`),
+    };
+  });
 }
