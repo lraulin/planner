@@ -1931,6 +1931,31 @@ export const financeAccountKindEnum = pgEnum("finance_account_kind", [
 ]);
 
 /**
+ * What a transaction *does*, as opposed to what it was spent on.
+ *
+ * This exists because summing negative amounts does not measure spending. Moving $500 from
+ * checking to savings is two rows and zero spend; paying a credit card is a second negative
+ * for money the card already recorded as spent. Reporting that does not know the difference
+ * overstates outflow by six figures on this data set.
+ *
+ * `internal_transfer` is money between accounts we hold — both legs are dropped from spend.
+ * `external_transfer` is money moved to somewhere outside the module (a PayPal balance),
+ * where only one leg will ever exist; it is not spending, but it is not neutral either.
+ * `interest_fee` is separated from `spend` because it is the cost of the accounts
+ * themselves and is worth its own number.
+ *
+ * Seeded complete for the same pooler reason as `finance_account_kind` above.
+ */
+export const financeFlowKindEnum = pgEnum("finance_flow_kind", [
+  "spend",
+  "income",
+  "internal_transfer",
+  "external_transfer",
+  "refund",
+  "interest_fee",
+]);
+
+/**
  * One account a transaction feed lands in — a bank account, a card, later whatever Plaid
  * calls an item.
  *
@@ -2022,6 +2047,35 @@ export const financeTransactions = pgTable(
     notes: text("notes").notNull().default(""),
     /** Running balance where the feed supplies one (the 360 exports do; cards do not). */
     balanceAfter: numeric("balance_after", { precision: 14, scale: 2 }),
+    /**
+     * What the classifier worked out this row is spent on. **Recomputable** — wiping the
+     * column and re-running the rules must be a no-op, which is what makes "Reclassify" a
+     * button rather than a migration. The user's `category` above overrides it.
+     */
+    derivedCategory: text("derived_category"),
+    /** Classifier's flow. Recomputable on the same terms as `derivedCategory`. */
+    derivedFlow: financeFlowKindEnum("derived_flow"),
+    /** The user disagreeing with `derivedFlow`. Wins, and survives every reclassify. */
+    flowOverride: financeFlowKindEnum("flow_override"),
+    /**
+     * Shared by both rows of one movement between accounts — the withdrawal and the deposit
+     * carry the same id.
+     *
+     * A boolean would say "this is a transfer" without saying *which* row is its other half,
+     * and the pairing is the whole point: it is what lets reporting drop both legs without
+     * also dropping a legitimate purchase that happens to match an unrelated amount. Null
+     * where no counterpart exists — a leg can be classified `internal_transfer` and still be
+     * unpaired, which is the normal case for card payments predating that card's import.
+     */
+    transferGroupId: uuid("transfer_group_id"),
+    /**
+     * Keep this row out of the baseline burn rate. The wedding and the house move are real
+     * money that says nothing about what next month costs; averaging them in answers a
+     * question nobody asked. Never set by the classifier — only suggested, then confirmed.
+     */
+    excludeFromBaseline: boolean("exclude_from_baseline").notNull().default(false),
+    /** Names the one-off — "Wedding", "House move" — so it totals as an event, not a blip. */
+    eventLabel: text("event_label").notNull().default(""),
     externalSource: text("external_source"),
     externalId: text("external_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -2037,6 +2091,16 @@ export const financeTransactions = pgTable(
     uniqueIndex("finance_transactions_external_ref_uq")
       .on(table.userId, table.externalSource, table.externalId)
       .where(sql`${table.externalId} is not null`),
+    // Finding the other leg of a transfer, and the reclassify pass that rebuilds them.
+    index("finance_transactions_transfer_group_idx")
+      .on(table.userId, table.transferGroupId)
+      .where(sql`${table.transferGroupId} is not null`),
+    // Every dashboard rollup filters by flow and then by date window, in that order.
+    index("finance_transactions_flow_date_idx").on(
+      table.userId,
+      table.derivedFlow,
+      table.transactionDate,
+    ),
   ],
 );
 
@@ -2161,6 +2225,7 @@ export type NewFinanceAccount = typeof financeAccounts.$inferInsert;
 export type FinanceAccountKind = (typeof financeAccountKindEnum.enumValues)[number];
 export type FinanceTransaction = typeof financeTransactions.$inferSelect;
 export type NewFinanceTransaction = typeof financeTransactions.$inferInsert;
+export type FinanceFlowKind = (typeof financeFlowKindEnum.enumValues)[number];
 export type FinanceStatement = typeof financeStatements.$inferSelect;
 export type NewFinanceStatement = typeof financeStatements.$inferInsert;
 export type FinanceStatementRate = typeof financeStatementRates.$inferSelect;
