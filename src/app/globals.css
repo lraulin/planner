@@ -47,6 +47,28 @@
   /* A dream is a goal, but it gets the star's yellow — see `TypeIcon.tsx`. */
   --type-dream: #caa400;
 
+  /*
+   * Three data hues for the Finances charts, and deliberately not the semantic ones above.
+   * `--priority-a` means "this is priority A" and `--type-goal` means "this row is a goal";
+   * painting a spending bar with either would give one colour two jobs, and recolouring
+   * priority would silently recolour the charts.
+   *
+   * Money in and money out are a polarity, so they are two hues either side of a neutral —
+   * not two arbitrary categorical slots. The trailing-average line is the third because it
+   * must not read as either pole.
+   *
+   * These are chosen, not eyeballed: both sets pass the lightness band, chroma floor,
+   * colour-blind separation (worst adjacent pair ΔE 9.0 light / 8.3 dark), normal-vision
+   * separation, and 3:1 contrast against their own surface. Changing one means re-running
+   * that check, not picking a nicer red.
+   *
+   * Everything else on a chart wears an existing token: `var(--rule)` for grid lines,
+   * `fill-ink-muted` for labels, `var(--surface)` for the gaps between marks.
+   */
+  --chart-income: #12805a;
+  --chart-spend: #c4442b;
+  --chart-average: #1a66b0;
+
   --row-height: 1.75rem;
   --indent-step: 0.875rem;
 
@@ -96,6 +118,12 @@
     --type-task: #e0a83f;
     --type-dream: #f2d24a;
 
+    /* Re-stepped for the dark surface, not lightened automatically: the light values sit
+     * outside the dark lightness band and would glare. Same six checks, re-run. */
+    --chart-income: #3d9c74;
+    --chart-spend: #e2604a;
+    --chart-average: #4f8ec4;
+
     --elev-1: 0 -1px 3px rgb(0 0 0 / 40%);
   }
 }
@@ -125,6 +153,10 @@
   --color-type-project: var(--type-project);
   --color-type-task: var(--type-task);
   --color-type-dream: var(--type-dream);
+
+  --color-chart-income: var(--chart-income);
+  --color-chart-spend: var(--chart-spend);
+  --color-chart-average: var(--chart-average);
 
   --font-sans: var(--font-archivo);
   --font-mono: var(--font-plex-mono);

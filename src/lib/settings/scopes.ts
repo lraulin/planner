@@ -30,6 +30,7 @@ export const SCOPE_KINDS = [
   "shell",
   "schedule",
   "display",
+  "insights",
 ] as const;
 export type ScopeKind = (typeof SCOPE_KINDS)[number];
 
@@ -139,6 +140,9 @@ export const SHELL_SCOPE = "shell";
 /** The week calendar's own drawing settings — slot height and Work Week Mode. */
 export const SCHEDULE_SCOPE = "schedule";
 
+/** The Finances insights dashboard's window and axis. */
+export const INSIGHTS_SCOPE = "insights";
+
 /** Cross-module display policy, currently the standalone calendar-day format. */
 export const DISPLAY_SCOPE = "display";
 
@@ -152,6 +156,7 @@ const KIND_LABELS: Record<ScopeKind, string> = {
   shell: "App shell",
   schedule: "Weekly Schedule",
   display: "Display",
+  insights: "Finances insights",
 };
 
 /** `projects.active-status` → `Projects / Active status`. */

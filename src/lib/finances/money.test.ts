@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   centsToNumericString,
   formatUsd,
+  formatUsdCompact,
   numericStringToCents,
   parseAmountCents,
   sumCents,
@@ -90,5 +91,21 @@ describe("sumCents", () => {
     expect(sumCents(pennies)).toBe(1000);
     expect(sumCents([])).toBe(0);
     expect(sumCents([-1059, 48120, -142966])).toBe(-95905);
+  });
+});
+
+describe("formatUsdCompact", () => {
+  it("drops the cents an axis label cannot use", () => {
+    expect(formatUsdCompact(45012)).toBe("$450");
+    expect(formatUsdCompact(0)).toBe("$0");
+  });
+
+  it("abbreviates thousands, losing the decimal once it stops mattering", () => {
+    expect(formatUsdCompact(210000)).toBe("$2.1k");
+    expect(formatUsdCompact(1234567)).toBe("$12k");
+  });
+
+  it("keeps the sign outside the symbol, like the register does", () => {
+    expect(formatUsdCompact(-210000)).toBe("-$2.1k");
   });
 });

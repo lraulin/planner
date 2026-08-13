@@ -32,6 +32,7 @@ function row(overrides: Partial<AnalyticsRow> = {}): AnalyticsRow {
     derivedCategory: "Groceries",
     derivedFlow: "spend",
     flowOverride: null,
+    transferGroupId: null,
     excludeFromBaseline: false,
     eventLabel: "",
     ...overrides,
@@ -366,6 +367,15 @@ describe("coverageGap", () => {
         transactionDate: "2024-01-04",
         amountCents: -24948,
         derivedFlow: "internal_transfer",
+      }),
+      // Paired, so it hides nothing: the savings moved and both legs are right here.
+      row({
+        accountId: "checking",
+        accountName: "360 Checking",
+        transactionDate: "2024-02-01",
+        amountCents: -500000,
+        derivedFlow: "internal_transfer",
+        transferGroupId: "moved-to-savings",
       }),
       row({
         accountId: "capone-card",

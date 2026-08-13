@@ -49,20 +49,18 @@ describe("the registry itself", () => {
 });
 
 describe("hasPageBar", () => {
-  it("is false for Finances, which has one built page and one reserved", () => {
-    // Not a bug to fix: a single tab spends a row saying "you are in the only place there is".
-    // The active insights spec flips `insights` to built and the bar appears.
-    expect(pagesForModule("finances")).toHaveLength(2);
-    expect(builtPagesForModule("finances")).toHaveLength(1);
-    expect(hasPageBar("finances")).toBe(false);
-  });
-
-  it("is true for the modules with two or more built pages", () => {
+  it("is true for every module with two or more built pages", () => {
     expect(hasPageBar("plan")).toBe(true);
     expect(hasPageBar("schedule")).toBe(true);
     expect(hasPageBar("fitness")).toBe(true);
     expect(hasPageBar("notes")).toBe(true);
     expect(hasPageBar("library")).toBe(true);
+    // Finances got its bar when Insights shipped beside the Register.
+    expect(builtPagesForModule("finances").map((page) => page.id)).toEqual([
+      "register",
+      "insights",
+    ]);
+    expect(hasPageBar("finances")).toBe(true);
   });
 });
 
@@ -98,13 +96,26 @@ describe("the consolidated modules", () => {
 });
 
 describe("reserved pages", () => {
-  it("are declared but never navigable", () => {
-    expect(pagesForModule("finances").map((page) => page.id)).toContain("insights");
-    expect(builtPagesForModule("finances").map((page) => page.id)).not.toContain(
-      "insights",
-    );
-    expect(builtPageById("finances", "insights")).toBeNull();
-    expect(pageForPathname("finances", "/finances", "/finances/insights")).toBeNull();
+  /**
+   * Every declared page is `built` today — Insights was the last `reserved` one and it
+   * shipped. So this asserts the filter still agrees with the statuses rather than that a
+   * particular page is hidden; the moment a `reserved` page is declared again it starts
+   * catching the real thing, which a test naming one specific page would not.
+   */
+  it("are the only ones the filter drops", () => {
+    for (const moduleId of PAGED_MODULES) {
+      expect(builtPagesForModule(moduleId), moduleId).toEqual(
+        pagesForModule(moduleId).filter((page) => page.status === "built"),
+      );
+      for (const page of pagesForModule(moduleId)) {
+        const navigable = builtPageById(moduleId, page.id) !== null;
+        expect(navigable, `${moduleId}/${page.id}`).toBe(page.status === "built");
+      }
+    }
+  });
+
+  it("has no route for a segment that was never declared", () => {
+    expect(pageForPathname("finances", "/finances", "/finances/envelopes")).toBeNull();
   });
 });
 

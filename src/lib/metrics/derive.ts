@@ -522,3 +522,108 @@ export function plotPoint(
   const y = padding.top + innerH - ((value - yMin) / span) * innerH;
   return { x, y };
 }
+
+/**
+ * Horizontal slots for an ordinal x axis — one per bucket, evenly divided.
+ *
+ * The line chart above places points in **calendar** time, where each day is the same
+ * width. Bars cannot: a month is a slot, not an instant, and February being three days
+ * narrower than March would be read as a smaller February. So bars get their own geometry
+ * and the two live side by side rather than one being bent into the other.
+ *
+ * `gapFraction` is the share of each slot left as surface between neighbours — the 2px-ish
+ * spacer that keeps adjacent bars from reading as one block.
+ */
+export function bandSlots(
+  count: number,
+  width: number,
+  padding: number | { left: number; right: number; top: number; bottom: number },
+  gapFraction = 0.2,
+): { x: number; width: number; center: number }[] {
+  if (count <= 0) return [];
+  const pad = normalizePad(padding);
+  const innerW = Math.max(1, width - pad.left - pad.right);
+  const slot = innerW / count;
+  const barWidth = Math.max(1, slot * (1 - gapFraction));
+  return Array.from({ length: count }, (_, index) => {
+    const x = pad.left + index * slot + (slot - barWidth) / 2;
+    return { x, width: barWidth, center: x + barWidth / 2 };
+  });
+}
+
+/**
+ * A bar's rectangle, measured from the baseline value rather than from the floor.
+ *
+ * Taking a baseline is what lets the same primitive draw a cost above zero and a negative
+ * net below it without the caller doing the arithmetic twice — and drawing from zero is
+ * not optional for a bar: a truncated bar axis misstates every ratio on the chart.
+ */
+export function barRect(
+  slot: { x: number; width: number },
+  value: number,
+  height: number,
+  padding: number | { left: number; right: number; top: number; bottom: number },
+  yMin: number,
+  yMax: number,
+  baseline = 0,
+): { x: number; y: number; width: number; height: number } {
+  const pad = normalizePad(padding);
+  const innerH = Math.max(1, height - pad.top - pad.bottom);
+  const span = yMax - yMin || 1;
+  const toY = (at: number) => pad.top + innerH - ((at - yMin) / span) * innerH;
+  const valueY = toY(value);
+  const baseY = toY(baseline);
+  return {
+    x: slot.x,
+    width: slot.width,
+    y: Math.min(valueY, baseY),
+    height: Math.abs(valueY - baseY),
+  };
+}
+
+/**
+ * Close a series down to a baseline, giving the polygon for a filled area.
+ *
+ * Takes the points already plotted rather than re-deriving them, so the fill cannot drift
+ * away from the line drawn over it.
+ */
+export function areaPolygon(
+  points: ReadonlyArray<{ x: number; y: number }>,
+  baselineY: number,
+): string {
+  if (points.length === 0) return "";
+  const along = points.map((point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`);
+  const last = points[points.length - 1];
+  const first = points[0];
+  return [
+    ...along,
+    `${last.x.toFixed(2)},${baselineY.toFixed(2)}`,
+    `${first.x.toFixed(2)},${baselineY.toFixed(2)}`,
+  ].join(" ");
+}
+
+/**
+ * Which bucket indices get an axis label, when there are more buckets than room.
+ *
+ * Always includes the first and last — the most recent bucket is the one being read, and an
+ * axis whose right end is unlabelled makes the reader count backwards. The catch is that a
+ * forced last label can land on top of the previous one when the count does not divide
+ * evenly (35 pay periods at every-4th ends "Jul 21" and "Aug 5" overlapping), so when the
+ * last label would crowd its neighbour it **replaces** that neighbour instead of joining it.
+ */
+export function labelIndices(count: number, maxLabels: number): number[] {
+  if (count <= 0) return [];
+  if (maxLabels <= 1) return [count - 1];
+  if (count <= maxLabels) return Array.from({ length: count }, (_, index) => index);
+
+  const step = Math.ceil(count / maxLabels);
+  const indices: number[] = [];
+  for (let index = 0; index < count; index += step) indices.push(index);
+
+  const last = count - 1;
+  const final = indices[indices.length - 1];
+  if (final === last) return indices;
+  if (last - final <= step / 2) indices[indices.length - 1] = last;
+  else indices.push(last);
+  return indices;
+}

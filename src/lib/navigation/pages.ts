@@ -224,11 +224,6 @@ const PAGES = {
     },
   ],
 
-  /*
-   * One built page, so Finances renders no bar yet. That is the >=2 rule working rather than a
-   * bug, and it is written down here so nobody "fixes" it. The active finances-insights spec
-   * flips `insights` to built, and the bar appears the same day.
-   */
   finances: [
     {
       id: "register",
@@ -242,7 +237,7 @@ const PAGES = {
       id: "insights",
       label: "Insights",
       segment: "insights",
-      status: "reserved",
+      status: "built",
       keywords: "spending baseline lumpy cashflow charts dashboard",
     },
   ],

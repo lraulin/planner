@@ -16,6 +16,7 @@ const MODULE_LABELS = {
   "time-charts": "Time Charts",
   resources: "Resources",
   contacts: "Contacts",
+  finances: "Finances",
 } as const;
 
 const MODULE_ORDER = Object.keys(MODULE_LABELS) as (keyof typeof MODULE_LABELS)[];
@@ -146,6 +147,19 @@ function moduleEntry(
         scope,
         label: "Calendar layout",
         detail: "Slot height and work-week display",
+        savedView: false,
+        showScopeId: false,
+      },
+    };
+  }
+
+  if (parsed.kind === "insights" && parsed.key === null) {
+    return {
+      moduleId: "finances",
+      entry: {
+        scope,
+        label: "Insights dashboard",
+        detail: "Reporting window and monthly vs pay-period axis",
         savedView: false,
         showScopeId: false,
       },

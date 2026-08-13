@@ -77,6 +77,24 @@ export function formatUsd(cents: number | null): string {
   })}`;
 }
 
+/**
+ * Money at chart scale: `$2.1k`, `-$450`, `$0`.
+ *
+ * Cents on an axis label are noise — nobody reads a y-axis to the penny, and eight
+ * characters per tick is what makes axis labels collide. Whole dollars up to a thousand,
+ * one decimal of thousands above it.
+ */
+export function formatUsdCompact(cents: number | null): string {
+  if (cents === null || !Number.isFinite(cents)) return "";
+  const negative = cents < 0;
+  const dollars = Math.abs(cents) / CENTS_PER_DOLLAR;
+  const body =
+    dollars >= 1000
+      ? `${(dollars / 1000).toFixed(dollars >= 10_000 ? 0 : 1)}k`
+      : String(Math.round(dollars));
+  return `${negative ? "-" : ""}$${body}`;
+}
+
 /** Total a column of cents. Integer addition, so no float drift over thousands of rows. */
 export function sumCents(values: readonly number[]): number {
   return values.reduce((total, value) => total + value, 0);

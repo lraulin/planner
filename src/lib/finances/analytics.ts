@@ -46,6 +46,8 @@ export type AnalyticsRow = {
   derivedCategory: string | null;
   derivedFlow: FinanceFlowKind | null;
   flowOverride: FinanceFlowKind | null;
+  /** Set when the classifier found this movement's other leg. Null means it never did. */
+  transferGroupId: string | null;
   excludeFromBaseline: boolean;
   eventLabel: string;
 };
@@ -690,13 +692,16 @@ export function coverageGap(rows: readonly AnalyticsRow[]): CoverageGap {
     starts[0].firstSeen,
   );
 
-  // Transfers out before every account was itemizing are purchases we will never see the
-  // detail of — that is exactly the money the gap hides.
+  // Only the **unpaired** legs. A transfer whose other half is in the data hides nothing —
+  // the savings moved, and both sides are visible. It is the payment to a card that had not
+  // been imported yet that stands in for purchases nobody can itemize, so counting paired
+  // transfers here would inflate the gap with money that is fully accounted for.
   const unitemizedCents = rows
     .filter(
       (row) =>
         row.transactionDate < completeFrom &&
         effectiveFlow(row) === "internal_transfer" &&
+        row.transferGroupId === null &&
         row.amountCents < 0,
     )
     .reduce((total, row) => total - row.amountCents, 0);

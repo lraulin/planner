@@ -3,9 +3,12 @@
 import {
   deleteAccount,
   deleteTransaction,
+  reclassifyTransactions,
+  setOneOff,
   updateAccount,
   updateTransaction,
   type AccountEdit,
+  type ReclassifySummary,
   type TransactionEdit,
 } from "@/lib/finances/mutations";
 import { getTransaction, listAccounts, listTransactions } from "@/lib/finances/queries";
@@ -14,7 +17,14 @@ import type {
   TransactionFilter,
   TransactionListRow,
 } from "@/lib/finances/types";
-import { run, runQuery, type ActionResult, type QueryResult } from "../actionResult";
+import {
+  run,
+  runQuery,
+  runWithData,
+  type ActionResult,
+  type DataActionResult,
+  type QueryResult,
+} from "../actionResult";
 
 export async function updateTransactionAction(
   transactionId: string,
@@ -48,6 +58,17 @@ export async function listTransactionsAction(
 
 export async function listAccountsAction(): Promise<QueryResult<FinanceAccountRow[]>> {
   return runQuery(listAccounts);
+}
+
+export async function reclassifyAction(): Promise<DataActionResult<ReclassifySummary>> {
+  return runWithData(reclassifyTransactions);
+}
+
+export async function setOneOffAction(
+  transactionIds: readonly string[],
+  edit: { excludeFromBaseline: boolean; eventLabel?: string },
+): Promise<ActionResult> {
+  return run((userId) => setOneOff(userId, transactionIds, edit));
 }
 
 export async function getTransactionAction(

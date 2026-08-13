@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   applyFrozenEntryOrder,
+  areaPolygon,
+  bandSlots,
+  barRect,
   chartPoints,
   dateKeyOrdinal,
+  labelIndices,
   dateXFraction,
   displayValue,
   latestEntry,
@@ -358,5 +362,83 @@ describe("plotPoint", () => {
   it("maps xFraction 0 and 1 to the plot edges", () => {
     expect(plotPoint(0, 0, 100, 100, pad, 0, 100).x).toBe(10);
     expect(plotPoint(1, 0, 100, 100, pad, 0, 100).x).toBe(90);
+  });
+});
+
+describe("bandSlots", () => {
+  it("divides the plot evenly and centres each bar in its slot", () => {
+    const slots = bandSlots(4, 440, { left: 40, right: 0, top: 0, bottom: 0 }, 0.2);
+
+    expect(slots).toHaveLength(4);
+    expect(slots[0].width).toBeCloseTo(80);
+    expect(slots[0].x).toBeCloseTo(50);
+    expect(slots[0].center).toBeCloseTo(90);
+    // Slots tile the plot: the last one ends where the plot does.
+    expect(slots[3].x + slots[3].width).toBeCloseTo(430);
+  });
+
+  it("has nothing to draw for an empty series", () => {
+    expect(bandSlots(0, 400, 10)).toEqual([]);
+  });
+});
+
+describe("barRect", () => {
+  const pad = { left: 0, right: 0, top: 0, bottom: 0 };
+
+  it("draws from the baseline, not from the floor of the axis", () => {
+    // A bar measured from a truncated axis misstates every ratio on the chart.
+    const rect = barRect({ x: 10, width: 20 }, 50, 100, pad, -100, 100);
+
+    expect(rect).toMatchObject({ x: 10, width: 20 });
+    expect(rect.y).toBeCloseTo(25);
+    expect(rect.height).toBeCloseTo(25);
+  });
+
+  it("hangs a negative value below the baseline", () => {
+    const rect = barRect({ x: 0, width: 10 }, -50, 100, pad, -100, 100);
+
+    expect(rect.y).toBeCloseTo(50);
+    expect(rect.height).toBeCloseTo(25);
+  });
+
+  it("gives a zero value no height", () => {
+    expect(barRect({ x: 0, width: 10 }, 0, 100, pad, 0, 100).height).toBeCloseTo(0);
+  });
+});
+
+describe("areaPolygon", () => {
+  it("closes the series down to the baseline in order", () => {
+    expect(
+      areaPolygon(
+        [
+          { x: 0, y: 10 },
+          { x: 10, y: 20 },
+        ],
+        50,
+      ),
+    ).toBe("0.00,10.00 10.00,20.00 10.00,50.00 0.00,50.00");
+  });
+
+  it("has nothing to close when there are no points", () => {
+    expect(areaPolygon([], 50)).toBe("");
+  });
+});
+
+describe("labelIndices", () => {
+  it("labels every bucket when they all fit", () => {
+    expect(labelIndices(4, 10)).toEqual([0, 1, 2, 3]);
+  });
+
+  it("thins to the step and always ends on the last bucket", () => {
+    expect(labelIndices(20, 5)).toEqual([0, 4, 8, 12, 16, 19]);
+  });
+
+  it("replaces a crowded neighbour rather than overlapping it", () => {
+    // 35 pay periods at every fourth used to end "Jul 21" and "Aug 5" on top of each other.
+    expect(labelIndices(35, 10)).toEqual([0, 4, 8, 12, 16, 20, 24, 28, 34]);
+  });
+
+  it("has nothing to label for an empty series", () => {
+    expect(labelIndices(0, 5)).toEqual([]);
   });
 });

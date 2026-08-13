@@ -59,6 +59,7 @@ export async function loadInsightsRows(
       derivedCategory: financeTransactions.derivedCategory,
       derivedFlow: financeTransactions.derivedFlow,
       flowOverride: financeTransactions.flowOverride,
+      transferGroupId: financeTransactions.transferGroupId,
       excludeFromBaseline: financeTransactions.excludeFromBaseline,
       eventLabel: financeTransactions.eventLabel,
     })
@@ -79,6 +80,7 @@ export async function loadInsightsRows(
     derivedCategory: row.derivedCategory,
     derivedFlow: row.derivedFlow,
     flowOverride: row.flowOverride,
+    transferGroupId: row.transferGroupId,
     excludeFromBaseline: row.excludeFromBaseline,
     eventLabel: row.eventLabel,
   }));
