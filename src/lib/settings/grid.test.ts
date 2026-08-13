@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { EMPTY_CROSS_FILTER } from "@/lib/grid/crossFilter";
 import {
+  clearViewSettings,
+  hasViewOverrides,
   DEFAULT_GRID_SETTINGS,
   hasActiveFilters,
   hasAnyNarrowing,
@@ -268,6 +270,89 @@ describe("parseGridSettings", () => {
     expect(parseGridSettings({ retired: true, view: "completed" }).view).toBe(
       "completed",
     );
+  });
+});
+
+describe("clearViewSettings", () => {
+  const adjusted = {
+    ...DEFAULT_GRID_SETTINGS,
+    order: ["name", "effort"],
+    widths: { name: 300 },
+    filters: { state: { mode: "options" as const, ids: ["open"] } },
+    search: "budget",
+    sorts: [{ columnId: "name", direction: "asc" as const }],
+    groupBy: ["area"],
+    collapsedGroups: ["area:1"],
+    density: "compact" as const,
+    switches: { groups: true },
+    view: "saved-a1b2c3d4",
+    includeDeferred: false,
+  };
+
+  it("clears every field a saved view captures", () => {
+    const cleared = clearViewSettings(adjusted);
+
+    expect(cleared.order).toBeNull();
+    expect(cleared.widths).toBeNull();
+    expect(cleared.filters).toBeNull();
+    expect(cleared.advancedFilter).toBeNull();
+    expect(cleared.search).toBeNull();
+    expect(cleared.sorts).toBeNull();
+    expect(cleared.groupBy).toBeNull();
+    expect(cleared.collapsedGroups).toBeNull();
+    expect(cleared.density).toBeNull();
+    expect(cleared.switches).toEqual({});
+  });
+
+  /**
+   * The reason this is not a scope reset. Outline, Notes, Wishes and Metrics keep their
+   * default view's grid state in the module's own scope, so the row being cleared is also
+   * the row holding which view is selected. Wipe that while saving a new view and the
+   * module snaps back to its default the instant you name one.
+   */
+  it("keeps the fields the module owns, not the view", () => {
+    const cleared = clearViewSettings(adjusted);
+
+    expect(cleared.view).toBe("saved-a1b2c3d4");
+    expect(cleared.includeDeferred).toBe(false);
+  });
+
+  it("is not a view override once cleared", () => {
+    expect(hasViewOverrides(adjusted)).toBe(true);
+    expect(hasViewOverrides(clearViewSettings(adjusted))).toBe(false);
+  });
+
+  it("stays clean after a serialize/parse round-trip", () => {
+    // The plausible mistake: spreading nulls into JSON. parseSearch/parseDensity then
+    // treat the key as present and coerce it to "" / comfortable, so Reset never undirties.
+    const cleared = clearViewSettings(adjusted);
+    expect(hasViewOverrides(parseGridSettings(serializeGridSettings(cleared)))).toBe(
+      false,
+    );
+  });
+});
+
+describe("hasViewOverrides", () => {
+  it("is false for an untouched working set", () => {
+    // A loaded definition stores nulls so the origin shows through. That is clean —
+    // Custom would otherwise light up the moment you picked a view.
+    expect(hasViewOverrides(DEFAULT_GRID_SETTINGS)).toBe(false);
+  });
+
+  it("treats a concrete empty as a tweak, not as untouched", () => {
+    expect(hasViewOverrides({ ...DEFAULT_GRID_SETTINGS, search: "" })).toBe(true);
+    expect(hasViewOverrides({ ...DEFAULT_GRID_SETTINGS, filters: {} })).toBe(true);
+    expect(hasViewOverrides({ ...DEFAULT_GRID_SETTINGS, sorts: [] })).toBe(true);
+  });
+
+  it("ignores origin id and includeDeferred", () => {
+    expect(
+      hasViewOverrides({
+        ...DEFAULT_GRID_SETTINGS,
+        view: "outline",
+        includeDeferred: false,
+      }),
+    ).toBe(false);
   });
 });
 

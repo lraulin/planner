@@ -1,5 +1,42 @@
 import { describe, expect, it } from "vitest";
-import { applyPending, coalesceWrites, readPending } from "./queue";
+import { applyPending, coalesceWrites, readPending, readScopeValue } from "./queue";
+
+describe("readScopeValue", () => {
+  it("prefers the newest pending write over the server row", () => {
+    const value = readScopeValue(
+      { "grid:outline": { v: 3, order: ["a"] } },
+      [
+        { scope: "grid:outline", value: { v: 3, order: ["b"] } },
+        { scope: "grid:tasks", value: { v: 3 } },
+        { scope: "grid:outline", value: { v: 3, order: ["c"] } },
+      ],
+      "grid:outline",
+    );
+    expect(value).toEqual({ v: 3, order: ["c"] });
+  });
+
+  it("falls back to the server row when nothing is pending for the scope", () => {
+    expect(
+      readScopeValue(
+        { "grid:outline": 1 },
+        [{ scope: "grid:tasks", value: 2 }],
+        "grid:outline",
+      ),
+    ).toBe(1);
+  });
+
+  it("returns the tombstone for a reset scope rather than the row it masks", () => {
+    // A reset queues `undefined`. Reading past it would resurrect the server row, and a
+    // patch built on that would write the cleared settings straight back.
+    expect(
+      readScopeValue(
+        { "grid:outline": 1 },
+        [{ scope: "grid:outline", value: undefined }],
+        "grid:outline",
+      ),
+    ).toBeUndefined();
+  });
+});
 
 describe("coalesceWrites", () => {
   it("keeps only the last write per scope", () => {

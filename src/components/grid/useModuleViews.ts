@@ -1,98 +1,96 @@
 "use client";
 
-import { useMemo } from "react";
-import { useCopyScope, useResetScope } from "@/components/settings/SettingsProvider";
-import { gridScope } from "@/lib/settings/scopes";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import {
+  useAllSettings,
+  useCopyScope,
+  useReadScope,
+  useResetScope,
+  useSetting,
+  type SettingCodec,
+} from "@/components/settings/SettingsProvider";
+import {
+  hasViewOverrides,
+  parseGridSettings,
+  serializeGridSettings,
+  type GridSettings,
+} from "@/lib/settings/grid";
+import { gridScope, WORKING_VIEW_ID } from "@/lib/settings/scopes";
 import { baseViewId } from "@/lib/settings/views";
 import type { ColumnMeta } from "./columns";
 import { useGridState, useTabView, type GridDefaults } from "./useGridState";
 import { savedViewDefaults, snapshotOf, useSavedViews } from "./useSavedViews";
 
 /**
- * A module's views and the grid state of whichever one is selected.
+ * A module's views and the single working set the grid is showing.
  *
- * Every view-capable grid used to spell out the same four steps in its own body — read the
- * catalogue, widen the allow-list, pick the view, key the grid state by it. Five copies of a
- * sequence whose **order is load-bearing** is four copies too many: `useSavedViews` has to run
- * before `useTabView`, because the allow-list needs the saved ids, and wired the other way
- * round every saved view is silently rejected as illegal and the module falls back to its
- * default — which looks exactly like saving having done nothing. The previous cycle shipped
- * that bug once and found it by driving the app.
+ * Named views are snapshots. Tweaks live in `grid:{moduleId}` (and optional extras
+ * working scopes). When those diverge from the active view's definition the picker
+ * stays on that view and shows Unsaved changes.
  *
- * So the sequence lives here once, and a module declares what it has: its built-in views, which
- * one it opens on, and what each of those views defaults to.
+ * `useSavedViews` still runs before `useTabView`: the allow-list needs the saved ids, and
+ * wired the other way every saved view is rejected as illegal.
  */
 
 export type BuiltInView<TView extends string = string> = { id: TView; label: string };
 
+const GRID_CODEC: SettingCodec<GridSettings> = {
+  parse: parseGridSettings,
+  serialize: serializeGridSettings,
+};
+
 export type ModuleViewsOptions<TCol extends ColumnMeta, TView extends string> = {
-  /** The module's settings key — `outline`, `tasks`. Unchanged from the old `tabId`. */
+  /** The module's settings key — `outline`, `tasks`. */
   moduleId: string;
   builtIn: readonly BuiltInView<TView>[];
   /**
    * Which of `builtIn` the module opens on — typed against their ids, so renaming a preset
-   * cannot leave the default pointing at a view that no longer exists. That failure mode is
-   * quiet and nasty: `useTabView` would fall back *to* the missing id and the module would open
-   * on nothing.
+   * cannot leave the default pointing at a view that no longer exists.
    */
   defaultViewId: NoInfer<TView>;
-  /**
-   * Whether the default view stores its grid state in the module's own scope (`grid:outline`)
-   * rather than a per-view one (`grid:outline.all`).
-   *
-   * True for the modules that had no view picker before this cycle: their stored column
-   * layouts, widths and filters live at the bare scope, and gaining a picker must not orphan
-   * them. This is less a special case than the existing contract read out loud —
-   * `GridSettings.view` is already nullable with null meaning "the module's default", so the
-   * bare scope already *is* where the default view's state lives.
-   *
-   * Modules with several presets (Tasks, Projects, Goals) leave it off: none of their views is
-   * "the module with nothing chosen", and `grid:tasks.active-status` is already written.
-   */
-  defaultViewSharesModuleScope?: boolean;
   columns: TCol[];
   /**
-   * What a built-in view opens as. Only ever called with a **built-in** id — a saved view's own
-   * settings are layered over this by `savedViewDefaults`, so `defaultsFor` never has to know
-   * that saved views exist.
+   * What a built-in view opens as. Only ever called with a **built-in** id — a saved view's
+   * own settings are layered over this by `savedViewDefaults`.
    */
   defaultsFor: (builtInId: string) => GridDefaults;
   /**
-   * Settings scopes the module keeps **per view**, besides the grid's own: the Task Chooser's
-   * weights (`chooser:{viewId}`), Notes' mode / sort / filter (`notes:{viewId}`).
+   * Settings scopes the module keeps **per named view**, besides the grid: Chooser weights
+   * (`chooser:{viewId}`), Notes mode (`notes:{viewId}` / `notes:filter` for working).
    *
-   * These are what let a module carry settings no column can hold, and they work by being keyed
-   * off the selected view — so they need no copying to *read*. But saving does: a new view's
-   * scope starts empty, so without this the module's own settings would snap back to their
-   * defaults the moment you named the grid you were looking at. `saveAs` forks each one.
-   *
-   * Must be stable (module scope). Called for both the source and the new view, and paired by
-   * position, so return the same scopes in the same order every time.
+   * Called with `WORKING_VIEW_ID` for the live extras row, and with a named id for that
+   * view's definition. Paired by position. Must be a stable function.
    */
   viewScopes?: (viewId: string) => readonly string[];
+  /**
+   * When extras have no separate definition row (built-in origin, or Notes' working row
+   * *is* `notes:filter`), dirty is "does the working blob still look like factory defaults?"
+   */
+  extrasMatchDefaults?: (raw: unknown) => boolean;
 };
 
 export function useModuleViews<TCol extends ColumnMeta, TView extends string>({
   moduleId,
   builtIn,
   defaultViewId,
-  defaultViewSharesModuleScope = false,
   columns,
   defaultsFor,
   viewScopes,
+  extrasMatchDefaults,
 }: ModuleViewsOptions<TCol, TView>) {
-  // Before `useTabView`, always. See the header note.
   const saved = useSavedViews(moduleId);
   const copyScope = useCopyScope();
   const resetScope = useResetScope();
+  const readScope = useReadScope();
+  const { snapshot } = useAllSettings();
+  const { value: moduleSettings, update: writeModule } = useSetting(
+    gridScope(moduleId),
+    GRID_CODEC,
+  );
 
   const builtInIds = useMemo(() => builtIn.map((entry) => entry.id), [builtIn]);
+  const builtInIdSet = useMemo(() => new Set<string>(builtInIds), [builtInIds]);
 
-  /**
-   * Saved ids join the built-ins so `useTabView` treats them as legal selections. A view is a
-   * legal choice exactly while it exists; delete it and the stored preference falls back rather
-   * than leaving the module pointing at nothing.
-   */
   const allowed = useMemo(
     () => [...builtInIds, ...saved.views.map((entry) => entry.id)],
     [builtInIds, saved.views],
@@ -100,109 +98,179 @@ export function useModuleViews<TCol extends ColumnMeta, TView extends string>({
 
   const [viewId, setViewId] = useTabView(moduleId, allowed, defaultViewId);
 
-  /**
-   * The built-in whose defaults *and behaviour* apply. Modules that resolve behaviour from the
-   * view id — the Task Chooser's scoring, above all — are handed this rather than `viewId`,
-   * because `saved-a1b2c3d4` is not one of their presets.
-   *
-   * Typed as a built-in id rather than a bare string, which is the whole point: it can be
-   * passed straight to a module's own `chooserView`-style lookup without a cast at the call
-   * site. Sound because `baseViewId` only ever returns a member of `builtInIds` or
-   * `defaultViewId`, and both are `TView`.
-   */
   const base = baseViewId(saved.views, viewId, builtInIds, defaultViewId) as TView;
-
   const current = saved.find(viewId);
-
-  /**
-   * Memoised on `base`, because a `defaultsFor` may well build its arrays on the way out —
-   * Projects' returns a different column order per view from a `switch`. `useGridState`
-   * memoises on the *identity* of `defaults.order`, so a fresh array every render would
-   * recompute the visible column set every render for no reason.
-   *
-   * This is why `defaultsFor` has to be a stable function: declare it at module scope, not as
-   * an inline arrow in the component body.
-   */
   const fallback = useMemo(() => defaultsFor(base), [defaultsFor, base]);
-
-  /**
-   * The wrapper object itself needs no memo — `useGridState` reads the fields off it
-   * immediately and memoises on those, and a saved view's own arrays come from the parsed
-   * settings blob, which is already stable.
-   */
   const defaults = savedViewDefaults(current, fallback);
 
-  const scope =
-    defaultViewSharesModuleScope && viewId === defaultViewId
-      ? moduleId
-      : `${moduleId}.${viewId}`;
+  // One working set. Per-view live scopes are no longer written.
+  const grid = useGridState(moduleId, columns, defaults);
 
-  const grid = useGridState(scope, columns, defaults);
+  const persistExtras = useCallback(
+    (fromId: string, toId: string) => {
+      if (!viewScopes) return;
+      const from = viewScopes(fromId);
+      const to = viewScopes(toId);
+      from.forEach((source, index) => {
+        const target = to[index];
+        if (!target || target === source) return;
+        const raw = readScope(source);
+        if (raw === undefined) resetScope(target);
+        else copyScope(source, target);
+      });
+    },
+    [viewScopes, readScope, resetScope, copyScope],
+  );
+
+  const loadExtras = useCallback(
+    (originId: string) => {
+      if (!viewScopes) return;
+      const working = viewScopes(WORKING_VIEW_ID);
+      const originIsNamed = !builtInIdSet.has(originId);
+      working.forEach((scope, index) => {
+        const definition = originIsNamed ? viewScopes(originId)[index] : undefined;
+        if (!definition || definition === scope) {
+          resetScope(scope);
+          return;
+        }
+        const raw = readScope(definition);
+        if (raw === undefined) resetScope(scope);
+        else copyScope(definition, scope);
+      });
+    },
+    [viewScopes, builtInIdSet, readScope, resetScope, copyScope],
+  );
+
+  /**
+   * Load a named definition into the working set. Dirty tweaks on the previous view
+   * are discarded. Same id as now still reloads — Reset uses that.
+   */
+  const clearViewState = grid.clearViewState;
+  const selectView = useCallback(
+    (id: string) => {
+      setViewId(id);
+      clearViewState();
+      loadExtras(id);
+    },
+    [setViewId, clearViewState, loadExtras],
+  );
+
+  const revert = useCallback(() => {
+    selectView(viewId);
+  }, [selectView, viewId]);
+
+  const previousViewId = useRef(viewId);
+  useEffect(() => {
+    if (previousViewId.current === viewId) return;
+    previousViewId.current = viewId;
+    // URL `?view=` (and any other store write we did not go through `selectView`) is an
+    // explicit navigation: load that definition. `selectView` / `saveAs` / `save`
+    // already cleared; doing it again is a no-op.
+    clearViewState();
+    loadExtras(viewId);
+  }, [viewId, clearViewState, loadExtras]);
+
+  const extrasDirty = useMemo(() => {
+    if (!viewScopes) return false;
+    const working = viewScopes(WORKING_VIEW_ID);
+    const originIsNamed = !builtInIdSet.has(viewId);
+    return working.some((scope, index) => {
+      const raw = snapshot[scope];
+      const definition = originIsNamed ? viewScopes(viewId)[index] : undefined;
+      if (!definition || definition === scope) {
+        return extrasMatchDefaults ? !extrasMatchDefaults(raw) : raw !== undefined;
+      }
+      return !rawEqual(raw, snapshot[definition]);
+    });
+  }, [viewScopes, builtInIdSet, viewId, snapshot, extrasMatchDefaults]);
+
+  const dirty = hasViewOverrides(moduleSettings) || extrasDirty;
+
+  const adopted = useRef(false);
+  useEffect(() => {
+    if (adopted.current) return;
+    adopted.current = true;
+
+    const perViewScope = gridScope(`${moduleId}.${viewId}`);
+    const workingScope = gridScope(moduleId);
+    if (perViewScope !== workingScope) {
+      const perViewRaw = readScope(perViewScope);
+      if (perViewRaw !== undefined && !hasViewOverrides(moduleSettings)) {
+        const live = parseGridSettings(perViewRaw);
+        writeModule({
+          ...live,
+          view: moduleSettings.view,
+          includeDeferred: moduleSettings.includeDeferred,
+        });
+        resetScope(perViewScope);
+      }
+    }
+
+    if (viewScopes && builtInIdSet.has(viewId)) {
+      const working = viewScopes(WORKING_VIEW_ID);
+      const leftover = viewScopes(viewId);
+      working.forEach((scope, index) => {
+        const from = leftover[index];
+        if (!from || from === scope) return;
+        if (readScope(scope) !== undefined) return;
+        if (readScope(from) !== undefined) copyScope(from, scope);
+      });
+    }
+    // First paint only: later Reset must not re-adopt a leftover per-view row.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount adoption
+  }, []);
 
   return {
     viewId,
-    setViewId,
+    setViewId: selectView,
+    selectView,
+    revert,
+    dirty,
     /** The built-in `viewId` derives from; equal to `viewId` when it is one. */
     base,
-    /** Null while a built-in view is selected. */
+    /** Null while the active view is a built-in. */
     current,
     grid,
     saved,
     builtIn,
     /**
-     * Capture the grid as it stands under a new name, and switch to it. `base` travels with it
-     * so the new view inherits the behaviour of the preset it was made from, and so that saving
-     * from a saved view never nests.
-     *
-     * Two forks ride along so the new view opens on what you could see, not on defaults:
-     * 1. The live **grid** scope — same values the catalogue just captured, already written
-     *    so the first paint does not depend on default resolution.
-     * 2. The module's own per-view scopes (`viewScopes`) — Chooser weights, Notes mode, etc.
-     *
-     * Without (2), the Chooser's date filter and Notes' Nested/Flat snapped back even though
-     * the grid half of the view was intact.
+     * Write the working copy over the active saved view, then clear dirty so the
+     * working set follows the definition you just wrote. No-op on a built-in.
+     */
+    save: () => {
+      if (!current) return;
+      saved.update(current.id, snapshotOf(grid));
+      persistExtras(WORKING_VIEW_ID, current.id);
+      grid.clearViewState();
+    },
+    /**
+     * Deep-copy the working copy into a new named view and switch to it.
+     * The source definition is untouched.
      */
     saveAs: (name: string) => {
       const id = saved.save(name, { base, ...snapshotOf(grid) });
-
-      const fromGrid = gridScope(scope);
-      const toGrid = gridScope(
-        defaultViewSharesModuleScope && id === defaultViewId
-          ? moduleId
-          : `${moduleId}.${id}`,
-      );
-      if (toGrid !== fromGrid) copyScope(fromGrid, toGrid);
-
-      if (viewScopes) {
-        const from = viewScopes(viewId);
-        const to = viewScopes(id);
-        from.forEach((scopeName, index) => {
-          const target = to[index];
-          if (target && target !== scopeName) copyScope(scopeName, target);
-        });
-      }
-
+      persistExtras(WORKING_VIEW_ID, id);
       setViewId(id);
+      grid.clearViewState();
       return id;
-    },
-    /** Write the grid back into the selected saved view, keeping its name and id. */
-    updateCurrent: () => {
-      if (current) saved.update(current.id, snapshotOf(grid));
     },
     renameCurrent: (name: string) => {
       if (current) saved.rename(current.id, name);
     },
-    /** Delete the selected saved view and fall back, rather than stranding the grid. */
     deleteCurrent: () => {
       if (!current) return;
-      setViewId(defaultViewId);
-      // The module's own scopes go with it, for the reason `useSavedViews.remove` clears the
-      // grid scope: left behind they are rows nothing can reach, and a recycled id would
-      // inherit them.
-      if (viewScopes) for (const scope of viewScopes(current.id)) resetScope(scope);
-      saved.remove(current.id);
+      const id = current.id;
+      if (viewScopes) for (const scope of viewScopes(id)) resetScope(scope);
+      saved.remove(id);
+      selectView(defaultViewId);
     },
   };
 }
 
 export type ModuleViewsApi = ReturnType<typeof useModuleViews>;
+
+function rawEqual(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+  if (left === undefined || right === undefined) return false;
+  return JSON.stringify(left) === JSON.stringify(right);
+}

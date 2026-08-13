@@ -7,33 +7,18 @@ import type { Command } from "@/lib/commands/registry";
 import type { ModuleViewsApi } from "./useModuleViews";
 
 /**
- * The View picker, and the four commands that make a view something you own.
+ * The View picker, and the commands that write named definitions.
  *
- * Built-in views and saved ones sit in one list under separate group headings, because from the
- * user's side they are the same kind of thing — a column layout, some filters, a grouping and
- * some switch positions. The only difference is who named it.
+ * The live grid is a working copy. The select stays on the named view you loaded.
+ * When the working copy differs, **Unsaved changes** appears — you have not left the
+ * view. Save writes the working copy over the active saved view; Save as deep-copies
+ * it into a new one. Built-ins are read-only (Save disabled).
  *
- * **Only the select holds bar width.** Save / Update / Rename / Delete register as commands and
- * appear behind `⋯` and in `⌘K`, which is what `data-grid.md`'s three-tier table asks of "a real
- * command, used occasionally" — the tier `Show Fields` and `Reset this grid` already sit in.
- * Four more buttons on every grid would have been a fourth tier invented to avoid reading the
- * table.
- *
- * The three that act on the selected view are **disabled, not absent**, on a built-in: a
- * command that vanishes teaches you it does not exist, and a built-in view is simply not yours
- * to rename.
+ * **Only the select holds bar width.** The commands sit behind `⋯` and in `⌘K`.
  */
 export function ViewPicker({ views }: { views: ModuleViewsApi }) {
   const [dialog, setDialog] = useState<"save" | "rename" | null>(null);
 
-  /**
-   * The commands read the module through a ref rather than closing over it.
-   *
-   * `views` carries the live grid, so it is a fresh object every render. In the deps of the memo
-   * below it would rebuild `commands` every render, and `useRegisterCommands` re-registers —
-   * and sets state — whenever that array changes. Only the facts that change how a command
-   * *reads* belong in the deps; what it *does* is read at click time.
-   */
   const latest = useRef(views);
   useEffect(() => {
     latest.current = views;
@@ -42,11 +27,8 @@ export function ViewPicker({ views }: { views: ModuleViewsApi }) {
   const current = views.current;
   const currentName = current?.name ?? null;
   const atCapacity = views.saved.atCapacity;
+  const dirty = views.dirty;
 
-  /**
-   * Update writes what is already on screen, so nothing visibly happens — the one command here
-   * with no natural feedback. `ux-principles.md` asks for some.
-   */
   const [flash, setFlash] = useState(false);
   useEffect(() => {
     if (!flash) return;
@@ -60,32 +42,32 @@ export function ViewPicker({ views }: { views: ModuleViewsApi }) {
     return [
       {
         id: "view.save",
-        label: "Save view…",
+        label: "Save view",
         group: "view",
         menu: "view",
         section: "Saved views",
         icon: "view-save",
-        keywords: "new named preset layout create",
-        disabled: atCapacity,
-        title: atCapacity
-          ? "This grid already has the maximum number of saved views"
-          : "Save the current columns, filters, grouping and switches as a view",
-        run: () => setDialog("save"),
-      },
-      {
-        id: "view.update",
-        label: "Update view",
-        group: "view",
-        menu: "view",
-        section: "Saved views",
-        icon: "view-save",
-        keywords: "save changes overwrite current",
+        keywords: "update changes overwrite current keep",
         disabled: currentName === null,
         title: unavailable ?? `Write the grid as it stands back into “${currentName}”`,
         run: () => {
-          latest.current.updateCurrent();
+          latest.current.save();
           setFlash(true);
         },
+      },
+      {
+        id: "view.saveAs",
+        label: "Save view as…",
+        group: "view",
+        menu: "view",
+        section: "Saved views",
+        icon: "view-save",
+        keywords: "new named preset layout create copy",
+        disabled: atCapacity,
+        title: atCapacity
+          ? "This grid already has the maximum number of saved views"
+          : "Save the current columns, filters, grouping and switches as a new view",
+        run: () => setDialog("save"),
       },
       {
         id: "view.rename",
@@ -123,7 +105,7 @@ export function ViewPicker({ views }: { views: ModuleViewsApi }) {
         <span className="whitespace-nowrap text-ink-faint">View</span>
         <select
           value={views.viewId}
-          onChange={(event) => views.setViewId(event.target.value)}
+          onChange={(event) => views.selectView(event.target.value)}
           className="min-h-tap rounded border border-rule bg-surface px-2 py-1 text-ink outline-none focus:border-select-edge md:min-h-0"
         >
           <optgroup label="Built in">
@@ -145,25 +127,31 @@ export function ViewPicker({ views }: { views: ModuleViewsApi }) {
         </select>
       </label>
 
+      {dirty && !flash && (
+        <span className="flex-none whitespace-nowrap text-[0.75rem] text-ink-muted">
+          Unsaved changes
+        </span>
+      )}
+
       {flash && (
         <span
           role="status"
           className="flex-none whitespace-nowrap text-[0.75rem] text-ink-muted"
         >
-          View updated
+          View saved
         </span>
       )}
 
       <NameViewDialog
-        // Keyed so the input starts from the right name each time it opens, rather than
-        // remembering what was typed into a dialog that has since been cancelled.
         key={dialog ?? "closed"}
         mode={dialog}
         initialName={dialog === "rename" ? (currentName ?? "") : ""}
         onSubmit={(name) => {
+          const mode = dialog;
           setDialog(null);
-          if (dialog === "rename") views.renameCurrent(name);
+          if (mode === "rename") views.renameCurrent(name);
           else views.saveAs(name);
+          setFlash(true);
         }}
         onCancel={() => setDialog(null)}
       />
@@ -171,11 +159,6 @@ export function ViewPicker({ views }: { views: ModuleViewsApi }) {
   );
 }
 
-/**
- * A one-field prompt, for both Save and Rename. A modal on what is nearly a create flow, and
- * the right call for the same reason quick capture is: it owns no record, it is over in one
- * keystroke, and the grid behind it is what you are naming — hiding it briefly costs nothing.
- */
 function NameViewDialog({
   mode,
   initialName,
@@ -207,12 +190,12 @@ function NameViewDialog({
       >
         <div className="flex flex-col gap-1">
           <h2 id={titleId} className="text-[0.9375rem] font-semibold text-ink">
-            {renaming ? "Rename this view" : "Save this view"}
+            {renaming ? "Rename this view" : "Save as a new view"}
           </h2>
           <p className="text-[0.75rem] text-ink-muted">
             {renaming
               ? "The view keeps its columns, filters and everything else — only the name changes."
-              : "Keeps everything customizable about this grid: columns, filters, sort, density, grouping, search, and toolbar switches."}
+              : "Names the grid as it stands. The view you are on is unchanged."}
           </p>
         </div>
 

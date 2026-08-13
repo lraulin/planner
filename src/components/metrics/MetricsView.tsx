@@ -151,8 +151,6 @@ export function MetricsView({
     moduleId: "metrics",
     builtIn: METRICS_VIEWS,
     defaultViewId: "metrics",
-    // No view picker before this, so the stored layout is at `grid:metrics` and stays there.
-    defaultViewSharesModuleScope: true,
     columns: metricsColumns,
     defaultsFor: viewDefaults,
   });

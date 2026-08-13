@@ -264,9 +264,10 @@ sequence — catalogue, allow-list, selection, grid state — whose **order is l
 silently falls back to its default). Passing its return value to `GridToolbar`'s `views` prop
 is the whole integration.
 
-- The **catalogue** lives in `views:{tabId}`; how you have since adjusted a saved view lives in
-  its own `grid:{tab}.{id}` scope, exactly as a built-in view's does. `Reset this grid` returns
-  to what you saved.
+- The **catalogue** lives in `views:{tabId}`. The live grid is one **working copy** per
+  module (`grid:{moduleId}`). Named views are snapshots; tweaks auto-persist only to the
+  working copy. The picker **stays on the named view**. When the working copy diverges,
+  **Unsaved changes** appears. `Reset this grid` reloads the active definition.
 - A saved view captures **everything customizable on the grid**: order, widths, column
   filters, the advanced filter, search, sort, grouping, collapsed groups, density and switch
   positions. Fields that already distinguish "not chosen" from "chosen" (nullable in
@@ -274,9 +275,14 @@ is the whole integration.
   `resolveSwitches` falls back per id (stored → view → the tab's `defaultOn`). Sort, density,
   search, widths and collapsed groups gained the same null-follows-view contract (settings
   version 3) so Reset can restore them. What stays out on purpose: `includeDeferred` (tab-
-  wide) and which view is selected. **Save also forks the live grid scope** and any module
-  `viewScopes`, so the new view opens on what you can see even before catalogue defaults
-  resolve, and Chooser weights / Notes mode travel with it.
+  wide) and which view is selected. Loading a definition is `clearViewState`, never a scope
+  reset: the same row holds `view` and `includeDeferred`, and clearing those would forget
+  which view you had just switched to.
+- **The pair is Save and Save as, and they mean what they mean in a document.** Save writes
+  the working copy over the _active_ saved view (disabled on a built-in). Save as deep-copies
+  the working copy into a new view and switches to it — the source definition is untouched.
+  Switching views loads that view's snapshot into the working copy and discards dirty.
+  Reload keeps the working copy, so unsaved tweaks survive without writing the named view.
 - **A view recording a switch does not make the switch a property of the view.** The rule above
   — a view may not carry behaviour reachable no other way — is intact: every switch stays on
   the toolbar, toggleable and combinable. Only its _position_ travels, as a column's
@@ -289,22 +295,22 @@ is the whole integration.
 - **A module's own per-view settings hang off the view id**, rather than living inside the
   view: the Task Chooser's weights in `chooser:{viewId}`, Notes' mode / sort / filter in
   `notes:{viewId}`. Achieve requires this for the Chooser (manual §8.1.4 — _"Other views will
-  retain their own unique settings"_). Declare them as `viewScopes` so **saving forks them**;
-  without that, naming the grid in front of you would snap the module's settings back to their
-  defaults. Deleting a view clears them, as it clears the grid scope.
-- **A module whose default view had no picker keeps its bare grid scope**
-  (`defaultViewSharesModuleScope`). `GridSettings.view` is already nullable with null meaning
-  "the module's default", so `grid:outline` _is_ that view's scope — which is what let Outline,
-  Wishes and Notes gain views without orphaning a single stored column layout.
+  retain their own unique settings"_). Live extras use the `working` key (`viewScopes`);
+  Save and Save as copy that row onto the named view. Deleting a view clears its extras,
+  as it always has.
+- **Every module's working copy is the bare grid scope** (`grid:{moduleId}`). Leftover
+  per-view live rows (`grid:tasks.active-status`) are adopted once into that scope, then
+  ignored. `GridSettings.view` names the active view, not a second live overlay.
 - Ids are **random, not sequential**. A reissued id would inherit the deleted view's leftover
   scopes. Deleting a view clears them with it.
 - Saved ids join the built-ins in `useTabView`'s allow-list, so deleting the view you are on
   falls back instead of stranding the grid.
-- **Only the select holds bar width.** Save / Update / Rename / Delete register as commands and
-  live behind `⋯`, per the three-tier table below. The three that act on the selected view are
-  **disabled, not absent**, on a built-in: a built-in is not yours to rename, and a command
-  that vanishes teaches you it does not exist. Update needs its own feedback — it writes what
-  is already on screen, so nothing visibly happens.
+- **Only the select holds bar width.** Save / Save as / Rename / Delete register as commands
+  and live behind `⋯`, per the three-tier table below. The three that act on the selected
+  view are **disabled, not absent**, on a built-in: a built-in is not yours to change, and a
+  command that vanishes teaches you it does not exist. Save needs its own feedback — it
+  writes what is already on screen, so nothing visibly happens. Unsaved changes is the
+  dirty mark.
 
 ### The chip bar accounts for missing rows, not for stored state
 

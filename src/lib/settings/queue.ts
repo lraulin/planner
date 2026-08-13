@@ -44,6 +44,30 @@ export function applyPending(
 }
 
 /**
+ * One scope's newest value: its last pending write if it has one, otherwise the server row.
+ *
+ * The same answer `applyPending(...)[scope]` gives, without building the merged snapshot —
+ * and, more to the point, readable **outside a render**. A component reads its scope from
+ * the render's snapshot, which is a photograph: two writes to one scope from a single event
+ * handler would both be computed from it, and the second would silently discard the first.
+ * A read-modify-write has to start from the queue as it stands right now.
+ *
+ * A tombstone is a write of `undefined`, and returning it is correct — the scope has been
+ * reset, so the server row underneath it must stay masked.
+ */
+export function readScopeValue(
+  snapshot: Record<string, unknown>,
+  pending: PendingWrite[],
+  scope: string,
+): unknown {
+  for (let index = pending.length - 1; index >= 0; index -= 1) {
+    const write = pending[index];
+    if (write && write.scope === scope) return write.value;
+  }
+  return snapshot[scope];
+}
+
+/**
  * Read the mirror. Anything malformed is dropped rather than replayed — a corrupt queue
  * must not be able to overwrite good server state, and an unknown scope would be rejected
  * by the write path anyway, failing the batch it rides in.

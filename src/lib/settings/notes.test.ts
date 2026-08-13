@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { EMPTY_NOTE_FILTER } from "@/lib/notes/filter";
-import { DEFAULT_NOTES_VIEW, parseNotesView, serializeNotesView } from "./notes";
+import {
+  DEFAULT_NOTES_VIEW,
+  notesMatchDefaults,
+  parseNotesView,
+  serializeNotesView,
+} from "./notes";
 
 describe("parseNotesView", () => {
   it("falls back entirely for a non-object", () => {
@@ -48,5 +53,18 @@ describe("parseNotesView", () => {
     });
     expect(parsed.filter.subjects).toEqual([]);
     expect(parsed.filter.search).toBe("x");
+  });
+});
+
+describe("notesMatchDefaults", () => {
+  it("treats a missing row as factory extras", () => {
+    expect(notesMatchDefaults(undefined)).toBe(true);
+    expect(notesMatchDefaults(serializeNotesView(DEFAULT_NOTES_VIEW))).toBe(true);
+  });
+
+  it("is false once mode or filter has been set", () => {
+    expect(
+      notesMatchDefaults(serializeNotesView({ ...DEFAULT_NOTES_VIEW, mode: "flat" })),
+    ).toBe(false);
   });
 });

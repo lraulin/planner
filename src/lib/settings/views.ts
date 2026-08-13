@@ -241,6 +241,61 @@ export function findSavedView(saved: SavedViews, id: string): SavedView | null {
   return saved.views.find((view) => view.id === id) ?? null;
 }
 
+export function viewSnapshotEquals(
+  a: SavedViewSettings,
+  b: SavedViewSettings,
+): boolean {
+  return (
+    sameList(a.order, b.order) &&
+    sameNumberMap(a.widths, b.widths) &&
+    stableEqual(a.filters, b.filters) &&
+    stableEqual(a.advancedFilter, b.advancedFilter) &&
+    a.search === b.search &&
+    stableEqual(a.sorts, b.sorts) &&
+    sameList(a.groupBy, b.groupBy) &&
+    sameSet(a.collapsedGroups, b.collapsedGroups) &&
+    a.density === b.density &&
+    sameBoolMap(a.switches, b.switches)
+  );
+}
+
+function sameList(
+  left: readonly string[] | null,
+  right: readonly string[] | null,
+): boolean {
+  if (left === right) return true;
+  if (!left || !right || left.length !== right.length) return false;
+  return left.every((value, index) => value === right[index]);
+}
+
+function sameSet(left: readonly string[], right: readonly string[]): boolean {
+  if (left.length !== right.length) return false;
+  const other = new Set(right);
+  return left.every((value) => other.has(value));
+}
+
+function sameNumberMap(
+  left: Record<string, number>,
+  right: Record<string, number>,
+): boolean {
+  const keys = Object.keys(left);
+  if (keys.length !== Object.keys(right).length) return false;
+  return keys.every((key) => right[key] === left[key]);
+}
+
+function sameBoolMap(
+  left: Record<string, boolean>,
+  right: Record<string, boolean>,
+): boolean {
+  const keys = Object.keys(left);
+  if (keys.length !== Object.keys(right).length) return false;
+  return keys.every((key) => right[key] === left[key]);
+}
+
+function stableEqual(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 /**
  * The built-in view whose defaults and behaviour apply to `viewId`.
  *

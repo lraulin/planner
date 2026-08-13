@@ -154,6 +154,49 @@ export const DEFAULT_GRID_SETTINGS: GridSettings = {
 };
 
 /**
+ * The scope with everything **the view owns** cleared, and everything the *module* owns
+ * kept.
+ *
+ * A grid scope is not purely per-view: the working set (`grid:{module}`) also holds `view`
+ * — the origin definition — and `includeDeferred`, both tab-level. So "put this working
+ * set back to the origin" cannot be a scope reset: that would forget which view you had
+ * just loaded.
+ *
+ * Everything else is per-view by construction — it is exactly what `snapshotOf` captures.
+ */
+export function clearViewSettings(settings: GridSettings): GridSettings {
+  return {
+    ...DEFAULT_GRID_SETTINGS,
+    view: settings.view,
+    includeDeferred: settings.includeDeferred,
+  };
+}
+
+/**
+ * Whether the working set is holding any view-owned override.
+ *
+ * Null fields follow the origin definition, so a loaded view is clean. A concrete value —
+ * including `[]` / `{}` / `""` — is a tweak, which is what makes the picker show
+ * Unsaved changes while still naming the active view.
+ *
+ * `view` and `includeDeferred` are not view-owned; they do not count.
+ */
+export function hasViewOverrides(settings: GridSettings): boolean {
+  return (
+    settings.order !== null ||
+    settings.widths !== null ||
+    settings.filters !== null ||
+    settings.advancedFilter !== null ||
+    settings.search !== null ||
+    settings.sorts !== null ||
+    settings.groupBy !== null ||
+    settings.collapsedGroups !== null ||
+    settings.density !== null ||
+    Object.keys(settings.switches).length > 0
+  );
+}
+
+/**
  * Column widths are written straight into `grid-template-columns`, so they are stored as
  * numbers and rendered as `px` rather than kept as free-text CSS tracks. A blob edited by
  * hand can then make a column comically narrow, but it cannot inject a track expression.
@@ -215,7 +258,7 @@ function parseFilters(
 
 /** Absent → follow the view; present map (even empty) → that choice. */
 function parseWidths(record: Record<string, unknown>): Record<string, number> | null {
-  if (!("widths" in record)) return null;
+  if (!("widths" in record) || record.widths === null) return null;
   if (!asRecord(record.widths)) return null;
   return asMap(record.widths, (entry) =>
     typeof entry === "number" && Number.isFinite(entry)
@@ -226,19 +269,19 @@ function parseWidths(record: Record<string, unknown>): Record<string, number> | 
 
 /** Absent → follow the view; present string (even empty) → that choice. */
 function parseSearch(record: Record<string, unknown>): string | null {
-  if (!("search" in record)) return null;
+  if (!("search" in record) || record.search === null) return null;
   return typeof record.search === "string" ? record.search : "";
 }
 
 /** Absent → follow the view; present string → known density or comfortable. */
 function parseDensity(record: Record<string, unknown>): GridDensity | null {
-  if (!("density" in record)) return null;
+  if (!("density" in record) || record.density === null) return null;
   return asOneOf(record.density, GRID_DENSITIES, DEFAULT_DENSITY);
 }
 
 /** Absent → follow the view; present array (even empty) → that choice. */
 function parseCollapsedGroups(record: Record<string, unknown>): string[] | null {
-  if (!("collapsedGroups" in record)) return null;
+  if (!("collapsedGroups" in record) || record.collapsedGroups === null) return null;
   return Array.isArray(record.collapsedGroups)
     ? asStringArray(record.collapsedGroups, [])
     : [];
@@ -293,7 +336,14 @@ function parseSort(value: unknown): GridSort | null {
 }
 
 export function serializeGridSettings(settings: GridSettings): unknown {
-  return { v: SETTINGS_VERSION, ...settings };
+  // Null means "follow the view". Writing the key as JSON null makes `parseSearch` /
+  // `parseDensity` treat it as present and coerce it to a concrete empty — the working
+  // copy would look dirty the moment you Reset or Save.
+  const blob: Record<string, unknown> = { v: SETTINGS_VERSION };
+  for (const [key, value] of Object.entries(settings)) {
+    if (value !== null && value !== undefined) blob[key] = value;
+  }
+  return blob;
 }
 
 /** Whether any column filter is actually narrowing the rows. */

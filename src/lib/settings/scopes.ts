@@ -108,6 +108,13 @@ export const NOTES_FILTER_SCOPE = "notes:filter";
 export const NOTES_DEFAULT_VIEW_ID = "notes";
 
 /**
+ * The working-set extras key (`chooser:working`; Notes maps it onto `notes:filter`).
+ *
+ * Not a view the picker can select. Built-in and saved ids must not use it.
+ */
+export const WORKING_VIEW_ID = "working";
+
+/**
  * Notes' own settings for one view.
  *
  * Notes has module settings that no column can carry — nested vs flat, the sort, the filter
@@ -119,7 +126,11 @@ export const NOTES_DEFAULT_VIEW_ID = "notes";
  * `useModuleViews`' `viewScopes` and have saving fork the right row.
  */
 export function notesViewScope(viewId: string): string {
-  return viewId === NOTES_DEFAULT_VIEW_ID ? NOTES_FILTER_SCOPE : `notes:${viewId}`;
+  // `working` shares the historic default row so existing Nested/Flat settings become
+  // the working set instead of being orphaned under `notes:working`.
+  return viewId === NOTES_DEFAULT_VIEW_ID || viewId === WORKING_VIEW_ID
+    ? NOTES_FILTER_SCOPE
+    : `notes:${viewId}`;
 }
 
 export const DRAWER_SCOPE = "drawer";

@@ -169,9 +169,6 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     moduleId: "outline",
     builtIn: OUTLINE_VIEWS,
     defaultViewId: "outline",
-    // The Outline had no view picker before, so its stored layout lives at `grid:outline`.
-    // Gaining one must not move it. See the option's own note.
-    defaultViewSharesModuleScope: true,
     columns: outlineColumns,
     defaultsFor: viewDefaults,
   });

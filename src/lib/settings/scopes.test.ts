@@ -10,6 +10,7 @@ import {
   NOTES_FILTER_SCOPE,
   notesViewScope,
   parseScope,
+  WORKING_VIEW_ID,
 } from "./scopes";
 
 describe("parseScope", () => {
@@ -91,6 +92,7 @@ describe("notesViewScope", () => {
     // Every existing mode and saved filter lives at `notes:filter`. Notes gaining a view
     // picker must not move them, or the first load after the upgrade silently resets them.
     expect(notesViewScope(NOTES_DEFAULT_VIEW_ID)).toBe(NOTES_FILTER_SCOPE);
+    expect(notesViewScope(WORKING_VIEW_ID)).toBe(NOTES_FILTER_SCOPE);
   });
 
   it("gives a saved view its own scope, addressable by the settings store", () => {

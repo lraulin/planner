@@ -4,6 +4,7 @@ import { useCallback, useMemo } from "react";
 import { useSetting, type SettingCodec } from "@/components/settings/SettingsProvider";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import {
+  clearViewSettings,
   DEFAULT_DENSITY,
   DEFAULT_GRID_SETTINGS,
   DEFAULT_SORTS,
@@ -568,6 +569,17 @@ export function useGridState<TCol extends ColumnMeta>(
   );
 
   /**
+   * Drop every adjustment this view is holding, so it opens on its saved state again —
+   * without disturbing what the *module* keeps in the same scope. See `clearViewSettings`.
+   *
+   * Distinct from `reset`, which clears the scope outright: that is right for "forget this
+   * grid", and wrong for a view that shares its row with the module's selected-view id.
+   */
+  const clearViewState = useCallback(() => {
+    patch(clearViewSettings);
+  }, [patch]);
+
+  /**
    * The layout commands bundled for `DataGrid`'s column menu and header drag-to-reorder.
    * One object rather than six props at eight call sites, and memoized so the header row
    * does not re-render on every keystroke elsewhere in the tab.
@@ -638,6 +650,7 @@ export function useGridState<TCol extends ColumnMeta>(
 
     /** Forget everything this tab remembers, including its sub-view. */
     reset,
+    clearViewState,
     defaults: DEFAULT_GRID_SETTINGS,
   };
 }

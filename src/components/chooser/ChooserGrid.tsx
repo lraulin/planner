@@ -10,7 +10,7 @@ import {
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import type { GridDefaults } from "@/components/grid/useGridState";
 import { useModuleViews } from "@/components/grid/useModuleViews";
-import { chooserScope } from "@/lib/settings/scopes";
+import { chooserScope, WORKING_VIEW_ID } from "@/lib/settings/scopes";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import {
   ToolbarButton,
@@ -136,7 +136,7 @@ export function ChooserGrid({
    * is not one of the five. The weights themselves are keyed by the selected view, so a saved
    * view keeps its own.
    */
-  const { settings, update, reset } = useChooserSettings(views.viewId, views.base);
+  const { settings, update, reset } = useChooserSettings(WORKING_VIEW_ID, views.base);
   const view = chooserView(views.base);
   const dateFilter = settings.dateFilter;
 

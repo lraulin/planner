@@ -33,7 +33,7 @@ function codecFor(baseViewId: ChooserViewId): SettingCodec<ChooserSettings> {
 }
 
 export function useChooserSettings(
-  /** The selected view, built-in or saved. Decides **which** settings row is read. */
+  /** The extras row to read — the working set (`working`), not the origin view. */
   viewId: string,
   /** The built-in it derives from. Decides what those settings **default to**. */
   base: ChooserViewId,

@@ -61,11 +61,12 @@ import {
 } from "@/components/settings/SettingsProvider";
 import { ToolbarButton, ToolbarSelect } from "@/components/tabs/tabChrome";
 import {
+  notesMatchDefaults,
   parseNotesView,
   serializeNotesView,
   type NotesViewSettings,
 } from "@/lib/settings/notes";
-import { notesViewScope } from "@/lib/settings/scopes";
+import { notesViewScope, WORKING_VIEW_ID } from "@/lib/settings/scopes";
 import { selectionMoveRoots } from "@/lib/grid/selection";
 import { copyAsText, writeClipboardText } from "@/lib/tree/copyAsText";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
@@ -159,11 +160,10 @@ export function NotesGrid({
     moduleId: "notes",
     builtIn: NOTES_VIEWS,
     defaultViewId: "notes",
-    // No view picker before this, so the stored layout is at `grid:notes` and stays there.
-    defaultViewSharesModuleScope: true,
     columns: notesColumns,
     defaultsFor: viewDefaults,
     viewScopes: notesScopes,
+    extrasMatchDefaults: notesMatchDefaults,
   });
   const gridState = views.grid;
   const setGridGroupBy = gridState.setGroupBy;
@@ -178,7 +178,7 @@ export function NotesGrid({
    * remembered its columns.
    */
   const { value: view, patch: patchView } = useSetting(
-    notesViewScope(views.viewId),
+    notesViewScope(WORKING_VIEW_ID),
     NOTES_VIEW_CODEC,
   );
   const { sort, filter } = view;

@@ -19,6 +19,7 @@ import {
   applyPending,
   coalesceWrites,
   readPending,
+  readScopeValue,
   type PendingWrite,
 } from "@/lib/settings/queue";
 import type { SettingsSnapshot } from "@/lib/settings/queries";
@@ -168,6 +169,14 @@ type SettingsContextValue = {
   snapshot: SettingsSnapshot;
   write: (scope: string, value: unknown) => void;
   /**
+   * One scope's value **as of now**, not as of the render that called this.
+   *
+   * Only `patch` needs it, and it needs it because a handler that writes two scopes may
+   * write the same one twice — saving a view switches the module to it and clears what the
+   * view you left was holding, which for Outline and Notes is the same row.
+   */
+  readScope: (scope: string) => unknown;
+  /**
    * Send whatever is queued now instead of waiting out the debounce.
    *
    * For the writes the **server** has to see before the next render — the Weekly
@@ -249,6 +258,13 @@ export function SettingsProvider({
     queueWrite(scope, value);
   }, []);
 
+  // Reads the module-level overlay directly rather than `writes`, which is this render's
+  // copy of it — that is the whole point. See `readScopeValue`.
+  const readScope = useCallback(
+    (scope: string) => readScopeValue(initial, getOverlay(), scope),
+    [initial],
+  );
+
   const resetScope = useCallback((scope: string) => {
     queueReset(scope);
     void resetSettingScopeAction(scope).then((result) => {
@@ -266,8 +282,8 @@ export function SettingsProvider({
   }, []);
 
   const value = useMemo(
-    () => ({ snapshot, write, flush, resetScope, resetScopes, saveError }),
-    [snapshot, write, flush, resetScope, resetScopes, saveError],
+    () => ({ snapshot, write, readScope, flush, resetScope, resetScopes, saveError }),
+    [snapshot, write, readScope, flush, resetScope, resetScopes, saveError],
   );
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
@@ -288,7 +304,7 @@ function useSettingsContext(): SettingsContextValue {
  * a codec rebuilt inline would re-parse the blob on every render of every grid.
  */
 export function useSetting<T>(scope: string, codec: SettingCodec<T>) {
-  const { snapshot, write, flush, resetScope } = useSettingsContext();
+  const { snapshot, write, readScope, flush, resetScope } = useSettingsContext();
 
   const raw = snapshot[scope];
   const value = useMemo(() => codec.parse(raw), [codec, raw]);
@@ -302,10 +318,16 @@ export function useSetting<T>(scope: string, codec: SettingCodec<T>) {
    * Patch from the current value. Takes a recipe rather than an object so a caller cannot
    * accidentally drop the fields it did not mention — a whole-scope write is how the
    * column layout would get wiped by a filter change.
+   *
+   * The recipe runs against the value **read at call time**, not the `value` this render
+   * resolved. Those differ exactly when one handler patches the same scope twice, and
+   * feeding both the render's copy makes the second silently undo the first — a race with
+   * no async in it, which is the kind that survives review.
    */
   const patch = useCallback(
-    (recipe: (current: T) => T) => write(scope, codec.serialize(recipe(value))),
-    [write, scope, codec, value],
+    (recipe: (current: T) => T) =>
+      write(scope, codec.serialize(recipe(codec.parse(readScope(scope))))),
+    [write, readScope, scope, codec],
   );
 
   const reset = useCallback(() => resetScope(scope), [resetScope, scope]);
@@ -341,6 +363,11 @@ export function useResetScope() {
   return useSettingsContext().resetScope;
 }
 
+/** One scope's value as of this call, including writes queued in the same handler. */
+export function useReadScope() {
+  return useSettingsContext().readScope;
+}
+
 /**
  * Copy one scope's stored value to another, for the caller **forking** a scope rather than
  * editing it.
@@ -355,15 +382,15 @@ export function useResetScope() {
  * fields it did not recognise.
  */
 export function useCopyScope() {
-  const { snapshot, write } = useSettingsContext();
+  const { readScope, write } = useSettingsContext();
 
   return useCallback(
     (from: string, to: string) => {
-      const value = snapshot[from];
+      const value = readScope(from);
       // Nothing stored means the source is on its defaults, and so is the destination.
       if (value !== undefined) write(to, value);
     },
-    [snapshot, write],
+    [readScope, write],
   );
 }
 

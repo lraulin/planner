@@ -32,11 +32,9 @@ const CODEC: SettingCodec<SavedViews> = {
 /**
  * A tab's saved views: the catalogue, and the two commands that change it.
  *
- * Saving copies what the grid is holding **right now** into a new view, then switches to it.
- * From that moment the view behaves exactly like a built-in one — its own
- * `grid:{tab}.{id}` scope keeps whatever you adjust, and Reset this grid returns to what you
- * saved. That is the whole feature: a view was already nothing but stored settings, so
- * saving one is copying three values and giving them a name.
+ * Saving copies what the grid is holding **right now** into a catalogue entry. The live
+ * grid is a separate working set; Reset this grid returns to the named definition. Saving
+ * one is still copying those values and giving them a name.
  */
 export function useSavedViews(tabId: string) {
   const { value, patch } = useSetting(viewsScope(tabId), CODEC);

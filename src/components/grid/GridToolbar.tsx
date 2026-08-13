@@ -102,7 +102,7 @@ export function GridToolbar({
   error?: string | null;
   /**
    * This grid's views, from `useModuleViews`. Supplying it renders the View select and
-   * registers Save / Update / Rename / Delete.
+   * registers Save / Save as / Rename / Delete.
    *
    * A prop rather than something each grid hand-places in `left`, which is what the last cycle
    * did three times: `data-grid.md` — "a tab declares what it has, it does not assemble
@@ -144,7 +144,9 @@ export function GridToolbar({
   const allCollapsed =
     groupIds.length > 0 && groupIds.every((id) => grid.collapsedGroups.has(id));
 
-  const { reset: resetGrid, setAllGroupsCollapsed } = grid;
+  const { reset: resetScope, setAllGroupsCollapsed } = grid;
+  const revertView = views?.revert;
+  const resetGrid = revertView ?? resetScope;
 
   /*
    * There was a `rowActions` prop here that took a selection plus Open and Rename and built a
@@ -203,7 +205,9 @@ export function GridToolbar({
         section: "Layout",
         icon: "reset",
         keywords: "clear default columns layout",
-        title: "Clear filters, sort, column layout, grouping and density for this view",
+        title: revertView
+          ? "Put the grid back to the named view it drifted from"
+          : "Clear filters, sort, column layout, grouping and density for this grid",
         run: resetGrid,
       },
     ];
@@ -230,6 +234,7 @@ export function GridToolbar({
     setAllGroupsCollapsed,
     groupIds,
     allCollapsed,
+    revertView,
   ]);
 
   useRegisterCommands(commands);
@@ -238,7 +243,7 @@ export function GridToolbar({
     <>
       {/*
         "for this grid", not "for this view": there is now a View select on this bar, and
-        Save / Update / Rename / Delete view are among the commands inside this menu. A label
+        Save / Save as / Rename / Delete view are among the commands inside this menu. A label
         saying "this view" next to a control that changes the view would read as the menu
         acting on whichever view is selected.
       */}

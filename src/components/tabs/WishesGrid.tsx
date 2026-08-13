@@ -73,8 +73,6 @@ export function WishesGrid({
     moduleId: "wishes",
     builtIn: WISHES_VIEWS,
     defaultViewId: "wishes",
-    // No view picker before this, so the stored layout is at `grid:wishes` and stays there.
-    defaultViewSharesModuleScope: true,
     columns: wishesColumns,
     defaultsFor: viewDefaults,
   });

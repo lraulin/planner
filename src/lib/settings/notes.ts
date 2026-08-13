@@ -72,3 +72,14 @@ function parseNoteFilter(value: unknown): NoteFilter {
 export function serializeNotesView(settings: NotesViewSettings): unknown {
   return { v: SETTINGS_VERSION, ...settings };
 }
+
+/** True when the stored blob is the factory Notes extras — Custom is then a grid matter. */
+export function notesMatchDefaults(raw: unknown): boolean {
+  if (raw === undefined) return true;
+  const parsed = parseNotesView(raw);
+  return (
+    parsed.mode === DEFAULT_NOTES_VIEW.mode &&
+    parsed.sort === DEFAULT_NOTES_VIEW.sort &&
+    JSON.stringify(parsed.filter) === JSON.stringify(DEFAULT_NOTES_VIEW.filter)
+  );
+}

@@ -13,7 +13,9 @@ import {
   serializeSavedViews,
   uniqueViewName,
   updateSavedView,
+  viewSnapshotEquals,
   type SavedView,
+  type SavedViewSettings,
   type SavedViews,
 } from "./views";
 
@@ -243,8 +245,7 @@ describe("updateSavedView", () => {
   };
 
   it("writes the grid back without touching the view's identity", () => {
-    // The whole point of Update over Save: the picker entry and its `grid:` scope survive, so
-    // the view you were on is still the view you are on.
+    // Replace writes the working set into a saved view you pick. Name, id and base stay.
     const before = saved({ ...view("saved-1", "This week"), base: "active-status" });
     const [after] = updateSavedView(before, "saved-1", settings).views;
 
@@ -263,6 +264,38 @@ describe("updateSavedView", () => {
     const before = saved(view("a"), view("b"));
     const after = updateSavedView(before, "a", settings);
     expect(after.views[1]).toEqual(before.views[1]);
+  });
+});
+
+describe("viewSnapshotEquals", () => {
+  const snap = (): SavedViewSettings => ({
+    order: ["name", "effort"],
+    widths: { name: 200 },
+    filters: { state: { mode: "options", ids: ["open"] } },
+    advancedFilter: null,
+    search: "",
+    sorts: [{ columnId: "name", direction: "asc" }],
+    groupBy: ["area"],
+    collapsedGroups: ["area:1", "area:2"],
+    density: "comfortable",
+    switches: { groups: true },
+  });
+
+  it("is true for the same snapshot", () => {
+    expect(viewSnapshotEquals(snap(), snap())).toBe(true);
+  });
+
+  it("treats collapsed group order as irrelevant", () => {
+    const left = { ...snap(), collapsedGroups: ["a", "b"] };
+    const right = { ...snap(), collapsedGroups: ["b", "a"] };
+    expect(viewSnapshotEquals(left, right)).toBe(true);
+  });
+
+  it("is false when a captured field drifts", () => {
+    expect(viewSnapshotEquals(snap(), { ...snap(), search: "budget" })).toBe(false);
+    expect(viewSnapshotEquals(snap(), { ...snap(), order: ["effort", "name"] })).toBe(
+      false,
+    );
   });
 });
 
