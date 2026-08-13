@@ -1,5 +1,14 @@
 import type { ComponentType } from "react";
 import {
+  builtPagesForModule,
+  defaultPageFor,
+  hasPageBar,
+  pageHref,
+  pagesForModule,
+  type PageEntry,
+  type PagedModuleId,
+} from "@/lib/navigation/pages";
+import {
   ChooserIcon,
   ContactsIcon,
   DayIcon,
@@ -286,6 +295,59 @@ export function moduleLabel(id: ModuleId): string {
  * Both the sidebar and the More sheet render from this, so the phone and the desktop group
  * the app identically — the one thing a second grouping implementation would get wrong.
  */
+/**
+ * Compile-time proof that every module id keying the page registry is a real module.
+ *
+ * `pages.ts` keys by plain `string` because it may not import this file — it would drag React
+ * icon components into `src/lib` and make the registry untestable. That leaves one gap a typo
+ * fits through: `scheduel: [...]` would type-check happily and silently give Schedule no pages,
+ * with the only symptom being a page bar that never appears. This closes it from the side that
+ * can see both lists.
+ */
+type _PagesNameRealModules = PagedModuleId extends ModuleId ? true : never;
+const _pagesNameRealModules: _PagesNameRealModules = true;
+
+export function moduleById(id: ModuleId): (typeof MODULES)[number] | undefined {
+  return MODULES.find((entry) => entry.id === id);
+}
+
+/**
+ * A module's pages, ready to render: built only, each with the href it lives at.
+ *
+ * This is the single accessor `navigation.md` requires — the page bar, the palette's go-to
+ * entries and the bare-path redirect all come through here, so none of them can hold a
+ * different opinion about what a module contains.
+ */
+export function modulePages(
+  id: ModuleId,
+): { page: PageEntry; href: string; moduleLabel: string }[] {
+  const entry = moduleById(id);
+  if (!entry) return [];
+
+  return builtPagesForModule(id).map((page) => ({
+    page,
+    href: pageHref(entry.href, page),
+    moduleLabel: entry.label,
+  }));
+}
+
+/** Whether this module shows a page bar at all — two or more built pages. */
+export function moduleHasPageBar(id: ModuleId): boolean {
+  return hasPageBar(id);
+}
+
+/** Where the bare module path lands when nothing is remembered. */
+export function moduleDefaultPageHref(id: ModuleId): string | null {
+  const entry = moduleById(id);
+  const page = defaultPageFor(id);
+  return entry && page ? pageHref(entry.href, page) : null;
+}
+
+/** Every declared page, reserved included. For settings and diagnostics, not for rendering. */
+export function moduleDeclaredPages(id: ModuleId): readonly PageEntry[] {
+  return pagesForModule(id);
+}
+
 export function sectionsWithModules(): {
   id: SectionId;
   label: string;

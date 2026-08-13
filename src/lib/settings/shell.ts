@@ -24,6 +24,17 @@ export type ShellSettings = {
    * existing leaves a dead key rather than a broken panel.
    */
   commandsPanelCollapsed: Record<string, boolean>;
+  /**
+   * The page you were last on in each module, keyed by module id, so `/schedule` can land you
+   * back on Agenda instead of always on Calendar. Schedule and Notes had this before their
+   * switchers became routes; promoting them to real URLs must not cost it.
+   *
+   * Stored unvalidated — this is a bag of strings an older build wrote, and a page that has been
+   * renamed or shelved since should leave a dead key rather than break the parse. `builtPageById`
+   * is what drops it, at the point of use, exactly as `commandsPanelCollapsed` tolerates a
+   * section name this build has never heard of.
+   */
+  lastPage: Record<string, string>;
 };
 
 /**
@@ -36,6 +47,7 @@ export const DEFAULT_SHELL_SETTINGS: ShellSettings = {
   sidebarCollapsed: false,
   commandsPanelOpen: false,
   commandsPanelCollapsed: {},
+  lastPage: {},
 };
 
 export function parseShellSettings(value: unknown): ShellSettings {
@@ -53,6 +65,9 @@ export function parseShellSettings(value: unknown): ShellSettings {
     ),
     commandsPanelCollapsed: asMap(record.commandsPanelCollapsed, (entry) =>
       typeof entry === "boolean" ? entry : null,
+    ),
+    lastPage: asMap(record.lastPage, (entry) =>
+      typeof entry === "string" && entry !== "" ? entry : null,
     ),
   };
 }

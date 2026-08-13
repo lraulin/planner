@@ -12,6 +12,7 @@ describe("parseShellSettings", () => {
       sidebarCollapsed: true,
       commandsPanelOpen: true,
       commandsPanelCollapsed: { Zoom: true, Move: false },
+      lastPage: { schedule: "agenda", notes: "journal" },
     };
     expect(parseShellSettings(serializeShellSettings(settings))).toEqual(settings);
   });
@@ -60,6 +61,23 @@ describe("parseShellSettings", () => {
     expect(
       parseShellSettings({ commandsPanelCollapsed: ["Zoom"] }).commandsPanelCollapsed,
     ).toEqual({});
+  });
+
+  /**
+   * `lastPage` is keyed by module id and valued with a page id, both of which are strings this
+   * build may no longer recognise. The parser's job is only to get strings out; whether the page
+   * still exists is `builtPageById`'s question, at the point of use.
+   */
+  it("keeps last-page entries as strings and drops the rest", () => {
+    expect(
+      parseShellSettings({
+        lastPage: { schedule: "agenda", notes: 3, fitness: "", metrics: null },
+      }).lastPage,
+    ).toEqual({ schedule: "agenda" });
+  });
+
+  it("survives a last-page map that is not a map", () => {
+    expect(parseShellSettings({ lastPage: "agenda" }).lastPage).toEqual({});
   });
 });
 
