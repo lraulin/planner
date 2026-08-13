@@ -139,9 +139,9 @@ One-off _suggestions_ are computed on read — no column.
 
 ## Changes from original plan
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                                                   | Why                                                                                                                                                                                                                                                                       |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | PenFed deposits are not treated as paychecks. The three-employer income succession is Endava → TrustedQA (`DIR DEP` / `DIRDEP`) → TrustedQA (`PAYROLL`). | Live amounts and gaps show PenFed as irregular sweeps from an unimported bank, not a 14-day series. Cadence detection plus the existing transfer classifier keep them as `external_transfer`; calling them income would invent earnings the imported accounts cannot see. |
 
 ## Tasks
 
