@@ -1,10 +1,14 @@
 "use client";
 
+import { useMemo } from "react";
 import { KIND_LABELS, type NodeKind } from "@/lib/tree/hierarchy";
 import { formatBindings } from "@/lib/commands/bindings";
 import { toolbarSegments } from "@/lib/commands/menus";
 import type { Command } from "@/lib/commands/registry";
 import { TypeIcon } from "@/components/icons/TypeIcon";
+import { CommandGlyph } from "@/components/icons/commandIcons";
+import { useRegisterCommands } from "@/components/shell/CommandProvider";
+import { useCommandsPanel } from "@/components/shell/useShellSettings";
 import { ToolbarDivider, ToolbarIconButton } from "@/components/tabs/tabChrome";
 import { CommandMenuBar } from "./CommandMenuBar";
 import type { GridSelectionCapability } from "@/lib/grid/commandDeck";
@@ -45,18 +49,44 @@ function accentFor(kind: NodeKind | undefined): string {
 export function CommandBar({
   commands,
   selection,
-  trailing,
 }: {
   commands: readonly Command[];
   selection?: GridSelectionCapability;
-  /** Right-aligned chrome that is not a command: the Commands panel toggle. */
-  trailing?: React.ReactNode;
 }) {
+  const { open: panelOpen, setOpen: setPanelOpen } = useCommandsPanel();
+  const panelCommand = useMemo<Command>(
+    () => ({
+      id: "view.commands-panel",
+      label: panelOpen ? "Hide commands panel" : "Show commands panel",
+      group: "view",
+      menu: "view",
+      section: "Panels",
+      icon: "panel",
+      keywords: "pane sidebar actions palette command bar",
+      title: "A pinned pane listing every command this view has, grouped",
+      run: () => setPanelOpen(!panelOpen),
+    }),
+    [panelOpen, setPanelOpen],
+  );
+  // Registered here, not by each host, so a view that draws this bar and never a GridToolbar
+  // (Schedule calendar, Fitness, Day) still has View ▸ Show commands panel. One source is
+  // also what stops a grid and a host from both listing it.
+  const panelCommands = useMemo(() => [panelCommand], [panelCommand]);
+  useRegisterCommands(panelCommands);
+
+  // The named menus read this list, not the registry — so the panel command has to
+  // sit here as well as in `useRegisterCommands`, or View ▸ Show commands panel
+  // exists in the palette and nowhere you can see.
+  const menuCommands = useMemo(
+    () => [...commands, panelCommand],
+    [commands, panelCommand],
+  );
+
   const segments = toolbarSegments(commands);
 
   return (
     <>
-      <CommandMenuBar commands={commands} />
+      <CommandMenuBar commands={menuCommands} />
 
       {segments.map((segment, index) => (
         <div key={index} className="flex flex-none items-center">
@@ -80,10 +110,45 @@ export function CommandBar({
 
       <SelectionChip selection={selection} />
 
-      {trailing && (
-        <div className="ml-auto flex flex-none items-center">{trailing}</div>
-      )}
+      <div className="ml-auto flex flex-none items-center">
+        <CommandsPanelToggle
+          open={panelOpen}
+          onToggle={() => setPanelOpen(!panelOpen)}
+        />
+      </div>
     </>
+  );
+}
+
+/**
+ * The Commands panel toggle, pinned to the right of the command row.
+ *
+ * Pressed-state fill rather than a label change, matching the sidebar's own collapse toggle
+ * and the Density segments: the control says what it is doing, so it does not need a word
+ * explaining that it is about panels. The command in `View ▸ Panels` carries the sentence.
+ */
+function CommandsPanelToggle({
+  open,
+  onToggle,
+}: {
+  open: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={open}
+      onClick={onToggle}
+      title={open ? "Hide the commands panel" : "Show the commands panel"}
+      aria-label={open ? "Hide the commands panel" : "Show the commands panel"}
+      className={`flex h-7 w-7 flex-none items-center justify-center rounded transition-colors ${
+        open
+          ? "bg-select text-ink"
+          : "text-ink-faint hover:bg-surface-raised hover:text-ink"
+      }`}
+    >
+      <CommandGlyph icon="panel" />
+    </button>
   );
 }
 

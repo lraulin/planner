@@ -15,8 +15,9 @@ import { useCommandsPanel } from "./useShellSettings";
  * exact row treatment so the two rails read as one frame rather than two designs.
  *
  * Opt-in and remembered per user (`shell` scope), because it costs 208px of grid width and a
- * datagrid app spends width on columns. Off by default; the toggle is on every command row and the
- * command is in `View ▸ Panels`.
+ * datagrid app spends width on columns. Off by default; `CommandBar` owns both the toggle
+ * and the `View ▸ Panels` command, so every view that draws a command row can bring the
+ * panel back — including Schedule, Fitness, and Day, which never go through `GridToolbar`.
  *
  * Not rendered below `md`: `responsive.md` is adaptive-not-shrunken, and a 208px pane on a 390px
  * screen is a different product rather than a narrower panel. Down there `⋯` holds the same tree.

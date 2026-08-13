@@ -18,8 +18,6 @@ import {
 } from "@/components/tabs/tabChrome";
 import { useRegisterCommands } from "@/components/shell/CommandProvider";
 import { OverflowMenu } from "@/components/shell/OverflowMenu";
-import { useCommandsPanel } from "@/components/shell/useShellSettings";
-import { CommandGlyph } from "@/components/icons/commandIcons";
 import type { Command } from "@/lib/commands/registry";
 import { GridFilterChips } from "./GridFilterChips";
 import { GridFilterDialog } from "./GridFilterDialog";
@@ -137,7 +135,6 @@ export function GridToolbar({
 }) {
   const [filterOpen, setFilterOpen] = useState(false);
   const [fieldsOpen, setFieldsOpen] = useState(false);
-  const { open: panelOpen, setOpen: setPanelOpen } = useCommandsPanel();
 
   // A grid scope may outlive a dimension. Keep only dimensions this tab currently offers,
   // so a retired or cross-module value degrades to ungrouped instead of occupying a picker.
@@ -209,17 +206,6 @@ export function GridToolbar({
         title: "Clear filters, sort, column layout, grouping and density for this view",
         run: resetGrid,
       },
-      {
-        id: "view.commands-panel",
-        label: panelOpen ? "Hide commands panel" : "Show commands panel",
-        group: "view",
-        menu: "view",
-        section: "Panels",
-        icon: "panel",
-        keywords: "pane sidebar actions palette",
-        title: "A pinned pane listing every command this view has, grouped",
-        run: () => setPanelOpen(!panelOpen),
-      },
     ];
 
     if (groupIds.length > 0) {
@@ -244,8 +230,6 @@ export function GridToolbar({
     setAllGroupsCollapsed,
     groupIds,
     allCollapsed,
-    panelOpen,
-    setPanelOpen,
   ]);
 
   useRegisterCommands(commands);
@@ -260,16 +244,7 @@ export function GridToolbar({
       */}
       <TabToolbar
         commandRow={
-          <CommandBar
-            commands={commands}
-            selection={commandCapabilities?.selection}
-            trailing={
-              <CommandsPanelToggle
-                open={panelOpen}
-                onToggle={() => setPanelOpen(!panelOpen)}
-              />
-            }
-          />
+          <CommandBar commands={commands} selection={commandCapabilities?.selection} />
         }
         pinned={<OverflowMenu label="More commands for this grid" />}
       >
@@ -389,38 +364,6 @@ export function GridToolbar({
         onClose={() => setFieldsOpen(false)}
       />
     </>
-  );
-}
-
-/**
- * The Commands panel toggle, pinned to the right of the command row.
- *
- * Pressed-state fill rather than a label change, matching the sidebar's own collapse toggle and the
- * Density segments: the control says what it is doing, so it does not need a word explaining that
- * it is about panels. The command in `View ▸ Panels` carries the sentence.
- */
-function CommandsPanelToggle({
-  open,
-  onToggle,
-}: {
-  open: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={open}
-      onClick={onToggle}
-      title={open ? "Hide the commands panel" : "Show the commands panel"}
-      aria-label={open ? "Hide the commands panel" : "Show the commands panel"}
-      className={`flex h-7 w-7 flex-none items-center justify-center rounded transition-colors ${
-        open
-          ? "bg-select text-ink"
-          : "text-ink-faint hover:bg-surface-raised hover:text-ink"
-      }`}
-    >
-      <CommandGlyph icon="panel" />
-    </button>
   );
 }
 
