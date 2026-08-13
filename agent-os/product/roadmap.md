@@ -616,10 +616,31 @@ YNAB-like, but simpler — and connected to goals over time.
   closing balances / due dates / APRs off the transaction table.
   Envelopes were deliberately deferred until there is real spending data to design them
   against; that is the next piece of this MVP.
-- **Next:** Envelopes; analyze past spending; light categorization (the register stores a
-  user-editable category alongside the bank's, with no taxonomy or rules yet).
-- **Then:** AI assistance/advice on top of that data; **integration with Goals**
-  (save for X, fund project Y).
+- **In progress:** Insights dashboard —
+  `agent-os/specs/2026-08-12-2031-finances-insights-dashboard/`. Merchant rules, transfer
+  pairing, paycheck cadence, and reporting. Makes the imported history readable. It
+  categorises by **who was paid**, which is the best the bank line can support and is
+  still a lie for anything sold at more than one store (see Later, below).
+- **Next:** Envelopes.
+- **Then:** **integration with Goals** (save for X, fund project Y); AI advice on top of
+  envelope + history data.
+- **Later — classification that isn't the merchant's name.** Raised 2026-08-12; not in
+  the insights spec. Two related failures of "vendor → category":
+
+  1. **AI classification.** A rules list keyed on the normalized merchant will never
+     know that this Amazon order was birdseed and that Walmart trip was formula. The
+     existing `derived_*` / override split is what an AI pass would write into — it can
+     propose, and a person can still win. Do not start this until the register already
+     shows honest spend (transfers out, baseline vs one-off).
+  2. **Purpose, not vendor.** PayPal posts as PayPal and never says what it was for —
+     which is why it got dropped as a way to pay. Amazon and Walmart sell the same
+     goods: weekly groceries at Walmart, and also C4, protein powder, birdseed, cat
+     food, vitamins, exercise equipment, baby formula — bought at either, depending on
+     the week. Filing Walmart as Groceries and Amazon as Shopping makes the biggest
+     discretionary merchants uninformative. Fixing that needs item-level purpose (or a
+     person), not another merchant alias. Split-across-categories stays out of the
+     current spec for the same reason.
+
 - **Eventually:** **Plaid** (or equivalent) to pull bank data by API — only after
   CSV + envelopes are trustworthy, given lock-in and security cost.
 
