@@ -38,6 +38,11 @@ import { createResource } from "@/lib/resources/mutations";
 import { getResourceDetail, listResources } from "@/lib/resources/queries";
 import { importFinanceCsvFiles } from "@/lib/finances/import";
 import {
+  loadCarryingCost,
+  loadInsightsRows,
+  unclassifiedCount,
+} from "@/lib/finances/dashboardQueries";
+import {
   getTransaction,
   listAccounts,
   listStatements,
@@ -293,6 +298,7 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect((await listAccounts(owner.userId)).length).toBeGreaterThan(0);
     expect((await listTransactions(owner.userId)).length).toBeGreaterThan(0);
     expect((await listStatements(owner.userId)).length).toBeGreaterThan(0);
+    expect((await loadInsightsRows(owner.userId)).length).toBeGreaterThan(0);
     expect(await getWeeklyPlanById(owner.userId, owner.planId)).toBeTruthy();
     expect((await listExercises(owner.userId)).length).toBeGreaterThan(0);
     expect((await listSessions(owner.userId)).length).toBeGreaterThan(0);
@@ -370,6 +376,19 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect(
       await transactionTotalCents(intruder, { accountId: owner.financeAccountId }),
     ).toBe(0);
+  });
+
+  it("finance insights", async () => {
+    // The dashboard loads whole rows rather than aggregates, so a dropped userId here hands
+    // over every description and amount at once.
+    expect(await loadInsightsRows(intruder)).toEqual([]);
+    expect(await loadInsightsRows(intruder, { from: "2000-01-01" })).toEqual([]);
+    expect(await unclassifiedCount(intruder)).toBe(0);
+    expect(await loadCarryingCost(intruder)).toMatchObject({
+      interestCents: 0,
+      feesCents: 0,
+      byAccount: [],
+    });
   });
 
   it("weekly plans and their entries", async () => {
