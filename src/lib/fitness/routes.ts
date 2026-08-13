@@ -1,16 +1,17 @@
 /**
  * Fitness URL helpers. Path-based so reload keeps sessions / exercises / log / editors.
  *
- *   /fitness
- *   /fitness/exercises
- *   /fitness/log?exercise=
- *   /fitness/sessions/[sessionId]
- *   /fitness/exercises/new
- *   /fitness/exercises/[exerciseId]
+ *   /fitness                        → redirects to the page you were last on
+ *   /fitness/sessions               ┐ the two pages, in the page bar
+ *   /fitness/exercises              ┘
+ *   /fitness/log?exercise=          ┐
+ *   /fitness/sessions/[sessionId]   │ focused flows and editors — never in the bar
+ *   /fitness/exercises/new          │
+ *   /fitness/exercises/[exerciseId] ┘
  */
 
 export function fitnessSessionsPath(): string {
-  return "/fitness";
+  return "/fitness/sessions";
 }
 
 export function fitnessExercisesPath(): string {

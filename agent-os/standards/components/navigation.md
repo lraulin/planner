@@ -7,7 +7,7 @@ Achieve Planner reached all sixteen of its views through the **Go** menu, and ke
 ones you had opened as tabs. We inherited the tabs without the Go menu, so every view had to
 be a permanent tab and the eleventh was already too many.
 
-Five surfaces now, each answering a different question.
+Six surfaces now, each answering a different question.
 
 | Surface                      | Question it answers              | Where                           |
 | ---------------------------- | -------------------------------- | ------------------------------- |
@@ -22,7 +22,7 @@ Below `md` the sidebar is replaced by the bottom nav plus the More sheet, there 
 no command row, and no panel — **`⋯` becomes the menu bar**, rendering the same tree with the
 section names as headings. See `responsive.md`.
 
-Achieve had four of these five (menu bar, icon toolbars, the docked **Outline Commands** pane, and
+Achieve had four of these six (menu bar, icon toolbars, the docked **Outline Commands** pane, and
 a sectioned row menu), all reading one command set. The palette is ours; the point of the others is
 that they were right.
 

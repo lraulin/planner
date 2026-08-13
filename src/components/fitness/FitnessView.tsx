@@ -93,14 +93,6 @@ export function FitnessView({
         ? "new"
         : (exercises.find((e) => e.id === openExerciseId) ?? null);
 
-  const goSessions = useCallback(() => {
-    router.push(fitnessSessionsPath());
-  }, [router]);
-
-  const goExercises = useCallback(() => {
-    router.push(fitnessExercisesPath());
-  }, [router]);
-
   const openNewLog = useCallback(
     (exerciseId: string | null = null) => {
       setError(null);
@@ -264,37 +256,15 @@ export function FitnessView({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/*
-        Sessions | Exercises is a lens control — it changes what is listed — so it stays on the lower
-        row. The two create verbs moved into the command row, and with them into `⌘K` and `⋯`, which
-        this view had neither of before.
+        Sessions | Exercises used to live here as a bordered segment, which made navigation look
+        like the density picker three controls to its right. It is a page switch, so the shell's
+        `PageBar` owns it now — see `navigation.md`. What is left on this row is genuinely the
+        lens, and the two create verbs stay on the command row, where they reach `⌘K` and `⋯`.
       */}
       <TabToolbar
         commandRow={<CommandBar commands={commands} />}
         pinned={<OverflowMenu label="More commands for fitness" />}
-      >
-        <div className="flex items-center gap-1 rounded border border-rule p-0.5">
-          <button
-            type="button"
-            onClick={goSessions}
-            className={`rounded px-2.5 py-1 text-[0.8125rem] ${
-              mode === "sessions" ? "bg-surface font-medium text-ink" : "text-ink-muted"
-            }`}
-          >
-            Sessions
-          </button>
-          <button
-            type="button"
-            onClick={goExercises}
-            className={`rounded px-2.5 py-1 text-[0.8125rem] ${
-              mode === "exercises"
-                ? "bg-surface font-medium text-ink"
-                : "text-ink-muted"
-            }`}
-          >
-            Exercises
-          </button>
-        </div>
-      </TabToolbar>
+      />
 
       {error && !editorOpen && <ErrorBanner message={error} />}
 

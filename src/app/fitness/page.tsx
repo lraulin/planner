@@ -1,8 +1,6 @@
 import { redirect } from "next/navigation";
-import { getCurrentUserId } from "@/lib/auth";
-import { listExercises, listSessions } from "@/lib/fitness/queries";
 import { fitnessLogPath, fitnessSessionPath } from "@/lib/fitness/routes";
-import { FitnessView } from "@/components/fitness/FitnessView";
+import { moduleEntryRedirect } from "@/components/shell/moduleEntry";
 
 export const dynamic = "force-dynamic";
 
@@ -13,9 +11,13 @@ type SearchParams = Promise<{
 }>;
 
 /**
- * Sessions list. Legacy query deep-links redirect to the path-based routes.
+ * The Fitness entry point. Renders nothing — Sessions and Exercises are the pages.
+ *
+ * Two generations of deep link land here and both still work: the query-based ones from before
+ * the editors became routes (`?session=`, `?log=1`), and every bookmark of `/fitness` itself
+ * from when this file *was* the Sessions list.
  */
-export default async function FitnessSessionsPage({
+export default async function FitnessPage({
   searchParams,
 }: {
   searchParams: SearchParams;
@@ -29,21 +31,5 @@ export default async function FitnessSessionsPage({
     redirect(fitnessLogPath(params.exercise ?? null));
   }
 
-  const userId = await getCurrentUserId();
-  const [sessions, exercises] = await Promise.all([
-    listSessions(userId),
-    listExercises(userId),
-  ]);
-
-  return (
-    <FitnessView
-      mode="sessions"
-      initialSessions={sessions}
-      initialExercises={exercises}
-      openLog={false}
-      seedExerciseId={null}
-      initialSessionDetail={null}
-      openExerciseId={null}
-    />
-  );
+  moduleEntryRedirect("fitness");
 }

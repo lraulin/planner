@@ -10,7 +10,7 @@ import {
 
 describe("fitness routes", () => {
   it("builds stable paths", () => {
-    expect(fitnessSessionsPath()).toBe("/fitness");
+    expect(fitnessSessionsPath()).toBe("/fitness/sessions");
     expect(fitnessExercisesPath()).toBe("/fitness/exercises");
     expect(fitnessLogPath()).toBe("/fitness/log");
     expect(fitnessLogPath("ex-1")).toBe("/fitness/log?exercise=ex-1");

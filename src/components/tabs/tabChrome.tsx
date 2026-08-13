@@ -29,11 +29,19 @@ export function TabToolbar({
 }: {
   /** Row 1: menu bar, icon segments, selection context. Desktop only. */
   commandRow?: React.ReactNode;
-  /** Row 2: the lens — view picker, scope, search, filter, grouping, density. */
-  children: React.ReactNode;
+  /**
+   * Row 2: the lens — view picker, scope, search, filter, grouping, density.
+   *
+   * Optional, because a module can have no lens at all. Fitness is the case: once
+   * `Sessions | Exercises` left for the page bar it had nothing to filter or group, and an empty
+   * 36px strip below the menus reads as a control that failed to load.
+   */
+  children?: React.ReactNode;
   /** Sits outside the lens scroller, against the right edge. `⋯` lives here. */
   pinned?: React.ReactNode;
 }) {
+  const hasLens = Boolean(children);
+
   return (
     <div className="flex flex-none flex-col border-b border-rule">
       {commandRow && (
@@ -42,23 +50,43 @@ export function TabToolbar({
         </div>
       )}
 
-      <div className="flex min-w-0 max-w-full items-stretch overflow-hidden">
-        <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-x-4 gap-y-2 overflow-x-auto px-3 py-2 md:flex-wrap md:overflow-x-visible">
-          {children}
-        </div>
+      {/*
+        With no lens the row exists only to carry `⋯`, which is phone-only — so above `md` it
+        does not exist either, rather than ruling off an empty strip.
+      */}
+      {(hasLens || pinned) && (
+        <div
+          className={`flex min-w-0 max-w-full items-stretch overflow-hidden ${
+            hasLens ? "" : "md:hidden"
+          }`}
+        >
+          {hasLens && (
+            <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-x-4 gap-y-2 overflow-x-auto px-3 py-2 md:flex-wrap md:overflow-x-visible">
+              {children}
+            </div>
+          )}
 
-        {/*
-          `⋯` is phone-only now. Above `md` the named menus are right there on the command row, and
-          a third button reprinting all of them is the clutter this replaced — the overflow tier
-          exists because a 390px screen has no menu bar and no `⌘K`, not because a desktop needs a
-          second way in.
-        */}
-        {pinned && (
-          <div className="flex flex-none items-center border-l border-rule px-2 py-2 md:hidden">
-            {pinned}
-          </div>
-        )}
-      </div>
+          {/*
+            `⋯` is phone-only now. Above `md` the named menus are right there on the command row, and
+            a third button reprinting all of them is the clutter this replaced — the overflow tier
+            exists because a 390px screen has no menu bar and no `⌘K`, not because a desktop needs a
+            second way in.
+
+            With no lens beside it the button *is* the row, so it drops the divider and the row's
+            own padding: on a 390px screen the difference between a 60px strip holding one glyph
+            and a 44px one is a visible slice of the list underneath.
+          */}
+          {pinned && (
+            <div
+              className={`flex flex-none items-center md:hidden ${
+                hasLens ? "border-l border-rule px-2 py-2" : "ml-auto px-2"
+              }`}
+            >
+              {pinned}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
