@@ -11,8 +11,6 @@ import {
 import type { NoteFlag } from "@/db/schema";
 import { INSERT_AFTER, INSERT_CHILD } from "@/lib/commands/chords";
 import type { NoteNode, NotePosition, NoteSummary } from "@/lib/notes/types";
-import { notesPresentationCommands } from "@/lib/notes/presentationCommands";
-import type { NotesPresentation } from "@/lib/settings/notes";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { ContactOption } from "@/lib/contacts/types";
 import type { GridRow } from "@/lib/tree/slice";
@@ -74,7 +72,6 @@ import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { notesColumns, NOTES_COLUMN_IDS, type NotesColumnCtx } from "./notesColumns";
 import { NoteFilterDialog } from "./NoteFilterDialog";
 import { NoteDrawer } from "./NoteDrawer";
-import { NotesPresentationSwitch } from "./NotesPresentationSwitch";
 import { isModalOpen, isTypingTarget } from "@/lib/keyboard";
 
 const NOTES_VIEW_CODEC: SettingCodec<NotesViewSettings> = {
@@ -114,8 +111,6 @@ export function NotesGrid({
   initialOpenNote = null,
   nodes,
   contacts,
-  presentation = "grid",
-  onPresentationChange,
 }: {
   /** List rows: metadata + snippet, never Markdown bodies. */
   initialNotes: NoteSummary[];
@@ -130,8 +125,6 @@ export function NotesGrid({
   nodes: OutlineNode[];
   /** People a note can be filed against, as Contact History. */
   contacts: ContactOption[];
-  presentation?: NotesPresentation;
-  onPresentationChange?: (next: NotesPresentation) => void;
 }) {
   const { value: displaySettings } = useDisplaySettings();
   const [patches, setPatches] = useState<Record<string, Partial<NoteSummary>>>({});
@@ -647,9 +640,6 @@ export function NotesGrid({
             icon: "collapse",
             run: () => apply(() => setAllNotesCollapsedAction(true)),
           },
-          ...(onPresentationChange
-            ? notesPresentationCommands(presentation, onPresentationChange)
-            : []),
         ],
       };
     },
@@ -662,8 +652,6 @@ export function NotesGrid({
       addNote,
       apply,
       requestDelete,
-      presentation,
-      onPresentationChange,
     ],
   );
 
@@ -863,14 +851,6 @@ export function NotesGrid({
               </ToolbarButton>
             )}
           </>
-        }
-        right={
-          onPresentationChange ? (
-            <NotesPresentationSwitch
-              value={presentation}
-              onChange={onPresentationChange}
-            />
-          ) : undefined
         }
         commandCapabilities={commandCapabilities}
       />

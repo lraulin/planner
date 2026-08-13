@@ -13,7 +13,6 @@ describe("parseNotesView", () => {
     const settings = {
       mode: "flat" as const,
       sort: "title" as const,
-      presentation: "journal" as const,
       filter: {
         ...EMPTY_NOTE_FILTER,
         search: "health",
@@ -30,10 +29,16 @@ describe("parseNotesView", () => {
     expect(parsed.sort).toBe("manual");
   });
 
-  it("defaults presentation to grid and drops unknown values", () => {
-    expect(parseNotesView({}).presentation).toBe("grid");
-    expect(parseNotesView({ presentation: "diary" }).presentation).toBe("grid");
-    expect(parseNotesView({ presentation: "journal" }).presentation).toBe("journal");
+  /**
+   * Grid vs Journal is a page now, so the choice lives in the URL and the stored blobs written
+   * before that carry a key nothing reads. It has to fall out silently rather than survive as
+   * an extra property, or a saved View would round-trip a presentation it can no longer honour.
+   */
+  it("ignores the presentation key left behind by older builds", () => {
+    expect(parseNotesView({ presentation: "journal" })).toEqual(DEFAULT_NOTES_VIEW);
+    expect(
+      parseNotesView({ mode: "flat", presentation: "journal" }),
+    ).not.toHaveProperty("presentation");
   });
 
   it("honours an explicitly empty subject list", () => {

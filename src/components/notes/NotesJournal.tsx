@@ -11,7 +11,7 @@ import { useDateFormatter } from "@/components/settings/SettingsProvider";
 import { MiniMonth } from "@/components/schedule/MiniMonth";
 import { useIsCompact } from "@/components/shell/useIsCompact";
 import { OverflowMenu } from "@/components/shell/OverflowMenu";
-import { useRegisterCommands } from "@/components/shell/CommandProvider";
+import type { Command } from "@/lib/commands/registry";
 import { TabToolbar } from "@/components/tabs/tabChrome";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import {
@@ -21,14 +21,11 @@ import {
   upsertDiarySummary,
   type DiarySummary,
 } from "@/lib/notes/diaryTree";
-import { notesPresentationCommands } from "@/lib/notes/presentationCommands";
 import type { NoteNode, NoteSummary } from "@/lib/notes/types";
-import type { NotesPresentation } from "@/lib/settings/notes";
 import { JOURNAL_SUBJECT } from "@/lib/day/types";
 import { localDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { MarkdownEditor } from "./MarkdownEditor";
 import { NotesDateTree } from "./NotesDateTree";
-import { NotesPresentationSwitch } from "./NotesPresentationSwitch";
 import { useAutosave } from "./useAutosave";
 
 function monthDateFromKey(dateKey: string): Date {
@@ -45,16 +42,19 @@ function localKeyFromParts(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
+/**
+ * Journal registers no commands of its own now that Grid | Journal is navigation. Module-level
+ * and frozen because `useRegisterCommands` re-registers on array identity, and a `[]` written
+ * inline would be a new array every render — which is the churn that locks the tab up.
+ */
+const NO_COMMANDS: readonly Command[] = [];
+
 export function NotesJournal({
   initialSummaries,
   initialOpenNote = null,
-  presentation,
-  onPresentationChange,
 }: {
   initialSummaries: DiarySummary[];
   initialOpenNote?: NoteNode | null;
-  presentation: NotesPresentation;
-  onPresentationChange: (next: NotesPresentation) => void;
 }) {
   const compact = useIsCompact();
   const formatDate = useDateFormatter();
@@ -96,12 +96,6 @@ export function NotesJournal({
     if (urlDate || !initialOpenNote?.noteDate) return;
     setDate(toDateKey(initialOpenNote.noteDate));
   }, [initialOpenNote, setDate, urlDate]);
-
-  const commands = useMemo(
-    () => notesPresentationCommands(presentation, onPresentationChange),
-    [onPresentationChange, presentation],
-  );
-  useRegisterCommands(commands);
 
   const loadEntry = useCallback(async (id: string) => {
     const result = await getNoteAction(id);
@@ -204,12 +198,16 @@ export function NotesJournal({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {/*
+        Grid | Journal used to sit on the lens row here; it is a page switch, so the shell's
+        `PageBar` owns it and the row is empty. `CommandBar` stays with nothing of its own to
+        show, because it registers `View ▸ Show commands panel` itself — a view that draws this
+        bar and no `GridToolbar` would otherwise lose the panel toggle entirely.
+      */}
       <TabToolbar
-        commandRow={<CommandBar commands={commands} />}
+        commandRow={<CommandBar commands={NO_COMMANDS} />}
         pinned={<OverflowMenu label="More commands for Notes" />}
-      >
-        <NotesPresentationSwitch value={presentation} onChange={onPresentationChange} />
-      </TabToolbar>
+      />
 
       {compact ? (
         sheetOpen ? (
