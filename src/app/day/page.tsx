@@ -3,7 +3,7 @@ import { appointmentsForDay } from "@/lib/day/appointments";
 import { loadDay } from "@/lib/day/queries";
 import { loadSchedule } from "@/lib/schedule/queries";
 import { fromDateKey, localDateKey } from "@/lib/schedule/geometry";
-import { weekRange } from "@/lib/schedule/range";
+import { dayRange } from "@/lib/schedule/range";
 import { AppShell } from "@/components/shell/AppShell";
 import { DayView } from "@/components/day/DayView";
 
@@ -22,11 +22,11 @@ export default async function DayPage({
   const today = localDateKey(new Date());
   const day = params.date ?? today;
 
-  // The schedule query works a week at a time; the day's appointments are filtered out of
-  // it rather than adding a second query path for one day.
+  // One day of occurrences, not a week to slice down: dayRange is the schedule helper
+  // written for this tab, and appointmentsForDay still applies the wall-clock rule.
   const [payload, schedule] = await Promise.all([
     loadDay(userId, day, today),
-    loadSchedule(userId, { range: weekRange(fromDateKey(day)) }),
+    loadSchedule(userId, { range: dayRange(fromDateKey(day)) }),
   ]);
 
   const appointments = appointmentsForDay(schedule.occurrences, day);
