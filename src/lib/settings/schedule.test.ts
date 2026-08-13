@@ -13,7 +13,6 @@ describe("parseScheduleView", () => {
       workWeek: true,
       dayCount: 20,
       anchorMode: "aligned",
-      viewMode: "agenda",
       railOpen: false,
       railShowCompleted: true,
       railGroupByArea: false,
@@ -71,7 +70,6 @@ describe("parseScheduleView", () => {
     const parsed = parseScheduleView({ slotMinutes: 15, workWeek: true });
     expect(parsed.dayCount).toBe(7);
     expect(parsed.anchorMode).toBe("rolling");
-    expect(parsed.viewMode).toBe("calendar");
     expect(parsed.railOpen).toBe(true);
   });
 
@@ -83,11 +81,17 @@ describe("parseScheduleView", () => {
     expect(parseScheduleView({ dayCount: 1 }).dayCount).toBe(1);
   });
 
-  it("refuses an unknown anchor or view mode", () => {
+  it("refuses an unknown anchor mode", () => {
     expect(parseScheduleView({ anchorMode: "today" }).anchorMode).toBe("rolling");
     expect(parseScheduleView({ anchorMode: "aligned" }).anchorMode).toBe("aligned");
-    expect(parseScheduleView({ viewMode: "list" }).viewMode).toBe("calendar");
-    expect(parseScheduleView({ viewMode: "agenda" }).viewMode).toBe("agenda");
+  });
+
+  /**
+   * Calendar vs Agenda is a page now, so it is in the URL and every blob written before that
+   * carries a `viewMode` nothing reads. It falls out rather than surviving as a stray property.
+   */
+  it("ignores the viewMode key left behind by older builds", () => {
+    expect(parseScheduleView({ viewMode: "agenda" })).not.toHaveProperty("viewMode");
   });
 
   it("keeps each field independent of the other being junk", () => {

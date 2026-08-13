@@ -184,7 +184,7 @@ export function WeekPlanView({
                 ].join(" ")}
               >
                 <Link
-                  href={`/day?date=${day}`}
+                  href={`/schedule/day?date=${day}`}
                   className={[
                     "text-[0.75rem] hover:underline",
                     day === today ? "font-semibold text-ink" : "text-ink-muted",

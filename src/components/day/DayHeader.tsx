@@ -53,15 +53,9 @@ export function DayHeader({
 }) {
   const step = mode === "day" ? 1 : 7;
   const href = (target: string) =>
-    mode === "day" ? `/day?date=${target}` : `/day/week?week=${target}`;
-
-  const toggleClass = (active: boolean) =>
-    [
-      "px-2 py-0.5 text-[0.75rem] leading-none",
-      active
-        ? "rounded border border-rule bg-surface font-medium text-ink"
-        : "text-ink-muted hover:text-ink",
-    ].join(" ");
+    mode === "day"
+      ? `/schedule/day?date=${target}`
+      : `/schedule/week-plan?week=${target}`;
 
   return (
     <TabToolbar>
@@ -95,15 +89,12 @@ export function DayHeader({
           <span className="ml-2 text-[0.75rem] text-ink-faint">Today</span>
         )}
       </span>
-
-      <span className="ml-auto flex items-center gap-px" role="group" aria-label="View">
-        <Link href={`/day?date=${today}`} className={toggleClass(mode === "day")}>
-          Day
-        </Link>
-        <Link href="/day/week" className={toggleClass(mode === "week")}>
-          Week
-        </Link>
-      </span>
+      {/*
+        The Day | Week toggle that used to sit here is gone. Day and Week Plan are pages of
+        Schedule now, so the shell's `PageBar` above this row switches between them — along
+        with Calendar and Agenda, which this toggle could never reach. What is left is the date
+        stepper, which is about *which* day, not which page.
+      */}
     </TabToolbar>
   );
 }

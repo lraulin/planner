@@ -57,7 +57,19 @@ import { useRegisterCommands } from "@/components/shell/CommandProvider";
 import { OverflowMenu } from "@/components/shell/OverflowMenu";
 import type { Command } from "@/lib/commands/registry";
 
+/** Which drawing of the range is on screen. The route decides; see `navigation.md`. */
+export type SchedulePage = "calendar" | "agenda";
+
 type Props = {
+  /**
+   * Calendar or Agenda, from the route rather than from a stored setting.
+   *
+   * It used to be `viewMode` on `ScheduleViewSettings`, beside `dayCount` and `anchorMode`.
+   * Those two answer *how much* of the schedule you are looking at and stay settings; this one
+   * answers *which page you are on*, and a page is a URL — you should be able to link someone
+   * to your agenda, and Back should return from it.
+   */
+  page: SchedulePage;
   initial: SchedulePayload;
   nodes: OutlineNode[];
   /** The day the visible range is anchored on — `?start=`, or today. */
@@ -141,7 +153,13 @@ function reportError(message: string) {
   if (typeof window !== "undefined") window.alert(message);
 }
 
-export function ScheduleView({ initial, nodes, anchorKey, blockNodeId = null }: Props) {
+export function ScheduleView({
+  page,
+  initial,
+  nodes,
+  anchorKey,
+  blockNodeId = null,
+}: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
 
@@ -816,8 +834,28 @@ export function ScheduleView({ initial, nodes, anchorKey, blockNodeId = null }: 
         run: () =>
           patchView((current) => ({ ...current, railOpen: !current.railOpen })),
       },
+      {
+        /*
+         * The weekly planning wizard, which was a hand-placed button on the lens row —
+         * the only way in, and the one thing on that row that was a verb rather than a lens.
+         * As a command it reaches the menu bar, `⌘K` and `⋯`, which is where the phone finds
+         * it: the lens row scrolls sideways down there and this button sat off the edge.
+         */
+        id: "schedule.plan-week",
+        label: "Plan Week…",
+        group: "app",
+        menu: "view",
+        section: "Planning",
+        toolbar: 30,
+        icon: "schedule",
+        keywords: "weekly planning wizard review budget",
+        title: "Walk the week: review, budget, and block out the plan",
+        run: () => router.push(`/schedule/plan?week=${anchorKey}&step=0`),
+      },
     ],
     [
+      anchorKey,
+      router,
       dayCountCommands,
       anchorModeCommand,
       selectedChartId,
@@ -856,47 +894,6 @@ export function ScheduleView({ initial, nodes, anchorKey, blockNodeId = null }: 
           ))}
         </select>
       </label>
-      <button
-        type="button"
-        className="rounded border border-select-edge bg-select px-2 py-1 text-[0.8125rem] font-medium text-ink hover:opacity-90"
-        onClick={() => router.push(`/schedule/plan?week=${anchorKey}&step=0`)}
-      >
-        Plan Week…
-      </button>
-      {/*
-       * Calendar | Agenda. A lens control, not a command — it answers "what am I looking
-       * at", so it belongs on this row rather than among the verbs above (`data-grid.md`).
-       * Two options visible at a glance is a segmented control, the same shape the grids'
-       * density switch uses.
-       */}
-      <div
-        role="group"
-        aria-label="Schedule view"
-        className="flex flex-none overflow-hidden rounded border border-rule"
-      >
-        {(
-          [
-            ["calendar", "Calendar", "Time blocks on a grid"],
-            ["agenda", "Agenda", "The same days as a list, with days left"],
-          ] as const
-        ).map(([mode, label, title]) => (
-          <button
-            key={mode}
-            type="button"
-            aria-pressed={view.viewMode === mode}
-            title={title}
-            onClick={() => patchView((current) => ({ ...current, viewMode: mode }))}
-            className={[
-              "min-h-tap px-2 py-1 text-[0.8125rem] leading-none whitespace-nowrap transition-colors md:min-h-0",
-              view.viewMode === mode
-                ? "bg-select text-ink"
-                : "text-ink-muted hover:bg-surface-raised hover:text-ink",
-            ].join(" ")}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
     </>
   );
 
@@ -990,7 +987,7 @@ export function ScheduleView({ initial, nodes, anchorKey, blockNodeId = null }: 
         merged into its command row and the lens controls below become its `left` and
         `right`. Two menu bars stacked is one too many, and two lens rows is worse.
       */}
-      {view.viewMode === "calendar" && (
+      {page === "calendar" && (
         <>
           <div className="hidden flex-none items-center gap-2 border-b border-rule bg-shell px-3 py-1.5 md:flex">
             <CommandBar commands={commands} />
@@ -1012,7 +1009,7 @@ export function ScheduleView({ initial, nodes, anchorKey, blockNodeId = null }: 
 
       <div className="flex min-h-0 flex-1">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {view.viewMode === "agenda" ? (
+          {page === "agenda" ? (
             <AgendaGrid
               occurrences={occurrences}
               days={days}
@@ -1072,7 +1069,7 @@ export function ScheduleView({ initial, nodes, anchorKey, blockNodeId = null }: 
                 onChangeMonth={(d) => navigateTo(d)}
               />
             </div>
-            {view.viewMode === "calendar" && <ProjectsRail nodes={nodes} />}
+            {page === "calendar" && <ProjectsRail nodes={nodes} />}
           </aside>
         )}
       </div>

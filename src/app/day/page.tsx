@@ -1,39 +1,22 @@
-import { getCurrentUserId } from "@/lib/auth";
-import { appointmentsForDay } from "@/lib/day/appointments";
-import { loadDay } from "@/lib/day/queries";
-import { loadSchedule } from "@/lib/schedule/queries";
-import { fromDateKey, localDateKey } from "@/lib/schedule/geometry";
-import { dayRange } from "@/lib/schedule/range";
-import { AppShell } from "@/components/shell/AppShell";
-import { DayView } from "@/components/day/DayView";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
 type SearchParams = Promise<{ date?: string }>;
 
-export default async function DayPage({
+/**
+ * Day used to be its own module. It is two pages of Schedule now — the Task Chooser covers the
+ * daily-pick job better, and folding an unfinished surface in beside Calendar and Agenda is
+ * what lets it stay visible without reading as a broken top-level destination.
+ *
+ * This route stays behind as a redirect because `/day?date=` is in bookmarks and in the
+ * `?date=` links Day's own pager wrote for months.
+ */
+export default async function DayRedirect({
   searchParams,
 }: {
   searchParams: SearchParams;
 }) {
-  const params = await searchParams;
-  const userId = await getCurrentUserId();
-
-  const today = localDateKey(new Date());
-  const day = params.date ?? today;
-
-  // One day of occurrences, not a week to slice down: dayRange is the schedule helper
-  // written for this tab, and appointmentsForDay still applies the wall-clock rule.
-  const [payload, schedule] = await Promise.all([
-    loadDay(userId, day, today),
-    loadSchedule(userId, { range: dayRange(fromDateKey(day)) }),
-  ]);
-
-  const appointments = appointmentsForDay(schedule.occurrences, day);
-
-  return (
-    <AppShell active="day">
-      <DayView initial={payload} today={today} appointments={appointments} />
-    </AppShell>
-  );
+  const { date } = await searchParams;
+  redirect(date ? `/schedule/day?date=${encodeURIComponent(date)}` : "/schedule/day");
 }

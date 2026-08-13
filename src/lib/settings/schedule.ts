@@ -28,10 +28,6 @@ import { SETTINGS_VERSION } from "./scopes";
 export const SLOT_MINUTES = [5, 6, 10, 15, 30, 60] as const;
 export type SlotMinutes = (typeof SLOT_MINUTES)[number];
 
-/** Calendar grid or the same range as a list of rows. See `AgendaGrid`. */
-export const SCHEDULE_VIEW_MODES = ["calendar", "agenda"] as const;
-export type ScheduleViewMode = (typeof SCHEDULE_VIEW_MODES)[number];
-
 export type ScheduleViewSettings = {
   slotMinutes: SlotMinutes;
   /** Achieve's Work Week Mode: Monday–Friday only. */
@@ -40,7 +36,6 @@ export type ScheduleViewSettings = {
   dayCount: DayCount;
   /** Whether the range starts on today or on the week boundary. */
   anchorMode: AnchorMode;
-  viewMode: ScheduleViewMode;
   /**
    * The schedule-specific right pane (mini calendar + projects rail). Separate from the
    * Commands panel, which is a shell setting — this one is only meaningful on `/schedule`.
@@ -69,7 +64,6 @@ export const DEFAULT_SCHEDULE_VIEW: ScheduleViewSettings = {
    * exactly, so nothing was taken away; it just stopped being the assumption.
    */
   anchorMode: "rolling",
-  viewMode: "calendar",
   railOpen: true,
   railShowCompleted: false,
   railGroupByArea: false,
@@ -97,11 +91,6 @@ export function parseScheduleView(value: unknown): ScheduleViewSettings {
       record.anchorMode,
       ANCHOR_MODES,
       DEFAULT_SCHEDULE_VIEW.anchorMode,
-    ),
-    viewMode: asOneOf(
-      record.viewMode,
-      SCHEDULE_VIEW_MODES,
-      DEFAULT_SCHEDULE_VIEW.viewMode,
     ),
     railOpen: asBoolean(record.railOpen, DEFAULT_SCHEDULE_VIEW.railOpen),
     railShowCompleted: asBoolean(

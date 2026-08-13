@@ -133,9 +133,9 @@ const GO_KEYWORDS: Record<string, string> = {
   tasks: "task list todo",
   goals: "goal dreams objectives",
   wishes: "wish list someday maybe",
-  day: "today daily page franklin covey",
   chooser: "task chooser next action best overall urgent",
-  schedule: "calendar week weekly time blocking appointments",
+  schedule:
+    "calendar week weekly time blocking appointments day today daily page franklin covey",
   metrics: "measures tracking numbers graph",
   fitness: "workout exercise log",
   notes: "note journal markdown",

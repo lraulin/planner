@@ -3,6 +3,7 @@ import {
   builtPagesForModule,
   defaultPageFor,
   hasPageBar,
+  pageForPathname,
   pageHref,
   pagesForModule,
   type PageEntry,
@@ -11,7 +12,6 @@ import {
 import {
   ChooserIcon,
   ContactsIcon,
-  DayIcon,
   FinancesIcon,
   FitnessIcon,
   GoalsIcon,
@@ -152,19 +152,12 @@ export const MODULES = [
   },
   // Do — what you are working on now, this day, this week.
   //
-  // Day is shelved for now: Task Chooser covers the same daily-pick job better, and Day
-  // still feels half-finished. Keep the entry (and `/day` + `/day/week`) so restoring or
-  // folding it into Schedule is a status flip, not a rebuild. Flip `status` to `"built"`
-  // and `primary` to `true` (and put it back on `MobileNav`) when that decision lands.
-  {
-    id: "day",
-    label: "Day",
-    href: "/day",
-    section: "do",
-    primary: false,
-    status: "reserved",
-    icon: DayIcon,
-  },
+  // Day is not here: it folded into Schedule as two of its pages (`/schedule/day`,
+  // `/schedule/week-plan`). It had been shelved because Task Chooser covers the daily-pick
+  // job better and Day still feels half-finished, and this comment used to say folding it in
+  // was the alternative to deleting it. That is what happened. Its future is still open; what
+  // changed is that an unfinished surface beside Calendar and Agenda does not read as a broken
+  // top-level destination the way a shelved module did.
   {
     id: "chooser",
     label: "Task Chooser",
@@ -175,8 +168,10 @@ export const MODULES = [
     icon: ChooserIcon,
   },
   {
+    // "Weekly Schedule" while it was one week drawn one way. It holds a Day page and a Week
+    // Plan page now, and a name that promised a week would be wrong on half of them.
     id: "schedule",
-    label: "Weekly Schedule",
+    label: "Schedule",
     href: "/schedule",
     section: "do",
     primary: false,
@@ -346,6 +341,28 @@ export function moduleDefaultPageHref(id: ModuleId): string | null {
 /** Every declared page, reserved included. For settings and diagnostics, not for rendering. */
 export function moduleDeclaredPages(id: ModuleId): readonly PageEntry[] {
   return pagesForModule(id);
+}
+
+/**
+ * What to call a destination in a "← Back to …" control, given only its path.
+ *
+ * Named from the registry rather than by the caller, because the caller does not reliably know:
+ * the time-chart editor is reached from two places and used to print its label from a hardcoded
+ * `returnTo === "/time-charts" ? "Time Charts" : "Schedule"`, which was already wrong for one
+ * destination and would silently mislabel every one added after it.
+ *
+ * Falls back to the module's own name, and then to "Back" for a path in no module at all.
+ */
+export function destinationLabel(path: string): string {
+  const pathname = path.split(/[?#]/)[0] ?? path;
+
+  const entry = MODULES.filter((item) => item.status === "built").find(
+    (item) => pathname === item.href || pathname.startsWith(`${item.href}/`),
+  );
+  if (!entry) return "Back";
+
+  const page = pageForPathname(entry.id, entry.href, pathname);
+  return page && hasPageBar(entry.id) ? page.label : entry.label;
 }
 
 export function sectionsWithModules(): {

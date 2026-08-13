@@ -9,6 +9,7 @@ import {
   useTransition,
 } from "react";
 import { useRouter } from "next/navigation";
+import { destinationLabel } from "@/components/shell/modules";
 import FullCalendar from "@fullcalendar/react";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin, { type EventResizeDoneArg } from "@fullcalendar/interaction";
@@ -116,12 +117,16 @@ export function TimeChartEditorView({ chart, initialAreas, nodes, returnTo }: Pr
     startTransition(() => router.refresh());
   }, [router]);
 
+  /**
+   * The editor is a focused flow, not a page — it has an exit rather than siblings in the page
+   * bar — so it has to say where the exit goes. The name comes from the registry, because this
+   * view is reached from both Time Charts and the Schedule calendar and used to decide between
+   * them with a hardcoded ternary.
+   */
+  const backTo = returnTo ?? `/schedule/calendar?chart=${chart.id}`;
+
   function goBack() {
-    if (returnTo) {
-      router.push(returnTo);
-    } else {
-      router.push(`/schedule?chart=${chart.id}`);
-    }
+    router.push(backTo);
   }
 
   async function saveChartName() {
@@ -318,7 +323,7 @@ export function TimeChartEditorView({ chart, initialAreas, nodes, returnTo }: Pr
           className="rounded border border-rule bg-surface px-2 py-1 text-ink hover:bg-surface-raised"
           onClick={goBack}
         >
-          ← Back to {returnTo === "/time-charts" ? "Time Charts" : "Schedule"}
+          ← Back to {destinationLabel(backTo)}
         </button>
         <span className="text-ink-muted">Edit Time Chart</span>
         <input
