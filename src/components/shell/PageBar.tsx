@@ -1,10 +1,12 @@
 "use client";
 
+import { useEffect } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { moduleById, modulePages } from "./modules";
 import type { ModuleId } from "./modules";
 import { pageForPathname } from "@/lib/navigation/pages";
 import { NavLink } from "./NavLink";
+import { useShellSettings } from "./useShellSettings";
 
 /**
  * The **page** bar: where you can go *inside* the module you are already in.
@@ -37,13 +39,14 @@ export function PageBar({ active }: { active: ModuleId | null }) {
    */
   const search = useSearchParams().toString();
 
-  if (!active) return null;
+  const entry = active ? moduleById(active) : undefined;
+  const pages = active ? modulePages(active) : [];
+  const current =
+    active && entry ? pageForPathname(active, entry.href, pathname) : null;
 
-  const entry = moduleById(active);
-  const pages = modulePages(active);
-  if (!entry || pages.length < 2) return null;
+  useRememberPage(active, current?.id ?? null);
 
-  const current = pageForPathname(active, entry.href, pathname);
+  if (!active || !entry || pages.length < 2) return null;
 
   return (
     <nav
@@ -75,4 +78,27 @@ export function PageBar({ active }: { active: ModuleId | null }) {
       })}
     </nav>
   );
+}
+
+/**
+ * Records the page you are on, so the bare module path can send you back to it.
+ *
+ * Written from the page rather than from the link that got you there, because plenty of arrivals
+ * are not clicks on this bar: a palette entry, a bookmark, Back, a deep link from another
+ * module. Storing on arrival is the only version that catches all of them.
+ *
+ * Skipped when the module has no pages and when the pathname resolves to none — a focused flow
+ * like the time-chart editor must not overwrite the page you will return to.
+ */
+function useRememberPage(active: ModuleId | null, pageId: string | null) {
+  const { value, patch } = useShellSettings();
+  const stored = active ? value.lastPage[active] : undefined;
+
+  useEffect(() => {
+    if (!active || !pageId || stored === pageId) return;
+    patch((current) => ({
+      ...current,
+      lastPage: { ...current.lastPage, [active]: pageId },
+    }));
+  }, [active, pageId, stored, patch]);
 }

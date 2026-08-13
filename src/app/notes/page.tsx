@@ -39,5 +39,5 @@ export default async function NotesPage({
     redirect(`/notes/${page}?note=${encodeURIComponent(params.note)}`);
   }
 
-  moduleEntryRedirect("notes");
+  await moduleEntryRedirect("notes");
 }

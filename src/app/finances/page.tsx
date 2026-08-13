@@ -1,23 +1,14 @@
-import { Suspense } from "react";
-import { getCurrentUserId } from "@/lib/auth";
-import { listAccounts, listTransactions } from "@/lib/finances/queries";
-import { AppShell } from "@/components/shell/AppShell";
-import { FinancesView } from "@/components/finances/FinancesView";
+import { moduleEntryRedirect } from "@/components/shell/moduleEntry";
 
 export const dynamic = "force-dynamic";
 
-export default async function FinancesPage() {
-  const userId = await getCurrentUserId();
-  const [transactions, accounts] = await Promise.all([
-    listTransactions(userId),
-    listAccounts(userId),
-  ]);
-
-  return (
-    <AppShell active="finances">
-      <Suspense fallback={<div className="min-h-0 flex-1" />}>
-        <FinancesView initialTransactions={transactions} initialAccounts={accounts} />
-      </Suspense>
-    </AppShell>
-  );
+/**
+ * The Finances entry point.
+ *
+ * Register is the only built page today, so no page bar renders — the floor is two, and one
+ * tab spends a row saying "you are in the only place there is". Insights is declared as
+ * `reserved` in the page registry; flipping it to `built` is what makes the bar appear.
+ */
+export default async function FinancesPage(): Promise<never> {
+  return moduleEntryRedirect("finances");
 }

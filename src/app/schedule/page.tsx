@@ -15,5 +15,5 @@ export default async function SchedulePage({
 }: {
   searchParams: Promise<ScheduleRangeSearchParams>;
 }) {
-  moduleEntryRedirect("schedule", await searchParams);
+  await moduleEntryRedirect("schedule", await searchParams);
 }

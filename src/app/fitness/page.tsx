@@ -31,5 +31,5 @@ export default async function FitnessPage({
     redirect(fitnessLogPath(params.exercise ?? null));
   }
 
-  moduleEntryRedirect("fitness");
+  await moduleEntryRedirect("fitness");
 }
