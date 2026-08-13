@@ -1,6 +1,7 @@
 import { isSettled } from "@/lib/tree/completionCascade";
 import type { OutlineNode } from "@/lib/tree/types";
 import { effectiveState } from "@/lib/tree/shelving";
+import { walkUp } from "@/lib/tree/walkUp";
 
 /**
  * One row in the hierarchy-aware destination picker (Tasks scope, Overview, organizer).
@@ -45,12 +46,13 @@ export function projectPickerRows(
 
   const shownIds = new Set(candidates.map((node) => node.id));
   for (const candidate of candidates) {
-    let parent = candidate.parentId ? byId.get(candidate.parentId) : undefined;
-    while (parent) {
-      if (shouldShowAncestor(parent, options.groupByResultArea)) {
-        shownIds.add(parent.id);
+    for (const ancestor of walkUp(
+      candidate.parentId ? byId.get(candidate.parentId) : undefined,
+      byId,
+    )) {
+      if (shouldShowAncestor(ancestor, options.groupByResultArea)) {
+        shownIds.add(ancestor.id);
       }
-      parent = parent.parentId ? byId.get(parent.parentId) : undefined;
     }
   }
 
@@ -62,13 +64,14 @@ export function projectPickerRows(
     // Rebase onto the nearest *shown* ancestor so a project under a hidden goal still
     // sits under its result area (or under nothing in flat mode).
     let parentId: string | null = null;
-    let walk = node.parentId ? byId.get(node.parentId) : undefined;
-    while (walk) {
-      if (shownIds.has(walk.id)) {
-        parentId = walk.id;
+    for (const ancestor of walkUp(
+      node.parentId ? byId.get(node.parentId) : undefined,
+      byId,
+    )) {
+      if (shownIds.has(ancestor.id)) {
+        parentId = ancestor.id;
         break;
       }
-      walk = walk.parentId ? byId.get(walk.parentId) : undefined;
     }
     parents.set(node.id, parentId);
     const parentDepth = parentId ? depths.get(parentId) : undefined;

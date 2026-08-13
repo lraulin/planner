@@ -128,6 +128,21 @@ describe("visiblePickerRows", () => {
     ]);
   });
 
+  it("does not hang when parent pointers form a cycle", () => {
+    const cycled = [
+      node({ id: "a", type: "project", name: "Alpha", parentId: "b" }),
+      node({ id: "b", type: "project", name: "Beta", parentId: "a" }),
+    ];
+    expect(
+      projectPickerRows(cycled, {
+        query: "",
+        groupByResultArea: false,
+        includeDeferred: false,
+        today: "2026-08-09",
+      }).map((row) => row.name),
+    ).toEqual(["Alpha", "Beta"]);
+  });
+
   it("excludes settled projects so they cannot be a filing destination", () => {
     const withSettled = [
       ...rows,
