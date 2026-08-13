@@ -15,6 +15,7 @@ import type { OutlineNode } from "@/lib/tree/types";
 import type { SchedulePayload, ScheduleOccurrence } from "@/lib/schedule/queries";
 import type { Occurrence } from "@/lib/schedule/recurrence";
 import { fromDateKey, localDateKey } from "@/lib/schedule/geometry";
+import { isDateKey } from "@/lib/metrics/parse";
 import {
   DAY_COUNTS,
   scheduleRange,
@@ -90,13 +91,18 @@ export type DraftAppointment = {
   projectId?: string | null;
 };
 
+/** A range day is a `YYYY-MM-DD` key; older payloads sent ISO instants. */
+function hydrateDay(value: string): Date {
+  return isDateKey(value) ? fromDateKey(value) : new Date(value);
+}
+
 /** Revive Date fields that RSC may have serialized as ISO strings. */
 function hydratePayload(initial: SchedulePayload) {
   return {
     charts: initial.charts,
     selectedChartId: initial.selectedChartId,
-    days: initial.days.map((day) => new Date(day)),
-    rangeEnd: new Date(initial.rangeEnd),
+    days: initial.days.map(hydrateDay),
+    rangeEnd: hydrateDay(initial.rangeEnd),
     backgroundEvents: initial.backgroundEvents.map((e) => ({
       ...e,
       start: new Date(e.start),
@@ -798,6 +804,18 @@ export function ScheduleView({ initial, nodes, anchorKey, blockNodeId = null }: 
       },
       ...dayCountCommands,
       anchorModeCommand,
+      {
+        id: "schedule.rail",
+        label: view.railOpen ? "Hide schedule pane" : "Show schedule pane",
+        group: "view",
+        menu: "view",
+        section: "Panels",
+        icon: "panel",
+        keywords: "mini calendar month projects rail sidebar",
+        title: "The mini calendar and the projects you can drag onto the week",
+        run: () =>
+          patchView((current) => ({ ...current, railOpen: !current.railOpen })),
+      },
     ],
     [
       dayCountCommands,
@@ -809,6 +827,8 @@ export function ScheduleView({ initial, nodes, anchorKey, blockNodeId = null }: 
       handleNewChart,
       handleSyncGoogle,
       navigateTo,
+      view.railOpen,
+      patchView,
     ],
   );
 
@@ -890,6 +910,7 @@ export function ScheduleView({ initial, nodes, anchorKey, blockNodeId = null }: 
       <div className="ml-auto flex items-center gap-1 md:hidden">
         <button
           type="button"
+          title="Previous day"
           aria-label="Previous day"
           className="min-h-tap rounded border border-rule bg-surface px-3 text-ink"
           onClick={() => stepDay(-1)}
@@ -901,6 +922,7 @@ export function ScheduleView({ initial, nodes, anchorKey, blockNodeId = null }: 
         </span>
         <button
           type="button"
+          title="Next day"
           aria-label="Next day"
           className="min-h-tap rounded border border-rule bg-surface px-3 text-ink"
           onClick={() => stepDay(1)}
@@ -912,6 +934,7 @@ export function ScheduleView({ initial, nodes, anchorKey, blockNodeId = null }: 
       <div className="ml-auto hidden items-center gap-1 md:flex">
         <button
           type="button"
+          title="Previous days"
           aria-label="Previous days"
           className="rounded border border-rule bg-surface px-2 py-1 text-ink hover:bg-surface-raised"
           onClick={() => stepRange(-1)}
@@ -921,6 +944,7 @@ export function ScheduleView({ initial, nodes, anchorKey, blockNodeId = null }: 
         <span className="min-w-[12rem] text-center tabular text-ink">{rangeLabel}</span>
         <button
           type="button"
+          title="Next days"
           aria-label="Next days"
           className="rounded border border-rule bg-surface px-2 py-1 text-ink hover:bg-surface-raised"
           onClick={() => stepRange(1)}
@@ -1035,18 +1059,22 @@ export function ScheduleView({ initial, nodes, anchorKey, blockNodeId = null }: 
         </div>
 
         {/* The mini-month and the drag-a-project-onto-the-week rail are both mouse surfaces,
-            and neither fits beside a day column. */}
-        <aside className="hidden w-56 flex-none flex-col border-l border-rule bg-shell md:flex">
-          <div className="border-b border-rule p-2">
-            <MiniMonth
-              month={rangeStart}
-              selected={rangeStart}
-              onSelectDay={(d) => navigateTo(d)}
-              onChangeMonth={(d) => navigateTo(d)}
-            />
-          </div>
-          {view.viewMode === "calendar" && <ProjectsRail nodes={nodes} />}
-        </aside>
+            and neither fits beside a day column. Toggle lives in View ▸ Panels so this
+            pane can close without trapping the user the way a missing commands-panel
+            command once did. */}
+        {view.railOpen && (
+          <aside className="hidden w-56 flex-none flex-col border-l border-rule bg-shell md:flex">
+            <div className="border-b border-rule p-2">
+              <MiniMonth
+                month={rangeStart}
+                selected={rangeStart}
+                onSelectDay={(d) => navigateTo(d)}
+                onChangeMonth={(d) => navigateTo(d)}
+              />
+            </div>
+            {view.viewMode === "calendar" && <ProjectsRail nodes={nodes} />}
+          </aside>
+        )}
       </div>
 
       <AppointmentDrawer

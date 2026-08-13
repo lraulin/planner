@@ -41,6 +41,11 @@ export type ScheduleViewSettings = {
   /** Whether the range starts on today or on the week boundary. */
   anchorMode: AnchorMode;
   viewMode: ScheduleViewMode;
+  /**
+   * The schedule-specific right pane (mini calendar + projects rail). Separate from the
+   * Commands panel, which is a shell setting — this one is only meaningful on `/schedule`.
+   */
+  railOpen: boolean;
   /** Projects rail: include finished work in the drag source. */
   railShowCompleted: boolean;
   railGroupByArea: boolean;
@@ -65,6 +70,7 @@ export const DEFAULT_SCHEDULE_VIEW: ScheduleViewSettings = {
    */
   anchorMode: "rolling",
   viewMode: "calendar",
+  railOpen: true,
   railShowCompleted: false,
   railGroupByArea: false,
   railShowTasks: false,
@@ -97,6 +103,7 @@ export function parseScheduleView(value: unknown): ScheduleViewSettings {
       SCHEDULE_VIEW_MODES,
       DEFAULT_SCHEDULE_VIEW.viewMode,
     ),
+    railOpen: asBoolean(record.railOpen, DEFAULT_SCHEDULE_VIEW.railOpen),
     railShowCompleted: asBoolean(
       record.railShowCompleted,
       DEFAULT_SCHEDULE_VIEW.railShowCompleted,

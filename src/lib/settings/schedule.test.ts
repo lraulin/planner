@@ -14,6 +14,7 @@ describe("parseScheduleView", () => {
       dayCount: 20,
       anchorMode: "aligned",
       viewMode: "agenda",
+      railOpen: false,
       railShowCompleted: true,
       railGroupByArea: false,
       railShowTasks: true,
@@ -37,9 +38,11 @@ describe("parseScheduleView", () => {
 
   it("keeps a rail switch turned off rather than reading false as absent", () => {
     const parsed = parseScheduleView({
+      railOpen: false,
       railShowCompleted: false,
       railShowTasks: true,
     });
+    expect(parsed.railOpen).toBe(false);
     expect(parsed.railShowCompleted).toBe(false);
     expect(parsed.railShowTasks).toBe(true);
   });
@@ -69,6 +72,7 @@ describe("parseScheduleView", () => {
     expect(parsed.dayCount).toBe(7);
     expect(parsed.anchorMode).toBe("rolling");
     expect(parsed.viewMode).toBe("calendar");
+    expect(parsed.railOpen).toBe(true);
   });
 
   it("refuses a day count that is not one of Achieve's", () => {

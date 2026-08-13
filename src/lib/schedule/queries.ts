@@ -15,7 +15,7 @@ import {
   expandTimeChartAreas,
   type Occurrence,
 } from "./recurrence";
-import { weekRange, type ScheduleRange } from "./range";
+import { serializeRange, weekRange, type ScheduleRange } from "./range";
 
 export async function listTimeCharts(userId: string) {
   return db
@@ -138,15 +138,16 @@ export type SchedulePayload = {
   backgroundEvents: ReturnType<typeof expandTimeChartAreas>;
   appointments: Awaited<ReturnType<typeof listAppointmentsInRange>>;
   occurrences: ScheduleOccurrence[];
-  /** First visible day, ISO. Named for the range because the calendar is not always a week. */
+  /** First visible day, `YYYY-MM-DD`. Named for the range because the calendar is not always a week. */
   rangeStart: string;
-  /** Exclusive end of the visible range, ISO. */
+  /** Exclusive end of the visible range, `YYYY-MM-DD`. */
   rangeEnd: string;
   /**
-   * The visible day columns as ISO instants (local midnights). Sent with the data rather
-   * than recomputed on the client so the grid can only ever draw days this payload covers —
+   * The visible day columns as `YYYY-MM-DD` keys. Sent with the data rather than
+   * recomputed on the client so the grid can only ever draw days this payload covers —
    * a client that derived them from settings would widen the moment you picked Twenty Days,
-   * before the twenty days had been loaded.
+   * before the twenty days had been loaded. Keys rather than ISO instants so a UTC server
+   * cannot shift the first column back a day (FullCalendar then draws an extra one).
    */
   days: string[];
   /** Outcome of the Google mirror pass; drives the toolbar banner. */
@@ -259,6 +260,7 @@ export async function loadSchedule(
       };
     });
 
+  const keys = serializeRange(range);
   return {
     charts,
     selectedChartId,
@@ -266,9 +268,9 @@ export async function loadSchedule(
     backgroundEvents,
     appointments: appts,
     occurrences,
-    rangeStart: rangeStart.toISOString(),
-    rangeEnd: rangeEnd.toISOString(),
-    days: range.days.map((day) => day.toISOString()),
+    rangeStart: keys.start,
+    rangeEnd: keys.end,
+    days: keys.days,
     sync,
   };
 }

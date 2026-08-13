@@ -14,7 +14,7 @@ import type {
 import type { AppointmentCheck } from "@/db/schema";
 import type { Occurrence } from "@/lib/schedule/recurrence";
 import type { ScheduleOccurrence } from "@/lib/schedule/queries";
-import { contrastText } from "@/lib/schedule/geometry";
+import { contrastText, localDateKey } from "@/lib/schedule/geometry";
 import { calendarTargetFrom, type CalendarTarget } from "@/lib/schedule/calendarTarget";
 import {
   checkStateLabel,
@@ -220,8 +220,8 @@ export function WeekCalendar({
         views={{ plannerRange: { type: "timeGrid" } }}
         visibleRange={
           singleDay
-            ? { start: singleDay, end: nextDay(singleDay) }
-            : { start: rangeStart, end: rangeEnd }
+            ? { start: localDateKey(singleDay), end: localDateKey(nextDay(singleDay)) }
+            : { start: localDateKey(rangeStart), end: localDateKey(rangeEnd) }
         }
         headerToolbar={false}
         height="100%"

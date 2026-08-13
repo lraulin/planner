@@ -6,6 +6,7 @@ import {
   isAnchorMode,
   isDayCount,
   scheduleRange,
+  serializeRange,
   stepAnchor,
   weekRange,
   type DayCount,
@@ -240,6 +241,35 @@ describe("weekRange / dayRange", () => {
     const range = dayRange(SUNDAY);
     expect(keys(range.days)).toEqual(["2026-08-09"]);
     expect(localDateKey(range.end)).toBe("2026-08-10");
+  });
+});
+
+describe("serializeRange", () => {
+  it("writes day keys, not ISO instants that shift in another zone", () => {
+    // The plausible mistake: `range.start.toISOString()`. Local midnight in New York is
+    // 04:00Z, which is still the 12th — but the same Date built as UTC midnight on a
+    // Vercel function is 00:00Z, which is the 11th at 20:00 Eastern. FullCalendar then
+    // draws yesterday as an extra column. Keys cannot do that.
+    const range = scheduleRange(WEDNESDAY, opts({ dayCount: 7 }));
+    const serialized = serializeRange(range);
+    expect(serialized.days).toEqual([
+      "2026-08-12",
+      "2026-08-13",
+      "2026-08-14",
+      "2026-08-15",
+      "2026-08-16",
+      "2026-08-17",
+      "2026-08-18",
+    ]);
+    expect(serialized.start).toBe("2026-08-12");
+    expect(serialized.end).toBe("2026-08-19");
+    expect(serialized.days).toHaveLength(7);
+  });
+
+  it("keeps a one-day range as today only", () => {
+    const serialized = serializeRange(scheduleRange(WEDNESDAY, opts({ dayCount: 1 })));
+    expect(serialized.days).toEqual(["2026-08-12"]);
+    expect(serialized.end).toBe("2026-08-13");
   });
 });
 

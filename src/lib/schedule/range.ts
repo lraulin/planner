@@ -14,7 +14,7 @@
  * land on the wrong calendar day).
  */
 
-import { startOfWeek, WEEKDAYS_ONLY } from "./geometry";
+import { localDateKey, startOfWeek, WEEKDAYS_ONLY } from "./geometry";
 
 /** Achieve's list, whole. `docs/achieve-planner/online-help.md:1634-1653`. */
 export const DAY_COUNTS = [1, 3, 5, 7, 10, 20] as const;
@@ -140,6 +140,25 @@ export function weekRange(anchor: Date, weekStartsOn = 0): ScheduleRange {
 /** A single calendar day, for the Day tab. */
 export function dayRange(day: Date): ScheduleRange {
   return scheduleRange(day, { dayCount: 1, anchorMode: "rolling", workWeek: false });
+}
+
+/**
+ * The range as calendar-day keys, for the wire and for FullCalendar's `visibleRange`.
+ *
+ * Local-midnight `Date`s become the wrong day once they cross a timezone as ISO instants:
+ * a UTC server's `2026-08-12T00:00:00.000Z` is the evening of the 11th in New York, and
+ * FullCalendar then draws an extra column. Keys are labels; they cannot shift.
+ */
+export function serializeRange(range: ScheduleRange): {
+  start: string;
+  end: string;
+  days: string[];
+} {
+  return {
+    start: localDateKey(range.start),
+    end: localDateKey(range.end),
+    days: range.days.map(localDateKey),
+  };
 }
 
 /** Local midnight of a date's own calendar day. Same idiom as `startOfWeek`. */
