@@ -1,7 +1,8 @@
 import { getCurrentUserId } from "@/lib/auth";
+import { appointmentsForDay } from "@/lib/day/appointments";
 import { loadDay } from "@/lib/day/queries";
 import { loadSchedule } from "@/lib/schedule/queries";
-import { fromDateKey, localDateKey, toDateKey } from "@/lib/schedule/geometry";
+import { fromDateKey, localDateKey } from "@/lib/schedule/geometry";
 import { weekRange } from "@/lib/schedule/range";
 import { AppShell } from "@/components/shell/AppShell";
 import { DayView } from "@/components/day/DayView";
@@ -22,22 +23,13 @@ export default async function DayPage({
   const day = params.date ?? today;
 
   // The schedule query works a week at a time; the day's appointments are filtered out of
-  // it client-side rather than adding a second query path for one day.
+  // it rather than adding a second query path for one day.
   const [payload, schedule] = await Promise.all([
     loadDay(userId, day, today),
     loadSchedule(userId, { range: weekRange(fromDateKey(day)) }),
   ]);
 
-  const appointments = schedule.occurrences
-    .filter((occurrence) => toDateKey(occurrence.startAt) === day)
-    .map((occurrence) => ({
-      id: occurrence.occurrenceKey,
-      subject: occurrence.subject,
-      startAt: occurrence.startAt,
-      endAt: occurrence.endAt,
-      allDay: occurrence.allDay,
-      checkState: occurrence.checkState,
-    }));
+  const appointments = appointmentsForDay(schedule.occurrences, day);
 
   return (
     <AppShell active="day">

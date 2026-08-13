@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import type { AppointmentCheck } from "@/db/schema";
+import type { DayAppointment } from "@/lib/day/appointments";
+
+export type { DayAppointment };
 
 /**
  * The day's appointments, read-only.
@@ -11,15 +13,6 @@ import type { AppointmentCheck } from "@/db/schema";
  * calendar here would mean two places to drag a block to and two ways for them to disagree.
  * Editing goes to the Schedule tab.
  */
-
-export type DayAppointment = {
-  id: string;
-  subject: string;
-  startAt: Date;
-  endAt: Date;
-  allDay: boolean;
-  checkState: AppointmentCheck;
-};
 
 function timeLabel(date: Date): string {
   return date
