@@ -1,6 +1,7 @@
 import { isSettled } from "./completionCascade";
 import { laterShelf, ownShelf, type Shelf } from "./shelving";
 import type { OutlineNode, OutlineRow } from "./types";
+import { walkUp } from "./walkUp";
 
 /**
  * Computes everything the outline shows that is not stored: inherited priority (L.A.P.),
@@ -9,7 +10,8 @@ import type { OutlineNode, OutlineRow } from "./types";
  * Kept free of database access so it can be tested directly.
  *
  * `rows` must arrive in depth-first order, parents before their children — which is what
- * ordering by the accumulated sort-key path produces.
+ * ordering by the accumulated sort-key path produces. Inherited walks go through `walkUp`
+ * so a parent cycle (corrupt import) costs a truncated answer rather than a hung tab.
  */
 export function derive(rows: OutlineRow[]): OutlineNode[] {
   const byId = new Map<string, OutlineRow>();
@@ -38,13 +40,16 @@ export function derive(rows: OutlineRow[]): OutlineNode[] {
     const cached = lapCache.get(id);
     if (cached) return cached;
 
-    const row = byId.get(id)!;
-    const result =
-      row.priorityLetter !== null
-        ? { letter: row.priorityLetter, rank: row.priorityRank }
-        : row.parentId && byId.has(row.parentId)
-          ? lapFor(row.parentId)
-          : { letter: null, rank: null };
+    let result: { letter: OutlineRow["priorityLetter"]; rank: number | null } = {
+      letter: null,
+      rank: null,
+    };
+    for (const cur of walkUp(byId.get(id), byId)) {
+      if (cur.priorityLetter !== null) {
+        result = { letter: cur.priorityLetter, rank: cur.priorityRank };
+        break;
+      }
+    }
 
     lapCache.set(id, result);
     return result;
@@ -57,13 +62,13 @@ export function derive(rows: OutlineRow[]): OutlineNode[] {
     const cached = resultAreaNameCache.get(id);
     if (cached !== undefined) return cached;
 
-    const row = byId.get(id)!;
-    const result =
-      row.type === "result_area"
-        ? row.name.trim() || null
-        : row.parentId && byId.has(row.parentId)
-          ? resultAreaNameFor(row.parentId)
-          : null;
+    let result: string | null = null;
+    for (const cur of walkUp(byId.get(id), byId)) {
+      if (cur.type === "result_area") {
+        result = cur.name.trim() || null;
+        break;
+      }
+    }
 
     resultAreaNameCache.set(id, result);
     return result;
@@ -82,13 +87,16 @@ export function derive(rows: OutlineRow[]): OutlineNode[] {
     const cached = projectPriorityCache.get(id);
     if (cached) return cached;
 
-    const row = byId.get(id)!;
-    const result =
-      row.type === "project"
-        ? { letter: row.priorityLetter, rank: row.priorityRank }
-        : row.parentId && byId.has(row.parentId)
-          ? projectPriorityFor(row.parentId)
-          : { letter: null, rank: null };
+    let result: { letter: OutlineRow["priorityLetter"]; rank: number | null } = {
+      letter: null,
+      rank: null,
+    };
+    for (const cur of walkUp(byId.get(id), byId)) {
+      if (cur.type === "project") {
+        result = { letter: cur.priorityLetter, rank: cur.priorityRank };
+        break;
+      }
+    }
 
     projectPriorityCache.set(id, result);
     return result;
@@ -106,13 +114,14 @@ export function derive(rows: OutlineRow[]): OutlineNode[] {
     const cached = categoryCache.get(id);
     if (cached !== undefined) return cached;
 
-    const row = byId.get(id)!;
-    const own = row.category?.trim();
-    const result = own
-      ? own
-      : row.parentId && byId.has(row.parentId)
-        ? categoryFor(row.parentId)
-        : null;
+    let result: string | null = null;
+    for (const cur of walkUp(byId.get(id), byId)) {
+      const own = cur.category?.trim();
+      if (own) {
+        result = own;
+        break;
+      }
+    }
 
     categoryCache.set(id, result);
     return result;
@@ -129,10 +138,13 @@ export function derive(rows: OutlineRow[]): OutlineNode[] {
     const cached = shelfCache.get(id);
     if (cached !== undefined) return cached;
 
-    const row = byId.get(id)!;
-    const inherited =
-      row.parentId && byId.has(row.parentId) ? shelfFor(row.parentId) : null;
-    const result = laterShelf(ownShelf(row), inherited);
+    // Fold root → leaf so laterShelf(own, inherited) keeps the same winner as the
+    // recursive walk. walkUp is nearest-first, so reverse it.
+    let result: Shelf | null = null;
+    const chain = [...walkUp(byId.get(id), byId)];
+    for (let i = chain.length - 1; i >= 0; i--) {
+      result = laterShelf(ownShelf(chain[i]), result);
+    }
 
     shelfCache.set(id, result);
     return result;
@@ -171,7 +183,10 @@ export function derive(rows: OutlineRow[]): OutlineNode[] {
     let weighted = 0;
 
     for (const childId of children) {
-      const child = rollups.get(childId)!;
+      // A cycle or a child that has not been visited yet has no rollup. Skip it
+      // rather than treating the missing bag as zero effort.
+      const child = rollups.get(childId);
+      if (!child) continue;
       if (child.effort !== null) effort = (effort ?? 0) + child.effort;
       if (child.effortLeft !== null) effortLeft = (effortLeft ?? 0) + child.effortLeft;
       actual += child.actual;

@@ -298,3 +298,26 @@ describe("derive — effectiveCategory", () => {
     expect(nodes.map((n) => n.effectiveCategory)).toEqual(["Personal", "Personal"]);
   });
 });
+
+describe("derive — broken parent pointers", () => {
+  it("does not hang when parent pointers form a cycle", () => {
+    // walkUp already refuses to loop. derive's inherited walks used to recurse on
+    // parentId and would blow the stack on the same corruption.
+    const nodes = derive([
+      row({ id: "a", type: "task", parentId: "b", priorityLetter: "A" }),
+      row({ id: "b", type: "task", parentId: "a" }),
+    ]);
+    expect(nodes).toHaveLength(2);
+    expect(nodes.find((n) => n.id === "a")?.lapLetter).toBe("A");
+    expect(nodes.find((n) => n.id === "b")?.lapLetter).toBe("A");
+  });
+
+  it("treats a missing parent as the top of the chain", () => {
+    const [node] = derive([
+      row({ id: "orphan", type: "task", parentId: "gone", priorityLetter: "B" }),
+    ]);
+    expect(node.lapLetter).toBe("B");
+    expect(node.resultAreaName).toBeNull();
+    expect(node.effectiveCategory).toBeNull();
+  });
+});
