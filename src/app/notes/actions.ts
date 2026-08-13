@@ -3,6 +3,7 @@
 import * as notes from "@/lib/notes/mutations";
 import type { NoteInput } from "@/lib/notes/mutations";
 import type { NoteFilter } from "@/lib/notes/filter";
+import { saveJournal } from "@/lib/day/mutations";
 import {
   loadNote,
   loadNoteIdsMatchingFilter,
@@ -94,6 +95,26 @@ export async function moveNoteVerticallyAction(
 /** Full body for the drawer / deep-link — list rows never carry Markdown. */
 export async function getNoteAction(id: string): Promise<QueryResult<NoteNode | null>> {
   return runQuery((userId) => loadNote(userId, id));
+}
+
+/**
+ * Create-on-type Journal persist. No route refresh — the diary tree patches from the
+ * returned summary. Empty body is a no-op and returns no data.
+ */
+export async function saveJournalNoteAction(
+  day: string,
+  body: string,
+): Promise<DataActionResult<NoteSummary>> {
+  return runWithData(
+    async (userId) => {
+      const id = await saveJournal(userId, day, body);
+      if (!id) return null;
+      const summary = await loadNoteSummary(userId, id);
+      if (!summary) throw new Error("Note not found.");
+      return summary;
+    },
+    { revalidate: [] },
+  );
 }
 
 /**

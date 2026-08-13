@@ -15,7 +15,9 @@ import {
   setNoteCollapsed,
   updateNote,
 } from "./mutations";
-import { loadNotes, loadNotesForNode } from "./queries";
+import { saveJournal } from "@/lib/day/mutations";
+import { JOURNAL_SUBJECT } from "@/lib/day/types";
+import { loadDiarySummaries, loadNotes, loadNotesForNode } from "./queries";
 
 /**
  * Integration tests against the local Postgres (`npm run db:up`), following the harness in
@@ -432,5 +434,13 @@ describeDb("user isolation", () => {
 
     expect(await loadNotesForNode(intruder, nodeId)).toEqual([]);
     expect(await loadNotesForNode(owner, nodeId)).toHaveLength(1);
+  });
+
+  it("does not list one user's journal in the other's diary summaries", async () => {
+    await saveJournal(owner, "2026-08-01", "Private thoughts.");
+    expect(await loadDiarySummaries(intruder)).toEqual([]);
+    const mine = await loadDiarySummaries(owner);
+    expect(mine).toHaveLength(1);
+    expect(mine[0]?.subject).toBe(JOURNAL_SUBJECT);
   });
 });

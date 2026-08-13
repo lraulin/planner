@@ -65,6 +65,11 @@ The core Achieve Planner loop — plan the week, block the time, work the outlin
   optional link to a node with reverse surface on the node drawer; markdown editor reused
   on long-form node-form fields. Deferred: always-present preview panel, cross-cutting
   search, wiki links, attachments, export.
+- **✅ Notes journal presentation.** `specs/2026-08-12-2145-notes-journal-presentation`.
+  Notes gains a Grid \| Journal switch (same idea as Schedule Calendar \| Agenda). Journal
+  is The Journal’s calendar + real Year → Month → entry tree + write pane over existing
+  `subject = "Journal"` and `Rednotebook` notes. Empty days write nothing; first
+  non-whitespace creates the Day-pane journal row. Not a new module and not a saved View.
 - **✅ Persistent UI state + unified grid controls.**
   `specs/2026-07-31-1520-persistent-ui-state`. View state (filters, sort, column set /
   order / widths, group collapse, sub-view, Outline type filters, Notes mode/filter,

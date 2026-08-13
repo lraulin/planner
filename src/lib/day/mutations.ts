@@ -452,17 +452,18 @@ export async function forwardOpenItems(
 }
 
 /**
- * Write the day's journal entry, creating the note on first keystroke.
+ * Write the day's journal entry, creating the note on first non-empty persist.
  *
  * A journal entry is an ordinary row in `notes` — same table, same markdown editor, same
  * tree — distinguished only by `subject = "Journal"` and its `noteDate`. Flat at the notes
- * root (no year/month folder scaffolding).
+ * root (no year/month folder scaffolding). Whitespace-only does not insert; it may update
+ * an existing row. Returns null when nothing was written.
  */
 export async function saveJournal(
   userId: string,
   day: string,
   body: string,
-): Promise<string> {
+): Promise<string | null> {
   return db.transaction(async (tx) => {
     const [existing] = await tx
       .select({ id: notes.id })
@@ -485,6 +486,9 @@ export async function saveJournal(
       return existing.id;
     }
 
+    // An empty box is not an entry. Whitespace-only must not mint a day.
+    if (body.trim() === "") return null;
+
     const [last] = await tx
       .select({ sortKey: notes.sortKey })
       .from(notes)
@@ -505,6 +509,7 @@ export async function saveJournal(
       })
       .returning({ id: notes.id });
 
+    if (!created) throw new Error("Note not found.");
     return created.id;
   });
 }

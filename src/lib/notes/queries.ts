@@ -1,10 +1,11 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { notes } from "@/db/schema";
 import { deriveNotes } from "./derive";
 import { filterRequiresBody, notePassesFilter, type NoteFilter } from "./filter";
 import { noteSnippet } from "./snippet";
 import type { NoteNode, NoteRow, NoteSummary } from "./types";
+import { DIARY_SUBJECTS, type DiarySummary } from "./diaryTree";
 
 /**
  * Loads a user's whole note tree in one round trip.
@@ -121,6 +122,37 @@ export async function loadNotesListPayload(
       .filter((note) => notePassesFilter(note, filter))
       .map((note) => note.id),
   };
+}
+
+/**
+ * Journal + Rednotebook notes only, list-shaped. Bodies never leave this function —
+ * the diary tree only needs a snippet and a date.
+ */
+export async function loadDiarySummaries(userId: string): Promise<DiarySummary[]> {
+  const rows = await db
+    .select({
+      id: notes.id,
+      subject: notes.subject,
+      body: notes.body,
+      noteDate: notes.noteDate,
+      createdAt: notes.createdAt,
+    })
+    .from(notes)
+    .where(
+      and(
+        eq(notes.userId, userId),
+        inArray(notes.subject, [...DIARY_SUBJECTS]),
+        isNotNull(notes.noteDate),
+      ),
+    );
+
+  return rows.map((row) => ({
+    id: row.id,
+    subject: row.subject,
+    snippet: noteSnippet(row.body),
+    noteDate: row.noteDate,
+    createdAt: row.createdAt,
+  }));
 }
 
 /** Summary fields after a successful autosave — patch the list without a route refresh. */

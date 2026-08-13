@@ -14,17 +14,25 @@ import { SETTINGS_VERSION } from "./scopes";
 const MODES: readonly NotesMode[] = ["nested", "flat"];
 const SORTS: readonly NotesSort[] = ["manual", "title", "date"];
 const MATCH_MODES: readonly MatchMode[] = ["all", "any"];
+export const NOTES_PRESENTATIONS = ["grid", "journal"] as const;
+export type NotesPresentation = (typeof NOTES_PRESENTATIONS)[number];
 
 export type NotesViewSettings = {
   mode: NotesMode;
   sort: NotesSort;
   filter: NoteFilter;
+  /**
+   * Grid vs Journal layout of the Notes module. Stored on the module default scope
+   * (`notes:filter`), not on a saved View — it is a presentation, not a filter collection.
+   */
+  presentation: NotesPresentation;
 };
 
 export const DEFAULT_NOTES_VIEW: NotesViewSettings = {
   mode: "nested",
   sort: "manual",
   filter: EMPTY_NOTE_FILTER,
+  presentation: "grid",
 };
 
 export function parseNotesView(value: unknown): NotesViewSettings {
@@ -35,6 +43,11 @@ export function parseNotesView(value: unknown): NotesViewSettings {
     mode: asOneOf(record.mode, MODES, DEFAULT_NOTES_VIEW.mode),
     sort: asOneOf(record.sort, SORTS, DEFAULT_NOTES_VIEW.sort),
     filter: parseNoteFilter(record.filter),
+    presentation: asOneOf(
+      record.presentation,
+      NOTES_PRESENTATIONS,
+      DEFAULT_NOTES_VIEW.presentation,
+    ),
   };
 }
 

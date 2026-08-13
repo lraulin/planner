@@ -92,6 +92,18 @@ export function useViewStateUrl() {
     [navigate],
   );
 
+  /** Calendar day. `replace` — flipping days is not a place you came from. */
+  const setDate = useCallback(
+    (date: string | null) => navigate({ date }, "replace"),
+    [navigate],
+  );
+
+  /** One replace so date and note cannot race and drop each other. */
+  const replaceViewState = useCallback(
+    (patch: ViewStatePatch) => navigate(patch, "replace"),
+    [navigate],
+  );
+
   return {
     detail: state.detail,
     view: state.view,
@@ -99,11 +111,14 @@ export function useViewStateUrl() {
     mode: state.mode,
     zoom: state.zoom,
     scope: state.scope,
+    date: state.date,
     setDetail,
     setView,
     setNote,
     setMode,
     setZoom,
     setScope,
+    setDate,
+    replaceViewState,
   };
 }

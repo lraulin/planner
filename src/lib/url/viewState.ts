@@ -6,6 +6,7 @@
  *   ?view=<viewId>     the selected view, built-in or saved (every module with a picker)
  *   ?mode=<modeId>     a module's own display mode (Notes nested/flat)
  *   ?scope=<nodeId>    narrow a list tab to one branch (Tasks, Projects, Goals)
+ *   ?date=YYYY-MM-DD   selected calendar day (Notes journal, Day)
  *
  * `?view=` used to double as the Notes nested/flat mode, which stopped being tenable once
  * Notes gained real views: one param cannot name both which view you are on and how that view
@@ -29,6 +30,7 @@ export const ZOOM_PARAM = "zoom";
  * navigation rather than one grid reaching into another one's internals.
  */
 export const SCOPE_PARAM = "scope";
+export const DATE_PARAM = "date";
 
 export type ViewStatePatch = {
   /** `null` clears the param; `undefined` leaves it alone. */
@@ -38,6 +40,7 @@ export type ViewStatePatch = {
   mode?: string | null;
   zoom?: string | null;
   scope?: string | null;
+  date?: string | null;
 };
 
 export type ViewState = {
@@ -47,6 +50,7 @@ export type ViewState = {
   mode: string | null;
   zoom: string | null;
   scope: string | null;
+  date: string | null;
 };
 
 /**
@@ -66,6 +70,28 @@ export function asRecordId(value: unknown): string | null {
  * Sub-view ids are ours (`active-status`, `nested`). Same shape as settings scope keys —
  * lower-case, no spaces — so a hand-edited URL cannot smuggle anything surprising.
  */
+/**
+ * A calendar-day key. Rejects the wrong shape and dates that do not exist (Feb 31),
+ * because a bad `?date=` must not become an invalid Date that later math walks forever.
+ */
+export function asDateKey(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const encoded = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+  if (
+    encoded.getUTCFullYear() !== year ||
+    encoded.getUTCMonth() + 1 !== month ||
+    encoded.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return value;
+}
+
 export function asViewId(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
@@ -90,6 +116,7 @@ export function readViewState(params: URLSearchParams): ViewState {
     mode: asViewId(firstParam(params, MODE_PARAM)),
     zoom: asRecordId(firstParam(params, ZOOM_PARAM)),
     scope: asRecordId(firstParam(params, SCOPE_PARAM)),
+    date: asDateKey(firstParam(params, DATE_PARAM)),
   };
 }
 
@@ -155,6 +182,12 @@ export function writeViewState(
     else next.delete(SCOPE_PARAM);
   }
 
+  if (patch.date !== undefined) {
+    const key = asDateKey(patch.date);
+    if (key) next.set(DATE_PARAM, key);
+    else next.delete(DATE_PARAM);
+  }
+
   return next;
 }
 
@@ -175,6 +208,14 @@ export function hrefWithViewState(
 /** Convenience for deep-links into Notes (e.g. a node's Linked Notes panel). */
 export function notesPath(noteId?: string | null): string {
   return hrefWithViewState("/notes", new URLSearchParams(), {
+    note: noteId ?? null,
+  });
+}
+
+/** Notes journal presentation on a calendar day. */
+export function notesJournalPath(dateKey: string, noteId?: string | null): string {
+  return hrefWithViewState("/notes", new URLSearchParams(), {
+    date: dateKey,
     note: noteId ?? null,
   });
 }

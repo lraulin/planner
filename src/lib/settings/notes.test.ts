@@ -13,6 +13,7 @@ describe("parseNotesView", () => {
     const settings = {
       mode: "flat" as const,
       sort: "title" as const,
+      presentation: "journal" as const,
       filter: {
         ...EMPTY_NOTE_FILTER,
         search: "health",
@@ -27,6 +28,12 @@ describe("parseNotesView", () => {
     const parsed = parseNotesView({ mode: "tree", sort: "flag" });
     expect(parsed.mode).toBe("nested");
     expect(parsed.sort).toBe("manual");
+  });
+
+  it("defaults presentation to grid and drops unknown values", () => {
+    expect(parseNotesView({}).presentation).toBe("grid");
+    expect(parseNotesView({ presentation: "diary" }).presentation).toBe("grid");
+    expect(parseNotesView({ presentation: "journal" }).presentation).toBe("journal");
   });
 
   it("honours an explicitly empty subject list", () => {

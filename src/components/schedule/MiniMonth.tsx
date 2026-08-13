@@ -7,15 +7,30 @@ type Props = {
   selected: Date;
   onSelectDay: (d: Date) => void;
   onChangeMonth: (d: Date) => void;
+  /** Calendar-day keys (`YYYY-MM-DD`) that have a diary entry. */
+  markedDays?: ReadonlySet<string>;
+  /** When set, used instead of `toDateKey(selected)` so callers can pass a date key. */
+  selectedKey?: string;
 };
 
-export function MiniMonth({ month, selected, onSelectDay, onChangeMonth }: Props) {
+function cellDateKey(year: number, monthIndex: number, day: number): string {
+  return `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+export function MiniMonth({
+  month,
+  selected,
+  onSelectDay,
+  onChangeMonth,
+  markedDays,
+  selectedKey: selectedKeyProp,
+}: Props) {
   const year = month.getFullYear();
   const mon = month.getMonth();
   const first = new Date(year, mon, 1);
   const startPad = first.getDay();
   const daysInMonth = new Date(year, mon + 1, 0).getDate();
-  const selectedKey = toDateKey(selected);
+  const selectedKey = selectedKeyProp ?? toDateKey(selected);
   const todayKey = localDateKey(new Date());
 
   const cells: Array<{ day: number | null; date: Date | null }> = [];
@@ -59,16 +74,17 @@ export function MiniMonth({ month, selected, onSelectDay, onChangeMonth }: Props
           if (!c.date || c.day == null) {
             return <div key={`e-${i}`} />;
           }
-          const key = toDateKey(c.date);
+          const key = cellDateKey(year, mon, c.day);
           const isSelected = key === selectedKey;
           const isToday = key === todayKey;
+          const isMarked = markedDays?.has(key) ?? false;
           return (
             <button
               key={key}
               type="button"
               onClick={() => onSelectDay(c.date!)}
               className={[
-                "rounded py-0.5 tabular",
+                "relative rounded py-0.5 tabular",
                 isSelected
                   ? "bg-select-edge text-white"
                   : isToday
@@ -77,6 +93,15 @@ export function MiniMonth({ month, selected, onSelectDay, onChangeMonth }: Props
               ].join(" ")}
             >
               {c.day}
+              {isMarked && (
+                <span
+                  aria-hidden
+                  className={[
+                    "absolute bottom-0 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full",
+                    isSelected ? "bg-white" : "bg-select-edge",
+                  ].join(" ")}
+                />
+              )}
             </button>
           );
         })}

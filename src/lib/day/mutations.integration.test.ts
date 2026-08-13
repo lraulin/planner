@@ -870,6 +870,18 @@ describeDb("week view and journal", () => {
     expect(day.journal).toMatchObject({ id, body: "Rough start. Better by lunch." });
   });
 
+  it("does not insert a blank or whitespace-only journal", async () => {
+    expect(await saveJournal(userId, MON, "")).toBeNull();
+    expect(await saveJournal(userId, MON, "   \n\t")).toBeNull();
+    expect((await loadDay(userId, MON, WED)).journal).toBeNull();
+  });
+
+  it("lets an existing journal be cleared without deleting the row", async () => {
+    const id = await saveJournal(userId, MON, "Something.");
+    expect(await saveJournal(userId, MON, "")).toBe(id);
+    expect((await loadDay(userId, MON, WED)).journal).toMatchObject({ id, body: "" });
+  });
+
   it("keeps journal entries separate per day", async () => {
     await saveJournal(userId, MON, "Monday");
     await saveJournal(userId, TUE, "Tuesday");

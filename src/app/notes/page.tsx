@@ -1,13 +1,17 @@
 import { Suspense } from "react";
 import { getCurrentUserId } from "@/lib/auth";
-import { loadNotesListPayload, loadNote } from "@/lib/notes/queries";
+import {
+  loadDiarySummaries,
+  loadNotesListPayload,
+  loadNote,
+} from "@/lib/notes/queries";
 import { loadOutline } from "@/lib/tree/queries";
 import { loadContactOptions } from "@/lib/contacts/queries";
 import { loadSettingsForSession } from "@/lib/settings/session";
 import { parseNotesView } from "@/lib/settings/notes";
 import { NOTES_FILTER_SCOPE } from "@/lib/settings/scopes";
 import { AppShell } from "@/components/shell/AppShell";
-import { NotesGrid } from "@/components/notes/NotesGrid";
+import { NotesModule } from "@/components/notes/NotesModule";
 
 export const dynamic = "force-dynamic";
 
@@ -27,8 +31,9 @@ export default async function NotesPage({
   const savedFilter = parseNotesView(settings[NOTES_FILTER_SCOPE]).filter;
 
   // The outline is loaded for the link picker, not for the grid.
-  const [list, nodes, contacts, openNote] = await Promise.all([
+  const [list, diarySummaries, nodes, contacts, openNote] = await Promise.all([
     loadNotesListPayload(userId, savedFilter),
+    loadDiarySummaries(userId),
     loadOutline(userId),
     loadContactOptions(userId),
     params.note ? loadNote(userId, params.note) : Promise.resolve(null),
@@ -38,10 +43,11 @@ export default async function NotesPage({
     <AppShell active="notes">
       {/* useSearchParams (via useViewStateUrl) needs a Suspense boundary. */}
       <Suspense fallback={<div className="min-h-0 flex-1" />}>
-        <NotesGrid
+        <NotesModule
           initialNotes={list.summaries}
           initialBodyMatchIds={list.bodyMatchIds}
           initialOpenNote={openNote}
+          diarySummaries={diarySummaries}
           nodes={nodes}
           contacts={contacts}
         />

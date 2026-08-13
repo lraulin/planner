@@ -42,7 +42,10 @@ export function DailyNotesPane({
         <h2 className="text-[0.75rem] font-semibold tracking-wide text-ink-muted uppercase">
           Daily Notes
         </h2>
-        <Link href="/notes" className="text-[0.6875rem] text-ink-faint hover:text-ink">
+        <Link
+          href={`/notes?date=${day}`}
+          className="text-[0.6875rem] text-ink-faint hover:text-ink"
+        >
           Journal
         </Link>
       </header>

@@ -48,6 +48,7 @@ describe("readViewState", () => {
       mode: null,
       zoom: null,
       scope: null,
+      date: null,
     });
   });
 
@@ -59,6 +60,7 @@ describe("readViewState", () => {
       mode: "flat",
       zoom: "node-1",
       scope: "project-3",
+      date: "2026-08-01",
     });
     expect(readViewState(written)).toEqual({
       detail: "node-1",
@@ -67,7 +69,12 @@ describe("readViewState", () => {
       mode: "flat",
       zoom: "node-1",
       scope: "project-3",
+      date: "2026-08-01",
     });
+  });
+
+  it("rejects a date that does not exist", () => {
+    expect(readViewState(new URLSearchParams("date=2026-02-31")).date).toBeNull();
   });
 
   it("round-trips a scope, and clears it on an empty string", () => {
@@ -124,6 +131,7 @@ describe("readViewState", () => {
       mode: null,
       zoom: null,
       scope: null,
+      date: null,
     });
   });
 

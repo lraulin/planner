@@ -10,7 +10,7 @@ import { createNodeItem, saveNodeDetail } from "@/lib/detail/mutations";
 import { loadNodeDetail } from "@/lib/detail/queries";
 import { loadWishList } from "@/lib/detail/wishQueries";
 import { createNote } from "@/lib/notes/mutations";
-import { loadNotes, loadNotesForNode } from "@/lib/notes/queries";
+import { loadDiarySummaries, loadNotes, loadNotesForNode } from "@/lib/notes/queries";
 import { createMetric, createMetricEntry } from "@/lib/metrics/mutations";
 import {
   getMetricDetail,
@@ -310,6 +310,7 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect(await loadNotes(intruder)).toEqual([]);
     // Reachable by id from a shared link, so it must refuse by user and not only by parent.
     expect(await loadNotesForNode(intruder, owner.taskId)).toEqual([]);
+    expect(await loadDiarySummaries(intruder)).toEqual([]);
   });
 
   it("the wish list, which reads node_items directly", async () => {
