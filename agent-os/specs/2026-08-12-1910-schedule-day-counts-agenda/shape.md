@@ -1,6 +1,6 @@
 # Schedule Day Counts & Agenda View — Shaping Notes
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-12)  
 Authoritative detail: `plan.md` (including **Changes from original plan**).
 
 ## Scope

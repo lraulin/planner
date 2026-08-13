@@ -332,6 +332,28 @@ View · Tools`) with an icon gutter and shortcut column; an **icon row** for the
   unification later shipped in `specs/2026-08-09-1956-settings-workspace-date-format`: module,
   grid, and named-view preferences share one grouped reset surface while saved-view settings
   remain protected from bulk reset. Deferred: capturing sort and density.
+- **✅ Schedule day counts + agenda mode.**
+  `specs/2026-08-12-1910-schedule-day-counts-agenda`. The Weekly Schedule stopped being a
+  week: Achieve's **One / Three / Five / Seven / Ten / Twenty Days** widths from its View
+  menu, on the calendar's right-click and in the menu bar behind `Days ▸`. Two departures
+  from Achieve, both deliberate. The range **starts on today** by default and rolls forward,
+  with `Align to the week` restoring the Sunday-anchored view exactly — the docs never state
+  an anchor rule for the non-seven widths, and a schedule whose left-hand third is already
+  spent is one you read around. And a second mode, **Agenda**: the same days as a `DataGrid`
+  with Date, Time, Subject, Project, status and **Days left**, which no time grid can show.
+  Achieve had no appointments grid at all; this follows Google Calendar's Schedule view.
+
+  Underneath, the day count counts **visible columns** — Work Week Mode's "Five Days" is
+  Monday to Friday, not Sunday to Thursday with two missing — and one pure function
+  (`lib/schedule/range.ts`) answers "which days" for the server loader and the calendar
+  alike, because two implementations of that would eventually draw a column nothing was
+  loaded for. The Google mirror now syncs a **canonical window** (whole weeks, four minimum)
+  rather than the visible range: freshness is time-based only, so a window that shrank with
+  the day count would report itself fresh over days it never fetched. `?week=` became
+  `?start=`. Supersedes the base calendar spec's "month/day primary views" exclusion, narrowly
+  — month and year views stay out. Deferred: agenda rows for deadline-bearing tasks, and
+  window-aware sync staleness (pre-existing).
+
 - Any remaining Achieve chrome that earns its keep.
 - **Pomodoro → time tracking.** Effort, Effort Left, Actual Effort, and % complete
   already live on tasks (and roll up); what’s missing is a way to _earn_ those numbers

@@ -1,6 +1,6 @@
 # Schedule day counts + agenda view
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-12)  
 Spec folder: `agent-os/specs/2026-08-12-1910-schedule-day-counts-agenda/`
 
 ## Context
@@ -84,9 +84,19 @@ and the agenda view are Planner additions.
 
 ## Changes from original plan
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                   | Why                                                                                                                                                                                                                                                                                                            |
+| --- | ------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Stepping is defined in **visible days**, not by adding the day count to the anchor.                                      | Plain arithmetic tiles correctly only while every day is drawn. With weekends hidden, "ten days from here" is twelve calendar days from a Monday and fourteen from a Wednesday, and stepping back was not the inverse of stepping forward. `stepAnchor` walks visible days from the range's own edges instead. |
+| 2   | Aligned mode pages by a **week**, at every day count.                                                                    | It is the mode whose whole definition is the week boundary. At counts other than seven this can overlap or skip a day at the seam, which is inherent to asking for a ten-day window aligned to a seven-day grid; rolling — the default, and the mode built for arbitrary counts — tiles exactly.               |
+| 3   | The server sends the **days it loaded** with the payload; the client does not derive them.                               | Both would usually agree, but picking Twenty Days patches the setting and reloads: a client-derived range widens instantly and would draw thirteen columns whose appointments had not arrived. Following the payload makes "the grid drew a day nothing was loaded for" unrepresentable.                       |
+| 4   | Day count, anchor mode and Work Week Mode **flush their setting before refreshing**; `useSetting` gained a `flush`.      | Writes are debounced 600ms. Refreshing immediately re-rendered the server against the _old_ width — the twenty-day view came back as seven. Slot size still does not flush: it changes only how the loaded days are drawn.                                                                                     |
+| 5   | Work Week Mode moved from a pure client toggle to one that reloads.                                                      | It used to hide two columns. Now it changes which days the range _contains_ — five visible days from a Wednesday ends on Tuesday — so the server has to agree.                                                                                                                                                 |
+| 6   | `syncGoogleAction` takes the anchor and rebuilds the range from stored settings.                                         | It used to take a week start and derive its own window. Refresh has to fetch exactly what the page loads, or "refreshed" days come back empty.                                                                                                                                                                 |
+| 7   | `GridToolbar` gained an optional `hostCommands`, and the agenda passes the tab's lens controls through `left` / `right`. | Not foreseen: a grid hosted _inside_ a tab that already has a toolbar rendered two menu bars and two lens rows stacked. Dropping the tab's own row instead would have left `New Time Chart…` with no visible path on a desktop, which `navigation.md` rules out.                                               |
+| 8   | Agenda rows are filtered by **visible day**, not by `start <= x < end`.                                                  | In Work Week Mode the range spans a weekend it does not draw. A Saturday row in the list beside a calendar hiding it would be the same range answering two ways.                                                                                                                                               |
+| 9   | `projectName` is resolved onto the agenda row rather than looked up in the cell.                                         | `ColumnDef.sortValue` and `filterValue` see only the row. A name resolved at render time could be displayed but never sorted or filtered on.                                                                                                                                                                   |
+| 10  | `scheduleRange` throws on an invalid anchor, and `/schedule` validates `?start=` with `isDateKey`.                       | A malformed key decodes to an invalid `Date`, whose `getDay()` is `NaN` — so in Work Week Mode the loop searching for the next weekday never terminates. A hung render from a bad URL is worse than an error.                                                                                                  |
+| 11  | `"Days"` was added to `MENU_SECTIONS.view` and `NESTED_SECTIONS`.                                                        | Six widths flat in the View menu would be most of it. The section matches that set's stated criterion exactly: the name is the useful thing and the members are a value-picker.                                                                                                                                |
 
 ---
 
@@ -284,6 +294,19 @@ No React component tests, per `CLAUDE.md`.
 
 ---
 
-> **Standing rule while this spec is active:** material changes to requirements, design or
-> scope — including feedback on what was actually built — go into `plan.md`/`shape.md` and
-> get a row in _Changes from original plan_. Pure implementation detail does not.
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- **Window-aware Google sync staleness.** `syncIsStale` (`src/lib/google/queries.ts:66`)
+  records _when_ each calendar was last read and nothing about _what_, so navigating months
+  away inside the five-minute freshness window still shows an unsynced range. Pre-existing;
+  the canonical window here only ensures the day count cannot make it worse. The fix is a
+  synced-window column per calendar link.
+- **`/day` files evening appointments on the wrong day.** `src/app/day/page.tsx` filters
+  occurrences with `toDateKey(occurrence.startAt)` — UTC components read off an instant — so
+  an appointment at 9pm Eastern belongs to tomorrow as far as that page is concerned. Found
+  while widening `loadSchedule`; deliberately not fixed here, because changing what the Day
+  tab shows is its own change with its own verification. `agenda.ts` uses `localDateKey`,
+  which is the correct form.
+- **Agenda rows for deadline-bearing tasks and projects.** Considered during shaping and
+  deferred: "days left" means something different for a deadline than for an event start,
+  and merging them needs a row-kind column and a mixed sort order.
