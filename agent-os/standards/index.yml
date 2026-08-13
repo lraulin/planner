@@ -4,7 +4,7 @@ database:
 
 components:
   ux-principles:
-    description: Core UI/UX philosophy — outline grid + drawer, inline editing, no re-sort while editing, date/decimal commit on blur, modals only for confirmations/capture, tabs for form sections
+    description: Core UI/UX philosophy — outline grid + drawer, inline editing, no re-sort while editing, date/decimal commit on blur, modals only for confirmations/capture, tabs for form sections, icon-only buttons need a title tooltip
   navigation:
     description: Getting around and finding commands — the grouped sidebar, the menu bar, the Commands panel, the ⌘K palette and the ⋯ sheet; one registry for views and one for commands; no command is palette-only; complete and sectioned everywhere; unavailable is disabled with the specific reason, never absent; declared families fold behind a submenu; right-click covers rows, blank grid space and the calendar; plural verbs act on the on-screen selection reduced to roots
   data-grid:

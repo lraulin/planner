@@ -872,6 +872,7 @@ function MetricForm({
                             type="button"
                             onClick={() => removeEntry(entry.id)}
                             className="flex h-tap w-tap items-center justify-center rounded text-[1.125rem] leading-none text-ink-faint hover:text-priority-a md:h-6 md:w-6 md:text-[0.875rem]"
+                            title="Delete entry"
                             aria-label="Delete entry"
                           >
                             ×

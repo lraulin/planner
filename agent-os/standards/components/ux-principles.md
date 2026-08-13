@@ -188,6 +188,24 @@ and right-click do not exist on touch, so these are translations of the same bin
 than a second set to learn. `F2` has no compact equivalent — inline rename happens in the
 sheet. See `responsive.md`.
 
+### Icon-only controls need a tooltip
+
+A control whose visible content is only a glyph (`‹ ›`, `×`, a chevron, a colour swatch, a
+toolbar icon) must have a `title`. The glyph is not a label. `aria-label` is not a
+substitute — it is not visible on hover, and this app is used with a mouse.
+
+```tsx
+<button type="button" title="Previous month" aria-label="Previous month">
+  ‹
+</button>
+```
+
+- `ToolbarIconButton` already requires `title` in its signature. Same rule for pagers, pane
+  toggles, close buttons, colour swatches, expand/collapse chevrons, and any other icon-only
+  control.
+- When the control is disabled, `title` says **why** (`navigation.md`).
+- A button that already shows words does not need a tooltip repeating them.
+
 ## Forms & Validation
 
 ### Minimise required fields

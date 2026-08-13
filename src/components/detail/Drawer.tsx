@@ -121,6 +121,7 @@ export function DrawerHeader({
       <button
         type="button"
         onClick={onClose}
+        title="Close"
         aria-label="Close"
         className="-mr-1 flex h-tap w-tap flex-none items-center justify-center rounded text-[1.25rem] leading-none text-ink-muted transition-colors hover:bg-surface-raised hover:text-ink md:h-7 md:w-7 md:text-[1.125rem]"
       >

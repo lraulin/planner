@@ -280,6 +280,7 @@ function TitleCell({
           event.stopPropagation();
           onToggleCollapsed();
         }}
+        title={note.collapsed ? "Expand" : "Collapse"}
         aria-label={note.collapsed ? "Expand" : "Collapse"}
         tabIndex={-1}
         className={[

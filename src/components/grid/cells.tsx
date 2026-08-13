@@ -113,6 +113,7 @@ export function NameCell({
           event.stopPropagation();
           onToggleCollapsed();
         }}
+        title={node.collapsed ? "Expand" : "Collapse"}
         aria-label={node.collapsed ? "Expand" : "Collapse"}
         tabIndex={-1}
         className={[

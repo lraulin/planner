@@ -30,6 +30,7 @@ export function MiniMonth({ month, selected, onSelectDay, onChangeMonth }: Props
         <button
           type="button"
           className="px-1 text-ink-muted hover:text-ink"
+          title="Previous month"
           aria-label="Previous month"
           onClick={() => onChangeMonth(new Date(year, mon - 1, 1))}
         >
@@ -41,6 +42,7 @@ export function MiniMonth({ month, selected, onSelectDay, onChangeMonth }: Props
         <button
           type="button"
           className="px-1 text-ink-muted hover:text-ink"
+          title="Next month"
           aria-label="Next month"
           onClick={() => onChangeMonth(new Date(year, mon + 1, 1))}
         >

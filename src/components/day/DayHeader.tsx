@@ -68,13 +68,23 @@ export function DayHeader({
       {/* Links, not buttons: a day is a URL, so these must be openable in a new tab. Styled
           to match `ToolbarButton`, which renders a real `<button>` and cannot wrap one. */}
       <span className="flex items-center gap-1">
-        <Link href={href(shift(day, -step))} aria-label="Previous" className={navClass}>
+        <Link
+          href={href(shift(day, -step))}
+          title={mode === "day" ? "Previous day" : "Previous week"}
+          aria-label={mode === "day" ? "Previous day" : "Previous week"}
+          className={navClass}
+        >
           ‹
         </Link>
         <Link href={href(today)} className={navClass}>
           Today
         </Link>
-        <Link href={href(shift(day, step))} aria-label="Next" className={navClass}>
+        <Link
+          href={href(shift(day, step))}
+          title={mode === "day" ? "Next day" : "Next week"}
+          aria-label={mode === "day" ? "Next day" : "Next week"}
+          className={navClass}
+        >
           ›
         </Link>
       </span>
