@@ -13,6 +13,7 @@ import type {
   RecurrenceFrequency,
   ShowAs,
 } from "@/db/schema";
+import { allDayRange } from "@/lib/schedule/allDay";
 import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { normalizeColorId } from "./eventColors";
 
@@ -40,9 +41,9 @@ export type GoogleEvent = {
 
 export type GoogleEventTime = {
   /** All-day events: `YYYY-MM-DD`. The end date is **exclusive**. */
-  date?: string;
+  date?: string | null;
   /** Timed events: RFC3339. */
-  dateTime?: string;
+  dateTime?: string | null;
   timeZone?: string;
 };
 
@@ -277,9 +278,11 @@ export function writeEventTime(
   allDay: boolean,
   timeZone: string = localTimeZone(),
 ): GoogleEventTime {
+  // PATCH merges. Leaving the unused field off keeps a prior `dateTime` beside a new
+  // `date` (or the reverse), which Google rejects as "Invalid start time."
   return allDay
-    ? { date: toDateKey(at), timeZone }
-    : { dateTime: at.toISOString(), timeZone };
+    ? { date: toDateKey(at), dateTime: null, timeZone }
+    : { date: null, dateTime: at.toISOString(), timeZone };
 }
 
 /** Build the Google write body for an appointment. */
@@ -308,12 +311,18 @@ export function appointmentToGoogleEvent(
   // chose "default". Null means calendar default — never empty string (Google 400s).
   const colorId = normalizeColorId(appointment.colorId);
 
+  // Timed instants flipped to all-day are still same-day 9:00–10:00 until this rewrite.
+  // Google's exclusive `end.date` then equals `start.date`, which it calls "Invalid start time."
+  const bounds = appointment.allDay
+    ? allDayRange(appointment.startAt, appointment.endAt)
+    : { startAt: appointment.startAt, endAt: appointment.endAt };
+
   return {
     summary: appointment.subject,
     location: appointment.location,
     description: appointment.notes,
-    start: writeEventTime(appointment.startAt, appointment.allDay, timeZone),
-    end: writeEventTime(appointment.endAt, appointment.allDay, timeZone),
+    start: writeEventTime(bounds.startAt, appointment.allDay, timeZone),
+    end: writeEventTime(bounds.endAt, appointment.allDay, timeZone),
     transparency,
     eventType,
     colorId,

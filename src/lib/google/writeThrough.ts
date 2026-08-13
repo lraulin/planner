@@ -116,10 +116,15 @@ export async function pushUpdate(
   }
 
   const body = appointmentToGoogleEvent(merged);
-  // Recurrence is never patched from here. The local row is one instance of a series
-  // Google owns; sending a rule would rewrite the whole series from a single occurrence.
-  const { recurrence: _recurrence, ...instanceFields } = body;
+  // Recurrence is omitted for one-offs so a PATCH cannot invent a series. When the
+  // merged row *has* a rule we send it: converting a repeating timed event to all-day
+  // otherwise leaves Google's timed UNTIL beside date-only start/end, which it rejects
+  // as "Invalid start time."
+  const { recurrence, ...instanceFields } = body;
   const patch: Partial<GoogleEventWrite> = instanceFields;
+  if (merged.recurrenceFrequency !== "none") {
+    patch.recurrence = recurrence;
+  }
 
   const targetEventId = row.externalSeriesId || row.externalId;
 

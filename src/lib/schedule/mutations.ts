@@ -20,6 +20,7 @@ import {
   type PushableAppointment,
 } from "@/lib/google/writeThrough";
 import { normalizeColorId } from "@/lib/google/eventColors";
+import { allDayRange } from "./allDay";
 import { sortDays, startOfWeek } from "./geometry";
 
 /** The week containing `at`, the unit `loadSchedule` mirrors. */
@@ -231,14 +232,18 @@ export async function createAppointment(
   userId: string,
   input: AppointmentInput,
 ): Promise<Appointment | null> {
-  assertRange(input.startAt, input.endAt);
+  const allDay = input.allDay ?? false;
+  const bounds = allDay ? allDayRange(input.startAt, input.endAt) : null;
+  const startAt = bounds?.startAt ?? input.startAt;
+  const endAt = bounds?.endAt ?? input.endAt;
+  assertRange(startAt, endAt);
   const values: NewAppointment = {
     userId,
     subject: input.subject.trim() || "Appointment",
     location: input.location ?? "",
-    startAt: input.startAt,
-    endAt: input.endAt,
-    allDay: input.allDay ?? false,
+    startAt,
+    endAt,
+    allDay,
     checkState: input.checkState ?? "open",
     reminderMinutes: input.reminderMinutes ?? null,
     showAs: input.showAs ?? "busy",
@@ -306,8 +311,12 @@ export async function updateAppointment(
     .limit(1);
   if (!existing) throw new Error("Appointment not found.");
 
-  const startAt = input.startAt ?? existing.startAt;
-  const endAt = input.endAt ?? existing.endAt;
+  const allDay = input.allDay ?? existing.allDay;
+  const rawStart = input.startAt ?? existing.startAt;
+  const rawEnd = input.endAt ?? existing.endAt;
+  const bounds = allDay ? allDayRange(rawStart, rawEnd) : null;
+  const startAt = bounds?.startAt ?? rawStart;
+  const endAt = bounds?.endAt ?? rawEnd;
   assertRange(startAt, endAt);
 
   const patch: Record<string, unknown> = {
@@ -318,7 +327,7 @@ export async function updateAppointment(
   if (input.subject !== undefined)
     patch.subject = input.subject.trim() || "Appointment";
   if (input.location !== undefined) patch.location = input.location;
-  if (input.allDay !== undefined) patch.allDay = input.allDay;
+  if (input.allDay !== undefined) patch.allDay = allDay;
   if (input.checkState !== undefined) patch.checkState = input.checkState;
   if (input.reminderMinutes !== undefined)
     patch.reminderMinutes = input.reminderMinutes;

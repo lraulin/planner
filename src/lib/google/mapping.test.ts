@@ -83,6 +83,7 @@ describe("writeEventTime", () => {
     const at = readEventTime({ date: "2026-07-27" });
     expect(writeEventTime(at!, true, "America/New_York")).toEqual({
       date: "2026-07-27",
+      dateTime: null,
       timeZone: "America/New_York",
     });
   });
@@ -305,8 +306,16 @@ describe("appointmentToGoogleEvent", () => {
       summary: "Deep work",
       location: "",
       description: "focus block",
-      start: { dateTime: "2026-07-27T14:00:00.000Z", timeZone: "America/New_York" },
-      end: { dateTime: "2026-07-27T16:00:00.000Z", timeZone: "America/New_York" },
+      start: {
+        date: null,
+        dateTime: "2026-07-27T14:00:00.000Z",
+        timeZone: "America/New_York",
+      },
+      end: {
+        date: null,
+        dateTime: "2026-07-27T16:00:00.000Z",
+        timeZone: "America/New_York",
+      },
       transparency: "opaque",
       eventType: "default",
       // Null = calendar default. Empty string is rejected by Google as invalid color id.
@@ -333,6 +342,22 @@ describe("appointmentToGoogleEvent", () => {
     });
     expect(body.start.date).toBe("2026-07-27");
     expect(body.end.date).toBe("2026-07-28");
+    expect(body.start.dateTime).toBeNull();
+    expect(body.end.dateTime).toBeNull();
+  });
+
+  it("rewrites a same-day timed range when the event is marked all-day", () => {
+    // Created repeating 9–10, then checked All day. Without the exclusive-end bump
+    // Google returns 400 "Invalid start time."
+    const body = appointmentToGoogleEvent({
+      ...appointment,
+      allDay: true,
+      startAt: new Date(2026, 6, 27, 9, 0, 0),
+      endAt: new Date(2026, 6, 27, 10, 0, 0),
+    });
+    expect(body.start.date).toBe("2026-07-27");
+    expect(body.end.date).toBe("2026-07-28");
+    expect(body.start.dateTime).toBeNull();
   });
 
   it("writes a known event colour id", () => {

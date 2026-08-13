@@ -80,4 +80,45 @@ describe("pushUpdate", () => {
       expect.objectContaining({ summary: "Standup", colorId: "5" }),
     );
   });
+
+  it("sends the RRULE when converting a repeating event to all-day", async () => {
+    // Same-day 9–10 plus all-day, without the exclusive end and without clearing
+    // dateTime, is the 400 "Invalid start time" that landed in the drawer.
+    await pushUpdate(
+      "user-1",
+      {
+        externalSource: "google",
+        externalId: "evt-1_20260812T130000Z",
+        externalSeriesId: "evt-1",
+        externalCalendarId: "calendar-1",
+      },
+      {
+        subject: "Retreat",
+        location: "",
+        notes: "",
+        startAt: new Date(2026, 7, 12, 9, 0, 0),
+        endAt: new Date(2026, 7, 12, 10, 0, 0),
+        allDay: true,
+        showAs: "busy",
+        colorId: null,
+        recurrenceFrequency: "weekly",
+        recurrenceInterval: 1,
+        recurrenceByWeekday: null,
+        recurrenceEnd: "never",
+        recurrenceCount: null,
+        recurrenceUntil: null,
+      },
+    );
+
+    expect(patchEvent).toHaveBeenCalledWith(
+      "user-1",
+      "calendar-1",
+      "evt-1",
+      expect.objectContaining({
+        start: expect.objectContaining({ date: "2026-08-12", dateTime: null }),
+        end: expect.objectContaining({ date: "2026-08-13", dateTime: null }),
+        recurrence: ["RRULE:FREQ=WEEKLY"],
+      }),
+    );
+  });
 });

@@ -23,7 +23,7 @@ import {
   listTimeCharts,
   loadSchedule,
 } from "./queries";
-import { fromDateKey } from "./geometry";
+import { fromDateKey, toDateKey } from "./geometry";
 import { scheduleRange, weekRange } from "./range";
 
 /**
@@ -258,6 +258,29 @@ describeDb("appointments", () => {
     expect(appt.subject).toBe("Appointment");
   });
 
+  it("stores all-day bounds as exclusive calendar days, even from a timed range", async () => {
+    const appt = await makeAppointment(userId, {
+      subject: "Retreat",
+      allDay: true,
+      ...hourAt("2026-08-12"),
+    });
+    expect(appt.allDay).toBe(true);
+    expect(toDateKey(appt.startAt)).toBe("2026-08-12");
+    expect(toDateKey(appt.endAt)).toBe("2026-08-13");
+  });
+
+  it("rewrites a repeating timed event to exclusive all-day bounds on update", async () => {
+    const created = await makeAppointment(userId, {
+      subject: "Standup",
+      recurrenceFrequency: "weekly",
+      ...hourAt("2026-08-12"),
+    });
+    const updated = await updateAppointment(userId, created.id, { allDay: true });
+    expect(updated.allDay).toBe(true);
+    expect(toDateKey(updated.startAt)).toBe("2026-08-12");
+    expect(toDateKey(updated.endAt)).toBe("2026-08-13");
+  });
+
   it("rejects an end at or before the start", async () => {
     const { startAt } = hourAt("2026-03-02");
     await expect(
@@ -479,6 +502,8 @@ describeDb("loadSchedule", () => {
     });
     expect(payload.occurrences.map((o) => o.subject)).toEqual(["Day 18"]);
     expect(payload.days).toHaveLength(20);
+    expect(payload.days[0]).toBe("2026-03-02");
+    expect(payload.rangeEnd).toBe("2026-03-22");
   });
 
   it("skips the weekend in Work Week Mode instead of narrowing the range", async () => {
