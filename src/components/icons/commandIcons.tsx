@@ -371,6 +371,26 @@ function GoToIcon() {
   );
 }
 
+/** Settings: sliders, not a gear — three strokes stay readable at 16px. */
+function SettingsIcon() {
+  return (
+    <Glyph>
+      <path d="M4 6.5h12M4 13.5h12" />
+      <path d="M8 4.5v4M13 11.5v4" strokeWidth={1.75} />
+    </Glyph>
+  );
+}
+
+/** Sign out: an arrow leaving a doorway. */
+function SignOutIcon() {
+  return (
+    <Glyph>
+      <path d="M8.5 4.5H5a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h3.5" />
+      <path d="M10 10h6.5M14 7.25 16.75 10 14 12.75" />
+    </Glyph>
+  );
+}
+
 export const COMMAND_ICONS: Record<CommandIcon, () => React.ReactElement> = {
   new: NewIcon,
   "insert-before": InsertBeforeIcon,
@@ -404,6 +424,8 @@ export const COMMAND_ICONS: Record<CommandIcon, () => React.ReactElement> = {
   cut: CutIcon,
   paste: PasteIcon,
   "go-to": GoToIcon,
+  settings: SettingsIcon,
+  "sign-out": SignOutIcon,
 };
 
 /**

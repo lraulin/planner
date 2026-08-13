@@ -30,6 +30,14 @@ describe("buildMenus", () => {
     expect(menus.map((menu) => menu.label)).toEqual(["New", "Organize", "View"]);
   });
 
+  it("puts File first even when it arrived last", () => {
+    const menus = buildMenus([
+      command("new-task", { menu: "new", section: "New" }),
+      command("settings", { menu: "file", section: "Account" }),
+    ]);
+    expect(menus.map((menu) => menu.id)).toEqual(["file", "new"]);
+  });
+
   it("orders sections by the declared taxonomy, not by declaration order", () => {
     // The real case: `Expand all items` is palette-group `view` and `Move up` is `record`, so
     // anything ordering by group or by build order puts Expand above Move inside one menu.

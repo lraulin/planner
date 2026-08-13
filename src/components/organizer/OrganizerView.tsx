@@ -20,6 +20,7 @@ import {
   ProjectPicker,
   type ProjectPickerValue,
 } from "@/components/projects/ProjectPicker";
+import { DestinationCommandBar } from "@/components/grid/DestinationCommandBar";
 import { formatBindings, matchBindings } from "@/lib/commands/bindings";
 import { COMMIT_FORM } from "@/lib/commands/chords";
 import type { OrganizerOutcome } from "@/lib/organizer/types";
@@ -58,16 +59,26 @@ export function OrganizerView({
   today: string;
   nowIso: string;
 }) {
-  if (queue.length === 0) return <OrganizerEmpty />;
+  if (queue.length === 0) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <DestinationCommandBar overflowLabel="More commands for the organizer" />
+        <OrganizerEmpty />
+      </div>
+    );
+  }
   return (
-    <OrganizerItemForm
-      key={queue[0].id}
-      item={queue[0]}
-      total={queue.length}
-      nodes={nodes}
-      today={today}
-      nowIso={nowIso}
-    />
+    <div className="flex min-h-0 flex-1 flex-col">
+      <DestinationCommandBar overflowLabel="More commands for the organizer" />
+      <OrganizerItemForm
+        key={queue[0].id}
+        item={queue[0]}
+        total={queue.length}
+        nodes={nodes}
+        today={today}
+        nowIso={nowIso}
+      />
+    </div>
   );
 }
 

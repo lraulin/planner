@@ -6,13 +6,10 @@ import {
   saveJournalNoteAction,
   updateNoteAction,
 } from "@/app/notes/actions";
-import { CommandBar } from "@/components/grid/CommandBar";
+import { DestinationCommandBar } from "@/components/grid/DestinationCommandBar";
 import { useDateFormatter } from "@/components/settings/SettingsProvider";
 import { MiniMonth } from "@/components/schedule/MiniMonth";
 import { useIsCompact } from "@/components/shell/useIsCompact";
-import { OverflowMenu } from "@/components/shell/OverflowMenu";
-import type { Command } from "@/lib/commands/registry";
-import { TabToolbar } from "@/components/tabs/tabChrome";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import {
   buildDiaryTree,
@@ -41,13 +38,6 @@ function dayDateFromKey(dateKey: string): Date {
 function localKeyFromParts(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
-
-/**
- * Journal registers no commands of its own now that Grid | Journal is navigation. Module-level
- * and frozen because `useRegisterCommands` re-registers on array identity, and a `[]` written
- * inline would be a new array every render — which is the churn that locks the tab up.
- */
-const NO_COMMANDS: readonly Command[] = [];
 
 export function NotesJournal({
   initialSummaries,
@@ -198,16 +188,7 @@ export function NotesJournal({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/*
-        Grid | Journal used to sit on the lens row here; it is a page switch, so the shell's
-        `PageBar` owns it and the row is empty. `CommandBar` stays with nothing of its own to
-        show, because it registers `View ▸ Show commands panel` itself — a view that draws this
-        bar and no `GridToolbar` would otherwise lose the panel toggle entirely.
-      */}
-      <TabToolbar
-        commandRow={<CommandBar commands={NO_COMMANDS} />}
-        pinned={<OverflowMenu label="More commands for Notes" />}
-      />
+      <DestinationCommandBar overflowLabel="More commands for Notes" />
 
       {compact ? (
         sheetOpen ? (

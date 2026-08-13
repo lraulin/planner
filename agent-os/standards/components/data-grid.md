@@ -529,13 +529,14 @@ That demotion used to cost something, because the only tier below the bar was an
 list. A _named, sectioned_ menu is findable by reading, so a command in `View ▸ Layout` is one
 click away **and** discoverable, which is what makes the tier honest.
 
-Three tiers, and a control belongs in the lowest one that still works:
+Three tiers, and a control belongs in the lowest one that still works. The menu is the
+**complete catalog** (`navigation.md`); the bar is a high-frequency subset of it:
 
 | Tier           | Test                                                                               |
 | -------------- | ---------------------------------------------------------------------------------- |
 | **On the bar** | Used most sessions. An icon button on the command row, or a widget on the lens row |
-| **In a menu**  | A real command, used occasionally (`Show Fields`, `Convert to…`, the zooms)        |
-| **Deleted**    | Fails one of the tests above                                                       |
+| **In a menu**  | Every real command. Occasional ones live _only_ here (`Show Fields`, the zooms)    |
+| **Deleted**    | Fails one of the tests above. Palette-only is not a tier.                          |
 
 A menu is not a place to hide things you could not justify. If a control fails the "column filter
 wearing a checkbox" or "unavailable or duplicated" test, moving it into a menu does not fix it —

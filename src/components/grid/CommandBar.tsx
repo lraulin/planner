@@ -7,8 +7,11 @@ import { toolbarSegments } from "@/lib/commands/menus";
 import type { Command } from "@/lib/commands/registry";
 import { TypeIcon } from "@/components/icons/TypeIcon";
 import { CommandGlyph } from "@/components/icons/commandIcons";
-import { useRegisterCommands } from "@/components/shell/CommandProvider";
+import { useCommands, useRegisterCommands } from "@/components/shell/CommandProvider";
+import { openCommandPalette } from "@/components/shell/commandEvent";
+import { useFileCommands } from "@/components/shell/globalCommands";
 import { useCommandsPanel } from "@/components/shell/useShellSettings";
+import { OPEN_PALETTE } from "@/lib/commands/chords";
 import { ToolbarDivider, ToolbarIconButton } from "@/components/tabs/tabChrome";
 import { CommandMenuBar } from "./CommandMenuBar";
 import type { GridSelectionCapability } from "@/lib/grid/commandDeck";
@@ -37,7 +40,7 @@ function accentFor(kind: NodeKind | undefined): string {
 /**
  * Row 1: the verbs.
  *
- * `New ▾ Item ▾ Organize ▾ View ▾ │ ⊕ │ ⤒ ⤓ ⤷ │ ↑ ↓ │ → ← │ ⏎ ✎ │ ☑ Write brief`
+ * `File ▾ New ▾ Item ▾ Organize ▾ View ▾ │ ⊕ │ ⤒ ⤓ ⤷ │ ↑ ↓ │ → ← │ ⏎ ✎ │ ☑ Write brief`
  *
  * Three things, left to right: the **menu bar** (everything this view can do, named and
  * sectioned), the **icon segments** (the handful you reach for every session, grouped by weight
@@ -54,6 +57,23 @@ export function CommandBar({
   selection?: GridSelectionCapability;
 }) {
   const { open: panelOpen, setOpen: setPanelOpen } = useCommandsPanel();
+  const fileCommands = useFileCommands();
+  const registered = useCommands();
+  const paletteCommand = useMemo<Command>(
+    () => ({
+      id: "view.command-palette",
+      label: "Command palette",
+      group: "view",
+      menu: "view",
+      section: "Panels",
+      icon: "go-to",
+      bindings: OPEN_PALETTE,
+      keywords: "search commands go fuzzy",
+      title: "Search every command and destination",
+      run: openCommandPalette,
+    }),
+    [],
+  );
   const panelCommand = useMemo<Command>(
     () => ({
       id: "view.commands-panel",
@@ -71,16 +91,30 @@ export function CommandBar({
   // Registered here, not by each host, so a view that draws this bar and never a GridToolbar
   // (Schedule calendar, Fitness, Day) still has View ▸ Show commands panel. One source is
   // also what stops a grid and a host from both listing it.
-  const panelCommands = useMemo(() => [panelCommand], [panelCommand]);
+  const panelCommands = useMemo(
+    () => [paletteCommand, panelCommand],
+    [paletteCommand, panelCommand],
+  );
   useRegisterCommands(panelCommands);
 
-  // The named menus read this list, not the registry — so the panel command has to
-  // sit here as well as in `useRegisterCommands`, or View ▸ Show commands panel
-  // exists in the palette and nowhere you can see.
-  const menuCommands = useMemo(
-    () => [...commands, panelCommand],
-    [commands, panelCommand],
-  );
+  // The named menus cannot read the registry alone: registration is a setState, so
+  // File, the host's commands, Command palette, and the panel toggle have to sit
+  // here this render. `registered` is merged after so a sibling like ViewPicker —
+  // which publishes Save / Save as on its own — still lands in View, not only in
+  // ⌘K and the panel.
+  const menuCommands = useMemo(() => {
+    const byId = new Map<string, Command>();
+    for (const command of [
+      ...fileCommands,
+      ...commands,
+      ...registered,
+      paletteCommand,
+      panelCommand,
+    ]) {
+      byId.set(command.id, command);
+    }
+    return [...byId.values()];
+  }, [fileCommands, commands, registered, paletteCommand, panelCommand]);
 
   const segments = toolbarSegments(commands);
 

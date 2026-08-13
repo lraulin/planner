@@ -12,6 +12,7 @@ import {
   toolbarCommands,
   toolbarSegments,
 } from "@/lib/commands/menus";
+import { toolbarWithoutMenu, unplacedCommands } from "@/lib/commands/fileCommands";
 
 function press(key: string, held: Partial<KeyEventLike> = {}): KeyEventLike {
   return {
@@ -131,6 +132,8 @@ describe("grid command deck", () => {
       expect(entry.section, `${entry.id} has no section`).toBeTruthy();
       expect(entry.icon, `${entry.id} has no icon`).toBeTruthy();
     }
+    expect(unplacedCommands(commands)).toEqual([]);
+    expect(toolbarWithoutMenu(commands)).toEqual([]);
 
     expect(buildMenus(commands).map((menu) => menu.id)).toEqual([
       "new",

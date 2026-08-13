@@ -282,6 +282,15 @@ View · Tools`) with an icon gutter and shortcut column; an **icon row** for the
   — the next slice, below — plus a pin/reorder command row and rebindable shortcuts, both of which
   the weight-and-binding model now makes possible.
 
+- **✅ Menus as the complete catalog.**
+  `specs/2026-08-13-1050-menu-completeness`. The surface above already said the menu bar must be
+  complete; app-wide verbs (Quick capture, Process Inbox, Plan Week…, Settings, Sign out) still
+  lived only in `⌘K`. They are now a leftmost **File** menu, registered at the shell so the
+  Commands panel and phone `⋯` see them, on every AppShell destination including Overview and
+  the organizer. **View ▸ Command palette** is the menu path to `⌘K`. Go-to destinations stay
+  sidebar + palette — no Go menu. `navigation.md` now states the rule: a command without
+  `menu` is not shipped, except `group: "go"`.
+
 - **✅ Right-click completion: submenus, the surfaces it missed, the verbs it lacked.**
   `specs/2026-08-06-1506-right-click-completion`. The surface above worked almost everywhere; this
   finished what it carried and where it reached.

@@ -43,6 +43,8 @@ export const COMMAND_ICON_IDS = [
   "cut",
   "paste",
   "go-to",
+  "settings",
+  "sign-out",
 ] as const;
 
 export type CommandIcon = (typeof COMMAND_ICON_IDS)[number];

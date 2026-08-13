@@ -41,15 +41,24 @@ export const COMMAND_GROUP_LABELS: Record<CommandGroup, string> = {
 /**
  * The named menus on a view's command bar, in the order they appear.
  *
- * Five, in the order the work happens: make something, act on it, restructure it, change what you
- * are looking at, and everything a single page invented for itself. A menu with nothing in it does
- * not render, so a flat catalog grid shows two of these and the Outline shows all five — the same
+ * File is always present (app-wide verbs). The rest appear when the destination has something
+ * for them — make something, act on it, restructure it, change what you are looking at, and
+ * everything a single page invented for itself. A menu with nothing in it does not render,
+ * so a flat catalog grid shows File plus two names and the Outline shows all six — the same
  * "a tab declares what it has" rule `data-grid.md` already imposes on columns.
  */
-export const COMMAND_MENUS = ["new", "item", "organize", "view", "tools"] as const;
+export const COMMAND_MENUS = [
+  "file",
+  "new",
+  "item",
+  "organize",
+  "view",
+  "tools",
+] as const;
 export type CommandMenu = (typeof COMMAND_MENUS)[number];
 
 export const COMMAND_MENU_LABELS: Record<CommandMenu, string> = {
+  file: "File",
   new: "New",
   item: "Item",
   organize: "Organize",
@@ -63,9 +72,9 @@ export type Command = {
   label: string;
   group: CommandGroup;
   /**
-   * Which named menu this command lives in. Absent means it is reachable through the palette and
-   * whatever else claims it, but has no menu row — which for a *grid* command is almost always a
-   * mistake, because `navigation.md` rules out a command with no visible path.
+   * Which named menu this command lives in. Required for every command except `group: "go"`
+   * destinations (the sidebar is their catalog; the palette lists them as extras). Absent on
+   * anything else is a `navigation.md` violation — `unplacedCommands` is the tripwire.
    */
   menu?: CommandMenu;
   /**

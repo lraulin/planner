@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { QuickCapture } from "@/components/capture/QuickCapture";
 import { CommandKeys } from "./CommandKeys";
+import { FileCommands } from "./FileCommands";
 import { PageBar } from "./PageBar";
 import { CommandPalette } from "./CommandPalette";
 import { CommandProvider } from "./CommandProvider";
@@ -81,6 +82,7 @@ export function AppShell({
         */}
           <CommandsPanel />
 
+          <FileCommands />
           <CommandKeys />
           <CommandPalette />
           <QuickCapture />

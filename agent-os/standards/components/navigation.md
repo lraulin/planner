@@ -9,14 +9,16 @@ be a permanent tab and the eleventh was already too many.
 
 Six surfaces now, each answering a different question.
 
-| Surface                      | Question it answers              | Where                           |
-| ---------------------------- | -------------------------------- | ------------------------------- |
-| **Sidebar** (`⌘K` to search) | "Where can I go?"                | Desktop, always                 |
-| **Page bar**                 | "Where else can I go _in here_?" | Above the toolbar, both layouts |
-| **Menu bar**                 | "What can I do here?"            | Every view's command row        |
-| **Commands panel**           | "…show me all of it at once"     | Desktop, opt-in, remembered     |
-| **Row context menu**         | "What can I do to _this_ row?"   | Right-click / long-press a row  |
-| **Command palette** (`⌘K`)   | "What can this app do?"          | Desktop, on demand              |
+| Surface                      | Question it answers              | Role                              | Where                           |
+| ---------------------------- | -------------------------------- | --------------------------------- | ------------------------------- |
+| **Sidebar** (`⌘K` to search) | "Where can I go?"                | Visual catalog of destinations    | Desktop, always                 |
+| **Page bar**                 | "Where else can I go _in here_?" | Destinations inside this module   | Above the toolbar, both layouts |
+| **Menu bar**                 | "What can I do here?"            | **Complete catalog of commands**  | Every destination's command row |
+| **Commands panel**           | "…show me all of it at once"     | The same tree left open           | Desktop, opt-in, remembered     |
+| **Row context menu**         | "What can I do to _this_ row?"   | Narrow, row-scoped subset         | Right-click / long-press a row  |
+| **Command palette** (`⌘K`)   | "What can this app do?"          | Searchable overlay + Go-to extras | Desktop, on demand              |
+
+The menu bar is the **source of truth for completeness**. Toolbars and the Commands panel / palette are accelerators. A user who never opens `⌘K` must still be able to find every command by reading the menus.
 
 Below `md` the sidebar is replaced by the bottom nav plus the More sheet, there is no palette and
 no command row, and no panel — **`⋯` becomes the menu bar**, rendering the same tree with the
@@ -213,14 +215,19 @@ handler stopped accepting it.
 label, no menu row and no icon, and they stay in the view that owns the selection. If it belongs in
 a menu it gets a binding; if it does not, it does not.
 
-### No command is palette-only
+### Menus are the source of truth
 
 `ux-principles.md`: _a gesture nobody can see is not a discoverable action_ — and there is no
-`⌘K` on a phone. Every command must have a visible, tappable path, which in practice means
-`⋯` unless it already has its own button.
+`⌘K` on a phone. Every command must have a visible, tappable path.
 
-This is the rule that makes the palette legal. Adding a command to the palette alone is not
-shipping it; it is shipping it for the one person who already knew it was there.
+**A command without `menu` is not shipped.** That is the rule that makes the palette and the
+icon row legal. Adding a command to `⌘K` or to a toolbar alone is shipping it for the person
+who already knew it was there.
+
+The one exception is `group: "go"` — destinations. Their visual catalog is the **sidebar**
+(and the page bar inside a module). The palette lists them as extras so typing `agenda` still
+works. They do not get a Go menu. App-wide verbs (capture, Process Inbox, Plan Week, Settings,
+Sign out) are **not** this exception; they live in **File**.
 
 ### Complete everywhere, sectioned everywhere
 
@@ -229,12 +236,23 @@ readable. "Short" was the old answer and it was the wrong one: the `⋯` menu wa
 leaving things out and unsorted, which is how it ended up as a traditional app menu with the
 organization removed.
 
-- The **palette must be complete.** A Go menu that omits things is one you stop trusting, and
-  then you stop opening it.
-- The **menu bar must be complete too.** It is the desktop's primary surface; a command that is
-  in neither a menu nor on the icon row does not exist to anyone not already holding `⌘K`.
-- The **row menu is the one narrow surface**, because it is about one row. A command opts in with
-  `rowMenu`, and it is the same command with the same label — not a hand-written near-copy.
+- The **menu bar is the complete catalog.** File is leftmost and always present. New / Item /
+  Organize / View / Tools appear when the destination has something for them. A command that
+  is not in a menu does not exist to anyone not already holding `⌘K`.
+- The **toolbar is a subset.** `toolbar` is a weight meaning "also an icon button." Every
+  toolbar item must also be a menu command, because that row is hidden below `md`. Frequency
+  and immediacy, not completeness.
+- The **Commands panel is the same tree left open.** Same labels, same sections, same
+  disabled reasons. Register File at the shell — a File menu that exists only as a
+  `CommandBar` prop is invisible to the panel and to `⋯`.
+- The **palette lists every menu command, plus Go-to.** Shortcuts are printed. **View ▸
+  Command palette** is the discoverable invocation; do not rely on people already knowing
+  `⌘K`.
+- The **row menu is the one narrow surface**, because it is about one row. A command opts in
+  with `rowMenu`, and it is the same command with the same label — not a hand-written
+  near-copy.
+
+The same command has the same name, icon, and resulting action on every surface.
 
 `ownControl: true` is the one exclusion, and it means something narrow: a _non-command widget_ on
 the lens row already controls this (`Filter…`, `Group by`, density). `⋯` skips those and only
@@ -303,13 +321,14 @@ Two things must hold before a command may act on a selection, and neither is fre
 
 ### Where a control belongs
 
-Three tiers, and a control should sit in the lowest one that still works:
+Three tiers, and a control should sit in the lowest one that still works. The menu tier is
+the **catalog**, not a junk drawer for things you could not justify on the bar:
 
-| Tier                | For                                                                         |
-| ------------------- | --------------------------------------------------------------------------- |
-| **On the bar**      | Used most sessions. An icon button (`toolbar`), or a widget on the lens row |
-| **In a named menu** | Real commands used occasionally (`Show Fields`, `Convert to…`, the zooms)   |
-| **Palette only**    | Nothing. See above.                                                         |
+| Tier                | For                                                                              |
+| ------------------- | -------------------------------------------------------------------------------- |
+| **On the bar**      | Used most sessions. An icon button (`toolbar`), or a widget on the lens row      |
+| **In a named menu** | Every real command. Occasional ones live _only_ here (`Show Fields`, the zooms)  |
+| **Palette only**    | Nothing except `group: "go"` destinations (sidebar is their catalog). See above. |
 
 `data-grid.md`'s toolbar tests still apply first: a control that is a column filter wearing a
 checkbox, or whose only two states are "unavailable" and "duplicated", does not belong in any

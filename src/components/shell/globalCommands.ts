@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import { requestQuickCapture } from "@/components/capture/event";
 import { signOut } from "@/lib/auth/client";
 import { QUICK_CAPTURE } from "@/lib/commands/chords";
+import { FILE_COMMAND_PLACEMENTS, FILE_MENU } from "@/lib/commands/fileCommands";
 import type { Command } from "@/lib/commands/registry";
 import { BUILT_MODULES, modulePages } from "./modules";
 
@@ -56,59 +57,29 @@ export function useGlobalCommands(): readonly Command[] {
       ];
     });
 
-    const app: Command[] = [
-      {
-        id: "app.capture",
-        label: "Quick capture",
-        group: "app",
-        // The binding stays where it is — `QuickCapture` owns a document listener with the
-        // `isModalOpen` guard, which the shared dispatcher deliberately does not do. Declaring it
-        // here is what makes the palette print `C`, and `chords.ts` is what makes the printed
-        // string and that listener agree on which key it is.
-        bindings: QUICK_CAPTURE,
-        keywords: "new task inbox add",
-        run: requestQuickCapture,
+    const runs: Record<string, () => void> = {
+      "app.capture": requestQuickCapture,
+      "app.process-inbox": () => router.push("/organize"),
+      "app.plan-week": () => router.push("/schedule/plan"),
+      "app.settings": () => router.push("/settings"),
+      "app.sign-out": () => {
+        void signOut().then(() => {
+          router.replace("/login");
+          router.refresh();
+        });
       },
-      {
-        id: "app.process-inbox",
-        label: "Process Inbox",
-        group: "app",
-        keywords: "organize triage gtd new tasks",
-        run: () => router.push("/organize"),
-      },
-      {
-        id: "app.plan-week",
-        label: "Plan Week…",
-        group: "app",
-        keywords: "weekly planning wizard",
-        run: () => router.push("/schedule/plan"),
-      },
-      {
-        /*
-         * One entry, not five. The import and export panels (Achieve transfer, RedNotebook,
-         * Tomboy, Google Calendar) all live on this page and none has a stable anchor to
-         * deep-link to — their headings use `useId`. Keywords make them findable; the page
-         * is where they are.
-         */
-        id: "app.settings",
-        label: "Settings",
-        group: "app",
-        keywords:
-          "options preferences import export achieve rednotebook tomboy google calendar reset backup",
-        run: () => router.push("/settings"),
-      },
-      {
-        id: "app.sign-out",
-        label: "Sign out",
-        group: "app",
-        run: () => {
-          void signOut().then(() => {
-            router.replace("/login");
-            router.refresh();
-          });
-        },
-      },
-    ];
+    };
+
+    const app: Command[] = FILE_COMMAND_PLACEMENTS.map((placement) => ({
+      ...placement,
+      group: "app" as const,
+      menu: FILE_MENU,
+      // Quick capture's binding stays here — `QuickCapture` owns a document listener with
+      // the `isModalOpen` guard, which the shared dispatcher deliberately does not do.
+      // Declaring it on the command is what makes File and the palette print `C`.
+      bindings: placement.id === "app.capture" ? QUICK_CAPTURE : undefined,
+      run: runs[placement.id] ?? (() => {}),
+    }));
 
     /*
      * Deliberately absent: **Reset everything**. It lives on the settings page behind its own
@@ -119,6 +90,12 @@ export function useGlobalCommands(): readonly Command[] {
 
     return [...go, ...app];
   }, [router]);
+}
+
+/** The five File-menu verbs, identity-stable with `useGlobalCommands`. */
+export function useFileCommands(): readonly Command[] {
+  const all = useGlobalCommands();
+  return useMemo(() => all.filter((command) => command.menu === FILE_MENU), [all]);
 }
 
 /**
