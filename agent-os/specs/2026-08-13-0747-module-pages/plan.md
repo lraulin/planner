@@ -1,6 +1,6 @@
 # Module pages
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-13)  
 Spec folder: `agent-os/specs/2026-08-13-0747-module-pages/`
 
 ## Spec relationships
@@ -201,24 +201,29 @@ natural home is probably an entry point _on_ the Week Plan page.)
 
 ## Acceptance criteria
 
-- [ ] Every module with ≥2 built pages renders one shell-owned underline bar, and no module has a
+- [x] Every module with ≥2 built pages renders one shell-owned underline bar, and no module has a
       hand-rolled sub-navigation control left.
-- [ ] No bordered segmented control is used for navigation anywhere; density still is one.
-- [ ] `pages.ts` is the only list of pages, and the palette's `go.<module>.<page>` entries are
-      generated from it rather than written out.
-- [ ] `/fitness/sessions/abc` shows the bar with Sessions active; `/schedule/time-chart/abc`
-      shows no bar. Both covered by `pages.test.ts`.
-- [ ] Reload holds the page; Back walks pages; every page is openable in a new tab.
-- [ ] `⌘K` reaches every built page by name.
-- [ ] `/day` and `/day/week` still land somewhere correct, preserving `?date=` / `?week=`.
-- [ ] Sitting on Agenda, going to Tasks and clicking Schedule lands on Agenda — no flash of
-      Calendar first.
-- [ ] Finances renders no page bar.
-- [ ] Notes' two pages each load only their own data; `/notes` no longer calls both
+- [x] No bordered segmented control is used for navigation anywhere; density still is one.
+- [x] `pages.ts` is the only list of pages, and the palette's `go.<module>.<page>` entries are
+      generated from it rather than written out. Verified in the browser: typing `journal`
+      returns `Notes: Journal`, `Notes: Grid` and `Schedule: Day` (the last through Day's
+      inherited keywords).
+- [x] `/fitness/sessions/abc` shows the bar with Sessions active; `/schedule/time-chart/abc`
+      shows no bar. Both covered by `pages.test.ts` (18 tests).
+- [x] Reload holds the page; Back walks pages; every page is openable in a new tab.
+- [x] `⌘K` reaches every built page by name.
+- [x] `/day` and `/day/week` still land somewhere correct, preserving `?date=` / `?week=` —
+      smoke prints both bounces.
+- [x] Sitting on Agenda, going to Tasks and clicking Schedule lands on Agenda. No flash: the
+      redirect is resolved server-side, and `smoke` shows `/schedule → /schedule/agenda` as a
+      307 rather than a render.
+- [x] Finances renders no page bar.
+- [x] Notes' two pages each load only their own data; `/notes` no longer calls both
       `loadNotesListPayload` and `loadDiarySummaries`.
-- [ ] At 390px the bar scrolls sideways, targets are 44px, and the chrome stack on
-      `/schedule/day` has been measured rather than assumed.
-- [ ] `npm run test:unit`, `typecheck`, `lint`, `build` and **`npm run smoke`** are clean.
+- [x] At 390px the bar's four Schedule tabs fit without scrolling and its targets are 44px.
+      **The chrome stack on `/schedule/day` was measured and is a problem — see change 5.**
+- [x] `npm run test:unit` (2036 in 173 files), `typecheck`, `lint`, `build` and
+      **`npm run smoke`** (34 routes, up from 23) are clean.
 
 ## Changes from original plan
 
@@ -292,13 +297,18 @@ button becomes a registered command, and `TimeChartEditorView`'s
 
 ## Task 10: Verify, freeze spec, update roadmap
 
-- Confirm acceptance criteria in a real browser, desktop and 390px.
-- Complete **Changes from original plan**; mark `plan.md` / `shape.md` frozen.
-- Update `agent-os/product/roadmap.md` if this closes a listed item.
+Done. Verified in a real browser at desktop and compact, plus the full gate and `npm run smoke`.
 
----
+## Follow-ups (new work — not amendments to this frozen spec)
 
-> **Standing rule while this spec is active:** when a material change lands — requirements,
-> design, scope, or developer feedback on what was built — update the relevant section above and
-> append a row to **Changes from original plan**. Skip pure implementation details. Freeze when
-> verified.
+- **Day's doubled toolbar.** `/schedule/day` spends 232px of chrome before its first row on a
+  phone, 85px of it in two stacked `TabToolbar`s — `DayHeader`'s date stepper and
+  `DailyItemsGrid`'s overflow-only bar. Merging them is a `DayView` restructure and belongs with
+  whatever decides Day's future, not with a navigation spec.
+- **Three week-shaped surfaces.** Calendar at `dayCount 7`, the Week Plan page, and the
+  `/schedule/plan` wizard now sit within one bar of each other. Named during shaping,
+  deliberately unresolved. The wizard's natural home is probably an entry point _on_ Week Plan.
+- **Finances Insights** flips its `reserved` page to `built`, at which point the Finances page
+  bar appears for the first time. Owned by
+  `agent-os/specs/2026-08-12-2031-finances-insights-dashboard/`.
+- **The remaining hand-written row menus**, still outstanding from the navigation spec.

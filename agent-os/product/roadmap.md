@@ -337,6 +337,31 @@ View · Tools`) with an icon gutter and shortcut column; an **icon row** for the
   unification later shipped in `specs/2026-08-09-1956-settings-workspace-date-format`: module,
   grid, and named-view preferences share one grouped reset surface while saved-view settings
   remain protected from bulk reset. Deferred: capturing sort and density.
+- **✅ Module pages.** `specs/2026-08-13-0747-module-pages`. Navigating _within_ a module was
+  the one tier `components/navigation.md` never governed, so four modules had invented four
+  answers: Fitness a bordered segment in one style, Schedule and Notes a bordered segment in
+  another, Day a bare pair of links — three visual treatments and two persistence models. A
+  **Page** is now a destination inside a module (Sessions, Journal, Agenda, Register), backed
+  by a URL segment, listed in one registry (`lib/navigation/pages.ts`), and drawn by one
+  shell-owned underline bar that renders only at two or more built pages — so eight modules
+  pay nothing. The rule that sorts it: **underline tabs are navigation, bordered segments are
+  a setting with two or three values**; density keeps its segment. Calendar|Agenda and
+  Grid|Journal stopped being stored presentations and became routes, which gains them Back,
+  reload and deep links while `shell.lastPage` keeps the stickiness that motivated the
+  setting. Notes' two pages now load only their own data — `/notes` had been calling both
+  `loadNotesListPayload` and `loadDiarySummaries` on every visit because it could not know
+  which layout would render. **Day is no longer a module:** it folded into Schedule as
+  `/schedule/day` and `/schedule/week-plan`, which is what `modules.ts` had already named as
+  the alternative to deleting it, and "Weekly Schedule" became **Schedule** because a name
+  promising a week is wrong on half its pages. A relocation, not a decision about Day's
+  future. **Terminology:** module → page → view, with _pane_ reserved for a layout region
+  that collapses below `md`, and "lens" fixed to name exactly one thing (the toolbar's second
+  row). The rejected alternative is recorded in the spec: splitting these by whether they show
+  the same records differently or different records entirely, which does not survive the cases
+  and is how the inconsistency was generated in the first place. Follow-ups: Day stacks two
+  toolbars and spends 232px of chrome before its first row on a phone; three week-shaped
+  surfaces (Calendar at seven days, Week Plan, the planning wizard) now sit within one bar of
+  each other; Finances Insights flips its reserved page to built and makes that bar appear.
 - **✅ Schedule day counts + agenda mode.**
   `specs/2026-08-12-1910-schedule-day-counts-agenda`. The Weekly Schedule stopped being a
   week: Achieve's **One / Three / Five / Seven / Ten / Twenty Days** widths from its View
