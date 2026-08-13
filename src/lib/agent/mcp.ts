@@ -12,8 +12,6 @@ import {
 export const MCP_PROTOCOL_LATEST = "2025-03-26";
 export const MCP_PROTOCOL_SUPPORTED = ["2025-03-26", "2024-11-05"] as const;
 export const MCP_SERVER_NAME = "planner";
-export const WWW_AUTHENTICATE_BEARER = 'Bearer realm="planner"';
-
 const HTTP_DISCOVERY_TOOLS = new Set(["health", "list_tools", "describe_tool"]);
 
 const PARSE_ERROR = -32700;
@@ -151,7 +149,7 @@ function initializeResult(params: unknown) {
   };
 }
 
-async function callTool(params: unknown): Promise<unknown> {
+async function callTool(params: unknown, userId?: string): Promise<unknown> {
   if (!isRecord(params) || typeof params.name !== "string") {
     throw { jsonrpc: true, code: INVALID_PARAMS, message: "params.name is required" };
   }
@@ -171,7 +169,7 @@ async function callTool(params: unknown): Promise<unknown> {
   }
 
   try {
-    const data = await dispatchAgentTool(name, args);
+    const data = await dispatchAgentTool(name, args, userId);
     return toolResult(data);
   } catch (error) {
     const agentError = toAgentError(error);
@@ -179,7 +177,10 @@ async function callTool(params: unknown): Promise<unknown> {
   }
 }
 
-async function handleRequest(request: JsonRpcRequest): Promise<unknown> {
+async function handleRequest(
+  request: JsonRpcRequest,
+  userId?: string,
+): Promise<unknown> {
   switch (request.method) {
     case "initialize":
       return initializeResult(request.params);
@@ -188,7 +189,7 @@ async function handleRequest(request: JsonRpcRequest): Promise<unknown> {
     case "tools/list":
       return { tools: listMcpToolDefinitions().map(toMcpTool) };
     case "tools/call":
-      return callTool(request.params);
+      return callTool(request.params, userId);
     default:
       throw {
         jsonrpc: true,
@@ -215,6 +216,7 @@ function isJsonRpcCoded(
  */
 export async function handleMcpMessage(
   message: unknown,
+  userId?: string,
 ): Promise<JsonRpcResponse | null> {
   const parsed = asRequest(message);
   if ("code" in parsed) {
@@ -228,7 +230,7 @@ export async function handleMcpMessage(
   }
 
   try {
-    const result = await handleRequest(request);
+    const result = await handleRequest(request, userId);
     if (isNotification) return null;
     return resultResponse(request.id as JsonRpcId, result);
   } catch (error) {
@@ -251,7 +253,10 @@ export type McpHttpResult =
   | { status: 400; body: JsonRpcResponse };
 
 /** Parse a Streamable HTTP POST body (one message or a batch). */
-export async function handleMcpHttpPayload(payload: unknown): Promise<McpHttpResult> {
+export async function handleMcpHttpPayload(
+  payload: unknown,
+  userId?: string,
+): Promise<McpHttpResult> {
   if (Array.isArray(payload)) {
     if (payload.length === 0) {
       return {
@@ -264,14 +269,14 @@ export async function handleMcpHttpPayload(payload: unknown): Promise<McpHttpRes
     }
     const responses: JsonRpcResponse[] = [];
     for (const item of payload) {
-      const response = await handleMcpMessage(item);
+      const response = await handleMcpMessage(item, userId);
       if (response) responses.push(response);
     }
     if (responses.length === 0) return { status: 202, body: null };
     return { status: 200, body: responses };
   }
 
-  const response = await handleMcpMessage(payload);
+  const response = await handleMcpMessage(payload, userId);
   if (response === null) return { status: 202, body: null };
   if (
     response.error?.code === PARSE_ERROR ||

@@ -30,8 +30,22 @@ Chat clients that speak MCP (Grok.com custom connectors, Claude) use the same re
 `POST /api/mcp` with the same Bearer key.
 
 To add Planner in Grok: [grok.com/connectors](https://grok.com/connectors) → New Connector
-→ Custom. Name `Planner`. URL `https://planner-lee-5344.vercel.app/api/mcp`. Authenticate
-with the Bearer token that matches Vercel’s `PLANNER_AGENT_API_KEY`.
+→ Custom. Name `Planner`. URL `https://planner-lee-5344.vercel.app/api/mcp`.
+
+Grok’s next dialog is OAuth, not an API-key field. After this deploy, either click
+**Save & Connect** and let Grok discover the endpoints, or fill:
+
+| Field                  | Value                                                 |
+| ---------------------- | ----------------------------------------------------- |
+| Client ID              | `planner`                                             |
+| Client Secret          | leave empty                                           |
+| Authorization Endpoint | `https://planner-lee-5344.vercel.app/oauth/authorize` |
+| Token Endpoint         | `https://planner-lee-5344.vercel.app/api/oauth/token` |
+| Scopes                 | `planner`                                             |
+| Token Auth Method      | none (PKCE only)                                      |
+
+Approve in the browser as your Planner account. The static agent API key still works for
+Alfred and `POST /api/agent/*`.
 
 See **[docs/agent-api.md](docs/agent-api.md)** for setup and the tool list. Conversation
 prompts and skills live in a separate **`planner-agent`** repo so the agent is not drowned

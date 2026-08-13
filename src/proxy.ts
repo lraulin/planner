@@ -16,7 +16,8 @@ import { buildCsp, createNonce } from "@/lib/security/csp";
  * Allowed without a session cookie:
  * - `/login`
  * - `/api/auth/*` (Better Auth)
- * - `/api/agent/*` and `/api/mcp` (Bearer key checked in the route handler)
+ * - `/api/agent/*` and `/api/mcp` (Bearer / OAuth checked in the route handler)
+ * - `/.well-known/*` and `/api/oauth/*` (MCP OAuth discovery and token/register)
  */
 export function proxy(request: NextRequest) {
   const nonce = createNonce();
@@ -48,7 +49,9 @@ export function proxy(request: NextRequest) {
     pathname.startsWith("/login") ||
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/api/agent") ||
-    pathname.startsWith("/api/mcp")
+    pathname.startsWith("/api/mcp") ||
+    pathname.startsWith("/api/oauth") ||
+    pathname.startsWith("/.well-known")
   ) {
     return proceed();
   }

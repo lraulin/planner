@@ -93,6 +93,27 @@ const checks = [
     },
   },
   {
+    name: "OAuth discovery is public",
+    run: async () => {
+      const as = await fetch(`${BASE}/.well-known/oauth-authorization-server`, {
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+      const prm = await fetch(`${BASE}/.well-known/oauth-protected-resource`, {
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+      const asBody = await as.json();
+      const prmBody = await prm.json();
+      return (
+        as.status === 200 &&
+        prm.status === 200 &&
+        typeof asBody.authorization_endpoint === "string" &&
+        asBody.authorization_endpoint.endsWith("/oauth/authorize") &&
+        typeof prmBody.resource === "string" &&
+        prmBody.resource.endsWith("/api/mcp")
+      );
+    },
+  },
+  {
     name: "MCP initialize advertises the planner server",
     run: async () => {
       const result = await mcp(1, "initialize", {

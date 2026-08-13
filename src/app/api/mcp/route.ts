@@ -1,24 +1,22 @@
 import { NextResponse } from "next/server";
-import { requireAgentApiKey } from "@/lib/agent/auth";
 import { httpStatusFor, toAgentError } from "@/lib/agent/errors";
-import {
-  handleMcpHttpPayload,
-  mcpParseError,
-  WWW_AUTHENTICATE_BEARER,
-} from "@/lib/agent/mcp";
+import { handleMcpHttpPayload, mcpParseError } from "@/lib/agent/mcp";
+import { requireMcpAuth } from "@/lib/oauth/bearer";
+import { wwwAuthenticateChallenge } from "@/lib/oauth/metadata";
+import { publicOrigin } from "@/lib/oauth/origin";
 
 /**
  * Remote MCP (Streamable HTTP, JSON only): POST /api/mcp
  *
- * Auth: Authorization: Bearer $PLANNER_AGENT_API_KEY
+ * Auth: Bearer $PLANNER_AGENT_API_KEY or an OAuth access token from /oauth/authorize.
  * Protocol: JSON-RPC initialize / tools/list / tools/call over the agent registry.
  */
 
-function authFailure(err: unknown): NextResponse {
+function authFailure(err: unknown, origin: string): NextResponse {
   const agentErr = toAgentError(err);
   const headers =
     agentErr.code === "unauthorized"
-      ? { "www-authenticate": WWW_AUTHENTICATE_BEARER }
+      ? { "www-authenticate": wwwAuthenticateChallenge(origin) }
       : undefined;
   return NextResponse.json(
     { error: { code: agentErr.code, message: agentErr.message } },
@@ -27,10 +25,12 @@ function authFailure(err: unknown): NextResponse {
 }
 
 export async function POST(request: Request) {
+  const origin = publicOrigin(request);
+  let auth;
   try {
-    requireAgentApiKey(request);
+    auth = requireMcpAuth(request, origin);
   } catch (err) {
-    return authFailure(err);
+    return authFailure(err, origin);
   }
 
   let payload: unknown;
@@ -40,7 +40,10 @@ export async function POST(request: Request) {
     return NextResponse.json(mcpParseError(), { status: 400 });
   }
 
-  const result = await handleMcpHttpPayload(payload);
+  const result = await handleMcpHttpPayload(
+    payload,
+    auth.via === "oauth" ? auth.userId : undefined,
+  );
   if (result.status === 202) {
     return new NextResponse(null, { status: 202 });
   }

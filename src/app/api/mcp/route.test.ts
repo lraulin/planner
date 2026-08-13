@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { issueAccessToken } from "@/lib/oauth/tokens";
 import { GET, POST } from "./route";
 
 const originalKey = process.env.PLANNER_AGENT_API_KEY;
@@ -32,7 +33,10 @@ describe("MCP HTTP boundary", () => {
       }),
     );
     expect(response.status).toBe(401);
-    expect(response.headers.get("www-authenticate")).toBe('Bearer realm="planner"');
+    expect(response.headers.get("www-authenticate")).toContain("resource_metadata=");
+    expect(response.headers.get("www-authenticate")).toContain(
+      "oauth-protected-resource",
+    );
     expect(await response.json()).toMatchObject({
       error: { code: "unauthorized" },
     });
@@ -48,14 +52,14 @@ describe("MCP HTTP boundary", () => {
     });
   });
 
-  it("fails closed when the server key is unset", async () => {
+  it("rejects a non-OAuth bearer when the server key is unset", async () => {
     delete process.env.PLANNER_AGENT_API_KEY;
     const response = await POST(
       request({ jsonrpc: "2.0", id: 1, method: "initialize" }),
     );
-    expect(response.status).toBe(500);
+    expect(response.status).toBe(401);
     expect(await response.json()).toMatchObject({
-      error: { code: "internal" },
+      error: { code: "unauthorized" },
     });
   });
 
@@ -85,6 +89,21 @@ describe("MCP HTTP boundary", () => {
     };
     expect(payload.result.tools).toHaveLength(26);
     expect(payload.result.tools.map((tool) => tool.name)).not.toContain("list_tools");
+  });
+
+  it("accepts an OAuth access token issued for this MCP resource", async () => {
+    const origin = (process.env.BETTER_AUTH_URL ?? "http://localhost").replace(
+      /\/$/,
+      "",
+    );
+    const token = issueAccessToken("user-1", `${origin}/api/mcp`);
+    const response = await POST(
+      request({ jsonrpc: "2.0", id: 9, method: "initialize" }, token),
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      result: { serverInfo: { name: "planner" } },
+    });
   });
 
   it("returns 405 for GET and 400 for malformed JSON", async () => {

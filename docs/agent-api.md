@@ -40,7 +40,12 @@ Content-Type: application/json
 `tools/list` exposes the current core and domain tools — not HTTP discovery
 (`list_tools`, `describe_tool`, `health`) or legacy aliases. In Grok: grok.com/connectors
 → New Connector → Custom, name `Planner`, URL
-`https://planner-lee-5344.vercel.app/api/mcp`, then paste the Bearer key.
+`https://planner-lee-5344.vercel.app/api/mcp`. Grok then asks for OAuth app
+credentials — Client ID `planner`, empty secret, authorize
+`https://planner-lee-5344.vercel.app/oauth/authorize`, token
+`https://planner-lee-5344.vercel.app/api/oauth/token`, scope `planner`, token
+auth method none (PKCE). Or re-add the connector after deploy and let discovery
+fill those in.
 
 ## Discovery first
 
