@@ -6,7 +6,7 @@ import { requestQuickCapture } from "@/components/capture/event";
 import { signOut } from "@/lib/auth/client";
 import { QUICK_CAPTURE } from "@/lib/commands/chords";
 import type { Command } from "@/lib/commands/registry";
-import { BUILT_MODULES } from "./modules";
+import { BUILT_MODULES, modulePages } from "./modules";
 
 /**
  * The commands that mean the same thing on every screen.
@@ -18,18 +18,43 @@ import { BUILT_MODULES } from "./modules";
  *
  * Modules marked `reserved` are excluded by `BUILT_MODULES`. A palette entry that 404s is
  * worse than a missing one.
+ *
+ * **Pages are generated the same way, and for the same reason.** The palette must be complete
+ * (`navigation.md`), and a module's pages are destinations — `Agenda` and `Journal` are places
+ * you go, so a Go menu that stops at the module and makes you find the bar yourself is one you
+ * stop trusting. `Schedule: Agenda` rather than a bare `Agenda`, because four of these labels
+ * are generic on their own and `Grid` alone would be indistinguishable from a command.
  */
 export function useGlobalCommands(): readonly Command[] {
   const router = useRouter();
 
   return useMemo(() => {
-    const go: Command[] = BUILT_MODULES.map((entry) => ({
-      id: `go.${entry.id}`,
-      label: entry.label,
-      group: "go",
-      keywords: GO_KEYWORDS[entry.id],
-      run: () => router.push(entry.href),
-    }));
+    const go: Command[] = BUILT_MODULES.flatMap((entry) => {
+      const pages = modulePages(entry.id);
+
+      const goToModule: Command = {
+        id: `go.${entry.id}`,
+        label: entry.label,
+        group: "go",
+        keywords: GO_KEYWORDS[entry.id],
+        run: () => router.push(entry.href),
+      };
+
+      // A module with one page has no bar, and a second entry naming it would be the same
+      // destination printed twice under two names.
+      if (pages.length < 2) return [goToModule];
+
+      return [
+        goToModule,
+        ...pages.map(({ page, href }) => ({
+          id: `go.${entry.id}.${page.id}`,
+          label: `${entry.label}: ${page.label}`,
+          group: "go" as const,
+          keywords: [GO_KEYWORDS[entry.id], page.keywords].filter(Boolean).join(" "),
+          run: () => router.push(href),
+        })),
+      ];
+    });
 
     const app: Command[] = [
       {

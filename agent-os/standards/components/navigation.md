@@ -9,13 +9,14 @@ be a permanent tab and the eleventh was already too many.
 
 Five surfaces now, each answering a different question.
 
-| Surface                      | Question it answers            | Where                          |
-| ---------------------------- | ------------------------------ | ------------------------------ |
-| **Sidebar** (`⌘K` to search) | "Where can I go?"              | Desktop, always                |
-| **Menu bar**                 | "What can I do here?"          | Every view's command row       |
-| **Commands panel**           | "…show me all of it at once"   | Desktop, opt-in, remembered    |
-| **Row context menu**         | "What can I do to _this_ row?" | Right-click / long-press a row |
-| **Command palette** (`⌘K`)   | "What can this app do?"        | Desktop, on demand             |
+| Surface                      | Question it answers              | Where                           |
+| ---------------------------- | -------------------------------- | ------------------------------- |
+| **Sidebar** (`⌘K` to search) | "Where can I go?"                | Desktop, always                 |
+| **Page bar**                 | "Where else can I go _in here_?" | Above the toolbar, both layouts |
+| **Menu bar**                 | "What can I do here?"            | Every view's command row        |
+| **Commands panel**           | "…show me all of it at once"     | Desktop, opt-in, remembered     |
+| **Row context menu**         | "What can I do to _this_ row?"   | Right-click / long-press a row  |
+| **Command palette** (`⌘K`)   | "What can this app do?"          | Desktop, on demand              |
 
 Below `md` the sidebar is replaced by the bottom nav plus the More sheet, there is no palette and
 no command row, and no panel — **`⋯` becomes the menu bar**, rendering the same tree with the
@@ -48,6 +49,89 @@ at all.
   next person re-arguing navigation.
 - **Do not** render a reserved module as a disabled or "coming soon" entry. A menu full of dead
   rows teaches the reader to stop reading the menu, and then the live rows stop working too.
+
+## Pages live in one registry too
+
+Three words, three different things, and they are not interchangeable:
+
+| Word       | Means                                                       | Registry                  |
+| ---------- | ----------------------------------------------------------- | ------------------------- |
+| **Module** | A sidebar destination — Tasks, Fitness, Schedule            | `shell/modules.ts`        |
+| **Page**   | A destination _within_ a module — Sessions, Journal, Agenda | `lib/navigation/pages.ts` |
+| **View**   | A saved collection of filter / column / sort settings       | `lib/settings/views.ts`   |
+
+A fourth word, **pane**, is a layout region that collapses below `md` (Day's appointments /
+list / journal). It is responsive layout, not navigation, and does not belong in any registry.
+
+**"Lens" names exactly one thing: `TabToolbar`'s second row.** It is a useful name for the row
+that answers "what am I looking at" — view picker, search, filter, grouping, density — and it
+stops being useful the moment an individual control is also called a lens, which is how two
+separate page switchers came to be documented as "lens controls" while sitting one tier above
+everything else on that row. The row is the lens; the things on it have their own names.
+
+**View is not renamed.** It is Achieve's own word for a saved column/filter preset, it is in
+`data-grid.md` and every grid call site, and "lens" as a synonym for it buys nothing.
+
+`pages.ts` is keyed by module id and holds no icons — the bar is text — which is what lets it
+live in `src/lib` and be tested. `modules.ts` owns the accessors (`modulePages`,
+`moduleHasPageBar`, `moduleDefaultPageHref`) and asserts at compile time that every id keying
+the page registry is a real module.
+
+**Everything the module registry promises, the page registry promises.** One list, read by the
+bar, the palette's go-to entries and the bare-path redirect. `status: "reserved"` means renders
+nowhere and is not a target. A reserved page is not drawn as a disabled tab.
+
+### The control depends on the question, not the module
+
+> **Underline tabs are navigation. Bordered segments are a setting with two or three values.**
+
+This is the whole rule, and it was written after four modules answered "how do I reach the other
+thing in here" four different ways: Fitness with a bordered segment in one style, Schedule and
+Notes with a bordered segment in another, Day with a bare pair of links. Consistency here does
+**not** mean one control for every switcher — that is exactly how `Sessions | Exercises` came to
+look like a density picker. It means one control per question, drawn identically everywhere.
+
+Density keeps its bordered segment. Every navigation switcher is a tab.
+
+### The bar gets its own row, and only when it earns one
+
+Above the toolbar, below the phone header. Not folded into the command row: navigation sits at
+the rank of the sidebar, and putting it among the verbs is the flattening `TabToolbar`'s two-row
+split already exists to prevent, one tier up.
+
+It renders **only at two or more built pages**. A single tab spends a row saying "you are in the
+only place there is", so most modules — and Finances, until Insights lands — pay nothing.
+
+Below `md` the page bar is the row that survives. The command row is hidden down there, so the
+bar is the _only_ path to a sibling page: it scrolls sideways and its tabs are 44px.
+
+### A page is a URL
+
+Real `<Link>`s to real routes, so Back works, reload holds, and a page opens in a new tab. Two
+of these were persisted settings that never touched the address bar, and promoting them cost
+nothing: the stickiness that motivated the setting is preserved separately by the bare module
+path redirecting to `shell.lastPage`.
+
+The query string is carried across a page switch, because the query is _where you are looking_
+and the page is _how it is drawn_ — flipping Calendar → Agenda must not discard the week you
+scrolled to. Each page validates its own params, so one the destination cannot use is ignored.
+
+### A focused flow is not a page
+
+`/schedule/plan`, `/fitness/log`, `/schedule/time-chart/[id]` and the editors never appear in
+the bar. The test: **in the bar you leave by tapping a sibling; a focused flow has an exit.**
+
+This is enforced by how the active page is resolved, and the rule is neither of the two you
+would reach for first. **A declared segment matches its own subtree; anything undeclared matches
+nothing.**
+
+- `/fitness/sessions/abc` is the session editor, rendered _inside_ the Sessions page. Exact
+  matching would drop the bar and the editor would look like it had left the module.
+- `/schedule/time-chart/abc` is a focused flow. "First segment after the module" would invent a
+  page for it.
+
+Both wrong answers fail silently on a real route, which is why `pageForPathname` is tested and
+the bar is not.
 
 ## Commands live in one registry
 

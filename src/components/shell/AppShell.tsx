@@ -1,5 +1,7 @@
+import { Suspense } from "react";
 import { QuickCapture } from "@/components/capture/QuickCapture";
 import { CommandKeys } from "./CommandKeys";
+import { PageBar } from "./PageBar";
 import { CommandPalette } from "./CommandPalette";
 import { CommandProvider } from "./CommandProvider";
 import { RowClipboardProvider } from "@/components/grid/RowClipboardProvider";
@@ -47,6 +49,20 @@ export function AppShell({
 
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <MobileHeader active={active} title={pageTitle} />
+
+            {/*
+              Here rather than inside each module for the same reason the sidebar is: five
+              surfaces reading one registry is what stops them disagreeing, and the four modules
+              that grew their own switcher grew three different ones. `PageBar` returns `null`
+              for a module with fewer than two built pages, so most of the app pays nothing.
+
+              The boundary is for `useSearchParams`, which the bar uses to carry the query across
+              a page switch. Every route is `force-dynamic`, so the fallback is theoretical — but
+              the bailout it guards against is a build-time error, not a runtime one.
+            */}
+            <Suspense fallback={null}>
+              <PageBar active={active} />
+            </Suspense>
 
             <div className="flex min-h-0 flex-1 flex-col">{children}</div>
 
