@@ -14,7 +14,9 @@
  *    are in the description. Rows a rule has claimed are also withheld from cadence
  *    detection, so a monthly benefit cannot drift into the biweekly paycheck median.
  * 3. **Cadence is income.** Whatever is left and arrives every fortnight is a paycheck.
- * 4. **Sign decides the rest.** Money out is spend; an unexplained credit is a refund.
+ * 4. **Sign decides the rest.** Money out is spend. Money *in* that nobody claimed is a
+ *    refund only when it comes back from a merchant money went out to; otherwise it is a
+ *    deposit from outside, and calling it a refund would make it subtract from spending.
  *
  * Everything here is pure and reproducible: same rows in, same plan out, including the
  * transfer group ids, which are **reused** whenever a pairing has not changed. That is what
@@ -25,9 +27,7 @@
 import type { FinanceFlowKind } from "@/db/schema";
 import { categorize } from "./categorize";
 import { detectIncome, type IncomeRow, type Payday } from "./income";
-import { matchRule } from "./rules";
 import { matchTransfers, type TransferAccount, type TransferRow } from "./transfers";
-import { normalizeMerchant } from "./merchant";
 
 export type ReclassifyRow = {
   id: string;
@@ -113,12 +113,17 @@ export function planReclassify(
   }));
   const transfers = matchTransfers(transferRows, accounts);
 
+  // One pass for merchant, category and any flow the merchant itself settles.
+  const perRow = new Map(
+    rows.map((row) => [row.id, categorize(row.description, row.sourceCategory)]),
+  );
+
   // A rule that names a flow has settled the row. Withholding those from cadence detection
   // keeps a monthly VA benefit out of the biweekly median, which would otherwise deflate
   // `median × 26 ÷ 12` — the one figure the whole dashboard leans on.
   const ruleFlows = new Map<string, FinanceFlowKind>();
   for (const row of rows) {
-    const flow = matchRule(normalizeMerchant(row.description))?.flow;
+    const flow = perRow.get(row.id)?.flow;
     if (flow) ruleFlows.set(row.id, flow);
   }
 
@@ -139,19 +144,50 @@ export function planReclassify(
     for (const id of group) groupIdByRow.set(id, groupId);
   }
 
+  /** What every detector agrees on, plus the debits. Credits are settled below. */
+  const claimed = new Map<string, FinanceFlowKind>();
+  for (const row of rows) {
+    const flow =
+      transfers.flows.get(row.id) ?? ruleFlows.get(row.id) ?? income.flows.get(row.id);
+    if (flow) claimed.set(row.id, flow);
+    else if (row.amountCents <= 0) claimed.set(row.id, "spend");
+  }
+
+  // Merchants money actually goes out to. A credit only counts as a refund if it comes back
+  // from one of these.
+  const spendingMerchants = new Set<string>();
+  for (const row of rows) {
+    if (claimed.get(row.id) !== "spend") continue;
+    const merchant = perRow.get(row.id)?.merchant;
+    if (merchant) spendingMerchants.add(merchant);
+  }
+
   const planned = rows.map((row) => {
+    const merchant = perRow.get(row.id)?.merchant ?? "";
     const flow: FinanceFlowKind =
-      transfers.flows.get(row.id) ??
-      ruleFlows.get(row.id) ??
-      income.flows.get(row.id) ??
-      // An unexplained credit is a refund rather than income: it is money back, and calling
-      // it earnings would invent a wage the accounts cannot see.
-      (row.amountCents > 0 ? "refund" : "spend");
+      claimed.get(row.id) ??
+      /*
+       * An unclaimed credit, and the two possibilities are not close.
+       *
+       * A **refund** is negative spending — returning the couch reduces what the couch cost
+       * — so it may only be a refund if the money came back from a merchant money went out
+       * to. Anything else is a deposit: a cheque, a tax refund, a Coinbase withdrawal, Zelle
+       * from a friend. Filing those as refunds made them *subtract* from spending, which is
+       * how a pay period that received a $2,516 tax refund reported negative money out.
+       *
+       * So the default is `external_transfer`: money arriving from outside what this module
+       * can see. That is deliberately the conservative bucket — it is neither a cost nor
+       * earnings, on the same reasoning already recorded for the Pentagon Federal sweeps in
+       * `transfers.ts`. Calling it income would invent a wage; calling it a refund invents a
+       * discount. A rule in `rules.ts` can name any of these properly, and the user's
+       * `flow_override` settles the rest.
+       */
+      (spendingMerchants.has(merchant) ? "refund" : "external_transfer");
 
     return {
       id: row.id,
       derivedCategory: carriesCategory(flow)
-        ? categorize(row.description, row.sourceCategory).category
+        ? (perRow.get(row.id)?.category ?? null)
         : null,
       derivedFlow: flow,
       transferGroupId: groupIdByRow.get(row.id) ?? null,

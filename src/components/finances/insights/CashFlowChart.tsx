@@ -66,8 +66,11 @@ export function CashFlowChart({
   // purchases has negative spend, and pinning the axis at zero drew that bar hanging below
   // the plot entirely.
   const domain = yDomain([0, ...values]);
-  const ticks = niceTicks(Math.min(0, domain.min), domain.max, compact ? 4 : 5);
-  const yMin = ticks[0] ?? Math.min(0, domain.min);
+  // The floor is the lowest *actual* value, not the padded domain: `yDomain` pads below its
+  // minimum, which on an all-positive chart reserved a whole negative band for nothing and
+  // squashed the bars into the top two thirds.
+  const ticks = niceTicks(Math.min(0, ...values), domain.max, compact ? 4 : 5);
+  const yMin = ticks[0] ?? Math.min(0, ...values);
   const yMax = ticks[ticks.length - 1] ?? domain.max;
 
   const slots = bandSlots(points.length, WIDTH, pad, 0.24);

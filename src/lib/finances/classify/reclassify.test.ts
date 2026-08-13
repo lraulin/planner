@@ -122,19 +122,52 @@ describe("planReclassify", () => {
     expect(plan.medianPaycheckCents).toBe(250000);
   });
 
-  it("files money out as spend and an unexplained credit as a refund", () => {
+  it("files a credit from a merchant we spend at as a refund", () => {
     const plan = planOf([
       row("out", "capone-card", "2026-02-02", "WM SUPERCENTER #1981", -8412),
       row("back", "capone-card", "2026-02-09", "WAL-MART #1981", 8412),
     ]);
 
     expect(flowOf(plan, "out")).toBe("spend");
+    // Money came back from a shop money went out to, so it is negative spending.
     expect(flowOf(plan, "back")).toBe("refund");
     // Both spellings are one store, so both carry the same category.
     expect(plan.rows.map((entry) => entry.derivedCategory)).toEqual([
       "Groceries",
       "Groceries",
     ]);
+  });
+
+  it("does not call a deposit a refund just because it is money coming in", () => {
+    /*
+     * The bug this pins: every unclaimed credit used to become a refund, and a refund is
+     * negative spending. A pay period that received a $2,516 tax refund therefore reported
+     * *negative* money out. A deposit from somewhere we never spend is not a discount.
+     */
+    const plan = planOf([
+      row("shop", "capone-card", "2026-02-02", "WM SUPERCENTER #1981", -8412),
+      row(
+        "tax",
+        "checking",
+        "2026-04-21",
+        "Deposit from ST. OF MARYLAND TAX REFUND",
+        83400,
+      ),
+      row("cheque", "checking", "2026-06-22", "Check Deposit (Mobile)", 50000),
+      row(
+        "zelle",
+        "checking",
+        "2026-05-02",
+        "Zelle money received from A FRIEND",
+        12000,
+      ),
+    ]);
+
+    for (const id of ["tax", "cheque", "zelle"]) {
+      expect(flowOf(plan, id), id).toBe("external_transfer");
+    }
+    // And nothing about them is spending, so none can drag a period's outgoings below zero.
+    expect(plan.rows.filter((entry) => entry.derivedFlow === "refund")).toEqual([]);
   });
 
   it("keeps the group id when a second run pairs the same two rows", () => {
