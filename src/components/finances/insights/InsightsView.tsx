@@ -24,13 +24,16 @@ import type { CarryingCost } from "@/lib/finances/dashboardQueries";
 import { formatUsd } from "@/lib/finances/money";
 import { reclassifyAction } from "@/app/finances/actions";
 import {
+  CHART_MODE_LABELS,
   INSIGHTS_AXES,
+  INSIGHTS_CHART_MODES,
   INSIGHTS_WINDOWS,
   WINDOW_LABELS,
   WINDOW_MONTHS,
   parseInsightsView,
   serializeInsightsView,
   type InsightsAxis,
+  type InsightsChartMode,
   type InsightsViewSettings,
   type InsightsWindow,
 } from "@/lib/settings/finances";
@@ -213,6 +216,17 @@ export function InsightsView({
             patch((current) => ({ ...current, axis: next as InsightsAxis }))
           }
         />
+        <ToggleGroup
+          label="Chart"
+          options={INSIGHTS_CHART_MODES.map((option) => ({
+            id: option,
+            label: CHART_MODE_LABELS[option],
+          }))}
+          value={view.mode}
+          onChange={(next) =>
+            patch((current) => ({ ...current, mode: next as InsightsChartMode }))
+          }
+        />
         <span className="text-[0.75rem] text-ink-muted">
           {formatDate(analysis.range.startKey)} – {formatDate(analysis.range.endKey)}
         </span>
@@ -256,14 +270,24 @@ export function InsightsView({
         </StatRow>
 
         <Panel
-          title={`Money in and out by ${bucketNoun}`}
+          title={
+            view.mode === "net"
+              ? `Net cash flow by ${bucketNoun}`
+              : `Money in and out by ${bucketNoun}`
+          }
           subtitle={
-            view.axis === "month"
-              ? "Calendar months. A month holding three paychecks looks rich and the next looks broke — switch the axis to pay periods to remove that."
-              : "One bucket per paycheck, so two stretches of a biweekly year are comparable."
+            view.mode === "net"
+              ? "What each bucket gained or lost. Above the line is money kept; below it is a shortfall covered from savings or a card."
+              : view.axis === "month"
+                ? "Calendar months. A month holding three paychecks looks rich and the next looks broke — switch the axis to pay periods to remove that."
+                : "One bucket per paycheck, so two stretches of a biweekly year are comparable."
           }
         >
-          <CashFlowChart points={analysis.flow} axisLabel={bucketNoun} />
+          <CashFlowChart
+            points={analysis.flow}
+            axisLabel={bucketNoun}
+            mode={view.mode}
+          />
         </Panel>
 
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">

@@ -184,6 +184,34 @@ describe("cashFlow", () => {
     });
   });
 
+  it("carries a net trailing average, signed, for the net view", () => {
+    const buckets = monthBuckets({ startKey: "2026-01-01", endKey: "2026-03-31" });
+    const points = cashFlow(
+      [
+        // Two months in surplus, one badly under.
+        row({
+          transactionDate: "2026-01-05",
+          amountCents: 300000,
+          derivedFlow: "income",
+        }),
+        row({ transactionDate: "2026-01-20", amountCents: -100000 }),
+        row({
+          transactionDate: "2026-02-05",
+          amountCents: 300000,
+          derivedFlow: "income",
+        }),
+        row({ transactionDate: "2026-02-20", amountCents: -100000 }),
+        row({ transactionDate: "2026-03-20", amountCents: -400000 }),
+      ],
+      buckets,
+      3,
+    );
+
+    expect(points.map((point) => point.netCents)).toEqual([200000, 200000, -400000]);
+    // Only the last bucket has three behind it: (200000 + 200000 − 400000) / 3 = 0.
+    expect(points.map((point) => point.trailingNetCents)).toEqual([null, null, 0]);
+  });
+
   it("leaves the rolling average null until the window is actually full", () => {
     // A "trailing 12" computed from three months is a different statistic wearing the same
     // label, and always the flattering one.

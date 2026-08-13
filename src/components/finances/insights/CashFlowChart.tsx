@@ -11,6 +11,7 @@ import {
 } from "@/lib/metrics/derive";
 import { formatUsd, formatUsdCompact } from "@/lib/finances/money";
 import type { CashFlowPoint } from "@/lib/finances/analytics";
+import type { InsightsChartMode } from "@/lib/settings/finances";
 import { useIsCompact } from "@/components/shell/useIsCompact";
 
 /**
@@ -39,10 +40,12 @@ type Hovered = { index: number; x: number };
 export function CashFlowChart({
   points,
   axisLabel,
+  mode,
 }: {
   points: CashFlowPoint[];
   /** What one bucket is — "month" or "pay period" — for the accessible description. */
   axisLabel: string;
+  mode: InsightsChartMode;
 }) {
   const compact = useIsCompact() ?? false;
   const [hovered, setHovered] = useState<Hovered | null>(null);
@@ -58,7 +61,10 @@ export function CashFlowChart({
     );
   }
 
-  const values = points.flatMap((point) => [point.incomeCents, point.spendCents]);
+  const net = mode === "net";
+  const values = net
+    ? points.map((point) => point.netCents)
+    : points.flatMap((point) => [point.incomeCents, point.spendCents]);
   // Bars are measured from zero, always. A truncated bar axis misstates every ratio drawn
   // on it, and this is a chart people will use to decide things.
   //
@@ -75,18 +81,18 @@ export function CashFlowChart({
 
   const slots = bandSlots(points.length, WIDTH, pad, 0.24);
   const gap = 1.5;
-  const halfWidth = Math.max(1, (slots[0].width - gap) / 2);
+  // One bar per bucket in net mode; two side by side otherwise.
+  const barWidth = net ? slots[0].width : Math.max(1, (slots[0].width - gap) / 2);
 
   const toY = (value: number) => plotPoint(0, value, WIDTH, HEIGHT, pad, yMin, yMax).y;
   const baselineY = toY(0);
 
   const labelled = new Set(labelIndices(points.length, compact ? 4 : 10));
 
-  const trailing = points.map((point, index) =>
-    point.trailingSpendCents === null
-      ? null
-      : { x: slots[index].center, y: toY(point.trailingSpendCents) },
-  );
+  const trailing = points.map((point, index) => {
+    const value = net ? point.trailingNetCents : point.trailingSpendCents;
+    return value === null ? null : { x: slots[index].center, y: toY(value) };
+  });
   // Split at the nulls: joining across a gap would draw an average through months that
   // never had one.
   const trailingRuns: { x: number; y: number }[][] = [];
@@ -108,7 +114,11 @@ export function CashFlowChart({
           viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
           className="h-auto w-full"
           role="img"
-          aria-label={`Income and spending per ${axisLabel}`}
+          aria-label={
+            net
+              ? `Net cash flow per ${axisLabel}`
+              : `Income and spending per ${axisLabel}`
+          }
           onPointerDown={() => setHovered(null)}
         >
           {ticks.map((tick) => {
@@ -139,7 +149,7 @@ export function CashFlowChart({
           {points.map((point, index) => {
             const slot = slots[index];
             const income = barRect(
-              { x: slot.x, width: halfWidth },
+              { x: slot.x, width: barWidth },
               point.incomeCents,
               HEIGHT,
               pad,
@@ -147,8 +157,16 @@ export function CashFlowChart({
               yMax,
             );
             const spend = barRect(
-              { x: slot.x + halfWidth + gap, width: halfWidth },
+              { x: slot.x + barWidth + gap, width: barWidth },
               point.spendCents,
+              HEIGHT,
+              pad,
+              yMin,
+              yMax,
+            );
+            const netBar = barRect(
+              { x: slot.x, width: barWidth },
+              point.netCents,
               HEIGHT,
               pad,
               yMin,
@@ -186,8 +204,23 @@ export function CashFlowChart({
                   fill={isActive ? "var(--select)" : "transparent"}
                   opacity={isActive ? 0.45 : 1}
                 />
-                <rect {...income} fill="var(--chart-income)" rx={2} />
-                <rect {...spend} fill="var(--chart-spend)" rx={2} />
+                {net ? (
+                  // Sign carries the meaning, so the hue follows it: a surplus is drawn in
+                  // the money-in colour above the line, a shortfall in the money-out colour
+                  // below it. Position and colour agree rather than competing.
+                  <rect
+                    {...netBar}
+                    fill={
+                      point.netCents < 0 ? "var(--chart-spend)" : "var(--chart-income)"
+                    }
+                    rx={2}
+                  />
+                ) : (
+                  <>
+                    <rect {...income} fill="var(--chart-income)" rx={2} />
+                    <rect {...spend} fill="var(--chart-spend)" rx={2} />
+                  </>
+                )}
               </g>
             );
           })}
@@ -240,24 +273,66 @@ export function CashFlowChart({
             }}
           >
             <div className="font-medium">{active.bucket.label}</div>
-            <div>In {formatUsd(active.incomeCents)}</div>
-            <div>Out {formatUsd(active.spendCents)}</div>
-            <div className="text-ink-muted">Net {formatUsd(active.netCents)}</div>
-            {active.trailingSpendCents !== null && (
-              <div className="text-ink-muted">
-                Avg out {formatUsd(active.trailingSpendCents)}
-              </div>
+            {net ? (
+              <>
+                <div
+                  style={{
+                    color:
+                      active.netCents < 0
+                        ? "var(--chart-spend)"
+                        : "var(--chart-income)",
+                  }}
+                >
+                  Net {formatUsd(active.netCents)}
+                </div>
+                <div className="text-ink-muted">
+                  In {formatUsd(active.incomeCents)} · out{" "}
+                  {formatUsd(active.spendCents)}
+                </div>
+                {active.trailingNetCents !== null && (
+                  <div className="text-ink-muted">
+                    Avg net {formatUsd(active.trailingNetCents)}
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div>In {formatUsd(active.incomeCents)}</div>
+                <div>Out {formatUsd(active.spendCents)}</div>
+                <div className="text-ink-muted">Net {formatUsd(active.netCents)}</div>
+                {active.trailingSpendCents !== null && (
+                  <div className="text-ink-muted">
+                    Avg out {formatUsd(active.trailingSpendCents)}
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
       </div>
 
       <ChartLegend
-        items={[
-          { color: "var(--chart-income)", label: "Money in" },
-          { color: "var(--chart-spend)", label: "Money out" },
-          { color: "var(--chart-average)", label: "Trailing average out", line: true },
-        ]}
+        items={
+          net
+            ? [
+                { color: "var(--chart-income)", label: "Gained" },
+                { color: "var(--chart-spend)", label: "Lost" },
+                {
+                  color: "var(--chart-average)",
+                  label: "Trailing average net",
+                  line: true,
+                },
+              ]
+            : [
+                { color: "var(--chart-income)", label: "Money in" },
+                { color: "var(--chart-spend)", label: "Money out" },
+                {
+                  color: "var(--chart-average)",
+                  label: "Trailing average out",
+                  line: true,
+                },
+              ]
+        }
       />
     </div>
   );

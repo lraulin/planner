@@ -314,6 +314,14 @@ export type CashFlowPoint = {
   trailingSpendCents: number | null;
   /** Trailing average of `incomeCents`, or null until the window is full. */
   trailingIncomeCents: number | null;
+  /**
+   * Trailing average of `netCents`, or null until the window is full.
+   *
+   * Its own average rather than `trailingIncome − trailingSpend`: those two are equal here,
+   * but only because both windows are the same length, and a reader should not have to
+   * verify that to trust the line.
+   */
+  trailingNetCents: number | null;
 };
 
 /**
@@ -374,12 +382,17 @@ export function cashFlow(
     totals.map((entry) => entry.incomeCents),
     window,
   );
+  const trailingNet = trailingAverage(
+    totals.map((entry) => entry.incomeCents - entry.spendCents),
+    window,
+  );
 
   return totals.map((entry, index) => ({
     ...entry,
     netCents: entry.incomeCents - entry.spendCents,
     trailingSpendCents: trailingSpend[index],
     trailingIncomeCents: trailingIncome[index],
+    trailingNetCents: trailingNet[index],
   }));
 }
 

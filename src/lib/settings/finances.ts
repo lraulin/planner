@@ -38,9 +38,25 @@ export const WINDOW_LABELS: Record<InsightsWindow, string> = {
   all: "All time",
 };
 
+/**
+ * Whether the cash-flow chart shows the two sides or the difference between them.
+ *
+ * `in-out` answers "which is bigger"; `net` answers "did this period gain or lose", which
+ * is a signed quantity and reads better as one bar either side of zero than as the gap
+ * between two.
+ */
+export const INSIGHTS_CHART_MODES = ["in-out", "net"] as const;
+export type InsightsChartMode = (typeof INSIGHTS_CHART_MODES)[number];
+
+export const CHART_MODE_LABELS: Record<InsightsChartMode, string> = {
+  "in-out": "In & out",
+  net: "Net",
+};
+
 export type InsightsViewSettings = {
   axis: InsightsAxis;
   window: InsightsWindow;
+  mode: InsightsChartMode;
 };
 
 /**
@@ -51,6 +67,8 @@ export type InsightsViewSettings = {
 export const DEFAULT_INSIGHTS_VIEW: InsightsViewSettings = {
   axis: "month",
   window: "12m",
+  // In-and-out first: it is the view that shows *why* a net figure is what it is.
+  mode: "in-out",
 };
 
 export function parseInsightsView(value: unknown): InsightsViewSettings {
@@ -59,9 +77,10 @@ export function parseInsightsView(value: unknown): InsightsViewSettings {
   return {
     axis: asOneOf(record.axis, INSIGHTS_AXES, DEFAULT_INSIGHTS_VIEW.axis),
     window: asOneOf(record.window, INSIGHTS_WINDOWS, DEFAULT_INSIGHTS_VIEW.window),
+    mode: asOneOf(record.mode, INSIGHTS_CHART_MODES, DEFAULT_INSIGHTS_VIEW.mode),
   };
 }
 
 export function serializeInsightsView(value: InsightsViewSettings): unknown {
-  return { axis: value.axis, window: value.window };
+  return { axis: value.axis, window: value.window, mode: value.mode };
 }
