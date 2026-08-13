@@ -25,7 +25,7 @@
 import type { FinanceFlowKind } from "@/db/schema";
 import { daysBetweenKeys } from "@/lib/schedule/geometry";
 import { categoryFromBank, UNCATEGORIZED } from "./classify/categories";
-import type { Payday } from "./classify/income";
+import { detectIncome, normalizedMonthlyIncome, type Payday } from "./classify/income";
 import { normalizeMerchant } from "./classify/merchant";
 import type { PayPeriod } from "./classify/payPeriods";
 import { matchRule } from "./classify/rules";
@@ -220,35 +220,83 @@ export function monthBuckets(range: DateRange): Bucket[] {
 }
 
 /**
- * Rebuild the paydays from rows the classifier already marked as income.
+ * The paydays that define a pay-period axis.
  *
- * The cadence detector runs inside `reclassify` and its answer is stored on the rows, so the
- * dashboard reads that answer back rather than re-deriving it. Same-day deposits from one
- * employer are one payday — a bonus that posts with the check must not open a second pay
- * period a day wide.
+ * **Not every income row is a payday.** A pay period is one paycheck's worth of time, so it
+ * is defined by a *cadence*, not by money arriving. A monthly VA benefit is reliable income
+ * and belongs in every income figure on the page — but letting it open a period split the
+ * biweekly calendar into extra windows whose only income was $180, which is how 31 of 104
+ * "paydays" came to be a disability payment.
+ *
+ * So this runs the same `detectIncome` the classifier does rather than grouping income rows
+ * by hand. Its biweekly test (a median gap of 12–16 days) is what excludes a ~30-day series,
+ * and having one implementation of that rule is what stops the dashboard and the classifier
+ * disagreeing about what a paycheck is.
  */
 export function paydaysFrom(rows: readonly AnalyticsRow[]): Payday[] {
-  const byKey = new Map<string, Payday>();
-  for (const row of rows) {
-    if (effectiveFlow(row) !== "income") continue;
-    const employer = effectiveMerchant(row);
-    const key = `${row.transactionDate}|${employer}`;
-    const payday = byKey.get(key) ?? {
-      dateKey: row.transactionDate,
-      employer,
-      amountCents: 0,
-      transactionIds: [],
-    };
-    payday.amountCents += row.amountCents;
-    payday.transactionIds.push(row.id);
-    byKey.set(key, payday);
-  }
+  const income = rows
+    .filter((row) => effectiveFlow(row) === "income")
+    .map((row) => ({
+      id: row.id,
+      transactionDate: row.transactionDate,
+      description: row.description,
+      amountCents: row.amountCents,
+    }));
+  return detectIncome(income).paydays;
+}
 
-  return [...byKey.values()].sort(
-    (left, right) =>
-      left.dateKey.localeCompare(right.dateKey) ||
-      left.employer.localeCompare(right.employer),
+function median(values: readonly number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? sorted[middle]
+    : Math.round((sorted[middle - 1] + sorted[middle]) / 2);
+}
+
+export type IncomeBreakdown = {
+  /** `median(paycheck) × 26 ÷ 12`. */
+  paycheckMonthlyCents: number;
+  /** Reliable income that is not a paycheck, averaged over the window's months. */
+  otherMonthlyCents: number;
+  totalMonthlyCents: number;
+  medianPaycheckCents: number;
+  paydayCount: number;
+};
+
+/**
+ * What arrives in a typical month, paycheck and otherwise.
+ *
+ * Reported as two parts because they are known two different ways: the paycheck half is a
+ * median times a cadence, which is stable against a three-paycheck month; the other half is
+ * whatever else the classifier calls income — a monthly benefit, interest earned — averaged
+ * over the window. Adding them is right (it is all money arriving) but blending how they
+ * were derived would hide that the second half is an average and the first is not.
+ */
+export function monthlyIncome(
+  rows: readonly AnalyticsRow[],
+  paydays: readonly Payday[],
+  range: DateRange,
+): IncomeBreakdown {
+  const inWindow = paydays.filter(
+    (payday) => payday.dateKey >= range.startKey && payday.dateKey <= range.endKey,
   );
+  const medianPaycheckCents = median(inWindow.map((payday) => payday.amountCents));
+  const paycheckMonthlyCents = normalizedMonthlyIncome(medianPaycheckCents);
+
+  const onAPayday = new Set(inWindow.flatMap((payday) => payday.transactionIds));
+  const otherCents = rowsInRange(rows, range)
+    .filter((row) => !onAPayday.has(row.id))
+    .reduce((total, row) => total + incomeCentsOf(row), 0);
+  const months = Math.max(1, monthBuckets(range).length);
+
+  return {
+    paycheckMonthlyCents,
+    otherMonthlyCents: Math.round(otherCents / months),
+    totalMonthlyCents: paycheckMonthlyCents + Math.round(otherCents / months),
+    medianPaycheckCents,
+    paydayCount: inWindow.length,
+  };
 }
 
 /**
@@ -524,15 +572,6 @@ const MAX_CADENCE_DAYS = 100;
 /** A charge may vary by this share of its own size and still be "the same bill". Comcast
  * moves a dollar; a grocery run moves a hundred, and that is the difference being tested. */
 const RECURRING_VARIANCE_RATIO = 0.25;
-
-function median(values: readonly number[]): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((left, right) => left - right);
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 1
-    ? sorted[middle]
-    : Math.round((sorted[middle - 1] + sorted[middle]) / 2);
-}
 
 function standardDeviation(values: readonly number[]): number {
   if (values.length < 2) return 0;

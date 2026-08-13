@@ -8,6 +8,7 @@ import {
   effectiveCategory,
   effectiveFlow,
   monthBuckets,
+  monthlyIncome,
   oneOffSuggestions,
   paydaysFrom,
   payPeriodBuckets,
@@ -115,33 +116,90 @@ describe("bucketRows", () => {
   });
 });
 
+/** Fortnightly deposits from one employer, the shape a real payroll series has. */
+function paycheckSeries(count: number, startKey = "2026-01-02", amountCents = 231121) {
+  const start = Date.parse(`${startKey}T00:00:00Z`);
+  return Array.from({ length: count }, (_, index) =>
+    row({
+      transactionDate: new Date(start + index * 14 * 86_400_000)
+        .toISOString()
+        .slice(0, 10),
+      description: "GA8248 TRUSTEDQA DIRDEP",
+      amountCents,
+      derivedFlow: "income",
+    }),
+  );
+}
+
+/** A monthly benefit: reliable income, but never a paycheck. */
+function monthlyBenefit(count: number) {
+  return Array.from({ length: count }, (_, index) =>
+    row({
+      transactionDate: `2026-${String(index + 1).padStart(2, "0")}-05`,
+      description: "VACP TREAS 310 XXVA BENEFIT",
+      amountCents: 18000,
+      derivedFlow: "income",
+    }),
+  );
+}
+
 describe("paydaysFrom", () => {
   it("reads one payday per employer per day, bonus folded into the check", () => {
+    const series = paycheckSeries(6);
     const paydays = paydaysFrom([
+      ...series,
+      // Posts the same day as the first check: one payday, not a period a day wide.
       row({
-        transactionDate: "2026-03-06",
-        description: "GA8248 TRUSTEDQA DIRDEP",
-        amountCents: 231121,
-        derivedFlow: "income",
-      }),
-      // Posts the same day as the check: one payday, not a pay period a day wide.
-      row({
-        transactionDate: "2026-03-06",
+        transactionDate: series[0].transactionDate,
         description: "GA8248 TRUSTEDQA PAYROLL",
         amountCents: 50000,
         derivedFlow: "income",
       }),
-      row({
-        transactionDate: "2026-03-20",
-        description: "GA8248 TRUSTEDQA DIRDEP",
-        amountCents: 231121,
-        derivedFlow: "income",
-      }),
-      row({ transactionDate: "2026-03-11", amountCents: -8412 }),
+      row({ transactionDate: "2026-01-11", amountCents: -8412 }),
     ]);
 
-    expect(paydays).toHaveLength(2);
-    expect(paydays[0]).toMatchObject({ dateKey: "2026-03-06", amountCents: 281121 });
+    expect(paydays).toHaveLength(6);
+    expect(paydays[0]).toMatchObject({
+      dateKey: series[0].transactionDate,
+      amountCents: 231121 + 50000,
+    });
+  });
+
+  it("does not let a monthly benefit open a pay period", () => {
+    /*
+     * The bug this pins: grouping every income row by date made a $180 monthly disability
+     * payment its own payday, and 31 of 104 periods on the real data were that benefit —
+     * splitting the biweekly calendar into windows whose only income was $180.
+     */
+    const paydays = paydaysFrom([...paycheckSeries(8), ...monthlyBenefit(6)]);
+
+    expect(paydays).toHaveLength(8);
+    expect(paydays.every((payday) => payday.amountCents === 231121)).toBe(true);
+  });
+});
+
+describe("monthlyIncome", () => {
+  const range = { startKey: "2026-01-01", endKey: "2026-06-30" };
+
+  it("adds reliable non-paycheck income without folding it into the paycheck median", () => {
+    const rows = [...paycheckSeries(13), ...monthlyBenefit(6)];
+    const income = monthlyIncome(rows, paydaysFrom(rows), range);
+
+    // The benefit must not drag the median down — that is what would deflate × 26 ÷ 12.
+    expect(income.medianPaycheckCents).toBe(231121);
+    expect(income.paycheckMonthlyCents).toBe(500762);
+    // Six monthly $180 payments over the window's six months.
+    expect(income.otherMonthlyCents).toBe(18000);
+    expect(income.totalMonthlyCents).toBe(518762);
+  });
+
+  it("reports nothing rather than a wrong figure when no paycheck series exists", () => {
+    const rows = monthlyBenefit(6);
+    const income = monthlyIncome(rows, paydaysFrom(rows), range);
+
+    expect(income.paydayCount).toBe(0);
+    expect(income.paycheckMonthlyCents).toBe(0);
+    expect(income.otherMonthlyCents).toBe(18000);
   });
 });
 

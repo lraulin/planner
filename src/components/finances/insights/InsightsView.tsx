@@ -7,6 +7,7 @@ import {
   cashFlow,
   coverageGap,
   monthBuckets,
+  monthlyIncome,
   oneOffSuggestions,
   paydaysFrom,
   payPeriodBuckets,
@@ -19,7 +20,6 @@ import {
   type Bucket,
 } from "@/lib/finances/analytics";
 import { buildPayPeriods } from "@/lib/finances/classify/payPeriods";
-import { normalizedMonthlyIncome } from "@/lib/finances/classify/income";
 import type { CarryingCost } from "@/lib/finances/dashboardQueries";
 import { formatUsd } from "@/lib/finances/money";
 import { reclassifyAction } from "@/app/finances/actions";
@@ -60,16 +60,6 @@ const AXIS_LABELS: Record<InsightsAxis, string> = {
   month: "Months",
   "pay-period": "Pay periods",
 };
-
-/** A median that does not care about order, over whatever paydays the window holds. */
-function medianCents(values: readonly number[]): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((left, right) => left - right);
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 1
-    ? sorted[middle]
-    : Math.round((sorted[middle - 1] + sorted[middle]) / 2);
-}
 
 /**
  * The Finances insights dashboard.
@@ -126,12 +116,7 @@ export function InsightsView({
       visibleKeys.has(point.bucket.key),
     );
 
-    const windowPaydays = paydays.filter(
-      (payday) => payday.dateKey >= range.startKey && payday.dateKey <= range.endKey,
-    );
-    const medianPaycheckCents = medianCents(
-      windowPaydays.map((payday) => payday.amountCents),
-    );
+    const income = monthlyIncome(rows, paydays, range);
     const split = baselineSplit(windowed, buckets.length);
 
     return {
@@ -140,9 +125,7 @@ export function InsightsView({
       buckets,
       flow,
       split,
-      medianPaycheckCents,
-      normalizedMonthlyIncomeCents: normalizedMonthlyIncome(medianPaycheckCents),
-      paydayCount: windowPaydays.length,
+      income,
       categories: spendByCategory(windowed),
       recurring: recurringMerchants(windowed),
       suggestions: oneOffSuggestions(windowed),
@@ -235,12 +218,16 @@ export function InsightsView({
       <div className="flex flex-col gap-3 p-3">
         <StatRow>
           <StatTile
-            label="Normalized monthly income"
-            value={formatUsd(analysis.normalizedMonthlyIncomeCents)}
+            label="Monthly income"
+            value={formatUsd(analysis.income.totalMonthlyCents)}
             detail={
-              analysis.paydayCount > 0
-                ? `Median paycheck ${formatUsd(analysis.medianPaycheckCents)} × 26 ÷ 12`
-                : "No paycheck series detected in this window"
+              analysis.income.paydayCount === 0
+                ? "No paycheck series detected in this window"
+                : analysis.income.otherMonthlyCents === 0
+                  ? `Median paycheck ${formatUsd(analysis.income.medianPaycheckCents)} × 26 ÷ 12`
+                  : `${formatUsd(analysis.income.paycheckMonthlyCents)} from pay (median ${formatUsd(
+                      analysis.income.medianPaycheckCents,
+                    )} × 26 ÷ 12) plus ${formatUsd(analysis.income.otherMonthlyCents)} a month of other reliable income`
             }
             tone="income"
           />
