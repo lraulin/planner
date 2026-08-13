@@ -23,6 +23,19 @@ async function call(tool, body) {
   return { status: response.status, payload: await response.json() };
 }
 
+async function mcp(id, method, params) {
+  const response = await fetch(`${BASE}/api/mcp`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${API_KEY}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+  return { status: response.status, payload: await response.json() };
+}
+
 const checks = [
   {
     name: "health advertises contract discovery",
@@ -77,6 +90,48 @@ const checks = [
         result.payload?.error?.code === "validation" &&
         result.payload.error.message.includes("Unknown field surprise")
       );
+    },
+  },
+  {
+    name: "MCP initialize advertises the planner server",
+    run: async () => {
+      const result = await mcp(1, "initialize", {
+        protocolVersion: "2025-03-26",
+        capabilities: {},
+      });
+      return (
+        result.status === 200 &&
+        result.payload?.result?.serverInfo?.name === "planner" &&
+        result.payload.result.protocolVersion === "2025-03-26"
+      );
+    },
+  },
+  {
+    name: "MCP tools/list is the 26-tool chat catalog",
+    run: async () => {
+      const result = await mcp(2, "tools/list");
+      const names = result.payload?.result?.tools?.map((tool) => tool.name) ?? [];
+      return (
+        result.status === 200 &&
+        names.length === 26 &&
+        names.includes("get_context") &&
+        names.includes("update_weekly_plan_entries") &&
+        !names.includes("list_tools") &&
+        !names.includes("capture")
+      );
+    },
+  },
+  {
+    name: "MCP tools/call reads context",
+    run: async () => {
+      const result = await mcp(3, "tools/call", {
+        name: "get_context",
+        arguments: {},
+      });
+      const text = result.payload?.result?.content?.[0]?.text;
+      if (result.status !== 200 || result.payload?.result?.isError) return false;
+      const data = text ? JSON.parse(text) : result.payload?.result?.structuredContent;
+      return data?.topOpenWorkInfo !== undefined;
     },
   },
 ];

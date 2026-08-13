@@ -5,10 +5,12 @@
 Contract version: **2**
 
 Spec: `agent-os/specs/2026-08-09-1130-agent-tool-contracts/`
+MCP transport: `agent-os/specs/2026-08-13-1730-remote-mcp-transport/`
 
 Planner exposes focused HTTP tools so an external agent can read and update the planner.
 The executable registry in `src/lib/agent/tools.ts` is canonical; this file is a generated
-human-readable projection.
+human-readable projection. Chat clients that speak MCP (Grok custom connectors, Claude)
+use the same registry at `POST /api/mcp` instead of the per-tool HTTP routes.
 
 ## Setup
 
@@ -26,6 +28,19 @@ Content-Type: application/json
 
 Success is `{ "ok": true, "data": … }`. Failure is
 `{ "ok": false, "error": { "code", "message" } }`.
+
+Remote MCP (Streamable HTTP, JSON only) uses the same Bearer key:
+
+```http
+POST /api/mcp
+Authorization: Bearer <PLANNER_AGENT_API_KEY>
+Content-Type: application/json
+```
+
+`tools/list` exposes the current core and domain tools — not HTTP discovery
+(`list_tools`, `describe_tool`, `health`) or legacy aliases. In Grok: grok.com/connectors
+→ New Connector → Custom, name `Planner`, URL
+`https://planner-lee-5344.vercel.app/api/mcp`, then paste the Bearer key.
 
 ## Discovery first
 

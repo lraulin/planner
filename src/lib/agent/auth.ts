@@ -6,8 +6,8 @@ import { AgentError } from "./errors";
  *
  * `===` on strings stops at the first differing byte, so how long it takes is a function of
  * the shared prefix. That is only worth caring about because this key guards a write surface
- * (`/api/agent/*` creates and deletes nodes) and the roadmap points it at a public HTTPS
- * endpoint for remote MCP.
+ * (`/api/agent/*` and `/api/mcp` create and delete nodes) and is the public HTTPS
+ * credential for remote MCP.
  *
  * Hashed first rather than compared directly: `timingSafeEqual` throws on unequal lengths, so
  * feeding it the raw values would need a length check that is itself an early return. SHA-256

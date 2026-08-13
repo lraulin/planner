@@ -25,6 +25,14 @@ External agents (Grok Build, Claude Code) can read/update the plan via tool-shap
 
 `POST /api/agent/{tool}` with `Authorization: Bearer $PLANNER_AGENT_API_KEY`.
 
+Chat clients that speak MCP (Grok.com custom connectors, Claude) use the same registry:
+
+`POST /api/mcp` with the same Bearer key.
+
+To add Planner in Grok: [grok.com/connectors](https://grok.com/connectors) → New Connector
+→ Custom. Name `Planner`. URL `https://planner-lee-5344.vercel.app/api/mcp`. Authenticate
+with the Bearer token that matches Vercel’s `PLANNER_AGENT_API_KEY`.
+
 See **[docs/agent-api.md](docs/agent-api.md)** for setup and the tool list. Conversation
 prompts and skills live in a separate **`planner-agent`** repo so the agent is not drowned
 in this app’s source tree.
@@ -162,7 +170,7 @@ Hosting targets the free tiers: Vercel Hobby for the app, Neon for Postgres.
    | `DIRECT_DATABASE_URL`      | Neon **direct** string (migrations on production build)                |
    | `BETTER_AUTH_SECRET`       | `openssl rand -base64 32`                                              |
    | `BETTER_AUTH_URL`          | Production origin, e.g. `https://planner-….vercel.app`                 |
-   | `PLANNER_AGENT_API_KEY`    | Optional; for `/api/agent/*`                                           |
+   | `PLANNER_AGENT_API_KEY`    | Optional; for `/api/agent/*` and `/api/mcp`                            |
    | `PLANNER_AGENT_USER_EMAIL` | Account the agent key acts as. **Required** — no default in production |
    | `GOOGLE_CLIENT_ID`         | Optional; Google Calendar + Contacts sync                              |
    | `GOOGLE_CLIENT_SECRET`     | Optional; Google Calendar + Contacts sync                              |
