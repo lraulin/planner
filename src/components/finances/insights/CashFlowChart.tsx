@@ -62,6 +62,7 @@ export function CashFlowChart({
   }
 
   const net = mode === "net";
+  const split = mode === "fixed-variable";
   const values = net
     ? points.map((point) => point.netCents)
     : points.flatMap((point) => [point.incomeCents, point.spendCents]);
@@ -117,7 +118,9 @@ export function CashFlowChart({
           aria-label={
             net
               ? `Net cash flow per ${axisLabel}`
-              : `Income and spending per ${axisLabel}`
+              : split
+                ? `Income against bills and other spending per ${axisLabel}`
+                : `Income and spending per ${axisLabel}`
           }
           onPointerDown={() => setHovered(null)}
         >
@@ -204,7 +207,37 @@ export function CashFlowChart({
                   fill={isActive ? "var(--select)" : "transparent"}
                   opacity={isActive ? 0.45 : 1}
                 />
-                {net ? (
+                {split ? (
+                  <>
+                    <rect {...income} fill="var(--chart-income)" rx={2} />
+                    {/*
+                      One quantity cut in two, so one hue cut by lightness rather than a
+                      second hue: both halves are still money out. Bills sit on the baseline
+                      because they are the part you cannot move, and the 2px inset keeps the
+                      two segments from reading as one block.
+                    */}
+                    <rect
+                      x={spend.x}
+                      width={spend.width}
+                      y={toY(point.fixedCents)}
+                      height={Math.max(0, baselineY - toY(point.fixedCents))}
+                      fill="var(--chart-spend)"
+                      rx={2}
+                    />
+                    <rect
+                      x={spend.x}
+                      width={spend.width}
+                      y={toY(point.spendCents)}
+                      height={Math.max(
+                        0,
+                        toY(point.fixedCents) - toY(point.spendCents) - 2,
+                      )}
+                      fill="var(--chart-spend)"
+                      opacity={0.45}
+                      rx={2}
+                    />
+                  </>
+                ) : net ? (
                   // Sign carries the meaning, so the hue follows it: a surplus is drawn in
                   // the money-in colour above the line, a shortfall in the money-out colour
                   // below it. Position and colour agree rather than competing.
@@ -299,6 +332,12 @@ export function CashFlowChart({
               <>
                 <div>In {formatUsd(active.incomeCents)}</div>
                 <div>Out {formatUsd(active.spendCents)}</div>
+                {split && (
+                  <div className="text-ink-muted">
+                    Bills {formatUsd(active.fixedCents)} · rest{" "}
+                    {formatUsd(active.variableCents)}
+                  </div>
+                )}
                 <div className="text-ink-muted">Net {formatUsd(active.netCents)}</div>
                 {active.trailingSpendCents !== null && (
                   <div className="text-ink-muted">
@@ -323,15 +362,30 @@ export function CashFlowChart({
                   line: true,
                 },
               ]
-            : [
-                { color: "var(--chart-income)", label: "Money in" },
-                { color: "var(--chart-spend)", label: "Money out" },
-                {
-                  color: "var(--chart-average)",
-                  label: "Trailing average out",
-                  line: true,
-                },
-              ]
+            : split
+              ? [
+                  { color: "var(--chart-income)", label: "Money in" },
+                  { color: "var(--chart-spend)", label: "Bills" },
+                  {
+                    color: "var(--chart-spend)",
+                    label: "Everything else",
+                    faded: true,
+                  },
+                  {
+                    color: "var(--chart-average)",
+                    label: "Trailing average out",
+                    line: true,
+                  },
+                ]
+              : [
+                  { color: "var(--chart-income)", label: "Money in" },
+                  { color: "var(--chart-spend)", label: "Money out" },
+                  {
+                    color: "var(--chart-average)",
+                    label: "Trailing average out",
+                    line: true,
+                  },
+                ]
         }
       />
     </div>
@@ -345,7 +399,7 @@ export function CashFlowChart({
 export function ChartLegend({
   items,
 }: {
-  items: { color: string; label: string; line?: boolean }[];
+  items: { color: string; label: string; line?: boolean; faded?: boolean }[];
 }) {
   return (
     <div className="mt-2 flex flex-wrap justify-end gap-x-4 gap-y-1 text-[0.75rem] text-ink-muted">

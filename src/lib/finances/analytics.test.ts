@@ -262,7 +262,7 @@ describe("cashFlow", () => {
         row({ transactionDate: "2026-03-20", amountCents: -400000 }),
       ],
       buckets,
-      3,
+      { window: 3 },
     );
 
     expect(points.map((point) => point.netCents)).toEqual([200000, 200000, -400000]);
@@ -279,7 +279,7 @@ describe("cashFlow", () => {
         row({ transactionDate: bucket.startKey, amountCents: -10000 }),
       ),
       buckets,
-      3,
+      { window: 3 },
     );
 
     expect(points.map((point) => point.trailingSpendCents)).toEqual([
@@ -334,6 +334,105 @@ describe("interest runs both ways", () => {
 
     expect(point.spendCents).toBe(0);
     expect(point.incomeCents).toBe(11734);
+  });
+});
+
+describe("fixed vs variable", () => {
+  /** A monthly bill, twelve times — enough for the recurring detector to know its cadence. */
+  function rent(months: number) {
+    return Array.from({ length: months }, (_, index) =>
+      row({
+        transactionDate: `2026-${String(index + 1).padStart(2, "0")}-01`,
+        description: "TURBOTENANT.COM RENT:RAULI",
+        amountCents: -210000,
+      }),
+    );
+  }
+
+  it("separates the bills from the half that is a decision each period", () => {
+    const buckets = monthBuckets({ startKey: "2026-01-01", endKey: "2026-12-31" });
+    const points = cashFlow(
+      [...rent(12), row({ transactionDate: "2026-01-14", amountCents: -8412 })],
+      buckets,
+    );
+
+    expect(points[0]).toMatchObject({
+      fixedCents: 210000,
+      variableCents: 8412,
+      spendCents: 218412,
+    });
+    expect(points[1]).toMatchObject({ fixedCents: 210000, variableCents: 0 });
+  });
+
+  it("levels a monthly bill across the fortnights it covers, changing no total", () => {
+    /*
+     * The artifact this removes: rent is monthly and a pay period is a fortnight, so one
+     * period in every ~2.17 takes the whole $2,100 and the rest take none. Levelling moves
+     * cost *within* the chart — every total has to come out identical or the chart has
+     * started inventing money.
+     */
+    const buckets = monthBuckets({ startKey: "2026-01-01", endKey: "2026-12-31" });
+    const rows = rent(12);
+    const plain = cashFlow(rows, buckets);
+    const levelled = cashFlow(rows, buckets, { levelRecurring: true });
+
+    const sum = (points: typeof plain) =>
+      points.reduce((total, point) => total + point.spendCents, 0);
+    expect(sum(levelled)).toBe(sum(plain));
+    expect(sum(levelled)).toBe(12 * 210000);
+
+    // Each charge covers ~31 days, so a calendar month still holds about one rent — the
+    // point of the exercise is what it does to a fortnightly axis, tested below.
+    for (const point of levelled) {
+      expect(point.fixedCents).toBeGreaterThan(0);
+    }
+  });
+
+  it("flattens the fortnight-sized swing a monthly bill creates", () => {
+    // Two-week buckets across a year, which is what a pay-period axis actually looks like.
+    const buckets = Array.from({ length: 26 }, (_, index) => {
+      const start = new Date(Date.UTC(2026, 0, 1) + index * 14 * 86_400_000);
+      const end = new Date(start.getTime() + 13 * 86_400_000);
+      const key = start.toISOString().slice(0, 10);
+      return {
+        key,
+        label: key,
+        startKey: key,
+        endKey: end.toISOString().slice(0, 10),
+      };
+    });
+    const rows = rent(12);
+
+    const spread = (points: { fixedCents: number }[]) => {
+      const values = points.map((point) => point.fixedCents);
+      const mean = values.reduce((t, v) => t + v, 0) / values.length;
+      return Math.sqrt(values.reduce((t, v) => t + (v - mean) ** 2, 0) / values.length);
+    };
+
+    const plain = cashFlow(rows, buckets);
+    const levelled = cashFlow(rows, buckets, { levelRecurring: true });
+
+    // Unlevelled, a period either holds the whole rent or none of it.
+    expect(spread(plain)).toBeGreaterThan(90_000);
+    // Levelled, every period carries roughly the same share.
+    expect(spread(levelled)).toBeLessThan(20_000);
+    expect(levelled.reduce((total, point) => total + point.fixedCents, 0)).toBe(
+      plain.reduce((total, point) => total + point.fixedCents, 0),
+    );
+  });
+
+  it("leaves a one-off purchase where it happened", () => {
+    const buckets = monthBuckets({ startKey: "2026-01-01", endKey: "2026-12-31" });
+    const points = cashFlow(
+      [...rent(12), row({ transactionDate: "2026-02-14", amountCents: -200000 })],
+      buckets,
+      { levelRecurring: true },
+    );
+
+    // Not a recurring merchant, so levelling must not touch it: the whole charge stays in
+    // February, and no other month picks any of it up.
+    expect(points[1].variableCents).toBe(200000);
+    expect(points.filter((point) => point.variableCents !== 0)).toHaveLength(1);
   });
 });
 

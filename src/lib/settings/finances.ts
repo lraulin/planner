@@ -1,4 +1,4 @@
-import { asOneOf, asRecord } from "./parse";
+import { asBoolean, asOneOf, asRecord } from "./parse";
 
 /**
  * What the Insights dashboard remembers: how far back it looks, and which axis it buckets on.
@@ -45,18 +45,27 @@ export const WINDOW_LABELS: Record<InsightsWindow, string> = {
  * is a signed quantity and reads better as one bar either side of zero than as the gap
  * between two.
  */
-export const INSIGHTS_CHART_MODES = ["in-out", "net"] as const;
+export const INSIGHTS_CHART_MODES = ["in-out", "net", "fixed-variable"] as const;
 export type InsightsChartMode = (typeof INSIGHTS_CHART_MODES)[number];
 
 export const CHART_MODE_LABELS: Record<InsightsChartMode, string> = {
   "in-out": "In & out",
   net: "Net",
+  "fixed-variable": "Bills vs rest",
 };
 
 export type InsightsViewSettings = {
   axis: InsightsAxis;
   window: InsightsWindow;
   mode: InsightsChartMode;
+  /**
+   * Spread recurring bills across the periods they cover.
+   *
+   * Off by default: it moves cost between buckets, so a levelled bar is a model of an
+   * ongoing obligation rather than a record of that fortnight. Worth switching on precisely
+   * when a monthly bill lands in a fortnightly bucket and swamps it.
+   */
+  levelRecurring: boolean;
 };
 
 /**
@@ -69,6 +78,7 @@ export const DEFAULT_INSIGHTS_VIEW: InsightsViewSettings = {
   window: "12m",
   // In-and-out first: it is the view that shows *why* a net figure is what it is.
   mode: "in-out",
+  levelRecurring: false,
 };
 
 export function parseInsightsView(value: unknown): InsightsViewSettings {
@@ -78,9 +88,18 @@ export function parseInsightsView(value: unknown): InsightsViewSettings {
     axis: asOneOf(record.axis, INSIGHTS_AXES, DEFAULT_INSIGHTS_VIEW.axis),
     window: asOneOf(record.window, INSIGHTS_WINDOWS, DEFAULT_INSIGHTS_VIEW.window),
     mode: asOneOf(record.mode, INSIGHTS_CHART_MODES, DEFAULT_INSIGHTS_VIEW.mode),
+    levelRecurring: asBoolean(
+      record.levelRecurring,
+      DEFAULT_INSIGHTS_VIEW.levelRecurring,
+    ),
   };
 }
 
 export function serializeInsightsView(value: InsightsViewSettings): unknown {
-  return { axis: value.axis, window: value.window, mode: value.mode };
+  return {
+    axis: value.axis,
+    window: value.window,
+    mode: value.mode,
+    levelRecurring: value.levelRecurring,
+  };
 }

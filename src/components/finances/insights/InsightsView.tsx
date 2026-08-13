@@ -112,9 +112,9 @@ export function InsightsView({
         ? payPeriodBuckets(buildPayPeriods(paydays, full))
         : monthBuckets(full);
     const visibleKeys = new Set(buckets.map((bucket) => bucket.key));
-    const flow = cashFlow(rows, fullBuckets).filter((point) =>
-      visibleKeys.has(point.bucket.key),
-    );
+    const flow = cashFlow(rows, fullBuckets, {
+      levelRecurring: view.levelRecurring,
+    }).filter((point) => visibleKeys.has(point.bucket.key));
 
     const income = monthlyIncome(rows, paydays, range);
     const split = baselineSplit(windowed, buckets.length);
@@ -132,7 +132,7 @@ export function InsightsView({
       balances: balanceSeries(rows, buckets),
       coverage: coverageGap(rows),
     };
-  }, [rows, view.axis, view.window]);
+  }, [rows, view.axis, view.window, view.levelRecurring]);
 
   function reclassify() {
     setReclassifyError(null);
@@ -210,6 +210,20 @@ export function InsightsView({
             patch((current) => ({ ...current, mode: next as InsightsChartMode }))
           }
         />
+        <label className="flex min-h-tap cursor-pointer items-center gap-1.5 text-[0.75rem] text-ink-muted md:min-h-0">
+          <input
+            type="checkbox"
+            checked={view.levelRecurring}
+            onChange={(event) =>
+              patch((current) => ({
+                ...current,
+                levelRecurring: event.target.checked,
+              }))
+            }
+            className="size-4"
+          />
+          Level bills
+        </label>
         <span className="text-[0.75rem] text-ink-muted">
           {formatDate(analysis.range.startKey)} – {formatDate(analysis.range.endKey)}
         </span>
@@ -260,14 +274,20 @@ export function InsightsView({
           title={
             view.mode === "net"
               ? `Net cash flow by ${bucketNoun}`
-              : `Money in and out by ${bucketNoun}`
+              : view.mode === "fixed-variable"
+                ? `Bills and everything else by ${bucketNoun}`
+                : `Money in and out by ${bucketNoun}`
           }
           subtitle={
-            view.mode === "net"
-              ? "What each bucket gained or lost. Above the line is money kept; below it is a shortfall covered from savings or a card."
-              : view.axis === "month"
-                ? "Calendar months. A month holding three paychecks looks rich and the next looks broke — switch the axis to pay periods to remove that."
-                : "One bucket per paycheck, so two stretches of a biweekly year are comparable."
+            view.levelRecurring
+              ? `Recurring bills are spread across the ${bucketNoun}s they cover, so one monthly charge cannot swamp a single ${bucketNoun}. A bar is then an ongoing obligation rather than a record of that ${bucketNoun}: nothing is created or lost, though a bill straddling the window edge shifts the visible total a little.`
+              : view.mode === "net"
+                ? "What each bucket gained or lost. Above the line is money kept; below it is a shortfall covered from savings or a card."
+                : view.mode === "fixed-variable"
+                  ? "The out bar split into recurring bills and everything else — the half that is actually a decision each period."
+                  : view.axis === "month"
+                    ? "Calendar months. A month holding three paychecks looks rich and the next looks broke — switch the axis to pay periods to remove that."
+                    : "One bucket per paycheck, so two stretches of a biweekly year are comparable."
           }
         >
           <CashFlowChart

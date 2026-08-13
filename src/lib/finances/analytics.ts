@@ -23,7 +23,7 @@
  */
 
 import type { FinanceFlowKind } from "@/db/schema";
-import { daysBetweenKeys } from "@/lib/schedule/geometry";
+import { daysBetweenKeys, shiftDateKey } from "@/lib/schedule/geometry";
 import { categoryFromBank, UNCATEGORIZED } from "./classify/categories";
 import { detectIncome, normalizedMonthlyIncome, type Payday } from "./classify/income";
 import { normalizeMerchant } from "./classify/merchant";
@@ -354,8 +354,12 @@ export function bucketRows(
 export type CashFlowPoint = {
   bucket: Bucket;
   incomeCents: number;
-  /** Positive cost. */
+  /** Positive cost. `fixedCents + variableCents`. */
   spendCents: number;
+  /** The part of the cost that is a recurring bill — rent, insurance, subscriptions. */
+  fixedCents: number;
+  /** Everything else. The half that is actually a decision each period. */
+  variableCents: number;
   /** `income − spend`. The only figure here that may be negative. */
   netCents: number;
   /** Trailing average of `spendCents`, or null until the window is full. */
@@ -398,46 +402,143 @@ export function trailingAverage(
   return out;
 }
 
+export type CashFlowOptions = {
+  /** Buckets the rolling average looks back over. */
+  window?: number;
+  /**
+   * Spread each recurring bill across the time it covers instead of landing it whole in the
+   * bucket it was paid from.
+   *
+   * Rent is paid monthly but a pay period is a fortnight, so one period in every ~2.17 gets
+   * $2,100 of rent and the others get none. On the real data that single artifact is most of
+   * the apparent volatility: recurring charges average $1,161 a period with a standard
+   * deviation of $1,128, while everything else averages $1,542 with a deviation of $640. The
+   * bills are the smaller half of spending and the larger half of the swing.
+   *
+   * Levelling redistributes **within** the chart, so every total and average is unchanged —
+   * only which bucket a cost is shown in moves. That still makes a single bar a model rather
+   * than a record of that fortnight, which is why it is off by default and labelled where it
+   * is on.
+   */
+  levelRecurring?: boolean;
+};
+
+/** Inclusive day count where two date ranges overlap. */
+function overlapDays(
+  aStart: string,
+  aEnd: string,
+  bStart: string,
+  bEnd: string,
+): number {
+  const start = aStart > bStart ? aStart : bStart;
+  const end = aEnd < bEnd ? aEnd : bEnd;
+  if (start > end) return 0;
+  return daysBetweenKeys(start, end) + 1;
+}
+
 /**
- * Income and spend per bucket, with the rolling overlay.
+ * Allocate one charge across the buckets its cadence covers, in whole cents.
+ *
+ * Shares are normalised over the buckets actually present rather than over the full cadence,
+ * so a bill paid near the end of the history puts all of its cost somewhere on the chart
+ * instead of quietly losing the part that covers next month. The final overlapping bucket
+ * takes the rounding remainder, which is what keeps the sum exactly equal to the charge.
+ */
+function allocateAcross(
+  costCents: number,
+  startKey: string,
+  cadenceDays: number,
+  buckets: readonly Bucket[],
+  into: number[],
+): void {
+  const endKey = shiftDateKey(startKey, Math.max(1, cadenceDays) - 1);
+  const overlaps = buckets.map((bucket) =>
+    overlapDays(startKey, endKey, bucket.startKey, bucket.endKey),
+  );
+  const total = overlaps.reduce((sum, days) => sum + days, 0);
+  if (total === 0) return;
+
+  let last = -1;
+  overlaps.forEach((days, index) => {
+    if (days > 0) last = index;
+  });
+
+  let allocated = 0;
+  overlaps.forEach((days, index) => {
+    if (days === 0) return;
+    if (index === last) {
+      into[index] += costCents - allocated;
+      return;
+    }
+    const share = Math.round((costCents * days) / total);
+    into[index] += share;
+    allocated += share;
+  });
+}
+
+/**
+ * Income and spend per bucket, split into bills and everything else, with the rolling
+ * overlay.
  *
  * Pass the **whole** history even when the chart shows one year: a trailing-12 average of
  * the visible window alone would be null everywhere, and slicing after the fact is what
- * lets the first visible month still carry a real average.
+ * lets the first visible month still carry a real average. Recurring merchants are detected
+ * over that whole history too, so the set does not change as the window moves.
  */
 export function cashFlow(
   rows: readonly AnalyticsRow[],
   buckets: readonly Bucket[],
-  window = TRAILING_WINDOW,
+  options: CashFlowOptions = {},
 ): CashFlowPoint[] {
+  const { window = TRAILING_WINDOW, levelRecurring = false } = options;
+  const cadenceByMerchant = new Map(
+    recurringMerchants(rows).map((entry) => [entry.merchant, entry.cadenceDays]),
+  );
   const grouped = bucketRows(rows, buckets);
-  const totals = buckets.map((bucket) => {
-    const inBucket = grouped.get(bucket.key) ?? [];
-    let incomeCents = 0;
-    let spendCents = 0;
-    for (const row of inBucket) {
-      incomeCents += incomeCentsOf(row);
-      spendCents += spendCentsOf(row);
+
+  const income = buckets.map((bucket) =>
+    (grouped.get(bucket.key) ?? []).reduce(
+      (total, row) => total + incomeCentsOf(row),
+      0,
+    ),
+  );
+  const fixed = new Array<number>(buckets.length).fill(0);
+  const variable = new Array<number>(buckets.length).fill(0);
+
+  buckets.forEach((bucket, index) => {
+    for (const row of grouped.get(bucket.key) ?? []) {
+      const cost = spendCentsOf(row);
+      if (cost === 0) continue;
+      const cadence = cadenceByMerchant.get(effectiveMerchant(row));
+      if (cadence === undefined) {
+        variable[index] += cost;
+        continue;
+      }
+      // A credit at a recurring merchant is still that bill's money, but there is no span
+      // of time for it to cover — it lands where it happened.
+      if (levelRecurring && cost > 0) {
+        allocateAcross(cost, row.transactionDate, cadence, buckets, fixed);
+      } else {
+        fixed[index] += cost;
+      }
     }
-    return { bucket, incomeCents, spendCents };
   });
 
-  const trailingSpend = trailingAverage(
-    totals.map((entry) => entry.spendCents),
-    window,
-  );
-  const trailingIncome = trailingAverage(
-    totals.map((entry) => entry.incomeCents),
-    window,
-  );
+  const spend = buckets.map((_, index) => fixed[index] + variable[index]);
+  const trailingSpend = trailingAverage(spend, window);
+  const trailingIncome = trailingAverage(income, window);
   const trailingNet = trailingAverage(
-    totals.map((entry) => entry.incomeCents - entry.spendCents),
+    buckets.map((_, index) => income[index] - spend[index]),
     window,
   );
 
-  return totals.map((entry, index) => ({
-    ...entry,
-    netCents: entry.incomeCents - entry.spendCents,
+  return buckets.map((bucket, index) => ({
+    bucket,
+    incomeCents: income[index],
+    spendCents: spend[index],
+    fixedCents: fixed[index],
+    variableCents: variable[index],
+    netCents: income[index] - spend[index],
     trailingSpendCents: trailingSpend[index],
     trailingIncomeCents: trailingIncome[index],
     trailingNetCents: trailingNet[index],
