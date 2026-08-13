@@ -1,6 +1,6 @@
 # Standards applied — Finances insights dashboard
 
-**Status: active**
+**Status: frozen / complete** (2026-08-13)
 
 - **Clean code** (`development/clean-code.md`): app → components → lib → db. All
   classification and analytics logic lives in `src/lib/finances/**` as small pure modules;

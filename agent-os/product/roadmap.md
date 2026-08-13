@@ -676,9 +676,11 @@ YNAB-like, but simpler — and connected to goals over time.
   closing balances / due dates / APRs off the transaction table.
   Envelopes were deliberately deferred until there is real spending data to design them
   against; that is the next piece of this MVP.
-- **In progress:** Insights dashboard —
+  ✅ Insights dashboard shipped 2026-08-13 —
   `agent-os/specs/2026-08-12-2031-finances-insights-dashboard/`. Merchant rules, transfer
-  pairing, paycheck cadence, and reporting. Makes the imported history readable. It
+  pairing, paycheck cadence and reporting, at `/finances/insights`. Classifying the real
+  2,845-row history took reported spend from the naive −$493,642 outflow to −$147,362 by
+  pairing transfers, and the pay-period axis removes the three-paycheck month. It
   categorises by **who was paid**, which is the best the bank line can support and is
   still a lie for anything sold at more than one store (see Later, below).
 - **Next:** Envelopes.
