@@ -113,13 +113,26 @@ export function isSpending(flow: FinanceFlowKind): boolean {
  *
  * A refund is a negative cost, which is why it is in `SPENDING_FLOWS` rather than dropped:
  * returning the couch has to reduce what the couch cost.
+ *
+ * **`interest_fee` is the one flow that runs both ways.** It covers the cost of holding the
+ * accounts *and* the interest a savings account pays you, and the schema deliberately keeps
+ * them under one kind. Only the charge is a cost: counting the credit as negative spending
+ * made a quiet fortnight in 2023 report −$117 of outgoings, because $117 of savings interest
+ * was the only thing in it.
  */
 export function spendCentsOf(row: FlowFields): number {
-  return isSpending(effectiveFlow(row)) ? -row.amountCents : 0;
+  const flow = effectiveFlow(row);
+  if (!isSpending(flow)) return 0;
+  if (flow === "interest_fee" && row.amountCents > 0) return 0;
+  return -row.amountCents;
 }
 
+/** Money arriving: a paycheck, or the other half of `interest_fee` — interest earned. */
 export function incomeCentsOf(row: FlowFields): number {
-  return effectiveFlow(row) === "income" ? row.amountCents : 0;
+  const flow = effectiveFlow(row);
+  if (flow === "income") return row.amountCents;
+  if (flow === "interest_fee" && row.amountCents > 0) return row.amountCents;
+  return 0;
 }
 
 // — Buckets ——————————————————————————————————————————————————————————————————

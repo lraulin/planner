@@ -13,7 +13,9 @@ import {
   payPeriodBuckets,
   recurringMerchants,
   rowsInRange,
+  incomeCentsOf,
   spendByCategory,
+  spendCentsOf,
   trailingAverage,
   trailingRange,
   type AnalyticsRow,
@@ -200,6 +202,52 @@ describe("cashFlow", () => {
       10000,
       10000,
     ]);
+  });
+});
+
+describe("interest runs both ways", () => {
+  it("counts an interest charge as a cost", () => {
+    const charge = row({
+      description: "INTEREST CHARGE ON PURCHASES",
+      amountCents: -3109,
+      derivedFlow: "interest_fee",
+    });
+    expect(spendCentsOf(charge)).toBe(3109);
+    expect(incomeCentsOf(charge)).toBe(0);
+  });
+
+  it("counts interest earned as money in, never as negative spending", () => {
+    /*
+     * The bug this pins: `interest_fee` covers both the cost of holding an account and the
+     * interest a savings account pays you. Treating the credit as a cost made a quiet
+     * fortnight in 2023 report −$117 of outgoings, because $117 of savings interest was the
+     * only thing in it.
+     */
+    const earned = row({
+      description: "Monthly Interest Paid",
+      amountCents: 11734,
+      derivedFlow: "interest_fee",
+    });
+    expect(spendCentsOf(earned)).toBe(0);
+    expect(incomeCentsOf(earned)).toBe(11734);
+  });
+
+  it("never reports negative money out for a period holding only interest earned", () => {
+    const buckets = monthBuckets({ startKey: "2023-10-01", endKey: "2023-10-31" });
+    const [point] = cashFlow(
+      [
+        row({
+          transactionDate: "2023-10-31",
+          description: "Monthly Interest Paid",
+          amountCents: 11734,
+          derivedFlow: "interest_fee",
+        }),
+      ],
+      buckets,
+    );
+
+    expect(point.spendCents).toBe(0);
+    expect(point.incomeCents).toBe(11734);
   });
 });
 
