@@ -475,6 +475,51 @@ export function DateField({
 }
 
 /**
+ * A calendar day stored as a `YYYY-MM-DD` string rather than a timestamp.
+ *
+ * `DateField` above is for the columns encoded as UTC noon in a `timestamptz`; this one is
+ * for the tables whose date columns are Postgres `date` — jobs, residences, life events,
+ * finance. There is nothing to encode or decode: a native date input's value already *is* the
+ * key, so passing it through `fromDateKey`/`toDateKey` would only add a round trip that could
+ * be got wrong. Cleared reads back as null, not as `""`.
+ */
+export function DateKeyField({
+  label,
+  value,
+  onChange,
+  hint,
+  className,
+  max,
+  min,
+}: {
+  label: string;
+  /** `YYYY-MM-DD`, or null when unset. */
+  value: string | null;
+  onChange: (value: string | null) => void;
+  hint?: string;
+  className?: string;
+  /** Inclusive latest day (`YYYY-MM-DD`) — use `localDateKey(new Date())` for "not future". */
+  max?: string;
+  /** Inclusive earliest day (`YYYY-MM-DD`). */
+  min?: string;
+}) {
+  const id = useId();
+  return (
+    <Field label={label} htmlFor={id} hint={hint} className={className}>
+      <input
+        id={id}
+        type="date"
+        value={value ?? ""}
+        max={max}
+        min={min}
+        onChange={(event) => onChange(event.target.value || null)}
+        className={`tabular ${INPUT_CLASS}`}
+      />
+    </Field>
+  );
+}
+
+/**
  * A whole number within a range — Importance (0–100), Severity, Probability, % complete.
  * Out-of-range or non-numeric input reverts and flags, like every other field here.
  */

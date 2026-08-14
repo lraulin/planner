@@ -250,7 +250,13 @@ const PAGES = {
    * Master contexts belong with these conceptually and are deliberately absent: their only UI
    * is `MasterContextsDialog`, and giving them a page is a new surface rather than a move.
    * Categories look like they belong too and do not exist as a thing to manage — `category` is
-   * free text inherited down the tree, not a table.
+   * free text inherited down the tree, not a table. Life-event categories are free text for the
+   * same reason: the grid's set filter offers the values in use, so there is nothing to manage.
+   *
+   * Timeline, Jobs and Residences are one feature in three pages. Timeline is the chronology
+   * you read; the other two are the records that half of it is derived from, at read time. A
+   * job's start and end appear on Timeline as two rows and are edited here — which is why
+   * Timeline's row menu disables Delete on a derived row and offers Open instead.
    */
   library: [
     {
@@ -267,6 +273,30 @@ const PAGES = {
       segment: "resources",
       status: "built",
       keywords: "capacity availability workload hours overhead effectiveness team",
+    },
+    {
+      id: "timeline",
+      label: "Timeline",
+      segment: "timeline",
+      status: "built",
+      keywords:
+        "chronology history milestones important dates anniversary age life events when did",
+    },
+    {
+      id: "jobs",
+      label: "Jobs",
+      segment: "jobs",
+      status: "built",
+      keywords:
+        "employment work career employer resume cv supervisor salary application history",
+    },
+    {
+      id: "residences",
+      label: "Residences",
+      segment: "residences",
+      status: "built",
+      keywords:
+        "address moved home lived apartment house landlord rent where did i live",
     },
   ],
 } as const satisfies Record<string, readonly PageEntry[]>;

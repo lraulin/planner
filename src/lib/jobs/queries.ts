@@ -2,8 +2,6 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { jobs } from "@/db/schema";
 import { formatPostalAddress } from "@/lib/address";
-import { moneyValue } from "@/lib/history/fields";
-import { elapsedParts, formatElapsed } from "@/lib/timeline/elapsed";
 import type { JobDetail, JobListRow } from "./types";
 
 function toDetail(row: typeof jobs.$inferSelect): JobDetail {
@@ -16,8 +14,8 @@ function toDetail(row: typeof jobs.$inferSelect): JobDetail {
     endDate: row.endDate,
     duties: row.duties,
     reasonForLeaving: row.reasonForLeaving,
-    startingPay: moneyValue(row.startingPay),
-    endingPay: moneyValue(row.endingPay),
+    startingPay: row.startingPay,
+    endingPay: row.endingPay,
     payPeriod: row.payPeriod,
     phone: row.phone,
     streetAddress: row.streetAddress,
@@ -38,27 +36,10 @@ function toDetail(row: typeof jobs.$inferSelect): JobDetail {
   };
 }
 
-/**
- * How long the job lasted, or has lasted so far.
- *
- * `todayKey` comes from the caller rather than from `new Date()` here, because on the server
- * that would be UTC's today and `development/dates.md` forbids a business rule that depends on
- * the process timezone. The page passes the browser's day; null means "do not guess", and a
- * current job simply shows no duration until the client knows what day it is.
- */
-function durationOf(row: JobDetail, todayKey: string | null): string | null {
-  if (!row.startDate) return null;
-  const end = row.endDate ?? todayKey;
-  if (!end) return null;
-  const parts = elapsedParts(row.startDate, end);
-  return parts ? formatElapsed(parts) : null;
-}
-
-function toListRow(row: JobDetail, todayKey: string | null): JobListRow {
+function toListRow(row: JobDetail): JobListRow {
   return {
     ...row,
     location: formatPostalAddress({ ...row, streetAddress: "", extendedAddress: "" }),
-    duration: durationOf(row, todayKey),
   };
 }
 
@@ -68,14 +49,14 @@ function toListRow(row: JobDetail, todayKey: string | null): JobListRow {
  * A job with no start date sorts to the end rather than the beginning: an undated record is
  * one you have not filled in yet, and burying it under the current job is wrong in the other
  * direction — you want to see it, just not first.
+ *
+ * Duration is deliberately **not** computed here. An ongoing job is measured against today,
+ * and the server does not know what day it is where the user is — see `lib/history/span.ts`.
  */
-export async function listJobs(
-  userId: string,
-  todayKey: string | null = null,
-): Promise<JobListRow[]> {
+export async function listJobs(userId: string): Promise<JobListRow[]> {
   const rows = await db.select().from(jobs).where(eq(jobs.userId, userId));
   return rows
-    .map((row) => toListRow(toDetail(row), todayKey))
+    .map((row) => toListRow(toDetail(row)))
     .sort((a, b) => {
       if (a.startDate === b.startDate) return a.employer.localeCompare(b.employer);
       if (!a.startDate) return 1;

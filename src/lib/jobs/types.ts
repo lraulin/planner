@@ -1,3 +1,5 @@
+import type { SpanDuration } from "@/lib/history/span";
+
 /** The complete Job record — everything the drawer edits and the grid summarises. */
 export type JobDetail = {
   id: string;
@@ -10,8 +12,9 @@ export type JobDetail = {
   endDate: string | null;
   duties: string;
   reasonForLeaving: string;
-  startingPay: number | null;
-  endingPay: number | null;
+  /** A `numeric` string, never a float. See `moneyOrNull`. */
+  startingPay: string | null;
+  endingPay: string | null;
   payPeriod: string;
   phone: string;
 
@@ -34,12 +37,22 @@ export type JobDetail = {
   updatedAt: Date;
 };
 
-/** One Jobs grid row: the record plus the two values the grid computes rather than stores. */
+/**
+ * What the server sends. Duration is **not** here: an ongoing job is measured against today,
+ * and only the client knows what day that is.
+ */
 export type JobListRow = JobDetail & {
   /** The employer's city and country, for the grid's one location column. */
   location: string;
-  /** `"3y 2m 14d"`, or null when the job has no start date to measure from. */
-  duration: string | null;
+};
+
+/**
+ * What the grid renders — the server row plus the duration the view derived once it knew the
+ * day. It sits on the row rather than in the column context because `ColumnDef.sortValue`
+ * receives only the row, and duration cannot be sorted by any stored column.
+ */
+export type JobGridRow = JobListRow & {
+  duration: SpanDuration;
 };
 
 /**
@@ -56,8 +69,8 @@ export type JobInput = {
   endDate?: string | null;
   duties?: string;
   reasonForLeaving?: string;
-  startingPay?: number | null;
-  endingPay?: number | null;
+  startingPay?: string | null;
+  endingPay?: string | null;
   payPeriod?: string;
   phone?: string;
 

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   dateKeyOrNull,
   moneyOrNull,
-  moneyValue,
   patchText,
   requireDateKey,
   requireOrderedDates,
@@ -57,26 +56,29 @@ describe("requireOrderedDates", () => {
 });
 
 describe("moneyOrNull", () => {
-  it("formats to two decimal places for numeric", () => {
-    expect(moneyOrNull(1200, "Rent")).toBe("1200.00");
-    expect(moneyOrNull(18.5, "Rent")).toBe("18.50");
+  it("keeps the amount as the string numeric round-trips exactly", () => {
+    // Never parsed to a float on the way through — that is how cents go missing.
+    expect(moneyOrNull("1200", "Rent")).toBe("1200");
+    expect(moneyOrNull("1234.56", "Rent")).toBe("1234.56");
   });
 
-  it("keeps absent absent", () => {
+  it("accepts what a person types into a money field", () => {
+    expect(moneyOrNull("$1,850.00", "Rent")).toBe("1850.00");
+    expect(moneyOrNull("  1850 ", "Rent")).toBe("1850");
+  });
+
+  it("keeps absent and blank alike as cleared", () => {
     expect(moneyOrNull(null, "Rent")).toBeNull();
     expect(moneyOrNull(undefined, "Rent")).toBeNull();
+    expect(moneyOrNull("", "Rent")).toBeNull();
   });
 
-  it("rejects a negative or non-finite amount", () => {
-    expect(() => moneyOrNull(-1, "Rent")).toThrow(
+  it("rejects a negative amount, a third decimal, and text", () => {
+    expect(() => moneyOrNull("-1", "Rent")).toThrow(
       "Rent must be a non-negative amount.",
     );
-    expect(() => moneyOrNull(Number.NaN, "Rent")).toThrow();
-  });
-
-  it("round-trips through moneyValue", () => {
-    expect(moneyValue(moneyOrNull(1234.56, "Rent"))).toBe(1234.56);
-    expect(moneyValue(null)).toBeNull();
+    expect(() => moneyOrNull("18.505", "Rent")).toThrow();
+    expect(() => moneyOrNull("a lot", "Rent")).toThrow();
   });
 });
 

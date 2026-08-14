@@ -425,9 +425,48 @@ export function DeadlineCell({
   today: string | null;
   onChange: (deadline: string | null) => void;
 }) {
-  const formatDate = useDateFormatter();
   const value = node.deadline ? toDateKey(node.deadline) : "";
-  const overdue = isDeadlineOverdue(value, today, node.state);
+  return (
+    <DateKeyCell
+      value={value}
+      ariaLabel="Deadline"
+      onChange={onChange}
+      overdue={isDeadlineOverdue(value, today, node.state)}
+    />
+  );
+}
+
+/**
+ * An editable calendar day in a grid cell, on the raw `YYYY-MM-DD` key.
+ *
+ * The interaction is the reason this is shared rather than written twice: a native date
+ * input is loud, so a set date is drawn as ordinary grid text and the real input only
+ * becomes visible on focus. Getting that wrong makes one column look nothing like the rest
+ * of the grid.
+ *
+ * Callers holding a UTC-noon `timestamptz` decode with `toDateKey` first — `DeadlineCell`
+ * above does. Callers on a Postgres `date` column (jobs, residences, life events) pass their
+ * stored value straight through, because it already is the key.
+ */
+export function DateKeyCell({
+  value,
+  ariaLabel,
+  onChange,
+  align = "right",
+  overdue = false,
+}: {
+  /** `YYYY-MM-DD`, or `""` when unset. */
+  value: string;
+  ariaLabel: string;
+  onChange: (value: string | null) => void;
+  align?: "left" | "right";
+  /** Draws the value in the overdue colour. Only the deadline column has an opinion here. */
+  overdue?: boolean;
+}) {
+  const formatDate = useDateFormatter();
+  const tone = overdue ? "text-priority-a" : "text-ink-muted";
+  const alignInput = align === "right" ? "text-right" : "text-left";
+  const alignOverlay = align === "right" ? "justify-end" : "justify-start";
 
   return (
     <span className="relative block w-full">
@@ -439,10 +478,11 @@ export function DeadlineCell({
           event.currentTarget.showPicker();
         }}
         onChange={(event) => onChange(event.target.value || null)}
-        aria-label="Deadline"
+        aria-label={ariaLabel}
         className={[
-          "peer tabular w-full border-none bg-transparent text-right text-[0.75rem] outline-none",
-          overdue ? "text-priority-a" : "text-ink-muted",
+          "peer tabular w-full border-none bg-transparent text-[0.75rem] outline-none",
+          alignInput,
+          tone,
           // A set date reads like every other grid date until the native editor has focus.
           value
             ? "opacity-0 focus:opacity-100"
@@ -452,9 +492,7 @@ export function DeadlineCell({
       {value ? (
         <span
           title={formatFullDateKey(value)}
-          className={`pointer-events-none absolute inset-0 flex min-w-0 items-center justify-end tabular text-[0.75rem] peer-focus:hidden ${
-            overdue ? "text-priority-a" : "text-ink-muted"
-          }`}
+          className={`pointer-events-none absolute inset-0 flex min-w-0 items-center tabular text-[0.75rem] peer-focus:hidden ${alignOverlay} ${tone}`}
         >
           <span className="min-w-0 truncate">{formatDate(value)}</span>
         </span>

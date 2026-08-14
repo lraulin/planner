@@ -57,18 +57,24 @@ describeDb("jobs mutations", () => {
     });
   });
 
-  it("computes duration against today for a job with no end date", async () => {
-    const id = await createJob(userId, { employer: "Acme", startDate: "2024-08-13" });
-    const [row] = await listJobs(userId, "2026-08-13");
+  it("summarises the employer's location without the street address", async () => {
+    const id = await createJob(userId, {
+      employer: "Hanbit",
+      streetAddress: "12 Sejong-daero",
+      city: "Seoul",
+      country: "South Korea",
+    });
+    const [row] = await listJobs(userId);
     expect(row.id).toBe(id);
-    expect(row.duration).toBe("2y 0m 0d");
+    expect(row.location).toBe("Seoul, South Korea");
   });
 
-  it("leaves duration blank when the caller does not know what day it is", async () => {
-    // listJobs must never reach for new Date(): on the server that is UTC's today.
-    await createJob(userId, { employer: "Acme", startDate: "2024-08-13" });
-    const [row] = await listJobs(userId, null);
-    expect(row.duration).toBeNull();
+  it("sorts undated jobs last rather than first", async () => {
+    await createJob(userId, { employer: "Undated" });
+    await createJob(userId, { employer: "Older", startDate: "2010-01-01" });
+    await createJob(userId, { employer: "Newer", startDate: "2020-01-01" });
+    const employers = (await listJobs(userId)).map((row) => row.employer);
+    expect(employers).toEqual(["Newer", "Older", "Undated"]);
   });
 
   it("writes only the fields supplied on update", async () => {
@@ -112,9 +118,9 @@ describeDb("jobs mutations", () => {
   });
 
   it("round-trips pay through numeric without losing cents", async () => {
-    const id = await createJob(userId, { employer: "Acme", startingPay: 62_500.5 });
+    const id = await createJob(userId, { employer: "Acme", startingPay: "62500.50" });
     await expect(getJobDetail(userId, id)).resolves.toMatchObject({
-      startingPay: 62500.5,
+      startingPay: "62500.50",
     });
   });
 

@@ -55,28 +55,26 @@ export function requireOrderedDates(
   }
 }
 
+const MONEY = /^\d+(\.\d{1,2})?$/;
+
 /**
  * A non-negative money amount as the string `numeric` wants, or null.
  *
- * Stored as a string rather than a number for the same reason the finance tables do it:
- * `numeric` round-trips exactly and a float does not.
+ * A string end to end, never a float — `MoneyField` writes one, Drizzle reads one back, and
+ * `numeric` round-trips it exactly. Parsing to a number in between is how cents go missing,
+ * which is why the finance tables do it this way too.
  */
 export function moneyOrNull(
-  value: number | null | undefined,
+  value: string | null | undefined,
   label: string,
 ): string | null {
   if (value === null || value === undefined) return null;
-  if (!Number.isFinite(value) || value < 0) {
+  const trimmed = value.trim().replace(/[$,]/g, "");
+  if (!trimmed) return null;
+  if (!MONEY.test(trimmed)) {
     throw new Error(`${label} must be a non-negative amount.`);
   }
-  return value.toFixed(2);
-}
-
-/** Read a `numeric` column back as a number, treating an unparseable value as absent. */
-export function moneyValue(value: string | null): number | null {
-  if (value === null) return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
+  return trimmed;
 }
 
 /**

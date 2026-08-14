@@ -1,3 +1,5 @@
+import type { SpanDuration } from "@/lib/history/span";
+
 /** The complete Residence record — everything the drawer edits and the grid summarises. */
 export type ResidenceDetail = {
   id: string;
@@ -17,7 +19,8 @@ export type ResidenceDetail = {
   /** `YYYY-MM-DD`. Null means you still live there. */
   movedOut: string | null;
   housingType: string;
-  monthlyRent: number | null;
+  /** A `numeric` string, never a float. See `moneyOrNull`. */
+  monthlyRent: string | null;
   reasonForLeaving: string;
 
   landlordName: string;
@@ -29,12 +32,15 @@ export type ResidenceDetail = {
   updatedAt: Date;
 };
 
-/** One Residences grid row: the record plus what the grid computes rather than stores. */
+/** What the server sends. Duration is derived on the client — see `JobListRow`. */
 export type ResidenceListRow = ResidenceDetail & {
   /** The full address on one line. */
   address: string;
-  /** `"2y 7m 3d"`, or null when there is no move-in date to measure from. */
-  duration: string | null;
+};
+
+/** What the grid renders — the server row plus the derived duration. See `JobGridRow`. */
+export type ResidenceGridRow = ResidenceListRow & {
+  duration: SpanDuration;
 };
 
 /** Partial structured edit; an omitted field is left alone rather than blanked. */
@@ -52,7 +58,7 @@ export type ResidenceInput = {
   movedIn?: string | null;
   movedOut?: string | null;
   housingType?: string;
-  monthlyRent?: number | null;
+  monthlyRent?: string | null;
   reasonForLeaving?: string;
 
   landlordName?: string;

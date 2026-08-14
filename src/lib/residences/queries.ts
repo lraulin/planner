@@ -2,8 +2,6 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { residences } from "@/db/schema";
 import { formatPostalAddress } from "@/lib/address";
-import { moneyValue } from "@/lib/history/fields";
-import { elapsedParts, formatElapsed } from "@/lib/timeline/elapsed";
 import type { ResidenceDetail, ResidenceListRow } from "./types";
 
 function toDetail(row: typeof residences.$inferSelect): ResidenceDetail {
@@ -20,7 +18,7 @@ function toDetail(row: typeof residences.$inferSelect): ResidenceDetail {
     movedIn: row.movedIn,
     movedOut: row.movedOut,
     housingType: row.housingType,
-    monthlyRent: moneyValue(row.monthlyRent),
+    monthlyRent: row.monthlyRent,
     reasonForLeaving: row.reasonForLeaving,
     landlordName: row.landlordName,
     landlordPhone: row.landlordPhone,
@@ -31,31 +29,19 @@ function toDetail(row: typeof residences.$inferSelect): ResidenceDetail {
   };
 }
 
-/** See the note on `jobs/queries.ts` — `todayKey` comes from the caller, never from `TZ`. */
-function durationOf(row: ResidenceDetail, todayKey: string | null): string | null {
-  if (!row.movedIn) return null;
-  const end = row.movedOut ?? todayKey;
-  if (!end) return null;
-  const parts = elapsedParts(row.movedIn, end);
-  return parts ? formatElapsed(parts) : null;
+function toListRow(row: ResidenceDetail): ResidenceListRow {
+  return { ...row, address: formatPostalAddress(row) };
 }
 
-function toListRow(row: ResidenceDetail, todayKey: string | null): ResidenceListRow {
-  return {
-    ...row,
-    address: formatPostalAddress(row),
-    duration: durationOf(row, todayKey),
-  };
-}
-
-/** Every residence, most recent move-in first; undated records sort last. */
-export async function listResidences(
-  userId: string,
-  todayKey: string | null = null,
-): Promise<ResidenceListRow[]> {
+/**
+ * Every residence, most recent move-in first; undated records sort last.
+ *
+ * Duration is computed on the client — see the same note on `jobs/queries.ts`.
+ */
+export async function listResidences(userId: string): Promise<ResidenceListRow[]> {
   const rows = await db.select().from(residences).where(eq(residences.userId, userId));
   return rows
-    .map((row) => toListRow(toDetail(row), todayKey))
+    .map((row) => toListRow(toDetail(row)))
     .sort((a, b) => {
       if (a.movedIn === b.movedIn) return a.city.localeCompare(b.city);
       if (!a.movedIn) return 1;

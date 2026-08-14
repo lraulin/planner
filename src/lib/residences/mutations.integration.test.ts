@@ -48,32 +48,31 @@ describeDb("residences mutations", () => {
       movedOut: "2017-02-15",
     });
 
-    const [row] = await listResidences(userId, "2026-08-13");
+    const [row] = await listResidences(userId);
     expect(row.id).toBe(id);
     expect(row.address).toBe("12 Sejong-daero, Seoul, 04524, South Korea");
-    expect(row.duration).toBe("2y 6m 14d");
   });
 
-  it("measures a current residence against today", async () => {
-    // From a leap day: 77 whole months lands on 2026-07-29 (Feb 29 clamps to the 29th of
-    // every month it can), and July has 31 days, so the remainder is 15 and not 14.
-    await createResidence(userId, { city: "Boston", movedIn: "2020-02-29" });
-    const [row] = await listResidences(userId, "2026-08-13");
-    expect(row.duration).toBe("6y 5m 15d");
+  it("sorts undated residences last rather than first", async () => {
+    await createResidence(userId, { city: "Undated" });
+    await createResidence(userId, { city: "Seoul", movedIn: "2014-08-01" });
+    await createResidence(userId, { city: "Boston", movedIn: "2020-01-01" });
+    const cities = (await listResidences(userId)).map((row) => row.city);
+    expect(cities).toEqual(["Boston", "Seoul", "Undated"]);
   });
 
   it("writes only the fields supplied on update", async () => {
     const id = await createResidence(userId, {
       city: "Boston",
       landlordName: "Ada King",
-      monthlyRent: 1850,
+      monthlyRent: "1850.00",
     });
     await updateResidence(userId, id, { city: "Cambridge" });
 
     await expect(getResidenceDetail(userId, id)).resolves.toMatchObject({
       city: "Cambridge",
       landlordName: "Ada King",
-      monthlyRent: 1850,
+      monthlyRent: "1850.00",
     });
   });
 
