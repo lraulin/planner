@@ -59,6 +59,7 @@ describe("hasPageBar", () => {
     expect(builtPagesForModule("finances").map((page) => page.id)).toEqual([
       "register",
       "insights",
+      "orders",
     ]);
     expect(hasPageBar("finances")).toBe(true);
   });

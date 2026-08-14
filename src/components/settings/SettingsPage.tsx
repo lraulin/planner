@@ -23,6 +23,7 @@ import {
 import { AchieveTransferPanel } from "./AchieveTransferPanel";
 import { GoogleCalendarPanel } from "./GoogleCalendarPanel";
 import { FinanceImportPanel } from "@/components/finances/FinanceImportPanel";
+import { AmazonImportPanel } from "./AmazonImportPanel";
 import { RedNotebookImportPanel } from "./RedNotebookImportPanel";
 import { TomboyImportPanel } from "./TomboyImportPanel";
 
@@ -437,6 +438,12 @@ function TransferPanels() {
         description="Import bank and card CSV exports into the Finances register."
       >
         <FinanceImportPanel embedded />
+      </TransferDisclosure>
+      <TransferDisclosure
+        title="Amazon orders"
+        description="Import the slim JSON from the Amazon data-request zip (line items, not card lumps)."
+      >
+        <AmazonImportPanel embedded />
       </TransferDisclosure>
     </div>
   );

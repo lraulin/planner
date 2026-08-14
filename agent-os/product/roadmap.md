@@ -729,13 +729,14 @@ YNAB-like, but simpler — and connected to goals over time.
      person), not another merchant alias. Split-across-categories stays out of the
      current spec for the same reason.
   3. **Itemized receipts** — the data that would make (1) and (2) real. One bank row
-     is a lump; the receipt is groceries + formula + cat food. Likely sources, none
-     chosen: Amazon order history / invoice export; crawl order-confirmation email
-     (Amazon already sends line items; others may); Walmart is harder from the bank
-     feed but purchases go through the app, so receipts may be exportable from there.
-     A later spec would have to attach line items to an existing
-     `finance_transactions` row without changing `amount` or inventing spend. Do not
-     start until the register's lumps are already classified honestly.
+     is a lump; the receipt is groceries + formula + cat food.
+     ✅ Amazon data-request ingest + Orders page shipped 2026-08-14 —
+     `specs/2026-08-14-1439-amazon-order-ingest/`. A local script slims the privacy
+     zip (JPEGs/PDFs stay out); `/finances/orders` browses 4,594 line items. Matching
+     those items to `finance_transactions` (date + last-4 + amount) without changing
+     `amount`, and grocery-vs-discretionary tags, are the next spec. Other sources
+     still later: order-confirmation email; Walmart is harder from the bank feed but
+     purchases go through the app.
 
 - **Eventually:** **Plaid** (or equivalent) to pull bank data by API — only after
   CSV + envelopes are trustworthy, given lock-in and security cost.

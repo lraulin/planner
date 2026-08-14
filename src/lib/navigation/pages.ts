@@ -240,6 +240,13 @@ const PAGES = {
       status: "built",
       keywords: "spending baseline lumpy cashflow charts dashboard",
     },
+    {
+      id: "orders",
+      label: "Orders",
+      segment: "orders",
+      status: "built",
+      keywords: "amazon items subscribe receipts",
+    },
   ],
 
   /*

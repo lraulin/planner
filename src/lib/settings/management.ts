@@ -17,6 +17,7 @@ const MODULE_LABELS = {
   resources: "Resources",
   contacts: "Contacts",
   finances: "Finances",
+  amazon: "Amazon orders",
 } as const;
 
 const MODULE_ORDER = Object.keys(MODULE_LABELS) as (keyof typeof MODULE_LABELS)[];
