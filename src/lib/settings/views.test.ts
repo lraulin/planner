@@ -278,14 +278,25 @@ describe("addSavedView / removeSavedView / renameSavedView", () => {
     }
     expect(state.views).toHaveLength(20);
 
-    // A 17th user view is refused because user slots are full.
-    expect(addSavedView(state, view("u-extra"))).toBe(state);
+    // Only 16 of 20 user slots are used, so the 17th user view must be accepted.
+    const withUser = addSavedView(state, view("u-extra"));
+    expect(withUser.views).toHaveLength(21);
+    expect(withUser.views.some((v) => v.id === "u-extra")).toBe(true);
 
-    // A shipped default is still accepted.
+    // Fill user slots to 20, then the 21st user view is refused.
+    let full = NO_SAVED_VIEWS;
+    for (let i = 0; i < MAX_SAVED_VIEWS; i += 1) {
+      full = addSavedView(full, view(`x${i}`));
+    }
+    for (let i = 0; i < 4; i += 1) {
+      full = addSavedView(full, seedOf(`fp-${i}`, `FP ${i}`));
+    }
+    expect(addSavedView(full, view("x-extra"))).toBe(full);
+
+    // A shipped default is accepted regardless of how many user views exist.
     const extraSeed = seedOf("preset-extra", "Extra Preset");
-    const withExtra = addSavedView(state, extraSeed);
-    expect(withExtra.views).toHaveLength(21);
-    expect(withExtra.views.some((v) => v.id === "preset-extra")).toBe(true);
+    const withSeed = addSavedView(full, extraSeed);
+    expect(withSeed.views.some((v) => v.id === "preset-extra")).toBe(true);
   });
 
   it("removes by id and leaves the rest in order", () => {
