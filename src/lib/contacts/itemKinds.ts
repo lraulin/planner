@@ -1,4 +1,5 @@
 import type { ContactItemKind } from "@/db/schema";
+import { formatPostalAddress } from "@/lib/address";
 
 /**
  * What each repeating list on a contact is called, and which of `contact_items`' columns it
@@ -272,13 +273,5 @@ export function summarizeContactItem(
   },
 ): string {
   if (kind !== "address") return item.value.trim();
-
-  const cityLine = [item.city, item.region]
-    .map((p) => p.trim())
-    .filter(Boolean)
-    .join(", ");
-  return [item.streetAddress, cityLine, item.postalCode, item.country]
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .join(", ");
+  return formatPostalAddress(item);
 }
