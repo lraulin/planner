@@ -9,7 +9,8 @@ import {
   parseReturns,
 } from "./parse";
 import { amazonDateKey, paymentLast4 } from "./csv";
-import { buildSlimFromTexts, parseSlimJson } from "./slim";
+import { AMAZON_UPLOAD_MAX_BYTES, amazonFileTooLargeForUpload } from "./types";
+import { buildSlimFromTexts, parseSlimJson, serializeSlim } from "./slim";
 
 const RETAIL_HEADER = [
   "ASIN",
@@ -312,6 +313,18 @@ describe("buildSlimFromTexts / parseSlimJson", () => {
 
     expect(parseSlimJson('{"version":1,"source":"nope"}').ok).toBe(false);
     expect(parseSlimJson("not json").ok).toBe(false);
+  });
+
+  it("serializes compact JSON so a pretty-printed dump cannot trip the upload cap", () => {
+    const retail = [RETAIL_HEADER, retailRow({})].join("\n");
+    const { document } = buildSlimFromTexts({ retail }, "2026-08-14T18:00:00.000Z");
+    const compact = serializeSlim(document);
+    expect(compact).not.toContain("\n  ");
+    expect(compact.length).toBeLessThan(JSON.stringify(document, null, 2).length);
+    expect(parseSlimJson(compact).ok).toBe(true);
+    expect(amazonFileTooLargeForUpload(4_867_976)).toBe(true);
+    expect(amazonFileTooLargeForUpload(3_718_042)).toBe(false);
+    expect(amazonFileTooLargeForUpload(AMAZON_UPLOAD_MAX_BYTES)).toBe(false);
   });
 });
 

@@ -3,7 +3,11 @@
 import { useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { readJsonResponse } from "@/lib/http/readJson";
-import type { AmazonImportResult } from "@/lib/amazon/types";
+import {
+  AMAZON_UPLOAD_MAX_BYTES,
+  amazonFileTooLargeForUpload,
+  type AmazonImportResult,
+} from "@/lib/amazon/types";
 
 type ImportEnvelope =
   | { ok: true; data: AmazonImportResult }
@@ -23,6 +27,12 @@ export function AmazonImportPanel({ embedded = false }: { embedded?: boolean } =
     if (!file) return;
     setError(null);
     setResult(null);
+    if (amazonFileTooLargeForUpload(file.size)) {
+      setError(
+        `That file is ${(file.size / 1024 / 1024).toFixed(1)} MB. Re-run npm run amazon:slim — compact JSON must stay under ${(AMAZON_UPLOAD_MAX_BYTES / 1024 / 1024).toFixed(1)} MB.`,
+      );
+      return;
+    }
 
     const form = new FormData();
     form.append("file", file);
@@ -72,7 +82,8 @@ export function AmazonImportPanel({ embedded = false }: { embedded?: boolean } =
           <code className="text-ink">
             npm run amazon:slim -- &quot;Your Orders.zip&quot;
           </code>
-          . The zip itself is not accepted — it is mostly delivery photos.
+          . The zip itself is not accepted — it is mostly delivery photos. The script
+          writes compact JSON so the file stays under the 4.5 MB upload limit.
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <input

@@ -113,6 +113,17 @@ export const SLIM_CSV_FILES = {
 
 export type SlimCsvKind = keyof typeof SLIM_CSV_FILES;
 
+/**
+ * Vercel Functions reject a request body over 4.5 MB with a 413. The slim file
+ * must stay under this so Settings import can reach the route. Pretty-printed
+ * dumps of the real order history do not.
+ */
+export const AMAZON_UPLOAD_MAX_BYTES = Math.floor(4.5 * 1024 * 1024);
+
+export function amazonFileTooLargeForUpload(byteLength: number): boolean {
+  return byteLength > AMAZON_UPLOAD_MAX_BYTES;
+}
+
 export const AMAZON_FEEDS = {
   order: "amazon:order",
   item: "amazon:item",

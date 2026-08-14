@@ -8,7 +8,8 @@
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { loadSlimTexts } from "../src/lib/amazon/files";
-import { buildSlimFromTexts } from "../src/lib/amazon/slim";
+import { buildSlimFromTexts, serializeSlim } from "../src/lib/amazon/slim";
+import { AMAZON_UPLOAD_MAX_BYTES } from "../src/lib/amazon/types";
 
 function usage(): never {
   console.error(
@@ -47,11 +48,18 @@ if (found.length === 0) {
 }
 
 const { document, warnings } = buildSlimFromTexts(texts);
-writeFileSync(resolve(output), `${JSON.stringify(document, null, 2)}\n`, "utf8");
+const body = serializeSlim(document);
+writeFileSync(resolve(output), body, "utf8");
 
+const bytes = Buffer.byteLength(body);
 console.log(
-  `Wrote ${output}: ${document.items.length} items, ${document.orders.length} orders, ${document.refunds.length} refunds, ${document.returns.length} returns, ${document.replacements.length} replacements.`,
+  `Wrote ${output}: ${document.items.length} items, ${document.orders.length} orders, ${document.refunds.length} refunds, ${document.returns.length} returns, ${document.replacements.length} replacements (${(bytes / 1024 / 1024).toFixed(2)} MB).`,
 );
+if (bytes > AMAZON_UPLOAD_MAX_BYTES) {
+  console.error(
+    `Warning: ${output} is larger than the 4.5 MB upload limit. Settings import will fail on Vercel.`,
+  );
+}
 if (warnings.length > 0) {
   console.error(`Warnings (${warnings.length}):`);
   for (const warning of warnings.slice(0, 20)) console.error(`  ${warning}`);

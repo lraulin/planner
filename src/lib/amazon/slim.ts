@@ -115,6 +115,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /**
  * Accept only a version-1 slim file. The app never parses the zip.
  */
+/**
+ * The ingest artifact is compact JSON. Pretty-printing this dump is ~4.9 MB, which
+ * Vercel Functions reject (4.5 MB request body) before our route runs.
+ */
+export function serializeSlim(document: SlimAmazonOrders): string {
+  return JSON.stringify(document);
+}
+
 export function parseSlimJson(
   text: string,
 ): { ok: true; data: SlimAmazonOrders } | { ok: false; error: string } {

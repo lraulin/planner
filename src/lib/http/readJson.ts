@@ -19,7 +19,7 @@ export async function readJsonResponse<T>(response: Response): Promise<T> {
     const snippet = text.replace(/\s+/g, " ").trim().slice(0, 160);
     if (response.status === 413 || /entity too large/i.test(snippet)) {
       throw new Error(
-        "That upload is larger than the server will accept in one go. Select fewer files.",
+        "That upload is larger than the server will accept (about 4.5 MB). Use a more compact file.",
       );
     }
     throw new Error(`Import failed (${response.status}): ${snippet}`);

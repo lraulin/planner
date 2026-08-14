@@ -12,9 +12,7 @@ describe("readJsonResponse", () => {
 
   it("names a 413 instead of throwing a JSON parse error", async () => {
     const res = new Response("Request Entity Too Large", { status: 413 });
-    await expect(readJsonResponse(res)).rejects.toThrow(
-      /larger than the server will accept/,
-    );
+    await expect(readJsonResponse(res)).rejects.toThrow(/4\.5 MB/);
   });
 
   it("does not surface Unexpected token when the body is plain text", async () => {
