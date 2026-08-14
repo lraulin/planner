@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import type { GridRow } from "@/lib/tree/slice";
 import { formatUsd } from "@/lib/finances/money";
 import { FINANCE_GROUP_BY_VALUES, groupTransactions } from "@/lib/finances/grouping";
@@ -11,8 +11,11 @@ import {
   listTransactionsAction,
 } from "@/app/finances/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
-import { ModalShell } from "@/components/detail/ModalShell";
 import { DataGrid } from "@/components/grid/DataGrid";
+import {
+  FileImportDialog,
+  useFileImportCommand,
+} from "@/components/import/FileImportHost";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 import { rowMenuFor } from "@/components/grid/rowMenu";
 import { catalogCapabilities } from "@/components/grid/catalogCommands";
@@ -105,8 +108,15 @@ export function FinancesView({
   const [groupIds, setGroupIds] = useState<readonly string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<TransactionListRow | null>(null);
-  const [importOpen, setImportOpen] = useState(false);
-  const importTitleId = useId();
+  const {
+    open: importOpen,
+    openImport,
+    closeImport: closeFileImport,
+  } = useFileImportCommand({
+    id: "import.finance",
+    label: "Import transactions…",
+    keywords: "csv statement bank card chase capital one pdf",
+  });
   const [, startTransition] = useTransition();
   const { detail: openId, setDetail: setOpenId } = useViewStateUrl();
 
@@ -158,11 +168,10 @@ export function FinancesView({
     });
   }, []);
 
-  const openImport = useCallback(() => setImportOpen(true), []);
   const closeImport = useCallback(() => {
-    setImportOpen(false);
+    closeFileImport();
     refresh();
-  }, [refresh]);
+  }, [closeFileImport, refresh]);
 
   const openDrawer = useCallback((id: string) => setOpenId(id), [setOpenId]);
   const closeDrawer = useCallback(() => {
@@ -302,29 +311,13 @@ export function FinancesView({
         }
       />
 
-      <ModalShell
+      <FileImportDialog
         open={importOpen}
         onClose={closeImport}
-        labelledBy={importTitleId}
-        width="max-w-xl"
+        title="Import transactions"
       >
-        <div className="flex items-center justify-between border-b border-rule px-4 py-2.5">
-          <h2
-            id={importTitleId}
-            className="text-[0.75rem] font-semibold uppercase tracking-wider text-ink-muted"
-          >
-            Import transactions
-          </h2>
-          <button
-            type="button"
-            onClick={closeImport}
-            className="min-h-tap px-2 text-[0.875rem] text-ink-muted md:min-h-0"
-          >
-            Close
-          </button>
-        </div>
         <FinanceImportPanel embedded />
-      </ModalShell>
+      </FileImportDialog>
 
       <TransactionDrawer
         transactionId={openId}

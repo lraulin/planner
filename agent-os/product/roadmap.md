@@ -700,6 +700,10 @@ YNAB-like, but simpler — and connected to goals over time.
   `agent-os/specs/2026-08-14-1430-capitalone-card-statements/` — 3,614 historical
   rows onto the existing `•••3448` card (Aug 2019–Jul 2026 PDFs; 2025 files were
   not in the folder) without duplicating the 2025-08+ CSV.
+  File ▸ Import on Register and Statements (and the other home pages) plus
+  client-side batching under the 4.5 MB Vercel body limit shipped 2026-08-14 —
+  `agent-os/specs/2026-08-14-1854-file-menu-imports/`. A folder of statements no
+  longer has to be re-picked a handful at a time.
   Envelopes were deliberately deferred until there is real spending data to design them
   against; that is the next piece of this MVP.
   ✅ Insights dashboard shipped 2026-08-13 —

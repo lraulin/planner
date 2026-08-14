@@ -5,6 +5,8 @@
  * versioned JSON; the app only knows this format.
  */
 
+import { VERCEL_BODY_MAX_BYTES } from "@/lib/http/uploadLimits";
+
 export const SLIM_VERSION = 1;
 export const SLIM_SOURCE = "amazon-data-request";
 
@@ -118,7 +120,7 @@ export type SlimCsvKind = keyof typeof SLIM_CSV_FILES;
  * must stay under this so Settings import can reach the route. Pretty-printed
  * dumps of the real order history do not.
  */
-export const AMAZON_UPLOAD_MAX_BYTES = Math.floor(4.5 * 1024 * 1024);
+export const AMAZON_UPLOAD_MAX_BYTES = VERCEL_BODY_MAX_BYTES;
 
 export function amazonFileTooLargeForUpload(byteLength: number): boolean {
   return byteLength > AMAZON_UPLOAD_MAX_BYTES;

@@ -71,6 +71,8 @@ import { selectionMoveRoots } from "@/lib/grid/selection";
 import { copyAsText, writeClipboardText } from "@/lib/tree/copyAsText";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { notesColumns, NOTES_COLUMN_IDS, type NotesColumnCtx } from "./notesColumns";
+import { FileImportHost } from "@/components/import/FileImportHost";
+import { TomboyImportPanel } from "@/components/settings/TomboyImportPanel";
 import { NoteFilterDialog } from "./NoteFilterDialog";
 import { NoteDrawer } from "./NoteDrawer";
 import { isModalOpen, isTypingTarget } from "@/lib/keyboard";
@@ -933,6 +935,15 @@ export function NotesGrid({
         }}
         onCancel={() => setPendingDelete(null)}
       />
+
+      <FileImportHost
+        commandId="import.tomboy"
+        label="Import Tomboy…"
+        keywords="tomboy note xml sync"
+        title="Import Tomboy"
+      >
+        <TomboyImportPanel embedded />
+      </FileImportHost>
     </div>
   );
 }

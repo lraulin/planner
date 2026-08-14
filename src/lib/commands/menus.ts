@@ -33,7 +33,7 @@ export const TOOLBAR_SEGMENT = 10;
  * first declared — so a page can invent a `Tools` section without editing this file.
  */
 export const MENU_SECTIONS: Record<CommandMenu, readonly string[]> = {
-  file: ["Inbox", "Plan", "Export", "Copy to Clipboard", "Account"],
+  file: ["Inbox", "Plan", "Import", "Export", "Copy to Clipboard", "Account"],
   new: ["New", "Insert row"],
   item: ["Item", "Convert to", "Danger"],
   // `Rank` and `State` are the Day grid's; `Move` is shared with the Outline's tree moves. They are

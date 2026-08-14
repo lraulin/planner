@@ -7,6 +7,8 @@ import {
   updateNoteAction,
 } from "@/app/notes/actions";
 import { DestinationCommandBar } from "@/components/grid/DestinationCommandBar";
+import { FileImportHost } from "@/components/import/FileImportHost";
+import { RedNotebookImportPanel } from "@/components/settings/RedNotebookImportPanel";
 import { useDateFormatter } from "@/components/settings/SettingsProvider";
 import { MiniMonth } from "@/components/schedule/MiniMonth";
 import { useIsCompact } from "@/components/shell/useIsCompact";
@@ -52,6 +54,11 @@ export function NotesJournal({
   const todayKey = localDateKey(new Date());
 
   const [summaries, setSummaries] = useState(initialSummaries);
+  const [seenSummaries, setSeenSummaries] = useState(initialSummaries);
+  if (initialSummaries !== seenSummaries) {
+    setSeenSummaries(initialSummaries);
+    setSummaries(initialSummaries);
+  }
   const tree = useMemo(() => buildDiaryTree(summaries), [summaries]);
   const treeRef = useRef(tree);
 
@@ -189,6 +196,14 @@ export function NotesJournal({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <DestinationCommandBar overflowLabel="More commands for Notes" />
+      <FileImportHost
+        commandId="import.rednotebook"
+        label="Import RedNotebook…"
+        keywords="rednotebook journal diary month"
+        title="Import RedNotebook"
+      >
+        <RedNotebookImportPanel embedded />
+      </FileImportHost>
 
       {compact ? (
         sheetOpen ? (

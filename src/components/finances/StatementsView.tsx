@@ -15,6 +15,8 @@ import type {
 } from "@/lib/finances/types";
 import { DateText } from "@/components/date/DateText";
 import { DataGrid } from "@/components/grid/DataGrid";
+import { FileImportHost } from "@/components/import/FileImportHost";
+import { FinanceImportPanel } from "./FinanceImportPanel";
 import { GridToolbar } from "@/components/grid/GridToolbar";
 import { useModuleViews } from "@/components/grid/useModuleViews";
 import type { GridDefaults } from "@/components/grid/useGridState";
@@ -198,7 +200,7 @@ export function StatementsView({
         density={gridState.density}
         empty={
           <p className="mx-auto max-w-lg p-6 text-center text-[0.9375rem] text-ink-muted">
-            No statements yet. Import monthly PDFs from Settings → Import &amp; export.
+            No statements yet. Import monthly PDFs from File → Import transactions…
           </p>
         }
       />
@@ -257,6 +259,15 @@ export function StatementsView({
           ) : null}
         </div>
       ) : null}
+
+      <FileImportHost
+        commandId="import.finance"
+        label="Import transactions…"
+        keywords="csv statement bank card chase capital one pdf"
+        title="Import transactions"
+      >
+        <FinanceImportPanel embedded />
+      </FileImportHost>
     </div>
   );
 }

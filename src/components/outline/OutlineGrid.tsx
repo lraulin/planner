@@ -75,6 +75,8 @@ import {
   OUTLINE_COLUMN_IDS,
   type OutlineColumnCtx,
 } from "./outlineColumns";
+import { FileImportHost } from "@/components/import/FileImportHost";
+import { AchieveTransferPanel } from "@/components/settings/AchieveTransferPanel";
 import { isModalOpen, isTypingTarget } from "@/lib/keyboard";
 import { useSuspendCommandKeys } from "@/components/shell/CommandProvider";
 import { zoomBranch, zoomOutRoot } from "@/lib/tree/zoom";
@@ -1086,6 +1088,16 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
           onCancel={stateChange.cancel}
         />
       )}
+
+      <FileImportHost
+        commandId="import.achieve"
+        label="Import Achieve XML…"
+        keywords="achieve xml backup restore merge replace"
+        title="Import Achieve XML"
+        width="max-w-2xl"
+      >
+        <AchieveTransferPanel embedded />
+      </FileImportHost>
     </div>
   );
 }

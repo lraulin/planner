@@ -2,7 +2,9 @@
 
 import { useId, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { financeUploadLimits } from "@/lib/finances/upload";
 import { readJsonResponse } from "@/lib/http/readJson";
+import { packFileBatches } from "@/lib/import/batchFiles";
 
 type ImportOk = {
   ok: true;
@@ -25,6 +27,35 @@ type ImportFail = { ok: false; error: string };
  * time, and statements overlap the bank CSV — so the result line leads with created and
  * skipped rather than treating skips as a problem.
  */
+function emptyImportOk(): ImportOk {
+  return {
+    ok: true,
+    created: 0,
+    skipped: 0,
+    accountsCreated: 0,
+    statementsCreated: 0,
+    statementsSkipped: 0,
+    warnings: [],
+  };
+}
+
+function addImportOk(left: ImportOk, right: ImportOk): ImportOk {
+  return {
+    ok: true,
+    created: left.created + right.created,
+    skipped: left.skipped + right.skipped,
+    accountsCreated: left.accountsCreated + right.accountsCreated,
+    statementsCreated: left.statementsCreated + right.statementsCreated,
+    statementsSkipped: left.statementsSkipped + right.statementsSkipped,
+    warnings: [...left.warnings, ...right.warnings],
+  };
+}
+
+function formatMb(bytes: number): string {
+  const mb = bytes / (1024 * 1024);
+  return Number.isInteger(mb) ? `${mb} MB` : `${mb.toFixed(1)} MB`;
+}
+
 export function FinanceImportPanel({ embedded = false }: { embedded?: boolean } = {}) {
   const headingId = useId();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -32,35 +63,70 @@ export function FinanceImportPanel({ embedded = false }: { embedded?: boolean } 
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ImportOk | null>(null);
+  const [progress, setProgress] = useState<string | null>(null);
 
   const runImport = (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
     setError(null);
     setResult(null);
+    setProgress(null);
 
-    const form = new FormData();
-    for (const file of Array.from(fileList)) {
-      form.append("files", file);
-    }
+    const plan = packFileBatches(Array.from(fileList), financeUploadLimits());
+    const totalQueued = plan.batches.reduce((count, batch) => count + batch.length, 0);
 
     startTransition(async () => {
       try {
-        const res = await fetch("/api/finances/import", {
-          method: "POST",
-          body: form,
-        });
-        const body = await readJsonResponse<ImportOk | ImportFail>(res);
-        if (!body.ok) {
-          setError(body.error);
+        let combined = emptyImportOk();
+        if (plan.rejected.length > 0) {
+          combined = {
+            ...combined,
+            warnings: plan.rejected.map(
+              (entry) =>
+                `"${entry.file.name}" is larger than ${formatMb(entry.limit)} and cannot be split.`,
+            ),
+          };
+        }
+
+        let sent = 0;
+        for (const batch of plan.batches) {
+          const from = sent + 1;
+          const to = sent + batch.length;
+          setProgress(
+            plan.batches.length > 1
+              ? `Importing files ${from}–${to} of ${totalQueued}…`
+              : "Importing…",
+          );
+          const form = new FormData();
+          for (const file of batch) form.append("files", file);
+          const res = await fetch("/api/finances/import", {
+            method: "POST",
+            body: form,
+          });
+          const body = await readJsonResponse<ImportOk | ImportFail>(res);
+          if (!body.ok) {
+            setError(body.error);
+            if (combined.created + combined.skipped + combined.warnings.length > 0) {
+              setResult(combined);
+            }
+            return;
+          }
+          combined = addImportOk(combined, body);
+          sent = to;
+        }
+
+        if (plan.batches.length === 0 && plan.rejected.length === 0) {
+          setError("Those files were empty.");
           return;
         }
-        setResult(body);
+
+        setResult(combined);
         // The register is a server component; without this the new rows are in the
         // database and not on the screen.
-        router.refresh();
+        if (plan.batches.length > 0) router.refresh();
       } catch (e) {
         setError(e instanceof Error ? e.message : "Import failed.");
       } finally {
+        setProgress(null);
         if (fileRef.current) fileRef.current.value = "";
       }
     });
@@ -120,7 +186,9 @@ export function FinanceImportPanel({ embedded = false }: { embedded?: boolean } 
           </p>
         </div>
 
-        {pending && <p className="text-[0.8125rem] text-ink-faint">Importing…</p>}
+        {pending && (
+          <p className="text-[0.8125rem] text-ink-faint">{progress ?? "Importing…"}</p>
+        )}
 
         {error && (
           <p

@@ -371,6 +371,16 @@ function ExportIcon() {
   );
 }
 
+/** Upload: a tray with an arrow out of it. File ▸ Import — the inverse of Export. */
+function ImportIcon() {
+  return (
+    <Glyph>
+      <path d="M5 13.5v2a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-2" />
+      <path d="M10 12.5v-8M7 7l3-3 3 3" />
+    </Glyph>
+  );
+}
+
 /** Cross-navigation: an arrow leaving its box. "Show me this somewhere else." */
 function GoToIcon() {
   return (
@@ -435,6 +445,7 @@ export const COMMAND_ICONS: Record<CommandIcon, () => React.ReactElement> = {
   paste: PasteIcon,
   "go-to": GoToIcon,
   export: ExportIcon,
+  import: ImportIcon,
   settings: SettingsIcon,
   "sign-out": SignOutIcon,
 };

@@ -44,6 +44,7 @@ export const COMMAND_ICON_IDS = [
   "paste",
   "go-to",
   "export",
+  "import",
   "settings",
   "sign-out",
 ] as const;

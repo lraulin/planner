@@ -6,6 +6,8 @@ import { AMAZON_GROUP_BY_VALUES, groupAmazonItems } from "@/lib/amazon/grouping"
 import type { AmazonItemListRow } from "@/lib/amazon/types";
 import { DataGrid } from "@/components/grid/DataGrid";
 import { GridToolbar } from "@/components/grid/GridToolbar";
+import { FileImportHost } from "@/components/import/FileImportHost";
+import { AmazonImportPanel } from "@/components/settings/AmazonImportPanel";
 import { useModuleViews } from "@/components/grid/useModuleViews";
 import type { GridDefaults } from "@/components/grid/useGridState";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
@@ -140,10 +142,19 @@ export function AmazonOrdersView({
           <p className="mx-auto max-w-lg p-6 text-center text-[0.9375rem] text-ink-muted">
             No Amazon orders yet. Run{" "}
             <code className="text-ink">npm run amazon:slim</code> on the privacy-request
-            zip, then import the JSON from Settings → Import &amp; export.
+            zip, then import the JSON from File → Import Amazon orders…
           </p>
         }
       />
+
+      <FileImportHost
+        commandId="import.amazon"
+        label="Import Amazon orders…"
+        keywords="amazon orders slim json data request"
+        title="Import Amazon orders"
+      >
+        <AmazonImportPanel embedded />
+      </FileImportHost>
     </div>
   );
 }
