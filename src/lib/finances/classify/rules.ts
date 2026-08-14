@@ -59,6 +59,14 @@ export const CLASSIFY_RULES: readonly ClassifyRule[] = [
     category: "Utilities",
     merchant: "Evergreen Disposal",
   },
+  // Propane, billed twice a year. The trading name says "HEATING AIR", which is why the
+  // bank files it under home services and it needs a rule to read as the utility it is.
+  {
+    id: "taylor-gas",
+    match: /^TAYLOR GAS/,
+    category: "Utilities",
+    merchant: "Taylor Gas",
+  },
   {
     id: "comcast",
     match: /^(COMCAST|XFINITY)|COMCAST \/ XFINITY/,

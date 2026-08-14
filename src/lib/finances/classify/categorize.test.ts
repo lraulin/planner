@@ -91,6 +91,14 @@ describe("categorize", () => {
     );
   });
 
+  it("files propane as a utility despite the trading name", () => {
+    // "TAYLOR GAS HEATING AIR" reads as home services to the bank and to any classifier
+    // working from the string alone. It is the propane bill, twice a year.
+    const result = categorize("TAYLOR GAS HEATING AIR", "Home Improvement");
+    expect(result.category).toBe("Utilities");
+    expect(result.merchant).toBe("Taylor Gas");
+  });
+
   it("groups the AI and developer tools that arrive under many names", () => {
     for (const description of ["CLAUDE.AI SUBSCRIPTION", "ANTHROPIC* CLAUDE SUB"]) {
       expect(categorize(description, "Merchandise").merchant).toBe("Anthropic");
