@@ -21,6 +21,10 @@ export const FEED_LABELS: Record<FinanceFeed, string> = {
   "csv:capitalone-bank": "Capital One 360 bank",
 };
 
+/** Fail-closed PDF dispatch names every format we actually parse. */
+export const SUPPORTED_STATEMENT_PDFS =
+  "Supported PDFs are Chase Prime Visa monthly statements, Capital One card monthly statements, and Capital One 360 monthly bank statements.";
+
 /**
  * One transaction as it comes out of a CSV, before it has an account id or a fingerprint.
  *

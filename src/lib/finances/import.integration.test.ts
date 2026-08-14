@@ -496,6 +496,42 @@ describeDb("finance statement import user isolation", () => {
   });
 });
 
+const caponeCardStatement: ImportFile = {
+  name: "Statement_072026_3448.pdf",
+  text: [
+    "Account Summary",
+    "Previous Balance $0.00",
+    "Payments $0.00",
+    "Other Credits $0.00",
+    "Transactions + $23.18",
+    "Cash Advances + $0.00",
+    "Fees Charged + $0.00",
+    "Interest Charged + $0.00",
+    "New Balance = $23.18",
+    "Credit Limit $16,500.00",
+    "Available Credit (as of Jul 21, 2026) $16,476.82",
+    "Payment Due Date",
+    "Aug 15, 2026",
+    "Minimum Payment Due",
+    "$25.00",
+    "VentureOne Credit Card | Visa Signature ending in 1797",
+    "Jun 21, 2026 - Jul 21, 2026 | 31 days in Billing Cycle",
+    "Pay or manage your account at capitalone.com",
+    "Rewards Balance",
+    "100 Track and redeem",
+    "LEE M EXAMPLE #1797: Payments, Credits and Adjustments",
+    "Trans Date Post Date Description Amount",
+    "LEE M EXAMPLE #1797: Transactions",
+    "Trans Date Post Date Description Amount",
+    "Jul 1 Jul 2 SBARRO WASHINGTON DC $6.59",
+    "Jul 1 Jul 2 SBARRO WASHINGTON DC $6.59",
+    "Jun 20 Jun 22 WAL-MART #1981CALIFORNIAMD $10.00",
+    "Total Transactions for This Period $23.18",
+    "Interest Charge on Purchases $0.00",
+    "Purchases 25.49% P $0.00 $0.00",
+  ].join("\n"),
+};
+
 function chaseCardStatement(rows: string[], newBalance = "$60.59"): ImportFile {
   return {
     name: "20260818-statements-9910-.pdf",
@@ -616,6 +652,67 @@ describeDb("finance Chase card statement import", () => {
     expect(after?.category).toBe("Household");
   });
 
+  it("lands a Capital One card statement on the existing 3448 account and skips overlap", async () => {
+    await importFinanceCsvFiles({ userId, files: [caponeCardFile] });
+    const before = await listAccounts(userId);
+    expect(before).toHaveLength(1);
+
+    const result = await importFinanceCsvFiles({
+      userId,
+      files: [caponeCardStatement],
+    });
+
+    expect(result).toMatchObject({
+      created: 1,
+      skipped: 2,
+      accountsCreated: 0,
+      statementsCreated: 1,
+    });
+    expect(await listAccounts(userId)).toEqual([
+      expect.objectContaining({ id: before[0].id, externalKey: "3448" }),
+    ]);
+    const rows = await listTransactions(userId);
+    expect(rows.map((r) => r.description)).toEqual(
+      expect.arrayContaining([
+        "SBARRO",
+        "CURSOR, AI POWERED IDE",
+        "CAPITAL ONE MOBILE PYMT",
+        "WAL-MART #1981",
+      ]),
+    );
+    expect(rows.filter((r) => r.description === "SBARRO")).toHaveLength(2);
+    const snapshots = await listStatements(userId);
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0]).toEqual(
+      expect.objectContaining({
+        periodStart: "2026-06-21",
+        periodEnd: "2026-07-21",
+        closingBalanceCents: -2318,
+      }),
+    );
+  });
+
+  it("skips the Capital One card CSV row when the statement landed first", async () => {
+    await importFinanceCsvFiles({ userId, files: [caponeCardStatement] });
+    const result = await importFinanceCsvFiles({ userId, files: [caponeCardFile] });
+    expect(result).toMatchObject({ created: 2, skipped: 2, accountsCreated: 0 });
+    expect(await listAccounts(userId)).toHaveLength(1);
+  });
+
+  it("creates no Capital One card rows or statements on re-import", async () => {
+    await importFinanceCsvFiles({ userId, files: [caponeCardStatement] });
+    const again = await importFinanceCsvFiles({
+      userId,
+      files: [caponeCardStatement],
+    });
+    expect(again).toMatchObject({
+      created: 0,
+      statementsCreated: 0,
+      statementsSkipped: 1,
+    });
+    expect(again.skipped).toBeGreaterThan(0);
+  });
+
   it("rejects an unknown PDF without sending it through the 360 parser", async () => {
     const result = await importFinanceCsvFiles({
       userId,
@@ -624,6 +721,7 @@ describeDb("finance Chase card statement import", () => {
     expect(result.created).toBe(0);
     expect(result.warnings.join(" ")).toMatch(/not a recognised statement/);
     expect(result.warnings.join(" ")).toMatch(/Chase Prime Visa/);
+    expect(result.warnings.join(" ")).toMatch(/Capital One card/);
   });
 });
 

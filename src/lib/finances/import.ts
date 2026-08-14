@@ -8,6 +8,10 @@ import {
 } from "@/db/schema";
 import { fromDateKey } from "@/lib/schedule/geometry";
 import {
+  looksLikeCapitalOneCardStatement,
+  parseCapitalOneCardStatement,
+} from "./capitalOneCardStatement";
+import {
   looksLikeChaseCreditStatement,
   parseChaseCreditStatement,
 } from "./chaseStatement";
@@ -22,6 +26,7 @@ import {
 } from "./statement";
 import {
   FEED_LABELS,
+  SUPPORTED_STATEMENT_PDFS,
   type ImportResult,
   type ParsedAccount,
   type ParsedFinanceCsv,
@@ -259,18 +264,22 @@ async function parseImportFile(file: ImportFile): Promise<ParsedFile> {
   if (looksLikeCapitalOne360Statement(text)) {
     return parseCapitalOne360Statement(file.name, text);
   }
+  if (looksLikeCapitalOneCardStatement(text)) {
+    return parseCapitalOneCardStatement(file.name, text);
+  }
   if (isPdf) {
     return {
       ok: false,
-      error: `"${file.name}" is not a recognised statement. Supported PDFs are Chase Prime Visa monthly statements and Capital One 360 monthly bank statements.`,
+      error: `"${file.name}" is not a recognised statement. ${SUPPORTED_STATEMENT_PDFS}`,
     };
   }
   return parseFinanceCsv(file.name, text);
 }
 
 /**
- * Import one or more bank/card CSV exports, Chase Prime Visa monthly statements, or
- * Capital One 360 statement PDFs. Each file's format is detected on its own.
+ * Import one or more bank/card CSV exports, Chase Prime Visa monthly statements,
+ * Capital One card monthly statements, or Capital One 360 statement PDFs. Each
+ * file's format is detected on its own.
  *
  * A file that cannot be identified becomes a warning and is skipped; the rest still import.
  * Individual unparseable rows become warnings too. Only a call with no usable file at all

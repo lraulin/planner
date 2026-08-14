@@ -1,12 +1,13 @@
 import { parseCsvDate } from "./formats";
 import { parseAmountCents } from "./money";
-import type {
-  ParsedAccount,
-  ParsedFinanceCsv,
-  ParsedStatement,
-  ParsedStatementRate,
-  ParsedTransaction,
-  RowError,
+import {
+  SUPPORTED_STATEMENT_PDFS,
+  type ParsedAccount,
+  type ParsedFinanceCsv,
+  type ParsedStatement,
+  type ParsedStatementRate,
+  type ParsedTransaction,
+  type RowError,
 } from "./types";
 
 /**
@@ -53,8 +54,7 @@ const ACTIVITY = /^(\d{2}\/\d{2})\s+(.+?)\s+(-?[\d,]*\.\d{2})(?:\s+([\d,]+))?$/;
 const RATE =
   /^(Purchases(?: prior to \d{2}\/\d{2}\/\d{4})?|Cash Advances|Balance Transfers)\s+(\d+\.\d+)%\S*\s+(.+)$/;
 
-const SUPPORTED =
-  "Supported PDFs are Chase Prime Visa monthly statements and Capital One 360 monthly bank statements.";
+const SUPPORTED = SUPPORTED_STATEMENT_PDFS;
 
 export function looksLikeChaseCreditStatement(text: string): boolean {
   if (!/Opening\/Closing Date/i.test(text)) return false;
