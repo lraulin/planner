@@ -135,7 +135,11 @@ export function parseSavedViews(value: unknown): SavedViews {
     ? parseDeletedDefaults(record.deletedDefaults)
     : [];
 
-  return { views: views.slice(0, MAX_SAVED_VIEWS), deletedDefaults };
+  // Shipped defaults (defaultSeed != null) bypass the user cap: they are always present
+  // regardless of how many user-created views exist.
+  const userViews = views.filter((v) => v.defaultSeed === null).slice(0, MAX_SAVED_VIEWS);
+  const seedViews = views.filter((v) => v.defaultSeed !== null);
+  return { views: [...userViews, ...seedViews], deletedDefaults };
 }
 
 function parseSavedView(value: unknown): SavedView | null {
@@ -254,9 +258,10 @@ export function uniqueViewName(saved: SavedViews, wanted: string): string {
   }
 }
 
-/** Append a view. At the cap the oldest is *not* evicted — silently losing one is worse. */
+/** Append a view. At the cap the oldest is *not* evicted — silently losing one is worse. Shipped defaults (defaultSeed != null) bypass the cap. */
 export function addSavedView(saved: SavedViews, view: SavedView): SavedViews {
-  if (saved.views.length >= MAX_SAVED_VIEWS) return saved;
+  const userCount = saved.views.filter((v) => v.defaultSeed === null).length;
+  if (view.defaultSeed === null && userCount >= MAX_SAVED_VIEWS) return saved;
   if (saved.views.some((entry) => entry.id === view.id)) return saved;
   return {
     ...saved,

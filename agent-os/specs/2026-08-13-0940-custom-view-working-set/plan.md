@@ -22,7 +22,7 @@ This spec commits to **working-copy + explicit Save**. The live grid is a workin
 | --- | ------------------------------------------------------------------------------------------ |
 | 1   | Working copy. Named views change only on Save / Save as.                                   |
 | 2   | Picker stays on the named view. Dirty is an “Unsaved changes” mark, not a Custom… option.  |
-| 3   | Save writes the working copy over the _active_ saved view. Disabled on a built-in.         |
+| 3   | Save writes the working copy over the _active_ saved view. Available on shipped defaults (which are now ordinary editable views). |
 | 4   | Save as deep-copies the working copy into a new view and switches to it. Source unchanged. |
 | 5   | Switching views loads that view’s definition. Dirty working copy is discarded. No prompt.  |
 | 6   | Reload restores the working copy + active view. Dirty stays if they still differ.          |

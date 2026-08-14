@@ -171,6 +171,43 @@ describe("parseSavedViews", () => {
       }).views[0].advancedFilter,
     ).toEqual(filter);
   });
+
+  it("keeps shipped defaults when 20 user views are present (cap is user-only)", () => {
+    // Build MAX_SAVED_VIEWS user views plus one shipped default.
+    const seed = {
+      id: "active-status",
+      name: "Active Status",
+      base: "active-status",
+      settings: {
+        order: null,
+        widths: {},
+        filters: {},
+        advancedFilter: null,
+        search: "",
+        sorts: [],
+        groupBy: [],
+        collapsedGroups: [],
+        density: "comfortable" as const,
+        switches: {},
+      },
+    };
+    const seedView: SavedView = {
+      id: seed.id,
+      name: seed.name,
+      base: seed.base,
+      ...seed.settings,
+      defaultSeed: seed,
+    };
+    const userViews: SavedView[] = Array.from({ length: MAX_SAVED_VIEWS }, (_, i) =>
+      view(`saved-${i.toString().padStart(3, "0")}`, `User ${i}`),
+    );
+    const source: SavedViews = { views: [...userViews, seedView], deletedDefaults: [] };
+    const roundTripped = parseSavedViews(serializeSavedViews(source));
+    expect(roundTripped.views.some((v) => v.id === seed.id)).toBe(true);
+    expect(roundTripped.views.filter((v) => v.defaultSeed === null)).toHaveLength(
+      MAX_SAVED_VIEWS,
+    );
+  });
 });
 
 describe("uniqueViewName", () => {
@@ -207,6 +244,48 @@ describe("addSavedView / removeSavedView / renameSavedView", () => {
     }
     expect(all.views).toHaveLength(MAX_SAVED_VIEWS);
     expect(addSavedView(all, view("one-more"))).toBe(all);
+  });
+
+  it("counts only user-created views toward the cap; shipped defaults pass through", () => {
+    // 16 user views + 4 shipped-default views = 20 total, but only 16 user slots used.
+    const seedOf = (id: string, name: string): SavedView => {
+      const seed = {
+        id,
+        name,
+        base: id,
+        settings: {
+          order: null,
+          widths: {},
+          filters: {},
+          advancedFilter: null,
+          search: "",
+          sorts: [],
+          groupBy: [],
+          collapsedGroups: [],
+          density: "comfortable" as const,
+          switches: {},
+        },
+      };
+      return { id, name, base: id, ...seed.settings, defaultSeed: seed };
+    };
+
+    let state = NO_SAVED_VIEWS;
+    for (let i = 0; i < 16; i += 1) {
+      state = addSavedView(state, view(`u${i}`));
+    }
+    for (let i = 0; i < 4; i += 1) {
+      state = addSavedView(state, seedOf(`preset-${i}`, `Preset ${i}`));
+    }
+    expect(state.views).toHaveLength(20);
+
+    // A 17th user view is refused because user slots are full.
+    expect(addSavedView(state, view("u-extra"))).toBe(state);
+
+    // A shipped default is still accepted.
+    const extraSeed = seedOf("preset-extra", "Extra Preset");
+    const withExtra = addSavedView(state, extraSeed);
+    expect(withExtra.views).toHaveLength(21);
+    expect(withExtra.views.some((v) => v.id === "preset-extra")).toBe(true);
   });
 
   it("removes by id and leaves the rest in order", () => {
