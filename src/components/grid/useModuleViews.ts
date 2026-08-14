@@ -155,7 +155,9 @@ export function useModuleViews<TCol extends ColumnMeta, TView extends string>({
       const working = viewScopes(WORKING_VIEW_ID);
       const originHasDefinition = saved.find(originId) !== null;
       working.forEach((scope, index) => {
-        const definition = originHasDefinition ? viewScopes(originId)[index] : undefined;
+        const definition = originHasDefinition
+          ? viewScopes(originId)[index]
+          : undefined;
         if (!definition || definition === scope) {
           resetScope(scope);
           return;
@@ -295,7 +297,7 @@ export function useModuleViews<TCol extends ColumnMeta, TView extends string>({
         remaining.find((entry) => entry.id === defaultViewId)?.id ??
         remaining[0]?.id ??
         defaultViewId;
-      selectView(next as TView);
+      selectView(next);
     },
   };
 }

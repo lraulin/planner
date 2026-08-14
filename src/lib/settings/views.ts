@@ -87,13 +87,13 @@ export type SavedView = SavedViewSettings & {
    * two-level chain would make deleting the middle view silently re-base the last.
    */
   base: string | null;
-   /**
-    * Factory definition for a shipped default view.
-    *
-    * Null means this is user-created. When present, rename/edit/delete never lose the
-    * original definition: restore can put it back exactly.
-    */
-   defaultSeed: DefaultViewSeed | null;
+  /**
+   * Factory definition for a shipped default view.
+   *
+   * Null means this is user-created. When present, rename/edit/delete never lose the
+   * original definition: restore can put it back exactly.
+   */
+  defaultSeed: DefaultViewSeed | null;
 };
 
 export type SavedViews = { views: SavedView[]; deletedDefaults: DefaultViewSeed[] };
@@ -191,20 +191,21 @@ function parseDefaultSeed(value: unknown): DefaultViewSeed | null {
   const id = asString(record.id, "");
   const name = asString(record.name, "").trim();
   if (!isValidViewId(id) || name === "") return null;
+  const settings = asRecord(record.settings);
   const parsed = parseSavedView({
     id,
     name,
     base: record.base,
-    order: record.settings && asRecord(record.settings)?.order,
-    widths: record.settings && asRecord(record.settings)?.widths,
-    filters: record.settings && asRecord(record.settings)?.filters,
-    advancedFilter: record.settings && asRecord(record.settings)?.advancedFilter,
-    search: record.settings && asRecord(record.settings)?.search,
-    sorts: record.settings && asRecord(record.settings)?.sorts,
-    groupBy: record.settings && asRecord(record.settings)?.groupBy,
-    collapsedGroups: record.settings && asRecord(record.settings)?.collapsedGroups,
-    density: record.settings && asRecord(record.settings)?.density,
-    switches: record.settings && asRecord(record.settings)?.switches,
+    order: settings?.order,
+    widths: settings?.widths,
+    filters: settings?.filters,
+    advancedFilter: settings?.advancedFilter,
+    search: settings?.search,
+    sorts: settings?.sorts,
+    groupBy: settings?.groupBy,
+    collapsedGroups: settings?.collapsedGroups,
+    density: settings?.density,
+    switches: settings?.switches,
   });
   if (!parsed) return null;
   return {
@@ -279,7 +280,6 @@ export function renameSavedView(
   const without = removeSavedView(saved, id);
   return {
     ...saved,
-    deletedDefaults: saved.deletedDefaults,
     views: saved.views.map((view) =>
       view.id === id ? { ...view, name: uniqueViewName(without, name) } : view,
     ),
@@ -316,12 +316,14 @@ export function reconcileDefaultViews(
 ): SavedViews {
   if (defaults.length === 0) return saved;
 
+  const defaultsById = new Map(defaults.map((entry) => [entry.id, entry]));
+  const defaultIds = new Set(defaultsById.keys());
   const viewsById = new Map(saved.views.map((view) => [view.id, view]));
   const deleted = new Set(saved.deletedDefaults.map((entry) => entry.id));
   let changed = false;
 
   const views = saved.views.map((view) => {
-    const seed = defaults.find((entry) => entry.id === view.id);
+    const seed = defaultsById.get(view.id);
     if (!seed) return view;
     const next = withDefaultSeed(view, seed);
     if (next !== view) changed = true;
@@ -329,7 +331,7 @@ export function reconcileDefaultViews(
     return next;
   });
 
-  for (const seed of defaults) {
+  for (const seed of defaultsById.values()) {
     if (viewsById.has(seed.id) || deleted.has(seed.id)) continue;
     if (views.length >= MAX_SAVED_VIEWS) break;
     views.push(defaultViewFromSeed(seed));
@@ -337,7 +339,7 @@ export function reconcileDefaultViews(
   }
 
   const deletedDefaults = saved.deletedDefaults.filter((entry) =>
-    defaults.some((seed) => seed.id === entry.id),
+    defaultIds.has(entry.id),
   );
   if (deletedDefaults.length !== saved.deletedDefaults.length) changed = true;
 

@@ -4,6 +4,9 @@ import {
   parseSavedViews,
   restoreDefaultViews,
   serializeSavedViews,
+  viewSnapshotEquals,
+  type DefaultViewSeed,
+  type SavedViews,
   type SavedView,
 } from "./views";
 
@@ -59,7 +62,10 @@ function cataloguesFrom(snapshot: SettingsSnapshot): {
     const parsed = parseScope(scope);
     if (parsed?.kind !== "views" || parsed.key === null) continue;
     const parsedViews = parseSavedViews(value);
-    catalogues.set(parsed.key, new Map(parsedViews.views.map((view) => [view.id, view])));
+    catalogues.set(
+      parsed.key,
+      new Map(parsedViews.views.map((view) => [view.id, view])),
+    );
     if (parsedViews.deletedDefaults.length > 0) {
       deletedDefaultModules.add(parsed.key);
     }
@@ -106,7 +112,7 @@ function moduleEntry(
         label: saved?.name ?? (viewId ? `${humanize(viewId)} view` : "Default view"),
         detail: "Columns, filters, sorting, grouping, and density",
         viewEntry: saved !== null,
-        defaultView: saved?.defaultSeed !== null,
+        defaultView: saved?.defaultSeed != null,
         showScopeId: false,
       },
     };
@@ -121,7 +127,7 @@ function moduleEntry(
         label: saved?.name ?? `${humanize(parsed.key)} view`,
         detail: "Scoring weights and chooser options",
         viewEntry: saved !== null,
-        defaultView: saved?.defaultSeed !== null,
+        defaultView: saved?.defaultSeed != null,
         showScopeId: false,
       },
     };
@@ -138,7 +144,7 @@ function moduleEntry(
           (parsed.key === "filter" ? "Default view options" : humanize(parsed.key)),
         detail: "Mode, sort, and note filters",
         viewEntry: saved !== null,
-        defaultView: saved?.defaultSeed !== null,
+        defaultView: saved?.defaultSeed != null,
         showScopeId: false,
       },
     };
@@ -331,8 +337,43 @@ export function restoreDefaultViewScopeWrites(
     if (moduleId && parsed.key !== moduleId) continue;
     const current = parseSavedViews(raw);
     const restored = restoreDefaultViews(current);
-    if (JSON.stringify(restored) === JSON.stringify(current)) continue;
+    if (savedViewsEqual(restored, current)) continue;
     writes.push({ scope, value: serializeSavedViews(restored) });
   }
   return writes;
+}
+
+function savedViewsEqual(left: SavedViews, right: SavedViews): boolean {
+  if (left.views.length !== right.views.length) return false;
+  if (left.deletedDefaults.length !== right.deletedDefaults.length) return false;
+
+  for (let i = 0; i < left.views.length; i += 1) {
+    const a = left.views[i];
+    const b = right.views[i];
+    if (!b) return false;
+    if (a.id !== b.id || a.name !== b.name || a.base !== b.base) return false;
+    if (!viewSnapshotEquals(a, b)) return false;
+    if (!defaultSeedEqual(a.defaultSeed, b.defaultSeed)) return false;
+  }
+
+  for (let i = 0; i < left.deletedDefaults.length; i += 1) {
+    if (!defaultSeedEqual(left.deletedDefaults[i], right.deletedDefaults[i]))
+      return false;
+  }
+
+  return true;
+}
+
+function defaultSeedEqual(
+  left: DefaultViewSeed | null | undefined,
+  right: DefaultViewSeed | null | undefined,
+): boolean {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  return (
+    left.id === right.id &&
+    left.name === right.name &&
+    left.base === right.base &&
+    viewSnapshotEquals(left.settings, right.settings)
+  );
 }
