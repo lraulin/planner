@@ -30,6 +30,12 @@ import { normalizeMerchant } from "./classify/merchant";
 import type { PayPeriod } from "./classify/payPeriods";
 import { matchRule } from "./classify/rules";
 import {
+  dateFallsInHole,
+  reconcileAccounts,
+  type CoverageHole,
+  type ReconcileStatement,
+} from "./reconcile";
+import {
   annualCents as annualFromCharge,
   cadenceMonthsFromGapDays,
   type DeclaredBill,
@@ -1409,27 +1415,54 @@ export function balanceSeries(
 
 // — Coverage ——————————————————————————————————————————————————————————————————
 
+export type CoverageMismatch = {
+  accountId: string;
+  accountName: string;
+  ledgerBalanceCents: number;
+  anchoredBalanceCents: number;
+  mismatchCents: number;
+};
+
 export type CoverageGap = {
   /** The day from which every account itemizes, so category totals are complete. */
   completeFrom: string | null;
   /** Accounts whose history starts after the earliest transaction, newest start first. */
   lateAccounts: { accountName: string; firstSeen: string }[];
-  /** Spend that exists only as lump card payments, before `completeFrom`. */
+  /**
+   * Unpaired outflow transfers that still stand in for spending we cannot itemize —
+   * before `completeFrom`, or inside a mid-history statement hole.
+   */
   unitemizedCents: number;
+  /** Missing cycles on an account that already has statements. */
+  holes: CoverageHole[];
+  /** Accounts whose ledger sum disagrees with the statement-anchored headline. */
+  mismatches: CoverageMismatch[];
 };
 
 /**
- * What the category charts cannot see.
+ * What the category charts and headline balances cannot see.
  *
- * The Capital One card itemizes from 2025-08-10, but payments to it run from 2023-08-04:
- * $109,248 of real spending exists in this data only as lump transfers. A category chart
- * over "all time" is therefore missing six figures, and the honest fix is to say so on the
- * page rather than to estimate the missing rows into existence.
+ * Late-starting accounts still matter: a card that only appears in 2025 hides earlier
+ * spending as lump payments from checking. Mid-history holes matter too — a year of
+ * missing Capital One card PDFs is not a late start once 2019–2024 rows exist.
+ *
+ * Only **unpaired** transfer legs count as unitemized. A transfer whose other half is
+ * in the data hides nothing.
  */
-export function coverageGap(rows: readonly AnalyticsRow[]): CoverageGap {
-  if (rows.length === 0) {
-    return { completeFrom: null, lateAccounts: [], unitemizedCents: 0 };
-  }
+export function coverageGap(
+  rows: readonly AnalyticsRow[],
+  statements: readonly ReconcileStatement[] = [],
+): CoverageGap {
+  const empty: CoverageGap = {
+    completeFrom: null,
+    lateAccounts: [],
+    unitemizedCents: 0,
+    holes: [],
+    mismatches: [],
+  };
+  if (rows.length === 0 && statements.length === 0) return empty;
+
+  const report = reconcileAccounts(statements, rows);
 
   const firstByAccount = new Map<string, { accountName: string; firstSeen: string }>();
   for (const row of rows) {
@@ -1443,35 +1476,47 @@ export function coverageGap(rows: readonly AnalyticsRow[]): CoverageGap {
   }
 
   const starts = [...firstByAccount.values()];
-  const earliest = starts.reduce(
-    (oldest, entry) => (entry.firstSeen < oldest ? entry.firstSeen : oldest),
-    starts[0].firstSeen,
-  );
-  const completeFrom = starts.reduce(
-    (latest, entry) => (entry.firstSeen > latest ? entry.firstSeen : latest),
-    starts[0].firstSeen,
-  );
+  const earliest = starts.length
+    ? starts.reduce(
+        (oldest, entry) => (entry.firstSeen < oldest ? entry.firstSeen : oldest),
+        starts[0].firstSeen,
+      )
+    : null;
+  const latestStart = starts.length
+    ? starts.reduce(
+        (latest, entry) => (entry.firstSeen > latest ? entry.firstSeen : latest),
+        starts[0].firstSeen,
+      )
+    : null;
+  const completeFrom =
+    earliest && latestStart && latestStart > earliest ? latestStart : null;
 
-  // Only the **unpaired** legs. A transfer whose other half is in the data hides nothing —
-  // the savings moved, and both sides are visible. It is the payment to a card that had not
-  // been imported yet that stands in for purchases nobody can itemize, so counting paired
-  // transfers here would inflate the gap with money that is fully accounted for.
   const unitemizedCents = rows
-    .filter(
-      (row) =>
-        row.transactionDate < completeFrom &&
-        effectiveFlow(row) === "internal_transfer" &&
-        row.transferGroupId === null &&
-        row.amountCents < 0,
-    )
+    .filter((row) => {
+      if (effectiveFlow(row) !== "internal_transfer") return false;
+      if (row.transferGroupId !== null) return false;
+      if (row.amountCents >= 0) return false;
+      if (completeFrom && row.transactionDate < completeFrom) return true;
+      return report.holes.some((hole) => dateFallsInHole(row.transactionDate, hole));
+    })
     .reduce((total, row) => total - row.amountCents, 0);
 
   return {
-    completeFrom: completeFrom > earliest ? completeFrom : null,
+    completeFrom,
     lateAccounts: starts
-      .filter((entry) => entry.firstSeen > earliest)
+      .filter((entry) => earliest !== null && entry.firstSeen > earliest)
       .sort((left, right) => right.firstSeen.localeCompare(left.firstSeen)),
     unitemizedCents,
+    holes: report.holes,
+    mismatches: report.accounts
+      .filter((account) => account.mismatchCents !== 0)
+      .map((account) => ({
+        accountId: account.accountId,
+        accountName: account.accountName,
+        ledgerBalanceCents: account.ledgerBalanceCents,
+        anchoredBalanceCents: account.anchoredBalanceCents,
+        mismatchCents: account.mismatchCents,
+      })),
   };
 }
 

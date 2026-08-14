@@ -853,6 +853,26 @@ export const outputSchemas = {
         z.strictObject({ accountName: z.string(), firstSeen: dateKey }),
       ),
       unitemizedCents: cents,
+      holes: z.array(
+        z.strictObject({
+          accountId: id,
+          accountName: z.string(),
+          afterPeriodEnd: dateKey,
+          beforePeriodStart: dateKey,
+          previousClosingCents: cents,
+          nextOpeningCents: cents,
+          discontinuityCents: cents,
+        }),
+      ),
+      mismatches: z.array(
+        z.strictObject({
+          accountId: id,
+          accountName: z.string(),
+          ledgerBalanceCents: cents,
+          anchoredBalanceCents: cents,
+          mismatchCents: cents,
+        }),
+      ),
     }),
     categories: z.array(z.string()),
     merchants: z.array(z.string()),

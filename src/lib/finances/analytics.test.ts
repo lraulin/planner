@@ -1125,6 +1125,8 @@ describe("coverageGap", () => {
     ]);
     // The lump payments are the only trace of what was actually bought.
     expect(gap.unitemizedCents).toBe(109248);
+    expect(gap.holes).toEqual([]);
+    expect(gap.mismatches).toEqual([]);
   });
 
   it("reports no gap when every account starts together", () => {
@@ -1134,6 +1136,59 @@ describe("coverageGap", () => {
     ]);
     expect(gap.completeFrom).toBeNull();
     expect(gap.lateAccounts).toEqual([]);
+    expect(gap.holes).toEqual([]);
+  });
+
+  it("names a mid-history statement hole even when the card already has earlier rows", () => {
+    const gap = coverageGap(
+      [
+        row({
+          accountId: "card",
+          accountName: "Capital One •••3448",
+          transactionDate: "2024-03-01",
+          amountCents: -2000,
+        }),
+        row({
+          accountId: "checking",
+          accountName: "360 Checking",
+          transactionDate: "2025-02-01",
+          amountCents: -190000,
+          derivedFlow: "internal_transfer",
+        }),
+      ],
+      [
+        {
+          id: "s1",
+          accountId: "card",
+          accountName: "Capital One •••3448",
+          periodStart: "2024-06-22",
+          periodEnd: "2024-07-21",
+          openingBalanceCents: 0,
+          closingBalanceCents: -180000,
+        },
+        {
+          id: "s2",
+          accountId: "card",
+          accountName: "Capital One •••3448",
+          periodStart: "2025-12-22",
+          periodEnd: "2026-01-21",
+          openingBalanceCents: -40000,
+          closingBalanceCents: -20114,
+        },
+      ],
+    );
+
+    expect(gap.holes).toEqual([
+      expect.objectContaining({
+        accountId: "card",
+        afterPeriodEnd: "2024-07-21",
+        beforePeriodStart: "2025-12-22",
+      }),
+    ]);
+    // The unpaired payment sits inside the hole, so it is unitemized even
+    // though the card's first row is earlier than checking.
+    expect(gap.unitemizedCents).toBe(190000);
+    expect(gap.mismatches[0]?.accountId).toBe("card");
   });
 });
 
