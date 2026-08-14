@@ -36,6 +36,9 @@ import {
 } from "@/lib/contacts/queries";
 import { createResource } from "@/lib/resources/mutations";
 import { getResourceDetail, listResources } from "@/lib/resources/queries";
+import { importAmazonSlim } from "@/lib/amazon/import";
+import { getAmazonItem, listAmazonItems } from "@/lib/amazon/queries";
+import { SLIM_SOURCE, SLIM_VERSION } from "@/lib/amazon/types";
 import { importFinanceCsvFiles } from "@/lib/finances/import";
 import {
   loadCarryingCost,
@@ -132,6 +135,7 @@ type Owned = {
   financeAccountId: string;
   financeTransactionId: string;
   financeStatementId: string;
+  amazonItemId: string;
   planId: string;
   exerciseId: string;
   sessionId: string;
@@ -234,6 +238,57 @@ async function seedOwner(): Promise<Owned> {
     cadenceMonths: 6,
     expectedCents: 141_260,
   });
+  await importAmazonSlim({
+    userId,
+    text: JSON.stringify({
+      version: SLIM_VERSION,
+      source: SLIM_SOURCE,
+      generatedAt: "2026-08-14T18:00:00.000Z",
+      orders: [
+        {
+          amazonOrderId: "114-owner",
+          channel: "retail",
+          orderDate: "2026-03-30",
+          orderStatus: "Closed",
+          paymentMethod: "Visa - 9910",
+          paymentLast4: "9910",
+          website: "Amazon.com",
+          currency: "USD",
+        },
+      ],
+      items: [
+        {
+          lineId: "114-owner:B00OWN:0",
+          amazonOrderId: "114-owner",
+          channel: "retail",
+          asin: "B00OWN",
+          productName: "Owner paper",
+          quantity: 1,
+          unitPriceCents: 630,
+          unitPriceTaxCents: 0,
+          itemPaidCents: 630,
+          itemTaxCents: 0,
+          discountsCents: 0,
+          shippingChargeCents: 0,
+          shippingOption: "std-sns-us",
+          shipmentStatus: "Shipped",
+          subscribeAndSave: true,
+          shipDate: "2026-03-31",
+          orderDate: "2026-03-30",
+          orderStatus: "Closed",
+          paymentMethod: "Visa - 9910",
+          paymentLast4: "9910",
+          website: "Amazon.com",
+          currency: "USD",
+        },
+      ],
+      refunds: [],
+      returns: [],
+      replacements: [],
+    }),
+  });
+  const [amazonItem] = await listAmazonItems(userId);
+  if (!amazonItem) throw new Error("expected the amazon seed to create an item");
 
   const plan = await ensureWeeklyPlan(userId, { weekStart: WEEK_START });
   await upsertPlanEntry(userId, plan.id, goalId, { focus: true });
@@ -270,6 +325,7 @@ async function seedOwner(): Promise<Owned> {
     financeAccountId: financeAccount.id,
     financeTransactionId: financeTransaction.id,
     financeStatementId: financeStatement.id,
+    amazonItemId: amazonItem.id,
     planId: plan.id,
     exerciseId,
     sessionId,
@@ -304,6 +360,7 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect((await listResources(owner.userId)).length).toBeGreaterThan(0);
     expect((await listAccounts(owner.userId)).length).toBeGreaterThan(0);
     expect((await listTransactions(owner.userId)).length).toBeGreaterThan(0);
+    expect((await listAmazonItems(owner.userId)).length).toBeGreaterThan(0);
     expect((await listStatements(owner.userId)).length).toBeGreaterThan(0);
     expect((await loadInsightsRows(owner.userId)).length).toBeGreaterThan(0);
     expect(await getWeeklyPlanById(owner.userId, owner.planId)).toBeTruthy();
@@ -366,6 +423,14 @@ describeDb("a second user reads none of the first user's rows", () => {
   it("resources", async () => {
     expect(await listResources(intruder)).toEqual([]);
     expect(await getResourceDetail(intruder, owner.resourceId)).toBeNull();
+  });
+
+  it("amazon order items", async () => {
+    expect(await listAmazonItems(intruder)).toEqual([]);
+    expect(await getAmazonItem(intruder, owner.amazonItemId)).toBeNull();
+    expect((await listAmazonItems(owner.userId)).map((row) => row.id)).toContain(
+      owner.amazonItemId,
+    );
   });
 
   it("finance accounts and transactions", async () => {

@@ -2282,6 +2282,176 @@ export const financeRecurringBills = pgTable(
 );
 
 /**
+ * Amazon order-history receipts. These are **not** ledger rows — they itemize what a
+ * later spec will attach to `finance_transactions` without changing `amount`.
+ *
+ * A privacy-request dump is a full snapshot: `Authorized` becomes `Closed`. Import upserts
+ * Amazon-owned columns. There are no user-owned columns yet; when purpose/notes arrive they
+ * must stay off the upsert list.
+ *
+ * Channel is text (`retail` | `digital`), not an enum — adding a marketplace must not be a
+ * migration. See the pooler note on `finance_account_kind`.
+ */
+export const amazonOrders = pgTable(
+  "amazon_orders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    amazonOrderId: text("amazon_order_id").notNull(),
+    channel: text("channel").notNull(),
+    orderDate: date("order_date", { mode: "string" }),
+    orderStatus: text("order_status").notNull().default(""),
+    paymentMethod: text("payment_method").notNull().default(""),
+    paymentLast4: text("payment_last4"),
+    website: text("website").notNull().default(""),
+    currency: text("currency").notNull().default("USD"),
+    externalSource: text("external_source").notNull(),
+    externalId: text("external_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("amazon_orders_user_order_uq").on(table.userId, table.amazonOrderId),
+    uniqueIndex("amazon_orders_external_ref_uq").on(
+      table.userId,
+      table.externalSource,
+      table.externalId,
+    ),
+    index("amazon_orders_user_date_idx").on(table.userId, table.orderDate),
+  ],
+);
+
+export const amazonOrderItems = pgTable(
+  "amazon_order_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    orderId: uuid("order_id")
+      .notNull()
+      .references(() => amazonOrders.id, { onDelete: "cascade" }),
+    amazonOrderId: text("amazon_order_id").notNull(),
+    channel: text("channel").notNull(),
+    asin: text("asin").notNull().default(""),
+    productName: text("product_name").notNull().default(""),
+    quantity: integer("quantity").notNull().default(1),
+    unitPrice: numeric("unit_price", { precision: 14, scale: 2 }),
+    unitPriceTax: numeric("unit_price_tax", { precision: 14, scale: 2 }),
+    itemPaid: numeric("item_paid", { precision: 14, scale: 2 }),
+    itemTax: numeric("item_tax", { precision: 14, scale: 2 }),
+    discounts: numeric("discounts", { precision: 14, scale: 2 }),
+    shippingCharge: numeric("shipping_charge", { precision: 14, scale: 2 }),
+    shippingOption: text("shipping_option").notNull().default(""),
+    shipmentStatus: text("shipment_status").notNull().default(""),
+    subscribeAndSave: boolean("subscribe_and_save").notNull().default(false),
+    shipDate: date("ship_date", { mode: "string" }),
+    externalSource: text("external_source").notNull(),
+    externalId: text("external_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("amazon_order_items_external_ref_uq").on(
+      table.userId,
+      table.externalSource,
+      table.externalId,
+    ),
+    index("amazon_order_items_order_idx").on(table.userId, table.orderId),
+    index("amazon_order_items_user_order_idx").on(table.userId, table.amazonOrderId),
+  ],
+);
+
+export const amazonRefunds = pgTable(
+  "amazon_refunds",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    amazonOrderId: text("amazon_order_id").notNull(),
+    channel: text("channel").notNull(),
+    refundDate: date("refund_date", { mode: "string" }),
+    creationDate: date("creation_date", { mode: "string" }),
+    amount: numeric("amount", { precision: 14, scale: 2 }),
+    currency: text("currency").notNull().default("USD"),
+    status: text("status").notNull().default(""),
+    reason: text("reason").notNull().default(""),
+    disbursementType: text("disbursement_type").notNull().default(""),
+    productName: text("product_name").notNull().default(""),
+    asin: text("asin").notNull().default(""),
+    externalSource: text("external_source").notNull(),
+    externalId: text("external_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("amazon_refunds_external_ref_uq").on(
+      table.userId,
+      table.externalSource,
+      table.externalId,
+    ),
+    index("amazon_refunds_user_order_idx").on(table.userId, table.amazonOrderId),
+  ],
+);
+
+export const amazonReturns = pgTable(
+  "amazon_returns",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    amazonOrderId: text("amazon_order_id").notNull(),
+    returnDate: date("return_date", { mode: "string" }),
+    creationDate: date("creation_date", { mode: "string" }),
+    amount: numeric("amount", { precision: 14, scale: 2 }),
+    currency: text("currency").notNull().default("USD"),
+    resolution: text("resolution").notNull().default(""),
+    reason: text("reason").notNull().default(""),
+    replacementOrderId: text("replacement_order_id").notNull().default(""),
+    externalSource: text("external_source").notNull(),
+    externalId: text("external_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("amazon_returns_external_ref_uq").on(
+      table.userId,
+      table.externalSource,
+      table.externalId,
+    ),
+    index("amazon_returns_user_order_idx").on(table.userId, table.amazonOrderId),
+  ],
+);
+
+export const amazonReplacements = pgTable(
+  "amazon_replacements",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    amazonOrderId: text("amazon_order_id").notNull(),
+    replacementOrderId: text("replacement_order_id"),
+    externalSource: text("external_source").notNull(),
+    externalId: text("external_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("amazon_replacements_external_ref_uq").on(
+      table.userId,
+      table.externalSource,
+      table.externalId,
+    ),
+    index("amazon_replacements_user_order_idx").on(table.userId, table.amazonOrderId),
+  ],
+);
+
+/**
  * Personal life history — the three tables behind Library's Timeline, Jobs and Residences.
  *
  * **Dates here are `date`, not `timestamptz` at UTC noon.** The rest of the app encodes a
@@ -2472,6 +2642,16 @@ export type FinanceStatement = typeof financeStatements.$inferSelect;
 export type NewFinanceStatement = typeof financeStatements.$inferInsert;
 export type FinanceStatementRate = typeof financeStatementRates.$inferSelect;
 export type NewFinanceStatementRate = typeof financeStatementRates.$inferInsert;
+export type AmazonOrder = typeof amazonOrders.$inferSelect;
+export type NewAmazonOrder = typeof amazonOrders.$inferInsert;
+export type AmazonOrderItem = typeof amazonOrderItems.$inferSelect;
+export type NewAmazonOrderItem = typeof amazonOrderItems.$inferInsert;
+export type AmazonRefund = typeof amazonRefunds.$inferSelect;
+export type NewAmazonRefund = typeof amazonRefunds.$inferInsert;
+export type AmazonReturn = typeof amazonReturns.$inferSelect;
+export type NewAmazonReturn = typeof amazonReturns.$inferInsert;
+export type AmazonReplacement = typeof amazonReplacements.$inferSelect;
+export type NewAmazonReplacement = typeof amazonReplacements.$inferInsert;
 export type LifeEvent = typeof lifeEvents.$inferSelect;
 export type NewLifeEvent = typeof lifeEvents.$inferInsert;
 export type Job = typeof jobs.$inferSelect;
