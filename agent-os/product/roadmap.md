@@ -637,6 +637,18 @@ flavor; optional palette thinning).
 - **Medium-term:** Deeper Goal / Result Area progress surfaces; routines/templates.
 - **Long-term:** Optional **Apple Health** (or similar) import — read-only first; cardio.
 
+### Life history
+
+- **✅ Timeline, Jobs and Residences.** `specs/2026-08-13-2006-life-history`. Three
+  Library pages: a chronology grid of exact dates (typed events plus derived job and
+  residence edges), and catalogs for employment and housing history with the
+  international address shape Contacts already uses. Days-ago and elapsed columns
+  ship now. Achieve has no life-history feature — this is personal reference data,
+  sitting next to Contacts and Resources. Out: linking events to Contacts, partial
+  dates, deriving chronology from other dated tables.
+- **Next:** the timeline **visualization** as a `Grid | Timeline` presentation pair,
+  once there is real data to shape it around.
+
 ### AI integration
 
 - **✅ Near-term (MVP):** Tooling / API / instructions so an **agent can operate the

@@ -1,6 +1,6 @@
 # Standards that apply
 
-**Status: active**
+**Status: frozen / complete** (2026-08-13)
 
 Analysis of how each standard governs this work, not a copy of it. The standards themselves
 live under `agent-os/standards/` and remain the text of record.

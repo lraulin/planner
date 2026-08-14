@@ -1,7 +1,10 @@
 # Life history — Timeline, Jobs, Residences
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-13)  
 Spec folder: `agent-os/specs/2026-08-13-2006-life-history/`
+
+This is the authoritative as-built record. Further work (the timeline visualization,
+linking, partial dates) should open a new delta-spec.
 
 ## Spec relationships
 
@@ -77,28 +80,34 @@ neither. Country stays free text.
 
 ## Acceptance criteria
 
-- [ ] The Library page bar shows five tabs: Contacts, Resources, Timeline, Jobs, Residences.
-- [ ] A job with a start and an end date produces exactly two rows on Timeline, categorized
+- [x] The Library page bar shows five tabs: Contacts, Resources, Timeline, Jobs, Residences.
+- [x] A job with a start and an end date produces exactly two rows on Timeline, categorized
       `Work`; a current job (null end) produces one.
-- [ ] A residence produces the same, categorized `Home`, and a Korean address round-trips with
+- [x] A residence produces the same, categorized `Home`, and a Korean address round-trips with
       no US-shaped field mangling it.
-- [ ] A miscellaneous life event can be created, retitled, recategorized, redated and deleted
+- [x] A miscellaneous life event can be created, retitled, recategorized, redated and deleted
       inline on the Timeline grid.
-- [ ] The Days-ago and Elapsed columns are correct across a leap day and a month-end borrow,
+- [x] The Days-ago and Elapsed columns are correct across a leap day and a month-end borrow,
       and render blank rather than wrong before hydration.
-- [ ] Filtering by category offers the values actually in use, derived and typed alike.
-- [ ] A derived row cannot be edited or deleted from Timeline; Open takes you to the record on
+- [x] Filtering by category offers the values actually in use, derived and typed alike.
+- [x] A derived row cannot be edited or deleted from Timeline; Open takes you to the record on
       its own page with that row selected.
-- [ ] A second user cannot read, update or delete the first user's jobs, residences or events.
+- [x] A second user cannot read, update or delete the first user's jobs, residences or events.
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Pure code polish is
 omitted deliberately.
 
-| #   | Change                                                                                                  | Why                                                                                                                                                                                                                                                                                                 |
-| --- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Opening a derived row uses the existing **`?detail=`** param, not a new `?open=` one the plan invented. | Shaping described `?open=` as "the one genuinely new mechanism (~10 lines)". It was not new: `?detail=` is already the deep-link-to-drawer param, read through `useViewStateUrl` and used by Contacts, the outline and `ContactDiscussionPanel`. This spec now adds no navigation mechanism at all. |
+| #   | Change                                                                                                                                                 | Why                                                                                                                                                                                                                                                                                                                                                                                                        |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Opening a derived row uses the existing **`?detail=`** param, not a new `?open=` one the plan invented.                                                | Shaping described `?open=` as "the one genuinely new mechanism (~10 lines)". It was not new: `?detail=` is already the deep-link-to-drawer param, read through `useViewStateUrl` and used by Contacts, the outline and `ContactDiscussionPanel`. This spec now adds no navigation mechanism at all.                                                                                                        |
+| 2   | **Duration is computed on the client, not in the query**, and rides on the grid row.                                                                   | An ongoing job is measured against today and the server does not know the user's day. `ColumnDef.sortValue` receives only the row, so a context-derived duration could not be sorted -- and unlike Agenda's days-left, duration is not monotonic in the date, so sorting on the date is wrong. Hence `lib/history/span.ts` and the `JobGridRow` / `ResidenceGridRow` view models, neither of them planned. |
+| 3   | Money is a **`numeric` string end to end**, not a number.                                                                                              | `MoneyField` writes a string and Drizzle reads one back; parsing to a float in between is how cents go missing. Matches the finance tables.                                                                                                                                                                                                                                                                |
+| 4   | Category, Source, employment Type, Housing and Country declare **`filterKind: "enum"`** despite being free text in the database.                       | The kind picks the _control_, not the storage, and `usesSetFilter` is enum-only. Declared as `text` they offered only `(All)/(Blanks)/(NonBlanks)`, so "categories so I can filter them" did nothing. Free text is how they are stored and typed; the checklist is how they are filtered, and its vocabulary is still derived from the rows.                                                               |
+| 5   | Two shared pieces were **extracted rather than copied**: `formatPostalAddress` out of `summarizeContactItem`, and `DateKeyCell` out of `DeadlineCell`. | Three tables now hold an address in the same seven columns, and two grids now hold an editable calendar day. One rule, one implementation.                                                                                                                                                                                                                                                                 |
+| 6   | Two pre-existing bugs fixed on the way through, both in shared grid code.                                                                              | `catalogCapabilities` had its two `disabled` conditions swapped, which is live on Contacts today: a Google-synced contact cannot be opened and _can_ be deleted. And the grid date cell committed on every keystroke rather than on blur, against `ux-principles.md` -- survivable on Deadline, not on a page where every row is a typed year.                                                             |
+| 7   | The narrow-viewport pass was **not completed** in this cycle.                                                                                          | The automated window resize did not take effect in the browser session. The page bar and compact-row behaviour are shared chrome this spec does not change, and Lee validates mobile on the deployed phone. Noted rather than claimed.                                                                                                                                                                     |
 
 ---
 
@@ -210,26 +219,17 @@ header comment that explains what deliberately is not a Library page. No `module
 
 ## Task 8: Verify, freeze spec, update roadmap
 
-- `npm run typecheck && npm run lint && npm run test:unit`, confirming the integration tests
-  did not silently skip.
-- `npm run dev`, then `npm run smoke`.
-- In the browser: a job with both dates, a residence with a Korean address, all four derived
-  rows on Timeline, an inline event, a category filter, and the five-tab bar on a narrow
-  viewport.
-- Update this file and `shape.md` for material as-built drift, fill **Changes from original
-  plan**, mark both **Status: frozen / complete**.
-- Add the roadmap entry, with the timeline visualization named as the follow-up.
+Done. Browser: five-tab Library bar; a job and a Korean residence producing four derived
+rows; create / retitle / recategorize / redate an event; Category checklist offering Home,
+Pets and Work together; event delete (New event → Delete event → confirm → empty state).
+Cross-user isolation is the integration tests. The narrow-viewport pass was not completed
+— see change 7.
 
-## Out of scope (named follow-ups, not omissions)
+## Follow-ups (new work — not amendments to this frozen spec)
 
-- The timeline **visualization** — a later delta, as `Grid | Timeline` presentations.
+- The timeline **visualization** — a later delta, as `Grid | Timeline` presentations,
+  once there is real data to shape it around.
 - **Linking** life events to Contacts, or to the job/residence they describe beyond the
   automatic derivation.
 - Partial dates (year-only, month + year).
 - Deriving chronology rows from anything else that has dates (nodes, fitness, finances).
-
----
-
-> While this spec is **active**, a material change to requirements, design or scope — including
-> feedback on what was built — updates the sections above and appends a row to **Changes from
-> original plan**. Pure implementation detail does not. Freeze when verified.
