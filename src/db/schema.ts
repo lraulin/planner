@@ -2204,6 +2204,171 @@ export const financeStatementRates = pgTable(
   ],
 );
 
+/**
+ * Personal life history — the three tables behind Library's Timeline, Jobs and Residences.
+ *
+ * **Dates here are `date`, not `timestamptz` at UTC noon.** The rest of the app encodes a
+ * calendar day as UTC noon in a `timestamptz` because those columns sit in the same rows and
+ * the same forms as true instants, and one column type for both is what keeps `nodes` legible.
+ * Nothing in life history is an instant: a job did not start at 9:04am, it started on a date.
+ * With `mode: "string"` the stored value simply *is* the `YYYY-MM-DD` key, so there is no
+ * encode/decode round trip in which the Aug 1 → Jul 31 regression could happen — the bug class
+ * is designed out rather than guarded against. `finance_transactions` made the same call.
+ * See `agent-os/standards/development/dates.md`, which sanctions both encodings.
+ */
+
+/**
+ * A dated fact worth remembering that is not a job and not a move — a pet's birthday, a
+ * graduation, a surgery, the day you got the car.
+ *
+ * There is deliberately **no end date**. The Timeline grid is a chronology of points: a job's
+ * start and end are two rows, not one row with a duration, and you go to the Jobs page to see
+ * them together. That decision removed the only reason this table would need a second date,
+ * and with it the "is this row a point or a span" branch from every column that reads it.
+ */
+export const lifeEvents = pgTable(
+  "life_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    eventDate: date("event_date", { mode: "string" }).notNull(),
+    title: text("title").notNull().default(""),
+    /**
+     * Free text, not an enum and not a lookup table. The grid's set filter offers the values
+     * the column actually holds, so the vocabulary maintains itself — the same reasoning that
+     * left `nodes.category` free text. Rows derived from jobs and residences contribute a
+     * fixed "Work" / "Home" to that same list.
+     */
+    category: text("category").notNull().default(""),
+    notes: text("notes").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("life_events_user_date_idx").on(table.userId, table.eventDate),
+    index("life_events_user_category_idx").on(table.userId, table.category),
+  ],
+);
+
+/**
+ * One position held. The field set is what a job application or a background check asks for,
+ * because the point of storing this at all is to stop hunting through old email for a
+ * supervisor's phone number.
+ *
+ * The address columns are named exactly as they are on `contact_items` — they arrived in that
+ * shape from Google People, which means they are already not US-shaped. That matters: Lee
+ * worked in Korea, which has neither a state nor a ZIP.
+ */
+export const jobs = pgTable(
+  "jobs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    employer: text("employer").notNull().default(""),
+    jobTitle: text("job_title").notNull().default(""),
+    /**
+     * "Full-time", "Contract", "Internship", … Text rather than a `pgEnum`: this is an open
+     * vocabulary, and `ALTER TYPE … ADD VALUE` fails on Neon's transaction-mode pooler, so an
+     * enum here would be a migration that cannot run in production. Suggestions live in
+     * `src/lib/jobs/vocabulary.ts`.
+     */
+    employmentType: text("employment_type").notNull().default(""),
+    /** Null while unknown; null `endDate` means this is the current job. */
+    startDate: date("start_date", { mode: "string" }),
+    endDate: date("end_date", { mode: "string" }),
+    /** What the role actually involved — the paragraph a résumé or application asks for. */
+    duties: text("duties").notNull().default(""),
+    reasonForLeaving: text("reason_for_leaving").notNull().default(""),
+    startingPay: numeric("starting_pay", { precision: 14, scale: 2 }),
+    endingPay: numeric("ending_pay", { precision: 14, scale: 2 }),
+    /** "Hourly", "Annual", … Same open-vocabulary reasoning as `employmentType`. */
+    payPeriod: text("pay_period").notNull().default(""),
+    phone: text("phone").notNull().default(""),
+
+    // Employer address — the `contact_items` column names, verbatim.
+    streetAddress: text("street_address").notNull().default(""),
+    extendedAddress: text("extended_address").notNull().default(""),
+    city: text("city").notNull().default(""),
+    /** Labeled "State / Province / Region" in the drawer. */
+    region: text("region").notNull().default(""),
+    postalCode: text("postal_code").notNull().default(""),
+    country: text("country").notNull().default(""),
+    countryCode: text("country_code").notNull().default(""),
+
+    supervisorName: text("supervisor_name").notNull().default(""),
+    supervisorTitle: text("supervisor_title").notNull().default(""),
+    supervisorPhone: text("supervisor_phone").notNull().default(""),
+    supervisorEmail: text("supervisor_email").notNull().default(""),
+    /** Applications ask this per employer, and the answer is not always yes. */
+    mayContactSupervisor: boolean("may_contact_supervisor").notNull().default(true),
+
+    notes: text("notes").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("jobs_user_start_idx").on(table.userId, table.startDate),
+    check(
+      "jobs_dates_ordered",
+      sql`${table.startDate} is null or ${table.endDate} is null
+          or ${table.endDate} >= ${table.startDate}`,
+    ),
+  ],
+);
+
+/**
+ * One place lived. Same international address shape and the same reason for it.
+ *
+ * `movedIn` / `movedOut` rather than start/end because that is what the rental application
+ * calls them, and a null `movedOut` means you still live there.
+ */
+export const residences = pgTable(
+  "residences",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** An optional nickname — "The Seoul apartment". The address is the identity. */
+    label: text("label").notNull().default(""),
+
+    streetAddress: text("street_address").notNull().default(""),
+    extendedAddress: text("extended_address").notNull().default(""),
+    city: text("city").notNull().default(""),
+    region: text("region").notNull().default(""),
+    postalCode: text("postal_code").notNull().default(""),
+    country: text("country").notNull().default(""),
+    countryCode: text("country_code").notNull().default(""),
+
+    movedIn: date("moved_in", { mode: "string" }),
+    movedOut: date("moved_out", { mode: "string" }),
+    /** "Rented", "Owned", "Dorm", "Family home". Open vocabulary; see `employmentType`. */
+    housingType: text("housing_type").notNull().default(""),
+    monthlyRent: numeric("monthly_rent", { precision: 14, scale: 2 }),
+    reasonForLeaving: text("reason_for_leaving").notNull().default(""),
+
+    landlordName: text("landlord_name").notNull().default(""),
+    landlordPhone: text("landlord_phone").notNull().default(""),
+    landlordEmail: text("landlord_email").notNull().default(""),
+
+    notes: text("notes").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("residences_user_moved_in_idx").on(table.userId, table.movedIn),
+    check(
+      "residences_dates_ordered",
+      sql`${table.movedIn} is null or ${table.movedOut} is null
+          or ${table.movedOut} >= ${table.movedIn}`,
+    ),
+  ],
+);
+
 export type DailyItem = typeof dailyItems.$inferSelect;
 export type NewDailyItem = typeof dailyItems.$inferInsert;
 export type WorkoutSet = typeof workoutSets.$inferSelect;
@@ -2230,3 +2395,9 @@ export type FinanceStatement = typeof financeStatements.$inferSelect;
 export type NewFinanceStatement = typeof financeStatements.$inferInsert;
 export type FinanceStatementRate = typeof financeStatementRates.$inferSelect;
 export type NewFinanceStatementRate = typeof financeStatementRates.$inferInsert;
+export type LifeEvent = typeof lifeEvents.$inferSelect;
+export type NewLifeEvent = typeof lifeEvents.$inferInsert;
+export type Job = typeof jobs.$inferSelect;
+export type NewJob = typeof jobs.$inferInsert;
+export type Residence = typeof residences.$inferSelect;
+export type NewResidence = typeof residences.$inferInsert;
