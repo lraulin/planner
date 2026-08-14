@@ -63,6 +63,13 @@ export type SavedViewSettings = {
   switches: Record<string, boolean>;
 };
 
+export type DefaultViewSeed = {
+  id: string;
+  name: string;
+  base: string | null;
+  settings: SavedViewSettings;
+};
+
 export type SavedView = SavedViewSettings & {
   /** Scope-safe and stable: it becomes the key of `grid:{tab}.{id}`. */
   id: string;
@@ -80,11 +87,18 @@ export type SavedView = SavedViewSettings & {
    * two-level chain would make deleting the middle view silently re-base the last.
    */
   base: string | null;
+   /**
+    * Factory definition for a shipped default view.
+    *
+    * Null means this is user-created. When present, rename/edit/delete never lose the
+    * original definition: restore can put it back exactly.
+    */
+   defaultSeed: DefaultViewSeed | null;
 };
 
-export type SavedViews = { views: SavedView[] };
+export type SavedViews = { views: SavedView[]; deletedDefaults: DefaultViewSeed[] };
 
-export const NO_SAVED_VIEWS: SavedViews = { views: [] };
+export const NO_SAVED_VIEWS: SavedViews = { views: [], deletedDefaults: [] };
 
 /**
  * How many a tab may hold. Not a storage limit — a picker you have to scroll is a picker that
@@ -117,7 +131,11 @@ export function parseSavedViews(value: unknown): SavedViews {
     views.push(view);
   }
 
-  return { views: views.slice(0, MAX_SAVED_VIEWS) };
+  const deletedDefaults = Array.isArray(record.deletedDefaults)
+    ? parseDeletedDefaults(record.deletedDefaults)
+    : [];
+
+  return { views: views.slice(0, MAX_SAVED_VIEWS), deletedDefaults };
 }
 
 function parseSavedView(value: unknown): SavedView | null {
@@ -151,6 +169,49 @@ function parseSavedView(value: unknown): SavedView | null {
     switches: asMap(record.switches, (entry) =>
       typeof entry === "boolean" ? entry : null,
     ),
+    defaultSeed: parseDefaultSeed(record.defaultSeed),
+  };
+}
+
+function parseDeletedDefaults(value: unknown[]): DefaultViewSeed[] {
+  const out: DefaultViewSeed[] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    const seed = parseDefaultSeed(entry);
+    if (!seed || seen.has(seed.id)) continue;
+    seen.add(seed.id);
+    out.push(seed);
+  }
+  return out;
+}
+
+function parseDefaultSeed(value: unknown): DefaultViewSeed | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  const id = asString(record.id, "");
+  const name = asString(record.name, "").trim();
+  if (!isValidViewId(id) || name === "") return null;
+  const parsed = parseSavedView({
+    id,
+    name,
+    base: record.base,
+    order: record.settings && asRecord(record.settings)?.order,
+    widths: record.settings && asRecord(record.settings)?.widths,
+    filters: record.settings && asRecord(record.settings)?.filters,
+    advancedFilter: record.settings && asRecord(record.settings)?.advancedFilter,
+    search: record.settings && asRecord(record.settings)?.search,
+    sorts: record.settings && asRecord(record.settings)?.sorts,
+    groupBy: record.settings && asRecord(record.settings)?.groupBy,
+    collapsedGroups: record.settings && asRecord(record.settings)?.collapsedGroups,
+    density: record.settings && asRecord(record.settings)?.density,
+    switches: record.settings && asRecord(record.settings)?.switches,
+  });
+  if (!parsed) return null;
+  return {
+    id,
+    name,
+    base: parsed.base,
+    settings: snapshotSettings(parsed),
   };
 }
 
@@ -197,12 +258,17 @@ export function addSavedView(saved: SavedViews, view: SavedView): SavedViews {
   if (saved.views.length >= MAX_SAVED_VIEWS) return saved;
   if (saved.views.some((entry) => entry.id === view.id)) return saved;
   return {
+    ...saved,
     views: [...saved.views, { ...view, name: uniqueViewName(saved, view.name) }],
   };
 }
 
 export function removeSavedView(saved: SavedViews, id: string): SavedViews {
-  return { views: saved.views.filter((view) => view.id !== id) };
+  const removed = saved.views.find((view) => view.id === id) ?? null;
+  const views = saved.views.filter((view) => view.id !== id);
+  if (!removed?.defaultSeed) return { ...saved, views };
+  const without = saved.deletedDefaults.filter((entry) => entry.id !== removed.id);
+  return { views, deletedDefaults: [...without, removed.defaultSeed] };
 }
 
 export function renameSavedView(
@@ -212,6 +278,8 @@ export function renameSavedView(
 ): SavedViews {
   const without = removeSavedView(saved, id);
   return {
+    ...saved,
+    deletedDefaults: saved.deletedDefaults,
     views: saved.views.map((view) =>
       view.id === id ? { ...view, name: uniqueViewName(without, name) } : view,
     ),
@@ -231,6 +299,7 @@ export function updateSavedView(
   settings: SavedViewSettings,
 ): SavedViews {
   return {
+    ...saved,
     views: saved.views.map((view) =>
       view.id === id ? { ...view, ...settings } : view,
     ),
@@ -239,6 +308,90 @@ export function updateSavedView(
 
 export function findSavedView(saved: SavedViews, id: string): SavedView | null {
   return saved.views.find((view) => view.id === id) ?? null;
+}
+
+export function reconcileDefaultViews(
+  saved: SavedViews,
+  defaults: readonly DefaultViewSeed[],
+): SavedViews {
+  if (defaults.length === 0) return saved;
+
+  const viewsById = new Map(saved.views.map((view) => [view.id, view]));
+  const deleted = new Set(saved.deletedDefaults.map((entry) => entry.id));
+  let changed = false;
+
+  const views = saved.views.map((view) => {
+    const seed = defaults.find((entry) => entry.id === view.id);
+    if (!seed) return view;
+    const next = withDefaultSeed(view, seed);
+    if (next !== view) changed = true;
+    deleted.delete(seed.id);
+    return next;
+  });
+
+  for (const seed of defaults) {
+    if (viewsById.has(seed.id) || deleted.has(seed.id)) continue;
+    if (views.length >= MAX_SAVED_VIEWS) break;
+    views.push(defaultViewFromSeed(seed));
+    changed = true;
+  }
+
+  const deletedDefaults = saved.deletedDefaults.filter((entry) =>
+    defaults.some((seed) => seed.id === entry.id),
+  );
+  if (deletedDefaults.length !== saved.deletedDefaults.length) changed = true;
+
+  return changed ? { views, deletedDefaults } : saved;
+}
+
+export function restoreDefaultViews(saved: SavedViews): SavedViews {
+  const restored = saved.views.map((view) => {
+    if (!view.defaultSeed) return view;
+    const seed = view.defaultSeed;
+    return {
+      ...view,
+      name: seed.name,
+      base: seed.base,
+      ...seed.settings,
+    };
+  });
+
+  const byId = new Set(restored.map((view) => view.id));
+  for (const seed of saved.deletedDefaults) {
+    if (byId.has(seed.id) || restored.length >= MAX_SAVED_VIEWS) continue;
+    restored.push(defaultViewFromSeed(seed));
+  }
+  return { views: restored, deletedDefaults: [] };
+}
+
+function defaultViewFromSeed(seed: DefaultViewSeed): SavedView {
+  return {
+    id: seed.id,
+    name: seed.name,
+    base: seed.base,
+    ...seed.settings,
+    defaultSeed: seed,
+  };
+}
+
+function withDefaultSeed(view: SavedView, seed: DefaultViewSeed): SavedView {
+  if (stableEqual(view.defaultSeed, seed)) return view;
+  return { ...view, defaultSeed: seed };
+}
+
+function snapshotSettings(view: SavedView): SavedViewSettings {
+  return {
+    order: view.order,
+    widths: view.widths,
+    filters: view.filters,
+    advancedFilter: view.advancedFilter,
+    search: view.search,
+    sorts: view.sorts,
+    groupBy: view.groupBy,
+    collapsedGroups: view.collapsedGroups,
+    density: view.density,
+    switches: view.switches,
+  };
 }
 
 export function viewSnapshotEquals(

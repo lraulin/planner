@@ -141,7 +141,7 @@ export function ContactsView({
 
   const views = useModuleViews({
     moduleId: "contacts",
-    builtIn: CONTACTS_VIEWS,
+    defaultViews: CONTACTS_VIEWS,
     defaultViewId: "all",
     columns: contactsColumns,
     defaultsFor: viewDefaults,

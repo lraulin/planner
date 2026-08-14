@@ -394,6 +394,11 @@ export function useCopyScope() {
   );
 }
 
+/** Write one raw scope payload. Callers provide already-serialized values. */
+export function useWriteScope() {
+  return useSettingsContext().write;
+}
+
 export function useAllSettings() {
   const { snapshot, resetScope, resetScopes, saveError } = useSettingsContext();
 

@@ -42,17 +42,13 @@ const GRID_CODEC: SettingCodec<GridSettings> = {
 export type ModuleViewsOptions<TCol extends ColumnMeta, TView extends string> = {
   /** The module's settings key — `outline`, `tasks`. */
   moduleId: string;
-  builtIn: readonly BuiltInView<TView>[];
+  defaultViews: readonly BuiltInView<TView>[];
   /**
-   * Which of `builtIn` the module opens on — typed against their ids, so renaming a preset
-   * cannot leave the default pointing at a view that no longer exists.
+   * Which shipped default a module opens on, typed against `defaultViews` ids.
    */
   defaultViewId: NoInfer<TView>;
   columns: TCol[];
-  /**
-   * What a built-in view opens as. Only ever called with a **built-in** id — a saved view's
-   * own settings are layered over this by `savedViewDefaults`.
-   */
+  /** Factory defaults for one shipped default view id. */
   defaultsFor: (builtInId: string) => GridDefaults;
   /**
    * Settings scopes the module keeps **per named view**, besides the grid: Chooser weights
@@ -63,7 +59,7 @@ export type ModuleViewsOptions<TCol extends ColumnMeta, TView extends string> = 
    */
   viewScopes?: (viewId: string) => readonly string[];
   /**
-   * When extras have no separate definition row (built-in origin, or Notes' working row
+   * When extras have no separate definition row (legacy unknown origin, or Notes' working row
    * *is* `notes:filter`), dirty is "does the working blob still look like factory defaults?"
    */
   extrasMatchDefaults?: (raw: unknown) => boolean;
@@ -71,14 +67,38 @@ export type ModuleViewsOptions<TCol extends ColumnMeta, TView extends string> = 
 
 export function useModuleViews<TCol extends ColumnMeta, TView extends string>({
   moduleId,
-  builtIn,
+  defaultViews,
   defaultViewId,
   columns,
   defaultsFor,
   viewScopes,
   extrasMatchDefaults,
 }: ModuleViewsOptions<TCol, TView>) {
-  const saved = useSavedViews(moduleId);
+  const seededDefaults = useMemo(
+    () =>
+      defaultViews.map((entry) => {
+        const defaults = defaultsFor(entry.id);
+        return {
+          id: entry.id,
+          name: entry.label,
+          base: entry.id,
+          settings: {
+            order: defaults.order,
+            widths: defaults.widths ?? {},
+            filters: defaults.filters ?? {},
+            advancedFilter: defaults.advancedFilter ?? null,
+            search: defaults.search ?? "",
+            sorts: defaults.sorts ?? [],
+            groupBy: defaults.groupBy ?? [],
+            collapsedGroups: defaults.collapsedGroups ?? [],
+            density: defaults.density ?? "comfortable",
+            switches: defaults.switches ?? {},
+          },
+        };
+      }),
+    [defaultViews, defaultsFor],
+  );
+  const saved = useSavedViews(moduleId, seededDefaults);
   const copyScope = useCopyScope();
   const resetScope = useResetScope();
   const readScope = useReadScope();
@@ -88,17 +108,24 @@ export function useModuleViews<TCol extends ColumnMeta, TView extends string>({
     GRID_CODEC,
   );
 
-  const builtInIds = useMemo(() => builtIn.map((entry) => entry.id), [builtIn]);
-  const builtInIdSet = useMemo(() => new Set<string>(builtInIds), [builtInIds]);
+  const defaultIds = useMemo(
+    () => defaultViews.map((entry) => entry.id),
+    [defaultViews],
+  );
+  const defaultIdSet = useMemo(() => new Set<string>(defaultIds), [defaultIds]);
 
-  const allowed = useMemo(
-    () => [...builtInIds, ...saved.views.map((entry) => entry.id)],
-    [builtInIds, saved.views],
+  const allowed = useMemo(() => saved.views.map((entry) => entry.id), [saved.views]);
+  const fallbackViewId = useMemo(
+    () =>
+      (allowed.includes(defaultViewId)
+        ? defaultViewId
+        : (allowed[0] ?? defaultViewId)) as TView,
+    [allowed, defaultViewId],
   );
 
-  const [viewId, setViewId] = useTabView(moduleId, allowed, defaultViewId);
+  const [viewId, setViewId] = useTabView(moduleId, allowed, fallbackViewId);
 
-  const base = baseViewId(saved.views, viewId, builtInIds, defaultViewId) as TView;
+  const base = baseViewId(saved.views, viewId, defaultIds, defaultViewId) as TView;
   const current = saved.find(viewId);
   const fallback = useMemo(() => defaultsFor(base), [defaultsFor, base]);
   const defaults = savedViewDefaults(current, fallback);
@@ -126,9 +153,9 @@ export function useModuleViews<TCol extends ColumnMeta, TView extends string>({
     (originId: string) => {
       if (!viewScopes) return;
       const working = viewScopes(WORKING_VIEW_ID);
-      const originIsNamed = !builtInIdSet.has(originId);
+      const originHasDefinition = saved.find(originId) !== null;
       working.forEach((scope, index) => {
-        const definition = originIsNamed ? viewScopes(originId)[index] : undefined;
+        const definition = originHasDefinition ? viewScopes(originId)[index] : undefined;
         if (!definition || definition === scope) {
           resetScope(scope);
           return;
@@ -138,7 +165,7 @@ export function useModuleViews<TCol extends ColumnMeta, TView extends string>({
         else copyScope(definition, scope);
       });
     },
-    [viewScopes, builtInIdSet, readScope, resetScope, copyScope],
+    [viewScopes, saved, readScope, resetScope, copyScope],
   );
 
   /**
@@ -173,16 +200,16 @@ export function useModuleViews<TCol extends ColumnMeta, TView extends string>({
   const extrasDirty = useMemo(() => {
     if (!viewScopes) return false;
     const working = viewScopes(WORKING_VIEW_ID);
-    const originIsNamed = !builtInIdSet.has(viewId);
+    const originHasDefinition = saved.find(viewId) !== null;
     return working.some((scope, index) => {
       const raw = snapshot[scope];
-      const definition = originIsNamed ? viewScopes(viewId)[index] : undefined;
+      const definition = originHasDefinition ? viewScopes(viewId)[index] : undefined;
       if (!definition || definition === scope) {
         return extrasMatchDefaults ? !extrasMatchDefaults(raw) : raw !== undefined;
       }
       return !rawEqual(raw, snapshot[definition]);
     });
-  }, [viewScopes, builtInIdSet, viewId, snapshot, extrasMatchDefaults]);
+  }, [viewScopes, viewId, snapshot, extrasMatchDefaults, saved]);
 
   const dirty = hasViewOverrides(moduleSettings) || extrasDirty;
 
@@ -206,7 +233,7 @@ export function useModuleViews<TCol extends ColumnMeta, TView extends string>({
       }
     }
 
-    if (viewScopes && builtInIdSet.has(viewId)) {
+    if (viewScopes && defaultIdSet.has(viewId)) {
       const working = viewScopes(WORKING_VIEW_ID);
       const leftover = viewScopes(viewId);
       working.forEach((scope, index) => {
@@ -228,14 +255,14 @@ export function useModuleViews<TCol extends ColumnMeta, TView extends string>({
     dirty,
     /** The built-in `viewId` derives from; equal to `viewId` when it is one. */
     base,
-    /** Null while the active view is a built-in. */
+    /** Active view definition, or null only for an unknown legacy id. */
     current,
     grid,
     saved,
-    builtIn,
+    defaultViews: defaultViews,
     /**
-     * Write the working copy over the active saved view, then clear dirty so the
-     * working set follows the definition you just wrote. No-op on a built-in.
+     * Write the working copy over the active view, then clear dirty so the working
+     * set follows the definition you just wrote.
      */
     save: () => {
       if (!current) return;
@@ -259,10 +286,16 @@ export function useModuleViews<TCol extends ColumnMeta, TView extends string>({
     },
     deleteCurrent: () => {
       if (!current) return;
+      if (saved.views.length <= 1) return;
       const id = current.id;
       if (viewScopes) for (const scope of viewScopes(id)) resetScope(scope);
+      const remaining = saved.views.filter((entry) => entry.id !== id);
       saved.remove(id);
-      selectView(defaultViewId);
+      const next =
+        remaining.find((entry) => entry.id === defaultViewId)?.id ??
+        remaining[0]?.id ??
+        defaultViewId;
+      selectView(next as TView);
     },
   };
 }

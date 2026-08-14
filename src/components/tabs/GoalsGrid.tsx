@@ -213,7 +213,7 @@ export function GoalsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const allColumns = useMemo(() => buildColumns(tab.today), [tab.today]);
   const views = useModuleViews({
     moduleId: "goals",
-    builtIn: VIEWS,
+    defaultViews: VIEWS,
     defaultViewId: "all",
     columns: allColumns,
     defaultsFor: viewDefaults,

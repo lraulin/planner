@@ -167,7 +167,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const outlineColumns = useMemo(() => buildOutlineColumns(today), [today]);
   const views = useModuleViews({
     moduleId: "outline",
-    builtIn: OUTLINE_VIEWS,
+    defaultViews: OUTLINE_VIEWS,
     defaultViewId: "outline",
     columns: outlineColumns,
     defaultsFor: viewDefaults,

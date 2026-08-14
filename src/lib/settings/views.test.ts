@@ -9,7 +9,9 @@ import {
   NO_SAVED_VIEWS,
   parseSavedViews,
   removeSavedView,
+  reconcileDefaultViews,
   renameSavedView,
+  restoreDefaultViews,
   serializeSavedViews,
   uniqueViewName,
   updateSavedView,
@@ -34,11 +36,12 @@ function view(id: string, name = id): SavedView {
     collapsedGroups: [],
     density: "comfortable",
     switches: {},
+    defaultSeed: null,
   };
 }
 
 function saved(...views: SavedView[]): SavedViews {
-  return { views };
+  return { views, deletedDefaults: [] };
 }
 
 describe("isValidViewId", () => {
@@ -85,6 +88,7 @@ describe("parseSavedViews", () => {
       collapsedGroups: ["project:health"],
       density: "compact",
       switches: { nextActions: true, showPurpose: false },
+      defaultSeed: null,
     });
     expect(parseSavedViews(serializeSavedViews(source))).toEqual(source);
   });
@@ -306,6 +310,48 @@ describe("baseViewId", () => {
     expect(
       baseViewId(NO_SAVED_VIEWS.views, "completed", builtIn, "active-status"),
     ).toBe("completed");
+  });
+
+  describe("default views", () => {
+    const seed = {
+      id: "active-status",
+      name: "Active Status",
+      base: "active-status",
+      settings: {
+        order: ["name"],
+        widths: {},
+        filters: {},
+        advancedFilter: null,
+        search: "",
+        sorts: [],
+        groupBy: [],
+        collapsedGroups: [],
+        density: "comfortable" as const,
+        switches: {},
+      },
+    };
+
+    it("reconciles missing defaults unless they were explicitly deleted", () => {
+      const seeded = reconcileDefaultViews(NO_SAVED_VIEWS, [seed]);
+      expect(seeded.views.find((entry) => entry.id === seed.id)?.defaultSeed).toEqual(seed);
+
+      const removed = removeSavedView(seeded, seed.id);
+      const afterDelete = reconcileDefaultViews(removed, [seed]);
+      expect(afterDelete.views.some((entry) => entry.id === seed.id)).toBe(false);
+    });
+
+    it("restores default definitions and recreates deleted defaults", () => {
+      const withDefault = reconcileDefaultViews(NO_SAVED_VIEWS, [seed]);
+      const renamed = renameSavedView(withDefault, seed.id, "Changed");
+      const restored = restoreDefaultViews(renamed);
+      expect(restored.views.find((entry) => entry.id === seed.id)?.name).toBe(
+        "Active Status",
+      );
+
+      const removed = removeSavedView(restored, seed.id);
+      const recreated = restoreDefaultViews(removed);
+      expect(recreated.views.some((entry) => entry.id === seed.id)).toBe(true);
+    });
   });
 
   it("resolves a saved view to the built-in it was saved from", () => {

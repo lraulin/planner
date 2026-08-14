@@ -53,7 +53,7 @@ export function JobsView({ initialJobs }: { initialJobs: JobListRow[] }) {
 
   const views = useModuleViews({
     moduleId: "jobs",
-    builtIn: JOB_VIEWS,
+    defaultViews: JOB_VIEWS,
     defaultViewId: "all",
     columns: jobsColumns,
     defaultsFor: viewDefaults,

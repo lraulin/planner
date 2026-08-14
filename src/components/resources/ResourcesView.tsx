@@ -58,7 +58,7 @@ export function ResourcesView({
 
   const views = useModuleViews({
     moduleId: "resources",
-    builtIn: RESOURCE_VIEWS,
+    defaultViews: RESOURCE_VIEWS,
     defaultViewId: "all",
     columns: resourcesColumns,
     defaultsFor: viewDefaults,

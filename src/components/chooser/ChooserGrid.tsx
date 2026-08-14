@@ -122,7 +122,7 @@ export function ChooserGrid({
   const allColumns = useMemo(() => buildChooserColumns(tab.today), [tab.today]);
   const views = useModuleViews({
     moduleId: "chooser",
-    builtIn: CHOOSER_VIEWS,
+    defaultViews: CHOOSER_VIEWS,
     defaultViewId: "best-overall",
     columns: allColumns,
     defaultsFor: viewDefaults,

@@ -312,7 +312,7 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
   );
   const views = useModuleViews({
     moduleId: "projects",
-    builtIn: VIEWS,
+    defaultViews: VIEWS,
     defaultViewId: "active-status",
     columns: allColumns,
     defaultsFor: viewDefaults,
