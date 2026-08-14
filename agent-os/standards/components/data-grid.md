@@ -279,7 +279,8 @@ is the whole integration.
   reset: the same row holds `view` and `includeDeferred`, and clearing those would forget
   which view you had just switched to.
 - **The pair is Save and Save as, and they mean what they mean in a document.** Save writes
-  the working copy over the _active_ saved view (disabled on a built-in). Save as deep-copies
+  the working copy over the _active_ saved view (available on shipped defaults, which are
+  ordinary editable views; Settings can restore a default to its factory definition). Save as deep-copies
   the working copy into a new view and switches to it — the source definition is untouched.
   Switching views loads that view's snapshot into the working copy and discards dirty.
   Reload keeps the working copy, so unsaved tweaks survive without writing the named view.
@@ -306,9 +307,8 @@ is the whole integration.
 - Saved ids join the built-ins in `useTabView`'s allow-list, so deleting the view you are on
   falls back instead of stranding the grid.
 - **Only the select holds bar width.** Save / Save as / Rename / Delete register as commands
-  and live behind `⋯`, per the three-tier table below. The three that act on the selected
-  view are **disabled, not absent**, on a built-in: a built-in is not yours to change, and a
-  command that vanishes teaches you it does not exist. Save needs its own feedback — it
+  and live behind `⋯`, per the three-tier table below. All four are available on shipped
+  defaults (which are ordinary editable views). Save needs its own feedback — it
   writes what is already on screen, so nothing visibly happens. Unsaved changes is the
   dirty mark.
 

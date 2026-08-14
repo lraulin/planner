@@ -335,7 +335,7 @@ export function TasksGrid({
   );
   const views = useModuleViews({
     moduleId: "tasks",
-    builtIn: VIEWS,
+    defaultViews: VIEWS,
     defaultViewId: "active-status",
     columns: allColumns,
     defaultsFor: viewDefaults,

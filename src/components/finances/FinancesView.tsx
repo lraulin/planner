@@ -101,7 +101,7 @@ export function FinancesView({
 
   const views = useModuleViews({
     moduleId: "finances",
-    builtIn: FINANCE_VIEWS,
+    defaultViews: FINANCE_VIEWS,
     defaultViewId: "all",
     columns: financeColumns,
     defaultsFor: viewDefaults,

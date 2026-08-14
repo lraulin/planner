@@ -9,6 +9,8 @@ import {
 import { gridScope, viewsScope } from "@/lib/settings/scopes";
 import {
   addSavedView,
+  reconcileDefaultViews,
+  type DefaultViewSeed,
   findSavedView,
   isValidViewId,
   MAX_SAVED_VIEWS,
@@ -36,36 +38,52 @@ const CODEC: SettingCodec<SavedViews> = {
  * grid is a separate working set; Reset this grid returns to the named definition. Saving
  * one is still copying those values and giving them a name.
  */
-export function useSavedViews(tabId: string) {
+export function useSavedViews(
+  tabId: string,
+  defaults: readonly DefaultViewSeed[] = [],
+) {
   const { value, patch } = useSetting(viewsScope(tabId), CODEC);
   const resetScope = useResetScope();
+  const reconciled = useMemo(
+    () => reconcileDefaultViews(value, defaults),
+    [value, defaults],
+  );
 
   const save = useCallback(
-    (name: string, snapshot: Omit<SavedView, "id" | "name">) => {
+    (name: string, snapshot: Omit<SavedView, "id" | "name" | "defaultSeed">) => {
       // Random rather than sequential: a sequential id could be reissued after a delete and
       // would inherit the deleted view's leftover `grid:` scope.
       const id = newViewId();
-      patch((current) => addSavedView(current, { id, name, ...snapshot }));
+      patch((current) =>
+        addSavedView(reconcileDefaultViews(current, defaults), {
+          id,
+          name,
+          ...snapshot,
+          defaultSeed: null,
+        }),
+      );
       return id;
     },
-    [patch],
+    [patch, defaults],
   );
 
   const remove = useCallback(
     (id: string) => {
-      patch((current) => removeSavedView(current, id));
+      patch((current) => removeSavedView(reconcileDefaultViews(current, defaults), id));
       // The view's own grid scope goes with it. Left behind it would be an orphan row that
       // nothing can reach — and a recycled id would inherit it.
       resetScope(gridScope(`${tabId}.${id}`));
     },
-    [patch, resetScope, tabId],
+    [patch, resetScope, tabId, defaults],
   );
 
   const rename = useCallback(
     (id: string, name: string) => {
-      patch((current) => renameSavedView(current, id, name));
+      patch((current) =>
+        renameSavedView(reconcileDefaultViews(current, defaults), id, name),
+      );
     },
-    [patch],
+    [patch, defaults],
   );
 
   /**
@@ -74,22 +92,26 @@ export function useSavedViews(tabId: string) {
    */
   const update = useCallback(
     (id: string, settings: SavedViewSettings) => {
-      patch((current) => updateSavedView(current, id, settings));
+      patch((current) =>
+        updateSavedView(reconcileDefaultViews(current, defaults), id, settings),
+      );
     },
-    [patch],
+    [patch, defaults],
   );
 
   return useMemo(
     () => ({
-      views: value.views,
-      atCapacity: value.views.length >= MAX_SAVED_VIEWS,
-      find: (id: string) => findSavedView(value, id),
+      views: reconciled.views,
+      atCapacity:
+        reconciled.views.filter((v) => v.defaultSeed === null).length >=
+        MAX_SAVED_VIEWS,
+      find: (id: string) => findSavedView(reconciled, id),
       save,
       remove,
       rename,
       update,
     }),
-    [value, save, remove, rename, update],
+    [reconciled, save, remove, rename, update],
   );
 }
 

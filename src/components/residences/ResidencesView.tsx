@@ -65,7 +65,7 @@ export function ResidencesView({
 
   const views = useModuleViews({
     moduleId: "residences",
-    builtIn: RESIDENCE_VIEWS,
+    defaultViews: RESIDENCE_VIEWS,
     defaultViewId: "all",
     columns: residencesColumns,
     defaultsFor: viewDefaults,

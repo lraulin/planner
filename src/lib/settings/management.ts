@@ -1,6 +1,14 @@
 import type { SettingsSnapshot } from "./queries";
 import { describeScope, parseScope } from "./scopes";
-import { parseSavedViews, type SavedView } from "./views";
+import {
+  parseSavedViews,
+  restoreDefaultViews,
+  serializeSavedViews,
+  viewSnapshotEquals,
+  type DefaultViewSeed,
+  type SavedViews,
+  type SavedView,
+} from "./views";
 
 const MODULE_LABELS = {
   outline: "Outline",
@@ -25,7 +33,8 @@ export type PreferenceEntry = {
   scope: string;
   label: string;
   detail: string;
-  savedView: boolean;
+  viewEntry: boolean;
+  defaultView: boolean;
   /** Only legacy/unknown rows show their storage id, so they never become unreachable. */
   showScopeId: boolean;
 };
@@ -36,21 +45,32 @@ export type PreferenceGroup = {
   entries: PreferenceEntry[];
   /** Ordinary scopes reset by the group's confirmed batch action. */
   resetScopes: string[];
+  /** Whether this module has at least one shipped default view definition. */
+  hasDefaultViews: boolean;
 };
 
 type Catalogues = Map<string, Map<string, SavedView>>;
+type DeletedDefaultModules = Set<string>;
 
-function cataloguesFrom(snapshot: SettingsSnapshot): Catalogues {
+function cataloguesFrom(snapshot: SettingsSnapshot): {
+  catalogues: Catalogues;
+  deletedDefaultModules: DeletedDefaultModules;
+} {
   const catalogues: Catalogues = new Map();
+  const deletedDefaultModules: DeletedDefaultModules = new Set();
   for (const [scope, value] of Object.entries(snapshot)) {
     const parsed = parseScope(scope);
     if (parsed?.kind !== "views" || parsed.key === null) continue;
+    const parsedViews = parseSavedViews(value);
     catalogues.set(
       parsed.key,
-      new Map(parseSavedViews(value).views.map((view) => [view.id, view])),
+      new Map(parsedViews.views.map((view) => [view.id, view])),
     );
+    if (parsedViews.deletedDefaults.length > 0) {
+      deletedDefaultModules.add(parsed.key);
+    }
   }
-  return catalogues;
+  return { catalogues, deletedDefaultModules };
 }
 
 function humanize(value: string): string {
@@ -91,7 +111,8 @@ function moduleEntry(
         scope,
         label: saved?.name ?? (viewId ? `${humanize(viewId)} view` : "Default view"),
         detail: "Columns, filters, sorting, grouping, and density",
-        savedView: saved !== null,
+        viewEntry: saved !== null,
+        defaultView: saved?.defaultSeed != null,
         showScopeId: false,
       },
     };
@@ -105,7 +126,8 @@ function moduleEntry(
         scope,
         label: saved?.name ?? `${humanize(parsed.key)} view`,
         detail: "Scoring weights and chooser options",
-        savedView: saved !== null,
+        viewEntry: saved !== null,
+        defaultView: saved?.defaultSeed != null,
         showScopeId: false,
       },
     };
@@ -121,7 +143,8 @@ function moduleEntry(
           saved?.name ??
           (parsed.key === "filter" ? "Default view options" : humanize(parsed.key)),
         detail: "Mode, sort, and note filters",
-        savedView: saved !== null,
+        viewEntry: saved !== null,
+        defaultView: saved?.defaultSeed != null,
         showScopeId: false,
       },
     };
@@ -134,7 +157,8 @@ function moduleEntry(
         scope,
         label: humanize(parsed.key),
         detail: "Outline display options",
-        savedView: false,
+        viewEntry: false,
+        defaultView: false,
         showScopeId: false,
       },
     };
@@ -147,7 +171,8 @@ function moduleEntry(
         scope,
         label: "Calendar layout",
         detail: "Slot height and work-week display",
-        savedView: false,
+        viewEntry: false,
+        defaultView: false,
         showScopeId: false,
       },
     };
@@ -160,7 +185,8 @@ function moduleEntry(
         scope,
         label: "Insights dashboard",
         detail: "Reporting window and monthly vs pay-period axis",
-        savedView: false,
+        viewEntry: false,
+        defaultView: false,
         showScopeId: false,
       },
     };
@@ -173,7 +199,8 @@ function moduleEntry(
         scope,
         label: "Navigation",
         detail: "Sidebar sections and commands panel",
-        savedView: false,
+        viewEntry: false,
+        defaultView: false,
         showScopeId: false,
       },
     };
@@ -186,7 +213,8 @@ function moduleEntry(
         scope,
         label: "Detail drawer",
         detail: "Last-opened tabs and drawer layout",
-        savedView: false,
+        viewEntry: false,
+        defaultView: false,
         showScopeId: false,
       },
     };
@@ -226,7 +254,7 @@ function isSavedViewScope(scope: string, catalogues: Catalogues): boolean {
 
 /** Scopes a global reset may remove without deleting or changing named saved views. */
 export function bulkResetScopes(snapshot: SettingsSnapshot): string[] {
-  const catalogues = cataloguesFrom(snapshot);
+  const { catalogues } = cataloguesFrom(snapshot);
   return Object.keys(snapshot)
     .filter((scope) => snapshot[scope] !== undefined)
     .filter((scope) => parseScope(scope)?.kind !== "views")
@@ -236,7 +264,7 @@ export function bulkResetScopes(snapshot: SettingsSnapshot): string[] {
 
 /** Human reset rows grouped by the module they affect, with legacy rows kept reachable. */
 export function buildPreferenceGroups(snapshot: SettingsSnapshot): PreferenceGroup[] {
-  const catalogues = cataloguesFrom(snapshot);
+  const { catalogues, deletedDefaultModules } = cataloguesFrom(snapshot);
   const entriesByModule = new Map<string, PreferenceEntry[]>();
   const other: PreferenceEntry[] = [];
 
@@ -256,7 +284,8 @@ export function buildPreferenceGroups(snapshot: SettingsSnapshot): PreferenceGro
       scope,
       label: describeScope(scope),
       detail: "Stored by an older or unrecognized Planner version",
-      savedView: false,
+      viewEntry: false,
+      defaultView: false,
       showScopeId: true,
     });
   }
@@ -275,8 +304,11 @@ export function buildPreferenceGroups(snapshot: SettingsSnapshot): PreferenceGro
           : MODULE_LABELS[moduleId as keyof typeof MODULE_LABELS],
       entries,
       resetScopes: entries
-        .filter((entry) => !entry.savedView)
+        .filter((entry) => !entry.viewEntry)
         .map((entry) => entry.scope),
+      hasDefaultViews:
+        entries.some((entry) => entry.defaultView) ||
+        deletedDefaultModules.has(moduleId),
     });
   }
 
@@ -286,7 +318,62 @@ export function buildPreferenceGroups(snapshot: SettingsSnapshot): PreferenceGro
       label: "Other",
       entries: other,
       resetScopes: other.map((entry) => entry.scope),
+      hasDefaultViews: false,
     });
   }
   return groups;
+}
+
+export type ScopeWrite = { scope: string; value: unknown };
+
+export function restoreDefaultViewScopeWrites(
+  snapshot: SettingsSnapshot,
+  moduleId?: string,
+): ScopeWrite[] {
+  const writes: ScopeWrite[] = [];
+  for (const [scope, raw] of Object.entries(snapshot)) {
+    const parsed = parseScope(scope);
+    if (parsed?.kind !== "views" || parsed.key === null) continue;
+    if (moduleId && parsed.key !== moduleId) continue;
+    const current = parseSavedViews(raw);
+    const restored = restoreDefaultViews(current);
+    if (savedViewsEqual(restored, current)) continue;
+    writes.push({ scope, value: serializeSavedViews(restored) });
+  }
+  return writes;
+}
+
+function savedViewsEqual(left: SavedViews, right: SavedViews): boolean {
+  if (left.views.length !== right.views.length) return false;
+  if (left.deletedDefaults.length !== right.deletedDefaults.length) return false;
+
+  for (let i = 0; i < left.views.length; i += 1) {
+    const a = left.views[i];
+    const b = right.views[i];
+    if (!b) return false;
+    if (a.id !== b.id || a.name !== b.name || a.base !== b.base) return false;
+    if (!viewSnapshotEquals(a, b)) return false;
+    if (!defaultSeedEqual(a.defaultSeed, b.defaultSeed)) return false;
+  }
+
+  for (let i = 0; i < left.deletedDefaults.length; i += 1) {
+    if (!defaultSeedEqual(left.deletedDefaults[i], right.deletedDefaults[i]))
+      return false;
+  }
+
+  return true;
+}
+
+function defaultSeedEqual(
+  left: DefaultViewSeed | null | undefined,
+  right: DefaultViewSeed | null | undefined,
+): boolean {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  return (
+    left.id === right.id &&
+    left.name === right.name &&
+    left.base === right.base &&
+    viewSnapshotEquals(left.settings, right.settings)
+  );
 }

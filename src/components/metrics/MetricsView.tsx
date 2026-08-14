@@ -149,7 +149,7 @@ export function MetricsView({
 
   const views = useModuleViews({
     moduleId: "metrics",
-    builtIn: METRICS_VIEWS,
+    defaultViews: METRICS_VIEWS,
     defaultViewId: "metrics",
     columns: metricsColumns,
     defaultsFor: viewDefaults,

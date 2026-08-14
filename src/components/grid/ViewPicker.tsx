@@ -12,7 +12,7 @@ import type { ModuleViewsApi } from "./useModuleViews";
  * The live grid is a working copy. The select stays on the named view you loaded.
  * When the working copy differs, **Unsaved changes** appears — you have not left the
  * view. Save writes the working copy over the active saved view; Save as deep-copies
- * it into a new one. Built-ins are read-only (Save disabled).
+ * it into a new one.
  *
  * **Only the select holds bar width.** The commands sit behind `⋯` and in `⌘K`.
  */
@@ -25,7 +25,7 @@ export function ViewPicker({ views }: { views: ModuleViewsApi }) {
   });
 
   const current = views.current;
-  const currentName = current?.name ?? null;
+  const currentName = current?.name ?? views.viewId;
   const atCapacity = views.saved.atCapacity;
   const dirty = views.dirty;
 
@@ -37,19 +37,20 @@ export function ViewPicker({ views }: { views: ModuleViewsApi }) {
   }, [flash]);
 
   const commands = useMemo<Command[]>(() => {
-    const unavailable = currentName === null ? "This is a built-in view" : undefined;
-
     return [
       {
         id: "view.save",
         label: "Save view",
         group: "view",
         menu: "view",
-        section: "Saved views",
+        section: "Views",
         icon: "view-save",
         keywords: "update changes overwrite current keep",
-        disabled: currentName === null,
-        title: unavailable ?? `Write the grid as it stands back into “${currentName}”`,
+        disabled: current === null,
+        title:
+          current === null
+            ? "This view is unavailable in this build"
+            : `Write the grid as it stands back into “${currentName}”`,
         run: () => {
           latest.current.save();
           setFlash(true);
@@ -60,7 +61,7 @@ export function ViewPicker({ views }: { views: ModuleViewsApi }) {
         label: "Save view as…",
         group: "view",
         menu: "view",
-        section: "Saved views",
+        section: "Views",
         icon: "view-save",
         keywords: "new named preset layout create copy",
         disabled: atCapacity,
@@ -74,11 +75,11 @@ export function ViewPicker({ views }: { views: ModuleViewsApi }) {
         label: "Rename view…",
         group: "view",
         menu: "view",
-        section: "Saved views",
+        section: "Views",
         icon: "rename",
         keywords: "name",
-        disabled: currentName === null,
-        title: unavailable,
+        disabled: current === null,
+        title: current === null ? "This view is unavailable in this build" : undefined,
         run: () => setDialog("rename"),
       },
       {
@@ -86,16 +87,21 @@ export function ViewPicker({ views }: { views: ModuleViewsApi }) {
         label: "Delete view",
         group: "view",
         menu: "view",
-        section: "Saved views",
+        section: "Views",
         icon: "delete",
         keywords: "remove",
-        disabled: currentName === null,
+        disabled: current === null || views.saved.views.length <= 1,
         destructive: true,
-        title: unavailable ?? `Delete “${currentName}”`,
+        title:
+          current === null
+            ? "This view is unavailable in this build"
+            : views.saved.views.length <= 1
+              ? "A module must keep at least one view"
+              : `Delete “${currentName}”`,
         run: () => latest.current.deleteCurrent(),
       },
     ];
-  }, [currentName, atCapacity]);
+  }, [currentName, atCapacity, current, views.saved.views.length]);
 
   useRegisterCommands(commands);
 
@@ -108,22 +114,11 @@ export function ViewPicker({ views }: { views: ModuleViewsApi }) {
           onChange={(event) => views.selectView(event.target.value)}
           className="min-h-tap rounded border border-rule bg-surface px-2 py-1 text-ink outline-none focus:border-select-edge md:min-h-0"
         >
-          <optgroup label="Built in">
-            {views.builtIn.map((entry) => (
-              <option key={entry.id} value={entry.id}>
-                {entry.label}
-              </option>
-            ))}
-          </optgroup>
-          {views.saved.views.length > 0 && (
-            <optgroup label="Saved">
-              {views.saved.views.map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  {entry.name}
-                </option>
-              ))}
-            </optgroup>
-          )}
+          {views.saved.views.map((entry) => (
+            <option key={entry.id} value={entry.id}>
+              {entry.name}
+            </option>
+          ))}
         </select>
       </label>
 

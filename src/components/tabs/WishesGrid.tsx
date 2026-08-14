@@ -74,7 +74,7 @@ export function WishesGrid({
 
   const views = useModuleViews({
     moduleId: "wishes",
-    builtIn: WISHES_VIEWS,
+    defaultViews: WISHES_VIEWS,
     defaultViewId: "wishes",
     columns: wishesColumns,
     defaultsFor: viewDefaults,

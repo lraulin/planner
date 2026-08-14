@@ -158,7 +158,7 @@ export function NotesGrid({
 
   const views = useModuleViews({
     moduleId: "notes",
-    builtIn: NOTES_VIEWS,
+    defaultViews: NOTES_VIEWS,
     defaultViewId: "notes",
     columns: notesColumns,
     defaultsFor: viewDefaults,

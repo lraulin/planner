@@ -67,7 +67,7 @@ export function TimelineView({ initialRows }: { initialRows: ChronologyRow[] }) 
 
   const views = useModuleViews({
     moduleId: "timeline",
-    builtIn: TIMELINE_VIEWS,
+    defaultViews: TIMELINE_VIEWS,
     defaultViewId: "all",
     columns: timelineColumns,
     defaultsFor: viewDefaults,

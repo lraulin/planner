@@ -173,7 +173,7 @@ export function ResultAreasGrid({ initialNodes }: { initialNodes: OutlineNode[] 
   const allColumns = useMemo(() => buildColumns(), []);
   const views = useModuleViews({
     moduleId: "result-areas",
-    builtIn: VIEWS,
+    defaultViews: VIEWS,
     defaultViewId: "all",
     columns: allColumns,
     defaultsFor: viewDefaults,

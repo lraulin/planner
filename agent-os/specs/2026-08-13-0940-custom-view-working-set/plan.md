@@ -22,24 +22,25 @@ This spec commits to **working-copy + explicit Save**. The live grid is a workin
 | --- | ------------------------------------------------------------------------------------------ |
 | 1   | Working copy. Named views change only on Save / Save as.                                   |
 | 2   | Picker stays on the named view. Dirty is an “Unsaved changes” mark, not a Custom… option.  |
-| 3   | Save writes the working copy over the _active_ saved view. Disabled on a built-in.         |
+| 3   | Save writes the working copy over the _active_ saved view. Available on shipped defaults (which are now ordinary editable views). |
 | 4   | Save as deep-copies the working copy into a new view and switches to it. Source unchanged. |
 | 5   | Switching views loads that view’s definition. Dirty working copy is discarded. No prompt.  |
 | 6   | Reload restores the working copy + active view. Dirty stays if they still differ.          |
 | 7   | Reset this grid reloads the active definition.                                             |
-| 8   | Built-ins are read-only.                                                                   |
+| 8   | Shipped defaults are editable and renamable; Settings can restore defaults by module or globally. |
 
 ## Acceptance criteria
 
 - [ ] Tweaking Full Outline keeps the picker on Full Outline and shows Unsaved changes.
 - [ ] Reload keeps Full Outline + unsaved + the same tweaks.
-- [ ] Save is disabled on a built-in.
+- [ ] Save and Rename work on shipped default views.
 - [ ] Save as creates a new view, switches to it (clean). Picking Full Outline is the preset.
 - [ ] Save on a saved view writes the working copy and clears unsaved.
 - [ ] Tweak, Save as, switch back: the first view is what it was before the tweak.
 - [ ] Switching views discards dirty with no prompt.
 - [ ] Reset reloads the active definition.
 - [ ] Notes / Chooser extras follow the same machine.
+- [ ] Settings can restore default views per module and globally.
 - [ ] Unit tests in `src/lib/settings`. Browser on Outline and Tasks.
 
 ## Changes from original plan
@@ -49,6 +50,7 @@ This spec commits to **working-copy + explicit Save**. The live grid is a workin
 | 1   | Dropped Custom… as the selected value and “no Save.” Restored Save = write to the _active_ named view. Dirty is an indicator. | Treating dirty as leaving the document was still a hybrid. Working-copy Save needs an active document. |
 | 2   | Dropped Replace view….                                                                                                        | Save already overwrites the active saved view.                                                         |
 | 3   | Switch discards dirty, no prompt.                                                                                             | Confirmed; personal tool, not SAP-style.                                                               |
+| 4   | Shipped defaults are now ordinary editable/renamable views, with restore-defaults actions in Settings (module + global).    | Built-in read-only handling was unnecessary ceremony. Defaults should behave like any other view and be recoverable in one place. |
 
 ## Tasks
 

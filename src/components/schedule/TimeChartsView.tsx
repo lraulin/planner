@@ -65,7 +65,7 @@ export function TimeChartsView({
 
   const views = useModuleViews({
     moduleId: "time-charts",
-    builtIn: TIME_CHARTS_VIEWS,
+    defaultViews: TIME_CHARTS_VIEWS,
     defaultViewId: "all",
     columns: timeChartsColumns,
     defaultsFor: viewDefaults,

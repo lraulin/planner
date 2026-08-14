@@ -7,6 +7,7 @@ import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import {
   useAllSettings,
   useDisplaySettings,
+  useWriteScope,
 } from "@/components/settings/SettingsProvider";
 import {
   DATE_FORMAT_OPTIONS,
@@ -18,6 +19,8 @@ import {
 import {
   buildPreferenceGroups,
   bulkResetScopes,
+  restoreDefaultViewScopeWrites,
+  type ScopeWrite,
   type PreferenceGroup,
 } from "@/lib/settings/management";
 import { AchieveTransferPanel } from "./AchieveTransferPanel";
@@ -270,12 +273,23 @@ function GeneralPanel() {
   );
 }
 
-type PendingReset = { title: string; message: string; label: string; scopes: string[] };
+type PendingReset = {
+  title: string;
+  message: string;
+  label: string;
+  scopes: string[];
+  writes: ScopeWrite[];
+};
 
 function ViewsLayoutPanel() {
   const { snapshot, resetScope, resetScopes } = useAllSettings();
+  const writeScope = useWriteScope();
   const groups = useMemo(() => buildPreferenceGroups(snapshot), [snapshot]);
   const allScopes = useMemo(() => bulkResetScopes(snapshot), [snapshot]);
+  const globalDefaultRestores = useMemo(
+    () => restoreDefaultViewScopeWrites(snapshot),
+    [snapshot],
+  );
   const [pendingReset, setPendingReset] = useState<PendingReset | null>(null);
 
   return (
@@ -287,25 +301,45 @@ function ViewsLayoutPanel() {
               Saved preferences
             </h2>
             <p className="mt-0.5 text-[0.75rem] text-ink-faint">
-              Named views and their own settings are protected from bulk resets.
+              View definitions and their own settings are protected from bulk resets.
             </p>
           </div>
-          <button
-            type="button"
-            disabled={allScopes.length === 0}
-            onClick={() =>
-              setPendingReset({
-                title: "Reset all ordinary preferences?",
-                message:
-                  "Display, navigation, grid layouts, filters, sorting, grouping, and module options return to defaults. Named views and the settings stored inside them remain.",
-                label: "Reset all preferences",
-                scopes: allScopes,
-              })
-            }
-            className="min-h-tap rounded border border-priority-a/50 bg-priority-a/10 px-3 py-1.5 text-[0.8125rem] font-medium text-priority-a transition-colors hover:bg-priority-a/20 disabled:cursor-not-allowed disabled:opacity-40 md:min-h-0"
-          >
-            Reset all preferences
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={globalDefaultRestores.length === 0}
+              onClick={() =>
+                setPendingReset({
+                  title: "Restore all default views?",
+                  message:
+                    "Every shipped default view across modules returns to its original name and factory settings. User-created views stay unchanged. Module-specific extras (Task Chooser weights, Notes mode) are not affected — reset those separately if needed.",
+                  label: "Restore all default views",
+                  scopes: [],
+                  writes: globalDefaultRestores,
+                })
+              }
+              className="min-h-tap rounded border border-rule px-3 py-1.5 text-[0.8125rem] text-ink transition-colors hover:border-rule-strong hover:bg-surface-raised disabled:cursor-not-allowed disabled:opacity-40 md:min-h-0"
+            >
+              Restore all default views
+            </button>
+            <button
+              type="button"
+              disabled={allScopes.length === 0}
+              onClick={() =>
+                setPendingReset({
+                  title: "Reset all ordinary preferences?",
+                  message:
+                    "Display, navigation, grid layouts, filters, sorting, grouping, and module options return to defaults. View definitions and the settings stored inside them remain.",
+                  label: "Reset all preferences",
+                  scopes: allScopes,
+                  writes: [],
+                })
+              }
+              className="min-h-tap rounded border border-priority-a/50 bg-priority-a/10 px-3 py-1.5 text-[0.8125rem] font-medium text-priority-a transition-colors hover:bg-priority-a/20 disabled:cursor-not-allowed disabled:opacity-40 md:min-h-0"
+            >
+              Reset all preferences
+            </button>
+          </div>
         </div>
 
         {groups.length === 0 ? (
@@ -322,9 +356,19 @@ function ViewsLayoutPanel() {
                 onResetGroup={() =>
                   setPendingReset({
                     title: `Reset ${group.label}?`,
-                    message: `Ordinary ${group.label} layout and display choices return to defaults. Named saved views and their own settings remain.`,
+                    message: `Ordinary ${group.label} layout and display choices return to defaults. View definitions and their own settings remain.`,
                     label: `Reset ${group.label}`,
                     scopes: group.resetScopes,
+                    writes: [],
+                  })
+                }
+                onRestoreDefaults={() =>
+                  setPendingReset({
+                    title: `Restore ${group.label} default views?`,
+                    message: `Shipped ${group.label} default views return to their original names and factory settings. User-created views stay unchanged. Module-specific extras (Task Chooser weights, Notes mode) are not affected — reset those separately if needed.`,
+                    label: `Restore ${group.label} default views`,
+                    scopes: [],
+                    writes: restoreDefaultViewScopeWrites(snapshot, group.id),
                   })
                 }
               />
@@ -341,7 +385,12 @@ function ViewsLayoutPanel() {
         cancelLabel="Keep preferences"
         destructive
         onConfirm={() => {
-          if (pendingReset) resetScopes(pendingReset.scopes);
+          if (pendingReset) {
+            for (const write of pendingReset.writes) {
+              writeScope(write.scope, write.value);
+            }
+            resetScopes(pendingReset.scopes);
+          }
           setPendingReset(null);
         }}
         onCancel={() => setPendingReset(null)}
@@ -354,24 +403,37 @@ function PreferenceGroupRows({
   group,
   onResetScope,
   onResetGroup,
+  onRestoreDefaults,
 }: {
   group: PreferenceGroup;
   onResetScope: (scope: string) => void;
   onResetGroup: () => void;
+  onRestoreDefaults: () => void;
 }) {
   return (
     <section>
       <div className="flex items-center justify-between gap-3 border-b border-rule/70 bg-shell px-4 py-2">
         <h3 className="text-[0.8125rem] font-semibold text-ink">{group.label}</h3>
-        {group.resetScopes.length > 0 && (
-          <button
-            type="button"
-            onClick={onResetGroup}
-            className="min-h-tap rounded px-2 text-[0.75rem] text-ink-muted underline decoration-dotted underline-offset-2 hover:text-ink md:min-h-0"
-          >
-            Reset module
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {group.hasDefaultViews && (
+            <button
+              type="button"
+              onClick={onRestoreDefaults}
+              className="min-h-tap rounded px-2 text-[0.75rem] text-ink-muted underline decoration-dotted underline-offset-2 hover:text-ink md:min-h-0"
+            >
+              Restore default views
+            </button>
+          )}
+          {group.resetScopes.length > 0 && (
+            <button
+              type="button"
+              onClick={onResetGroup}
+              className="min-h-tap rounded px-2 text-[0.75rem] text-ink-muted underline decoration-dotted underline-offset-2 hover:text-ink md:min-h-0"
+            >
+              Reset module
+            </button>
+          )}
+        </div>
       </div>
       <ul className="divide-y divide-rule/70">
         {group.entries.map((entry) => (
@@ -384,9 +446,9 @@ function PreferenceGroupRows({
                 <p className="truncate text-[0.8125rem] font-medium text-ink">
                   {entry.label}
                 </p>
-                {entry.savedView && (
+                {entry.viewEntry && (
                   <span className="flex-none border border-select-edge/50 bg-select px-1.5 py-0.5 font-mono text-[0.625rem] uppercase tracking-wide text-ink-muted">
-                    Saved view
+                    {entry.defaultView ? "Default view" : "Saved view"}
                   </span>
                 )}
               </div>
