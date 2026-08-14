@@ -128,17 +128,46 @@ const checks = [
     },
   },
   {
-    name: "MCP tools/list is the 26-tool chat catalog",
+    name: "MCP tools/list is the 32-tool chat catalog",
     run: async () => {
       const result = await mcp(2, "tools/list");
       const names = result.payload?.result?.tools?.map((tool) => tool.name) ?? [];
       return (
         result.status === 200 &&
-        names.length === 26 &&
+        names.length === 32 &&
         names.includes("get_context") &&
+        names.includes("get_finance_overview") &&
+        names.includes("search_transactions") &&
         names.includes("update_weekly_plan_entries") &&
         !names.includes("list_tools") &&
         !names.includes("capture")
+      );
+    },
+  },
+  {
+    name: "finance domain lists the six read tools",
+    run: async () => {
+      const result = await call("list_tools", { domain: "finances" });
+      const names = result.payload?.data?.tools?.map((tool) => tool.name) ?? [];
+      return (
+        result.status === 200 &&
+        result.payload?.ok === true &&
+        names.length === 6 &&
+        names.includes("get_finance_overview") &&
+        names.includes("get_cash_flow") &&
+        names.includes("search_transactions")
+      );
+    },
+  },
+  {
+    name: "finance overview reads",
+    run: async () => {
+      const result = await call("get_finance_overview", {});
+      return (
+        result.status === 200 &&
+        result.payload?.ok === true &&
+        Array.isArray(result.payload.data?.accounts) &&
+        result.payload.data?.coverage !== undefined
       );
     },
   },

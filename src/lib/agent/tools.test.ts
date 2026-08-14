@@ -108,6 +108,21 @@ describe("agent tool registry", () => {
     expect(legacy.tools).toContainEqual(
       expect.objectContaining({ name: "capture", replacedBy: "capture_inbox" }),
     );
+
+    const finances = (await dispatchAgentTool(
+      "list_tools",
+      { domain: "finances" },
+      UNUSED_USER_ID,
+    )) as { tools: { name: string; domain: string }[] };
+    expect(finances.tools.map((tool) => tool.name)).toEqual([
+      "get_finance_overview",
+      "get_cash_flow",
+      "get_spending_breakdown",
+      "list_recurring_bills",
+      "get_debt_summary",
+      "search_transactions",
+    ]);
+    expect(finances.tools.every((tool) => tool.domain === "finances")).toBe(true);
   });
 
   it("keeps health compatible while pointing to contract discovery", async () => {

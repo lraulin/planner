@@ -86,7 +86,7 @@ complete input/output JSON Schemas.
 
 List the focused core surface or one tool domain.
 
-- Use when: Use first, or when a task moves into notes, schedule, planning, or metrics.
+- Use when: Use first, or when a task moves into notes, schedule, planning, metrics, or finances.
 - Avoid when: Do not request all domains unless you truly need a broad inventory.
 - Returns: Compact selection metadata without full schemas.
 - Effects: read; destructive=false; retry=safe; confirmation=none
@@ -553,6 +553,98 @@ Correct one existing metric measurement.
 - Exposure: domain
 - Arguments: `{ id*, value?, entryDate?, target?, entryType? }`
 - Output: `{ entry*, metric* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+## Finances
+
+### `get_finance_overview`
+
+Orient on accounts, imported history, coverage gaps, and carrying cost.
+
+- Use when: Start here for any money question. Use before cash flow, spending, or search so you know the coverage gap and which accounts exist.
+- Avoid when: Do not use it for a dated series or a named transaction; those are the other finance tools.
+- Returns: Accounts with balances, the imported date range, unclassified count, coverage gap, category vocabulary, and headline interest/fees.
+- Effects: read; destructive=false; retry=safe; confirmation=none
+- Exposure: domain
+- Arguments: `{  }`
+- Output: `{ accounts*, history*, unclassifiedCount*, coverage*, categories*, merchants*, carryingCost* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `get_cash_flow`
+
+Income, spend, net, trailing-12 overlay, and the baseline vs one-off split.
+
+- Use when: Use to answer whether cash flow is positive, whether a stretch is typical, or whether one-off events are hiding the baseline.
+- Avoid when: Do not blend baselineCents and oneOffCents. Use get_spending_breakdown for ranked categories and search_transactions to inspect named rows.
+- Returns: Per-bucket income/spend/fixed/variable/net plus trailing averages, window totals, typical monthly income, and the named one-off split.
+- Effects: read; destructive=false; retry=safe; confirmation=none
+- Exposure: domain
+- Arguments: `{ window*, from?, to?, axis*, levelRecurring*, accountIds*, categories*, merchants* }`
+- Output: `{ range*, axis*, window*, levelRecurring*, points*, totals*, income*, baseline* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `get_spending_breakdown`
+
+Ranked spend by category or merchant for a window.
+
+- Use when: Use after get_finance_overview when asking where the money went.
+- Avoid when: Category totals before coverage.completeFrom are missing unitemized card spend. Do not treat an all-time category chart as complete without reading the coverage gap.
+- Returns: Ranked { name, cents, share, count }, total spend, leftover otherCents, and optional per-bucket trends.
+- Effects: read; destructive=false; retry=safe; confirmation=none
+- Exposure: domain
+- Arguments: `{ window*, from?, to?, axis*, levelRecurring*, accountIds*, categories*, merchants*, by*, limit*, trend* }`
+- Output: `{ range*, by*, items*, totalSpendCents*, otherCents*, returned*, total*, trends? }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `list_recurring_bills`
+
+Detected and declared recurring commitments, annualized.
+
+- Use when: Use to find the actual levers — subscriptions and bills whose annual cost is a decision.
+- Avoid when: Do not use it to list one-off merchants. Use get_cash_flow for the baseline split and search_transactions for a named charge.
+- Returns: Recurring merchants with typical/low/high/annual cents, declared vs detected, the annual total, and upcoming due dates.
+- Effects: read; destructive=false; retry=safe; confirmation=none
+- Exposure: domain
+- Arguments: `{ window*, from?, to?, axis*, levelRecurring*, accountIds*, categories*, merchants*, includeUpcoming* }`
+- Output: `{ range*, bills*, annualTotalCents*, upcoming* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `get_debt_summary`
+
+Asset vs debt trajectory, account contributions, and statement carrying cost.
+
+- Use when: Use to test whether cards are actually being paid down and what interest and fees cost.
+- Avoid when: Do not use it for spending categories or named transactions.
+- Returns: Per-bucket asset/debt/net, the latest snapshot and ratio, per-account contributions, and interest/fees/APR from statements.
+- Effects: read; destructive=false; retry=safe; confirmation=none
+- Exposure: domain
+- Arguments: `{ window*, from?, to?, axis*, levelRecurring*, accountIds*, categories*, merchants* }`
+- Output: `{ range*, series*, latest*, debtToAssetRatio*, contributions*, carryingCost* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `search_transactions`
+
+Find compact transaction rows and the income/spend/net of the whole match set.
+
+- Use when: Use to test a hypothesis about named rows — family gifts, a merchant, a category — after the aggregate tools frame the question.
+- Avoid when: Do not page through the whole register. Use get_cash_flow or get_spending_breakdown for totals.
+- Returns: A compact page of rows plus matchedIncomeCents, matchedSpendCents, and matchedNetCents over every match, not just the page.
+- Effects: read; destructive=false; retry=safe; confirmation=none
+- Exposure: domain
+- Arguments: `{ query?, from?, to?, accountId?, category?, flow?, direction*, minCents?, maxCents?, offset*, limit* }`
+- Output: `{ transactions*, pageInfo*, matchedIncomeCents*, matchedSpendCents*, matchedNetCents* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
 complete input/output JSON Schemas.

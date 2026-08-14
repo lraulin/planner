@@ -145,7 +145,7 @@ function initializeResult(params: unknown) {
       version: String(AGENT_CONTRACT_VERSION),
     },
     instructions:
-      "Planner personal planning tools. Start with get_context. Search before mutating and use ids from search or read results. Use capture_inbox for unprocessed ideas. Do not guess a parent or node id.",
+      "Planner personal planning tools. Start with get_context. For money questions start with get_finance_overview. Search before mutating and use ids from search or read results. Use capture_inbox for unprocessed ideas. Do not guess a parent or node id.",
   };
 }
 

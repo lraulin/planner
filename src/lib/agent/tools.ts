@@ -43,12 +43,20 @@ import {
   updateMetricEntryTool,
   updateMetricTool,
 } from "./metricTools";
+import {
+  getCashFlowTool,
+  getDebtSummaryTool,
+  getFinanceOverviewTool,
+  getSpendingBreakdownTool,
+  listRecurringBillsTool,
+  searchTransactionsTool,
+} from "./financeTools";
 
 export const AGENT_CONTRACT_VERSION = 2 as const;
 const SYSTEM_TOOL_USER_ID = "00000000-0000-4000-8000-000000000000";
 
 export type AgentToolDomain =
-  "system" | "outline" | "notes" | "schedule" | "planning" | "metrics";
+  "system" | "outline" | "notes" | "schedule" | "planning" | "metrics" | "finances";
 export type AgentToolExposure = "core" | "domain" | "legacy";
 export type AgentToolEffects = {
   kind: "read" | "write";
@@ -133,7 +141,7 @@ const definitions: AgentToolDefinition[] = [
     domain: "system",
     summary: "List the focused core surface or one tool domain.",
     useWhen:
-      "Use first, or when a task moves into notes, schedule, planning, or metrics.",
+      "Use first, or when a task moves into notes, schedule, planning, metrics, or finances.",
     avoidWhen: "Do not request all domains unless you truly need a broad inventory.",
     returns: "Compact selection metadata without full schemas.",
     effects: read,
@@ -460,6 +468,98 @@ const definitions: AgentToolDefinition[] = [
     exposure: "domain",
     handler: updateMetricEntryTool,
   }),
+  defineTool("get_finance_overview", {
+    domain: "finances",
+    summary: "Orient on accounts, imported history, coverage gaps, and carrying cost.",
+    useWhen:
+      "Start here for any money question. Use before cash flow, spending, or search so you know the coverage gap and which accounts exist.",
+    avoidWhen:
+      "Do not use it for a dated series or a named transaction; those are the other finance tools.",
+    returns:
+      "Accounts with balances, the imported date range, unclassified count, coverage gap, category vocabulary, and headline interest/fees.",
+    effects: read,
+    exposure: "domain",
+    handler: getFinanceOverviewTool,
+  }),
+  defineTool("get_cash_flow", {
+    domain: "finances",
+    summary:
+      "Income, spend, net, trailing-12 overlay, and the baseline vs one-off split.",
+    useWhen:
+      "Use to answer whether cash flow is positive, whether a stretch is typical, or whether one-off events are hiding the baseline.",
+    avoidWhen:
+      "Do not blend baselineCents and oneOffCents. Use get_spending_breakdown for ranked categories and search_transactions to inspect named rows.",
+    returns:
+      "Per-bucket income/spend/fixed/variable/net plus trailing averages, window totals, typical monthly income, and the named one-off split.",
+    effects: read,
+    exposure: "domain",
+    examples: [{ title: "Last two years", arguments: { window: "24m" } }],
+    handler: getCashFlowTool,
+  }),
+  defineTool("get_spending_breakdown", {
+    domain: "finances",
+    summary: "Ranked spend by category or merchant for a window.",
+    useWhen: "Use after get_finance_overview when asking where the money went.",
+    avoidWhen:
+      "Category totals before coverage.completeFrom are missing unitemized card spend. Do not treat an all-time category chart as complete without reading the coverage gap.",
+    returns:
+      "Ranked { name, cents, share, count }, total spend, leftover otherCents, and optional per-bucket trends.",
+    effects: read,
+    exposure: "domain",
+    examples: [
+      {
+        title: "Top merchants last year",
+        arguments: { window: "12m", by: "merchant" },
+      },
+    ],
+    handler: getSpendingBreakdownTool,
+  }),
+  defineTool("list_recurring_bills", {
+    domain: "finances",
+    summary: "Detected and declared recurring commitments, annualized.",
+    useWhen:
+      "Use to find the actual levers — subscriptions and bills whose annual cost is a decision.",
+    avoidWhen:
+      "Do not use it to list one-off merchants. Use get_cash_flow for the baseline split and search_transactions for a named charge.",
+    returns:
+      "Recurring merchants with typical/low/high/annual cents, declared vs detected, the annual total, and upcoming due dates.",
+    effects: read,
+    exposure: "domain",
+    handler: listRecurringBillsTool,
+  }),
+  defineTool("get_debt_summary", {
+    domain: "finances",
+    summary:
+      "Asset vs debt trajectory, account contributions, and statement carrying cost.",
+    useWhen:
+      "Use to test whether cards are actually being paid down and what interest and fees cost.",
+    avoidWhen: "Do not use it for spending categories or named transactions.",
+    returns:
+      "Per-bucket asset/debt/net, the latest snapshot and ratio, per-account contributions, and interest/fees/APR from statements.",
+    effects: read,
+    exposure: "domain",
+    handler: getDebtSummaryTool,
+  }),
+  defineTool("search_transactions", {
+    domain: "finances",
+    summary:
+      "Find compact transaction rows and the income/spend/net of the whole match set.",
+    useWhen:
+      "Use to test a hypothesis about named rows — family gifts, a merchant, a category — after the aggregate tools frame the question.",
+    avoidWhen:
+      "Do not page through the whole register. Use get_cash_flow or get_spending_breakdown for totals.",
+    returns:
+      "A compact page of rows plus matchedIncomeCents, matchedSpendCents, and matchedNetCents over every match, not just the page.",
+    effects: read,
+    exposure: "domain",
+    examples: [
+      {
+        title: "Family gifts",
+        arguments: { query: "gift", direction: "income" },
+      },
+    ],
+    handler: searchTransactionsTool,
+  }),
 ];
 
 export const TOOL_REGISTRY = new Map(definitions.map((tool) => [tool.name, tool]));
@@ -508,6 +608,32 @@ const fieldDescriptions: Record<string, string> = {
   entries: "Ordered cohesive batch; the whole batch succeeds or rolls back.",
   weekStart: "Any ISO date in the desired week; Planner normalizes it to week start.",
   weekStartsOn: "Weekday index, 0 for Sunday through 6 for Saturday.",
+  window:
+    "Insights window: 3m, 6m, 12m, 24m, ytd, qtd, or all. Default 12m. Ignored when from/to are set.",
+  from: "Inclusive start date YYYY-MM-DD.",
+  to: "Inclusive end date YYYY-MM-DD.",
+  axis: "Bucket axis: month or pay-period. pay_period is accepted as an alias.",
+  levelRecurring:
+    "Spread recurring bills across the periods they cover instead of landing them whole.",
+  accountIds: "Restrict analysis to these account UUIDs. Empty means all.",
+  categories: "Restrict analysis to these effective categories. Empty means all.",
+  merchants: "Restrict analysis to these effective merchants. Empty means all.",
+  by: "Rank spend by category or merchant.",
+  trend: "When true, also return per-bucket spend for the top categories.",
+  includeUpcoming: "When true, include the next expected date for each declared bill.",
+  direction: "Keep income rows, spend rows (including refunds), or any flow.",
+  minCents:
+    "Inclusive minimum of abs(amountCents). Values are integer cents (100 = $1.00).",
+  maxCents:
+    "Inclusive maximum of abs(amountCents). Values are integer cents (100 = $1.00).",
+  accountId: "Finance account UUID returned by get_finance_overview.",
+  flow: "Effective flow kind: spend, income, internal_transfer, external_transfer, refund, interest_fee.",
+  balanceCents:
+    "Integer cents. 100 = $1.00. Signed; positive is money into the account.",
+  incomeCents: "Integer cents of money arriving.",
+  spendCents: "Integer cents of reported spend, as a positive cost.",
+  netCents:
+    "Integer cents. incomeCents minus spendCents; the only figure that may be negative.",
 };
 
 function humanizeField(name: string): string {
@@ -566,7 +692,14 @@ function healthTool() {
 
 function listTools(_userId: string, args: Record<string, unknown>) {
   const domain = args.domain as
-    "core" | "outline" | "notes" | "schedule" | "planning" | "metrics" | "all";
+    | "core"
+    | "outline"
+    | "notes"
+    | "schedule"
+    | "planning"
+    | "metrics"
+    | "finances"
+    | "all";
   const includeLegacy = args.includeLegacy === true;
   return {
     tools: definitions

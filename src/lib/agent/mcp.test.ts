@@ -46,13 +46,19 @@ const REQUIRED = [
   "update_metric",
   "log_metric_entry",
   "update_metric_entry",
+  "get_finance_overview",
+  "get_cash_flow",
+  "get_spending_breakdown",
+  "list_recurring_bills",
+  "get_debt_summary",
+  "search_transactions",
 ] as const;
 
 describe("MCP catalog", () => {
-  it("exposes the 26 core and domain tools and hides discovery plus legacy", () => {
+  it("exposes the 32 core and domain tools and hides discovery plus legacy", () => {
     const tools = listMcpToolDefinitions();
     const names = tools.map((tool) => tool.name);
-    expect(names).toHaveLength(26);
+    expect(names).toHaveLength(32);
     expect(names).toEqual(expect.arrayContaining([...REQUIRED]));
     for (const hidden of HIDDEN) {
       expect(names).not.toContain(hidden);
@@ -101,6 +107,9 @@ describe("MCP JSON-RPC", () => {
     expect(
       (response as { result: { instructions: string } }).result.instructions,
     ).toContain("get_context");
+    expect(
+      (response as { result: { instructions: string } }).result.instructions,
+    ).toContain("get_finance_overview");
   });
 
   it("falls back to the latest protocol when the client asks for an unknown one", async () => {
@@ -131,7 +140,7 @@ describe("MCP JSON-RPC", () => {
       method: "tools/list",
     });
     const tools = (response as { result: { tools: { name: string }[] } }).result.tools;
-    expect(tools).toHaveLength(26);
+    expect(tools).toHaveLength(32);
     expect(tools.map((tool) => tool.name)).not.toEqual(
       expect.arrayContaining([...HIDDEN]),
     );

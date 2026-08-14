@@ -1,10 +1,13 @@
 import { z } from "zod";
 import {
+  financeAccountKindEnum,
+  financeFlowKindEnum,
   nodeStateEnum,
   nodeTypeEnum,
   noteFlagEnum,
   priorityLetterEnum,
 } from "@/db/schema";
+import { INSIGHTS_WINDOW_KEYS } from "@/lib/finances/insightsFilter";
 import {
   GOAL_KEYS,
   PROJECT_KEYS,
@@ -366,11 +369,117 @@ const captureResultSchema = z.strictObject({
   externalId: z.string().optional(),
 });
 
+const financeWindowFields = {
+  window: z.enum(INSIGHTS_WINDOW_KEYS).default("12m"),
+  from: dateKey.optional(),
+  to: dateKey.optional(),
+  axis: z.enum(["month", "pay-period", "pay_period"]).default("month"),
+  levelRecurring: z.boolean().default(false),
+  accountIds: z.array(id).default([]),
+  categories: z.array(z.string()).default([]),
+  merchants: z.array(z.string()).default([]),
+};
+
+const cents = z.number().int().describe("Integer cents. 100 = $1.00.");
+const dateRangeSchema = z.strictObject({ startKey: dateKey, endKey: dateKey });
+const nullableDateRangeSchema = dateRangeSchema.nullable();
+
+const cashFlowPointSchema = z.strictObject({
+  key: z.string(),
+  label: z.string(),
+  startKey: dateKey,
+  endKey: dateKey,
+  incomeCents: cents,
+  spendCents: cents,
+  fixedCents: cents,
+  variableCents: cents,
+  netCents: cents,
+  trailingSpendCents: cents.nullable(),
+  trailingIncomeCents: cents.nullable(),
+  trailingNetCents: cents.nullable(),
+});
+
+const baselineEventSchema = z.strictObject({
+  label: z.string(),
+  cents,
+  count: z.number().int().min(0),
+});
+
+const rankedSpendSchema = z.strictObject({
+  name: z.string(),
+  cents,
+  share: z.number(),
+  count: z.number().int().min(0),
+});
+
+const recurringBillSchema = z.strictObject({
+  merchant: z.string(),
+  typicalCents: cents,
+  lowCents: cents,
+  highCents: cents,
+  deviationCents: cents,
+  chargeCount: z.number().int().min(0),
+  cadenceDays: z.number().int(),
+  cadenceMonths: z.number().int().nullable(),
+  annualCents: cents,
+  lastChargeOn: z.string(),
+  declared: z.boolean(),
+  scheduled: z.boolean(),
+});
+
+const upcomingBillSchema = z.strictObject({
+  merchant: z.string(),
+  cadenceMonths: z.number().int(),
+  dueOn: dateKey,
+  daysAway: z.number().int(),
+  expectedCents: cents,
+  lastChargeOn: z.string(),
+});
+
+const assetDebtPointSchema = z.strictObject({
+  key: z.string(),
+  label: z.string(),
+  startKey: dateKey,
+  endKey: dateKey,
+  assetCents: cents,
+  debtCents: cents,
+  netCents: cents,
+});
+
+const accountContributionSchema = z.strictObject({
+  accountId: id,
+  accountName: z.string(),
+  kind: z.enum(financeAccountKindEnum.enumValues),
+  startCents: cents,
+  endCents: cents,
+  changeCents: cents,
+});
+
+const carryingAccountSchema = z.strictObject({
+  accountId: id,
+  accountName: z.string(),
+  interestCents: cents,
+  feesCents: cents,
+  latestAprPercent: z.number().nullable(),
+  latestCreditLimitCents: cents.nullable(),
+  latestClosingBalanceCents: cents.nullable(),
+  statementCount: z.number().int().min(0),
+});
+
 export const inputSchemas = {
   health: z.strictObject({}),
   list_tools: z.strictObject({
     domain: z
-      .enum(["core", "outline", "notes", "schedule", "planning", "metrics", "all"])
+      .enum([
+        "core",
+        "outline",
+        "notes",
+        "schedule",
+        "planning",
+        "metrics",
+        "finances",
+        "all",
+      ])
       .default("core"),
     includeLegacy: z.boolean().default(false),
   }),
@@ -506,6 +615,31 @@ export const inputSchemas = {
     entryDate: dateKey.optional(),
     target: z.number().finite().nullable().optional(),
     entryType: z.string().optional(),
+  }),
+  get_finance_overview: z.strictObject({}),
+  get_cash_flow: z.strictObject(financeWindowFields),
+  get_spending_breakdown: z.strictObject({
+    ...financeWindowFields,
+    by: z.enum(["category", "merchant"]).default("category"),
+    limit: z.number().int().min(1).max(100).default(20),
+    trend: z.boolean().default(false),
+  }),
+  list_recurring_bills: z.strictObject({
+    ...financeWindowFields,
+    includeUpcoming: z.boolean().default(true),
+  }),
+  get_debt_summary: z.strictObject(financeWindowFields),
+  search_transactions: z.strictObject({
+    query: z.string().optional(),
+    from: dateKey.optional(),
+    to: dateKey.optional(),
+    accountId: id.optional(),
+    category: z.string().optional(),
+    flow: z.enum(financeFlowKindEnum.enumValues).optional(),
+    direction: z.enum(["income", "spend", "any"]).default("any"),
+    minCents: z.number().int().optional(),
+    maxCents: z.number().int().optional(),
+    ...pageInputFields,
   }),
 } as const;
 
@@ -694,5 +828,125 @@ export const outputSchemas = {
   update_metric_entry: z.strictObject({
     entry: metricEntrySchema,
     metric: metricDetailSchema,
+  }),
+  get_finance_overview: z.strictObject({
+    accounts: z.array(
+      z.strictObject({
+        id,
+        name: z.string(),
+        kind: z.enum(financeAccountKindEnum.enumValues),
+        institution: z.string(),
+        balanceCents: cents,
+        transactionCount: z.number().int().min(0),
+        closedAt: isoDate.nullable(),
+      }),
+    ),
+    history: z.strictObject({
+      startKey: dateKey.nullable(),
+      endKey: dateKey.nullable(),
+      transactionCount: z.number().int().min(0),
+    }),
+    unclassifiedCount: z.number().int().min(0),
+    coverage: z.strictObject({
+      completeFrom: dateKey.nullable(),
+      lateAccounts: z.array(
+        z.strictObject({ accountName: z.string(), firstSeen: dateKey }),
+      ),
+      unitemizedCents: cents,
+    }),
+    categories: z.array(z.string()),
+    merchants: z.array(z.string()),
+    carryingCost: z.strictObject({
+      interestCents: cents,
+      feesCents: cents,
+    }),
+  }),
+  get_cash_flow: z.strictObject({
+    range: nullableDateRangeSchema,
+    axis: z.enum(["month", "pay-period"]),
+    window: z.string(),
+    levelRecurring: z.boolean(),
+    points: z.array(cashFlowPointSchema),
+    totals: z.strictObject({
+      incomeCents: cents,
+      spendCents: cents,
+      fixedCents: cents,
+      variableCents: cents,
+      netCents: cents,
+    }),
+    income: z.strictObject({
+      paycheckMonthlyCents: cents,
+      otherMonthlyCents: cents,
+      totalMonthlyCents: cents,
+      medianPaycheckCents: cents,
+      paydayCount: z.number().int().min(0),
+    }),
+    baseline: z.strictObject({
+      baselineCents: cents,
+      oneOffCents: cents,
+      baselinePerBucketCents: cents,
+      bucketCount: z.number().int().min(0),
+      events: z.array(baselineEventSchema),
+      levelled: z.boolean(),
+      billsCents: cents,
+    }),
+  }),
+  get_spending_breakdown: z.strictObject({
+    range: nullableDateRangeSchema,
+    by: z.enum(["category", "merchant"]),
+    items: z.array(rankedSpendSchema),
+    totalSpendCents: cents,
+    otherCents: cents,
+    returned: z.number().int().min(0),
+    total: z.number().int().min(0),
+    trends: z
+      .array(
+        z.strictObject({
+          key: z.string(),
+          label: z.string(),
+          startKey: dateKey,
+          endKey: dateKey,
+          byName: z.record(z.string(), cents),
+        }),
+      )
+      .optional(),
+  }),
+  list_recurring_bills: z.strictObject({
+    range: nullableDateRangeSchema,
+    bills: z.array(recurringBillSchema),
+    annualTotalCents: cents,
+    upcoming: z.array(upcomingBillSchema),
+  }),
+  get_debt_summary: z.strictObject({
+    range: nullableDateRangeSchema,
+    series: z.array(assetDebtPointSchema),
+    latest: assetDebtPointSchema.nullable(),
+    debtToAssetRatio: z.number().nullable(),
+    contributions: z.array(accountContributionSchema),
+    carryingCost: z.strictObject({
+      interestCents: cents,
+      feesCents: cents,
+      byAccount: z.array(carryingAccountSchema),
+    }),
+  }),
+  search_transactions: z.strictObject({
+    transactions: z.array(
+      z.strictObject({
+        id,
+        transactionDate: dateKey,
+        accountName: z.string(),
+        description: z.string(),
+        merchant: z.string(),
+        amountCents: cents,
+        category: z.string(),
+        flow: z.enum(financeFlowKindEnum.enumValues),
+        excludeFromBaseline: z.boolean(),
+        eventLabel: z.string(),
+      }),
+    ),
+    pageInfo: pageInfoSchema,
+    matchedIncomeCents: cents,
+    matchedSpendCents: cents,
+    matchedNetCents: cents,
   }),
 } as const;
