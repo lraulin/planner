@@ -468,16 +468,45 @@ export function DateKeyCell({
   const alignInput = align === "right" ? "text-right" : "text-left";
   const alignOverlay = align === "right" ? "justify-end" : "justify-start";
 
+  /**
+   * **Commit on blur, not on change** — `ux-principles.md`'s rule for dates and decimals.
+   *
+   * A native date input fires `change` for every segment you type, so typing the year 2010
+   * writes 0002, then 0020, then 0201, then 2010: four saves, four re-sorts, and a garbage
+   * year left behind if focus leaves mid-word. Typing a year is the *normal* way to enter a
+   * date that is not near today, which is every row on the Timeline.
+   */
+  const [draft, setDraft] = useState(value);
+  const [seenValue, setSeenValue] = useState(value);
+  // The row can change underneath us after a save or a refresh; follow it.
+  if (value !== seenValue) {
+    setSeenValue(value);
+    setDraft(value);
+  }
+
   return (
     <span className="relative block w-full">
       <input
         type="date"
-        value={value}
+        value={draft}
         onClick={(event) => {
           event.stopPropagation();
           event.currentTarget.showPicker();
         }}
-        onChange={(event) => onChange(event.target.value || null)}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={() => {
+          if (draft !== value) onChange(draft || null);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            event.currentTarget.blur();
+          } else if (event.key === "Escape") {
+            event.preventDefault();
+            setDraft(value);
+            event.currentTarget.blur();
+          }
+        }}
         aria-label={ariaLabel}
         className={[
           "peer tabular w-full border-none bg-transparent text-[0.75rem] outline-none",
