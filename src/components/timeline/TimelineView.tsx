@@ -199,9 +199,10 @@ export function TimelineView({ initialRows }: { initialRows: ChronologyRow[] }) 
         deleteLabel: "Delete event",
         deleteDisabled: derived
           ? `This date comes from a record on ${derived.label}. Delete it there.`
-          : row
-            ? undefined
-            : "Select a row first",
+          : undefined,
+        // An event has no record to open — it *is* the row, and it edits in place.
+        openDisabled:
+          row && !derived ? "This event edits in the grid — click a cell." : undefined,
         selection: { id: rowId, count, label: row?.title },
         onCreate: createNew,
         onOpen: openRow,

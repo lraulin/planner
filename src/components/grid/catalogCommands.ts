@@ -18,6 +18,7 @@ export function catalogCapabilities({
   openLabel,
   deleteLabel = "Delete",
   deleteDisabled,
+  openDisabled,
   selection,
   onCreate,
   onOpen,
@@ -31,6 +32,11 @@ export function catalogCapabilities({
   deleteLabel?: string;
   /** Why the selected record cannot be deleted, when the domain owns that constraint. */
   deleteDisabled?: string;
+  /**
+   * Why the selected record cannot be opened. Rare — most catalogs open everything — but
+   * Timeline has rows that edit in the grid and have no record to open.
+   */
+  openDisabled?: string;
   selection: { id: string | null; count: number; label?: string | null };
   onCreate: () => void;
   onOpen: (id: string) => void;
@@ -39,7 +45,17 @@ export function catalogCapabilities({
   pageCommands?: readonly GridPageCommand[];
 }): GridCommandCapabilities {
   const noRow = selection.id === null ? "Select a row first" : undefined;
+  /**
+   * Open needs a row and nothing more. Delete needs a row *and* the domain's permission —
+   * `deleteDisabled` is the reason the record cannot be removed from here.
+   *
+   * These two were swapped: `record.open` was gated on `cannotDelete` and `record.delete`
+   * ignored `deleteDisabled` entirely. Contacts is the caller that shows what that cost —
+   * a Google-synced contact could not be opened at all, and could be deleted despite the
+   * message saying to delete it in Google. The variable was even named `cannotDelete`.
+   */
   const cannotDelete = noRow ?? deleteDisabled;
+  const cannotOpen = noRow ?? openDisabled;
 
   return {
     selection,
@@ -69,8 +85,8 @@ export function catalogCapabilities({
         toolbar: 50,
         rowMenu: true,
         bindings: OPEN_RECORD,
-        disabled: Boolean(cannotDelete),
-        title: cannotDelete,
+        disabled: Boolean(cannotOpen),
+        title: cannotOpen,
         run: () => selection.id && onOpen(selection.id),
       },
       {
@@ -83,8 +99,8 @@ export function catalogCapabilities({
         rowMenu: true,
         destructive: true,
         bindings: DELETE_ROW,
-        disabled: selection.id === null,
-        title: noRow,
+        disabled: Boolean(cannotDelete),
+        title: cannotDelete,
         run: () => selection.id && onDelete(selection.id),
       },
       ...pageCommands,
