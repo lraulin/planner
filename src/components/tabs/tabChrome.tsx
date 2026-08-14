@@ -147,6 +147,72 @@ export function ToolbarToggle({
   );
 }
 
+export type ToolbarSegment<T extends string> = {
+  value: T;
+  label: string;
+  /** Why you would pick this one. Worth the words — the labels are one or two each. */
+  title?: string;
+};
+
+/**
+ * A small set of mutually exclusive choices, shown as pressed buttons rather than a `<select>`.
+ *
+ * Use it when the options are few and fit in a word or two: the current state **is** the pressed
+ * button, so the control says what it is doing without spending a label on its own name. A
+ * dropdown hides the answer behind a click and then needs a word to say what it is a dropdown of.
+ *
+ * `label` is for the cases where the buttons genuinely cannot say what dimension they are —
+ * "Fit / Decades / Years" needs "Zoom" in front of it, "Roomy / Dense" does not.
+ *
+ * This was written by hand three times before it was one component (row height, the Insights
+ * window and axis, the Timeline presentation), which is the duplication `development/clean-code.md`
+ * exists to stop.
+ */
+export function ToolbarSegments<T extends string>({
+  label,
+  ariaLabel,
+  options,
+  value,
+  onChange,
+}: {
+  /** Shown before the buttons. Omit when the labels already name the dimension. */
+  label?: string;
+  /** The group's accessible name. Defaults to `label`; required when there is none. */
+  ariaLabel?: string;
+  options: readonly ToolbarSegment<T>[];
+  value: T;
+  onChange: (next: T) => void;
+}) {
+  return (
+    <div className="flex flex-none items-center gap-1.5 text-[0.8125rem]">
+      {label && <span className="whitespace-nowrap text-ink-faint">{label}</span>}
+      <div
+        role="group"
+        aria-label={ariaLabel ?? label}
+        className="flex flex-none overflow-hidden rounded border border-rule"
+      >
+        {options.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            aria-pressed={value === option.value}
+            title={option.title}
+            onClick={() => onChange(option.value)}
+            className={[
+              "min-h-tap px-2 py-1 text-[0.8125rem] leading-none whitespace-nowrap transition-colors md:min-h-0",
+              value === option.value
+                ? "bg-select text-ink"
+                : "bg-surface text-ink-muted hover:bg-surface-raised hover:text-ink",
+            ].join(" ")}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function ToolbarButton({
   children,
   onClick,

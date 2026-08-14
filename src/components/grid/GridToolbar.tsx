@@ -13,8 +13,10 @@ import {
   ErrorBanner,
   TabToolbar,
   ToolbarButton,
+  ToolbarSegments,
   ToolbarSelect,
   ToolbarToggle,
+  type ToolbarSegment,
 } from "@/components/tabs/tabChrome";
 import { useRegisterCommands } from "@/components/shell/CommandProvider";
 import { OverflowMenu } from "@/components/shell/OverflowMenu";
@@ -380,6 +382,15 @@ export function GridToolbar({
  * that fits in eleven characters. The current state is the pressed button, so the control
  * says what it is doing without a label explaining that it is Density.
  */
+const DENSITY_SEGMENTS: readonly ToolbarSegment<GridDensity>[] = [
+  {
+    value: "comfortable",
+    label: "Roomy",
+    title: "Taller rows, easier inline editing",
+  },
+  { value: "compact", label: "Dense", title: "More rows per screen" },
+];
+
 function DensityToggle({
   value,
   onChange,
@@ -388,34 +399,12 @@ function DensityToggle({
   onChange: (density: GridDensity) => void;
 }) {
   return (
-    <div
-      role="group"
-      aria-label="Row height"
-      className="flex flex-none overflow-hidden rounded border border-rule"
-    >
-      {(
-        [
-          ["comfortable", "Roomy", "Taller rows, easier inline editing"],
-          ["compact", "Dense", "More rows per screen"],
-        ] as const
-      ).map(([density, label, title]) => (
-        <button
-          key={density}
-          type="button"
-          aria-pressed={value === density}
-          title={title}
-          onClick={() => onChange(density)}
-          className={[
-            "min-h-tap px-2 py-1 text-[0.8125rem] leading-none whitespace-nowrap transition-colors md:min-h-0",
-            value === density
-              ? "bg-select text-ink"
-              : "text-ink-muted hover:bg-surface-raised hover:text-ink",
-          ].join(" ")}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
+    <ToolbarSegments
+      ariaLabel="Row height"
+      options={DENSITY_SEGMENTS}
+      value={value}
+      onChange={onChange}
+    />
   );
 }
 

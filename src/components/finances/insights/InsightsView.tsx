@@ -31,9 +31,7 @@ import {
   parseInsightsView,
   serializeInsightsView,
   type InsightsAxis,
-  type InsightsChartMode,
   type InsightsViewSettings,
-  type InsightsWindow,
 } from "@/lib/settings/finances";
 import { INSIGHTS_SCOPE } from "@/lib/settings/scopes";
 import {
@@ -42,6 +40,7 @@ import {
   type SettingCodec,
 } from "@/components/settings/SettingsProvider";
 import { useToday } from "@/components/grid/useToday";
+import { ToolbarSegments } from "@/components/tabs/tabChrome";
 import { AssetDebtChart } from "./AssetDebtChart";
 import { CarryingCostTable } from "./CarryingCostTable";
 import { CashFlowChart } from "./CashFlowChart";
@@ -219,38 +218,32 @@ export function InsightsView({
   return (
     <div className="min-h-0 flex-1 overflow-auto">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-rule bg-surface-raised px-3 py-2">
-        <ToggleGroup
+        <ToolbarSegments
           label="Window"
           options={INSIGHTS_WINDOWS.map((option) => ({
-            id: option,
+            value: option,
             label: WINDOW_LABELS[option],
           }))}
           value={view.window}
-          onChange={(next) =>
-            patch((current) => ({ ...current, window: next as InsightsWindow }))
-          }
+          onChange={(next) => patch((current) => ({ ...current, window: next }))}
         />
-        <ToggleGroup
+        <ToolbarSegments
           label="Axis"
           options={INSIGHTS_AXES.map((option) => ({
-            id: option,
+            value: option,
             label: AXIS_LABELS[option],
           }))}
           value={view.axis}
-          onChange={(next) =>
-            patch((current) => ({ ...current, axis: next as InsightsAxis }))
-          }
+          onChange={(next) => patch((current) => ({ ...current, axis: next }))}
         />
-        <ToggleGroup
+        <ToolbarSegments
           label="Chart"
           options={INSIGHTS_CHART_MODES.map((option) => ({
-            id: option,
+            value: option,
             label: CHART_MODE_LABELS[option],
           }))}
           value={view.mode}
-          onChange={(next) =>
-            patch((current) => ({ ...current, mode: next as InsightsChartMode }))
-          }
+          onChange={(next) => patch((current) => ({ ...current, mode: next }))}
         />
         <FilterSelect
           label="Accounts"
@@ -465,19 +458,14 @@ export function InsightsView({
           title={`Spending trends by ${bucketNoun}`}
           subtitle="Top categories across the window, everything else folded into Other. Click a segment."
           actions={
-            <ToggleGroup
+            <ToolbarSegments
               label="Bars"
               options={[
-                { id: "stacked", label: "Stacked" },
-                { id: "grouped", label: "Grouped" },
+                { value: "stacked", label: "Stacked" },
+                { value: "grouped", label: "Grouped" },
               ]}
               value={view.trendMode}
-              onChange={(next) =>
-                patch((current) => ({
-                  ...current,
-                  trendMode: next as "stacked" | "grouped",
-                }))
-              }
+              onChange={(next) => patch((current) => ({ ...current, trendMode: next }))}
             />
           }
         >
@@ -493,18 +481,15 @@ export function InsightsView({
           title="Cash flow"
           subtitle="This period's income sources and where the money went. Thickness is amount; nothing here claims a given paycheck bought the groceries."
           actions={
-            <ToggleGroup
+            <ToolbarSegments
               label="Group"
               options={[
-                { id: "category", label: "Category" },
-                { id: "category-merchant", label: "Category & merchant" },
+                { value: "category", label: "Category" },
+                { value: "category-merchant", label: "Category & merchant" },
               ]}
               value={view.sankeyGrouping}
               onChange={(next) =>
-                patch((current) => ({
-                  ...current,
-                  sankeyGrouping: next as "category" | "category-merchant",
-                }))
+                patch((current) => ({ ...current, sankeyGrouping: next }))
               }
             />
           }
@@ -732,44 +717,4 @@ function drilledRows(
     );
   }
   return rowsForDrill(rows, drill);
-}
-
-/** A small segmented control. 44px tap targets, and the current value is a real state. */
-function ToggleGroup({
-  label,
-  options,
-  value,
-  onChange,
-}: {
-  label: string;
-  options: { id: string; label: string }[];
-  value: string;
-  onChange: (next: string) => void;
-}) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className="text-[0.75rem] text-ink-muted">{label}</span>
-      <div
-        className="flex overflow-hidden rounded border border-rule"
-        role="group"
-        aria-label={label}
-      >
-        {options.map((option) => (
-          <button
-            key={option.id}
-            type="button"
-            aria-pressed={option.id === value}
-            onClick={() => onChange(option.id)}
-            className={`min-h-tap px-2.5 text-[0.8125rem] md:min-h-0 md:py-1 ${
-              option.id === value
-                ? "bg-select text-ink"
-                : "bg-surface text-ink-muted hover:text-ink"
-            }`}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
 }
