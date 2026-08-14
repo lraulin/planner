@@ -69,6 +69,8 @@ export const NESTED_SECTIONS: ReadonlySet<string> = new Set([
   "Expand",
   "Priority",
   "Zoom",
+  // File ▸ Export ▸ CSV / JSON / YAML — a format picker, same shape as Days.
+  "Export",
 ]);
 
 export type MenuSection = {

@@ -361,7 +361,7 @@ function PasteIcon() {
   );
 }
 
-/** Download: a tray with an arrow into it. File ▸ Export as CSV. */
+/** Download: a tray with an arrow into it. File ▸ Export ▸ CSV / JSON / YAML. */
 function ExportIcon() {
   return (
     <Glyph>

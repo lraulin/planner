@@ -6,8 +6,14 @@ import {
   csvFilename,
   exportableColumns,
   exportCellText,
-  gridExportCsvCommand,
+  exportFilename,
+  gridExportCommands,
+  serializeGridExport,
   tableToCsv,
+  tableToJson,
+  tableToRecords,
+  tableToYaml,
+  yamlScalar,
 } from "./exportCsv";
 
 describe("exportCellText", () => {
@@ -54,23 +60,23 @@ describe("exportableColumns", () => {
   });
 });
 
-describe("tableToCsv", () => {
-  type Row = { name: string; note: string | null };
-  const columns = exportableColumns<Row>([
-    { id: "name", label: "Name", filterValue: (row) => row.name },
-    { id: "note", label: "Note", filterValue: (row) => row.note },
-  ]);
+type Row = { name: string; note: string | null; depth: number };
+const columns = exportableColumns<Row>([
+  { id: "name", label: "Name", filterValue: (row) => row.name },
+  { id: "note", label: "Note", filterValue: (row) => row.note },
+]);
 
+describe("tableToCsv", () => {
   it("writes a header and one line per row, then a trailing newline", () => {
     const csv = tableToCsv(columns, [
-      { name: "Write brief", note: "due Friday" },
-      { name: "Review", note: null },
+      { name: "Write brief", note: "due Friday", depth: 0 },
+      { name: "Review", note: null, depth: 1 },
     ]);
     expect(csv).toBe("Name,Note\nWrite brief,due Friday\nReview,\n");
   });
 
   it("quotes commas, quotes, and newlines so the document round-trips", () => {
-    const csv = tableToCsv(columns, [{ name: 'Say "hi"', note: "a,b\nc" }]);
+    const csv = tableToCsv(columns, [{ name: 'Say "hi"', note: "a,b\nc", depth: 0 }]);
     expect(parseCsvRows(csv)).toEqual([
       ["Name", "Note"],
       ['Say "hi"', "a,b\nc"],
@@ -83,36 +89,148 @@ describe("tableToCsv", () => {
   });
 
   it("returns empty when there is no exportable column", () => {
-    expect(tableToCsv([], [{ name: "x" }])).toBe("");
+    expect(tableToCsv([], [{ name: "x", note: null, depth: 0 }])).toBe("");
+  });
+
+  it("stays flat when the rows have depth", () => {
+    // CSV cannot nest. A child is another line, not a cell.
+    const csv = tableToCsv(columns, [
+      { name: "Goal", note: null, depth: 0 },
+      { name: "Task", note: null, depth: 1 },
+    ]);
+    expect(csv).toBe("Name,Note\nGoal,\nTask,\n");
   });
 });
 
-describe("csvFilename", () => {
-  it("turns the grid label into a safe .csv name", () => {
+describe("tableToRecords", () => {
+  it("nests descendants under children and omits the key on a leaf", () => {
+    expect(
+      tableToRecords(columns, [
+        { name: "Goal", note: "q1", depth: 0 },
+        { name: "Task", note: null, depth: 1 },
+        { name: "Peer", note: "also", depth: 0 },
+      ]),
+    ).toEqual([
+      {
+        Name: "Goal",
+        Note: "q1",
+        children: [{ Name: "Task", Note: "" }],
+      },
+      { Name: "Peer", Note: "also" },
+    ]);
+  });
+
+  it("stays a flat list when every row is a root", () => {
+    expect(
+      tableToRecords(columns, [
+        { name: "Rent", note: null, depth: 0 },
+        { name: "Groceries", note: null, depth: 0 },
+      ]),
+    ).toEqual([
+      { Name: "Rent", Note: "" },
+      { Name: "Groceries", Note: "" },
+    ]);
+  });
+});
+
+describe("tableToJson", () => {
+  it("pretty-prints the nested records", () => {
+    expect(
+      tableToJson(columns, [
+        { name: "Goal", note: null, depth: 0 },
+        { name: "Task", note: null, depth: 1 },
+      ]),
+    ).toBe(`${JSON.stringify(
+      [{ Name: "Goal", Note: "", children: [{ Name: "Task", Note: "" }] }],
+      null,
+      2,
+    )}\n`);
+  });
+
+  it("writes an empty array when the grid is empty", () => {
+    expect(tableToJson(columns, [])).toBe("[]\n");
+  });
+});
+
+describe("yamlScalar", () => {
+  it("leaves a plain word bare and quotes anything YAML would misread", () => {
+    expect(yamlScalar("Write brief")).toBe("Write brief");
+    expect(yamlScalar("")).toBe('""');
+    expect(yamlScalar("true")).toBe('"true"');
+    expect(yamlScalar("12")).toBe('"12"');
+    expect(yamlScalar("a: b")).toBe('"a: b"');
+    expect(yamlScalar("say #1")).toBe('"say #1"');
+  });
+});
+
+describe("tableToYaml", () => {
+  it("writes a list of maps with nested children", () => {
+    expect(
+      tableToYaml(columns, [
+        { name: "Goal", note: "q1", depth: 0 },
+        { name: "Task", note: null, depth: 1 },
+        { name: "Step", note: "do", depth: 2 },
+        { name: "Peer", note: "also", depth: 0 },
+      ]),
+    ).toBe(
+      [
+        "- Name: Goal",
+        "  Note: q1",
+        "  children:",
+        "    - Name: Task",
+        '      Note: ""',
+        "      children:",
+        "        - Name: Step",
+        "          Note: do",
+        "- Name: Peer",
+        "  Note: also",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  it("writes an empty array when the grid is empty", () => {
+    expect(tableToYaml(columns, [])).toBe("[]\n");
+  });
+});
+
+describe("serializeGridExport", () => {
+  it("dispatches on the format without changing the cells", () => {
+    const rows = [{ name: "Goal", note: null, depth: 0 }];
+    expect(serializeGridExport("csv", columns, rows)).toBe(tableToCsv(columns, rows));
+    expect(serializeGridExport("json", columns, rows)).toBe(tableToJson(columns, rows));
+    expect(serializeGridExport("yaml", columns, rows)).toBe(tableToYaml(columns, rows));
+  });
+});
+
+describe("exportFilename", () => {
+  it("turns the grid label into a safe name with the format suffix", () => {
     expect(csvFilename("Today's task list")).toBe("Today_s_task_list.csv");
-    expect(csvFilename("  Agenda  ")).toBe("Agenda.csv");
-    expect(csvFilename("   ")).toBe("grid.csv");
+    expect(exportFilename("Today's task list", "json")).toBe("Today_s_task_list.json");
+    expect(exportFilename("  Agenda  ", "yaml")).toBe("Agenda.yaml");
+    expect(exportFilename("   ", "csv")).toBe("grid.csv");
   });
 });
 
-describe("gridExportCsvCommand", () => {
-  it("lives in File ▸ Export, not on the toolbar or the row menu", () => {
-    const command = gridExportCsvCommand(() => {});
-    expect(command).toMatchObject({
+describe("gridExportCommands", () => {
+  it("lives in File ▸ Export as a format picker, not on the toolbar or the row menu", () => {
+    const commands = gridExportCommands(() => {});
+    expect(commands.map((command) => command.label)).toEqual(["CSV", "JSON", "YAML"]);
+    expect(commands[0]).toMatchObject({
       id: "grid.export-csv",
-      label: "Export as CSV",
       menu: "file",
       section: "Export",
       group: "view",
     });
-    expect(command.toolbar).toBeUndefined();
-    expect(command.rowMenu).toBeUndefined();
-    expect(unplacedCommands([command])).toEqual([]);
-    expect(toolbarWithoutMenu([command])).toEqual([]);
+    expect(commands.every((command) => command.toolbar === undefined)).toBe(true);
+    expect(commands.every((command) => command.rowMenu === undefined)).toBe(true);
+    expect(unplacedCommands(commands)).toEqual([]);
+    expect(toolbarWithoutMenu(commands)).toEqual([]);
   });
 
-  it("sits in File after Plan and before Account", () => {
-    // Declared taxonomy, not build order — see MENU_SECTIONS.file.
+  it("folds Export into a submenu after Plan and before Account", () => {
+    // Declared taxonomy, not build order — see MENU_SECTIONS.file. Three formats
+    // clear the two-command floor, so Export is a fly-out rather than three File rows.
     const file = buildMenus([
       {
         id: "app.sign-out",
@@ -122,7 +240,7 @@ describe("gridExportCsvCommand", () => {
         section: "Account",
         run: () => {},
       },
-      gridExportCsvCommand(() => {}),
+      ...gridExportCommands(() => {}),
       {
         id: "app.capture",
         label: "Quick capture",
@@ -141,11 +259,16 @@ describe("gridExportCsvCommand", () => {
       },
     ]).find((menu) => menu.id === "file");
 
-    expect(file?.sections.map((section) => section.label)).toEqual([
-      "Inbox",
-      "Plan",
-      "Export",
-      "Account",
+    expect(file?.sections.map((section) => [section.label, section.submenu === true])).toEqual([
+      ["Inbox", false],
+      ["Plan", false],
+      ["Export", true],
+      ["Account", false],
+    ]);
+    expect(file?.sections[2].commands.map((command) => command.label)).toEqual([
+      "CSV",
+      "JSON",
+      "YAML",
     ]);
   });
 });

@@ -36,10 +36,12 @@ import { rowMatchesSearch, searchActive } from "@/lib/grid/search";
 import { sortRowsWithinGroups } from "@/lib/grid/sortRows";
 import { resolveCompactFields } from "@/lib/grid/compactFields";
 import {
-  csvFilename,
   exportableColumns,
-  gridExportCsvCommand,
-  tableToCsv,
+  exportFilename,
+  exportMimeType,
+  gridExportCommands,
+  serializeGridExport,
+  type GridExportFormat,
 } from "@/lib/grid/exportCsv";
 import { useRegisterCommands } from "@/components/shell/CommandProvider";
 import { useIsCompact } from "@/components/shell/useIsCompact";
@@ -536,9 +538,10 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   }, [onNavigableIdsChange, navigableKey]);
 
   /**
-   * File ▸ Export as CSV. Registered here, not by each host, so every DataGrid — including
-   * Day, which never goes through GridToolbar — has the same command on File. The snapshot
-   * is what is on screen: visible columns, filtered/sorted node rows, no group headers.
+   * File ▸ Export ▸ CSV / JSON / YAML. Registered here, not by each host, so every
+   * DataGrid — including Day, which never goes through GridToolbar — has the same
+   * commands on File. The snapshot is what is on screen: visible columns,
+   * filtered/sorted node rows, no group headers. JSON and YAML nest by row depth.
    *
    * The command list is identity-stable. `columns` / `displayRows` are new arrays on some
    * hosts every render; putting them in this memo's deps re-registered every frame and
@@ -549,26 +552,29 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   useEffect(() => {
     exportSnapshot.current = { columns, displayRows, ariaLabel };
   });
-  const exportCommands = useMemo(() => {
-    const command = gridExportCsvCommand(() => {});
-    return [
-      {
-        ...command,
-        run: () => {
-          const {
-            columns: visible,
-            displayRows: shown,
-            ariaLabel: label,
-          } = exportSnapshot.current;
-          const nodeRows = shown.filter((row): row is Row => row.kind === "node");
-          downloadTextFile(
-            csvFilename(label),
-            tableToCsv(exportableColumns(visible), nodeRows),
-          );
-        },
-      },
-    ];
-  }, []);
+  const exportCommands = useMemo(
+    () =>
+      gridExportCommands(() => {}).map((command) => {
+        const format = command.id.slice("grid.export-".length) as GridExportFormat;
+        return {
+          ...command,
+          run: () => {
+            const {
+              columns: visible,
+              displayRows: shown,
+              ariaLabel: label,
+            } = exportSnapshot.current;
+            const nodeRows = shown.filter((row): row is Row => row.kind === "node");
+            downloadTextFile(
+              exportFilename(label, format),
+              serializeGridExport(format, exportableColumns(visible), nodeRows),
+              exportMimeType(format),
+            );
+          },
+        };
+      }),
+    [],
+  );
   useRegisterCommands(exportCommands);
 
   /**

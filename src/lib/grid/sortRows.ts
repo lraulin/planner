@@ -1,4 +1,5 @@
 import type { GridRow } from "@/lib/tree/slice";
+import { parseDepthForest, type ForestNode } from "./forest";
 
 /**
  * Sorting a prepared `GridRow[]` without destroying its group structure or its outline
@@ -44,45 +45,6 @@ export function compareSortValues(a: SortValue, b: SortValue): number {
 
 type NodeRow<T> = Extract<GridRow<T>, { kind: "node" }>;
 
-type TreeNode<T> = {
-  row: NodeRow<T>;
-  children: TreeNode<T>[];
-};
-
-/**
- * Parse a flat depth-indented run into a forest. Each row's children are the following
- * rows with strictly greater depth, until a peer or ancestor appears.
- *
- * Orphan depths (a jump of more than one, or a first row deeper than the base) are treated
- * as siblings of the nearest open level so a filter that dropped a mid-level parent still
- * produces a coherent forest rather than dropping rows.
- */
-function parseForest<T>(rows: NodeRow<T>[]): TreeNode<T>[] {
-  if (rows.length === 0) return [];
-
-  const baseDepth = Math.min(...rows.map((row) => row.depth));
-  const root: TreeNode<T>[] = [];
-  /** Stack of open parents, root-most first. */
-  const stack: { depth: number; node: TreeNode<T> }[] = [];
-
-  for (const row of rows) {
-    const node: TreeNode<T> = { row, children: [] };
-
-    while (stack.length > 0 && stack[stack.length - 1].depth >= row.depth) {
-      stack.pop();
-    }
-
-    if (stack.length === 0 || row.depth <= baseDepth) {
-      root.push(node);
-    } else {
-      stack[stack.length - 1].node.children.push(node);
-    }
-    stack.push({ depth: row.depth, node });
-  }
-
-  return root;
-}
-
 /**
  * One sort key: how to read the value, and which way it runs.
  *
@@ -116,14 +78,14 @@ function compareRows<T>(a: NodeRow<T>, b: NodeRow<T>, keys: SortKey<T>[]): numbe
   return 0;
 }
 
-function sortForest<T>(forest: TreeNode<T>[], keys: SortKey<T>[]): void {
+function sortForest<T>(forest: ForestNode<NodeRow<T>>[], keys: SortKey<T>[]): void {
   forest.sort((a, b) => compareRows(a.row, b.row, keys));
   for (const node of forest) {
     if (node.children.length > 0) sortForest(node.children, keys);
   }
 }
 
-function flattenForest<T>(forest: TreeNode<T>[]): NodeRow<T>[] {
+function flattenForest<T>(forest: ForestNode<NodeRow<T>>[]): NodeRow<T>[] {
   const out: NodeRow<T>[] = [];
   for (const node of forest) {
     out.push(node.row);
@@ -135,7 +97,7 @@ function flattenForest<T>(forest: TreeNode<T>[]): NodeRow<T>[] {
 /** Sort one contiguous run of node rows, keeping each subtree under its parent. */
 function sortNodeRun<T>(run: NodeRow<T>[], keys: SortKey<T>[]): NodeRow<T>[] {
   if (run.length <= 1) return run;
-  const forest = parseForest(run);
+  const forest = parseDepthForest(run);
   sortForest(forest, keys);
   return flattenForest(forest);
 }
