@@ -10,7 +10,6 @@ import { gridScope, viewsScope } from "@/lib/settings/scopes";
 import {
   addSavedView,
   reconcileDefaultViews,
-  restoreDefaultViews,
   type DefaultViewSeed,
   findSavedView,
   isValidViewId,
@@ -103,18 +102,16 @@ export function useSavedViews(
   return useMemo(
     () => ({
       views: reconciled.views,
-      atCapacity: reconciled.views.length >= MAX_SAVED_VIEWS,
+      atCapacity:
+        reconciled.views.filter((v) => v.defaultSeed === null).length >=
+        MAX_SAVED_VIEWS,
       find: (id: string) => findSavedView(reconciled, id),
       save,
       remove,
       rename,
       update,
-      restoreDefaults: () =>
-        patch((current) =>
-          restoreDefaultViews(reconcileDefaultViews(current, defaults)),
-        ),
     }),
-    [reconciled, save, remove, rename, update, patch, defaults],
+    [reconciled, save, remove, rename, update],
   );
 }
 

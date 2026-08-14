@@ -312,48 +312,6 @@ describe("baseViewId", () => {
     ).toBe("completed");
   });
 
-  describe("default views", () => {
-    const seed = {
-      id: "active-status",
-      name: "Active Status",
-      base: "active-status",
-      settings: {
-        order: ["name"],
-        widths: {},
-        filters: {},
-        advancedFilter: null,
-        search: "",
-        sorts: [],
-        groupBy: [],
-        collapsedGroups: [],
-        density: "comfortable" as const,
-        switches: {},
-      },
-    };
-
-    it("reconciles missing defaults unless they were explicitly deleted", () => {
-      const seeded = reconcileDefaultViews(NO_SAVED_VIEWS, [seed]);
-      expect(seeded.views.find((entry) => entry.id === seed.id)?.defaultSeed).toEqual(seed);
-
-      const removed = removeSavedView(seeded, seed.id);
-      const afterDelete = reconcileDefaultViews(removed, [seed]);
-      expect(afterDelete.views.some((entry) => entry.id === seed.id)).toBe(false);
-    });
-
-    it("restores default definitions and recreates deleted defaults", () => {
-      const withDefault = reconcileDefaultViews(NO_SAVED_VIEWS, [seed]);
-      const renamed = renameSavedView(withDefault, seed.id, "Changed");
-      const restored = restoreDefaultViews(renamed);
-      expect(restored.views.find((entry) => entry.id === seed.id)?.name).toBe(
-        "Active Status",
-      );
-
-      const removed = removeSavedView(restored, seed.id);
-      const recreated = restoreDefaultViews(removed);
-      expect(recreated.views.some((entry) => entry.id === seed.id)).toBe(true);
-    });
-  });
-
   it("resolves a saved view to the built-in it was saved from", () => {
     const all = saved({ ...view("saved-1"), base: "completed" });
     expect(baseViewId(all.views, "saved-1", builtIn, "active-status")).toBe(
@@ -387,5 +345,137 @@ describe("baseViewId", () => {
   it("terminates on a cycle instead of hanging", () => {
     const all = saved({ ...view("a"), base: "b" }, { ...view("b"), base: "a" });
     expect(baseViewId(all.views, "a", builtIn, "active-status")).toBe("active-status");
+  });
+});
+
+describe("reconcileDefaultViews", () => {
+  const seed = {
+    id: "active-status",
+    name: "Active Status",
+    base: "active-status",
+    settings: {
+      order: ["name"],
+      widths: {},
+      filters: {},
+      advancedFilter: null,
+      search: "",
+      sorts: [],
+      groupBy: [],
+      collapsedGroups: [],
+      density: "comfortable" as const,
+      switches: {},
+    },
+  };
+
+  it("adds missing seeds and attaches defaultSeed", () => {
+    const result = reconcileDefaultViews(NO_SAVED_VIEWS, [seed]);
+    const entry = result.views.find((v) => v.id === seed.id);
+    expect(entry?.defaultSeed).toEqual(seed);
+  });
+
+  it("does not re-add a seed that was explicitly deleted", () => {
+    const seeded = reconcileDefaultViews(NO_SAVED_VIEWS, [seed]);
+    const removed = removeSavedView(seeded, seed.id);
+    const after = reconcileDefaultViews(removed, [seed]);
+    expect(after.views.some((v) => v.id === seed.id)).toBe(false);
+  });
+
+  it("inserts a missing seed even when user views fill the cap", () => {
+    // Build MAX_SAVED_VIEWS user-created views (defaultSeed: null)
+    const userViews: SavedView[] = Array.from({ length: MAX_SAVED_VIEWS }, (_, i) =>
+      view(`saved-${i.toString().padStart(3, "0")}`, `User View ${i}`),
+    );
+    const full: SavedViews = { views: userViews, deletedDefaults: [] };
+    const result = reconcileDefaultViews(full, [seed]);
+    expect(result.views.some((v) => v.id === seed.id)).toBe(true);
+  });
+
+  it("suffixes the seed name when a user view already occupies it", () => {
+    const userView = view("saved-user", "Active Status");
+    const start: SavedViews = { views: [userView], deletedDefaults: [] };
+    const result = reconcileDefaultViews(start, [seed]);
+    const names = result.views.map((v) => v.name);
+    expect(new Set(names).size).toBe(names.length);
+    expect(names).toContain("Active Status");
+    expect(names.some((n) => n.startsWith("Active Status ("))).toBe(true);
+  });
+});
+
+describe("restoreDefaultViews", () => {
+  const seed = {
+    id: "active-status",
+    name: "Active Status",
+    base: "active-status",
+    settings: {
+      order: ["name"],
+      widths: {},
+      filters: {},
+      advancedFilter: null,
+      search: "",
+      sorts: [],
+      groupBy: [],
+      collapsedGroups: [],
+      density: "comfortable" as const,
+      switches: {},
+    },
+  };
+
+  it("restores name and settings from the seed", () => {
+    const seeded = reconcileDefaultViews(NO_SAVED_VIEWS, [seed]);
+    const renamed = renameSavedView(seeded, seed.id, "Changed");
+    const result = restoreDefaultViews(renamed);
+    const entry = result.views.find((v) => v.id === seed.id);
+    expect(entry?.name).toBe("Active Status");
+    expect(entry?.order).toEqual(seed.settings.order);
+    expect(entry?.density).toBe(seed.settings.density);
+  });
+
+  it("clears deletedDefaults after restore", () => {
+    const seeded = reconcileDefaultViews(NO_SAVED_VIEWS, [seed]);
+    const removed = removeSavedView(seeded, seed.id);
+    expect(removed.deletedDefaults).toHaveLength(1);
+    const result = restoreDefaultViews(removed);
+    expect(result.deletedDefaults).toEqual([]);
+  });
+
+  it("recreates a deleted default", () => {
+    const seeded = reconcileDefaultViews(NO_SAVED_VIEWS, [seed]);
+    const removed = removeSavedView(seeded, seed.id);
+    const result = restoreDefaultViews(removed);
+    expect(result.views.some((v) => v.id === seed.id)).toBe(true);
+  });
+
+  it("leaves user-created views untouched", () => {
+    const seeded = reconcileDefaultViews(NO_SAVED_VIEWS, [seed]);
+    const withUser: SavedViews = {
+      views: [view("saved-user", "My View"), ...seeded.views],
+      deletedDefaults: [],
+    };
+    const result = restoreDefaultViews(withUser);
+    expect(result.views.find((v) => v.id === "saved-user")?.name).toBe("My View");
+  });
+
+  it("recreates deleted defaults even when user views fill the cap", () => {
+    const userViews: SavedView[] = Array.from({ length: MAX_SAVED_VIEWS }, (_, i) =>
+      view(`saved-${i.toString().padStart(3, "0")}`, `User View ${i}`),
+    );
+    const withDeleted: SavedViews = {
+      views: userViews,
+      deletedDefaults: [seed],
+    };
+    const result = restoreDefaultViews(withDeleted);
+    expect(result.views.some((v) => v.id === seed.id)).toBe(true);
+  });
+
+  it("suffixes the restored default name when a user view already occupies it", () => {
+    const userView = view("saved-user", "Active Status");
+    const seeded = reconcileDefaultViews(NO_SAVED_VIEWS, [seed]);
+    const withUser: SavedViews = {
+      views: [userView, ...seeded.views],
+      deletedDefaults: [],
+    };
+    const result = restoreDefaultViews(withUser);
+    const names = result.views.map((v) => v.name);
+    expect(new Set(names).size).toBe(names.length);
   });
 });

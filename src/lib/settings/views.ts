@@ -331,10 +331,14 @@ export function reconcileDefaultViews(
     return next;
   });
 
+  // Shipped defaults bypass the user-created cap: they were always present in the old
+  // separate optgroup and must not be omitted because the user's Save-as copies filled up.
   for (const seed of defaultsById.values()) {
     if (viewsById.has(seed.id) || deleted.has(seed.id)) continue;
-    if (views.length >= MAX_SAVED_VIEWS) break;
-    views.push(defaultViewFromSeed(seed));
+    const currentSaved: SavedViews = { views, deletedDefaults: saved.deletedDefaults };
+    views.push(
+      defaultViewFromSeed({ ...seed, name: uniqueViewName(currentSaved, seed.name) }),
+    );
     changed = true;
   }
 
@@ -347,21 +351,31 @@ export function reconcileDefaultViews(
 }
 
 export function restoreDefaultViews(saved: SavedViews): SavedViews {
-  const restored = saved.views.map((view) => {
-    if (!view.defaultSeed) return view;
+  const restored: SavedView[] = [];
+
+  for (const view of saved.views) {
+    if (!view.defaultSeed) {
+      restored.push(view);
+      continue;
+    }
     const seed = view.defaultSeed;
-    return {
+    // If a user view already occupies the factory name, suffix the restored default.
+    const name = uniqueViewName({ views: restored, deletedDefaults: [] }, seed.name);
+    restored.push({
       ...view,
-      name: seed.name,
+      name,
       base: seed.base,
       ...seed.settings,
-    };
-  });
+    });
+  }
 
   const byId = new Set(restored.map((view) => view.id));
   for (const seed of saved.deletedDefaults) {
-    if (byId.has(seed.id) || restored.length >= MAX_SAVED_VIEWS) continue;
-    restored.push(defaultViewFromSeed(seed));
+    if (byId.has(seed.id)) continue;
+    const currentSaved: SavedViews = { views: restored, deletedDefaults: [] };
+    restored.push(
+      defaultViewFromSeed({ ...seed, name: uniqueViewName(currentSaved, seed.name) }),
+    );
   }
   return { views: restored, deletedDefaults: [] };
 }

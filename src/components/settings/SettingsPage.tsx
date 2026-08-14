@@ -312,7 +312,7 @@ function ViewsLayoutPanel() {
                 setPendingReset({
                   title: "Restore all default views?",
                   message:
-                    "Every shipped default view across modules returns to its original name and factory settings. User-created views stay unchanged.",
+                    "Every shipped default view across modules returns to its original name and factory settings. User-created views stay unchanged. Module-specific extras (Task Chooser weights, Notes mode) are not affected — reset those separately if needed.",
                   label: "Restore all default views",
                   scopes: [],
                   writes: globalDefaultRestores,
@@ -365,7 +365,7 @@ function ViewsLayoutPanel() {
                 onRestoreDefaults={() =>
                   setPendingReset({
                     title: `Restore ${group.label} default views?`,
-                    message: `Shipped ${group.label} default views return to their original names and factory settings. User-created views stay unchanged.`,
+                    message: `Shipped ${group.label} default views return to their original names and factory settings. User-created views stay unchanged. Module-specific extras (Task Chooser weights, Notes mode) are not affected — reset those separately if needed.`,
                     label: `Restore ${group.label} default views`,
                     scopes: [],
                     writes: restoreDefaultViewScopeWrites(snapshot, group.id),
