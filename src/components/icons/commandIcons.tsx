@@ -361,6 +361,16 @@ function PasteIcon() {
   );
 }
 
+/** Download: a tray with an arrow into it. File ▸ Export as CSV. */
+function ExportIcon() {
+  return (
+    <Glyph>
+      <path d="M5 13.5v2a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-2" />
+      <path d="M10 4.5v8M7 10l3 3 3-3" />
+    </Glyph>
+  );
+}
+
 /** Cross-navigation: an arrow leaving its box. "Show me this somewhere else." */
 function GoToIcon() {
   return (
@@ -424,6 +434,7 @@ export const COMMAND_ICONS: Record<CommandIcon, () => React.ReactElement> = {
   cut: CutIcon,
   paste: PasteIcon,
   "go-to": GoToIcon,
+  export: ExportIcon,
   settings: SettingsIcon,
   "sign-out": SignOutIcon,
 };

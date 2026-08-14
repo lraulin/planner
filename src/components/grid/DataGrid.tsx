@@ -35,12 +35,20 @@ import { collectColumnValues, distinctValuesOf } from "@/lib/grid/distinct";
 import { rowMatchesSearch, searchActive } from "@/lib/grid/search";
 import { sortRowsWithinGroups } from "@/lib/grid/sortRows";
 import { resolveCompactFields } from "@/lib/grid/compactFields";
+import {
+  csvFilename,
+  exportableColumns,
+  gridExportCsvCommand,
+  tableToCsv,
+} from "@/lib/grid/exportCsv";
+import { useRegisterCommands } from "@/components/shell/CommandProvider";
 import { useIsCompact } from "@/components/shell/useIsCompact";
 import { CompactRow, type RowSwipe } from "./CompactRow";
 import type { SelectMods } from "@/lib/grid/selection";
 import { NameIconContext } from "./nameIconContext";
 import { RowDragHandleContext, type RowDragHandleApi } from "./rowDragContext";
 import { RowSelectedContext } from "./rowSelectedContext";
+import { downloadTextFile } from "./downloadCsv";
 
 export type GridSortKey = { columnId: string; direction: "asc" | "desc" };
 
@@ -526,6 +534,42 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   useEffect(() => {
     onNavigableIdsChange?.(navigableKey === "" ? [] : navigableKey.split("\0"));
   }, [onNavigableIdsChange, navigableKey]);
+
+  /**
+   * File ▸ Export as CSV. Registered here, not by each host, so every DataGrid — including
+   * Day, which never goes through GridToolbar — has the same command on File. The snapshot
+   * is what is on screen: visible columns, filtered/sorted node rows, no group headers.
+   *
+   * The command list is identity-stable. `columns` / `displayRows` are new arrays on some
+   * hosts every render; putting them in this memo's deps re-registered every frame and
+   * tripped `useRegisterCommands`' churn guard (Maximum update depth on Finances). The run
+   * closure reads the latest snapshot from a ref instead — same shape as ViewPicker.
+   */
+  const exportSnapshot = useRef({ columns, displayRows, ariaLabel });
+  useEffect(() => {
+    exportSnapshot.current = { columns, displayRows, ariaLabel };
+  });
+  const exportCommands = useMemo(() => {
+    const command = gridExportCsvCommand(() => {});
+    return [
+      {
+        ...command,
+        run: () => {
+          const {
+            columns: visible,
+            displayRows: shown,
+            ariaLabel: label,
+          } = exportSnapshot.current;
+          const nodeRows = shown.filter((row): row is Row => row.kind === "node");
+          downloadTextFile(
+            csvFilename(label),
+            tableToCsv(exportableColumns(visible), nodeRows),
+          );
+        },
+      },
+    ];
+  }, []);
+  useRegisterCommands(exportCommands);
 
   /**
    * Achieve's header cycle: unsorted → ascending → descending → unsorted.
