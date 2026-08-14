@@ -15,6 +15,7 @@ import { ConversionDialog } from "@/components/outline/ConversionDialog";
 import { nodeDeleteMessage, nodeDeleteTitle } from "@/lib/tree/deleteMessage";
 import { NODE_KINDS, kindOfNode, type NodeKind } from "@/lib/tree/hierarchy";
 import { owningProjectId } from "@/lib/tree/owningProject";
+import { outlineSelectPath } from "@/lib/url/viewState";
 import { lifecycleStateRefusal } from "@/lib/tree/lifecycle";
 import { selectionMoveRoots } from "@/lib/grid/selection";
 import { pasteMoves, pasteRefusal } from "@/lib/grid/rowClipboard";
@@ -184,17 +185,18 @@ export function useNodeCommandDeck({
         clearClipboard();
       },
       /*
-       * The three cross-module verbs, implemented once here rather than five times in the hosts.
+       * The four cross-module verbs, implemented once here rather than five times in the hosts.
        *
-       * All three are plain navigations, which is the point: `?scope=` and `?detail=` are already
-       * the app's addressable state, so `View tasks…` is the Tasks module the user could have
-       * reached by hand — reload and Back both work — rather than a mode this grid pushes into
-       * another one.
+       * All four are plain navigations, which is the point: `?scope=`, `?detail=` and `?select=`
+       * are already the app's addressable state, so `View in Outline` is the Outline the user
+       * could have reached by hand — reload and Back both work — rather than a mode this grid
+       * pushes into another one.
        */
       onScheduleBlock: (id: string) => router.push(`/schedule?block=${id}`),
       onViewTasks: (id: string) => router.push(`/tasks?scope=${id}`),
       onViewProject: (projectId: string) =>
         router.push(`/projects?detail=${projectId}`),
+      onViewInOutline: (id: string) => router.push(outlineSelectPath(id)),
     }),
     [
       apply,

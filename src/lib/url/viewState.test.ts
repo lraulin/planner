@@ -4,6 +4,7 @@ import {
   asViewId,
   hrefWithViewState,
   notesPath,
+  outlineSelectPath,
   readDetailParam,
   readNoteParam,
   readViewParam,
@@ -43,6 +44,7 @@ describe("readViewState", () => {
   it("returns nulls when params are absent", () => {
     expect(readViewState(new URLSearchParams())).toEqual({
       detail: null,
+      select: null,
       view: null,
       note: null,
       mode: null,
@@ -55,6 +57,7 @@ describe("readViewState", () => {
   it("round-trips a full set", () => {
     const written = writeViewState(new URLSearchParams(), {
       detail: "node-1",
+      select: "node-2",
       view: "active-status",
       note: "note-9",
       mode: "flat",
@@ -64,6 +67,7 @@ describe("readViewState", () => {
     });
     expect(readViewState(written)).toEqual({
       detail: "node-1",
+      select: "node-2",
       view: "active-status",
       note: "note-9",
       mode: "flat",
@@ -126,6 +130,7 @@ describe("readViewState", () => {
     const next = writeViewState(current, { detail: null });
     expect(readViewState(next)).toEqual({
       detail: null,
+      select: null,
       view: "all",
       note: "note-1",
       mode: null,
@@ -158,5 +163,14 @@ describe("hrefWithViewState", () => {
     expect(notesPath("abc")).toBe("/notes?note=abc");
     expect(notesPath(null)).toBe("/notes");
     expect(notesPath()).toBe("/notes");
+  });
+
+  it("builds View in Outline as select-only, never as an open drawer", () => {
+    expect(outlineSelectPath("node-1")).toBe("/plan/outline?select=node-1");
+    const next = writeViewState(new URLSearchParams("detail=old"), {
+      select: "node-1",
+    });
+    expect(next.get("select")).toBe("node-1");
+    expect(next.get("detail")).toBe("old");
   });
 });

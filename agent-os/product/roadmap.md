@@ -313,7 +313,7 @@ View · Tools`) with an icon gutter and shortcut column; an **icon row** for the
 
   **The verbs.** Complete (`⌃L`) with the state vocabulary behind `State ▸`, `Schedule block…`
   (`⌃⌥⇧B`) which opens the week with a drawer prefilled from the row's own effort,
-  `View tasks…` / `View project…` (`⌃T` / `⌃⇧J`), and Achieve's `Pickup Row(s)` as **Cut and
+  `View tasks…` / `View project…` (`⌃T` / `⌃⇧J`), **View in Outline** (`specs/2026-08-14-1142-view-in-outline` — `?select=` lands on the row without opening the drawer), and Achieve's `Pickup Row(s)` as **Cut and
   Paste** — a move, so `moveNode` covers it and no mutation was added. Delete, the state changes
   and Cut now act on the whole selection and print its size.
 

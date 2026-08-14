@@ -186,6 +186,7 @@ describe("grid command deck", () => {
           onScheduleBlock: () => {},
           onViewTasks: () => {},
           onViewProject: () => {},
+          onViewInOutline: () => {},
         },
       });
 
@@ -271,6 +272,11 @@ describe("grid command deck", () => {
       const filed = build({ id: "n", projectId: "p", hasTasks: true });
       expect(find(filed, "record.view-project").disabled).toBe(false);
       expect(find(filed, "record.view-tasks").disabled).toBe(false);
+      expect(find(filed, "record.view-in-outline").disabled).toBe(false);
+      expect(find(build({ id: null }), "record.view-in-outline")).toMatchObject({
+        disabled: true,
+        title: "Select a row first",
+      });
     });
 
     it("keeps Achieve's shortcuts on the verbs that had them", () => {
@@ -297,6 +303,7 @@ describe("grid command deck", () => {
         "record.schedule-block",
         "record.view-tasks",
         "record.view-project",
+        "record.view-in-outline",
       ]) {
         expect(
           commands.some((entry) => entry.id === id),

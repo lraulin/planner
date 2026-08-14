@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import type { PriorityLetter } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { GridRow } from "@/lib/tree/slice";
@@ -20,6 +21,7 @@ import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { copyAsText, writeClipboardText } from "@/lib/tree/copyAsText";
+import { outlineSelectPath } from "@/lib/url/viewState";
 import { ToolbarSelect } from "./tabChrome";
 import { isTypingTarget } from "@/lib/keyboard";
 import {
@@ -65,6 +67,7 @@ export function WishesGrid({
   }
   const [scopeId, setScopeId] = useState("");
   const { detail: detailNodeId, setDetail: setDetailNodeId } = useViewStateUrl();
+  const router = useRouter();
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
@@ -271,10 +274,23 @@ export function WishesGrid({
             title: wish ? undefined : "Select a row first",
             run: () => wish && setDetailNodeId(wish.nodeId),
           },
+          {
+            id: "record.view-in-outline",
+            label: "View in Outline",
+            group: "record",
+            menu: "item",
+            section: "Item",
+            icon: "go-to",
+            rowMenu: true,
+            keywords: "tree hierarchy locate find reveal",
+            disabled: wish === null,
+            title: wish ? undefined : "Select a row first",
+            run: () => wish && router.push(outlineSelectPath(wish.nodeId)),
+          },
         ],
       };
     },
-    [rows, copySelectionAsText, setDetailNodeId],
+    [rows, copySelectionAsText, setDetailNodeId, router],
   );
 
   const commandCapabilities = useMemo(

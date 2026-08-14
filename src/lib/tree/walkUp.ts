@@ -20,3 +20,24 @@ export function* walkUp<T extends { id: string; parentId: string | null }>(
     cur = cur.parentId ? byId.get(cur.parentId) : undefined;
   }
 }
+
+/**
+ * Ancestors that currently hide `nodeId` — the ones View in Outline must expand so
+ * the row is actually on screen. Self is never included: collapsing the target does
+ * not hide it.
+ *
+ * Unknown id → empty. Same cycle insurance as `walkUp`.
+ */
+export function collapsedAncestorIds<
+  T extends { id: string; parentId: string | null; collapsed: boolean },
+>(nodes: readonly T[], nodeId: string): string[] {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const start = byId.get(nodeId);
+  if (!start) return [];
+  const ids: string[] = [];
+  for (const ancestor of walkUp(start, byId)) {
+    if (ancestor.id === nodeId) continue;
+    if (ancestor.collapsed) ids.push(ancestor.id);
+  }
+  return ids;
+}

@@ -94,6 +94,8 @@ export type GridCommandActions = {
   onViewTasks?: (id: string) => void;
   /** Achieve's `View Project…` — open the project this row belongs to. */
   onViewProject?: (projectId: string) => void;
+  /** Achieve's `View in Outline` — the Outline page with this row selected, drawer closed. */
+  onViewInOutline?: (id: string) => void;
   /** Achieve's `Pickup Row(s)` — mark the selection for a move. See `rowClipboard.ts`. */
   onCutRows?: (ids: readonly string[]) => void;
   /** Drop the picked-up rows beside this one, or under it. */
@@ -479,6 +481,24 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
             ? "This row is not under a project"
             : undefined,
         run: () => projectId && actions.onViewProject?.(projectId),
+      }),
+    );
+  }
+
+  if (actions.onViewInOutline) {
+    out.push(
+      command({
+        id: "record.view-in-outline",
+        label: "View in Outline",
+        group: "record",
+        menu: "item",
+        section: "Item",
+        icon: "go-to",
+        rowMenu: true,
+        keywords: "tree hierarchy locate find reveal",
+        disabled: !hasSelection,
+        title: selectionTitle,
+        run: () => id && actions.onViewInOutline?.(id),
       }),
     );
   }

@@ -59,3 +59,23 @@ export function zoomOutRoot(
   if (!rootId) return null;
   return nodes.find((node) => node.id === rootId)?.parentId ?? null;
 }
+
+/**
+ * Whether `nodeId` would still be on screen under this zoom root.
+ *
+ * No zoom, or the node *is* the root, counts as inside. A stale / missing root does
+ * not — View in Outline should clear that zoom rather than land on an empty branch.
+ */
+export function isInZoomBranch(
+  nodes: readonly OutlineNode[],
+  zoomRootId: string | null,
+  nodeId: string,
+): boolean {
+  if (!zoomRootId) return true;
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  if (!byId.has(zoomRootId)) return false;
+  for (const ancestor of walkUp(byId.get(nodeId), byId)) {
+    if (ancestor.id === zoomRootId) return true;
+  }
+  return false;
+}

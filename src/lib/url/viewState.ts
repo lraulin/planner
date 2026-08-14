@@ -2,6 +2,7 @@
  * Encode and decode the view-state query params shared by the grid tabs.
  *
  *   ?detail=<nodeId>   open detail drawer (Outline, Projects, Tasks, Goals, Wishes, Chooser)
+ *   ?select=<nodeId>   select this outline row without opening the drawer (View in Outline)
  *   ?note=<noteId>     open note drawer (Notes)
  *   ?view=<viewId>     the selected view, built-in or saved (every module with a picker)
  *   ?mode=<modeId>     a module's own display mode (Notes nested/flat)
@@ -17,6 +18,12 @@
  */
 
 export const DETAIL_PARAM = "detail";
+/**
+ * Land on this outline row without opening its drawer. `?detail=` is "the form is open";
+ * this is "this is the selected row." View in Outline is the reason it exists — see
+ * `outlineSelectPath`.
+ */
+export const SELECT_PARAM = "select";
 export const VIEW_PARAM = "view";
 export const NOTE_PARAM = "note";
 export const MODE_PARAM = "mode";
@@ -35,6 +42,7 @@ export const DATE_PARAM = "date";
 export type ViewStatePatch = {
   /** `null` clears the param; `undefined` leaves it alone. */
   detail?: string | null;
+  select?: string | null;
   view?: string | null;
   note?: string | null;
   mode?: string | null;
@@ -45,6 +53,7 @@ export type ViewStatePatch = {
 
 export type ViewState = {
   detail: string | null;
+  select: string | null;
   view: string | null;
   note: string | null;
   mode: string | null;
@@ -110,6 +119,7 @@ function firstParam(params: URLSearchParams, key: string): string | null {
 export function readViewState(params: URLSearchParams): ViewState {
   return {
     detail: asRecordId(firstParam(params, DETAIL_PARAM)),
+    select: asRecordId(firstParam(params, SELECT_PARAM)),
     view: asViewId(firstParam(params, VIEW_PARAM)),
     note: asRecordId(firstParam(params, NOTE_PARAM)),
     // Same shape as a view id — ours, lower-case, no spaces.
@@ -150,6 +160,12 @@ export function writeViewState(
     const id = asRecordId(patch.detail);
     if (id) next.set(DETAIL_PARAM, id);
     else next.delete(DETAIL_PARAM);
+  }
+
+  if (patch.select !== undefined) {
+    const id = asRecordId(patch.select);
+    if (id) next.set(SELECT_PARAM, id);
+    else next.delete(SELECT_PARAM);
   }
 
   if (patch.view !== undefined) {
@@ -217,5 +233,17 @@ export function notesJournalPath(dateKey: string, noteId?: string | null): strin
   return hrefWithViewState("/notes", new URLSearchParams(), {
     date: dateKey,
     note: noteId ?? null,
+  });
+}
+
+/**
+ * Land on this row in the Outline without opening its drawer.
+ *
+ * A fresh params object, not a patch on the current page: View in Outline is a
+ * destination, not a lens change, so Projects' `?view=` / `?scope=` must not come along.
+ */
+export function outlineSelectPath(nodeId: string): string {
+  return hrefWithViewState("/plan/outline", new URLSearchParams(), {
+    select: nodeId,
   });
 }

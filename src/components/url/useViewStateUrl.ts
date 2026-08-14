@@ -106,6 +106,7 @@ export function useViewStateUrl() {
 
   return {
     detail: state.detail,
+    select: state.select,
     view: state.view,
     note: state.note,
     mode: state.mode,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { OutlineNode } from "@/lib/tree/types";
 import { categoryLabelFromGroupId } from "@/lib/tree/slice";
@@ -57,6 +57,8 @@ import { useOptimisticNodes } from "@/components/grid/useOptimisticNodes";
 import { useStateChange } from "@/components/grid/useStateChange";
 import { useToday } from "@/components/grid/useToday";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
+import { collapsedAncestorIds } from "@/lib/tree/walkUp";
+import { isInZoomBranch } from "@/lib/tree/zoom";
 import {
   flattenLevels,
   LEVEL_LABELS,
@@ -143,7 +145,13 @@ function viewDefaults(): GridDefaults {
  */
 export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const { nodes, byId, patch, apply, error } = useOptimisticNodes(initialNodes);
-  const { detail: detailId, zoom, setDetail: setDetailId, setZoom } = useViewStateUrl();
+  const {
+    detail: detailId,
+    select: selectId,
+    zoom,
+    setDetail: setDetailId,
+    setZoom,
+  } = useViewStateUrl();
   const [editingId, setEditingId] = useState<string | null>(null);
   /**
    * Row id opened for naming immediately after create. Escape with an empty draft discards
@@ -272,16 +280,57 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
    */
   const fallbackIds = useMemo(() => navigable.map((n) => n.id), [navigable]);
   const { order: orderedIds, onIdsChange: setScreenIds } = useNavigableIds(fallbackIds);
-  const multi = useMultiSelect(orderedIds, detailId ?? initialNodes[0]?.id ?? null);
+  const multi = useMultiSelect(
+    orderedIds,
+    detailId ?? selectId ?? initialNodes[0]?.id ?? null,
+  );
   const { selectedId, selectedIds, select, selectOne, move } = multi;
 
-  // Back / forward and deep-links change `?detail=`. Sync selection during render so the
-  // open drawer always has a selected owner without an effect-driven cascade.
+  // Back / forward and deep-links change `?detail=` / `?select=`. Sync selection during
+  // render so the open drawer (or the View in Outline landing) has a selected owner
+  // without an effect-driven cascade.
   const [seenDetailId, setSeenDetailId] = useState(detailId);
   if (detailId !== seenDetailId) {
     setSeenDetailId(detailId);
     if (detailId) selectOne(detailId);
   }
+  const [seenSelectId, setSeenSelectId] = useState(selectId);
+  if (selectId !== seenSelectId) {
+    setSeenSelectId(selectId);
+    if (selectId && byId.has(selectId)) selectOne(selectId);
+  }
+
+  // Reveal a `?select=` landing. Two steps, because they settle on different ticks:
+  // 1. Expand collapsed ancestors (and persist) so the row can enter `orderedIds`.
+  // 2. Re-select once the row is actually on screen. Selecting a still-hidden id is
+  //    pruned to the first visible row (`useMultiSelect` / `pruneSelection`).
+  const revealedSelectId = useRef<string | null>(null);
+  const settledSelectId = useRef<string | null>(null);
+  useEffect(() => {
+    if (!selectId) {
+      revealedSelectId.current = null;
+      settledSelectId.current = null;
+      return;
+    }
+    if (revealedSelectId.current === selectId) return;
+    if (!byId.has(selectId)) return;
+    revealedSelectId.current = selectId;
+    settledSelectId.current = null;
+    for (const id of collapsedAncestorIds(nodes, selectId)) {
+      patch(id, { collapsed: false });
+      apply(() => setCollapsedAction(id, false));
+    }
+    if (zoom && !isInZoomBranch(nodes, zoom, selectId)) {
+      setZoom(null, "replace");
+    }
+  }, [selectId, nodes, byId, patch, apply, zoom, setZoom]);
+
+  useEffect(() => {
+    if (!selectId || settledSelectId.current === selectId) return;
+    if (!orderedIds.includes(selectId)) return;
+    if (selectedId !== selectId) selectOne(selectId);
+    settledSelectId.current = selectId;
+  }, [selectId, orderedIds, selectedId, selectOne]);
 
   const conversionPlan = useMemo<ConversionPlan | null>(() => {
     if (!pendingConversion) return null;

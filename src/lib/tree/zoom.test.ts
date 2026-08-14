@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { OutlineNode } from "./types";
-import { zoomBranch, zoomOutRoot } from "./zoom";
+import { isInZoomBranch, zoomBranch, zoomOutRoot } from "./zoom";
 
 const node = (
   id: string,
@@ -95,5 +95,14 @@ describe("outline zoom", () => {
     expect(zoomBranch(nodes, "gone")).toEqual({ nodes: [], stale: true });
     expect(zoomOutRoot(nodes, "task")).toBe("project");
     expect(zoomOutRoot(nodes, "area")).toBeNull();
+  });
+
+  it("says whether a row would still be on screen under a zoom", () => {
+    expect(isInZoomBranch(nodes, null, "task")).toBe(true);
+    expect(isInZoomBranch(nodes, "project", "task")).toBe(true);
+    expect(isInZoomBranch(nodes, "project", "project")).toBe(true);
+    expect(isInZoomBranch(nodes, "project", "area")).toBe(false);
+    expect(isInZoomBranch(nodes, "gone", "task")).toBe(false);
+    expect(isInZoomBranch(nodes, "project", "ghost")).toBe(false);
   });
 });
