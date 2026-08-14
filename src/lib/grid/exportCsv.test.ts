@@ -3,11 +3,14 @@ import { parseCsvRows } from "@/lib/csv/text";
 import { unplacedCommands, toolbarWithoutMenu } from "@/lib/commands/fileCommands";
 import { buildMenus } from "@/lib/commands/menus";
 import {
+  copyClipboardLabel,
   csvFilename,
   exportableColumns,
   exportCellText,
   exportFilename,
+  gridCopyCommands,
   gridExportCommands,
+  gridExportFormatOf,
   serializeGridExport,
   tableToCsv,
   tableToJson,
@@ -140,11 +143,13 @@ describe("tableToJson", () => {
         { name: "Goal", note: null, depth: 0 },
         { name: "Task", note: null, depth: 1 },
       ]),
-    ).toBe(`${JSON.stringify(
-      [{ Name: "Goal", Note: "", children: [{ Name: "Task", Note: "" }] }],
-      null,
-      2,
-    )}\n`);
+    ).toBe(
+      `${JSON.stringify(
+        [{ Name: "Goal", Note: "", children: [{ Name: "Task", Note: "" }] }],
+        null,
+        2,
+      )}\n`,
+    );
   });
 
   it("writes an empty array when the grid is empty", () => {
@@ -259,7 +264,9 @@ describe("gridExportCommands", () => {
       },
     ]).find((menu) => menu.id === "file");
 
-    expect(file?.sections.map((section) => [section.label, section.submenu === true])).toEqual([
+    expect(
+      file?.sections.map((section) => [section.label, section.submenu === true]),
+    ).toEqual([
       ["Inbox", false],
       ["Plan", false],
       ["Export", true],
@@ -270,5 +277,76 @@ describe("gridExportCommands", () => {
       "JSON",
       "YAML",
     ]);
+  });
+
+  it("offers Option-held copy as an alternate on each download row", () => {
+    // Finder rewrites the row. The permanent Copy to Clipboard family is the
+    // discoverable twin; this is the accelerator.
+    const [csv] = gridExportCommands(() => {});
+    expect(csv.alternate).toMatchObject({
+      label: "Copy CSV to Clipboard",
+      title: "Copy the current view as CSV to the clipboard",
+    });
+    expect(copyClipboardLabel("json")).toBe("Copy JSON to Clipboard");
+  });
+});
+
+describe("gridCopyCommands", () => {
+  it("lives in File ▸ Copy to Clipboard, not on the toolbar or the row menu", () => {
+    const commands = gridCopyCommands(() => {});
+    expect(commands.map((command) => command.label)).toEqual([
+      "Copy CSV to Clipboard",
+      "Copy JSON to Clipboard",
+      "Copy YAML to Clipboard",
+    ]);
+    expect(commands[0]).toMatchObject({
+      id: "grid.copy-csv",
+      menu: "file",
+      section: "Copy to Clipboard",
+      group: "view",
+    });
+    expect(commands.every((command) => command.toolbar === undefined)).toBe(true);
+    expect(unplacedCommands(commands)).toEqual([]);
+    expect(toolbarWithoutMenu(commands)).toEqual([]);
+  });
+
+  it("folds next to Export, after Plan and before Account", () => {
+    const file = buildMenus([
+      ...gridExportCommands(() => {}),
+      ...gridCopyCommands(() => {}),
+      {
+        id: "app.plan-week",
+        label: "Plan Week…",
+        group: "app",
+        menu: "file",
+        section: "Plan",
+        run: () => {},
+      },
+      {
+        id: "app.sign-out",
+        label: "Sign out",
+        group: "app",
+        menu: "file",
+        section: "Account",
+        run: () => {},
+      },
+    ]).find((menu) => menu.id === "file");
+
+    expect(
+      file?.sections.map((section) => [section.label, section.submenu === true]),
+    ).toEqual([
+      ["Plan", false],
+      ["Export", true],
+      ["Copy to Clipboard", true],
+      ["Account", false],
+    ]);
+  });
+});
+
+describe("gridExportFormatOf", () => {
+  it("reads the format off either family of ids", () => {
+    expect(gridExportFormatOf("grid.export-yaml")).toBe("yaml");
+    expect(gridExportFormatOf("grid.copy-json")).toBe("json");
+    expect(gridExportFormatOf("grid.export-xls")).toBeNull();
   });
 });

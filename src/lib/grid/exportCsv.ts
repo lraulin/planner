@@ -18,11 +18,24 @@ export const GRID_EXPORT_CSV_ID = "grid.export-csv";
 export const GRID_EXPORT_JSON_ID = "grid.export-json";
 export const GRID_EXPORT_YAML_ID = "grid.export-yaml";
 
-const FORMAT_LABEL: Record<GridExportFormat, string> = {
+export const FORMAT_LABEL: Record<GridExportFormat, string> = {
   csv: "CSV",
   json: "JSON",
   yaml: "YAML",
 };
+
+export type GridExportDestination = "file" | "clipboard";
+
+export function copyClipboardLabel(format: GridExportFormat): string {
+  return `Copy ${FORMAT_LABEL[format]} to Clipboard`;
+}
+
+export function gridExportFormatOf(id: string): GridExportFormat | null {
+  for (const format of GRID_EXPORT_FORMATS) {
+    if (id === `grid.export-${format}` || id === `grid.copy-${format}`) return format;
+  }
+  return null;
+}
 
 const FORMAT_MIME: Record<GridExportFormat, string> = {
   csv: "text/csv;charset=utf-8",
@@ -216,8 +229,13 @@ export function serializeGridExport<TRow extends DepthExportRow>(
  * File ▸ Export ▸ CSV / JSON / YAML. Menu only — occasional, not a toolbar verb, and
  * not a row action. `navigation.md`: a command without a menu is not shipped; the
  * unavailable-or-duplicated toolbar tests in `data-grid.md` keep this off the icon row.
+ *
+ * `alternate` is the Option-held copy. Pulldown menus swap to it; the Commands panel
+ * keeps the download label. `gridCopyCommands` is the always-visible twin.
  */
-export function gridExportCommands(run: (format: GridExportFormat) => void): Command[] {
+export function gridExportCommands(
+  run: (format: GridExportFormat, destination?: GridExportDestination) => void,
+): Command[] {
   return GRID_EXPORT_FORMATS.map((format) => ({
     id: `grid.export-${format}`,
     label: FORMAT_LABEL[format],
@@ -230,6 +248,30 @@ export function gridExportCommands(run: (format: GridExportFormat) => void): Com
       format === "csv"
         ? "Download the rows and columns currently on screen"
         : `Download the current view as ${FORMAT_LABEL[format]}, keeping parent/child nesting`,
+    alternate: {
+      label: copyClipboardLabel(format),
+      title: `Copy the current view as ${FORMAT_LABEL[format]} to the clipboard`,
+      run: () => run(format, "clipboard"),
+    },
+    run: () => run(format, "file"),
+  }));
+}
+
+/**
+ * File ▸ Copy to Clipboard ▸ CSV / JSON / YAML. The discoverable path for the same
+ * write Export's Option-swap performs — Commands panel, ⌘K, phone ⋯, and anyone who
+ * does not hold Option.
+ */
+export function gridCopyCommands(run: (format: GridExportFormat) => void): Command[] {
+  return GRID_EXPORT_FORMATS.map((format) => ({
+    id: `grid.copy-${format}`,
+    label: copyClipboardLabel(format),
+    group: "view",
+    menu: "file",
+    section: "Copy to Clipboard",
+    icon: "copy",
+    keywords: `copy clipboard ${format} export`,
+    title: `Copy the current view as ${FORMAT_LABEL[format]} to the clipboard`,
     run: () => run(format),
   }));
 }

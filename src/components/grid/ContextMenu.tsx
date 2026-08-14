@@ -51,6 +51,10 @@ export type MenuItem =
       disabled?: boolean;
       destructive?: boolean;
       onSelect: () => void;
+      /** Option/Alt held: show this label and fire this run. Finder's "Copy as Pathname". */
+      alternateLabel?: string;
+      alternateTitle?: string;
+      onAlternateSelect?: () => void;
     };
 
 type Selectable = Extract<MenuItem, { onSelect: () => void }>;
@@ -137,6 +141,9 @@ function commandItem(command: MenuSection["commands"][number]): MenuItem {
     disabled: command.disabled,
     destructive: command.destructive,
     onSelect: command.run,
+    alternateLabel: command.alternate?.label,
+    alternateTitle: command.alternate?.title,
+    onAlternateSelect: command.alternate?.run,
   };
 }
 
@@ -155,6 +162,7 @@ export function MenuList({
   onChoose,
   onOpenSubmenu,
   rowClassName = "",
+  alternate = false,
 }: {
   items: readonly MenuItem[];
   /** Keyboard highlight. `ColumnMenu` drives its own selection and passes nothing. */
@@ -162,9 +170,11 @@ export function MenuList({
   /** Which submenu row is currently flown out. Only `ContextMenu` tracks this. */
   openIndex?: number | null;
   onHover?: (index: number) => void;
-  onChoose: (item: Selectable) => void;
+  onChoose: (item: Selectable, event?: { altKey: boolean }) => void;
   /** Click or hover on a submenu row. Absent means submenu rows are inert (`ColumnMenu`). */
   onOpenSubmenu?: (index: number) => void;
+  /** Option/Alt is down — swap to `alternateLabel` on rows that have one. */
+  alternate?: boolean;
   /** Escape hatch for a container that imposes inherited type styling. */
   rowClassName?: string;
 }) {
@@ -201,6 +211,10 @@ export function MenuList({
 
         const nested = isSubmenu(item);
         const destructive = !nested && item.destructive === true;
+        const swapped =
+          !nested && alternate && isCommand(item) && item.alternateLabel !== undefined;
+        const label = swapped ? item.alternateLabel : item.label;
+        const title = swapped ? (item.alternateTitle ?? item.title) : item.title;
 
         return (
           <button
@@ -214,12 +228,14 @@ export function MenuList({
             aria-haspopup={nested ? "menu" : undefined}
             aria-expanded={nested ? openIndex === index : undefined}
             disabled={item.disabled}
-            title={item.title}
+            title={title}
             // A menu row is not a tab stop — the menu itself owns the keyboard. Chrome focuses a
             // `<button>` on mousedown, which mattered to nothing while every click closed the
             // menu, and starts mattering now that clicking a submenu row leaves it open.
             onMouseDown={(event) => event.preventDefault()}
-            onClick={() => (nested ? onOpenSubmenu?.(index) : onChoose(item))}
+            onClick={(event) =>
+              nested ? onOpenSubmenu?.(index) : onChoose(item, event)
+            }
             onMouseEnter={() => onHover?.(index)}
             className={[
               "flex w-full items-center gap-3 px-3 py-1 text-left text-[0.8125rem] leading-5",
@@ -243,7 +259,7 @@ export function MenuList({
                 <CommandGlyph icon={item.icon} />
               </span>
             )}
-            <span className="flex-1 truncate">{item.label}</span>
+            <span className="flex-1 truncate">{label}</span>
             {nested ? (
               <span
                 aria-hidden
@@ -291,6 +307,28 @@ export function ContextMenu({
   /** The submenu row currently flown out, and the highlight inside it. */
   const [openSub, setOpenSub] = useState<number | null>(null);
   const [subActive, setSubActive] = useState<number | null>(null);
+  /**
+   * Option/Alt is down. Finder rewrites the row you are looking at; we do the same.
+   * Keyup/keydown both report `altKey`, so one listener covers press and release.
+   * Window blur clears it so a focus-stealing Alt (Windows menu bar) cannot stick.
+   */
+  const [altHeld, setAltHeld] = useState(false);
+  useEffect(() => {
+    function sync(event: KeyboardEvent) {
+      setAltHeld(event.altKey);
+    }
+    function clear() {
+      setAltHeld(false);
+    }
+    window.addEventListener("keydown", sync);
+    window.addEventListener("keyup", sync);
+    window.addEventListener("blur", clear);
+    return () => {
+      window.removeEventListener("keydown", sync);
+      window.removeEventListener("keyup", sync);
+      window.removeEventListener("blur", clear);
+    };
+  }, []);
 
   const openItem = openSub === null ? null : items[openSub];
   const subItems = openItem && isSubmenu(openItem) ? openItem.items : null;
@@ -455,10 +493,14 @@ export function ContextMenu({
     return null;
   }
 
-  function choose(item: MenuItem) {
+  function choose(item: MenuItem, event?: { altKey: boolean }) {
     if (!isCommand(item) || item.disabled) return;
     onClose();
-    item.onSelect();
+    if ((altHeld || event?.altKey) && item.onAlternateSelect) {
+      item.onAlternateSelect();
+    } else {
+      item.onSelect();
+    }
   }
 
   /** Back out of an open fly-out; `false` when there was none, so the caller can close instead. */
@@ -619,6 +661,7 @@ export function ContextMenu({
         onOpenSubmenu={drilled ? undefined : openSubmenu}
         onHover={compact ? undefined : hover}
         onChoose={choose}
+        alternate={altHeld}
         // 44px rows on touch (`responsive.md`); the desktop's 20px rows are a mouse target.
         rowClassName={compact ? "min-h-tap" : ""}
       />
@@ -660,6 +703,7 @@ export function ContextMenu({
           activeIndex={subActive}
           onHover={setSubActive}
           onChoose={choose}
+          alternate={altHeld}
         />
       </div>
     </>

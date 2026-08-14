@@ -124,6 +124,16 @@ export type Command = {
    * desktop-only, so on a phone `⋯` is the only place they exist.
    */
   ownControl?: boolean;
+  /**
+   * Option/Alt held in a pulldown: the row swaps to this label and this run. Finder's
+   * "Copy as Pathname". Only `ContextMenu` honours it — the Commands panel and palette
+   * keep the primary label, and a permanent sibling command is the discoverable path.
+   */
+  alternate?: {
+    label: string;
+    title?: string;
+    run: () => void;
+  };
   run: () => void;
 };
 
