@@ -50,7 +50,8 @@ export const residencesColumns: ColumnDef<ResidencesColumnCtx, ResidenceGridRow>
     id: "country",
     label: "Country",
     width: "minmax(8rem,0.7fr)",
-    filterKind: "text",
+    // Few values, and "show me the Korean addresses" is a tick, not a search.
+    filterKind: "enum",
     filterValue: (row) => row.node.country || null,
     sortValue: (row) => row.node.country.toLowerCase(),
     compact: "meta",
@@ -108,7 +109,7 @@ export const residencesColumns: ColumnDef<ResidencesColumnCtx, ResidenceGridRow>
     id: "housing",
     label: "Housing",
     width: "7.5rem",
-    filterKind: "text",
+    filterKind: "enum",
     filterValue: (row) => row.node.housingType || null,
     sortValue: (row) => row.node.housingType.toLowerCase(),
     compact: "hidden",

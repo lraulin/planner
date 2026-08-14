@@ -110,7 +110,8 @@ export const jobsColumns: ColumnDef<JobsColumnCtx, JobGridRow>[] = [
     id: "type",
     label: "Type",
     width: "7.5rem",
-    filterKind: "text",
+    // A short suggested vocabulary — the checklist case. See the note on Timeline's Category.
+    filterKind: "enum",
     filterValue: (row) => row.node.employmentType || null,
     sortValue: (row) => row.node.employmentType.toLowerCase(),
     compact: "hidden",

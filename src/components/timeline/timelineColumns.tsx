@@ -111,7 +111,11 @@ export const timelineColumns: ColumnDef<TimelineColumnCtx, ChronologyRow>[] = [
     id: "category",
     label: "Category",
     width: "9rem",
-    filterKind: "text",
+    // `enum`, not `text`, even though the column is free text in the database. The kind picks
+    // the *control*, and `filters.ts` names Category as exactly the case a value checklist is
+    // right for: a small set you would have picked from a dropdown. Free text is how it is
+    // stored and typed; a checklist of what is in use is how it is filtered.
+    filterKind: "enum",
     // Free text on events, a fixed "Work" / "Home" on derived rows. The set filter offers
     // whatever is actually in use, which is the whole reason no vocabulary is maintained.
     filterValue: (row) => row.node.category || null,
@@ -169,7 +173,7 @@ export const timelineColumns: ColumnDef<TimelineColumnCtx, ChronologyRow>[] = [
     id: "source",
     label: "Source",
     width: "6.5rem",
-    filterKind: "text",
+    filterKind: "enum",
     filterValue: (row) => SOURCE_LABELS[row.node.source],
     sortValue: (row) => SOURCE_LABELS[row.node.source],
     compact: "hidden",
