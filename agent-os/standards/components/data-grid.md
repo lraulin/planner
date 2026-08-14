@@ -308,7 +308,8 @@ is the whole integration.
   falls back instead of stranding the grid.
 - **Only the select holds bar width.** Save / Save as / Rename / Delete register as commands
   and live behind `⋯`, per the three-tier table below. All four are available on shipped
-  defaults (which are ordinary editable views). Save needs its own feedback — it
+  defaults (ordinary editable views), except Delete when it is the last view on the
+  module. Save needs its own feedback — it
   writes what is already on screen, so nothing visibly happens. Unsaved changes is the
   dirty mark.
 

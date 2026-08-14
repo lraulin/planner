@@ -135,11 +135,20 @@ export function parseSavedViews(value: unknown): SavedViews {
     ? parseDeletedDefaults(record.deletedDefaults)
     : [];
 
-  // Shipped defaults (defaultSeed != null) bypass the user cap: they are always present
-  // regardless of how many user-created views exist.
-  const userViews = views.filter((v) => v.defaultSeed === null).slice(0, MAX_SAVED_VIEWS);
-  const seedViews = views.filter((v) => v.defaultSeed !== null);
-  return { views: [...userViews, ...seedViews], deletedDefaults };
+  // User-created rows count toward the cap; shipped defaults do not. Walk in stored
+  // order so a Save-as that landed after a preset does not jump on reload.
+  const kept: SavedView[] = [];
+  let userCount = 0;
+  for (const view of views) {
+    if (view.defaultSeed !== null) {
+      kept.push(view);
+      continue;
+    }
+    if (userCount >= MAX_SAVED_VIEWS) continue;
+    kept.push(view);
+    userCount += 1;
+  }
+  return { views: kept, deletedDefaults };
 }
 
 function parseSavedView(value: unknown): SavedView | null {
@@ -356,6 +365,9 @@ export function reconcileDefaultViews(
 }
 
 export function restoreDefaultViews(saved: SavedViews): SavedViews {
+  // Unique against every user view first, not only those already walked — a
+  // colliding Save-as can sit after the factory row in the catalogue.
+  const taken: SavedView[] = saved.views.filter((view) => view.defaultSeed === null);
   const restored: SavedView[] = [];
 
   for (const view of saved.views) {
@@ -364,23 +376,26 @@ export function restoreDefaultViews(saved: SavedViews): SavedViews {
       continue;
     }
     const seed = view.defaultSeed;
-    // If a user view already occupies the factory name, suffix the restored default.
-    const name = uniqueViewName({ views: restored, deletedDefaults: [] }, seed.name);
-    restored.push({
+    const name = uniqueViewName({ views: taken, deletedDefaults: [] }, seed.name);
+    const next = {
       ...view,
       name,
       base: seed.base,
       ...seed.settings,
-    });
+    };
+    restored.push(next);
+    taken.push(next);
   }
 
   const byId = new Set(restored.map((view) => view.id));
   for (const seed of saved.deletedDefaults) {
     if (byId.has(seed.id)) continue;
-    const currentSaved: SavedViews = { views: restored, deletedDefaults: [] };
-    restored.push(
-      defaultViewFromSeed({ ...seed, name: uniqueViewName(currentSaved, seed.name) }),
-    );
+    const next = defaultViewFromSeed({
+      ...seed,
+      name: uniqueViewName({ views: taken, deletedDefaults: [] }, seed.name),
+    });
+    restored.push(next);
+    taken.push(next);
   }
   return { views: restored, deletedDefaults: [] };
 }

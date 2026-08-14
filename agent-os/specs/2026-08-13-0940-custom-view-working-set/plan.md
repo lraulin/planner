@@ -51,6 +51,7 @@ This spec commits to **working-copy + explicit Save**. The live grid is a workin
 | 2   | Dropped Replace view….                                                                                                        | Save already overwrites the active saved view.                                                         |
 | 3   | Switch discards dirty, no prompt.                                                                                             | Confirmed; personal tool, not SAP-style.                                                               |
 | 4   | Shipped defaults are now ordinary editable/renamable views, with restore-defaults actions in Settings (module + global).    | Built-in read-only handling was unnecessary ceremony. Defaults should behave like any other view and be recoverable in one place. |
+| 5   | `MAX_SAVED_VIEWS` counts only user-created rows. Deleted shipped defaults are tombstoned until Settings restore. A module keeps at least one view. | After flattening the picker, the old user-only cap would drop factory views on parse, and delete needed a last-view guard. |
 
 ## Tasks
 

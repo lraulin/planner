@@ -208,6 +208,60 @@ describe("parseSavedViews", () => {
       MAX_SAVED_VIEWS,
     );
   });
+
+  it("keeps stored order and only drops excess user views", () => {
+    const seedView: SavedView = {
+      id: "active-status",
+      name: "Active Status",
+      base: "active-status",
+      order: null,
+      widths: {},
+      filters: {},
+      advancedFilter: null,
+      search: "",
+      sorts: [],
+      groupBy: [],
+      collapsedGroups: [],
+      density: "comfortable",
+      switches: {},
+      defaultSeed: {
+        id: "active-status",
+        name: "Active Status",
+        base: "active-status",
+        settings: {
+          order: null,
+          widths: {},
+          filters: {},
+          advancedFilter: null,
+          search: "",
+          sorts: [],
+          groupBy: [],
+          collapsedGroups: [],
+          density: "comfortable",
+          switches: {},
+        },
+      },
+    };
+    const mixed = saved(view("u1", "One"), seedView, view("u2", "Two"));
+    expect(parseSavedViews(serializeSavedViews(mixed)).views.map((v) => v.id)).toEqual([
+      "u1",
+      "active-status",
+      "u2",
+    ]);
+
+    const users = Array.from({ length: MAX_SAVED_VIEWS + 1 }, (_, i) =>
+      view(`saved-${i.toString().padStart(3, "0")}`, `User ${i}`),
+    );
+    const overflow: SavedViews = {
+      views: [...users.slice(0, 10), seedView, ...users.slice(10)],
+      deletedDefaults: [],
+    };
+    const parsed = parseSavedViews(serializeSavedViews(overflow));
+    expect(parsed.views.some((v) => v.id === seedView.id)).toBe(true);
+    expect(parsed.views.filter((v) => v.defaultSeed === null).map((v) => v.id)).toEqual(
+      users.slice(0, MAX_SAVED_VIEWS).map((v) => v.id),
+    );
+  });
 });
 
 describe("uniqueViewName", () => {
@@ -567,5 +621,19 @@ describe("restoreDefaultViews", () => {
     const result = restoreDefaultViews(withUser);
     const names = result.views.map((v) => v.name);
     expect(new Set(names).size).toBe(names.length);
+  });
+
+  it("suffixes the default even when the colliding user view comes after it", () => {
+    const userView = view("saved-user", "Active Status");
+    const seeded = reconcileDefaultViews(NO_SAVED_VIEWS, [seed]);
+    const withUser: SavedViews = {
+      views: [...seeded.views, userView],
+      deletedDefaults: [],
+    };
+    const result = restoreDefaultViews(withUser);
+    const names = result.views.map((v) => v.name);
+    expect(new Set(names).size).toBe(names.length);
+    expect(result.views.find((v) => v.id === "saved-user")?.name).toBe("Active Status");
+    expect(result.views.find((v) => v.id === seed.id)?.name).toMatch(/^Active Status \(/);
   });
 });
