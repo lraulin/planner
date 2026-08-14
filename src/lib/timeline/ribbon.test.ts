@@ -1,12 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
   axisTicks,
+  barInRange,
+  clampWindow,
   deriveRibbon,
   FOLD_COLOR_INDEX,
+  keyAtFraction,
+  MIN_WINDOW_DAYS,
   offsetPercent,
+  packLane,
+  pinLabelWidths,
   ribbonRange,
   type RibbonBar,
 } from "./ribbon";
+import { daysBetweenKeys as daysBetween } from "@/lib/schedule/geometry";
 import type { LifeEventDetail } from "./types";
 
 const NOW = new Date("2026-08-14T12:00:00Z");
@@ -53,15 +60,25 @@ function residence(
   };
 }
 
-/** The lane the ribbon puts residences in, and the one it puts jobs in. */
+/** The bars the ribbon puts in one lane, packed the way the component packs them. */
 function laneRows(ribbon: ReturnType<typeof deriveRibbon>, id: "home" | "work") {
   const lane = ribbon.lanes.find((entry) => entry.id === id);
   if (!lane) throw new Error(`no ${id} lane`);
-  return lane.rows;
+  return packLane(lane.bars);
 }
 
 function labels(rows: RibbonBar[][]): string[][] {
   return rows.map((row) => row.map((bar) => bar.label));
+}
+
+/** The range a reader gets after dragging out exactly this window. */
+function windowRange(startKey: string, endKey: string) {
+  const range = ribbonRange({ minKey: startKey, maxKey: endKey }, null, {
+    startKey,
+    endKey,
+  });
+  if (!range) throw new Error("range");
+  return range;
 }
 
 describe("deriveRibbon", () => {
@@ -339,7 +356,6 @@ describe("pins and their colours", () => {
     expect(categories).toEqual([{ label: "Pets", colorIndex: 0 }]);
   });
 });
-
 describe("bounds", () => {
   it("spans every dated thing on the page, from all three sources", () => {
     const ribbon = deriveRibbon(
@@ -359,13 +375,10 @@ describe("bounds", () => {
 describe("ribbonRange", () => {
   const bounds = { minKey: "2014-08-01", maxKey: "2022-06-30" };
 
-  it("rounds out to whole calendar years so every tick is a January", () => {
-    const range = ribbonRange(bounds, null);
-    expect(range).toMatchObject({
+  it("rounds the default view out to whole calendar years", () => {
+    expect(ribbonRange(bounds, null)).toMatchObject({
       startKey: "2014-01-01",
       endKey: "2022-12-31",
-      startYear: 2014,
-      endYear: 2022,
     });
   });
 
@@ -384,65 +397,229 @@ describe("ribbonRange", () => {
     expect(ribbonRange(bounds, null)?.endKey).toBe("2022-12-31");
   });
 
-  it("gives a single-year history a full year of axis rather than a zero-width one", () => {
-    const range = ribbonRange({ minKey: "2020-03-01", maxKey: "2020-03-02" }, null);
-    expect(range?.totalDays).toBe(365); // 2020 is a leap year: Jan 1 → Dec 31
+  it("uses a dragged window exactly, without rounding it to years", () => {
+    // The reader asked for these dates. Rounding them out would undo the gesture.
+    expect(
+      ribbonRange(bounds, "2026-08-14", {
+        startKey: "2015-03-04",
+        endKey: "2016-09-19",
+      }),
+    ).toEqual({ startKey: "2015-03-04", endKey: "2016-09-19", totalDays: 565 });
   });
 
   it("is null when there is nothing to draw", () => {
     expect(ribbonRange(null, "2026-08-14")).toBeNull();
+    // A window over nothing is still nothing — the page shows its empty state either way.
+    expect(
+      ribbonRange(null, null, { startKey: "2015-01-01", endKey: "2016-01-01" }),
+    ).toBeNull();
   });
 });
 
-describe("offsetPercent", () => {
-  const range = ribbonRange({ minKey: "2020-01-01", maxKey: "2020-12-31" }, null);
+describe("offsetPercent and keyAtFraction", () => {
+  const range = ribbonRange({ minKey: "2020-01-01", maxKey: "2020-12-31" }, null)!;
 
   it("puts the first day at 0 and the last at 100", () => {
-    expect(offsetPercent(range!, "2020-01-01")).toBe(0);
-    expect(offsetPercent(range!, "2020-12-31")).toBe(100);
+    expect(offsetPercent(range, "2020-01-01")).toBe(0);
+    expect(offsetPercent(range, "2020-12-31")).toBe(100);
   });
 
   it("clamps a date outside the range instead of drawing off the container", () => {
-    expect(offsetPercent(range!, "1998-01-01")).toBe(0);
-    expect(offsetPercent(range!, "2099-01-01")).toBe(100);
+    expect(offsetPercent(range, "1998-01-01")).toBe(0);
+    expect(offsetPercent(range, "2099-01-01")).toBe(100);
+  });
+
+  it("round-trips a position back to the date under it", () => {
+    // The drag reads dates off the ribbon this way; a drift here would move what you selected.
+    for (const key of ["2020-01-01", "2020-04-11", "2020-07-01", "2020-12-31"]) {
+      expect(keyAtFraction(range, offsetPercent(range, key) / 100)).toBe(key);
+    }
+  });
+
+  it("clamps a fraction from a pointer that left the container", () => {
+    expect(keyAtFraction(range, -0.4)).toBe("2020-01-01");
+    expect(keyAtFraction(range, 1.8)).toBe("2020-12-31");
+  });
+});
+
+describe("clampWindow", () => {
+  it("orders a backwards drag", () => {
+    expect(clampWindow("2016-01-01", "2012-01-01")).toEqual({
+      startKey: "2012-01-01",
+      endKey: "2016-01-01",
+    });
+  });
+
+  it("leaves a window that is already wide enough alone", () => {
+    expect(clampWindow("2012-01-01", "2016-01-01")).toEqual({
+      startKey: "2012-01-01",
+      endKey: "2016-01-01",
+    });
+  });
+
+  it("widens a too-narrow drag around its middle rather than rejecting it", () => {
+    // A few pixels across thirty years is a handful of days, and the reader meant "in here".
+    const window = clampWindow("2015-06-10", "2015-06-12");
+    expect(daysBetween(window.startKey, window.endKey)).toBeGreaterThanOrEqual(
+      MIN_WINDOW_DAYS,
+    );
+    expect(window.startKey < "2015-06-10").toBe(true);
+    expect(window.endKey > "2015-06-12").toBe(true);
+  });
+
+  it("survives a drag that never moved", () => {
+    const window = clampWindow("2015-06-10", "2015-06-10");
+    expect(daysBetween(window.startKey, window.endKey)).toBeGreaterThanOrEqual(
+      MIN_WINDOW_DAYS,
+    );
+  });
+});
+
+describe("barInRange", () => {
+  const range = windowRange("2010-01-01", "2015-01-01");
+
+  function bar(startKey: string | null, endKey: string | null): RibbonBar {
+    return {
+      id: "b",
+      source: "job",
+      sourceId: "j",
+      label: "x",
+      detail: "",
+      startKey,
+      endKey,
+    };
+  }
+
+  it("keeps a span that only overlaps the window at one edge", () => {
+    expect(barInRange(bar("2005-01-01", "2010-01-01"), range)).toBe(true);
+    expect(barInRange(bar("2015-01-01", "2020-01-01"), range)).toBe(true);
+  });
+
+  it("drops a span that finished before the window or starts after it", () => {
+    expect(barInRange(bar("2005-01-01", "2009-12-31"), range)).toBe(false);
+    expect(barInRange(bar("2015-01-02", "2020-01-01"), range)).toBe(false);
+  });
+
+  it("keeps a half-open span whose recorded end reaches into the window", () => {
+    // Ongoing and unknown-start bars reach forever; cropping them out would hide a current job.
+    expect(barInRange(bar("2005-01-01", null), range)).toBe(true);
+    expect(barInRange(bar(null, "2012-01-01"), range)).toBe(true);
+    expect(barInRange(bar(null, null), range)).toBe(true);
   });
 });
 
 describe("axisTicks", () => {
-  function range(startYear: number, endYear: number) {
-    const value = ribbonRange(
-      { minKey: `${startYear}-06-01`, maxKey: `${endYear}-06-01` },
-      null,
-    );
-    if (!value) throw new Error("range");
-    return value;
-  }
+  const range = windowRange;
 
   it("lands ticks on round multiples, not on the range's own first year", () => {
-    // A decade axis beginning at 1997 reads as arbitrary.
-    expect(axisTicks(range(1997, 2026), null).map((tick) => tick.year)).toEqual([
-      2000, 2005, 2010, 2015, 2020, 2025,
+    // A decade axis beginning at 1997 reads as arbitrary. Thirty years across 900px earns a
+    // two-year step, and every mark it produces is an even year.
+    const years = axisTicks(range("1997-01-01", "2026-12-31"), 900).map((tick) =>
+      Number(tick.label),
+    );
+    expect(years[0]).toBe(1998);
+    expect(years.every((year) => year % 2 === 0)).toBe(true);
+  });
+
+  it("uses whole years as the step as soon as one year has room for a label", () => {
+    expect(
+      axisTicks(range("2000-01-01", "2020-12-31"), 1200).map((t) => t.label),
+    ).toEqual(Array.from({ length: 21 }, (_, index) => String(2000 + index)));
+  });
+
+  it("thins the labels when the container is too narrow for them", () => {
+    expect(
+      axisTicks(range("2000-01-01", "2020-12-31"), 300).map((t) => t.label),
+    ).toEqual(["2000", "2005", "2010", "2015", "2020"]);
+  });
+
+  it("drops to months once the window is short enough to need them", () => {
+    // The whole point of a range control: a year label alone says nothing inside one year.
+    const ticks = axisTicks(range("2015-01-01", "2015-06-30"), 900);
+    expect(ticks.map((tick) => tick.label)).toEqual([
+      "Jan 2015",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
     ]);
   });
 
-  it("widens the step at Fit so a long life does not print thirty labels", () => {
-    expect(axisTicks(range(1980, 2026), null).length).toBeLessThanOrEqual(8);
+  it("names the year on the first mark even when the window starts mid-year", () => {
+    // Otherwise a window inside one year never says which year it is.
+    const ticks = axisTicks(range("2015-02-10", "2015-08-20"), 900);
+    expect(ticks[0].label).toBe("Mar 2015");
+    expect(ticks[1].label).toBe("Apr");
   });
 
-  it("uses every year when a fixed zoom gives each label room", () => {
-    expect(axisTicks(range(2018, 2022), 200).map((tick) => tick.year)).toEqual([
-      2018, 2019, 2020, 2021, 2022,
+  it("marks year boundaries as major so the reader has something to count by", () => {
+    const ticks = axisTicks(range("2014-06-01", "2016-06-01"), 900);
+    expect(ticks.filter((tick) => tick.major).map((tick) => tick.dateKey)).toEqual([
+      "2015-01-01",
+      "2016-01-01",
     ]);
   });
 
-  it("thins the labels when a fixed zoom is too tight for them", () => {
-    // 20px per year cannot carry a four-digit label every year.
-    expect(axisTicks(range(2000, 2020), 20).map((tick) => tick.year)).toEqual([
-      2000, 2005, 2010, 2015, 2020,
-    ]);
+  it("assumes a narrow container before it has been measured", () => {
+    // First paint must be sparse and then thicken, never start overlapping.
+    const measured = axisTicks(range("2000-01-01", "2020-12-31"), 1200);
+    const unmeasured = axisTicks(range("2000-01-01", "2020-12-31"), null);
+    expect(unmeasured.length).toBeLessThan(measured.length);
   });
 
-  it("gives a one-year range its single tick", () => {
-    expect(axisTicks(range(2020, 2020), null).map((tick) => tick.year)).toEqual([2020]);
+  it("never draws a mark behind the left edge of a window that starts mid-month", () => {
+    // The aligned tick for February is the 1st, and the window starts on the 10th. Drawing it
+    // would clamp it to 0% and label the edge with a date the reader did not select.
+    const ticks = axisTicks(range("2015-02-10", "2015-08-20"), 900);
+    expect(ticks.every((tick) => tick.dateKey >= "2015-02-10")).toBe(true);
+  });
+});
+
+describe("pinLabelWidths", () => {
+  const range = windowRange("2020-01-01", "2020-12-31");
+
+  function pinAt(id: string, dateKey: string) {
+    return { id, sourceId: id, dateKey, title: id, category: "", colorIndex: 0 };
+  }
+
+  it("gives a lone pin the rest of the ribbon to write in", () => {
+    const [room] = pinLabelWidths([pinAt("a", "2020-01-01")], range, 1000);
+    expect(room).toBeCloseTo(992, 0);
+  });
+
+  it("gives each pin only the room up to the next one", () => {
+    const rooms = pinLabelWidths(
+      [pinAt("a", "2020-01-01"), pinAt("b", "2020-07-01")], // roughly half way
+      range,
+      1000,
+    );
+    expect(rooms[0]).toBeGreaterThan(400);
+    expect(rooms[0]).toBeLessThan(520);
+  });
+
+  it("withholds a label there is no room for rather than printing an ellipsis", () => {
+    const rooms = pinLabelWidths(
+      [pinAt("a", "2020-06-01"), pinAt("b", "2020-06-08")],
+      range,
+      400,
+    );
+    expect(rooms[0]).toBeNull();
+    expect(rooms[1]).not.toBeNull();
+  });
+
+  it("drops the earlier of two pins on the same day and keeps the later one", () => {
+    // Two labels drawn on top of each other is worse than one label and a tooltip.
+    const rooms = pinLabelWidths(
+      [pinAt("a", "2020-03-01"), pinAt("b", "2020-03-01")],
+      range,
+      1000,
+    );
+    expect(rooms[0]).toBeNull();
+    expect(rooms[1]).not.toBeNull();
+  });
+
+  it("shows no labels until the container has been measured", () => {
+    expect(pinLabelWidths([pinAt("a", "2020-03-01")], range, null)).toEqual([null]);
   });
 });

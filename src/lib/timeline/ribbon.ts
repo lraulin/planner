@@ -1,5 +1,5 @@
 import { formatPostalAddress } from "@/lib/address";
-import { daysBetweenKeys } from "@/lib/schedule/geometry";
+import { daysBetweenKeys, shiftDateKey } from "@/lib/schedule/geometry";
 import { employerName, residenceName } from "./naming";
 import type { LifeEventDetail } from "./types";
 
@@ -21,6 +21,11 @@ import type { LifeEventDetail } from "./types";
  * depends on it — where an ongoing bar stops, where the axis ends — is in `ribbonRange` and in
  * the component. That split is what lets the expensive half be computed on the server and stay
  * deterministic under test.
+ *
+ * **Packing happens at render, not here.** Which bars are on screen depends on the window the
+ * reader has dragged out, so `deriveRibbon` hands over a flat list per lane and the component
+ * calls {@link packLane} on the ones it is actually drawing. Packing the whole life on the server
+ * and then filtering would leave a lane full of sub-rows holding nothing.
  */
 
 export type RibbonBarSource = "job" | "residence";
@@ -44,11 +49,7 @@ export type RibbonLaneId = "home" | "work";
 export type RibbonLane = {
   id: RibbonLaneId;
   label: string;
-  /**
-   * Sub-rows. Two bars that overlap in time land on different ones, so a lease that runs past a
-   * move stacks instead of drawing over the address that replaced it.
-   */
-  rows: RibbonBar[][];
+  bars: RibbonBar[];
 };
 
 export type RibbonPin = {
@@ -140,8 +141,8 @@ export function deriveRibbon(
 
   return {
     lanes: [
-      { id: "home", label: LANE_LABELS.home, rows: packLane(homeBars) },
-      { id: "work", label: LANE_LABELS.work, rows: packLane(workBars) },
+      { id: "home", label: LANE_LABELS.home, bars: homeBars },
+      { id: "work", label: LANE_LABELS.work, bars: workBars },
     ],
     pins,
     categories,
@@ -160,7 +161,7 @@ export function deriveRibbon(
  * Touching is not overlapping: a residence you left on the day you moved into the next one shares
  * a row, and the two bars read as one continuous band, which is what happened.
  */
-function packLane(bars: readonly RibbonBar[]): RibbonBar[][] {
+export function packLane(bars: readonly RibbonBar[]): RibbonBar[][] {
   const sorted = [...bars].sort(
     (a, b) =>
       effectiveStart(a).localeCompare(effectiveStart(b)) || a.id.localeCompare(b.id),
@@ -256,42 +257,45 @@ function boundsOf(
   };
 }
 
-/** The drawn axis: whole calendar years, so a tick is always a January 1st. */
-export type RibbonRange = {
-  startKey: string;
-  endKey: string;
-  startYear: number;
-  endYear: number;
-  totalDays: number;
-};
+/**
+ * The stretch of time the ribbon is currently drawing, always filling the container.
+ *
+ * There is no zoom control and no horizontal scrolling: the range **is** the zoom, so narrowing it
+ * magnifies what is left. That is one idea where two were fighting — a `Years` zoom used to start
+ * you at 1997 and make you pan to reach 2015, which is the long way round to "show me 2015".
+ */
+export type RibbonRange = { startKey: string; endKey: string; totalDays: number };
+
+/** A reader-chosen stretch, from dragging across the ribbon. `null` is the whole life. */
+export type RibbonWindow = { startKey: string; endKey: string };
 
 /**
- * Widen the recorded bounds to whole years, and out to today if today is later.
+ * What to draw: the dragged window if there is one, otherwise everything, rounded out to whole
+ * years so the default view's ticks land on Januaries.
  *
- * `todayKey` is `null` on the server and before hydration, and the axis then simply ends at the
+ * `todayKey` is `null` on the server and before hydration, and the default range then ends at the
  * last recorded date. That is a correct drawing of what is known rather than a placeholder — an
  * ongoing bar reaching the right edge is exactly what "still going" looks like — so nothing has to
- * suppress the ribbon until it hydrates.
+ * suppress the ribbon until it hydrates. A window, being explicit, is used as given.
  */
 export function ribbonRange(
   bounds: RibbonBounds | null,
   todayKey: string | null,
+  window: RibbonWindow | null = null,
 ): RibbonRange | null {
   if (!bounds) return null;
+  if (window) return rangeOf(window.startKey, window.endKey);
 
   const startYear = yearOf(bounds.minKey);
   const lastKey = todayKey && todayKey > bounds.maxKey ? todayKey : bounds.maxKey;
-  const endYear = yearOf(lastKey);
+  return rangeOf(`${pad4(startYear)}-01-01`, `${pad4(yearOf(lastKey))}-12-31`);
+}
 
-  const startKey = `${pad4(startYear)}-01-01`;
-  const endKey = `${pad4(endYear)}-12-31`;
-
+function rangeOf(startKey: string, endKey: string): RibbonRange {
   return {
     startKey,
     endKey,
-    startYear,
-    endYear,
-    totalDays: daysBetweenKeys(startKey, endKey),
+    totalDays: Math.max(1, daysBetweenKeys(startKey, endKey)),
   };
 }
 
@@ -301,44 +305,160 @@ export function offsetPercent(range: RibbonRange, key: string): number {
   return Math.min(100, Math.max(0, raw));
 }
 
-export type RibbonTick = { year: number; dateKey: string };
+/** The date under a point on the ribbon, as a fraction of its width. The inverse of the above. */
+export function keyAtFraction(range: RibbonRange, fraction: number): string {
+  const clamped = Math.min(1, Math.max(0, fraction));
+  return shiftDateKey(range.startKey, Math.round(clamped * range.totalDays));
+}
 
 /**
- * The year marks to label, at a step that keeps them from colliding.
+ * A window narrow enough to be useless is widened around its own middle rather than rejected.
  *
- * Two regimes, because the ribbon has two: at a fixed zoom the width per year is known, so the
- * step is whatever gives each label its ~44px. At `Fit` the width is whatever the container
- * happens to be — the same markup serves a 390px phone and a 1440px desktop — so the step comes
- * from a label budget instead, sized for the narrow end. Measuring the container to do better
- * would buy a denser desktop axis at the cost of a `ResizeObserver` in a static picture.
- *
- * Ticks land on multiples of the step (1990, 2000, 2010), not on the range's own first year,
- * because a decade axis starting at 1997 reads as arbitrary.
+ * A drag of a few pixels across thirty years is a handful of days, and the reader who did it meant
+ * "in here somewhere", not "these four days". Snapping back to nothing would make a slightly
+ * imprecise gesture feel broken; widening keeps the gesture cheap to attempt.
  */
-export function axisTicks(range: RibbonRange, pxPerYear: number | null): RibbonTick[] {
-  const step = tickStep(range.endYear - range.startYear + 1, pxPerYear);
-  const first = Math.ceil(range.startYear / step) * step;
+export const MIN_WINDOW_DAYS = 30;
+
+export function clampWindow(startKey: string, endKey: string): RibbonWindow {
+  const [from, to] = startKey <= endKey ? [startKey, endKey] : [endKey, startKey];
+  const days = daysBetweenKeys(from, to);
+  if (days >= MIN_WINDOW_DAYS) return { startKey: from, endKey: to };
+
+  const grow = Math.ceil((MIN_WINDOW_DAYS - days) / 2);
+  return { startKey: shiftDateKey(from, -grow), endKey: shiftDateKey(to, grow) };
+}
+
+/** Whether any part of a span falls inside the drawn range. Half-open ends reach forever. */
+export function barInRange(bar: RibbonBar, range: RibbonRange): boolean {
+  return effectiveStart(bar) <= range.endKey && effectiveEnd(bar) >= range.startKey;
+}
+
+export type RibbonTick = {
+  dateKey: string;
+  label: string;
+  /** A year boundary — drawn brighter, because it is what the reader is orienting by. */
+  major: boolean;
+};
+
+/**
+ * Axis marks at whatever granularity the current width can carry.
+ *
+ * Steps are whole months so that every tick is a real calendar boundary, and aligning to multiples
+ * of the step falls out for free: a 60-month step lands on years divisible by five because
+ * `year * 12` is divisible by 60 exactly when the year is. Ticks land on those multiples rather
+ * than on the range's own first day, since an axis beginning at "17 March 1997" reads as arbitrary.
+ *
+ * `widthPx` is `null` until the container has been measured; the assumed width is the narrow end,
+ * so the first paint is sparse rather than overlapping and then thickens.
+ */
+export function axisTicks(range: RibbonRange, widthPx: number | null): RibbonTick[] {
+  const width = widthPx ?? ASSUMED_WIDTH_PX;
+  const pxPerDay = width / range.totalDays;
+  const step =
+    TICK_STEPS_MONTHS.find(
+      (months) => months * DAYS_PER_MONTH * pxPerDay >= MIN_TICK_PX,
+    ) ?? TICK_STEPS_MONTHS[TICK_STEPS_MONTHS.length - 1];
+
+  const startIndex = monthIndex(range.startKey);
+  const first = Math.ceil(startIndex / step) * step;
 
   const ticks: RibbonTick[] = [];
-  for (let year = first; year <= range.endYear; year += step) {
-    ticks.push({ year, dateKey: `${pad4(year)}-01-01` });
+  for (let index = first; ; index += step) {
+    const dateKey = keyOfMonthIndex(index);
+    if (dateKey > range.endKey) break;
+    // A window starting mid-month aligns to the 1st, which is *behind* the left edge. Drawing it
+    // would clamp it to 0% and label the edge with a month the reader did not select.
+    if (dateKey < range.startKey) continue;
+    // The first mark carries the year even mid-year, or a range inside one year never names it.
+    const major = index % 12 === 0;
+    ticks.push({
+      dateKey,
+      label: tickLabel(index, step, major || ticks.length === 0),
+      major,
+    });
   }
   return ticks;
 }
 
-const TICK_STEPS = [1, 2, 5, 10, 25, 50, 100] as const;
-/** Roughly a four-digit label plus breathing room. */
-const MIN_LABEL_PX = 44;
-/** How many labels a 390px ribbon can carry at `Fit` before they run together. */
-const FIT_LABEL_BUDGET = 6;
+/** 1 / 3 / 6 months, then 1, 2, 5, 10, 25, 50, 100 years. */
+const TICK_STEPS_MONTHS = [1, 3, 6, 12, 24, 60, 120, 300, 600, 1200] as const;
+/** Roughly a label plus breathing room. */
+const MIN_TICK_PX = 56;
+/** The narrow end — a phone — used until a real measurement arrives. */
+const ASSUMED_WIDTH_PX = 360;
+const DAYS_PER_MONTH = 365.25 / 12;
 
-function tickStep(years: number, pxPerYear: number | null): number {
-  const fits = (step: number) =>
-    pxPerYear === null
-      ? years / step <= FIT_LABEL_BUDGET
-      : step * pxPerYear >= MIN_LABEL_PX;
-  return TICK_STEPS.find(fits) ?? TICK_STEPS[TICK_STEPS.length - 1];
+const MONTH_NAMES = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
+
+/**
+ * `"2015"` at a year or coarser; `"Mar"` below that, with the year attached where it changes.
+ *
+ * Deliberately not `useDateFormatter`: that renders a *record's* date in the reader's chosen
+ * format, and an axis mark is a scale, not a value. "3/1/2015" on a tick would claim something
+ * happened that day.
+ */
+function tickLabel(index: number, step: number, withYear: boolean): string {
+  const year = Math.floor(index / 12);
+  if (step >= 12) return String(year);
+  const month = MONTH_NAMES[index % 12];
+  return withYear ? `${month} ${year}` : month;
 }
+
+/** Months since year 0, the unit every tick step is a multiple of. */
+function monthIndex(key: string): number {
+  return yearOf(key) * 12 + (Number(key.slice(5, 7)) - 1);
+}
+
+function keyOfMonthIndex(index: number): string {
+  return `${pad4(Math.floor(index / 12))}-${pad2((index % 12) + 1)}-01`;
+}
+
+/**
+ * How much room each pin has for a label before it would run into the next one.
+ *
+ * `null` means "no room, leave it to the tooltip". Returning the available width rather than a
+ * yes/no lets the label truncate into whatever it got, which is why nothing here has to guess how
+ * wide a string renders — the browser already knows, and a character-count estimate would be wrong
+ * in exactly the crowded cases that matter.
+ *
+ * Pins must arrive sorted by date, as `deriveRibbon` leaves them. Two events on the same day give
+ * the earlier one a gap of zero, so it drops its label and the later one keeps its own — better
+ * than two labels drawn on top of each other.
+ */
+export function pinLabelWidths(
+  pins: readonly RibbonPin[],
+  range: RibbonRange,
+  widthPx: number | null,
+): (number | null)[] {
+  if (widthPx === null) return pins.map(() => null);
+
+  return pins.map((pin, index) => {
+    const x = (offsetPercent(range, pin.dateKey) / 100) * widthPx;
+    const next = pins[index + 1];
+    const limit = next ? (offsetPercent(range, next.dateKey) / 100) * widthPx : widthPx;
+    const room = limit - x - PIN_LABEL_GAP_PX;
+    return room >= MIN_PIN_LABEL_PX ? room : null;
+  });
+}
+
+/** Below this a label is an ellipsis and a letter, which teaches less than no label at all. */
+const MIN_PIN_LABEL_PX = 44;
+/** Clear air between one label and the next pin's dot. */
+const PIN_LABEL_GAP_PX = 8;
 
 function yearOf(key: string): number {
   return Number(key.slice(0, 4));
@@ -346,4 +466,8 @@ function yearOf(key: string): number {
 
 function pad4(year: number): string {
   return String(year).padStart(4, "0");
+}
+
+function pad2(value: number): string {
+  return String(value).padStart(2, "0");
 }

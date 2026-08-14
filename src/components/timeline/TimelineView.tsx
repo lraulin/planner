@@ -22,7 +22,12 @@ import type { GridDefaults } from "@/components/grid/useGridState";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { useToday } from "@/components/grid/useToday";
-import { ErrorBanner, TabToolbar, ToolbarSegments } from "@/components/tabs/tabChrome";
+import {
+  ErrorBanner,
+  TabToolbar,
+  ToolbarButton,
+  ToolbarSegments,
+} from "@/components/tabs/tabChrome";
 import { useSetting, type SettingCodec } from "@/components/settings/SettingsProvider";
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import { isTypingTarget } from "@/lib/keyboard";
@@ -31,11 +36,9 @@ import { TIMELINE_SCOPE } from "@/lib/settings/scopes";
 import {
   parseTimelineSettings,
   serializeTimelineSettings,
-  TIMELINE_ZOOMS,
-  ZOOM_LABELS,
   type TimelinePresentation,
   type TimelineSettings,
-  type TimelineZoom,
+  type TimelineWindow,
 } from "@/lib/settings/timeline";
 import { TimelineRibbon } from "./TimelineRibbon";
 import {
@@ -63,8 +66,6 @@ const PRESENTATIONS = [
     title: "The picture: how long each job and address lasted, and what overlapped",
   },
 ];
-
-const ZOOMS = TIMELINE_ZOOMS.map((zoom) => ({ value: zoom, label: ZOOM_LABELS[zoom] }));
 
 function viewDefaults(): GridDefaults {
   return {
@@ -279,8 +280,9 @@ export function TimelineView({
     [patchSettings],
   );
 
-  const setZoom = useCallback(
-    (next: TimelineZoom) => patchSettings((current) => ({ ...current, zoom: next })),
+  const setWindow = useCallback(
+    (next: TimelineWindow | null) =>
+      patchSettings((current) => ({ ...current, window: next })),
     [patchSettings],
   );
 
@@ -357,19 +359,29 @@ export function TimelineView({
         */}
         <TabToolbar>
           {presentationToggle}
-          <ToolbarSegments
-            label="Zoom"
-            options={ZOOMS}
-            value={settings.zoom}
-            onChange={setZoom}
-          />
+          {/*
+            The chip is the only *visible* half of the range control — dragging is the way you set
+            one, which is an invisible affordance, so what is on the bar says which stretch you are
+            looking at and offers the way back out. `navigation.md` does not let a state you can
+            get into have no signposted exit; double-clicking the ribbon does the same thing for
+            someone who has learned the gesture.
+          */}
+          {settings.window && (
+            <ToolbarButton
+              onClick={() => setWindow(null)}
+              title="Back to the whole timeline"
+            >
+              {formatWindow(settings.window)} ✕
+            </ToolbarButton>
+          )}
         </TabToolbar>
 
         {error && <ErrorBanner message={error} />}
 
         <TimelineRibbon
           ribbon={ribbon}
-          zoom={settings.zoom}
+          window={settings.window}
+          onWindowChange={setWindow}
           onOpenRecord={openBar}
           onSelectEvent={openPin}
           empty={emptyState}
@@ -438,4 +450,36 @@ export function TimelineView({
       />
     </div>
   );
+}
+
+/**
+ * `"2014 – 2020"`, or `"Mar – Sep 2015"` inside one year.
+ *
+ * Years, not exact dates, even though the window is stored as dates: the chip answers "roughly
+ * where am I" at a glance, and a drag lands on an arbitrary day that nobody chose on purpose.
+ */
+function formatWindow(window: TimelineWindow): string {
+  const from = window.startKey.slice(0, 4);
+  const to = window.endKey.slice(0, 4);
+  if (from !== to) return `${from} – ${to}`;
+
+  const months = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
+  const startMonth = months[Number(window.startKey.slice(5, 7)) - 1];
+  const endMonth = months[Number(window.endKey.slice(5, 7)) - 1];
+  return startMonth === endMonth
+    ? `${startMonth} ${from}`
+    : `${startMonth} – ${endMonth} ${from}`;
 }

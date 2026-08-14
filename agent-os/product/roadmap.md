@@ -652,6 +652,11 @@ flavor; optional palette thinning).
   A `Grid | Timeline` toggle **inside** `/library/timeline` rather than a second Library
   page — both presentations derive from the same one read, so a route would buy nothing.
   Out: filtering the picture, editing from it, an age axis, a pin lane per category.
+- **✅ Range and event labels.** `specs/2026-08-14-1805-timeline-range-and-labels`. Drag
+  across the ribbon to look at that stretch and it fills the container, which replaced the
+  zoom control outright — narrowing the range _is_ zooming in, and nothing scrolls
+  sideways any more. Event titles print beside their dots wherever there is room. Out:
+  keyboard access to the range, and panning a narrowed window.
 
 ### AI integration
 
