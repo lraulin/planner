@@ -100,9 +100,10 @@ function explicitRange(
 
 async function loadAnalyzed(userId: string, args: Record<string, unknown>) {
   const parsed = parseFinanceWindow(args);
-  const [rows, bills] = await Promise.all([
+  const [rows, bills, statements] = await Promise.all([
     loadInsightsRows(userId),
     loadRecurringBills(userId),
+    listStatements(userId),
   ]);
   const analysis = analyzeInsights(rows, bills, {
     filter: parsed.filter,
@@ -111,6 +112,7 @@ async function loadAnalyzed(userId: string, args: Record<string, unknown>) {
     levelRecurring: parsed.levelRecurring,
     today: localDateKey(),
     range: explicitRange(parsed, rowsRange(rows)),
+    statements,
   });
   return { rows, parsed, analysis };
 }
@@ -125,6 +127,9 @@ function flattenFlowPoint(point: {
   trailingSpendCents: number | null;
   trailingIncomeCents: number | null;
   trailingNetCents: number | null;
+  statementPositionCents?: number | null;
+  statementNetCents?: number | null;
+  discrepancyCents?: number | null;
 }) {
   return {
     key: point.bucket.key,
@@ -139,6 +144,9 @@ function flattenFlowPoint(point: {
     trailingSpendCents: point.trailingSpendCents,
     trailingIncomeCents: point.trailingIncomeCents,
     trailingNetCents: point.trailingNetCents,
+    statementPositionCents: point.statementPositionCents ?? null,
+    statementNetCents: point.statementNetCents ?? null,
+    discrepancyCents: point.discrepancyCents ?? null,
   };
 }
 
@@ -197,6 +205,8 @@ export async function getCashFlowTool(userId: string, args: Record<string, unkno
         fixedCents: 0,
         variableCents: 0,
         netCents: 0,
+        statementNetCents: null,
+        discrepancyCents: null,
       },
       income: EMPTY_INCOME,
       baseline: EMPTY_BASELINE,
@@ -210,6 +220,14 @@ export async function getCashFlowTool(userId: string, args: Record<string, unkno
       fixedCents: sum.fixedCents + point.fixedCents,
       variableCents: sum.variableCents + point.variableCents,
       netCents: sum.netCents + point.netCents,
+      statementNetCents:
+        point.statementNetCents === null || point.statementNetCents === undefined
+          ? sum.statementNetCents
+          : (sum.statementNetCents ?? 0) + point.statementNetCents,
+      discrepancyCents:
+        point.discrepancyCents === null || point.discrepancyCents === undefined
+          ? sum.discrepancyCents
+          : (sum.discrepancyCents ?? 0) + point.discrepancyCents,
     }),
     {
       incomeCents: 0,
@@ -217,6 +235,8 @@ export async function getCashFlowTool(userId: string, args: Record<string, unkno
       fixedCents: 0,
       variableCents: 0,
       netCents: 0,
+      statementNetCents: null as number | null,
+      discrepancyCents: null as number | null,
     },
   );
 

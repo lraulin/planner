@@ -165,4 +165,47 @@ describe("analyzeInsights", () => {
     });
     expect(analysis).toMatchObject({ empty: true, filtered: [] });
   });
+
+  it("flags a statement hole as a discrepancy against transaction net", () => {
+    const analysis = analyzeInsights(
+      [
+        row({
+          accountId: "card",
+          accountName: "Card",
+          accountKind: "credit_card",
+          transactionDate: "2025-05-10",
+          amountCents: -1000,
+          derivedFlow: "spend",
+        }),
+        row({
+          accountId: "checking",
+          transactionDate: "2025-06-15",
+          amountCents: 0,
+          derivedFlow: "spend",
+        }),
+      ],
+      [],
+      {
+        window: "all",
+        statements: [
+          {
+            accountId: "card",
+            periodEnd: "2025-05-21",
+            closingBalanceCents: -33994,
+          },
+          {
+            accountId: "card",
+            periodEnd: "2025-06-21",
+            closingBalanceCents: -11103,
+          },
+        ],
+      },
+    );
+    expect(analysis.empty).toBe(false);
+    if (analysis.empty) return;
+    const june = analysis.flow.find((point) => point.bucket.key === "2025-06");
+    expect(june?.statementNetCents).toBe(-11103 - -33994);
+    expect(june?.netCents).toBe(0);
+    expect(june?.discrepancyCents).toBe(0 - (-11103 - -33994));
+  });
 });

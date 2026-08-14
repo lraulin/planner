@@ -397,6 +397,9 @@ const cashFlowPointSchema = z.strictObject({
   trailingSpendCents: cents.nullable(),
   trailingIncomeCents: cents.nullable(),
   trailingNetCents: cents.nullable(),
+  statementPositionCents: cents.nullable(),
+  statementNetCents: cents.nullable(),
+  discrepancyCents: cents.nullable(),
 });
 
 const baselineEventSchema = z.strictObject({
@@ -903,6 +906,8 @@ export const outputSchemas = {
       fixedCents: cents,
       variableCents: cents,
       netCents: cents,
+      statementNetCents: cents.nullable(),
+      discrepancyCents: cents.nullable(),
     }),
     income: z.strictObject({
       paycheckMonthlyCents: cents,

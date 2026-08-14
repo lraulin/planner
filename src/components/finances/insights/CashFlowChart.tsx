@@ -68,7 +68,7 @@ export function CashFlowChart({
   const net = mode === "net";
   const split = mode === "fixed-variable";
   const values = net
-    ? points.map((point) => point.netCents)
+    ? points.flatMap((point) => [point.netCents, point.statementNetCents ?? 0])
     : points.flatMap((point) => [point.incomeCents, point.spendCents]);
   // Bars are measured from zero, always. A truncated bar axis misstates every ratio drawn
   // on it, and this is a chart people will use to decide things.
@@ -290,6 +290,29 @@ export function CashFlowChart({
             ),
           )}
 
+          {net &&
+            (() => {
+              const run = points.flatMap((point, index) => {
+                if (
+                  point.statementNetCents === null ||
+                  point.statementNetCents === undefined
+                ) {
+                  return [];
+                }
+                return [{ x: slots[index].center, y: toY(point.statementNetCents) }];
+              });
+              return run.length < 2 ? null : (
+                <polyline
+                  fill="none"
+                  stroke="var(--ink)"
+                  strokeWidth={1.75}
+                  strokeDasharray="5 3"
+                  strokeLinejoin="round"
+                  points={run.map((point) => `${point.x},${point.y}`).join(" ")}
+                />
+              );
+            })()}
+
           {points.map((point, index) =>
             labelled.has(index) ? (
               <text
@@ -332,6 +355,16 @@ export function CashFlowChart({
                   In {formatUsd(active.incomeCents)} · out{" "}
                   {formatUsd(active.spendCents)}
                 </div>
+                {active.statementNetCents !== null &&
+                  active.statementNetCents !== undefined && (
+                    <div className="text-ink-muted">
+                      Statement {formatUsd(active.statementNetCents)}
+                      {active.discrepancyCents !== null &&
+                      active.discrepancyCents !== undefined
+                        ? ` · Δ ${formatUsd(active.discrepancyCents)}`
+                        : ""}
+                    </div>
+                  )}
                 {active.trailingNetCents !== null && (
                   <div className="text-ink-muted">
                     Avg net {formatUsd(active.trailingNetCents)}
@@ -371,6 +404,7 @@ export function CashFlowChart({
                   label: "Trailing average net",
                   line: true,
                 },
+                { color: "var(--ink)", label: "Statement net", line: true },
               ]
             : split
               ? [

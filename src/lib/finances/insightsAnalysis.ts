@@ -54,6 +54,7 @@ import {
 } from "./insightsFilter";
 import type { DeclaredBill } from "./recurringBills";
 import type { InsightsAxis } from "@/lib/settings/finances";
+import { statementCashFlow, type PositionStatement } from "./statementCashFlow";
 
 export type InsightsAnalysisOptions = {
   filter?: InsightsReportFilter;
@@ -62,6 +63,8 @@ export type InsightsAnalysisOptions = {
   levelRecurring?: boolean;
   /** Wall-clock day for YTD/QTD. Null falls back to the last imported day. */
   today?: string | null;
+  /** Official bookends. Position still works with none (ledger through asOf). */
+  statements?: readonly PositionStatement[];
   /**
    * When set, this range is the window. Trailing averages still run over the
    * full filtered history, the same way a named window does.
@@ -128,10 +131,28 @@ export function analyzeInsights(
       ? payPeriodBuckets(buildPayPeriods(paydays, full))
       : monthBuckets(full);
   const visibleKeys = new Set(buckets.map((bucket) => bucket.key));
+  const statementPoints = statementCashFlow(
+    options.statements ?? [],
+    filtered,
+    fullBuckets,
+  );
+  const statementByKey = new Map(statementPoints.map((point) => [point.key, point]));
   const flow = cashFlow(filtered, fullBuckets, {
     levelRecurring,
     bills,
-  }).filter((point) => visibleKeys.has(point.bucket.key));
+  })
+    .filter((point) => visibleKeys.has(point.bucket.key))
+    .map((point) => {
+      const statement = statementByKey.get(point.bucket.key);
+      const statementNetCents = statement?.netCents ?? null;
+      return {
+        ...point,
+        statementPositionCents: statement?.positionCents ?? null,
+        statementNetCents,
+        discrepancyCents:
+          statementNetCents === null ? null : point.netCents - statementNetCents,
+      };
+    });
 
   const income = monthlyIncome(filtered, paydays, range);
   // Detection runs on the window; declared bills read their amounts from the whole

@@ -579,8 +579,8 @@ complete input/output JSON Schemas.
 Income, spend, net, trailing-12 overlay, and the baseline vs one-off split.
 
 - Use when: Use to answer whether cash flow is positive, whether a stretch is typical, or whether one-off events are hiding the baseline.
-- Avoid when: Do not blend baselineCents and oneOffCents. Do not treat a window that overlaps coverage.holes as complete. Use get_spending_breakdown for ranked categories and search_transactions to inspect named rows.
-- Returns: Per-bucket income/spend/fixed/variable/net plus trailing averages, window totals, typical monthly income, and the named one-off split.
+- Avoid when: Do not blend baselineCents and oneOffCents. Do not blend netCents and statementNetCents — their difference is the diagnostic. Do not treat a window that overlaps coverage.holes as complete. Use get_spending_breakdown for ranked categories and search_transactions to inspect named rows.
+- Returns: Per-bucket income/spend/fixed/variable/net plus trailing averages, statement-anchored position and net, discrepancy (transaction net minus statement net), window totals, typical monthly income, and the named one-off split.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: domain
 - Arguments: `{ window*, from?, to?, axis*, levelRecurring*, accountIds*, categories*, merchants* }`

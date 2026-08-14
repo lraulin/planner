@@ -389,6 +389,12 @@ export type CashFlowPoint = {
    * verify that to trust the line.
    */
   trailingNetCents: number | null;
+  /** Official household position at this bucket's end. Null when not computed. */
+  statementPositionCents?: number | null;
+  /** Change in that position from the previous bucket. */
+  statementNetCents?: number | null;
+  /** `netCents − statementNetCents`. Null when statement net is missing. */
+  discrepancyCents?: number | null;
 };
 
 /**

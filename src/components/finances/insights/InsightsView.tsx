@@ -103,6 +103,7 @@ export function InsightsView({
       axis: view.axis,
       levelRecurring: view.levelRecurring,
       today,
+      statements,
     });
     if (core.empty) return core;
     return {
@@ -374,7 +375,7 @@ export function InsightsView({
             view.levelRecurring
               ? `Recurring bills are spread across the ${bucketNoun}s they cover, so one monthly charge cannot swamp a single ${bucketNoun}. A bar is then an ongoing obligation rather than a record of that ${bucketNoun}: nothing is created or lost, though a bill straddling the window edge shifts the visible total a little.`
               : view.mode === "net"
-                ? "What each bucket gained or lost. Above the line is money kept; below it is a shortfall covered from savings or a card."
+                ? "Bars are transaction net (transfers out). The dashed line is the change in statement-anchored household position. They should agree; a residual is a hole or a classification miss."
                 : view.mode === "fixed-variable"
                   ? "The out bar split into recurring bills and everything else — the half that is actually a decision each period."
                   : view.axis === "month"
@@ -391,6 +392,19 @@ export function InsightsView({
               setDrill({ kind: "bucket", startKey, endKey })
             }
           />
+          {view.mode !== "net" &&
+            analysis.flow.some((point) => (point.discrepancyCents ?? 0) !== 0) && (
+              <p className="mt-2 text-[0.75rem] text-ink-muted">
+                Transaction net and statement-anchored position change differ by{" "}
+                {formatUsd(
+                  analysis.flow.reduce(
+                    (total, point) => total + Math.abs(point.discrepancyCents ?? 0),
+                    0,
+                  ),
+                )}{" "}
+                across this window (absolute). Switch to Net to see both series.
+              </p>
+            )}
         </Panel>
 
         <Panel

@@ -715,6 +715,11 @@ YNAB-like, but simpler — and connected to goals over time.
   snapped from a drifted ledger −$2,790 to −$301). Coverage now names
   mid-history holes (the missing 2025 card PDFs). `/finances/statements` lists
   snapshots and the register check; MCP `list_statements` matches the page.
+  ✅ Statement-anchored cash flow shipped 2026-08-14 —
+  `agent-os/specs/2026-08-14-1617-statement-cash-flow/`. Insights Net chart
+  overlays official household-position change on transaction net; the
+  residual is the diagnostic. 2025 Cap One PDFs closed the year-long hole
+  (June 2025 file is a May reprint).
 - **Next:** Envelopes.
 - **Then:** **integration with Goals** (save for X, fund project Y); AI advice on top of
   envelope + history data.
