@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { dailyItems, nodes, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
-import { toDateKey } from "@/lib/schedule/geometry";
+import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { createNode, moveNode, setState } from "@/lib/tree/mutations";
 import { saveNodeDetail } from "@/lib/detail/mutations";
 import {
@@ -950,13 +950,14 @@ describeDb("shelving and day lines", () => {
       type: "task",
       name: "File in September",
     });
-    // MON is 2026-07-27; shelf through mid-August clears it, leaves September alone.
-    await planNodeForDay(userId, early, MON);
+    // Explicit calendar days, not MON (tomorrow). MON is 2026-08-15 now, which is
+    // the old shelf date, so startKey < untilKey would be false and the plan would stay.
+    await planNodeForDay(userId, early, "2026-08-01");
     await planNodeForDay(userId, late, "2026-09-15");
 
     await saveNodeDetail(userId, projectId, {
       name: "Pay Taxes",
-      deferredDate: new Date("2026-08-15T00:00:00"),
+      deferredDate: fromDateKey("2026-08-20"),
     });
 
     expect(await plannedDayForNode(userId, early)).toBeNull();
