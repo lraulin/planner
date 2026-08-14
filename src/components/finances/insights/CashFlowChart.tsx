@@ -41,11 +41,15 @@ export function CashFlowChart({
   points,
   axisLabel,
   mode,
+  onSelect,
+  selectedKey,
 }: {
   points: CashFlowPoint[];
   /** What one bucket is — "month" or "pay period" — for the accessible description. */
   axisLabel: string;
   mode: InsightsChartMode;
+  onSelect?: (bucketKey: string, startKey: string, endKey: string) => void;
+  selectedKey?: string | null;
 }) {
   const compact = useIsCompact() ?? false;
   const [hovered, setHovered] = useState<Hovered | null>(null);
@@ -175,7 +179,8 @@ export function CashFlowChart({
               yMin,
               yMax,
             );
-            const isActive = hovered?.index === index;
+            const isActive =
+              hovered?.index === index || selectedKey === point.bucket.startKey;
             return (
               <g
                 key={point.bucket.key}
@@ -194,6 +199,11 @@ export function CashFlowChart({
                   event.stopPropagation();
                   setHovered((current) =>
                     current?.index === index ? null : { index, x: slot.center },
+                  );
+                  onSelect?.(
+                    point.bucket.key,
+                    point.bucket.startKey,
+                    point.bucket.endKey,
                   );
                 }}
               >

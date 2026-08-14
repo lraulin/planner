@@ -16,9 +16,15 @@ import {
   rowsInRange,
   incomeCentsOf,
   spendByCategory,
+  spendByCategoryPerBucket,
+  spendByMerchant,
   spendCentsOf,
   trailingAverage,
   trailingRange,
+  TREND_OTHER,
+  assetDebtSeries,
+  accountContributions,
+  debtToAssetRatio,
   type AnalyticsRow,
 } from "./analytics";
 
@@ -27,6 +33,7 @@ function row(overrides: Partial<AnalyticsRow> = {}): AnalyticsRow {
     id: crypto.randomUUID(),
     accountId: "checking",
     accountName: "360 Checking",
+    accountKind: "checking",
     transactionDate: "2026-03-14",
     description: "WM SUPERCENTER #1981",
     amountCents: -8412,
@@ -656,5 +663,141 @@ describe("rowsInRange", () => {
     expect(
       rowsInRange(rows, { startKey: "2026-03-01", endKey: "2026-03-31" }),
     ).toHaveLength(2);
+  });
+});
+
+describe("spendByMerchant", () => {
+  it("ranks merchants the same way categories are ranked, refunds netting off", () => {
+    const totals = spendByMerchant([
+      row({ description: "SBARRO", amountCents: -2000 }),
+      row({ description: "SBARRO", amountCents: 500, derivedFlow: "refund" }),
+      row({ description: "SIMPLISAFE 8888957880", amountCents: -3471 }),
+    ]);
+    expect(totals[0]?.merchant).toBe("SimpliSafe");
+    expect(totals.find((entry) => entry.merchant === "SBARRO")?.cents).toBe(1500);
+  });
+});
+
+describe("spendByCategoryPerBucket", () => {
+  it("keeps the top categories stable across buckets and folds the rest into Other", () => {
+    const buckets = monthBuckets({ startKey: "2026-01-01", endKey: "2026-02-28" });
+    const rows = [
+      row({
+        transactionDate: "2026-01-05",
+        derivedCategory: "Groceries",
+        amountCents: -10000,
+      }),
+      row({
+        transactionDate: "2026-01-06",
+        derivedCategory: "Dining",
+        amountCents: -2000,
+      }),
+      row({
+        transactionDate: "2026-02-05",
+        derivedCategory: "Groceries",
+        amountCents: -10000,
+      }),
+      row({
+        transactionDate: "2026-02-06",
+        derivedCategory: "Pets",
+        amountCents: -1000,
+      }),
+    ];
+    const { keys, points } = spendByCategoryPerBucket(rows, buckets, 1);
+    expect(keys).toEqual(["Groceries", TREND_OTHER]);
+    expect(points[0]?.byCategory.Groceries).toBe(10000);
+    expect(points[0]?.byCategory[TREND_OTHER]).toBe(2000);
+    expect(points[1]?.byCategory[TREND_OTHER]).toBe(1000);
+  });
+});
+
+describe("assetDebtSeries", () => {
+  it("splits checking from card debt and reports debt as a positive magnitude", () => {
+    const buckets = monthBuckets({ startKey: "2026-02-01", endKey: "2026-03-31" });
+    const points = assetDebtSeries(
+      [
+        row({
+          accountId: "checking",
+          accountKind: "checking",
+          transactionDate: "2026-01-15",
+          amountCents: 500000,
+        }),
+        row({
+          accountId: "card",
+          accountName: "Chase",
+          accountKind: "credit_card",
+          transactionDate: "2026-02-10",
+          amountCents: -100000,
+        }),
+        row({
+          accountId: "checking",
+          accountKind: "checking",
+          transactionDate: "2026-03-10",
+          amountCents: -50000,
+        }),
+      ],
+      buckets,
+    );
+    expect(points[0]).toMatchObject({
+      assetCents: 500000,
+      debtCents: 100000,
+      netCents: 400000,
+    });
+    expect(points[1]).toMatchObject({
+      assetCents: 450000,
+      debtCents: 100000,
+      netCents: 350000,
+    });
+  });
+
+  it("lists per-account change across the window", () => {
+    const contrib = accountContributions(
+      [
+        row({
+          accountId: "checking",
+          transactionDate: "2026-01-01",
+          amountCents: 100000,
+        }),
+        row({
+          accountId: "checking",
+          transactionDate: "2026-03-01",
+          amountCents: -20000,
+        }),
+      ],
+      { startKey: "2026-02-01", endKey: "2026-03-31" },
+    );
+    expect(contrib).toEqual([
+      {
+        accountId: "checking",
+        accountName: "360 Checking",
+        kind: "checking",
+        startCents: 100000,
+        endCents: 80000,
+        changeCents: -20000,
+      },
+    ]);
+  });
+
+  it("returns a null ratio when there are no assets to divide by", () => {
+    expect(debtToAssetRatio(0, 100)).toBeNull();
+    expect(debtToAssetRatio(200, 50)).toBe(0.25);
+  });
+
+  it("does not report a card credit as negative debt", () => {
+    const buckets = monthBuckets({ startKey: "2026-02-01", endKey: "2026-02-28" });
+    const points = assetDebtSeries(
+      [
+        row({
+          accountId: "card",
+          accountName: "Chase",
+          accountKind: "credit_card",
+          transactionDate: "2026-02-10",
+          amountCents: 50000,
+        }),
+      ],
+      buckets,
+    );
+    expect(points[0]?.debtCents).toBe(0);
+    expect(points[0]?.assetCents).toBe(50000);
   });
 });

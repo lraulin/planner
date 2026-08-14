@@ -2,10 +2,13 @@
 
 import { useMemo, useState, useTransition } from "react";
 import {
-  balanceSeries,
+  accountContributions,
+  assetDebtSeries,
   baselineSplit,
   cashFlow,
   coverageGap,
+  debtToAssetRatio,
+  effectiveCategory,
   monthBuckets,
   monthlyIncome,
   oneOffSuggestions,
@@ -15,13 +18,25 @@ import {
   rowsInRange,
   rowsRange,
   spendByCategory,
-  trailingRange,
+  spendByCategoryPerBucket,
+  spendByMerchant,
+  spendCentsOf,
+  TREND_OTHER,
   type AnalyticsRow,
   type Bucket,
 } from "@/lib/finances/analytics";
 import { buildPayPeriods } from "@/lib/finances/classify/payPeriods";
 import type { CarryingCost } from "@/lib/finances/dashboardQueries";
+import {
+  applyInsightsFilter,
+  drillLabel,
+  insightsFilterOptions,
+  resolveInsightsRange,
+  rowsForDrill,
+  type InsightsDrill,
+} from "@/lib/finances/insightsFilter";
 import { formatUsd } from "@/lib/finances/money";
+import { cashFlowSankey } from "@/lib/finances/sankeyFlow";
 import { reclassifyAction } from "@/app/finances/actions";
 import {
   CHART_MODE_LABELS,
@@ -29,7 +44,7 @@ import {
   INSIGHTS_CHART_MODES,
   INSIGHTS_WINDOWS,
   WINDOW_LABELS,
-  WINDOW_MONTHS,
+  insightsFilterOf,
   parseInsightsView,
   serializeInsightsView,
   type InsightsAxis,
@@ -43,13 +58,19 @@ import {
   useSetting,
   type SettingCodec,
 } from "@/components/settings/SettingsProvider";
-import { BalanceChart } from "./BalanceChart";
+import { useToday } from "@/components/grid/useToday";
+import { AssetDebtChart } from "./AssetDebtChart";
 import { CarryingCostTable } from "./CarryingCostTable";
 import { CashFlowChart } from "./CashFlowChart";
 import { CategoryBars } from "./CategoryBars";
+import { FilterSelect } from "./FilterSelect";
 import { OneOffReview } from "./OneOffReview";
 import { Panel, PanelEmpty, StatRow, StatTile } from "./Panel";
+import { RankedBars } from "./RankedBars";
 import { RecurringTable } from "./RecurringTable";
+import { SankeyChart } from "./SankeyChart";
+import { SpendingTrendsChart } from "./SpendingTrendsChart";
+import { TransactionAudit } from "./TransactionAudit";
 
 const INSIGHTS_CODEC: SettingCodec<InsightsViewSettings> = {
   parse: parseInsightsView,
@@ -64,14 +85,10 @@ const AXIS_LABELS: Record<InsightsAxis, string> = {
 /**
  * The Finances insights dashboard.
  *
- * Every panel reads the **same** `rows` array — the whole imported history — and narrows it
- * locally. That is why the trailing average is real on the first visible bucket: the chart
- * shows a window, but the statistic behind it saw the twelve buckets before it. Windowing at
- * the query would have made the overlay null wherever anyone actually looked.
- *
- * The two toggles persist through `useSetting` rather than `useState`. A window you re-pick
- * on every visit is one you stop using, and the axis choice especially is a way of thinking,
- * not a momentary view.
+ * Filters narrow the whole history first. Windowing and the trailing average then run on
+ * that filtered set, so a grocery-only view does not mix in everyone else's average.
+ * The coverage gap still reads the unfiltered import — it is a fact about the feed, not
+ * about the current slice.
  */
 export function InsightsView({
   rows,
@@ -80,46 +97,50 @@ export function InsightsView({
 }: {
   rows: AnalyticsRow[];
   carryingCost: CarryingCost;
-  /** Rows a reclassify has never seen. Nonzero means the numbers below are incomplete. */
   unclassified: number;
 }) {
   const formatDate = useDateFormatter();
+  const today = useToday();
   const { value: view, patch } = useSetting(INSIGHTS_SCOPE, INSIGHTS_CODEC);
   const [reclassifyError, setReclassifyError] = useState<string | null>(null);
   const [reclassified, setReclassified] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  const filterOptions = useMemo(() => insightsFilterOptions(rows), [rows]);
+
   const analysis = useMemo(() => {
-    const full = rowsRange(rows);
-    if (!full) return null;
+    const filtered = applyInsightsFilter(rows, insightsFilterOf(view));
+    const full = rowsRange(filtered);
+    if (!full) return { filtered, empty: true as const };
 
-    const months = WINDOW_MONTHS[view.window];
-    const range = months === null ? full : trailingRange(full.endKey, months);
-    const windowed = rowsInRange(rows, range);
+    const range = resolveInsightsRange(view.window, today ?? full.endKey, full);
+    if (!range) return { filtered, empty: true as const };
+    const windowed = rowsInRange(filtered, range);
 
-    // Pay periods are built from the whole history's paydays so a window that starts
-    // mid-period still lands inside a real one rather than opening a stub.
-    const paydays = paydaysFrom(rows);
+    const paydays = paydaysFrom(filtered);
     const buckets: Bucket[] =
       view.axis === "pay-period"
         ? payPeriodBuckets(buildPayPeriods(paydays, range))
         : monthBuckets(range);
 
-    // Cash flow runs over the *whole* history and is sliced afterwards, which is what makes
-    // the rolling average non-null at the left edge of the window.
     const fullBuckets: Bucket[] =
       view.axis === "pay-period"
         ? payPeriodBuckets(buildPayPeriods(paydays, full))
         : monthBuckets(full);
     const visibleKeys = new Set(buckets.map((bucket) => bucket.key));
-    const flow = cashFlow(rows, fullBuckets, {
+    const flow = cashFlow(filtered, fullBuckets, {
       levelRecurring: view.levelRecurring,
     }).filter((point) => visibleKeys.has(point.bucket.key));
 
-    const income = monthlyIncome(rows, paydays, range);
+    const income = monthlyIncome(filtered, paydays, range);
     const split = baselineSplit(windowed, buckets.length);
+    const trends = spendByCategoryPerBucket(windowed, buckets);
+    const assetDebt = assetDebtSeries(filtered, buckets);
+    const latest = assetDebt[assetDebt.length - 1];
 
     return {
+      empty: false as const,
+      filtered,
       range,
       windowed,
       buckets,
@@ -127,12 +148,26 @@ export function InsightsView({
       split,
       income,
       categories: spendByCategory(windowed),
+      payees: spendByMerchant(windowed),
+      trends,
+      sankey: cashFlowSankey(windowed, view.sankeyGrouping),
       recurring: recurringMerchants(windowed),
       suggestions: oneOffSuggestions(windowed),
-      balances: balanceSeries(rows, buckets),
+      assetDebt,
+      contributions: accountContributions(filtered, range),
+      debtRatio: latest ? debtToAssetRatio(latest.assetCents, latest.debtCents) : null,
+      latest,
       coverage: coverageGap(rows),
+      drilled: drilledRows(windowed, view.drill, trends.keys),
     };
-  }, [rows, view.axis, view.window, view.levelRecurring]);
+  }, [rows, today, view]);
+
+  function setDrill(next: InsightsDrill) {
+    patch((current) => ({
+      ...current,
+      drill: sameDrill(current.drill, next) ? null : next,
+    }));
+  }
 
   function reclassify() {
     setReclassifyError(null);
@@ -153,14 +188,69 @@ export function InsightsView({
   }
 
   const bucketNoun = view.axis === "pay-period" ? "pay period" : "month";
+  const filterActive =
+    view.accounts.length + view.categories.length + view.merchants.length > 0;
 
-  if (!analysis) {
+  if (rows.length === 0) {
     return (
       <div className="min-h-0 flex-1 overflow-auto p-3">
         <PanelEmpty>
           No transactions yet. Import a CSV from the Register and the dashboard fills
           in.
         </PanelEmpty>
+      </div>
+    );
+  }
+
+  if (analysis.empty) {
+    return (
+      <div className="min-h-0 flex-1 overflow-auto">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-rule bg-surface-raised px-3 py-2">
+          <FilterSelect
+            label="Accounts"
+            options={filterOptions.accounts.map((account) => ({
+              id: account.id,
+              label: account.name,
+            }))}
+            selected={view.accounts}
+            onChange={(accounts) => patch((current) => ({ ...current, accounts }))}
+          />
+          <FilterSelect
+            label="Categories"
+            options={filterOptions.categories.map((category) => ({
+              id: category,
+              label: category,
+            }))}
+            selected={view.categories}
+            onChange={(categories) => patch((current) => ({ ...current, categories }))}
+          />
+          <FilterSelect
+            label="Merchants"
+            options={filterOptions.merchants.map((merchant) => ({
+              id: merchant,
+              label: merchant,
+            }))}
+            selected={view.merchants}
+            onChange={(merchants) => patch((current) => ({ ...current, merchants }))}
+          />
+          <button
+            type="button"
+            onClick={() =>
+              patch((current) => ({
+                ...current,
+                accounts: [],
+                categories: [],
+                merchants: [],
+              }))
+            }
+            className="min-h-tap text-[0.75rem] text-ink-muted hover:text-ink md:min-h-0"
+          >
+            Clear filters
+          </button>
+        </div>
+        <div className="p-3">
+          <PanelEmpty>Nothing matches these filters.</PanelEmpty>
+        </div>
       </div>
     );
   }
@@ -210,6 +300,33 @@ export function InsightsView({
             patch((current) => ({ ...current, mode: next as InsightsChartMode }))
           }
         />
+        <FilterSelect
+          label="Accounts"
+          options={filterOptions.accounts.map((account) => ({
+            id: account.id,
+            label: account.name,
+          }))}
+          selected={view.accounts}
+          onChange={(accounts) => patch((current) => ({ ...current, accounts }))}
+        />
+        <FilterSelect
+          label="Categories"
+          options={filterOptions.categories.map((category) => ({
+            id: category,
+            label: category,
+          }))}
+          selected={view.categories}
+          onChange={(categories) => patch((current) => ({ ...current, categories }))}
+        />
+        <FilterSelect
+          label="Merchants"
+          options={filterOptions.merchants.map((merchant) => ({
+            id: merchant,
+            label: merchant,
+          }))}
+          selected={view.merchants}
+          onChange={(merchants) => patch((current) => ({ ...current, merchants }))}
+        />
         <label className="flex min-h-tap cursor-pointer items-center gap-1.5 text-[0.75rem] text-ink-muted md:min-h-0">
           <input
             type="checkbox"
@@ -224,6 +341,22 @@ export function InsightsView({
           />
           Level bills
         </label>
+        {filterActive && (
+          <button
+            type="button"
+            onClick={() =>
+              patch((current) => ({
+                ...current,
+                accounts: [],
+                categories: [],
+                merchants: [],
+              }))
+            }
+            className="min-h-tap text-[0.75rem] text-ink-muted hover:text-ink md:min-h-0"
+          >
+            Clear filters
+          </button>
+        )}
         <span className="text-[0.75rem] text-ink-muted">
           {formatDate(analysis.range.startKey)} – {formatDate(analysis.range.endKey)}
         </span>
@@ -294,6 +427,25 @@ export function InsightsView({
             points={analysis.flow}
             axisLabel={bucketNoun}
             mode={view.mode}
+            selectedKey={view.drill?.kind === "bucket" ? view.drill.startKey : null}
+            onSelect={(_key, startKey, endKey) =>
+              setDrill({ kind: "bucket", startKey, endKey })
+            }
+          />
+        </Panel>
+
+        <Panel
+          title="The rows behind the figure"
+          subtitle="Click a bar, a stack, a Sankey node or a payee. This list is that number, so it can be audited."
+        >
+          <TransactionAudit
+            rows={analysis.drilled}
+            title={view.drill ? drillLabel(view.drill) : "Everything in the window"}
+            onClear={
+              view.drill
+                ? () => patch((current) => ({ ...current, drill: null }))
+                : undefined
+            }
           />
         </Panel>
 
@@ -308,9 +460,84 @@ export function InsightsView({
                 : "Spending by category over the window."
             }
           >
-            <CategoryBars totals={analysis.categories} />
+            <CategoryBars
+              totals={analysis.categories}
+              selected={view.drill?.kind === "category" ? view.drill.id : null}
+              onSelect={(category) => setDrill({ kind: "category", id: category })}
+            />
           </Panel>
 
+          <Panel
+            title="Top payees"
+            subtitle="Who was paid, ranked the same way as the categories — length, not angle."
+          >
+            <RankedBars
+              items={analysis.payees.map((entry) => ({
+                key: entry.merchant,
+                label: entry.merchant,
+                cents: entry.cents,
+                share: entry.share,
+              }))}
+              selected={view.drill?.kind === "merchant" ? view.drill.id : null}
+              onSelect={(merchant) => setDrill({ kind: "merchant", id: merchant })}
+              restNoun="smaller payees"
+              empty="No payees in this window."
+            />
+          </Panel>
+        </div>
+
+        <Panel
+          title={`Spending trends by ${bucketNoun}`}
+          subtitle="Top categories across the window, everything else folded into Other. Click a segment."
+          actions={
+            <ToggleGroup
+              label="Bars"
+              options={[
+                { id: "stacked", label: "Stacked" },
+                { id: "grouped", label: "Grouped" },
+              ]}
+              value={view.trendMode}
+              onChange={(next) =>
+                patch((current) => ({
+                  ...current,
+                  trendMode: next as "stacked" | "grouped",
+                }))
+              }
+            />
+          }
+        >
+          <SpendingTrendsChart
+            keys={analysis.trends.keys}
+            points={analysis.trends.points}
+            mode={view.trendMode}
+            onSelect={(category) => setDrill({ kind: "category", id: category })}
+          />
+        </Panel>
+
+        <Panel
+          title="Cash flow"
+          subtitle="This period's income sources and where the money went. Thickness is amount; nothing here claims a given paycheck bought the groceries."
+          actions={
+            <ToggleGroup
+              label="Group"
+              options={[
+                { id: "category", label: "Category" },
+                { id: "category-merchant", label: "Category & merchant" },
+              ]}
+              value={view.sankeyGrouping}
+              onChange={(next) =>
+                patch((current) => ({
+                  ...current,
+                  sankeyGrouping: next as "category" | "category-merchant",
+                }))
+              }
+            />
+          }
+        >
+          <SankeyChart model={analysis.sankey} onSelect={setDrill} />
+        </Panel>
+
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           <Panel
             title="Baseline vs one-off"
             subtitle="Two numbers, never blended: an average that folds in a wedding answers a question nobody asked."
@@ -348,6 +575,66 @@ export function InsightsView({
               )}
             </div>
           </Panel>
+
+          <Panel
+            title="Cash vs card debt"
+            subtitle="Cash minus card debt across the imported accounts. Not net worth — no mortgage, car or unimported retirement account is in here."
+          >
+            <div className="flex flex-col gap-3">
+              <StatRow>
+                <StatTile
+                  label="Assets"
+                  value={formatUsd(analysis.latest?.assetCents ?? 0)}
+                  tone="income"
+                />
+                <StatTile
+                  label="Debt"
+                  value={formatUsd(analysis.latest?.debtCents ?? 0)}
+                  tone="spend"
+                />
+                <StatTile
+                  label="Debt-to-asset"
+                  value={
+                    analysis.debtRatio === null
+                      ? "—"
+                      : `${Math.round(analysis.debtRatio * 100)}%`
+                  }
+                />
+              </StatRow>
+              <AssetDebtChart
+                points={analysis.assetDebt}
+                onSelect={(startKey, endKey) =>
+                  setDrill({ kind: "bucket", startKey, endKey })
+                }
+              />
+              <ul className="flex flex-col divide-y divide-rule text-[0.8125rem]">
+                {analysis.contributions.map((entry) => (
+                  <li key={entry.accountId}>
+                    <button
+                      type="button"
+                      onClick={() => setDrill({ kind: "account", id: entry.accountId })}
+                      className={`flex w-full min-h-tap items-baseline justify-between gap-2 py-1 text-left md:min-h-0 ${
+                        view.drill?.kind === "account" &&
+                        view.drill.id === entry.accountId
+                          ? "bg-select"
+                          : ""
+                      }`}
+                    >
+                      <span className="min-w-0 truncate text-ink">
+                        {entry.accountName}
+                      </span>
+                      <span className="tabular flex-none text-ink-muted">
+                        {formatUsd(entry.changeCents)}
+                      </span>
+                      <span className="tabular flex-none text-ink">
+                        {formatUsd(entry.endCents)}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </Panel>
         </div>
 
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
@@ -365,13 +652,6 @@ export function InsightsView({
             <OneOffReview suggestions={analysis.suggestions} />
           </Panel>
         </div>
-
-        <Panel
-          title="Tracked balance"
-          subtitle="Cash minus card debt across the imported accounts. Not net worth — no mortgage, car or retirement account is in here."
-        >
-          <BalanceChart points={analysis.balances} />
-        </Panel>
 
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           <Panel
@@ -428,6 +708,24 @@ export function InsightsView({
       </div>
     </div>
   );
+}
+
+function sameDrill(left: InsightsDrill | null, right: InsightsDrill): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function drilledRows(
+  rows: AnalyticsRow[],
+  drill: InsightsDrill | null,
+  trendKeys: string[],
+): AnalyticsRow[] {
+  if (drill?.kind === "category" && drill.id === TREND_OTHER) {
+    const named = new Set(trendKeys.filter((key) => key !== TREND_OTHER));
+    return rows.filter(
+      (row) => spendCentsOf(row) !== 0 && !named.has(effectiveCategory(row)),
+    );
+  }
+  return rowsForDrill(rows, drill);
 }
 
 /** A small segmented control. 44px tap targets, and the current value is a real state. */

@@ -695,6 +695,9 @@ YNAB-like, but simpler — and connected to goals over time.
   pairing transfers, and the pay-period axis removes the three-paycheck month. It
   categorises by **who was paid**, which is the best the bank line can support and is
   still a lie for anything sold at more than one store (see Later, below).
+  Interactive reports (drill-down, shared filters, YTD/QTD, spending trends, top payees,
+  Sankey, cash-vs-card-debt) are in
+  `agent-os/specs/2026-08-13-2121-insights-interactive-reports/` (active).
 - **Next:** Envelopes.
 - **Then:** **integration with Goals** (save for X, fund project Y); AI advice on top of
   envelope + history data.

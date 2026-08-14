@@ -1,4 +1,12 @@
-import { asBoolean, asOneOf, asRecord } from "./parse";
+import {
+  INSIGHTS_WINDOW_KEYS,
+  parseInsightsDrill,
+  serializeInsightsDrill,
+  type InsightsDrill,
+  type InsightsReportFilter,
+  type InsightsWindowKey,
+} from "@/lib/finances/insightsFilter";
+import { asBoolean, asOneOf, asRecord, asStringArray } from "./parse";
 
 /**
  * What the Insights dashboard remembers: how far back it looks, and which axis it buckets on.
@@ -21,20 +29,16 @@ export const INSIGHTS_AXES = ["month", "pay-period"] as const;
 export type InsightsAxis = (typeof INSIGHTS_AXES)[number];
 
 /** `all` is the whole imported history — three years and counting. */
-export const INSIGHTS_WINDOWS = ["6m", "12m", "24m", "all"] as const;
-export type InsightsWindow = (typeof INSIGHTS_WINDOWS)[number];
-
-export const WINDOW_MONTHS: Record<InsightsWindow, number | null> = {
-  "6m": 6,
-  "12m": 12,
-  "24m": 24,
-  all: null,
-};
+export const INSIGHTS_WINDOWS = INSIGHTS_WINDOW_KEYS;
+export type InsightsWindow = InsightsWindowKey;
 
 export const WINDOW_LABELS: Record<InsightsWindow, string> = {
+  "3m": "3 months",
   "6m": "6 months",
   "12m": "12 months",
   "24m": "2 years",
+  ytd: "YTD",
+  qtd: "QTD",
   all: "All time",
 };
 
@@ -66,6 +70,17 @@ export type InsightsViewSettings = {
    * when a monthly bill lands in a fortnightly bucket and swamps it.
    */
   levelRecurring: boolean;
+  /**
+   * Empty arrays mean *all* — unlike the checkbox convention in `parse.ts`. A dashboard
+   * that silently shows nothing is a worse default than one that shows everything.
+   */
+  accounts: string[];
+  categories: string[];
+  merchants: string[];
+  drill: InsightsDrill | null;
+  /** Stacked vs grouped for the spending-trends panel. */
+  trendMode: "stacked" | "grouped";
+  sankeyGrouping: "category" | "category-merchant";
 };
 
 /**
@@ -79,7 +94,16 @@ export const DEFAULT_INSIGHTS_VIEW: InsightsViewSettings = {
   // In-and-out first: it is the view that shows *why* a net figure is what it is.
   mode: "in-out",
   levelRecurring: false,
+  accounts: [],
+  categories: [],
+  merchants: [],
+  drill: null,
+  trendMode: "stacked",
+  sankeyGrouping: "category",
 };
+
+const TREND_MODES = ["stacked", "grouped"] as const;
+const SANKEY_GROUPINGS = ["category", "category-merchant"] as const;
 
 export function parseInsightsView(value: unknown): InsightsViewSettings {
   const record = asRecord(value);
@@ -92,6 +116,16 @@ export function parseInsightsView(value: unknown): InsightsViewSettings {
       record.levelRecurring,
       DEFAULT_INSIGHTS_VIEW.levelRecurring,
     ),
+    accounts: asStringArray(record.accounts, DEFAULT_INSIGHTS_VIEW.accounts),
+    categories: asStringArray(record.categories, DEFAULT_INSIGHTS_VIEW.categories),
+    merchants: asStringArray(record.merchants, DEFAULT_INSIGHTS_VIEW.merchants),
+    drill: parseInsightsDrill(record.drill),
+    trendMode: asOneOf(record.trendMode, TREND_MODES, DEFAULT_INSIGHTS_VIEW.trendMode),
+    sankeyGrouping: asOneOf(
+      record.sankeyGrouping,
+      SANKEY_GROUPINGS,
+      DEFAULT_INSIGHTS_VIEW.sankeyGrouping,
+    ),
   };
 }
 
@@ -101,5 +135,19 @@ export function serializeInsightsView(value: InsightsViewSettings): unknown {
     window: value.window,
     mode: value.mode,
     levelRecurring: value.levelRecurring,
+    accounts: value.accounts,
+    categories: value.categories,
+    merchants: value.merchants,
+    drill: serializeInsightsDrill(value.drill),
+    trendMode: value.trendMode,
+    sankeyGrouping: value.sankeyGrouping,
+  };
+}
+
+export function insightsFilterOf(view: InsightsViewSettings): InsightsReportFilter {
+  return {
+    accountIds: view.accounts,
+    categories: view.categories,
+    merchants: view.merchants,
   };
 }

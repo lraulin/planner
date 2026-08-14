@@ -69,6 +69,20 @@
   --chart-spend: #c4442b;
   --chart-average: #1a66b0;
 
+  /*
+   * Categorical identities for stacked trends and Sankey only. Ranked lists stay on
+   * --chart-spend. These are a third colour job, not a reuse of priority or type tokens.
+   * --chart-cat-8 is the fold ("Other") and is deliberately the dullest.
+   */
+  --chart-cat-1: #6b4c9a;
+  --chart-cat-2: #0f766e;
+  --chart-cat-3: #b45309;
+  --chart-cat-4: #9d174d;
+  --chart-cat-5: #3f6212;
+  --chart-cat-6: #4338ca;
+  --chart-cat-7: #87531a;
+  --chart-cat-8: #64748b;
+
   --row-height: 1.75rem;
   --indent-step: 0.875rem;
 
@@ -124,6 +138,15 @@
     --chart-spend: #e2604a;
     --chart-average: #4f8ec4;
 
+    --chart-cat-1: #9b7ec8;
+    --chart-cat-2: #2a9d8f;
+    --chart-cat-3: #e07a2f;
+    --chart-cat-4: #d4537e;
+    --chart-cat-5: #7a9e3a;
+    --chart-cat-6: #7b74e0;
+    --chart-cat-7: #c48a4a;
+    --chart-cat-8: #8b93a5;
+
     --elev-1: 0 -1px 3px rgb(0 0 0 / 40%);
   }
 }
@@ -157,6 +180,14 @@
   --color-chart-income: var(--chart-income);
   --color-chart-spend: var(--chart-spend);
   --color-chart-average: var(--chart-average);
+  --color-chart-cat-1: var(--chart-cat-1);
+  --color-chart-cat-2: var(--chart-cat-2);
+  --color-chart-cat-3: var(--chart-cat-3);
+  --color-chart-cat-4: var(--chart-cat-4);
+  --color-chart-cat-5: var(--chart-cat-5);
+  --color-chart-cat-6: var(--chart-cat-6);
+  --color-chart-cat-7: var(--chart-cat-7);
+  --color-chart-cat-8: var(--chart-cat-8);
 
   --font-sans: var(--font-archivo);
   --font-mono: var(--font-plex-mono);

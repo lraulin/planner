@@ -22,7 +22,7 @@
  * arithmetic in JS is both correct and cheaper than a round trip per panel.
  */
 
-import type { FinanceFlowKind } from "@/db/schema";
+import type { FinanceAccountKind, FinanceFlowKind } from "@/db/schema";
 import { daysBetweenKeys, shiftDateKey } from "@/lib/schedule/geometry";
 import { categoryFromBank, UNCATEGORIZED } from "./classify/categories";
 import { detectIncome, normalizedMonthlyIncome, type Payday } from "./classify/income";
@@ -35,6 +35,8 @@ export type AnalyticsRow = {
   id: string;
   accountId: string;
   accountName: string;
+  /** Drives assets-vs-debt. The classifier never writes this. */
+  accountKind: FinanceAccountKind;
   /** `YYYY-MM-DD`. */
   transactionDate: string;
   description: string;
@@ -646,6 +648,234 @@ export function spendByCategory(rows: readonly AnalyticsRow[]): CategoryTotal[] 
       (left, right) =>
         right.cents - left.cents || left.category.localeCompare(right.category),
     );
+}
+
+export type MerchantTotal = {
+  merchant: string;
+  cents: number;
+  share: number;
+  count: number;
+};
+
+/** Spend by merchant, largest first. Same rules as {@link spendByCategory}. */
+export function spendByMerchant(rows: readonly AnalyticsRow[]): MerchantTotal[] {
+  const totals = new Map<string, { cents: number; count: number }>();
+  let total = 0;
+
+  for (const row of rows) {
+    const cost = spendCentsOf(row);
+    if (cost === 0) continue;
+    const merchant = effectiveMerchant(row);
+    const entry = totals.get(merchant) ?? { cents: 0, count: 0 };
+    entry.cents += cost;
+    entry.count += 1;
+    totals.set(merchant, entry);
+    total += cost;
+  }
+
+  return [...totals.entries()]
+    .map(([merchant, entry]) => ({
+      merchant,
+      cents: entry.cents,
+      count: entry.count,
+      share: total > 0 ? entry.cents / total : 0,
+    }))
+    .sort(
+      (left, right) =>
+        right.cents - left.cents || left.merchant.localeCompare(right.merchant),
+    );
+}
+
+/** Folded into this bucket so a trend chart does not grow a colour per leftover category. */
+export const TREND_OTHER = "Other";
+/** Seven named stacks plus Other — eight `--chart-cat-*` tokens. */
+export const TREND_TOP_N = 7;
+
+export type CategoryBucketTotal = {
+  bucket: Bucket;
+  byCategory: Record<string, number>;
+};
+
+/**
+ * Spend by category inside each bucket, with everything past the top N folded into Other.
+ *
+ * The key list is computed over the whole window so a category does not appear, vanish and
+ * reappear as the months change — that would make the colour mapping lie.
+ */
+export function spendByCategoryPerBucket(
+  rows: readonly AnalyticsRow[],
+  buckets: readonly Bucket[],
+  topN = TREND_TOP_N,
+): { keys: string[]; points: CategoryBucketTotal[] } {
+  const overall = spendByCategory(rows);
+  const top = overall.slice(0, topN).map((entry) => entry.category);
+  const topSet = new Set(top);
+  const keys = overall.length > topN ? [...top, TREND_OTHER] : [...top];
+  const grouped = bucketRows(rows, buckets);
+
+  const points = buckets.map((bucket) => {
+    const byCategory: Record<string, number> = Object.fromEntries(
+      keys.map((key) => [key, 0]),
+    );
+    for (const row of grouped.get(bucket.key) ?? []) {
+      const cost = spendCentsOf(row);
+      if (cost === 0) continue;
+      const category = effectiveCategory(row);
+      const key = topSet.has(category) ? category : TREND_OTHER;
+      if (key in byCategory) byCategory[key] += cost;
+    }
+    return { bucket, byCategory };
+  });
+
+  return { keys, points };
+}
+
+const ASSET_KINDS: ReadonlySet<FinanceAccountKind> = new Set([
+  "checking",
+  "savings",
+  "cash",
+  "investment",
+]);
+const DEBT_KINDS: ReadonlySet<FinanceAccountKind> = new Set(["credit_card", "loan"]);
+
+export function isAssetKind(kind: FinanceAccountKind): boolean {
+  return ASSET_KINDS.has(kind);
+}
+
+export function isDebtKind(kind: FinanceAccountKind): boolean {
+  return DEBT_KINDS.has(kind);
+}
+
+export type AssetDebtPoint = {
+  bucket: Bucket;
+  assetCents: number;
+  /** Positive magnitude of what is owed. */
+  debtCents: number;
+  netCents: number;
+};
+
+export type AccountContribution = {
+  accountId: string;
+  accountName: string;
+  kind: FinanceAccountKind;
+  startCents: number;
+  endCents: number;
+  changeCents: number;
+};
+
+function sidesOf(running: Map<string, { kind: FinanceAccountKind; cents: number }>): {
+  assetCents: number;
+  debtCents: number;
+  netCents: number;
+} {
+  let assets = 0;
+  let debts = 0;
+  for (const { kind, cents } of running.values()) {
+    // Debt is only the money still owed. A reconstructed card credit (payments that
+    // outran the imported purchases because the feed did not start at zero) is not
+    // negative debt — it sits with assets so the ratio cannot go below zero.
+    if (isDebtKind(kind) || kind === "other") {
+      if (cents < 0) debts += cents;
+      else assets += cents;
+    } else {
+      assets += cents;
+    }
+  }
+  return {
+    assetCents: assets,
+    debtCents: debts === 0 ? 0 : -debts,
+    netCents: assets + debts,
+  };
+}
+
+function applyRow(
+  running: Map<string, { kind: FinanceAccountKind; cents: number; name: string }>,
+  row: AnalyticsRow,
+): void {
+  const current = running.get(row.accountId);
+  if (current) {
+    current.cents += row.amountCents;
+    return;
+  }
+  running.set(row.accountId, {
+    kind: row.accountKind,
+    cents: row.amountCents,
+    name: row.accountName,
+  });
+}
+
+/**
+ * Assets vs debt at the end of each bucket, among imported accounts only.
+ *
+ * Checking/savings/cash/investment are assets. Credit cards and loans are debt.
+ * `other` follows the sign of that account's running balance so a leftover account is
+ * not silently dumped into cash. Not net worth — nothing unimported is here.
+ */
+export function assetDebtSeries(
+  rows: readonly AnalyticsRow[],
+  buckets: readonly Bucket[],
+): AssetDebtPoint[] {
+  const grouped = bucketRows(rows, buckets);
+  const firstStart = buckets[0]?.startKey ?? "";
+  const running = new Map<
+    string,
+    { kind: FinanceAccountKind; cents: number; name: string }
+  >();
+  for (const row of rows) {
+    if (row.transactionDate < firstStart) applyRow(running, row);
+  }
+
+  return buckets.map((bucket) => {
+    for (const row of grouped.get(bucket.key) ?? []) applyRow(running, row);
+    return { bucket, ...sidesOf(running) };
+  });
+}
+
+/**
+ * How each imported account moved across a window — the expandable list under cash-vs-debt.
+ */
+export function accountContributions(
+  rows: readonly AnalyticsRow[],
+  range: DateRange,
+): AccountContribution[] {
+  const running = new Map<
+    string,
+    { kind: FinanceAccountKind; cents: number; name: string }
+  >();
+  for (const row of rows) {
+    if (row.transactionDate < range.startKey) applyRow(running, row);
+  }
+  const startByAccount = new Map(
+    [...running.entries()].map(([id, entry]) => [id, entry.cents]),
+  );
+  for (const row of rows) {
+    if (row.transactionDate >= range.startKey && row.transactionDate <= range.endKey) {
+      applyRow(running, row);
+    }
+  }
+
+  return [...running.entries()]
+    .map(([accountId, entry]) => {
+      const startCents = startByAccount.get(accountId) ?? 0;
+      return {
+        accountId,
+        accountName: entry.name,
+        kind: entry.kind,
+        startCents,
+        endCents: entry.cents,
+        changeCents: entry.cents - startCents,
+      };
+    })
+    .sort(
+      (left, right) =>
+        Math.abs(right.changeCents) - Math.abs(left.changeCents) ||
+        left.accountName.localeCompare(right.accountName),
+    );
+}
+
+export function debtToAssetRatio(assetCents: number, debtCents: number): number | null {
+  if (assetCents <= 0) return null;
+  return debtCents / assetCents;
 }
 
 // — Recurring merchants ——————————————————————————————————————————————————————
