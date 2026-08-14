@@ -1,7 +1,6 @@
 # Statement reconcile + sanity checks
 
-**Status: active**
-
+**Status: frozen / complete** (2026-08-14)  
 Spec folder: `agent-os/specs/2026-08-14-1524-statement-reconcile/`
 
 ## Spec relationships
@@ -48,26 +47,42 @@ Roadmap § Financial planning — not a new item. This makes CSV + statements tr
 
 ## Acceptance criteria
 
-- [ ] For an account with statements, the register strip, Insights, and `get_finance_overview` show the same headline: latest closing + later txs. A fixture whose ledger sum is −$2,368 and whose latest close is −$201.14 with no later rows headlines −$201.14 and warns.
-- [ ] An account with no statements still headlines `SUM(all rows)` and does not warn.
-- [ ] Reclassify still leaves every account’s `SUM(amount)` byte-identical. Anchored headline is unaffected by classification.
-- [ ] Each stored statement reports `registerDeltaCents` (`opening + period rows − closing`). A matching period is 0; a planted extra or missing row is not.
-- [ ] A missing cycle (e.g. Jul 2024 close then Jan 2026 open) appears as a hole: date range, previous close, next open, `discontinuityCents`.
-- [ ] Unpaired internal-transfer legs remain listed; they are not called “unitemized card spend” when the opposite account now itemizes.
-- [ ] `/finances/statements` lists snapshots (account, period, open/close, due, activity totals, reconcile status). Selecting a period lists the imported rows that produced the register side. Missing cycles are visible, not only stored rows.
-- [ ] Re-importing an already-loaded statement still creates 0 transactions and 0 statements (insert-or-skip unchanged).
-- [ ] `list_statements` over MCP returns the same period totals and reconcile flags as the page. A second user sees none of the first user’s statements or mismatches.
-- [ ] Insights “What this dashboard cannot see” names mid-history holes and balance mismatches, not only late-starting accounts.
-- [ ] Live Capital One headline matches the Jul 21 close plus any imported txs after that date (≈ −$201 plus post-statement spend), not −$2,368. The 2025 PDF hole is visible. If investigation finds duplicates, they are gone; if it finds only the hole, no rows were invented.
-- [ ] `npm run test:unit` passes. Integration tests actually ran (no skip warning) after query/mutation changes. After `src/app/**` changes, `npm run smoke` against the running dev server.
+- [x] For an account with statements, the register strip, Insights, and `get_finance_overview` show the same headline: latest closing + later txs. A fixture whose ledger sum is −$2,368 and whose latest close is −$201.14 with no later rows headlines −$201.14 and warns.
+- [x] An account with no statements still headlines `SUM(all rows)` and does not warn.
+- [x] Reclassify still leaves every account’s `SUM(amount)` byte-identical. Anchored headline is unaffected by classification.
+- [x] Each stored statement reports `registerDeltaCents` (`opening + period rows − closing`). A matching period is 0; a planted extra or missing row is not.
+- [x] A missing cycle (e.g. Jul 2024 close then Jan 2026 open) appears as a hole: date range, previous close, next open, `discontinuityCents`.
+- [x] Unpaired internal-transfer legs remain listed. Copy no longer calls them “card itemization starts 2025-08-10”; unitemized dollars are unpaired outflows before `completeFrom` or inside a hole.
+- [x] `/finances/statements` lists snapshots (account, period, open/close, due, activity totals, reconcile status). Selecting a period lists the imported rows that produced the register side. Missing cycles are visible, not only stored rows.
+- [x] Re-importing an already-loaded statement still creates 0 transactions and 0 statements (insert-or-skip unchanged).
+- [x] `list_statements` over MCP returns the same period totals and reconcile flags as the page. A second user sees none of the first user’s statements or mismatches.
+- [x] Insights “What this dashboard cannot see” names mid-history holes and balance mismatches, not only late-starting accounts.
+- [x] Live Capital One headline matches the Jul 21 close plus imported txs after that date (−$301.20), not the ledger −$2,790. The 2025 PDF hole is visible. No rows were invented or deleted.
+- [x] `npm run test:unit` passes. Integration tests actually ran (no skip warning) after query changes. After `src/app/**` changes, `npm run smoke` against the running dev server (53 routes, including `/finances/statements`).
+
+## Verified as built
+
+- Live register (6,459 txs, 183 statements): Capital One headlines **−$301.20** (close −$201.14 + 31 later txs), ledger −$2,790.08 shown as a warning. Chase headlines $15.52 vs ledger $738.86. 360 checking/savings/CD already matched.
+- Statements page: four Cap One holes including **12/21/2024 → 12/22/2025 (−$1,464.34)**. Checking periods show delta $0.00. Selecting Jul 2026 checking lists the imported rows (including a $2,000 PayPal transfer from Lee Raulin — one of the family gifts the earlier search missed).
+- Insights coverage names the same holes and both card mismatches. Historical cash-flow charts were not rewritten.
+- No rows deleted. Same-day same-amount groups are treated as real repeats.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- 2025 Capital One card PDFs, if they turn up.
+- Post-statement refresh (Capital One will not CSV-export after close; Plaid later).
+- Statement-anchored _historical_ debt series.
+- Why 80 card periods have a nonzero register delta (date-boundary / unmatched CSV vs statement wording).
+- Envelopes (still next on the roadmap).
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                            | Why                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| --- | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Live Cap One drift is the unused statement close, not a stored field and not safe-to-delete duplicates            | Ran reconcile on the real 5-account / 6,459-row register. Cap One ledger −$2,790.08 vs latest close −$201.14 + 31 later txs (−$100.06) = **−$301.20**, which matches the bank app (~$311). 360 checking/savings already match. Same-day same-amount groups are mostly real repeats (SBARRO, Steam, Facebook); extras sum only −$374.51. Four Cap One holes, including 2024-12-21 → 2025-12-22. 80 periods have a nonzero register delta (date-boundary / unmatched CSV vs statement wording). No rows deleted; no synthetic plugs. |
+| 2   | Unitemized dollars still use late-start `completeFrom` plus holes, not a per-card “does this window itemize” test | Pairing does not name the missing opposite account. The stale “itemization starts 2025-08-10 / $109k” copy is gone; the number now includes unpaired outflows inside the 2025 hole.                                                                                                                                                                                                                                                                                                                                                |
 
 ---
 

@@ -662,7 +662,7 @@ flavor; optional palette thinning).
 - **✅ Medium-term — MCP + chat clients:** Same registry as a remote MCP server —
   `specs/2026-08-13-1730-remote-mcp-transport`. Stateless Streamable HTTP at
   `POST /api/mcp` (production `https://planner-lee-5344.vercel.app/api/mcp`), Bearer
-  `PLANNER_AGENT_API_KEY`, no second write path. `tools/list` exposes the 32 core and
+  `PLANNER_AGENT_API_KEY`, no second write path. `tools/list` exposes the 33 core and
   domain tools so Grok.com / other chat clients do not need HTTP two-step discovery.
   Still open: OAuth, per-user keys, mapping the key to a real user beyond
   `PLANNER_AGENT_USER_EMAIL`. Skills/prompts from `planner-agent` still apply as system
@@ -709,6 +709,12 @@ YNAB-like, but simpler — and connected to goals over time.
   `list_recurring_bills`, `get_debt_summary`, `search_transactions`) return the
   Insights dashboard's numbers so an agent can analyze cash flow without a
   second composition.
+  ✅ Statement reconcile + Statements page shipped 2026-08-14 —
+  `agent-os/specs/2026-08-14-1524-statement-reconcile/`. Headline account
+  balances are the latest official close plus later imported txs (Capital One
+  snapped from a drifted ledger −$2,790 to −$301). Coverage now names
+  mid-history holes (the missing 2025 card PDFs). `/finances/statements` lists
+  snapshots and the register check; MCP `list_statements` matches the page.
 - **Next:** Envelopes.
 - **Then:** **integration with Goals** (save for X, fund project Y); AI advice on top of
   envelope + history data.

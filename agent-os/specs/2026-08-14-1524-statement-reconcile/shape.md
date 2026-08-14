@@ -1,6 +1,6 @@
 # Statement reconcile + sanity checks — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-08-14)
 
 ## Scope
 
@@ -43,6 +43,20 @@ This spec:
 - MCP: extend `get_finance_overview`; add `list_statements`. Same numbers as the page.
 - Page order: Register · Statements · Insights · Orders.
 - No visuals. Follow Register / Orders / Insights.
+
+## Live investigation (Task 3)
+
+Against the real register (1 user, 5 accounts, 6,459 txs, 183 statements):
+
+| Account                     | Ledger     | Anchored     | Latest close                          | Match to bank app                               |
+| --------------------------- | ---------- | ------------ | ------------------------------------- | ----------------------------------------------- |
+| Capital One •••3448         | −$2,790.08 | **−$301.20** | −$201.14 on 2026-07-21 + 31 later txs | Yes (~$311 live)                                |
+| Chase •••9910               | +$738.86   | +$15.52      | −$239.34 on 2026-07-18 + 27 later txs | Live was ~$204 — still mid-cycle / not imported |
+| 360 Checking / Savings / CD | = anchored | = anchored   | Jul 31 2026 (CD closed)               | Already honest                                  |
+
+Cap One holes: 2019-08→2020-01 (empty first cycle), two 2023 one-month jumps (reprint/skip files), and **2024-12-21 → 2025-12-22** (the missing 2025 PDFs).
+
+Did **not** delete the 29 same-day same-amount groups. The founding spec’s SBARRO case is why occurrence ordinal exists; Steam/Facebook/UNITED pairs are the same shape. Auto-deleting them would be the silent-drop failure that spec forbade. Period-level `registerDelta ≠ 0` (80 of 183) is a warning the Statements page will show, not a license to guess which row is extra.
 
 ## Context
 
