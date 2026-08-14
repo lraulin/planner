@@ -2,39 +2,18 @@
 
 import { useMemo, useState, useTransition } from "react";
 import {
-  accountContributions,
-  assetDebtSeries,
-  baselineSplit,
-  cadenceCandidates,
-  cashFlow,
   coverageGap,
-  debtToAssetRatio,
   effectiveCategory,
-  monthBuckets,
-  monthlyIncome,
-  oneOffSuggestions,
-  paydaysFrom,
-  payPeriodBuckets,
-  recurringMerchants,
-  rowsInRange,
-  rowsRange,
-  spendByCategory,
-  spendByCategoryPerBucket,
-  spendByMerchant,
   spendCentsOf,
   TREND_OTHER,
-  upcomingBills,
   type AnalyticsRow,
-  type Bucket,
 } from "@/lib/finances/analytics";
-import { buildPayPeriods } from "@/lib/finances/classify/payPeriods";
 import type { CarryingCost } from "@/lib/finances/dashboardQueries";
+import { analyzeInsights } from "@/lib/finances/insightsAnalysis";
 import type { DeclaredBill } from "@/lib/finances/recurringBills";
 import {
-  applyInsightsFilter,
   drillLabel,
   insightsFilterOptions,
-  resolveInsightsRange,
   rowsForDrill,
   type InsightsDrill,
 } from "@/lib/finances/insightsFilter";
@@ -115,70 +94,19 @@ export function InsightsView({
   const filterOptions = useMemo(() => insightsFilterOptions(rows), [rows]);
 
   const analysis = useMemo(() => {
-    const filtered = applyInsightsFilter(rows, insightsFilterOf(view));
-    const full = rowsRange(filtered);
-    if (!full) return { filtered, empty: true as const };
-
-    const range = resolveInsightsRange(view.window, today ?? full.endKey, full);
-    if (!range) return { filtered, empty: true as const };
-    const windowed = rowsInRange(filtered, range);
-
-    const paydays = paydaysFrom(filtered);
-    const buckets: Bucket[] =
-      view.axis === "pay-period"
-        ? payPeriodBuckets(buildPayPeriods(paydays, range))
-        : monthBuckets(range);
-
-    const fullBuckets: Bucket[] =
-      view.axis === "pay-period"
-        ? payPeriodBuckets(buildPayPeriods(paydays, full))
-        : monthBuckets(full);
-    const visibleKeys = new Set(buckets.map((bucket) => bucket.key));
-    const flow = cashFlow(filtered, fullBuckets, {
+    const core = analyzeInsights(rows, bills, {
+      filter: insightsFilterOf(view),
+      window: view.window,
+      axis: view.axis,
       levelRecurring: view.levelRecurring,
-      bills,
-    }).filter((point) => visibleKeys.has(point.bucket.key));
-
-    const income = monthlyIncome(filtered, paydays, range);
-    // Detection runs on the window; declared bills read their amounts from the whole
-    // history, so a commitment does not vanish from the table when the window narrows.
-    const recurring = recurringMerchants(windowed, bills, filtered);
-    const split = baselineSplit(windowed, buckets.length, {
-      levelRecurring: view.levelRecurring,
-      bills: recurring,
-      buckets,
+      today,
     });
-    const trends = spendByCategoryPerBucket(windowed, buckets);
-    const assetDebt = assetDebtSeries(filtered, buckets);
-    const latest = assetDebt[assetDebt.length - 1];
-
+    if (core.empty) return core;
     return {
-      empty: false as const,
-      filtered,
-      range,
-      windowed,
-      buckets,
-      flow,
-      split,
-      income,
-      categories: spendByCategory(windowed),
-      payees: spendByMerchant(windowed),
-      trends,
-      sankey: cashFlowSankey(windowed, view.sankeyGrouping),
-      recurring,
-      suggestions: oneOffSuggestions(windowed, { bills }),
-      // Both of these read the **whole** filtered history, not the window. The two charges
-      // that make a semi-annual pattern are eight months apart, and the anchor a forecast
-      // walks from is the most recent charge — a window that hides either produces a
-      // confident wrong answer rather than no answer.
-      candidates: cadenceCandidates(filtered),
-      upcoming: upcomingBills(filtered, bills, today ?? full.endKey),
-      assetDebt,
-      contributions: accountContributions(filtered, range),
-      debtRatio: latest ? debtToAssetRatio(latest.assetCents, latest.debtCents) : null,
-      latest,
+      ...core,
+      sankey: cashFlowSankey(core.windowed, view.sankeyGrouping),
       coverage: coverageGap(rows),
-      drilled: drilledRows(windowed, view.drill, trends.keys),
+      drilled: drilledRows(core.windowed, view.drill, core.trends.keys),
     };
   }, [rows, today, view, bills]);
 
