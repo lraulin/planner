@@ -1,6 +1,6 @@
 # Timeline ribbon — the life-history visualization
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-14)  
 Spec folder: `agent-os/specs/2026-08-14-1724-timeline-ribbon/`
 
 ## Spec relationships
@@ -42,23 +42,26 @@ local database has zero life-history rows.
 
 ## Acceptance criteria
 
-- [ ] `/library/timeline` offers `Grid | Timeline` and remembers the choice across a reload.
-- [ ] Jobs and residences draw as bars on a year axis; overlapping ones stack rather than collide.
-- [ ] A job with no end date runs to the today rule and reads as ongoing.
-- [ ] A residence with only a `movedOut` date draws from the left edge rather than vanishing.
-- [ ] Life events draw as pins, coloured by category, with a legend.
-- [ ] Hovering or focusing a bar or pin names it, its dates and its duration.
-- [ ] Clicking a bar opens that record on Jobs / Residences; clicking a pin returns to the grid
+- [x] `/library/timeline` offers `Grid | Timeline` and remembers the choice across a reload.
+- [x] Jobs and residences draw as bars on a year axis; overlapping ones stack rather than collide.
+- [x] A job with no end date runs to the today rule and reads as ongoing.
+- [x] A residence with only a `movedOut` date draws from the left edge rather than vanishing.
+- [x] Life events draw as pins, coloured by category, with a legend.
+- [x] Hovering or focusing a bar or pin names it, its dates and its duration.
+- [x] Clicking a bar opens that record on Jobs / Residences; clicking a pin returns to the grid
       with that row selected.
-- [ ] The ribbon is usable at 390px: horizontal scroll, 44px tap targets, no clipped chrome.
-- [ ] An empty history says so rather than drawing an empty axis.
-- [ ] No new database query, mutation or migration.
+- [x] The ribbon is usable at 390px: horizontal scroll, 44px tap targets, no clipped chrome.
+- [x] An empty history says so rather than drawing an empty axis.
+- [x] No new database query, mutation or migration.
 
 ## Changes from original plan
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                                | Why                                                                                                                                                                                                                                                                     |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `deriveRibbon` takes **no** `todayKey`. Everything today-dependent moved into `ribbonRange(bounds, todayKey)` and into the component. | The plan had one function taking today, which would have made the whole derivation client-only and untestable without freezing a clock. Splitting it keeps the expensive half on the server and deterministic, and makes `todayKey === null` a first-class tested case. |
+| 2   | Bars carry no duration string; the detail strip calls `spanDuration` at render.                                                       | Same reason — a duration measured against today cannot be precomputed on the server.                                                                                                                                                                                    |
+| 3   | The "what to call a nameless record" rule was extracted to `src/lib/timeline/naming.ts` and is now shared with `deriveChronology`.    | The grid and the ribbon draw the same records. "Started at an unnamed employer" beside a bar labelled something else is one record wearing two names — a business rule, so `clean-code.md`'s DRY exception applies.                                                     |
+| 4   | The ribbon hugs its content instead of filling the page.                                                                              | Seen on the built thing: three lanes are a few hundred pixels tall, and stretching pushed the colour key to the bottom of an empty screen with nothing between the two.                                                                                                 |
 
 ## Task 1: Save spec documentation
 

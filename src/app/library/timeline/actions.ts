@@ -1,11 +1,12 @@
 "use server";
 
-import { loadChronology } from "@/lib/timeline/chronology";
+import { deriveChronology, loadLifeHistory } from "@/lib/timeline/chronology";
 import {
   createLifeEvent,
   deleteLifeEvent,
   updateLifeEvent,
 } from "@/lib/timeline/mutations";
+import { deriveRibbon, type Ribbon } from "@/lib/timeline/ribbon";
 import type { ChronologyRow, LifeEventInput } from "@/lib/timeline/types";
 import { run, runQuery, type ActionResult, type QueryResult } from "../../actionResult";
 
@@ -30,6 +31,15 @@ export async function deleteLifeEventAction(eventId: string): Promise<ActionResu
   return run((userId) => deleteLifeEvent(userId, eventId));
 }
 
-export async function listChronologyAction(): Promise<QueryResult<ChronologyRow[]>> {
-  return runQuery(loadChronology);
+/** Both drawings of the page, so an edit refreshes whichever one you are looking at. */
+export type TimelinePayload = { rows: ChronologyRow[]; ribbon: Ribbon };
+
+export async function listTimelineAction(): Promise<QueryResult<TimelinePayload>> {
+  return runQuery(async (userId) => {
+    const { events, jobs, residences } = await loadLifeHistory(userId);
+    return {
+      rows: deriveChronology(events, jobs, residences),
+      ribbon: deriveRibbon(events, jobs, residences),
+    };
+  });
 }

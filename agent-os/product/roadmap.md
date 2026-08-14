@@ -646,8 +646,12 @@ flavor; optional palette thinning).
   ship now. Achieve has no life-history feature — this is personal reference data,
   sitting next to Contacts and Resources. Out: linking events to Contacts, partial
   dates, deriving chronology from other dated tables.
-- **Next:** the timeline **visualization** as a `Grid | Timeline` presentation pair,
-  once there is real data to shape it around.
+- **✅ The timeline ribbon.** `specs/2026-08-14-1724-timeline-ribbon`. The picture the
+  grid deliberately refuses to be: `Home` and `Work` drawn as bars over a year axis with
+  life events as pins, so duration and overlap are a shape rather than two point rows.
+  A `Grid | Timeline` toggle **inside** `/library/timeline` rather than a second Library
+  page — both presentations derive from the same one read, so a route would buy nothing.
+  Out: filtering the picture, editing from it, an age axis, a pin lane per category.
 
 ### AI integration
 

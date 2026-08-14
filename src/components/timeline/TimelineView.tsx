@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { ChronologyRow } from "@/lib/timeline/types";
+import type { Ribbon, RibbonBar, RibbonPin } from "@/lib/timeline/ribbon";
 import type { GridRow } from "@/lib/tree/slice";
 import {
   createLifeEventAction,
   deleteLifeEventAction,
-  listChronologyAction,
+  listTimelineAction,
   updateLifeEventAction,
 } from "@/app/library/timeline/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
@@ -21,9 +22,22 @@ import type { GridDefaults } from "@/components/grid/useGridState";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { useToday } from "@/components/grid/useToday";
+import { ErrorBanner, TabToolbar, ToolbarSegments } from "@/components/tabs/tabChrome";
+import { useSetting, type SettingCodec } from "@/components/settings/SettingsProvider";
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import { isTypingTarget } from "@/lib/keyboard";
 import { localDateKey } from "@/lib/schedule/geometry";
+import { TIMELINE_SCOPE } from "@/lib/settings/scopes";
+import {
+  parseTimelineSettings,
+  serializeTimelineSettings,
+  TIMELINE_ZOOMS,
+  ZOOM_LABELS,
+  type TimelinePresentation,
+  type TimelineSettings,
+  type TimelineZoom,
+} from "@/lib/settings/timeline";
+import { TimelineRibbon } from "./TimelineRibbon";
 import {
   TIMELINE_COLUMN_IDS,
   timelineColumns,
@@ -31,6 +45,26 @@ import {
 } from "./timelineColumns";
 
 const TIMELINE_VIEWS = [{ id: "all", label: "Whole Timeline" }] as const;
+
+const TIMELINE_CODEC: SettingCodec<TimelineSettings> = {
+  parse: parseTimelineSettings,
+  serialize: serializeTimelineSettings,
+};
+
+const PRESENTATIONS = [
+  {
+    value: "grid" as TimelinePresentation,
+    label: "Grid",
+    title: "The chronology: one row per date, and where events are edited",
+  },
+  {
+    value: "ribbon" as TimelinePresentation,
+    label: "Timeline",
+    title: "The picture: how long each job and address lasted, and what overlapped",
+  },
+];
+
+const ZOOMS = TIMELINE_ZOOMS.map((zoom) => ({ value: zoom, label: ZOOM_LABELS[zoom] }));
 
 function viewDefaults(): GridDefaults {
   return {
@@ -47,22 +81,42 @@ const SOURCE_PAGES = {
 } as const;
 
 /**
- * The chronology of everything dated: life events you type here, plus the start and end of
- * every job and residence, derived at read time.
+ * Everything dated: life events you type here, plus the start and end of every job and
+ * residence, derived at read time — drawn either as a chronology or as a ribbon of spans.
+ *
+ * **The two presentations are one page, not two routes.** Both come from the same three queries
+ * (`loadLifeHistory`), derived on the server into the two payloads below, so flipping between
+ * them costs nothing. Notes split `Grid | Journal` into routes because its two presentations
+ * needed *different* reads and a client-side mode made every visit pay for both; that argument
+ * does not reach here. The choice persists in the `timeline` settings scope, so it survives a
+ * reload the way a remembered page does.
  */
-export function TimelineView({ initialRows }: { initialRows: ChronologyRow[] }) {
+export function TimelineView({
+  initialRows,
+  initialRibbon,
+}: {
+  initialRows: ChronologyRow[];
+  initialRibbon: Ribbon;
+}) {
   const router = useRouter();
   const [rows, setRows] = useState(initialRows);
+  const [ribbon, setRibbon] = useState(initialRibbon);
   const [seenServerRows, setSeenServerRows] = useState(initialRows);
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ChronologyRow | null>(null);
   const [, startTransition] = useTransition();
   const todayKey = useToday();
+  const { value: settings, patch: patchSettings } = useSetting(
+    TIMELINE_SCOPE,
+    TIMELINE_CODEC,
+  );
+  const presentation = settings.presentation;
 
   if (initialRows !== seenServerRows) {
     setSeenServerRows(initialRows);
     setRows(initialRows);
+    setRibbon(initialRibbon);
   }
 
   const views = useModuleViews({
@@ -94,9 +148,11 @@ export function TimelineView({ initialRows }: { initialRows: ChronologyRow[] }) 
 
   const refresh = useCallback(() => {
     startTransition(async () => {
-      const result = await listChronologyAction();
-      if (result.ok) setRows(result.data);
-      else setError(result.error);
+      const result = await listTimelineAction();
+      if (result.ok) {
+        setRows(result.data.rows);
+        setRibbon(result.data.ribbon);
+      } else setError(result.error);
     });
   }, []);
 
@@ -217,6 +273,56 @@ export function TimelineView({ initialRows }: { initialRows: ChronologyRow[] }) 
     [capabilitiesFor, selectedId, selectedIds.size],
   );
 
+  const setPresentation = useCallback(
+    (next: TimelinePresentation) =>
+      patchSettings((current) => ({ ...current, presentation: next })),
+    [patchSettings],
+  );
+
+  const setZoom = useCallback(
+    (next: TimelineZoom) => patchSettings((current) => ({ ...current, zoom: next })),
+    [patchSettings],
+  );
+
+  /** A bar is a whole job or residence, so it opens the record rather than one of its dates. */
+  const openBar = useCallback(
+    (bar: RibbonBar) => {
+      router.push(`${SOURCE_PAGES[bar.source].href}?detail=${bar.sourceId}`);
+    },
+    [router],
+  );
+
+  /**
+   * A pin has no record behind it — a life event *is* its row — so it hands you back to the grid
+   * with that row selected, which is the only place it can be edited.
+   */
+  const openPin = useCallback(
+    (pin: RibbonPin) => {
+      setPresentation("grid");
+      select(pin.id);
+    },
+    [setPresentation, select],
+  );
+
+  const presentationToggle = (
+    <ToolbarSegments
+      ariaLabel="Presentation"
+      options={PRESENTATIONS}
+      value={presentation}
+      onChange={setPresentation}
+    />
+  );
+
+  const emptyState = (
+    <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center text-[0.9375rem] text-ink-muted">
+      <p>Nothing on the timeline yet.</p>
+      <p className="text-[0.8125rem] text-ink-faint">
+        Add an event here, or add a job or residence — their dates appear on this page
+        automatically.
+      </p>
+    </div>
+  );
+
   const rowMenu = useCallback(
     (id: string | null): MenuItem[] => rowMenuFor(capabilitiesFor(id, id ? 1 : 0)),
     [capabilitiesFor],
@@ -224,6 +330,7 @@ export function TimelineView({ initialRows }: { initialRows: ChronologyRow[] }) 
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
+      if (presentation !== "grid") return;
       if (pendingDelete || isTypingTarget(event.target)) return;
       if (event.key === "ArrowDown") {
         event.preventDefault();
@@ -237,11 +344,44 @@ export function TimelineView({ initialRows }: { initialRows: ChronologyRow[] }) 
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [pendingDelete, move]);
+  }, [presentation, pendingDelete, move]);
+
+  if (presentation === "ribbon") {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col bg-surface">
+        {/*
+          A slim bar rather than `GridToolbar`. The ribbon is a reading surface: it has no rows to
+          act on, no columns to show or hide and nothing to filter, so a command row would be a
+          menu of things that are all unavailable. `New event` and every row verb live one segment
+          away, on the grid, which is where an event can actually be typed.
+        */}
+        <TabToolbar>
+          {presentationToggle}
+          <ToolbarSegments
+            label="Zoom"
+            options={ZOOMS}
+            value={settings.zoom}
+            onChange={setZoom}
+          />
+        </TabToolbar>
+
+        {error && <ErrorBanner message={error} />}
+
+        <TimelineRibbon
+          ribbon={ribbon}
+          zoom={settings.zoom}
+          onOpenRecord={openBar}
+          onSelectEvent={openPin}
+          empty={emptyState}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
       <GridToolbar
+        left={presentationToggle}
         grid={gridState}
         gridLabel="Timeline"
         allColumns={timelineColumns}
@@ -284,15 +424,7 @@ export function TimelineView({ initialRows }: { initialRows: ChronologyRow[] }) 
         collapsedGroups={gridState.collapsedGroups}
         onToggleGroup={gridState.toggleGroup}
         density={gridState.density}
-        empty={
-          <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center text-[0.9375rem] text-ink-muted">
-            <p>Nothing on the timeline yet.</p>
-            <p className="text-[0.8125rem] text-ink-faint">
-              Add an event here, or add a job or residence — their dates appear on this
-              page automatically.
-            </p>
-          </div>
-        }
+        empty={emptyState}
       />
 
       <ConfirmDialog

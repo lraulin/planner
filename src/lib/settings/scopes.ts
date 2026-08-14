@@ -31,6 +31,7 @@ export const SCOPE_KINDS = [
   "schedule",
   "display",
   "insights",
+  "timeline",
 ] as const;
 export type ScopeKind = (typeof SCOPE_KINDS)[number];
 
@@ -146,6 +147,9 @@ export const INSIGHTS_SCOPE = "insights";
 /** Cross-module display policy, currently the standalone calendar-day format. */
 export const DISPLAY_SCOPE = "display";
 
+/** Which way the Library Timeline page is drawing itself, and the ribbon's zoom. */
+export const TIMELINE_SCOPE = "timeline";
+
 const KIND_LABELS: Record<ScopeKind, string> = {
   grid: "Grid",
   views: "Saved views",
@@ -157,6 +161,7 @@ const KIND_LABELS: Record<ScopeKind, string> = {
   schedule: "Weekly Schedule",
   display: "Display",
   insights: "Finances insights",
+  timeline: "Timeline",
 };
 
 /** `projects.active-status` → `Projects / Active status`. */

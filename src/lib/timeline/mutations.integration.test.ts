@@ -5,7 +5,7 @@ import { users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { createJob } from "@/lib/jobs/mutations";
 import { createResidence } from "@/lib/residences/mutations";
-import { loadChronology } from "./chronology";
+import { loadChronology, loadLifeHistory } from "./chronology";
 import { createLifeEvent, deleteLifeEvent, updateLifeEvent } from "./mutations";
 import { getLifeEvent, listLifeEvents } from "./queries";
 
@@ -177,5 +177,24 @@ describeDb("life event user isolation", () => {
     await createResidence(ownerId, { city: "Private city", movedIn: "2014-08-01" });
     expect(await loadChronology(intruderId)).toEqual([]);
     expect(await loadChronology(ownerId)).toHaveLength(3);
+  });
+
+  it("keeps one user's life history free of another user's records", async () => {
+    // `loadLifeHistory` is the read the Timeline page actually makes — the chronology and the
+    // ribbon are both derived from it — so its scoping is checked directly rather than through
+    // whichever projection happens to be tested.
+    await createJob(ownerId, { employer: "Private job", startDate: "2019-03-01" });
+    await createResidence(ownerId, { city: "Private city", movedIn: "2014-08-01" });
+
+    expect(await loadLifeHistory(intruderId)).toEqual({
+      events: [],
+      jobs: [],
+      residences: [],
+    });
+
+    const owned = await loadLifeHistory(ownerId);
+    expect([owned.events.length, owned.jobs.length, owned.residences.length]).toEqual([
+      1, 1, 1,
+    ]);
   });
 });

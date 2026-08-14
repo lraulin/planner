@@ -1,6 +1,7 @@
 import { formatPostalAddress } from "@/lib/address";
 import { listJobDates } from "@/lib/jobs/queries";
 import { listResidenceDates } from "@/lib/residences/queries";
+import { employerName, residenceName } from "./naming";
 import { listLifeEvents } from "./queries";
 import type { ChronologyRow, LifeEventDetail } from "./types";
 
@@ -67,7 +68,7 @@ export function deriveChronology(
   }
 
   for (const job of jobs) {
-    const employer = job.employer.trim() || "an unnamed employer";
+    const employer = employerName(job);
     if (job.startDate) {
       rows.push(jobRow(job, "start", job.startDate, `Started at ${employer}`));
     }
@@ -78,7 +79,7 @@ export function deriveChronology(
 
   for (const residence of residences) {
     const address = formatPostalAddress(residence);
-    const place = residence.city.trim() || residence.label.trim() || "a new address";
+    const place = residenceName(residence);
     if (residence.movedIn) {
       rows.push(
         residenceRow(residence, "in", residence.movedIn, `Moved to ${place}`, address),
@@ -140,12 +141,31 @@ function residenceRow(
   };
 }
 
-/** Every chronology row for one user. Three scoped queries, merged in memory. */
-export async function loadChronology(userId: string): Promise<ChronologyRow[]> {
+/** Everything the Timeline page draws, in the three shapes it is stored in. */
+export type LifeHistory = {
+  events: Awaited<ReturnType<typeof listLifeEvents>>;
+  jobs: Awaited<ReturnType<typeof listJobDates>>;
+  residences: Awaited<ReturnType<typeof listResidenceDates>>;
+};
+
+/**
+ * The Timeline page's whole read: three scoped queries in parallel, and nothing derived.
+ *
+ * It exists because the page draws the same records two ways — `deriveChronology` for the grid,
+ * `deriveRibbon` for the picture — and running the queries once for both is what lets the reader
+ * flip between them without a round trip. Both projections stay pure functions over this.
+ */
+export async function loadLifeHistory(userId: string): Promise<LifeHistory> {
   const [events, jobs, residences] = await Promise.all([
     listLifeEvents(userId),
     listJobDates(userId),
     listResidenceDates(userId),
   ]);
+  return { events, jobs, residences };
+}
+
+/** Every chronology row for one user. */
+export async function loadChronology(userId: string): Promise<ChronologyRow[]> {
+  const { events, jobs, residences } = await loadLifeHistory(userId);
   return deriveChronology(events, jobs, residences);
 }
