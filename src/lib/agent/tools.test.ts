@@ -120,6 +120,7 @@ describe("agent tool registry", () => {
       "get_spending_breakdown",
       "list_recurring_bills",
       "get_debt_summary",
+      "list_statements",
       "search_transactions",
     ]);
     expect(finances.tools.every((tool) => tool.domain === "finances")).toBe(true);

@@ -286,7 +286,9 @@ describeDb("finance CSV import", () => {
   it("reports a balance that is the sum of the account's transactions", async () => {
     await importFinanceCsvFiles({ userId, files: [caponeBankFile] });
     const [account] = await listAccounts(userId);
-    expect(account.balanceCents).toBe(-48120 + 231121);
+    expect(account.ledgerBalanceCents).toBe(-48120 + 231121);
+    expect(account.balanceCents).toBe(account.ledgerBalanceCents);
+    expect(account.balanceMismatchCents).toBe(0);
   });
 
   it("warns about an unreadable file but still imports the others", async () => {
@@ -613,6 +615,16 @@ describeDb("finance Chase card statement import", () => {
     );
     expect(snapshots[0].rates[0]).toEqual(
       expect.objectContaining({ balanceType: "Purchases", aprPercent: 23.24 }),
+    );
+    const [card] = await listAccounts(userId);
+    const laterCents = rows
+      .filter((row) => row.transactionDate > "2026-08-18")
+      .reduce((total, row) => total + row.amountCents, 0);
+    expect(card.statementPeriodEnd).toBe("2026-08-18");
+    expect(card.statementClosingCents).toBe(-6059);
+    expect(card.balanceCents).toBe(-6059 + laterCents);
+    expect(card.ledgerBalanceCents).toBe(
+      rows.reduce((total, row) => total + row.amountCents, 0),
     );
   });
 

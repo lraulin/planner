@@ -629,6 +629,12 @@ export const inputSchemas = {
     includeUpcoming: z.boolean().default(true),
   }),
   get_debt_summary: z.strictObject(financeWindowFields),
+  list_statements: z.strictObject({
+    accountId: id.optional(),
+    from: dateKey.optional(),
+    to: dateKey.optional(),
+    ...pageInputFields,
+  }),
   search_transactions: z.strictObject({
     query: z.string().optional(),
     from: dateKey.optional(),
@@ -837,6 +843,10 @@ export const outputSchemas = {
         kind: z.enum(financeAccountKindEnum.enumValues),
         institution: z.string(),
         balanceCents: cents,
+        ledgerBalanceCents: cents,
+        statementClosingCents: cents.nullable(),
+        statementPeriodEnd: dateKey.nullable(),
+        mismatchCents: cents,
         transactionCount: z.number().int().min(0),
         closedAt: isoDate.nullable(),
       }),
@@ -948,6 +958,37 @@ export const outputSchemas = {
       feesCents: cents,
       byAccount: z.array(carryingAccountSchema),
     }),
+  }),
+  list_statements: z.strictObject({
+    statements: z.array(
+      z.strictObject({
+        id,
+        accountId: id,
+        accountName: z.string(),
+        periodStart: dateKey,
+        periodEnd: dateKey,
+        openingBalanceCents: cents,
+        closingBalanceCents: cents,
+        paymentsCreditsCents: cents.nullable(),
+        purchasesCents: cents.nullable(),
+        registerSumCents: cents,
+        registerDeltaCents: cents,
+        rowCount: z.number().int().min(0),
+        holeAfter: z.boolean(),
+      }),
+    ),
+    holes: z.array(
+      z.strictObject({
+        accountId: id,
+        accountName: z.string(),
+        afterPeriodEnd: dateKey,
+        beforePeriodStart: dateKey,
+        previousClosingCents: cents,
+        nextOpeningCents: cents,
+        discontinuityCents: cents,
+      }),
+    ),
+    pageInfo: pageInfoSchema,
   }),
   search_transactions: z.strictObject({
     transactions: z.array(

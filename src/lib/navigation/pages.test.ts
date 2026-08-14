@@ -58,6 +58,7 @@ describe("hasPageBar", () => {
     // Finances got its bar when Insights shipped beside the Register.
     expect(builtPagesForModule("finances").map((page) => page.id)).toEqual([
       "register",
+      "statements",
       "insights",
       "orders",
     ]);

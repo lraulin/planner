@@ -44,23 +44,40 @@ function viewDefaults(): GridDefaults {
   };
 }
 
-/** Balance strip above the register — one figure per account, summed in SQL. */
+/** Balance strip above the register — statement-anchored when a snapshot exists. */
 function AccountBalances({ accounts }: { accounts: FinanceAccountRow[] }) {
   if (accounts.length === 0) return null;
   return (
     <div className="flex flex-wrap items-center gap-x-5 gap-y-1 border-b border-rule bg-surface-raised px-3 py-1.5">
-      {accounts.map((account) => (
-        <span key={account.id} className="flex items-baseline gap-1.5 text-[0.8125rem]">
-          <span className="text-ink-muted">{account.name}</span>
+      {accounts.map((account) => {
+        const mismatch = account.balanceMismatchCents !== 0;
+        const title = mismatch
+          ? `Statement ${formatUsd(account.statementClosingCents ?? 0)} as of ${account.statementPeriodEnd}. Ledger sum ${formatUsd(account.ledgerBalanceCents)}.`
+          : account.statementPeriodEnd
+            ? `Statement ${formatUsd(account.statementClosingCents ?? 0)} as of ${account.statementPeriodEnd}.`
+            : "Sum of imported transactions.";
+        return (
           <span
-            className={`tabular font-medium ${
-              account.balanceCents < 0 ? "text-priority-a" : "text-ink"
-            }`}
+            key={account.id}
+            title={title}
+            className="flex items-baseline gap-1.5 text-[0.8125rem]"
           >
-            {formatUsd(account.balanceCents)}
+            <span className="text-ink-muted">{account.name}</span>
+            <span
+              className={`tabular font-medium ${
+                account.balanceCents < 0 || mismatch ? "text-priority-a" : "text-ink"
+              }`}
+            >
+              {formatUsd(account.balanceCents)}
+            </span>
+            {mismatch ? (
+              <span className="text-[0.75rem] text-ink-muted">
+                ledger {formatUsd(account.ledgerBalanceCents)}
+              </span>
+            ) : null}
           </span>
-        </span>
-      ))}
+        );
+      })}
     </div>
   );
 }

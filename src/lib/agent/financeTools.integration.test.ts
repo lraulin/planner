@@ -236,6 +236,13 @@ describeDb("finance agent tools", () => {
     expect(found.transactions).toEqual([]);
     expect(found.matchedIncomeCents).toBe(0);
 
+    const snaps = (await dispatchAgentTool("list_statements", {}, intruderId)) as {
+      statements: unknown[];
+      holes: unknown[];
+    };
+    expect(snaps.statements).toEqual([]);
+    expect(snaps.holes).toEqual([]);
+
     // Owner still sees the seed, so the empties above are isolation, not a failed import.
     const ownerSearch = (await dispatchAgentTool(
       "search_transactions",

@@ -234,6 +234,13 @@ const PAGES = {
       keywords: "transactions ledger accounts import",
     },
     {
+      id: "statements",
+      label: "Statements",
+      segment: "statements",
+      status: "built",
+      keywords: "reconcile snapshots closing balance coverage holes",
+    },
+    {
       id: "insights",
       label: "Insights",
       segment: "insights",

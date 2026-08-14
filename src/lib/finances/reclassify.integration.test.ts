@@ -97,7 +97,7 @@ function flowOf(rows: Awaited<ReturnType<typeof classifiedRows>>, needle: string
 async function balances(userId: string): Promise<Record<string, number>> {
   const accounts = await listAccounts(userId);
   return Object.fromEntries(
-    accounts.map((account) => [account.name, account.balanceCents]),
+    accounts.map((account) => [account.name, account.ledgerBalanceCents]),
   );
 }
 

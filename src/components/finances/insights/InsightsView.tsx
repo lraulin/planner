@@ -11,6 +11,7 @@ import {
 import type { CarryingCost } from "@/lib/finances/dashboardQueries";
 import { analyzeInsights } from "@/lib/finances/insightsAnalysis";
 import type { DeclaredBill } from "@/lib/finances/recurringBills";
+import type { ReconcileStatement } from "@/lib/finances/reconcile";
 import {
   drillLabel,
   insightsFilterOptions,
@@ -78,11 +79,13 @@ export function InsightsView({
   carryingCost,
   unclassified,
   bills,
+  statements = [],
 }: {
   rows: AnalyticsRow[];
   carryingCost: CarryingCost;
   unclassified: number;
   bills: DeclaredBill[];
+  statements?: readonly ReconcileStatement[];
 }) {
   const formatDate = useDateFormatter();
   const today = useToday();
@@ -105,10 +108,10 @@ export function InsightsView({
     return {
       ...core,
       sankey: cashFlowSankey(core.windowed, view.sankeyGrouping),
-      coverage: coverageGap(rows),
+      coverage: coverageGap(rows, statements),
       drilled: drilledRows(core.windowed, view.drill, core.trends.keys),
     };
-  }, [rows, today, view, bills]);
+  }, [rows, today, view, bills, statements]);
 
   function setDrill(next: InsightsDrill) {
     patch((current) => ({
@@ -409,11 +412,13 @@ export function InsightsView({
           <Panel
             title="Where it went"
             subtitle={
-              coverage.completeFrom
-                ? `Complete from ${formatDate(coverage.completeFrom)}. Before then ${formatUsd(
-                    coverage.unitemizedCents,
-                  )} exists only as lump card payments, so it cannot appear here.`
-                : "Spending by category over the window."
+              coverage.holes.length > 0
+                ? `${coverage.holes.length} statement hole${coverage.holes.length === 1 ? "" : "s"} — category totals skip those dates.`
+                : coverage.completeFrom
+                  ? `Complete from ${formatDate(coverage.completeFrom)}. Before then ${formatUsd(
+                      coverage.unitemizedCents,
+                    )} exists only as lump card payments, so it cannot appear here.`
+                  : "Spending by category over the window."
             }
           >
             <CategoryBars
@@ -648,12 +653,27 @@ export function InsightsView({
             }
           >
             <ul className="flex flex-col gap-2 text-[0.8125rem] text-ink">
-              {coverage.completeFrom && (
+              {coverage.holes.map((hole) => (
+                <li key={`${hole.accountId}:${hole.afterPeriodEnd}`}>
+                  {hole.accountName} has no statement after{" "}
+                  {formatDate(hole.afterPeriodEnd)} until{" "}
+                  {formatDate(hole.beforePeriodStart)}. Official close moved{" "}
+                  {formatUsd(hole.discontinuityCents)} across the gap, so cash-flow and
+                  category charts skip that stretch.
+                </li>
+              ))}
+              {coverage.mismatches.map((mismatch) => (
+                <li key={mismatch.accountId} className="text-priority-a">
+                  {mismatch.accountName} headlines{" "}
+                  {formatUsd(mismatch.anchoredBalanceCents)} from its latest statement,
+                  but the ledger sums to {formatUsd(mismatch.ledgerBalanceCents)}.
+                </li>
+              ))}
+              {coverage.completeFrom && coverage.unitemizedCents > 0 && (
                 <li>
-                  Card itemization starts {formatDate(coverage.completeFrom)}.{" "}
-                  {formatUsd(coverage.unitemizedCents)} of earlier spending exists only
-                  as lump payments from checking, so category and merchant totals before
-                  that date are incomplete by roughly that much.
+                  Some accounts start {formatDate(coverage.completeFrom)}.{" "}
+                  {formatUsd(coverage.unitemizedCents)} of unpaired payments before then
+                  (or inside a hole) stand in for spending the register cannot itemize.
                 </li>
               )}
               {coverage.lateAccounts.map((account) => (

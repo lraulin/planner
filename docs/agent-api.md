@@ -564,8 +564,8 @@ complete input/output JSON Schemas.
 Orient on accounts, imported history, coverage gaps, and carrying cost.
 
 - Use when: Start here for any money question. Use before cash flow, spending, or search so you know the coverage gap and which accounts exist.
-- Avoid when: Do not use it for a dated series or a named transaction; those are the other finance tools.
-- Returns: Accounts with balances, the imported date range, unclassified count, coverage gap, category vocabulary, and headline interest/fees.
+- Avoid when: Do not use it for a dated series or a named transaction; those are the other finance tools. Do not treat ledgerBalanceCents as the current balance when mismatchCents is nonzero.
+- Returns: Accounts with statement-anchored balances (plus ledger sum and mismatch), the imported date range, unclassified count, coverage (late starts, holes, mismatches), category vocabulary, and headline interest/fees.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: domain
 - Arguments: `{  }`
@@ -579,7 +579,7 @@ complete input/output JSON Schemas.
 Income, spend, net, trailing-12 overlay, and the baseline vs one-off split.
 
 - Use when: Use to answer whether cash flow is positive, whether a stretch is typical, or whether one-off events are hiding the baseline.
-- Avoid when: Do not blend baselineCents and oneOffCents. Use get_spending_breakdown for ranked categories and search_transactions to inspect named rows.
+- Avoid when: Do not blend baselineCents and oneOffCents. Do not treat a window that overlaps coverage.holes as complete. Use get_spending_breakdown for ranked categories and search_transactions to inspect named rows.
 - Returns: Per-bucket income/spend/fixed/variable/net plus trailing averages, window totals, typical monthly income, and the named one-off split.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: domain
@@ -594,7 +594,7 @@ complete input/output JSON Schemas.
 Ranked spend by category or merchant for a window.
 
 - Use when: Use after get_finance_overview when asking where the money went.
-- Avoid when: Category totals before coverage.completeFrom are missing unitemized card spend. Do not treat an all-time category chart as complete without reading the coverage gap.
+- Avoid when: Category totals skip statement holes and unitemized unpaired payments. Read get_finance_overview coverage before treating an all-time chart as complete.
 - Returns: Ranked { name, cents, share, count }, total spend, leftover otherCents, and optional per-bucket trends.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: domain
@@ -630,6 +630,21 @@ Asset vs debt trajectory, account contributions, and statement carrying cost.
 - Exposure: domain
 - Arguments: `{ window*, from?, to?, axis*, levelRecurring*, accountIds*, categories*, merchants* }`
 - Output: `{ range*, series*, latest*, debtToAssetRatio*, contributions*, carryingCost* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `list_statements`
+
+Official statement snapshots with the register check for each period.
+
+- Use when: Use to compare a bank's opening/closing to imported rows, or to see which cycles are missing.
+- Avoid when: Do not use it for current spend totals. Use get_finance_overview for the headline balance and search_transactions for named rows.
+- Returns: A page of period rows (open/close, activity, registerDeltaCents, holeAfter) plus the hole list and pageInfo.
+- Effects: read; destructive=false; retry=safe; confirmation=none
+- Exposure: domain
+- Arguments: `{ accountId?, from?, to?, offset*, limit* }`
+- Output: `{ statements*, holes*, pageInfo* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
 complete input/output JSON Schemas.

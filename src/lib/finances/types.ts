@@ -140,8 +140,17 @@ export type FinanceAccountRow = {
   externalSource: string;
   externalKey: string;
   closedAt: Date | null;
-  /** Sum of every transaction on the account, in cents. */
+  /**
+   * Headline current balance. Latest statement closing plus later txs when a
+   * snapshot exists; otherwise the ledger sum.
+   */
   balanceCents: number;
+  /** Sum of every transaction on the account. */
+  ledgerBalanceCents: number;
+  statementClosingCents: number | null;
+  statementPeriodEnd: string | null;
+  /** `ledger − headline`. Zero when there is no statement. */
+  balanceMismatchCents: number;
   transactionCount: number;
 };
 
@@ -204,4 +213,11 @@ export type StatementListRow = {
   ytdInterestCents: number | null;
   rewardsPoints: number | null;
   rates: ParsedStatementRate[];
+};
+
+/** One stored statement plus the register check for that period. */
+export type StatementViewRow = StatementListRow & {
+  registerSumCents: number;
+  registerDeltaCents: number;
+  rowCount: number;
 };

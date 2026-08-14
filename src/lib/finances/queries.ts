@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, lte, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeAccounts,
@@ -70,17 +70,77 @@ export async function listAccounts(userId: string): Promise<FinanceAccountRow[]>
     .groupBy(financeAccounts.id)
     .orderBy(asc(financeAccounts.name));
 
-  return rows.map((row) => ({
-    id: row.id,
-    name: row.name,
-    kind: row.kind,
-    institution: row.institution,
-    externalSource: row.externalSource,
-    externalKey: row.externalKey,
-    closedAt: row.closedAt,
-    balanceCents: numericStringToCents(row.balance) ?? 0,
-    transactionCount: row.transactionCount,
-  }));
+  const latestRows = await db
+    .select({
+      accountId: financeStatements.accountId,
+      periodEnd: financeStatements.periodEnd,
+      closingBalance: financeStatements.closingBalance,
+    })
+    .from(financeStatements)
+    .where(eq(financeStatements.userId, userId))
+    .orderBy(desc(financeStatements.periodEnd), desc(financeStatements.id));
+
+  const latestByAccount = new Map<
+    string,
+    { periodEnd: string; closingCents: number }
+  >();
+  for (const row of latestRows) {
+    if (latestByAccount.has(row.accountId)) continue;
+    latestByAccount.set(row.accountId, {
+      periodEnd: row.periodEnd,
+      closingCents: numericStringToCents(row.closingBalance) ?? 0,
+    });
+  }
+
+  const postByAccount = new Map<string, number>();
+  const latestList = [...latestByAccount.entries()];
+  if (latestList.length > 0) {
+    const postRows = await db
+      .select({
+        accountId: financeTransactions.accountId,
+        total: sql<string>`coalesce(sum(${financeTransactions.amount}), 0)`,
+      })
+      .from(financeTransactions)
+      .where(
+        and(
+          eq(financeTransactions.userId, userId),
+          or(
+            ...latestList.map(([accountId, latest]) =>
+              and(
+                eq(financeTransactions.accountId, accountId),
+                gt(financeTransactions.transactionDate, latest.periodEnd),
+              ),
+            ),
+          ),
+        ),
+      )
+      .groupBy(financeTransactions.accountId);
+    for (const row of postRows) {
+      postByAccount.set(row.accountId, numericStringToCents(row.total) ?? 0);
+    }
+  }
+
+  return rows.map((row) => {
+    const ledgerBalanceCents = numericStringToCents(row.balance) ?? 0;
+    const latest = latestByAccount.get(row.id);
+    const postCents = latest ? (postByAccount.get(row.id) ?? 0) : 0;
+    const balanceCents = latest ? latest.closingCents + postCents : ledgerBalanceCents;
+    return {
+      id: row.id,
+      name: row.name,
+      kind: row.kind,
+      institution: row.institution,
+      externalSource: row.externalSource,
+      externalKey: row.externalKey,
+      closedAt: row.closedAt,
+      balanceCents,
+      ledgerBalanceCents,
+      statementClosingCents: latest?.closingCents ?? null,
+      statementPeriodEnd: latest?.periodEnd ?? null,
+      balanceMismatchCents: latest ? ledgerBalanceCents - balanceCents : 0,
+      transactionCount: row.transactionCount,
+    };
+  });
 }
 
 /**

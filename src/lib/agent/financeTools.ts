@@ -23,7 +23,8 @@ import {
   type InsightsReportFilter,
   type InsightsWindowKey,
 } from "@/lib/finances/insightsFilter";
-import { listAccounts } from "@/lib/finances/queries";
+import { listAccounts, listStatements } from "@/lib/finances/queries";
+import { reconcileAccounts } from "@/lib/finances/reconcile";
 import { searchTransactions } from "@/lib/finances/transactionSearch";
 import { localDateKey } from "@/lib/metrics/parse";
 import type { InsightsAxis } from "@/lib/settings/finances";
@@ -142,11 +143,12 @@ function flattenFlowPoint(point: {
 }
 
 export async function getFinanceOverviewTool(userId: string) {
-  const [accounts, rows, unclassified, carrying] = await Promise.all([
+  const [accounts, rows, unclassified, carrying, statements] = await Promise.all([
     listAccounts(userId),
     loadInsightsRows(userId),
     unclassifiedCount(userId),
     loadCarryingCost(userId),
+    listStatements(userId),
   ]);
   const history = rowsRange(rows);
   const options = insightsFilterOptions(rows);
@@ -157,6 +159,10 @@ export async function getFinanceOverviewTool(userId: string) {
       kind: account.kind,
       institution: account.institution,
       balanceCents: account.balanceCents,
+      ledgerBalanceCents: account.ledgerBalanceCents,
+      statementClosingCents: account.statementClosingCents,
+      statementPeriodEnd: account.statementPeriodEnd,
+      mismatchCents: account.balanceMismatchCents,
       transactionCount: account.transactionCount,
       closedAt: account.closedAt ? account.closedAt.toISOString() : null,
     })),
@@ -166,7 +172,7 @@ export async function getFinanceOverviewTool(userId: string) {
       transactionCount: rows.length,
     },
     unclassifiedCount: unclassified,
-    coverage: coverageGap(rows),
+    coverage: coverageGap(rows, statements),
     categories: options.categories,
     merchants: options.merchants,
     carryingCost: {
@@ -430,5 +436,58 @@ export async function searchTransactionsTool(
     matchedIncomeCents: found.matchedIncomeCents,
     matchedSpendCents: found.matchedSpendCents,
     matchedNetCents: found.matchedNetCents,
+  };
+}
+
+export async function listStatementsTool(
+  userId: string,
+  args: Record<string, unknown>,
+) {
+  const [statements, rows] = await Promise.all([
+    listStatements(userId),
+    loadInsightsRows(userId),
+  ]);
+  const report = reconcileAccounts(statements, rows);
+  const checkById = new Map(report.statements.map((row) => [row.statementId, row]));
+  const accountId = optionalString(args, "accountId");
+  const from = optionalString(args, "from");
+  const to = optionalString(args, "to");
+  const holeKeys = new Set(
+    report.holes.map((hole) => `${hole.accountId}:${hole.afterPeriodEnd}`),
+  );
+
+  const filtered = statements.filter((statement) => {
+    if (accountId && statement.accountId !== accountId) return false;
+    if (from && statement.periodEnd < from) return false;
+    if (to && statement.periodStart > to) return false;
+    return true;
+  });
+
+  const bounds = pageBounds(
+    optionalNumber(args, "offset"),
+    optionalNumber(args, "limit"),
+  );
+  const page = paginate(filtered, bounds);
+  return {
+    statements: page.items.map((statement) => {
+      const check = checkById.get(statement.id);
+      return {
+        id: statement.id,
+        accountId: statement.accountId,
+        accountName: statement.accountName,
+        periodStart: statement.periodStart,
+        periodEnd: statement.periodEnd,
+        openingBalanceCents: statement.openingBalanceCents,
+        closingBalanceCents: statement.closingBalanceCents,
+        paymentsCreditsCents: statement.paymentsCreditsCents,
+        purchasesCents: statement.purchasesCents,
+        registerSumCents: check?.registerSumCents ?? 0,
+        registerDeltaCents: check?.registerDeltaCents ?? 0,
+        rowCount: check?.rowCount ?? 0,
+        holeAfter: holeKeys.has(`${statement.accountId}:${statement.periodEnd}`),
+      };
+    }),
+    holes: report.holes.filter((hole) => !accountId || hole.accountId === accountId),
+    pageInfo: page.pageInfo,
   };
 }

@@ -49,6 +49,7 @@ import {
   getFinanceOverviewTool,
   getSpendingBreakdownTool,
   listRecurringBillsTool,
+  listStatementsTool,
   searchTransactionsTool,
 } from "./financeTools";
 
@@ -474,9 +475,9 @@ const definitions: AgentToolDefinition[] = [
     useWhen:
       "Start here for any money question. Use before cash flow, spending, or search so you know the coverage gap and which accounts exist.",
     avoidWhen:
-      "Do not use it for a dated series or a named transaction; those are the other finance tools.",
+      "Do not use it for a dated series or a named transaction; those are the other finance tools. Do not treat ledgerBalanceCents as the current balance when mismatchCents is nonzero.",
     returns:
-      "Accounts with balances, the imported date range, unclassified count, coverage gap, category vocabulary, and headline interest/fees.",
+      "Accounts with statement-anchored balances (plus ledger sum and mismatch), the imported date range, unclassified count, coverage (late starts, holes, mismatches), category vocabulary, and headline interest/fees.",
     effects: read,
     exposure: "domain",
     handler: getFinanceOverviewTool,
@@ -488,7 +489,7 @@ const definitions: AgentToolDefinition[] = [
     useWhen:
       "Use to answer whether cash flow is positive, whether a stretch is typical, or whether one-off events are hiding the baseline.",
     avoidWhen:
-      "Do not blend baselineCents and oneOffCents. Use get_spending_breakdown for ranked categories and search_transactions to inspect named rows.",
+      "Do not blend baselineCents and oneOffCents. Do not treat a window that overlaps coverage.holes as complete. Use get_spending_breakdown for ranked categories and search_transactions to inspect named rows.",
     returns:
       "Per-bucket income/spend/fixed/variable/net plus trailing averages, window totals, typical monthly income, and the named one-off split.",
     effects: read,
@@ -501,7 +502,7 @@ const definitions: AgentToolDefinition[] = [
     summary: "Ranked spend by category or merchant for a window.",
     useWhen: "Use after get_finance_overview when asking where the money went.",
     avoidWhen:
-      "Category totals before coverage.completeFrom are missing unitemized card spend. Do not treat an all-time category chart as complete without reading the coverage gap.",
+      "Category totals skip statement holes and unitemized unpaired payments. Read get_finance_overview coverage before treating an all-time chart as complete.",
     returns:
       "Ranked { name, cents, share, count }, total spend, leftover otherCents, and optional per-bucket trends.",
     effects: read,
@@ -539,6 +540,19 @@ const definitions: AgentToolDefinition[] = [
     effects: read,
     exposure: "domain",
     handler: getDebtSummaryTool,
+  }),
+  defineTool("list_statements", {
+    domain: "finances",
+    summary: "Official statement snapshots with the register check for each period.",
+    useWhen:
+      "Use to compare a bank's opening/closing to imported rows, or to see which cycles are missing.",
+    avoidWhen:
+      "Do not use it for current spend totals. Use get_finance_overview for the headline balance and search_transactions for named rows.",
+    returns:
+      "A page of period rows (open/close, activity, registerDeltaCents, holeAfter) plus the hole list and pageInfo.",
+    effects: read,
+    exposure: "domain",
+    handler: listStatementsTool,
   }),
   defineTool("search_transactions", {
     domain: "finances",
@@ -629,7 +643,14 @@ const fieldDescriptions: Record<string, string> = {
   accountId: "Finance account UUID returned by get_finance_overview.",
   flow: "Effective flow kind: spend, income, internal_transfer, external_transfer, refund, interest_fee.",
   balanceCents:
-    "Integer cents. 100 = $1.00. Signed; positive is money into the account.",
+    "Headline current balance in integer cents (100 = $1.00). Latest statement closing plus later txs when a snapshot exists; otherwise the ledger sum. Signed; positive is money into the account.",
+  ledgerBalanceCents:
+    "Sum of every imported transaction on the account, in integer cents. Diagnostic; can disagree with the official close.",
+  mismatchCents:
+    "ledgerBalanceCents minus the headline. Zero when the account has no statement.",
+  statementClosingCents:
+    "Official closing balance of the newest statement, in integer cents.",
+  statementPeriodEnd: "Closing date of the newest statement (YYYY-MM-DD).",
   incomeCents: "Integer cents of money arriving.",
   spendCents: "Integer cents of reported spend, as a positive cost.",
   netCents:
