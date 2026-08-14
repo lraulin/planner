@@ -5,6 +5,7 @@ import {
   accountContributions,
   assetDebtSeries,
   baselineSplit,
+  cadenceCandidates,
   cashFlow,
   coverageGap,
   debtToAssetRatio,
@@ -22,11 +23,13 @@ import {
   spendByMerchant,
   spendCentsOf,
   TREND_OTHER,
+  upcomingBills,
   type AnalyticsRow,
   type Bucket,
 } from "@/lib/finances/analytics";
 import { buildPayPeriods } from "@/lib/finances/classify/payPeriods";
 import type { CarryingCost } from "@/lib/finances/dashboardQueries";
+import type { DeclaredBill } from "@/lib/finances/recurringBills";
 import {
   applyInsightsFilter,
   drillLabel,
@@ -71,6 +74,7 @@ import { RecurringTable } from "./RecurringTable";
 import { SankeyChart } from "./SankeyChart";
 import { SpendingTrendsChart } from "./SpendingTrendsChart";
 import { TransactionAudit } from "./TransactionAudit";
+import { UpcomingBills } from "./UpcomingBills";
 
 const INSIGHTS_CODEC: SettingCodec<InsightsViewSettings> = {
   parse: parseInsightsView,
@@ -94,10 +98,12 @@ export function InsightsView({
   rows,
   carryingCost,
   unclassified,
+  bills,
 }: {
   rows: AnalyticsRow[];
   carryingCost: CarryingCost;
   unclassified: number;
+  bills: DeclaredBill[];
 }) {
   const formatDate = useDateFormatter();
   const today = useToday();
@@ -130,10 +136,18 @@ export function InsightsView({
     const visibleKeys = new Set(buckets.map((bucket) => bucket.key));
     const flow = cashFlow(filtered, fullBuckets, {
       levelRecurring: view.levelRecurring,
+      bills,
     }).filter((point) => visibleKeys.has(point.bucket.key));
 
     const income = monthlyIncome(filtered, paydays, range);
-    const split = baselineSplit(windowed, buckets.length);
+    // Detection runs on the window; declared bills read their amounts from the whole
+    // history, so a commitment does not vanish from the table when the window narrows.
+    const recurring = recurringMerchants(windowed, bills, filtered);
+    const split = baselineSplit(windowed, buckets.length, {
+      levelRecurring: view.levelRecurring,
+      bills: recurring,
+      buckets,
+    });
     const trends = spendByCategoryPerBucket(windowed, buckets);
     const assetDebt = assetDebtSeries(filtered, buckets);
     const latest = assetDebt[assetDebt.length - 1];
@@ -151,8 +165,14 @@ export function InsightsView({
       payees: spendByMerchant(windowed),
       trends,
       sankey: cashFlowSankey(windowed, view.sankeyGrouping),
-      recurring: recurringMerchants(windowed),
-      suggestions: oneOffSuggestions(windowed),
+      recurring,
+      suggestions: oneOffSuggestions(windowed, { bills }),
+      // Both of these read the **whole** filtered history, not the window. The two charges
+      // that make a semi-annual pattern are eight months apart, and the anchor a forecast
+      // walks from is the most recent charge — a window that hides either produces a
+      // confident wrong answer rather than no answer.
+      candidates: cadenceCandidates(filtered),
+      upcoming: upcomingBills(filtered, bills, today ?? full.endKey),
       assetDebt,
       contributions: accountContributions(filtered, range),
       debtRatio: latest ? debtToAssetRatio(latest.assetCents, latest.debtCents) : null,
@@ -160,7 +180,7 @@ export function InsightsView({
       coverage: coverageGap(rows),
       drilled: drilledRows(windowed, view.drill, trends.keys),
     };
-  }, [rows, today, view]);
+  }, [rows, today, view, bills]);
 
   function setDrill(next: InsightsDrill) {
     patch((current) => ({
@@ -379,11 +399,19 @@ export function InsightsView({
             tone="income"
           />
           <StatTile
-            label={`Baseline burn per ${bucketNoun}`}
+            label={`Baseline burn per ${bucketNoun}${split.levelled ? " (levelled)" : ""}`}
             value={formatUsd(split.baselinePerBucketCents)}
-            detail={`Ongoing spend only, over ${split.bucketCount} ${bucketNoun}${
-              split.bucketCount === 1 ? "" : "s"
-            }`}
+            detail={
+              split.levelled
+                ? `Ongoing spend over ${split.bucketCount} ${bucketNoun}${
+                    split.bucketCount === 1 ? "" : "s"
+                  }, with bills accrued at their cadence — ${formatUsd(
+                    Math.round(split.billsCents / Math.max(1, split.bucketCount)),
+                  )} a ${bucketNoun} of them, whether or not a charge landed here. Untick "Level bills" for what actually posted.`
+                : `Ongoing spend only, as posted, over ${split.bucketCount} ${bucketNoun}${
+                    split.bucketCount === 1 ? "" : "s"
+                  }. A semi-annual bill lands whole in its own ${bucketNoun}; tick "Level bills" to spread it.`
+            }
             tone="spend"
           />
           <StatTile
@@ -640,20 +668,33 @@ export function InsightsView({
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           <Panel
             title="Recurring charges"
-            subtitle="Found by how little they vary, not by category — and priced by the year."
+            subtitle="Found by how little they vary, not by category, plus the cadences you declared (▸) — and priced by the year, with what to set aside each month."
           >
-            <RecurringTable merchants={analysis.recurring} />
+            <RecurringTable
+              merchants={analysis.recurring}
+              declarable={filterOptions.merchants}
+            />
           </Panel>
 
           <Panel
             title="One-offs to review"
-            subtitle="Suggestions only. An annual premium looks like a one-off to any statistic, so nothing is excluded until you say so."
+            subtitle="Suggestions only. An annual premium looks like a one-off to any statistic, so nothing is excluded until you say so — and if it is a bill, say that instead."
           >
-            <OneOffReview suggestions={analysis.suggestions} />
+            <OneOffReview
+              suggestions={analysis.suggestions}
+              candidates={analysis.candidates}
+            />
           </Panel>
         </div>
 
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <Panel
+            title="Upcoming bills"
+            subtitle="Projected from the last charge on file, for the cadences you declared. Nothing here reconciles against the charge that arrives — a bill still listed after its date means the import is behind, not that money went missing."
+          >
+            <UpcomingBills bills={analysis.upcoming} />
+          </Panel>
+
           <Panel
             title="What the accounts cost"
             subtitle="Interest and fees as the statements state them, not as the register infers them."

@@ -2205,6 +2205,66 @@ export const financeStatementRates = pgTable(
 );
 
 /**
+ * A bill the user has **declared** recurring, with the cadence they know it arrives on.
+ *
+ * This exists because detection cannot reach the long cadences.
+ * `recurringMerchants` (`src/lib/finances/analytics.ts`) finds a subscription by variance
+ * alone, but it needs six charges at a gap under 100 days before it will say so — thresholds
+ * that are right for something asserted without being asked. A semi-annual propane bill is
+ * over the day cap and would need three years of history to reach six charges; an annual
+ * insurance premium would need six years. Neither is ever detectable, so both fell through to
+ * the one-off review list, where the only offers were to exclude them from the baseline —
+ * which understates what a year costs, a little more confidently every year — or to leave
+ * them on the list forever. The declaration is the missing third answer.
+ *
+ * **Keyed on the merchant, not on a transaction.** A cadence is a fact about Geico, not about
+ * the March charge, and keying it this way is exactly what stops the row coming back next
+ * time. The key is `effectiveMerchant()` output, so it is the display name where a classifier
+ * rule supplies one (`Geico`) and the normalized description where none does.
+ *
+ * **Cadence is months, not days.** "Semi-annual" means March and September, not every 182.5
+ * days; months keep the next-due date from drifting a fortnight per decade. A `smallint` with
+ * a CHECK rather than an enum leaves room for a cadence nobody predicted and sidesteps the
+ * `ALTER TYPE … ADD VALUE` limitation recorded at `financeFlowKindEnum` above.
+ */
+export const financeRecurringBills = pgTable(
+  "finance_recurring_bills",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Effective merchant — `effectiveMerchant()` output, not the raw bank description. */
+    merchant: text("merchant").notNull(),
+    /** 1 monthly, 3 quarterly, 6 semi-annual, 12 yearly. */
+    cadenceMonths: smallint("cadence_months").notNull(),
+    /**
+     * What the user says it costs. Null means "use the median of the charges on file", which
+     * is the better answer once there is history and the only wrong one when there is none.
+     */
+    expectedCents: integer("expected_cents"),
+    /**
+     * Anchors the next-due walk when the imported history does not reach a real charge —
+     * declaring a bill whose last instance predates the import coverage gap, for instance.
+     * Null means the latest charge on file is the anchor.
+     */
+    anchorDate: date("anchor_date", { mode: "string" }),
+    notes: text("notes").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // One declaration per merchant is the whole point: two would mean two answers to
+    // "how often is this", and every reader would have to pick.
+    uniqueIndex("finance_recurring_bills_merchant_uq").on(table.userId, table.merchant),
+    check(
+      "finance_recurring_bills_cadence_months",
+      sql`${table.cadenceMonths} >= 1 and ${table.cadenceMonths} <= 24`,
+    ),
+  ],
+);
+
+/**
  * Personal life history — the three tables behind Library's Timeline, Jobs and Residences.
  *
  * **Dates here are `date`, not `timestamptz` at UTC noon.** The rest of the app encodes a

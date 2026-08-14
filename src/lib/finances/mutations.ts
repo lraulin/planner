@@ -3,6 +3,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeAccounts,
+  financeRecurringBills,
   financeTransactions,
   type FinanceAccountKind,
   type FinanceFlowKind,
@@ -329,4 +330,84 @@ export async function deleteAccount(userId: string, accountId: string): Promise<
   await db
     .delete(financeAccounts)
     .where(and(eq(financeAccounts.id, accountId), eq(financeAccounts.userId, userId)));
+}
+
+export type RecurringBillEdit = {
+  /** Effective merchant, as `effectiveMerchant()` produces it. */
+  merchant: string;
+  cadenceMonths: number;
+  /** Null keeps the median of the charges on file as the amount. */
+  expectedCents?: number | null;
+  anchorDate?: string | null;
+  notes?: string;
+};
+
+/**
+ * Declare a merchant's bill cadence, or change one already declared.
+ *
+ * Keyed on the merchant rather than an id, because the caller is the one-off review row and
+ * it knows the merchant, not whether a declaration already exists. That makes the operation
+ * naturally idempotent: declaring Geico semi-annual twice is one declaration, and correcting
+ * it to yearly is the same call with a different number.
+ *
+ * The cadence is checked here as well as by the column's CHECK — a constraint violation
+ * surfaces as a database error the user cannot act on, and the offered list is a closed set.
+ */
+export async function upsertRecurringBill(
+  userId: string,
+  edit: RecurringBillEdit,
+): Promise<void> {
+  const merchant = edit.merchant.trim();
+  if (merchant === "") throw new Error("A bill needs a merchant.");
+  if (
+    !Number.isInteger(edit.cadenceMonths) ||
+    edit.cadenceMonths < 1 ||
+    edit.cadenceMonths > 24
+  ) {
+    throw new Error("A cadence must be a whole number of months, from 1 to 24.");
+  }
+
+  // Only the fields supplied are written, the same rule `updateTransaction` follows. It
+  // matters here because correcting a cadence from the recurring table sends the cadence and
+  // nothing else, and a blanket write would silently clear the declared amount — after which
+  // the bill's figure would quietly fall back to whatever the visible window's median was.
+  const changes = {
+    cadenceMonths: edit.cadenceMonths,
+    ...(edit.expectedCents !== undefined ? { expectedCents: edit.expectedCents } : {}),
+    ...(edit.anchorDate !== undefined ? { anchorDate: edit.anchorDate } : {}),
+    ...(edit.notes !== undefined ? { notes: edit.notes.trim() } : {}),
+    updatedAt: new Date(),
+  };
+
+  await db
+    .insert(financeRecurringBills)
+    .values({
+      userId,
+      merchant,
+      cadenceMonths: edit.cadenceMonths,
+      expectedCents: edit.expectedCents ?? null,
+      anchorDate: edit.anchorDate ?? null,
+      notes: edit.notes?.trim() ?? "",
+    })
+    // The unique index is on (user_id, merchant), so this can only ever collide with this
+    // user's own row — another user's identical merchant is a different row entirely.
+    .onConflictDoUpdate({
+      target: [financeRecurringBills.userId, financeRecurringBills.merchant],
+      set: changes,
+    });
+}
+
+/** Undeclare a bill. Its charges return to the review list, which is the point of undoing. */
+export async function deleteRecurringBill(
+  userId: string,
+  merchant: string,
+): Promise<void> {
+  await db
+    .delete(financeRecurringBills)
+    .where(
+      and(
+        eq(financeRecurringBills.userId, userId),
+        eq(financeRecurringBills.merchant, merchant),
+      ),
+    );
 }

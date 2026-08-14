@@ -29,6 +29,13 @@ import { detectIncome, normalizedMonthlyIncome, type Payday } from "./classify/i
 import { normalizeMerchant } from "./classify/merchant";
 import type { PayPeriod } from "./classify/payPeriods";
 import { matchRule } from "./classify/rules";
+import {
+  annualCents as annualFromCharge,
+  cadenceMonthsFromGapDays,
+  type DeclaredBill,
+  nextDueFrom,
+  spanDays,
+} from "./recurringBills";
 
 /** One classified transaction, as every panel reads it. */
 export type AnalyticsRow = {
@@ -423,6 +430,12 @@ export type CashFlowOptions = {
    * is on.
    */
   levelRecurring?: boolean;
+  /**
+   * Bills the user declared. Without these a semi-annual premium is not levelled at all —
+   * detection cannot see past a 100-day cadence, so the charge lands whole in one bucket and
+   * the levelled chart still has the spike it exists to remove.
+   */
+  bills?: readonly DeclaredBill[];
 };
 
 /** Inclusive day count where two date ranges overlap. */
@@ -479,6 +492,32 @@ function allocateAcross(
 }
 
 /**
+ * How many days a charge at a given merchant covers, or null if it is not a bill at all.
+ *
+ * Declared bills win over detected ones, for the same reason `flow_override` wins over
+ * `derived_flow`: the person knows, and the statistics were only ever guessing. Their span is
+ * measured from the charge's own date rather than from a constant, so a February-anchored
+ * semi-annual bill covers its real 181 days.
+ */
+function cadenceSpans(
+  rows: readonly AnalyticsRow[],
+  bills: readonly DeclaredBill[],
+): (merchant: string, chargeDateKey: string) => number | null {
+  const declared = new Map(bills.map((bill) => [bill.merchant, bill.cadenceMonths]));
+  const detected = new Map(
+    recurringMerchants(rows, bills)
+      .filter((entry) => !entry.declared)
+      .map((entry) => [entry.merchant, entry.cadenceDays]),
+  );
+
+  return (merchant, chargeDateKey) => {
+    const months = declared.get(merchant);
+    if (months !== undefined) return spanDays(chargeDateKey, months);
+    return detected.get(merchant) ?? null;
+  };
+}
+
+/**
  * Income and spend per bucket, split into bills and everything else, with the rolling
  * overlay.
  *
@@ -492,10 +531,8 @@ export function cashFlow(
   buckets: readonly Bucket[],
   options: CashFlowOptions = {},
 ): CashFlowPoint[] {
-  const { window = TRAILING_WINDOW, levelRecurring = false } = options;
-  const cadenceByMerchant = new Map(
-    recurringMerchants(rows).map((entry) => [entry.merchant, entry.cadenceDays]),
-  );
+  const { window = TRAILING_WINDOW, levelRecurring = false, bills = [] } = options;
+  const spanFor = cadenceSpans(rows, bills);
   const grouped = bucketRows(rows, buckets);
 
   const income = buckets.map((bucket) =>
@@ -511,8 +548,8 @@ export function cashFlow(
     for (const row of grouped.get(bucket.key) ?? []) {
       const cost = spendCentsOf(row);
       if (cost === 0) continue;
-      const cadence = cadenceByMerchant.get(effectiveMerchant(row));
-      if (cadence === undefined) {
+      const cadence = spanFor(effectiveMerchant(row), row.transactionDate);
+      if (cadence === null) {
         variable[index] += cost;
         continue;
       }
@@ -565,20 +602,59 @@ export type BaselineSplit = {
   bucketCount: number;
   /** Named one-offs, largest first. Unlabelled ones are collected under one entry. */
   events: SpendEvent[];
+  /** True when bills were accrued at their cadence rate rather than counted as posted. */
+  levelled: boolean;
+  /** The part of `baselineCents` contributed by bills. Zero unless `levelled`. */
+  billsCents: number;
 };
 
 const UNNAMED_EVENT = "Unnamed one-off";
+
+export type BaselineOptions = {
+  /**
+   * Accrue bills at their cadence rate instead of counting the charges that happened to post
+   * inside the window. Shares the `levelRecurring` setting with the cash-flow chart.
+   */
+  levelRecurring?: boolean;
+  /**
+   * The merged recurring table from `recurringMerchants` — detected and declared alike. Only
+   * read when levelling.
+   */
+  bills?: readonly RecurringMerchant[];
+  /** The window's buckets, which is how a rate becomes an amount. Required to level. */
+  buckets?: readonly Bucket[];
+};
 
 /**
  * Split spending into what repeats and what does not.
  *
  * These are reported as two numbers everywhere, never blended: the wedding happened, and
  * saying "you spend $6,800 a month" because of it answers a question nobody asked.
+ *
+ * **Levelling here accrues, where the chart redistributes, and the difference is deliberate.**
+ * `cashFlow` moves a charge between buckets and preserves the total, because a chart is a
+ * record of money that moved. This figure answers "what does an ongoing month cost", so a
+ * bill contributes its *rate* — a $2,825/year premium is $706 of a three-month window whether
+ * or not the charge landed inside it. Counting the charge instead would say $1,412 in the
+ * quarter it posts and nothing in the other three, which is the distortion, not the answer.
+ * The consequence is that `baselineCents` is no longer the sum of the rows in the window; the
+ * caller has to say which mode is showing, and `levelled` is how it knows.
  */
 export function baselineSplit(
   rows: readonly AnalyticsRow[],
   bucketCount: number,
+  options: BaselineOptions = {},
 ): BaselineSplit {
+  const { levelRecurring = false, bills = [], buckets = [] } = options;
+  const windowDays = buckets.reduce(
+    (total, bucket) => total + daysBetweenKeys(bucket.startKey, bucket.endKey) + 1,
+    0,
+  );
+  const levelled = levelRecurring && bills.length > 0 && windowDays > 0;
+  const billMerchants = levelled
+    ? new Set(bills.map((entry) => entry.merchant))
+    : new Set<string>();
+
   let baselineCents = 0;
   let oneOffCents = 0;
   const events = new Map<string, SpendEvent>();
@@ -587,6 +663,9 @@ export function baselineSplit(
     const cost = spendCentsOf(row);
     if (cost === 0) continue;
     if (!row.excludeFromBaseline) {
+      // A charge at a levelled bill is replaced by that bill's accrual below. A credit is
+      // not: a refund has no span to spread over, the same exception `cashFlow` makes.
+      if (cost > 0 && billMerchants.has(effectiveMerchant(row))) continue;
       baselineCents += cost;
       continue;
     }
@@ -598,6 +677,17 @@ export function baselineSplit(
     events.set(label, event);
   }
 
+  // 365, matching the definition of `annualCents` itself, so a calendar year of window
+  // accrues exactly the figure the commitments table prints and the two reconcile by
+  // inspection. A leap year over-accrues by a day, which is the cheaper of the two errors.
+  const billsCents = levelled
+    ? bills.reduce(
+        (total, entry) => total + Math.round((entry.annualCents * windowDays) / 365),
+        0,
+      )
+    : 0;
+  baselineCents += billsCents;
+
   return {
     baselineCents,
     oneOffCents,
@@ -608,6 +698,8 @@ export function baselineSplit(
       (left, right) =>
         right.cents - left.cents || left.label.localeCompare(right.label),
     ),
+    levelled,
+    billsCents,
   };
 }
 
@@ -892,6 +984,13 @@ export type RecurringMerchant = {
   /** `typical × 365 ÷ cadence` — what a year of this costs. */
   annualCents: number;
   lastChargeOn: string;
+  /**
+   * Set when the user declared the cadence rather than the statistics finding it. Null for a
+   * detected merchant, where months would be a rounding of an observed gap and not a fact.
+   */
+  cadenceMonths: number | null;
+  /** True when this row came from a declaration. Drives the marker in the table. */
+  declared: boolean;
 };
 
 /** Below six charges there is no cadence to speak of, only a coincidence. */
@@ -923,23 +1022,29 @@ function standardDeviation(values: readonly number[]): number {
  * Annualizing is the point of the panel: $34.71 a month is invisible and $416 a year is a
  * decision.
  */
-export function recurringMerchants(rows: readonly AnalyticsRow[]): RecurringMerchant[] {
-  const byMerchant = new Map<string, AnalyticsRow[]>();
-  for (const row of rows) {
-    if (spendCentsOf(row) <= 0) continue;
-    const merchant = effectiveMerchant(row);
-    if (merchant === "") continue;
-    const bucket = byMerchant.get(merchant);
-    if (bucket) bucket.push(row);
-    else byMerchant.set(merchant, [row]);
-  }
+export function recurringMerchants(
+  rows: readonly AnalyticsRow[],
+  bills: readonly DeclaredBill[] = [],
+  /**
+   * Where a **declared** bill's charges are read from, when that is not the same set the
+   * detection runs over. A commitment does not depend on the window: a yearly premium costs
+   * what it costs in a month that holds none of its charges, and reading its amount from the
+   * visible slice would make the row blink out of this table whenever someone narrowed the
+   * range. Callers with a window pass their whole history here.
+   */
+  billRows: readonly AnalyticsRow[] = rows,
+): RecurringMerchant[] {
+  const byMerchant = chargesByMerchant(rows);
+  const byMerchantForBills =
+    billRows === rows ? byMerchant : chargesByMerchant(billRows);
+  const declared = new Map(bills.map((bill) => [bill.merchant, bill]));
 
   const found: RecurringMerchant[] = [];
-  for (const [merchant, charges] of byMerchant) {
-    if (charges.length < MIN_RECURRING_CHARGES) continue;
-    const ordered = [...charges].sort((left, right) =>
-      left.transactionDate.localeCompare(right.transactionDate),
-    );
+  for (const [merchant, ordered] of byMerchant) {
+    // A declaration is the user's answer to the same question, so the statistics do not get
+    // to disagree with it — and a semi-annual bill would fail every threshold below anyway.
+    if (declared.has(merchant)) continue;
+    if (ordered.length < MIN_RECURRING_CHARGES) continue;
 
     const amounts = ordered.map(spendCentsOf);
     const typicalCents = median(amounts);
@@ -947,16 +1052,7 @@ export function recurringMerchants(rows: readonly AnalyticsRow[]): RecurringMerc
     const deviationCents = standardDeviation(amounts);
     if (deviationCents > typicalCents * RECURRING_VARIANCE_RATIO) continue;
 
-    const gaps: number[] = [];
-    for (let index = 1; index < ordered.length; index++) {
-      gaps.push(
-        daysBetweenKeys(
-          ordered[index - 1].transactionDate,
-          ordered[index].transactionDate,
-        ),
-      );
-    }
-    const cadenceDays = median(gaps);
+    const cadenceDays = median(gapsBetween(ordered));
     if (cadenceDays < MIN_CADENCE_DAYS || cadenceDays > MAX_CADENCE_DAYS) continue;
 
     found.push({
@@ -967,6 +1063,31 @@ export function recurringMerchants(rows: readonly AnalyticsRow[]): RecurringMerc
       cadenceDays,
       annualCents: Math.round((typicalCents * 365) / cadenceDays),
       lastChargeOn: ordered[ordered.length - 1].transactionDate,
+      cadenceMonths: null,
+      declared: false,
+    });
+  }
+
+  for (const bill of bills) {
+    const charges = byMerchantForBills.get(bill.merchant) ?? [];
+    const amounts = charges.map(spendCentsOf);
+    // The declared amount first, because it survives a window that contains no charge — which
+    // is the normal case for a yearly bill and exactly when the commitment still exists.
+    const typicalCents =
+      bill.expectedCents ?? (amounts.length > 0 ? median(amounts) : 0);
+    if (typicalCents <= 0) continue;
+
+    found.push({
+      merchant: bill.merchant,
+      typicalCents,
+      deviationCents: standardDeviation(amounts),
+      chargeCount: charges.length,
+      cadenceDays: Math.round(bill.cadenceMonths * (365.2425 / 12)),
+      annualCents: annualFromCharge(typicalCents, bill.cadenceMonths),
+      lastChargeOn:
+        charges[charges.length - 1]?.transactionDate ?? bill.anchorDate ?? "",
+      cadenceMonths: bill.cadenceMonths,
+      declared: true,
     });
   }
 
@@ -975,6 +1096,156 @@ export function recurringMerchants(rows: readonly AnalyticsRow[]): RecurringMerc
       right.annualCents - left.annualCents ||
       left.merchant.localeCompare(right.merchant),
   );
+}
+
+/** Spending charges grouped by effective merchant, each group in date order. */
+function chargesByMerchant(rows: readonly AnalyticsRow[]): Map<string, AnalyticsRow[]> {
+  const byMerchant = new Map<string, AnalyticsRow[]>();
+  for (const row of rows) {
+    if (spendCentsOf(row) <= 0) continue;
+    const merchant = effectiveMerchant(row);
+    if (merchant === "") continue;
+    const bucket = byMerchant.get(merchant);
+    if (bucket) bucket.push(row);
+    else byMerchant.set(merchant, [row]);
+  }
+  for (const charges of byMerchant.values()) {
+    charges.sort((left, right) =>
+      left.transactionDate.localeCompare(right.transactionDate),
+    );
+  }
+  return byMerchant;
+}
+
+/** Days between consecutive charges. Empty for a single charge, which has no cadence. */
+function gapsBetween(ordered: readonly AnalyticsRow[]): number[] {
+  const gaps: number[] = [];
+  for (let index = 1; index < ordered.length; index++) {
+    gaps.push(
+      daysBetweenKeys(
+        ordered[index - 1].transactionDate,
+        ordered[index].transactionDate,
+      ),
+    );
+  }
+  return gaps;
+}
+
+// — Cadence proposals ————————————————————————————————————————————————————————
+
+export type CadenceCandidate = {
+  merchant: string;
+  /** The cadence the gaps look like, in months. */
+  cadenceMonths: number;
+  typicalCents: number;
+  chargeCount: number;
+  lastChargeOn: string;
+};
+
+/** Two charges is one gap — thin, but enough to *offer* a cadence for confirmation. */
+const MIN_CANDIDATE_CHARGES = 2;
+
+/**
+ * Merchants whose charges look like they arrive on a cadence, offered as a pre-filled answer.
+ *
+ * Deliberately far looser than `recurringMerchants`, and deliberately unable to change a
+ * number on its own. That function asserts a subscription unprompted, so it demands six
+ * charges inside 100 days; a semi-annual bill clears neither bar and never will. This one
+ * only fills in a dropdown someone is about to read, where a wrong guess costs one click to
+ * correct and a missing guess costs the user working out their own propane schedule.
+ *
+ * Run it over the **whole** history rather than the visible window: the two charges that make
+ * a semi-annual pattern are eight months apart and a six-month window sees only one of them.
+ */
+export function cadenceCandidates(rows: readonly AnalyticsRow[]): CadenceCandidate[] {
+  const found: CadenceCandidate[] = [];
+
+  for (const [merchant, ordered] of chargesByMerchant(rows)) {
+    if (ordered.length < MIN_CANDIDATE_CHARGES) continue;
+
+    const amounts = ordered.map(spendCentsOf);
+    const typicalCents = median(amounts);
+    if (typicalCents <= 0) continue;
+    // Spread from the median rather than a standard deviation, which is near-meaningless on
+    // the two-charge case this exists to serve.
+    const widest = Math.max(...amounts.map((cents) => Math.abs(cents - typicalCents)));
+    if (widest > typicalCents * RECURRING_VARIANCE_RATIO) continue;
+
+    const cadenceMonths = cadenceMonthsFromGapDays(median(gapsBetween(ordered)));
+    if (cadenceMonths === null) continue;
+
+    found.push({
+      merchant,
+      cadenceMonths,
+      typicalCents,
+      chargeCount: ordered.length,
+      lastChargeOn: ordered[ordered.length - 1].transactionDate,
+    });
+  }
+
+  return found.sort((left, right) => left.merchant.localeCompare(right.merchant));
+}
+
+// — Upcoming bills ————————————————————————————————————————————————————————————
+
+export type UpcomingBill = {
+  merchant: string;
+  cadenceMonths: number;
+  /** The next date this is expected to land. */
+  dueOn: string;
+  /** Negative once the expected date has passed without a matching charge. */
+  daysAway: number;
+  expectedCents: number;
+  /** What the forecast is anchored on — the last real charge, or the declared anchor. */
+  lastChargeOn: string;
+};
+
+/**
+ * When each declared bill is next expected, and for how much.
+ *
+ * A projection from the last charge, not a promise: nothing here reconciles against the
+ * charge that eventually arrives, so a bill still listed a week after its date means the
+ * import is behind or the date moved, not that the money is missing.
+ *
+ * Pass the **whole** history. The anchor is the most recent charge, and a window that
+ * excludes it would forecast from whichever older charge happened to survive the filter.
+ */
+export function upcomingBills(
+  rows: readonly AnalyticsRow[],
+  bills: readonly DeclaredBill[],
+  todayKey: string,
+): UpcomingBill[] {
+  const byMerchant = chargesByMerchant(rows);
+
+  return bills
+    .flatMap((bill) => {
+      const charges = byMerchant.get(bill.merchant) ?? [];
+      const lastChargeOn =
+        charges[charges.length - 1]?.transactionDate ?? bill.anchorDate ?? "";
+      if (lastChargeOn === "") return [];
+
+      const expectedCents =
+        bill.expectedCents ??
+        (charges.length > 0 ? median(charges.map(spendCentsOf)) : 0);
+      if (expectedCents <= 0) return [];
+
+      const dueOn = nextDueFrom(lastChargeOn, bill.cadenceMonths, todayKey);
+      return [
+        {
+          merchant: bill.merchant,
+          cadenceMonths: bill.cadenceMonths,
+          dueOn,
+          daysAway: daysBetweenKeys(todayKey, dueOn),
+          expectedCents,
+          lastChargeOn,
+        },
+      ];
+    })
+    .sort(
+      (left, right) =>
+        left.dueOn.localeCompare(right.dueOn) ||
+        left.merchant.localeCompare(right.merchant),
+    );
 }
 
 // — One-off suggestions ——————————————————————————————————————————————————————
@@ -986,6 +1257,15 @@ export type OneOffSuggestion = {
   category: string;
   /** How many times the typical spending row this is. */
   multiple: number;
+};
+
+export type OneOffOptions = {
+  limit?: number;
+  /**
+   * Bills the user has declared. Their charges are withheld permanently — a declaration is
+   * the answer to this list's question, and continuing to ask is the bug being fixed.
+   */
+  bills?: readonly DeclaredBill[];
 };
 
 /** How far above a typical row a charge has to sit before it is worth asking about. */
@@ -1001,18 +1281,28 @@ const OUTLIER_FLOOR_CENTS = 50_000;
  * quietly understate what a year costs. So the statistic proposes and the user disposes —
  * `setOneOff` is a confirmation, never a consequence of running this.
  *
- * Rows on a recurring merchant are withheld for the same reason.
+ * Rows on a recurring merchant are withheld for the same reason, whether that merchant was
+ * detected or declared. Detection alone was not enough: it cannot see a cadence longer than
+ * 100 days, so the semi-annual and yearly bills it misses had no way to leave this list at
+ * all — the only offers were to exclude them, which is the compounding error above, or to
+ * keep seeing them forever.
  */
 export function oneOffSuggestions(
   rows: readonly AnalyticsRow[],
-  limit = 20,
+  options: OneOffOptions = {},
 ): OneOffSuggestion[] {
+  const { limit = 20, bills = [] } = options;
   const spending = rows.filter((row) => spendCentsOf(row) > 0);
   if (spending.length === 0) return [];
 
   const typical = median(spending.map(spendCentsOf));
   const threshold = Math.max(typical * OUTLIER_MULTIPLE, OUTLIER_FLOOR_CENTS);
-  const recurring = new Set(recurringMerchants(rows).map((entry) => entry.merchant));
+  const recurring = new Set(
+    recurringMerchants(rows, bills).map((entry) => entry.merchant),
+  );
+  // A declared bill with no charge in this window is absent from the table above but is
+  // still declared, and its charge must not resurface the moment the window narrows.
+  for (const bill of bills) recurring.add(bill.merchant);
 
   return spending
     .filter((row) => !row.excludeFromBaseline)

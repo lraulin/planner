@@ -4,11 +4,14 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { importFinanceCsvFiles, type ImportFile } from "./import";
+import { loadRecurringBills } from "./dashboardQueries";
 import {
   deleteAccount,
+  deleteRecurringBill,
   deleteTransaction,
   updateAccount,
   updateTransaction,
+  upsertRecurringBill,
 } from "./mutations";
 import { getTransaction, listAccounts, listTransactions } from "./queries";
 
@@ -199,5 +202,137 @@ describeDb("finance user isolation", () => {
     );
     expect(await listAccounts(ownerId)).toHaveLength(1);
     expect(await listTransactions(ownerId)).toHaveLength(2);
+  });
+});
+
+describeDb("declared recurring bills", () => {
+  let userId: string;
+
+  beforeEach(async () => {
+    userId = await makeUser();
+  });
+
+  it("declares a cadence and reads it back", async () => {
+    await upsertRecurringBill(userId, {
+      merchant: "Geico",
+      cadenceMonths: 6,
+      expectedCents: 141_260,
+    });
+
+    expect(await loadRecurringBills(userId)).toEqual([
+      {
+        merchant: "Geico",
+        cadenceMonths: 6,
+        expectedCents: 141_260,
+        anchorDate: null,
+      },
+    ]);
+  });
+
+  it("corrects a declaration in place rather than making a second one", async () => {
+    // The caller is a review row that knows the merchant and not whether a declaration
+    // exists, so declaring twice has to mean correcting — two rows would be two answers.
+    await upsertRecurringBill(userId, { merchant: "Geico", cadenceMonths: 6 });
+    await upsertRecurringBill(userId, {
+      merchant: "Geico",
+      cadenceMonths: 12,
+      expectedCents: 282_520,
+    });
+
+    const bills = await loadRecurringBills(userId);
+    expect(bills).toHaveLength(1);
+    expect(bills[0]).toMatchObject({ cadenceMonths: 12, expectedCents: 282_520 });
+  });
+
+  it("keeps the declared amount when only the cadence is corrected", async () => {
+    // What the recurring table sends. A blanket write would clear the amount here, and the
+    // bill's figure would silently fall back to the visible window's median.
+    await upsertRecurringBill(userId, {
+      merchant: "Geico",
+      cadenceMonths: 6,
+      expectedCents: 141_260,
+      anchorDate: "2026-03-03",
+    });
+    await upsertRecurringBill(userId, { merchant: "Geico", cadenceMonths: 12 });
+
+    expect((await loadRecurringBills(userId))[0]).toEqual({
+      merchant: "Geico",
+      cadenceMonths: 12,
+      expectedCents: 141_260,
+      anchorDate: "2026-03-03",
+    });
+  });
+
+  it("clears the amount when null is passed explicitly", async () => {
+    await upsertRecurringBill(userId, {
+      merchant: "Geico",
+      cadenceMonths: 6,
+      expectedCents: 141_260,
+    });
+    await upsertRecurringBill(userId, {
+      merchant: "Geico",
+      cadenceMonths: 6,
+      expectedCents: null,
+    });
+
+    expect((await loadRecurringBills(userId))[0].expectedCents).toBeNull();
+  });
+
+  it("refuses a cadence the column would reject with a database error", async () => {
+    await expect(
+      upsertRecurringBill(userId, { merchant: "Geico", cadenceMonths: 0 }),
+    ).rejects.toThrow("A cadence must be a whole number of months");
+    await expect(
+      upsertRecurringBill(userId, { merchant: "Geico", cadenceMonths: 36 }),
+    ).rejects.toThrow("A cadence must be a whole number of months");
+    await expect(
+      upsertRecurringBill(userId, { merchant: "  ", cadenceMonths: 6 }),
+    ).rejects.toThrow("A bill needs a merchant.");
+    expect(await loadRecurringBills(userId)).toEqual([]);
+  });
+
+  it("undeclares a bill", async () => {
+    await upsertRecurringBill(userId, { merchant: "Geico", cadenceMonths: 6 });
+    await deleteRecurringBill(userId, "Geico");
+    expect(await loadRecurringBills(userId)).toEqual([]);
+  });
+});
+
+describeDb("declared recurring bill isolation", () => {
+  let ownerId: string;
+  let intruderId: string;
+
+  beforeEach(async () => {
+    ownerId = await makeUser();
+    intruderId = await makeUser();
+    await upsertRecurringBill(ownerId, {
+      merchant: "Geico",
+      cadenceMonths: 6,
+      expectedCents: 141_260,
+    });
+  });
+
+  it("does not let a second user read another user's declared bills", async () => {
+    expect(await loadRecurringBills(intruderId)).toEqual([]);
+  });
+
+  it("does not let a second user change another user's declaration", async () => {
+    // The uniqueness is per user, so this must create the intruder's own row and leave the
+    // owner's untouched — the failure mode a shared-key upsert would have.
+    await upsertRecurringBill(intruderId, { merchant: "Geico", cadenceMonths: 1 });
+
+    expect((await loadRecurringBills(ownerId))[0]).toMatchObject({
+      cadenceMonths: 6,
+      expectedCents: 141_260,
+    });
+    expect((await loadRecurringBills(intruderId))[0]).toMatchObject({
+      cadenceMonths: 1,
+      expectedCents: null,
+    });
+  });
+
+  it("does not let a second user delete another user's declaration", async () => {
+    await deleteRecurringBill(intruderId, "Geico");
+    expect(await loadRecurringBills(ownerId)).toHaveLength(1);
   });
 });

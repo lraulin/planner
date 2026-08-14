@@ -3,6 +3,7 @@ import {
   balanceSeries,
   baselineSplit,
   bucketRows,
+  cadenceCandidates,
   cashFlow,
   coverageGap,
   effectiveCategory,
@@ -18,6 +19,7 @@ import {
   spendByCategory,
   spendByCategoryPerBucket,
   spendByMerchant,
+  upcomingBills,
   spendCentsOf,
   trailingAverage,
   trailingRange,
@@ -572,6 +574,341 @@ describe("oneOffSuggestions", () => {
       eventLabel: "Wedding",
     });
     expect(oneOffSuggestions([wedding])).toEqual([]);
+  });
+
+  it("withholds a declared bill that detection could never have found", () => {
+    // Two charges eight months apart: under the six-charge floor and over the 100-day
+    // cadence cap, so `recurringMerchants` will never claim it. Before the declaration
+    // existed this row had no way off the list.
+    const ordinary = Array.from({ length: 30 }, (_, index) =>
+      row({
+        transactionDate: `2026-03-${String(index + 1).padStart(2, "0")}`,
+        amountCents: -4000,
+      }),
+    );
+    const premiums = [
+      row({
+        description: "GEICO *AUTO",
+        transactionDate: "2025-09-04",
+        amountCents: -138900,
+      }),
+      row({
+        description: "GEICO *AUTO",
+        transactionDate: "2026-03-03",
+        amountCents: -141260,
+      }),
+    ];
+
+    expect(
+      oneOffSuggestions([...ordinary, ...premiums]).map((entry) => entry.merchant),
+    ).toEqual(["Geico", "Geico"]);
+
+    expect(
+      oneOffSuggestions([...ordinary, ...premiums], { bills: [geicoBill] }),
+    ).toEqual([]);
+  });
+
+  it("keeps withholding a declared bill in a window holding none of its charges", () => {
+    const solitary = row({
+      description: "GEICO *AUTO",
+      transactionDate: "2026-03-03",
+      amountCents: -141260,
+    });
+    // One charge, so the declared merchant contributes nothing to the recurring table — the
+    // suppression cannot be left to depend on that table having produced a row.
+    expect(oneOffSuggestions([solitary], { bills: [geicoBill] })).toEqual([]);
+  });
+});
+
+/** Geico's real shape: a semi-annual premium, declared because it cannot be detected. */
+const geicoBill = {
+  merchant: "Geico",
+  cadenceMonths: 6,
+  expectedCents: 141260,
+  anchorDate: null,
+};
+
+describe("recurringMerchants with declared bills", () => {
+  it("lists a declared bill with a year of it costed, from no charges at all", () => {
+    const found = recurringMerchants([], [geicoBill]);
+
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({
+      merchant: "Geico",
+      typicalCents: 141260,
+      annualCents: 282520,
+      cadenceMonths: 6,
+      chargeCount: 0,
+      declared: true,
+    });
+  });
+
+  it("prefers the declared amount over the median of the charges on file", () => {
+    const charges = [
+      row({
+        description: "GEICO *AUTO",
+        transactionDate: "2026-03-03",
+        amountCents: -1,
+      }),
+    ];
+    expect(recurringMerchants(charges, [geicoBill])[0].typicalCents).toBe(141260);
+  });
+
+  it("falls back to the charges when no amount was declared", () => {
+    const charges = [
+      row({
+        description: "GEICO *AUTO",
+        transactionDate: "2026-03-03",
+        amountCents: -141260,
+      }),
+    ];
+    const found = recurringMerchants(charges, [{ ...geicoBill, expectedCents: null }]);
+    expect(found[0].typicalCents).toBe(141260);
+  });
+
+  it("prices a declared bill from the whole history, not the visible window", () => {
+    // The propane case: the window is a trailing year and the last delivery was fourteen
+    // months ago. Reading the amount from the window would drop the row entirely, so the
+    // commitment would blink out of the table exactly when someone narrowed the range.
+    const history = [
+      row({
+        description: "TAYLOR GAS HEATING AIR",
+        transactionDate: "2025-10-24",
+        amountCents: -33_583,
+      }),
+    ];
+    const bill = {
+      merchant: "Taylor Gas",
+      cadenceMonths: 6,
+      expectedCents: null,
+      anchorDate: null,
+    };
+
+    expect(recurringMerchants([], [bill])).toEqual([]);
+    expect(recurringMerchants([], [bill], history)[0]).toMatchObject({
+      merchant: "Taylor Gas",
+      typicalCents: 33_583,
+      annualCents: 67_166,
+      declared: true,
+    });
+  });
+
+  it("does not also detect a merchant that has been declared", () => {
+    // Twelve monthly charges would normally be detected. Declaring it quarterly is the
+    // user disagreeing, and one merchant may not appear twice with two different answers.
+    const charges = Array.from({ length: 12 }, (_, index) =>
+      row({
+        description: "SIMPLISAFE 8888957880",
+        transactionDate: `2025-${String(index + 1).padStart(2, "0")}-14`,
+        amountCents: -3471,
+      }),
+    );
+    const found = recurringMerchants(charges, [
+      {
+        merchant: "SimpliSafe",
+        cadenceMonths: 3,
+        expectedCents: null,
+        anchorDate: null,
+      },
+    ]);
+
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({ cadenceMonths: 3, declared: true });
+    expect(found[0].annualCents).toBe(13884);
+  });
+});
+
+describe("cadenceCandidates", () => {
+  it("proposes semi-annual from the two charges detection cannot use", () => {
+    const premiums = [
+      row({
+        description: "GEICO *AUTO",
+        transactionDate: "2025-09-04",
+        amountCents: -138900,
+      }),
+      row({
+        description: "GEICO *AUTO",
+        transactionDate: "2026-03-03",
+        amountCents: -141260,
+      }),
+    ];
+
+    expect(cadenceCandidates(premiums)).toEqual([
+      {
+        merchant: "Geico",
+        cadenceMonths: 6,
+        typicalCents: 140080,
+        chargeCount: 2,
+        lastChargeOn: "2026-03-03",
+      },
+    ]);
+  });
+
+  it("proposes nothing for two visits at wildly different amounts", () => {
+    // A grocery run six months apart is a coincidence, and offering "yearly?" for it is how
+    // a pre-filled dropdown becomes a source of wrong numbers.
+    expect(
+      cadenceCandidates([
+        row({ transactionDate: "2025-09-04", amountCents: -4200 }),
+        row({ transactionDate: "2026-03-03", amountCents: -31000 }),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("proposes nothing when the gap belongs to no cadence", () => {
+    expect(
+      cadenceCandidates([
+        row({
+          description: "GEICO *AUTO",
+          transactionDate: "2025-07-04",
+          amountCents: -141260,
+        }),
+        row({
+          description: "GEICO *AUTO",
+          transactionDate: "2026-03-03",
+          amountCents: -141260,
+        }),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("needs more than one charge", () => {
+    expect(
+      cadenceCandidates([row({ description: "GEICO *AUTO", amountCents: -141260 })]),
+    ).toEqual([]);
+  });
+});
+
+describe("upcomingBills", () => {
+  const charge = row({
+    description: "GEICO *AUTO",
+    transactionDate: "2026-03-03",
+    amountCents: -141260,
+  });
+
+  it("forecasts the next one from the last that landed", () => {
+    expect(upcomingBills([charge], [geicoBill], "2026-08-14")).toEqual([
+      {
+        merchant: "Geico",
+        cadenceMonths: 6,
+        dueOn: "2026-09-03",
+        daysAway: 20,
+        expectedCents: 141260,
+        lastChargeOn: "2026-03-03",
+      },
+    ]);
+  });
+
+  it("walks past an anchor several cycles stale rather than reporting a past date", () => {
+    const old = row({
+      description: "GEICO *AUTO",
+      transactionDate: "2024-03-03",
+      amountCents: -141260,
+    });
+    expect(upcomingBills([old], [geicoBill], "2026-08-14")[0].dueOn).toBe("2026-09-03");
+  });
+
+  it("uses the declared anchor when no charge is on file", () => {
+    expect(
+      upcomingBills([], [{ ...geicoBill, anchorDate: "2026-03-03" }], "2026-08-14")[0],
+    ).toMatchObject({ dueOn: "2026-09-03", lastChargeOn: "2026-03-03" });
+  });
+
+  it("forecasts nothing it has no anchor for", () => {
+    expect(upcomingBills([], [geicoBill], "2026-08-14")).toEqual([]);
+  });
+});
+
+describe("baselineSplit levelling", () => {
+  /** A quarter, and one semi-annual premium that happens to land inside it. */
+  const quarter = monthBuckets({ startKey: "2026-01-01", endKey: "2026-03-31" });
+  // Amounts that swing, so these stay a habit and never trip the variance detector — the
+  // levelled figure below has to be the premium's alone.
+  const groceries = [
+    4200, 18800, 9100, 2200, 31000, 7600, 15400, 5000, 22000, 8800, 12100, 3800,
+  ].map((cents, index) =>
+    row({
+      transactionDate: `2026-0${Math.floor(index / 4) + 1}-${String((index % 4) * 7 + 1).padStart(2, "0")}`,
+      amountCents: -cents,
+    }),
+  );
+  const groceriesCents = 140000;
+  const premium = row({
+    description: "GEICO *AUTO",
+    transactionDate: "2026-03-03",
+    amountCents: -141260,
+  });
+
+  it("counts the charge as posted when levelling is off", () => {
+    const split = baselineSplit([...groceries, premium], 3);
+    expect(split.baselineCents).toBe(groceriesCents + 141260);
+    expect(split.levelled).toBe(false);
+    expect(split.billsCents).toBe(0);
+  });
+
+  it("accrues a quarter of the year's premium instead of the whole charge", () => {
+    const bills = recurringMerchants([...groceries, premium], [geicoBill]);
+    const split = baselineSplit([...groceries, premium], 3, {
+      levelRecurring: true,
+      bills,
+      buckets: quarter,
+    });
+
+    // 90 days of a $2,825.20 year, not the $1,412.60 that happened to post in March.
+    expect(split.billsCents).toBe(69662);
+    expect(split.baselineCents).toBe(groceriesCents + 69662);
+    expect(split.levelled).toBe(true);
+    expect(split.baselinePerBucketCents).toBe(Math.round((groceriesCents + 69662) / 3));
+  });
+
+  it("charges a window that contains no charge at all, because the bill still exists", () => {
+    const bills = recurringMerchants(groceries, [geicoBill]);
+    const split = baselineSplit(groceries, 3, {
+      levelRecurring: true,
+      bills,
+      buckets: quarter,
+    });
+    expect(split.billsCents).toBe(69662);
+  });
+
+  it("agrees with the as-posted figure over a window holding a whole cadence", () => {
+    const year = monthBuckets({ startKey: "2026-01-01", endKey: "2026-12-31" });
+    const twoPremiums = [
+      premium,
+      row({
+        description: "GEICO *AUTO",
+        transactionDate: "2026-09-03",
+        amountCents: -141260,
+      }),
+    ];
+    const bills = recurringMerchants(twoPremiums, [geicoBill]);
+
+    const posted = baselineSplit(twoPremiums, 12);
+    const levelled = baselineSplit(twoPremiums, 12, {
+      levelRecurring: true,
+      bills,
+      buckets: year,
+    });
+
+    // The year holds exactly two of a semi-annual bill, so accrual and actuals are the same
+    // money. Only a partial window separates them.
+    expect(levelled.baselineCents).toBe(posted.baselineCents);
+  });
+
+  it("still counts a refund at a levelled merchant, which has no span to spread over", () => {
+    const refund = row({
+      description: "GEICO *AUTO",
+      transactionDate: "2026-03-20",
+      amountCents: 20000,
+      derivedFlow: "refund",
+    });
+    const bills = recurringMerchants([premium], [geicoBill]);
+    const split = baselineSplit([premium, refund], 3, {
+      levelRecurring: true,
+      bills,
+      buckets: quarter,
+    });
+    expect(split.baselineCents).toBe(69662 - 20000);
   });
 });
 

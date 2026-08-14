@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import type { OneOffSuggestion } from "@/lib/finances/analytics";
+import type { CadenceCandidate, OneOffSuggestion } from "@/lib/finances/analytics";
 import { formatUsd } from "@/lib/finances/money";
-import { setOneOffAction } from "@/app/finances/actions";
+import { CADENCE_CHOICES, cadenceLabel } from "@/lib/finances/recurringBills";
+import { setOneOffAction, setRecurringBillAction } from "@/app/finances/actions";
 import { useDateFormatter } from "@/components/settings/SettingsProvider";
 import { PanelEmpty } from "./Panel";
 
@@ -15,17 +16,37 @@ import { PanelEmpty } from "./Panel";
  * every year would quietly understate what a year costs — the kind of error that gets more
  * confident the longer it runs. So the statistic proposes, the person disposes, and the
  * event name is asked for at the moment someone actually knows it.
+ *
+ * That reasoning needs **three** answers, not two. For most of this list's life it offered
+ * only "exclude" and silence, so the bills it warns about above — a semi-annual propane
+ * delivery, a car insurance premium — had no correct disposition at all: excluding them is
+ * the compounding error, and leaving them meant seeing them again every window forever.
+ * Declaring the cadence is the third answer, and where the charges on file already look like
+ * a cadence, the answer arrives filled in.
  */
-export function OneOffReview({ suggestions }: { suggestions: OneOffSuggestion[] }) {
+export function OneOffReview({
+  suggestions,
+  candidates,
+}: {
+  suggestions: OneOffSuggestion[];
+  candidates: CadenceCandidate[];
+}) {
   const formatDate = useDateFormatter();
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [label, setLabel] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [declaring, setDeclaring] = useState<string | null>(null);
+  /** Cadence chosen per row, keyed by transaction id. Absent means "whatever was proposed". */
+  const [cadences, setCadences] = useState<Record<string, number>>({});
 
   if (suggestions.length === 0) {
     return <PanelEmpty>Nothing in this window looks like a one-off.</PanelEmpty>;
   }
+
+  const proposals = new Map(
+    candidates.map((candidate) => [candidate.merchant, candidate]),
+  );
 
   function toggle(id: string) {
     setSelected((current) => {
@@ -53,33 +74,104 @@ export function OneOffReview({ suggestions }: { suggestions: OneOffSuggestion[] 
     });
   }
 
+  function declare(suggestion: OneOffSuggestion, cadenceMonths: number) {
+    if (cadenceMonths <= 0) return;
+    setError(null);
+    setDeclaring(suggestion.row.id);
+    startTransition(async () => {
+      // The charge that prompted the declaration is the best amount available, and storing it
+      // is what lets the bill keep its figure in a window holding none of its charges.
+      const result = await setRecurringBillAction({
+        merchant: suggestion.merchant,
+        cadenceMonths,
+        expectedCents: suggestion.cents,
+        anchorDate: suggestion.row.transactionDate,
+      });
+      setDeclaring(null);
+      if (!result.ok) setError(result.error);
+    });
+  }
+
   return (
     <div className="flex flex-col gap-2">
       <ul className="flex flex-col divide-y divide-rule">
-        {suggestions.map((suggestion) => (
-          <li key={suggestion.row.id}>
-            <label className="flex min-h-tap cursor-pointer items-center gap-2 py-1.5">
-              <input
-                type="checkbox"
-                checked={selected.has(suggestion.row.id)}
-                onChange={() => toggle(suggestion.row.id)}
-                className="size-4 flex-none"
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[0.8125rem] text-ink">
-                  {suggestion.merchant || suggestion.row.description}
+        {suggestions.map((suggestion) => {
+          const proposed = proposals.get(suggestion.merchant);
+          return (
+            <li key={suggestion.row.id} className="flex flex-col gap-1 py-1.5">
+              <label className="flex min-h-tap cursor-pointer items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={selected.has(suggestion.row.id)}
+                  onChange={() => toggle(suggestion.row.id)}
+                  className="size-4 flex-none"
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[0.8125rem] text-ink">
+                    {suggestion.merchant || suggestion.row.description}
+                  </span>
+                  <span className="block truncate text-[0.75rem] text-ink-muted">
+                    {formatDate(suggestion.row.transactionDate)} · {suggestion.category}{" "}
+                    · {Math.round(suggestion.multiple)}× a typical charge
+                  </span>
                 </span>
-                <span className="block truncate text-[0.75rem] text-ink-muted">
-                  {formatDate(suggestion.row.transactionDate)} · {suggestion.category} ·{" "}
-                  {Math.round(suggestion.multiple)}× a typical charge
+                <span className="tabular flex-none text-[0.8125rem] text-[var(--chart-spend)]">
+                  {formatUsd(suggestion.cents)}
                 </span>
-              </span>
-              <span className="tabular flex-none text-[0.8125rem] text-[var(--chart-spend)]">
-                {formatUsd(suggestion.cents)}
-              </span>
-            </label>
-          </li>
-        ))}
+              </label>
+
+              <div className="flex flex-wrap items-center gap-2 pl-6">
+                <span className="text-[0.75rem] text-ink-muted">
+                  {proposed
+                    ? `Looks like a bill ${cadenceLabel(proposed.cadenceMonths).toLowerCase()} —`
+                    : "Or, if it repeats:"}
+                </span>
+                <select
+                  value={cadences[suggestion.row.id] ?? proposed?.cadenceMonths ?? 0}
+                  disabled={pending}
+                  aria-label={`Bill cadence for ${suggestion.merchant || suggestion.row.description}`}
+                  onChange={(event) =>
+                    setCadences((current) => ({
+                      ...current,
+                      [suggestion.row.id]: Number(event.target.value),
+                    }))
+                  }
+                  // 16px, or iOS zooms the whole page on focus.
+                  className="min-h-tap rounded border border-rule bg-surface px-2 py-1 text-base text-ink md:min-h-0 md:text-[0.75rem]"
+                >
+                  <option value={0}>Choose a cadence…</option>
+                  {CADENCE_CHOICES.map((months) => (
+                    <option key={months} value={months}>
+                      {cadenceLabel(months)}
+                    </option>
+                  ))}
+                </select>
+                {/*
+                 * A button rather than declaring on change. When the cadence arrives
+                 * pre-filled — the case this whole flow exists for — picking the option
+                 * already selected fires no change event at all, so a proposal would be the
+                 * one row nobody could accept.
+                 */}
+                <button
+                  type="button"
+                  onClick={() =>
+                    declare(
+                      suggestion,
+                      cadences[suggestion.row.id] ?? proposed?.cadenceMonths ?? 0,
+                    )
+                  }
+                  disabled={
+                    pending ||
+                    (cadences[suggestion.row.id] ?? proposed?.cadenceMonths ?? 0) === 0
+                  }
+                  className="min-h-tap rounded border border-rule bg-surface-raised px-2 text-[0.75rem] text-ink disabled:opacity-50 md:min-h-0 md:py-1"
+                >
+                  {declaring === suggestion.row.id ? "Declaring…" : "It's a bill"}
+                </button>
+              </div>
+            </li>
+          );
+        })}
       </ul>
 
       <div className="flex flex-wrap items-center gap-2 border-t border-rule pt-2">

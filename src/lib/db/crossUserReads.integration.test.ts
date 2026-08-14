@@ -40,8 +40,10 @@ import { importFinanceCsvFiles } from "@/lib/finances/import";
 import {
   loadCarryingCost,
   loadInsightsRows,
+  loadRecurringBills,
   unclassifiedCount,
 } from "@/lib/finances/dashboardQueries";
+import { upsertRecurringBill } from "@/lib/finances/mutations";
 import {
   getTransaction,
   listAccounts,
@@ -227,6 +229,11 @@ async function seedOwner(): Promise<Owned> {
       "expected the finance seed to create an account, row, and statement",
     );
   }
+  await upsertRecurringBill(userId, {
+    merchant: "Owner Insurance",
+    cadenceMonths: 6,
+    expectedCents: 141_260,
+  });
 
   const plan = await ensureWeeklyPlan(userId, { weekStart: WEEK_START });
   await upsertPlanEntry(userId, plan.id, goalId, { focus: true });
@@ -389,6 +396,7 @@ describeDb("a second user reads none of the first user's rows", () => {
       feesCents: 0,
       byAccount: [],
     });
+    expect(await loadRecurringBills(intruder)).toEqual([]);
   });
 
   it("weekly plans and their entries", async () => {

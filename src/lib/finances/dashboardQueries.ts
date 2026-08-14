@@ -2,12 +2,14 @@ import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeAccounts,
+  financeRecurringBills,
   financeStatementRates,
   financeStatements,
   financeTransactions,
 } from "@/db/schema";
 import type { AnalyticsRow } from "./analytics";
 import { numericStringToCents } from "./money";
+import type { DeclaredBill } from "./recurringBills";
 
 /**
  * Reads for the insights dashboard. Every one takes `userId` and scopes on it.
@@ -100,6 +102,28 @@ export async function unclassifiedCount(userId: string): Promise<number> {
       ),
     );
   return row?.count ?? 0;
+}
+
+/**
+ * Every bill this user has declared a cadence for.
+ *
+ * Unfiltered by window on purpose. A yearly bill is a commitment in a month that holds none
+ * of its charges, and a window-scoped read would make it flicker out of the recurring panel
+ * and back onto the one-off review list every time someone narrowed the range.
+ */
+export async function loadRecurringBills(userId: string): Promise<DeclaredBill[]> {
+  const rows = await db
+    .select({
+      merchant: financeRecurringBills.merchant,
+      cadenceMonths: financeRecurringBills.cadenceMonths,
+      expectedCents: financeRecurringBills.expectedCents,
+      anchorDate: financeRecurringBills.anchorDate,
+    })
+    .from(financeRecurringBills)
+    .where(eq(financeRecurringBills.userId, userId))
+    .orderBy(asc(financeRecurringBills.merchant));
+
+  return rows;
 }
 
 export type AccountCarryingCost = {

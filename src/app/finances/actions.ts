@@ -2,12 +2,15 @@
 
 import {
   deleteAccount,
+  deleteRecurringBill,
   deleteTransaction,
   reclassifyTransactions,
   setOneOff,
   updateAccount,
   updateTransaction,
+  upsertRecurringBill,
   type AccountEdit,
+  type RecurringBillEdit,
   type ReclassifySummary,
   type TransactionEdit,
 } from "@/lib/finances/mutations";
@@ -69,6 +72,18 @@ export async function setOneOffAction(
   edit: { excludeFromBaseline: boolean; eventLabel?: string },
 ): Promise<ActionResult> {
   return run((userId) => setOneOff(userId, transactionIds, edit));
+}
+
+export async function setRecurringBillAction(
+  edit: RecurringBillEdit,
+): Promise<ActionResult> {
+  return run((userId) => upsertRecurringBill(userId, edit));
+}
+
+export async function deleteRecurringBillAction(
+  merchant: string,
+): Promise<ActionResult> {
+  return run((userId) => deleteRecurringBill(userId, merchant));
 }
 
 export async function getTransactionAction(
