@@ -492,18 +492,31 @@ function allocateAcross(
 }
 
 /**
- * How many days a charge at a given merchant covers, or null if it is not a bill at all.
+ * What a charge at a given merchant is, for the fixed/variable split and for levelling.
+ *
+ * `kind` says which side of the split it lands on; `spanDays` says how much time it covers,
+ * and is null when it covers no knowable stretch.
  *
  * Declared bills win over detected ones, for the same reason `flow_override` wins over
- * `derived_flow`: the person knows, and the statistics were only ever guessing. Their span is
- * measured from the charge's own date rather than from a constant, so a February-anchored
- * semi-annual bill covers its real 181 days.
+ * `derived_flow`: the person knows, and the statistics were only ever guessing. A scheduled
+ * bill's span is measured from the charge's own date rather than from a constant, so a
+ * February-anchored semi-annual bill covers its real 181 days.
+ *
+ * **An unscheduled bill is a bill with no span.** Propane is not discretionary, so it belongs
+ * on the bills side — but spreading it would double-count: two deliveries in one cold winter
+ * would each claim the twelve months the declaration names, and the chart would show the money
+ * twice. It lands whole where it happened instead. The baseline is unaffected, because that
+ * accrues the declared yearly cost rather than the charges.
  */
+type ChargeKind = { bill: boolean; spanDays: number | null };
+
+const NOT_A_BILL: ChargeKind = { bill: false, spanDays: null };
+
 function cadenceSpans(
   rows: readonly AnalyticsRow[],
   bills: readonly DeclaredBill[],
-): (merchant: string, chargeDateKey: string) => number | null {
-  const declared = new Map(bills.map((bill) => [bill.merchant, bill.cadenceMonths]));
+): (merchant: string, chargeDateKey: string) => ChargeKind {
+  const declared = new Map(bills.map((bill) => [bill.merchant, bill]));
   const detected = new Map(
     recurringMerchants(rows, bills)
       .filter((entry) => !entry.declared)
@@ -511,9 +524,15 @@ function cadenceSpans(
   );
 
   return (merchant, chargeDateKey) => {
-    const months = declared.get(merchant);
-    if (months !== undefined) return spanDays(chargeDateKey, months);
-    return detected.get(merchant) ?? null;
+    const bill = declared.get(merchant);
+    if (bill !== undefined) {
+      return {
+        bill: true,
+        spanDays: bill.scheduled ? spanDays(chargeDateKey, bill.cadenceMonths) : null,
+      };
+    }
+    const days = detected.get(merchant);
+    return days === undefined ? NOT_A_BILL : { bill: true, spanDays: days };
   };
 }
 
@@ -548,15 +567,16 @@ export function cashFlow(
     for (const row of grouped.get(bucket.key) ?? []) {
       const cost = spendCentsOf(row);
       if (cost === 0) continue;
-      const cadence = spanFor(effectiveMerchant(row), row.transactionDate);
-      if (cadence === null) {
+      const charge = spanFor(effectiveMerchant(row), row.transactionDate);
+      if (!charge.bill) {
         variable[index] += cost;
         continue;
       }
       // A credit at a recurring merchant is still that bill's money, but there is no span
-      // of time for it to cover — it lands where it happened.
-      if (levelRecurring && cost > 0) {
-        allocateAcross(cost, row.transactionDate, cadence, buckets, fixed);
+      // of time for it to cover — it lands where it happened. Same for an unscheduled bill,
+      // whose span is unknowable by construction.
+      if (levelRecurring && cost > 0 && charge.spanDays !== null) {
+        allocateAcross(cost, row.transactionDate, charge.spanDays, buckets, fixed);
       } else {
         fixed[index] += cost;
       }
@@ -978,6 +998,21 @@ export type RecurringMerchant = {
   typicalCents: number;
   /** Standard deviation of the charges, in cents. Near zero is a subscription. */
   deviationCents: number;
+  /**
+   * The cheapest and dearest charge seen, so a swingy bill can say so.
+   *
+   * Schedule and amount are **independent** axes and only one of them is a fact the user has
+   * to supply. A utility is usually regular in date and wild in amount — SMECO runs $77.95 to
+   * $311.13 across 22 charges, St Mary's Water $77.38 to $184.24 — while MetLife Pet is
+   * $100.24 twelve times running. Reporting one median for the first two states an estimate
+   * as a fact.
+   *
+   * Unlike a cadence, this needs no declaring: the history already measures it. That is the
+   * whole difference between the two axes, and the reason `scheduled` is a stored column and
+   * this is not.
+   */
+  lowCents: number;
+  highCents: number;
   chargeCount: number;
   /** Median days between charges. */
   cadenceDays: number;
@@ -991,6 +1026,12 @@ export type RecurringMerchant = {
   cadenceMonths: number | null;
   /** True when this row came from a declaration. Drives the marker in the table. */
   declared: boolean;
+  /**
+   * False when the user declared the cost but not a schedule — propane, whose yearly figure
+   * is solid and whose delivery date is a tank sensor. Always true for a detected merchant,
+   * which was found by having a cadence in the first place.
+   */
+  scheduled: boolean;
 };
 
 /** Below six charges there is no cadence to speak of, only a coincidence. */
@@ -1059,12 +1100,15 @@ export function recurringMerchants(
       merchant,
       typicalCents,
       deviationCents,
+      lowCents: Math.min(...amounts),
+      highCents: Math.max(...amounts),
       chargeCount: ordered.length,
       cadenceDays,
       annualCents: Math.round((typicalCents * 365) / cadenceDays),
       lastChargeOn: ordered[ordered.length - 1].transactionDate,
       cadenceMonths: null,
       declared: false,
+      scheduled: true,
     });
   }
 
@@ -1081,6 +1125,11 @@ export function recurringMerchants(
       merchant: bill.merchant,
       typicalCents,
       deviationCents: standardDeviation(amounts),
+      // A declared bill with no charges on file has no observed range; collapsing it onto
+      // the declared amount is what makes the table show a single figure rather than a
+      // range invented out of nothing.
+      lowCents: amounts.length > 0 ? Math.min(...amounts) : typicalCents,
+      highCents: amounts.length > 0 ? Math.max(...amounts) : typicalCents,
       chargeCount: charges.length,
       cadenceDays: Math.round(bill.cadenceMonths * (365.2425 / 12)),
       annualCents: annualFromCharge(typicalCents, bill.cadenceMonths),
@@ -1088,6 +1137,7 @@ export function recurringMerchants(
         charges[charges.length - 1]?.transactionDate ?? bill.anchorDate ?? "",
       cadenceMonths: bill.cadenceMonths,
       declared: true,
+      scheduled: bill.scheduled,
     });
   }
 
@@ -1209,6 +1259,11 @@ export type UpcomingBill = {
  *
  * Pass the **whole** history. The anchor is the most recent charge, and a window that
  * excludes it would forecast from whichever older charge happened to survive the filter.
+ *
+ * **Unscheduled bills are absent entirely**, not shown with a soft date. Propane's yearly cost
+ * is knowable and its delivery date is not, and a projected date reads as knowledge however
+ * carefully the panel is captioned — the parent spec's forecast is honest only because a real
+ * cadence stands behind it.
  */
 export function upcomingBills(
   rows: readonly AnalyticsRow[],
@@ -1219,6 +1274,7 @@ export function upcomingBills(
 
   return bills
     .flatMap((bill) => {
+      if (!bill.scheduled) return [];
       const charges = byMerchant.get(bill.merchant) ?? [];
       const lastChargeOn =
         charges[charges.length - 1]?.transactionDate ?? bill.anchorDate ?? "";

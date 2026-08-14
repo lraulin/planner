@@ -225,6 +225,7 @@ describeDb("declared recurring bills", () => {
         cadenceMonths: 6,
         expectedCents: 141_260,
         anchorDate: null,
+        scheduled: true,
       },
     ]);
   });
@@ -260,6 +261,7 @@ describeDb("declared recurring bills", () => {
       cadenceMonths: 12,
       expectedCents: 141_260,
       anchorDate: "2026-03-03",
+      scheduled: true,
     });
   });
 
@@ -288,6 +290,36 @@ describeDb("declared recurring bills", () => {
     await expect(
       upsertRecurringBill(userId, { merchant: "  ", cadenceMonths: 6 }),
     ).rejects.toThrow("A bill needs a merchant.");
+    expect(await loadRecurringBills(userId)).toEqual([]);
+  });
+
+  it("declares a bill that recurs on no schedule", async () => {
+    await upsertRecurringBill(userId, {
+      merchant: "Taylor Gas",
+      cadenceMonths: 12,
+      expectedCents: 50_000,
+      scheduled: false,
+    });
+
+    expect((await loadRecurringBills(userId))[0]).toMatchObject({
+      merchant: "Taylor Gas",
+      cadenceMonths: 12,
+      expectedCents: 50_000,
+      scheduled: false,
+    });
+  });
+
+  it("refuses an unscheduled bill with no stated cost", async () => {
+    // It has no cadence to infer an amount from and no forecast to fall back on, so a
+    // declaration without a number would contribute nothing to the baseline while still
+    // suppressing its own charges from the review list — strictly worse than not declaring.
+    await expect(
+      upsertRecurringBill(userId, {
+        merchant: "Taylor Gas",
+        cadenceMonths: 12,
+        scheduled: false,
+      }),
+    ).rejects.toThrow("needs its cost for the period");
     expect(await loadRecurringBills(userId)).toEqual([]);
   });
 

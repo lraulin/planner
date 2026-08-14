@@ -528,6 +528,51 @@ describe("recurringMerchants", () => {
     expect(found[0].annualCents).toBe(40868);
   });
 
+  it("reports the range a bill actually swings across, as positive costs", () => {
+    // Schedule and amount are independent axes: an electric bill arrives every month and
+    // costs whatever the weather decided. One median would state that as a fact.
+    const found = recurringMerchants(
+      monthlyCharges(
+        "SMECO",
+        [
+          18827, 19500, 20000, 21000, 22319, 23000, 24000, 26000, 28000, 29000, 30000,
+          31113,
+        ],
+      ),
+    );
+
+    expect(found[0]).toMatchObject({ lowCents: 18827, highCents: 31113 });
+    // Costs, not signed amounts — a sign slip here would report a negative floor.
+    expect(found[0].lowCents).toBeGreaterThan(0);
+  });
+
+  it("does not detect a bill whose amount swings past the variance band at all", () => {
+    /*
+     * SMECO over its whole history runs $77.95 to $311.13 — a 4× swing whose deviation is
+     * far outside `RECURRING_VARIANCE_RATIO`, so it is not a "subscription" by this
+     * function's definition and lands in variable spend instead. Worth pinning because it
+     * is the case that has to be **declared**: detection cannot rescue a bill that regular
+     * in date and wild in amount, and it will not pretend otherwise.
+     */
+    expect(
+      recurringMerchants(
+        monthlyCharges(
+          "SMECO",
+          [
+            7795, 9100, 12000, 15500, 18827, 22319, 25000, 28000, 31113, 20000, 14000,
+            9500,
+          ],
+        ),
+      ),
+    ).toEqual([]);
+  });
+
+  it("collapses the range onto the declared amount when no charge is on file", () => {
+    // Otherwise a bill with no history would print a range invented out of nothing.
+    const found = recurringMerchants([], [geicoBill]);
+    expect(found[0]).toMatchObject({ lowCents: 141260, highCents: 141260 });
+  });
+
   it("ignores a merchant with too few charges to have a cadence", () => {
     expect(
       recurringMerchants([
@@ -626,6 +671,7 @@ const geicoBill = {
   cadenceMonths: 6,
   expectedCents: 141260,
   anchorDate: null,
+  scheduled: true,
 };
 
 describe("recurringMerchants with declared bills", () => {
@@ -682,6 +728,7 @@ describe("recurringMerchants with declared bills", () => {
       cadenceMonths: 6,
       expectedCents: null,
       anchorDate: null,
+      scheduled: true,
     };
 
     expect(recurringMerchants([], [bill])).toEqual([]);
@@ -709,6 +756,7 @@ describe("recurringMerchants with declared bills", () => {
         cadenceMonths: 3,
         expectedCents: null,
         anchorDate: null,
+        scheduled: true,
       },
     ]);
 
@@ -816,6 +864,115 @@ describe("upcomingBills", () => {
 
   it("forecasts nothing it has no anchor for", () => {
     expect(upcomingBills([], [geicoBill], "2026-08-14")).toEqual([]);
+  });
+});
+
+describe("unscheduled bills", () => {
+  /** Propane: the yearly cost is knowable, the delivery date is a tank sensor. */
+  const propane = {
+    merchant: "Taylor Gas",
+    cadenceMonths: 12,
+    expectedCents: 50_000,
+    anchorDate: null,
+    scheduled: false,
+  };
+  /** Two deliveries in one cold winter — the case that double-counts if levelled. */
+  const deliveries = [
+    row({
+      description: "TAYLOR GAS COMPANY INC.",
+      transactionDate: "2026-01-23",
+      amountCents: -15_000,
+    }),
+    row({
+      description: "TAYLOR GAS HEATING AIR",
+      transactionDate: "2026-04-01",
+      amountCents: -37_932,
+    }),
+  ];
+
+  it("is priced by its declared year, not by how many deliveries landed", () => {
+    const found = recurringMerchants(deliveries, [propane]);
+    expect(found[0]).toMatchObject({
+      merchant: "Taylor Gas",
+      annualCents: 50_000,
+      cadenceMonths: 12,
+      declared: true,
+      scheduled: false,
+    });
+  });
+
+  it("gets no forecast row, while a scheduled bill still does", () => {
+    expect(upcomingBills(deliveries, [propane], "2026-08-14")).toEqual([]);
+
+    const geico = row({
+      description: "GEICO *AUTO",
+      transactionDate: "2026-06-26",
+      amountCents: -59_498,
+    });
+    expect(
+      upcomingBills([geico], [geicoBill], "2026-08-14").map((bill) => bill.merchant),
+    ).toEqual(["Geico"]);
+  });
+
+  it("counts as a bill rather than as variable spend", () => {
+    const buckets = monthBuckets({ startKey: "2026-01-01", endKey: "2026-04-30" });
+    const [january] = cashFlow(deliveries, buckets, { bills: [propane] });
+
+    expect(january.fixedCents).toBe(15_000);
+    expect(january.variableCents).toBe(0);
+  });
+
+  it("is not spread across the year, because two deliveries would double-count it", () => {
+    // Each delivery levelled over its declared 12 months would put ~$44k of the $52,932
+    // into a four-month window twice over. It lands where it happened instead.
+    const buckets = monthBuckets({ startKey: "2026-01-01", endKey: "2026-04-30" });
+    const levelled = cashFlow(deliveries, buckets, {
+      levelRecurring: true,
+      bills: [propane],
+    });
+
+    expect(levelled.map((point) => point.fixedCents)).toEqual([15_000, 0, 0, 37_932]);
+    expect(levelled.reduce((total, point) => total + point.spendCents, 0)).toBe(52_932);
+  });
+
+  it("still accrues its declared year into the levelled baseline", () => {
+    // The point of declaring it: the baseline reads the stated yearly cost, so a window with
+    // two deliveries and a window with none both charge the same rate.
+    const quarter = monthBuckets({ startKey: "2026-01-01", endKey: "2026-03-31" });
+    const withCharges = baselineSplit(deliveries, 3, {
+      levelRecurring: true,
+      bills: recurringMerchants(deliveries, [propane]),
+      buckets: quarter,
+    });
+    const without = baselineSplit([], 3, {
+      levelRecurring: true,
+      bills: recurringMerchants([], [propane]),
+      buckets: quarter,
+    });
+
+    expect(withCharges.billsCents).toBe(12_329);
+    expect(without.billsCents).toBe(12_329);
+  });
+
+  it("leaves a scheduled bill levelled exactly as before", () => {
+    const year = monthBuckets({ startKey: "2026-01-01", endKey: "2026-12-31" });
+    const premium = row({
+      description: "GEICO *AUTO",
+      transactionDate: "2026-03-03",
+      amountCents: -141_260,
+    });
+    const levelled = cashFlow([premium], year, {
+      levelRecurring: true,
+      bills: [geicoBill],
+    });
+
+    // Spread from March, not landed whole in it. Seven months carry a share, not six: the
+    // 184-day span from Mar 3 runs to Sep 2 and so clips the first two days of September.
+    expect(levelled[2].fixedCents).toBeLessThan(141_260);
+    expect(levelled.filter((point) => point.fixedCents > 0)).toHaveLength(7);
+    expect(levelled.reduce((total, point) => total + point.fixedCents, 0)).toBe(
+      141_260,
+    );
   });
 });
 

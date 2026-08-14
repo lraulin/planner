@@ -665,17 +665,22 @@ export function InsightsView({
           </Panel>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        {/* Full width, not half. Five columns, two of them controls, and a charge that
+            carries its observed range underneath — at half width the set-aside figure fell
+            off the edge and the one number you would plan against needed scrolling to. */}
+        <div className="grid grid-cols-1 gap-3">
           <Panel
             title="Recurring charges"
-            subtitle="Found by how little they vary, not by category, plus the cadences you declared (▸) — and priced by the year, with what to set aside each month."
+            subtitle="Found by how little they vary, not by category, plus the cadences you declared (▸) — and priced by the year, with what to set aside each month. A range under the charge means the amount swings; the yearly figure is a projection over it."
           >
             <RecurringTable
               merchants={analysis.recurring}
               declarable={filterOptions.merchants}
             />
           </Panel>
+        </div>
 
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           <Panel
             title="One-offs to review"
             subtitle="Suggestions only. An annual premium looks like a one-off to any statistic, so nothing is excluded until you say so — and if it is a bill, say that instead."
@@ -685,9 +690,7 @@ export function InsightsView({
               candidates={analysis.candidates}
             />
           </Panel>
-        </div>
 
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           <Panel
             title="Upcoming bills"
             subtitle="Projected from the last charge on file, for the cadences you declared. Nothing here reconciles against the charge that arrives — a bill still listed after its date means the import is behind, not that money went missing."

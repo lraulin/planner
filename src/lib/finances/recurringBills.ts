@@ -24,11 +24,17 @@ import { daysBetweenKeys } from "@/lib/schedule/geometry";
 /** A declared bill, as the analytics and UI layers need it. Mirrors the table's columns. */
 export type DeclaredBill = {
   merchant: string;
+  /** The period `expectedCents` covers. */
   cadenceMonths: number;
   /** Null means "use the median of the charges on file" — better once there is history. */
   expectedCents: number | null;
   /** Overrides the latest charge as the anchor for the next-due walk. */
   anchorDate: string | null;
+  /**
+   * Whether the dates are predictable, as distinct from the cost. False for propane: the
+   * yearly figure is solid, the delivery date is a tank sensor and the weather.
+   */
+  scheduled: boolean;
 };
 
 /**

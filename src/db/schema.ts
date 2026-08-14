@@ -2236,8 +2236,25 @@ export const financeRecurringBills = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     /** Effective merchant — `effectiveMerchant()` output, not the raw bank description. */
     merchant: text("merchant").notNull(),
-    /** 1 monthly, 3 quarterly, 6 semi-annual, 12 yearly. */
+    /** The period `expectedCents` covers. 1 monthly, 3 quarterly, 6 semi-annual, 12 yearly. */
     cadenceMonths: smallint("cadence_months").notNull(),
+    /**
+     * Whether the **dates** are predictable, as distinct from the cost.
+     *
+     * These are two facts and the first version of this table conflated them. Propane is a
+     * utility bill whose yearly cost is perfectly knowable — roughly $500 — but Taylor Gas
+     * monitors the tank and refills it at about 25%, so nobody can say when the truck comes:
+     * the three deliveries on file are 69 days apart and then 571. Declaring that "every 6
+     * months" invented both an annual figure and a delivery date.
+     *
+     * False keeps every figure built on `cadenceMonths` — the annual cost, the monthly
+     * set-aside, the baseline accrual — and drops only the forecast, which is the one thing
+     * that needs a calendar. A projected date is worse than no date, because it reads as
+     * knowledge however it is captioned.
+     *
+     * Defaults true so every declaration made before this column existed keeps its behaviour.
+     */
+    scheduled: boolean("scheduled").notNull().default(true),
     /**
      * What the user says it costs. Null means "use the median of the charges on file", which
      * is the better answer once there is history and the only wrong one when there is none.

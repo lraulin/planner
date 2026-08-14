@@ -118,6 +118,7 @@ export async function loadRecurringBills(userId: string): Promise<DeclaredBill[]
       cadenceMonths: financeRecurringBills.cadenceMonths,
       expectedCents: financeRecurringBills.expectedCents,
       anchorDate: financeRecurringBills.anchorDate,
+      scheduled: financeRecurringBills.scheduled,
     })
     .from(financeRecurringBills)
     .where(eq(financeRecurringBills.userId, userId))

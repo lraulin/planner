@@ -340,6 +340,11 @@ export type RecurringBillEdit = {
   expectedCents?: number | null;
   anchorDate?: string | null;
   notes?: string;
+  /**
+   * Whether the dates are predictable, as distinct from the cost. False for propane, whose
+   * yearly figure is solid and whose delivery date is a tank sensor and the weather.
+   */
+  scheduled?: boolean;
 };
 
 /**
@@ -366,6 +371,13 @@ export async function upsertRecurringBill(
   ) {
     throw new Error("A cadence must be a whole number of months, from 1 to 24.");
   }
+  // An unscheduled bill has no cadence to infer an amount from and no forecast to fall back
+  // on, so the stated cost is the only thing it knows. Without it there is nothing to
+  // declare — and a bill contributing zero to the baseline would be worse than none, because
+  // it would also suppress its own charges from the one-off review list.
+  if (edit.scheduled === false && !(Number(edit.expectedCents) > 0)) {
+    throw new Error("A bill with no fixed schedule needs its cost for the period.");
+  }
 
   // Only the fields supplied are written, the same rule `updateTransaction` follows. It
   // matters here because correcting a cadence from the recurring table sends the cadence and
@@ -376,6 +388,7 @@ export async function upsertRecurringBill(
     ...(edit.expectedCents !== undefined ? { expectedCents: edit.expectedCents } : {}),
     ...(edit.anchorDate !== undefined ? { anchorDate: edit.anchorDate } : {}),
     ...(edit.notes !== undefined ? { notes: edit.notes.trim() } : {}),
+    ...(edit.scheduled !== undefined ? { scheduled: edit.scheduled } : {}),
     updatedAt: new Date(),
   };
 
@@ -388,6 +401,7 @@ export async function upsertRecurringBill(
       expectedCents: edit.expectedCents ?? null,
       anchorDate: edit.anchorDate ?? null,
       notes: edit.notes?.trim() ?? "",
+      scheduled: edit.scheduled ?? true,
     })
     // The unique index is on (user_id, merchant), so this can only ever collide with this
     // user's own row — another user's identical merchant is a different row entirely.

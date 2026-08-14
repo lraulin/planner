@@ -1,0 +1,1 @@
+ALTER TABLE "finance_recurring_bills" ADD COLUMN "scheduled" boolean DEFAULT true NOT NULL;

@@ -10,6 +10,32 @@ import {
 } from "@/app/finances/actions";
 import { PanelEmpty } from "./Panel";
 
+/**
+ * Dollars only. A range is an admission that the figure is soft, so printing it to the cent
+ * argues with itself — and the two extra columns of width cost the set-aside figure its place
+ * on screen.
+ */
+function wholeUsd(cents: number): string {
+  return `$${Math.round(cents / 100).toLocaleString()}`;
+}
+
+/**
+ * Whether this bill's amount moves enough that one figure would misrepresent it.
+ *
+ * Schedule and amount are independent, and a utility is typically regular in one and wild in
+ * the other: SMECO arrives every month and costs anywhere from $77.95 to $311.13. Printing
+ * its median alone states an estimate as a fact, and the annual figure built on it inherits
+ * the same false confidence.
+ *
+ * The threshold is `RECURRING_VARIANCE_RATIO` — the same 25% that decides whether a merchant
+ * is regular enough to *be* a bill — so a charge either sits inside the band the detector
+ * calls "the same bill every time" or the table says out loud that it does not.
+ */
+function swings(entry: RecurringMerchant): boolean {
+  if (entry.chargeCount < 2 || entry.typicalCents <= 0) return false;
+  return entry.highCents - entry.lowCents > entry.typicalCents * 0.25;
+}
+
 /** Roughly how often, in words, for a cadence read off the gaps rather than declared. */
 function detectedCadenceLabel(days: number): string {
   if (days <= 9) return "Weekly";
@@ -48,7 +74,10 @@ export function RecurringTable({
 }) {
   const [pending, startTransition] = useTransition();
   const [adding, setAdding] = useState("");
+  // 0 is the sentinel for "no fixed schedule". Stored as a yearly period with the forecast
+  // switched off, because "about $500 a year" is what an unschedulable bill actually knows.
   const [addCadence, setAddCadence] = useState(6);
+  const [addYearly, setAddYearly] = useState("");
 
   const annualTotal = merchants.reduce((total, entry) => total + entry.annualCents, 0);
   const setAsideTotal = merchants.reduce(
@@ -68,13 +97,42 @@ export function RecurringTable({
     });
   }
 
+  const unscheduled = addCadence === 0;
+  const yearlyCents = Math.round(Number(addYearly.replace(/[$,\s]/g, "")) * 100);
+
   function add() {
     if (adding === "") return;
+    if (unscheduled && !(yearlyCents > 0)) return;
     startTransition(async () => {
-      // No amount: with no charge to read it off, the median of what is on file is the
-      // honest figure, and it improves on its own as the bill arrives again.
-      await setRecurringBillAction({ merchant: adding, cadenceMonths: addCadence });
+      await setRecurringBillAction(
+        unscheduled
+          ? {
+              merchant: adding,
+              // A yearly period carrying the stated annual cost, with the forecast off. The
+              // dates are unknowable; the money is not.
+              cadenceMonths: 12,
+              expectedCents: yearlyCents,
+              scheduled: false,
+            }
+          : // No amount on a scheduled bill: the median of what is on file is the honest
+            // figure, and it improves on its own as the bill arrives again.
+            { merchant: adding, cadenceMonths: addCadence, scheduled: true },
+      );
       setAdding("");
+      setAddYearly("");
+    });
+  }
+
+  function setYearly(merchant: string, dollars: string) {
+    const cents = Math.round(Number(dollars.replace(/[$,\s]/g, "")) * 100);
+    if (!(cents > 0)) return;
+    startTransition(async () => {
+      await setRecurringBillAction({
+        merchant,
+        cadenceMonths: 12,
+        expectedCents: cents,
+        scheduled: false,
+      });
     });
   }
 
@@ -110,11 +168,24 @@ export function RecurringTable({
             {cadenceLabel(months)}
           </option>
         ))}
+        <option value={0}>No fixed schedule</option>
       </select>
+      {unscheduled && (
+        <input
+          type="text"
+          inputMode="decimal"
+          value={addYearly}
+          onChange={(event) => setAddYearly(event.target.value)}
+          placeholder="Cost a year"
+          aria-label="Yearly cost"
+          // 16px, or iOS zooms the whole page on focus.
+          className="min-h-tap w-28 rounded border border-rule bg-surface px-2 py-1 text-base text-ink md:min-h-0 md:text-[0.75rem]"
+        />
+      )}
       <button
         type="button"
         onClick={add}
-        disabled={pending || adding === ""}
+        disabled={pending || adding === "" || (unscheduled && !(yearlyCents > 0))}
         className="min-h-tap rounded border border-rule bg-surface-raised px-2 text-[0.75rem] text-ink disabled:opacity-50 md:min-h-0 md:py-1"
       >
         Declare
@@ -137,7 +208,9 @@ export function RecurringTable({
   return (
     <div className="flex min-w-0 flex-col gap-2">
       <div className="min-w-0 overflow-x-auto">
-        <table className="w-full min-w-[30rem] text-[0.8125rem]">
+        {/* Wide enough for a charge that carries its range underneath without the set-aside
+            column being clipped; the wrapper scrolls rather than the page. */}
+        <table className="w-full min-w-[34rem] text-[0.8125rem]">
           <thead>
             <tr className="border-b border-rule text-left text-[0.75rem] text-ink-muted">
               <th className="py-1 pr-2 font-normal">Merchant</th>
@@ -165,6 +238,10 @@ export function RecurringTable({
                 <td className="py-1 pr-2 whitespace-nowrap text-ink-muted">
                   {entry.cadenceMonths === null ? (
                     detectedCadenceLabel(entry.cadenceDays)
+                  ) : !entry.scheduled ? (
+                    <span title="Recurs, but on no predictable schedule">
+                      Irregular
+                    </span>
                   ) : (
                     <select
                       value={entry.cadenceMonths}
@@ -183,11 +260,30 @@ export function RecurringTable({
                     </select>
                   )}
                 </td>
-                <td className="tabular py-1 pr-2 text-right text-ink">
+                <td className="tabular py-1 pr-2 text-right whitespace-nowrap text-ink">
                   {formatUsd(entry.typicalCents)}
+                  {swings(entry) && (
+                    <span className="block text-[0.75rem] text-ink-muted">
+                      {wholeUsd(entry.lowCents)}–{wholeUsd(entry.highCents)}
+                    </span>
+                  )}
                 </td>
                 <td className="tabular py-1 pr-2 text-right text-[var(--chart-spend)]">
-                  {formatUsd(entry.annualCents)}
+                  {entry.declared && !entry.scheduled ? (
+                    // The one figure an unscheduled bill actually knows, so it is the one
+                    // that is editable. Everything else about it is derived from this.
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      defaultValue={(entry.annualCents / 100).toFixed(2)}
+                      disabled={pending}
+                      aria-label={`Yearly cost for ${entry.merchant}`}
+                      onBlur={(event) => setYearly(entry.merchant, event.target.value)}
+                      className="tabular w-20 rounded border border-rule bg-surface px-1 text-right text-base text-ink md:text-[0.8125rem]"
+                    />
+                  ) : (
+                    formatUsd(entry.annualCents)
+                  )}
                 </td>
                 <td className="tabular py-1 text-right whitespace-nowrap text-ink-muted">
                   {formatUsd(Math.round(entry.annualCents / 12))}
