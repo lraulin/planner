@@ -1,4 +1,4 @@
-# References for Live bank sync via Teller
+# References for Live bank sync
 
 ## Governing specs
 
@@ -10,8 +10,8 @@
   partial unique index on `(user_id, external_source, external_id)`; integer cents
   throughout
 - **What changes:** nothing in the CSV path. The sync is a second producer into the same
-  tables, and D5's pending replacement is the one place the never-update rule does not hold —
-  which is why it lives outside `importFinanceCsvFiles`
+  tables, and D5's application of `modified` / `removed` deltas is the one place the
+  never-update rule does not hold — which is why it lives outside `importFinanceCsvFiles`
 
 ### `agent-os/specs/2026-08-12-1316-security-hardening-and-standard/`
 
@@ -19,7 +19,7 @@
 - **Relevant decisions:** every mutation takes `userId` and proves ownership; error
   redaction is mandatory at every client boundary and **no** `UserFacingError` hierarchy;
   secrets are environment-only and fail closed
-- **What changes:** `frame-src https://teller.io` is added so Teller Connect's iframe
+- **What changes:** `frame-src https://cdn.plaid.com` is added so Plaid Link's iframe
   renders. `connect-src` stays `'self'` — the API is called server-side. Every other
   directive is untouched
 - **Note:** that spec is frozen and says further security work opens a delta. This is it
@@ -31,7 +31,7 @@
   it, falling back to the ledger sum when no statement exists; the discrepancy is a
   diagnostic, not a correction
 - **What changes:** its "Plaid is out of scope" deferral, and its "no change to the headline
-  current-balance rule" — for Teller-linked accounts only. Unlinked accounts keep the
+  current-balance rule" — for linked accounts only. Unlinked accounts keep the
   statement-anchored rule exactly as frozen
 
 ### `agent-os/specs/2026-08-14-1524-statement-reconcile/`
@@ -63,7 +63,7 @@ closing` against the register and reports `CoverageHole[]` and `mismatchCents`
   `off` and `skipped` deliberately distinct so the UI knows whether to offer Refresh;
   `syncWindowIfStale` + `SYNC_MAX_AGE_MS` at `sync.ts:26,188`; per-item failures collected
   rather than thrown (`sync.ts:64-73`)
-- **Where it differs:** Better Auth owns Google's token refresh. Teller has no Better Auth
+- **Where it differs:** Better Auth owns Google's token refresh. Plaid has no Better Auth
   provider, so this is the first integration that owns its own credential row — a new
   decision, not a pattern to copy
 
@@ -119,7 +119,7 @@ ledgerBalanceCents` becomes a three-source precedence, and `balanceMismatchCents
 - **Location:** `safeError.ts:31-35`, `csp.ts:39-73`
 - **Relevance:** the two files the integration must not fight. Anything with a `code` is
   redacted — so user-facing bank errors are plain `Error`s. `script-src` already has
-  `'strict-dynamic'`, so a nonced `next/script` can pull `connect.js` with no host
+  `'strict-dynamic'`, so a nonced `next/script` can pull `link-initialize.js` with no host
   allowlist; the iframe is the only thing needing a new directive
 
 ### `src/app/actionResult.ts`
@@ -130,25 +130,41 @@ ledgerBalanceCents` becomes a three-source precedence, and `balanceMismatchCents
 
 ## External documentation
 
-Teller's docs are the authority for the API surface; captured here so the shaping is not
+Plaid's docs are the authority for the API surface; captured here so the shaping is not
 re-derived.
 
-- **Environments** — <https://teller.io/docs/guides/environments>. Development connects to
-  real institutions with real credentials, free, 100-enrollment cap. Production needs KYB.
-- **Authentication** — <https://teller.io/docs/api/authentication>. mTLS is required for all
-  requests involving end-user data; the access token is HTTP Basic username with an empty
-  password. "Access tokens are useless without a Teller client certificate."
-- **Connect** — <https://teller.io/docs/guides/connect>. `https://cdn.teller.io/connect/connect.js`;
-  `applicationId`, `environment`, `products`, `onSuccess` → `{ accessToken, enrollment.id,
-user.id }`. Re-auth by re-initializing with `enrollmentId`.
-- **Transactions** — <https://teller.io/docs/api/account/transactions>. Fields: `id`,
-  `account_id`, `date`, `description`, `amount` (signed string), `type`, `status`
-  (`posted` | `pending`), `running_balance` (posted only), `details.category`,
-  `details.counterparty`, `details.processing_status`. Pagination `count` / `from_id`, plus
-  `start_date` / `end_date`. Ids are stable **except** when a pending transaction changes
-  substantially on posting, which issues a new id.
-- **Balances** — <https://teller.io/docs/api/account/balances>. `ledger` and `available`
-  (ledger net pending); at least one is always present. Fetched live from the bank.
-- **Accounts** — <https://teller.io/docs/api/accounts>. `id`, `enrollment_id`,
-  `institution{id,name}`, `name`, `type` (`depository` | `credit`), `subtype`, `last_four`,
-  `currency`, `status`, `links`.
+- **Trial plan** — <https://plaid.com/docs/account/billing/>. Free for US/Canada teams
+  created on or after 2026-04-15. **10 Production Items, and `/item/remove` does not free a
+  slot.** Bundles Auth, Transactions (+ Refresh), Balance, Identity, Assets, Liabilities,
+  Investments, Statements. Trial OAuth access covers Chase **and Capital One**, plus BoA,
+  Wells Fargo, Citi, Navy Federal, PNC, US Bank, Amex. Caveat: adding a subscription product
+  (Transactions, Liabilities, Investments) during the Trial bills on any later upgrade.
+- **`/transactions/sync`** — <https://plaid.com/docs/api/products/transactions/>. Cursor
+  model returning `added` / `modified` / `removed` plus `next_cursor` and `has_more`; a
+  fully-drained cursor stays valid at least a year. Transaction fields: `transaction_id`,
+  `account_id`, `date`, `authorized_date`, `name` (raw), `merchant_name` (cleaned),
+  `amount` (**positive = money out**), `pending`, `pending_transaction_id`,
+  `personal_finance_category`. Transactions are explicitly **not immutable** and can be
+  removed by the institution — which is why the deltas are applied literally.
+- **Balance** — <https://plaid.com/docs/balance/>. `/accounts/balance/get` forces a live
+  fetch from the institution. The `balances` object on `/accounts/get` and
+  `/transactions/sync` is **cached** — an Item with Transactions refreshes it about once a
+  day, an Auth-only Item as rarely as every 30 days.
+- **Capital One limitations** —
+  <https://support.plaid.com/hc/en-us/articles/25286986638231-Are-pending-transactions-returned-for-Capital-One-accounts>.
+  No pending transactions, and only 90 days of history. Source-side; identical under any
+  aggregator.
+- **Link** — <https://plaid.com/docs/link/>. `link-initialize.js` from `cdn.plaid.com`,
+  initialised with a server-minted `link_token`; `onSuccess` yields a `public_token`
+  exchanged server-side via `/item/public_token/exchange`. Re-auth uses a link token in
+  update mode against the existing Item.
+- **Item errors** — <https://plaid.com/docs/errors/item/>. `ITEM_LOGIN_REQUIRED` is the
+  reconnect signal.
+
+### Teller (rejected — API withdrawn)
+
+Teller was the original choice and its documentation is **still online**, as is its
+marketing site advertising the service. It withdrew the API in early July 2026
+(<https://news.ycombinator.com/item?id=48841633>), citing an inability to attract large
+customers. Recorded here so the next reader does not re-derive the same dead end from docs
+that still read as current.
