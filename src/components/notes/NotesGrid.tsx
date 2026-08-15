@@ -736,8 +736,24 @@ export function NotesGrid({
           return lastResult;
         });
       },
+      onExpand: (id) => {
+        if (!showHierarchy) return;
+        const note = byId.get(id);
+        if (!note?.hasChildren || !note.collapsed) return;
+        patch(id, { collapsed: false });
+        apply(() => setNoteCollapsedAction(id, false));
+      },
     };
-  }, [canReorder, byId, apply, selectOne, headerSort, clearHeaderSort]);
+  }, [
+    canReorder,
+    byId,
+    apply,
+    selectOne,
+    headerSort,
+    clearHeaderSort,
+    showHierarchy,
+    patch,
+  ]);
 
   const rowMenu = useCallback(
     // `null` is the blank area below the rows — the same menu with nothing selected.

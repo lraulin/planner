@@ -842,8 +842,23 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
           return lastResult;
         });
       },
+      onExpand: (id) => {
+        const node = byId.get(id);
+        if (!node) return;
+        toggleCollapsed(node, false);
+      },
     };
-  }, [byId, byCategory, nodes, apply, patch, headerSort, clearHeaderSort, selectOne]);
+  }, [
+    byId,
+    byCategory,
+    nodes,
+    apply,
+    patch,
+    headerSort,
+    clearHeaderSort,
+    selectOne,
+    toggleCollapsed,
+  ]);
 
   const columnCtx: OutlineColumnCtx = useMemo(
     () => ({

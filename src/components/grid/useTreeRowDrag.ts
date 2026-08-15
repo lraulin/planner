@@ -126,6 +126,12 @@ export function useTreeRowDrag({
           return lastResult;
         });
       },
+      onExpand: (id) => {
+        const node = byId.get(id);
+        if (!node?.hasChildren || !node.collapsed) return;
+        patch(id, { collapsed: false });
+        apply(() => setCollapsedAction(id, false));
+      },
     };
   }, [nodes, byId, apply, patch, selectOne, headerSorts, clearHeaderSort]);
 }

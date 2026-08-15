@@ -85,6 +85,11 @@ export type RowDrag = {
     zone: DropZone,
   ) => { depth: number } | null;
   onDrop: (dragIds: readonly string[], targetId: string, zone: DropZone) => void;
+  /**
+   * Hover-dwell on a collapsed row with the pointer in the "inside" third. The grid
+   * owns the timer; the host expands and persists. Group headers expand themselves.
+   */
+  onExpand?: (id: string) => void;
 };
 
 type DropHint = { targetId: string; zone: DropZone; depth: number };
@@ -109,6 +114,9 @@ type RowDragBinding = {
 /** Left gutter width: wide enough for a 3-digit row number, narrow without one. */
 const HANDLE_WIDTH_NUMBERED = "2rem";
 const HANDLE_WIDTH_PLAIN = "1.25rem";
+
+/** Dwell on a collapsed row before it opens under a drag. */
+const HOLD_EXPAND_MS = 500;
 
 /**
  * What a row announces to assistive tech and whether it draws as expandable. These are the
@@ -341,6 +349,35 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
 
   const [dragIds, setDragIds] = useState<readonly string[] | null>(null);
   const [dropHint, setDropHint] = useState<DropHint | null>(null);
+  const holdExpandId = useRef<string | null>(null);
+  const holdExpandTimer = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (holdExpandTimer.current != null) {
+        window.clearTimeout(holdExpandTimer.current);
+      }
+    },
+    [],
+  );
+
+  function clearHoldExpand() {
+    if (holdExpandTimer.current != null) {
+      window.clearTimeout(holdExpandTimer.current);
+      holdExpandTimer.current = null;
+    }
+    holdExpandId.current = null;
+  }
+
+  function scheduleHoldExpand(id: string, expand: () => void) {
+    if (holdExpandId.current === id) return;
+    clearHoldExpand();
+    holdExpandId.current = id;
+    holdExpandTimer.current = window.setTimeout(() => {
+      holdExpandTimer.current = null;
+      holdExpandId.current = null;
+      expand();
+    }, HOLD_EXPAND_MS);
+  }
   const [menu, setMenu] = useState<{
     /** `null` when the pointer was over blank space rather than a row. */
     rowId: string | null;
@@ -672,6 +709,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   );
 
   function endDrag() {
+    clearHoldExpand();
     setDragIds(null);
     setDropHint(null);
   }
@@ -692,6 +730,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   function dragBindingFor(
     rowId: string,
     nodeOrder: readonly string[],
+    onHoldInside?: () => void,
   ): RowDragBinding | undefined {
     if (!rowDrag) return undefined;
     // Drag is off below `md`, deliberately. The handle is mouse-shaped; reordering on a
@@ -725,6 +764,13 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
       },
       onOver: (zone) => {
         if (!activeDrag || activeDrag.length === 0) return false;
+        // Expand even when the hover is not yet a legal drop — the children that appear
+        // are what the pointer is looking for.
+        if (zone === "inside" && onHoldInside) {
+          scheduleHoldExpand(rowId, onHoldInside);
+        } else if (holdExpandId.current === rowId) {
+          clearHoldExpand();
+        }
         const resolved = rowDrag.resolve(activeDrag, rowId, zone);
         if (!resolved) {
           forget();
@@ -741,7 +787,10 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
         );
         return true;
       },
-      onLeave: forget,
+      onLeave: () => {
+        if (holdExpandId.current === rowId) clearHoldExpand();
+        forget();
+      },
       onDrop: (zone) => {
         const ids = activeDrag;
         endDrag();
@@ -853,7 +902,13 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
                         onToggle={() => onToggleGroup?.(row.id)}
                         // Groups are drop targets only (never dragged). Outline category headers
                         // use this so a root result area can change category by landing on a group.
-                        drag={dragBindingFor(row.id, nodeOrder)}
+                        drag={dragBindingFor(
+                          row.id,
+                          nodeOrder,
+                          collapsedGroups?.has(row.id)
+                            ? () => onToggleGroup?.(row.id)
+                            : undefined,
+                        )}
                         compact={compact}
                       />
                     );
@@ -901,7 +956,14 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
                       onOpenDetail={
                         onOpenDetail ? () => onOpenDetail(row.id) : undefined
                       }
-                      drag={dragBindingFor(row.id, nodeOrder)}
+                      drag={dragBindingFor(
+                        row.id,
+                        nodeOrder,
+                        rowExpansionFor(row, rowExpansion) === false &&
+                          rowDrag?.onExpand
+                          ? () => rowDrag.onExpand?.(row.id)
+                          : undefined,
+                      )}
                       onContextMenu={
                         rowMenu &&
                         ((x, y) => {
