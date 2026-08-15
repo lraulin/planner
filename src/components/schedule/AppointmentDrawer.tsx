@@ -126,7 +126,7 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
     toLocalInputValue(new Date(value.startAt)),
   );
   const [endLocal, setEndLocal] = useState(toLocalInputValue(new Date(value.endAt)));
-  const [allDay, setAllDay] = useState(full ? value.allDay : false);
+  const [allDay, setAllDay] = useState(value.allDay ?? false);
   const [checkState, setCheckState] = useState<AppointmentCheck>(
     full ? value.checkState : "open",
   );

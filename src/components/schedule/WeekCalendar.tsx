@@ -50,7 +50,7 @@ type Props = {
   singleDay?: Date;
   backgroundEvents: BackgroundEvent[];
   occurrences: ScheduleOccurrence[];
-  onSelectRange: (start: Date, end: Date) => void;
+  onSelectRange: (start: Date, end: Date, allDay: boolean) => void;
   onEventClick: (occ: Occurrence) => void;
   onEventDrop: (
     id: string,
@@ -315,7 +315,7 @@ export function WeekCalendar({
           info.el.style.setProperty("--tc-fill", fill);
         }}
         select={(arg: DateSelectArg) => {
-          onSelectRange(arg.start, arg.end);
+          onSelectRange(arg.start, arg.end, arg.allDay);
           arg.view.calendar.unselect();
         }}
         eventClick={(arg: EventClickArg) => {

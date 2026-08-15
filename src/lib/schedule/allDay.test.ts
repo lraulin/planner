@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { toDateKey } from "./geometry";
-import { allDayRange } from "./allDay";
+import { allDayRange, draftFromCalendarSelect } from "./allDay";
 
 describe("allDayRange", () => {
   it("turns a same-day timed range into a one-day exclusive pair", () => {
@@ -45,5 +45,31 @@ describe("allDayRange", () => {
     const range = allDayRange(start, end);
     expect(toDateKey(range.startAt)).toBe("2026-08-12");
     expect(toDateKey(range.endAt)).toBe("2026-08-13");
+  });
+});
+
+describe("draftFromCalendarSelect", () => {
+  it("does not treat a midnight-to-midnight span as all-day without the flag", () => {
+    // The all-day strip and a genuine 24-hour timed event produce the same instants.
+    // Dropping FullCalendar's `allDay` is how "New all-day event" became a 24-hour block.
+    const start = new Date(2026, 7, 12, 0, 0, 0);
+    const end = new Date(2026, 7, 13, 0, 0, 0);
+    expect(draftFromCalendarSelect(start, end, false)).toEqual({
+      startAt: start,
+      endAt: end,
+      allDay: false,
+    });
+    const allDay = draftFromCalendarSelect(start, end, true);
+    expect(allDay.allDay).toBe(true);
+    expect(toDateKey(allDay.startAt)).toBe("2026-08-12");
+    expect(toDateKey(allDay.endAt)).toBe("2026-08-13");
+  });
+
+  it("opens a one-day all-day draft from a same-instant all-day click", () => {
+    const at = new Date(2026, 7, 12, 0, 0, 0);
+    const draft = draftFromCalendarSelect(at, at, true);
+    expect(draft.allDay).toBe(true);
+    expect(toDateKey(draft.startAt)).toBe("2026-08-12");
+    expect(toDateKey(draft.endAt)).toBe("2026-08-13");
   });
 });

@@ -7,6 +7,7 @@ import type { SchedulePayload } from "@/lib/schedule/queries";
 import type { Occurrence } from "@/lib/schedule/recurrence";
 import type { WeeklyPlanPatch } from "@/lib/planning/mutations";
 import { fromDateKey, parseFloatingDateTime } from "@/lib/schedule/geometry";
+import { draftFromCalendarSelect } from "@/lib/schedule/allDay";
 import { weekRange } from "@/lib/schedule/range";
 import { asyncHandler } from "@/lib/eventHandler";
 import {
@@ -104,8 +105,8 @@ export function FixedTimeStep({
     onScheduleChange();
   }
 
-  function handleCreateRange(start: Date, end: Date) {
-    setEditing({ subject: "", startAt: start, endAt: end });
+  function handleCreateRange(start: Date, end: Date, allDay: boolean) {
+    setEditing({ subject: "", ...draftFromCalendarSelect(start, end, allDay) });
   }
 
   const handleCycleCheck = useCallback(

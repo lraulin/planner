@@ -36,3 +36,20 @@ export function allDayRange(start: Date, end: Date): AllDayRange {
   const exclusiveEnd = endKey <= startKey ? shiftDateKey(startKey, 1) : endKey;
   return { startAt: fromDateKey(startKey), endAt: fromDateKey(exclusiveEnd) };
 }
+
+/**
+ * What the appointment drawer should open with after a calendar selection.
+ *
+ * FullCalendar's all-day strip yields midnight→next-midnight with `allDay: true`. If that
+ * flag is dropped, the same instants become a 24-hour timed event. The flag is the
+ * discriminator — do not infer all-day from a 24-hour span.
+ */
+export function draftFromCalendarSelect(
+  start: Date,
+  end: Date,
+  allDay: boolean,
+): { startAt: Date; endAt: Date; allDay: boolean } {
+  if (!allDay) return { startAt: start, endAt: end, allDay: false };
+  const range = allDayRange(start, end);
+  return { startAt: range.startAt, endAt: range.endAt, allDay: true };
+}

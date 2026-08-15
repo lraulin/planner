@@ -14,6 +14,7 @@ import {
 } from "@/lib/planning/blocks";
 import { selectProjectsForCommitment } from "@/lib/planning/review";
 import { atMinutes, fromDateKey, parseFloatingDateTime } from "@/lib/schedule/geometry";
+import { draftFromCalendarSelect } from "@/lib/schedule/allDay";
 import { weekRange } from "@/lib/schedule/range";
 import { formatEffort } from "@/lib/tree/format";
 import { asyncHandler } from "@/lib/eventHandler";
@@ -194,14 +195,23 @@ export function ScheduleBlocksStep({
     onScheduleChange();
   }
 
-  function handleCreateRange(start: Date, end: Date) {
+  function handleCreateRange(start: Date, end: Date, allDay: boolean) {
+    const draft = { subject: "", ...draftFromCalendarSelect(start, end, allDay) };
     if (!selectedProjectId) {
-      setEditing({ subject: "", startAt: start, endAt: end });
+      setEditing(draft);
       return;
     }
     const project = committedProjects.find((p) => p.id === selectedProjectId);
     if (!project) {
-      setEditing({ subject: "", startAt: start, endAt: end });
+      setEditing(draft);
+      return;
+    }
+    if (allDay) {
+      setEditing({
+        ...draft,
+        subject: project.name || "Project",
+        projectId: project.id,
+      });
       return;
     }
     const remaining = remainingById.get(project.id) ?? null;

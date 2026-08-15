@@ -19,6 +19,7 @@ import {
   localDateKey,
   parseFloatingDateTime,
 } from "@/lib/schedule/geometry";
+import { draftFromCalendarSelect } from "@/lib/schedule/allDay";
 import { isDateKey } from "@/lib/metrics/parse";
 import {
   DAY_COUNTS,
@@ -104,6 +105,7 @@ export type DraftAppointment = {
   subject: string;
   startAt: Date;
   endAt: Date;
+  allDay?: boolean;
   projectId?: string | null;
 };
 
@@ -386,11 +388,10 @@ export function ScheduleView({
     startTransition(() => router.refresh());
   }, [router]);
 
-  function handleCreateRange(start: Date, end: Date) {
+  function handleCreateRange(start: Date, end: Date, allDay: boolean) {
     setEditingAppointment({
       subject: "",
-      startAt: start,
-      endAt: end,
+      ...draftFromCalendarSelect(start, end, allDay),
     });
   }
 
@@ -694,11 +695,12 @@ export function ScheduleView({
             run: () =>
               setEditingAppointment(
                 allDay
-                  ? { subject: "", startAt: start, endAt: start }
+                  ? { subject: "", ...draftFromCalendarSelect(start, start, true) }
                   : {
                       subject: "",
                       startAt: start,
                       endAt: new Date(start.getTime() + view.slotMinutes * 60_000),
+                      allDay: false,
                     },
               ),
           },
