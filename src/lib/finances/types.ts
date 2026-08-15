@@ -6,12 +6,13 @@ import type { FinanceAccountKind, FinanceFlowKind } from "@/db/schema";
  * later Plaid or SimpleFIN sync should be a new member here and nothing else.
  */
 export type FinanceFeed =
-  "csv:chase-credit" | "csv:capitalone-card" | "csv:capitalone-bank";
+  "csv:chase-credit" | "csv:capitalone-card" | "csv:capitalone-bank" | "csv:coinbase";
 
 export const FINANCE_FEEDS: readonly FinanceFeed[] = [
   "csv:chase-credit",
   "csv:capitalone-card",
   "csv:capitalone-bank",
+  "csv:coinbase",
 ] as const;
 
 /** Human label for a feed, for import summaries and warnings. */
@@ -19,6 +20,7 @@ export const FEED_LABELS: Record<FinanceFeed, string> = {
   "csv:chase-credit": "Chase credit card",
   "csv:capitalone-card": "Capital One card",
   "csv:capitalone-bank": "Capital One 360 bank",
+  "csv:coinbase": "Coinbase",
 };
 
 /** Fail-closed PDF dispatch names every format we actually parse. */
@@ -51,6 +53,12 @@ export type ParsedTransaction = {
   memo: string;
   /** Running balance where the feed supplies one. */
   balanceAfterCents: number | null;
+  /**
+   * The feed's own id, when it has one (Coinbase). Absent feeds get a fingerprint
+   * at import. Kept off the hash so a later description tweak cannot duplicate a row
+   * Coinbase already numbered.
+   */
+  externalId?: string;
 };
 
 /**

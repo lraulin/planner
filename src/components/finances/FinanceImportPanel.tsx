@@ -23,8 +23,8 @@ type ImportFail = { ok: false; error: string };
 /**
  * Import bank/card CSV exports, Chase Prime Visa monthly statements, Capital One
  * card monthly statements, Capital One 360 monthly statement PDFs, and PayPal
- * monthly statements. Format is detected per file. PayPal files enrich existing
- * rows; they do not insert a PayPal account.
+ * monthly statements, and Coinbase transaction-history CSVs. Format is detected
+ * per file. PayPal files enrich existing rows; they do not insert a PayPal account.
  *
  * Re-importing an overlapping file is the normal case — you download the last N days each
  * time, and statements overlap the bank CSV — so the result line leads with created and
@@ -161,11 +161,12 @@ export function FinanceImportPanel({ embedded = false }: { embedded?: boolean } 
       <div className="space-y-4 px-4 py-4 text-[0.875rem] leading-relaxed text-ink-muted">
         <p>
           Import transaction CSVs or monthly statement PDFs. Chase credit card, Capital
-          One card, and Capital One 360 Checking and Savings CSVs, plus Chase Prime
-          Visa, Capital One card, and Capital One 360 monthly statements, are recognised
-          automatically, so you can select all of them at once. Accounts are created the
-          first time they are seen and matched by account number after that — rename
-          them freely.
+          One card, and Capital One 360 Checking and Savings CSVs, Coinbase
+          transaction-history CSVs, plus Chase Prime Visa, Capital One card, Capital One
+          360, and PayPal monthly statements, are recognised automatically, so you can
+          select all of them at once. Accounts are created the first time they are seen
+          and matched by account number after that — rename them freely. PayPal files
+          name existing rows; they do not create a PayPal account.
         </p>
         <p>
           Re-importing a file that overlaps one you already loaded is expected and safe:

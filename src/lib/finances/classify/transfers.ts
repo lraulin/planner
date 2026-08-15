@@ -68,10 +68,17 @@ const INTERNAL_PATTERNS: readonly RegExp[] = [
  * carries a PayPal balance, so every `TO` is a purchase and `CLASSIFY_RULES` now files it
  * as spend. The inbound `FROM` half stays here: those are gifts and reimbursements, not
  * earnings, and naming the sender is a resolution, not a reclassification as income.
+ *
+ * Coinbase buys and sends stay here for the same reason PenFed does: the 77 buys were
+ * funded from an unimported credit union, and the Sends left for wallets we do not
+ * hold. Treating either as income or spend would invent a wage or a cost we cannot
+ * see. The three USD withdrawals are the opposite case — they name checking — and
+ * are paired as internal via the last four, not this list.
  */
 const EXTERNAL_PATTERNS: readonly RegExp[] = [
   /PAYPAL FROM LEE RAULIN/i,
   /PENTAGON FEDERAL/i,
+  /^Coinbase (Buy|Sell|Send|Receive|Retail)/i,
 ];
 
 /** Capital One's masked counterparty: `XXXXXXX2322`. The last four are the account key. */

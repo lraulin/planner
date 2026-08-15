@@ -41,6 +41,14 @@ describe("detectFeed", () => {
   it("returns null for something else entirely", () => {
     expect(detectFeed(["Date", "Note", "Value"])).toBeNull();
     expect(detectFeed([])).toBeNull();
+    // Coinbase has a preamble; its header is not a bank-CSV feed.
+    expect(
+      detectFeed(
+        "ID,Timestamp,Transaction Type,Asset,Quantity Transacted,Price Currency,Price at Transaction,Subtotal,Total (inclusive of fees and/or spread),Fees and/or Spread,Notes".split(
+          ",",
+        ),
+      ),
+    ).toBeNull();
   });
 });
 

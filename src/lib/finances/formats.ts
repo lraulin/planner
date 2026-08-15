@@ -31,7 +31,13 @@ function normalizeHeader(cell: string): string {
     .replace(/[^a-z0-9]/g, "");
 }
 
-const HEADERS: Record<FinanceFeed, readonly string[]> = {
+/**
+ * Bank CSVs this module parses. Coinbase has a preamble and its own parser
+ * (`coinbaseCsv.ts`); it is a `FinanceFeed` but not a row-0 header format.
+ */
+type BankCsvFeed = Exclude<FinanceFeed, "csv:coinbase">;
+
+const HEADERS: Record<BankCsvFeed, readonly string[]> = {
   // Chase's "Post Date" against Capital One's "Posted Date" is the whole difference between
   // the two card formats' first columns, so match on a column only one of them has.
   "csv:chase-credit": ["transactiondate", "postdate", "description", "type", "amount"],
@@ -49,10 +55,10 @@ const HEADERS: Record<FinanceFeed, readonly string[]> = {
  * Which feed a file is, from its header row alone. Returns null when nothing matches, which
  * the caller reports as "unrecognised format" naming the file.
  */
-export function detectFeed(headerCells: readonly string[]): FinanceFeed | null {
+export function detectFeed(headerCells: readonly string[]): BankCsvFeed | null {
   const present = new Set(headerCells.map(normalizeHeader));
   for (const [feed, required] of Object.entries(HEADERS) as [
-    FinanceFeed,
+    BankCsvFeed,
     readonly string[],
   ][]) {
     if (required.every((column) => present.has(column))) return feed;
@@ -287,14 +293,14 @@ const parseCapitalOneBankRow: RowParser = (cells, index) => {
   };
 };
 
-const ROW_PARSERS: Record<FinanceFeed, RowParser> = {
+const ROW_PARSERS: Record<BankCsvFeed, RowParser> = {
   "csv:chase-credit": parseChaseRow,
   "csv:capitalone-card": parseCapitalOneCardRow,
   "csv:capitalone-bank": parseCapitalOneBankRow,
 };
 
 function accountNaming(
-  feed: FinanceFeed,
+  feed: BankCsvFeed,
   externalKey: string,
   fileName: string,
 ): { name: string; institution: string; kind: FinanceAccountKind } {
@@ -346,7 +352,7 @@ export function parseFinanceCsv(
   if (!feed) {
     return {
       ok: false,
-      error: `"${fileName}" is not a recognised export. Expected a Chase credit card, Capital One card, or Capital One 360 bank CSV.`,
+      error: `"${fileName}" is not a recognised export. Expected a Chase credit card, Capital One card, Capital One 360 bank, or Coinbase CSV.`,
     };
   }
 

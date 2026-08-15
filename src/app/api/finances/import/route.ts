@@ -10,9 +10,9 @@ const MAX_TOTAL_BYTES = 40 * 1024 * 1024;
 const MAX_FILES = 80;
 
 /**
- * POST multipart form: one or more `files` fields — bank/card CSV exports, Chase Prime
- * Visa monthly statements, Capital One card monthly statements, or Capital One 360
- * monthly statement PDFs.
+ * POST multipart form: one or more `files` fields — bank/card CSV exports, a Coinbase
+ * transaction-history CSV, Chase Prime Visa monthly statements, Capital One card monthly
+ * statements, Capital One 360 monthly statement PDFs, or PayPal monthly statements.
  *
  * Route handler rather than a Server Action so a multi-file upload is not forced through
  * the React Flight serializer (same pattern as the Achieve, RedNotebook and Tomboy imports).

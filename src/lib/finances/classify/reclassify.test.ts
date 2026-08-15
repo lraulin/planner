@@ -10,6 +10,7 @@ const ACCOUNTS: ReclassifyAccount[] = [
   { id: "checking", externalKey: "2322" },
   { id: "savings", externalKey: "2603" },
   { id: "capone-card", externalKey: "3448" },
+  { id: "coinbase", externalKey: "0b7043a7-af9a-5c5c-bb18-6e15b4e0267e" },
 ];
 
 function row(
@@ -292,6 +293,30 @@ describe("planReclassify", () => {
       ),
     ]);
     expect(flowOf(plan, "out")).toBe("spend");
+  });
+
+  it("pairs a Coinbase withdrawal with checking and leaves the Sell as the liquidation", () => {
+    const plan = planOf([
+      row(
+        "cb-out",
+        "coinbase",
+        "2025-11-21",
+        "Coinbase Withdrawal -490.62 USD to Capital One XXXX2322",
+        -48203,
+      ),
+      row("cb-sell", "coinbase", "2025-11-21", "Coinbase Sell -0.00606489 BTC", 48203),
+      row("bank", "checking", "2025-11-21", "Deposit from COINBASE", 48203),
+    ]);
+
+    expect(flowOf(plan, "cb-out")).toBe("internal_transfer");
+    expect(flowOf(plan, "bank")).toBe("internal_transfer");
+    expect(flowOf(plan, "cb-sell")).toBe("external_transfer");
+    const group = plan.rows.find((entry) => entry.id === "cb-out")?.transferGroupId;
+    expect(group).toBeTruthy();
+    expect(plan.rows.find((entry) => entry.id === "bank")?.transferGroupId).toBe(group);
+    expect(
+      plan.rows.find((entry) => entry.id === "cb-sell")?.transferGroupId,
+    ).toBeNull();
   });
 
   it("keeps an inbound PayPal deposit as an external transfer", () => {

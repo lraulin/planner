@@ -19,6 +19,7 @@ import { fingerprintAll } from "./fingerprint";
 import { parseFinanceCsv } from "./formats";
 import { selectNewTransactions } from "./matchExisting";
 import { centsToNumericString, numericStringToCents } from "./money";
+import { looksLikeCoinbaseCsv, parseCoinbaseCsv } from "./coinbaseCsv";
 import { persistPaypalResolutions } from "./paypalResolutions";
 import {
   looksLikePaypalStatement,
@@ -270,6 +271,10 @@ async function parseImportFile(file: ImportFile): Promise<ParsedFile> {
   if (looksLikePaypalStatement(text)) {
     return { ok: true, kind: "paypal", entries: parsePaypalStatement(text) };
   }
+  if (looksLikeCoinbaseCsv(text)) {
+    const parsed = parseCoinbaseCsv(file.name, text);
+    return parsed.ok ? { ok: true, kind: "ledger", parsed: parsed.parsed } : parsed;
+  }
   if (looksLikeChaseCreditStatement(text)) {
     const parsed = parseChaseCreditStatement(file.name, text);
     return parsed.ok ? { ok: true, kind: "ledger", parsed: parsed.parsed } : parsed;
@@ -294,9 +299,9 @@ async function parseImportFile(file: ImportFile): Promise<ParsedFile> {
 
 /**
  * Import one or more bank/card CSV exports, Chase Prime Visa monthly statements,
- * Capital One card monthly statements, Capital One 360 statement PDFs, or PayPal
- * monthly statements. PayPal files write resolutions, not register rows. Each
- * file's format is detected on its own.
+ * Capital One card monthly statements, Capital One 360 statement PDFs, PayPal
+ * monthly statements, or a Coinbase transaction-history CSV. PayPal files write
+ * resolutions, not register rows. Each file's format is detected on its own.
  *
  * A file that cannot be identified becomes a warning and is skipped; the rest still import.
  * Individual unparseable rows become warnings too. Only a call with no usable file at all
@@ -397,7 +402,7 @@ export async function importFinanceCsvFiles({
               ? null
               : centsToNumericString(transaction.balanceAfterCents),
           externalSource: feed,
-          externalId: ids[i],
+          externalId: transaction.externalId ?? ids[i],
         }));
 
         let inserted = 0;

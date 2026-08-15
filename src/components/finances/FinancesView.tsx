@@ -115,7 +115,7 @@ export function FinancesView({
   } = useFileImportCommand({
     id: "import.finance",
     label: "Import transactions…",
-    keywords: "csv statement bank card chase capital one pdf",
+    keywords: "csv statement bank card chase capital one pdf coinbase paypal",
   });
   const [, startTransition] = useTransition();
   const { detail: openId, setDetail: setOpenId } = useViewStateUrl();

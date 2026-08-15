@@ -263,7 +263,7 @@ export function StatementsView({
       <FileImportHost
         commandId="import.finance"
         label="Import transactions…"
-        keywords="csv statement bank card chase capital one pdf"
+        keywords="csv statement bank card chase capital one pdf coinbase paypal"
         title="Import transactions"
       >
         <FinanceImportPanel embedded />

@@ -2008,13 +2008,14 @@ export const financeAccounts = pgTable(
  * (`src/lib/finances/formats.ts`). One rule for every account kind means sums and balances
  * never branch — a credit card is simply a liability whose balance runs negative.
  *
- * **`externalId` is a dedup fingerprint, not a bank-supplied id** — none of these CSV feeds
- * supply one. It hashes account, both dates, description, signed amount, **and an
- * occurrence ordinal**; see `src/lib/finances/fingerprint.ts`. The ordinal is what keeps two
- * byte-identical rows in one file (the real Capital One export has a pair) from collapsing
- * into one, while still letting a re-import of that same file recognise both. The partial
- * unique index below makes the database the arbiter, so a double-submitted upload cannot
- * duplicate rows even if the caller miscounts.
+ * **`externalId` is the dedup key.** Bank CSVs have no native id, so we store a fingerprint
+ * of account, both dates, description, signed amount, **and an occurrence ordinal**; see
+ * `src/lib/finances/fingerprint.ts`. The ordinal is what keeps two byte-identical rows in
+ * one file (the real Capital One export has a pair) from collapsing into one, while still
+ * letting a re-import of that same file recognise both. Coinbase supplies its own id and
+ * that is stored instead, so a later description tweak cannot duplicate a numbered row.
+ * The partial unique index below makes the database the arbiter, so a double-submitted
+ * upload cannot duplicate rows even if the caller miscounts.
  *
  * The running `balanceAfter` and the bank's `sourceCategory` are deliberately **outside**
  * the fingerprint: banks restate balances and recategorise merchants, and neither should

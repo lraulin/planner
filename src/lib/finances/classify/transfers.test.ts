@@ -6,6 +6,7 @@ const ACCOUNTS: TransferAccount[] = [
   { id: "savings", externalKey: "2603" },
   { id: "capone-card", externalKey: "3448" },
   { id: "chase-card", externalKey: "9910" },
+  { id: "coinbase", externalKey: "0b7043a7-af9a-5c5c-bb18-6e15b4e0267e" },
 ];
 
 function row(
@@ -217,6 +218,39 @@ describe("matchTransfers", () => {
     ];
     const result = matchTransfers(rows, ACCOUNTS);
     expect(result.flows.get("sweep")).toBe("external_transfer");
+  });
+
+  it("pairs a Coinbase withdrawal with the checking deposit it names", () => {
+    // Coinbase truncates the account name; the parser writes the last four so
+    // signal 1 can find checking. The Sell is the liquidation and must stay
+    // external — pairing it with the withdrawal would cancel cash flow.
+    const rows = [
+      row(
+        "cb-out",
+        "coinbase",
+        "2025-11-21",
+        "Coinbase Withdrawal -490.62 USD to Capital One XXXX2322",
+        -48203,
+      ),
+      row("cb-sell", "coinbase", "2025-11-21", "Coinbase Sell -0.00606489 BTC", 48203),
+      row("bank", "checking", "2025-11-21", "Deposit from COINBASE", 48203),
+    ];
+    const result = matchTransfers(rows, ACCOUNTS);
+
+    expect(result.groups).toEqual([["cb-out", "bank"]]);
+    expect(result.flows.get("cb-out")).toBe("internal_transfer");
+    expect(result.flows.get("bank")).toBe("internal_transfer");
+    expect(result.flows.get("cb-sell")).toBe("external_transfer");
+  });
+
+  it("keeps a Coinbase buy as an external transfer", () => {
+    // Funded from PenFed, which we do not hold. $0 so it cannot pair anyway.
+    const result = matchTransfers(
+      [row("buy", "coinbase", "2022-11-29", "Coinbase Buy 0.00202835 BTC", 0)],
+      ACCOUNTS,
+    );
+    expect(result.flows.get("buy")).toBe("external_transfer");
+    expect(result.groups).toEqual([]);
   });
 
   it("leaves ordinary spending untouched", () => {

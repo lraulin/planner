@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { financeTransactions, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { importFinanceCsvFiles, type ImportFile } from "./import";
 import { updateAccount, updateTransaction } from "./mutations";
@@ -819,5 +819,104 @@ describeDb("finance Chase statement user isolation", () => {
         accountId: (await listAccounts(ownerId))[0]?.id,
       }),
     ).toEqual([]);
+  });
+});
+
+const COINBASE_FILE: ImportFile = {
+  name: "coinbase.csv",
+  text: `
+Transactions
+User,Lee Raulin,0b7043a7-af9a-5c5c-bb18-6e15b4e0267e
+ID,Timestamp,Transaction Type,Asset,Quantity Transacted,Price Currency,Price at Transaction,Subtotal,Total (inclusive of fees and/or spread),Fees and/or Spread,Notes,Sender Address,Recipient Address
+698242c1ff3a8c113e3fa72f,2026-02-03 18:47:29 UTC,Withdrawal,USD,-1517,USD,$1.00,$1517.00,$1517.00,$0.00,Withdrawal to Capital One - 360 Chec... ****2322,,
+698242730d7d7d5fcce96cb7,2026-02-03 18:46:11 UTC,Sell,BTC,-0.02126381,USD,$73455.055,$1546.42,$1517.42,-15.62,Sold 0.02126381 BTC for 1517.42 USD,,
+63854c7b3aea980001a75d2a,2022-11-29 00:04:11 UTC,Buy,BTC,0.00202835,USD,$16194.665,$32.84845,$35.00,0.16155124725,Bought 0.00202835 BTC for 35 USD using bank account PenFed Credit Union - ... ******2021,,
+`,
+};
+
+describeDb("finance Coinbase import", () => {
+  let userId: string;
+
+  beforeEach(async () => {
+    userId = await makeUser();
+  });
+
+  it("creates an investment account and stores Coinbase's own ids", async () => {
+    const result = await importFinanceCsvFiles({ userId, files: [COINBASE_FILE] });
+    expect(result).toMatchObject({ created: 3, skipped: 0, accountsCreated: 1 });
+    expect(result.warnings).toEqual([]);
+
+    const accounts = await listAccounts(userId);
+    expect(accounts).toHaveLength(1);
+    expect(accounts[0]).toMatchObject({
+      name: "Coinbase",
+      kind: "investment",
+      institution: "Coinbase",
+      transactionCount: 3,
+    });
+
+    const rows = await listTransactions(userId);
+    const sell = rows.find((row) => row.description.includes("Sell"));
+    const withdrawal = rows.find((row) => row.description.includes("Withdrawal"));
+    const buy = rows.find((row) => row.description.includes("Buy"));
+    expect(sell?.amountCents).toBe(151700);
+    expect(withdrawal?.amountCents).toBe(-151700);
+    expect(buy?.amountCents).toBe(0);
+
+    const stored = await db
+      .select({
+        externalSource: financeTransactions.externalSource,
+        externalId: financeTransactions.externalId,
+      })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.userId, userId));
+    expect(stored).toEqual(
+      expect.arrayContaining([
+        { externalSource: "csv:coinbase", externalId: "698242c1ff3a8c113e3fa72f" },
+        { externalSource: "csv:coinbase", externalId: "698242730d7d7d5fcce96cb7" },
+        { externalSource: "csv:coinbase", externalId: "63854c7b3aea980001a75d2a" },
+      ]),
+    );
+  });
+
+  it("skips a re-import even after the description is edited", async () => {
+    await importFinanceCsvFiles({ userId, files: [COINBASE_FILE] });
+    const [row] = await db
+      .select({ id: financeTransactions.id })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.userId, userId))
+      .limit(1);
+    await db
+      .update(financeTransactions)
+      .set({ description: "edited by hand" })
+      .where(eq(financeTransactions.id, row.id));
+
+    const again = await importFinanceCsvFiles({ userId, files: [COINBASE_FILE] });
+    expect(again).toMatchObject({ created: 0, skipped: 3, accountsCreated: 0 });
+    expect(await listTransactions(userId)).toHaveLength(3);
+    expect(
+      (await listTransactions(userId)).some(
+        (entry) => entry.description === "edited by hand",
+      ),
+    ).toBe(true);
+  });
+});
+
+describeDb("finance Coinbase import user isolation", () => {
+  it("does not let a second user see the first user's Coinbase rows", async () => {
+    const ownerId = await makeUser();
+    const intruderId = await makeUser();
+    await importFinanceCsvFiles({ userId: ownerId, files: [COINBASE_FILE] });
+
+    expect(await listAccounts(intruderId)).toEqual([]);
+    expect(await listTransactions(intruderId)).toEqual([]);
+
+    const result = await importFinanceCsvFiles({
+      userId: intruderId,
+      files: [COINBASE_FILE],
+    });
+    expect(result).toMatchObject({ created: 3, skipped: 0, accountsCreated: 1 });
+    expect(await listTransactions(ownerId)).toHaveLength(3);
+    expect(await listTransactions(intruderId)).toHaveLength(3);
   });
 });
