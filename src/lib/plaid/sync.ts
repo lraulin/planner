@@ -14,7 +14,7 @@ import {
   refreshTransactions,
   syncTransactions,
 } from "./client";
-import { availableCentsOf, balanceCentsOf } from "./mapping";
+import { availableCentsOf, balanceAsOfFrom, balanceCentsOf } from "./mapping";
 import { applySync, saveBalance, setReauthRequired } from "./mutations";
 import {
   existingRowsInWindow,
@@ -152,7 +152,7 @@ async function syncOne(
     const linkByPlaidAccount = new Map(
       links.map((link) => [link.plaidAccountId, link]),
     );
-    const asOf = new Date();
+    const requestedAt = new Date();
     for (const account of balances) {
       const link = linkByPlaidAccount.get(account.account_id);
       if (!link) continue;
@@ -160,7 +160,9 @@ async function syncOne(
         linkId: link.id,
         balanceCents: balanceCentsOf(account),
         availableCents: availableCentsOf(account),
-        asOf,
+        // Not `requestedAt` unconditionally: a Capital One card balance can be a day old,
+        // and stamping it with now would present it as current.
+        asOf: balanceAsOfFrom(account, requestedAt),
       });
       balancesUpdated++;
     }

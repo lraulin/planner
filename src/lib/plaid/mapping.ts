@@ -32,6 +32,12 @@ export type PlaidAccount = {
     current?: number | null;
     limit?: number | null;
     iso_currency_code?: string | null;
+    /**
+     * When the institution last refreshed this figure. Present only where the balance is
+     * *not* real-time — Capital One's non-depository accounts are the case that matters
+     * here. Absent means the number was read live during our request.
+     */
+    last_updated_datetime?: string | null;
   } | null;
 };
 
@@ -193,6 +199,20 @@ export function linkCandidates(
       return a.externalKey.localeCompare(b.externalKey);
     })
     .map((candidate) => candidate.id);
+}
+
+/**
+ * When the balance was actually true, not when we asked for it.
+ *
+ * Plaid reports `last_updated_datetime` only for balances it could not read live. Stamping
+ * the request time on one of those would present a day-old Capital One card balance as
+ * current, which is precisely the lie this feature exists to stop telling.
+ */
+export function balanceAsOfFrom(account: PlaidAccount, requestedAt: Date): Date {
+  const reported = account.balances?.last_updated_datetime;
+  if (!reported) return requestedAt;
+  const parsed = new Date(reported);
+  return Number.isNaN(parsed.getTime()) ? requestedAt : parsed;
 }
 
 /** A default display name for an account we end up creating rather than linking. */

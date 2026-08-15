@@ -62,6 +62,24 @@ describe("buildCsp", () => {
     expect(directive(prod(), "connect-src")).not.toContain("ws:");
   });
 
+  it("admits Plaid Link's iframe and API, and nothing wider", () => {
+    const policy = prod();
+    // The picker is an iframe; without frame-src it falls through to default-src 'self'
+    // and renders blank.
+    expect(directive(policy, "frame-src")).toBe("frame-src https://cdn.plaid.com");
+    // Link talks to Plaid from the browser while the user is inside it.
+    const connectSrc = directive(policy, "connect-src");
+    expect(connectSrc).toContain("https://production.plaid.com");
+    expect(connectSrc).toContain("https://sandbox.plaid.com");
+    expect(connectSrc).toContain("'self'");
+    // Enumerated hosts, never a wildcard: `https://*.plaid.com` would admit any subdomain
+    // that Plaid — or someone who took one over — stands up.
+    expect(policy).not.toContain("*.plaid.com");
+    // The Link script rides on strict-dynamic from a nonced tag; a host here would be
+    // ignored by CSP3 browsers and imply a permission we do not actually grant.
+    expect(directive(policy, "script-src")).not.toContain("plaid.com");
+  });
+
   it("refuses framing and plugins, and pins base and form targets", () => {
     const policy = prod();
     expect(directive(policy, "frame-ancestors")).toBe("frame-ancestors 'none'");

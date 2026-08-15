@@ -219,15 +219,41 @@ export async function getAccounts(accessToken: string): Promise<PlaidAccount[]> 
 }
 
 /**
- * Accounts with **live** balances, fetched from the institution on this call.
+ * How stale a cached balance may be before the request is rejected.
  *
- * This is not interchangeable with `getAccounts`. That endpoint's `balances` object is
- * cached and refreshes about once a day, so using it for the headline balance would
- * reintroduce exactly the staleness this feature exists to remove.
+ * Only consulted where a real-time read is impossible (see `getBalances`). 26 hours rather
+ * than 24 because the institutions this covers refresh roughly daily, and asking for
+ * something fresher than the source can produce turns a stale number into a failed request —
+ * which is worse, since a stale balance labelled with its age is still useful.
+ */
+const MAX_BALANCE_AGE_MS = 26 * 60 * 60 * 1000;
+
+/**
+ * Accounts with balances, fetched from the institution on this call **where the institution
+ * permits it**.
+ *
+ * Not interchangeable with `getAccounts`: that endpoint's `balances` object is cached and
+ * refreshes about once a day, so using it for the headline balance would reintroduce exactly
+ * the staleness this feature exists to remove.
+ *
+ * **`min_last_updated_datetime` is not optional in practice.** Capital One does not serve
+ * real-time balances for non-depository accounts, and omitting the field on an Item holding
+ * a Capital One credit card fails the whole request with `INVALID_FIELD` — not just that
+ * account. Sending it always is safe: every other institution, and Capital One's own
+ * checking and savings accounts, ignore the field and still return a real-time balance. So
+ * the cost of sending it is nothing and the cost of omitting it is a dead endpoint.
+ *
+ * The consequence to carry upward: on a Capital One card this returns a balance up to a day
+ * old. `balances.last_updated_datetime` says how old, which is why the UI shows an age.
  */
 export async function getBalances(accessToken: string): Promise<PlaidAccount[]> {
+  const minLastUpdated = new Date(Date.now() - MAX_BALANCE_AGE_MS)
+    .toISOString()
+    .replace(/\.\d{3}Z$/, "Z");
+
   const result = (await plaidFetch("/accounts/balance/get", {
     access_token: accessToken,
+    options: { min_last_updated_datetime: minLastUpdated },
   })) as { accounts?: PlaidAccount[] };
   return result.accounts ?? [];
 }

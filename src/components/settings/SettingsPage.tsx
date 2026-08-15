@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import type { GoogleCalendarLink } from "@/db/schema";
+import type { PlaidItemRow } from "@/lib/plaid/queries";
 import { LogoutButton } from "@/components/auth/LogoutButton";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import {
@@ -22,6 +23,7 @@ import {
 } from "@/lib/settings/management";
 import { AchieveTransferPanel } from "./AchieveTransferPanel";
 import { GoogleCalendarPanel } from "./GoogleCalendarPanel";
+import { BankSyncPanel } from "./BankSyncPanel";
 import { FinanceImportPanel } from "@/components/finances/FinanceImportPanel";
 import { AmazonImportPanel } from "./AmazonImportPanel";
 import { RedNotebookImportPanel } from "./RedNotebookImportPanel";
@@ -57,12 +59,18 @@ const SECTIONS = [
 
 type SectionId = (typeof SECTIONS)[number]["id"];
 
+/** Derived from the panel's own props, so the two cannot drift apart. */
+type BankLinkedRow = ComponentProps<typeof BankSyncPanel>["linked"][number];
+
 type SettingsPageProps = {
   initialSection?: string;
   accountEmail: string;
   viaDevBypass: boolean;
   googleConfigured: boolean;
   googleLinked: boolean;
+  plaidConfigured: boolean;
+  bankItems: PlaidItemRow[];
+  bankLinked: BankLinkedRow[];
   calendars: GoogleCalendarLink[];
   contactSyncLastSyncedAt: string | null;
 };
@@ -79,6 +87,9 @@ export function SettingsPage({
   viaDevBypass,
   googleConfigured,
   googleLinked,
+  plaidConfigured,
+  bankItems,
+  bankLinked,
   calendars,
   contactSyncLastSyncedAt,
 }: SettingsPageProps) {
@@ -178,6 +189,11 @@ export function SettingsPage({
                 linked={googleLinked}
                 calendars={calendars}
                 contactSyncLastSyncedAt={contactSyncLastSyncedAt}
+              />
+              <BankSyncPanel
+                configured={plaidConfigured}
+                items={bankItems}
+                linked={bankLinked}
               />
             </div>
           )}
