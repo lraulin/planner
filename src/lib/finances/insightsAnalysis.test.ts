@@ -166,7 +166,112 @@ describe("analyzeInsights", () => {
     expect(analysis).toMatchObject({ empty: true, filtered: [] });
   });
 
-  it("flags a statement hole as a discrepancy against transaction net", () => {
+  it("leaves no residual when an external transfer explains the whole move", () => {
+    const analysis = analyzeInsights(
+      [
+        // February exists only so March is not the first bucket, which has no prior
+        // position to difference against.
+        row({
+          accountId: "checking",
+          transactionDate: "2026-02-10",
+          amountCents: 0,
+          derivedFlow: "spend",
+        }),
+        // $2,000 arrives from outside the imported accounts and nothing else happens.
+        // Official position moves by the full amount, so the identity closes exactly —
+        // this is precisely the month that used to report a $2,000 "discrepancy".
+        row({
+          accountId: "checking",
+          transactionDate: "2026-03-10",
+          amountCents: 200000,
+          derivedFlow: "external_transfer",
+        }),
+      ],
+      [],
+      {
+        window: "all",
+        statements: [
+          {
+            accountId: "checking",
+            periodEnd: "2026-02-28",
+            closingBalanceCents: 50000,
+          },
+          {
+            accountId: "checking",
+            periodEnd: "2026-03-31",
+            closingBalanceCents: 250000,
+          },
+        ],
+      },
+    );
+    expect(analysis.empty).toBe(false);
+    if (analysis.empty) return;
+    const march = analysis.flow.find((point) => point.bucket.key === "2026-03");
+    expect(march).toMatchObject({
+      netCents: 0,
+      externalTransferCents: 200000,
+      statementNetCents: 200000,
+      residualCents: 0,
+    });
+  });
+
+  it("reconciles identically whether or not recurring bills are levelled", () => {
+    // Levelling spreads a bill across the periods it covers, which moves cost over bucket
+    // edges and changes the window's visible total. The official position it is compared
+    // against cannot move, so a reconciliation computed from levelled bars reports a
+    // residual that is an artifact of the smoothing. On real data that was $2,170.
+    // A yearly premium charged in the last visible month: levelling spreads it over the
+    // twelve months it covers, so eleven twelfths of it leaves the window entirely.
+    const rows = groceryHistory([
+      row({
+        description: "GEICO *AUTO",
+        transactionDate: "2026-03-15",
+        amountCents: -282500,
+        derivedCategory: "Insurance",
+      }),
+    ]);
+    const options = {
+      window: "3m",
+      today: "2026-03-31",
+      statements: [
+        { accountId: "checking", periodEnd: "2025-12-31", closingBalanceCents: 0 },
+        {
+          accountId: "checking",
+          periodEnd: "2026-03-31",
+          closingBalanceCents: -312500,
+        },
+      ],
+    } as const;
+
+    const plain = analyzeInsights(rows, [geicoBill], {
+      ...options,
+      levelRecurring: false,
+    });
+    const levelled = analyzeInsights(rows, [geicoBill], {
+      ...options,
+      levelRecurring: true,
+    });
+    expect(plain.empty).toBe(false);
+    expect(levelled.empty).toBe(false);
+    if (plain.empty || levelled.empty) return;
+
+    // The fixture has to actually bite, or this test proves nothing.
+    const visibleNet = (analysis: typeof plain) =>
+      analysis.empty
+        ? 0
+        : analysis.flow.reduce((total, point) => total + point.netCents, 0);
+    expect(visibleNet(levelled)).not.toBe(visibleNet(plain));
+
+    // …and the reconciliation is unmoved by it.
+    expect(levelled.reconciliation).toEqual(plain.reconciliation);
+    expect(plain.reconciliation).toMatchObject({
+      netCents: -312500,
+      statementCents: -312500,
+      residualCents: 0,
+    });
+  });
+
+  it("flags a statement hole as a residual against transaction net", () => {
     const analysis = analyzeInsights(
       [
         row({
@@ -206,6 +311,8 @@ describe("analyzeInsights", () => {
     const june = analysis.flow.find((point) => point.bucket.key === "2025-06");
     expect(june?.statementNetCents).toBe(-11103 - -33994);
     expect(june?.netCents).toBe(0);
-    expect(june?.discrepancyCents).toBe(0 - (-11103 - -33994));
+    // No external transfers here, so the residual is the whole unexplained gap.
+    expect(june?.externalTransferCents).toBe(0);
+    expect(june?.residualCents).toBe(0 - (-11103 - -33994));
   });
 });

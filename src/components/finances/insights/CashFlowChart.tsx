@@ -68,7 +68,11 @@ export function CashFlowChart({
   const net = mode === "net";
   const split = mode === "fixed-variable";
   const values = net
-    ? points.flatMap((point) => [point.netCents, point.statementNetCents ?? 0])
+    ? points.flatMap((point) => [
+        point.netCents,
+        point.statementNetCents ?? 0,
+        point.externalTransferCents,
+      ])
     : points.flatMap((point) => [point.incomeCents, point.spendCents]);
   // Bars are measured from zero, always. A truncated bar axis misstates every ratio drawn
   // on it, and this is a chart people will use to decide things.
@@ -290,6 +294,30 @@ export function CashFlowChart({
             ),
           )}
 
+          {/*
+            External transfers, dotted. Drawn under the statement line because the reader's
+            question is "do net and statement agree", and this is the term that explains why
+            they do not — it should be findable, not competing for the eye.
+          */}
+          {net &&
+            (() => {
+              const run = points.map((point, index) => ({
+                x: slots[index].center,
+                y: toY(point.externalTransferCents),
+              }));
+              return run.length < 2 ? null : (
+                <polyline
+                  fill="none"
+                  stroke="var(--chart-average)"
+                  strokeWidth={1.5}
+                  strokeDasharray="1 3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  points={run.map((point) => `${point.x},${point.y}`).join(" ")}
+                />
+              );
+            })()}
+
           {net &&
             (() => {
               const run = points.flatMap((point, index) => {
@@ -355,13 +383,18 @@ export function CashFlowChart({
                   In {formatUsd(active.incomeCents)} · out{" "}
                   {formatUsd(active.spendCents)}
                 </div>
+                {active.externalTransferCents !== 0 && (
+                  <div className="text-ink-muted">
+                    External {formatUsd(active.externalTransferCents)}
+                  </div>
+                )}
                 {active.statementNetCents !== null &&
                   active.statementNetCents !== undefined && (
                     <div className="text-ink-muted">
                       Statement {formatUsd(active.statementNetCents)}
-                      {active.discrepancyCents !== null &&
-                      active.discrepancyCents !== undefined
-                        ? ` · Δ ${formatUsd(active.discrepancyCents)}`
+                      {active.residualCents !== null &&
+                      active.residualCents !== undefined
+                        ? ` · residual ${formatUsd(active.residualCents)}`
                         : ""}
                     </div>
                   )}
@@ -404,7 +437,18 @@ export function CashFlowChart({
                   label: "Trailing average net",
                   line: true,
                 },
-                { color: "var(--ink)", label: "Statement net", line: true },
+                {
+                  color: "var(--chart-average)",
+                  label: "External transfers",
+                  line: true,
+                  dash: "dotted",
+                },
+                {
+                  color: "var(--ink)",
+                  label: "Statement net",
+                  line: true,
+                  dash: "dashed",
+                },
               ]
             : split
               ? [
@@ -443,7 +487,15 @@ export function CashFlowChart({
 export function ChartLegend({
   items,
 }: {
-  items: { color: string; label: string; line?: boolean; faded?: boolean }[];
+  items: {
+    color: string;
+    label: string;
+    line?: boolean;
+    faded?: boolean;
+    /** Match the stroke pattern the series is drawn with. Two lines sharing a colour are
+     * told apart by their dash, so the swatch has to show it or the legend is a lie. */
+    dash?: "dashed" | "dotted";
+  }[];
 }) {
   return (
     <div className="mt-2 flex flex-wrap justify-end gap-x-4 gap-y-1 text-[0.75rem] text-ink-muted">
@@ -455,7 +507,17 @@ export function ChartLegend({
                 ? "inline-block h-0.5 w-4"
                 : "inline-block h-2.5 w-2.5 rounded-[2px]"
             }
-            style={{ backgroundColor: item.color }}
+            style={
+              item.dash
+                ? {
+                    backgroundImage: `repeating-linear-gradient(to right, ${item.color} 0 ${
+                      item.dash === "dotted" ? "1.5px" : "5px"
+                    }, transparent ${item.dash === "dotted" ? "1.5px" : "5px"} ${
+                      item.dash === "dotted" ? "4.5px" : "8px"
+                    })`,
+                  }
+                : { backgroundColor: item.color }
+            }
           />
           {item.label}
         </span>

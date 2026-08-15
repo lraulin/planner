@@ -124,12 +124,13 @@ function flattenFlowPoint(point: {
   fixedCents: number;
   variableCents: number;
   netCents: number;
+  externalTransferCents: number;
   trailingSpendCents: number | null;
   trailingIncomeCents: number | null;
   trailingNetCents: number | null;
   statementPositionCents?: number | null;
   statementNetCents?: number | null;
-  discrepancyCents?: number | null;
+  residualCents?: number | null;
 }) {
   return {
     key: point.bucket.key,
@@ -141,12 +142,13 @@ function flattenFlowPoint(point: {
     fixedCents: point.fixedCents,
     variableCents: point.variableCents,
     netCents: point.netCents,
+    externalTransferCents: point.externalTransferCents,
     trailingSpendCents: point.trailingSpendCents,
     trailingIncomeCents: point.trailingIncomeCents,
     trailingNetCents: point.trailingNetCents,
     statementPositionCents: point.statementPositionCents ?? null,
     statementNetCents: point.statementNetCents ?? null,
-    discrepancyCents: point.discrepancyCents ?? null,
+    residualCents: point.residualCents ?? null,
   };
 }
 
@@ -205,8 +207,9 @@ export async function getCashFlowTool(userId: string, args: Record<string, unkno
         fixedCents: 0,
         variableCents: 0,
         netCents: 0,
+        externalTransferCents: 0,
         statementNetCents: null,
-        discrepancyCents: null,
+        residualCents: null,
       },
       income: EMPTY_INCOME,
       baseline: EMPTY_BASELINE,
@@ -220,14 +223,15 @@ export async function getCashFlowTool(userId: string, args: Record<string, unkno
       fixedCents: sum.fixedCents + point.fixedCents,
       variableCents: sum.variableCents + point.variableCents,
       netCents: sum.netCents + point.netCents,
+      externalTransferCents: sum.externalTransferCents + point.externalTransferCents,
       statementNetCents:
         point.statementNetCents === null || point.statementNetCents === undefined
           ? sum.statementNetCents
           : (sum.statementNetCents ?? 0) + point.statementNetCents,
-      discrepancyCents:
-        point.discrepancyCents === null || point.discrepancyCents === undefined
-          ? sum.discrepancyCents
-          : (sum.discrepancyCents ?? 0) + point.discrepancyCents,
+      residualCents:
+        point.residualCents === null || point.residualCents === undefined
+          ? sum.residualCents
+          : (sum.residualCents ?? 0) + point.residualCents,
     }),
     {
       incomeCents: 0,
@@ -235,8 +239,9 @@ export async function getCashFlowTool(userId: string, args: Record<string, unkno
       fixedCents: 0,
       variableCents: 0,
       netCents: 0,
+      externalTransferCents: 0,
       statementNetCents: null as number | null,
-      discrepancyCents: null as number | null,
+      residualCents: null as number | null,
     },
   );
 

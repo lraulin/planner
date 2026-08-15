@@ -19,6 +19,8 @@ import {
   cadenceCandidates,
   cashFlow,
   debtToAssetRatio,
+  externalTransferCentsOf,
+  incomeCentsOf,
   monthBuckets,
   monthlyIncome,
   oneOffSuggestions,
@@ -30,6 +32,7 @@ import {
   spendByCategory,
   spendByCategoryPerBucket,
   spendByMerchant,
+  spendCentsOf,
   upcomingBills,
   type AnalyticsRow,
   type AssetDebtPoint,
@@ -97,6 +100,29 @@ export type InsightsAnalysisReady = {
   contributions: ReturnType<typeof accountContributions>;
   debtRatio: number | null;
   latest: AssetDebtPoint | undefined;
+  /** The window's reconciliation, or null when no bucket has an official position. */
+  reconciliation: Reconciliation | null;
+};
+
+/**
+ * Does the money we recorded moving agree with the money the banks say moved?
+ *
+ *     netCents + externalTransferCents = statementCents + residualCents
+ *
+ * **Deliberately computed unlevelled**, even when the chart is levelling recurring bills.
+ * Levelling spreads a bill across the periods it covers, which is a presentational
+ * smoothing: it moves cost across bucket edges and therefore changes the window's visible
+ * total, while the official position it is being compared against cannot move at all. On
+ * real data that alone shifted net by $2,170 and turned a healthy reconciliation into a
+ * fictitious residual. The question "did the books balance" is about money that actually
+ * moved, so it is answered from the rows.
+ */
+export type Reconciliation = {
+  netCents: number;
+  externalCents: number;
+  statementCents: number;
+  /** What the identity leaves over: a hole, an unpaired leg, or a misclassified row. */
+  residualCents: number;
 };
 
 export type InsightsAnalysis = InsightsAnalysisEmpty | InsightsAnalysisReady;
@@ -149,8 +175,13 @@ export function analyzeInsights(
         ...point,
         statementPositionCents: statement?.positionCents ?? null,
         statementNetCents,
-        discrepancyCents:
-          statementNetCents === null ? null : point.netCents - statementNetCents,
+        // The identity, not a subtraction of two things that were never comparable:
+        // transaction net plus what crossed the boundary should be the change in official
+        // position. What is left over is the part no imported row accounts for.
+        residualCents:
+          statementNetCents === null
+            ? null
+            : point.netCents + point.externalTransferCents - statementNetCents,
       };
     });
 
@@ -166,6 +197,39 @@ export function analyzeInsights(
   const trends = spendByCategoryPerBucket(windowed, buckets);
   const assetDebt = assetDebtSeries(filtered, buckets);
   const latest = assetDebt[assetDebt.length - 1];
+
+  // Measured over the **bucket** span rather than `range`, because that is the span the
+  // statement positions bookend. `range` can stop mid-month (the last import), and pairing
+  // a part-month of rows against a whole month of official movement invents a residual.
+  const spanStart = buckets[0]?.startKey ?? range.startKey;
+  const spanEnd = buckets[buckets.length - 1]?.endKey ?? range.endKey;
+  const spanned = filtered.filter(
+    (row) => row.transactionDate >= spanStart && row.transactionDate <= spanEnd,
+  );
+  const anchored = flow.filter((point) => point.statementNetCents !== null);
+  const reconciliation: Reconciliation | null =
+    anchored.length === 0
+      ? null
+      : (() => {
+          const netCents = spanned.reduce(
+            (total, row) => total + incomeCentsOf(row) - spendCentsOf(row),
+            0,
+          );
+          const externalCents = spanned.reduce(
+            (total, row) => total + externalTransferCentsOf(row),
+            0,
+          );
+          const statementCents = anchored.reduce(
+            (total, point) => total + (point.statementNetCents ?? 0),
+            0,
+          );
+          return {
+            netCents,
+            externalCents,
+            statementCents,
+            residualCents: netCents + externalCents - statementCents,
+          };
+        })();
 
   return {
     empty: false,
@@ -191,5 +255,6 @@ export function analyzeInsights(
     contributions: accountContributions(filtered, range),
     debtRatio: latest ? debtToAssetRatio(latest.assetCents, latest.debtCents) : null,
     latest,
+    reconciliation,
   };
 }

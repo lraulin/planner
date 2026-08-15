@@ -251,6 +251,35 @@ describe("cashFlow", () => {
     });
   });
 
+  it("reports external transfers as their own signed term, outside net", () => {
+    const buckets = monthBuckets({ startKey: "2026-03-01", endKey: "2026-03-31" });
+    const [point] = cashFlow(
+      [
+        // A gift from a parent, arriving via PayPal. It funds the month without being
+        // earned, so it must not reach incomeCents — and must not vanish either.
+        row({
+          transactionDate: "2026-03-02",
+          amountCents: 200000,
+          derivedFlow: "external_transfer",
+        }),
+        // A sweep out to a bank this module cannot see. Still ours, so not a cost.
+        row({
+          transactionDate: "2026-03-03",
+          amountCents: -50000,
+          derivedFlow: "external_transfer",
+        }),
+      ],
+      buckets,
+    );
+
+    expect(point).toMatchObject({
+      incomeCents: 0,
+      spendCents: 0,
+      netCents: 0,
+      externalTransferCents: 150000,
+    });
+  });
+
   it("carries a net trailing average, signed, for the net view", () => {
     const buckets = monthBuckets({ startKey: "2026-01-01", endKey: "2026-03-31" });
     const points = cashFlow(

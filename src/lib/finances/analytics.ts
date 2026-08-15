@@ -150,6 +150,28 @@ export function incomeCentsOf(row: FlowFields): number {
   return 0;
 }
 
+/**
+ * Money crossing the boundary of what this module can see, **signed** — positive arriving,
+ * negative leaving.
+ *
+ * This is the third term, and it is neither income nor spending. A tax refund, an HSA
+ * reimbursement, a crypto liquidation and a gift from a parent all fund a month without
+ * being earnings; a sweep out to an unimported credit union leaves without being a cost.
+ *
+ * It gets its own accessor because leaving it out of both other accessors is what made
+ * `netCents` disagree with the statement-anchored series by $15,462 over two years — money
+ * that demonstrably moved the household position while appearing in no reported total. The
+ * fix is not to fold it into income: that would make a Coinbase sale and a paycheck the same
+ * thing. The fix is to report it, so
+ *
+ *     statement net = netCents + externalTransferCents + residual
+ *
+ * and the residual is small enough to mean something when it is not.
+ */
+export function externalTransferCentsOf(row: FlowFields): number {
+  return effectiveFlow(row) === "external_transfer" ? row.amountCents : 0;
+}
+
 // — Buckets ——————————————————————————————————————————————————————————————————
 
 /** One time window on the x-axis. Calendar months and pay periods are the same shape. */
@@ -377,6 +399,13 @@ export type CashFlowPoint = {
   variableCents: number;
   /** `income − spend`. The only figure here that may be negative. */
   netCents: number;
+  /**
+   * Signed external transfers in this bucket — positive arriving, negative leaving.
+   *
+   * Deliberately outside `netCents`: it funds a month without being earned. Reported so the
+   * gap between transaction net and statement net has a name instead of looking like a bug.
+   */
+  externalTransferCents: number;
   /** Trailing average of `spendCents`, or null until the window is full. */
   trailingSpendCents: number | null;
   /** Trailing average of `incomeCents`, or null until the window is full. */
@@ -393,8 +422,17 @@ export type CashFlowPoint = {
   statementPositionCents?: number | null;
   /** Change in that position from the previous bucket. */
   statementNetCents?: number | null;
-  /** `netCents − statementNetCents`. Null when statement net is missing. */
-  discrepancyCents?: number | null;
+  /**
+   * What the identity fails to explain:
+   * `netCents + externalTransferCents − statementNetCents`. Null when statement net is
+   * missing.
+   *
+   * Near zero is the healthy case. A residual is a hole in the imported history, an unpaired
+   * transfer leg, or a misclassified row — the things that genuinely need looking at. It
+   * replaced a plain `netCents − statementNetCents`, which was dominated by external
+   * transfers and so stayed large for a perfectly healthy dataset.
+   */
+  residualCents?: number | null;
 };
 
 /**
@@ -572,6 +610,12 @@ export function cashFlow(
       0,
     ),
   );
+  const external = buckets.map((bucket) =>
+    (grouped.get(bucket.key) ?? []).reduce(
+      (total, row) => total + externalTransferCentsOf(row),
+      0,
+    ),
+  );
   const fixed = new Array<number>(buckets.length).fill(0);
   const variable = new Array<number>(buckets.length).fill(0);
 
@@ -610,6 +654,7 @@ export function cashFlow(
     fixedCents: fixed[index],
     variableCents: variable[index],
     netCents: income[index] - spend[index],
+    externalTransferCents: external[index],
     trailingSpendCents: trailingSpend[index],
     trailingIncomeCents: trailingIncome[index],
     trailingNetCents: trailingNet[index],

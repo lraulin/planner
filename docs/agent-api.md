@@ -579,8 +579,8 @@ complete input/output JSON Schemas.
 Income, spend, net, trailing-12 overlay, and the baseline vs one-off split.
 
 - Use when: Use to answer whether cash flow is positive, whether a stretch is typical, or whether one-off events are hiding the baseline.
-- Avoid when: Do not blend baselineCents and oneOffCents. Do not blend netCents and statementNetCents — their difference is the diagnostic. Do not treat a window that overlaps coverage.holes as complete. Use get_spending_breakdown for ranked categories and search_transactions to inspect named rows.
-- Returns: Per-bucket income/spend/fixed/variable/net plus trailing averages, statement-anchored position and net, discrepancy (transaction net minus statement net), window totals, typical monthly income, and the named one-off split.
+- Avoid when: Do not blend baselineCents and oneOffCents. Do not report netCents alone as 'cash flow' when externalTransferCents is large: netCents is earned minus spent, and the three terms reconcile as netCents + externalTransferCents = statementNetCents + residualCents. External transfers are refunds, reimbursements, liquidations and gifts — they fund a period without being income, so they belong in the answer but not in netCents. Only residualCents is a data-quality signal; a large statementNetCents minus netCents gap is usually just external transfers, not an error. Do not treat a window that overlaps coverage.holes as complete. Use get_spending_breakdown for ranked categories and search_transactions to inspect named rows.
+- Returns: Per-bucket income/spend/fixed/variable/net, signed external transfers, trailing averages, statement-anchored position and net, the residual the identity leaves unexplained, window totals, typical monthly income, and the named one-off split.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: domain
 - Arguments: `{ window*, from?, to?, axis*, levelRecurring*, accountIds*, categories*, merchants* }`

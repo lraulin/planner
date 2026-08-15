@@ -206,7 +206,7 @@ export function InsightsView({
     );
   }
 
-  const { split, coverage } = analysis;
+  const { split, coverage, reconciliation } = analysis;
   const netPerBucket =
     analysis.buckets.length > 0
       ? Math.round(
@@ -368,7 +368,7 @@ export function InsightsView({
             view.levelRecurring
               ? `Recurring bills are spread across the ${bucketNoun}s they cover, so one monthly charge cannot swamp a single ${bucketNoun}. A bar is then an ongoing obligation rather than a record of that ${bucketNoun}: nothing is created or lost, though a bill straddling the window edge shifts the visible total a little.`
               : view.mode === "net"
-                ? "Bars are transaction net (transfers out). The dashed line is the change in statement-anchored household position. They should agree; a residual is a hole or a classification miss."
+                ? "Bars are transaction net — earned minus spent, transfers out. The dotted line is money crossing the boundary of these accounts: refunds, reimbursements, liquidations, gifts. It funds a month without being earned, so it sits outside net rather than in it. The dashed line is the change in statement-anchored household position, and the three reconcile: net + external = statement, give or take a residual."
                 : view.mode === "fixed-variable"
                   ? "The out bar split into recurring bills and everything else — the half that is actually a decision each period."
                   : view.axis === "month"
@@ -385,19 +385,21 @@ export function InsightsView({
               setDrill({ kind: "bucket", startKey, endKey })
             }
           />
-          {view.mode !== "net" &&
-            analysis.flow.some((point) => (point.discrepancyCents ?? 0) !== 0) && (
-              <p className="mt-2 text-[0.75rem] text-ink-muted">
-                Transaction net and statement-anchored position change differ by{" "}
-                {formatUsd(
-                  analysis.flow.reduce(
-                    (total, point) => total + Math.abs(point.discrepancyCents ?? 0),
-                    0,
-                  ),
-                )}{" "}
-                across this window (absolute). Switch to Net to see both series.
-              </p>
-            )}
+          {reconciliation !== null && (
+            <p className="mt-2 text-[0.75rem] text-ink-muted">
+              Across this window: net {formatUsd(reconciliation.netCents)} + external{" "}
+              {formatUsd(reconciliation.externalCents)} ={" "}
+              {formatUsd(reconciliation.netCents + reconciliation.externalCents)},
+              against {formatUsd(reconciliation.statementCents)} of statement-anchored
+              movement —{" "}
+              {reconciliation.residualCents === 0
+                ? "an exact reconciliation."
+                : `a residual of ${formatUsd(reconciliation.residualCents)}, which is what no imported row accounts for.`}
+              {view.levelRecurring
+                ? " Counted from the rows as they posted, so it does not match the levelled bars above."
+                : ""}
+            </p>
+          )}
         </Panel>
 
         <Panel
