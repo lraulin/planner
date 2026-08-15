@@ -99,6 +99,22 @@ a source-side limitation, documented by Plaid, and would be identical under any 
 Pending is therefore a **Chase-only** capability. The 90-day window is harmless because
 full history already exists from statements, but the initial sync cannot backfill the card.
 
+**D5b — Plaid `amount` is negated on the way in, uniformly.** Confirmed against Sandbox
+payloads: 42 of 48 transactions carry a positive `amount`, and the negatives are exactly the
+inflows (a −500 airline refund, a −4.22 interest payment). Positive = money out, on both
+depository and credit accounts, so `mapping.ts` negates without branching. Amounts arrive as
+JSON floats and must go through `money.ts` rather than `* 100`.
+
+**Verified in Sandbox (Task 2), so the implementation may rely on it:** a second
+`/transactions/sync` with the stored cursor returns `added: 0, modified: 0, removed: 0,
+has_more: false`. That is the mechanism behind "refresh twice inserts nothing."
+
+**Not verifiable in Sandbox:** the pending→posted transition. A pending row arrives with
+`pending: true` and `pending_transaction_id: null` — the link appears on the **posted** row
+that later replaces it, and Sandbox time cannot be advanced to produce one. D5 relies on
+that field, so it must be confirmed against real Chase data over a day or two before the
+pending path is called done.
+
 **D6 — Cross-source dedup reuses `selectNewTransactions`** (`matchExisting.ts:71`)
 unchanged — date + signed cents + fuzzy `descriptionsMatch`, occurrence-counted. It was
 built for exactly this ("the index will not recognise overlap"). Because D2 puts synced rows
@@ -113,6 +129,23 @@ register-vs-bank drift, which is the number that says whether the register is co
 Refresh must call **`/accounts/balance/get`**, which forces a live fetch from the
 institution. The `balances` object returned by `/accounts/get` and `/transactions/sync` is
 **cached** — using it would quietly reintroduce the staleness this spec exists to remove.
+
+**D7a — The balance mapping branches on account type; the transaction mapping does not.**
+Confirmed against Sandbox payloads:
+
+| Plaid `type` | `current`       | `available`                  | Register balance |
+| ------------ | --------------- | ---------------------------- | ---------------- |
+| `depository` | funds held      | funds net pending            | `+current`       |
+| `credit`     | **amount owed** | remaining credit, often null | `−current`       |
+
+A card reporting `current: 410` means $410 **owed**, and storing that unbranched would make
+the card read as a $410 asset — matching the module-sign convention `financeStatements`
+already uses, where a card's New Balance is stored negative. `available` is **not** a
+drop-in headline: it is null on one Sandbox card and means remaining credit on the other,
+so `current` is the field that carries the balance and `available` is only meaningful for
+depository accounts.
+
+Transactions need no such branch — negation is uniform across both types (D5b).
 
 **D8 — Manual refresh button plus a stale-on-load throttle. No scheduler.** Copies
 `syncWindowIfStale` / `SYNC_MAX_AGE_MS` (`src/lib/google/sync.ts:26,188`) and the
@@ -166,6 +199,7 @@ as a plain `Error` with no `code`, the way `GoogleNotLinkedError` is.
       pre-matched on mask. No duplicate accounts appear in the register.
 - [ ] A refresh pulls transactions and a **live** balance; the headline balance for a linked
       account matches what the bank's own app shows.
+- [ ] The Capital One card's headline balance is **negative** (owed), not a positive asset.
 - [ ] Re-running a refresh inserts nothing new.
 - [ ] Importing a Chase statement CSV that overlaps already-synced dates inserts nothing new.
 - [ ] A Chase pending transaction that posts ends up as exactly one posted row, not two,
@@ -180,15 +214,18 @@ as a plain `Error` with no `code`, the way `GoogleNotLinkedError` is.
 
 ## Changes from original plan
 
-| #   | Change                                                                                                                                                    | Why                                                                                                                                                                                                                      |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1   | Vendor switched from Teller to Plaid; folder renamed `teller-bank-sync` → `live-bank-sync`. D1, D2, D3, D10, D11, D12 rewritten.                          | Teller withdrew its API in early July 2026, before any code was written. Its documentation is still online, which is why it read as viable during shaping. Slug made vendor-neutral so a third switch is a content edit. |
-| 2   | D5 replaced: "pending rows are a replaceable set" → "apply `/transactions/sync` deltas literally, resolving pending→posted via `pending_transaction_id`." | Plaid supplies the link explicitly. The original design was a heuristic invented to work around Teller reissuing ids; it is strictly worse than using the answer the API gives.                                          |
-| 3   | D5a added: pending is Chase-only; Capital One supplies no pending data and only 90 days of history.                                                       | Source-side limitation documented by Plaid, identical under any aggregator. Materially narrows the "matches your bank app" criterion for the card, so it is stated rather than discovered.                               |
-| 4   | D7 tightened to require `/accounts/balance/get`.                                                                                                          | The `balances` object on `/accounts/get` and `/transactions/sync` is cached and can be a day or more stale — it would silently reintroduce the exact problem this spec exists to remove.                                 |
-| 5   | D11 inverted: mTLS via `node:https` → plain `fetch` with `client_id`/`secret`.                                                                            | Plaid needs no client certificate. Removes the one genuinely unprecedented piece of infrastructure in the original plan.                                                                                                 |
-| 6   | D9 extended to reject Plaid's `personal_finance_category` as a classification authority.                                                                  | A second authority would make `effectiveCategory`'s fallback chain ambiguous. Not a question the original plan had to answer, because Teller's enrichment was thinner.                                                   |
-| 7   | Task 2 spike narrowed to Sandbox; sign convention moved out of it into D-known facts.                                                                     | Plaid documents `amount` as positive = money out, the inverse of this register's rule. That was a spike question under Teller; it is now a documented fact and belongs in `mapping.ts` tests.                            |
+| #   | Change                                                                                                                                                    | Why                                                                                                                                                                                                                           |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Vendor switched from Teller to Plaid; folder renamed `teller-bank-sync` → `live-bank-sync`. D1, D2, D3, D10, D11, D12 rewritten.                          | Teller withdrew its API in early July 2026, before any code was written. Its documentation is still online, which is why it read as viable during shaping. Slug made vendor-neutral so a third switch is a content edit.      |
+| 2   | D5 replaced: "pending rows are a replaceable set" → "apply `/transactions/sync` deltas literally, resolving pending→posted via `pending_transaction_id`." | Plaid supplies the link explicitly. The original design was a heuristic invented to work around Teller reissuing ids; it is strictly worse than using the answer the API gives.                                               |
+| 3   | D5a added: pending is Chase-only; Capital One supplies no pending data and only 90 days of history.                                                       | Source-side limitation documented by Plaid, identical under any aggregator. Materially narrows the "matches your bank app" criterion for the card, so it is stated rather than discovered.                                    |
+| 4   | D7 tightened to require `/accounts/balance/get`.                                                                                                          | The `balances` object on `/accounts/get` and `/transactions/sync` is cached and can be a day or more stale — it would silently reintroduce the exact problem this spec exists to remove.                                      |
+| 5   | D11 inverted: mTLS via `node:https` → plain `fetch` with `client_id`/`secret`.                                                                            | Plaid needs no client certificate. Removes the one genuinely unprecedented piece of infrastructure in the original plan.                                                                                                      |
+| 6   | D9 extended to reject Plaid's `personal_finance_category` as a classification authority.                                                                  | A second authority would make `effectiveCategory`'s fallback chain ambiguous. Not a question the original plan had to answer, because Teller's enrichment was thinner.                                                        |
+| 7   | Task 2 spike narrowed to Sandbox; sign convention moved out of it into D-known facts.                                                                     | Plaid documents `amount` as positive = money out, the inverse of this register's rule. That was a spike question under Teller; it is now a documented fact and belongs in `mapping.ts` tests.                                 |
+| 8   | **D7a added: the balance mapping branches on account `type`.** New acceptance criterion that the card's headline balance is negative.                     | Found in the Task 2 Sandbox run. A credit account's `current` is the amount **owed**, so an unbranched mapping would show the Capital One card as a positive asset. D7 as written did not branch and would have shipped that. |
+| 9   | D5b added: negation confirmed uniform across account types; amounts arrive as JSON floats.                                                                | Task 2 measured it — 42/48 positive, negatives exactly the inflows. Removes the risk from the detail shape.md calls highest-risk, and fixes cents conversion as a `money.ts` concern rather than a `* 100`.                   |
+| 10  | D5 caveat recorded: `pending_transaction_id` could not be verified in Sandbox.                                                                            | A pending row carries `pending: true` and a **null** link; the link appears on the posted row that replaces it, and Sandbox time cannot be advanced. D5 depends on it, so it stays unverified until real Chase data lands.    |
 
 ---
 
@@ -198,24 +235,36 @@ Done — this folder. Amended in place for the vendor change per the standing ru
 
 ## Task 2: Sandbox spike — gate everything on this
 
-**Sandbox only. No Production Items.** Sign up for Plaid, get `client_id` and the sandbox
-`secret`, and with a throwaway script (scratchpad, not committed) confirm end to end:
+### 2a. Sandbox — **done 2026-08-15**
 
-- `/link/token/create` → Link → `/item/public_token/exchange` returns an access token.
-- `/accounts/get` shapes, including `mask`, `type`, `subtype`.
-- `/accounts/balance/get` returns `available` and `current`, and how they differ between a
-  depository account and a credit card.
-- `/transactions/sync` cursor behaviour across two calls: `added` / `modified` / `removed`,
-  `has_more`, and a `pending` → posted transition carrying `pending_transaction_id`
-  (Sandbox can force this).
-- Confirm the sign convention concretely: a purchase must arrive **positive** from Plaid and
-  be stored **negative** in the register.
+`/sandbox/public_token/create` mints a token with no Link widget and no browser, so this ran
+headlessly and consumed **no Production Items**. Settled:
 
-Then, and only then, one Production Item against Chase to confirm the real institution
-behaves as Sandbox did. Capital One second.
+- ✅ Token mint → `/item/public_token/exchange` round-trip, `client_id`/`secret` only.
+- ✅ `/accounts/get` carries `mask`, `type`, `subtype`. Types beyond the expected three
+  appear (`investment/ira`, `loan/mortgage`), all of which `financeAccountKindEnum` covers.
+- ✅ `/accounts/balance/get` — and it forced **D7a**: `current` on a credit account is the
+  amount owed, `available` is remaining credit and is sometimes null.
+- ✅ `/transactions/sync` cursor is idempotent: a second call with the stored cursor returns
+  `added: 0, modified: 0, removed: 0, has_more: false`.
+- ✅ Sign convention — **D5b**. 42/48 positive, negatives exactly the inflows.
+- ✅ Pending rows render (`pending: true`) via a custom Sandbox user with a future
+  `date_posted`. Payload captured as a fixture.
+- ❌ **`pending_transaction_id` could not be verified.** It is null on the pending row; the
+  link lives on the posted row that replaces it, and Sandbox time cannot be advanced.
 
-**Stop and reassess if an institution fails.** Capture the payloads; they become the Task 5
-fixtures.
+Two traps worth keeping, since both cost a run: a custom-user config needs `version` as a
+**number** (a quoted `"1"` returns `INVALID_CREDENTIALS`, which says nothing about the
+credentials), and the first `/transactions/sync` can return empty with `has_more: false`
+while Plaid is still generating data — so the poll must loop on row count, not `has_more`.
+
+### 2b. Production — outstanding
+
+One Production Item against Chase, then Capital One. Confirm the real institutions behave as
+Sandbox did, and specifically that a Chase pending charge posts with a populated
+`pending_transaction_id`.
+
+**Stop and reassess if an institution fails.**
 
 ## Task 3: Schema
 
