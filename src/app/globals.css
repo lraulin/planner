@@ -464,21 +464,32 @@ body {
   overflow: hidden;
   font-size: 0.75rem;
   line-height: 1.2;
-  color: #1b1d23 !important;
 }
 
-/* Do not fade Time Chart backgrounds — opacity was killing label contrast. */
+/*
+ * Time Chart areas are wallpaper, not events. Mix the stored fill toward the page so
+ * appointments stay the only solid blocks, and label them in muted ink — after the wash
+ * the fill is always close to the page, so contrastText against the original colour
+ * would pick the wrong ink.
+ */
 .schedule-calendar .fc-bg-event,
 .schedule-calendar .fc-timechart-bg {
-  opacity: 1;
+  opacity: 1 !important;
+  background-color: color-mix(
+    in srgb,
+    var(--tc-fill, var(--fc-event-bg-color)) 28%,
+    var(--fc-page-bg-color)
+  ) !important;
 }
 
 .schedule-calendar .fc-bg-event .fc-event-title,
 .schedule-calendar .fc-timechart-bg .fc-event-title {
-  font-weight: 600;
-  font-size: 0.75rem;
+  font-weight: 500;
+  font-size: 0.6875rem;
+  letter-spacing: 0.03em;
   line-height: 1.2;
   padding: 2px 4px;
+  color: var(--ink-muted) !important;
 }
 
 /* Time Chart full-page editor — areas are real events (not background wallpaper). */

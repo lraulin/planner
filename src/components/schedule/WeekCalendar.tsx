@@ -282,7 +282,12 @@ export function WeekCalendar({
               >
                 {mark}
               </button>
-              <span className="fc-event-title">{arg.event.title}</span>
+              <span
+                className="fc-event-title"
+                style={arg.event.textColor ? { color: arg.event.textColor } : undefined}
+              >
+                {arg.event.title}
+              </span>
             </div>
           );
         }}
@@ -296,16 +301,18 @@ export function WeekCalendar({
               info.el.dataset.appointmentId = appointmentId;
               info.el.dataset.occurrenceKey = info.event.id;
             }
+            // Coloured fills pick ink via contrastText; pin it on the title so a later
+            // stylesheet cannot force dark text onto a dark block.
+            const label = info.event.textColor;
+            if (label) {
+              info.el.style.setProperty("--fc-event-text-color", label);
+              const title = info.el.querySelector<HTMLElement>(".fc-event-title");
+              if (title) title.style.color = label;
+            }
             return;
           }
-          const label =
-            (info.event.extendedProps.labelColor as string | undefined) ??
-            info.event.textColor ??
-            contrastText(String(info.event.backgroundColor ?? "#ccc"));
-          info.el.style.color = label;
-          info.el.style.setProperty("--fc-event-text-color", label);
-          const title = info.el.querySelector<HTMLElement>(".fc-event-title");
-          if (title) title.style.color = label;
+          const fill = String(info.event.backgroundColor ?? "#c8e0f0");
+          info.el.style.setProperty("--tc-fill", fill);
         }}
         select={(arg: DateSelectArg) => {
           onSelectRange(arg.start, arg.end);
