@@ -166,8 +166,16 @@ export type FinanceAccountRow = {
   ledgerBalanceCents: number;
   statementClosingCents: number | null;
   statementPeriodEnd: string | null;
-  /** `ledger − headline`. Zero when there is no statement. */
+  /**
+   * `ledger − headline`. Zero when nothing anchors the headline to an outside source.
+   *
+   * Against a live synced balance this is the more useful reading of the same number: how
+   * far the register has drifted from what the bank says, i.e. whether the register is
+   * complete.
+   */
   balanceMismatchCents: number;
+  /** When the live balance was read, or null for an account with no bank connection. */
+  syncedBalanceAsOf: Date | null;
   transactionCount: number;
 };
 

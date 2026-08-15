@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { financeAccounts, financeTransactions, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { listAccounts } from "@/lib/finances/queries";
 import {
   applySync,
   deleteItem,
@@ -498,5 +499,83 @@ describeDb("cross-user isolation", () => {
       }),
     ).rejects.toThrow(/Account not found/i);
     expect(await listLinks(intruder)).toEqual([]);
+  });
+});
+
+describeDb("balance precedence in the register", () => {
+  it("shows the live synced balance ahead of the ledger sum", async () => {
+    const userId = await makeUser();
+    const itemRowId = await saveItem(userId, { itemId: "item-1", accessToken: "t" });
+    const accountId = await makeAccount(userId);
+    const linkId = await linkAccount(userId, {
+      itemRowId,
+      plaidAccountId: "p1",
+      accountId,
+    });
+    await applySync(userId, {
+      itemRowId,
+      inserts: [insertRow(accountId, { externalId: "t1" })],
+      updates: [],
+      deletes: [],
+      cursor: "c1",
+    });
+
+    // Before a balance is read, the register falls back to summing its own rows.
+    const beforeSync = await listAccounts(userId);
+    expect(beforeSync[0].balanceCents).toBe(-433);
+    expect(beforeSync[0].syncedBalanceAsOf).toBeNull();
+
+    // The bank says the account holds $110 — more than the register knows about, because
+    // the register has one row and the account has years of history.
+    await saveBalance(userId, {
+      linkId,
+      balanceCents: 11000,
+      availableCents: 10000,
+      asOf: new Date("2026-08-15T12:00:00Z"),
+    });
+
+    const [account] = await listAccounts(userId);
+    expect(account.balanceCents).toBe(11000);
+    expect(account.ledgerBalanceCents).toBe(-433);
+    // The mismatch is now the useful question: how far the register has drifted from the
+    // bank, which is the same as asking whether the register is complete.
+    expect(account.balanceMismatchCents).toBe(-11433);
+    expect(account.syncedBalanceAsOf).not.toBeNull();
+  });
+
+  it("leaves an unlinked account on the statement-anchored rule", async () => {
+    const userId = await makeUser();
+    const linked = await makeAccount(userId, "1111");
+    const unlinked = await makeAccount(userId, "2222");
+    const itemRowId = await saveItem(userId, { itemId: "item-1", accessToken: "t" });
+    const linkId = await linkAccount(userId, {
+      itemRowId,
+      plaidAccountId: "p1",
+      accountId: linked,
+    });
+    await applySync(userId, {
+      itemRowId,
+      inserts: [
+        insertRow(linked, { externalId: "t1" }),
+        insertRow(unlinked, { externalId: "t2" }),
+      ],
+      updates: [],
+      deletes: [],
+      cursor: "c1",
+    });
+    await saveBalance(userId, {
+      linkId,
+      balanceCents: 500,
+      availableCents: null,
+      asOf: new Date(),
+    });
+
+    const accounts = await listAccounts(userId);
+    const byId = new Map(accounts.map((a) => [a.id, a]));
+    expect(byId.get(linked)?.balanceCents).toBe(500);
+    // One account having a live feed must not change how any other account is valued.
+    expect(byId.get(unlinked)?.balanceCents).toBe(-433);
+    expect(byId.get(unlinked)?.balanceMismatchCents).toBe(0);
+    expect(byId.get(unlinked)?.syncedBalanceAsOf).toBeNull();
   });
 });

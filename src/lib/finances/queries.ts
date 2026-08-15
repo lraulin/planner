@@ -6,6 +6,7 @@ import {
   financeStatementRates,
   financeStatements,
   financeTransactions,
+  plaidAccountLinks,
 } from "@/db/schema";
 import { numericStringToCents } from "./money";
 import type {
@@ -121,11 +122,38 @@ export async function listAccounts(userId: string): Promise<FinanceAccountRow[]>
     }
   }
 
+  // A live balance from the bank outranks both the statement close and the ledger sum: it
+  // is what the bank's own app shows, read seconds ago. Nulls where an account has no live
+  // feed, which is every account until one is linked.
+  const syncedRows = await db
+    .select({
+      accountId: plaidAccountLinks.accountId,
+      balanceCents: plaidAccountLinks.balanceCents,
+      balanceAsOf: plaidAccountLinks.balanceAsOf,
+    })
+    .from(plaidAccountLinks)
+    .where(eq(plaidAccountLinks.userId, userId));
+
+  const syncedByAccount = new Map(
+    syncedRows
+      .filter((row) => row.balanceCents !== null && row.balanceAsOf !== null)
+      .map((row) => [
+        row.accountId,
+        { cents: row.balanceCents as number, asOf: row.balanceAsOf as Date },
+      ]),
+  );
+
   return rows.map((row) => {
     const ledgerBalanceCents = numericStringToCents(row.balance) ?? 0;
     const latest = latestByAccount.get(row.id);
     const postCents = latest ? (postByAccount.get(row.id) ?? 0) : 0;
-    const balanceCents = latest ? latest.closingCents + postCents : ledgerBalanceCents;
+    const statementAnchored = latest
+      ? latest.closingCents + postCents
+      : ledgerBalanceCents;
+
+    const synced = syncedByAccount.get(row.id);
+    const balanceCents = synced ? synced.cents : statementAnchored;
+
     return {
       id: row.id,
       name: row.name,
@@ -138,7 +166,11 @@ export async function listAccounts(userId: string): Promise<FinanceAccountRow[]>
       ledgerBalanceCents,
       statementClosingCents: latest?.closingCents ?? null,
       statementPeriodEnd: latest?.periodEnd ?? null,
-      balanceMismatchCents: latest ? ledgerBalanceCents - balanceCents : 0,
+      // Against a live balance this stops being a statement-versus-register question and
+      // becomes the useful one: how far the register has drifted from what the bank says,
+      // which is the same as asking whether the register is complete.
+      balanceMismatchCents: synced || latest ? ledgerBalanceCents - balanceCents : 0,
+      syncedBalanceAsOf: synced?.asOf ?? null,
       transactionCount: row.transactionCount,
     };
   });
