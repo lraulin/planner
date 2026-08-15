@@ -46,6 +46,14 @@ const TYPE_STYLE: Record<OutlineNode["type"], string> = {
   task: "text-[0.875rem] font-normal",
 };
 
+/** Name ink matches the priority column so a scan of the grid reads the same way. */
+function nameToneClass(node: OutlineNode, done: boolean): string {
+  if (done) return "text-ink-faint line-through";
+  if (!node.name) return "text-ink-faint italic";
+  if (node.priorityLetter) return PRIORITY_COLOR[node.priorityLetter];
+  return "text-ink";
+}
+
 // ---------------------------------------------------------------------------
 // Name
 // ---------------------------------------------------------------------------
@@ -178,8 +186,7 @@ export function NameCell({
           className={[
             "min-w-0 flex-1 self-center truncate",
             TYPE_STYLE[node.type],
-            done ? "text-ink-faint line-through" : "text-ink",
-            node.name ? "" : "text-ink-faint italic",
+            nameToneClass(node, done),
           ].join(" ")}
         >
           {node.name || `New ${KIND_LABELS[kind].toLowerCase()}`}
