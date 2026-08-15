@@ -164,9 +164,9 @@ describe("matchTransfers", () => {
       row(
         "paypal",
         "checking",
-        "2025-06-01",
-        "Withdrawal from PAYPAL to LEE RAULIN INST XFER",
-        -20000,
+        "2025-04-20",
+        "Deposit from PAYPAL from LEE RAULIN TRANSFER",
+        200000,
       ),
       row(
         "penfed",
@@ -178,10 +178,30 @@ describe("matchTransfers", () => {
     ];
     const result = matchTransfers(rows, ACCOUNTS);
 
+    // Inbound PayPal is still external — a gift, not a wage. Outbound PayPal is no
+    // longer here: those are purchases, and CLASSIFY_RULES files them as spend.
     expect(result.flows.get("paypal")).toBe("external_transfer");
     expect(result.flows.get("penfed")).toBe("external_transfer");
     // External legs have no counterpart here, so they never form a group.
     expect(result.groups).toEqual([]);
+  });
+
+  it("does not claim an outbound PayPal withdrawal as a transfer", () => {
+    // The statements showed these are purchases funded from checking. Leaving them
+    // here would keep CLASSIFY_RULES from ever filing them as spend.
+    const result = matchTransfers(
+      [
+        row(
+          "out",
+          "checking",
+          "2025-03-14",
+          "Withdrawal from PAYPAL to LEE RAULIN INST XFER",
+          -23744,
+        ),
+      ],
+      ACCOUNTS,
+    );
+    expect(result.flows.get("out")).toBeUndefined();
   });
 
   it("ignores a masked number belonging to an account we do not hold", () => {

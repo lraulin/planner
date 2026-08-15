@@ -11,6 +11,11 @@ import {
 import type { CarryingCost } from "@/lib/finances/dashboardQueries";
 import { analyzeInsights } from "@/lib/finances/insightsAnalysis";
 import type { DeclaredBill } from "@/lib/finances/recurringBills";
+import {
+  unresolvedPaypalInflows,
+  type PaypalResolution,
+} from "@/lib/finances/paypalMatch";
+import type { PaymentResolutionRow } from "@/lib/finances/queries";
 import type { ReconcileStatement } from "@/lib/finances/reconcile";
 import {
   drillLabel,
@@ -73,18 +78,37 @@ const AXIS_LABELS: Record<InsightsAxis, string> = {
  * The coverage gap still reads the unfiltered import — it is a fact about the feed, not
  * about the current slice.
  */
+function asPaypalResolutions(
+  rows: readonly PaymentResolutionRow[],
+): PaypalResolution[] {
+  return rows.flatMap((row) => {
+    if (row.direction !== "in" && row.direction !== "out") return [];
+    return [
+      {
+        externalId: row.externalId,
+        date: row.transactionDate,
+        amountCents: row.amountCents,
+        counterparty: row.counterparty,
+        direction: row.direction,
+      },
+    ];
+  });
+}
+
 export function InsightsView({
   rows,
   carryingCost,
   unclassified,
   bills,
   statements = [],
+  resolutions = [],
 }: {
   rows: AnalyticsRow[];
   carryingCost: CarryingCost;
   unclassified: number;
   bills: DeclaredBill[];
   statements?: readonly ReconcileStatement[];
+  resolutions?: readonly PaymentResolutionRow[];
 }) {
   const formatDate = useDateFormatter();
   const today = useToday();
@@ -94,6 +118,10 @@ export function InsightsView({
   const [pending, startTransition] = useTransition();
 
   const filterOptions = useMemo(() => insightsFilterOptions(rows), [rows]);
+  const unresolvedPaypal = useMemo(
+    () => unresolvedPaypalInflows(rows, asPaypalResolutions(resolutions)),
+    [rows, resolutions],
+  );
 
   const analysis = useMemo(() => {
     const core = analyzeInsights(rows, bills, {
@@ -680,6 +708,12 @@ export function InsightsView({
               {coverage.lateAccounts.map((account) => (
                 <li key={account.accountName} className="text-ink-muted">
                   {account.accountName} starts {formatDate(account.firstSeen)}.
+                </li>
+              ))}
+              {unresolvedPaypal.map((entry) => (
+                <li key={entry.rowId}>
+                  PayPal deposit {formatUsd(entry.amountCents)} on{" "}
+                  {formatDate(entry.date)} is unresolved: {entry.reason}.
                 </li>
               ))}
               <li

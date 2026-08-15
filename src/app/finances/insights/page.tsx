@@ -6,7 +6,7 @@ import {
   loadRecurringBills,
   unclassifiedCount,
 } from "@/lib/finances/dashboardQueries";
-import { listStatements } from "@/lib/finances/queries";
+import { listPaymentResolutions, listStatements } from "@/lib/finances/queries";
 import { AppShell } from "@/components/shell/AppShell";
 import { InsightsView } from "@/components/finances/insights/InsightsView";
 
@@ -21,13 +21,15 @@ export const dynamic = "force-dynamic";
  */
 export default async function FinancesInsightsPage() {
   const userId = await getCurrentUserId();
-  const [rows, carryingCost, unclassified, bills, statements] = await Promise.all([
-    loadInsightsRows(userId),
-    loadCarryingCost(userId),
-    unclassifiedCount(userId),
-    loadRecurringBills(userId),
-    listStatements(userId),
-  ]);
+  const [rows, carryingCost, unclassified, bills, statements, resolutions] =
+    await Promise.all([
+      loadInsightsRows(userId),
+      loadCarryingCost(userId),
+      unclassifiedCount(userId),
+      loadRecurringBills(userId),
+      listStatements(userId),
+      listPaymentResolutions(userId),
+    ]);
 
   return (
     <AppShell active="finances">
@@ -38,6 +40,7 @@ export default async function FinancesInsightsPage() {
           unclassified={unclassified}
           bills={bills}
           statements={statements}
+          resolutions={resolutions}
         />
       </Suspense>
     </AppShell>

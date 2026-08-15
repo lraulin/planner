@@ -3,6 +3,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeAccounts,
+  financePaymentResolutions,
   financeRecurringBills,
   financeTransactions,
   type FinanceAccountKind,
@@ -10,6 +11,7 @@ import {
 } from "@/db/schema";
 import { changedRows, planReclassify } from "./classify/reclassify";
 import { numericStringToCents } from "./money";
+import type { PaypalResolution } from "./paypalMatch";
 
 /**
  * Writes for the register.
@@ -131,6 +133,59 @@ export async function deleteTransaction(
     );
 }
 
+async function requirePaymentResolution(
+  userId: string,
+  resolutionId: string,
+): Promise<void> {
+  const [row] = await db
+    .select({ id: financePaymentResolutions.id })
+    .from(financePaymentResolutions)
+    .where(
+      and(
+        eq(financePaymentResolutions.id, resolutionId),
+        eq(financePaymentResolutions.userId, userId),
+      ),
+    )
+    .limit(1);
+  if (!row) throw new Error("Payment resolution not found.");
+}
+
+/**
+ * Correct the counterparty a statement named. Date and amount stay as PayPal wrote them
+ * — those are the match key, and rewriting them would silently remarry the row.
+ */
+export async function updatePaymentResolution(
+  userId: string,
+  resolutionId: string,
+  edit: { counterparty: string },
+): Promise<void> {
+  await requirePaymentResolution(userId, resolutionId);
+  await db
+    .update(financePaymentResolutions)
+    .set({ counterparty: edit.counterparty.trim(), updatedAt: new Date() })
+    .where(
+      and(
+        eq(financePaymentResolutions.id, resolutionId),
+        eq(financePaymentResolutions.userId, userId),
+      ),
+    );
+}
+
+export async function deletePaymentResolution(
+  userId: string,
+  resolutionId: string,
+): Promise<void> {
+  await requirePaymentResolution(userId, resolutionId);
+  await db
+    .delete(financePaymentResolutions)
+    .where(
+      and(
+        eq(financePaymentResolutions.id, resolutionId),
+        eq(financePaymentResolutions.userId, userId),
+      ),
+    );
+}
+
 export type AccountEdit = {
   name?: string;
   kind?: FinanceAccountKind;
@@ -204,7 +259,7 @@ export type ReclassifySummary = {
 export async function reclassifyTransactions(
   userId: string,
 ): Promise<ReclassifySummary> {
-  const [rows, accounts] = await Promise.all([
+  const [rows, accounts, storedResolutions] = await Promise.all([
     db
       .select({
         id: financeTransactions.id,
@@ -226,6 +281,16 @@ export async function reclassifyTransactions(
       })
       .from(financeAccounts)
       .where(eq(financeAccounts.userId, userId)),
+    db
+      .select({
+        externalId: financePaymentResolutions.externalId,
+        transactionDate: financePaymentResolutions.transactionDate,
+        amount: financePaymentResolutions.amount,
+        counterparty: financePaymentResolutions.counterparty,
+        direction: financePaymentResolutions.direction,
+      })
+      .from(financePaymentResolutions)
+      .where(eq(financePaymentResolutions.userId, userId)),
   ]);
 
   const parsed = rows.map((row) => ({
@@ -240,7 +305,22 @@ export async function reclassifyTransactions(
     derivedFlow: row.derivedFlow,
   }));
 
-  const plan = planReclassify(parsed, accounts, randomUUID);
+  const resolutions: PaypalResolution[] = storedResolutions.flatMap((row) => {
+    const amountCents = numericStringToCents(row.amount);
+    if (amountCents === null) return [];
+    if (row.direction !== "in" && row.direction !== "out") return [];
+    return [
+      {
+        externalId: row.externalId,
+        date: row.transactionDate,
+        amountCents,
+        counterparty: row.counterparty,
+        direction: row.direction,
+      },
+    ];
+  });
+
+  const plan = planReclassify(parsed, accounts, randomUUID, resolutions);
   const changed = changedRows(parsed, plan);
 
   if (changed.length > 0) {

@@ -259,6 +259,54 @@ describe("planReclassify", () => {
     expect(byId.get("b")).toBeNull();
   });
 
+  it("lets a PayPal resolution keep a named gift out of refunds", () => {
+    // Without the resolution this credit would look like a refund from a merchant we
+    // spend at. The statement is what says it is a person, not a store credit.
+    const rows = [
+      row("out", "capone-card", "2025-04-01", "Dennis Raulin", -5000),
+      row("gift", "checking", "2025-04-20", "Dennis Raulin", 200000),
+    ];
+    const without = planOf(rows);
+    expect(flowOf(without, "gift")).toBe("refund");
+
+    const withName = planReclassify(rows, ACCOUNTS, minter(), [
+      {
+        externalId: "pp-gift",
+        date: "2025-04-20",
+        amountCents: 200000,
+        counterparty: "Dennis Raulin",
+        direction: "in",
+      },
+    ]);
+    expect(flowOf(withName, "gift")).toBe("external_transfer");
+  });
+
+  it("files an outbound PayPal withdrawal as spend, not an external transfer", () => {
+    const plan = planOf([
+      row(
+        "out",
+        "checking",
+        "2025-03-14",
+        "Withdrawal from PAYPAL to LEE RAULIN INST XFER",
+        -23744,
+      ),
+    ]);
+    expect(flowOf(plan, "out")).toBe("spend");
+  });
+
+  it("keeps an inbound PayPal deposit as an external transfer", () => {
+    const plan = planOf([
+      row(
+        "gift",
+        "checking",
+        "2025-04-20",
+        "Deposit from PAYPAL from LEE RAULIN TRANSFER",
+        200000,
+      ),
+    ]);
+    expect(flowOf(plan, "gift")).toBe("external_transfer");
+  });
+
   it("reports only the rows whose stored values disagree with the plan", () => {
     const rows = [
       row("out", "capone-card", "2026-02-02", "WM SUPERCENTER #1981", -8412),

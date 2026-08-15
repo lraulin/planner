@@ -2282,6 +2282,50 @@ export const financeRecurringBills = pgTable(
 );
 
 /**
+ * PayPal (and later, other rails) naming a register row the bank feed left opaque.
+ *
+ * These are **not** ledger rows. PayPal is a payment rail: every purchase already sits
+ * on a card or as a checking withdrawal, and inserting them would double-count. What
+ * the statement uniquely knows is the counterparty — `Dennis Raulin` where checking
+ * says `Deposit from PAYPAL from LEE RAULIN TRANSFER`. Import inserts or skips on
+ * `(user_id, source, external_id)`. Nothing here rewrites `amount`.
+ */
+export const financePaymentResolutions = pgTable(
+  "finance_payment_resolutions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** The rail that named this event — `paypal` today. */
+    source: text("source").notNull(),
+    /** The rail's own transaction id. Stable across re-downloads. */
+    externalId: text("external_id").notNull(),
+    /** Calendar day on the statement (`YYYY-MM-DD`). */
+    transactionDate: date("transaction_date", { mode: "string" }).notNull(),
+    /** Module sign; positive is money arriving at the rail. */
+    amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
+    /** Who PayPal says was paid, or who paid. */
+    counterparty: text("counterparty").notNull().default(""),
+    /** `in` or `out` as text — adding a rail must not be a migration. */
+    direction: text("direction").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("finance_payment_resolutions_external_uq").on(
+      table.userId,
+      table.source,
+      table.externalId,
+    ),
+    index("finance_payment_resolutions_user_date_idx").on(
+      table.userId,
+      table.transactionDate,
+    ),
+  ],
+);
+
+/**
  * Amazon order-history receipts. These are **not** ledger rows — they itemize what a
  * later spec will attach to `finance_transactions` without changing `amount`.
  *
@@ -2642,6 +2686,8 @@ export type FinanceStatement = typeof financeStatements.$inferSelect;
 export type NewFinanceStatement = typeof financeStatements.$inferInsert;
 export type FinanceStatementRate = typeof financeStatementRates.$inferSelect;
 export type NewFinanceStatementRate = typeof financeStatementRates.$inferInsert;
+export type FinancePaymentResolution = typeof financePaymentResolutions.$inferSelect;
+export type NewFinancePaymentResolution = typeof financePaymentResolutions.$inferInsert;
 export type AmazonOrder = typeof amazonOrders.$inferSelect;
 export type NewAmazonOrder = typeof amazonOrders.$inferInsert;
 export type AmazonOrderItem = typeof amazonOrderItems.$inferSelect;

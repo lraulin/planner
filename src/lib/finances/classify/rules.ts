@@ -181,7 +181,12 @@ export const CLASSIFY_RULES: readonly ClassifyRule[] = [
   { id: "xai", match: /^(GROK|XAI)/, category: "Software & AI", merchant: "xAI" },
   { id: "cursor", match: /^CURSOR/, category: "Software & AI", merchant: "Cursor" },
   { id: "github", match: /^GITHUB/, category: "Software & AI", merchant: "GitHub" },
-  { id: "paddle", match: /^PADDLE/, category: "Software & AI", merchant: "Paddle" },
+  {
+    id: "paddle",
+    match: /^PADDLE/,
+    category: "Software & AI",
+    merchant: "Paddle.com Market Limited",
+  },
   { id: "apple", match: /^APPLE/, category: "Software & AI", merchant: "Apple" },
   {
     id: "software-vendors",
@@ -218,9 +223,17 @@ export const CLASSIFY_RULES: readonly ClassifyRule[] = [
     merchant: "YouTube",
   },
   {
+    id: "spotify",
+    // `PP*SPOTIFY*<hash>` and `PAYPAL *SPOTIFY USA` normalize to different residues;
+    // naming it here is what stops one subscription appearing as fourteen merchants.
+    match: /^SPOTIFY/,
+    category: "Streaming & Media",
+    merchant: "Spotify USA Inc",
+  },
+  {
     id: "streaming-services",
     match:
-      /^(NETFLIX|HULU|DISNEY|PARAMOUNT|HELP\.?HBOMAX|HBOMAX|NEBULA|SPOTIFY|AUDIBLE|PANDORA|CRUNCHYROLL)/,
+      /^(NETFLIX|HULU|DISNEY|PARAMOUNT|HELP\.?HBOMAX|HBOMAX|NEBULA|AUDIBLE|PANDORA|CRUNCHYROLL)/,
     category: "Streaming & Media",
   },
   {
@@ -330,6 +343,14 @@ export const CLASSIFY_RULES: readonly ClassifyRule[] = [
     match: /^VACP TREAS/,
     flow: "income",
     merchant: "VA Benefits",
+  },
+  // Lee never carries a PayPal balance, so a checking withdrawal to PayPal is the
+  // purchase itself. `transfers.ts` used to park these as external; this rule is what
+  // the cash-flow identity needs, and it does not need a statement to fire.
+  {
+    id: "paypal-outbound",
+    match: /^PAYPAL TO LEE RAULIN/,
+    flow: "spend",
   },
 ];
 

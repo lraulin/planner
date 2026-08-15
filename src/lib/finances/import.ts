@@ -19,6 +19,12 @@ import { fingerprintAll } from "./fingerprint";
 import { parseFinanceCsv } from "./formats";
 import { selectNewTransactions } from "./matchExisting";
 import { centsToNumericString, numericStringToCents } from "./money";
+import { persistPaypalResolutions } from "./paypalResolutions";
+import {
+  looksLikePaypalStatement,
+  parsePaypalStatement,
+  type PaypalEntry,
+} from "./paypalStatement";
 import { extractPdfText, isPdfBytes } from "./pdf";
 import {
   looksLikeCapitalOne360Statement,
@@ -139,7 +145,10 @@ async function markClosedIfNeeded(
 
 export type ImportFile = { name: string; text?: string; bytes?: Uint8Array };
 
-type ParsedFile = { ok: false; error: string } | { ok: true; parsed: ParsedFinanceCsv };
+type ParsedFile =
+  | { ok: false; error: string }
+  | { ok: true; kind: "paypal"; entries: PaypalEntry[] }
+  | { ok: true; kind: "ledger"; parsed: ParsedFinanceCsv };
 
 function optionalCents(cents: number | null | undefined): string | null {
   return cents === null || cents === undefined ? null : centsToNumericString(cents);
@@ -258,14 +267,20 @@ async function parseImportFile(file: ImportFile): Promise<ParsedFile> {
     return { ok: false, error: `"${file.name}" is empty.` };
   }
   const isPdf = isPdfBytes(file.bytes ?? new Uint8Array()) || /\.pdf$/i.test(file.name);
+  if (looksLikePaypalStatement(text)) {
+    return { ok: true, kind: "paypal", entries: parsePaypalStatement(text) };
+  }
   if (looksLikeChaseCreditStatement(text)) {
-    return parseChaseCreditStatement(file.name, text);
+    const parsed = parseChaseCreditStatement(file.name, text);
+    return parsed.ok ? { ok: true, kind: "ledger", parsed: parsed.parsed } : parsed;
   }
   if (looksLikeCapitalOne360Statement(text)) {
-    return parseCapitalOne360Statement(file.name, text);
+    const parsed = parseCapitalOne360Statement(file.name, text);
+    return parsed.ok ? { ok: true, kind: "ledger", parsed: parsed.parsed } : parsed;
   }
   if (looksLikeCapitalOneCardStatement(text)) {
-    return parseCapitalOneCardStatement(file.name, text);
+    const parsed = parseCapitalOneCardStatement(file.name, text);
+    return parsed.ok ? { ok: true, kind: "ledger", parsed: parsed.parsed } : parsed;
   }
   if (isPdf) {
     return {
@@ -273,12 +288,14 @@ async function parseImportFile(file: ImportFile): Promise<ParsedFile> {
       error: `"${file.name}" is not a recognised statement. ${SUPPORTED_STATEMENT_PDFS}`,
     };
   }
-  return parseFinanceCsv(file.name, text);
+  const parsed = parseFinanceCsv(file.name, text);
+  return parsed.ok ? { ok: true, kind: "ledger", parsed: parsed.parsed } : parsed;
 }
 
 /**
  * Import one or more bank/card CSV exports, Chase Prime Visa monthly statements,
- * Capital One card monthly statements, or Capital One 360 statement PDFs. Each
+ * Capital One card monthly statements, Capital One 360 statement PDFs, or PayPal
+ * monthly statements. PayPal files write resolutions, not register rows. Each
  * file's format is detected on its own.
  *
  * A file that cannot be identified becomes a warning and is skipped; the rest still import.
@@ -298,11 +315,26 @@ export async function importFinanceCsvFiles({
   let accountsCreated = 0;
   let statementsCreated = 0;
   let statementsSkipped = 0;
+  let resolutionsCreated = 0;
+  let resolutionsSkipped = 0;
 
   for (const file of files) {
     const parsed = await parseImportFile(file);
     if (!parsed.ok) {
       warnings.push(parsed.error);
+      continue;
+    }
+
+    if (parsed.kind === "paypal") {
+      if (parsed.entries.length === 0) {
+        warnings.push(
+          `${file.name} looked like a PayPal statement but had no transactions.`,
+        );
+        continue;
+      }
+      const outcome = await persistPaypalResolutions(userId, parsed.entries);
+      resolutionsCreated += outcome.created;
+      resolutionsSkipped += outcome.skipped;
       continue;
     }
 
@@ -402,6 +434,8 @@ export async function importFinanceCsvFiles({
     accountsCreated,
     statementsCreated,
     statementsSkipped,
+    resolutionsCreated,
+    resolutionsSkipped,
     warnings,
   };
 }

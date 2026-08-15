@@ -92,6 +92,8 @@ export async function POST(request: Request) {
       accountsCreated: result.accountsCreated,
       statementsCreated: result.statementsCreated,
       statementsSkipped: result.statementsSkipped,
+      resolutionsCreated: result.resolutionsCreated,
+      resolutionsSkipped: result.resolutionsSkipped,
       warnings,
     });
   } catch (error) {

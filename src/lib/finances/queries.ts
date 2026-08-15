@@ -2,6 +2,7 @@ import { and, asc, desc, eq, gt, gte, inArray, lte, or, sql } from "drizzle-orm"
 import { db } from "@/db";
 import {
   financeAccounts,
+  financePaymentResolutions,
   financeStatementRates,
   financeStatements,
   financeTransactions,
@@ -369,4 +370,79 @@ export async function listStatements(
     rewardsPoints: row.rewardsPoints,
     rates: ratesByStatement.get(row.id) ?? [],
   }));
+}
+
+export type PaymentResolutionRow = {
+  id: string;
+  source: string;
+  externalId: string;
+  transactionDate: string;
+  amountCents: number;
+  counterparty: string;
+  direction: string;
+};
+
+export async function listPaymentResolutions(
+  userId: string,
+): Promise<PaymentResolutionRow[]> {
+  const rows = await db
+    .select({
+      id: financePaymentResolutions.id,
+      source: financePaymentResolutions.source,
+      externalId: financePaymentResolutions.externalId,
+      transactionDate: financePaymentResolutions.transactionDate,
+      amount: financePaymentResolutions.amount,
+      counterparty: financePaymentResolutions.counterparty,
+      direction: financePaymentResolutions.direction,
+    })
+    .from(financePaymentResolutions)
+    .where(eq(financePaymentResolutions.userId, userId))
+    .orderBy(
+      desc(financePaymentResolutions.transactionDate),
+      asc(financePaymentResolutions.externalId),
+    );
+
+  return rows.map((row) => ({
+    id: row.id,
+    source: row.source,
+    externalId: row.externalId,
+    transactionDate: row.transactionDate,
+    amountCents: numericStringToCents(row.amount) ?? 0,
+    counterparty: row.counterparty,
+    direction: row.direction,
+  }));
+}
+
+export async function getPaymentResolution(
+  userId: string,
+  resolutionId: string,
+): Promise<PaymentResolutionRow | null> {
+  const [row] = await db
+    .select({
+      id: financePaymentResolutions.id,
+      source: financePaymentResolutions.source,
+      externalId: financePaymentResolutions.externalId,
+      transactionDate: financePaymentResolutions.transactionDate,
+      amount: financePaymentResolutions.amount,
+      counterparty: financePaymentResolutions.counterparty,
+      direction: financePaymentResolutions.direction,
+    })
+    .from(financePaymentResolutions)
+    .where(
+      and(
+        eq(financePaymentResolutions.id, resolutionId),
+        eq(financePaymentResolutions.userId, userId),
+      ),
+    )
+    .limit(1);
+  if (!row) return null;
+  return {
+    id: row.id,
+    source: row.source,
+    externalId: row.externalId,
+    transactionDate: row.transactionDate,
+    amountCents: numericStringToCents(row.amount) ?? 0,
+    counterparty: row.counterparty,
+    direction: row.direction,
+  };
 }

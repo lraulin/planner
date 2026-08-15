@@ -281,6 +281,13 @@
       "when": 1786733204452,
       "tag": "0039_third_northstar",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1786755804477,
+      "tag": "0040_swift_paibok",
+      "breakpoints": true
     }
   ]
 }

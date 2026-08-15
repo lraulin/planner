@@ -23,7 +23,7 @@ export const FEED_LABELS: Record<FinanceFeed, string> = {
 
 /** Fail-closed PDF dispatch names every format we actually parse. */
 export const SUPPORTED_STATEMENT_PDFS =
-  "Supported PDFs are Chase Prime Visa monthly statements, Capital One card monthly statements, and Capital One 360 monthly bank statements.";
+  "Supported PDFs are Chase Prime Visa monthly statements, Capital One card monthly statements, Capital One 360 monthly bank statements, and PayPal monthly statements.";
 
 /**
  * One transaction as it comes out of a CSV, before it has an account id or a fingerprint.
@@ -128,6 +128,9 @@ export type ImportResult = {
   accountsCreated: number;
   statementsCreated: number;
   statementsSkipped: number;
+  /** PayPal enrichment rows. Not ledger inserts. */
+  resolutionsCreated: number;
+  resolutionsSkipped: number;
   warnings: string[];
 };
 

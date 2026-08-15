@@ -25,6 +25,7 @@
  */
 
 import type { FinanceFlowKind } from "@/db/schema";
+import { matchPaypalResolutions, type PaypalResolution } from "../paypalMatch";
 import { categorize } from "./categorize";
 import { detectIncome, type IncomeRow, type Payday } from "./income";
 import { matchTransfers, type TransferAccount, type TransferRow } from "./transfers";
@@ -103,6 +104,7 @@ export function planReclassify(
   rows: readonly ReclassifyRow[],
   accounts: readonly ReclassifyAccount[],
   mintGroupId: () => string,
+  resolutions: readonly PaypalResolution[] = [],
 ): ReclassifyPlan {
   const transferRows: TransferRow[] = rows.map((row) => ({
     id: row.id,
@@ -112,10 +114,27 @@ export function planReclassify(
     amountCents: row.amountCents,
   }));
   const transfers = matchTransfers(transferRows, accounts);
+  const named = matchPaypalResolutions(rows, resolutions).byRowId;
 
   // One pass for merchant, category and any flow the merchant itself settles.
+  // A resolution names who PayPal actually paid, so that name is what categorise
+  // should see — the bank description is only the rail.
   const perRow = new Map(
-    rows.map((row) => [row.id, categorize(row.description, row.sourceCategory)]),
+    rows.map((row) => {
+      const fromBank = categorize(row.description, row.sourceCategory);
+      const resolution = named.get(row.id);
+      if (!resolution?.counterparty) return [row.id, fromBank] as const;
+      const fromPaypal = categorize(resolution.counterparty, row.sourceCategory);
+      return [
+        row.id,
+        {
+          merchant: fromPaypal.merchant || fromBank.merchant,
+          category: fromPaypal.category ?? fromBank.category,
+          flow: fromBank.flow ?? fromPaypal.flow,
+          ruleId: fromPaypal.ruleId ?? fromBank.ruleId,
+        },
+      ] as const;
+    }),
   );
 
   // A rule that names a flow has settled the row. Withholding those from cadence detection
@@ -175,14 +194,19 @@ export function planReclassify(
        * from a friend. Filing those as refunds made them *subtract* from spending, which is
        * how a pay period that received a $2,516 tax refund reported negative money out.
        *
-       * So the default is `external_transfer`: money arriving from outside what this module
-       * can see. That is deliberately the conservative bucket — it is neither a cost nor
-       * earnings, on the same reasoning already recorded for the Pentagon Federal sweeps in
-       * `transfers.ts`. Calling it income would invent a wage; calling it a refund invents a
-       * discount. A rule in `rules.ts` can name any of these properly, and the user's
-       * `flow_override` settles the rest.
+       * A PayPal resolution that names the sender takes priority over that refund check:
+       * $2,000 from Dennis Raulin is not a store credit even if we also shop somewhere
+       * whose merchant string happens to collide. Then the default is `external_transfer`:
+       * money arriving from outside what this module can see. That is deliberately the
+       * conservative bucket — it is neither a cost nor earnings, on the same reasoning
+       * already recorded for the Pentagon Federal sweeps in `transfers.ts`. Calling it
+       * income would invent a wage; calling it a refund invents a discount.
        */
-      (spendingMerchants.has(merchant) ? "refund" : "external_transfer");
+      (named.has(row.id)
+        ? "external_transfer"
+        : spendingMerchants.has(merchant)
+          ? "refund"
+          : "external_transfer");
 
     return {
       id: row.id,

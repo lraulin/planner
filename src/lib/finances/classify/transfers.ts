@@ -58,17 +58,19 @@ const INTERNAL_PATTERNS: readonly RegExp[] = [
 ];
 
 /**
- * Money moving to or from an account outside this module — an old credit union, a PayPal
- * balance. Not spending, because it is still ours; not neutral, because only one leg will
- * ever exist here.
+ * Money moving to or from an account outside this module. Not spending, because it is
+ * still ours; not neutral, because only one leg will ever exist here.
  *
- * The Pentagon Federal rows matter for a reason worth recording: they are a sweep from a
- * bank that was never imported, so treating them as income would invent earnings we cannot
- * see, and treating them as spending would invent losses. Income before 2024 simply is not
- * observable from the accounts that exist here.
+ * This list used to include every PayPal row. That was right when the statements were
+ * unreadable: treating an opaque `PAYPAL TO LEE RAULIN` withdrawal as spend would invent
+ * purchases we could not see, the same reasoning that still holds for Pentagon Federal.
+ * Twenty-five PayPal statements remove the precondition for the outbound half — Lee never
+ * carries a PayPal balance, so every `TO` is a purchase and `CLASSIFY_RULES` now files it
+ * as spend. The inbound `FROM` half stays here: those are gifts and reimbursements, not
+ * earnings, and naming the sender is a resolution, not a reclassification as income.
  */
 const EXTERNAL_PATTERNS: readonly RegExp[] = [
-  /PAYPAL (TO|FROM) LEE RAULIN/i,
+  /PAYPAL FROM LEE RAULIN/i,
   /PENTAGON FEDERAL/i,
 ];
 

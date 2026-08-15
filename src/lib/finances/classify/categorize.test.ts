@@ -109,6 +109,15 @@ describe("categorize", () => {
     expect(categorize("PAYPAL *GITHUB INC", "Merchandise").category).toBe(
       "Software & AI",
     );
+    expect(categorize("PAYPAL *PADDLE.NET35314369001", "Merchandise").merchant).toBe(
+      "Paddle.com Market Limited",
+    );
+    expect(categorize("PP*SPOTIFY*7A3K19B2", "Merchandise").merchant).toBe(
+      "Spotify USA Inc",
+    );
+    expect(categorize("PAYPAL *SPOTIFY USA INC", "Merchandise").merchant).toBe(
+      "Spotify USA Inc",
+    );
     expect(categorize("CURSOR, AI POWERED IDE", "Merchandise").category).toBe(
       "Software & AI",
     );
@@ -116,6 +125,12 @@ describe("categorize", () => {
 
   it("reports which rule fired, so a categorisation can be explained", () => {
     expect(categorize("PIZZA HUT 036874", "Dining").ruleId).toBe("pizza-hut");
+  });
+
+  it("files an outbound PayPal withdrawal as spend", () => {
+    const result = categorize("Withdrawal from PAYPAL to LEE RAULIN INST XFER", "");
+    expect(result.flow).toBe("spend");
+    expect(result.ruleId).toBe("paypal-outbound");
   });
 });
 

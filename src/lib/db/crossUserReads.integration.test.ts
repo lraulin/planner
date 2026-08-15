@@ -48,8 +48,10 @@ import {
 } from "@/lib/finances/dashboardQueries";
 import { upsertRecurringBill } from "@/lib/finances/mutations";
 import {
+  getPaymentResolution,
   getTransaction,
   listAccounts,
+  listPaymentResolutions,
   listStatements,
   listTransactions,
   transactionTotalCents,
@@ -135,6 +137,7 @@ type Owned = {
   financeAccountId: string;
   financeTransactionId: string;
   financeStatementId: string;
+  paymentResolutionId: string;
   amazonItemId: string;
   planId: string;
   exerciseId: string;
@@ -238,6 +241,26 @@ async function seedOwner(): Promise<Owned> {
     cadenceMonths: 6,
     expectedCents: 141_260,
   });
+  await importFinanceCsvFiles({
+    userId,
+    files: [
+      {
+        name: "statement-Apr-2025.pdf",
+        text: [
+          "Statement Period PayPal Account ID",
+          "PAYPAL ACCOUNT",
+          "ACCOUNT ACTIVITY",
+          "04/20/2025 General Payment: Dennis Raulin",
+          "ID: 0LT3288171837814B",
+          "USD 2,000.00 0.00 2,000.00",
+        ].join("\n"),
+      },
+    ],
+  });
+  const [paymentResolution] = await listPaymentResolutions(userId);
+  if (!paymentResolution) {
+    throw new Error("expected the PayPal seed to create a resolution");
+  }
   await importAmazonSlim({
     userId,
     text: JSON.stringify({
@@ -325,6 +348,7 @@ async function seedOwner(): Promise<Owned> {
     financeAccountId: financeAccount.id,
     financeTransactionId: financeTransaction.id,
     financeStatementId: financeStatement.id,
+    paymentResolutionId: paymentResolution.id,
     amazonItemId: amazonItem.id,
     planId: plan.id,
     exerciseId,
@@ -362,6 +386,7 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect((await listTransactions(owner.userId)).length).toBeGreaterThan(0);
     expect((await listAmazonItems(owner.userId)).length).toBeGreaterThan(0);
     expect((await listStatements(owner.userId)).length).toBeGreaterThan(0);
+    expect((await listPaymentResolutions(owner.userId)).length).toBeGreaterThan(0);
     expect((await loadInsightsRows(owner.userId)).length).toBeGreaterThan(0);
     expect(await getWeeklyPlanById(owner.userId, owner.planId)).toBeTruthy();
     expect((await listExercises(owner.userId)).length).toBeGreaterThan(0);
@@ -438,6 +463,8 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect(await listTransactions(intruder)).toEqual([]);
     expect(await listStatements(intruder)).toEqual([]);
     expect(await getTransaction(intruder, owner.financeTransactionId)).toBeNull();
+    expect(await listPaymentResolutions(intruder)).toEqual([]);
+    expect(await getPaymentResolution(intruder, owner.paymentResolutionId)).toBeNull();
     // The filtered read takes an account id the intruder can guess; it must refuse by user
     // rather than trusting that the id belongs to the caller.
     expect(

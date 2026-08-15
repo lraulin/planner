@@ -13,6 +13,8 @@ type ImportOk = {
   accountsCreated: number;
   statementsCreated: number;
   statementsSkipped: number;
+  resolutionsCreated: number;
+  resolutionsSkipped: number;
   warnings: string[];
 };
 
@@ -20,8 +22,9 @@ type ImportFail = { ok: false; error: string };
 
 /**
  * Import bank/card CSV exports, Chase Prime Visa monthly statements, Capital One
- * card monthly statements, and Capital One 360 monthly statement PDFs. Format is
- * detected per file.
+ * card monthly statements, Capital One 360 monthly statement PDFs, and PayPal
+ * monthly statements. Format is detected per file. PayPal files enrich existing
+ * rows; they do not insert a PayPal account.
  *
  * Re-importing an overlapping file is the normal case — you download the last N days each
  * time, and statements overlap the bank CSV — so the result line leads with created and
@@ -35,6 +38,8 @@ function emptyImportOk(): ImportOk {
     accountsCreated: 0,
     statementsCreated: 0,
     statementsSkipped: 0,
+    resolutionsCreated: 0,
+    resolutionsSkipped: 0,
     warnings: [],
   };
 }
@@ -47,6 +52,10 @@ function addImportOk(left: ImportOk, right: ImportOk): ImportOk {
     accountsCreated: left.accountsCreated + right.accountsCreated,
     statementsCreated: left.statementsCreated + right.statementsCreated,
     statementsSkipped: left.statementsSkipped + right.statementsSkipped,
+    resolutionsCreated:
+      (left.resolutionsCreated ?? 0) + (right.resolutionsCreated ?? 0),
+    resolutionsSkipped:
+      (left.resolutionsSkipped ?? 0) + (right.resolutionsSkipped ?? 0),
     warnings: [...left.warnings, ...right.warnings],
   };
 }
@@ -207,6 +216,8 @@ export function FinanceImportPanel({ embedded = false }: { embedded?: boolean } 
                 ` ${result.accountsCreated} new account${result.accountsCreated === 1 ? "" : "s"}.`}
               {(result.statementsCreated > 0 || result.statementsSkipped > 0) &&
                 ` ${result.statementsCreated} statement snapshot${result.statementsCreated === 1 ? "" : "s"}, ${result.statementsSkipped} already stored.`}
+              {(result.resolutionsCreated > 0 || result.resolutionsSkipped > 0) &&
+                ` ${result.resolutionsCreated} PayPal name${result.resolutionsCreated === 1 ? "" : "s"}, ${result.resolutionsSkipped} already stored.`}
             </p>
             {result.warnings.length > 0 && (
               <details className="mt-2">
