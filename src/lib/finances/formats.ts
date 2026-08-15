@@ -32,10 +32,13 @@ function normalizeHeader(cell: string): string {
 }
 
 /**
- * Bank CSVs this module parses. Coinbase has a preamble and its own parser
- * (`coinbaseCsv.ts`); it is a `FinanceFeed` but not a row-0 header format.
+ * Bank CSVs this module parses — the feeds that arrive as a file with a header on row 0.
+ *
+ * Two `FinanceFeed` members are deliberately not here. Coinbase has a preamble and its own
+ * parser (`coinbaseCsv.ts`). `api:plaid` is not a file at all; it never reaches header
+ * sniffing, because a sync writes rows directly rather than going through `parseImportFile`.
  */
-type BankCsvFeed = Exclude<FinanceFeed, "csv:coinbase">;
+type BankCsvFeed = Exclude<FinanceFeed, "csv:coinbase" | "api:plaid">;
 
 const HEADERS: Record<BankCsvFeed, readonly string[]> = {
   // Chase's "Post Date" against Capital One's "Posted Date" is the whole difference between

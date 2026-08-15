@@ -6,13 +6,18 @@ import type { FinanceAccountKind, FinanceFlowKind } from "@/db/schema";
  * later Plaid or SimpleFIN sync should be a new member here and nothing else.
  */
 export type FinanceFeed =
-  "csv:chase-credit" | "csv:capitalone-card" | "csv:capitalone-bank" | "csv:coinbase";
+  | "csv:chase-credit"
+  | "csv:capitalone-card"
+  | "csv:capitalone-bank"
+  | "csv:coinbase"
+  | "api:plaid";
 
 export const FINANCE_FEEDS: readonly FinanceFeed[] = [
   "csv:chase-credit",
   "csv:capitalone-card",
   "csv:capitalone-bank",
   "csv:coinbase",
+  "api:plaid",
 ] as const;
 
 /** Human label for a feed, for import summaries and warnings. */
@@ -21,6 +26,7 @@ export const FEED_LABELS: Record<FinanceFeed, string> = {
   "csv:capitalone-card": "Capital One card",
   "csv:capitalone-bank": "Capital One 360 bank",
   "csv:coinbase": "Coinbase",
+  "api:plaid": "Bank sync",
 };
 
 /** Fail-closed PDF dispatch names every format we actually parse. */

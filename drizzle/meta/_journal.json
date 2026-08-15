@@ -288,6 +288,13 @@
       "when": 1786755804477,
       "tag": "0040_swift_paibok",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1786826197794,
+      "tag": "0041_previous_thunderbolt",
+      "breakpoints": true
     }
   ]
 }

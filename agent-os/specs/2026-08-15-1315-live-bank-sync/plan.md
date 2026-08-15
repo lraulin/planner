@@ -105,6 +105,16 @@ inflows (a −500 airline refund, a −4.22 interest payment). Positive = money 
 depository and credit accounts, so `mapping.ts` negates without branching. Amounts arrive as
 JSON floats and must go through `money.ts` rather than `* 100`.
 
+**D5c — Chase supports `transactions_refresh`; Capital One does not.** Confirmed from
+`/institutions/get_by_id`, which costs no Item. `/transactions/refresh` forces an immediate
+pull from the institution; without it, Capital One's transactions arrive on Plaid's own
+cadence, roughly daily, and the refresh button cannot make them appear sooner.
+
+The card's **balance** is still live on demand — `balance` is supported — so "what do I have
+available" holds for both banks. It is the card's transaction list that lags. Together with
+D5a this means the Capital One card is materially less live than Chase, and the UI must not
+imply otherwise: a refresh that silently no-ops on one account reads as a bug.
+
 **Verified in Sandbox (Task 2), so the implementation may rely on it:** a second
 `/transactions/sync` with the stored cursor returns `added: 0, modified: 0, removed: 0,
 has_more: false`. That is the mechanism behind "refresh twice inserts nothing."
@@ -226,6 +236,7 @@ as a plain `Error` with no `code`, the way `GoogleNotLinkedError` is.
 | 8   | **D7a added: the balance mapping branches on account `type`.** New acceptance criterion that the card's headline balance is negative.                     | Found in the Task 2 Sandbox run. A credit account's `current` is the amount **owed**, so an unbranched mapping would show the Capital One card as a positive asset. D7 as written did not branch and would have shipped that. |
 | 9   | D5b added: negation confirmed uniform across account types; amounts arrive as JSON floats.                                                                | Task 2 measured it — 42/48 positive, negatives exactly the inflows. Removes the risk from the detail shape.md calls highest-risk, and fixes cents conversion as a `money.ts` concern rather than a `* 100`.                   |
 | 10  | D5 caveat recorded: `pending_transaction_id` could not be verified in Sandbox.                                                                            | A pending row carries `pending: true` and a **null** link; the link appears on the posted row that replaces it, and Sandbox time cannot be advanced. D5 depends on it, so it stays unverified until real Chase data lands.    |
+| 11  | D5c added: Chase supports `transactions_refresh`, Capital One does not. Task 4 adds `/transactions/refresh` to the client surface.                        | Found via `/institutions/get_by_id`, which costs no Item. The refresh button cannot force new transactions on the card — only a new balance. The UI has to say so rather than appear broken.                                  |
 
 ---
 
@@ -268,17 +279,26 @@ Sandbox did, and specifically that a Chase pending charge posts with a populated
 
 ## Task 3: Schema
 
+**Done 2026-08-15** — `drizzle/0041_previous_thunderbolt.sql`.
+
 Migration adding `plaidItems`, `plaidAccountLinks`, and
 `finance_transactions.pending boolean not null default false`. Both new tables `userId`-scoped
 with cascade delete; the sync cursor lives on `plaidItems`. Add `api:plaid` to `FinanceFeed`,
-`FINANCE_FEEDS`, `FEED_LABELS`. Register the new query module in
-`src/lib/db/crossUserReads.integration.test.ts`.
+`FINANCE_FEEDS`, `FEED_LABELS`.
+
+Note: `BankCsvFeed` in `formats.ts` was `Exclude<FinanceFeed, "csv:coinbase">`, so a new feed
+member silently joined the set of formats expected to have a header row. Now excludes
+`api:plaid` explicitly — the typecheck caught it, which is the point of that `Record`.
+
+Registering the query module in `src/lib/db/crossUserReads.integration.test.ts` moved to
+**Task 7**: that sweep imports real query functions, which do not exist until then.
 
 ## Task 4: `src/lib/plaid/client.ts` — outbound calls
 
 Plain `fetch` against the Plaid API with `client_id`/`secret` from a fail-closed env
 accessor. `/link/token/create`, `/item/public_token/exchange`, `/accounts/get`,
-`/accounts/balance/get`, `/transactions/sync`. Error classes per D12, mapping `error_code`
+`/accounts/balance/get`, `/transactions/sync`, and `/transactions/refresh` (Chase only, per
+D5c). Error classes per D12, mapping `error_code`
 (especially `ITEM_LOGIN_REQUIRED`) to a remediation. Thin and effectively untested by design,
 mirroring `src/lib/google/client.ts`. No Plaid SDK — the surface used here is five endpoints.
 
@@ -306,7 +326,8 @@ inserted.
 
 `userId`-first, ownership proved before every write, in the shape of `requireTransaction`
 (`finances/mutations.ts:29`). Store Item, link/unlink accounts, delete Item.
-`*.integration.test.ts` including the full cross-user battery.
+`*.integration.test.ts` including the full cross-user battery, **and** register the new query
+functions in `src/lib/db/crossUserReads.integration.test.ts` (moved here from Task 3).
 
 ## Task 8: Balance seam
 
