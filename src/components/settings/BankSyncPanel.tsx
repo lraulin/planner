@@ -273,6 +273,21 @@ export function BankSyncPanel({ connections, linked }: Props) {
                     No accounts matched yet — nothing will sync until one is.
                   </p>
                 )}
+                {/*
+                  Shown for as long as it is true, not once when it happens. The refresh that
+                  carries an unmatched account's transactions mentions it and the next one has
+                  moved past them, so a one-off notice is missable — and the account then sits
+                  unsynced with no sign at all.
+                */}
+                {connection.unmatchedAccountCount > 0 && (
+                  <p className="mt-1 text-priority-a">
+                    {connection.unmatchedAccountCount} account
+                    {connection.unmatchedAccountCount === 1 ? " is" : "s are"} not
+                    matched to anything, so{" "}
+                    {connection.unmatchedAccountCount === 1 ? "its" : "their"}{" "}
+                    transactions are being skipped.
+                  </p>
+                )}
 
                 <div className="mt-2 flex flex-wrap gap-2">
                   <button

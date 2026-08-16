@@ -309,6 +309,13 @@
       "when": 1786892145797,
       "tag": "0043_good_monster_badoon",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1786896885080,
+      "tag": "0044_amusing_rocket_racer",
+      "breakpoints": true
     }
   ]
 }

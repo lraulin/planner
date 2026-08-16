@@ -2383,6 +2383,18 @@ export const bankConnections = pgTable(
     syncedThrough: date("synced_through", { mode: "string" }),
     lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
     /**
+     * Accounts on this connection carrying data that nothing is matched to, as of the last
+     * sync.
+     *
+     * Stored rather than computed because computing it needs a network call, and a page
+     * render must not make one. Stored rather than merely reported once because the report
+     * is transient: the sync that carries an unmatched account's transactions mentions it,
+     * and the next sync has moved past them and says nothing. An account can then sit
+     * unsynced indefinitely with no sign — the same silent gap the reporting exists to
+     * prevent.
+     */
+    unmatchedAccountCount: integer("unmatched_account_count").notNull().default(0),
+    /**
      * Set when SimpleFIN answers 403 (access revoked) and cleared on a successful sync.
      * A lapsed subscription answers 402 instead and is deliberately not this flag — paying
      * is a different remedy from reconnecting.

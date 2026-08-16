@@ -59,6 +59,21 @@ export async function saveConnection(
   return row.id;
 }
 
+/** Give a connection a display label. */
+export async function renameConnection(
+  userId: string,
+  connectionId: string,
+  label: string,
+): Promise<void> {
+  await requireConnection(userId, connectionId);
+  await db
+    .update(bankConnections)
+    .set({ label, updatedAt: new Date() })
+    .where(
+      and(eq(bankConnections.id, connectionId), eq(bankConnections.userId, userId)),
+    );
+}
+
 /** Replace the access URL on an existing connection, e.g. after re-claiming a fresh token. */
 export async function replaceAccessUrl(
   userId: string,
@@ -216,6 +231,7 @@ export async function applySync(
     updates: readonly BankUpdate[];
     deletes: readonly string[];
     syncedThrough: string;
+    unmatchedAccountCount: number;
   },
 ): Promise<ApplySyncResult> {
   await requireConnection(userId, input.connectionId);
@@ -292,6 +308,9 @@ export async function applySync(
       .set({
         syncedThrough: input.syncedThrough,
         lastSyncedAt: new Date(),
+        // Recorded every sync so the count reflects the latest truth rather than whatever
+        // the first one happened to see.
+        unmatchedAccountCount: input.unmatchedAccountCount,
         updatedAt: new Date(),
       })
       .where(

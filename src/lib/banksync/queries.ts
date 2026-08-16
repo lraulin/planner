@@ -27,6 +27,8 @@ export type BankConnectionRow = {
   lastSyncedAt: Date | null;
   reauthRequiredAt: Date | null;
   linkedAccountCount: number;
+  /** Accounts on this connection that nothing is matched to, as of the last sync. */
+  unmatchedAccountCount: number;
 };
 
 export async function listConnections(userId: string): Promise<BankConnectionRow[]> {
@@ -37,6 +39,7 @@ export async function listConnections(userId: string): Promise<BankConnectionRow
       syncedThrough: bankConnections.syncedThrough,
       lastSyncedAt: bankConnections.lastSyncedAt,
       reauthRequiredAt: bankConnections.reauthRequiredAt,
+      unmatchedAccountCount: bankConnections.unmatchedAccountCount,
     })
     .from(bankConnections)
     .where(eq(bankConnections.userId, userId));

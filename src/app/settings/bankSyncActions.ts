@@ -6,6 +6,7 @@ import { institutionOf, linkCandidates } from "@/lib/banksync/mapping";
 import {
   deleteConnection,
   linkAccount,
+  renameConnection,
   replaceAccessUrl,
   saveConnection,
   unlinkAccount,
@@ -93,12 +94,22 @@ async function describeConnection(
  */
 export async function connectAction(
   setupToken: string,
-  label?: string,
 ): Promise<DataActionResult<ConnectResult>> {
   return runWithData(async (userId) => {
     const accessUrl = await claimSetupToken(setupToken);
-    const connectionId = await saveConnection(userId, { accessUrl, label });
-    return describeConnection(userId, connectionId, accessUrl);
+    const connectionId = await saveConnection(userId, { accessUrl });
+    const described = await describeConnection(userId, connectionId, accessUrl);
+
+    // Name the connection after the institutions it actually reaches. One SimpleFIN
+    // connection can cover several banks, so "Chase, Capital One" says more than the
+    // provider's name ever would — and the fallback label is the same for every row.
+    const institutions = [
+      ...new Set(described.accounts.map((a) => a.institution).filter(Boolean)),
+    ];
+    if (institutions.length > 0) {
+      await renameConnection(userId, connectionId, institutions.join(", "));
+    }
+    return described;
   });
 }
 

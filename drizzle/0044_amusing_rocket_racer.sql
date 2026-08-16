@@ -1,0 +1,1 @@
+ALTER TABLE "bank_connections" ADD COLUMN "unmatched_account_count" integer DEFAULT 0 NOT NULL;

@@ -13,6 +13,7 @@ function row(
     accountName: extras.accountName ?? "Checking",
     transactionDate: date,
     postedDate: null,
+    pending: false,
     description: extras.description ?? id,
     amountCents: extras.amountCents ?? -100,
     sourceCategory: "",

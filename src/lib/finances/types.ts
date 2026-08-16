@@ -193,6 +193,11 @@ export type TransactionListRow = {
   accountName: string;
   transactionDate: string;
   postedDate: string | null;
+  /**
+   * The bank has authorised this but not settled it, so the amount can still change and the
+   * row can vanish. Only a live feed sets it; every file export is posted-only.
+   */
+  pending: boolean;
   description: string;
   amountCents: number;
   sourceCategory: string;

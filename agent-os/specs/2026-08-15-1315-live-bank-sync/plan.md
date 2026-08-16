@@ -419,19 +419,23 @@ nothing. A settings-page client component loading
 initialised from a server-minted `link_token`, POSTing the `public_token` to a server action
 that exchanges it. Re-auth path mints a link token in update mode for the existing Item.
 
-## Task 10: Register UI
+## Task 10: Register UI — **done 2026-08-16**
 
-Refresh button with `SyncStatus` states, last-synced timestamp, pending rows visibly
-distinct in the register, reconnect prompt on `ITEM_LOGIN_REQUIRED`. Phone-first: this is
-validated on the deployed iPhone.
+Pending rows carry a **Pending** badge in the **Posted** column — that cell is empty
+precisely because the row has not posted, so the caveat belongs there rather than beside the
+date, where it collided with the account name. The amount renders unweighted, because a
+pending figure is provisional and rendering it like a settled one invites it to be totalled
+as final. The column filters and sorts as "Pending", so the register can be narrowed to them
+without a column of its own, and it is visible on a phone where the exact posting day is not.
 
-**Plus the Task 9 finding (change 15):** an unmatched Plaid account must be visible whenever
-it is unmatched, not only on the refresh that happened to carry its transactions. Persist the
-count at sync time and show it on the connection card — a computed check would need a network
-call on every page render.
+The unmatched-account count is **persisted on the connection and shown for as long as it is
+true** (change 15). Computing it would need a network call on every page render; reporting it
+once is worse, because the refresh that carries an unmatched account's transactions mentions
+it and the next has moved past them — leaving an account unsynced with no sign at all.
 
-Also worth a look while here: the first click on a settings button after a cold page load can
-be swallowed. Seen repeatedly during Task 9 verification; may be pre-hydration, may be real.
+A connection is labelled from the institutions it actually reaches ("Chase Bank, Capital
+One"), since one SimpleFIN connection covers several banks and the provider's own name is the
+same on every row.
 
 ## Task 11: Verify, freeze spec, update roadmap
 

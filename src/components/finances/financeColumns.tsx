@@ -167,18 +167,34 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, TransactionListRow>[] =
     filterValue: (row) => formatUsd(row.node.amountCents),
     sortValue: (row) => row.node.amountCents,
     compact: "meta",
-    render: (row) => <Amount cents={row.node.amountCents} strong />,
+    // Not `strong` while pending: the figure is provisional, and rendering it with the same
+    // weight as a settled amount invites it to be added up as though it were final.
+    render: (row) => <Amount cents={row.node.amountCents} strong={!row.node.pending} />,
   },
   {
     id: "posted",
     label: "Posted",
     width: "7rem",
     filterKind: "date",
-    filterValue: (row) => row.node.postedDate,
-    sortValue: (row) => row.node.postedDate,
-    compact: "hidden",
+    // Pending rows filter and sort as "Pending" rather than as an empty cell, so the
+    // register can be narrowed to them without a column of its own.
+    filterValue: (row) => (row.node.pending ? "Pending" : row.node.postedDate),
+    sortValue: (row) => (row.node.pending ? "\uffff" : row.node.postedDate),
+    // Visible on a phone, unlike the posted date itself: on a small screen "has this landed
+    // yet" is the question, and the exact posting day is not.
+    compact: "meta",
     render: (row) =>
-      row.node.postedDate ? (
+      row.node.pending ? (
+        // This column is empty precisely *because* the row has not posted, so the caveat
+        // belongs here rather than beside the date: the bank has authorised the charge but
+        // not settled it, and the amount can still change or the row vanish.
+        <span
+          title="Authorised but not settled — the amount can still change."
+          className="rounded border border-rule px-1 py-px text-[0.625rem] uppercase tracking-wide text-ink-faint"
+        >
+          Pending
+        </span>
+      ) : row.node.postedDate ? (
         <DateText
           dateKey={row.node.postedDate}
           className="tabular text-[0.8125rem] text-ink-muted"

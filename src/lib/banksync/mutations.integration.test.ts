@@ -162,6 +162,37 @@ describeDb("connections and links", () => {
     expect(await listLinks(userId)).toHaveLength(1);
   });
 
+  it("keeps reporting unmatched accounts for as long as they are unmatched", async () => {
+    const userId = await makeUser();
+    const connectionId = await saveConnection(userId, {
+      accessUrl: "https://a:b@x.test",
+    });
+    const accountId = await makeAccount(userId);
+    await linkAccount(userId, { connectionId, externalAccountId: "p1", accountId });
+
+    await applySync(userId, {
+      connectionId,
+      inserts: [],
+      updates: [],
+      deletes: [],
+      syncedThrough: "2026-08-16",
+      unmatchedAccountCount: 3,
+    });
+    expect((await listConnections(userId))[0].unmatchedAccountCount).toBe(3);
+
+    // The next sync has moved past those transactions and reports nothing about them, so a
+    // count that only ever went up would be as misleading as one that vanished.
+    await applySync(userId, {
+      connectionId,
+      inserts: [],
+      updates: [],
+      deletes: [],
+      syncedThrough: "2026-08-17",
+      unmatchedAccountCount: 0,
+    });
+    expect((await listConnections(userId))[0].unmatchedAccountCount).toBe(0);
+  });
+
   it("deleting a connection removes its links but keeps imported transactions", async () => {
     const userId = await makeUser();
     const connectionId = await saveConnection(userId, {
@@ -175,6 +206,7 @@ describeDb("connections and links", () => {
       updates: [],
       deletes: [],
       syncedThrough: "2026-08-16",
+      unmatchedAccountCount: 0,
     });
 
     await deleteConnection(userId, connectionId);
@@ -204,6 +236,7 @@ describeDb("applySync", () => {
       updates: [],
       deletes: [],
       syncedThrough: "2026-08-16",
+      unmatchedAccountCount: 0,
     });
 
     expect(result).toEqual({ inserted: 1, updated: 0, deleted: 0 });
@@ -225,6 +258,7 @@ describeDb("applySync", () => {
       updates: [],
       deletes: [],
       syncedThrough: "2026-08-16",
+      unmatchedAccountCount: 0,
     });
     const second = await applySync(userId, {
       connectionId,
@@ -232,6 +266,7 @@ describeDb("applySync", () => {
       updates: [],
       deletes: [],
       syncedThrough: "2026-08-17",
+      unmatchedAccountCount: 0,
     });
     expect(second.inserted).toBe(0);
   });
@@ -249,6 +284,7 @@ describeDb("applySync", () => {
       updates: [],
       deletes: [],
       syncedThrough: "2026-08-16",
+      unmatchedAccountCount: 0,
     });
     await db
       .update(financeTransactions)
@@ -275,6 +311,7 @@ describeDb("applySync", () => {
       ],
       deletes: [],
       syncedThrough: "2026-08-16",
+      unmatchedAccountCount: 0,
     });
 
     expect(result.updated).toBe(1);
@@ -325,6 +362,7 @@ describeDb("applySync", () => {
       updates: [],
       deletes: [],
       syncedThrough: "2026-08-16",
+      unmatchedAccountCount: 0,
     });
 
     const result = await applySync(userId, {
@@ -333,6 +371,7 @@ describeDb("applySync", () => {
       updates: [],
       deletes: ["shared-id"],
       syncedThrough: "2026-08-16",
+      unmatchedAccountCount: 0,
     });
 
     expect(result.deleted).toBe(1);
@@ -366,6 +405,7 @@ describeDb("queries for the sync window", () => {
       updates: [],
       deletes: [],
       syncedThrough: "2026-08-16",
+      unmatchedAccountCount: 0,
     });
 
     expect([...(await knownExternalIds(userId, [accountId]))]).toEqual(["sfin-1"]);
@@ -423,6 +463,7 @@ describeDb("balance precedence in the register", () => {
       updates: [],
       deletes: [],
       syncedThrough: "2026-08-16",
+      unmatchedAccountCount: 0,
     });
 
     const before = await listAccounts(userId);
@@ -490,6 +531,7 @@ describeDb("cross-user isolation", () => {
       updates: [],
       deletes: [],
       syncedThrough: "2026-08-16",
+      unmatchedAccountCount: 0,
     });
 
     // Read
@@ -524,6 +566,7 @@ describeDb("cross-user isolation", () => {
         updates: [],
         deletes: ["t1"],
         syncedThrough: "2026-08-16",
+        unmatchedAccountCount: 0,
       }),
     ).rejects.toThrow(/not found/i);
 

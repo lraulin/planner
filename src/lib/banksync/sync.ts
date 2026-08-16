@@ -138,6 +138,7 @@ async function syncOne(
       updates: plan.updates,
       deletes: plan.deletes,
       syncedThrough: today(),
+      unmatchedAccountCount: plan.unlinkedAccountIds.length,
     });
 
     // Balances come from the same response — no second call, and nothing metered.
