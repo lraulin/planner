@@ -11,6 +11,7 @@ import {
   deleteItemAction,
   exchangeAction,
   linkAccountAction,
+  loadAccountsAction,
   openLinkAction,
   reconnectLinkAction,
   syncAction,
@@ -155,6 +156,20 @@ export function BankSyncPanel({ configured, items, linked }: Props) {
         return;
       }
       await openLink(result.data);
+    });
+  };
+
+  /** Open the matching screen for a connection we already have. No Link involved. */
+  const manage = (itemRowId: string) => {
+    setError(null);
+    setNotice(null);
+    startTransition(async () => {
+      const result = await loadAccountsAction(itemRowId);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setBinding(result.data);
     });
   };
 
@@ -321,14 +336,33 @@ export function BankSyncPanel({ configured, items, linked }: Props) {
                 )}
 
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => reconnect(item.id)}
-                    disabled={pending}
-                    className="min-h-tap rounded border border-rule px-2.5 py-1 transition-colors hover:border-rule-strong disabled:opacity-40 md:min-h-0"
-                  >
-                    {item.reauthRequiredAt ? "Reconnect" : "Manage accounts"}
-                  </button>
+                  {/*
+                    Reconnect goes through Link because the bank genuinely needs the user
+                    again. Matching does not — it is a local decision about which register
+                    account a feed lands in, and routing it through Link would imply
+                    re-authentication is required to change one's mind.
+                  */}
+                  {item.reauthRequiredAt ? (
+                    <button
+                      type="button"
+                      onClick={() => reconnect(item.id)}
+                      disabled={pending}
+                      className="min-h-tap rounded border border-rule px-2.5 py-1 transition-colors hover:border-rule-strong disabled:opacity-40 md:min-h-0"
+                    >
+                      Reconnect
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => manage(item.id)}
+                      disabled={pending}
+                      className="min-h-tap rounded border border-rule px-2.5 py-1 transition-colors hover:border-rule-strong disabled:opacity-40 md:min-h-0"
+                    >
+                      {item.linkedAccountCount === 0
+                        ? "Match accounts"
+                        : "Manage accounts"}
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setRemoving(item)}

@@ -7,7 +7,7 @@ import {
   getAccounts,
   plaidConfigured,
 } from "@/lib/plaid/client";
-import { accountKindOf, linkCandidates } from "@/lib/plaid/mapping";
+import { linkCandidates } from "@/lib/plaid/mapping";
 import {
   deleteItem,
   linkAccount,
@@ -130,7 +130,47 @@ export async function exchangeAction(
         subtype: account.subtype ?? "",
         candidateIds: linkCandidates(account, registerAccounts),
         linkedAccountId: linkedByPlaidAccount.get(account.account_id) ?? null,
-        kind: accountKindOf(account),
+      })),
+    };
+  });
+}
+
+/**
+ * The accounts on a stored connection, with their candidates — without touching Link.
+ *
+ * Binding is a purely local decision, so re-opening Link to reach the matching screen
+ * would be both slow and misleading: it implies re-authenticating is required to change
+ * which register account a feed lands in, which it is not. This is what "Manage accounts"
+ * calls; Link is reserved for the case where the bank actually needs the user again.
+ */
+export async function loadAccountsAction(
+  itemRowId: string,
+): Promise<QueryResult<ExchangeResult>> {
+  return runQuery(async (userId) => {
+    const items = await loadItemsForSync(userId);
+    const item = items.find((candidate) => candidate.id === itemRowId);
+    if (!item) throw new Error("Bank connection not found.");
+
+    const [plaidAccounts, registerAccounts, existingLinks] = await Promise.all([
+      getAccounts(item.accessToken),
+      linkableAccounts(userId),
+      listLinks(userId, itemRowId),
+    ]);
+    const linkedByPlaidAccount = new Map(
+      existingLinks.map((link) => [link.plaidAccountId, link.accountId]),
+    );
+
+    return {
+      itemRowId,
+      registerAccounts,
+      accounts: plaidAccounts.map((account) => ({
+        plaidAccountId: account.account_id,
+        name: account.name,
+        mask: account.mask ?? "",
+        type: account.type,
+        subtype: account.subtype ?? "",
+        candidateIds: linkCandidates(account, registerAccounts),
+        linkedAccountId: linkedByPlaidAccount.get(account.account_id) ?? null,
       })),
     };
   });

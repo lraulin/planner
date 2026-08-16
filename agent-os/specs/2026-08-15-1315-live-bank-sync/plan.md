@@ -268,6 +268,8 @@ as a plain `Error` with no `code`, the way `GoogleNotLinkedError` is.
 | 11  | D5c added: Chase supports `transactions_refresh`, Capital One does not. Task 4 adds `/transactions/refresh` to the client surface.                                                                                                                                       | Found via `/institutions/get_by_id`, which costs no Item. The refresh button cannot force new transactions on the card — only a new balance. The UI has to say so rather than appear broken.                                                                                                                                                                             |
 | 12  | **D7b added: the Capital One card balance is not real-time.** `min_last_updated_datetime` is now sent on every `/accounts/balance/get`, and `balanceAsOf` stores Plaid's reported timestamp rather than the request time. Acceptance criteria split Chase from the card. | Found while implementing Task 9. Capital One serves no live balance for non-depository accounts, and omitting the field fails the **whole** request with `INVALID_FIELD`. With D5a and D5c this makes the card a daily feed in every respect, which materially narrows what the feature delivers for it and had to be stated rather than discovered on the deployed app. |
 | 13  | **D10 corrected: the CSP delta is two directives, not one.** `connect-src` gains the two Plaid API hosts alongside `frame-src`.                                                                                                                                          | Link calls Plaid from the browser, so `frame-src` alone leaves the picker unable to talk to anything. This widens `connect-src` past `'self'` for the first time — the only change in the spec that enlarges the attack surface rather than adding capability, so it is named as such rather than folded in silently.                                                    |
+| 14  | **Matching accounts no longer goes through Link.** A new `loadAccountsAction` reads the connection's accounts server-side, and "Manage accounts" calls it; Link is now reserved for the reconnect case.                                                                  | Found on first use. Binding is a purely local decision about which register account a feed lands in, and routing it through Link implied re-authenticating was required to change one's mind. It also stranded the matching screen: it existed only in the moment after enrollment and was unreachable after a reload.                                                   |
+| 15  | **The unmatched-account warning is transient**; surfacing it persistently moved into Task 10.                                                                                                                                                                            | Measured in the Sandbox run: the first sync reported "4 unmatched account(s) skipped", the second reported nothing, because the cursor had moved past those transactions. D5's promise that unlinked accounts are reported rather than dropped silently only holds for one refresh, which is the same silent-gap failure it was written to prevent.                      |
 
 ---
 
@@ -366,7 +368,7 @@ Extend `listAccounts` (`queries.ts:47`) so a fresh Plaid snapshot outranks state
 as `balanceCents`, with `balanceMismatchCents` becoming register-vs-bank drift (D7). Surface
 the snapshot age — a stale balance presented as live is worse than no balance.
 
-## Task 9: CSP + Plaid Link UI
+## Task 9: CSP + Plaid Link UI — **done 2026-08-16**
 
 `frame-src https://cdn.plaid.com` **and** the two Plaid API hosts on `connect-src` in
 `src/lib/security/csp.ts` (D10), each with a doc comment explaining the concession, plus unit
@@ -379,8 +381,16 @@ that exchanges it. Re-auth path mints a link token in update mode for the existi
 ## Task 10: Register UI
 
 Refresh button with `SyncStatus` states, last-synced timestamp, pending rows visibly
-distinct, account-link confirmation screen. Reconnect prompt on `ITEM_LOGIN_REQUIRED`.
-Phone-first: this is validated on the deployed iPhone.
+distinct in the register, reconnect prompt on `ITEM_LOGIN_REQUIRED`. Phone-first: this is
+validated on the deployed iPhone.
+
+**Plus the Task 9 finding (change 15):** an unmatched Plaid account must be visible whenever
+it is unmatched, not only on the refresh that happened to carry its transactions. Persist the
+count at sync time and show it on the connection card — a computed check would need a network
+call on every page render.
+
+Also worth a look while here: the first click on a settings button after a cold page load can
+be swallowed. Seen repeatedly during Task 9 verification; may be pre-hydration, may be real.
 
 ## Task 11: Verify, freeze spec, update roadmap
 
