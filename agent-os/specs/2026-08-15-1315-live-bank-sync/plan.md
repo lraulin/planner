@@ -304,6 +304,16 @@ while Plaid is still generating data — so the poll must loop on row count, not
 
 ### 2b. Production — outstanding
 
+**Dashboard prerequisite, discovered on first Production attempt.** `/link/token/create`
+fails with `INVALID_LINK_CUSTOMIZATION` until at least one **Data Transparency Messaging**
+use case is selected and _published_ at
+<https://dashboard.plaid.com/link/data-transparency-v5>. It is Plaid's 1033-compliance
+consent screen, mandatory for US/Canada Production since 2024-10-31, enforced only in
+Production — which is why Sandbox never surfaced it. There is no code-side alternative;
+`link_customization_name` cannot supply it. Selecting without clicking **Publish changes**
+leaves the identical error, so that is the step to check first. No Item is consumed by the
+failure: it happens before enrollment.
+
 One Production Item against Chase, then Capital One. Confirm the real institutions behave as
 Sandbox did, and specifically that a Chase pending charge posts with a populated
 `pending_transaction_id`.
