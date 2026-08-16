@@ -296,7 +296,7 @@ function AccountBalanceRow({
         }`}
         title={
           showPosted
-            ? `${formatUsd(view.workingCents)} includes pending. ${formatUsd(view.postedCents)} is what the bank shows as posted.`
+            ? `${formatUsd(view.postedCents)} posted + ${formatUsd(view.pendingCents)} pending = ${formatUsd(view.workingCents)}`
             : undefined
         }
       >
