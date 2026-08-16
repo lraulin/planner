@@ -1,90 +1,43 @@
 "use client";
 
-import Script from "next/script";
-import { useCallback, useId, useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { formatUsd } from "@/lib/finances/money";
-import type { PlaidItemRow } from "@/lib/plaid/queries";
-import type { SyncResult } from "@/lib/plaid/sync";
+import type { BankConnectionRow } from "@/lib/banksync/queries";
+import type { SyncResult } from "@/lib/banksync/sync";
 import {
-  deleteItemAction,
-  exchangeAction,
+  connectAction,
+  deleteConnectionAction,
   linkAccountAction,
   loadAccountsAction,
-  openLinkAction,
-  reconnectLinkAction,
+  reconnectAction,
   syncAction,
-  type ExchangeResult,
-} from "@/app/settings/plaidActions";
+  type ConnectResult,
+} from "@/app/settings/bankSyncActions";
 
 /**
  * Connect a bank, bind its accounts to the register, and refresh.
  *
- * Progressive disclosure per `components/ux-principles`: before connecting this is one
- * button and a sentence; the account-binding step only exists once there is a connection
- * with accounts to bind.
+ * Notably there is **no third-party widget**: the provider hands the user a setup token on
+ * its own site and this app exchanges it server-side. That is why the CSP needs no
+ * concession for this feature, and why nothing here loads a script.
  */
 
 type LinkedAccountSummary = {
   linkId: string;
-  itemRowId: string;
   accountName: string;
+  institution: string;
   balanceCents: number | null;
   balanceAsOf: string | null;
-  /** True where the institution cannot serve a live balance (Capital One cards). */
-  balanceIsDaily: boolean;
 };
 
 type Props = {
-  configured: boolean;
-  items: PlaidItemRow[];
+  connections: BankConnectionRow[];
   linked: LinkedAccountSummary[];
 };
 
-/** Plaid's own global, present once `link-initialize.js` has loaded. */
-type PlaidHandler = { open: () => void; exit: () => void; destroy: () => void };
-declare global {
-  interface Window {
-    Plaid?: {
-      create: (config: {
-        token: string;
-        onSuccess: (
-          publicToken: string,
-          metadata: { institution?: { institution_id?: string; name?: string } | null },
-        ) => void;
-        onExit: (error: { display_message?: string | null } | null) => void;
-      }) => PlaidHandler;
-    };
-  }
-}
-
-const LINK_SRC = "https://cdn.plaid.com/link/v2/stable/link-initialize.js";
-
-/**
- * Resolve once Plaid's global exists.
- *
- * Deliberately polls for the global rather than trusting `next/script`'s `onReady`. That
- * callback fires on the load that inserted the tag, but a client-side navigation back to
- * this panel re-renders it with the script already present and the callback never fires
- * again — leaving the button disabled at "Loading…" forever. The global is the thing we
- * actually need, so it is the thing to wait for.
- */
-function waitForPlaid(timeoutMs = 8000): Promise<NonNullable<Window["Plaid"]> | null> {
-  if (window.Plaid) return Promise.resolve(window.Plaid);
-  return new Promise((resolve) => {
-    const started = Date.now();
-    const tick = window.setInterval(() => {
-      if (window.Plaid) {
-        window.clearInterval(tick);
-        resolve(window.Plaid);
-      } else if (Date.now() - started > timeoutMs) {
-        window.clearInterval(tick);
-        resolve(null);
-      }
-    }, 100);
-  });
-}
+const SETUP_URL = "https://beta-bridge.simplefin.org/";
 
 function ageLabel(iso: string | null): string {
   if (!iso) return "never";
@@ -97,74 +50,48 @@ function ageLabel(iso: string | null): string {
   return `${Math.round(hours / 24)}d ago`;
 }
 
-export function BankSyncPanel({ configured, items, linked }: Props) {
+export function BankSyncPanel({ connections, linked }: Props) {
   const headingId = useId();
+  const tokenId = useId();
   const router = useRouter();
+  const [token, setToken] = useState("");
+  const [reconnecting, setReconnecting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [binding, setBinding] = useState<ExchangeResult | null>(null);
-  const [removing, setRemoving] = useState<PlaidItemRow | null>(null);
+  const [binding, setBinding] = useState<ConnectResult | null>(null);
+  const [removing, setRemoving] = useState<BankConnectionRow | null>(null);
   const [pending, startTransition] = useTransition();
 
-  /** Open Link with a token minted server-side, then hand the public token straight back. */
-  const openLink = useCallback(
-    async (token: string) => {
-      const plaid = await waitForPlaid();
-      if (!plaid) {
-        setError("The bank connection widget did not load. Reload and try again.");
-        return;
-      }
-      const handler = plaid.create({
-        token,
-        onSuccess: (publicToken, metadata) => {
-          startTransition(async () => {
-            const result = await exchangeAction(publicToken, {
-              id: metadata.institution?.institution_id,
-              name: metadata.institution?.name ?? undefined,
-            });
-            if (!result.ok) {
-              setError(result.error);
-              return;
-            }
-            // Straight into binding: an Item whose accounts are bound to nothing syncs
-            // nothing, and the moment the user just authorised it is the moment they know
-            // which account is which.
-            if (result.data) setBinding(result.data);
-            router.refresh();
-          });
-        },
-        onExit: (exitError) => {
-          if (exitError?.display_message) setError(exitError.display_message);
-        },
-      });
-      handler.open();
-    },
-    [router],
-  );
-
-  const connect = () => {
+  const submitToken = () => {
     setError(null);
     setNotice(null);
+    const value = token.trim();
+    if (!value) {
+      setError("Paste the setup token first.");
+      return;
+    }
     startTransition(async () => {
-      const result = await openLinkAction();
+      const result = reconnecting
+        ? await reconnectAction(reconnecting, value)
+        : await connectAction(value);
       if (!result.ok) {
         setError(result.error);
         return;
       }
-      if (!result.data) {
-        setError("Plaid is not configured on this server.");
-        return;
-      }
-      await openLink(result.data);
+      // The token is single-use, so clearing it prevents a second submit that could only
+      // ever fail — and fail in a way the provider treats as a compromised token.
+      setToken("");
+      setReconnecting(null);
+      if (result.data) setBinding(result.data);
+      router.refresh();
     });
   };
 
-  /** Open the matching screen for a connection we already have. No Link involved. */
-  const manage = (itemRowId: string) => {
+  const manage = (connectionId: string) => {
     setError(null);
     setNotice(null);
     startTransition(async () => {
-      const result = await loadAccountsAction(itemRowId);
+      const result = await loadAccountsAction(connectionId);
       if (!result.ok) {
         setError(result.error);
         return;
@@ -173,29 +100,18 @@ export function BankSyncPanel({ configured, items, linked }: Props) {
     });
   };
 
-  const reconnect = (itemRowId: string) => {
-    setError(null);
-    startTransition(async () => {
-      const result = await reconnectLinkAction(itemRowId);
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-      if (result.data) await openLink(result.data);
-    });
-  };
-
-  const bind = (plaidAccountId: string, accountId: string) => {
+  const bind = (externalAccountId: string, accountId: string) => {
     if (!binding) return;
-    const account = binding.accounts.find((a) => a.plaidAccountId === plaidAccountId);
+    const account = binding.accounts.find(
+      (a) => a.externalAccountId === externalAccountId,
+    );
     setError(null);
     startTransition(async () => {
       const result = await linkAccountAction({
-        itemRowId: binding.itemRowId,
-        plaidAccountId,
+        connectionId: binding.connectionId,
+        externalAccountId,
         accountId,
-        plaidType: account?.type,
-        plaidSubtype: account?.subtype,
+        institution: account?.institution,
       });
       if (!result.ok) {
         setError(result.error);
@@ -204,7 +120,7 @@ export function BankSyncPanel({ configured, items, linked }: Props) {
       setBinding({
         ...binding,
         accounts: binding.accounts.map((a) =>
-          a.plaidAccountId === plaidAccountId
+          a.externalAccountId === externalAccountId
             ? { ...a, linkedAccountId: accountId }
             : a,
         ),
@@ -227,37 +143,8 @@ export function BankSyncPanel({ configured, items, linked }: Props) {
     });
   };
 
-  if (!configured) {
-    return (
-      <section aria-labelledby={headingId} className="mt-4 rounded border border-rule">
-        <div className="border-b border-rule bg-surface-raised px-4 py-2.5">
-          <h2
-            id={headingId}
-            className="text-[0.75rem] font-semibold uppercase tracking-wider text-ink-muted"
-          >
-            Bank sync
-          </h2>
-        </div>
-        <p className="px-4 py-2.5 text-[0.8125rem] leading-relaxed text-ink-muted">
-          Not available — this server has no Plaid credentials configured.
-        </p>
-      </section>
-    );
-  }
-
   return (
     <section aria-labelledby={headingId} className="mt-4 rounded border border-rule">
-      {/*
-        Nonced so `strict-dynamic` trusts it; the CSP grants `frame-src` and `connect-src`
-        for Plaid's hosts but deliberately no `script-src` host, because a script loaded by
-        a trusted script inherits trust and a host allowlist would be ignored anyway.
-      */}
-      <Script
-        src={LINK_SRC}
-        strategy="afterInteractive"
-        onError={() => setError("Could not load the bank connection widget.")}
-      />
-
       <div className="flex items-center justify-between gap-3 border-b border-rule bg-surface-raised px-4 py-2.5">
         <h2
           id={headingId}
@@ -265,7 +152,7 @@ export function BankSyncPanel({ configured, items, linked }: Props) {
         >
           Bank sync
         </h2>
-        {items.length > 0 && (
+        {connections.length > 0 && (
           <button
             type="button"
             onClick={refresh}
@@ -279,8 +166,10 @@ export function BankSyncPanel({ configured, items, linked }: Props) {
 
       <div className="px-4 py-3">
         <p className="text-[0.8125rem] leading-relaxed text-ink-muted">
-          Pull balances and transactions straight from the bank, so the register stays
-          current without downloading a file.
+          Pull balances and transactions from your banks through SimpleFIN, so the
+          register stays current without downloading a file. Data refreshes about once a
+          day — the button re-reads what SimpleFIN currently holds, it does not make a
+          bank hand over something newer.
         </p>
 
         {error && (
@@ -297,75 +186,115 @@ export function BankSyncPanel({ configured, items, linked }: Props) {
           </p>
         )}
 
-        <div className="mt-3 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={connect}
-            disabled={pending}
-            className="min-h-tap rounded border border-rule bg-surface-raised px-3 py-1.5 text-[0.8125rem] font-medium text-ink transition-colors hover:border-rule-strong disabled:opacity-40 md:min-h-0"
+        <div className="mt-3">
+          <label
+            htmlFor={tokenId}
+            className="block text-[0.8125rem] font-medium text-ink"
           >
-            {pending ? "Opening…" : "Connect a bank"}
-          </button>
+            {reconnecting ? "New setup token" : "Setup token"}
+          </label>
+          <p className="mt-0.5 text-[0.8125rem] text-ink-muted">
+            Connect your banks at{" "}
+            <a
+              href={SETUP_URL}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="underline"
+            >
+              SimpleFIN
+            </a>
+            , then paste the setup token it gives you. It can only be used once.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <input
+              id={tokenId}
+              type="text"
+              value={token}
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(event) => setToken(event.target.value)}
+              placeholder="aHR0cHM6Ly8…"
+              className="min-h-tap flex-1 rounded border border-rule bg-surface px-2 py-1 font-mono text-base md:min-h-0 md:text-[0.8125rem]"
+            />
+            <button
+              type="button"
+              onClick={submitToken}
+              disabled={pending}
+              className="min-h-tap rounded border border-rule bg-surface-raised px-3 py-1.5 text-[0.8125rem] font-medium text-ink transition-colors hover:border-rule-strong disabled:opacity-40 md:min-h-0"
+            >
+              {pending ? "Connecting…" : reconnecting ? "Reconnect" : "Connect"}
+            </button>
+            {reconnecting && (
+              <button
+                type="button"
+                onClick={() => {
+                  setReconnecting(null);
+                  setToken("");
+                }}
+                className="min-h-tap rounded border border-rule px-2.5 py-1 text-[0.8125rem] md:min-h-0"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
         </div>
 
-        {items.length > 0 && (
+        {connections.length > 0 && (
           <ul className="mt-4 space-y-2">
-            {items.map((item) => (
+            {connections.map((connection) => (
               <li
-                key={item.id}
+                key={connection.id}
                 className="border border-rule px-3 py-2 text-[0.8125rem]"
               >
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="font-medium">{item.institutionName || "Bank"}</span>
+                  <span className="font-medium">{connection.label || "Bank sync"}</span>
                   <span className="text-ink-muted">
-                    {item.linkedAccountCount} account
-                    {item.linkedAccountCount === 1 ? "" : "s"} · synced{" "}
-                    {ageLabel(item.lastSyncedAt ? String(item.lastSyncedAt) : null)}
+                    {connection.linkedAccountCount} account
+                    {connection.linkedAccountCount === 1 ? "" : "s"} · synced{" "}
+                    {ageLabel(
+                      connection.lastSyncedAt ? String(connection.lastSyncedAt) : null,
+                    )}
                   </span>
                 </div>
 
-                {item.reauthRequiredAt && (
+                {connection.reauthRequiredAt && (
                   <p className="mt-1 text-priority-a">
-                    This connection needs reconnecting before it can sync again.
+                    This connection was revoked. Generate a new setup token and
+                    reconnect.
                   </p>
                 )}
-                {item.linkedAccountCount === 0 && (
+                {connection.linkedAccountCount === 0 && (
                   <p className="mt-1 text-ink-muted">
-                    No accounts bound yet — nothing will sync until one is.
+                    No accounts matched yet — nothing will sync until one is.
                   </p>
                 )}
 
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {/*
-                    Reconnect goes through Link because the bank genuinely needs the user
-                    again. Matching does not — it is a local decision about which register
-                    account a feed lands in, and routing it through Link would imply
-                    re-authentication is required to change one's mind.
-                  */}
-                  {item.reauthRequiredAt ? (
-                    <button
-                      type="button"
-                      onClick={() => reconnect(item.id)}
-                      disabled={pending}
-                      className="min-h-tap rounded border border-rule px-2.5 py-1 transition-colors hover:border-rule-strong disabled:opacity-40 md:min-h-0"
-                    >
-                      Reconnect
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => manage(item.id)}
-                      disabled={pending}
-                      className="min-h-tap rounded border border-rule px-2.5 py-1 transition-colors hover:border-rule-strong disabled:opacity-40 md:min-h-0"
-                    >
-                      {item.linkedAccountCount === 0
-                        ? "Match accounts"
-                        : "Manage accounts"}
-                    </button>
-                  )}
                   <button
                     type="button"
-                    onClick={() => setRemoving(item)}
+                    onClick={() => manage(connection.id)}
+                    disabled={pending}
+                    className="min-h-tap rounded border border-rule px-2.5 py-1 transition-colors hover:border-rule-strong disabled:opacity-40 md:min-h-0"
+                  >
+                    {connection.linkedAccountCount === 0
+                      ? "Match accounts"
+                      : "Manage accounts"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReconnecting(connection.id);
+                      setToken("");
+                      setError(null);
+                    }}
+                    disabled={pending}
+                    className="min-h-tap rounded border border-rule px-2.5 py-1 transition-colors hover:border-rule-strong disabled:opacity-40 md:min-h-0"
+                  >
+                    Reconnect
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRemoving(connection)}
                     disabled={pending}
                     className="min-h-tap rounded border border-rule px-2.5 py-1 transition-colors hover:border-rule-strong disabled:opacity-40 md:min-h-0"
                   >
@@ -402,14 +331,12 @@ export function BankSyncPanel({ configured, items, linked }: Props) {
                   <td className="py-1 text-right tabular-nums">
                     {formatUsd(row.balanceCents)}
                   </td>
+                  {/*
+                    The provider's own balance date, not when we asked. A figure from
+                    yesterday labelled "just now" is the lie this feature exists to avoid.
+                  */}
                   <td className="py-1 text-right text-ink-muted">
                     {ageLabel(row.balanceAsOf)}
-                    {/*
-                    Capital One serves no live balance for cards, so this figure is up to a
-                    day old however recently the refresh ran. Saying so is the difference
-                    between a stale number and a wrong one.
-                  */}
-                    {row.balanceIsDaily && " · daily"}
                   </td>
                 </tr>
               ))}
@@ -418,7 +345,7 @@ export function BankSyncPanel({ configured, items, linked }: Props) {
         )}
 
         {binding && (
-          <BindAccounts
+          <MatchAccounts
             binding={binding}
             pending={pending}
             onBind={bind}
@@ -431,7 +358,7 @@ export function BankSyncPanel({ configured, items, linked }: Props) {
         <ConfirmDialog
           open
           destructive
-          title={`Remove ${removing.institutionName || "this connection"}?`}
+          title={`Remove ${removing.label || "this connection"}?`}
           message="Transactions already imported stay in the register. The connection stops syncing and its stored credentials are forgotten."
           confirmLabel="Remove"
           onCancel={() => setRemoving(null)}
@@ -439,7 +366,7 @@ export function BankSyncPanel({ configured, items, linked }: Props) {
             const target = removing;
             setRemoving(null);
             startTransition(async () => {
-              const result = await deleteItemAction(target.id);
+              const result = await deleteConnectionAction(target.id);
               if (!result.ok) setError(result.error);
               router.refresh();
             });
@@ -451,20 +378,20 @@ export function BankSyncPanel({ configured, items, linked }: Props) {
 }
 
 /**
- * Bind each Plaid account to the register account it already is.
+ * Bind each provider account to the register account it already is.
  *
- * Candidates are pre-matched on last four but nothing is selected by default: a wrong link
- * merges two real accounts, and is far harder to undo than a second click is to make.
+ * Candidates are pre-matched on trailing digits but nothing is selected by default: a wrong
+ * link merges two real accounts, and is far harder to undo than a second click is to make.
  */
-function BindAccounts({
+function MatchAccounts({
   binding,
   pending,
   onBind,
   onDone,
 }: {
-  binding: ExchangeResult;
+  binding: ConnectResult;
   pending: boolean;
-  onBind: (plaidAccountId: string, accountId: string) => void;
+  onBind: (externalAccountId: string, accountId: string) => void;
   onDone: () => void;
 }) {
   const byId = new Map(binding.registerAccounts.map((a) => [a.id, a]));
@@ -487,14 +414,14 @@ function BindAccounts({
           );
 
           return (
-            <li key={account.plaidAccountId} className="text-[0.8125rem]">
+            <li key={account.externalAccountId} className="text-[0.8125rem]">
               <div className="font-medium">
                 {account.name}
-                {account.mask && ` ••• ${account.mask}`}
-                <span className="ml-2 font-normal text-ink-muted">
-                  {account.type}
-                  {account.subtype && ` / ${account.subtype}`}
-                </span>
+                {account.institution && (
+                  <span className="ml-2 font-normal text-ink-muted">
+                    {account.institution}
+                  </span>
+                )}
               </div>
 
               {account.linkedAccountId ? (
@@ -507,10 +434,11 @@ function BindAccounts({
                   defaultValue=""
                   disabled={pending}
                   onChange={(event) => {
-                    if (event.target.value)
-                      onBind(account.plaidAccountId, event.target.value);
+                    if (event.target.value) {
+                      onBind(account.externalAccountId, event.target.value);
+                    }
                   }}
-                  className="mt-1 min-h-tap w-full border border-rule bg-surface px-2 py-1 text-base md:min-h-0 md:text-[0.8125rem]"
+                  className="mt-1 min-h-tap w-full rounded border border-rule bg-surface px-2 py-1 text-base md:min-h-0 md:text-[0.8125rem]"
                 >
                   <option value="">Don&rsquo;t sync this account</option>
                   {candidates.length > 0 && (
@@ -541,7 +469,7 @@ function BindAccounts({
       <button
         type="button"
         onClick={onDone}
-        className="mt-3 min-h-tap border border-rule px-3 py-1.5 text-[0.8125rem] md:min-h-0"
+        className="mt-3 min-h-tap rounded border border-rule px-3 py-1.5 text-[0.8125rem] md:min-h-0"
       >
         Done
       </button>
@@ -551,34 +479,39 @@ function BindAccounts({
 
 /** One sentence per connection: what changed, and what could not. */
 function describeSync(result: SyncResult): string {
-  if (result.items.length === 0) return "No bank connections to refresh.";
+  if (result.connections.length === 0) return "No bank connections to refresh.";
 
-  return result.items
-    .map((item) => {
-      if (item.state === "not_linked") {
-        return `${item.institution}: no accounts matched yet.`;
+  return result.connections
+    .map((connection) => {
+      if (connection.state === "not_linked") {
+        return `${connection.label}: no accounts matched yet.`;
       }
-      if (item.state === "reauth_required") {
-        return `${item.institution}: needs reconnecting.`;
+      if (connection.state === "reauth_required") {
+        return `${connection.label}: was revoked — reconnect with a new setup token.`;
       }
-      if (item.state === "failed") return `${item.institution}: ${item.message}`;
+      if (connection.state === "subscription_lapsed") {
+        return `${connection.label}: ${connection.message}`;
+      }
+      if (connection.state === "failed") {
+        return `${connection.label}: ${connection.message}`;
+      }
 
-      const { counts } = item;
+      const { counts } = connection;
       const parts = [`${counts.inserted} new`];
       if (counts.updated) parts.push(`${counts.updated} updated`);
-      if (counts.deleted) parts.push(`${counts.deleted} removed`);
+      if (counts.deleted) parts.push(`${counts.deleted} cleared`);
       if (counts.skippedDuplicate) {
         parts.push(`${counts.skippedDuplicate} already imported`);
       }
       if (counts.unlinkedAccounts) {
         parts.push(`${counts.unlinkedAccounts} unmatched account(s) skipped`);
       }
-      // Capital One cannot force a pull, so its transactions arrive on the bank's own
-      // schedule. Without saying so, a refresh that finds nothing looks broken.
-      if (!counts.transactionsForced) {
-        parts.push("transactions follow the bank's daily schedule");
-      }
-      return `${item.institution}: ${parts.join(", ")}.`;
+      const line = `${connection.label}: ${parts.join(", ")}.`;
+      // Upstream problems arrive alongside good data rather than instead of it, so they are
+      // appended rather than replacing the counts.
+      return counts.providerErrors.length > 0
+        ? `${line} ${counts.providerErrors.join(" ")}`
+        : line;
     })
     .join(" ");
 }

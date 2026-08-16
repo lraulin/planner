@@ -5,8 +5,7 @@ import { getCurrentAccount } from "@/lib/auth";
 import { googleConfigured } from "@/lib/auth/server";
 import { isGoogleLinked, listCalendarLinks } from "@/lib/google/queries";
 import { getGoogleContactSync } from "@/lib/google/contacts/queries";
-import { plaidConfigured } from "@/lib/plaid/client";
-import { listItems, listLinks } from "@/lib/plaid/queries";
+import { listConnections, listLinks } from "@/lib/banksync/queries";
 import { listAccounts } from "@/lib/finances/queries";
 
 export const dynamic = "force-dynamic";
@@ -63,12 +62,12 @@ function SettingsPending() {
 
 async function SettingsBody({ initialSection }: { initialSection?: string }) {
   const account = await getCurrentAccount();
-  const [linked, calendars, contactSync, plaidItems, plaidLinks, financeAccounts] =
+  const [linked, calendars, contactSync, bankConnections, bankLinks, financeAccounts] =
     await Promise.all([
       isGoogleLinked(account.id),
       listCalendarLinks(account.id),
       getGoogleContactSync(account.id),
-      listItems(account.id),
+      listConnections(account.id),
       listLinks(account.id),
       listAccounts(account.id),
     ]);
@@ -76,15 +75,14 @@ async function SettingsBody({ initialSection }: { initialSection?: string }) {
   // Dates cross to the client component as ISO strings: a Date survives the Flight
   // serializer, but the panel only ever renders it as an age.
   const accountNameById = new Map(financeAccounts.map((a) => [a.id, a.name]));
-  const bankLinked = plaidLinks.map((link) => ({
+  const bankLinked = bankLinks.map((link) => ({
     linkId: link.id,
-    itemRowId: link.itemId,
     accountName: accountNameById.get(link.accountId) ?? "Unknown account",
+    institution: link.institution,
     balanceCents: link.balanceCents,
+    // The provider's own balance date, carried as an ISO string. The panel renders it as an
+    // age, and it is deliberately not the time the refresh ran.
     balanceAsOf: link.balanceAsOf ? link.balanceAsOf.toISOString() : null,
-    // Capital One serves no live balance for cards, so the age shown for one is the age of
-    // the bank's own figure, not of our request.
-    balanceIsDaily: link.plaidType.toLowerCase() !== "depository",
   }));
 
   return (
@@ -93,8 +91,7 @@ async function SettingsBody({ initialSection }: { initialSection?: string }) {
       accountEmail={account.email}
       viaDevBypass={account.viaDevBypass}
       googleConfigured={googleConfigured}
-      plaidConfigured={plaidConfigured()}
-      bankItems={plaidItems}
+      bankConnections={bankConnections}
       bankLinked={bankLinked}
       googleLinked={linked}
       calendars={calendars}

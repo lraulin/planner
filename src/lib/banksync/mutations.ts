@@ -6,27 +6,29 @@
  * you check, and that is exactly how a cross-user write slips through unnoticed.
  *
  * The one place this module knowingly diverges from `finances/mutations.ts`: it updates and
- * deletes transaction rows, which the CSV importer never does. That is the pending-row
- * contract (spec D5) and it is confined to rows carrying `external_source = 'api:plaid'`,
- * so no statement-imported row can be reached from here.
+ * deletes transaction rows, which the CSV importer never does. That is the pending contract
+ * (spec D5) and it is confined to rows carrying `external_source = 'api:simplefin'`, so no
+ * statement-imported row can be reached from here.
  */
 
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
+  bankAccountLinks,
+  bankConnections,
   financeAccounts,
   financeTransactions,
-  plaidAccountLinks,
-  plaidItems,
 } from "@/db/schema";
 import { centsToNumericString } from "@/lib/finances/money";
-import type { PlaidInsert, PlaidUpdate } from "./syncPlan";
+import type { BankInsert, BankUpdate } from "./syncPlan";
 
-async function requireItem(userId: string, itemRowId: string): Promise<void> {
+async function requireConnection(userId: string, connectionId: string): Promise<void> {
   const [row] = await db
-    .select({ id: plaidItems.id })
-    .from(plaidItems)
-    .where(and(eq(plaidItems.id, itemRowId), eq(plaidItems.userId, userId)))
+    .select({ id: bankConnections.id })
+    .from(bankConnections)
+    .where(
+      and(eq(bankConnections.id, connectionId), eq(bankConnections.userId, userId)),
+    )
     .limit(1);
   if (!row) throw new Error("Bank connection not found.");
 }
@@ -41,123 +43,116 @@ async function requireAccount(userId: string, accountId: string): Promise<void> 
 }
 
 /**
- * Store a freshly exchanged Item, or refresh the token on one we already have.
+ * Store a claimed access URL.
  *
- * Re-linking the same institution through Link's update mode returns the same `item_id`,
- * so the conflict path is the normal re-authentication case, not an error. It clears
- * `reauthRequiredAt` because a new token is exactly what that flag was asking for.
+ * A setup token can only be claimed once, so the claim and this write have to happen in the
+ * same operation — losing the result means generating a new token at the provider.
  */
-export async function saveItem(
+export async function saveConnection(
   userId: string,
-  input: {
-    itemId: string;
-    accessToken: string;
-    institutionId?: string;
-    institutionName?: string;
-  },
+  input: { accessUrl: string; label?: string },
 ): Promise<string> {
   const [row] = await db
-    .insert(plaidItems)
-    .values({
-      userId,
-      itemId: input.itemId,
-      accessToken: input.accessToken,
-      institutionId: input.institutionId ?? "",
-      institutionName: input.institutionName ?? "",
-    })
-    .onConflictDoUpdate({
-      target: [plaidItems.userId, plaidItems.itemId],
-      set: {
-        accessToken: input.accessToken,
-        reauthRequiredAt: null,
-        updatedAt: new Date(),
-      },
-    })
-    .returning({ id: plaidItems.id });
+    .insert(bankConnections)
+    .values({ userId, accessUrl: input.accessUrl, label: input.label ?? "" })
+    .returning({ id: bankConnections.id });
   return row.id;
 }
 
+/** Replace the access URL on an existing connection, e.g. after re-claiming a fresh token. */
+export async function replaceAccessUrl(
+  userId: string,
+  connectionId: string,
+  accessUrl: string,
+): Promise<void> {
+  await requireConnection(userId, connectionId);
+  await db
+    .update(bankConnections)
+    .set({ accessUrl, reauthRequiredAt: null, updatedAt: new Date() })
+    .where(
+      and(eq(bankConnections.id, connectionId), eq(bankConnections.userId, userId)),
+    );
+}
+
 /**
- * Bind a Plaid account to a register account. Idempotent on re-link.
+ * Bind a provider account to a register account. Idempotent on re-link.
  *
- * Both ids are proven to belong to the user first: `itemRowId` because it is the parent, and
- * `accountId` because a link is a write into the register's namespace.
+ * Both ids are proven to belong to the user first: the connection because it is the parent,
+ * and the account because a link is a write into the register's namespace.
  */
 export async function linkAccount(
   userId: string,
   input: {
-    itemRowId: string;
-    plaidAccountId: string;
+    connectionId: string;
+    externalAccountId: string;
     accountId: string;
-    plaidType?: string;
-    plaidSubtype?: string;
+    institution?: string;
   },
 ): Promise<string> {
-  await requireItem(userId, input.itemRowId);
+  await requireConnection(userId, input.connectionId);
   await requireAccount(userId, input.accountId);
 
   const [row] = await db
-    .insert(plaidAccountLinks)
+    .insert(bankAccountLinks)
     .values({
       userId,
-      itemId: input.itemRowId,
-      plaidAccountId: input.plaidAccountId,
+      connectionId: input.connectionId,
+      externalAccountId: input.externalAccountId,
       accountId: input.accountId,
-      plaidType: input.plaidType ?? "",
-      plaidSubtype: input.plaidSubtype ?? "",
+      institution: input.institution ?? "",
     })
     .onConflictDoUpdate({
-      target: [plaidAccountLinks.userId, plaidAccountLinks.plaidAccountId],
+      target: [bankAccountLinks.userId, bankAccountLinks.externalAccountId],
       set: {
-        itemId: input.itemRowId,
+        connectionId: input.connectionId,
         accountId: input.accountId,
-        plaidType: input.plaidType ?? "",
-        plaidSubtype: input.plaidSubtype ?? "",
+        institution: input.institution ?? "",
         updatedAt: new Date(),
       },
     })
-    .returning({ id: plaidAccountLinks.id });
+    .returning({ id: bankAccountLinks.id });
   return row.id;
 }
 
 /** Drop a link. The register account and its rows stay; only the live feed stops. */
 export async function unlinkAccount(userId: string, linkId: string): Promise<void> {
   const deleted = await db
-    .delete(plaidAccountLinks)
-    .where(and(eq(plaidAccountLinks.id, linkId), eq(plaidAccountLinks.userId, userId)))
-    .returning({ id: plaidAccountLinks.id });
+    .delete(bankAccountLinks)
+    .where(and(eq(bankAccountLinks.id, linkId), eq(bankAccountLinks.userId, userId)))
+    .returning({ id: bankAccountLinks.id });
   if (deleted.length === 0) throw new Error("Link not found.");
 }
 
-/**
- * Remove a connection. Cascades to its links; imported transactions are untouched.
- *
- * Note this does not call Plaid's `/item/remove`. On the Trial plan removing an Item does
- * not free its slot against the cap of 10, so the call spends nothing and gains nothing —
- * and forgetting the token locally is what the user actually asked for.
- */
-export async function deleteItem(userId: string, itemRowId: string): Promise<void> {
+/** Remove a connection. Cascades to its links; imported transactions are untouched. */
+export async function deleteConnection(
+  userId: string,
+  connectionId: string,
+): Promise<void> {
   const deleted = await db
-    .delete(plaidItems)
-    .where(and(eq(plaidItems.id, itemRowId), eq(plaidItems.userId, userId)))
-    .returning({ id: plaidItems.id });
+    .delete(bankConnections)
+    .where(
+      and(eq(bankConnections.id, connectionId), eq(bankConnections.userId, userId)),
+    )
+    .returning({ id: bankConnections.id });
   if (deleted.length === 0) throw new Error("Bank connection not found.");
 }
 
-/** Flag a connection as needing re-authentication, or clear the flag. */
+/** Flag a connection as needing re-setup, or clear the flag. */
 export async function setReauthRequired(
   userId: string,
-  itemRowId: string,
+  connectionId: string,
   required: boolean,
 ): Promise<void> {
-  await requireItem(userId, itemRowId);
+  await requireConnection(userId, connectionId);
   await db
-    .update(plaidItems)
+    .update(bankConnections)
     .set({ reauthRequiredAt: required ? new Date() : null, updatedAt: new Date() })
-    .where(and(eq(plaidItems.id, itemRowId), eq(plaidItems.userId, userId)));
+    .where(
+      and(eq(bankConnections.id, connectionId), eq(bankConnections.userId, userId)),
+    );
 }
 
-/** Live balance snapshot for one link, already in module sign. */
+/** Balance snapshot for one link, already in module sign. */
 export async function saveBalance(
   userId: string,
   input: {
@@ -168,7 +163,7 @@ export async function saveBalance(
   },
 ): Promise<void> {
   const updated = await db
-    .update(plaidAccountLinks)
+    .update(bankAccountLinks)
     .set({
       balanceCents: input.balanceCents,
       availableCents: input.availableCents,
@@ -176,37 +171,33 @@ export async function saveBalance(
       updatedAt: new Date(),
     })
     .where(
-      and(eq(plaidAccountLinks.id, input.linkId), eq(plaidAccountLinks.userId, userId)),
+      and(eq(bankAccountLinks.id, input.linkId), eq(bankAccountLinks.userId, userId)),
     )
-    .returning({ id: plaidAccountLinks.id });
+    .returning({ id: bankAccountLinks.id });
   if (updated.length === 0) throw new Error("Link not found.");
 }
 
-export type ApplySyncResult = {
-  inserted: number;
-  updated: number;
-  deleted: number;
-};
+export type ApplySyncResult = { inserted: number; updated: number; deleted: number };
 
 /**
- * Apply one Item's deltas and advance its cursor, in a single transaction.
+ * Apply one connection's reconciliation and advance its window, in a single transaction.
  *
- * **The cursor moves in the same transaction as the rows, deliberately.** It only ever goes
- * forward, so a crash between writing rows and saving the cursor would either replay a page
+ * **`syncedThrough` moves in the same transaction as the rows, deliberately.** It only ever
+ * goes forward, so a crash between writing rows and saving it would either replay a window
  * or skip one permanently, depending on the order. Inside one transaction there is no
  * between.
  */
 export async function applySync(
   userId: string,
   input: {
-    itemRowId: string;
-    inserts: readonly PlaidInsert[];
-    updates: readonly PlaidUpdate[];
+    connectionId: string;
+    inserts: readonly BankInsert[];
+    updates: readonly BankUpdate[];
     deletes: readonly string[];
-    cursor: string;
+    syncedThrough: string;
   },
 ): Promise<ApplySyncResult> {
-  await requireItem(userId, input.itemRowId);
+  await requireConnection(userId, input.connectionId);
 
   return db.transaction(async (tx) => {
     let inserted = 0;
@@ -219,8 +210,8 @@ export async function applySync(
         .where(
           and(
             eq(financeTransactions.userId, userId),
-            // Scoped to the Plaid feed so a delta can never reach a statement-imported row.
-            eq(financeTransactions.externalSource, "api:plaid"),
+            // Scoped to this feed so reconciliation can never reach a statement row.
+            eq(financeTransactions.externalSource, "api:simplefin"),
             inArray(financeTransactions.externalId, [...input.deletes]),
           ),
         )
@@ -236,14 +227,13 @@ export async function applySync(
           postedDate: update.postedDate,
           description: update.description,
           amount: centsToNumericString(update.amountCents),
-          sourceCategory: update.sourceCategory,
           pending: update.pending,
           updatedAt: new Date(),
         })
         .where(
           and(
             eq(financeTransactions.userId, userId),
-            eq(financeTransactions.externalSource, "api:plaid"),
+            eq(financeTransactions.externalSource, "api:simplefin"),
             eq(financeTransactions.externalId, update.externalId),
           ),
         )
@@ -265,7 +255,7 @@ export async function applySync(
             sourceCategory: insert.transaction.sourceCategory,
             notes: insert.transaction.memo,
             pending: insert.pending,
-            externalSource: "api:plaid" as const,
+            externalSource: "api:simplefin" as const,
             externalId: insert.externalId,
           })),
         )
@@ -277,13 +267,18 @@ export async function applySync(
     }
 
     await tx
-      .update(plaidItems)
+      .update(bankConnections)
       .set({
-        syncCursor: input.cursor,
+        syncedThrough: input.syncedThrough,
         lastSyncedAt: new Date(),
         updatedAt: new Date(),
       })
-      .where(and(eq(plaidItems.id, input.itemRowId), eq(plaidItems.userId, userId)));
+      .where(
+        and(
+          eq(bankConnections.id, input.connectionId),
+          eq(bankConnections.userId, userId),
+        ),
+      );
 
     return { inserted, updated, deleted };
   });

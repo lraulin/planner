@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import type { GoogleCalendarLink } from "@/db/schema";
-import type { PlaidItemRow } from "@/lib/plaid/queries";
+import type { BankConnectionRow } from "@/lib/banksync/queries";
 import { LogoutButton } from "@/components/auth/LogoutButton";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import {
@@ -68,8 +68,7 @@ type SettingsPageProps = {
   viaDevBypass: boolean;
   googleConfigured: boolean;
   googleLinked: boolean;
-  plaidConfigured: boolean;
-  bankItems: PlaidItemRow[];
+  bankConnections: BankConnectionRow[];
   bankLinked: BankLinkedRow[];
   calendars: GoogleCalendarLink[];
   contactSyncLastSyncedAt: string | null;
@@ -87,8 +86,7 @@ export function SettingsPage({
   viaDevBypass,
   googleConfigured,
   googleLinked,
-  plaidConfigured,
-  bankItems,
+  bankConnections,
   bankLinked,
   calendars,
   contactSyncLastSyncedAt,
@@ -190,11 +188,7 @@ export function SettingsPage({
                 calendars={calendars}
                 contactSyncLastSyncedAt={contactSyncLastSyncedAt}
               />
-              <BankSyncPanel
-                configured={plaidConfigured}
-                items={bankItems}
-                linked={bankLinked}
-              />
+              <BankSyncPanel connections={bankConnections} linked={bankLinked} />
             </div>
           )}
           {sectionId === "import-export" && <TransferPanels />}

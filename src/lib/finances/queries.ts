@@ -6,7 +6,7 @@ import {
   financeStatementRates,
   financeStatements,
   financeTransactions,
-  plaidAccountLinks,
+  bankAccountLinks,
 } from "@/db/schema";
 import { numericStringToCents } from "./money";
 import type {
@@ -127,12 +127,12 @@ export async function listAccounts(userId: string): Promise<FinanceAccountRow[]>
   // feed, which is every account until one is linked.
   const syncedRows = await db
     .select({
-      accountId: plaidAccountLinks.accountId,
-      balanceCents: plaidAccountLinks.balanceCents,
-      balanceAsOf: plaidAccountLinks.balanceAsOf,
+      accountId: bankAccountLinks.accountId,
+      balanceCents: bankAccountLinks.balanceCents,
+      balanceAsOf: bankAccountLinks.balanceAsOf,
     })
-    .from(plaidAccountLinks)
-    .where(eq(plaidAccountLinks.userId, userId));
+    .from(bankAccountLinks)
+    .where(eq(bankAccountLinks.userId, userId));
 
   const syncedByAccount = new Map(
     syncedRows

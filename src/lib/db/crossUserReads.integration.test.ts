@@ -56,15 +56,15 @@ import {
   listTransactions,
   transactionTotalCents,
 } from "@/lib/finances/queries";
-import { linkAccount, saveItem } from "@/lib/plaid/mutations";
+import { linkAccount, saveConnection } from "@/lib/banksync/mutations";
 import {
   existingRowsInWindow,
   knownExternalIds,
   linkableAccounts,
-  listItems,
+  listConnections,
   listLinks,
-  loadItemsForSync,
-} from "@/lib/plaid/queries";
+  loadConnectionsForSync,
+} from "@/lib/banksync/queries";
 import { ensureWeeklyPlan, upsertPlanEntry } from "@/lib/planning/mutations";
 import {
   getWeeklyPlan,
@@ -144,7 +144,7 @@ type Owned = {
   contactId: string;
   resourceId: string;
   financeAccountId: string;
-  plaidItemId: string;
+  bankConnectionId: string;
   financeTransactionId: string;
   financeStatementId: string;
   paymentResolutionId: string;
@@ -343,19 +343,18 @@ async function seedOwner(): Promise<Owned> {
 
   await writeUserSetting(userId, "shell", { v: 2, sidebarCollapsed: true });
 
-  const plaidItemId = await saveItem(userId, {
-    itemId: `item-${userId}`,
-    accessToken: "owner-bank-token",
-    institutionName: "Owner Bank",
+  const bankConnectionId = await saveConnection(userId, {
+    accessUrl: `https://user:owner-bank-secret@example.test/${userId}`,
+    label: "Owner Bank",
   });
   await linkAccount(userId, {
-    itemRowId: plaidItemId,
-    plaidAccountId: `plaid-acct-${userId}`,
+    connectionId: bankConnectionId,
+    externalAccountId: `sfin-acct-${userId}`,
     accountId: financeAccount.id,
   });
 
   return {
-    plaidItemId,
+    bankConnectionId,
     userId,
     goalId,
     taskId,
@@ -500,12 +499,12 @@ describeDb("a second user reads none of the first user's rows", () => {
   });
 
   it("bank sync connections, links and their sync windows", async () => {
-    // `loadItemsForSync` is the one read that carries a bank access token, so a dropped
+    // `loadConnectionsForSync` is the one read that carries a bank access token, so a dropped
     // userId here hands over a live credential rather than a row.
-    expect(await listItems(intruder)).toEqual([]);
-    expect(await loadItemsForSync(intruder)).toEqual([]);
+    expect(await listConnections(intruder)).toEqual([]);
+    expect(await loadConnectionsForSync(intruder)).toEqual([]);
     expect(await listLinks(intruder)).toEqual([]);
-    expect(await listLinks(intruder, owner.plaidItemId)).toEqual([]);
+    expect(await listLinks(intruder, owner.bankConnectionId)).toEqual([]);
     expect(await linkableAccounts(intruder)).toEqual([]);
     // Both take account ids the intruder can guess; they must refuse by user rather than
     // trusting that the id belongs to the caller.

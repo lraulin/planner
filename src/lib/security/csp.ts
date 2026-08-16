@@ -18,25 +18,6 @@ export type CspOptions = {
 };
 
 /**
- * The two concessions Plaid Link needs, and nothing else.
- *
- * Link renders its account picker in an iframe served from `cdn.plaid.com`, and talks to
- * Plaid's API from the browser while the user is inside it. Both hosts are enumerated
- * rather than wildcarded: `https://*.plaid.com` would also admit any subdomain Plaid or an
- * attacker who took one over might stand up.
- *
- * Notably **not** here: the Link *script*. `script-src` already carries `'strict-dynamic'`,
- * so a nonced `next/script` tag can pull `link-initialize.js` and a host allowlist would be
- * ignored by every CSP3 browser anyway.
- *
- * Both environments are listed because the sandbox host is what a local build talks to, and
- * a policy that differs between dev and production is a policy whose production form is
- * never exercised until it breaks in production.
- */
-const PLAID_FRAME_SRC = "https://cdn.plaid.com";
-const PLAID_CONNECT_SRC = "https://production.plaid.com https://sandbox.plaid.com";
-
-/**
  * Build the policy string.
  *
  * Two directives are deliberately *not* what a first pass would write, and both will look
@@ -74,15 +55,12 @@ export function buildCsp({ nonce, isDev }: CspOptions): string {
     // Dev only: Next's HMR client opens a websocket back to the same origin, and browsers
     // have historically been inconsistent about whether 'self' covers a ws: scheme.
     //
-    // The Plaid hosts widen this past 'self' for the first time. That is a real concession
-    // and worth naming: an injected script could now reach two more origins. It buys the
-    // bank connection, and the alternative — proxying Link's own traffic through this app —
-    // would mean standing between a user and their bank, which is worse.
-    `connect-src 'self' ${PLAID_CONNECT_SRC}${isDev ? " ws: wss:" : ""}`,
-
-    // Link's account picker is an iframe. Without this the directive falls through to
-    // `default-src 'self'` and the modal renders blank with no console error worth reading.
-    `frame-src ${PLAID_FRAME_SRC}`,
+    // Still `'self'` and nothing more. The bank sync was briefly built on a provider whose
+    // widget ran in the page and needed two extra origins here plus a `frame-src`; the
+    // provider that shipped talks to its server from ours, so the page loads no third-party
+    // script and frames nothing. Anything proposing to widen this again should be weighed
+    // against that — it was reverted once because it turned out not to be necessary.
+    `connect-src 'self'${isDev ? " ws: wss:" : ""}`,
 
     "object-src 'none'",
     "base-uri 'self'",

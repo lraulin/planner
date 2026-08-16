@@ -2340,105 +2340,108 @@ export const financePaymentResolutions = pgTable(
 );
 
 /**
- * One Plaid Item — a single bank login, which may cover several accounts.
+ * One SimpleFIN access URL — the whole bank connection, however many institutions it covers.
  *
  * **Why a separate table rather than columns on `finance_accounts`.** Account identity there
  * is `(user_id, external_source, external_key)`, so giving synced accounts their own
  * `external_source` would fork every account into a CSV twin and a live twin and split the
- * history in half. The link below points a Plaid account at the row that already exists, and
- * `finance_accounts.external_source` is never rewritten — so re-importing an old CSV still
- * resolves to the same account. Follows `google_contact_syncs`: authoritative integration
- * state gets its own table, not `user_settings`.
+ * history in half. The link below points a synced account at the row that already exists,
+ * and `finance_accounts.external_source` is never rewritten — so re-importing an old CSV
+ * still resolves to the same account. Follows `google_contact_syncs`: authoritative
+ * integration state gets its own table, not `user_settings`.
  *
- * The Plaid access token is long-lived and is **not** an OAuth token Better Auth could
- * refresh, which is why it lives here rather than in `accounts`.
+ * Named for the concept, not the vendor. This is the third provider considered for this
+ * feature; the previous two are gone and the tables outlived them.
+ *
+ * Unlike a per-bank model, **one row covers every institution the user has added at
+ * SimpleFIN**. Adding a bank happens there, not here.
  */
-export const plaidItems = pgTable(
-  "plaid_items",
+export const bankConnections = pgTable(
+  "bank_connections",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    /** Plaid's `item_id`. Stable for the life of the connection. */
-    itemId: text("item_id").notNull(),
-    /** Long-lived; does not expire on a schedule. Never leaves the server. */
-    accessToken: text("access_token").notNull(),
-    /** `ins_56`, `ins_128026`. */
-    institutionId: text("institution_id").notNull().default(""),
-    /** Display only — "Chase", "Capital One". */
-    institutionName: text("institution_name").notNull().default(""),
     /**
-     * `/transactions/sync` cursor. Null until the first sync completes.
+     * The access URL, credentials included as `scheme://user:pass@host`.
      *
-     * Written in the same transaction as the rows it accounts for. Advancing it separately
-     * would let a crash between the two silently skip a page of transactions forever, since
-     * the cursor only ever moves forward.
+     * Per-user data rather than an app-wide key, which is why it lives here rather than in
+     * the environment. It never leaves the server and is never returned by a query that a
+     * page or action could serialise to the browser.
      */
-    syncCursor: text("sync_cursor"),
+    accessUrl: text("access_url").notNull(),
+    /** Display label. SimpleFIN names the connection; falls back to "Bank sync". */
+    label: text("label").notNull().default(""),
+    /**
+     * Newest transaction date this connection has been read through, as `YYYY-MM-DD`.
+     *
+     * SimpleFIN has no cursor: each sync asks for a date window. The next window starts a
+     * few days before this so a transaction that posts late is still seen — the provider's
+     * own guide recommends overlapping by about five days.
+     */
+    syncedThrough: date("synced_through", { mode: "string" }),
     lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
     /**
-     * Set when Plaid reports `ITEM_LOGIN_REQUIRED` and cleared on a successful sync. The
-     * UI prompts for re-authentication on the strength of this rather than re-deriving it.
+     * Set when SimpleFIN answers 403 (access revoked) and cleared on a successful sync.
+     * A lapsed subscription answers 402 instead and is deliberately not this flag — paying
+     * is a different remedy from reconnecting.
      */
     reauthRequiredAt: timestamp("reauth_required_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [uniqueIndex("plaid_items_user_item_uq").on(table.userId, table.itemId)],
+  (table) => [index("bank_connections_user_idx").on(table.userId)],
 );
 
 /**
- * One Plaid account bound to one `finance_accounts` row, plus the last live balance read.
+ * One synced account bound to one `finance_accounts` row, plus the last balance read.
  *
  * The binding is **confirmed by the user**, not inferred. Candidates are proposed by
- * matching Plaid's `mask` against `finance_accounts.external_key`, but a wrong auto-link
+ * matching trailing digits against `finance_accounts.external_key`, but a wrong auto-link
  * merges two real accounts and is near-impossible to unpick afterwards.
  *
- * Balances are stored in module sign — positive is money you have — so a credit card's
- * balance is **negative**, matching `finance_statements`. Plaid reports a card's `current`
- * as the amount *owed* (a positive number), so the mapping negates it; storing it raw would
- * make the card read as an asset.
+ * Balances are stored in module sign — positive is money you have — which is already
+ * SimpleFIN's own convention, so no conversion happens on the way in.
  */
-export const plaidAccountLinks = pgTable(
-  "plaid_account_links",
+export const bankAccountLinks = pgTable(
+  "bank_account_links",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    itemId: uuid("item_id")
+    connectionId: uuid("connection_id")
       .notNull()
-      .references(() => plaidItems.id, { onDelete: "cascade" }),
-    /** Plaid's `account_id`, unique per Item. */
-    plaidAccountId: text("plaid_account_id").notNull(),
+      .references(() => bankConnections.id, { onDelete: "cascade" }),
+    /** SimpleFIN's account id, unique within the connection. */
+    externalAccountId: text("external_account_id").notNull(),
     accountId: uuid("account_id")
       .notNull()
       .references(() => financeAccounts.id, { onDelete: "cascade" }),
-    /** Plaid `type`/`subtype` as reported, for the balance-sign branch and for display. */
-    plaidType: text("plaid_type").notNull().default(""),
-    plaidSubtype: text("plaid_subtype").notNull().default(""),
-    /** Last live `/accounts/balance/get` read, module sign. Null before the first refresh. */
+    /** Institution name as the provider reports it. Display only. */
+    institution: text("institution").notNull().default(""),
+    /** Last balance read, module sign. Null before the first refresh. */
     balanceCents: integer("balance_cents"),
-    /**
-     * Ledger net pending, module sign. Depository accounts only — on a credit account Plaid
-     * reports remaining credit here, which is a different quantity and is often absent.
-     */
+    /** Balance net pending, where the provider supplies one. */
     availableCents: integer("available_cents"),
-    /** When `balanceCents` was read. A live balance presented without its age is a lie. */
+    /**
+     * When the balance was true according to the provider — its `balance-date`, not the
+     * time we asked. A stale figure stamped "now" is worse than no figure.
+     */
     balanceAsOf: timestamp("balance_as_of", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    uniqueIndex("plaid_account_links_plaid_account_uq").on(
+    uniqueIndex("bank_account_links_external_uq").on(
       table.userId,
-      table.plaidAccountId,
+      table.externalAccountId,
     ),
-    // One live feed per register account. Two Items claiming the same account would each
-    // sync it and the rows would interleave under different Plaid ids.
-    uniqueIndex("plaid_account_links_account_uq").on(table.userId, table.accountId),
-    index("plaid_account_links_item_idx").on(table.userId, table.itemId),
+    // One live feed per register account. Two links claiming the same account would each
+    // sync it and the rows would interleave under different provider ids.
+    uniqueIndex("bank_account_links_account_uq").on(table.userId, table.accountId),
+    index("bank_account_links_connection_idx").on(table.userId, table.connectionId),
   ],
 );
 
