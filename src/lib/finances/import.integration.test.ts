@@ -920,3 +920,86 @@ describeDb("finance Coinbase import user isolation", () => {
     expect(await listTransactions(intruderId)).toHaveLength(3);
   });
 });
+
+describeDb("importing a statement after a live sync", () => {
+  /**
+   * The direction that bites weeks later. A sync runs daily and writes rows carrying the
+   * aggregator's date; the bank's own statement arrives afterwards dating the same
+   * transactions a day later. Under exact matching every one imported twice.
+   */
+  async function seedSyncedRow(userId: string, accountId: string) {
+    await db.insert(financeTransactions).values({
+      userId,
+      accountId,
+      // The aggregator's date. Chase's CSV below calls the same purchase 08/10.
+      transactionDate: "2026-08-09",
+      description: "AMAZON MKTPL*5H1YV8C82",
+      amount: "-10.59",
+      externalSource: "api:simplefin",
+      externalId: "sfin-1",
+    });
+  }
+
+  it("does not re-import a transaction the sync already wrote", async () => {
+    const userId = await makeUser();
+    await importFinanceCsvFiles({ userId, files: [chaseFile] });
+    const [account] = await listAccounts(userId);
+
+    // Clear what the file wrote, then stand in for a sync having run first.
+    await db.delete(financeTransactions).where(eq(financeTransactions.userId, userId));
+    await seedSyncedRow(userId, account.id);
+
+    const result = await importFinanceCsvFiles({ userId, files: [chaseFile] });
+
+    const rows = await listTransactions(userId);
+    const amazon = rows.filter((row) => row.description.includes("5H1YV8C82"));
+    // One row, not two — and it is the synced one, since import never updates.
+    expect(amazon).toHaveLength(1);
+    expect(amazon[0].transactionDate).toBe("2026-08-09");
+    expect(result.skipped).toBeGreaterThanOrEqual(1);
+  });
+
+  it("finds a synced row dated outside the file's own range", async () => {
+    // The boundary case. This file's rows span 08/06..08/10, and the sync dated the same
+    // payment 08/05 — outside it. Looking only within the file's range hides that row, and
+    // every transaction on the edge of an import duplicates.
+    const userId = await makeUser();
+    await importFinanceCsvFiles({ userId, files: [chaseFile] });
+    const [account] = await listAccounts(userId);
+    await db.delete(financeTransactions).where(eq(financeTransactions.userId, userId));
+    await db.insert(financeTransactions).values({
+      userId,
+      accountId: account.id,
+      transactionDate: "2026-08-05",
+      description: "Payment Thank You-Mobile",
+      amount: "481.20",
+      externalSource: "api:simplefin",
+      externalId: "sfin-payment",
+    });
+
+    await importFinanceCsvFiles({ userId, files: [chaseFile] });
+
+    const rows = await listTransactions(userId);
+    const payments = rows.filter((row) =>
+      row.description.includes("Payment Thank You"),
+    );
+    expect(payments).toHaveLength(1);
+    expect(payments[0].transactionDate).toBe("2026-08-05");
+  });
+
+  it("still imports the statement rows the sync never saw", async () => {
+    const userId = await makeUser();
+    await importFinanceCsvFiles({ userId, files: [chaseFile] });
+    const [account] = await listAccounts(userId);
+    await db.delete(financeTransactions).where(eq(financeTransactions.userId, userId));
+    await seedSyncedRow(userId, account.id);
+
+    await importFinanceCsvFiles({ userId, files: [chaseFile] });
+
+    const rows = await listTransactions(userId);
+    // The payment row was never synced, so the file is still the way it arrives.
+    expect(rows.some((row) => row.description.includes("Payment Thank You"))).toBe(
+      true,
+    );
+  });
+});

@@ -21,7 +21,7 @@
  * — leaving the account with neither.
  */
 
-import { selectUnmatched } from "./crossSource";
+import { selectUnmatched } from "@/lib/finances/liveFeedMatch";
 import type { ParsedTransaction } from "@/lib/finances/types";
 import { toParsedTransaction, type SimpleFinAccount } from "./mapping";
 

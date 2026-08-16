@@ -17,7 +17,11 @@ import {
 } from "./chaseStatement";
 import { fingerprintAll } from "./fingerprint";
 import { parseFinanceCsv } from "./formats";
-import { selectNewTransactions } from "./matchExisting";
+import {
+  DATE_TOLERANCE_DAYS,
+  selectNewAgainstMixed,
+  type TaggedRow,
+} from "./liveFeedMatch";
 import { centsToNumericString, numericStringToCents } from "./money";
 import { looksLikeCoinbaseCsv, parseCoinbaseCsv } from "./coinbaseCsv";
 import { persistPaypalResolutions } from "./paypalResolutions";
@@ -215,21 +219,43 @@ async function persistStatements(
   return { created, skipped };
 }
 
+/**
+ * Rows already on this account across the dates the file covers.
+ *
+ * The range is widened by the live-feed date tolerance because a row the **sync** wrote
+ * carries the aggregator's date, not the bank's, and the two differ by a day or two. A row
+ * dated just outside the file's own range is still the same event, and loading only the
+ * file's range hides exactly those — which duplicates every transaction on the boundary.
+ */
+/** A `YYYY-MM-DD` day shifted by whole days. Noon UTC so no timezone can move the date. */
+function shiftDateKey(key: string, days: number): string {
+  const date = new Date(`${key}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 async function existingOnAccount(
   tx: Executor,
   userId: string,
   accountId: string,
   incoming: readonly { transactionDate: string }[],
-): Promise<{ transactionDate: string; amountCents: number; description: string }[]> {
+): Promise<TaggedRow[]> {
   if (incoming.length === 0) return [];
   const dates = incoming.map((row) => row.transactionDate);
-  const from = dates.reduce((min, d) => (d < min ? d : min));
-  const to = dates.reduce((max, d) => (d > max ? d : max));
+  const from = shiftDateKey(
+    dates.reduce((min, d) => (d < min ? d : min)),
+    -DATE_TOLERANCE_DAYS,
+  );
+  const to = shiftDateKey(
+    dates.reduce((max, d) => (d > max ? d : max)),
+    DATE_TOLERANCE_DAYS,
+  );
   const rows = await tx
     .select({
       transactionDate: financeTransactions.transactionDate,
       amount: financeTransactions.amount,
       description: financeTransactions.description,
+      externalSource: financeTransactions.externalSource,
     })
     .from(financeTransactions)
     .where(
@@ -244,6 +270,9 @@ async function existingOnAccount(
     transactionDate: row.transactionDate,
     amountCents: numericStringToCents(row.amount) ?? 0,
     description: row.description,
+    // Only a live feed's rows get the looser comparison. Everything else keeps the exact
+    // matching that CSV-to-CSV dedup already relies on.
+    fromLiveFeed: row.externalSource === "api:simplefin",
   }));
 }
 
@@ -380,7 +409,7 @@ export async function importFinanceCsvFiles({
           resolved.id,
           account.transactions,
         );
-        const { keep, skipCount } = selectNewTransactions(
+        const { keep, skipCount } = selectNewAgainstMixed(
           already,
           account.transactions,
         );

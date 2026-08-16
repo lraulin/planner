@@ -165,9 +165,18 @@ Two ways a live feed and a bank statement disagree, neither guessable:
    `Withdrawal from RENT:RAULIN RENT:RAULI` where the feed says `RENT:RAULIN`.
    `descriptionsMatch` wants a prefix; here the feed's text sits in the middle.
 
-So `crossSource.ts` matches on **exact amount, ±2 days, and description containment above a
-length floor**. `matchExisting.ts` is left alone — it serves CSV-to-CSV dedup, which works,
-and loosening it would loosen that too.
+So `finances/liveFeedMatch.ts` matches on **exact amount, ±2 days, and description
+containment above a length floor**. `matchExisting.ts` is left alone — it serves CSV-to-CSV
+dedup, which works, and loosening it would loosen that too.
+
+**It applies in both directions, and the second one is the trap.** A sync compares the
+provider's rows against what statements already wrote. An import compares statement rows
+against what the sync already wrote — and that happens weeks later, when a statement covering
+already-synced days finally arrives. `import.ts` therefore tags each existing row with
+whether a live feed wrote it and compares tolerantly only against those; a row from a file is
+still matched exactly, so nothing about CSV-to-CSV dedup changes. Both halves of that — the
+tag and the widened lookup range — are covered by integration tests that fail when either is
+removed.
 
 **The first sync anchors to the newest row already on file**, not to the provider's maximum
 history. The register holds complete history from statements; re-fetching it only gives the
