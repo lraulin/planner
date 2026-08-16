@@ -6,11 +6,12 @@ import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { effectiveCategory, effectiveFlow } from "./analytics";
 import {
   loadCarryingCost,
+  loadDashboard,
   loadInsightsRows,
   unclassifiedCount,
 } from "./dashboardQueries";
 import { importFinanceCsvFiles, type ImportFile } from "./import";
-import { reclassifyTransactions, setOneOff } from "./mutations";
+import { reclassifyTransactions, setOneOff, upsertRecurringBill } from "./mutations";
 import { listTransactions } from "./queries";
 
 const dbReachable = await databaseReachable();
@@ -200,5 +201,68 @@ describeDb("insights user isolation", () => {
     // the seed silently failed.
     expect((await loadInsightsRows(ownerId)).length).toBe(3);
     expect((await loadCarryingCost(ownerId)).interestCents).toBe(1245);
+  });
+});
+
+describeDb("loadDashboard", () => {
+  it("returns the accounts, bills and bill charges the headline is built from", async () => {
+    const userId = await makeUser();
+    await seed(userId);
+    await reclassifyTransactions(userId);
+    await upsertRecurringBill(userId, {
+      merchant: "SimpliSafe",
+      cadenceMonths: 1,
+      expectedCents: 3_471,
+      setAside: true,
+      dueDay: 9,
+    });
+
+    const data = await loadDashboard(userId);
+
+    expect(data.accounts).toHaveLength(1);
+    expect(data.accounts[0]).toMatchObject({
+      name: "Chase •••9910",
+      kind: "credit_card",
+    });
+    expect(data.bills[0]).toMatchObject({ setAside: true, dueDay: 9 });
+    // Only charges against a declared merchant — the Walmart row is not one.
+    expect(data.billCharges).toEqual([
+      { merchant: "SimpliSafe", dateKey: "2026-03-09" },
+      { merchant: "SimpliSafe", dateKey: "2026-04-09" },
+    ]);
+  });
+
+  it("reports no pending rows for a register built from files", async () => {
+    // Pending only ever arrives from a live feed. An import that produced pending rows would
+    // mean the CSV path had started writing a column only the sync is allowed to own.
+    const userId = await makeUser();
+    await seed(userId);
+
+    expect((await loadDashboard(userId)).pending).toEqual([]);
+  });
+
+  it("does not hand a second user another user's dashboard", async () => {
+    const ownerId = await makeUser();
+    const intruderId = await makeUser();
+    await seed(ownerId);
+    await reclassifyTransactions(ownerId);
+    await upsertRecurringBill(ownerId, {
+      merchant: "SimpliSafe",
+      cadenceMonths: 1,
+      expectedCents: 3_471,
+      setAside: true,
+    });
+
+    const intruder = await loadDashboard(intruderId);
+    expect(intruder.accounts).toEqual([]);
+    expect(intruder.bills).toEqual([]);
+    expect(intruder.billCharges).toEqual([]);
+    expect(intruder.pending).toEqual([]);
+    expect(intruder.paydays).toEqual([]);
+    expect(intruder.connections).toEqual([]);
+
+    // And the owner still sees theirs, so the assertions above are not passing on an empty
+    // seed.
+    expect((await loadDashboard(ownerId)).accounts).toHaveLength(1);
   });
 });

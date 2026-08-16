@@ -10,7 +10,7 @@ import {
 } from "@/lib/finances/analytics";
 import type { CarryingCost } from "@/lib/finances/dashboardQueries";
 import { analyzeInsights } from "@/lib/finances/insightsAnalysis";
-import type { DeclaredBill } from "@/lib/finances/recurringBills";
+import type { StoredBill } from "@/lib/finances/recurringBills";
 import {
   unresolvedPaypalInflows,
   type PaypalResolution,
@@ -106,12 +106,19 @@ export function InsightsView({
   rows: AnalyticsRow[];
   carryingCost: CarryingCost;
   unclassified: number;
-  bills: DeclaredBill[];
+  bills: StoredBill[];
   statements?: readonly ReconcileStatement[];
   resolutions?: readonly PaymentResolutionRow[];
 }) {
   const formatDate = useDateFormatter();
   const today = useToday();
+  // Which declarations the dashboard holds money back for. Passed alongside the analysis
+  // rather than folded into `RecurringMerchant`, so `analytics.ts` stays unaware that
+  // budgeting exists — it costs a year of a bill, and what to do about that is not its call.
+  const setAsideMerchants = useMemo(
+    () => new Set(bills.filter((bill) => bill.setAside).map((bill) => bill.merchant)),
+    [bills],
+  );
   const { value: view, patch } = useSetting(INSIGHTS_SCOPE, INSIGHTS_CODEC);
   const [reclassifyError, setReclassifyError] = useState<string | null>(null);
   const [reclassified, setReclassified] = useState<string | null>(null);
@@ -638,6 +645,7 @@ export function InsightsView({
             <RecurringTable
               merchants={analysis.recurring}
               declarable={filterOptions.merchants}
+              setAsides={setAsideMerchants}
             />
           </Panel>
         </div>

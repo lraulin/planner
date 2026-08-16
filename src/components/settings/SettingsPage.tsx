@@ -24,6 +24,7 @@ import {
 import { AchieveTransferPanel } from "./AchieveTransferPanel";
 import { GoogleCalendarPanel } from "./GoogleCalendarPanel";
 import { BankSyncPanel } from "./BankSyncPanel";
+import { PayCadencePanel } from "./PayCadencePanel";
 import { FinanceImportPanel } from "@/components/finances/FinanceImportPanel";
 import { AmazonImportPanel } from "./AmazonImportPanel";
 import { RedNotebookImportPanel } from "./RedNotebookImportPanel";
@@ -189,6 +190,7 @@ export function SettingsPage({
                 contactSyncLastSyncedAt={contactSyncLastSyncedAt}
               />
               <BankSyncPanel connections={bankConnections} linked={bankLinked} />
+              <PayCadencePanel />
             </div>
           )}
           {sectionId === "import-export" && <TransferPanels />}

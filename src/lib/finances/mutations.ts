@@ -425,6 +425,14 @@ export type RecurringBillEdit = {
    * yearly figure is solid and whose delivery date is a tank sensor and the weather.
    */
   scheduled?: boolean;
+  /**
+   * Hold this bill's cost back from the dashboard's "available to spend", accruing a share out
+   * of each paycheck. Independent of `scheduled`: that one is about the date, this is about
+   * the money.
+   */
+  setAside?: boolean;
+  /** Day of the period the charge is expected, 1–31, or null to walk from the last charge. */
+  dueDay?: number | null;
 };
 
 /**
@@ -458,6 +466,20 @@ export async function upsertRecurringBill(
   if (edit.scheduled === false && !(Number(edit.expectedCents) > 0)) {
     throw new Error("A bill with no fixed schedule needs its cost for the period.");
   }
+  if (
+    edit.dueDay !== undefined &&
+    edit.dueDay !== null &&
+    (!Number.isInteger(edit.dueDay) || edit.dueDay < 1 || edit.dueDay > 31)
+  ) {
+    throw new Error("A due day must be a whole number from 1 to 31.");
+  }
+  // A set-aside with no stated cost has nothing to accrue. Falling back to the median of the
+  // charges on file is right for a report and wrong here: this figure is subtracted from money
+  // the user is about to spend against, and an estimate deducted from a real balance is the
+  // one guess this page must not make.
+  if (edit.setAside === true && !(Number(edit.expectedCents) > 0)) {
+    throw new Error("A set-aside needs its cost for the period.");
+  }
 
   // Only the fields supplied are written, the same rule `updateTransaction` follows. It
   // matters here because correcting a cadence from the recurring table sends the cadence and
@@ -469,6 +491,8 @@ export async function upsertRecurringBill(
     ...(edit.anchorDate !== undefined ? { anchorDate: edit.anchorDate } : {}),
     ...(edit.notes !== undefined ? { notes: edit.notes.trim() } : {}),
     ...(edit.scheduled !== undefined ? { scheduled: edit.scheduled } : {}),
+    ...(edit.setAside !== undefined ? { setAside: edit.setAside } : {}),
+    ...(edit.dueDay !== undefined ? { dueDay: edit.dueDay } : {}),
     updatedAt: new Date(),
   };
 
@@ -482,6 +506,8 @@ export async function upsertRecurringBill(
       anchorDate: edit.anchorDate ?? null,
       notes: edit.notes?.trim() ?? "",
       scheduled: edit.scheduled ?? true,
+      setAside: edit.setAside ?? false,
+      dueDay: edit.dueDay ?? null,
     })
     // The unique index is on (user_id, merchant), so this can only ever collide with this
     // user's own row — another user's identical merchant is a different row entirely.

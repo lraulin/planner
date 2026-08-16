@@ -31,6 +31,7 @@ export const SCOPE_KINDS = [
   "schedule",
   "display",
   "insights",
+  "payday",
   "timeline",
 ] as const;
 export type ScopeKind = (typeof SCOPE_KINDS)[number];
@@ -144,6 +145,16 @@ export const SCHEDULE_SCOPE = "schedule";
 /** The Finances insights dashboard's window and axis. */
 export const INSIGHTS_SCOPE = "insights";
 
+/**
+ * A correction to the detected pay cadence, for the Finances dashboard's day count.
+ *
+ * Configuration rather than view state, and the odd one out in this file for that reason. It
+ * lives here anyway because it is small, per-user, and already carried to the client by
+ * `loadSettingsForSession()` — the alternative, a column on `users`, would be a migration and a
+ * second delivery path to reach the one component that reads it.
+ */
+export const PAYDAY_SCOPE = "payday";
+
 /** Cross-module display policy, currently the standalone calendar-day format. */
 export const DISPLAY_SCOPE = "display";
 
@@ -161,6 +172,7 @@ const KIND_LABELS: Record<ScopeKind, string> = {
   schedule: "Weekly Schedule",
   display: "Display",
   insights: "Finances insights",
+  payday: "Pay cadence",
   timeline: "Timeline",
 };
 

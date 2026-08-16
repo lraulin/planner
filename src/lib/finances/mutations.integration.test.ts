@@ -226,6 +226,8 @@ describeDb("declared recurring bills", () => {
         expectedCents: 141_260,
         anchorDate: null,
         scheduled: true,
+        setAside: false,
+        dueDay: null,
       },
     ]);
   });
@@ -262,6 +264,8 @@ describeDb("declared recurring bills", () => {
       expectedCents: 141_260,
       anchorDate: "2026-03-03",
       scheduled: true,
+      setAside: false,
+      dueDay: null,
     });
   });
 
@@ -323,6 +327,63 @@ describeDb("declared recurring bills", () => {
     expect(await loadRecurringBills(userId)).toEqual([]);
   });
 
+  it("flags a bill as a set-aside with a due day", async () => {
+    await upsertRecurringBill(userId, {
+      merchant: "RENT:RAULIN",
+      cadenceMonths: 1,
+      expectedCents: 210_000,
+      setAside: true,
+      dueDay: 1,
+    });
+
+    expect((await loadRecurringBills(userId))[0]).toMatchObject({
+      setAside: true,
+      dueDay: 1,
+    });
+  });
+
+  it("keeps the set-aside flag when only the cadence is corrected", async () => {
+    // Same hazard as the declared amount: the recurring table sends one field, and a blanket
+    // write would silently stop deducting rent from the headline.
+    await upsertRecurringBill(userId, {
+      merchant: "RENT:RAULIN",
+      cadenceMonths: 1,
+      expectedCents: 210_000,
+      setAside: true,
+      dueDay: 1,
+    });
+    await upsertRecurringBill(userId, { merchant: "RENT:RAULIN", cadenceMonths: 1 });
+
+    expect((await loadRecurringBills(userId))[0]).toMatchObject({
+      setAside: true,
+      dueDay: 1,
+      expectedCents: 210_000,
+    });
+  });
+
+  it("refuses a set-aside with no stated cost", async () => {
+    // A median estimate is fine for a report and wrong when the figure is subtracted from a
+    // real balance the user is about to spend against.
+    await expect(
+      upsertRecurringBill(userId, {
+        merchant: "RENT:RAULIN",
+        cadenceMonths: 1,
+        setAside: true,
+      }),
+    ).rejects.toThrow("A set-aside needs its cost for the period.");
+    expect(await loadRecurringBills(userId)).toEqual([]);
+  });
+
+  it("refuses a due day the column would reject with a database error", async () => {
+    await expect(
+      upsertRecurringBill(userId, { merchant: "Geico", cadenceMonths: 6, dueDay: 0 }),
+    ).rejects.toThrow("A due day must be a whole number from 1 to 31.");
+    await expect(
+      upsertRecurringBill(userId, { merchant: "Geico", cadenceMonths: 6, dueDay: 32 }),
+    ).rejects.toThrow("A due day must be a whole number from 1 to 31.");
+    expect(await loadRecurringBills(userId)).toEqual([]);
+  });
+
   it("undeclares a bill", async () => {
     await upsertRecurringBill(userId, { merchant: "Geico", cadenceMonths: 6 });
     await deleteRecurringBill(userId, "Geico");
@@ -341,11 +402,29 @@ describeDb("declared recurring bill isolation", () => {
       merchant: "Geico",
       cadenceMonths: 6,
       expectedCents: 141_260,
+      setAside: true,
+      dueDay: 3,
     });
   });
 
   it("does not let a second user read another user's declared bills", async () => {
     expect(await loadRecurringBills(intruderId)).toEqual([]);
+  });
+
+  it("does not let a second user change another user's set-aside", async () => {
+    // Turning someone else's set-aside off would silently change the number they budget by.
+    await upsertRecurringBill(intruderId, {
+      merchant: "Geico",
+      cadenceMonths: 6,
+      expectedCents: 1,
+      setAside: false,
+      dueDay: 28,
+    });
+
+    expect((await loadRecurringBills(ownerId))[0]).toMatchObject({
+      setAside: true,
+      dueDay: 3,
+    });
   });
 
   it("does not let a second user change another user's declaration", async () => {

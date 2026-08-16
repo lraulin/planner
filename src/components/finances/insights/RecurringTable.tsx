@@ -3,7 +3,11 @@
 import { useState, useTransition } from "react";
 import type { RecurringMerchant } from "@/lib/finances/analytics";
 import { formatUsd } from "@/lib/finances/money";
-import { CADENCE_CHOICES, cadenceLabel } from "@/lib/finances/recurringBills";
+import {
+  CADENCE_CHOICES,
+  cadenceLabel,
+  cadenceMonthsFromGapDays,
+} from "@/lib/finances/recurringBills";
 import {
   deleteRecurringBillAction,
   setRecurringBillAction,
@@ -65,12 +69,21 @@ function detectedCadenceLabel(days: number): string {
 export function RecurringTable({
   merchants,
   declarable,
+  setAsides,
 }: {
   merchants: RecurringMerchant[];
   /** Every merchant in the history, so a bill too small for the review list is still
    * declarable. Taylor Gas is the case: propane at $335 a delivery never clears the
    * one-off floor, so the review row that the rest of this flow hangs off never appears. */
   declarable: string[];
+  /**
+   * Merchants the dashboard holds money back for, out of each paycheck.
+   *
+   * A set separate from `merchants` because `RecurringMerchant` comes from `analytics.ts`,
+   * which costs a year of a bill and has no opinion about budgeting. Widening it would make
+   * every analytics caller carry a field only this checkbox reads.
+   */
+  setAsides: ReadonlySet<string>;
 }) {
   const [pending, startTransition] = useTransition();
   const [adding, setAdding] = useState("");
@@ -94,6 +107,27 @@ export function RecurringTable({
   function remove(merchant: string) {
     startTransition(async () => {
       await deleteRecurringBillAction(merchant);
+    });
+  }
+
+  /**
+   * Hold this bill's cost back from the dashboard's available-to-spend, or stop.
+   *
+   * Turning it **on** writes the amount as well, because a set-aside with no declared cost is
+   * refused: the figure is subtracted from a real balance, so it has to be one the user has
+   * seen rather than a median the code picked. The charge in this row is that figure, which is
+   * why the value sent is the one already on screen.
+   */
+  function toggleSetAside(entry: RecurringMerchant, on: boolean) {
+    const cadenceMonths =
+      entry.cadenceMonths ?? cadenceMonthsFromGapDays(entry.cadenceDays) ?? 1;
+    startTransition(async () => {
+      await setRecurringBillAction({
+        merchant: entry.merchant,
+        cadenceMonths,
+        setAside: on,
+        ...(on ? { expectedCents: entry.typicalCents } : {}),
+      });
     });
   }
 
@@ -217,7 +251,13 @@ export function RecurringTable({
               <th className="py-1 pr-2 font-normal">Every</th>
               <th className="py-1 pr-2 text-right font-normal">Charge</th>
               <th className="py-1 pr-2 text-right font-normal">A year</th>
-              <th className="py-1 text-right font-normal">Set aside</th>
+              <th className="py-1 pr-2 text-right font-normal">Set aside</th>
+              <th
+                className="py-1 text-center font-normal"
+                title="Hold this back from Dashboard's available-to-spend"
+              >
+                Hold back
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -285,7 +325,7 @@ export function RecurringTable({
                     formatUsd(entry.annualCents)
                   )}
                 </td>
-                <td className="tabular py-1 text-right whitespace-nowrap text-ink-muted">
+                <td className="tabular py-1 pr-2 text-right whitespace-nowrap text-ink-muted">
                   {formatUsd(Math.round(entry.annualCents / 12))}
                   {entry.declared && (
                     <button
@@ -299,6 +339,17 @@ export function RecurringTable({
                     </button>
                   )}
                 </td>
+                <td className="py-1 text-center">
+                  <input
+                    type="checkbox"
+                    checked={setAsides.has(entry.merchant)}
+                    disabled={pending}
+                    aria-label={`Hold back ${entry.merchant} from available to spend`}
+                    title={`Hold ${formatUsd(entry.typicalCents)} back out of each paycheck`}
+                    onChange={(event) => toggleSetAside(entry, event.target.checked)}
+                    className="size-4 align-middle accent-[var(--chart-spend)]"
+                  />
+                </td>
               </tr>
             ))}
           </tbody>
@@ -311,8 +362,11 @@ export function RecurringTable({
               <td className="tabular py-1 pr-2 text-right font-medium text-ink">
                 {formatUsd(annualTotal)}
               </td>
-              <td className="tabular py-1 text-right font-medium text-ink">
+              <td className="tabular py-1 pr-2 text-right font-medium text-ink">
                 {formatUsd(setAsideTotal)}
+              </td>
+              <td className="py-1 text-center text-[0.75rem] text-ink-muted">
+                {merchants.filter((entry) => setAsides.has(entry.merchant)).length}
               </td>
             </tr>
           </tfoot>

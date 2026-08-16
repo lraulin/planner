@@ -38,6 +38,27 @@ export type DeclaredBill = {
 };
 
 /**
+ * A declaration as the **table** holds it — every column, including the ones only the
+ * dashboard's set-aside arithmetic reads.
+ *
+ * `DeclaredBill` above is deliberately the narrower shape: it is what `analytics.ts` needs to
+ * cost a year and forecast a due date, and widening it would make every caller that has no
+ * interest in budgeting supply two fields to satisfy the compiler. A `StoredBill` is assignable
+ * wherever a `DeclaredBill` is wanted, so the read is one query either way.
+ */
+export type StoredBill = DeclaredBill & {
+  /**
+   * Hold this bill's cost back from "available to spend", a share out of each paycheck.
+   *
+   * Independent of `scheduled` — that one is about the date, this one is about the money, and
+   * an unscheduled bill is a perfectly good set-aside.
+   */
+  setAside: boolean;
+  /** Day of the period the charge is expected, 1–31, or null to walk from the last charge. */
+  dueDay: number | null;
+};
+
+/**
  * The cadences offered in the UI, in months.
  *
  * A closed list because these are the cadences bills actually use, and an open number field

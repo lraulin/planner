@@ -224,13 +224,33 @@ const PAGES = {
     },
   ],
 
+  /*
+   * Ordered by how often a page is opened, which for Finances is the reverse of how it was
+   * built: the current position first, then the analysis behind it, then the records behind
+   * that. Dashboard answers "can I spend this", which is a question asked daily; Register
+   * answers "what did I spend", which is asked when something looks wrong.
+   */
   finances: [
+    {
+      id: "dashboard",
+      label: "Dashboard",
+      segment: "dashboard",
+      status: "built",
+      isDefault: true,
+      keywords: "available to spend payday balances set aside envelopes budget now",
+    },
+    {
+      id: "insights",
+      label: "Insights",
+      segment: "insights",
+      status: "built",
+      keywords: "spending baseline lumpy cashflow charts reports",
+    },
     {
       id: "register",
       label: "Register",
       segment: "register",
       status: "built",
-      isDefault: true,
       keywords: "transactions ledger accounts import",
     },
     {
@@ -239,13 +259,6 @@ const PAGES = {
       segment: "statements",
       status: "built",
       keywords: "reconcile snapshots closing balance coverage holes",
-    },
-    {
-      id: "insights",
-      label: "Insights",
-      segment: "insights",
-      status: "built",
-      keywords: "spending baseline lumpy cashflow charts dashboard",
     },
     {
       id: "orders",

@@ -5,9 +5,10 @@ export const dynamic = "force-dynamic";
 /**
  * The Finances entry point.
  *
- * Register is the only built page today, so no page bar renders — the floor is two, and one
- * tab spends a row saying "you are in the only place there is". Insights is declared as
- * `reserved` in the page registry; flipping it to `built` is what makes the bar appear.
+ * Five built pages now, so the bar renders. This redirects to the **remembered** page and only
+ * falls back to the registry default, which is Dashboard — so a session that last sat on the
+ * Register keeps landing there until Dashboard is visited once. That is the persisted-UI-state
+ * contract rather than a bug, and it is written down here because it looks exactly like one.
  */
 export default async function FinancesPage(): Promise<never> {
   return moduleEntryRedirect("finances");

@@ -55,11 +55,12 @@ describe("hasPageBar", () => {
     expect(hasPageBar("fitness")).toBe(true);
     expect(hasPageBar("notes")).toBe(true);
     expect(hasPageBar("library")).toBe(true);
-    // Finances got its bar when Insights shipped beside the Register.
+    // Finances is ordered by how often a page is opened, not by when it was built.
     expect(builtPagesForModule("finances").map((page) => page.id)).toEqual([
+      "dashboard",
+      "insights",
       "register",
       "statements",
-      "insights",
       "orders",
     ]);
     expect(hasPageBar("finances")).toBe(true);
@@ -210,7 +211,7 @@ describe("defaultPageFor and builtPageById", () => {
     expect(defaultPageFor("schedule")?.id).toBe("calendar");
     expect(defaultPageFor("fitness")?.id).toBe("sessions");
     expect(defaultPageFor("notes")?.id).toBe("grid");
-    expect(defaultPageFor("finances")?.id).toBe("register");
+    expect(defaultPageFor("finances")?.id).toBe("dashboard");
     expect(defaultPageFor("library")?.id).toBe("contacts");
   });
 

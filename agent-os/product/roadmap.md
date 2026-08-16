@@ -733,7 +733,19 @@ YNAB-like, but simpler — and connected to goals over time.
   overlays official household-position change on transaction net; the
   residual is the diagnostic. 2025 Cap One PDFs closed the year-long hole
   (June 2025 file is a May reprint).
-- **Next:** Envelopes.
+  ✅ Finances Dashboard shipped 2026-08-16 —
+  `agent-os/specs/2026-08-16-1338-finances-dashboard-available/`. The first
+  finance page that answers a forward-looking question: available to spend
+  before the next paycheck, and how many days that is. Checking and cash,
+  less pending, less the full card balance, less what is set aside — savings
+  deliberately excluded, and the figure allowed to go negative. Cash position
+  sits beside it. Set-asides are a flag on a declared recurring bill, accruing
+  a share per paycheck and re-anchoring when the charge posts. `/finances`
+  now opens on Dashboard, with the page bar ordered by how often a page is
+  read rather than when it was built.
+- **Next:** Envelopes. The dashboard delivered the **set-aside primitive** and the
+  surface envelopes will live on; it did not build the envelope model — multiple
+  funded categories, rollover, and reallocation are all still ahead.
 - **Then:** **integration with Goals** (save for X, fund project Y); AI advice on top of
   envelope + history data.
 - **Later — classification that isn't the merchant's name.** Raised 2026-08-12; not in

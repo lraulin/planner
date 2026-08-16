@@ -1,0 +1,3 @@
+ALTER TABLE "finance_recurring_bills" ADD COLUMN "set_aside" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "finance_recurring_bills" ADD COLUMN "due_day" smallint;--> statement-breakpoint
+ALTER TABLE "finance_recurring_bills" ADD CONSTRAINT "finance_recurring_bills_due_day" CHECK ("finance_recurring_bills"."due_day" is null or ("finance_recurring_bills"."due_day" >= 1 and "finance_recurring_bills"."due_day" <= 31));

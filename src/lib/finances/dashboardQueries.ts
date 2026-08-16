@@ -7,9 +7,14 @@ import {
   financeStatements,
   financeTransactions,
 } from "@/db/schema";
-import type { AnalyticsRow } from "./analytics";
+import { listConnections, type BankConnectionRow } from "@/lib/banksync/queries";
+import { effectiveMerchant, paydaysFrom, type AnalyticsRow } from "./analytics";
+import type { BillCharge, PendingRow } from "./available";
+import type { Payday } from "./classify/income";
 import { numericStringToCents } from "./money";
-import type { DeclaredBill } from "./recurringBills";
+import { listAccounts } from "./queries";
+import type { StoredBill } from "./recurringBills";
+import type { FinanceAccountRow } from "./types";
 
 /**
  * Reads for the insights dashboard. Every one takes `userId` and scopes on it.
@@ -111,7 +116,7 @@ export async function unclassifiedCount(userId: string): Promise<number> {
  * of its charges, and a window-scoped read would make it flicker out of the recurring panel
  * and back onto the one-off review list every time someone narrowed the range.
  */
-export async function loadRecurringBills(userId: string): Promise<DeclaredBill[]> {
+export async function loadRecurringBills(userId: string): Promise<StoredBill[]> {
   const rows = await db
     .select({
       merchant: financeRecurringBills.merchant,
@@ -119,12 +124,79 @@ export async function loadRecurringBills(userId: string): Promise<DeclaredBill[]
       expectedCents: financeRecurringBills.expectedCents,
       anchorDate: financeRecurringBills.anchorDate,
       scheduled: financeRecurringBills.scheduled,
+      setAside: financeRecurringBills.setAside,
+      dueDay: financeRecurringBills.dueDay,
     })
     .from(financeRecurringBills)
     .where(eq(financeRecurringBills.userId, userId))
     .orderBy(asc(financeRecurringBills.merchant));
 
   return rows;
+}
+
+/**
+ * Everything the Finances **dashboard** reads, in one call.
+ *
+ * Composed from reads that already exist rather than reimplemented: `listAccounts` computes the
+ * three-tier headline balance and `syncedBalanceAsOf` that `available.ts` turns on, and
+ * `paydaysFrom` runs the same `detectIncome` the classifier does. Two implementations of "what
+ * is a paycheck" is exactly how a dashboard comes to disagree with the page it links to.
+ *
+ * **Paydays and bill charges are derived here rather than in the view.** The full classified
+ * history is a few thousand rows — the right payload for Insights, which re-slices all of it a
+ * dozen ways, and the wrong one for a status page that needs a list of dates and a list of
+ * charges. Both derivations are pure and neither depends on "today", so nothing about doing
+ * them server-side makes the result depend on the deploy region's clock.
+ */
+export type DashboardData = {
+  accounts: FinanceAccountRow[];
+  /** Rows the bank has not yet posted. Signed in module convention. */
+  pending: PendingRow[];
+  bills: StoredBill[];
+  paydays: Payday[];
+  /** Every posted charge against a declared bill, keyed by effective merchant. */
+  billCharges: BillCharge[];
+  connections: BankConnectionRow[];
+};
+
+export async function loadDashboard(userId: string): Promise<DashboardData> {
+  const [accounts, rows, bills, pendingRows, connections] = await Promise.all([
+    listAccounts(userId),
+    loadInsightsRows(userId),
+    loadRecurringBills(userId),
+    db
+      .select({
+        accountId: financeTransactions.accountId,
+        amount: financeTransactions.amount,
+      })
+      .from(financeTransactions)
+      .where(
+        and(
+          eq(financeTransactions.userId, userId),
+          eq(financeTransactions.pending, true),
+        ),
+      ),
+    listConnections(userId),
+  ]);
+
+  const declared = new Set(bills.map((bill) => bill.merchant));
+
+  return {
+    accounts,
+    pending: pendingRows.map((row) => ({
+      accountId: row.accountId,
+      amountCents: numericStringToCents(row.amount) ?? 0,
+    })),
+    bills,
+    paydays: paydaysFrom(rows),
+    billCharges: rows
+      .map((row) => ({
+        merchant: effectiveMerchant(row),
+        dateKey: row.transactionDate,
+      }))
+      .filter((charge) => declared.has(charge.merchant)),
+    connections,
+  };
 }
 
 export type AccountCarryingCost = {

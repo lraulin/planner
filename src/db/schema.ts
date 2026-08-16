@@ -2280,6 +2280,29 @@ export const financeRecurringBills = pgTable(
      * Null means the latest charge on file is the anchor.
      */
     anchorDate: date("anchor_date", { mode: "string" }),
+    /**
+     * Hold this bill's cost back from "available to spend", accruing a share out of each
+     * paycheck rather than appearing as a cliff on the due date.
+     *
+     * **Orthogonal to `scheduled`**, which is the pair of facts that column exists to keep
+     * apart: `scheduled` says whether the *date* is knowable, this says whether the *cost*
+     * accrues. Propane is unscheduled and a perfectly good set-aside — $500 a year has to come
+     * from somewhere whenever the truck arrives.
+     *
+     * Defaults false: a declaration made to keep a bill off the review list said nothing about
+     * budgeting, and turning every existing one into a deduction from the headline would be a
+     * silent, and large, change to a number the user reads daily.
+     */
+    setAside: boolean("set_aside").notNull().default(false),
+    /**
+     * Day of the period the charge is expected, 1–31. Null keeps the existing behaviour, where
+     * `nextDueDate` walks forward from the last charge on file.
+     *
+     * Not clamped to 28: a rent due on the 31st is a real thing, and the month arithmetic in
+     * `recurringBills.ts` already shortens an overlong day to the month's end rather than
+     * spilling into the next one.
+     */
+    dueDay: smallint("due_day"),
     notes: text("notes").notNull().default(""),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -2291,6 +2314,10 @@ export const financeRecurringBills = pgTable(
     check(
       "finance_recurring_bills_cadence_months",
       sql`${table.cadenceMonths} >= 1 and ${table.cadenceMonths} <= 24`,
+    ),
+    check(
+      "finance_recurring_bills_due_day",
+      sql`${table.dueDay} is null or (${table.dueDay} >= 1 and ${table.dueDay} <= 31)`,
     ),
   ],
 );
