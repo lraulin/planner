@@ -98,3 +98,35 @@ describe("safeErrorMessage", () => {
     ).toBe("Transaction not found.");
   });
 });
+
+describe("wrapped driver errors", () => {
+  it("redacts a Drizzle query error, whose PostgresError hides in cause", () => {
+    // The real shape, from a foreign-key violation: the wrapper is a plain `Error` with no
+    // `code`, and its message is the whole statement plus a `params:` list. Checking only
+    // the outer error let that reach the browser verbatim.
+    const pg = new Error("insert violates foreign key constraint");
+    pg.name = "PostgresError";
+    (pg as unknown as { code: string }).code = "23503";
+
+    const wrapper = new Error(
+      'Failed query: insert into "finance_transactions" ... params: SBARRO,-6.59',
+      { cause: pg },
+    );
+
+    expect(isInternalError(wrapper)).toBe(true);
+    expect(safeErrorMessage(wrapper, "test")).toBe(GENERIC_ERROR_MESSAGE);
+  });
+
+  it("still lets a deliberate sentence through when its cause is also ours", () => {
+    const inner = new Error("Account not found.");
+    const outer = new Error("Transaction not found.", { cause: inner });
+    expect(isInternalError(outer)).toBe(false);
+    expect(safeErrorMessage(outer, "test")).toBe("Transaction not found.");
+  });
+
+  it("terminates on a self-referential cause rather than hanging", () => {
+    const looped = new Error("looped");
+    (looped as unknown as { cause: unknown }).cause = looped;
+    expect(isInternalError(looped)).toBe(false);
+  });
+});

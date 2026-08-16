@@ -26,13 +26,34 @@
 export const GENERIC_ERROR_MESSAGE = "Something went wrong.";
 
 /**
+ * How far down a `cause` chain to look. Three is more than any wrapper here produces, and a
+ * bound means a self-referential `cause` cannot hang the request.
+ */
+const MAX_CAUSE_DEPTH = 3;
+
+/**
  * Did this come from the database driver, the network stack, or the filesystem — as opposed
  * to being a sentence we wrote?
+ *
+ * **The `cause` chain has to be walked, not just the top error.** Drizzle wraps every query
+ * failure in a `DrizzleQueryError` whose `name` is plain `"Error"`, which carries no `code`,
+ * and whose `message` is the full SQL plus a `params:` list — with the real `PostgresError`
+ * tucked into `cause`. Checking only the outer error therefore passed the entire statement
+ * and its parameter values straight through to the browser. For the finance tables those
+ * parameters are descriptions and amounts, which is exactly what this module exists to keep
+ * off the screen.
  */
 export function isInternalError(error: unknown): boolean {
   if (!(error instanceof Error)) return true;
-  if (error.name === "PostgresError") return true;
-  return typeof (error as { code?: unknown }).code === "string";
+
+  let current: unknown = error;
+  for (let depth = 0; depth <= MAX_CAUSE_DEPTH; depth++) {
+    if (!(current instanceof Error)) break;
+    if (current.name === "PostgresError") return true;
+    if (typeof (current as { code?: unknown }).code === "string") return true;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
 }
 
 /**

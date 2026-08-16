@@ -140,6 +140,28 @@ describeDb("connections and links", () => {
     expect((await listConnections(userId))[0].linkedAccountCount).toBe(1);
   });
 
+  it("refuses a second provider account on a register account that already has one", async () => {
+    const userId = await makeUser();
+    const connectionId = await saveConnection(userId, {
+      accessUrl: "https://a:b@x.test",
+    });
+    const accountId = await makeAccount(userId);
+
+    await linkAccount(userId, { connectionId, externalAccountId: "p1", accountId });
+
+    // Two unique indexes guard this table and onConflictDoUpdate can only name one, so
+    // without the explicit check this surfaced as a raw driver error carrying the SQL.
+    await expect(
+      linkAccount(userId, { connectionId, externalAccountId: "p2", accountId }),
+    ).rejects.toThrow(/already matched to another bank account/i);
+
+    // Re-matching the same provider account is still an upsert, not a clash.
+    await expect(
+      linkAccount(userId, { connectionId, externalAccountId: "p1", accountId }),
+    ).resolves.toBeTruthy();
+    expect(await listLinks(userId)).toHaveLength(1);
+  });
+
   it("deleting a connection removes its links but keeps imported transactions", async () => {
     const userId = await makeUser();
     const connectionId = await saveConnection(userId, {

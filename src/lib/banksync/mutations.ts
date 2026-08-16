@@ -92,6 +92,27 @@ export async function linkAccount(
   await requireConnection(userId, input.connectionId);
   await requireAccount(userId, input.accountId);
 
+  // There are *two* unique indexes on this table and `onConflictDoUpdate` can only name
+  // one. It names `(user_id, external_account_id)`, so re-matching the same provider
+  // account is an upsert — but pointing a *second* provider account at a register account
+  // that already has one violates `(user_id, account_id)` and comes back as a raw driver
+  // error. Checked here so it reads as the sentence it is.
+  const [clash] = await db
+    .select({ externalAccountId: bankAccountLinks.externalAccountId })
+    .from(bankAccountLinks)
+    .where(
+      and(
+        eq(bankAccountLinks.userId, userId),
+        eq(bankAccountLinks.accountId, input.accountId),
+      ),
+    )
+    .limit(1);
+  if (clash && clash.externalAccountId !== input.externalAccountId) {
+    throw new Error(
+      "That register account is already matched to another bank account. Unmatch it first.",
+    );
+  }
+
   const [row] = await db
     .insert(bankAccountLinks)
     .values({
