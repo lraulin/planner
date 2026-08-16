@@ -76,6 +76,11 @@ export function BankSyncPanel({ connections, linked }: Props) {
         : await connectAction(value);
       if (!result.ok) {
         setError(result.error);
+        // Refresh anyway. A setup token can only be claimed once, and the claim is saved
+        // before the accounts are described — so a failure in the second half leaves a
+        // usable connection that must not stay invisible until the page is reloaded by
+        // hand. Reaching it via "Match accounts" is then the recovery, with no new token.
+        router.refresh();
         return;
       }
       // The token is single-use, so clearing it prevents a second submit that could only
