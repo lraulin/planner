@@ -19,9 +19,11 @@ import {
   existingRowsInWindow,
   listLinks,
   loadConnectionsForSync,
+  newestTransactionDate,
   type BankConnectionForSync,
 } from "./queries";
 import { planSync } from "./syncPlan";
+import { syncWindow } from "./crossSource";
 
 /** How stale a connection may be before a page load refreshes it on its own. */
 export const SYNC_MAX_AGE_MS = 5 * 60_000;
@@ -36,8 +38,14 @@ export const SYNC_MAX_AGE_MS = 5 * 60_000;
  */
 const OVERLAP_DAYS = 7;
 
-/** How far back the very first sync reaches. The provider caps a window at 90 days. */
-const INITIAL_DAYS = 89;
+/**
+ * Furthest back a first sync will ever reach.
+ *
+ * 45 rather than the protocol's 90-day maximum because the provider answers a wider request
+ * with a warning in `errors`: "Requested date range exceeds recommended range of 45 days.
+ * In the future, this may be capped."
+ */
+const MAX_INITIAL_DAYS = 45;
 
 /**
  * What happened to one connection.
@@ -76,12 +84,6 @@ export type SyncResult = {
   reclassified: boolean;
 };
 
-function shiftDays(key: string, days: number): string {
-  const date = new Date(`${key}T12:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
-
 const today = (): string => new Date().toISOString().slice(0, 10);
 
 async function syncOne(
@@ -101,14 +103,20 @@ async function syncOne(
     );
     const accountIds = links.map((link) => link.accountId);
 
-    // Re-read a little before where we left off: a transaction can post later than the day
-    // it happened, and would otherwise slip behind the window permanently.
-    const windowStart = connection.syncedThrough
-      ? shiftDays(connection.syncedThrough, -OVERLAP_DAYS)
-      : shiftDays(today(), -INITIAL_DAYS);
+    // Where to resume, and what to weigh the result against. The relationship between the
+    // three dates is subtle enough to live in a tested function rather than here.
+    //
+    // On a first sync there is no cursor, and the obvious choice — reach back as far as the
+    // provider allows — is the wrong one. The register already holds full history from
+    // statement and CSV imports, so a bulk fetch re-delivers months of rows the cross-source
+    // matcher then has to recognise, and every one it misses becomes a duplicate. Measured
+    // against real data that was 217 candidate rows of which only 16 were genuinely new.
+    const anchor =
+      connection.syncedThrough ?? (await newestTransactionDate(userId, accountIds));
+    const window = syncWindow(anchor, today(), OVERLAP_DAYS, MAX_INITIAL_DAYS);
 
     const set = await fetchAccounts(connection.accessUrl, {
-      startDate: windowStart,
+      startDate: window.fetchFrom,
       pending: true,
     });
 
@@ -118,11 +126,10 @@ async function syncOne(
       existingByAccount: await existingRowsInWindow(
         userId,
         accountIds,
-        windowStart,
-        // Generous upper bound: a pending row can carry a date slightly ahead of today.
-        shiftDays(today(), 2),
+        window.compareFrom,
+        window.compareTo,
       ),
-      windowStart,
+      windowStart: window.fetchFrom,
     });
 
     const applied = await applySync(userId, {

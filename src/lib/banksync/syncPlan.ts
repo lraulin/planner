@@ -21,7 +21,7 @@
  * — leaving the account with neither.
  */
 
-import { selectNewTransactions } from "@/lib/finances/matchExisting";
+import { selectUnmatched } from "./crossSource";
 import type { ParsedTransaction } from "@/lib/finances/types";
 import { toParsedTransaction, type SimpleFinAccount } from "./mapping";
 
@@ -169,7 +169,9 @@ export function planSync(input: SyncPlanInput): SyncPlan {
     }
   }
 
-  // Cross-source dedup, per account. The rows being deleted are excluded first: a pending
+  // Cross-source dedup, per account, using `crossSource.ts` rather than the CSV importer's
+  // matcher — a live feed and a statement disagree on dates and wrap descriptions in ways
+  // that exact matching cannot see. The rows being deleted are excluded first: a pending
   // row that just posted still matches its replacement on date, amount and description, so
   // leaving it in would drop the posted row as a duplicate of a row about to disappear.
   let skippedDuplicate = 0;
@@ -181,7 +183,7 @@ export function planSync(input: SyncPlanInput): SyncPlan {
       inserts.push(...candidates);
       continue;
     }
-    const { keep } = selectNewTransactions(
+    const { keep } = selectUnmatched(
       existing,
       candidates.map((candidate) => candidate.transaction),
     );

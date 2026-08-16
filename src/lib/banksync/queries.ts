@@ -8,7 +8,7 @@
  * receives.
  */
 
-import { and, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { db } from "@/db";
 import {
   bankAccountLinks,
@@ -202,4 +202,33 @@ export async function existingRowsInWindow(
     out.set(row.accountId, bucket);
   }
   return out;
+}
+
+/**
+ * The newest transaction already stored across a set of accounts, or null when there is
+ * none.
+ *
+ * This is what makes the first sync not a bulk import. The register already holds full
+ * history from statement and CSV imports, so re-fetching three months of it only creates
+ * work for the cross-source matcher — and every row it fails to match becomes a duplicate.
+ * Starting from what is already there means the first sync fetches what is genuinely
+ * missing and nothing else.
+ */
+export async function newestTransactionDate(
+  userId: string,
+  accountIds: readonly string[],
+): Promise<string | null> {
+  if (accountIds.length === 0) return null;
+  const [row] = await db
+    .select({ transactionDate: financeTransactions.transactionDate })
+    .from(financeTransactions)
+    .where(
+      and(
+        eq(financeTransactions.userId, userId),
+        inArray(financeTransactions.accountId, [...accountIds]),
+      ),
+    )
+    .orderBy(desc(financeTransactions.transactionDate))
+    .limit(1);
+  return row?.transactionDate ?? null;
 }

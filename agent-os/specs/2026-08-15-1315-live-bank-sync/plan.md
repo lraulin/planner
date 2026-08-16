@@ -150,8 +150,39 @@ offers nothing equivalent to `/transactions/refresh`. The refresh button re-read
 SimpleFIN currently holds; it cannot make a bank hand over something newer. The UI must say
 so plainly rather than implying a button makes data appear.
 
-**D6 — Cross-source dedup reuses `selectNewTransactions`** (`matchExisting.ts:71`)
-unchanged. Unaffected by the vendor switch.
+**D6 — Cross-source dedup is the sync's own matcher, not the CSV importer's, and the first
+sync does not backfill.** Both halves were forced by measurement against real accounts, and
+the original design — reuse `selectNewTransactions`, fetch 89 days on first sync — produced
+**217 candidate rows of which only 16 were genuinely new**.
+
+Two ways a live feed and a bank statement disagree, neither guessable:
+
+1. **Dates are off by a day or two.** The aggregator reports when the merchant authorised
+   the charge; the statement records the bank's own transaction date. 176 of the 217 rows
+   differed by exactly one day with byte-identical descriptions, and an exact-date rule
+   matched none of them.
+2. **Descriptions get wrapped.** The Capital One 360 export writes
+   `Withdrawal from RENT:RAULIN RENT:RAULI` where the feed says `RENT:RAULIN`.
+   `descriptionsMatch` wants a prefix; here the feed's text sits in the middle.
+
+So `crossSource.ts` matches on **exact amount, ±2 days, and description containment above a
+length floor**. `matchExisting.ts` is left alone — it serves CSV-to-CSV dedup, which works,
+and loosening it would loosen that too.
+
+**The first sync anchors to the newest row already on file**, not to the provider's maximum
+history. The register holds complete history from statements; re-fetching it only gives the
+matcher work, and every row it misses is a duplicate. With the anchor the same real run
+produced 16 inserts, all dated after the newest existing row.
+
+**The comparison window reaches back further than the fetch window**, by at least the date
+tolerance. Loading existing rows from the fetch start hides statement rows dated a day or two
+earlier, which duplicates every transaction on the boundary — three did, on the first real
+run. `syncWindow()` is a pure function for exactly this reason: the relationship between the
+three dates is the part that was wrong and is invisible when it is.
+
+Error direction is chosen deliberately throughout: a missed match inserts a duplicate, which
+is visible and deletable; an over-eager match drops a real transaction, which is invisible.
+`fingerprint.ts` already names the latter as the worse outcome.
 
 **D7 — The synced balance leads for linked accounts.** `FinanceAccountRow` already models
 headline-vs-ledger with a mismatch delta; the synced balance slots in ahead of
@@ -172,7 +203,14 @@ exists to stop telling. Carried over from the Plaid design unchanged in spirit.
 
 **D8 — Manual refresh button plus a stale-on-load throttle. No scheduler.** Unchanged, and
 cheaper to justify now: there is no per-call charge, so refreshing costs nothing but a
-request against the 24/day allowance.
+request against the 24/day allowance. Windows are capped at **45 days**, not the protocol's
+90: a wider request comes back with "Requested date range exceeds recommended range of 45
+days. In the future, this may be capped."
+
+**D8a — `available-balance` is unusable and must not be built on.** Every account came back
+with `available-balance: 0`, including a checking account holding $571.45. It is stored as
+reported but nothing reads it. The follow-on available-to-spend spec has to derive that
+figure from the balance and pending rows, not from this field.
 
 **D9 — Sync triggers `reclassifyTransactions` when it inserted anything.** Unchanged.
 
