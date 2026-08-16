@@ -102,7 +102,7 @@ export function DashboardView({
   const openAccounts = accounts.filter((account) => account.closedAt === null);
 
   return (
-    <div className="flex min-w-0 flex-col gap-3 p-3">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-auto p-3">
       <Panel
         title="Available to spend"
         subtitle={
@@ -323,25 +323,9 @@ function CapOnePendingPaste() {
   return (
     <Panel
       title="Capital One pending"
-      subtitle="SimpleFIN does not send these. Copy them from the bank page, then paste here."
+      subtitle="SimpleFIN does not send these. Copy on the bank page, then paste here."
     >
-      <textarea
-        ref={areaRef}
-        spellCheck={false}
-        rows={6}
-        aria-label="Capital One pending paste"
-        placeholder="# planner-pending v1"
-        className="w-full min-h-[7rem] rounded border border-rule bg-surface px-2 py-1 font-mono text-[0.75rem] text-ink"
-      />
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          disabled={pending || today === null}
-          onClick={() => apply(areaRef.current?.value ?? "")}
-          className="min-h-tap rounded border border-rule bg-surface-raised px-2 text-[0.8125rem] text-ink disabled:opacity-50 md:min-h-0 md:py-1"
-        >
-          Apply paste
-        </button>
+      <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
           disabled={pending || today === null}
@@ -356,9 +340,17 @@ function CapOnePendingPaste() {
               },
             );
           }}
-          className="min-h-tap rounded border border-rule px-2 text-[0.8125rem] text-ink disabled:opacity-50 md:min-h-0 md:py-1"
+          className="min-h-tap rounded border border-rule bg-surface-raised px-2 text-[0.8125rem] text-ink disabled:opacity-50 md:min-h-0 md:py-1"
         >
           Paste from clipboard
+        </button>
+        <button
+          type="button"
+          disabled={pending || today === null}
+          onClick={() => apply(areaRef.current?.value ?? "")}
+          className="min-h-tap rounded border border-rule px-2 text-[0.8125rem] text-ink disabled:opacity-50 md:min-h-0 md:py-1"
+        >
+          Apply text
         </button>
       </div>
       {message && <p className="mt-2 text-[0.8125rem] text-ink">{message}</p>}
@@ -367,6 +359,14 @@ function CapOnePendingPaste() {
           {error}
         </p>
       )}
+      <textarea
+        ref={areaRef}
+        spellCheck={false}
+        rows={3}
+        aria-label="Capital One pending paste"
+        placeholder="# planner-pending v1"
+        className="mt-2 w-full rounded border border-rule bg-surface px-2 py-1 font-mono text-[0.75rem] text-ink"
+      />
     </Panel>
   );
 }
