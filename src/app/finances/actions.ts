@@ -1,6 +1,10 @@
 "use server";
 
 import {
+  replaceScrapedPending,
+  type ReplaceScrapedPendingResult,
+} from "@/lib/finances/scrapePending";
+import {
   deleteAccount,
   deleteRecurringBill,
   deleteTransaction,
@@ -84,6 +88,13 @@ export async function deleteRecurringBillAction(
   merchant: string,
 ): Promise<ActionResult> {
   return run((userId) => deleteRecurringBill(userId, merchant));
+}
+
+export async function pasteScrapedPendingAction(
+  text: string,
+  todayKey: string,
+): Promise<DataActionResult<ReplaceScrapedPendingResult>> {
+  return runWithData((userId) => replaceScrapedPending(userId, text, todayKey));
 }
 
 export async function getTransactionAction(

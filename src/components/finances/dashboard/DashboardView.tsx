@@ -1,7 +1,9 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { pasteScrapedPendingAction } from "@/app/finances/actions";
 import type { BankConnectionRow } from "@/lib/banksync/queries";
 import {
   availableToSpend,
@@ -274,7 +276,98 @@ export function DashboardView({
           </li>
         </ul>
       </Panel>
+
+      <CapOnePendingPaste />
     </div>
+  );
+}
+
+/**
+ * Capital One does not send pending rows through SimpleFIN. The Tampermonkey script copies
+ * the bank page's pending table; this is the paste that writes them.
+ */
+function CapOnePendingPaste() {
+  const today = useToday();
+  const router = useRouter();
+  const areaRef = useRef<HTMLTextAreaElement>(null);
+  const [pending, startTransition] = useTransition();
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  function apply(value: string) {
+    const payload = value.trim() === "" ? (areaRef.current?.value ?? "") : value;
+    if (today === null || payload.trim() === "") return;
+    setError(null);
+    setMessage(null);
+    startTransition(async () => {
+      const outcome = await pasteScrapedPendingAction(payload, today);
+      if (!outcome.ok) {
+        setError(outcome.error);
+        return;
+      }
+      const data = outcome.data;
+      setMessage(
+        data
+          ? `Wrote ${data.inserted} pending on ${data.accountName}` +
+              (data.skippedPosted > 0
+                ? ` · ${data.skippedPosted} already posted`
+                : "") +
+              "."
+          : "Updated.",
+      );
+      if (areaRef.current) areaRef.current.value = "";
+      router.refresh();
+    });
+  }
+
+  return (
+    <Panel
+      title="Capital One pending"
+      subtitle="SimpleFIN does not send these. Copy them from the bank page, then paste here."
+    >
+      <textarea
+        ref={areaRef}
+        spellCheck={false}
+        rows={6}
+        aria-label="Capital One pending paste"
+        placeholder="# planner-pending v1"
+        className="w-full min-h-[7rem] rounded border border-rule bg-surface px-2 py-1 font-mono text-[0.75rem] text-ink"
+      />
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          disabled={pending || today === null}
+          onClick={() => apply(areaRef.current?.value ?? "")}
+          className="min-h-tap rounded border border-rule bg-surface-raised px-2 text-[0.8125rem] text-ink disabled:opacity-50 md:min-h-0 md:py-1"
+        >
+          Apply paste
+        </button>
+        <button
+          type="button"
+          disabled={pending || today === null}
+          onClick={() => {
+            void navigator.clipboard.readText().then(
+              (value) => {
+                if (areaRef.current) areaRef.current.value = value;
+                apply(value);
+              },
+              () => {
+                setError("Could not read the clipboard. Paste into the box instead.");
+              },
+            );
+          }}
+          className="min-h-tap rounded border border-rule px-2 text-[0.8125rem] text-ink disabled:opacity-50 md:min-h-0 md:py-1"
+        >
+          Paste from clipboard
+        </button>
+      </div>
+      {message && <p className="mt-2 text-[0.8125rem] text-ink">{message}</p>}
+      {error && (
+        <p role="alert" className="mt-2 text-[0.8125rem] text-[var(--chart-spend)]">
+          {error}
+        </p>
+      )}
+    </Panel>
   );
 }
 

@@ -10,7 +10,8 @@ export type FinanceFeed =
   | "csv:capitalone-card"
   | "csv:capitalone-bank"
   | "csv:coinbase"
-  | "api:simplefin";
+  | "api:simplefin"
+  | "scrape:capitalone";
 
 export const FINANCE_FEEDS: readonly FinanceFeed[] = [
   "csv:chase-credit",
@@ -18,6 +19,7 @@ export const FINANCE_FEEDS: readonly FinanceFeed[] = [
   "csv:capitalone-bank",
   "csv:coinbase",
   "api:simplefin",
+  "scrape:capitalone",
 ] as const;
 
 /** Human label for a feed, for import summaries and warnings. */
@@ -27,6 +29,7 @@ export const FEED_LABELS: Record<FinanceFeed, string> = {
   "csv:capitalone-bank": "Capital One 360 bank",
   "csv:coinbase": "Coinbase",
   "api:simplefin": "Bank sync",
+  "scrape:capitalone": "Capital One pending",
 };
 
 /** Fail-closed PDF dispatch names every format we actually parse. */

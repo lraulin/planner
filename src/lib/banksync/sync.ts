@@ -8,6 +8,7 @@
  */
 
 import { reclassifyTransactions } from "@/lib/finances/mutations";
+import { resolveScrapedPending } from "@/lib/finances/scrapePending";
 import {
   BankReauthRequiredError,
   BankSubscriptionLapsedError,
@@ -140,6 +141,11 @@ async function syncOne(
       syncedThrough: today(),
       unmatchedAccountCount: plan.unlinkedAccountIds.length,
     });
+
+    // Scraped Cap One pending is a different feed. applySync will not delete it. A posted
+    // row that just landed has to retire the matching scrape row here, or available-to-spend
+    // double-counts until the next paste.
+    await resolveScrapedPending(userId, accountIds);
 
     // Balances come from the same response — no second call, and nothing metered.
     let balancesUpdated = 0;

@@ -25,6 +25,8 @@ import {
 import { centsToNumericString, numericStringToCents } from "./money";
 import { looksLikeCoinbaseCsv, parseCoinbaseCsv } from "./coinbaseCsv";
 import { persistPaypalResolutions } from "./paypalResolutions";
+import { looksLikePlannerPending } from "./capitalOnePending";
+import { replaceScrapedPending } from "./scrapePending";
 import {
   looksLikePaypalStatement,
   parsePaypalStatement,
@@ -353,6 +355,22 @@ export async function importFinanceCsvFiles({
   let resolutionsSkipped = 0;
 
   for (const file of files) {
+    const text = file.text ?? "";
+    if (looksLikePlannerPending(text)) {
+      try {
+        const outcome = await replaceScrapedPending(userId, text, "");
+        created += outcome.inserted;
+        skipped += outcome.skippedPosted;
+      } catch (error) {
+        warnings.push(
+          error instanceof Error
+            ? `${file.name}: ${error.message}`
+            : `"${file.name}" failed.`,
+        );
+      }
+      continue;
+    }
+
     const parsed = await parseImportFile(file);
     if (!parsed.ok) {
       warnings.push(parsed.error);

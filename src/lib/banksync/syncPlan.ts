@@ -16,9 +16,10 @@
  *    on an account whose history came from CSVs overlaps them completely.
  *
  * Rules 2 and 3 interact in a way that is easy to get wrong, and there is a test for it:
- * the pending rows being deleted must be **excluded** from the cross-source comparison,
- * or the newly posted row matches the pending row it replaces and is dropped as a duplicate
- * — leaving the account with neither.
+ * every pending row must be **excluded** from the cross-source comparison, or a newly
+ * posted row matches the pending row it replaces and is dropped as a duplicate — leaving
+ * the account with neither. That includes scrape-pending from Capital One, which have no
+ * SimpleFIN id and would otherwise sit in the comparison set forever.
  */
 
 import { selectUnmatched } from "@/lib/finances/liveFeedMatch";
@@ -177,7 +178,7 @@ export function planSync(input: SyncPlanInput): SyncPlan {
   let skippedDuplicate = 0;
   for (const [accountId, candidates] of candidatesByAccount) {
     const existing = (existingByAccount.get(accountId) ?? []).filter(
-      (row) => !(row.externalId && deleted.has(row.externalId)),
+      (row) => !row.pending && !(row.externalId && deleted.has(row.externalId)),
     );
     if (existing.length === 0) {
       inserts.push(...candidates);

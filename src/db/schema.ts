@@ -2045,10 +2045,9 @@ export const financeTransactions = pgTable(
      * feed does not supply a posted date" — true of every Chase statement row, none of
      * which is pending.
      *
-     * Only a live API feed can set this. Every CSV and statement export is posted-only, and
-     * Capital One supplies no pending data even through Plaid, so in practice this is Chase
-     * over `api:plaid`. A pending row is transient: the sync replaces it when the real one
-     * posts, which is why user edits on one are not durable.
+     * Live feeds and the Capital One pending scrape set this. Every CSV and statement
+     * export is posted-only. A pending row is transient: the sync (or a later scrape)
+     * replaces it when the real one posts, which is why user edits on one are not durable.
      */
     pending: boolean("pending").notNull().default(false),
     description: text("description").notNull(),
