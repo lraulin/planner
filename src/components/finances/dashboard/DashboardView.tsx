@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { pasteScrapedPendingAction } from "@/app/finances/actions";
 import type { BankConnectionRow } from "@/lib/banksync/queries";
 import {
+  accountBalanceView,
   availableToSpend,
   cashPosition,
   nextPayday,
@@ -156,7 +157,10 @@ export function DashboardView({
       </StatRow>
 
       <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2">
-        <Panel title="Accounts" subtitle="Headline balance, and how fresh it is">
+        <Panel
+          title="Accounts"
+          subtitle="Working balance, and how fresh the posted figure is"
+        >
           {openAccounts.length === 0 ? (
             <PanelEmpty>
               No accounts yet. <Link href="/finances/register">Import a file</Link> or
@@ -165,29 +169,12 @@ export function DashboardView({
           ) : (
             <ul className="flex flex-col gap-1">
               {openAccounts.map((account) => (
-                <li
+                <AccountBalanceRow
                   key={account.id}
-                  className="flex items-baseline justify-between gap-3 border-b border-rule py-1 last:border-b-0"
-                >
-                  <div className="min-w-0">
-                    <div className="truncate text-[0.8125rem] text-ink">
-                      {account.name}
-                    </div>
-                    <div className="text-[0.75rem] text-ink-muted">
-                      {KIND_LABELS[account.kind] ?? account.kind} ·{" "}
-                      {freshness(account, formatDate)}
-                    </div>
-                  </div>
-                  <div
-                    className={`tabular flex-none text-[0.875rem] ${
-                      account.balanceCents < 0
-                        ? "text-[var(--chart-spend)]"
-                        : "text-ink"
-                    }`}
-                  >
-                    {formatUsd(account.balanceCents)}
-                  </div>
-                </li>
+                  account={account}
+                  pending={pending}
+                  formatDate={formatDate}
+                />
               ))}
             </ul>
           )}
@@ -279,6 +266,48 @@ export function DashboardView({
 
       <CapOnePendingPaste />
     </div>
+  );
+}
+
+function AccountBalanceRow({
+  account,
+  pending,
+  formatDate,
+}: {
+  account: FinanceAccountRow;
+  pending: readonly PendingRow[];
+  formatDate: (key: string) => string;
+}) {
+  const view = accountBalanceView(account, pending);
+  const showPosted = account.kind === "credit_card" && view.pendingCents !== 0;
+  const primary = showPosted ? view.workingCents : view.postedCents;
+
+  return (
+    <li className="flex items-baseline justify-between gap-3 border-b border-rule py-1 last:border-b-0">
+      <div className="min-w-0">
+        <div className="truncate text-[0.8125rem] text-ink">{account.name}</div>
+        <div className="text-[0.75rem] text-ink-muted">
+          {KIND_LABELS[account.kind] ?? account.kind} · {freshness(account, formatDate)}
+        </div>
+      </div>
+      <div
+        className={`tabular flex-none text-right text-[0.875rem] ${
+          primary < 0 ? "text-[var(--chart-spend)]" : "text-ink"
+        }`}
+        title={
+          showPosted
+            ? `${formatUsd(view.workingCents)} includes pending. ${formatUsd(view.postedCents)} is what the bank shows as posted.`
+            : undefined
+        }
+      >
+        {formatUsd(primary)}
+        {showPosted && (
+          <span className="mt-0.5 block text-[0.75rem] font-normal text-ink-muted">
+            ({formatUsd(view.postedCents)} posted)
+          </span>
+        )}
+      </div>
+    </li>
   );
 }
 

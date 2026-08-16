@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  accountBalanceView,
   availableToSpend,
   cashPosition,
   nextPayday,
@@ -91,6 +92,42 @@ describe("cashPosition", () => {
       cardDebtCents: 0,
       netCents: 0,
     });
+  });
+});
+
+describe("accountBalanceView", () => {
+  it("adds pending on top of a synced card and leaves the posted figure alone", () => {
+    const view = accountBalanceView(
+      account({
+        id: "card",
+        kind: "credit_card",
+        balanceCents: -5978,
+        syncedBalanceAsOf: new Date("2026-08-16T09:00:00Z"),
+      }),
+      [
+        { accountId: "card", amountCents: -37968 },
+        { accountId: "other", amountCents: -1000 },
+      ],
+    );
+
+    expect(view.postedCents).toBe(-5978);
+    expect(view.pendingCents).toBe(-37968);
+    expect(view.workingCents).toBe(-43946);
+  });
+
+  it("does not add pending to a statement-anchored card", () => {
+    const view = accountBalanceView(
+      account({
+        id: "card",
+        kind: "credit_card",
+        balanceCents: -5978,
+        syncedBalanceAsOf: null,
+      }),
+      [{ accountId: "card", amountCents: -37968 }],
+    );
+
+    expect(view.pendingCents).toBe(0);
+    expect(view.workingCents).toBe(-5978);
   });
 });
 

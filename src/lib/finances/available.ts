@@ -72,6 +72,38 @@ export type PendingRow = {
   amountCents: number;
 };
 
+export type AccountBalanceView = {
+  /** Posted headline plus pending, when pending sits on top of a synced balance. */
+  workingCents: number;
+  /** The headline: synced posted, or statement/ledger (already includes pending). */
+  postedCents: number;
+  pendingCents: number;
+};
+
+/**
+ * What one account should show: the working figure, and the posted figure when they differ.
+ *
+ * Pending is added only on a synced headline — the same D2a trap as `availableToSpend`.
+ * A statement or ledger balance already contains every pending row.
+ */
+export function accountBalanceView(
+  account: DashboardAccount,
+  pending: readonly PendingRow[],
+): AccountBalanceView {
+  const postedCents = account.balanceCents;
+  const pendingCents =
+    account.syncedBalanceAsOf === null
+      ? 0
+      : pending
+          .filter((row) => row.accountId === account.id)
+          .reduce((total, row) => total + row.amountCents, 0);
+  return {
+    workingCents: postedCents + pendingCents,
+    postedCents,
+    pendingCents,
+  };
+}
+
 /**
  * A posted charge against a declared bill, used to decide whether this period is already paid.
  * `merchant` is `effectiveMerchant()` output, matching how the bill was declared.
