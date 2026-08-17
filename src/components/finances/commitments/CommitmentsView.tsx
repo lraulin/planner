@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { GridRow } from "@/lib/tree/slice";
 import type { Payday } from "@/lib/finances/classify/income";
@@ -28,8 +28,11 @@ import {
   setRecurringBillAction,
   setRecurringSpendAction,
 } from "@/app/finances/actions";
+import type { Command } from "@/lib/commands/registry";
+import { useRegisterCommands } from "@/components/shell/CommandProvider";
 import { DataGrid } from "@/components/grid/DataGrid";
-import { GridToolbar } from "@/components/grid/GridToolbar";
+import { DestinationCommandBar } from "@/components/grid/DestinationCommandBar";
+import { GridToolbar, type GridToolbarHandle } from "@/components/grid/GridToolbar";
 import { useGridState, type GridDefaults } from "@/components/grid/useGridState";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useNavigableIds } from "@/components/grid/useNavigableIds";
@@ -46,6 +49,12 @@ import {
   type SpendGridRow,
 } from "./commitmentColumns";
 import { ReviewList } from "./ReviewList";
+
+const BILLS_SCOPE = {
+  id: "bills",
+  label: "Subscriptions & bills",
+} as const;
+const SPEND_SCOPE = { id: "spend", label: "Recurring spend" } as const;
 
 function asRows<T extends { id: string }>(items: T[]): GridRow<T>[] {
   return items.map((node) => ({ kind: "node" as const, id: node.id, node, depth: 0 }));
@@ -98,6 +107,14 @@ export function CommitmentsView({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [focusedGrid, setFocusedGrid] = useState<"bills" | "spend">("bills");
+  const billsToolbar = useRef<GridToolbarHandle>(null);
+  const spendToolbar = useRef<GridToolbarHandle>(null);
+  const focusedGridRef = useRef(focusedGrid);
+
+  useEffect(() => {
+    focusedGridRef.current = focusedGrid;
+  }, [focusedGrid]);
 
   const todayKey = today;
 
@@ -234,17 +251,61 @@ export function CommitmentsView({
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (isTypingTarget(event.target)) return;
+      const select = focusedGridRef.current === "bills" ? billsSelect : spendSelect;
       if (event.key === "ArrowDown") {
         event.preventDefault();
-        billsSelect.move(1, event.shiftKey);
+        select.move(1, event.shiftKey);
       } else if (event.key === "ArrowUp") {
         event.preventDefault();
-        billsSelect.move(-1, event.shiftKey);
+        select.move(-1, event.shiftKey);
       }
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [billsSelect]);
+  }, [billsSelect, spendSelect]);
+
+  const focusedLabel = focusedGrid === "bills" ? BILLS_SCOPE.label : SPEND_SCOPE.label;
+  const focusedCommands = useMemo<Command[]>(() => {
+    const handle = () =>
+      focusedGridRef.current === "bills" ? billsToolbar.current : spendToolbar.current;
+    return [
+      {
+        id: "view.filter",
+        label: "Filter…",
+        group: "view",
+        menu: "view",
+        section: "Layout",
+        icon: "filter",
+        keywords: "advanced condition where",
+        ownControl: true,
+        title: `Filter the ${focusedLabel} grid`,
+        run: () => handle()?.openFilter(),
+      },
+      {
+        id: "view.fields",
+        label: "Show Fields",
+        group: "view",
+        menu: "view",
+        section: "Layout",
+        icon: "fields",
+        keywords: "columns hide customize current view",
+        title: `Show Fields on ${focusedLabel}`,
+        run: () => handle()?.openFields(),
+      },
+      {
+        id: "view.reset",
+        label: "Reset this grid",
+        group: "view",
+        menu: "view",
+        section: "Layout",
+        icon: "reset",
+        keywords: "clear default columns layout",
+        title: `Reset ${focusedLabel}`,
+        run: () => handle()?.reset(),
+      },
+    ];
+  }, [focusedLabel]);
+  useRegisterCommands(focusedCommands);
 
   function run(work: () => Promise<{ ok: boolean; error?: string }>) {
     setError(null);
@@ -310,143 +371,172 @@ export function CommitmentsView({
   );
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-5 overflow-auto p-3">
-      {error && (
-        <p role="alert" className="text-[0.8125rem] text-[var(--chart-spend)]">
-          {error}
-        </p>
-      )}
-
-      <section className="shrink-0 rounded border border-rule p-2">
-        <header className="mb-2">
-          <h2 className="text-[0.9375rem] font-medium text-ink">Review</h2>
-          <p className="text-[0.75rem] text-ink-muted">
-            Detected charges that are not yet a commitment. Track as a bill (it charges
-            unless you cancel), track as recurring spend (pizza, groceries), or dismiss.
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <DestinationCommandBar
+        commands={focusedCommands}
+        overflowLabel="More commands for Commitments"
+      />
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-5 overflow-auto p-3">
+        {error && (
+          <p role="alert" className="text-[0.8125rem] text-[var(--chart-spend)]">
+            {error}
           </p>
-        </header>
-        <ReviewList items={review} onError={setError} />
-      </section>
+        )}
 
-      <section className="flex h-[26rem] min-w-0 shrink-0 flex-col overflow-hidden rounded border border-rule">
-        <header className="flex flex-wrap items-baseline justify-between gap-2 px-2 pt-2">
-          <div>
-            <h2 className="text-[0.9375rem] font-medium text-ink">
-              Subscriptions & bills
-            </h2>
+        <section className="shrink-0 rounded border border-rule p-2">
+          <header className="mb-2">
+            <h2 className="text-[0.9375rem] font-medium text-ink">Review</h2>
             <p className="text-[0.75rem] text-ink-muted">
-              Charges unless you cancel. {formatUsd(monthlyTotal)} / month ·{" "}
-              {formatUsd(annualTotal)} / year. Tick <strong>Hold</strong> to subtract a
-              bill from Available to Spend.
+              Detected charges that are not yet a commitment. Track as a bill (it
+              charges unless you cancel), track as recurring spend (pizza, groceries),
+              or dismiss.
             </p>
+          </header>
+          <ReviewList items={review} onError={setError} />
+        </section>
+
+        <section
+          className={`flex h-[26rem] min-w-0 shrink-0 flex-col overflow-hidden rounded border ${
+            focusedGrid === "bills" ? "border-select-edge" : "border-rule"
+          }`}
+          onMouseDown={() => setFocusedGrid("bills")}
+          onFocusCapture={() => setFocusedGrid("bills")}
+        >
+          <header className="flex flex-wrap items-baseline justify-between gap-2 px-2 pt-2">
+            <div>
+              <h2 className="text-[0.9375rem] font-medium text-ink">
+                Subscriptions & bills
+              </h2>
+              <p className="text-[0.75rem] text-ink-muted">
+                Charges unless you cancel. {formatUsd(monthlyTotal)} / month ·{" "}
+                {formatUsd(annualTotal)} / year. Tick <strong>Hold</strong> to subtract
+                a bill from Available to Spend.
+              </p>
+            </div>
+          </header>
+          <div className="px-2">
+            <NewBillForm claimed={claimed} pending={pending} onError={setError} />
           </div>
-        </header>
-        <div className="px-2">
-          <NewBillForm claimed={claimed} pending={pending} onError={setError} />
-        </div>
-        <GridToolbar
-          grid={billGrid}
-          gridLabel="Subscriptions"
-          allColumns={billColumns}
-          distinctValues={billDistinct}
-          counts={billCounts}
-          commandRow={false}
-        />
-        <div className="min-h-0 min-w-0 flex-1">
-          <DataGrid<BillColumnCtx, BillGridRow>
-            rows={billGridRows}
-            columns={billGrid.columns}
+          <GridToolbar
+            grid={billGrid}
+            gridLabel="Subscriptions"
             allColumns={billColumns}
-            columnCtx={billCtx}
-            selectedId={billsSelect.selectedId}
-            selectedIds={billsSelect.selectedIds}
-            onSelect={billsSelect.select}
-            ariaLabel="Subscriptions and bills"
-            exportCommands={false}
-            enableFilters
-            enableSort
-            sorts={billGrid.sorts}
-            onSortChange={billGrid.toggleSort}
-            onSetSort={billGrid.setSort}
-            filters={billGrid.filters}
-            onFilterChange={billGrid.setFilter}
-            advancedFilter={billGrid.advancedFilter}
-            search={billGrid.search}
             distinctValues={billDistinct}
-            onCountsChange={setBillCounts}
-            onNavigableIdsChange={billsNav.onIdsChange}
-            widths={billGrid.widths}
-            onResizeColumn={billGrid.setWidth}
-            onResetColumnWidth={billGrid.clearWidth}
-            columnControls={billGrid.columnControls}
-            density={billGrid.density}
-            empty={
-              <p className="p-4 text-center text-[0.8125rem] text-ink-muted">
-                No subscriptions declared yet. Pick a merchant below, or declare one
-                from Insights.
-              </p>
-            }
+            counts={billCounts}
+            commandRow={false}
+            commandScope={BILLS_SCOPE}
+            toolbarRef={billsToolbar}
           />
-        </div>
-      </section>
+          <div className="min-h-0 min-w-0 flex-1">
+            <DataGrid<BillColumnCtx, BillGridRow>
+              rows={billGridRows}
+              columns={billGrid.columns}
+              allColumns={billColumns}
+              columnCtx={billCtx}
+              selectedId={billsSelect.selectedId}
+              selectedIds={billsSelect.selectedIds}
+              onSelect={(id, mods) => {
+                setFocusedGrid("bills");
+                billsSelect.select(id, mods);
+              }}
+              ariaLabel="Subscriptions and bills"
+              commandScope={BILLS_SCOPE}
+              enableFilters
+              enableSort
+              sorts={billGrid.sorts}
+              onSortChange={billGrid.toggleSort}
+              onSetSort={billGrid.setSort}
+              filters={billGrid.filters}
+              onFilterChange={billGrid.setFilter}
+              advancedFilter={billGrid.advancedFilter}
+              search={billGrid.search}
+              distinctValues={billDistinct}
+              onCountsChange={setBillCounts}
+              onNavigableIdsChange={billsNav.onIdsChange}
+              widths={billGrid.widths}
+              onResizeColumn={billGrid.setWidth}
+              onResetColumnWidth={billGrid.clearWidth}
+              columnControls={billGrid.columnControls}
+              density={billGrid.density}
+              empty={
+                <p className="p-4 text-center text-[0.8125rem] text-ink-muted">
+                  No subscriptions declared yet. Pick a merchant below, or declare one
+                  from Insights.
+                </p>
+              }
+            />
+          </div>
+        </section>
 
-      <section className="flex h-[22rem] min-w-0 shrink-0 flex-col overflow-hidden rounded border border-rule">
-        <header className="px-2 pt-2">
-          <h2 className="text-[0.9375rem] font-medium text-ink">Recurring spend</h2>
-          <p className="text-[0.75rem] text-ink-muted">
-            Pizza, groceries — a cadence you choose, an amount that follows history.
-          </p>
-        </header>
-        <div className="px-2">
-          <NewSpendForm claimed={claimed} pending={pending} onError={setError} />
-        </div>
-        <GridToolbar
-          grid={spendGrid}
-          gridLabel="Recurring spend"
-          allColumns={spendColumns}
-          distinctValues={spendDistinct}
-          counts={spendCounts}
-          commandRow={false}
-        />
-        <div className="min-h-0 min-w-0 flex-1">
-          <DataGrid<SpendColumnCtx, SpendGridRow>
-            rows={spendGridRows}
-            columns={spendGrid.columns}
+        <section
+          className={`flex h-[22rem] min-w-0 shrink-0 flex-col overflow-hidden rounded border ${
+            focusedGrid === "spend" ? "border-select-edge" : "border-rule"
+          }`}
+          onMouseDown={() => setFocusedGrid("spend")}
+          onFocusCapture={() => setFocusedGrid("spend")}
+        >
+          <header className="px-2 pt-2">
+            <h2 className="text-[0.9375rem] font-medium text-ink">Recurring spend</h2>
+            <p className="text-[0.75rem] text-ink-muted">
+              Pizza, groceries — a cadence you choose, an amount that follows history.
+            </p>
+          </header>
+          <div className="px-2">
+            <NewSpendForm claimed={claimed} pending={pending} onError={setError} />
+          </div>
+          <GridToolbar
+            grid={spendGrid}
+            gridLabel="Recurring spend"
             allColumns={spendColumns}
-            columnCtx={spendCtx}
-            selectedId={spendSelect.selectedId}
-            selectedIds={spendSelect.selectedIds}
-            onSelect={spendSelect.select}
-            ariaLabel="Recurring spend"
-            exportCommands={false}
-            enableFilters
-            enableSort
-            sorts={spendGrid.sorts}
-            onSortChange={spendGrid.toggleSort}
-            onSetSort={spendGrid.setSort}
-            filters={spendGrid.filters}
-            onFilterChange={spendGrid.setFilter}
-            advancedFilter={spendGrid.advancedFilter}
-            search={spendGrid.search}
             distinctValues={spendDistinct}
-            onCountsChange={setSpendCounts}
-            onNavigableIdsChange={spendNav.onIdsChange}
-            widths={spendGrid.widths}
-            onResizeColumn={spendGrid.setWidth}
-            onResetColumnWidth={spendGrid.clearWidth}
-            columnControls={spendGrid.columnControls}
-            density={spendGrid.density}
-            empty={
-              <p className="p-4 text-center text-[0.8125rem] text-ink-muted">
-                Nothing tracked as recurring spend. Group Pizza Hut and Domino&apos;s
-                here.
-              </p>
-            }
+            counts={spendCounts}
+            commandRow={false}
+            commandScope={SPEND_SCOPE}
+            toolbarRef={spendToolbar}
           />
-        </div>
-      </section>
+          <div className="min-h-0 min-w-0 flex-1">
+            <DataGrid<SpendColumnCtx, SpendGridRow>
+              rows={spendGridRows}
+              columns={spendGrid.columns}
+              allColumns={spendColumns}
+              columnCtx={spendCtx}
+              selectedId={spendSelect.selectedId}
+              selectedIds={spendSelect.selectedIds}
+              onSelect={(id, mods) => {
+                setFocusedGrid("spend");
+                spendSelect.select(id, mods);
+              }}
+              ariaLabel="Recurring spend"
+              commandScope={SPEND_SCOPE}
+              enableFilters
+              enableSort
+              sorts={spendGrid.sorts}
+              onSortChange={spendGrid.toggleSort}
+              onSetSort={spendGrid.setSort}
+              filters={spendGrid.filters}
+              onFilterChange={spendGrid.setFilter}
+              advancedFilter={spendGrid.advancedFilter}
+              search={spendGrid.search}
+              distinctValues={spendDistinct}
+              onCountsChange={setSpendCounts}
+              onNavigableIdsChange={spendNav.onIdsChange}
+              widths={spendGrid.widths}
+              onResizeColumn={spendGrid.setWidth}
+              onResetColumnWidth={spendGrid.clearWidth}
+              columnControls={spendGrid.columnControls}
+              density={spendGrid.density}
+              empty={
+                <p className="p-4 text-center text-[0.8125rem] text-ink-muted">
+                  Nothing tracked as recurring spend. Group Pizza Hut and Domino&apos;s
+                  here.
+                </p>
+              }
+            />
+          </div>
+        </section>
 
-      <ForwardPanel months={months} periods={periods} />
+        <ForwardPanel months={months} periods={periods} />
+      </div>
     </div>
   );
 }

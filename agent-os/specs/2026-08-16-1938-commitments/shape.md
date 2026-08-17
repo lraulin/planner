@@ -67,7 +67,7 @@ feature low-maintenance, and is the reason this is not YNAB.
 
 ## Decisions
 
-Full statements with rationale live in `plan.md` D0–D10. In brief:
+Full statements with rationale live in `plan.md` D0–D11. In brief:
 
 - **D0** Three tiers; Tier 3 deliberately has no buckets.
 - **D1** Two tables, one shared arithmetic module; drift prevented by a shared `Commitment`
@@ -84,6 +84,8 @@ Full statements with rationale live in `plan.md` D0–D10. In brief:
 - **D8** Dead-subscription detection flags, never applies.
 - **D9** `active | cancelled | ignored`.
 - **D10** One page, two grids, second in the Finances nav.
+- **D11** One File/View catalog on the page; each grid keeps local Filter and names itself
+  in View / File ▸ Export so the command is never ambiguous.
 
 ### Constraints noted during shaping
 

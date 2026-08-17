@@ -227,6 +227,9 @@ describe("gridExportCommands", () => {
       section: "Export",
       group: "view",
     });
+    expect(gridExportFormatOf("grid.export-csv")).toBe("csv");
+    expect(gridExportFormatOf("grid.export-csv.bills")).toBe("csv");
+    expect(gridExportFormatOf("grid.copy-yaml.spend")).toBe("yaml");
     expect(commands.every((command) => command.toolbar === undefined)).toBe(true);
     expect(commands.every((command) => command.rowMenu === undefined)).toBe(true);
     expect(unplacedCommands(commands)).toEqual([]);

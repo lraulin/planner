@@ -47,6 +47,11 @@ import {
 import { writeClipboardText } from "@/lib/tree/copyAsText";
 import { useRegisterCommands } from "@/components/shell/CommandProvider";
 import type { Command } from "@/lib/commands/registry";
+import {
+  scopeCommand,
+  scopedFormatLabel,
+  type CommandScope,
+} from "@/lib/commands/scope";
 import { useIsCompact } from "@/components/shell/useIsCompact";
 import { CompactRow, type RowSwipe } from "./CompactRow";
 import type { SelectMods } from "@/lib/grid/selection";
@@ -218,6 +223,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
    */
   rowNumbers = false,
   exportCommands: registerExportCommands = true,
+  commandScope,
 }: {
   rows: GridRow<TRow>[];
   /**
@@ -253,11 +259,13 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   enableSort?: boolean;
   rowNumbers?: boolean;
   /**
-   * Register File ▸ Export / Copy for this grid. Default true so a lone grid keeps the
-   * catalog complete. Turn off when two grids share a page — two File menus is a catalog
-   * that has forked.
+   * Register File ▸ Export / Copy for this grid. Default true so a lone grid keeps
+   * the catalog complete. Two grids on one page pass `commandScope` so each export
+   * names its grid; turning this off hides Export from File entirely.
    */
   exportCommands?: boolean;
+  /** Stamp export ids/labels when two grids share File ▸ Export. */
+  commandScope?: CommandScope;
   /**
    * Sort and filters are controlled when a host passes them, which is what lets a tab
    * persist them. Omitting both keeps the grid's own state, so a tab can adopt one at a
@@ -649,7 +657,22 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
     });
     return [...downloads, ...copies];
   }, []);
-  useRegisterCommands(registerExportCommands ? exportCommands : EMPTY_EXPORT_COMMANDS);
+  const scopedExportCommands = useMemo(
+    () =>
+      commandScope
+        ? exportCommands.map((command) =>
+            scopeCommand(
+              command,
+              commandScope,
+              scopedFormatLabel(command.label, commandScope),
+            ),
+          )
+        : exportCommands,
+    [exportCommands, commandScope],
+  );
+  useRegisterCommands(
+    registerExportCommands ? scopedExportCommands : EMPTY_EXPORT_COMMANDS,
+  );
 
   /**
    * Achieve's header cycle: unsorted → ascending → descending → unsorted.

@@ -145,6 +145,14 @@ Dashboard, **Commitments**, Insights, Register, Statements, Orders. Built on the
 One page because the forward view needs both tiers and would otherwise have no home; two
 sections because pizza must never appear in a list of things that charge you automatically.
 
+**D11 — One File/View catalog; filters stay local to each grid.** The page draws one
+`DestinationCommandBar`. Each grid keeps its lens Filter button (an accelerator). View
+lists **Filter…** / **Show Fields** / **Reset this grid** for the focused grid, plus
+explicit **Filter for [grid]…** items so a grid can be targeted without focusing it
+first. File ▸ Export / Copy names the grid the same way. Hiding both command rows
+without a page-level bar left Commitments with no menu at all — the catalog must
+still exist. Global menu-above-tabs chrome is out of this spec.
+
 ## Acceptance criteria
 
 - [ ] 1Password can be renamed from `1PASSWORDTORONTOON`, its amount corrected from the
@@ -175,14 +183,15 @@ sections because pizza must never appear in a list of things that charge you aut
 Material refinements during implementation (requirements, design, scope). Pure code polish
 is omitted deliberately.
 
-| #   | Change                                                                       | Why                                                                                                                                    |
-| --- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Rename is an in-place update (`renameRecurringBill`), not insert-then-delete | Inserting the new name first trips D3: the old row still holds the same matchers                                                       |
-| 2   | `setSubscriptionStatus` is its own write, not a general upsert               | The D8 prompt sends a status and (when still active) an anchor. A general upsert on that path would be able to clear the amount        |
-| 3   | Insights takes `suppressMerchants` rather than a spend table                 | Pins D7: pizza can leave the review list without becoming an input to `baselineSplit`                                                  |
-| 4   | Detected recurring charges curate on Commitments, not Insights               | Insights is a report; declaring a commitment is a decision. The detector still feeds levelling; the review list is the inbox           |
-| 5   | Hold-back lives only on a declared bill, labelled on the Commitments grid    | The Insights checkbox both declared and deducted in one click, which is why it was unreadable. Tracking as a bill now holds by default |
-| 6   | Two grids on Commitments share the page File menu; they do not each draw one | A second File/View bar per section is a catalog that has forked                                                                        |
+| #   | Change                                                                       | Why                                                                                                                                                          |
+| --- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | Rename is an in-place update (`renameRecurringBill`), not insert-then-delete | Inserting the new name first trips D3: the old row still holds the same matchers                                                                             |
+| 2   | `setSubscriptionStatus` is its own write, not a general upsert               | The D8 prompt sends a status and (when still active) an anchor. A general upsert on that path would be able to clear the amount                              |
+| 3   | Insights takes `suppressMerchants` rather than a spend table                 | Pins D7: pizza can leave the review list without becoming an input to `baselineSplit`                                                                        |
+| 4   | Detected recurring charges curate on Commitments, not Insights               | Insights is a report; declaring a commitment is a decision. The detector still feeds levelling; the review list is the inbox                                 |
+| 5   | Hold-back lives only on a declared bill, labelled on the Commitments grid    | The Insights checkbox both declared and deducted in one click, which is why it was unreadable. Tracking as a bill now holds by default                       |
+| 6   | Two grids on Commitments share the page File menu; they do not each draw one | A second File/View bar per section is a catalog that has forked                                                                                              |
+| 7   | One `DestinationCommandBar`; View/Export items name the grid they act on     | Hiding both command rows removed the catalog. Local Filter buttons stay; the menu is the completeness layer, scoped so last-wins cannot steal the other grid |
 
 ---
 

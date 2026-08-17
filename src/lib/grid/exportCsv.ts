@@ -32,7 +32,14 @@ export function copyClipboardLabel(format: GridExportFormat): string {
 
 export function gridExportFormatOf(id: string): GridExportFormat | null {
   for (const format of GRID_EXPORT_FORMATS) {
-    if (id === `grid.export-${format}` || id === `grid.copy-${format}`) return format;
+    if (
+      id === `grid.export-${format}` ||
+      id === `grid.copy-${format}` ||
+      id.startsWith(`grid.export-${format}.`) ||
+      id.startsWith(`grid.copy-${format}.`)
+    ) {
+      return format;
+    }
   }
   return null;
 }

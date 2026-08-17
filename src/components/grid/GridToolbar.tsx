@@ -1,6 +1,12 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import {
+  useImperativeHandle,
+  useMemo,
+  useState,
+  type ReactNode,
+  type Ref,
+} from "react";
 import {
   asGridGroupBy,
   GROUP_BY_LABELS,
@@ -21,6 +27,13 @@ import {
 import { useRegisterCommands } from "@/components/shell/CommandProvider";
 import { OverflowMenu } from "@/components/shell/OverflowMenu";
 import type { Command } from "@/lib/commands/registry";
+import {
+  scopeCommand,
+  scopedFieldsLabel,
+  scopedFilterLabel,
+  scopedResetLabel,
+  type CommandScope,
+} from "@/lib/commands/scope";
 import { GridFilterChips } from "./GridFilterChips";
 import { GridFilterDialog } from "./GridFilterDialog";
 import { GridSearchBox } from "./GridSearchBox";
@@ -38,7 +51,6 @@ import type { ModuleViewsApi } from "./useModuleViews";
 const EMPTY_GROUP_DIMENSIONS: readonly GridGroupBy[] = [];
 const EMPTY_GROUP_IDS: readonly string[] = [];
 const EMPTY_SWITCHES: readonly GridSwitch[] = [];
-const EMPTY_COMMANDS: Command[] = [];
 
 /**
  * The controls every grid gets, assembled once, in two rows.
@@ -57,6 +69,13 @@ const EMPTY_COMMANDS: Command[] = [];
  * Everything here is driven from `GridState`, which owns the single `grid:{tabId}` scope.
  * Nothing in this component holds view state of its own except which dialog is open.
  */
+
+/** Imperative entry so a page-level menu can open this grid's dialogs. */
+export type GridToolbarHandle = {
+  openFilter: () => void;
+  openFields: () => void;
+  reset: () => void;
+};
 
 /** A tab-declared toggle. Its value lives in `settings.switches[id]`. */
 export type GridSwitch = {
@@ -87,6 +106,8 @@ export function GridToolbar({
   commandCapabilities,
   hostCommands,
   commandRow = true,
+  commandScope,
+  toolbarRef,
 }: {
   grid: GridState;
   /** Names the grid in the filter dialog title, e.g. "Tasks". */
@@ -137,11 +158,20 @@ export function GridToolbar({
    */
   commandCapabilities?: GridCommandCapabilities;
   /**
-   * The File/View menu row. Default on — a module that is one grid *is* the menu bar.
-   * Two grids on one page would each draw a File menu; pass false and keep the lens
-   * (search, filter, density) so the page still has one catalog.
+   * Draw this grid's File/View row. Default on — a module that is one grid *is*
+   * the menu bar. Two grids on one page would each draw a File menu; pass false
+   * and put one `DestinationCommandBar` on the page. Commands still register
+   * either way, so the catalog stays complete.
    */
   commandRow?: boolean;
+  /**
+   * When two grids share a page, stamp their View commands so `view.filter` on
+   * one cannot last-wins the other. Labels name the grid (`Filter for
+   * Subscriptions & bills…`). Omit on a lone grid — ids stay `view.filter`.
+   */
+  commandScope?: CommandScope;
+  /** Page-level Filter… / Show Fields / Reset act on the focused grid through this. */
+  toolbarRef?: Ref<GridToolbarHandle>;
 }) {
   const [filterOpen, setFilterOpen] = useState(false);
   const [fieldsOpen, setFieldsOpen] = useState(false);
@@ -183,47 +213,55 @@ export function GridToolbar({
    * re-registering sets state — a fresh array each render would be an infinite loop.
    */
   const commands = useMemo<Command[]>(() => {
-    const list: Command[] = [
-      ...(hostCommands ?? []),
-      ...deckCommands,
-      {
-        id: "view.filter",
-        label: "Filter…",
-        group: "view",
-        menu: "view",
-        section: "Layout",
-        icon: "filter",
-        keywords: "advanced condition where",
-        ownControl: true,
-        run: () => setFilterOpen(true),
-      },
-      {
-        id: "view.fields",
-        label: "Show Fields",
-        group: "view",
-        menu: "view",
-        section: "Layout",
-        icon: "fields",
-        keywords: "columns hide customize current view",
-        run: () => setFieldsOpen(true),
-      },
-      {
-        id: "view.reset",
-        label: "Reset this grid",
-        group: "view",
-        menu: "view",
-        section: "Layout",
-        icon: "reset",
-        keywords: "clear default columns layout",
-        title: revertView
-          ? "Put the grid back to the named view it drifted from"
-          : "Clear filters, sort, column layout, grouping and density for this grid",
-        run: resetGrid,
-      },
-    ];
+    const filter: Command = {
+      id: "view.filter",
+      label: "Filter…",
+      group: "view",
+      menu: "view",
+      section: "Layout",
+      icon: "filter",
+      keywords: "advanced condition where",
+      ownControl: true,
+      run: () => setFilterOpen(true),
+    };
+    const fields: Command = {
+      id: "view.fields",
+      label: "Show Fields",
+      group: "view",
+      menu: "view",
+      section: "Layout",
+      icon: "fields",
+      keywords: "columns hide customize current view",
+      run: () => setFieldsOpen(true),
+    };
+    const reset: Command = {
+      id: "view.reset",
+      label: "Reset this grid",
+      group: "view",
+      menu: "view",
+      section: "Layout",
+      icon: "reset",
+      keywords: "clear default columns layout",
+      title: revertView
+        ? "Put the grid back to the named view it drifted from"
+        : "Clear filters, sort, column layout, grouping and density for this grid",
+      run: resetGrid,
+    };
+
+    const list: Command[] = [...(hostCommands ?? []), ...deckCommands];
+
+    if (commandScope) {
+      list.push(
+        scopeCommand(filter, commandScope, scopedFilterLabel(commandScope)),
+        scopeCommand(fields, commandScope, scopedFieldsLabel(commandScope)),
+        scopeCommand(reset, commandScope, scopedResetLabel(commandScope)),
+      );
+    } else {
+      list.push(filter, fields, reset);
+    }
 
     if (groupIds.length > 0) {
-      list.splice(1, 0, {
+      const collapse: Command = {
         id: "view.collapse-all",
         label: allCollapsed ? "Expand all groups" : "Collapse all groups",
         group: "view",
@@ -233,7 +271,18 @@ export function GridToolbar({
         keywords: "groups",
         ownControl: true,
         run: () => setAllGroupsCollapsed(groupIds, !allCollapsed),
-      });
+      };
+      if (commandScope) {
+        list.push(
+          scopeCommand(
+            collapse,
+            commandScope,
+            `${collapse.label} in ${commandScope.label}`,
+          ),
+        );
+      } else {
+        list.splice(1, 0, collapse);
+      }
     }
 
     return list;
@@ -245,9 +294,20 @@ export function GridToolbar({
     groupIds,
     allCollapsed,
     revertView,
+    commandScope,
   ]);
 
-  useRegisterCommands(commandRow ? commands : EMPTY_COMMANDS);
+  useRegisterCommands(commands);
+
+  useImperativeHandle(
+    toolbarRef,
+    () => ({
+      openFilter: () => setFilterOpen(true),
+      openFields: () => setFieldsOpen(true),
+      reset: resetGrid,
+    }),
+    [resetGrid],
+  );
 
   return (
     <>
