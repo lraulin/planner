@@ -108,7 +108,7 @@ function formatBarbellBadge(barWeightLb: number): string {
   return `Barbell · ${bar} lb`;
 }
 
-/** Short equipment tag for dropdowns — no need to put "Dumbbell" in the exercise name. */
+/** Short equipment tag for the picker — no need to put "Dumbbell" in the exercise name. */
 export function formatEquipmentShort(
   equipment: ExerciseEquipment,
   barWeightLb: number,
@@ -132,7 +132,7 @@ export function formatEquipmentBadge(
 }
 
 /**
- * Option text in the session log select: "Curl · Dumbbell", "Curl · Barbell · EZ 15".
+ * Option text in the session log picker: "Curl · Dumbbell", "Curl · Barbell · EZ 15".
  * Name stays clean; equipment disambiguates barbell vs dumbbell variants.
  */
 export function formatExerciseSelectLabel(
@@ -144,9 +144,6 @@ export function formatExerciseSelectLabel(
   const label = name.trim() || "Untitled";
   return `${label} · ${formatEquipmentShort(equipment, barWeightLb, unilateral)}`;
 }
-
-/** Sentinel value for the session exercise &lt;select&gt; “Add new…” option. */
-export const NEW_EXERCISE_SELECT_VALUE = "__new_exercise__";
 
 /** Defaults when creating a new catalog exercise. */
 export function defaultExercisePrefs(): {

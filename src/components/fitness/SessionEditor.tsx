@@ -7,8 +7,6 @@ import { useAutosave, type SaveStatus } from "@/components/notes/useAutosave";
 import {
   effectiveUnilateral,
   formatEquipmentBadge,
-  formatExerciseSelectLabel,
-  NEW_EXERCISE_SELECT_VALUE,
   usesPlateCalculator,
   usesWeight,
 } from "@/lib/fitness/equipment";
@@ -34,6 +32,7 @@ import type {
 } from "@/lib/fitness/types";
 import { bumpWeight, weightStep } from "@/lib/fitness/weightStep";
 import { ExerciseEditor } from "./ExerciseEditor";
+import { ExercisePicker } from "./ExercisePicker";
 import { RestTimer } from "./RestTimer";
 
 function draftFromDetail(
@@ -141,6 +140,7 @@ export function SessionEditor({
   const [exerciseEditor, setExerciseEditor] = useState<{
     exercise: ExerciseSummary | null;
     blockIndex: number;
+    seedName?: string;
   } | null>(null);
 
   const idCatalog = useMemo(
@@ -413,8 +413,8 @@ export function SessionEditor({
                 sessionId={sessionId}
                 onSelect={(id) => selectExercise(bi, id)}
                 onRemove={() => setBlocksAndSave((c) => c.filter((_, i) => i !== bi))}
-                onNewExercise={() =>
-                  setExerciseEditor({ exercise: null, blockIndex: bi })
+                onNewExercise={(seedName) =>
+                  setExerciseEditor({ exercise: null, blockIndex: bi, seedName })
                 }
                 onEditExercise={() => {
                   const ex = catalog.find((e) => e.id === block.exerciseId);
@@ -453,6 +453,7 @@ export function SessionEditor({
       <ExerciseEditor
         open={exerciseEditor !== null}
         exercise={exerciseEditor?.exercise ?? null}
+        seedName={exerciseEditor?.seedName}
         onClose={() => setExerciseEditor(null)}
         onSaved={handleExerciseSaved}
       />
@@ -480,7 +481,7 @@ function ExerciseBlock({
   sessionId: string | null;
   onSelect: (id: string) => void;
   onRemove: () => void;
-  onNewExercise: () => void;
+  onNewExercise: (seedName: string) => void;
   onEditExercise: () => void;
   onUpdateSet: (setIndex: number, patch: Partial<DraftSet>) => void;
   onRemoveSet: (setIndex: number) => void;
@@ -504,34 +505,18 @@ function ExerciseBlock({
   return (
     <div className="rounded border border-rule bg-shell/40 p-3">
       <div className="mb-1 flex items-end gap-2">
-        <label className="flex min-w-0 flex-1 flex-col gap-1 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
-          Exercise
-          <select
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
+            Exercise
+          </span>
+          <ExercisePicker
+            catalog={sortedCatalog}
             value={block.exerciseId}
-            onChange={(e) => {
-              const value = e.target.value;
-              if (value === NEW_EXERCISE_SELECT_VALUE) {
-                onNewExercise();
-                return;
-              }
-              onSelect(value);
-            }}
-            className="rounded border border-rule bg-surface px-2 py-1.5 text-[0.875rem] text-ink normal-case tracking-normal"
-          >
-            <option value="">Select exercise…</option>
-            {sortedCatalog.map((ex) => (
-              <option key={ex.id} value={ex.id}>
-                {formatExerciseSelectLabel(
-                  ex.name,
-                  ex.equipment,
-                  ex.barWeight,
-                  ex.unilateral,
-                )}
-              </option>
-            ))}
-            <option value={NEW_EXERCISE_SELECT_VALUE}>Add new exercise…</option>
-          </select>
-        </label>
+            onChange={onSelect}
+            onCreateNew={onNewExercise}
+            emptyLabel="Select exercise…"
+          />
+        </div>
         {canRemove && (
           <button
             type="button"
@@ -564,7 +549,7 @@ function ExerciseBlock({
           </>
         ) : (
           <span className="text-ink-faint">
-            Pick an exercise or choose “Add new exercise…”
+            Type to find an exercise, or add a new one
           </span>
         )}
       </div>

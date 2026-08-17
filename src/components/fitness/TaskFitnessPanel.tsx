@@ -9,6 +9,7 @@ import {
 import { formatSetsLabel } from "@/lib/fitness/format";
 import type { ExerciseHistoryEntry, ExerciseSummary } from "@/lib/fitness/types";
 import { FieldGrid, Section } from "@/components/detail/fields";
+import { ExercisePicker } from "@/components/fitness/ExercisePicker";
 import { useDateFormatter } from "@/components/settings/SettingsProvider";
 import { formatFullDateKey } from "@/lib/dateFormat";
 import { localDateKey } from "@/lib/schedule/geometry";
@@ -66,25 +67,22 @@ export function TaskFitnessPanel({
   return (
     <Section title="Fitness">
       <FieldGrid>
-        <label className="flex flex-col gap-1 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted sm:col-span-2">
-          Linked exercise
-          <select
+        <div className="flex flex-col gap-1 sm:col-span-2">
+          <span className="text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
+            Linked exercise
+          </span>
+          <ExercisePicker
+            catalog={catalog}
             value={exerciseId ?? ""}
-            onChange={(e) => onChange(e.target.value === "" ? null : e.target.value)}
-            className="rounded border border-rule bg-surface px-2 py-1.5 text-[0.875rem] text-ink normal-case tracking-normal outline-none focus:border-select-edge"
-          >
-            <option value="">(none — plan only)</option>
-            {catalog.map((ex) => (
-              <option key={ex.id} value={ex.id}>
-                {ex.name}
-              </option>
-            ))}
-          </select>
+            onChange={(id) => onChange(id === "" ? null : id)}
+            allowEmpty
+            emptyLabel="(none — plan only)"
+          />
           <span className="text-[0.75rem] font-normal normal-case tracking-normal text-ink-faint">
             Links this task as a reminder. Cancelling or deleting the task does not
             erase workout history.
           </span>
-        </label>
+        </div>
       </FieldGrid>
 
       {exerciseId && (

@@ -19,10 +19,10 @@ type Draft = {
   unilateral: boolean;
 };
 
-function toDraft(exercise: ExerciseSummary | null): Draft {
+function toDraft(exercise: ExerciseSummary | null, seedName?: string): Draft {
   if (!exercise) {
     return {
-      name: "",
+      name: seedName?.trim() ?? "",
       notes: "",
       equipment: "barbell",
       barWeight: 45,
@@ -45,12 +45,15 @@ function toDraft(exercise: ExerciseSummary | null): Draft {
 export function ExerciseEditor({
   open,
   exercise,
+  seedName,
   onClose,
   onSaved,
 }: {
   open: boolean;
   /** null = create new */
   exercise: ExerciseSummary | null;
+  /** Prefill the name when creating from a typed picker query. */
+  seedName?: string;
   onClose: () => void;
   onSaved: (exercise: ExerciseSummary) => void;
 }) {
@@ -58,8 +61,9 @@ export function ExerciseEditor({
     <Drawer open={open} onClose={onClose} labelledBy="exercise-editor-title">
       {open && (
         <ExerciseForm
-          key={exercise?.id ?? "new"}
+          key={exercise?.id ?? `new:${seedName ?? ""}`}
           exercise={exercise}
+          seedName={seedName}
           onClose={onClose}
           onSaved={onSaved}
         />
@@ -70,14 +74,16 @@ export function ExerciseEditor({
 
 function ExerciseForm({
   exercise,
+  seedName,
   onClose,
   onSaved,
 }: {
   exercise: ExerciseSummary | null;
+  seedName?: string;
   onClose: () => void;
   onSaved: (exercise: ExerciseSummary) => void;
 }) {
-  const [draft, setDraft] = useState<Draft>(() => toDraft(exercise));
+  const [draft, setDraft] = useState<Draft>(() => toDraft(exercise, seedName));
   const [error, setError] = useState<string | null>(null);
   const [busy, startTransition] = useTransition();
 
