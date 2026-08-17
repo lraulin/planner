@@ -14,7 +14,14 @@ import {
   clearConflictingDescendantPlans,
   syncDayLineToTargetStart,
 } from "@/lib/day/sync";
-import { applyStateTransition, reopenSettledAncestors } from "@/lib/tree/mutations";
+import {
+  applyStateTransition,
+  moveNode,
+  reopenSettledAncestors,
+} from "@/lib/tree/mutations";
+import { owningResultAreaIdFromChain } from "@/lib/tree/owningResultArea";
+import { loadNodeChain } from "@/lib/tree/path";
+import { parentIdForResultAreaChange } from "./resultAreaParent";
 import {
   asCalendarDay,
   fromDateKey,
@@ -393,8 +400,10 @@ export async function saveNodeDetail(
   nodeId: string,
   values: NodeDetailPatch,
 ): Promise<void> {
+  let savedType: string | undefined;
   await db.transaction(async (tx) => {
     const node = await requireNode(tx, userId, nodeId);
+    savedType = node.type;
 
     // The task's own dates as they stand, so a newly-filled Started on or Date completed can
     // be told from one that was already there. Only for tasks; only when the draft carries
@@ -666,6 +675,58 @@ export async function saveNodeDetail(
       await syncDayLineToTargetStart(tx, userId, nodeId);
     }
   });
+
+  // After the field write: reparenting is its own move (sort key, nest rules, day lines)
+  // and must not run inside the save transaction — `moveNode` opens its own.
+  if (
+    values.resultAreaId !== undefined &&
+    (savedType === "goal" || savedType === "project")
+  ) {
+    await applyResultAreaId(userId, nodeId, values.resultAreaId);
+  }
+}
+
+/**
+ * Refile a Goal or Project under the chosen Result Area. No-op when the row already
+ * belongs to that area, so a project nested under a goal is not yanked out on every save.
+ */
+async function applyResultAreaId(
+  userId: string,
+  nodeId: string,
+  nextResultAreaId: string | null,
+): Promise<void> {
+  if (nextResultAreaId !== null) {
+    await requireResultArea(userId, nextResultAreaId);
+  }
+
+  const currentResultAreaId = owningResultAreaIdFromChain(
+    await loadNodeChain(userId, nodeId),
+  );
+
+  const nextParentId = parentIdForResultAreaChange({
+    currentResultAreaId,
+    nextResultAreaId,
+  });
+  if (nextParentId === undefined) return;
+
+  await moveNode({
+    userId,
+    nodeId,
+    parentId: nextParentId,
+    position: { at: "last" },
+  });
+}
+
+async function requireResultArea(userId: string, id: string): Promise<void> {
+  const [row] = await db
+    .select({ type: nodes.type })
+    .from(nodes)
+    .where(and(eq(nodes.id, id), eq(nodes.userId, userId)))
+    .limit(1);
+  if (!row) throw new Error(`Node not found: ${id}`);
+  if (row.type !== "result_area") {
+    throw new Error("The Result Area field only accepts a Result Area.");
+  }
 }
 
 /**

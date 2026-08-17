@@ -394,6 +394,7 @@ function DetailForm({
       runAction,
       busy,
       categories,
+      resultAreas: detail.resultAreas,
     }),
     [
       detail,
@@ -547,6 +548,7 @@ function initialValues(detail: NodeDetail, today: string | null): NodeDetailValu
     deferredDate: detail.deferredDate,
     focus: detail.focus,
     notes: detail.notes,
+    resultAreaId: detail.resultAreaId,
     resultArea: withoutKey(detail.resultArea),
     goal: withoutKey(detail.goal),
     project: withoutKey(detail.project),

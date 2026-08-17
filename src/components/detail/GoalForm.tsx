@@ -15,7 +15,7 @@ import {
 import { GoalMetricsPanel } from "@/components/metrics/GoalMetricsPanel";
 import { LinkedNotesPanel } from "@/components/notes/LinkedNotesPanel";
 import type { FormTab } from "./FormTabs";
-import { CoreHeaderFields, type DetailFormProps } from "./formShared";
+import { CoreHeaderFields, ResultAreaField, type DetailFormProps } from "./formShared";
 
 /**
  * Achieve's Range dropdown, in Achieve's order — shortest horizon to longest.
@@ -74,7 +74,12 @@ export function goalTabs(props: DetailFormProps): FormTab[] {
         <>
           <CoreHeaderFields values={values} patch={patch} />
 
-          <FieldGrid columns={3}>
+          <FieldGrid>
+            <ResultAreaField
+              value={values.resultAreaId}
+              resultAreas={props.resultAreas}
+              onChange={(resultAreaId) => patch({ resultAreaId })}
+            />
             <SelectField
               label="Range"
               value={range}
@@ -83,6 +88,9 @@ export function goalTabs(props: DetailFormProps): FormTab[] {
               allowEmpty
               hint="The horizon this goal is set against."
             />
+          </FieldGrid>
+
+          <FieldGrid columns={3}>
             <SelectField
               label="State"
               value={values.state}

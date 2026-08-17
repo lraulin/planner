@@ -9,7 +9,7 @@ import type {
 } from "@/db/schema";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { NodeDetail, NodeDetailValues } from "@/lib/detail/types";
-import { FieldGrid, PriorityField, TextField } from "./fields";
+import { FieldGrid, PriorityField, SelectField, TextField } from "./fields";
 
 /**
  * What every detail form is handed. The drawer owns the draft and the item wiring; a form
@@ -40,6 +40,8 @@ export type DetailFormProps = {
    * Empty when the drawer has no outline context; the form still offers Personal / Work.
    */
   categories: string[];
+  /** Result Areas this user can file this record under. */
+  resultAreas: { id: string; name: string }[];
 };
 
 /**
@@ -69,5 +71,38 @@ export function CoreHeaderFields({
         }
       />
     </FieldGrid>
+  );
+}
+
+/**
+ * Achieve's Result Area dropdown on Goal and Project forms. Changing it reparents the
+ * row under that area; leaving it alone does not touch the immediate parent.
+ */
+export function ResultAreaField({
+  value,
+  resultAreas,
+  onChange,
+}: {
+  value: string | null;
+  resultAreas: readonly { id: string; name: string }[];
+  onChange: (resultAreaId: string | null) => void;
+}) {
+  const options = resultAreas.map((area) => ({
+    value: area.id,
+    label: area.name || "(unnamed)",
+  }));
+  // A stored owner that is no longer in the list must stay selectable so the next save
+  // does not silently clear it.
+  if (value && !options.some((option) => option.value === value)) {
+    options.push({ value, label: "(missing Result Area)" });
+  }
+  return (
+    <SelectField
+      label="Result Area"
+      value={value}
+      options={options}
+      onChange={onChange}
+      allowEmpty
+    />
   );
 }

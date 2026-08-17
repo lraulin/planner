@@ -30,6 +30,11 @@ export type LinkedNoteSummary = {
  * holds them on the `OutlineNode` it opened the drawer from, so the form reads them from
  * there rather than recomputing the subtree for one row.
  */
+export type ResultAreaOption = {
+  id: string;
+  name: string;
+};
+
 export type NodeDetail = {
   id: string;
   type: NodeType;
@@ -43,6 +48,14 @@ export type NodeDetail = {
   deferredDate: Date | null;
   focus: boolean;
   notes: string;
+  /**
+   * Owning Result Area — the nearest `result_area` at or above this row. Not a column;
+   * derived from the parent chain so the Goal / Project form can show Achieve's Result
+   * Area dropdown. Null when the row is not filed under any area.
+   */
+  resultAreaId: string | null;
+  /** Every Result Area this user has, for the Goal / Project form dropdown. */
+  resultAreas: ResultAreaOption[];
   resultArea: ResultAreaDetails | null;
   goal: GoalDetails | null;
   project: ProjectDetails | null;
@@ -87,6 +100,12 @@ export type CoreValues = {
  * does not match the record's type rather than trusting the caller.
  */
 export type NodeDetailValues = CoreValues & {
+  /**
+   * Owning Result Area. Not a column — changing it reparents a Goal or Project under
+   * that area. The drawer always sends the current value; a partial save that omits
+   * the key leaves the parent alone.
+   */
+  resultAreaId: string | null;
   resultArea?: Partial<Omit<ResultAreaDetails, "nodeId">>;
   goal?: Partial<Omit<GoalDetails, "nodeId">>;
   project?: Partial<Omit<ProjectDetails, "nodeId">>;
@@ -103,7 +122,9 @@ export type NodeDetailValues = CoreValues & {
  * error rather than a silently unchanged column.
  */
 export type NodeDetailPatch = Partial<CoreValues> &
-  Pick<NodeDetailValues, "resultArea" | "goal" | "project" | "task">;
+  Pick<NodeDetailValues, "resultArea" | "goal" | "project" | "task"> & {
+    resultAreaId?: string | null;
+  };
 
 /** The editable columns of a repeating list row. */
 export type NodeItemValues = Partial<

@@ -717,6 +717,148 @@ describeDb("detail mutations", () => {
     expect(detail?.goal?.contexts).toEqual(["@outside"]);
   });
 
+  describe("Result Area field", () => {
+    async function parentOf(id: string) {
+      const [row] = await db
+        .select({ parentId: nodes.parentId })
+        .from(nodes)
+        .where(eq(nodes.id, id))
+        .limit(1);
+      return row?.parentId ?? null;
+    }
+
+    it("loads the owning area and only this user's areas for the dropdown", async () => {
+      const otherUser = await makeUser();
+      await createNode({
+        userId: otherUser,
+        parentId: null,
+        type: "result_area",
+        name: "Theirs",
+      });
+
+      const detail = await loadNodeDetail(userId, projectId);
+      expect(detail?.resultAreaId).toBe(areaId);
+      expect(detail?.resultAreas.map((area) => area.name)).toEqual(["Career"]);
+      expect(await loadNodeDetail(otherUser, projectId)).toBeNull();
+    });
+
+    it("reparents a project when its Result Area changes", async () => {
+      const health = await createNode({
+        userId,
+        parentId: null,
+        type: "result_area",
+        name: "Health",
+      });
+
+      await saveNodeDetail(userId, projectId, {
+        ...core,
+        name: "Rebuild the planner",
+        resultAreaId: health,
+      });
+
+      expect(await parentOf(projectId)).toBe(health);
+      expect((await loadNodeDetail(userId, projectId))?.resultAreaId).toBe(health);
+    });
+
+    it("reparents a goal when its Result Area changes", async () => {
+      const health = await createNode({
+        userId,
+        parentId: null,
+        type: "result_area",
+        name: "Health",
+      });
+
+      await saveNodeDetail(userId, goalId, {
+        ...core,
+        name: "Run a half marathon",
+        resultAreaId: health,
+      });
+
+      expect(await parentOf(goalId)).toBe(health);
+    });
+
+    it("does not yank a project out from under its goal when the area is unchanged", async () => {
+      // The plausible mistake: treating resultAreaId as parentId on every save.
+      const nested = await createNode({
+        userId,
+        parentId: goalId,
+        type: "project",
+        name: "Training plan",
+      });
+
+      await saveNodeDetail(userId, nested, {
+        ...core,
+        name: "Training plan",
+        resultAreaId: areaId,
+      });
+
+      expect(await parentOf(nested)).toBe(goalId);
+    });
+
+    it("clears the parent when the Result Area is cleared", async () => {
+      await saveNodeDetail(userId, projectId, {
+        ...core,
+        name: "Rebuild the planner",
+        resultAreaId: null,
+      });
+
+      expect(await parentOf(projectId)).toBeNull();
+      expect((await loadNodeDetail(userId, projectId))?.resultAreaId).toBeNull();
+    });
+
+    it("refuses a destination that is not a Result Area", async () => {
+      await expect(
+        saveNodeDetail(userId, projectId, {
+          ...core,
+          name: "Rebuild the planner",
+          resultAreaId: goalId,
+        }),
+      ).rejects.toThrow("The Result Area field only accepts a Result Area.");
+
+      expect(await parentOf(projectId)).toBe(areaId);
+    });
+
+    it("refuses to reparent via another user's area", async () => {
+      const otherUser = await makeUser();
+      const theirs = await createNode({
+        userId: otherUser,
+        parentId: null,
+        type: "result_area",
+        name: "Theirs",
+      });
+
+      await expect(
+        saveNodeDetail(userId, projectId, {
+          ...core,
+          name: "Rebuild the planner",
+          resultAreaId: theirs,
+        }),
+      ).rejects.toThrow(`Node not found: ${theirs}`);
+
+      expect(await parentOf(projectId)).toBe(areaId);
+    });
+
+    it("does not let another user change this project's Result Area", async () => {
+      const otherUser = await makeUser();
+      const health = await createNode({
+        userId,
+        parentId: null,
+        type: "result_area",
+        name: "Health",
+      });
+
+      await expect(
+        saveNodeDetail(otherUser, projectId, {
+          ...core,
+          name: "Stolen",
+          resultAreaId: health,
+        }),
+      ).rejects.toThrow(`Node not found: ${projectId}`);
+
+      expect(await parentOf(projectId)).toBe(areaId);
+    });
+  });
+
   it("saves the wider task fields", async () => {
     const taskId = await createNode({
       userId,

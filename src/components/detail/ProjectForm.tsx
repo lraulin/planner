@@ -18,7 +18,7 @@ import {
 import { STATE_OPTIONS } from "@/lib/tree/hierarchy";
 import { LinkedNotesPanel } from "@/components/notes/LinkedNotesPanel";
 import type { FormTab } from "./FormTabs";
-import { CoreHeaderFields, type DetailFormProps } from "./formShared";
+import { CoreHeaderFields, ResultAreaField, type DetailFormProps } from "./formShared";
 
 const SENSITIVITY_OPTIONS: { value: Sensitivity; label: string }[] = [
   { value: "normal", label: "Normal" },
@@ -50,6 +50,14 @@ export function projectTabs(props: DetailFormProps): FormTab[] {
       render: () => (
         <>
           <CoreHeaderFields values={values} patch={patch} />
+
+          <FieldGrid>
+            <ResultAreaField
+              value={values.resultAreaId}
+              resultAreas={props.resultAreas}
+              onChange={(resultAreaId) => patch({ resultAreaId })}
+            />
+          </FieldGrid>
 
           <Section title="Schedule">
             <FieldGrid columns={3}>
