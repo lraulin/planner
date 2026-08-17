@@ -91,8 +91,10 @@ describe("readViewState", () => {
   });
 
   it("keeps the scope through a view switch", () => {
-    // Unlike `mode`, a scope is not a property of the view you were on: narrowing Tasks to a
-    // project and then switching from Active Status to All is still that project's tasks.
+    // The URL helper does not imply a project from `?view=`. Built-in switches
+    // leave the picker alone (Active Status → All Tasks is still that project's
+    // tasks). A saved Tasks view that *owns* a project writes `scope` in the
+    // same replace via `setView(id, { scope })`, not through this helper.
     const current = writeViewState(new URLSearchParams(), {
       view: "active-status",
       scope: "project-3",

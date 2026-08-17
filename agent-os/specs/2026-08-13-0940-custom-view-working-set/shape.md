@@ -10,6 +10,7 @@ End the hybrid: one model, visible to the user.
 - Stay on the named view; show Unsaved changes when dirty.
 - Save / Save as with document meanings and deep-copy isolation.
 - Switch loads a clean snapshot (discard dirty). Reload keeps the working copy.
+- On Tasks, Save also names the selected project. Switching back to that view restores it.
 
 ### Out of scope
 

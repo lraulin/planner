@@ -18,16 +18,17 @@ This spec commits to **working-copy + explicit Save**. The live grid is a workin
 
 ## Decisions
 
-| #   | Decision                                                                                   |
-| --- | ------------------------------------------------------------------------------------------ |
-| 1   | Working copy. Named views change only on Save / Save as.                                   |
-| 2   | Picker stays on the named view. Dirty is an “Unsaved changes” mark, not a Custom… option.  |
-| 3   | Save writes the working copy over the _active_ saved view. Disabled on a built-in.         |
-| 4   | Save as deep-copies the working copy into a new view and switches to it. Source unchanged. |
-| 5   | Switching views loads that view’s definition. Dirty working copy is discarded. No prompt.  |
-| 6   | Reload restores the working copy + active view. Dirty stays if they still differ.          |
-| 7   | Reset this grid reloads the active definition.                                             |
-| 8   | Built-ins are read-only.                                                                   |
+| #   | Decision                                                                                                                                                                             |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | Working copy. Named views change only on Save / Save as.                                                                                                                             |
+| 2   | Picker stays on the named view. Dirty is an “Unsaved changes” mark, not a Custom… option.                                                                                            |
+| 3   | Save writes the working copy over the _active_ saved view. Disabled on a built-in.                                                                                                   |
+| 4   | Save as deep-copies the working copy into a new view and switches to it. Source unchanged.                                                                                           |
+| 5   | Switching views loads that view’s definition. Dirty working copy is discarded. No prompt.                                                                                            |
+| 6   | Reload restores the working copy + active view. Dirty stays if they still differ.                                                                                                    |
+| 7   | Reset this grid reloads the active definition.                                                                                                                                       |
+| 8   | Built-ins are read-only.                                                                                                                                                             |
+| 9   | Tasks' Project picker is part of a saved view. Live value stays in `?scope=`. Save writes it; selecting that view restores it. Built-ins and pre-scope views leave the picker alone. |
 
 ## Acceptance criteria
 
@@ -41,14 +42,16 @@ This spec commits to **working-copy + explicit Save**. The live grid is a workin
 - [ ] Reset reloads the active definition.
 - [ ] Notes / Chooser extras follow the same machine.
 - [ ] Unit tests in `src/lib/settings`. Browser on Outline and Tasks.
+- [ ] Save a Tasks view with a project selected; switch away and back; that project is selected again. Save with All Projects clears the picker on restore. Built-in view switches leave the picker alone. `View tasks…` still lands on `?scope=` without the last view overwriting it.
 
 ## Changes from original plan
 
-| #   | Change                                                                                                                        | Why                                                                                                    |
-| --- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| 1   | Dropped Custom… as the selected value and “no Save.” Restored Save = write to the _active_ named view. Dirty is an indicator. | Treating dirty as leaving the document was still a hybrid. Working-copy Save needs an active document. |
-| 2   | Dropped Replace view….                                                                                                        | Save already overwrites the active saved view.                                                         |
-| 3   | Switch discards dirty, no prompt.                                                                                             | Confirmed; personal tool, not SAP-style.                                                               |
+| #   | Change                                                                                                                        | Why                                                                                                                                                                       |
+| --- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Dropped Custom… as the selected value and “no Save.” Restored Save = write to the _active_ named view. Dirty is an indicator. | Treating dirty as leaving the document was still a hybrid. Working-copy Save needs an active document.                                                                    |
+| 2   | Dropped Replace view….                                                                                                        | Save already overwrites the active saved view.                                                                                                                            |
+| 3   | Switch discards dirty, no prompt.                                                                                             | Confirmed; personal tool, not SAP-style.                                                                                                                                  |
+| 4   | Tasks saved views capture the Project picker (`scope` on the catalogue entry).                                                | The picker was URL-only, so Save named the grid but not which project you were looking at. Built-ins still leave it alone so Active Status → All Tasks keeps the project. |
 
 ## Tasks
 

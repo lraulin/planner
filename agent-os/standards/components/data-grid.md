@@ -278,6 +278,13 @@ is the whole integration.
   wide) and which view is selected. Loading a definition is `clearViewState`, never a scope
   reset: the same row holds `view` and `includeDeferred`, and clearing those would forget
   which view you had just switched to.
+- **Tasks also captures the Project picker.** The live value stays in `?scope=` (so
+  `View tasks…` is still a plain navigation and reload/Back keep the narrowing). Save
+  writes that id into the view; switching back to the view restores it, including All
+  Projects as a stored `null`. Built-ins and views saved before this field do not own a
+  project — flipping Active Status → All Tasks leaves the picker where it is. A present
+  junk id degrades to All Projects rather than failing the catalogue. Projects' and
+  Goals' branch pickers stay out of the snapshot until someone asks.
 - **The pair is Save and Save as, and they mean what they mean in a document.** Save writes
   the working copy over the _active_ saved view (disabled on a built-in). Save as deep-copies
   the working copy into a new view and switches to it — the source definition is untouched.

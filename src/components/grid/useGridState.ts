@@ -90,9 +90,9 @@ export function useTabView<T extends string>(
       : stored;
 
   const setView = useCallback(
-    (next: T) => {
+    (next: T, extras?: { scope?: string | null }) => {
       patch((current) => ({ ...current, view: next }));
-      setUrlView(next);
+      setUrlView(next, extras);
     },
     [patch, setUrlView],
   );

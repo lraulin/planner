@@ -107,9 +107,12 @@ export type SavedViewsApi = ReturnType<typeof useSavedViews>;
  *
  * Every customizable value is the **resolved** one — what the grid is showing — so naming
  * the grid names what you can see. `includeDeferred` and the selected view id stay out:
- * they are not per-view.
+ * they are not per-view. Tasks also passes the Project picker as `extras.scope`.
  */
-export function snapshotOf(grid: GridState): SavedViewSettings {
+export function snapshotOf(
+  grid: GridState,
+  extras?: { scope?: string | null },
+): SavedViewSettings {
   return {
     order: grid.order,
     widths: grid.widths,
@@ -121,6 +124,7 @@ export function snapshotOf(grid: GridState): SavedViewSettings {
     collapsedGroups: [...grid.collapsedGroups],
     density: grid.density,
     switches: grid.switches,
+    ...(extras ? { scope: extras.scope ?? null } : {}),
   };
 }
 

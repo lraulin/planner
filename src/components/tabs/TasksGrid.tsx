@@ -339,6 +339,9 @@ export function TasksGrid({
     defaultViewId: "active-status",
     columns: allColumns,
     defaultsFor: viewDefaults,
+    // The Project picker is part of what a Tasks view is. Built-ins leave it
+    // alone; a saved view restores the project that was selected at Save.
+    branchScope: tab.scope,
   });
   const gridState = views.grid;
   const rowDrag = useTreeRowDrag({

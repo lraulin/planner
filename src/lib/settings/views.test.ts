@@ -5,11 +5,13 @@ import {
   baseViewId,
   findSavedView,
   isValidViewId,
+  isViewScopeDirty,
   MAX_SAVED_VIEWS,
   NO_SAVED_VIEWS,
   parseSavedViews,
   removeSavedView,
   renameSavedView,
+  scopeToApply,
   serializeSavedViews,
   uniqueViewName,
   updateSavedView,
@@ -85,8 +87,17 @@ describe("parseSavedViews", () => {
       collapsedGroups: ["project:health"],
       density: "compact",
       switches: { nextActions: true, showPurpose: false },
+      scope: "project-3",
     });
     expect(parseSavedViews(serializeSavedViews(source))).toEqual(source);
+  });
+
+  it("round-trips All Projects as a stored null, not as a missing field", () => {
+    // A missing field means "this view does not own a project" (legacy). A stored
+    // null means the user saved All Projects and switching back should clear the
+    // picker. Collapsing those two would make Save-on-All-Projects a no-op.
+    const source = saved({ ...view("saved-1", "All"), scope: null });
+    expect(parseSavedViews(serializeSavedViews(source)).views[0].scope).toBeNull();
   });
 
   it("keeps only boolean switches, so one junk value cannot cost the whole view", () => {
@@ -154,6 +165,28 @@ describe("parseSavedViews", () => {
     expect(parsed.widths).toEqual({});
     expect(parsed.collapsedGroups).toEqual([]);
     expect(parsed.density).toBe("comfortable");
+    expect(parsed.scope).toBeUndefined();
+  });
+
+  it("keeps a captured project, including the no-project filter", () => {
+    expect(
+      parseSavedViews({
+        views: [{ id: "a", name: "A", scope: "project-3" }],
+      }).views[0].scope,
+    ).toBe("project-3");
+    expect(
+      parseSavedViews({
+        views: [{ id: "a", name: "A", scope: "__none__" }],
+      }).views[0].scope,
+    ).toBe("__none__");
+  });
+
+  it("treats a present junk scope as All Projects rather than dropping the view", () => {
+    expect(
+      parseSavedViews({
+        views: [{ id: "a", name: "A", scope: "has a space" }],
+      }).views[0].scope,
+    ).toBeNull();
   });
 
   it("keeps an advanced filter when present", () => {
@@ -296,6 +329,37 @@ describe("viewSnapshotEquals", () => {
     expect(viewSnapshotEquals(snap(), { ...snap(), order: ["effort", "name"] })).toBe(
       false,
     );
+  });
+
+  it("treats a missing scope as different from All Projects", () => {
+    expect(viewSnapshotEquals(snap(), { ...snap(), scope: null })).toBe(false);
+    expect(
+      viewSnapshotEquals({ ...snap(), scope: null }, { ...snap(), scope: null }),
+    ).toBe(true);
+  });
+});
+
+describe("scopeToApply / isViewScopeDirty", () => {
+  it("leaves the picker alone on a built-in or a view saved before scope existed", () => {
+    expect(scopeToApply(null)).toBeUndefined();
+    expect(scopeToApply(view("saved-1"))).toBeUndefined();
+    expect(isViewScopeDirty(null, "project-3")).toBe(false);
+    expect(isViewScopeDirty(view("saved-1"), "project-3")).toBe(false);
+  });
+
+  it("applies a captured project, and All Projects as a clear", () => {
+    expect(scopeToApply({ ...view("saved-1"), scope: "project-3" })).toBe("project-3");
+    expect(scopeToApply({ ...view("saved-1"), scope: null })).toBeNull();
+  });
+
+  it("is dirty only when a view that owns a project disagrees with the picker", () => {
+    const owned = { ...view("saved-1"), scope: "project-3" };
+    expect(isViewScopeDirty(owned, "project-3")).toBe(false);
+    expect(isViewScopeDirty(owned, "other")).toBe(true);
+    expect(isViewScopeDirty(owned, null)).toBe(true);
+    expect(isViewScopeDirty({ ...view("saved-1"), scope: null }, null)).toBe(false);
+    // A module that does not capture branch never dirties on this axis.
+    expect(isViewScopeDirty(owned, undefined)).toBe(false);
   });
 });
 

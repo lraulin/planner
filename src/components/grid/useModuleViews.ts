@@ -16,7 +16,7 @@ import {
   type GridSettings,
 } from "@/lib/settings/grid";
 import { gridScope, WORKING_VIEW_ID } from "@/lib/settings/scopes";
-import { baseViewId } from "@/lib/settings/views";
+import { baseViewId, isViewScopeDirty, scopeToApply } from "@/lib/settings/views";
 import type { ColumnMeta } from "./columns";
 import { useGridState, useTabView, type GridDefaults } from "./useGridState";
 import { savedViewDefaults, snapshotOf, useSavedViews } from "./useSavedViews";
@@ -67,6 +67,12 @@ export type ModuleViewsOptions<TCol extends ColumnMeta, TView extends string> = 
    * *is* `notes:filter`), dirty is "does the working blob still look like factory defaults?"
    */
   extrasMatchDefaults?: (raw: unknown) => boolean;
+  /**
+   * Live `?scope=` when this module's branch picker is part of a saved view
+   * (Tasks' Project). Omit on every other module. Pass `null` for All Projects
+   * — that is a captured value, not "this module does not capture branch".
+   */
+  branchScope?: string | null;
 };
 
 export function useModuleViews<TCol extends ColumnMeta, TView extends string>({
@@ -77,6 +83,7 @@ export function useModuleViews<TCol extends ColumnMeta, TView extends string>({
   defaultsFor,
   viewScopes,
   extrasMatchDefaults,
+  branchScope,
 }: ModuleViewsOptions<TCol, TView>) {
   const saved = useSavedViews(moduleId);
   const copyScope = useCopyScope();
@@ -146,13 +153,20 @@ export function useModuleViews<TCol extends ColumnMeta, TView extends string>({
    * are discarded. Same id as now still reloads — Reset uses that.
    */
   const clearViewState = grid.clearViewState;
+  const findSaved = saved.find;
   const selectView = useCallback(
     (id: string) => {
-      setViewId(id);
+      // Built-ins and pre-scope views return undefined: leave the picker.
+      // A captured null is All Projects and must clear `?scope=` in this same
+      // replace, or the view switch and the project restore race.
+      const nextScope =
+        branchScope !== undefined ? scopeToApply(findSaved(id)) : undefined;
+      if (nextScope !== undefined) setViewId(id, { scope: nextScope });
+      else setViewId(id);
       clearViewState();
       loadExtras(id);
     },
-    [setViewId, clearViewState, loadExtras],
+    [setViewId, clearViewState, loadExtras, branchScope, findSaved],
   );
 
   const revert = useCallback(() => {
@@ -184,7 +198,8 @@ export function useModuleViews<TCol extends ColumnMeta, TView extends string>({
     });
   }, [viewScopes, builtInIdSet, viewId, snapshot, extrasMatchDefaults]);
 
-  const dirty = hasViewOverrides(moduleSettings) || extrasDirty;
+  const scopeDirty = isViewScopeDirty(current, branchScope);
+  const dirty = hasViewOverrides(moduleSettings) || extrasDirty || scopeDirty;
 
   const adopted = useRef(false);
   useEffect(() => {
@@ -220,6 +235,9 @@ export function useModuleViews<TCol extends ColumnMeta, TView extends string>({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount adoption
   }, []);
 
+  const viewSnapshot = () =>
+    snapshotOf(grid, branchScope !== undefined ? { scope: branchScope } : undefined);
+
   return {
     viewId,
     setViewId: selectView,
@@ -239,7 +257,7 @@ export function useModuleViews<TCol extends ColumnMeta, TView extends string>({
      */
     save: () => {
       if (!current) return;
-      saved.update(current.id, snapshotOf(grid));
+      saved.update(current.id, viewSnapshot());
       persistExtras(WORKING_VIEW_ID, current.id);
       grid.clearViewState();
     },
@@ -248,7 +266,7 @@ export function useModuleViews<TCol extends ColumnMeta, TView extends string>({
      * The source definition is untouched.
      */
     saveAs: (name: string) => {
-      const id = saved.save(name, { base, ...snapshotOf(grid) });
+      const id = saved.save(name, { base, ...viewSnapshot() });
       persistExtras(WORKING_VIEW_ID, id);
       setViewId(id);
       grid.clearViewState();

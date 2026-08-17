@@ -1,5 +1,6 @@
 import { parseCrossColumnFilter, type CrossColumnFilter } from "@/lib/grid/crossFilter";
 import { parseColumnFilter, type ColumnFilter } from "@/lib/grid/customFilter";
+import { asRecordId } from "@/lib/url/viewState";
 import {
   asClampedNumber,
   asMap,
@@ -26,7 +27,9 @@ import { SETTINGS_VERSION } from "./scopes";
  * A view is the full set of **customizable** grid settings under a name. Saving one is
  * naming the grid in front of you; Reset this grid returns to that snapshot. The fields
  * that deliberately stay out are the ones that are not per-view by design:
- * `includeDeferred` (tab-wide) and `view` (which view is selected).
+ * `includeDeferred` (tab-wide) and `view` (which view is selected). Tasks also
+ * captures the Project picker (`scope`) — that lives in the URL as the working
+ * copy, and in this blob as the named definition.
  *
  * Module-owned settings that no column can hold (Chooser weights, Notes mode) hang off the
  * view id in their own scopes and are forked on save via `viewScopes` — they are not in this
@@ -61,6 +64,17 @@ export type SavedViewSettings = {
    * stored switches — see `resolveSwitches` in `grid.ts`.
    */
   switches: Record<string, boolean>;
+  /**
+   * Branch the view is narrowed to — Tasks' Project picker, stored as the same
+   * `?scope=` id the URL uses.
+   *
+   * Three states, because views outlive this field:
+   * - **absent** (`undefined`) — not captured. Built-ins and views saved before
+   *   this field existed leave the picker alone.
+   * - **`null`** — All Projects. Switching to the view clears the narrowing.
+   * - **string** — that node, or `__none__` for tasks with no project.
+   */
+  scope?: string | null;
 };
 
 export type SavedView = SavedViewSettings & {
@@ -151,6 +165,10 @@ function parseSavedView(value: unknown): SavedView | null {
     switches: asMap(record.switches, (entry) =>
       typeof entry === "boolean" ? entry : null,
     ),
+    // Absent stays absent so a view saved before this field does not suddenly
+    // own All Projects and yank the picker. A present junk value degrades to
+    // All Projects rather than failing the view.
+    ...("scope" in record ? { scope: asRecordId(record.scope) } : {}),
   };
 }
 
@@ -255,8 +273,36 @@ export function viewSnapshotEquals(
     sameList(a.groupBy, b.groupBy) &&
     sameSet(a.collapsedGroups, b.collapsedGroups) &&
     a.density === b.density &&
-    sameBoolMap(a.switches, b.switches)
+    sameBoolMap(a.switches, b.switches) &&
+    sameScope(a.scope, b.scope)
   );
+}
+
+/**
+ * Scope to write into `?scope=` when loading this view.
+ *
+ * `undefined` — leave the current picker (built-in, or a view saved before
+ * scope was captured). `null` — All Projects. A string is that project.
+ */
+export function scopeToApply(view: SavedView | null): string | null | undefined {
+  if (!view || view.scope === undefined) return undefined;
+  return view.scope;
+}
+
+/**
+ * Whether the live picker has drifted from a saved view that owns a project.
+ *
+ * Built-ins and legacy views do not own a scope, so changing the picker is
+ * not unsaved — it never was part of those definitions. A module that does
+ * not capture branch (`current === undefined`) is never dirty on this axis.
+ */
+export function isViewScopeDirty(
+  view: SavedView | null,
+  current: string | null | undefined,
+): boolean {
+  if (current === undefined) return false;
+  if (!view || view.scope === undefined) return false;
+  return view.scope !== current;
 }
 
 function sameList(
@@ -290,6 +336,15 @@ function sameBoolMap(
   const keys = Object.keys(left);
   if (keys.length !== Object.keys(right).length) return false;
   return keys.every((key) => right[key] === left[key]);
+}
+
+function sameScope(
+  left: string | null | undefined,
+  right: string | null | undefined,
+): boolean {
+  if (left === undefined && right === undefined) return true;
+  if (left === undefined || right === undefined) return false;
+  return left === right;
 }
 
 function stableEqual(left: unknown, right: unknown): boolean {

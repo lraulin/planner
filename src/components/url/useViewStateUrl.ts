@@ -56,9 +56,20 @@ export function useViewStateUrl() {
    * A module's display mode is now part of what a view stores (Notes' nested/flat), so a
    * lingering param would pin it across every view you picked afterwards — you would switch to
    * a view saved as Nested and get Flat, with nothing on screen explaining why.
+   *
+   * `extras.scope` is written in the same replace when a saved Tasks view owns a
+   * project. Built-ins and other modules omit it so the Project picker stays put.
    */
   const setView = useCallback(
-    (view: string | null) => navigate({ view, mode: null }, "replace"),
+    (view: string | null, extras?: { scope?: string | null }) =>
+      navigate(
+        {
+          view,
+          mode: null,
+          ...(extras && "scope" in extras ? { scope: extras.scope ?? null } : {}),
+        },
+        "replace",
+      ),
     [navigate],
   );
 
