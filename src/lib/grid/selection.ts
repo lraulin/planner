@@ -160,31 +160,71 @@ export function selectionMoveRoots(
   });
 }
 
-/** Drop ids that no longer appear in the ordered list (filtered out, deleted, …). */
+/**
+ * Row that should keep keyboard focus after `vanishedId` leaves the list.
+ *
+ * Prefer the nearest still-visible neighbour above it — that is the user's
+ * place. If nothing above survived (the vanished row was first, or everything
+ * above left too), take the nearest still-visible neighbour below. Returns
+ * null when the vanished id was never in the previous list, or when nothing
+ * remains.
+ */
+export function neighborAfterRemoval(
+  previousIds: readonly string[],
+  nextIds: readonly string[],
+  vanishedId: string | null,
+): string | null {
+  if (nextIds.length === 0 || vanishedId === null) return null;
+  const prevIndex = previousIds.indexOf(vanishedId);
+  if (prevIndex === -1) return null;
+
+  const visible = new Set(nextIds);
+  for (let i = prevIndex - 1; i >= 0; i--) {
+    const id = previousIds[i];
+    if (visible.has(id)) return id;
+  }
+  for (let i = prevIndex + 1; i < previousIds.length; i++) {
+    const id = previousIds[i];
+    if (visible.has(id)) return id;
+  }
+  return nextIds[0] ?? null;
+}
+
+/**
+ * Drop ids that no longer appear in the ordered list (filtered out, deleted, …).
+ *
+ * `previousOrderedIds` is the on-screen order from before this change. Without
+ * it the vanished focus cannot be placed — it is already gone from `orderedIds`
+ * — and the only remaining fallback is the first visible row, which jumps the
+ * viewport to the top.
+ */
 export function pruneSelection(
   orderedIds: readonly string[],
   selectedIds: ReadonlySet<string>,
   focusId: string | null,
   anchorId: string | null,
+  previousOrderedIds: readonly string[] = orderedIds,
 ): SelectResult {
+  if (orderedIds.length === 0) {
+    return { selectedIds: new Set(), anchorId: null, focusId: null };
+  }
+
   const visible = new Set(orderedIds);
   const next = new Set([...selectedIds].filter((id) => visible.has(id)));
   let nextFocus = focusId && visible.has(focusId) ? focusId : null;
   let nextAnchor = anchorId && visible.has(anchorId) ? anchorId : null;
 
-  if (next.size === 0 && orderedIds.length > 0) {
-    // Prefer the row that used to be focus's neighbour.
-    const oldIndex = focusId ? orderedIds.indexOf(focusId) : -1;
-    // focusId is gone, so find its former place via the original selection order.
-    // orderedIds no longer contains it; fall back to first visible.
-    const fallback =
-      oldIndex >= 0
-        ? orderedIds[Math.min(oldIndex, orderedIds.length - 1)]
-        : orderedIds[0];
-    return selectOnly(fallback);
+  if (nextFocus === null) {
+    nextFocus = neighborAfterRemoval(previousOrderedIds, orderedIds, focusId);
   }
 
-  if (nextFocus === null && next.size > 0) {
+  if (next.size === 0) {
+    // Unknown vanished id (never on the previous list): first visible, same as
+    // the `?select=` landing before ancestors have expanded.
+    return selectOnly(nextFocus ?? orderedIds[0]);
+  }
+
+  if (nextFocus === null) {
     nextFocus =
       [...next].sort((a, b) => orderedIds.indexOf(a) - orderedIds.indexOf(b))[0] ??
       null;

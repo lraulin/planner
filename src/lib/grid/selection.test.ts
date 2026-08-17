@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applySelect,
   moveSelection,
+  neighborAfterRemoval,
   pruneSelection,
   rangeIds,
   selectOnly,
@@ -69,6 +70,24 @@ describe("moveSelection", () => {
   });
 });
 
+describe("neighborAfterRemoval", () => {
+  it("prefers the still-visible neighbour above the vanished row", () => {
+    expect(neighborAfterRemoval(ORDER, ["a", "b", "d", "e"], "c")).toBe("b");
+  });
+
+  it("takes the neighbour below when nothing above survived", () => {
+    expect(neighborAfterRemoval(ORDER, ["b", "c", "d", "e"], "a")).toBe("b");
+  });
+
+  it("skips a hole of vanished rows to the last still-visible above it", () => {
+    expect(neighborAfterRemoval(ORDER, ["a", "e"], "d")).toBe("a");
+  });
+
+  it("returns null when the vanished id was never on the previous list", () => {
+    expect(neighborAfterRemoval(ORDER, ORDER, "gone")).toBeNull();
+  });
+});
+
 describe("pruneSelection", () => {
   it("drops ids that left the ordered list and keeps a sensible focus", () => {
     const result = pruneSelection(["a", "c", "e"], new Set(["b", "c", "d"]), "b", "b");
@@ -76,9 +95,51 @@ describe("pruneSelection", () => {
     expect(result.focusId).toBe("c");
   });
 
-  it("falls back to the first visible row when everything is gone", () => {
+  it("falls back to the first visible row when the vanished id was never listed", () => {
     const result = pruneSelection(ORDER, new Set(["gone"]), "gone", "gone");
     expect([...result.selectedIds]).toEqual(["a"]);
+  });
+
+  it("moves focus to the row above a completed or filtered-out item", () => {
+    // The plausible mistake: looking up the vanished id in the *new* list, missing
+    // it, and selecting the first row — which then scrollIntoView-jumps to the top.
+    const result = pruneSelection(
+      ["a", "b", "d", "e"],
+      new Set(["c"]),
+      "c",
+      "c",
+      ORDER,
+    );
+    expect(result.focusId).toBe("b");
+    expect([...result.selectedIds]).toEqual(["b"]);
+  });
+
+  it("moves focus to the next row when the first item disappears", () => {
+    const result = pruneSelection(
+      ["b", "c", "d", "e"],
+      new Set(["a"]),
+      "a",
+      "a",
+      ORDER,
+    );
+    expect(result.focusId).toBe("b");
+  });
+
+  it("moves focus to the row above when the last item disappears", () => {
+    const result = pruneSelection(
+      ["a", "b", "c", "d"],
+      new Set(["e"]),
+      "e",
+      "e",
+      ORDER,
+    );
+    expect(result.focusId).toBe("d");
+  });
+
+  it("clears the selection when the last visible row disappears", () => {
+    const result = pruneSelection([], new Set(["a"]), "a", "a", ["a"]);
+    expect([...result.selectedIds]).toEqual([]);
+    expect(result.focusId).toBeNull();
   });
 });
 

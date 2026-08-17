@@ -244,8 +244,9 @@ function MetricForm({
    *
    * Deleting an entry leaves its id in `selectedIds` — nothing removes it — which used to
    * make "Copy (N)" count rows that were gone. Derived rather than synced: the grid's
-   * `pruneSelection` would do this, but it also selects the first row whenever the set
-   * comes back empty, which here would light up a row every time an entry was deleted.
+   * `pruneSelection` would do this, but it also moves focus onto a neighbour
+   * whenever the set comes back empty, which here would light up a row every
+   * time an entry was deleted.
    * A stale anchor is dropped for the same reason: `applySelect` keeps an anchor it cannot
    * find, so Shift-click would stay stuck on the missing row instead of re-anchoring.
    */
