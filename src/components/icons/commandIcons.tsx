@@ -349,6 +349,17 @@ function CutIcon() {
 }
 
 /**
+ * Attach: a paperclip. One stroke so it stays a clip at 16px, not a knot.
+ */
+function AttachIcon() {
+  return (
+    <Glyph>
+      <path d="M8 13.5 13.25 8.25a2.5 2.5 0 0 0-3.5-3.5L5.5 9a1.75 1.75 0 1 0 2.5 2.5l3.75-3.75" />
+    </Glyph>
+  );
+}
+
+/**
  * Paste: a clipboard. Deliberately not `CopyIcon`'s two overlapping sheets — cut and paste are
  * one round trip and the pair has to be told apart at a glance in the same section.
  */
@@ -419,6 +430,7 @@ export const COMMAND_ICONS: Record<CommandIcon, () => React.ReactElement> = {
   open: OpenIcon,
   rename: RenameIcon,
   copy: CopyIcon,
+  attach: AttachIcon,
   delete: DeleteIcon,
   convert: ConvertIcon,
   "move-up": MoveUpIcon,

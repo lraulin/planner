@@ -88,6 +88,7 @@ import { rowSwipeFor } from "@/lib/grid/rowSwipe";
 import type { RowSwipe } from "@/components/grid/CompactRow";
 import { pasteMoves, pasteRefusal } from "@/lib/grid/rowClipboard";
 import { useRowClipboard } from "@/components/grid/RowClipboardProvider";
+import { useAttachFromClipboard } from "@/components/grid/useAttachFromClipboard";
 import { planNodeConversion, type ConversionPlan } from "@/lib/tree/conversion";
 import { depthForOutlineLevel } from "@/lib/tree/outlineLevel";
 import { lifecycleStateRefusal } from "@/lib/tree/lifecycle";
@@ -147,6 +148,7 @@ function viewDefaults(): GridDefaults {
  */
 export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
   const { nodes, byId, patch, apply, error } = useOptimisticNodes(initialNodes);
+  const { attachFromClipboard, noticeDialog } = useAttachFromClipboard(apply);
   const {
     detail: detailId,
     select: selectId,
@@ -577,6 +579,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
             );
           },
           onCopyAsText: copySelectionAsText,
+          onAttachFromClipboard: attachFromClipboard,
           onMoveUp: (nodeId) => apply(() => moveNodeVerticallyAction(nodeId, "up")),
           onMoveDown: (nodeId) => apply(() => moveNodeVerticallyAction(nodeId, "down")),
           onIndent: (nodeId) => apply(() => indentNodeAction(nodeId)),
@@ -654,6 +657,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
       selectOne,
       setDetailId,
       copySelectionAsText,
+      attachFromClipboard,
       apply,
       toggleCollapsed,
       setTreeCollapsed,
@@ -1103,6 +1107,8 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
           onCancel={stateChange.cancel}
         />
       )}
+
+      {noticeDialog}
 
       <FileImportHost
         commandId="import.achieve"

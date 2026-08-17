@@ -103,6 +103,8 @@ export type GridCommandActions = {
   onRename?: (id: string) => void;
   onDelete?: (ids: readonly string[]) => void;
   onCopyAsText?: () => void;
+  /** Attach clipboard URLs to this project or task. */
+  onAttachFromClipboard?: (id: string) => void;
   onMoveUp?: (id: string) => void;
   onMoveDown?: (id: string) => void;
   onIndent?: (id: string) => void;
@@ -584,6 +586,29 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
         disabled: !hasSelection,
         title: selectionTitle,
         run: actions.onCopyAsText,
+      }),
+    );
+  }
+  if (actions.onAttachFromClipboard) {
+    const kind = selection?.kind;
+    const attachable = kind === "project" || kind === "task";
+    out.push(
+      command({
+        id: "record.attach-from-clipboard",
+        label: "Add attachment from clipboard",
+        group: "record",
+        menu: "item",
+        section: "Item",
+        icon: "attach",
+        rowMenu: true,
+        keywords: "link url paste clipboard attach",
+        disabled: !hasSelection || !attachable,
+        title: !hasSelection
+          ? SELECT_REASON
+          : attachable
+            ? undefined
+            : "Attachments live on projects and tasks.",
+        run: () => id && actions.onAttachFromClipboard?.(id),
       }),
     );
   }

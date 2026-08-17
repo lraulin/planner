@@ -108,6 +108,7 @@ describe("grid command deck", () => {
         onRename: () => {},
         onDelete: () => {},
         onCopyAsText: () => {},
+        onAttachFromClipboard: () => {},
         onMoveUp: () => {},
         onMoveDown: () => {},
         onIndent: () => {},
@@ -692,6 +693,68 @@ describe("grid command deck", () => {
       expect(
         commands.find((entry) => entry.id === "grid.create")?.disabled,
       ).toBeFalsy();
+    });
+  });
+
+  describe("add attachment from clipboard", () => {
+    const build = (selection: Parameters<typeof buildGridCommands>[0]["selection"]) =>
+      buildGridCommands({
+        selection,
+        actions: { onAttachFromClipboard: () => {} },
+      });
+
+    const find = (commands: ReturnType<typeof buildGridCommands>, id: string) => {
+      const found = commands.find((entry) => entry.id === id);
+      if (!found) throw new Error(`${id} is not in the deck`);
+      return found;
+    };
+
+    it("is on the Item menu and the row menu", () => {
+      const command = find(
+        build({ id: "t", kind: "task" }),
+        "record.attach-from-clipboard",
+      );
+      expect(command).toMatchObject({
+        label: "Add attachment from clipboard",
+        menu: "item",
+        section: "Item",
+        rowMenu: true,
+        disabled: false,
+      });
+      expect(
+        rowMenuSections(build({ id: "t", kind: "task" }))
+          .flatMap((section) => section.commands)
+          .map((entry) => entry.id),
+      ).toContain("record.attach-from-clipboard");
+    });
+
+    it("is enabled on a project and a task", () => {
+      expect(
+        find(build({ id: "p", kind: "project" }), "record.attach-from-clipboard")
+          .disabled,
+      ).toBe(false);
+      expect(
+        find(build({ id: "t", kind: "task" }), "record.attach-from-clipboard").disabled,
+      ).toBe(false);
+    });
+
+    it("stays visible and explains why on a goal or with no selection", () => {
+      expect(
+        find(build({ id: "g", kind: "goal" }), "record.attach-from-clipboard"),
+      ).toMatchObject({
+        disabled: true,
+        title: "Attachments live on projects and tasks.",
+      });
+      expect(
+        find(build({ id: "ra", kind: "result_area" }), "record.attach-from-clipboard"),
+      ).toMatchObject({
+        disabled: true,
+        title: "Attachments live on projects and tasks.",
+      });
+      expect(find(build({ id: null }), "record.attach-from-clipboard")).toMatchObject({
+        disabled: true,
+        title: "Select a row first",
+      });
     });
   });
 

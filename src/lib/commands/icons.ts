@@ -18,6 +18,7 @@ export const COMMAND_ICON_IDS = [
   "open",
   "rename",
   "copy",
+  "attach",
   "delete",
   "convert",
   "move-up",

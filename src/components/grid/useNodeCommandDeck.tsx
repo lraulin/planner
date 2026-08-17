@@ -29,6 +29,7 @@ import type { MenuItem } from "./ContextMenu";
 import type { RowSwipe } from "./CompactRow";
 import { rowMenuFor } from "./rowMenu";
 import { rowSwipeFor } from "@/lib/grid/rowSwipe";
+import { useAttachFromClipboard } from "./useAttachFromClipboard";
 
 /** Shared non-structural commands for list views that are projections of the outline. */
 export function useNodeCommandDeck({
@@ -106,6 +107,7 @@ export function useNodeCommandDeck({
   const byId = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
   const router = useRouter();
   const { clipboard, pickUp, clear: clearClipboard } = useRowClipboard();
+  const { attachFromClipboard, noticeDialog } = useAttachFromClipboard(apply);
 
   const onConvert = useCallback((id: string, targetKind: NodeKind) => {
     setPendingConversion({ nodeId: id, targetKind });
@@ -135,6 +137,7 @@ export function useNodeCommandDeck({
       onOpen,
       onRename,
       onCopyAsText,
+      onAttachFromClipboard: attachFromClipboard,
       onRemovePriorityGaps: () => {},
       onReprioritizeUnique: (id: string) => apply(() => reprioritizeUniqueAction(id)),
       onConvert,
@@ -209,6 +212,7 @@ export function useNodeCommandDeck({
       onOpen,
       onRename,
       onCopyAsText,
+      attachFromClipboard,
       onStateChange,
       router,
     ],
@@ -389,6 +393,7 @@ export function useNodeCommandDeck({
       <>
         {deleteDialog}
         {conversionDialog}
+        {noticeDialog}
       </>
     ),
   };
