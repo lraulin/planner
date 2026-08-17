@@ -26,7 +26,7 @@ import {
   syncDayLineToTargetStart,
   syncDayLinesInSubtree,
 } from "@/lib/day/sync";
-import { cascadeStateChange, isSettled, type CascadeNode } from "./completionCascade";
+import { cascadeStateChange, type CascadeNode } from "./completionCascade";
 import {
   assertCanNest,
   kindOfNode,
@@ -1101,31 +1101,31 @@ export async function setState(
     const branch = await branchStates(tx, userId, nodeId);
     const settled = branch.find((node) => node.id === nodeId)?.state ?? state;
 
-    for (const change of cascadeStateChange(branch, nodeId, settled)) {
+    // Pass the request as well as the result: a repeating task never lands on `completed`
+    // (it shelves until next time) but work did happen, so not-started ancestors still start.
+    for (const change of cascadeStateChange(branch, nodeId, settled, state)) {
       await applyStateTransition(tx, userId, change.id, change.state);
     }
   });
 }
 
 /**
- * Re-open the settled ancestors above a node that has just become un-settled — the upward
- * half of the cascade, for callers that drive one node's state themselves instead of going
- * through `setState`.
+ * Apply the upward half of the cascade — start not-started ancestors, reopen settled ones —
+ * for callers that drive one node's state themselves instead of going through `setState`.
  *
  * The detail drawer and the day page both call `applyStateTransition` directly, because both
  * have their own work to do around it (a whole draft of side-table fields; a day row whose
- * own state is finer than the task's). Neither used to touch the branch, so re-opening a
- * subtask from its drawer, or un-ticking it on the day page, left a completed project sitting
- * above open work — the contradiction `completionCascade.ts` exists to prevent, reachable
- * from every surface except the grids.
+ * own state is finer than the task's). Neither used to touch the branch, so completing a
+ * subtask from its drawer, or ticking it on the day page, left a Not started project sitting
+ * above finished work — and re-opening one left a completed project above open work.
  *
  * **Upward only, and deliberately.** The downward half settles open work, which is the
  * direction you cannot undo by reversing the gesture, and the grids gate it behind a
  * confirmation naming the count (`useStateChange.ts`). Neither of these surfaces has that
- * confirmation yet, so neither gets the settling half; re-opening needs no such gate.
+ * confirmation yet, so neither gets the settling half.
  *
- * Reads the state the node **actually ended up in** rather than the one that was requested,
- * for the same reason `setState` does — see the note there about recurrence.
+ * `requested` is what the caller asked for. Completing a repeating task never lands on
+ * `completed`, and without the request the parents would stay Not started after real work.
  *
  * Call it inside the caller's transaction, after the transition, so the branch is never left
  * half-changed by a failure between two statements.
@@ -1134,12 +1134,18 @@ export async function reopenSettledAncestors(
   tx: Executor,
   userId: string,
   nodeId: string,
+  requested?: NodeState,
 ): Promise<void> {
   const chain = await selfAndAncestors(tx, userId, nodeId);
   const self = chain.find((node) => node.id === nodeId);
-  if (!self || self.state === null || isSettled(self.state)) return;
+  if (!self || self.state === null) return;
 
-  for (const change of cascadeStateChange(chain, nodeId, self.state)) {
+  for (const change of cascadeStateChange(
+    chain,
+    nodeId,
+    self.state,
+    requested ?? self.state,
+  )) {
     await applyStateTransition(tx, userId, change.id, change.state);
   }
 }

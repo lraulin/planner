@@ -124,11 +124,17 @@ Show Fields hides a column. It does not un-ask the question you asked about it.
 
 ## A parent's state is a claim about the work beneath it
 
-Settling a node settles the open work under it; re-opening one re-opens the settled nodes
-above it, as `in_progress` — something under it _has_ been done. `lib/tree/completionCascade.ts`
-owns the rule; `setState` runs it in one transaction so a branch is never half-settled, and
-`useStateChange` repeats it locally so the other rows move on the same frame.
+Settling a node settles the open work under it; starting or finishing one starts the
+not-started nodes above it, as `in_progress`; re-opening one re-opens the settled nodes
+above it, as `in_progress` — something under it _has_ begun, or _has_ been done.
+`lib/tree/completionCascade.ts` owns the rule; `setState` runs it in one transaction so a
+branch is never half-settled, and `useStateChange` repeats it locally so the other rows
+move on the same frame.
 
+- **Completed and in progress start not-started ancestors.** Achieve does this on complete
+  only; we also do it on In progress, because a parent whose child is underway is no longer
+  Not started. Cancel, waiting, postponed and delegated do not — those are not "work has
+  begun". A postponed or waiting parent is left alone.
 - **Completed and cancelled are interchangeably settled.** Achieve reopens a completed parent
   when a child is cancelled but does not complete a cancelled child when the parent completes;
   one rule that treats both as "not coming back" is easier to hold than two that disagree.

@@ -647,7 +647,25 @@ describeDb("detail mutations", () => {
     // covered in `completionCascade.test.ts`, and cannot be set up here: `setState` re-opens
     // the grandparent while arranging it, so an integration version would pass either way.
 
-    it("leaves the branch alone when the drawer settles a node", async () => {
+    it("starts a not-started parent when a subtask is completed from the drawer", async () => {
+      const taskId = await createNode({
+        userId,
+        parentId: projectId,
+        type: "task",
+        name: "Ship it",
+      });
+
+      await saveNodeDetail(userId, taskId, {
+        ...base,
+        name: "Ship it",
+        state: "completed",
+      });
+
+      expect(await stateById(taskId)).toBe("completed");
+      expect(await stateById(projectId)).toBe("in_progress");
+    });
+
+    it("leaves descendants alone when the drawer settles a node", async () => {
       // Upward only: the settling half is gated behind a confirmation the drawer does not
       // have, so completing a parent here must not silently settle open work beneath it.
       const taskId = await createNode({

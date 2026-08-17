@@ -38,8 +38,13 @@ function tree(
   });
 }
 
-function changes(nodes: CascadeNode[], id: string, next: NodeState) {
-  return cascadeStateChange(nodes, id, next)
+function changes(
+  nodes: CascadeNode[],
+  id: string,
+  next: NodeState,
+  requested?: NodeState,
+) {
+  return cascadeStateChange(nodes, id, next, requested)
     .map((change) => `${change.id}=${change.state}`)
     .sort();
 }
@@ -63,8 +68,9 @@ describe("isSettled", () => {
 });
 
 describe("cascadeStateChange — settling", () => {
-  it("settles every open descendant, at any depth", () => {
+  it("settles every open descendant, at any depth, and starts not-started ancestors", () => {
     expect(changes(tree(), "project", "completed")).toEqual([
+      "goal=in_progress",
       "subtask=completed",
       "task-a=completed",
       "task-b=completed",
@@ -79,10 +85,12 @@ describe("cascadeStateChange — settling", () => {
   it("leaves an already-settled descendant on its own settled state", () => {
     // Completing the project must not rewrite a task somebody deliberately cancelled.
     expect(changes(tree({ "task-a": "cancelled" }), "project", "completed")).toEqual([
+      "goal=in_progress",
       "subtask=completed",
       "task-b=completed",
     ]);
-    // And cancelling must not erase work that was actually finished.
+    // And cancelling must not erase work that was actually finished — nor start the goal,
+    // because cancelling is "not doing this", not "work has begun".
     expect(changes(tree({ "task-a": "completed" }), "project", "cancelled")).toEqual([
       "subtask=cancelled",
       "task-b=cancelled",
@@ -93,6 +101,7 @@ describe("cascadeStateChange — settling", () => {
     // task-b is done but its subtask is not — leaving that open under a completed project
     // is exactly the contradiction this rule exists to prevent.
     expect(changes(tree({ "task-b": "completed" }), "project", "completed")).toEqual([
+      "goal=in_progress",
       "subtask=completed",
       "task-a=completed",
     ]);
@@ -108,14 +117,25 @@ describe("cascadeStateChange — settling", () => {
     ]);
   });
 
-  it("changes nothing for a leaf", () => {
-    expect(changes(tree(), "task-a", "completed")).toEqual([]);
-    expect(changes(tree(), "subtask", "completed")).toEqual([]);
+  it("starts not-started ancestors when a leaf is completed", () => {
+    expect(changes(tree(), "task-a", "completed")).toEqual([
+      "goal=in_progress",
+      "project=in_progress",
+    ]);
+    expect(changes(tree(), "subtask", "completed")).toEqual([
+      "goal=in_progress",
+      "project=in_progress",
+      "task-b=in_progress",
+    ]);
   });
 
   it("does not touch a sibling's subtree", () => {
     const result = changes(tree(), "task-b", "completed");
-    expect(result).toEqual(["subtask=completed"]);
+    expect(result).toEqual([
+      "goal=in_progress",
+      "project=in_progress",
+      "subtask=completed",
+    ]);
   });
 });
 
@@ -142,8 +162,42 @@ describe("cascadeStateChange — re-opening", () => {
     expect(changes(mixed, "task-a", "waiting")).toEqual(["project=in_progress"]);
   });
 
-  it("leaves already-open ancestors alone", () => {
-    expect(changes(tree(), "task-a", "in_progress")).toEqual([]);
+  it("starts not-started ancestors when a child moves to in progress", () => {
+    // Achieve only does this on complete. We also do it on In progress: the parent is no
+    // longer a thing that has not begun, which is exactly what Not started claims.
+    expect(changes(tree(), "task-a", "in_progress")).toEqual([
+      "goal=in_progress",
+      "project=in_progress",
+    ]);
+  });
+
+  it("leaves already-started, waiting, and postponed ancestors alone", () => {
+    const mixed = tree({
+      goal: "postponed",
+      project: "in_progress",
+    });
+    expect(changes(mixed, "task-a", "in_progress")).toEqual([]);
+    expect(changes(mixed, "task-a", "completed")).toEqual([]);
+    expect(changes(tree({ project: "waiting" }), "task-a", "completed")).toEqual([
+      "goal=in_progress",
+    ]);
+  });
+
+  it("does not start ancestors for waiting, postponed, or delegated", () => {
+    // Those are not "work has begun" in the same way — a postponed child is shelved, a
+    // waiting one is blocked, and neither should flip a parent that has not started.
+    expect(changes(tree(), "task-a", "waiting")).toEqual([]);
+    expect(changes(tree(), "task-a", "postponed")).toEqual([]);
+    expect(changes(tree(), "task-a", "delegated")).toEqual([]);
+  });
+
+  it("starts not-started ancestors when a repeating task is completed", () => {
+    // Completing a repeating task shelves it until next time; reading only the result
+    // would leave the project Not started after real work happened.
+    expect(changes(tree(), "task-a", "postponed", "completed")).toEqual([
+      "goal=in_progress",
+      "project=in_progress",
+    ]);
   });
 
   it("reopens the same way for every open state, cancelled being the interesting one", () => {
@@ -162,7 +216,9 @@ describe("cascadeStateChange — re-opening", () => {
       subtask: "completed",
     });
     const result = changes(settled, "project", "in_progress");
-    expect(result).toEqual([]);
+    // The goal has not started, so it starts; the finished tasks stay finished.
+    expect(result).toEqual(["goal=in_progress"]);
+    expect(result.join(" ")).not.toMatch(/task|subtask/);
   });
 
   it("stops at the root without looping", () => {

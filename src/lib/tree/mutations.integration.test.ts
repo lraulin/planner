@@ -1406,7 +1406,7 @@ describeDb("tree mutations", () => {
       );
     }
 
-    it("completes every open descendant, at any depth", async () => {
+    it("completes every open descendant, at any depth, and starts not-started ancestors", async () => {
       const ids = await branch();
       await setState(userId, ids.project, "completed");
 
@@ -1415,9 +1415,67 @@ describeDb("tree mutations", () => {
         taskA: "completed",
         taskB: "completed",
         subtask: "completed",
-        // Ancestors are a claim about work below them, and that claim has not changed.
-        goal: "not_started",
+        // Completing the project is starting work on the goal.
+        goal: "in_progress",
         area: null,
+      });
+    });
+
+    it("starts not-started ancestors when a leaf is completed", async () => {
+      const ids = await branch();
+      await setState(userId, ids.taskA, "completed");
+
+      expect(await statesOf(ids)).toMatchObject({
+        taskA: "completed",
+        project: "in_progress",
+        goal: "in_progress",
+        area: null,
+        // Siblings and their children are not the work that started.
+        taskB: "not_started",
+        subtask: "not_started",
+      });
+    });
+
+    it("starts not-started ancestors when a child moves to in progress", async () => {
+      const ids = await branch();
+      await setState(userId, ids.subtask, "in_progress");
+
+      expect(await statesOf(ids)).toMatchObject({
+        subtask: "in_progress",
+        taskB: "in_progress",
+        project: "in_progress",
+        goal: "in_progress",
+        area: null,
+        taskA: "not_started",
+      });
+    });
+
+    it("does not start ancestors when a child is cancelled", async () => {
+      const ids = await branch();
+      await setState(userId, ids.taskA, "cancelled");
+
+      expect(await statesOf(ids)).toMatchObject({
+        taskA: "cancelled",
+        project: "not_started",
+        goal: "not_started",
+      });
+    });
+
+    it("starts not-started ancestors when a repeating child is completed", async () => {
+      // The child shelves until next time, so the cascade must not key off the result
+      // alone or the project stays Not started after real work.
+      const ids = await branch();
+      await db
+        .update(taskDetails)
+        .set({ recurrenceFrequency: "daily", recurrenceInterval: 1 })
+        .where(eq(taskDetails.nodeId, ids.taskA));
+      await setState(userId, ids.taskA, "completed");
+
+      expect(await statesOf(ids)).toMatchObject({
+        taskA: "postponed",
+        project: "in_progress",
+        goal: "in_progress",
+        taskB: "not_started",
       });
     });
 

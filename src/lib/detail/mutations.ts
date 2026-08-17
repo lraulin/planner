@@ -645,11 +645,11 @@ export async function saveNodeDetail(
         transition.state,
         transition.at ?? undefined,
       );
-      // A parent's state is a claim about the work beneath it, so re-opening a subtask here
-      // has to re-open the completed project above it exactly as it does from the grids.
-      // Upward only — settling open descendants is gated behind a confirmation this drawer
-      // does not have yet. See `reopenSettledAncestors`.
-      await reopenSettledAncestors(tx, userId, nodeId);
+      // A parent's state is a claim about the work beneath it, so completing or starting a
+      // subtask here has to start the Not started project above it, and re-opening one has
+      // to re-open the completed project — exactly as the grids do. Upward only: settling
+      // open descendants is gated behind a confirmation this drawer does not have yet.
+      await reopenSettledAncestors(tx, userId, nodeId, transition.state);
     }
 
     // A deferred-date change on a row that is (or just became) postponed may newly conflict

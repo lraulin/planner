@@ -186,10 +186,9 @@ export async function setDailyItemState(
       // settle helpers), so stamping here would race them. Intermediate states still need
       // the day row's own state column kept in sync.
       await applyStateTransition(tx, userId, item.nodeId, state);
-      // Un-ticking a line re-opens the settled work above it, the same as from the grids —
-      // a completed project must not sit above a task you have just put back on your plate.
-      // Upward only; see `reopenSettledAncestors`.
-      await reopenSettledAncestors(tx, userId, item.nodeId);
+      // Completing a line starts the Not started work above it; un-ticking re-opens settled
+      // ancestors. Same upward walk as the grids. See `reopenSettledAncestors`.
+      await reopenSettledAncestors(tx, userId, item.nodeId, state);
       if (!settling) {
         await tx
           .update(dailyItems)

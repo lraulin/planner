@@ -8,6 +8,10 @@ import type { NodeState } from "@/db/schema";
  * - **Settling a node settles the open work under it.** Ticking off a project when three of
  *   its tasks are still open would leave the outline asserting both that the project is done
  *   and that it is not.
+ * - **Starting or finishing a node starts the not-started nodes above it**, as `in_progress`.
+ *   Work under a project has begun (or is already done); leaving the project Not started
+ *   would claim otherwise. Achieve does this on complete; we also do it on In progress,
+ *   because that is the same claim one step earlier.
  * - **Un-settling a node re-opens the settled nodes above it**, as `in_progress` rather than
  *   `not_started` — something under it *has* been done, which is exactly the state that
  *   describes.
@@ -19,7 +23,8 @@ import type { NodeState } from "@/db/schema";
  * Achieve reopens a completed parent when a child goes *cancelled*, but does not complete a
  * cancelled child when the parent completes. We treat **completed and cancelled as
  * interchangeably settled** instead — both mean the work is not coming back, and one rule is
- * easier to hold than two that disagree at the edges.
+ * easier to hold than two that disagree at the edges. Cancelling also does not start a
+ * not-started parent: the work is not happening, so the parent has not begun.
  *
  * Pure, because this is the reasoning worth testing: the database walk around it is
  * bookkeeping, and a wrong answer here looks entirely plausible on screen.
@@ -42,15 +47,30 @@ export function isSettled(state: NodeState | null): boolean {
  * The state every *other* node takes when `nodeId` becomes `next`. Never includes `nodeId`
  * itself — the caller is already applying that one, and returning it twice invites a double
  * write with two different code paths deciding what it means.
+ *
+ * `next` is the state the node **ended up in**, which is what the downward settle and the
+ * reopen walk must read. `requested` is what was asked for, and only matters for starting
+ * not-started ancestors: completing a repeating task never lands on `completed` (it shelves
+ * until next time) but work did happen, so the parents still have to start.
  */
 export function cascadeStateChange(
   all: readonly CascadeNode[],
   nodeId: string,
   next: NodeState,
+  requested: NodeState = next,
 ): StateChange[] {
-  return isSettled(next)
+  const out = isSettled(next)
     ? settleDescendants(all, nodeId, next)
     : reopenAncestors(all, nodeId);
+  if (impliesWorkStarted(next) || requested === "completed") {
+    out.push(...startNotStartedAncestors(all, nodeId));
+  }
+  return out;
+}
+
+/** Completed or in progress: work under this node has begun, or is already done. */
+function impliesWorkStarted(state: NodeState): boolean {
+  return state === "completed" || state === "in_progress";
 }
 
 /**
@@ -110,6 +130,33 @@ function settleDescendants(
  * task under a completed goal — the same contradiction one level up.
  */
 function reopenAncestors(all: readonly CascadeNode[], nodeId: string): StateChange[] {
+  return walkAncestors(all, nodeId, (parent) =>
+    parent.state !== null && isSettled(parent.state) ? "in_progress" : null,
+  );
+}
+
+/**
+ * Not-started ancestors become `in_progress`. Waiting, postponed, delegated and the rest
+ * stay put — those are deliberate, and starting work underneath does not unshelve a parent
+ * or un-wait one.
+ *
+ * Walks the whole chain: a not-started grandparent above an already-started parent is still
+ * claiming nothing has begun.
+ */
+function startNotStartedAncestors(
+  all: readonly CascadeNode[],
+  nodeId: string,
+): StateChange[] {
+  return walkAncestors(all, nodeId, (parent) =>
+    parent.state === "not_started" ? "in_progress" : null,
+  );
+}
+
+function walkAncestors(
+  all: readonly CascadeNode[],
+  nodeId: string,
+  nextState: (parent: CascadeNode) => NodeState | null,
+): StateChange[] {
   const byId = new Map(all.map((node) => [node.id, node]));
   const out: StateChange[] = [];
 
@@ -120,9 +167,8 @@ function reopenAncestors(all: readonly CascadeNode[], nodeId: string): StateChan
     seen.add(parentId);
     const parent = byId.get(parentId);
     if (!parent) break;
-    if (parent.state !== null && isSettled(parent.state)) {
-      out.push({ id: parent.id, state: "in_progress" });
-    }
+    const state = nextState(parent);
+    if (state !== null) out.push({ id: parent.id, state });
     parentId = parent.parentId;
   }
 

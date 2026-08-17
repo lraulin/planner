@@ -10,17 +10,19 @@ import { STATE_LABELS } from "@/lib/tree/hierarchy";
 /**
  * Changing a row's state, with the branch kept consistent around it.
  *
- * Settling a node settles the open work under it and re-opening one re-opens the settled
- * nodes above it — the rule and its reasoning live in `lib/tree/completionCascade`. The
- * server does the same walk in one transaction; this repeats it locally so the other rows
- * change on the same frame rather than a round trip later.
+ * Settling a node settles the open work under it; starting or finishing one starts the
+ * not-started nodes above it; re-opening one re-opens the settled nodes above it — the
+ * rule and its reasoning live in `lib/tree/completionCascade`. The server does the same
+ * walk in one transaction; this repeats it locally so the other rows change on the same
+ * frame rather than a round trip later.
  *
  * **It asks first only when it would settle open work.** Settling is the one direction you
  * cannot undo by reversing the gesture: re-opening a project deliberately does not re-open
  * the twenty tasks that really were finished, so a mis-click would leave you fixing them by
- * hand. Completing a leaf task, or a project whose work is already done, changes nothing
- * else and goes straight through — which is the overwhelming majority of completions, and
- * why this is not the confirm-on-every-tick that Achieve ships.
+ * hand. Completing a leaf task, or a project whose work is already done, only starts
+ * not-started ancestors (reversible by setting them back) and goes straight through —
+ * which is the overwhelming majority of completions, and why this is not the
+ * confirm-on-every-tick that Achieve ships.
  */
 
 /** The server action for one node's state, as the hosts already have it bound. */

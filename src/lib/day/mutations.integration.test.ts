@@ -355,7 +355,7 @@ describeDb("completing from the day page", () => {
       const itemId = await lineFor(nodeId);
 
       await setDailyItemState(userId, itemId, "completed");
-      expect(await stateById(projectId)).toBe("not_started");
+      expect(await stateById(projectId)).toBe("in_progress");
       await setState(userId, projectId, "completed");
       expect(await stateById(nodeId)).toBe("completed");
 
