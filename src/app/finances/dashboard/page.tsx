@@ -30,8 +30,10 @@ export default async function FinancesDashboardPage() {
           accounts={data.accounts}
           pending={data.pending}
           bills={data.bills}
+          spend={data.spend}
           paydays={data.paydays}
           billCharges={data.billCharges}
+          spendCharges={Object.fromEntries(data.spendCharges)}
           connections={data.connections}
         />
       </Suspense>

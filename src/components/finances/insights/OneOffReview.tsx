@@ -4,7 +4,11 @@ import { useState, useTransition } from "react";
 import type { CadenceCandidate, OneOffSuggestion } from "@/lib/finances/analytics";
 import { formatUsd } from "@/lib/finances/money";
 import { CADENCE_CHOICES, cadenceLabel } from "@/lib/finances/recurringBills";
-import { setOneOffAction, setRecurringBillAction } from "@/app/finances/actions";
+import {
+  setOneOffAction,
+  setRecurringBillAction,
+  setRecurringSpendAction,
+} from "@/app/finances/actions";
 import { useDateFormatter } from "@/components/settings/SettingsProvider";
 import { PanelEmpty } from "./Panel";
 
@@ -82,10 +86,23 @@ export function OneOffReview({
       // The charge that prompted the declaration is the best amount available, and storing it
       // is what lets the bill keep its figure in a window holding none of its charges.
       const result = await setRecurringBillAction({
-        merchant: suggestion.merchant,
+        name: suggestion.merchant,
         cadenceMonths,
         expectedCents: suggestion.cents,
         anchorDate: suggestion.row.transactionDate,
+      });
+      setDeclaring(null);
+      if (!result.ok) setError(result.error);
+    });
+  }
+
+  function declareSpend(suggestion: OneOffSuggestion) {
+    setError(null);
+    setDeclaring(suggestion.row.id);
+    startTransition(async () => {
+      const result = await setRecurringSpendAction({
+        name: suggestion.merchant,
+        matchers: [suggestion.merchant],
       });
       setDeclaring(null);
       if (!result.ok) setError(result.error);
@@ -167,6 +184,14 @@ export function OneOffReview({
                   className="min-h-tap rounded border border-rule bg-surface-raised px-2 text-[0.75rem] text-ink disabled:opacity-50 md:min-h-0 md:py-1"
                 >
                   {declaring === suggestion.row.id ? "Declaring…" : "It's a bill"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => declareSpend(suggestion)}
+                  disabled={pending}
+                  className="min-h-tap rounded border border-rule px-2 text-[0.75rem] text-ink disabled:opacity-50 md:min-h-0 md:py-1"
+                >
+                  Track as spend
                 </button>
               </div>
             </li>

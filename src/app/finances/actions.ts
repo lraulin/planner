@@ -6,18 +6,25 @@ import {
 } from "@/lib/finances/scrapePending";
 import {
   deleteAccount,
+  deleteCommitment,
   deleteRecurringBill,
+  deleteRecurringSpend,
   deleteTransaction,
   reclassifyTransactions,
+  renameRecurringBill,
   setOneOff,
+  setSubscriptionStatus,
   updateAccount,
   updateTransaction,
   upsertRecurringBill,
+  upsertRecurringSpend,
   type AccountEdit,
   type RecurringBillEdit,
+  type RecurringSpendEdit,
   type ReclassifySummary,
   type TransactionEdit,
 } from "@/lib/finances/mutations";
+import type { CommitmentStatus } from "@/db/schema";
 import { getTransaction, listAccounts, listTransactions } from "@/lib/finances/queries";
 import type {
   FinanceAccountRow,
@@ -88,6 +95,38 @@ export async function deleteRecurringBillAction(
   merchant: string,
 ): Promise<ActionResult> {
   return run((userId) => deleteRecurringBill(userId, merchant));
+}
+
+export async function setRecurringSpendAction(
+  edit: RecurringSpendEdit,
+): Promise<ActionResult> {
+  return run((userId) => upsertRecurringSpend(userId, edit));
+}
+
+export async function deleteRecurringSpendAction(name: string): Promise<ActionResult> {
+  return run((userId) => deleteRecurringSpend(userId, name));
+}
+
+export async function renameRecurringBillAction(
+  from: string,
+  to: string,
+): Promise<ActionResult> {
+  return run((userId) => renameRecurringBill(userId, from, to));
+}
+
+export async function setSubscriptionStatusAction(
+  name: string,
+  status: CommitmentStatus,
+  options: { reanchorOn?: string; cancelledOn?: string | null } = {},
+): Promise<ActionResult> {
+  return run((userId) => setSubscriptionStatus(userId, name, status, options));
+}
+
+export async function deleteCommitmentAction(target: {
+  kind: "bill" | "spend";
+  name: string;
+}): Promise<ActionResult> {
+  return run((userId) => deleteCommitment(userId, target));
 }
 
 export async function pasteScrapedPendingAction(

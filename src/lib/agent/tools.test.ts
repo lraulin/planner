@@ -122,6 +122,11 @@ describe("agent tool registry", () => {
       "get_debt_summary",
       "list_statements",
       "search_transactions",
+      "list_commitments",
+      "list_commitment_candidates",
+      "upsert_subscription",
+      "upsert_recurring_spend",
+      "delete_commitment",
     ]);
     expect(finances.tools.every((tool) => tool.domain === "finances")).toBe(true);
   });

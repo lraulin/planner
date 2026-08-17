@@ -87,7 +87,7 @@ describe("MCP HTTP boundary", () => {
     const payload = (await listed.json()) as {
       result: { tools: { name: string }[] };
     };
-    expect(payload.result.tools).toHaveLength(33);
+    expect(payload.result.tools).toHaveLength(38);
     expect(payload.result.tools.map((tool) => tool.name)).not.toContain("list_tools");
   });
 

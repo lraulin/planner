@@ -4,14 +4,19 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { importFinanceCsvFiles, type ImportFile } from "./import";
-import { loadRecurringBills } from "./dashboardQueries";
+import { loadRecurringBills, loadRecurringSpend } from "./dashboardQueries";
 import {
   deleteAccount,
+  deleteCommitment,
   deleteRecurringBill,
+  deleteRecurringSpend,
   deleteTransaction,
+  renameRecurringBill,
+  setSubscriptionStatus,
   updateAccount,
   updateTransaction,
   upsertRecurringBill,
+  upsertRecurringSpend,
 } from "./mutations";
 import { getTransaction, listAccounts, listTransactions } from "./queries";
 
@@ -214,14 +219,20 @@ describeDb("declared recurring bills", () => {
 
   it("declares a cadence and reads it back", async () => {
     await upsertRecurringBill(userId, {
-      merchant: "Geico",
+      name: "Geico",
       cadenceMonths: 6,
       expectedCents: 141_260,
     });
 
-    expect(await loadRecurringBills(userId)).toEqual([
+    expect(await loadRecurringBills(userId)).toMatchObject([
       {
-        merchant: "Geico",
+        name: "Geico",
+        // Declared with no matchers, so the name is its own: exactly the single-merchant
+        // behaviour every pre-existing declaration had before identity split from matching.
+        matchers: ["Geico"],
+        status: "active",
+        cancelledOn: null,
+        cancelUrl: "",
         cadenceMonths: 6,
         expectedCents: 141_260,
         anchorDate: null,
@@ -235,9 +246,9 @@ describeDb("declared recurring bills", () => {
   it("corrects a declaration in place rather than making a second one", async () => {
     // The caller is a review row that knows the merchant and not whether a declaration
     // exists, so declaring twice has to mean correcting — two rows would be two answers.
-    await upsertRecurringBill(userId, { merchant: "Geico", cadenceMonths: 6 });
+    await upsertRecurringBill(userId, { name: "Geico", cadenceMonths: 6 });
     await upsertRecurringBill(userId, {
-      merchant: "Geico",
+      name: "Geico",
       cadenceMonths: 12,
       expectedCents: 282_520,
     });
@@ -251,15 +262,15 @@ describeDb("declared recurring bills", () => {
     // What the recurring table sends. A blanket write would clear the amount here, and the
     // bill's figure would silently fall back to the visible window's median.
     await upsertRecurringBill(userId, {
-      merchant: "Geico",
+      name: "Geico",
       cadenceMonths: 6,
       expectedCents: 141_260,
       anchorDate: "2026-03-03",
     });
-    await upsertRecurringBill(userId, { merchant: "Geico", cadenceMonths: 12 });
+    await upsertRecurringBill(userId, { name: "Geico", cadenceMonths: 12 });
 
-    expect((await loadRecurringBills(userId))[0]).toEqual({
-      merchant: "Geico",
+    expect((await loadRecurringBills(userId))[0]).toMatchObject({
+      name: "Geico",
       cadenceMonths: 12,
       expectedCents: 141_260,
       anchorDate: "2026-03-03",
@@ -271,12 +282,12 @@ describeDb("declared recurring bills", () => {
 
   it("clears the amount when null is passed explicitly", async () => {
     await upsertRecurringBill(userId, {
-      merchant: "Geico",
+      name: "Geico",
       cadenceMonths: 6,
       expectedCents: 141_260,
     });
     await upsertRecurringBill(userId, {
-      merchant: "Geico",
+      name: "Geico",
       cadenceMonths: 6,
       expectedCents: null,
     });
@@ -286,27 +297,27 @@ describeDb("declared recurring bills", () => {
 
   it("refuses a cadence the column would reject with a database error", async () => {
     await expect(
-      upsertRecurringBill(userId, { merchant: "Geico", cadenceMonths: 0 }),
+      upsertRecurringBill(userId, { name: "Geico", cadenceMonths: 0 }),
     ).rejects.toThrow("A cadence must be a whole number of months");
     await expect(
-      upsertRecurringBill(userId, { merchant: "Geico", cadenceMonths: 36 }),
+      upsertRecurringBill(userId, { name: "Geico", cadenceMonths: 36 }),
     ).rejects.toThrow("A cadence must be a whole number of months");
     await expect(
-      upsertRecurringBill(userId, { merchant: "  ", cadenceMonths: 6 }),
-    ).rejects.toThrow("A bill needs a merchant.");
+      upsertRecurringBill(userId, { name: "  ", cadenceMonths: 6 }),
+    ).rejects.toThrow("A bill needs a name.");
     expect(await loadRecurringBills(userId)).toEqual([]);
   });
 
   it("declares a bill that recurs on no schedule", async () => {
     await upsertRecurringBill(userId, {
-      merchant: "Taylor Gas",
+      name: "Taylor Gas",
       cadenceMonths: 12,
       expectedCents: 50_000,
       scheduled: false,
     });
 
     expect((await loadRecurringBills(userId))[0]).toMatchObject({
-      merchant: "Taylor Gas",
+      name: "Taylor Gas",
       cadenceMonths: 12,
       expectedCents: 50_000,
       scheduled: false,
@@ -319,7 +330,7 @@ describeDb("declared recurring bills", () => {
     // suppressing its own charges from the review list — strictly worse than not declaring.
     await expect(
       upsertRecurringBill(userId, {
-        merchant: "Taylor Gas",
+        name: "Taylor Gas",
         cadenceMonths: 12,
         scheduled: false,
       }),
@@ -329,7 +340,7 @@ describeDb("declared recurring bills", () => {
 
   it("flags a bill as a set-aside with a due day", async () => {
     await upsertRecurringBill(userId, {
-      merchant: "RENT:RAULIN",
+      name: "RENT:RAULIN",
       cadenceMonths: 1,
       expectedCents: 210_000,
       setAside: true,
@@ -346,13 +357,13 @@ describeDb("declared recurring bills", () => {
     // Same hazard as the declared amount: the recurring table sends one field, and a blanket
     // write would silently stop deducting rent from the headline.
     await upsertRecurringBill(userId, {
-      merchant: "RENT:RAULIN",
+      name: "RENT:RAULIN",
       cadenceMonths: 1,
       expectedCents: 210_000,
       setAside: true,
       dueDay: 1,
     });
-    await upsertRecurringBill(userId, { merchant: "RENT:RAULIN", cadenceMonths: 1 });
+    await upsertRecurringBill(userId, { name: "RENT:RAULIN", cadenceMonths: 1 });
 
     expect((await loadRecurringBills(userId))[0]).toMatchObject({
       setAside: true,
@@ -366,7 +377,7 @@ describeDb("declared recurring bills", () => {
     // real balance the user is about to spend against.
     await expect(
       upsertRecurringBill(userId, {
-        merchant: "RENT:RAULIN",
+        name: "RENT:RAULIN",
         cadenceMonths: 1,
         setAside: true,
       }),
@@ -376,18 +387,35 @@ describeDb("declared recurring bills", () => {
 
   it("refuses a due day the column would reject with a database error", async () => {
     await expect(
-      upsertRecurringBill(userId, { merchant: "Geico", cadenceMonths: 6, dueDay: 0 }),
+      upsertRecurringBill(userId, { name: "Geico", cadenceMonths: 6, dueDay: 0 }),
     ).rejects.toThrow("A due day must be a whole number from 1 to 31.");
     await expect(
-      upsertRecurringBill(userId, { merchant: "Geico", cadenceMonths: 6, dueDay: 32 }),
+      upsertRecurringBill(userId, { name: "Geico", cadenceMonths: 6, dueDay: 32 }),
     ).rejects.toThrow("A due day must be a whole number from 1 to 31.");
     expect(await loadRecurringBills(userId)).toEqual([]);
   });
 
   it("undeclares a bill", async () => {
-    await upsertRecurringBill(userId, { merchant: "Geico", cadenceMonths: 6 });
+    await upsertRecurringBill(userId, { name: "Geico", cadenceMonths: 6 });
     await deleteRecurringBill(userId, "Geico");
     expect(await loadRecurringBills(userId)).toEqual([]);
+  });
+
+  it("renames a bill without dropping its matchers", async () => {
+    await upsertRecurringBill(userId, {
+      name: "1PASSWORDTORONTOON",
+      matchers: ["1PASSWORDTORONTOON"],
+      cadenceMonths: 12,
+      expectedCents: 7188,
+      anchorDate: "2027-03-30",
+    });
+    await renameRecurringBill(userId, "1PASSWORDTORONTOON", "1Password");
+    expect((await loadRecurringBills(userId))[0]).toMatchObject({
+      name: "1Password",
+      matchers: ["1PASSWORDTORONTOON"],
+      expectedCents: 7188,
+      anchorDate: "2027-03-30",
+    });
   });
 });
 
@@ -399,7 +427,7 @@ describeDb("declared recurring bill isolation", () => {
     ownerId = await makeUser();
     intruderId = await makeUser();
     await upsertRecurringBill(ownerId, {
-      merchant: "Geico",
+      name: "Geico",
       cadenceMonths: 6,
       expectedCents: 141_260,
       setAside: true,
@@ -414,7 +442,7 @@ describeDb("declared recurring bill isolation", () => {
   it("does not let a second user change another user's set-aside", async () => {
     // Turning someone else's set-aside off would silently change the number they budget by.
     await upsertRecurringBill(intruderId, {
-      merchant: "Geico",
+      name: "Geico",
       cadenceMonths: 6,
       expectedCents: 1,
       setAside: false,
@@ -430,7 +458,7 @@ describeDb("declared recurring bill isolation", () => {
   it("does not let a second user change another user's declaration", async () => {
     // The uniqueness is per user, so this must create the intruder's own row and leave the
     // owner's untouched — the failure mode a shared-key upsert would have.
-    await upsertRecurringBill(intruderId, { merchant: "Geico", cadenceMonths: 1 });
+    await upsertRecurringBill(intruderId, { name: "Geico", cadenceMonths: 1 });
 
     expect((await loadRecurringBills(ownerId))[0]).toMatchObject({
       cadenceMonths: 6,
@@ -445,5 +473,248 @@ describeDb("declared recurring bill isolation", () => {
   it("does not let a second user delete another user's declaration", async () => {
     await deleteRecurringBill(intruderId, "Geico");
     expect(await loadRecurringBills(ownerId)).toHaveLength(1);
+  });
+});
+
+describeDb("commitment matchers", () => {
+  let userId: string;
+
+  beforeEach(async () => {
+    userId = await makeUser();
+  });
+
+  it("covers several bank spellings with one declaration", async () => {
+    // The Taylor Gas case. Before identity split from matching this needed a code change in
+    // classify/rules.ts to collapse two descriptions the bank happens to send.
+    await upsertRecurringBill(userId, {
+      name: "Taylor Gas",
+      matchers: ["TAYLOR GAS COMPANY INC.", "TAYLOR GAS HEATING AIR"],
+      cadenceMonths: 12,
+      expectedCents: 50_000,
+      scheduled: false,
+    });
+
+    expect((await loadRecurringBills(userId))[0].matchers).toEqual([
+      "TAYLOR GAS COMPANY INC.",
+      "TAYLOR GAS HEATING AIR",
+    ]);
+  });
+
+  it("keeps the matchers when only the cadence is corrected", async () => {
+    // Same reasoning as the declared amount: the recurring table sends a cadence and nothing
+    // else, and a blanket write would silently unclaim the merchants the bill was built on.
+    await upsertRecurringBill(userId, {
+      name: "Pizza night",
+      matchers: ["PIZZA HUT"],
+      cadenceMonths: 1,
+    });
+    await upsertRecurringBill(userId, { name: "Pizza night", cadenceMonths: 3 });
+
+    expect((await loadRecurringBills(userId))[0]).toMatchObject({
+      cadenceMonths: 3,
+      matchers: ["PIZZA HUT"],
+    });
+  });
+
+  it("refuses a merchant another commitment already holds, naming the holder", async () => {
+    /*
+     * The invariant no SQL constraint can express, because it spans two tables. A merchant
+     * claimed twice is counted twice — in the bill's accrual and again in the spend rate —
+     * and every figure downstream is wrong while looking entirely reasonable.
+     */
+    await upsertRecurringSpend(userId, {
+      name: "Pizza",
+      matchers: ["PIZZA HUT", "DOMINOS"],
+    });
+
+    await expect(
+      upsertRecurringBill(userId, {
+        name: "Pizza Hut Sub",
+        matchers: ["PIZZA HUT"],
+        cadenceMonths: 1,
+      }),
+    ).rejects.toThrow('"PIZZA HUT" already belongs to the commitment "Pizza".');
+
+    // And in the other direction, so neither table is the privileged one.
+    await upsertRecurringBill(userId, {
+      name: "Netflix",
+      matchers: ["NETFLIX.COM"],
+      cadenceMonths: 1,
+    });
+    await expect(
+      upsertRecurringSpend(userId, { name: "Streaming", matchers: ["NETFLIX.COM"] }),
+    ).rejects.toThrow('"NETFLIX.COM" already belongs to the commitment "Netflix".');
+  });
+
+  it("lets a commitment keep its own matchers when it is edited", async () => {
+    // The self-collision that a naive check would raise on every single update.
+    await upsertRecurringSpend(userId, { name: "Pizza", matchers: ["PIZZA HUT"] });
+    await upsertRecurringSpend(userId, {
+      name: "Pizza",
+      matchers: ["PIZZA HUT", "DOMINOS"],
+    });
+
+    expect((await loadRecurringSpend(userId))[0].matchers).toEqual([
+      "PIZZA HUT",
+      "DOMINOS",
+    ]);
+  });
+
+  it("does not see another user's claims", async () => {
+    // Two people can both shop at Walmart. Scoping the check by user is what allows that.
+    const otherId = await makeUser();
+    await upsertRecurringSpend(otherId, {
+      name: "Groceries",
+      matchers: ["WM SUPERCENTER"],
+    });
+
+    await expect(
+      upsertRecurringSpend(userId, { name: "Food", matchers: ["WM SUPERCENTER"] }),
+    ).resolves.toBeUndefined();
+  });
+});
+
+describeDb("recurring spend", () => {
+  let userId: string;
+
+  beforeEach(async () => {
+    userId = await makeUser();
+  });
+
+  it("defaults to an auto rate that is held back", async () => {
+    // The opposite defaults from a bill: deducting it is the whole reason the row exists.
+    await upsertRecurringSpend(userId, { name: "Pizza", matchers: ["PIZZA HUT"] });
+
+    expect((await loadRecurringSpend(userId))[0]).toMatchObject({
+      name: "Pizza",
+      period: "week",
+      amountSource: "auto",
+      expectedCents: null,
+      setAside: true,
+      active: true,
+    });
+  });
+
+  it("pins an amount and keeps it through an unrelated edit", async () => {
+    await upsertRecurringSpend(userId, {
+      name: "Groceries",
+      matchers: ["WM SUPERCENTER"],
+      amountSource: "pinned",
+      expectedCents: 21_500,
+    });
+    await upsertRecurringSpend(userId, { name: "Groceries", period: "month" });
+
+    expect((await loadRecurringSpend(userId))[0]).toMatchObject({
+      period: "month",
+      amountSource: "pinned",
+      expectedCents: 21_500,
+    });
+  });
+
+  it("refuses a pinned amount with no figure behind it", async () => {
+    // Same rule as a set-aside bill: this is subtracted from money about to be spent, so
+    // "pinned to nothing" would deduct zero while claiming to be deliberate.
+    await expect(
+      upsertRecurringSpend(userId, { name: "Pizza", amountSource: "pinned" }),
+    ).rejects.toThrow("A pinned amount needs a figure above zero.");
+    await expect(upsertRecurringSpend(userId, { name: "  " })).rejects.toThrow(
+      "A recurring spend needs a name.",
+    );
+
+    expect(await loadRecurringSpend(userId)).toEqual([]);
+  });
+});
+
+describeDb("recurring spend isolation", () => {
+  let ownerId: string;
+  let intruderId: string;
+
+  beforeEach(async () => {
+    ownerId = await makeUser();
+    intruderId = await makeUser();
+    await upsertRecurringSpend(ownerId, {
+      name: "Pizza",
+      matchers: ["PIZZA HUT"],
+      amountSource: "pinned",
+      expectedCents: 6000,
+    });
+  });
+
+  it("does not let a second user read another user's entries", async () => {
+    expect(await loadRecurringSpend(intruderId)).toEqual([]);
+  });
+
+  it("does not let a second user change another user's entry", async () => {
+    await upsertRecurringSpend(intruderId, {
+      name: "Pizza",
+      amountSource: "pinned",
+      expectedCents: 99_900,
+    });
+
+    expect((await loadRecurringSpend(ownerId))[0].expectedCents).toBe(6000);
+    expect((await loadRecurringSpend(intruderId))[0].expectedCents).toBe(99_900);
+  });
+
+  it("does not let a second user delete another user's entry", async () => {
+    await deleteRecurringSpend(intruderId, "Pizza");
+    expect(await loadRecurringSpend(ownerId)).toHaveLength(1);
+  });
+});
+
+describeDb("subscription status", () => {
+  let userId: string;
+
+  beforeEach(async () => {
+    userId = await makeUser();
+    await upsertRecurringBill(userId, {
+      name: "Paramount+",
+      cadenceMonths: 1,
+      expectedCents: 1299,
+      setAside: true,
+    });
+  });
+
+  it("cancels a bill and stamps the date", async () => {
+    await setSubscriptionStatus(userId, "Paramount+", "cancelled", {
+      cancelledOn: "2026-08-16",
+    });
+
+    expect((await loadRecurringBills(userId))[0]).toMatchObject({
+      status: "cancelled",
+      cancelledOn: "2026-08-16",
+      expectedCents: 1299,
+      setAside: true,
+    });
+  });
+
+  it("re-anchors a still-active bill without touching the amount", async () => {
+    // The D8 prompt: the charge never arrived, the user says it is still live, so the walk
+    // starts again from today rather than staying overdue forever.
+    await setSubscriptionStatus(userId, "Paramount+", "active", {
+      reanchorOn: "2026-08-16",
+    });
+
+    expect((await loadRecurringBills(userId))[0]).toMatchObject({
+      status: "active",
+      anchorDate: "2026-08-16",
+      expectedCents: 1299,
+    });
+  });
+
+  it("does not let a second user change another user's status", async () => {
+    const intruderId = await makeUser();
+    await expect(
+      setSubscriptionStatus(intruderId, "Paramount+", "cancelled"),
+    ).rejects.toThrow("Bill not found.");
+    expect((await loadRecurringBills(userId))[0].status).toBe("active");
+  });
+
+  it("deleteCommitment removes the named row of the named kind only", async () => {
+    await upsertRecurringSpend(userId, { name: "Paramount+", matchers: ["PPLUS"] });
+    await deleteCommitment(userId, { kind: "bill", name: "Paramount+" });
+    expect(await loadRecurringBills(userId)).toEqual([]);
+    expect(await loadRecurringSpend(userId)).toHaveLength(1);
+    await deleteCommitment(userId, { kind: "spend", name: "Paramount+" });
+    expect(await loadRecurringSpend(userId)).toEqual([]);
   });
 });

@@ -6,11 +6,13 @@ import {
   nextPayday,
   paydaysPerCadence,
   setAsideHeld,
+  recurringSpendHeld,
   type BillCharge,
   type DashboardAccount,
   type PendingRow,
 } from "./available";
 import type { Payday } from "./classify/income";
+import type { StoredSpend } from "./commitments";
 import type { StoredBill } from "./recurringBills";
 
 /**
@@ -38,7 +40,7 @@ function payday(dateKey: string): Payday {
 
 function bill(over: Partial<StoredBill> = {}): StoredBill {
   return {
-    merchant: "RENT:RAULIN",
+    name: "RENT:RAULIN",
     cadenceMonths: 1,
     expectedCents: 210000,
     anchorDate: null,
@@ -205,7 +207,7 @@ describe("availableToSpend", () => {
       pending,
       [
         {
-          merchant: "RENT:RAULIN",
+          name: "RENT:RAULIN",
           expectedCents: 210000,
           perPaycheckCents: 105000,
           heldCents: 105000,
@@ -235,7 +237,7 @@ describe("availableToSpend", () => {
       pending,
       [
         {
-          merchant: "RENT:RAULIN",
+          name: "RENT:RAULIN",
           expectedCents: 210000,
           perPaycheckCents: 105000,
           heldCents: 105000,
@@ -338,7 +340,7 @@ describe("paydaysPerCadence", () => {
 });
 
 describe("setAsideHeld", () => {
-  const charges: BillCharge[] = [{ merchant: "RENT:RAULIN", dateKey: "2026-08-01" }];
+  const charges: BillCharge[] = [{ name: "RENT:RAULIN", dateKey: "2026-08-01" }];
 
   it("accrues one half-share per payday since the last charge", () => {
     const held = setAsideHeld(bill(), [payday("2026-08-07")], charges, "2026-08-16");
@@ -356,7 +358,7 @@ describe("setAsideHeld", () => {
     const held = setAsideHeld(
       bill(),
       [payday("2026-08-07"), payday("2026-08-21"), payday("2026-09-04")],
-      [{ merchant: "RENT:RAULIN", dateKey: "2026-08-01" }],
+      [{ name: "RENT:RAULIN", dateKey: "2026-08-01" }],
       "2026-09-10",
     );
 
@@ -371,7 +373,7 @@ describe("setAsideHeld", () => {
     const beforeRentPosts = setAsideHeld(
       bill({ anchorDate: "2026-07-01" }),
       [payday("2026-07-10"), payday("2026-07-24")],
-      [{ merchant: "RENT:RAULIN", dateKey: "2026-07-01" }],
+      [{ name: "RENT:RAULIN", dateKey: "2026-07-01" }],
       "2026-07-31",
     );
     expect(beforeRentPosts?.heldCents).toBe(210000);
@@ -380,8 +382,8 @@ describe("setAsideHeld", () => {
       bill({ anchorDate: "2026-07-01" }),
       [payday("2026-07-10"), payday("2026-07-24")],
       [
-        { merchant: "RENT:RAULIN", dateKey: "2026-07-01" },
-        { merchant: "RENT:RAULIN", dateKey: "2026-08-01" },
+        { name: "RENT:RAULIN", dateKey: "2026-07-01" },
+        { name: "RENT:RAULIN", dateKey: "2026-08-01" },
       ],
       "2026-08-01",
     );
@@ -395,7 +397,7 @@ describe("setAsideHeld", () => {
     const held = setAsideHeld(
       bill(),
       [payday("2026-08-07"), payday("2026-08-21")],
-      [{ merchant: "RENT:RAULIN", dateKey: "2026-07-01" }],
+      [{ name: "RENT:RAULIN", dateKey: "2026-07-01" }],
       "2026-08-25",
     );
 
@@ -412,7 +414,7 @@ describe("setAsideHeld", () => {
     const held = setAsideHeld(
       bill({ anchorDate: "2026-08-01" }),
       [payday("2026-08-07")],
-      [{ merchant: "RENT:RAULIN", dateKey: "2026-09-01" }],
+      [{ name: "RENT:RAULIN", dateKey: "2026-09-01" }],
       "2026-08-16",
     );
 
@@ -424,7 +426,7 @@ describe("setAsideHeld", () => {
     const held = setAsideHeld(
       bill({ anchorDate: "2026-08-01" }),
       [payday("2026-08-07")],
-      [{ merchant: "Geico", dateKey: "2026-08-02" }],
+      [{ name: "Geico", dateKey: "2026-08-02" }],
       "2026-08-16",
     );
 
@@ -454,7 +456,7 @@ describe("setAsideHeld", () => {
     // scheduled and setAside are orthogonal: propane's $500 a year has to come from somewhere.
     const held = setAsideHeld(
       bill({
-        merchant: "Taylor Gas",
+        name: "Taylor Gas",
         cadenceMonths: 12,
         expectedCents: 50000,
         scheduled: false,
@@ -492,5 +494,187 @@ describe("setAsideHeld", () => {
 
   it("holds nothing with no paydays at all", () => {
     expect(setAsideHeld(bill({ dueDay: 1 }), [], [], "2026-08-16")?.heldCents).toBe(0);
+  });
+});
+
+function spendEntry(over: Partial<StoredSpend> = {}): StoredSpend {
+  return {
+    id: "spend-1",
+    name: "Pizza",
+    matchers: ["PIZZA HUT", "DOMINOS"],
+    period: "week",
+    amountSource: "auto",
+    expectedCents: null,
+    setAside: true,
+    active: true,
+    ...over,
+  };
+}
+
+describe("recurringSpendHeld", () => {
+  /*
+   * The behaviour this whole tier exists for. `setAsideHeld` cannot express it: that one
+   * accrues toward a future charge and assumes the cadence is at least a pay period, which a
+   * weekly grocery run against fortnightly pay is not.
+   *
+   * 2026-08-17 is a Monday, so a week runs Mon–Sun and the fortnight to 2026-08-31 holds
+   * exactly two whole weeks.
+   */
+  const MONDAY = "2026-08-17";
+  const PAYDAY = "2026-08-31";
+
+  it("holds every whole period between today and payday", () => {
+    const held = recurringSpendHeld(spendEntry(), 6000, [], MONDAY, PAYDAY);
+
+    expect(held?.periodsCounted).toBe(2);
+    expect(held?.heldCents).toBe(12000);
+  });
+
+  it("moves available by exactly the overage, not by the whole charge", () => {
+    /*
+     * The trace from the spec, and the reason the clamp at zero is the mechanism rather than a
+     * tidy-up. A $95 pizza against a $60 week:
+     *
+     *   before  balance − 12000
+     *   after   (balance − 9500) − 6000  =  balance − 15500
+     *   delta   −3500, the overage alone
+     *
+     * Without the clamp the $35 would be counted twice — once as a real charge that already
+     * left the account, and again as an obligation still outstanding.
+     */
+    const before = recurringSpendHeld(spendEntry(), 6000, [], MONDAY, PAYDAY);
+    const after = recurringSpendHeld(
+      spendEntry(),
+      6000,
+      [{ dateKey: "2026-08-21", costCents: 9500 }],
+      MONDAY,
+      PAYDAY,
+    );
+
+    expect(before?.heldCents).toBe(12000);
+    expect(after?.heldCents).toBe(6000);
+    expect(-9500 - (after?.heldCents ?? 0) + (before?.heldCents ?? 0)).toBe(-3500);
+    expect(after?.overCents).toBe(3500);
+  });
+
+  it("makes spending within the rate free, because it was already held", () => {
+    // Buying the pizza you budgeted for must not move the headline at all.
+    const before = recurringSpendHeld(spendEntry(), 6000, [], MONDAY, PAYDAY);
+    const after = recurringSpendHeld(
+      spendEntry(),
+      6000,
+      [{ dateKey: "2026-08-21", costCents: 6000 }],
+      MONDAY,
+      PAYDAY,
+    );
+
+    expect(-6000 - (after?.heldCents ?? 0) + (before?.heldCents ?? 0)).toBe(0);
+    expect(after?.overCents).toBe(0);
+  });
+
+  it("never holds a negative amount when a period runs well over", () => {
+    const held = recurringSpendHeld(
+      spendEntry(),
+      6000,
+      [{ dateKey: "2026-08-18", costCents: 50000 }],
+      MONDAY,
+      PAYDAY,
+    );
+
+    // The second week is still owed in full; only the blown one clamps to zero.
+    expect(held?.heldCents).toBe(6000);
+    expect(held?.overCents).toBe(44000);
+  });
+
+  it("does not pro-rate the current period, however little of it is left", () => {
+    // Friday's pizza is a lump. Two days left in the week does not mean two sevenths of one.
+    const held = recurringSpendHeld(spendEntry(), 6000, [], "2026-08-22", "2026-08-23");
+    expect(held?.heldCents).toBe(6000);
+  });
+
+  it("pro-rates a future period that payday cuts short", () => {
+    // Payday lands on the Wednesday of the third week, so that week is owed 2/7 of its rate.
+    const held = recurringSpendHeld(spendEntry(), 7000, [], MONDAY, "2026-09-02");
+
+    expect(held?.periodsCounted).toBe(3);
+    expect(held?.heldCents).toBe(7000 + 7000 + 2000);
+  });
+
+  it("still holds this period when no payday can be dated", () => {
+    const held = recurringSpendHeld(spendEntry(), 6000, [], MONDAY, null);
+
+    expect(held?.periodsCounted).toBe(1);
+    expect(held?.heldCents).toBe(6000);
+  });
+
+  it("holds nothing for an inactive entry, one opted out, or a zero rate", () => {
+    expect(
+      recurringSpendHeld(spendEntry({ active: false }), 6000, [], MONDAY, PAYDAY),
+    ).toBeNull();
+    expect(
+      recurringSpendHeld(spendEntry({ setAside: false }), 6000, [], MONDAY, PAYDAY),
+    ).toBeNull();
+    expect(recurringSpendHeld(spendEntry(), 0, [], MONDAY, PAYDAY)).toBeNull();
+  });
+
+  it("counts only the current period's charges as spent, not last week's", () => {
+    const held = recurringSpendHeld(
+      spendEntry(),
+      6000,
+      [
+        { dateKey: "2026-08-14", costCents: 9500 },
+        { dateKey: "2026-08-19", costCents: 1000 },
+      ],
+      MONDAY,
+      PAYDAY,
+    );
+
+    expect(held?.spentThisPeriodCents).toBe(1000);
+    expect(held?.heldCents).toBe(5000 + 6000);
+  });
+});
+
+describe("availableToSpend with recurring spend", () => {
+  it("subtracts bills and recurring spend as two separate, labelled lines", () => {
+    // One merged figure would make the larger of them impossible to interpret.
+    const result = availableToSpend(
+      [account({ kind: "checking", balanceCents: 100000 })],
+      [],
+      [
+        {
+          name: "Rent",
+          expectedCents: 210000,
+          perPaycheckCents: 105000,
+          heldCents: 105000,
+          fullyFunded: false,
+          periodStartKey: "2026-08-01",
+          nextDueKey: "2026-09-01",
+        },
+      ],
+      [
+        {
+          name: "Pizza",
+          ratePerPeriodCents: 6000,
+          spentThisPeriodCents: 0,
+          heldCents: 12000,
+          overCents: 0,
+          periodsCounted: 2,
+        },
+      ],
+    );
+
+    expect(result.setAsideCents).toBe(105000);
+    expect(result.recurringSpendCents).toBe(12000);
+    expect(result.totalCents).toBe(100000 - 105000 - 12000);
+    // The breakdown must add up to its own headline, or the page shows a contradiction.
+    expect(result.terms.reduce((total, term) => total + term.cents, 0)).toBe(
+      result.totalCents,
+    );
+  });
+
+  it("is unchanged when nothing recurring is declared", () => {
+    const result = availableToSpend([account({ balanceCents: 50000 })], [], []);
+    expect(result.recurringSpendCents).toBe(0);
+    expect(result.totalCents).toBe(50000);
   });
 });

@@ -562,11 +562,56 @@ type ChargeKind = { bill: boolean; spanDays: number | null };
 
 const NOT_A_BILL: ChargeKind = { bill: false, spanDays: null };
 
+/** Every bank string a declaration covers, including the name itself. */
+export function billMatcherKeys(bill: DeclaredBill): readonly string[] {
+  const matchers =
+    bill.matchers && bill.matchers.length > 0 ? bill.matchers : [bill.name];
+  return matchers.includes(bill.name) ? matchers : [...matchers, bill.name];
+}
+
+function billStatusOf(bill: DeclaredBill): NonNullable<DeclaredBill["status"]> {
+  return bill.status ?? "active";
+}
+
+/** Active bills only — cancelled and ignored stop levelling, forecasting, and accrual. */
+function activeBills(bills: readonly DeclaredBill[]): DeclaredBill[] {
+  return bills.filter((bill) => billStatusOf(bill) === "active");
+}
+
+function chargesForBill(
+  byMerchant: Map<string, AnalyticsRow[]>,
+  bill: DeclaredBill,
+): AnalyticsRow[] {
+  const seen = new Set<string>();
+  const rows: AnalyticsRow[] = [];
+  for (const key of billMatcherKeys(bill)) {
+    for (const row of byMerchant.get(key) ?? []) {
+      if (seen.has(row.id)) continue;
+      seen.add(row.id);
+      rows.push(row);
+    }
+  }
+  rows.sort(
+    (left, right) =>
+      left.transactionDate.localeCompare(right.transactionDate) ||
+      left.id.localeCompare(right.id),
+  );
+  return rows;
+}
+
+function claimedByBills(bills: readonly DeclaredBill[]): Map<string, DeclaredBill> {
+  const index = new Map<string, DeclaredBill>();
+  for (const bill of bills) {
+    for (const key of billMatcherKeys(bill)) index.set(key, bill);
+  }
+  return index;
+}
+
 function cadenceSpans(
   rows: readonly AnalyticsRow[],
   bills: readonly DeclaredBill[],
 ): (merchant: string, chargeDateKey: string) => ChargeKind {
-  const declared = new Map(bills.map((bill) => [bill.merchant, bill]));
+  const declared = claimedByBills(activeBills(bills));
   const detected = new Map(
     recurringMerchants(rows, bills)
       .filter((entry) => !entry.declared)
@@ -728,8 +773,9 @@ export function baselineSplit(
     0,
   );
   const levelled = levelRecurring && bills.length > 0 && windowDays > 0;
+  const levelledBills = bills.filter((entry) => entry.status !== "cancelled");
   const billMerchants = levelled
-    ? new Set(bills.map((entry) => entry.merchant))
+    ? new Set(levelledBills.map((entry) => entry.merchant))
     : new Set<string>();
 
   let baselineCents = 0;
@@ -758,7 +804,7 @@ export function baselineSplit(
   // accrues exactly the figure the commitments table prints and the two reconcile by
   // inspection. A leap year over-accrues by a day, which is the cheaper of the two errors.
   const billsCents = levelled
-    ? bills.reduce(
+    ? levelledBills.reduce(
         (total, entry) => total + Math.round((entry.annualCents * windowDays) / 365),
         0,
       )
@@ -1089,6 +1135,8 @@ export type RecurringMerchant = {
    * which was found by having a cadence in the first place.
    */
   scheduled: boolean;
+  /** Declared bills carry status so cancelled history can stay visible without being costed. */
+  status: "active" | "cancelled" | "ignored";
 };
 
 /** Below six charges there is no cadence to speak of, only a coincidence. */
@@ -1135,13 +1183,14 @@ export function recurringMerchants(
   const byMerchant = chargesByMerchant(rows);
   const byMerchantForBills =
     billRows === rows ? byMerchant : chargesByMerchant(billRows);
-  const declared = new Map(bills.map((bill) => [bill.merchant, bill]));
+  const claimed = claimedByBills(bills);
 
   const found: RecurringMerchant[] = [];
   for (const [merchant, ordered] of byMerchant) {
     // A declaration is the user's answer to the same question, so the statistics do not get
     // to disagree with it — and a semi-annual bill would fail every threshold below anyway.
-    if (declared.has(merchant)) continue;
+    // Cancelled and ignored still claim their matchers, so they cannot reappear as detections.
+    if (claimed.has(merchant)) continue;
     if (ordered.length < MIN_RECURRING_CHARGES) continue;
 
     const amounts = ordered.map(spendCentsOf);
@@ -1166,11 +1215,16 @@ export function recurringMerchants(
       cadenceMonths: null,
       declared: false,
       scheduled: true,
+      status: "active",
     });
   }
 
   for (const bill of bills) {
-    const charges = byMerchantForBills.get(bill.merchant) ?? [];
+    // Ignored means "detection proposed this and it was never a commitment". It stays off
+    // the table permanently. Cancelled stays visible as history.
+    if (billStatusOf(bill) === "ignored") continue;
+
+    const charges = chargesForBill(byMerchantForBills, bill);
     const amounts = charges.map(spendCentsOf);
     // The declared amount first, because it survives a window that contains no charge — which
     // is the normal case for a yearly bill and exactly when the commitment still exists.
@@ -1179,7 +1233,7 @@ export function recurringMerchants(
     if (typicalCents <= 0) continue;
 
     found.push({
-      merchant: bill.merchant,
+      merchant: bill.name,
       typicalCents,
       deviationCents: standardDeviation(amounts),
       // A declared bill with no charges on file has no observed range; collapsing it onto
@@ -1195,6 +1249,7 @@ export function recurringMerchants(
       cadenceMonths: bill.cadenceMonths,
       declared: true,
       scheduled: bill.scheduled,
+      status: billStatusOf(bill),
     });
   }
 
@@ -1264,10 +1319,15 @@ const MIN_CANDIDATE_CHARGES = 2;
  * Run it over the **whole** history rather than the visible window: the two charges that make
  * a semi-annual pattern are eight months apart and a six-month window sees only one of them.
  */
-export function cadenceCandidates(rows: readonly AnalyticsRow[]): CadenceCandidate[] {
+export function cadenceCandidates(
+  rows: readonly AnalyticsRow[],
+  options: { suppressMerchants?: readonly string[] } = {},
+): CadenceCandidate[] {
+  const suppressed = new Set(options.suppressMerchants ?? []);
   const found: CadenceCandidate[] = [];
 
   for (const [merchant, ordered] of chargesByMerchant(rows)) {
+    if (suppressed.has(merchant)) continue;
     if (ordered.length < MIN_CANDIDATE_CHARGES) continue;
 
     const amounts = ordered.map(spendCentsOf);
@@ -1331,8 +1391,8 @@ export function upcomingBills(
 
   return bills
     .flatMap((bill) => {
-      if (!bill.scheduled) return [];
-      const charges = byMerchant.get(bill.merchant) ?? [];
+      if (!bill.scheduled || billStatusOf(bill) !== "active") return [];
+      const charges = chargesForBill(byMerchant, bill);
       const lastChargeOn =
         charges[charges.length - 1]?.transactionDate ?? bill.anchorDate ?? "";
       if (lastChargeOn === "") return [];
@@ -1345,7 +1405,7 @@ export function upcomingBills(
       const dueOn = nextDueFrom(lastChargeOn, bill.cadenceMonths, todayKey);
       return [
         {
-          merchant: bill.merchant,
+          merchant: bill.name,
           cadenceMonths: bill.cadenceMonths,
           dueOn,
           daysAway: daysBetweenKeys(todayKey, dueOn),
@@ -1379,6 +1439,11 @@ export type OneOffOptions = {
    * the answer to this list's question, and continuing to ask is the bug being fixed.
    */
   bills?: readonly DeclaredBill[];
+  /**
+   * Extra merchants to withhold — typically matchers already claimed by recurring spend, so
+   * pizza does not keep showing up as a one-off after it has been grouped.
+   */
+  suppressMerchants?: readonly string[];
 };
 
 /** How far above a typical row a charge has to sit before it is worth asking about. */
@@ -1404,7 +1469,7 @@ export function oneOffSuggestions(
   rows: readonly AnalyticsRow[],
   options: OneOffOptions = {},
 ): OneOffSuggestion[] {
-  const { limit = 20, bills = [] } = options;
+  const { limit = 20, bills = [], suppressMerchants = [] } = options;
   const spending = rows.filter((row) => spendCentsOf(row) > 0);
   if (spending.length === 0) return [];
 
@@ -1415,7 +1480,11 @@ export function oneOffSuggestions(
   );
   // A declared bill with no charge in this window is absent from the table above but is
   // still declared, and its charge must not resurface the moment the window narrows.
-  for (const bill of bills) recurring.add(bill.merchant);
+  // Matchers (and cancelled/ignored claims) suppress the same way: the answer has been given.
+  for (const bill of bills) {
+    for (const key of billMatcherKeys(bill)) recurring.add(key);
+  }
+  for (const merchant of suppressMerchants) recurring.add(merchant);
 
   return spending
     .filter((row) => !row.excludeFromBaseline)

@@ -44,13 +44,18 @@ import {
   updateMetricTool,
 } from "./metricTools";
 import {
+  deleteCommitmentTool,
   getCashFlowTool,
   getDebtSummaryTool,
   getFinanceOverviewTool,
   getSpendingBreakdownTool,
+  listCommitmentCandidatesTool,
+  listCommitmentsTool,
   listRecurringBillsTool,
   listStatementsTool,
   searchTransactionsTool,
+  upsertRecurringSpendTool,
+  upsertSubscriptionTool,
 } from "./financeTools";
 
 export const AGENT_CONTRACT_VERSION = 2 as const;
@@ -574,6 +579,63 @@ const definitions: AgentToolDefinition[] = [
     ],
     handler: searchTransactionsTool,
   }),
+  defineTool("list_commitments", {
+    domain: "finances",
+    summary:
+      "List declared subscriptions/bills and recurring spend, with next due and rates.",
+    useWhen:
+      "Use to see what is already spoken for before creating or updating a commitment.",
+    avoidWhen:
+      "Do not use it to detect undeclared merchants — that is list_commitment_candidates.",
+    returns:
+      "Both tables: bills with next due and annual cost, spend with auto/pinned rates.",
+    effects: read,
+    exposure: "domain",
+    handler: listCommitmentsTool,
+  }),
+  defineTool("list_commitment_candidates", {
+    domain: "finances",
+    summary: "Detected recurring merchants not yet claimed by a commitment.",
+    useWhen:
+      "Use after the user pastes a list of subscriptions, to see what is still unclaimed.",
+    avoidWhen: "Do not use it to list declared commitments; that is list_commitments.",
+    returns: "Unclaimed merchant strings, sorted.",
+    effects: read,
+    exposure: "domain",
+    handler: listCommitmentCandidatesTool,
+  }),
+  defineTool("upsert_subscription", {
+    domain: "finances",
+    summary: "Create or correct a subscription or bill.",
+    useWhen:
+      "Use to declare a bill, rename its matchers, set the amount, or mark it cancelled.",
+    avoidWhen: "Use upsert_recurring_spend for pizza and groceries.",
+    returns: "The saved bill's name, matchers, and status.",
+    effects: safeWrite,
+    exposure: "domain",
+    handler: upsertSubscriptionTool,
+  }),
+  defineTool("upsert_recurring_spend", {
+    domain: "finances",
+    summary: "Create or correct a recurring-spend group.",
+    useWhen:
+      "Use to group merchants like Pizza Hut and Domino's under one weekly rate.",
+    avoidWhen: "Use upsert_subscription for things that charge unless cancelled.",
+    returns: "The saved entry's name, matchers, and period.",
+    effects: safeWrite,
+    exposure: "domain",
+    handler: upsertRecurringSpendTool,
+  }),
+  defineTool("delete_commitment", {
+    domain: "finances",
+    summary: "Remove a bill or recurring-spend entry.",
+    useWhen: "Use when the user undeclares a commitment entirely.",
+    avoidWhen: "Use upsert_subscription with status cancelled to keep the history.",
+    returns: "Confirmation of the kind and name removed.",
+    effects: destructiveWrite,
+    exposure: "domain",
+    handler: deleteCommitmentTool,
+  }),
 ];
 
 export const TOOL_REGISTRY = new Map(definitions.map((tool) => [tool.name, tool]));
@@ -635,6 +697,21 @@ const fieldDescriptions: Record<string, string> = {
   by: "Rank spend by category or merchant.",
   trend: "When true, also return per-bucket spend for the top categories.",
   includeUpcoming: "When true, include the next expected date for each declared bill.",
+  matchers:
+    "Bank merchant strings this commitment covers, as effectiveMerchant produces them.",
+  cadenceMonths: "How often the bill charges, in months. 1 monthly, 12 yearly.",
+  expectedCents: "Stated amount in integer cents. Null means derive from history.",
+  anchorDate:
+    "YYYY-MM-DD the next-due walk starts from when history does not reach it.",
+  status: "active, cancelled, or ignored.",
+  cancelUrl: "Where to cancel the subscription. Stored, never followed.",
+  scheduled: "Whether the dates are predictable. False for propane.",
+  setAside: "Whether to hold this back from available-to-spend.",
+  dueDay: "Day of the period the charge is expected, 1-31.",
+  period: "week or month — the unit the recurring-spend rate is quoted in.",
+  amountSource: "auto derives the rate from history; pinned stores expectedCents.",
+  kind: "bill for a subscription, spend for a recurring-spend group.",
+  active: "Whether this recurring-spend entry is still part of the routine.",
   direction: "Keep income rows, spend rows (including refunds), or any flow.",
   minCents:
     "Inclusive minimum of abs(amountCents). Values are integer cents (100 = $1.00).",

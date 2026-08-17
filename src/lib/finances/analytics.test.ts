@@ -696,7 +696,7 @@ describe("oneOffSuggestions", () => {
 
 /** Geico's real shape: a semi-annual premium, declared because it cannot be detected. */
 const geicoBill = {
-  merchant: "Geico",
+  name: "Geico",
   cadenceMonths: 6,
   expectedCents: 141260,
   anchorDate: null,
@@ -753,7 +753,7 @@ describe("recurringMerchants with declared bills", () => {
       }),
     ];
     const bill = {
-      merchant: "Taylor Gas",
+      name: "Taylor Gas",
       cadenceMonths: 6,
       expectedCents: null,
       anchorDate: null,
@@ -781,7 +781,7 @@ describe("recurringMerchants with declared bills", () => {
     );
     const found = recurringMerchants(charges, [
       {
-        merchant: "SimpliSafe",
+        name: "SimpliSafe",
         cadenceMonths: 3,
         expectedCents: null,
         anchorDate: null,
@@ -792,6 +792,47 @@ describe("recurringMerchants with declared bills", () => {
     expect(found).toHaveLength(1);
     expect(found[0]).toMatchObject({ cadenceMonths: 3, declared: true });
     expect(found[0].annualCents).toBe(13884);
+  });
+
+  it("costs a declared bill from every matcher, not just the name", () => {
+    // Pizza Hut and Domino's are two bank strings and one commitment. Without matchers
+    // the charges sit under their own names and the declaration would look empty.
+    const charges = [
+      row({
+        description: "ACME MART",
+        transactionDate: "2026-01-09",
+        amountCents: -2800,
+      }),
+      row({
+        description: "BOB'S GROCERY",
+        transactionDate: "2026-01-16",
+        amountCents: -3200,
+      }),
+    ];
+    const found = recurringMerchants(charges, [
+      {
+        name: "Groceries",
+        matchers: ["ACME MART", "BOB'S GROCERY"],
+        cadenceMonths: 1,
+        expectedCents: null,
+        anchorDate: null,
+        scheduled: true,
+      },
+    ]);
+
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({
+      merchant: "Groceries",
+      chargeCount: 2,
+      typicalCents: 3000,
+      declared: true,
+    });
+  });
+
+  it("keeps a cancelled bill on the list and off every total that would count it", () => {
+    const found = recurringMerchants([], [{ ...geicoBill, status: "cancelled" }]);
+    expect(found[0]).toMatchObject({ merchant: "Geico", status: "cancelled" });
+    expect(recurringMerchants([], [{ ...geicoBill, status: "ignored" }])).toEqual([]);
   });
 });
 
@@ -899,7 +940,7 @@ describe("upcomingBills", () => {
 describe("unscheduled bills", () => {
   /** Propane: the yearly cost is knowable, the delivery date is a tank sensor. */
   const propane = {
-    merchant: "Taylor Gas",
+    name: "Taylor Gas",
     cadenceMonths: 12,
     expectedCents: 50_000,
     anchorDate: null,

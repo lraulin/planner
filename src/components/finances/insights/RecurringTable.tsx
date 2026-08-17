@@ -11,6 +11,7 @@ import {
 import {
   deleteRecurringBillAction,
   setRecurringBillAction,
+  setRecurringSpendAction,
 } from "@/app/finances/actions";
 import { PanelEmpty } from "./Panel";
 
@@ -91,16 +92,18 @@ export function RecurringTable({
   // switched off, because "about $500 a year" is what an unschedulable bill actually knows.
   const [addCadence, setAddCadence] = useState(6);
   const [addYearly, setAddYearly] = useState("");
+  const [addKind, setAddKind] = useState<"bill" | "spend">("bill");
 
-  const annualTotal = merchants.reduce((total, entry) => total + entry.annualCents, 0);
-  const setAsideTotal = merchants.reduce(
+  const live = merchants.filter((entry) => entry.status !== "cancelled");
+  const annualTotal = live.reduce((total, entry) => total + entry.annualCents, 0);
+  const setAsideTotal = live.reduce(
     (total, entry) => total + Math.round(entry.annualCents / 12),
     0,
   );
 
   function change(merchant: string, cadenceMonths: number) {
     startTransition(async () => {
-      await setRecurringBillAction({ merchant, cadenceMonths });
+      await setRecurringBillAction({ name: merchant, cadenceMonths });
     });
   }
 
@@ -123,7 +126,7 @@ export function RecurringTable({
       entry.cadenceMonths ?? cadenceMonthsFromGapDays(entry.cadenceDays) ?? 1;
     startTransition(async () => {
       await setRecurringBillAction({
-        merchant: entry.merchant,
+        name: entry.merchant,
         cadenceMonths,
         setAside: on,
         ...(on ? { expectedCents: entry.typicalCents } : {}),
@@ -136,12 +139,19 @@ export function RecurringTable({
 
   function add() {
     if (adding === "") return;
+    if (addKind === "spend") {
+      startTransition(async () => {
+        await setRecurringSpendAction({ name: adding, matchers: [adding] });
+        setAdding("");
+      });
+      return;
+    }
     if (unscheduled && !(yearlyCents > 0)) return;
     startTransition(async () => {
       await setRecurringBillAction(
         unscheduled
           ? {
-              merchant: adding,
+              name: adding,
               // A yearly period carrying the stated annual cost, with the forecast off. The
               // dates are unknowable; the money is not.
               cadenceMonths: 12,
@@ -150,7 +160,7 @@ export function RecurringTable({
             }
           : // No amount on a scheduled bill: the median of what is on file is the honest
             // figure, and it improves on its own as the bill arrives again.
-            { merchant: adding, cadenceMonths: addCadence, scheduled: true },
+            { name: adding, cadenceMonths: addCadence, scheduled: true },
       );
       setAdding("");
       setAddYearly("");
@@ -162,7 +172,7 @@ export function RecurringTable({
     if (!(cents > 0)) return;
     startTransition(async () => {
       await setRecurringBillAction({
-        merchant,
+        name: merchant,
         cadenceMonths: 12,
         expectedCents: cents,
         scheduled: false,
@@ -172,8 +182,21 @@ export function RecurringTable({
 
   const declareControls = (
     <div className="flex flex-wrap items-center gap-2 border-t border-rule pt-2">
-      <label className="text-[0.75rem] text-ink-muted" htmlFor="declare-merchant">
-        Declare a bill
+      <label className="text-[0.75rem] text-ink-muted" htmlFor="declare-kind">
+        Track as
+      </label>
+      <select
+        id="declare-kind"
+        value={addKind}
+        disabled={pending}
+        onChange={(event) => setAddKind(event.target.value as "bill" | "spend")}
+        className="min-h-tap rounded border border-rule bg-surface px-2 py-1 text-base text-ink md:min-h-0 md:text-[0.75rem]"
+      >
+        <option value="bill">Bill</option>
+        <option value="spend">Recurring spend</option>
+      </select>
+      <label className="sr-only" htmlFor="declare-merchant">
+        Merchant
       </label>
       <select
         id="declare-merchant"
@@ -192,7 +215,7 @@ export function RecurringTable({
       </select>
       <select
         value={addCadence}
-        disabled={pending}
+        disabled={pending || addKind === "spend"}
         aria-label="Cadence for the bill being declared"
         onChange={(event) => setAddCadence(Number(event.target.value))}
         className="min-h-tap rounded border border-rule bg-surface px-2 py-1 text-base text-ink md:min-h-0 md:text-[0.75rem]"
@@ -219,7 +242,11 @@ export function RecurringTable({
       <button
         type="button"
         onClick={add}
-        disabled={pending || adding === "" || (unscheduled && !(yearlyCents > 0))}
+        disabled={
+          pending ||
+          adding === "" ||
+          (addKind === "bill" && unscheduled && !(yearlyCents > 0))
+        }
         className="min-h-tap rounded border border-rule bg-surface-raised px-2 text-[0.75rem] text-ink disabled:opacity-50 md:min-h-0 md:py-1"
       >
         Declare
@@ -274,6 +301,9 @@ export function RecurringTable({
                     </span>
                   )}
                   {entry.merchant}
+                  {entry.status === "cancelled" && (
+                    <span className="ml-1 text-[0.7rem] text-ink-muted">cancelled</span>
+                  )}
                 </td>
                 <td className="py-1 pr-2 whitespace-nowrap text-ink-muted">
                   {entry.cadenceMonths === null ? (

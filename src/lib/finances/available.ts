@@ -38,6 +38,13 @@
 import type { FinanceAccountKind } from "@/db/schema";
 import { daysBetweenKeys, shiftDateKey } from "@/lib/schedule/geometry";
 import { BIWEEKLY_DAYS, type Payday } from "./classify/income";
+import {
+  periodIndex,
+  periodLengthDays,
+  periodStartKey,
+  type CommitmentCharge,
+  type StoredSpend,
+} from "./commitments";
 import { shiftDateKeyMonths, type StoredBill } from "./recurringBills";
 
 /** Kinds whose balance is money you could spend this fortnight without a decision. */
@@ -106,10 +113,13 @@ export function accountBalanceView(
 
 /**
  * A posted charge against a declared bill, used to decide whether this period is already paid.
- * `merchant` is `effectiveMerchant()` output, matching how the bill was declared.
+ *
+ * Keyed by the **commitment's name**, not the bank's merchant string: the caller has already
+ * resolved it through the matcher index, which is what lets a bill covering two bank spellings
+ * arrive here as one series rather than two that each look half-paid.
  */
 export type BillCharge = {
-  merchant: string;
+  name: string;
   /** `YYYY-MM-DD`. */
   dateKey: string;
 };
@@ -257,7 +267,8 @@ export function paydaysPerCadence(cadenceMonths: number): number {
 }
 
 export type SetAside = {
-  merchant: string;
+  /** The commitment's name, as the user set it. */
+  name: string;
   /** What the whole bill costs, per cadence period. */
   expectedCents: number;
   /** `expectedCents` divided over the paychecks in one cadence. */
@@ -309,7 +320,7 @@ export function setAsideHeld(
 
   // A charge dated ahead of today cannot have reset anything yet.
   const mine = charges
-    .filter((charge) => charge.merchant === bill.merchant && charge.dateKey <= todayKey)
+    .filter((charge) => charge.name === bill.name && charge.dateKey <= todayKey)
     .sort((left, right) => left.dateKey.localeCompare(right.dateKey));
   const lastCharge = mine.length > 0 ? mine[mine.length - 1].dateKey : null;
 
@@ -324,7 +335,7 @@ export function setAsideHeld(
   const heldCents = Math.min(bill.expectedCents, perPaycheckCents * accrued);
 
   return {
-    merchant: bill.merchant,
+    name: bill.name,
     expectedCents: bill.expectedCents,
     perPaycheckCents,
     heldCents,
@@ -333,6 +344,97 @@ export function setAsideHeld(
     // One cadence on, not `nextDueFrom`'s walk to the future: a due date that has already
     // passed unpaid is the one thing worth seeing, and walking past it would hide it.
     nextDueKey: shiftDateKeyMonths(periodStartKey, bill.cadenceMonths),
+  };
+}
+
+export type SpendHeld = {
+  /** The commitment's name. */
+  name: string;
+  /** What one period of it costs — derived from history, or pinned. */
+  ratePerPeriodCents: number;
+  /** Already spent in the period containing `todayKey`. */
+  spentThisPeriodCents: number;
+  /** What must be held back out of today's spendable money. */
+  heldCents: number;
+  /** How far over the period's rate this period has already gone. Zero when within it. */
+  overCents: number;
+  /** Periods counted, including the current one. */
+  periodsCounted: number;
+};
+
+/**
+ * How much of a recurring-spend commitment must be held back before the next paycheck.
+ *
+ * **This is not `setAsideHeld`, and the difference is the point.** That one accrues *toward* a
+ * future charge and assumes the cadence is at least as long as a pay period — right for rent,
+ * meaningless for a weekly grocery run against fortnightly pay, where two whole periods fall
+ * inside one paycheck. So this sums the periods between today and payday instead:
+ *
+ * ```
+ * current period      → max(0, rate − spent)
+ * whole future period → rate
+ * period straddling   → rate × daysBeforePayday ÷ periodDays
+ *   the payday
+ * ```
+ *
+ * **The clamp at zero is the whole mechanism**, and it is what produces the behaviour asked
+ * for. A $60/week entry with fourteen days to payday holds $120. Order a $95 pizza and the
+ * balance drops $95 while this period's held falls to `max(0, 60 − 95) = 0`, so the total held
+ * drops to $60 and the headline moves by exactly **−$35** — the overage, and nothing else.
+ * Money already budgeted is free because it was already held; only going over bites. Without
+ * the clamp the overspend would be counted twice, once as a real charge and once as an unmet
+ * obligation.
+ *
+ * **The current period is never pro-rated.** Friday's pizza is a lump, not a trickle, so half a
+ * week left does not mean half a pizza. Only a *future* period cut short by payday is
+ * pro-rated, because there the question really is "how much of that week does this paycheck
+ * have to cover".
+ */
+export function recurringSpendHeld(
+  entry: StoredSpend,
+  ratePerPeriodCents: number,
+  charges: readonly CommitmentCharge[],
+  todayKey: string,
+  nextPaydayKey: string | null,
+): SpendHeld | null {
+  if (!entry.active || !entry.setAside || ratePerPeriodCents <= 0) return null;
+
+  const currentPeriod = periodIndex(todayKey, entry.period);
+  const spentThisPeriodCents = charges
+    .filter((charge) => periodIndex(charge.dateKey, entry.period) === currentPeriod)
+    .reduce((total, charge) => total + charge.costCents, 0);
+
+  // No payday in sight is not a reason to hold nothing: this period's obligation stands
+  // whether or not the next paycheck can be dated.
+  const lastPeriod =
+    nextPaydayKey === null ? currentPeriod : periodIndex(nextPaydayKey, entry.period);
+
+  let heldCents = Math.max(0, ratePerPeriodCents - spentThisPeriodCents);
+  let periodsCounted = 1;
+
+  for (let period = currentPeriod + 1; period <= lastPeriod; period++) {
+    const startKey = periodStartKey(period, entry.period);
+    if (nextPaydayKey !== null && startKey >= nextPaydayKey) break;
+
+    const lengthDays = periodLengthDays(period, entry.period);
+    const endKey = shiftDateKey(startKey, lengthDays);
+    periodsCounted += 1;
+
+    if (nextPaydayKey === null || endKey <= nextPaydayKey) {
+      heldCents += ratePerPeriodCents;
+      continue;
+    }
+    const coveredDays = daysBetweenKeys(startKey, nextPaydayKey);
+    heldCents += Math.round((ratePerPeriodCents * coveredDays) / lengthDays);
+  }
+
+  return {
+    name: entry.name,
+    ratePerPeriodCents,
+    spentThisPeriodCents,
+    heldCents,
+    overCents: Math.max(0, spentThisPeriodCents - ratePerPeriodCents),
+    periodsCounted,
   };
 }
 
@@ -380,6 +482,8 @@ export type AvailableToSpend = {
   pendingCents: number;
   cardDebtCents: number;
   setAsideCents: number;
+  /** Held back for tier 2 recurring spend before the next payday. */
+  recurringSpendCents: number;
   /**
    * The arithmetic, in the order it should be read.
    *
@@ -413,6 +517,7 @@ export function availableToSpend(
   accounts: readonly DashboardAccount[],
   pending: readonly PendingRow[],
   setAsides: readonly SetAside[],
+  spendHeld: readonly SpendHeld[] = [],
 ): AvailableToSpend {
   const position = cashPosition(accounts);
 
@@ -430,9 +535,17 @@ export function availableToSpend(
     .reduce((total, row) => total + row.amountCents, 0);
 
   const setAsideCents = setAsides.reduce((total, entry) => total + entry.heldCents, 0);
+  const recurringSpendCents = spendHeld.reduce(
+    (total, entry) => total + entry.heldCents,
+    0,
+  );
 
   const totalCents =
-    position.spendableCents + pendingCents + position.cardDebtCents - setAsideCents;
+    position.spendableCents +
+    pendingCents +
+    position.cardDebtCents -
+    setAsideCents -
+    recurringSpendCents;
 
   return {
     totalCents,
@@ -440,11 +553,16 @@ export function availableToSpend(
     pendingCents,
     cardDebtCents: position.cardDebtCents,
     setAsideCents,
+    recurringSpendCents,
+    // Two lines, not one. They are held for different reasons and answer different questions —
+    // "the bills are covered" and "the groceries are covered" — and one merged figure would
+    // make the larger of them impossible to interpret.
     terms: [
       { label: "Checking & cash", cents: position.spendableCents },
       { label: "Pending", cents: pendingCents },
       { label: "Card balances", cents: position.cardDebtCents },
-      { label: "Set aside", cents: -setAsideCents },
+      { label: "Set aside for bills", cents: -setAsideCents },
+      { label: "Recurring spend", cents: -recurringSpendCents },
     ],
   };
 }

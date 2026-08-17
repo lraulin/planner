@@ -651,6 +651,41 @@ export const inputSchemas = {
     maxCents: z.number().int().optional(),
     ...pageInputFields,
   }),
+  list_commitments: z.strictObject({}),
+  list_commitment_candidates: z.strictObject({}),
+  upsert_subscription: z.strictObject({
+    name: z.string().min(1).describe("User-chosen name for the bill."),
+    matchers: z
+      .array(z.string())
+      .optional()
+      .describe("Bank merchant strings this bill covers."),
+    cadenceMonths: z.number().int().min(1).max(24).describe("Cadence in months."),
+    expectedCents: z.number().int().nullable().optional(),
+    anchorDate: dateKey.nullable().optional(),
+    status: z.enum(["active", "cancelled", "ignored"]).optional(),
+    cancelUrl: z.string().optional(),
+    scheduled: z.boolean().optional(),
+    setAside: z.boolean().optional(),
+    dueDay: z.number().int().min(1).max(31).nullable().optional(),
+    notes: z.string().optional(),
+  }),
+  upsert_recurring_spend: z.strictObject({
+    name: z.string().min(1).describe("User-chosen name, e.g. Pizza."),
+    matchers: z
+      .array(z.string())
+      .optional()
+      .describe("Bank merchant strings that count toward this."),
+    period: z.enum(["week", "month"]).optional(),
+    amountSource: z.enum(["auto", "pinned"]).optional(),
+    expectedCents: z.number().int().nullable().optional(),
+    setAside: z.boolean().optional(),
+    active: z.boolean().optional(),
+    notes: z.string().optional(),
+  }),
+  delete_commitment: z.strictObject({
+    kind: z.enum(["bill", "spend"]).describe("Which table the name lives in."),
+    name: z.string().min(1).describe("The commitment's name."),
+  }),
 } as const;
 
 const healthOutput = z.strictObject({
@@ -1016,5 +1051,50 @@ export const outputSchemas = {
     matchedIncomeCents: cents,
     matchedSpendCents: cents,
     matchedNetCents: cents,
+  }),
+  list_commitments: z.strictObject({
+    bills: z.array(
+      z.strictObject({
+        name: z.string(),
+        matchers: z.array(z.string()),
+        status: z.enum(["active", "cancelled", "ignored"]),
+        cadenceMonths: z.number().int(),
+        expectedCents: cents.nullable(),
+        annualCents: cents,
+        nextDue: dateKey.nullable(),
+        scheduled: z.boolean(),
+        setAside: z.boolean(),
+      }),
+    ),
+    spend: z.array(
+      z.strictObject({
+        name: z.string(),
+        matchers: z.array(z.string()),
+        period: z.enum(["week", "month"]),
+        amountSource: z.enum(["auto", "pinned"]),
+        ratePerPeriodCents: cents,
+        observedCents: cents,
+        setAside: z.boolean(),
+        active: z.boolean(),
+      }),
+    ),
+  }),
+  list_commitment_candidates: z.strictObject({
+    merchants: z.array(z.string()),
+  }),
+  upsert_subscription: z.strictObject({
+    name: z.string(),
+    matchers: z.array(z.string()),
+    status: z.enum(["active", "cancelled", "ignored"]),
+  }),
+  upsert_recurring_spend: z.strictObject({
+    name: z.string(),
+    matchers: z.array(z.string()),
+    period: z.enum(["week", "month"]),
+  }),
+  delete_commitment: z.strictObject({
+    deleted: z.literal(true),
+    kind: z.enum(["bill", "spend"]),
+    name: z.string(),
   }),
 } as const;

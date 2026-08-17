@@ -91,7 +91,7 @@ async function seed(userId: string): Promise<void> {
     await updateTransaction(userId, gift.id, { flowOverride: "income" });
   }
   await upsertRecurringBill(userId, {
-    merchant: "SimpliSafe",
+    name: "SimpliSafe",
     cadenceMonths: 1,
     expectedCents: 3471,
   });
@@ -236,6 +236,13 @@ describeDb("finance agent tools", () => {
     expect(found.transactions).toEqual([]);
     expect(found.matchedIncomeCents).toBe(0);
 
+    expect(
+      (await dispatchAgentTool("list_commitments", {}, intruderId)) as {
+        bills: unknown[];
+        spend: unknown[];
+      },
+    ).toMatchObject({ bills: [], spend: [] });
+
     const snaps = (await dispatchAgentTool("list_statements", {}, intruderId)) as {
       statements: unknown[];
       holes: unknown[];
@@ -259,5 +266,80 @@ describeDb("finance agent tools", () => {
       code: "validation",
       message: expect.stringContaining("Unknown field surprise"),
     });
+  });
+
+  it("creates, lists and deletes commitments, and refuses another user's writes", async () => {
+    const created = (await dispatchAgentTool(
+      "upsert_recurring_spend",
+      { name: "Pizza", matchers: ["PIZZA HUT", "DOMINOS"], period: "week" },
+      ownerId,
+    )) as { name: string; matchers: string[] };
+    expect(created).toMatchObject({
+      name: "Pizza",
+      matchers: ["PIZZA HUT", "DOMINOS"],
+    });
+
+    const listed = (await dispatchAgentTool("list_commitments", {}, ownerId)) as {
+      bills: { name: string }[];
+      spend: { name: string }[];
+    };
+    expect(listed.bills.some((bill) => bill.name === "SimpliSafe")).toBe(true);
+    expect(listed.spend.some((entry) => entry.name === "Pizza")).toBe(true);
+
+    await expect(
+      dispatchAgentTool(
+        "upsert_subscription",
+        { name: "Hut sub", matchers: ["PIZZA HUT"], cadenceMonths: 1 },
+        ownerId,
+      ),
+    ).rejects.toMatchObject({
+      code: "validation",
+      message: expect.stringContaining("PIZZA HUT"),
+    });
+
+    await dispatchAgentTool(
+      "upsert_subscription",
+      {
+        name: "Paramount+",
+        matchers: ["PARAMOUNT"],
+        cadenceMonths: 1,
+        expectedCents: 1299,
+        status: "cancelled",
+      },
+      ownerId,
+    );
+
+    await dispatchAgentTool(
+      "upsert_recurring_spend",
+      { name: "Pizza", matchers: ["DOMINOS"] },
+      intruderId,
+    );
+    const ownerAfter = (await dispatchAgentTool("list_commitments", {}, ownerId)) as {
+      spend: { name: string; matchers: string[] }[];
+    };
+    expect(ownerAfter.spend.find((entry) => entry.name === "Pizza")?.matchers).toEqual([
+      "PIZZA HUT",
+      "DOMINOS",
+    ]);
+
+    await dispatchAgentTool(
+      "delete_commitment",
+      { kind: "spend", name: "Pizza" },
+      intruderId,
+    );
+    const stillThere = (await dispatchAgentTool("list_commitments", {}, ownerId)) as {
+      spend: { name: string }[];
+    };
+    expect(stillThere.spend.some((entry) => entry.name === "Pizza")).toBe(true);
+
+    await dispatchAgentTool(
+      "delete_commitment",
+      { kind: "spend", name: "Pizza" },
+      ownerId,
+    );
+    const gone = (await dispatchAgentTool("list_commitments", {}, ownerId)) as {
+      spend: { name: string }[];
+    };
+    expect(gone.spend.some((entry) => entry.name === "Pizza")).toBe(false);
   });
 });

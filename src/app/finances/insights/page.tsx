@@ -4,6 +4,7 @@ import {
   loadCarryingCost,
   loadInsightsRows,
   loadRecurringBills,
+  loadRecurringSpend,
   unclassifiedCount,
 } from "@/lib/finances/dashboardQueries";
 import { listPaymentResolutions, listStatements } from "@/lib/finances/queries";
@@ -21,12 +22,13 @@ export const dynamic = "force-dynamic";
  */
 export default async function FinancesInsightsPage() {
   const userId = await getCurrentUserId();
-  const [rows, carryingCost, unclassified, bills, statements, resolutions] =
+  const [rows, carryingCost, unclassified, bills, spend, statements, resolutions] =
     await Promise.all([
       loadInsightsRows(userId),
       loadCarryingCost(userId),
       unclassifiedCount(userId),
       loadRecurringBills(userId),
+      loadRecurringSpend(userId),
       listStatements(userId),
       listPaymentResolutions(userId),
     ]);
@@ -39,6 +41,7 @@ export default async function FinancesInsightsPage() {
           carryingCost={carryingCost}
           unclassified={unclassified}
           bills={bills}
+          spend={spend}
           statements={statements}
           resolutions={resolutions}
         />

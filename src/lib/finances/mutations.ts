@@ -5,11 +5,16 @@ import {
   financeAccounts,
   financePaymentResolutions,
   financeRecurringBills,
+  financeRecurringSpend,
   financeTransactions,
+  type CommitmentStatus,
   type FinanceAccountKind,
   type FinanceFlowKind,
+  type RecurringSpendAmountSource,
+  type RecurringSpendPeriod,
 } from "@/db/schema";
 import { changedRows, planReclassify } from "./classify/reclassify";
+import { MatcherConflictError } from "./commitments";
 import { numericStringToCents } from "./money";
 import type { PaypalResolution } from "./paypalMatch";
 
@@ -413,8 +418,19 @@ export async function deleteAccount(userId: string, accountId: string): Promise<
 }
 
 export type RecurringBillEdit = {
-  /** Effective merchant, as `effectiveMerchant()` produces it. */
-  merchant: string;
+  /** The user's name for the bill, and the upsert key. */
+  name: string;
+  /**
+   * Bank merchant strings whose charges belong to this bill, as `effectiveMerchant()` produces
+   * them. Omitted leaves the existing set alone — correcting a cadence must not silently
+   * unclaim the merchants the declaration was built on.
+   */
+  matchers?: readonly string[];
+  /** Whether it is still live. See `CommitmentStatus`. */
+  status?: CommitmentStatus;
+  /** When it was cancelled. Defaults to today when `status` becomes `cancelled`. */
+  cancelledOn?: string | null;
+  cancelUrl?: string;
   cadenceMonths: number;
   /** Null keeps the median of the charges on file as the amount. */
   expectedCents?: number | null;
@@ -436,12 +452,77 @@ export type RecurringBillEdit = {
 };
 
 /**
- * Declare a merchant's bill cadence, or change one already declared.
+ * Every merchant string this user has already claimed, and the commitment holding it.
  *
- * Keyed on the merchant rather than an id, because the caller is the one-off review row and
- * it knows the merchant, not whether a declaration already exists. That makes the operation
- * naturally idempotent: declaring Geico semi-annual twice is one declaration, and correcting
- * it to yearly is the same call with a different number.
+ * **The enforcement point for the one invariant Postgres cannot express.** A merchant may
+ * belong to at most one commitment across `finance_recurring_bills` and
+ * `finance_recurring_spend`; a unique index cannot span two tables, so it is checked here.
+ * Letting a second claim through would not fail loudly — it would double-count that merchant's
+ * charges in the rate, the accrual and everything built on either, and look plausible doing it.
+ *
+ * `exclude` is the row being edited, which must not collide with itself.
+ */
+async function claimedMatchers(
+  userId: string,
+  exclude: { table: "bill" | "spend"; id?: string } | null,
+): Promise<Map<string, string>> {
+  const [bills, spend] = await Promise.all([
+    db
+      .select({
+        id: financeRecurringBills.id,
+        name: financeRecurringBills.name,
+        matchers: financeRecurringBills.matchers,
+      })
+      .from(financeRecurringBills)
+      .where(eq(financeRecurringBills.userId, userId)),
+    db
+      .select({
+        id: financeRecurringSpend.id,
+        name: financeRecurringSpend.name,
+        matchers: financeRecurringSpend.matchers,
+      })
+      .from(financeRecurringSpend)
+      .where(eq(financeRecurringSpend.userId, userId)),
+  ]);
+
+  const claimed = new Map<string, string>();
+  for (const row of bills) {
+    if (exclude?.table === "bill" && exclude.id === row.id) continue;
+    for (const merchant of row.matchers) claimed.set(merchant, row.name);
+  }
+  for (const row of spend) {
+    if (exclude?.table === "spend" && exclude.id === row.id) continue;
+    for (const merchant of row.matchers) claimed.set(merchant, row.name);
+  }
+  return claimed;
+}
+
+/** Normalize, de-duplicate, and refuse matchers another commitment already holds. */
+async function checkedMatchers(
+  userId: string,
+  matchers: readonly string[],
+  exclude: { table: "bill" | "spend"; id?: string } | null,
+): Promise<string[]> {
+  const cleaned = [...new Set(matchers.map((entry) => entry.trim()).filter(Boolean))];
+  if (cleaned.length === 0) return cleaned;
+
+  const claimed = await claimedMatchers(userId, exclude);
+  for (const merchant of cleaned) {
+    const holder = claimed.get(merchant);
+    if (holder !== undefined) {
+      throw new MatcherConflictError(merchant, holder);
+    }
+  }
+  return cleaned;
+}
+
+/**
+ * Declare a bill, or change one already declared.
+ *
+ * Keyed on the **name** rather than an id, because the caller is often the one-off review row
+ * and it knows what it is declaring, not whether a declaration already exists. That makes the
+ * operation naturally idempotent: declaring Geico semi-annual twice is one declaration, and
+ * correcting it to yearly is the same call with a different number.
  *
  * The cadence is checked here as well as by the column's CHECK — a constraint violation
  * surfaces as a database error the user cannot act on, and the offered list is a closed set.
@@ -450,8 +531,8 @@ export async function upsertRecurringBill(
   userId: string,
   edit: RecurringBillEdit,
 ): Promise<void> {
-  const merchant = edit.merchant.trim();
-  if (merchant === "") throw new Error("A bill needs a merchant.");
+  const name = edit.name.trim();
+  if (name === "") throw new Error("A bill needs a name.");
   if (
     !Number.isInteger(edit.cadenceMonths) ||
     edit.cadenceMonths < 1 ||
@@ -481,18 +562,48 @@ export async function upsertRecurringBill(
     throw new Error("A set-aside needs its cost for the period.");
   }
 
+  const existing = await db
+    .select({ id: financeRecurringBills.id })
+    .from(financeRecurringBills)
+    .where(
+      and(
+        eq(financeRecurringBills.userId, userId),
+        eq(financeRecurringBills.name, name),
+      ),
+    )
+    .limit(1);
+
+  const matchers =
+    edit.matchers === undefined
+      ? undefined
+      : await checkedMatchers(userId, edit.matchers, {
+          table: "bill",
+          id: existing[0]?.id,
+        });
+
   // Only the fields supplied are written, the same rule `updateTransaction` follows. It
   // matters here because correcting a cadence from the recurring table sends the cadence and
   // nothing else, and a blanket write would silently clear the declared amount — after which
   // the bill's figure would quietly fall back to whatever the visible window's median was.
   const changes = {
     cadenceMonths: edit.cadenceMonths,
+    ...(matchers !== undefined ? { matchers } : {}),
     ...(edit.expectedCents !== undefined ? { expectedCents: edit.expectedCents } : {}),
     ...(edit.anchorDate !== undefined ? { anchorDate: edit.anchorDate } : {}),
     ...(edit.notes !== undefined ? { notes: edit.notes.trim() } : {}),
     ...(edit.scheduled !== undefined ? { scheduled: edit.scheduled } : {}),
     ...(edit.setAside !== undefined ? { setAside: edit.setAside } : {}),
     ...(edit.dueDay !== undefined ? { dueDay: edit.dueDay } : {}),
+    ...(edit.status !== undefined ? { status: edit.status } : {}),
+    // Cancelling stamps the date and reactivating clears it, so the pair cannot disagree —
+    // a `cancelledOn` left behind on an active bill would read as a fact about the future.
+    ...(edit.status !== undefined
+      ? {
+          cancelledOn:
+            edit.status === "cancelled" ? (edit.cancelledOn ?? todayInUtc()) : null,
+        }
+      : {}),
+    ...(edit.cancelUrl !== undefined ? { cancelUrl: edit.cancelUrl.trim() } : {}),
     updatedAt: new Date(),
   };
 
@@ -500,7 +611,8 @@ export async function upsertRecurringBill(
     .insert(financeRecurringBills)
     .values({
       userId,
-      merchant,
+      name,
+      matchers: matchers ?? [name],
       cadenceMonths: edit.cadenceMonths,
       expectedCents: edit.expectedCents ?? null,
       anchorDate: edit.anchorDate ?? null,
@@ -508,26 +620,218 @@ export async function upsertRecurringBill(
       scheduled: edit.scheduled ?? true,
       setAside: edit.setAside ?? false,
       dueDay: edit.dueDay ?? null,
+      status: edit.status ?? "active",
+      cancelledOn:
+        edit.status === "cancelled" ? (edit.cancelledOn ?? todayInUtc()) : null,
+      cancelUrl: edit.cancelUrl?.trim() ?? "",
     })
-    // The unique index is on (user_id, merchant), so this can only ever collide with this
-    // user's own row — another user's identical merchant is a different row entirely.
+    // The unique index is on (user_id, name), so this can only ever collide with this user's
+    // own row — another user's identical name is a different row entirely.
     .onConflictDoUpdate({
-      target: [financeRecurringBills.userId, financeRecurringBills.merchant],
+      target: [financeRecurringBills.userId, financeRecurringBills.name],
       set: changes,
     });
 }
 
-/** Undeclare a bill. Its charges return to the review list, which is the point of undoing. */
-export async function deleteRecurringBill(
+/**
+ * Rename a bill in place. Insert-then-delete would trip the matcher exclusivity check —
+ * the old row still holds the same bank strings — so the name column is updated directly.
+ */
+export async function renameRecurringBill(
   userId: string,
-  merchant: string,
+  from: string,
+  to: string,
 ): Promise<void> {
+  const next = to.trim();
+  if (next === "") throw new Error("A bill needs a name.");
+  const result = await db
+    .update(financeRecurringBills)
+    .set({ name: next, updatedAt: new Date() })
+    .where(
+      and(
+        eq(financeRecurringBills.userId, userId),
+        eq(financeRecurringBills.name, from),
+      ),
+    )
+    .returning({ id: financeRecurringBills.id });
+  if (result.length === 0) throw new Error("Bill not found.");
+}
+
+/** Undeclare a bill. Its charges return to the review list, which is the point of undoing. */
+export async function deleteRecurringBill(userId: string, name: string): Promise<void> {
   await db
     .delete(financeRecurringBills)
     .where(
       and(
         eq(financeRecurringBills.userId, userId),
-        eq(financeRecurringBills.merchant, merchant),
+        eq(financeRecurringBills.name, name),
       ),
     );
+}
+
+export type RecurringSpendEdit = {
+  /** The user's name for it — "Pizza". Also the upsert key. */
+  name: string;
+  /** Bank merchant strings whose charges count. Omitted leaves the existing set alone. */
+  matchers?: readonly string[];
+  period?: RecurringSpendPeriod;
+  amountSource?: RecurringSpendAmountSource;
+  /** The pinned rate per period. Ignored while `amountSource` is `auto`. */
+  expectedCents?: number | null;
+  setAside?: boolean;
+  active?: boolean;
+  notes?: string;
+};
+
+/**
+ * Create or correct a recurring-spend entry — tier 2.
+ *
+ * A pinned amount is required when `amountSource` is `pinned`, for the same reason a set-aside
+ * bill needs a stated cost: this figure is subtracted from money the user is about to spend
+ * against, and "pinned to nothing" would silently deduct zero while claiming to be deliberate.
+ * Under `auto` the amount is not stored at all — the rate is recomputed from history on read.
+ */
+export async function upsertRecurringSpend(
+  userId: string,
+  edit: RecurringSpendEdit,
+): Promise<void> {
+  const name = edit.name.trim();
+  if (name === "") throw new Error("A recurring spend needs a name.");
+  if (edit.amountSource === "pinned" && !(Number(edit.expectedCents) > 0)) {
+    throw new Error("A pinned amount needs a figure above zero.");
+  }
+  if (
+    edit.expectedCents !== undefined &&
+    edit.expectedCents !== null &&
+    (!Number.isInteger(edit.expectedCents) || edit.expectedCents < 0)
+  ) {
+    throw new Error("An amount must be a whole number of cents, zero or more.");
+  }
+
+  const existing = await db
+    .select({ id: financeRecurringSpend.id })
+    .from(financeRecurringSpend)
+    .where(
+      and(
+        eq(financeRecurringSpend.userId, userId),
+        eq(financeRecurringSpend.name, name),
+      ),
+    )
+    .limit(1);
+
+  const matchers =
+    edit.matchers === undefined
+      ? undefined
+      : await checkedMatchers(userId, edit.matchers, {
+          table: "spend",
+          id: existing[0]?.id,
+        });
+
+  const changes = {
+    ...(matchers !== undefined ? { matchers } : {}),
+    ...(edit.period !== undefined ? { period: edit.period } : {}),
+    ...(edit.amountSource !== undefined ? { amountSource: edit.amountSource } : {}),
+    ...(edit.expectedCents !== undefined ? { expectedCents: edit.expectedCents } : {}),
+    ...(edit.setAside !== undefined ? { setAside: edit.setAside } : {}),
+    ...(edit.active !== undefined ? { active: edit.active } : {}),
+    ...(edit.notes !== undefined ? { notes: edit.notes.trim() } : {}),
+    updatedAt: new Date(),
+  };
+
+  await db
+    .insert(financeRecurringSpend)
+    .values({
+      userId,
+      name,
+      matchers: matchers ?? [],
+      period: edit.period ?? "week",
+      amountSource: edit.amountSource ?? "auto",
+      expectedCents: edit.expectedCents ?? null,
+      setAside: edit.setAside ?? true,
+      active: edit.active ?? true,
+      notes: edit.notes?.trim() ?? "",
+    })
+    .onConflictDoUpdate({
+      target: [financeRecurringSpend.userId, financeRecurringSpend.name],
+      set: changes,
+    });
+}
+
+/** Remove a recurring-spend entry. Its charges go back to being ordinary spending. */
+export async function deleteRecurringSpend(
+  userId: string,
+  name: string,
+): Promise<void> {
+  await db
+    .delete(financeRecurringSpend)
+    .where(
+      and(
+        eq(financeRecurringSpend.userId, userId),
+        eq(financeRecurringSpend.name, name),
+      ),
+    );
+}
+
+/**
+ * Cancel, ignore, or revive a subscription.
+ *
+ * A dedicated write rather than another `upsertRecurringBill` so the dashboard's "still
+ * active?" prompt cannot accidentally clear the amount or cadence on the way through — it
+ * sends a status and, when the answer is *still active*, a new anchor, and nothing else.
+ *
+ * Throws if this user has no bill by that name, so a second user cannot "succeed" at
+ * cancelling someone else's subscription by writing a row of their own.
+ */
+export async function setSubscriptionStatus(
+  userId: string,
+  name: string,
+  status: CommitmentStatus,
+  options: { reanchorOn?: string; cancelledOn?: string | null } = {},
+): Promise<void> {
+  const trimmed = name.trim();
+  const [existing] = await db
+    .select({ cadenceMonths: financeRecurringBills.cadenceMonths })
+    .from(financeRecurringBills)
+    .where(
+      and(
+        eq(financeRecurringBills.userId, userId),
+        eq(financeRecurringBills.name, trimmed),
+      ),
+    )
+    .limit(1);
+  if (!existing) throw new Error("Bill not found.");
+
+  await upsertRecurringBill(userId, {
+    name: trimmed,
+    cadenceMonths: existing.cadenceMonths,
+    status,
+    ...(options.cancelledOn !== undefined ? { cancelledOn: options.cancelledOn } : {}),
+    ...(status === "active" && options.reanchorOn !== undefined
+      ? { anchorDate: options.reanchorOn }
+      : {}),
+  });
+}
+
+/** Remove a commitment from either table. Kind is required because names are unique per table, not across both. */
+export async function deleteCommitment(
+  userId: string,
+  target: { kind: "bill" | "spend"; name: string },
+): Promise<void> {
+  if (target.kind === "bill") {
+    await deleteRecurringBill(userId, target.name);
+    return;
+  }
+  await deleteRecurringSpend(userId, target.name);
+}
+
+/**
+ * Today as a `YYYY-MM-DD` key, for stamping `cancelled_on` when the caller did not supply one.
+ *
+ * Server-side "today" is acceptable here and nowhere else in this feature: it records when a
+ * write happened rather than driving a calculation, so a timezone being a few hours out
+ * misdates the audit trail at worst. Every figure that a reader compares against a date takes
+ * `todayKey` from the browser instead (`agent-os/standards/development/dates.md`).
+ */
+function todayInUtc(): string {
+  return new Date().toISOString().slice(0, 10);
 }

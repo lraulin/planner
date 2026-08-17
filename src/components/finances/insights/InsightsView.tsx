@@ -10,6 +10,7 @@ import {
 } from "@/lib/finances/analytics";
 import type { CarryingCost } from "@/lib/finances/dashboardQueries";
 import { analyzeInsights } from "@/lib/finances/insightsAnalysis";
+import type { StoredSpend } from "@/lib/finances/commitments";
 import type { StoredBill } from "@/lib/finances/recurringBills";
 import {
   unresolvedPaypalInflows,
@@ -100,6 +101,7 @@ export function InsightsView({
   carryingCost,
   unclassified,
   bills,
+  spend = [],
   statements = [],
   resolutions = [],
 }: {
@@ -107,6 +109,7 @@ export function InsightsView({
   carryingCost: CarryingCost;
   unclassified: number;
   bills: StoredBill[];
+  spend?: readonly StoredSpend[];
   statements?: readonly ReconcileStatement[];
   resolutions?: readonly PaymentResolutionRow[];
 }) {
@@ -116,7 +119,12 @@ export function InsightsView({
   // rather than folded into `RecurringMerchant`, so `analytics.ts` stays unaware that
   // budgeting exists — it costs a year of a bill, and what to do about that is not its call.
   const setAsideMerchants = useMemo(
-    () => new Set(bills.filter((bill) => bill.setAside).map((bill) => bill.merchant)),
+    () =>
+      new Set(
+        bills
+          .filter((bill) => bill.setAside && (bill.status ?? "active") === "active")
+          .map((bill) => bill.name),
+      ),
     [bills],
   );
   const { value: view, patch } = useSetting(INSIGHTS_SCOPE, INSIGHTS_CODEC);
@@ -138,6 +146,7 @@ export function InsightsView({
       levelRecurring: view.levelRecurring,
       today,
       statements,
+      suppressMerchants: spend.flatMap((entry) => [...entry.matchers]),
     });
     if (core.empty) return core;
     return {
@@ -146,7 +155,7 @@ export function InsightsView({
       coverage: coverageGap(rows, statements),
       drilled: drilledRows(core.windowed, view.drill, core.trends.keys),
     };
-  }, [rows, today, view, bills, statements]);
+  }, [rows, today, view, bills, statements, spend]);
 
   function setDrill(next: InsightsDrill) {
     patch((current) => ({

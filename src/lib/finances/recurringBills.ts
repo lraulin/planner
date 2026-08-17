@@ -23,7 +23,24 @@ import { daysBetweenKeys } from "@/lib/schedule/geometry";
 
 /** A declared bill, as the analytics and UI layers need it. Mirrors the table's columns. */
 export type DeclaredBill = {
-  merchant: string;
+  /**
+   * The user's name for it, and the key every reporting path groups its charges under.
+   *
+   * Was `merchant` until the commitments spec split identity from matching: the bank strings
+   * this covers now live in `matchers` (`commitments.ts`), so one declaration can span Pizza
+   * Hut and Domino's, and renaming it cannot orphan a charge.
+   */
+  name: string;
+  /**
+   * Bank merchant strings this bill covers. Absent or empty means the name is the only
+   * matcher — the single-merchant case every pre-split declaration had.
+   */
+  matchers?: readonly string[];
+  /**
+   * Live, cancelled, or never a commitment. Absent means `active`, so existing fixtures
+   * and the narrower analytics callers keep working.
+   */
+  status?: "active" | "cancelled" | "ignored";
   /** The period `expectedCents` covers. */
   cadenceMonths: number;
   /** Null means "use the median of the charges on file" — better once there is history. */

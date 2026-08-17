@@ -2218,6 +2218,26 @@ export const financeStatementRates = pgTable(
 );
 
 /**
+ * Whether a declared bill is still live, cancelled, or was never a commitment at all.
+ *
+ * A `const` tuple rather than a `pgEnum` so the column can be a `text` + CHECK: adding a value
+ * to a Postgres enum needs `ALTER TYPE … ADD VALUE`, which fails outright on Neon's
+ * transaction-mode pooler (see `financeAccountKindEnum`). The tuple still gives the column a
+ * literal TypeScript type and gives `z.enum()` its members, so nothing is lost but the risk.
+ */
+export const COMMITMENT_STATUSES = ["active", "cancelled", "ignored"] as const;
+export type CommitmentStatus = (typeof COMMITMENT_STATUSES)[number];
+
+/** The period a recurring-spend rate is quoted in. Same text + CHECK reasoning as above. */
+export const RECURRING_SPEND_PERIODS = ["week", "month"] as const;
+export type RecurringSpendPeriod = (typeof RECURRING_SPEND_PERIODS)[number];
+
+/** Whether a recurring-spend rate is derived from history or stated by the user. */
+export const RECURRING_SPEND_AMOUNT_SOURCES = ["auto", "pinned"] as const;
+export type RecurringSpendAmountSource =
+  (typeof RECURRING_SPEND_AMOUNT_SOURCES)[number];
+
+/**
  * A bill the user has **declared** recurring, with the cadence they know it arrives on.
  *
  * This exists because detection cannot reach the long cadences.
@@ -2230,15 +2250,23 @@ export const financeStatementRates = pgTable(
  * which understates what a year costs, a little more confidently every year — or to leave
  * them on the list forever. The declaration is the missing third answer.
  *
- * **Keyed on the merchant, not on a transaction.** A cadence is a fact about Geico, not about
- * the March charge, and keying it this way is exactly what stops the row coming back next
- * time. The key is `effectiveMerchant()` output, so it is the display name where a classifier
- * rule supplies one (`Geico`) and the normalized description where none does.
+ * **Keyed on a name you choose, matched on the strings the bank sends.** A cadence is a fact
+ * about Geico, not about the March charge, and keying it that way is what stops the row coming
+ * back next time. The first version of this table used one `merchant` column for both halves
+ * of that idea, and it turned out to be three jobs in one: the display name, the unique key,
+ * and the join to `finance_transactions`. Every consequence was a real bug — `1PASSWORDTORONTOON`
+ * could not be renamed to `1Password`, Taylor Gas needed a `classify/rules.ts` entry purely to
+ * collapse `TAYLOR GAS COMPANY INC.` and `TAYLOR GAS HEATING AIR`, and nothing could ever cover
+ * two merchants at once. `name` and `matchers` are that column split in two.
  *
  * **Cadence is months, not days.** "Semi-annual" means March and September, not every 182.5
  * days; months keep the next-due date from drifting a fortnight per decade. A `smallint` with
  * a CHECK rather than an enum leaves room for a cadence nobody predicted and sidesteps the
  * `ALTER TYPE … ADD VALUE` limitation recorded at `financeFlowKindEnum` above.
+ *
+ * **This is tier 1 of two.** A bill charges *unless you cancel* — which is why `status`,
+ * `cancelledOn` and `cancelUrl` live here and have no counterpart on
+ * `financeRecurringSpend` below, where the default runs the other way.
  */
 export const financeRecurringBills = pgTable(
   "finance_recurring_bills",
@@ -2247,8 +2275,45 @@ export const financeRecurringBills = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    /** Effective merchant — `effectiveMerchant()` output, not the raw bank description. */
-    merchant: text("merchant").notNull(),
+    /**
+     * What the user calls it. Theirs to change, and nothing joins on it — so renaming
+     * `1PASSWORDTORONTOON` to `1Password` cannot orphan a single charge.
+     */
+    name: text("name").notNull(),
+    /**
+     * The `effectiveMerchant()` strings whose charges belong to this bill.
+     *
+     * An array rather than a column because one commitment routinely spans several bank
+     * spellings, and because the alternative — a rule in `classify/rules.ts` for every such
+     * case — makes a user-level fact into a code change.
+     *
+     * **A merchant string may appear on at most one commitment across this table and
+     * `financeRecurringSpend`.** Postgres cannot express that across two tables, so it is
+     * enforced in `upsertRecurringBill` / `upsertRecurringSpend` and pinned by an integration
+     * test. Two claims on one merchant would double-count its charges everywhere downstream.
+     */
+    matchers: text("matchers").array().notNull().default([]),
+    /**
+     * Whether this bill is still live.
+     *
+     * `cancelled` keeps the row and its history but stops every forward-looking figure — the
+     * accrual, the forecast, the annual total. `ignored` is the different admission that
+     * detection proposed something which was never a commitment at all, and suppresses it from
+     * the review list permanently. Two states would force those into one bucket, and a year
+     * later nobody could tell "I cancelled Paramount+" from "that was never a subscription".
+     *
+     * Text with a CHECK rather than a `pgEnum`, for the reason recorded at
+     * `financeAccountKindEnum`: `ALTER TYPE … ADD VALUE` fails on Neon's transaction-mode
+     * pooler, so a vocabulary that might plausibly grow should not be an enum.
+     */
+    status: text("status").$type<CommitmentStatus>().notNull().default("active"),
+    /** When it was cancelled, for the record. Null while active. */
+    cancelledOn: date("cancelled_on", { mode: "string" }),
+    /**
+     * Where to go to cancel it. The single most useful thing to have already looked up at the
+     * moment you decide a subscription has to go; the app stores it and never follows it.
+     */
+    cancelUrl: text("cancel_url").notNull().default(""),
     /** The period `expectedCents` covers. 1 monthly, 3 quarterly, 6 semi-annual, 12 yearly. */
     cadenceMonths: smallint("cadence_months").notNull(),
     /**
@@ -2271,6 +2336,10 @@ export const financeRecurringBills = pgTable(
     /**
      * What the user says it costs. Null means "use the median of the charges on file", which
      * is the better answer once there is history and the only wrong one when there is none.
+     *
+     * The fallback is only ever a guess, and a confident-looking one: 1Password's charges on
+     * file produced a median of $38.03 against a real $71.88 a year. That is why the
+     * Commitments grid makes this editable on every bill rather than only on unscheduled ones.
      */
     expectedCents: integer("expected_cents"),
     /**
@@ -2307,9 +2376,10 @@ export const financeRecurringBills = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    // One declaration per merchant is the whole point: two would mean two answers to
-    // "how often is this", and every reader would have to pick.
-    uniqueIndex("finance_recurring_bills_merchant_uq").on(table.userId, table.merchant),
+    // One declaration per name: two would mean two answers to "how often is this", and every
+    // reader would have to pick. The uniqueness that actually protects the arithmetic is on
+    // `matchers` and spans both tables, which is why it lives in the mutation instead.
+    uniqueIndex("finance_recurring_bills_name_uq").on(table.userId, table.name),
     check(
       "finance_recurring_bills_cadence_months",
       sql`${table.cadenceMonths} >= 1 and ${table.cadenceMonths} <= 24`,
@@ -2317,6 +2387,99 @@ export const financeRecurringBills = pgTable(
     check(
       "finance_recurring_bills_due_day",
       sql`${table.dueDay} is null or (${table.dueDay} >= 1 and ${table.dueDay} <= 31)`,
+    ),
+    check(
+      "finance_recurring_bills_status",
+      sql`${table.status} in ('active', 'cancelled', 'ignored')`,
+    ),
+  ],
+);
+
+/**
+ * Money that leaves on a cadence because the user chooses to spend it — tier 2.
+ *
+ * Pizza every Friday, groceries every Saturday. Separate from `financeRecurringBills` because
+ * the two have **opposite defaults**: a subscription charges unless you cancel it, and this
+ * costs nothing unless you go and buy it. That asymmetry is the whole reason for the split —
+ * only tier 1 can be cancelled, only tier 1 can have a charge fail to arrive, and listing
+ * pizza among things that bill you automatically would misrepresent both.
+ *
+ * **Why this exists at all:** `availableToSpend` subtracted declared bills but not the
+ * groceries and pizza that were certainly coming, so the headline ran a few hundred dollars a
+ * week optimistic — wrong in the comfortable direction, which is the one way that page fails.
+ *
+ * **What it is deliberately not.** There is no tier 3. Clothes, games and books get no bucket,
+ * ever; per-category discretionary envelopes encode a judgement the user already makes
+ * correctly without a ledger, and the admission test here is the cadence — if you cannot state
+ * one, it is discretionary and `availableToSpend` already covers it. See
+ * `agent-os/specs/2026-08-16-1938-commitments/` D0.
+ */
+export const financeRecurringSpend = pgTable(
+  "finance_recurring_spend",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** What the user calls it — "Pizza", "Groceries". Nothing joins on it. */
+    name: text("name").notNull(),
+    /**
+     * The `effectiveMerchant()` strings that count toward this. Pizza Hut *and* Domino's.
+     *
+     * Which of them Friday's pizza came from is not a question worth answering, and no rule
+     * here says "one or the other, never both" — that would invent a constraint the data does
+     * not have. The rate is a sum over the group per period, so two pizzas in one week reads
+     * as a higher rate rather than as an error.
+     *
+     * Subject to the same cross-table exclusivity as `financeRecurringBills.matchers`.
+     */
+    matchers: text("matchers").array().notNull().default([]),
+    /**
+     * The period the rate is quoted in. Weekly is the common case and the one worth entering
+     * by hand: pizza and groceries are one payment a week, so a week is the unit the user
+     * actually knows, whatever period the dashboard later reports in.
+     */
+    period: text("period").$type<RecurringSpendPeriod>().notNull().default("week"),
+    /**
+     * Whether `expectedCents` is authoritative or derived.
+     *
+     * `auto` is the default and leaves `expectedCents` null: the rate is recomputed from
+     * history on every read, so it tracks reality without the user touching anything — which
+     * is the only condition under which this tier is worth having rather than being the
+     * bucket-filling busywork it replaces. `pinned` stores a figure so intent is expressible
+     * ("cut pizza to $40 a week"), and the derived number stays on screen beside it so a
+     * pinned value cannot quietly go stale.
+     */
+    amountSource: text("amount_source")
+      .$type<RecurringSpendAmountSource>()
+      .notNull()
+      .default("auto"),
+    /** The pinned rate per `period`. Null — and ignored — while `amountSource` is `auto`. */
+    expectedCents: integer("expected_cents"),
+    /**
+     * Hold this back from "available to spend".
+     *
+     * Defaults **true**, the opposite of the bills table, because deducting it is the entire
+     * reason the row exists. A bill declaration was originally about keeping something off a
+     * review list and said nothing about budgeting; there is no such second purpose here.
+     */
+    setAside: boolean("set_aside").notNull().default(true),
+    /** Whether it is still part of the routine. No cancellation state — nothing to cancel. */
+    active: boolean("active").notNull().default(true),
+    notes: text("notes").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("finance_recurring_spend_name_uq").on(table.userId, table.name),
+    check("finance_recurring_spend_period", sql`${table.period} in ('week', 'month')`),
+    check(
+      "finance_recurring_spend_amount_source",
+      sql`${table.amountSource} in ('auto', 'pinned')`,
+    ),
+    check(
+      "finance_recurring_spend_expected_cents",
+      sql`${table.expectedCents} is null or ${table.expectedCents} >= 0`,
     ),
   ],
 );

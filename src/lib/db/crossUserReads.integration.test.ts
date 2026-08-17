@@ -44,9 +44,10 @@ import {
   loadCarryingCost,
   loadInsightsRows,
   loadRecurringBills,
+  loadRecurringSpend,
   unclassifiedCount,
 } from "@/lib/finances/dashboardQueries";
-import { upsertRecurringBill } from "@/lib/finances/mutations";
+import { upsertRecurringBill, upsertRecurringSpend } from "@/lib/finances/mutations";
 import {
   getPaymentResolution,
   getTransaction,
@@ -247,9 +248,13 @@ async function seedOwner(): Promise<Owned> {
     );
   }
   await upsertRecurringBill(userId, {
-    merchant: "Owner Insurance",
+    name: "Owner Insurance",
     cadenceMonths: 6,
     expectedCents: 141_260,
+  });
+  await upsertRecurringSpend(userId, {
+    name: "Owner Pizza",
+    matchers: ["OWNER PIZZA"],
   });
   await importFinanceCsvFiles({
     userId,
@@ -535,6 +540,7 @@ describeDb("a second user reads none of the first user's rows", () => {
       byAccount: [],
     });
     expect(await loadRecurringBills(intruder)).toEqual([]);
+    expect(await loadRecurringSpend(intruder)).toEqual([]);
   });
 
   it("weekly plans and their entries", async () => {

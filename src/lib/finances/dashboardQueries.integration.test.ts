@@ -210,7 +210,7 @@ describeDb("loadDashboard", () => {
     await seed(userId);
     await reclassifyTransactions(userId);
     await upsertRecurringBill(userId, {
-      merchant: "SimpliSafe",
+      name: "SimpliSafe",
       cadenceMonths: 1,
       expectedCents: 3_471,
       setAside: true,
@@ -227,8 +227,8 @@ describeDb("loadDashboard", () => {
     expect(data.bills[0]).toMatchObject({ setAside: true, dueDay: 9 });
     // Only charges against a declared merchant — the Walmart row is not one.
     expect(data.billCharges).toEqual([
-      { merchant: "SimpliSafe", dateKey: "2026-03-09" },
-      { merchant: "SimpliSafe", dateKey: "2026-04-09" },
+      { name: "SimpliSafe", dateKey: "2026-03-09" },
+      { name: "SimpliSafe", dateKey: "2026-04-09" },
     ]);
   });
 
@@ -247,7 +247,7 @@ describeDb("loadDashboard", () => {
     await seed(ownerId);
     await reclassifyTransactions(ownerId);
     await upsertRecurringBill(ownerId, {
-      merchant: "SimpliSafe",
+      name: "SimpliSafe",
       cadenceMonths: 1,
       expectedCents: 3_471,
       setAside: true,
@@ -256,6 +256,7 @@ describeDb("loadDashboard", () => {
     const intruder = await loadDashboard(intruderId);
     expect(intruder.accounts).toEqual([]);
     expect(intruder.bills).toEqual([]);
+    expect(intruder.spend).toEqual([]);
     expect(intruder.billCharges).toEqual([]);
     expect(intruder.pending).toEqual([]);
     expect(intruder.paydays).toEqual([]);

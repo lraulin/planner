@@ -3,17 +3,28 @@ import { db } from "@/db";
 import {
   financeAccounts,
   financeRecurringBills,
+  financeRecurringSpend,
   financeStatementRates,
   financeStatements,
   financeTransactions,
 } from "@/db/schema";
 import { listConnections, type BankConnectionRow } from "@/lib/banksync/queries";
-import { effectiveMerchant, paydaysFrom, type AnalyticsRow } from "./analytics";
+import {
+  effectiveMerchant,
+  paydaysFrom,
+  spendCentsOf,
+  type AnalyticsRow,
+} from "./analytics";
 import type { BillCharge, PendingRow } from "./available";
 import type { Payday } from "./classify/income";
+import {
+  matcherIndex,
+  type CommitmentCharge,
+  type StoredBillRow,
+  type StoredSpend,
+} from "./commitments";
 import { numericStringToCents } from "./money";
 import { listAccounts } from "./queries";
-import type { StoredBill } from "./recurringBills";
 import type { FinanceAccountRow } from "./types";
 
 /**
@@ -115,23 +126,52 @@ export async function unclassifiedCount(userId: string): Promise<number> {
  * Unfiltered by window on purpose. A yearly bill is a commitment in a month that holds none
  * of its charges, and a window-scoped read would make it flicker out of the recurring panel
  * and back onto the one-off review list every time someone narrowed the range.
+ *
+ * Cancelled and ignored bills are returned too. Filtering them here would make every caller's
+ * behaviour depend on a decision it could not see; the ones that must exclude them — the
+ * accrual, the forecast — check `status` themselves and say so.
  */
-export async function loadRecurringBills(userId: string): Promise<StoredBill[]> {
+export async function loadRecurringBills(userId: string): Promise<StoredBillRow[]> {
   const rows = await db
     .select({
-      merchant: financeRecurringBills.merchant,
+      id: financeRecurringBills.id,
+      name: financeRecurringBills.name,
+      matchers: financeRecurringBills.matchers,
+      status: financeRecurringBills.status,
+      cancelledOn: financeRecurringBills.cancelledOn,
+      cancelUrl: financeRecurringBills.cancelUrl,
       cadenceMonths: financeRecurringBills.cadenceMonths,
       expectedCents: financeRecurringBills.expectedCents,
       anchorDate: financeRecurringBills.anchorDate,
       scheduled: financeRecurringBills.scheduled,
       setAside: financeRecurringBills.setAside,
       dueDay: financeRecurringBills.dueDay,
+      notes: financeRecurringBills.notes,
     })
     .from(financeRecurringBills)
     .where(eq(financeRecurringBills.userId, userId))
-    .orderBy(asc(financeRecurringBills.merchant));
+    .orderBy(asc(financeRecurringBills.name));
 
   return rows;
+}
+
+/** Every recurring-spend entry — tier 2. Unfiltered by window, for the same reason. */
+export async function loadRecurringSpend(userId: string): Promise<StoredSpend[]> {
+  return db
+    .select({
+      id: financeRecurringSpend.id,
+      name: financeRecurringSpend.name,
+      matchers: financeRecurringSpend.matchers,
+      period: financeRecurringSpend.period,
+      amountSource: financeRecurringSpend.amountSource,
+      expectedCents: financeRecurringSpend.expectedCents,
+      setAside: financeRecurringSpend.setAside,
+      active: financeRecurringSpend.active,
+      notes: financeRecurringSpend.notes,
+    })
+    .from(financeRecurringSpend)
+    .where(eq(financeRecurringSpend.userId, userId))
+    .orderBy(asc(financeRecurringSpend.name));
 }
 
 /**
@@ -152,18 +192,30 @@ export type DashboardData = {
   accounts: FinanceAccountRow[];
   /** Rows the bank has not yet posted. Signed in module convention. */
   pending: PendingRow[];
-  bills: StoredBill[];
+  bills: StoredBillRow[];
+  spend: StoredSpend[];
   paydays: Payday[];
-  /** Every posted charge against a declared bill, keyed by effective merchant. */
+  /**
+   * Every posted charge against a tier 1 bill, keyed by the **commitment's name** rather than
+   * by the bank's merchant — so a bill covering two spellings arrives as one series.
+   */
   billCharges: BillCharge[];
+  /**
+   * Charges against tier 2 entries, by commitment name, carrying the cost so the rate and the
+   * "spent this period" figure can both be computed from one read.
+   */
+  spendCharges: Map<string, CommitmentCharge[]>;
   connections: BankConnectionRow[];
+  /** Distinct `effectiveMerchant` strings, for the Commitments create picker. */
+  merchants: string[];
 };
 
 export async function loadDashboard(userId: string): Promise<DashboardData> {
-  const [accounts, rows, bills, pendingRows, connections] = await Promise.all([
+  const [accounts, rows, bills, spend, pendingRows, connections] = await Promise.all([
     listAccounts(userId),
     loadInsightsRows(userId),
     loadRecurringBills(userId),
+    loadRecurringSpend(userId),
     db
       .select({
         accountId: financeTransactions.accountId,
@@ -179,7 +231,35 @@ export async function loadDashboard(userId: string): Promise<DashboardData> {
     listConnections(userId),
   ]);
 
-  const declared = new Set(bills.map((bill) => bill.merchant));
+  // One index, built once, and the only route from a bank string to a commitment. Resolving
+  // per panel is how Pizza Hut ends up folded into "Pizza" on one surface and not another.
+  const index = matcherIndex(bills, spend);
+  const billNames = new Set(bills.map((bill) => bill.name));
+  const spendNames = new Set(spend.map((entry) => entry.name));
+
+  const billCharges: BillCharge[] = [];
+  const spendCharges = new Map<string, CommitmentCharge[]>();
+  const merchantSet = new Set<string>();
+
+  for (const row of rows) {
+    const merchant = effectiveMerchant(row);
+    if (merchant !== "") merchantSet.add(merchant);
+    const ref = index.get(merchant);
+    if (ref === undefined) continue;
+
+    if (ref.kind === "bill" && billNames.has(ref.name)) {
+      billCharges.push({ name: ref.name, dateKey: row.transactionDate });
+      continue;
+    }
+    if (ref.kind === "spend" && spendNames.has(ref.name)) {
+      // `spendCentsOf` already returns 0 for anything that is not spending and expresses a
+      // refund as a negative cost, so a card payment landing on a matched merchant cannot
+      // inflate the rate — returning the couch has to reduce what the couch cost.
+      const list = spendCharges.get(ref.name) ?? [];
+      list.push({ dateKey: row.transactionDate, costCents: spendCentsOf(row) });
+      spendCharges.set(ref.name, list);
+    }
+  }
 
   return {
     accounts,
@@ -188,14 +268,12 @@ export async function loadDashboard(userId: string): Promise<DashboardData> {
       amountCents: numericStringToCents(row.amount) ?? 0,
     })),
     bills,
+    spend,
     paydays: paydaysFrom(rows),
-    billCharges: rows
-      .map((row) => ({
-        merchant: effectiveMerchant(row),
-        dateKey: row.transactionDate,
-      }))
-      .filter((charge) => declared.has(charge.merchant)),
+    billCharges,
+    spendCharges,
     connections,
+    merchants: [...merchantSet].sort((left, right) => left.localeCompare(right)),
   };
 }
 

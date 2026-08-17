@@ -175,9 +175,11 @@ sections because pizza must never appear in a list of things that charge you aut
 Material refinements during implementation (requirements, design, scope). Pure code polish
 is omitted deliberately.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                       | Why                                                                                                                             |
+| --- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Rename is an in-place update (`renameRecurringBill`), not insert-then-delete | Inserting the new name first trips D3: the old row still holds the same matchers                                                |
+| 2   | `setSubscriptionStatus` is its own write, not a general upsert               | The D8 prompt sends a status and (when still active) an anchor. A general upsert on that path would be able to clear the amount |
+| 3   | Insights takes `suppressMerchants` rather than a spend table                 | Pins D7: pizza can leave the review list without becoming an input to `baselineSplit`                                           |
 
 ---
 

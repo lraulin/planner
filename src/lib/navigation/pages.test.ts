@@ -58,6 +58,7 @@ describe("hasPageBar", () => {
     // Finances is ordered by how often a page is opened, not by when it was built.
     expect(builtPagesForModule("finances").map((page) => page.id)).toEqual([
       "dashboard",
+      "commitments",
       "insights",
       "register",
       "statements",

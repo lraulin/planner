@@ -13,10 +13,23 @@ import {
 } from "@/lib/finances/analytics";
 import {
   loadCarryingCost,
+  loadDashboard,
   loadInsightsRows,
   loadRecurringBills,
+  loadRecurringSpend,
   unclassifiedCount,
 } from "@/lib/finances/dashboardQueries";
+import {
+  MatcherConflictError,
+  recurringSpendRate,
+  unclaimedMerchants,
+} from "@/lib/finances/commitments";
+import { annualCents, nextDueFrom } from "@/lib/finances/recurringBills";
+import {
+  deleteCommitment,
+  upsertRecurringBill,
+  upsertRecurringSpend,
+} from "@/lib/finances/mutations";
 import { analyzeInsights } from "@/lib/finances/insightsAnalysis";
 import {
   insightsFilterOptions,
@@ -515,4 +528,162 @@ export async function listStatementsTool(
     holes: report.holes.filter((hole) => !accountId || hole.accountId === accountId),
     pageInfo: page.pageInfo,
   };
+}
+
+function asStringList(value: unknown): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) return [];
+  return value.filter((entry): entry is string => typeof entry === "string");
+}
+
+async function writeOrConflict<T>(work: () => Promise<T>): Promise<T> {
+  try {
+    return await work();
+  } catch (error) {
+    if (error instanceof MatcherConflictError) {
+      throw new AgentError("validation", error.message);
+    }
+    throw error;
+  }
+}
+
+export async function listCommitmentsTool(userId: string) {
+  const data = await loadDashboard(userId);
+  const today = localDateKey();
+  return {
+    bills: data.bills.map((bill) => {
+      const last = data.billCharges
+        .filter((charge) => charge.name === bill.name)
+        .map((charge) => charge.dateKey)
+        .sort()
+        .at(-1);
+      const anchor = last ?? bill.anchorDate;
+      const annual =
+        bill.expectedCents !== null
+          ? annualCents(bill.expectedCents, bill.cadenceMonths)
+          : 0;
+      return {
+        name: bill.name,
+        matchers: [...bill.matchers],
+        status: bill.status,
+        cadenceMonths: bill.cadenceMonths,
+        expectedCents: bill.expectedCents,
+        annualCents: annual,
+        nextDue:
+          bill.scheduled && bill.status === "active" && anchor !== null
+            ? nextDueFrom(anchor, bill.cadenceMonths, today)
+            : null,
+        scheduled: bill.scheduled,
+        setAside: bill.setAside,
+      };
+    }),
+    spend: data.spend.map((entry) => {
+      const rate = recurringSpendRate(
+        entry,
+        data.spendCharges.get(entry.name) ?? [],
+        today,
+      );
+      return {
+        name: entry.name,
+        matchers: [...entry.matchers],
+        period: entry.period,
+        amountSource: entry.amountSource,
+        ratePerPeriodCents: rate.ratePerPeriodCents,
+        observedCents: rate.observedCents,
+        setAside: entry.setAside,
+        active: entry.active,
+      };
+    }),
+  };
+}
+
+export async function listCommitmentCandidatesTool(userId: string) {
+  const [data, analyzed] = await Promise.all([
+    loadDashboard(userId),
+    loadAnalyzed(userId, { window: "all" }),
+  ]);
+  const detected = analyzed.analysis.empty
+    ? data.merchants
+    : analyzed.analysis.recurring.map((entry) => entry.merchant);
+  return {
+    merchants: unclaimedMerchants(
+      [...detected, ...data.merchants],
+      data.bills,
+      data.spend,
+    ),
+  };
+}
+
+export async function upsertSubscriptionTool(
+  userId: string,
+  args: Record<string, unknown>,
+) {
+  const name = optionalString(args, "name") ?? "";
+  await writeOrConflict(() =>
+    upsertRecurringBill(userId, {
+      name,
+      matchers: asStringList(args.matchers),
+      cadenceMonths: optionalNumber(args, "cadenceMonths") ?? 1,
+      expectedCents:
+        args.expectedCents === null ? null : optionalNumber(args, "expectedCents"),
+      anchorDate: args.anchorDate === null ? null : optionalString(args, "anchorDate"),
+      status: optionalString(args, "status") as
+        "active" | "cancelled" | "ignored" | undefined,
+      cancelUrl: optionalString(args, "cancelUrl"),
+      scheduled: args.scheduled === undefined ? undefined : args.scheduled === true,
+      setAside: args.setAside === undefined ? undefined : args.setAside === true,
+      dueDay: args.dueDay === null ? null : optionalNumber(args, "dueDay"),
+      notes: optionalString(args, "notes"),
+    }),
+  );
+  const [row] = (await loadRecurringBills(userId)).filter(
+    (bill) => bill.name === name.trim(),
+  );
+  return {
+    name: row?.name ?? name.trim(),
+    matchers: row ? [...row.matchers] : [],
+    status: row?.status ?? "active",
+  };
+}
+
+export async function upsertRecurringSpendTool(
+  userId: string,
+  args: Record<string, unknown>,
+) {
+  const name = optionalString(args, "name") ?? "";
+  await writeOrConflict(() =>
+    upsertRecurringSpend(userId, {
+      name,
+      matchers: asStringList(args.matchers),
+      period: optionalString(args, "period") as "week" | "month" | undefined,
+      amountSource: optionalString(args, "amountSource") as
+        "auto" | "pinned" | undefined,
+      expectedCents:
+        args.expectedCents === null ? null : optionalNumber(args, "expectedCents"),
+      setAside: args.setAside === undefined ? undefined : args.setAside === true,
+      active: args.active === undefined ? undefined : args.active === true,
+      notes: optionalString(args, "notes"),
+    }),
+  );
+  const [row] = (await loadRecurringSpend(userId)).filter(
+    (entry) => entry.name === name.trim(),
+  );
+  return {
+    name: row?.name ?? name.trim(),
+    matchers: row ? [...row.matchers] : [],
+    period: row?.period ?? "week",
+  };
+}
+
+export async function deleteCommitmentTool(
+  userId: string,
+  args: Record<string, unknown>,
+) {
+  const kind = optionalString(args, "kind");
+  const name = optionalString(args, "name") ?? "";
+  if (kind !== "bill" && kind !== "spend") {
+    throw new AgentError("validation", "kind must be bill or spend");
+  }
+  await deleteCommitment(userId, { kind, name });
+  return { deleted: true as const, kind, name };
 }

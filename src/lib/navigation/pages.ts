@@ -237,7 +237,15 @@ const PAGES = {
       segment: "dashboard",
       status: "built",
       isDefault: true,
-      keywords: "available to spend payday balances set aside envelopes budget now",
+      keywords:
+        "available to spend payday balances set aside envelopes budget now commitments",
+    },
+    {
+      id: "commitments",
+      label: "Commitments",
+      segment: "commitments",
+      status: "built",
+      keywords: "subscriptions bills recurring spend pizza envelopes set aside",
     },
     {
       id: "insights",

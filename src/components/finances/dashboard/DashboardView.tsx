@@ -3,21 +3,32 @@
 import { useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { pasteScrapedPendingAction } from "@/app/finances/actions";
+import {
+  pasteScrapedPendingAction,
+  setSubscriptionStatusAction,
+} from "@/app/finances/actions";
 import type { BankConnectionRow } from "@/lib/banksync/queries";
 import {
   accountBalanceView,
   availableToSpend,
   cashPosition,
   nextPayday,
+  recurringSpendHeld,
   setAsideHeld,
   type BillCharge,
   type PendingRow,
   type SetAside,
+  type SpendHeld,
 } from "@/lib/finances/available";
 import type { Payday } from "@/lib/finances/classify/income";
+import {
+  recurringSpendRate,
+  staleSubscriptions,
+  type CommitmentCharge,
+  type StoredBillRow,
+  type StoredSpend,
+} from "@/lib/finances/commitments";
 import { formatUsd } from "@/lib/finances/money";
-import type { StoredBill } from "@/lib/finances/recurringBills";
 import type { FinanceAccountRow } from "@/lib/finances/types";
 import { localDateKey } from "@/lib/schedule/geometry";
 import { parsePayday, serializePayday } from "@/lib/settings/finances";
@@ -64,20 +75,26 @@ export function DashboardView({
   accounts,
   pending,
   bills,
+  spend,
   paydays,
   billCharges,
+  spendCharges,
   connections,
 }: {
   accounts: readonly FinanceAccountRow[];
   pending: readonly PendingRow[];
-  bills: readonly StoredBill[];
+  bills: readonly StoredBillRow[];
+  spend: readonly StoredSpend[];
   paydays: readonly Payday[];
   billCharges: readonly BillCharge[];
+  spendCharges: Record<string, CommitmentCharge[]>;
   connections: readonly BankConnectionRow[];
 }) {
   const today = useToday();
   const formatDate = useDateFormatter();
   const { value: override } = useSetting(PAYDAY_SCOPE, PAYDAY_CODEC);
+  const router = useRouter();
+  const [statusPending, startStatus] = useTransition();
 
   const analysis = useMemo(() => {
     const position = cashPosition(accounts);
@@ -85,21 +102,56 @@ export function DashboardView({
       ? nextPayday(paydays, override, today)
       : { dateKey: null, daysAway: null, source: "unknown" as const };
 
+    const activeBills = bills.filter((bill) => bill.status === "active");
     const setAsides: SetAside[] = today
-      ? bills
+      ? activeBills
           .map((bill) => setAsideHeld(bill, paydays, billCharges, today))
           .filter((entry): entry is SetAside => entry !== null)
       : [];
+
+    const spendHeld: SpendHeld[] = today
+      ? spend.flatMap((entry) => {
+          const rate = recurringSpendRate(entry, spendCharges[entry.name] ?? [], today);
+          const held = recurringSpendHeld(
+            entry,
+            rate.ratePerPeriodCents,
+            spendCharges[entry.name] ?? [],
+            today,
+            payday.dateKey,
+          );
+          return held === null ? [] : [held];
+        })
+      : [];
+
+    const chargesByName = new Map<string, CommitmentCharge[]>();
+    for (const charge of billCharges) {
+      const list = chargesByName.get(charge.name) ?? [];
+      list.push({ dateKey: charge.dateKey, costCents: 0 });
+      chargesByName.set(charge.name, list);
+    }
+    const stale = today ? staleSubscriptions(bills, chargesByName, today) : [];
 
     return {
       position,
       payday,
       setAsides,
-      available: availableToSpend(accounts, pending, setAsides),
+      spendHeld,
+      stale,
+      available: availableToSpend(accounts, pending, setAsides, spendHeld),
     };
-  }, [accounts, pending, bills, paydays, billCharges, override, today]);
+  }, [
+    accounts,
+    pending,
+    bills,
+    spend,
+    paydays,
+    billCharges,
+    spendCharges,
+    override,
+    today,
+  ]);
 
-  const { available, position, payday, setAsides } = analysis;
+  const { available, position, payday, setAsides, spendHeld, stale } = analysis;
   const openAccounts = accounts.filter((account) => account.closedAt === null);
 
   return (
@@ -181,24 +233,25 @@ export function DashboardView({
         </Panel>
 
         <Panel
-          title="Set aside"
+          title="Bills"
           subtitle="Held back out of each paycheck until the bill is paid"
         >
           {setAsides.length === 0 ? (
             <PanelEmpty>
               Nothing set aside. Declare a bill on{" "}
-              <Link href="/finances/insights">Insights</Link> and mark it a set-aside.
+              <Link href="/finances/commitments">Commitments</Link> and mark it a
+              set-aside.
             </PanelEmpty>
           ) : (
             <ul className="flex flex-col gap-2">
               {setAsides.map((entry) => (
                 <li
-                  key={entry.merchant}
+                  key={entry.name}
                   className="border-b border-rule pb-2 last:border-b-0"
                 >
                   <div className="flex items-baseline justify-between gap-3">
                     <span className="truncate text-[0.8125rem] text-ink">
-                      {entry.merchant}
+                      {entry.name}
                     </span>
                     <span className="tabular flex-none text-[0.875rem] text-ink">
                       {formatUsd(entry.heldCents)}
@@ -209,10 +262,98 @@ export function DashboardView({
                     {formatUsd(entry.expectedCents)} · due{" "}
                     {formatDate(entry.nextDueKey)}
                     {entry.fullyFunded && " · fully set aside"}
-                    {/* A paid bill re-anchors on its own charge, so its next due date is a
-                        cadence in the future. A due date still in the past means it was
-                        missed. */}
                     {today !== null && entry.nextDueKey < today && " · overdue"}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+      </div>
+
+      <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2">
+        <Panel
+          title="This period"
+          subtitle="Recurring spend already held back before payday"
+        >
+          {spendHeld.length === 0 ? (
+            <PanelEmpty>
+              No recurring spend tracked. Group pizza or groceries on{" "}
+              <Link href="/finances/commitments">Commitments</Link>.
+            </PanelEmpty>
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {spendHeld.map((entry) => (
+                <li
+                  key={entry.name}
+                  className="border-b border-rule pb-2 last:border-b-0"
+                >
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="truncate text-[0.8125rem] text-ink">
+                      {entry.name}
+                    </span>
+                    <span className="tabular flex-none text-[0.875rem] text-ink">
+                      {formatUsd(entry.heldCents)} held
+                    </span>
+                  </div>
+                  <div className="text-[0.75rem] text-ink-muted">
+                    {formatUsd(entry.spentThisPeriodCents)} /{" "}
+                    {formatUsd(entry.ratePerPeriodCents)} this period
+                    {entry.overCents > 0 && ` · over by ${formatUsd(entry.overCents)}`}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+
+        <Panel title="Still active?" subtitle="Expected charges that never arrived">
+          {stale.length === 0 ? (
+            <PanelEmpty>Every scheduled bill has posted on time.</PanelEmpty>
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {stale.map((entry) => (
+                <li
+                  key={entry.billId}
+                  className="border-b border-rule pb-2 last:border-b-0"
+                >
+                  <div className="text-[0.8125rem] text-ink">
+                    {entry.name}: expected{" "}
+                    {entry.expectedCents !== null
+                      ? formatUsd(entry.expectedCents)
+                      : "a charge"}{" "}
+                    on {formatDate(entry.expectedOn)} — nothing posted.
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={statusPending || today === null}
+                      onClick={() => {
+                        if (today === null) return;
+                        startStatus(async () => {
+                          await setSubscriptionStatusAction(entry.name, "active", {
+                            reanchorOn: today,
+                          });
+                          router.refresh();
+                        });
+                      }}
+                      className="min-h-tap rounded border border-rule px-2 text-[0.75rem] text-ink disabled:opacity-50 md:min-h-0 md:py-1"
+                    >
+                      Still active
+                    </button>
+                    <button
+                      type="button"
+                      disabled={statusPending}
+                      onClick={() => {
+                        startStatus(async () => {
+                          await setSubscriptionStatusAction(entry.name, "cancelled");
+                          router.refresh();
+                        });
+                      }}
+                      className="min-h-tap rounded border border-rule px-2 text-[0.75rem] text-ink disabled:opacity-50 md:min-h-0 md:py-1"
+                    >
+                      Cancelled
+                    </button>
                   </div>
                 </li>
               ))}
@@ -251,8 +392,9 @@ export function DashboardView({
             </li>
           )}
           <li>
-            {setAsides.length} of {bills.length} declared bill(s) are set aside. The
-            rest are not held back from the figure above.
+            {setAsides.length} of{" "}
+            {bills.filter((bill) => bill.status === "active").length} active bill(s) are
+            set aside. The rest are not held back from the figure above.
           </li>
           {/* SimpleFIN refreshes on its own roughly daily cadence and offers nothing that
               forces a bank to hand over something newer. Saying so beats a button that

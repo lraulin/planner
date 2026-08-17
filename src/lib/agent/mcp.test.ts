@@ -53,13 +53,18 @@ const REQUIRED = [
   "get_debt_summary",
   "list_statements",
   "search_transactions",
+  "list_commitments",
+  "list_commitment_candidates",
+  "upsert_subscription",
+  "upsert_recurring_spend",
+  "delete_commitment",
 ] as const;
 
 describe("MCP catalog", () => {
-  it("exposes the 33 core and domain tools and hides discovery plus legacy", () => {
+  it("exposes the core and domain tools and hides discovery plus legacy", () => {
     const tools = listMcpToolDefinitions();
     const names = tools.map((tool) => tool.name);
-    expect(names).toHaveLength(33);
+    expect(names).toHaveLength(38);
     expect(names).toEqual(expect.arrayContaining([...REQUIRED]));
     for (const hidden of HIDDEN) {
       expect(names).not.toContain(hidden);
@@ -141,7 +146,7 @@ describe("MCP JSON-RPC", () => {
       method: "tools/list",
     });
     const tools = (response as { result: { tools: { name: string }[] } }).result.tools;
-    expect(tools).toHaveLength(33);
+    expect(tools).toHaveLength(38);
     expect(tools.map((tool) => tool.name)).not.toEqual(
       expect.arrayContaining([...HIDDEN]),
     );

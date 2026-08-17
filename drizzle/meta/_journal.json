@@ -323,6 +323,20 @@
       "when": 1786902111297,
       "tag": "0045_good_sally_floyd",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1786923930847,
+      "tag": "0046_white_omega_flight",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1786923954949,
+      "tag": "0047_dark_bruce_banner",
+      "breakpoints": true
     }
   ]
 }
