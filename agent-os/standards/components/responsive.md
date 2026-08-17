@@ -18,7 +18,7 @@ the app presents **a different information architecture over the same data**:
 | ------------------------------ | --------------------------------------- | ------------------------------------------------------------ |
 | Grid + right drawer            | List → full-screen sheet                | Context preservation is cheap on 1440px, impossible on 390px |
 | Grouped sidebar (collapsible)  | Bottom nav + More sheet                 | A 48px icon rail on a 390px screen is the shrunken answer    |
-| `⌘K` command palette           | `⋯` on the view's toolbar               | There is no `⌘K` on touch — see `navigation.md`              |
+| `⌘K` command palette           | `⋯` on the shell                        | There is no `⌘K` on touch — see `navigation.md`              |
 | Multi-column panes, side rails | One column, segmented control to switch | Horizontal scrolling is a failure state                      |
 | Hover reveals, double-click    | Persistent affordances, single tap      | There is no hover on touch                                   |
 | Right-click menu               | Long-press menu                         | There is no right button                                     |

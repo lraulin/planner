@@ -394,8 +394,16 @@ say what it is doing:
   bottom half also moves says nothing about how much has been filtered out. Group headers
   are not counted; they are chrome, not results.
 - One **Clear all** that clears column filters, the advanced filter and the search together.
+- **`Clear filters` is a View / palette command**, not a toolbar button. It is disabled with
+  the specific reason when nothing is filtered. On a dual-grid page it exists twice: a
+  focused shortcut, and an explicit `Clear filters for [grid name]` — `navigation.md` and
+  `src/lib/commands/scope.ts`.
 - An empty builder is **inactive**, not "match nothing". A dialog the user opened and left
   empty must never empty the grid.
+
+Lens `Filter…` opens **that** grid's panel. The menu carries the same command as the catalog
+path: unscoped on a one-grid page, plus `Filter for [grid name]…` when two grids share the
+page. The toolbar button is never the only way in.
 
 ## Persistence
 
@@ -435,8 +443,9 @@ already holds, and treat `false` as a stored value rather than as absent.
 
 **Two rows: verbs above, lens below.**
 
-`GridToolbar` renders both. Row 1 is `CommandBar` — the view's named menus, the handful of
-commands promoted to icon buttons, the selection chip, the Commands panel toggle. Row 2 is the
+`GridToolbar` renders both. Named menus live in the **shell**, above the page bar
+(`navigation.md`) — they are not this component's first row. Row 1 is the page verb row:
+the handful of commands promoted to icon buttons, and the selection chip. Row 2 is the
 lens: view picker, scope pickers, search, `Filter…`, `Group by`, the tab's switches, density,
 with the chip bar under it.
 
@@ -532,11 +541,11 @@ click away **and** discoverable, which is what makes the tier honest.
 Three tiers, and a control belongs in the lowest one that still works. The menu is the
 **complete catalog** (`navigation.md`); the bar is a high-frequency subset of it:
 
-| Tier           | Test                                                                               |
-| -------------- | ---------------------------------------------------------------------------------- |
-| **On the bar** | Used most sessions. An icon button on the command row, or a widget on the lens row |
-| **In a menu**  | Every real command. Occasional ones live _only_ here (`Show Fields`, the zooms)    |
-| **Deleted**    | Fails one of the tests above. Palette-only is not a tier.                          |
+| Tier           | Test                                                                                 |
+| -------------- | ------------------------------------------------------------------------------------ |
+| **On the bar** | Used most sessions. An icon button on the page verb row, or a widget on the lens row |
+| **In a menu**  | Every real command. Occasional ones live _only_ here (`Show Fields`, the zooms)      |
+| **Deleted**    | Fails one of the tests above. Palette-only is not a tier.                            |
 
 A menu is not a place to hide things you could not justify. If a control fails the "column filter
 wearing a checkbox" or "unavailable or duplicated" test, moving it into a menu does not fix it —

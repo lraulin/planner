@@ -24,6 +24,10 @@ export function scopedFilterLabel(scope: CommandScope): string {
   return `Filter for ${scope.label}…`;
 }
 
+export function scopedClearFiltersLabel(scope: CommandScope): string {
+  return `Clear filters for ${scope.label}`;
+}
+
 export function scopedFieldsLabel(scope: CommandScope): string {
   return `Show Fields for ${scope.label}`;
 }

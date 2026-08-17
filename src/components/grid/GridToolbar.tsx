@@ -25,21 +25,17 @@ import {
   type ToolbarSegment,
 } from "@/components/tabs/tabChrome";
 import { useRegisterCommands } from "@/components/shell/CommandProvider";
-import { OverflowMenu } from "@/components/shell/OverflowMenu";
+
 import type { Command } from "@/lib/commands/registry";
-import {
-  scopeCommand,
-  scopedFieldsLabel,
-  scopedFilterLabel,
-  scopedResetLabel,
-  type CommandScope,
-} from "@/lib/commands/scope";
+import { gridViewLayoutCommands } from "@/lib/commands/gridViewCommands";
+import { scopeCommand, type CommandScope } from "@/lib/commands/scope";
+import { hasAnyNarrowing } from "@/lib/settings/grid";
 import { GridFilterChips } from "./GridFilterChips";
 import { GridFilterDialog } from "./GridFilterDialog";
 import { GridSearchBox } from "./GridSearchBox";
 import { ShowFieldsDialog } from "./ShowFieldsDialog";
 import { ViewPicker } from "./ViewPicker";
-import { CommandBar } from "./CommandBar";
+import { CommandBar, hasVerbRow } from "./CommandBar";
 import {
   buildGridCommands,
   type GridCommandCapabilities,
@@ -61,10 +57,9 @@ const EMPTY_SWITCHES: readonly GridSwitch[] = [];
  * declares **what it has** (its columns, its switches, its group dimensions, its command
  * capabilities) and this supplies **how you control them**.
  *
- * Row 1 (`CommandBar`) is the **verbs**: the named menus, the promoted icon buttons, the selection
- * chip, the Commands panel toggle. Row 2 is the **lens**: which view, which scope, what is filtered
- * out, how it is grouped, how tall the rows are. The split is the point — one row holding both is
- * what made `New` and `Group by` look like the same kind of thing.
+ * Row 1 (`CommandBar`) is the **page verb row**: the promoted icon buttons and the selection
+ * chip. Named menus live in the shell, above the page bar. Row 2 is the **lens**: which view,
+ * which scope, what is filtered out, how it is grouped, how tall the rows are.
  *
  * Everything here is driven from `GridState`, which owns the single `grid:{tabId}` scope.
  * Nothing in this component holds view state of its own except which dialog is open.
@@ -75,6 +70,7 @@ export type GridToolbarHandle = {
   openFilter: () => void;
   openFields: () => void;
   reset: () => void;
+  clearFilters: () => void;
 };
 
 /** A tab-declared toggle. Its value lives in `settings.switches[id]`. */
@@ -158,10 +154,9 @@ export function GridToolbar({
    */
   commandCapabilities?: GridCommandCapabilities;
   /**
-   * Draw this grid's File/View row. Default on — a module that is one grid *is*
-   * the menu bar. Two grids on one page would each draw a File menu; pass false
-   * and put one `DestinationCommandBar` on the page. Commands still register
-   * either way, so the catalog stays complete.
+   * Draw this grid's icon/selection row. Default on. Two grids on one page pass
+   * false so they do not stack two verb rows; the application menu is in the
+   * shell either way. Commands still register, so the catalog stays complete.
    */
   commandRow?: boolean;
   /**
@@ -184,9 +179,14 @@ export function GridToolbar({
   const allCollapsed =
     groupIds.length > 0 && groupIds.every((id) => grid.collapsedGroups.has(id));
 
-  const { reset: resetScope, setAllGroupsCollapsed } = grid;
+  const { reset: resetScope, setAllGroupsCollapsed, clearFilters } = grid;
   const revertView = views?.revert;
   const resetGrid = revertView ?? resetScope;
+  const filtersNarrowing = hasAnyNarrowing(
+    grid.filters,
+    grid.advancedFilter,
+    grid.search,
+  );
 
   /*
    * There was a `rowActions` prop here that took a selection plus Open and Rename and built a
@@ -213,51 +213,24 @@ export function GridToolbar({
    * re-registering sets state — a fresh array each render would be an infinite loop.
    */
   const commands = useMemo<Command[]>(() => {
-    const filter: Command = {
-      id: "view.filter",
-      label: "Filter…",
-      group: "view",
-      menu: "view",
-      section: "Layout",
-      icon: "filter",
-      keywords: "advanced condition where",
-      ownControl: true,
-      run: () => setFilterOpen(true),
-    };
-    const fields: Command = {
-      id: "view.fields",
-      label: "Show Fields",
-      group: "view",
-      menu: "view",
-      section: "Layout",
-      icon: "fields",
-      keywords: "columns hide customize current view",
-      run: () => setFieldsOpen(true),
-    };
-    const reset: Command = {
-      id: "view.reset",
-      label: "Reset this grid",
-      group: "view",
-      menu: "view",
-      section: "Layout",
-      icon: "reset",
-      keywords: "clear default columns layout",
-      title: revertView
-        ? "Put the grid back to the named view it drifted from"
-        : "Clear filters, sort, column layout, grouping and density for this grid",
-      run: resetGrid,
-    };
-
     const list: Command[] = [...(hostCommands ?? []), ...deckCommands];
 
-    if (commandScope) {
+    // Dual-grid pages publish focused + scoped layout commands themselves so
+    // View lists Filter… (focused) before Filter for [name]…. A scoped toolbar
+    // that also published would insert the named rows first (child mounts first).
+    if (!commandScope) {
       list.push(
-        scopeCommand(filter, commandScope, scopedFilterLabel(commandScope)),
-        scopeCommand(fields, commandScope, scopedFieldsLabel(commandScope)),
-        scopeCommand(reset, commandScope, scopedResetLabel(commandScope)),
+        ...gridViewLayoutCommands({
+          openFilter: () => setFilterOpen(true),
+          clearFilters,
+          openFields: () => setFieldsOpen(true),
+          reset: resetGrid,
+          filtersActive: filtersNarrowing,
+          resetTitle: revertView
+            ? "Put the grid back to the named view it drifted from"
+            : "Clear filters, sort, column layout, grouping and density for this grid",
+        }),
       );
-    } else {
-      list.push(filter, fields, reset);
     }
 
     if (groupIds.length > 0) {
@@ -281,7 +254,7 @@ export function GridToolbar({
           ),
         );
       } else {
-        list.splice(1, 0, collapse);
+        list.push(collapse);
       }
     }
 
@@ -290,6 +263,8 @@ export function GridToolbar({
     hostCommands,
     deckCommands,
     resetGrid,
+    clearFilters,
+    filtersNarrowing,
     setAllGroupsCollapsed,
     groupIds,
     allCollapsed,
@@ -305,8 +280,9 @@ export function GridToolbar({
       openFilter: () => setFilterOpen(true),
       openFields: () => setFieldsOpen(true),
       reset: resetGrid,
+      clearFilters,
     }),
-    [resetGrid],
+    [resetGrid, clearFilters],
   );
 
   return (
@@ -319,15 +295,12 @@ export function GridToolbar({
       */}
       <TabToolbar
         commandRow={
-          commandRow ? (
+          commandRow && hasVerbRow(commands, commandCapabilities?.selection) ? (
             <CommandBar
               commands={commands}
               selection={commandCapabilities?.selection}
             />
           ) : undefined
-        }
-        pinned={
-          commandRow ? <OverflowMenu label="More commands for this grid" /> : undefined
         }
       >
         {/*

@@ -12,7 +12,7 @@ import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { ErrorBanner, TabToolbar, ToolbarButton } from "@/components/tabs/tabChrome";
 import { CommandBar } from "@/components/grid/CommandBar";
 import { useRegisterCommands } from "@/components/shell/CommandProvider";
-import { OverflowMenu } from "@/components/shell/OverflowMenu";
+
 import type { Command } from "@/lib/commands/registry";
 import { INSERT_AFTER } from "@/lib/commands/chords";
 import { formatEquipmentBadge } from "@/lib/fitness/equipment";
@@ -261,10 +261,7 @@ export function FitnessView({
         `PageBar` owns it now — see `navigation.md`. What is left on this row is genuinely the
         lens, and the two create verbs stay on the command row, where they reach `⌘K` and `⋯`.
       */}
-      <TabToolbar
-        commandRow={<CommandBar commands={commands} />}
-        pinned={<OverflowMenu label="More commands for fitness" />}
-      />
+      <TabToolbar commandRow={<CommandBar commands={commands} />} />
 
       {error && !editorOpen && <ErrorBanner message={error} />}
 

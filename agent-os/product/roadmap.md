@@ -289,7 +289,10 @@ View · Tools`) with an icon gutter and shortcut column; an **icon row** for the
   Commands panel and phone `⋯` see them, on every AppShell destination including Overview and
   the organizer. **View ▸ Command palette** is the menu path to `⌘K`. Go-to destinations stay
   sidebar + palette — no Go menu. `navigation.md` now states the rule: a command without
-  `menu` is not shipped, except `group: "go"`.
+  `menu` is not shipped, except `group: "go"`. The menu itself is application chrome above
+  the page bar (`specs/2026-08-16-2152-app-menu-above-pages`): File stays put when tabs
+  change, Insights and Dashboard have a menu, and a dual-grid page names which grid
+  `Filter…` targets.
 
 - **✅ Right-click completion: submenus, the surfaces it missed, the verbs it lacked.**
   `specs/2026-08-06-1506-right-click-completion`. The surface above worked almost everywhere; this

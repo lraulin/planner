@@ -28,10 +28,10 @@ import {
   setRecurringBillAction,
   setRecurringSpendAction,
 } from "@/app/finances/actions";
-import type { Command } from "@/lib/commands/registry";
+import { dualGridViewCommands } from "@/lib/commands/gridViewCommands";
+import { hasAnyNarrowing } from "@/lib/settings/grid";
 import { useRegisterCommands } from "@/components/shell/CommandProvider";
 import { DataGrid } from "@/components/grid/DataGrid";
-import { DestinationCommandBar } from "@/components/grid/DestinationCommandBar";
 import { GridToolbar, type GridToolbarHandle } from "@/components/grid/GridToolbar";
 import { useGridState, type GridDefaults } from "@/components/grid/useGridState";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
@@ -265,47 +265,75 @@ export function CommitmentsView({
   }, [billsSelect, spendSelect]);
 
   const focusedLabel = focusedGrid === "bills" ? BILLS_SCOPE.label : SPEND_SCOPE.label;
-  const focusedCommands = useMemo<Command[]>(() => {
-    const handle = () =>
+  const billsNarrowing = hasAnyNarrowing(
+    billGrid.filters,
+    billGrid.advancedFilter,
+    billGrid.search,
+  );
+  const spendNarrowing = hasAnyNarrowing(
+    spendGrid.filters,
+    spendGrid.advancedFilter,
+    spendGrid.search,
+  );
+  const focusedNarrowing = focusedGrid === "bills" ? billsNarrowing : spendNarrowing;
+  const viewCommands = useMemo(() => {
+    const noop = () => undefined;
+    const templates = dualGridViewCommands(
+      {
+        label: focusedLabel,
+        filtersActive: focusedNarrowing,
+        openFilter: noop,
+        clearFilters: noop,
+        openFields: noop,
+        reset: noop,
+        resetTitle: `Reset ${focusedLabel}`,
+      },
+      [
+        {
+          scope: BILLS_SCOPE,
+          filtersActive: billsNarrowing,
+          openFilter: noop,
+          clearFilters: noop,
+          openFields: noop,
+          reset: noop,
+          resetTitle: `Reset ${BILLS_SCOPE.label}`,
+        },
+        {
+          scope: SPEND_SCOPE,
+          filtersActive: spendNarrowing,
+          openFilter: noop,
+          clearFilters: noop,
+          openFields: noop,
+          reset: noop,
+          resetTitle: `Reset ${SPEND_SCOPE.label}`,
+        },
+      ],
+    );
+    const focusedHandle = () =>
       focusedGridRef.current === "bills" ? billsToolbar.current : spendToolbar.current;
-    return [
-      {
-        id: "view.filter",
-        label: "Filter…",
-        group: "view",
-        menu: "view",
-        section: "Layout",
-        icon: "filter",
-        keywords: "advanced condition where",
-        ownControl: true,
-        title: `Filter the ${focusedLabel} grid`,
-        run: () => handle()?.openFilter(),
-      },
-      {
-        id: "view.fields",
-        label: "Show Fields",
-        group: "view",
-        menu: "view",
-        section: "Layout",
-        icon: "fields",
-        keywords: "columns hide customize current view",
-        title: `Show Fields on ${focusedLabel}`,
-        run: () => handle()?.openFields(),
-      },
-      {
-        id: "view.reset",
-        label: "Reset this grid",
-        group: "view",
-        menu: "view",
-        section: "Layout",
-        icon: "reset",
-        keywords: "clear default columns layout",
-        title: `Reset ${focusedLabel}`,
-        run: () => handle()?.reset(),
-      },
-    ];
-  }, [focusedLabel]);
-  useRegisterCommands(focusedCommands);
+    const runs: Record<string, () => void> = {
+      "view.filter": () => focusedHandle()?.openFilter(),
+      "view.clear-filters": () => focusedHandle()?.clearFilters(),
+      "view.fields": () => focusedHandle()?.openFields(),
+      "view.reset": () => focusedHandle()?.reset(),
+      "view.filter.bills": () => billsToolbar.current?.openFilter(),
+      "view.clear-filters.bills": () => billsToolbar.current?.clearFilters(),
+      "view.fields.bills": () => billsToolbar.current?.openFields(),
+      "view.reset.bills": () => billsToolbar.current?.reset(),
+      "view.filter.spend": () => spendToolbar.current?.openFilter(),
+      "view.clear-filters.spend": () => spendToolbar.current?.clearFilters(),
+      "view.fields.spend": () => spendToolbar.current?.openFields(),
+      "view.reset.spend": () => spendToolbar.current?.reset(),
+    };
+    // run() fires from the menu, not here. The handle must be the live ref —
+    // a first-render snapshot would be null forever.
+    // eslint-disable-next-line react-hooks/refs -- run closes over refs on purpose
+    return templates.map((command) => ({
+      ...command,
+      run: runs[command.id] ?? command.run,
+    }));
+  }, [focusedLabel, focusedNarrowing, billsNarrowing, spendNarrowing]);
+  useRegisterCommands(viewCommands);
 
   function run(work: () => Promise<{ ok: boolean; error?: string }>) {
     setError(null);
@@ -372,10 +400,6 @@ export function CommitmentsView({
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <DestinationCommandBar
-        commands={focusedCommands}
-        overflowLabel="More commands for Commitments"
-      />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-5 overflow-auto p-3">
         {error && (
           <p role="alert" className="text-[0.8125rem] text-[var(--chart-spend)]">

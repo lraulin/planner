@@ -59,7 +59,7 @@ import { nextCheckState } from "@/lib/schedule/checkState";
 import { owningProjectId } from "@/lib/tree/owningProject";
 import { CommandBar } from "@/components/grid/CommandBar";
 import { useRegisterCommands } from "@/components/shell/CommandProvider";
-import { OverflowMenu } from "@/components/shell/OverflowMenu";
+
 import type { Command } from "@/lib/commands/registry";
 
 /** Which drawing of the range is on screen. The route decides; see `navigation.md`. */
@@ -1000,14 +1000,6 @@ export function ScheduleView({
           </div>
           <div className="flex flex-none flex-nowrap items-center gap-2 overflow-x-auto border-b border-rule bg-shell px-3 py-1.5 text-[0.8125rem] md:flex-wrap md:overflow-x-visible">
             {lensControls}
-            {/*
-              `⋯` on the lens row, phone-only: the command row above is `md:flex`, so without
-              this the schedule's verbs would exist on a desktop and nowhere else. Not pinned
-              outside a scroller here because this row is short enough not to pan on a phone.
-            */}
-            <span className="flex-none md:hidden">
-              <OverflowMenu label="More commands for this schedule" />
-            </span>
             {rangePagers}
           </div>
         </>

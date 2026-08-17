@@ -30,7 +30,7 @@ import {
   type GridCommandCapabilities,
 } from "@/lib/grid/commandDeck";
 import { useRegisterCommands } from "@/components/shell/CommandProvider";
-import { OverflowMenu } from "@/components/shell/OverflowMenu";
+
 import { TabToolbar } from "@/components/tabs/tabChrome";
 import { DAY_COLUMNS, type DayColumnCtx } from "./dayColumns";
 
@@ -489,18 +489,14 @@ export function DailyItemsGrid({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/*
-        No lens row: the Day grid has no view picker, no scope and no grouping controls — its rows
-        are one date's list. So the command row is the whole toolbar, and below `md` the pinned `⋯`
-        is, which is why the `children` slot here is empty.
+        No lens row: the Day grid has no view picker, no scope and no grouping controls — its
+        rows are one date's list. Below `md` the shell's `⋯` is the catalog.
       */}
       <TabToolbar
         commandRow={
           <CommandBar commands={commands} selection={commandCapabilities.selection} />
         }
-        pinned={<OverflowMenu label="More commands for this day" />}
-      >
-        {null}
-      </TabToolbar>
+      />
       <div className="min-h-0 flex-1 overflow-auto">
         <DataGrid<DayColumnCtx, DailyItemView>
           rows={rows}

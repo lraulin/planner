@@ -4,6 +4,7 @@ import {
   builtPagesForModule,
   defaultPageFor,
   hasPageBar,
+  isFocusedFlow,
   pageForPathname,
   pageHref,
   pagesForModule,
@@ -168,6 +169,22 @@ describe("pageForPathname", () => {
    * These two assertions are one letter apart on purpose. Anyone "fixing" the inconsistency
    * fails here rather than shipping a bar onto the editor.
    */
+  it("names the flows that suppress the application menu", () => {
+    expect(isFocusedFlow("/schedule/plan")).toBe(true);
+    expect(isFocusedFlow("/schedule/plan/step")).toBe(true);
+    expect(isFocusedFlow("/fitness/log")).toBe(true);
+    expect(isFocusedFlow("/schedule/time-chart/abc123")).toBe(true);
+    // A merely simple destination, or a module with no page bar, still has File.
+    expect(isFocusedFlow("/finances/insights")).toBe(false);
+    expect(isFocusedFlow("/finances/dashboard")).toBe(false);
+    expect(isFocusedFlow("/chooser")).toBe(false);
+    expect(isFocusedFlow("/metrics")).toBe(false);
+    expect(isFocusedFlow("/plan/tasks")).toBe(false);
+    // Inside a declared page — the session editor keeps the menu.
+    expect(isFocusedFlow("/fitness/sessions/abc")).toBe(false);
+    expect(isFocusedFlow("/schedule/time-charts")).toBe(false);
+  });
+
   it("keeps the time-chart editor out of the Time Charts page's subtree", () => {
     expect(pageForPathname("schedule", "/schedule", "/schedule/time-charts")?.id).toBe(
       "time-charts",

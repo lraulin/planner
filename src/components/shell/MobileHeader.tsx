@@ -1,7 +1,9 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { isFocusedFlow } from "@/lib/navigation/pages";
 import { destinationLabel } from "./modules";
+import { OverflowMenu } from "./OverflowMenu";
 
 /**
  * The phone's "you are here".
@@ -23,10 +25,11 @@ export function MobileHeader({ title }: { title?: string }) {
 
   return (
     <header className="pt-safe flex-none border-b border-rule bg-shell md:hidden">
-      <div className="flex h-11 items-center px-3">
-        <h1 className="text-[0.9375rem] font-semibold tracking-tight text-ink">
+      <div className="flex h-11 items-center gap-2 px-3">
+        <h1 className="min-w-0 flex-1 truncate text-[0.9375rem] font-semibold tracking-tight text-ink">
           {title ?? destinationLabel(pathname, "Planner")}
         </h1>
+        {!isFocusedFlow(pathname) && <OverflowMenu label="More commands" />}
       </div>
     </header>
   );

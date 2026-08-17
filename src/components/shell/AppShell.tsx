@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { QuickCapture } from "@/components/capture/QuickCapture";
 import { CommandKeys } from "./CommandKeys";
 import { FileCommands } from "./FileCommands";
+import { ApplicationMenu } from "./ApplicationMenu";
 import { PageBar } from "./PageBar";
 import { CommandPalette } from "./CommandPalette";
 import { CommandProvider } from "./CommandProvider";
@@ -50,6 +51,12 @@ export function AppShell({
 
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <MobileHeader title={pageTitle} />
+
+            {/*
+              Application menu above the page bar: the catalog belongs to the app, not the
+              current tab (`navigation.md`). `ApplicationMenu` hides itself on focused flows.
+            */}
+            <ApplicationMenu />
 
             {/*
               Here rather than inside each module for the same reason the sidebar is: five

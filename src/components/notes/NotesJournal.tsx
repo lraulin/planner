@@ -6,7 +6,7 @@ import {
   saveJournalNoteAction,
   updateNoteAction,
 } from "@/app/notes/actions";
-import { DestinationCommandBar } from "@/components/grid/DestinationCommandBar";
+
 import { FileImportHost } from "@/components/import/FileImportHost";
 import { RedNotebookImportPanel } from "@/components/settings/RedNotebookImportPanel";
 import { useDateFormatter } from "@/components/settings/SettingsProvider";
@@ -195,7 +195,6 @@ export function NotesJournal({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <DestinationCommandBar overflowLabel="More commands for Notes" />
       <FileImportHost
         commandId="import.rednotebook"
         label="Import RedNotebook…"

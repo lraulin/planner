@@ -1,19 +1,11 @@
 "use client";
 
-import { useMemo } from "react";
 import { KIND_LABELS, type NodeKind } from "@/lib/tree/hierarchy";
 import { formatBindings } from "@/lib/commands/bindings";
 import { toolbarSegments } from "@/lib/commands/menus";
 import type { Command } from "@/lib/commands/registry";
 import { TypeIcon } from "@/components/icons/TypeIcon";
-import { CommandGlyph } from "@/components/icons/commandIcons";
-import { useCommands, useRegisterCommands } from "@/components/shell/CommandProvider";
-import { openCommandPalette } from "@/components/shell/commandEvent";
-import { useFileCommands } from "@/components/shell/globalCommands";
-import { useCommandsPanel } from "@/components/shell/useShellSettings";
-import { OPEN_PALETTE } from "@/lib/commands/chords";
 import { ToolbarDivider, ToolbarIconButton } from "@/components/tabs/tabChrome";
-import { CommandMenuBar } from "./CommandMenuBar";
 import type { GridSelectionCapability } from "@/lib/grid/commandDeck";
 
 /**
@@ -37,17 +29,22 @@ function accentFor(kind: NodeKind | undefined): string {
   }
 }
 
+export function hasVerbRow(
+  commands: readonly Command[],
+  selection?: GridSelectionCapability,
+): boolean {
+  return toolbarSegments(commands).length > 0 || Boolean(selection);
+}
+
 /**
- * Row 1: the verbs.
+ * The page verb row: icon segments and the selection chip.
  *
- * `File ▾ New ▾ Item ▾ Organize ▾ View ▾ │ ⊕ │ ⤒ ⤓ ⤷ │ ↑ ↓ │ → ← │ ⏎ ✎ │ ☑ Write brief`
+ * Named menus live in the shell (`ApplicationMenu`), above the page bar. This row is the
+ * high-frequency subset that sits with the grid. Desktop only — `TabToolbar` hides it
+ * below `md`, where `⋯` on the shell is the catalog.
  *
- * Three things, left to right: the **menu bar** (everything this view can do, named and
- * sectioned), the **icon segments** (the handful you reach for every session, grouped by weight
- * decade so a hairline lands between clusters), and the **selection chip** (what the verbs are
- * about to act on).
- *
- * Desktop only — `TabToolbar` hides this row below `md`, where `⋯` renders the same tree.
+ * Returns `null` when there is nothing to draw, so a page with no promoted icons does not
+ * keep an empty strip under the application menu.
  */
 export function CommandBar({
   commands,
@@ -56,76 +53,14 @@ export function CommandBar({
   commands: readonly Command[];
   selection?: GridSelectionCapability;
 }) {
-  const { open: panelOpen, setOpen: setPanelOpen } = useCommandsPanel();
-  const fileCommands = useFileCommands();
-  const registered = useCommands();
-  const paletteCommand = useMemo<Command>(
-    () => ({
-      id: "view.command-palette",
-      label: "Command palette",
-      group: "view",
-      menu: "view",
-      section: "Panels",
-      icon: "go-to",
-      bindings: OPEN_PALETTE,
-      keywords: "search commands go fuzzy",
-      title: "Search every command and destination",
-      run: openCommandPalette,
-    }),
-    [],
-  );
-  const panelCommand = useMemo<Command>(
-    () => ({
-      id: "view.commands-panel",
-      label: panelOpen ? "Hide commands panel" : "Show commands panel",
-      group: "view",
-      menu: "view",
-      section: "Panels",
-      icon: "panel",
-      keywords: "pane sidebar actions palette command bar",
-      title: "A pinned pane listing every command this view has, grouped",
-      run: () => setPanelOpen(!panelOpen),
-    }),
-    [panelOpen, setPanelOpen],
-  );
-  // Registered here, not by each host, so a view that draws this bar and never a GridToolbar
-  // (Schedule calendar, Fitness, Day) still has View ▸ Show commands panel. One source is
-  // also what stops a grid and a host from both listing it.
-  const panelCommands = useMemo(
-    () => [paletteCommand, panelCommand],
-    [paletteCommand, panelCommand],
-  );
-  useRegisterCommands(panelCommands);
-
-  // The named menus cannot read the registry alone: registration is a setState, so
-  // File, the host's commands, Command palette, and the panel toggle have to sit
-  // here this render. `registered` is merged after so a sibling like ViewPicker —
-  // which publishes Save / Save as on its own — still lands in View, not only in
-  // ⌘K and the panel.
-  const menuCommands = useMemo(() => {
-    const byId = new Map<string, Command>();
-    for (const command of [
-      ...fileCommands,
-      ...commands,
-      ...registered,
-      paletteCommand,
-      panelCommand,
-    ]) {
-      byId.set(command.id, command);
-    }
-    return [...byId.values()];
-  }, [fileCommands, commands, registered, paletteCommand, panelCommand]);
-
   const segments = toolbarSegments(commands);
+  if (segments.length === 0 && !selection) return null;
 
   return (
     <>
-      <CommandMenuBar commands={menuCommands} />
-
       {segments.map((segment, index) => (
         <div key={index} className="flex flex-none items-center">
-          {/* Between segments, and between the menu bar and the first one. */}
-          <ToolbarDivider />
+          {index > 0 && <ToolbarDivider />}
           {segment.map((command) => (
             <ToolbarIconButton
               key={command.id}
@@ -143,46 +78,7 @@ export function CommandBar({
       ))}
 
       <SelectionChip selection={selection} />
-
-      <div className="ml-auto flex flex-none items-center">
-        <CommandsPanelToggle
-          open={panelOpen}
-          onToggle={() => setPanelOpen(!panelOpen)}
-        />
-      </div>
     </>
-  );
-}
-
-/**
- * The Commands panel toggle, pinned to the right of the command row.
- *
- * Pressed-state fill rather than a label change, matching the sidebar's own collapse toggle
- * and the Density segments: the control says what it is doing, so it does not need a word
- * explaining that it is about panels. The command in `View ▸ Panels` carries the sentence.
- */
-function CommandsPanelToggle({
-  open,
-  onToggle,
-}: {
-  open: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={open}
-      onClick={onToggle}
-      title={open ? "Hide the commands panel" : "Show the commands panel"}
-      aria-label={open ? "Hide the commands panel" : "Show the commands panel"}
-      className={`flex h-7 w-7 flex-none items-center justify-center rounded transition-colors ${
-        open
-          ? "bg-select text-ink"
-          : "text-ink-faint hover:bg-surface-raised hover:text-ink"
-      }`}
-    >
-      <CommandGlyph icon="panel" />
-    </button>
   );
 }
 

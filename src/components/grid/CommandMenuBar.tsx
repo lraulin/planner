@@ -6,7 +6,7 @@ import { MenuButton } from "@/components/shell/MenuButton";
 import { menuItemsFor } from "./ContextMenu";
 
 /**
- * The view's menu bar: `File · New · Item · Organize · View · Tools`.
+ * The application menu bar: `File · New · Item · Organize · View · Tools`.
  *
  * The whole point of the slice. Before this, a view's commands were a flat row of eleven
  * identically-bordered words with the rest behind an unsorted `⋯` — a traditional app menu with

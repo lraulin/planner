@@ -9,20 +9,21 @@ be a permanent tab and the eleventh was already too many.
 
 Six surfaces now, each answering a different question.
 
-| Surface                      | Question it answers              | Role                              | Where                           |
-| ---------------------------- | -------------------------------- | --------------------------------- | ------------------------------- |
-| **Sidebar** (`⌘K` to search) | "Where can I go?"                | Visual catalog of destinations    | Desktop, always                 |
-| **Page bar**                 | "Where else can I go _in here_?" | Destinations inside this module   | Above the toolbar, both layouts |
-| **Menu bar**                 | "What can I do here?"            | **Complete catalog of commands**  | Every destination's command row |
-| **Commands panel**           | "…show me all of it at once"     | The same tree left open           | Desktop, opt-in, remembered     |
-| **Row context menu**         | "What can I do to _this_ row?"   | Narrow, row-scoped subset         | Right-click / long-press a row  |
-| **Command palette** (`⌘K`)   | "What can this app do?"          | Searchable overlay + Go-to extras | Desktop, on demand              |
+| Surface                      | Question it answers              | Role                              | Where                                  |
+| ---------------------------- | -------------------------------- | --------------------------------- | -------------------------------------- |
+| **Sidebar** (`⌘K` to search) | "Where can I go?"                | Visual catalog of destinations    | Desktop, always                        |
+| **Menu bar**                 | "What can I do here?"            | **Complete catalog of commands**  | Application chrome, above the page bar |
+| **Page bar**                 | "Where else can I go _in here_?" | Destinations inside this module   | Below the menu, above page toolbars    |
+| **Commands panel**           | "…show me all of it at once"     | The same tree left open           | Desktop, opt-in, remembered            |
+| **Row context menu**         | "What can I do to _this_ row?"   | Narrow, row-scoped subset         | Right-click / long-press a row         |
+| **Command palette** (`⌘K`)   | "What can this app do?"          | Searchable overlay + Go-to extras | Desktop, on demand                     |
 
 The menu bar is the **source of truth for completeness**. Toolbars and the Commands panel / palette are accelerators. A user who never opens `⌘K` must still be able to find every command by reading the menus.
 
 Below `md` the sidebar is replaced by the bottom nav plus the More sheet, there is no palette and
-no command row, and no panel — **`⋯` becomes the menu bar**, rendering the same tree with the
-section names as headings. See `responsive.md`.
+no desktop menu bar, and no panel — **`⋯` becomes the menu bar**, rendering the same tree with the
+section names as headings. It is **shell-owned**, so a destination without a page toolbar still
+has it. See `responsive.md`.
 
 Achieve had four of these six (menu bar, icon toolbars, the docked **Outline Commands** pane, and
 a sectioned row menu), all reading one command set. The palette is ours; the point of the others is
@@ -130,15 +131,24 @@ Density keeps its bordered segment. Every navigation switcher is a tab.
 
 ### The bar gets its own row, and only when it earns one
 
-Above the toolbar, below the phone header. Not folded into the command row: navigation sits at
-the rank of the sidebar, and putting it among the verbs is the flattening `TabToolbar`'s two-row
-split already exists to prevent, one tier up.
+Three tiers, in this order, even though this is a hybrid web app with a sidebar:
+
+1. **Application menu** — File / New / Item / Organize / View / Tools. Belongs to the app.
+2. **Page bar** — sibling destinations inside this module. Belongs to the module.
+3. **Page toolbars** — icon row, selection chip, lens (`Filter…`, search, grouping). Belong to
+   the content.
+
+Not folded into the command row: navigation sits at the rank of the sidebar, and putting it
+among the verbs is the flattening `TabToolbar`'s two-row split already exists to prevent, one
+tier up. Putting the page bar **above** the menu is the other inversion: the menu then reads as
+belonging to the current tab, and it jumps when you switch pages.
 
 It renders **only at two or more built pages**. A single tab spends a row saying "you are in the
-only place there is", so most modules — and Finances, until Insights lands — pay nothing.
+only place there is", so modules with one destination pay nothing.
 
-Below `md` the page bar is the row that survives. The command row is hidden down there, so the
-bar is the _only_ path to a sibling page: it scrolls sideways and its tabs are 44px.
+Below `md` the page bar is the row that survives. The desktop menu is hidden down there, so the
+bar is the _only_ path to a sibling page: it scrolls sideways and its tabs are 44px. `⋯` is the
+phone's menu, on the shell.
 
 ### A page is a URL
 
@@ -154,7 +164,8 @@ scrolled to. Each page validates its own params, so one the destination cannot u
 ### A focused flow is not a page
 
 `/schedule/plan`, `/fitness/log`, `/schedule/time-chart/[id]` and the editors never appear in
-the bar. The test: **in the bar you leave by tapping a sibling; a focused flow has an exit.**
+the bar, and they suppress the application menu. The test: **in the bar you leave by tapping a
+sibling; a focused flow has an exit.**
 
 This is enforced by how the active page is resolved, and the rule is neither of the two you
 would reach for first. **A declared segment matches its own subtree; anything undeclared matches
@@ -229,6 +240,49 @@ The one exception is `group: "go"` — destinations. Their visual catalog is the
 works. They do not get a Go menu. App-wide verbs (capture, Process Inbox, Plan Week, Settings,
 Sign out) are **not** this exception; they live in **File**.
 
+### The menu belongs to the application, not the tab
+
+The menu bar is not another toolbar. It is the application-level command catalog. `AppShell`
+draws it, above the page bar, from `useCommands()`. File is always there. New / Item /
+Organize / View / Tools appear when the destination has something for them.
+
+That placement is load-bearing even though the rest of the chrome is modern (sidebar, page
+tabs, local toolbars):
+
+- The menu does not belong to the current tab, so it does not jump when the page bar changes.
+- A destination that is merely simple — Insights, Dashboard, Overview, Journal — still has
+  it. A page without a menu forces people into a toolbar or `⌘K`, which is the
+  discoverability failure the catalog rule exists to prevent.
+- Icon buttons, the selection chip, and the lens stay on the page, next to the data. Those
+  are accelerators. They are never the only path.
+
+**Focused flows may suppress the menu.** Weekly wizard (`/schedule/plan`), `/fitness/log`,
+the time-chart editor, and the fitness session/exercise editors have their own exit and are
+not destinations. Settings stays outside `AppShell`. Detect those flows with a pure path
+helper next to `pageForPathname`. Do **not** treat "no page bar" as the signal — Chooser and
+Metrics have no page bar and still need File.
+
+### Targeting when two grids share a page
+
+Command ids are unique across the merged catalog. Two toolbars both publishing `view.filter`
+is last-wins, which silently filters only the grid that mounted second.
+
+Each grid gets a stable `CommandScope` (`id` + label) from `src/lib/commands/scope.ts`. The
+View menu (and `⌘K`) then carries both:
+
+- A **focused shortcut** — `Filter…`, `Clear filters` — acting on the last-interacted grid
+  (default: the top one). A visible focus ring makes "current grid" real.
+- **Explicit per-grid rows** — `Filter for Subscriptions & bills…`, `Clear filters for
+Recurring spend` — so the user can target a grid without focusing it first.
+
+One grid: only the unscoped rows. Do not invent `Filter for Tasks…` on a page that has one
+grid. Compact and flat: no extra "Top grid" submenu. The same commands appear in the palette
+with the grid name in the label.
+
+The lens `Filter…` button still opens **that** grid's panel only. `Clear filters` is a menu
+and palette command, disabled with the specific reason when nothing is filtered. It is not a
+toolbar button — `data-grid.md`.
+
 ### Complete everywhere, sectioned everywhere
 
 Every surface lists everything it is responsible for, and **sections** are what keep that
@@ -236,15 +290,17 @@ readable. "Short" was the old answer and it was the wrong one: the `⋯` menu wa
 leaving things out and unsorted, which is how it ended up as a traditional app menu with the
 organization removed.
 
-- The **menu bar is the complete catalog.** File is leftmost and always present. New / Item /
-  Organize / View / Tools appear when the destination has something for them. A command that
-  is not in a menu does not exist to anyone not already holding `⌘K`.
+- The **menu bar is the complete catalog**, drawn by the shell above the page bar. File is
+  leftmost and always present. New / Item / Organize / View / Tools appear when the
+  destination has something for them. A command that is not in a menu does not exist to
+  anyone not already holding `⌘K`.
 - The **toolbar is a subset.** `toolbar` is a weight meaning "also an icon button." Every
   toolbar item must also be a menu command, because that row is hidden below `md`. Frequency
   and immediacy, not completeness.
 - The **Commands panel is the same tree left open.** Same labels, same sections, same
-  disabled reasons. Register File at the shell — a File menu that exists only as a
-  `CommandBar` prop is invisible to the panel and to `⋯`.
+  disabled reasons. Register File and the named menus at the shell — a File menu that exists
+  only as a `CommandBar` prop is invisible to the panel, to `⋯`, and to any destination that
+  never mounts a `CommandBar`.
 - The **palette lists every menu command, plus Go-to.** Shortcuts are printed. **View ▸
   Command palette** is the discoverable invocation; do not rely on people already knowing
   `⌘K`.

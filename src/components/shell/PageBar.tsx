@@ -16,7 +16,7 @@ import { useShellSettings } from "./useShellSettings";
  * shell owned modules and commands and nothing owned the tier between them. It is owned here
  * now, rendered from one registry, so a fifth module cannot invent a fifth look.
  *
- * **Its own row, above the toolbar.** `TabToolbar` split verbs from lens controls because one
+ * **Its own row, below the application menu, above the page toolbars.** `TabToolbar` split verbs from lens controls because one
  * row of identically-bordered boxes said nothing about which was which; this is the same
  * argument one tier up. Navigation sits at the rank of the sidebar, not among the verbs — and
  * it is the row that has to survive below `md`, where the command row is hidden and the bar is

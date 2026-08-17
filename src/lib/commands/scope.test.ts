@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Command } from "./registry";
 import {
   scopeCommand,
+  scopedClearFiltersLabel,
   scopedCommandId,
   scopedFieldsLabel,
   scopedFilterLabel,
@@ -30,6 +31,9 @@ describe("command scope", () => {
 
   it("names the grid in the verb, not as a vague Filter…", () => {
     expect(scopedFilterLabel(BILLS)).toBe("Filter for Subscriptions & bills…");
+    expect(scopedClearFiltersLabel(BILLS)).toBe(
+      "Clear filters for Subscriptions & bills",
+    );
     expect(scopedFieldsLabel(BILLS)).toBe("Show Fields for Subscriptions & bills");
     expect(scopedResetLabel(BILLS)).toBe("Reset Subscriptions & bills");
     expect(scopedFormatLabel("CSV", BILLS)).toBe("CSV — Subscriptions & bills");

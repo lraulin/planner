@@ -10,7 +10,7 @@ import { useFileCommands } from "./globalCommands";
  * menu that exists only as a local merge would be the exact drift this spec exists to remove:
  * visible on desktop menus, missing from the panel and from the phone.
  *
- * Mounted once in `AppShell`. `CommandBar` still merges the same list this render, because
+ * Mounted once in `AppShell`. `ApplicationMenu` merges the same list this render, because
  * registration is a `setState` and would miss the first paint.
  */
 export function FileCommands() {

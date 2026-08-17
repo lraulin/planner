@@ -411,3 +411,22 @@ export function pageForPathname(
     ) ?? null
   );
 }
+
+/**
+ * Destinations that keep their own chrome and suppress the application menu.
+ *
+ * An explicit list, not "pageForPathname returned null". The bare module path, Chooser,
+ * Metrics, Insights and Dashboard all return null or have no page bar and still need File.
+ * Fitness session/exercise editors sit *inside* a declared page (`/fitness/sessions/abc`)
+ * and keep the menu; `/fitness/log` does not.
+ */
+export function isFocusedFlow(pathname: string): boolean {
+  if (pathname === "/schedule/plan" || pathname.startsWith("/schedule/plan/")) {
+    return true;
+  }
+  if (pathname === "/fitness/log" || pathname.startsWith("/fitness/log/")) {
+    return true;
+  }
+  if (pathname.startsWith("/schedule/time-chart/")) return true;
+  return false;
+}

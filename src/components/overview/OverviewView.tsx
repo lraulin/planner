@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { requestQuickCapture } from "@/components/capture/event";
-import { DestinationCommandBar } from "@/components/grid/DestinationCommandBar";
+
 import { MasterContextsDialog } from "@/components/contexts/MasterContextsDialog";
 import { ProjectPickerDialog } from "@/components/projects/ProjectPickerDialog";
 import type { ProjectPickerValue } from "@/components/projects/ProjectPicker";
@@ -92,7 +92,6 @@ export function OverviewView({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <DestinationCommandBar overflowLabel="More commands for Overview" />
       <div className="min-h-0 flex-1 overflow-y-auto bg-surface px-4 py-6 sm:px-6 md:px-8 md:py-9">
         <main className="mx-auto max-w-[76rem]">
           <div className="flex flex-col gap-2 border-b border-rule pb-5 md:flex-row md:items-end md:justify-between">

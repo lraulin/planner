@@ -6,7 +6,7 @@
  * toolbar with an unsorted `⋯` behind it, which is a menu with the organization removed. A command
  * declared here is now rendered by five surfaces: the view's **menu bar**, its **icon toolbar**,
  * the pinnable **Commands panel**, the row **context menu**, and the `⌘K` **palette** (with `⋯`
- * standing in for the menu bar below `md`).
+ * on the shell standing in for the menu bar below `md`).
  *
  * **One registry, every renderer.** This is the same contract `views.ts` has, for the same
  * reason: a command described in two places is a command whose two descriptions eventually
@@ -39,7 +39,7 @@ export const COMMAND_GROUP_LABELS: Record<CommandGroup, string> = {
 };
 
 /**
- * The named menus on a view's command bar, in the order they appear.
+ * The named menus on the application menu bar, in the order they appear.
  *
  * File is always present (app-wide verbs). The rest appear when the destination has something
  * for them — make something, act on it, restructure it, change what you are looking at, and
