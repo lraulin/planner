@@ -18,7 +18,7 @@ import type { NodeItem, NodeItemKind } from "@/db/schema";
 
 /** Which editor control a field gets. The list renderer maps these onto `fields.tsx`. */
 export type ItemFieldKind =
-  "text" | "textarea" | "priority" | "number" | "select" | "check" | "date";
+  "text" | "textarea" | "priority" | "number" | "select" | "check" | "date" | "contact";
 
 /** The editable columns a list row can draw on. */
 export type ItemColumnKey =
@@ -45,6 +45,7 @@ export type ItemColumnKey =
       | "filledBy"
       | "association"
       | "contact"
+      | "contactId"
       | "source"
       | "resolution"
       | "resolved"
@@ -236,11 +237,10 @@ export const ITEM_KINDS: Record<NodeItemKind, ItemKindConfig> = {
     title: "Contacts",
     singular: "contact",
     empty: "Who do you need to be able to reach?",
-    columns: ["title", "association", "contact"],
+    columns: ["contactId", "association"],
     fields: [
-      { key: "title", label: "Name", kind: "text" },
+      { key: "contactId", label: "Name", kind: "contact" },
       { key: "association", label: "Association", kind: "textarea", rows: 2 },
-      { key: "contact", label: "Contact details", kind: "text" },
     ],
   },
 
@@ -444,9 +444,9 @@ export const ITEM_KINDS: Record<NodeItemKind, ItemKindConfig> = {
 /**
  * Column header text for a list.
  *
- * A kind's own field label wins where it has one, so Contacts head their title column
- * "Name" and Issues head theirs "Summary" — the same column, named the way Achieve names
- * it in each form. `COLUMN_LABELS` is the fallback.
+ * A kind's own field label wins where it has one, so Contacts head their person column
+ * "Name" and Issues head theirs "Summary" — named the way Achieve names it in each form.
+ * `COLUMN_LABELS` is the fallback.
  */
 export function columnLabel(config: ItemKindConfig, key: ItemColumnKey): string {
   const field = config.fields.find((f) => f.key === key);
@@ -477,6 +477,7 @@ export const COLUMN_LABELS: Record<ItemColumnKey, string> = {
   filledBy: "Filled by",
   association: "Association",
   contact: "Contact",
+  contactId: "Name",
   source: "Source",
   resolution: "Resolution",
   resolved: "Resolved",

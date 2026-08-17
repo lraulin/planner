@@ -50,9 +50,19 @@ export function cycleItemSort(
  * < A10 < bare A < B1, blanks sort last, and dates / numbers / booleans compare as
  * themselves.
  */
-export function itemSortValue(item: NodeItem, column: ItemSortColumn): SortValue {
+export function itemSortValue(
+  item: NodeItem,
+  column: ItemSortColumn,
+  contactNames?: ReadonlyMap<string, string>,
+): SortValue {
   if (column === "priority") {
     return priorityOrderValue(item.priorityLetter, item.priorityRank);
+  }
+
+  if (column === "contactId") {
+    if (!item.contactId) return null;
+    const name = contactNames?.get(item.contactId);
+    return name ? name.toLowerCase() : null;
   }
 
   const value = item[column];
@@ -67,7 +77,11 @@ export function itemSortValue(item: NodeItem, column: ItemSortColumn): SortValue
  * Stable sort of a list under the active sort. `null` sort returns the input order
  * (stored `sortKey` order from the query).
  */
-export function sortItems(items: NodeItem[], sort: ItemSort | null): NodeItem[] {
+export function sortItems(
+  items: NodeItem[],
+  sort: ItemSort | null,
+  contactNames?: ReadonlyMap<string, string>,
+): NodeItem[] {
   if (!sort || items.length <= 1) return items;
 
   const factor = sort.direction === "asc" ? 1 : -1;
@@ -75,8 +89,8 @@ export function sortItems(items: NodeItem[], sort: ItemSort | null): NodeItem[] 
   return items
     .map((item, index) => ({ item, index }))
     .sort((a, b) => {
-      const left = itemSortValue(a.item, sort.column);
-      const right = itemSortValue(b.item, sort.column);
+      const left = itemSortValue(a.item, sort.column, contactNames);
+      const right = itemSortValue(b.item, sort.column, contactNames);
       // Nulls last in both directions (same rule as the main grid).
       if (left == null || right == null) {
         const blank = compareSortValues(left, right);

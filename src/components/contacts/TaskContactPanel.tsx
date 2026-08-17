@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { listContactOptionsAction } from "@/app/library/contacts/actions";
 import type { ContactOption } from "@/lib/contacts/types";
 import { FieldGrid, Section } from "@/components/detail/fields";
+import { ContactSelect } from "./ContactSelect";
 
 /**
  * The task-side of a contact discussion item.
@@ -38,19 +39,12 @@ export function TaskContactPanel({
       <FieldGrid>
         <label className="flex flex-col gap-1 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted sm:col-span-2">
           Contact
-          <select
-            value={contactId ?? ""}
-            onChange={(event) => onChange(event.target.value || null)}
+          <ContactSelect
+            value={contactId ?? null}
+            onChange={onChange}
+            contacts={contacts}
             disabled={loading}
-            className="rounded border border-rule bg-surface px-2 py-1.5 text-[0.875rem] text-ink normal-case tracking-normal outline-none focus:border-select-edge disabled:opacity-50"
-          >
-            <option value="">(none)</option>
-            {contacts.map((contact) => (
-              <option key={contact.id} value={contact.id}>
-                {contact.displayName}
-              </option>
-            ))}
-          </select>
+          />
           <span className="text-[0.75rem] font-normal normal-case tracking-normal text-ink-faint">
             Links this task to a person&apos;s discussion list. Completing it resolves
             that item there too.

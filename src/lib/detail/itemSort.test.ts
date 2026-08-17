@@ -31,6 +31,7 @@ function item(overrides: Partial<NodeItem> & Pick<NodeItem, "id">): NodeItem {
     filledBy: "",
     association: "",
     contact: "",
+    contactId: null,
     source: "",
     resolution: "",
     resolved: false,
@@ -151,6 +152,24 @@ describe("itemSortValue / sortItems", () => {
 
     expect(
       sortItems(rows, { column: "score", direction: "asc" }).map((r) => r.id),
+    ).toEqual(["2", "1", "3"]);
+  });
+
+  it("sorts a contact column by display name, not id", () => {
+    const names = new Map([
+      ["id-z", "Ada"],
+      ["id-a", "Zoe"],
+    ]);
+    const rows = [
+      item({ id: "1", contactId: "id-a" }),
+      item({ id: "2", contactId: "id-z" }),
+      item({ id: "3", contactId: null }),
+    ];
+
+    expect(
+      sortItems(rows, { column: "contactId", direction: "asc" }, names).map(
+        (r) => r.id,
+      ),
     ).toEqual(["2", "1", "3"]);
   });
 

@@ -831,7 +831,7 @@ export const nodeItems = pgTable(
     sortKey: text("sort_key").notNull(),
     priorityLetter: priorityLetterEnum("priority_letter"),
     priorityRank: smallint("priority_rank"),
-    /** Also carries an Issue's "Summary" and a Contact's "Name". */
+    /** Also carries an Issue's "Summary". A Contacts-tab row's name is the linked person, not this column. */
     title: text("title").notNull().default(""),
     description: text("description").notNull().default(""),
 
@@ -857,9 +857,21 @@ export const nodeItems = pgTable(
     candidates: text("candidates").notNull().default(""),
     filled: boolean("filled").notNull().default(false),
     filledBy: text("filled_by").notNull().default(""),
-    // Contact
+    // Contact — a link to someone in `contacts`, plus how they relate to this node.
+    // Name is derived from the person (`displayNameOf`), never stored on `title`.
     association: text("association").notNull().default(""),
+    /**
+     * Leftover free-text from when this list was a planning pad, not an address-book
+     * link. New writes leave it empty. Dropped in a later cleanup, not this change.
+     */
     contact: text("contact").notNull().default(""),
+    /**
+     * The person this Contacts-tab row is. Cascade: the row exists only as the link, unlike
+     * discussion tasks / notes / resources which keep the work and `set null`.
+     */
+    contactId: uuid("contact_id").references(() => contacts.id, {
+      onDelete: "cascade",
+    }),
     // Issue
     source: text("source").notNull().default(""),
     resolution: text("resolution").notNull().default(""),
@@ -907,6 +919,12 @@ export const nodeItems = pgTable(
       table.kind,
       table.sortKey,
     ),
+    index("node_items_user_contact_idx").on(table.userId, table.contactId),
+    // One person per project/task Contacts tab. Nulls stay out so Insert can add an
+    // unlinked row before the picker is used.
+    uniqueIndex("node_items_contact_once_uq")
+      .on(table.userId, table.nodeId, table.contactId)
+      .where(sql`${table.kind} = 'contact' and ${table.contactId} is not null`),
   ],
 );
 
@@ -1654,8 +1672,9 @@ export const contactItemKindEnum = pgEnum("contact_item_kind", [
  *
  * **Local-only — a sync must never write or clear these:** `contexts`, and
  * `contact_items.notes`. So are the *inbound* links: `task_details.contact_id` (Achieve's
- * Discussion Items, which are tasks here) and `notes.contact_id` (Contact History, which are
- * notes here).
+ * Discussion Items, which are tasks here), `notes.contact_id` (Contact History, which are
+ * notes here), and `node_items.contact_id` (a project/task Contacts-tab row — cascade,
+ * because the row is the link).
  *
  * **Two of the six `external_*` columns are placeholders**, carried for shape parity with
  * `appointments` rather than because People has somewhere to put them — see each one.

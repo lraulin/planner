@@ -46,7 +46,7 @@ describe("item kind config", () => {
   it("names a column after the kind's own field label where it has one", () => {
     // Achieve heads the same column "Summary" on Issues and "Name" on Contacts.
     expect(columnLabel(ITEM_KINDS.issue, "title")).toBe("Summary");
-    expect(columnLabel(ITEM_KINDS.contact, "title")).toBe("Name");
+    expect(columnLabel(ITEM_KINDS.contact, "contactId")).toBe("Name");
     expect(columnLabel(ITEM_KINDS.objective, "title")).toBe("Title");
   });
 

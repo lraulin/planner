@@ -17,6 +17,7 @@ import {
   TextArea,
   TextField,
 } from "@/components/detail/fields";
+import { ContactSelect } from "@/components/contacts/ContactSelect";
 import { formatEffort } from "@/lib/tree/format";
 
 function draftOf(detail: ResourceDetail): Required<ResourceInput> {
@@ -175,18 +176,11 @@ function ResourceForm({
               />
               <label className="flex flex-col gap-1 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
                 Contact
-                <select
-                  value={draft.contactId ?? ""}
-                  onChange={(event) => patch("contactId", event.target.value || null)}
-                  className="min-h-tap w-full rounded border border-rule bg-surface px-2 py-1.5 text-[0.875rem] font-normal normal-case tracking-normal text-ink outline-none focus:border-select-edge md:min-h-0"
-                >
-                  <option value="">(none)</option>
-                  {contacts.map((contact) => (
-                    <option key={contact.id} value={contact.id}>
-                      {contact.displayName}
-                    </option>
-                  ))}
-                </select>
+                <ContactSelect
+                  value={draft.contactId}
+                  onChange={(contactId) => patch("contactId", contactId)}
+                  contacts={contacts}
+                />
               </label>
             </FieldGrid>
             <TextArea

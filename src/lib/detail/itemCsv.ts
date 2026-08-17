@@ -1,4 +1,5 @@
 import type { NodeItem } from "@/db/schema";
+import type { ContactOption } from "@/lib/contacts/types";
 import { escapeCsvField, parseCsvRows } from "@/lib/csv/text";
 import type { NodeItemValues } from "@/lib/detail/types";
 import type { ItemField } from "./itemKinds";
@@ -23,8 +24,13 @@ import { formatPriority, parsePriority } from "@/lib/tree/format";
  */
 export type ItemCsvField = Pick<ItemField, "key" | "label" | "kind">;
 
+/** A parsed row, plus an optional display name from a contact-kind column. */
+export type ItemCsvValues = NodeItemValues & {
+  contactName?: string;
+};
+
 export type ParseItemsCsvResult = {
-  rows: NodeItemValues[];
+  rows: ItemCsvValues[];
   /** 1-based data row numbers (header is row 1) that could not be parsed. */
   errors: { row: number; message: string }[];
 };
@@ -79,9 +85,18 @@ function matchField(
   return undefined;
 }
 
-function cellOf(item: NodeItem, field: ItemCsvField): string {
+function cellOf(
+  item: NodeItem,
+  field: ItemCsvField,
+  contactNames?: ReadonlyMap<string, string>,
+): string {
   if (field.kind === "priority") {
     return formatPriority(item.priorityLetter, item.priorityRank);
+  }
+
+  if (field.kind === "contact") {
+    if (!item.contactId) return "";
+    return contactNames?.get(item.contactId) ?? "";
   }
 
   const value = item[field.key as keyof NodeItem];
@@ -98,12 +113,13 @@ function cellOf(item: NodeItem, field: ItemCsvField): string {
 export function itemsToCsv(
   fields: readonly ItemCsvField[],
   items: readonly NodeItem[],
+  contactNames?: ReadonlyMap<string, string>,
 ): string {
   if (fields.length === 0) return "";
 
   const header = fields.map((f) => escapeCsvField(f.label)).join(",");
   const lines = items.map((item) =>
-    fields.map((f) => escapeCsvField(cellOf(item, f))).join(","),
+    fields.map((f) => escapeCsvField(cellOf(item, f, contactNames))).join(","),
   );
   return [header, ...lines].join("\n") + (lines.length || fields.length ? "\n" : "");
 }
@@ -156,7 +172,7 @@ export function parseItemsCsv(
     };
   }
 
-  const rows: NodeItemValues[] = [];
+  const rows: ItemCsvValues[] = [];
   const errors: { row: number; message: string }[] = [];
 
   for (let i = 1; i < table.length; i++) {
@@ -164,7 +180,7 @@ export function parseItemsCsv(
     const cells = table[i];
     if (cells.every((c) => c.trim() === "")) continue;
 
-    const values: NodeItemValues = {};
+    const values: ItemCsvValues = {};
     let failed = false;
 
     for (let c = 0; c < mapping.length; c++) {
@@ -233,6 +249,11 @@ export function parseItemsCsv(
         continue;
       }
 
+      if (field.kind === "contact") {
+        values.contactName = raw.trim();
+        continue;
+      }
+
       // text / textarea / select
       (values as Record<string, unknown>)[field.key] = raw;
     }
@@ -245,4 +266,50 @@ export function parseItemsCsv(
   }
 
   return { rows, errors };
+}
+
+/**
+ * Turn CSV display names into `contactId`s. Unknown or ambiguous names become row
+ * errors; nothing here creates a contact.
+ */
+export function resolveContactCsvRows(
+  rows: readonly ItemCsvValues[],
+  options: readonly ContactOption[],
+  firstDataRow = 2,
+): ParseItemsCsvResult {
+  const byName = new Map<string, ContactOption[]>();
+  for (const option of options) {
+    const key = option.displayName.trim().toLowerCase();
+    const list = byName.get(key);
+    if (list) list.push(option);
+    else byName.set(key, [option]);
+  }
+
+  const resolved: ItemCsvValues[] = [];
+  const errors: { row: number; message: string }[] = [];
+
+  rows.forEach((row, index) => {
+    const name = row.contactName?.trim() ?? "";
+    const rowNum = firstDataRow + index;
+    if (!name) {
+      errors.push({ row: rowNum, message: "Name is required." });
+      return;
+    }
+    const matches = byName.get(name.toLowerCase()) ?? [];
+    if (matches.length === 0) {
+      errors.push({ row: rowNum, message: `No contact named "${name}".` });
+      return;
+    }
+    if (matches.length > 1) {
+      errors.push({
+        row: rowNum,
+        message: `More than one contact is named "${name}".`,
+      });
+      return;
+    }
+    const { contactName: _ignored, ...rest } = row;
+    resolved.push({ ...rest, contactId: matches[0].id });
+  });
+
+  return { rows: resolved, errors };
 }

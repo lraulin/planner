@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/db";
-import { goalDetails, nodes, taskDetails, users } from "@/db/schema";
+import { goalDetails, nodeItems, nodes, taskDetails, users } from "@/db/schema";
+import { createContact, deleteContact } from "@/lib/contacts/mutations";
 import { getTableColumns } from "drizzle-orm";
 import { eq } from "drizzle-orm";
 import {
@@ -1000,6 +1001,100 @@ describeDb("detail mutations", () => {
 
       const detail = await loadNodeDetail(userId, projectId);
       expect(detail?.items.find((item) => item.id === id)?.title).toBe("Keep me");
+    });
+
+    it("links a contact without copying their name onto the row", async () => {
+      const contactId = await createContact(userId, {
+        givenName: "Ada",
+        familyName: "King",
+      });
+      const id = await createNodeItem({
+        userId,
+        nodeId: projectId,
+        kind: "contact",
+        values: { contactId, association: "Sponsor" },
+      });
+
+      const detail = await loadNodeDetail(userId, projectId);
+      const row = detail?.items.find((item) => item.id === id);
+      expect(row?.contactId).toBe(contactId);
+      expect(row?.association).toBe("Sponsor");
+      expect(row?.title).toBe("");
+    });
+
+    it("will not attach another user's contact", async () => {
+      const ownerId = await makeUser();
+      const contactId = await createContact(ownerId, { givenName: "Ada" });
+
+      await expect(
+        createNodeItem({
+          userId,
+          nodeId: projectId,
+          kind: "contact",
+          values: { contactId },
+        }),
+      ).rejects.toThrow("Contact not found.");
+
+      const detail = await loadNodeDetail(userId, projectId);
+      expect(detail?.items.filter((item) => item.kind === "contact")).toEqual([]);
+    });
+
+    it("will not let a second user change or delete the first user's contact row", async () => {
+      const otherUserId = await makeUser();
+      const contactId = await createContact(userId, { givenName: "Ada" });
+      const id = await createNodeItem({
+        userId,
+        nodeId: projectId,
+        kind: "contact",
+        values: { contactId, association: "Mine" },
+      });
+
+      await updateNodeItem(otherUserId, id, { association: "Theirs" });
+      await deleteNodeItem(otherUserId, id);
+
+      const detail = await loadNodeDetail(userId, projectId);
+      const row = detail?.items.find((item) => item.id === id);
+      expect(row?.association).toBe("Mine");
+      expect(await loadNodeDetail(otherUserId, projectId)).toBeNull();
+    });
+
+    it("refuses the same contact twice on one node", async () => {
+      const contactId = await createContact(userId, { givenName: "Ada" });
+      await createNodeItem({
+        userId,
+        nodeId: projectId,
+        kind: "contact",
+        values: { contactId },
+      });
+
+      await expect(
+        createNodeItem({
+          userId,
+          nodeId: projectId,
+          kind: "contact",
+          values: { contactId },
+        }),
+      ).rejects.toThrow("already on this list");
+    });
+
+    it("removes the link row when the contact is deleted", async () => {
+      const contactId = await createContact(userId, { givenName: "Ada" });
+      const id = await createNodeItem({
+        userId,
+        nodeId: projectId,
+        kind: "contact",
+        values: { contactId, association: "Sponsor" },
+      });
+
+      await deleteContact(userId, contactId);
+
+      const detail = await loadNodeDetail(userId, projectId);
+      expect(detail?.items.find((item) => item.id === id)).toBeUndefined();
+      const leftover = await db
+        .select({ id: nodeItems.id })
+        .from(nodeItems)
+        .where(eq(nodeItems.id, id));
+      expect(leftover).toEqual([]);
     });
 
     it("will not autofill another user's attachment", async () => {

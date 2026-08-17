@@ -1,8 +1,17 @@
 "use client";
 
-import { useMemo, useRef, useState, type ChangeEvent as ReactChangeEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent as ReactChangeEvent,
+} from "react";
+import { listContactOptionsAction } from "@/app/library/contacts/actions";
+import { ContactSelect } from "@/components/contacts/ContactSelect";
 import type { NodeItem, NodeItemKind } from "@/db/schema";
-import { itemsToCsv, parseItemsCsv } from "@/lib/detail/itemCsv";
+import type { ContactOption } from "@/lib/contacts/types";
+import { itemsToCsv, parseItemsCsv, resolveContactCsvRows } from "@/lib/detail/itemCsv";
 import {
   cycleItemSort,
   defaultItemSort,
@@ -78,14 +87,45 @@ export function ItemList({
   );
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [contacts, setContacts] = useState<ContactOption[]>([]);
   const csvImportRef = useRef<HTMLInputElement>(null);
+  const seenIds = useRef(new Set(items.map((item) => item.id)));
 
-  const displayItems = useMemo(() => sortItems(items, sort), [items, sort]);
+  const contactNames = useMemo(
+    () => new Map(contacts.map((contact) => [contact.id, contact.displayName])),
+    [contacts],
+  );
+
+  useEffect(() => {
+    if (kind !== "contact") return;
+    let cancelled = false;
+    void listContactOptionsAction().then((result) => {
+      if (!cancelled && result.ok) setContacts(result.data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [kind]);
+
+  useEffect(() => {
+    if (kind !== "contact") {
+      seenIds.current = new Set(items.map((item) => item.id));
+      return;
+    }
+    const added = items.filter((item) => !seenIds.current.has(item.id));
+    seenIds.current = new Set(items.map((item) => item.id));
+    if (added.length === 1) setOpenId(added[0].id);
+  }, [items, kind]);
+
+  const displayItems = useMemo(
+    () => sortItems(items, sort, contactNames),
+    [items, sort, contactNames],
+  );
   // Manual reorder only makes sense against stored order, not a temporary column sort.
   const canReorder = sort === null;
 
   const exportCsv = () => {
-    const csv = itemsToCsv(config.fields, displayItems);
+    const csv = itemsToCsv(config.fields, displayItems, contactNames);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -104,9 +144,18 @@ export function ItemList({
     const reader = new FileReader();
     reader.onload = () => {
       const text = typeof reader.result === "string" ? reader.result : "";
+      if (kind === "contact" && contacts.length === 0) {
+        setStatus(null);
+        setError("Contacts have not loaded yet. Try again in a moment.");
+        return;
+      }
       const parsed = parseItemsCsv(config.fields, text);
-      if (parsed.rows.length === 0) {
-        const first = parsed.errors[0];
+      const resolved =
+        kind === "contact" ? resolveContactCsvRows(parsed.rows, contacts) : null;
+      const rows = resolved?.rows ?? parsed.rows;
+      const errors = resolved ? [...parsed.errors, ...resolved.errors] : parsed.errors;
+      if (rows.length === 0) {
+        const first = errors[0];
         setStatus(null);
         setError(
           first?.message ??
@@ -116,15 +165,15 @@ export function ItemList({
       }
 
       void (async () => {
-        const result = await onImport(parsed.rows);
+        const result = await onImport(rows);
         if (!result.ok) {
           setStatus(null);
           setError(result.error);
           return;
         }
         const parts = [`Imported ${result.created}`];
-        if (parsed.errors.length > 0) {
-          parts.push(`${parsed.errors.length} invalid row(s) ignored`);
+        if (errors.length > 0) {
+          parts.push(`${errors.length} invalid row(s) ignored`);
         }
         setError(null);
         setStatus(parts.join("; ") + ".");
@@ -235,26 +284,30 @@ export function ItemList({
                     setOpenId(openId === item.id ? null : item.id);
                   }}
                 >
-                  {config.columns.map((column) => (
-                    <span
-                      key={column}
-                      className={`${columnClass(column)} truncate ${
-                        column === "priority" ? "tabular" : ""
-                      } ${
-                        column === "url"
-                          ? ""
-                          : summaryOf(item, column)
-                            ? "text-ink"
-                            : "text-ink-faint"
-                      }`}
-                    >
-                      {column === "url" ? (
-                        <UrlCell value={summaryOf(item, column)} />
-                      ) : (
-                        summaryOf(item, column) || "—"
-                      )}
-                    </span>
-                  ))}
+                  {config.columns.map((column) => {
+                    const summary = summaryOf(item, column, contactNames);
+                    const emptyPrompt = column === "contactId" ? "Pick a contact" : "—";
+                    return (
+                      <span
+                        key={column}
+                        className={`${columnClass(column)} truncate ${
+                          column === "priority" ? "tabular" : ""
+                        } ${
+                          column === "url"
+                            ? ""
+                            : summary
+                              ? "text-ink"
+                              : "text-ink-faint"
+                        }`}
+                      >
+                        {column === "url" ? (
+                          <UrlCell value={summary} />
+                        ) : (
+                          summary || emptyPrompt
+                        )}
+                      </span>
+                    );
+                  })}
 
                   <span className="flex flex-none justify-end gap-0.5 md:w-16">
                     <RowButton
@@ -288,6 +341,14 @@ export function ItemList({
                     <ItemEditor
                       item={item}
                       fields={config.fields}
+                      contacts={contacts}
+                      takenContactIds={
+                        new Set(
+                          items
+                            .filter((other) => other.id !== item.id && other.contactId)
+                            .map((other) => other.contactId as string),
+                        )
+                      }
                       onChange={(values) => onChange(item.id, values)}
                     />
                     <div className="mt-3 flex justify-end">
@@ -334,9 +395,17 @@ function columnClass(column: ItemColumnKey): string {
   }
 }
 
-function summaryOf(item: NodeItem, column: ItemColumnKey): string {
+function summaryOf(
+  item: NodeItem,
+  column: ItemColumnKey,
+  contactNames: ReadonlyMap<string, string>,
+): string {
   if (column === "priority") {
     return formatPriority(item.priorityLetter, item.priorityRank);
+  }
+
+  if (column === "contactId") {
+    return item.contactId ? (contactNames.get(item.contactId) ?? "") : "";
   }
 
   const value = item[column];
@@ -403,10 +472,14 @@ function RowButton({
 function ItemEditor({
   item,
   fields,
+  contacts,
+  takenContactIds,
   onChange,
 }: {
   item: NodeItem;
   fields: ItemField[];
+  contacts: readonly ContactOption[];
+  takenContactIds: ReadonlySet<string>;
   onChange: (values: NodeItemValues) => void;
 }) {
   return (
@@ -462,6 +535,23 @@ function ItemEditor({
                 onChange={(value) => onChange({ [field.key]: value })}
               />
             );
+
+          case "contact": {
+            const options = contacts.filter(
+              (contact) =>
+                contact.id === item.contactId || !takenContactIds.has(contact.id),
+            );
+            return (
+              <ContactSelect
+                key={field.key}
+                label={field.label}
+                value={item.contactId}
+                onChange={(contactId) => onChange({ contactId })}
+                contacts={options}
+                emptyLabel="Pick a contact"
+              />
+            );
+          }
 
           case "select":
             return (

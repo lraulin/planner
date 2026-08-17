@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { contacts, resources } from "@/db/schema";
+import { resources } from "@/db/schema";
+import { assertContactOwned } from "@/lib/contacts/ownership";
 import { RESOURCE_MINUTE_FIELDS, type ResourceMinuteField } from "./capacity";
 import type { ResourceInput } from "./types";
 
@@ -18,20 +19,6 @@ async function requireResource(tx: Executor, userId: string, resourceId: string)
     .limit(1);
   if (!row) throw new Error("Resource not found.");
   return row;
-}
-
-async function assertContactOwned(
-  tx: Executor,
-  userId: string,
-  contactId: string | null | undefined,
-): Promise<void> {
-  if (contactId === undefined || contactId === null) return;
-  const [contact] = await tx
-    .select({ id: contacts.id })
-    .from(contacts)
-    .where(and(eq(contacts.id, contactId), eq(contacts.userId, userId)))
-    .limit(1);
-  if (!contact) throw new Error("Contact not found.");
 }
 
 function percentage(value: number, label: string, max: number): number {

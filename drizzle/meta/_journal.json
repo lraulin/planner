@@ -344,6 +344,13 @@
       "when": 1786990204017,
       "tag": "0048_cute_cable",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1786991294352,
+      "tag": "0049_early_mauler",
+      "breakpoints": true
     }
   ]
 }

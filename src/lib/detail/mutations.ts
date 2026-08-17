@@ -8,7 +8,8 @@ import {
   taskDetails,
 } from "@/db/schema";
 import type { NodeItemKind } from "@/db/schema";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, ne } from "drizzle-orm";
+import { assertContactOwned } from "@/lib/contacts/ownership";
 import {
   clearConflictingDescendantPlans,
   syncDayLineToTargetStart,
@@ -284,6 +285,7 @@ const ITEM_KEYS = [
   "filledBy",
   "association",
   "contact",
+  "contactId",
   "source",
   "resolution",
   "resolved",
@@ -333,6 +335,46 @@ async function requireItem(tx: Executor, userId: string, itemId: string) {
 
   if (!item) throw new Error(`List row not found: ${itemId}`);
   return item;
+}
+
+/**
+ * One person per project's (or task's) Contacts tab. `exceptItemId` is the row being
+ * edited, so changing its association without changing the person does not trip the check.
+ */
+async function assertContactUnusedOnNode(
+  tx: Executor,
+  userId: string,
+  nodeId: string,
+  contactId: string | null | undefined,
+  exceptItemId?: string,
+): Promise<void> {
+  if (!contactId) return;
+  const [existing] = await tx
+    .select({ id: nodeItems.id })
+    .from(nodeItems)
+    .where(
+      and(
+        eq(nodeItems.userId, userId),
+        eq(nodeItems.nodeId, nodeId),
+        eq(nodeItems.kind, "contact"),
+        eq(nodeItems.contactId, contactId),
+        exceptItemId ? ne(nodeItems.id, exceptItemId) : undefined,
+      ),
+    )
+    .limit(1);
+  if (existing) throw new Error("That contact is already on this list.");
+}
+
+async function assertItemContact(
+  tx: Executor,
+  userId: string,
+  nodeId: string,
+  values: NodeItemValues | undefined,
+  exceptItemId?: string,
+): Promise<void> {
+  if (!values || !("contactId" in values)) return;
+  await assertContactOwned(tx, userId, values.contactId);
+  await assertContactUnusedOnNode(tx, userId, nodeId, values.contactId, exceptItemId);
 }
 
 /**
@@ -811,6 +853,7 @@ export async function createNodeItem(params: {
 
   return db.transaction(async (tx) => {
     await requireNode(tx, userId, nodeId);
+    await assertItemContact(tx, userId, nodeId, values);
     const sortKey = await sortKeyFor(tx, userId, nodeId, kind, position);
 
     const [created] = await tx
@@ -849,6 +892,7 @@ export async function importNodeItems(params: {
     const createdIds: string[] = [];
 
     for (const values of rows) {
+      await assertItemContact(tx, userId, nodeId, values);
       const sortKey = await sortKeyFor(tx, userId, nodeId, kind, { at: "last" });
       const [created] = await tx
         .insert(nodeItems)
@@ -868,16 +912,28 @@ export async function updateNodeItem(
 ): Promise<void> {
   const set = pick(values, ITEM_KEYS);
 
-  await db
-    .update(nodeItems)
-    .set({
-      ...set,
-      ...("priorityLetter" in set && set.priorityLetter === null
-        ? { priorityRank: null }
-        : {}),
-      updatedAt: new Date(),
-    })
-    .where(and(eq(nodeItems.id, itemId), eq(nodeItems.userId, userId)));
+  await db.transaction(async (tx) => {
+    const [item] = await tx
+      .select({ id: nodeItems.id, nodeId: nodeItems.nodeId })
+      .from(nodeItems)
+      .where(and(eq(nodeItems.id, itemId), eq(nodeItems.userId, userId)))
+      .limit(1);
+    // Missing or someone else's: same silent no-op as every other scoped update.
+    if (!item) return;
+
+    await assertItemContact(tx, userId, item.nodeId, values, item.id);
+
+    await tx
+      .update(nodeItems)
+      .set({
+        ...set,
+        ...("priorityLetter" in set && set.priorityLetter === null
+          ? { priorityRank: null }
+          : {}),
+        updatedAt: new Date(),
+      })
+      .where(and(eq(nodeItems.id, itemId), eq(nodeItems.userId, userId)));
+  });
 }
 
 /**

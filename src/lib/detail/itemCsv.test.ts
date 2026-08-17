@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { NodeItem } from "@/db/schema";
 import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
-import { itemsToCsv, parseItemsCsv, type ItemCsvField } from "./itemCsv";
+import {
+  itemsToCsv,
+  parseItemsCsv,
+  resolveContactCsvRows,
+  type ItemCsvField,
+} from "./itemCsv";
 
 const BENEFIT_FIELDS: ItemCsvField[] = [
   { key: "priority", label: "Priority", kind: "priority" },
@@ -44,6 +49,7 @@ function item(overrides: Partial<NodeItem> & Pick<NodeItem, "id">): NodeItem {
     filledBy: "",
     association: "",
     contact: "",
+    contactId: null,
     source: "",
     resolution: "",
     resolved: false,
@@ -177,6 +183,50 @@ describe("itemsToCsv / parseItemsCsv", () => {
     ]);
     expect(parsed.errors).toEqual([
       { row: 2, message: 'Invalid priority "Z9" (use A1, B, …).' },
+    ]);
+  });
+
+  it("exports a contact's display name, not their id", () => {
+    const fields: ItemCsvField[] = [
+      { key: "contactId", label: "Name", kind: "contact" },
+      { key: "association", label: "Association", kind: "text" },
+    ];
+    const csv = itemsToCsv(
+      fields,
+      [
+        item({
+          id: "1",
+          kind: "contact",
+          contactId: "c-ada",
+          association: "Sponsor",
+        }),
+      ],
+      new Map([["c-ada", "Ada King"]]),
+    );
+    expect(csv).toBe("Name,Association\nAda King,Sponsor\n");
+  });
+
+  it("resolves imported names to contact ids and rejects unknowns", () => {
+    const fields: ItemCsvField[] = [
+      { key: "contactId", label: "Name", kind: "contact" },
+      { key: "association", label: "Association", kind: "text" },
+    ];
+    const parsed = parseItemsCsv(
+      fields,
+      "Name,Association\nAda King,Sponsor\nNobody,Friend\n",
+    );
+    expect(parsed.errors).toEqual([]);
+    expect(parsed.rows).toEqual([
+      { contactName: "Ada King", association: "Sponsor" },
+      { contactName: "Nobody", association: "Friend" },
+    ]);
+
+    const resolved = resolveContactCsvRows(parsed.rows, [
+      { id: "c-ada", displayName: "Ada King" },
+    ]);
+    expect(resolved.rows).toEqual([{ association: "Sponsor", contactId: "c-ada" }]);
+    expect(resolved.errors).toEqual([
+      { row: 3, message: 'No contact named "Nobody".' },
     ]);
   });
 
