@@ -174,14 +174,12 @@ function ResourceForm({
                 onChange={(value) => patch("shortName", value)}
                 hint="The concise name scheduling will use."
               />
-              <label className="flex flex-col gap-1 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
-                Contact
-                <ContactSelect
-                  value={draft.contactId}
-                  onChange={(contactId) => patch("contactId", contactId)}
-                  contacts={contacts}
-                />
-              </label>
+              <ContactSelect
+                label="Contact"
+                value={draft.contactId}
+                onChange={(contactId) => patch("contactId", contactId)}
+                contacts={contacts}
+              />
             </FieldGrid>
             <TextArea
               label="Description"

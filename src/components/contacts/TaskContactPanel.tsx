@@ -37,8 +37,7 @@ export function TaskContactPanel({
   return (
     <Section title="Contact">
       <FieldGrid>
-        <label className="flex flex-col gap-1 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted sm:col-span-2">
-          Contact
+        <div className="flex flex-col gap-1 sm:col-span-2">
           <ContactSelect
             value={contactId ?? null}
             onChange={onChange}
@@ -49,7 +48,7 @@ export function TaskContactPanel({
             Links this task to a person&apos;s discussion list. Completing it resolves
             that item there too.
           </span>
-        </label>
+        </div>
       </FieldGrid>
     </Section>
   );
