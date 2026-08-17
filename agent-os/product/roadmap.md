@@ -634,9 +634,11 @@ flavor; optional palette thinning).
 
 - **✅ Short-term MVP (strength log):** `specs/2026-07-30-1240-fitness-strength-log`.
   Exercise catalog + multi-exercise sessions with ordered sets (reps × weight); Fitness
-  tab; optional task ↔ exercise link for outline reminders. History is a separate domain
-  (notes-style durability) so deleting a plan task never wipes the log. Out: cardio/runs,
-  routines, recurrence, Health import.
+  tab. History is its own domain (notes-style durability), not outline state. The
+  optional task ↔ exercise “plan reminder” was removed in
+  `specs/2026-08-17-1402-shelve-task-exercise-link` — tasks and the log stay separate
+  until a later Goal-level join is worth designing. Out: cardio/runs, routines,
+  recurrence, Health import.
 - **Medium-term:** Deeper Goal / Result Area progress surfaces; routines/templates.
 - **Long-term:** Optional **Apple Health** (or similar) import — read-only first; cardio.
 

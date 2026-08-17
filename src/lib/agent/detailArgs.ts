@@ -309,7 +309,7 @@ function coerceField(value: unknown, key: string, path: string): unknown {
     return value;
   }
 
-  // Free-text and uuid strings (description, purpose, exerciseId, …).
+  // Free-text and uuid strings (description, purpose, contactId, …).
   if (typeof value === "string") {
     return value;
   }

@@ -270,7 +270,7 @@ export function FitnessView({
           sessions.length === 0 ? (
             <EmptyState
               title="No sessions yet"
-              body="Log a workout with sets and reps. History lives here — not on outline tasks — so cancelling a plan never wipes what you lifted."
+              body="Log sets and reps so the next session has last time's numbers."
               actionLabel="Log first session"
               onAction={() => openNewLog(null)}
             />

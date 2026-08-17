@@ -609,24 +609,14 @@ export const taskDetails = pgTable(
     mileage: text("mileage").notNull().default(""),
     description: text("description").notNull().default(""),
     /**
-     * Optional link to a Fitness catalog exercise. Makes this task a **plan reminder** for
-     * that lift (e.g. "Bench Press" under a Strength project). History lives on
-     * `workout_sessions` / sets, not on the task — so deleting or cancelling the task never
-     * erases what you lifted. `set null` if the exercise is removed.
-     */
-    exerciseId: uuid("exercise_id").references(() => exercises.id, {
-      onDelete: "set null",
-    }),
-    /**
      * The contact this task is a **discussion item** for — Achieve's Contact form Discussion
      * Items grid, whose columns (Priority, Title, Type, Context, Description, Deadline,
      * Resolved) are task fields in everything but name. Modelling them separately would have
      * built a second, worse task list that the Task Chooser and the Day view could not see.
      *
      * Task-only, so it belongs here rather than on `nodes`: a result area does not have a
-     * discussion item, and `nodes` is selected whole by `loadOutline` on every render. Same
-     * shape as `exerciseId` above, and `set null` for the same reason — deleting the person
-     * must never delete the work.
+     * discussion item, and `nodes` is selected whole by `loadOutline` on every render.
+     * `set null` so deleting the person never deletes the work.
      */
     contactId: uuid("contact_id").references(() => contacts.id, {
       onDelete: "set null",

@@ -21,7 +21,6 @@ import {
 import { RecurrenceFields } from "./RecurrenceFields";
 import { skipRecurrenceAction } from "@/app/plan/outline/actions";
 import { LinkedNotesPanel } from "@/components/notes/LinkedNotesPanel";
-import { TaskFitnessPanel } from "@/components/fitness/TaskFitnessPanel";
 import { TaskContactPanel } from "@/components/contacts/TaskContactPanel";
 import type { FormTab } from "./FormTabs";
 import { CoreHeaderFields, type DetailFormProps } from "./formShared";
@@ -325,11 +324,6 @@ export function taskTabs(props: DetailFormProps): FormTab[] {
       label: "Details",
       render: () => (
         <>
-          <TaskFitnessPanel
-            exerciseId={task.exerciseId ?? null}
-            onChange={(exerciseId) => patchTask({ exerciseId })}
-          />
-
           <TaskContactPanel
             contactId={task.contactId ?? null}
             onChange={(contactId) => patchTask({ contactId })}

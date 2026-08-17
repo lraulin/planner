@@ -258,7 +258,6 @@ export const TASK_KEYS = [
   "company",
   "mileage",
   "description",
-  "exerciseId",
   "contactId",
 ] as const;
 

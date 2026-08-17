@@ -1,10 +1,8 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { exercises, users } from "@/db/schema";
+import { users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
-import { saveNodeDetail } from "@/lib/detail/mutations";
-import { createNode, deleteNode } from "@/lib/tree/mutations";
 import {
   createExercise,
   createSession,
@@ -282,38 +280,6 @@ describeDb("fitness sessions", () => {
     expect(
       await loadExerciseHistory(userId, (await listExercises(userId))[0].id),
     ).toEqual([]);
-  });
-
-  it("keeps history when a linked task is deleted", async () => {
-    const exerciseId = await createExercise(userId, "Bench Press");
-    const sessionId = await createSession(userId, {
-      performedAt: new Date("2026-07-01T12:00:00Z"),
-      exercises: [
-        {
-          exerciseId,
-          sets: [
-            { reps: 5, weight: 185 },
-            { reps: 5, weight: 185 },
-          ],
-        },
-      ],
-    });
-
-    const taskId = await createNode({
-      userId,
-      parentId: null,
-      type: "task",
-      name: "Bench Press",
-    });
-    await saveNodeDetail(userId, taskId, {
-      task: { exerciseId },
-    });
-
-    await deleteNode(userId, taskId);
-
-    expect(await getSessionDetail(userId, sessionId)).not.toBeNull();
-    const [ex] = await db.select().from(exercises).where(eq(exercises.id, exerciseId));
-    expect(ex?.name).toBe("Bench Press");
   });
 
   it("isolates second user from first user's fitness rows", async () => {

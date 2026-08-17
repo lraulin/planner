@@ -1,7 +1,6 @@
 /**
  * Fitness domain types. Sessions own ordered exercises and sets; exercises are a catalog.
- * Outline tasks may optionally link to an exercise for planning — that link is not the
- * system of record for what was lifted.
+ * Workout history lives here, not on outline tasks.
  */
 
 export type WeightUnit = "lb" | "kg";
