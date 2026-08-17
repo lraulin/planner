@@ -12,8 +12,10 @@ import { listConnections, type BankConnectionRow } from "@/lib/banksync/queries"
 import {
   effectiveMerchant,
   paydaysFrom,
+  recurringMerchants,
   spendCentsOf,
   type AnalyticsRow,
+  type RecurringMerchant,
 } from "./analytics";
 import type { BillCharge, PendingRow } from "./available";
 import type { Payday } from "./classify/income";
@@ -208,6 +210,11 @@ export type DashboardData = {
   connections: BankConnectionRow[];
   /** Distinct `effectiveMerchant` strings, for the Commitments create picker. */
   merchants: string[];
+  /**
+   * Detected recurring merchants that no commitment has claimed. The Commitments review
+   * list — propose, never apply.
+   */
+  review: RecurringMerchant[];
 };
 
 export async function loadDashboard(userId: string): Promise<DashboardData> {
@@ -274,6 +281,10 @@ export async function loadDashboard(userId: string): Promise<DashboardData> {
     spendCharges,
     connections,
     merchants: [...merchantSet].sort((left, right) => left.localeCompare(right)),
+    review: recurringMerchants(rows, bills).filter((entry) => {
+      if (entry.declared) return false;
+      return !index.has(entry.merchant);
+    }),
   };
 }
 

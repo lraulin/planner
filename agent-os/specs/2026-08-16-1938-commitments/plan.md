@@ -175,11 +175,14 @@ sections because pizza must never appear in a list of things that charge you aut
 Material refinements during implementation (requirements, design, scope). Pure code polish
 is omitted deliberately.
 
-| #   | Change                                                                       | Why                                                                                                                             |
-| --- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Rename is an in-place update (`renameRecurringBill`), not insert-then-delete | Inserting the new name first trips D3: the old row still holds the same matchers                                                |
-| 2   | `setSubscriptionStatus` is its own write, not a general upsert               | The D8 prompt sends a status and (when still active) an anchor. A general upsert on that path would be able to clear the amount |
-| 3   | Insights takes `suppressMerchants` rather than a spend table                 | Pins D7: pizza can leave the review list without becoming an input to `baselineSplit`                                           |
+| #   | Change                                                                       | Why                                                                                                                                    |
+| --- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Rename is an in-place update (`renameRecurringBill`), not insert-then-delete | Inserting the new name first trips D3: the old row still holds the same matchers                                                       |
+| 2   | `setSubscriptionStatus` is its own write, not a general upsert               | The D8 prompt sends a status and (when still active) an anchor. A general upsert on that path would be able to clear the amount        |
+| 3   | Insights takes `suppressMerchants` rather than a spend table                 | Pins D7: pizza can leave the review list without becoming an input to `baselineSplit`                                                  |
+| 4   | Detected recurring charges curate on Commitments, not Insights               | Insights is a report; declaring a commitment is a decision. The detector still feeds levelling; the review list is the inbox           |
+| 5   | Hold-back lives only on a declared bill, labelled on the Commitments grid    | The Insights checkbox both declared and deducted in one click, which is why it was unreadable. Tracking as a bill now holds by default |
+| 6   | Two grids on Commitments share the page File menu; they do not each draw one | A second File/View bar per section is a catalog that has forked                                                                        |
 
 ---
 

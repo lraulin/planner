@@ -46,6 +46,7 @@ import {
 } from "@/lib/grid/exportCsv";
 import { writeClipboardText } from "@/lib/tree/copyAsText";
 import { useRegisterCommands } from "@/components/shell/CommandProvider";
+import type { Command } from "@/lib/commands/registry";
 import { useIsCompact } from "@/components/shell/useIsCompact";
 import { CompactRow, type RowSwipe } from "./CompactRow";
 import type { SelectMods } from "@/lib/grid/selection";
@@ -110,6 +111,8 @@ type RowDragBinding = {
   onDrop: (zone: DropZone) => void;
   onEnd: () => void;
 };
+
+const EMPTY_EXPORT_COMMANDS: Command[] = [];
 
 /** Left gutter width: wide enough for a 3-digit row number, narrow without one. */
 const HANDLE_WIDTH_NUMBERED = "2rem";
@@ -214,6 +217,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
    * list tabs turn it on so the gutter doubles as a rank index.
    */
   rowNumbers = false,
+  exportCommands: registerExportCommands = true,
 }: {
   rows: GridRow<TRow>[];
   /**
@@ -248,6 +252,12 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   enableFilters?: boolean;
   enableSort?: boolean;
   rowNumbers?: boolean;
+  /**
+   * Register File ▸ Export / Copy for this grid. Default true so a lone grid keeps the
+   * catalog complete. Turn off when two grids share a page — two File menus is a catalog
+   * that has forked.
+   */
+  exportCommands?: boolean;
   /**
    * Sort and filters are controlled when a host passes them, which is what lets a tab
    * persist them. Omitting both keeps the grid's own state, so a tab can adopt one at a
@@ -639,7 +649,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
     });
     return [...downloads, ...copies];
   }, []);
-  useRegisterCommands(exportCommands);
+  useRegisterCommands(registerExportCommands ? exportCommands : EMPTY_EXPORT_COMMANDS);
 
   /**
    * Achieve's header cycle: unsorted → ascending → descending → unsorted.

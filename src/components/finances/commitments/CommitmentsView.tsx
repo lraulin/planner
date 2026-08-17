@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { GridRow } from "@/lib/tree/slice";
 import type { Payday } from "@/lib/finances/classify/income";
 import type { BillCharge } from "@/lib/finances/available";
+import type { RecurringMerchant } from "@/lib/finances/analytics";
 import {
   projectForwardMonths,
   projectForwardPayPeriods,
@@ -44,6 +45,7 @@ import {
   type SpendColumnCtx,
   type SpendGridRow,
 } from "./commitmentColumns";
+import { ReviewList } from "./ReviewList";
 
 function asRows<T extends { id: string }>(items: T[]): GridRow<T>[] {
   return items.map((node) => ({ kind: "node" as const, id: node.id, node, depth: 0 }));
@@ -82,6 +84,7 @@ export function CommitmentsView({
   spendCharges,
   paydays,
   merchants,
+  review,
 }: {
   bills: StoredBillRow[];
   spend: StoredSpend[];
@@ -89,6 +92,7 @@ export function CommitmentsView({
   spendCharges: Record<string, CommitmentCharge[]>;
   paydays: readonly Payday[];
   merchants: readonly string[];
+  review: RecurringMerchant[];
 }) {
   const today = useToday();
   const router = useRouter();
@@ -313,6 +317,17 @@ export function CommitmentsView({
         </p>
       )}
 
+      <section className="shrink-0 rounded border border-rule p-2">
+        <header className="mb-2">
+          <h2 className="text-[0.9375rem] font-medium text-ink">Review</h2>
+          <p className="text-[0.75rem] text-ink-muted">
+            Detected charges that are not yet a commitment. Track as a bill (it charges
+            unless you cancel), track as recurring spend (pizza, groceries), or dismiss.
+          </p>
+        </header>
+        <ReviewList items={review} onError={setError} />
+      </section>
+
       <section className="flex h-[26rem] min-w-0 shrink-0 flex-col overflow-hidden rounded border border-rule">
         <header className="flex flex-wrap items-baseline justify-between gap-2 px-2 pt-2">
           <div>
@@ -321,7 +336,8 @@ export function CommitmentsView({
             </h2>
             <p className="text-[0.75rem] text-ink-muted">
               Charges unless you cancel. {formatUsd(monthlyTotal)} / month ·{" "}
-              {formatUsd(annualTotal)} / year.
+              {formatUsd(annualTotal)} / year. Tick <strong>Hold</strong> to subtract a
+              bill from Available to Spend.
             </p>
           </div>
         </header>
@@ -334,6 +350,7 @@ export function CommitmentsView({
           allColumns={billColumns}
           distinctValues={billDistinct}
           counts={billCounts}
+          commandRow={false}
         />
         <div className="min-h-0 min-w-0 flex-1">
           <DataGrid<BillColumnCtx, BillGridRow>
@@ -345,6 +362,7 @@ export function CommitmentsView({
             selectedIds={billsSelect.selectedIds}
             onSelect={billsSelect.select}
             ariaLabel="Subscriptions and bills"
+            exportCommands={false}
             enableFilters
             enableSort
             sorts={billGrid.sorts}
@@ -388,6 +406,7 @@ export function CommitmentsView({
           allColumns={spendColumns}
           distinctValues={spendDistinct}
           counts={spendCounts}
+          commandRow={false}
         />
         <div className="min-h-0 min-w-0 flex-1">
           <DataGrid<SpendColumnCtx, SpendGridRow>
@@ -399,6 +418,7 @@ export function CommitmentsView({
             selectedIds={spendSelect.selectedIds}
             onSelect={spendSelect.select}
             ariaLabel="Recurring spend"
+            exportCommands={false}
             enableFilters
             enableSort
             sorts={spendGrid.sorts}

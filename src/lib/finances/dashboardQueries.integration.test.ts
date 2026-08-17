@@ -257,6 +257,7 @@ describeDb("loadDashboard", () => {
     expect(intruder.accounts).toEqual([]);
     expect(intruder.bills).toEqual([]);
     expect(intruder.spend).toEqual([]);
+    expect(intruder.review).toEqual([]);
     expect(intruder.billCharges).toEqual([]);
     expect(intruder.pending).toEqual([]);
     expect(intruder.paydays).toEqual([]);

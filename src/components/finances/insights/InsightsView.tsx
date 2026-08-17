@@ -55,7 +55,7 @@ import { FilterSelect } from "./FilterSelect";
 import { OneOffReview } from "./OneOffReview";
 import { Panel, PanelEmpty, StatRow, StatTile } from "./Panel";
 import { RankedBars } from "./RankedBars";
-import { RecurringTable } from "./RecurringTable";
+import Link from "next/link";
 import { SankeyChart } from "./SankeyChart";
 import { SpendingTrendsChart } from "./SpendingTrendsChart";
 import { TransactionAudit } from "./TransactionAudit";
@@ -118,15 +118,7 @@ export function InsightsView({
   // Which declarations the dashboard holds money back for. Passed alongside the analysis
   // rather than folded into `RecurringMerchant`, so `analytics.ts` stays unaware that
   // budgeting exists — it costs a year of a bill, and what to do about that is not its call.
-  const setAsideMerchants = useMemo(
-    () =>
-      new Set(
-        bills
-          .filter((bill) => bill.setAside && (bill.status ?? "active") === "active")
-          .map((bill) => bill.name),
-      ),
-    [bills],
-  );
+
   const { value: view, patch } = useSetting(INSIGHTS_SCOPE, INSIGHTS_CODEC);
   const [reclassifyError, setReclassifyError] = useState<string | null>(null);
   const [reclassified, setReclassified] = useState<string | null>(null);
@@ -643,19 +635,40 @@ export function InsightsView({
           </Panel>
         </div>
 
-        {/* Full width, not half. Five columns, two of them controls, and a charge that
-            carries its observed range underneath — at half width the set-aside figure fell
-            off the edge and the one number you would plan against needed scrolling to. */}
         <div className="grid grid-cols-1 gap-3">
           <Panel
             title="Recurring charges"
-            subtitle="Found by how little they vary, not by category, plus the cadences you declared (▸) — and priced by the year, with what to set aside each month. A range under the charge means the amount swings; the yearly figure is a projection over it."
+            subtitle="Detection still runs here so the cash-flow chart can level bills. Curation — track, edit, dismiss — lives on Commitments."
           >
-            <RecurringTable
-              merchants={analysis.recurring}
-              declarable={filterOptions.merchants}
-              setAsides={setAsideMerchants}
-            />
+            {(() => {
+              const open = analysis.recurring.filter((entry) => !entry.declared).length;
+              const declared = analysis.recurring.filter(
+                (entry) => entry.declared,
+              ).length;
+              return (
+                <p className="text-[0.8125rem] text-ink">
+                  {open > 0 ? (
+                    <>
+                      {open} detected {open === 1 ? "charge" : "charges"} to review on{" "}
+                      <Link href="/finances/commitments">Commitments</Link>
+                      {declared > 0 && ` · ${declared} already tracked`}.
+                    </>
+                  ) : declared > 0 ? (
+                    <>
+                      {declared} tracked on{" "}
+                      <Link href="/finances/commitments">Commitments</Link>. Nothing new
+                      to review.
+                    </>
+                  ) : (
+                    <>
+                      Nothing in this window looks regular enough to review.{" "}
+                      <Link href="/finances/commitments">Commitments</Link> is where
+                      declarations live.
+                    </>
+                  )}
+                </p>
+              );
+            })()}
           </Panel>
         </div>
 

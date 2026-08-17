@@ -27,6 +27,7 @@ export default async function FinancesCommitmentsPage() {
           spendCharges={Object.fromEntries(data.spendCharges)}
           paydays={data.paydays}
           merchants={data.merchants}
+          review={data.review}
         />
       </Suspense>
     </AppShell>

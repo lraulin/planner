@@ -38,6 +38,7 @@ import type { ModuleViewsApi } from "./useModuleViews";
 const EMPTY_GROUP_DIMENSIONS: readonly GridGroupBy[] = [];
 const EMPTY_GROUP_IDS: readonly string[] = [];
 const EMPTY_SWITCHES: readonly GridSwitch[] = [];
+const EMPTY_COMMANDS: Command[] = [];
 
 /**
  * The controls every grid gets, assembled once, in two rows.
@@ -85,6 +86,7 @@ export function GridToolbar({
   right,
   commandCapabilities,
   hostCommands,
+  commandRow = true,
 }: {
   grid: GridState;
   /** Names the grid in the filter dialog title, e.g. "Tasks". */
@@ -134,6 +136,12 @@ export function GridToolbar({
    * and the panel toggle.
    */
   commandCapabilities?: GridCommandCapabilities;
+  /**
+   * The File/View menu row. Default on — a module that is one grid *is* the menu bar.
+   * Two grids on one page would each draw a File menu; pass false and keep the lens
+   * (search, filter, density) so the page still has one catalog.
+   */
+  commandRow?: boolean;
 }) {
   const [filterOpen, setFilterOpen] = useState(false);
   const [fieldsOpen, setFieldsOpen] = useState(false);
@@ -239,7 +247,7 @@ export function GridToolbar({
     revertView,
   ]);
 
-  useRegisterCommands(commands);
+  useRegisterCommands(commandRow ? commands : EMPTY_COMMANDS);
 
   return (
     <>
@@ -251,9 +259,16 @@ export function GridToolbar({
       */}
       <TabToolbar
         commandRow={
-          <CommandBar commands={commands} selection={commandCapabilities?.selection} />
+          commandRow ? (
+            <CommandBar
+              commands={commands}
+              selection={commandCapabilities?.selection}
+            />
+          ) : undefined
         }
-        pinned={<OverflowMenu label="More commands for this grid" />}
+        pinned={
+          commandRow ? <OverflowMenu label="More commands for this grid" /> : undefined
+        }
       >
         {/*
           Ahead of `left`: the view decides what the rest of the bar is even showing, and a
