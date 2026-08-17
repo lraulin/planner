@@ -441,13 +441,17 @@ already holds, and treat `false` as a stored value rather than as absent.
 
 ## Toolbar
 
-**Two rows: verbs above, lens below.**
+**Two rows: verbs above, lens below — lens on the data.**
 
 `GridToolbar` renders both. Named menus live in the **shell**, above the page bar
 (`navigation.md`) — they are not this component's first row. Row 1 is the page verb row:
-the handful of commands promoted to icon buttons, and the selection chip. Row 2 is the
-lens: view picker, scope pickers, search, `Filter…`, `Group by`, the tab's switches, density,
-with the chip bar under it.
+the handful of commands promoted to icon buttons, and the selection chip (“what can I do”).
+Row 2 is the lens: view picker, scope pickers, search, `Filter…`, `Group by`, the tab's
+switches, density, with the chip bar under it (“how am I looking”). The lens belongs to
+the **grid**, not to the page chrome, so it is the last thing above the rows. That is
+deliberate and not Achieve's Win32 order (toolbar glued to the menu). Do not swap the
+rows to restore that, and do not merge them because the desktop app had one strip —
+`navigation.md` states when a single strip is allowed.
 
 One row held both and the result was a flat run of identically-bordered controls where `New` and
 `Rename` sat between `Group by` and `Density` with nothing to say which kind of thing was which.

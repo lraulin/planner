@@ -131,12 +131,25 @@ Density keeps its bordered segment. Every navigation switcher is a tab.
 
 ### The bar gets its own row, and only when it earns one
 
-Three tiers, in this order, even though this is a hybrid web app with a sidebar:
+Four tiers, in this order, even though this is a hybrid web app with a sidebar:
 
 1. **Application menu** — File / New / Item / Organize / View / Tools. Belongs to the app.
 2. **Page bar** — sibling destinations inside this module. Belongs to the module.
-3. **Page toolbars** — icon row, selection chip, lens (`Filter…`, search, grouping). Belong to
-   the content.
+3. **Page verb row** — icon buttons and the selection chip. “What can I _do_?” Belongs to
+   the page.
+4. **Lens row** — view picker, search, `Filter…`, `Group by`, density. “How am I _looking_
+   at it?” Belongs to the grid, so it sits **immediately above the data**.
+
+Achieve put a Win32 toolbar directly under the menus. We do not copy that. The verb row is
+the page's actions; the lens changes what the grid shows, and proximity is the rule that
+wins: cause sits next to effect. Reversing them to look more like 2005, or folding both
+into one strip because “the desktop app had one toolbar,” is the mistake these rows exist
+to prevent. A single combined strip is allowed only when both sets are short; the moment
+verbs or lens controls fill the width, they stay two rows, verbs above, lens on the data.
+
+On a dual-grid page the verb row stays page-level. Each grid keeps (or shares) a lens that
+is visibly about that grid. Selection-specific verbs grow on the verb row so they do not
+push Filter / Group / Search farther from the rows they affect.
 
 Not folded into the command row: navigation sits at the rank of the sidebar, and putting it
 among the verbs is the flattening `TabToolbar`'s two-row split already exists to prevent, one

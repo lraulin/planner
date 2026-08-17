@@ -15,8 +15,9 @@ import { CommandGlyph } from "@/components/icons/commandIcons";
  * and wrap into each other unpredictably.
  *
  * Verbs first because "what can I do" is the question you arrive with; the lens answers "what am I
- * looking at", which the grid itself is already showing you. ~28px is the price and it buys a bar
- * that can be read in one sweep.
+ * looking at" and sits on the grid so Filter / Group / Search stay next to the rows they change.
+ * That is not Achieve's toolbar-under-the-menu order — `navigation.md`. ~28px is the price and it
+ * buys a bar that can be read in one sweep.
  *
  * Below `md` there is **one** row, the lens, panning sideways with `⋯` pinned outside the scroller.
  * The verbs are all inside `⋯` down there — `responsive.md`, adaptive not shrunken: two rows on a
@@ -27,7 +28,7 @@ export function TabToolbar({
   children,
   pinned,
 }: {
-  /** Row 1: menu bar, icon segments, selection context. Desktop only. */
+  /** Row 1: page verb row — icon segments and selection context. Desktop only. */
   commandRow?: React.ReactNode;
   /**
    * Row 2: the lens — view picker, scope, search, filter, grouping, density.

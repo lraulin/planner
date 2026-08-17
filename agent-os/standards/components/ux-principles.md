@@ -45,10 +45,11 @@ document differs from the original, it is because Achieve Planner's model differ
 
 A collapsible **sidebar** for where you can go; a **menu bar** (File leftmost) as the
 complete catalog of what you can do, sitting **above the page bar** as application chrome;
-an **icon row** for the handful of commands used most sessions; a pinnable **Commands
-panel** as that same tree left open; a `⌘K` **palette** as the searchable overlay (plus
-Go-to). Below `md`, **`⋯` is the menu bar**, on the shell. Views and commands each live in
-exactly one registry. Full rules, including why a command without a menu row is not shipped:
+an **icon row** of page verbs; a **lens** (filter, search, grouping) immediately above the
+grid — not a 2000s toolbar glued to the menu; a pinnable **Commands panel** as that same
+tree left open; a `⌘K` **palette** as the searchable overlay (plus Go-to). Below `md`,
+**`⋯` is the menu bar**, on the shell. Views and commands each live in exactly one
+registry. Full rules, including why a command without a menu row is not shipped:
 **`navigation.md`**.
 
 ### Grid + drawer is the default
