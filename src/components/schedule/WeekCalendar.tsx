@@ -257,6 +257,7 @@ export function WeekCalendar({
           const state =
             (arg.event.extendedProps.checkState as AppointmentCheck) ?? "open";
           const appointmentId = arg.event.extendedProps.appointmentId as string;
+          const isRecurring = Boolean(arg.event.extendedProps.isRecurring);
           const mark = checkStateMark(state);
 
           return (
@@ -287,6 +288,11 @@ export function WeekCalendar({
                 style={arg.event.textColor ? { color: arg.event.textColor } : undefined}
               >
                 {arg.event.title}
+                {isRecurring && (
+                  <span className="ml-1 opacity-70" title="Part of a repeating series">
+                    ↻
+                  </span>
+                )}
               </span>
             </div>
           );

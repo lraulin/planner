@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  appointmentIsRecurring,
+  appointmentRecurrenceSummary,
   expandRecurrence,
   expandTimeChartAreas,
   type RecurrenceInput,
@@ -257,6 +259,65 @@ describe("expandRecurrence — monthly and yearly", () => {
       ...window("2025-01-01", "2026-01-01"),
     );
     expect(keysOf(occ)).toEqual(["2025-02-28"]);
+  });
+});
+
+describe("appointmentIsRecurring / appointmentRecurrenceSummary", () => {
+  it("does not treat a one-off as repeating", () => {
+    expect(
+      appointmentIsRecurring({
+        recurrenceFrequency: "none",
+        externalSeriesId: null,
+      }),
+    ).toBe(false);
+    expect(
+      appointmentRecurrenceSummary({
+        recurrenceFrequency: "none",
+        recurrenceInterval: 1,
+        externalSeriesId: null,
+      }),
+    ).toBe("Does not repeat");
+  });
+
+  it("marks a Google series instance as repeating even though its frequency is none", () => {
+    // The mirror stores each expanded day with recurrenceFrequency = "none". The only
+    // local signal it belongs to a series is Google's recurringEventId. Forgetting that
+    // is how standup showed "Does not repeat" on every instance.
+    expect(
+      appointmentIsRecurring({
+        recurrenceFrequency: "none",
+        externalSeriesId: "evt-standup",
+      }),
+    ).toBe(true);
+    expect(
+      appointmentRecurrenceSummary({
+        recurrenceFrequency: "none",
+        recurrenceInterval: 1,
+        externalSeriesId: "evt-standup",
+      }),
+    ).toBe("Repeats in Google Calendar");
+  });
+
+  it("still describes a planner-owned rule", () => {
+    expect(
+      appointmentRecurrenceSummary({
+        recurrenceFrequency: "weekly",
+        recurrenceInterval: 2,
+      }),
+    ).toBe("Every 2 weeks");
+  });
+
+  it("keeps a Google instance as one occurrence, marked recurring", () => {
+    const occ = expandRecurrence(
+      master({
+        ...at9("2026-08-17"),
+        recurrenceFrequency: "none",
+        externalSeriesId: "evt-standup",
+      }),
+      ...window("2026-08-16", "2026-08-23"),
+    );
+    expect(occ).toHaveLength(1);
+    expect(occ[0]?.isRecurring).toBe(true);
   });
 });
 

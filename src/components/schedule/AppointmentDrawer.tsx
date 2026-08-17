@@ -25,7 +25,9 @@ import {
   type AppointmentFormPayload,
 } from "@/app/schedule/actions";
 import { GOOGLE_EVENT_COLORS } from "@/lib/google/eventColors";
+import { googleCalendarEventUrl } from "@/lib/google/eventUrl";
 import { toDateKey, WEEKDAY_LABELS } from "@/lib/schedule/geometry";
+import { appointmentRecurrenceSummary } from "@/lib/schedule/recurrence";
 import {
   checkStateLabel,
   checkStateMark,
@@ -49,19 +51,6 @@ type Props = {
 function toLocalInputValue(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-/** Short label for a collapsed appointment recurrence header. */
-function appointmentRecurrenceSummary(
-  frequency: RecurrenceFrequency,
-  interval: number,
-): string {
-  if (frequency === "none") return "Does not repeat";
-  const n = Math.max(1, interval || 1);
-  const unit = { daily: "day", weekly: "week", monthly: "month", yearly: "year" }[
-    frequency
-  ];
-  return n === 1 ? `Every ${unit}` : `Every ${n} ${unit}s`;
 }
 
 function isFullAppointment(v: Appointment | DraftAppointment): v is Appointment {
@@ -166,6 +155,11 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
   const [saving, setSaving] = useState(false);
 
   const projects = nodes.filter((n) => n.type === "project" && !n.hidden);
+  const googleSeriesId = full ? value.externalSeriesId : null;
+  const googleSeriesUrl =
+    googleSeriesId && full && value.externalCalendarId
+      ? googleCalendarEventUrl(googleSeriesId, value.externalCalendarId)
+      : null;
 
   function markDirty() {
     setDirty(true);
@@ -492,123 +486,149 @@ function AppointmentForm({ value, nodes, onClose, onSaved, onDelete }: FormProps
               title="Recurrence"
               collapsible
               defaultOpen={recurrenceFrequency !== "none"}
-              summary={appointmentRecurrenceSummary(
+              summary={appointmentRecurrenceSummary({
                 recurrenceFrequency,
                 recurrenceInterval,
-              )}
+                externalSeriesId: googleSeriesId,
+              })}
             >
-              <FieldGrid>
-                <label className="flex flex-col gap-1 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
-                  Pattern
-                  <select
-                    className="rounded border border-rule bg-surface px-2 py-1.5 text-[0.875rem] font-normal normal-case tracking-normal text-ink"
-                    value={recurrenceFrequency}
-                    onChange={(e) => {
-                      setRecurrenceFrequency(e.target.value as RecurrenceFrequency);
-                      markDirty();
-                    }}
-                  >
-                    <option value="none">None</option>
-                    <option value="daily">Daily</option>
-                    <option value="weekly">Weekly</option>
-                    <option value="monthly">Monthly</option>
-                    <option value="yearly">Yearly</option>
-                  </select>
-                </label>
-                {recurrenceFrequency !== "none" && (
-                  <label className="flex flex-col gap-1 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
-                    Every
-                    <input
-                      type="number"
-                      min={1}
-                      className="rounded border border-rule bg-surface px-2 py-1.5 text-[0.875rem] font-normal normal-case tracking-normal text-ink"
-                      value={recurrenceInterval}
-                      onChange={(e) => {
-                        setRecurrenceInterval(Math.max(1, Number(e.target.value) || 1));
-                        markDirty();
-                      }}
-                    />
-                  </label>
-                )}
-              </FieldGrid>
-
-              {recurrenceFrequency === "weekly" && (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {WEEKDAY_LABELS.map((label, d) => (
-                    <label
-                      key={label}
-                      className="flex items-center gap-1 text-[0.8125rem] font-normal normal-case tracking-normal text-ink"
+              {googleSeriesId ? (
+                <div className="space-y-2 text-[0.8125rem] text-ink">
+                  <p>
+                    This is one day of a repeating series. The pattern lives in Google
+                    Calendar.
+                  </p>
+                  {googleSeriesUrl && (
+                    <a
+                      href={googleSeriesUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[var(--select-edge)] underline-offset-2 hover:underline"
                     >
-                      <input
-                        type="checkbox"
-                        checked={recurrenceByWeekday.includes(d)}
-                        onChange={() => toggleWeekday(d)}
-                      />
-                      {label}
+                      Open in Google Calendar
+                    </a>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <FieldGrid>
+                    <label className="flex flex-col gap-1 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
+                      Pattern
+                      <select
+                        className="rounded border border-rule bg-surface px-2 py-1.5 text-[0.875rem] font-normal normal-case tracking-normal text-ink"
+                        value={recurrenceFrequency}
+                        onChange={(e) => {
+                          setRecurrenceFrequency(e.target.value as RecurrenceFrequency);
+                          markDirty();
+                        }}
+                      >
+                        <option value="none">None</option>
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                        <option value="yearly">Yearly</option>
+                      </select>
                     </label>
-                  ))}
-                </div>
-              )}
+                    {recurrenceFrequency !== "none" && (
+                      <label className="flex flex-col gap-1 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
+                        Every
+                        <input
+                          type="number"
+                          min={1}
+                          className="rounded border border-rule bg-surface px-2 py-1.5 text-[0.875rem] font-normal normal-case tracking-normal text-ink"
+                          value={recurrenceInterval}
+                          onChange={(e) => {
+                            setRecurrenceInterval(
+                              Math.max(1, Number(e.target.value) || 1),
+                            );
+                            markDirty();
+                          }}
+                        />
+                      </label>
+                    )}
+                  </FieldGrid>
 
-              {recurrenceFrequency !== "none" && (
-                <div className="mt-3 space-y-2 text-[0.8125rem] text-ink">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      name="rec-end"
-                      checked={recurrenceEnd === "never"}
-                      onChange={() => {
-                        setRecurrenceEnd("never");
-                        markDirty();
-                      }}
-                    />
-                    No end date
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      name="rec-end"
-                      checked={recurrenceEnd === "count"}
-                      onChange={() => {
-                        setRecurrenceEnd("count");
-                        markDirty();
-                      }}
-                    />
-                    End after
-                    <input
-                      type="number"
-                      min={1}
-                      className="w-16 rounded border border-rule px-1 py-0.5"
-                      value={recurrenceCount}
-                      onChange={(e) => {
-                        setRecurrenceCount(Math.max(1, Number(e.target.value) || 1));
-                        markDirty();
-                      }}
-                    />
-                    occurrences
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      name="rec-end"
-                      checked={recurrenceEnd === "until"}
-                      onChange={() => {
-                        setRecurrenceEnd("until");
-                        markDirty();
-                      }}
-                    />
-                    End by
-                    <input
-                      type="date"
-                      className="rounded border border-rule px-1 py-0.5"
-                      value={recurrenceUntil}
-                      onChange={(e) => {
-                        setRecurrenceUntil(e.target.value);
-                        markDirty();
-                      }}
-                    />
-                  </label>
-                </div>
+                  {recurrenceFrequency === "weekly" && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {WEEKDAY_LABELS.map((label, d) => (
+                        <label
+                          key={label}
+                          className="flex items-center gap-1 text-[0.8125rem] font-normal normal-case tracking-normal text-ink"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={recurrenceByWeekday.includes(d)}
+                            onChange={() => toggleWeekday(d)}
+                          />
+                          {label}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+
+                  {recurrenceFrequency !== "none" && (
+                    <div className="mt-3 space-y-2 text-[0.8125rem] text-ink">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="rec-end"
+                          checked={recurrenceEnd === "never"}
+                          onChange={() => {
+                            setRecurrenceEnd("never");
+                            markDirty();
+                          }}
+                        />
+                        No end date
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="rec-end"
+                          checked={recurrenceEnd === "count"}
+                          onChange={() => {
+                            setRecurrenceEnd("count");
+                            markDirty();
+                          }}
+                        />
+                        End after
+                        <input
+                          type="number"
+                          min={1}
+                          className="w-16 rounded border border-rule px-1 py-0.5"
+                          value={recurrenceCount}
+                          onChange={(e) => {
+                            setRecurrenceCount(
+                              Math.max(1, Number(e.target.value) || 1),
+                            );
+                            markDirty();
+                          }}
+                        />
+                        occurrences
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="rec-end"
+                          checked={recurrenceEnd === "until"}
+                          onChange={() => {
+                            setRecurrenceEnd("until");
+                            markDirty();
+                          }}
+                        />
+                        End by
+                        <input
+                          type="date"
+                          className="rounded border border-rule px-1 py-0.5"
+                          value={recurrenceUntil}
+                          onChange={(e) => {
+                            setRecurrenceUntil(e.target.value);
+                            markDirty();
+                          }}
+                        />
+                      </label>
+                    </div>
+                  )}
+                </>
               )}
             </Section>
           </div>

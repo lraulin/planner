@@ -40,9 +40,46 @@ export type RecurrenceInput = {
   recurrenceEnd: RecurrenceEnd;
   recurrenceCount: number | null;
   recurrenceUntil: Date | null;
+  /**
+   * Google `recurringEventId`. Instances are stored with `recurrenceFrequency = "none"`
+   * because Google expands the series; this is what still marks them as repeating.
+   */
+  externalSeriesId?: string | null;
 };
 
 const MS_DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * Whether this row is part of a series. Google instances keep `recurrenceFrequency`
+ * at `"none"` on purpose (the mirror stores one concrete day, not a rule), so the
+ * series id is the only local signal they repeat.
+ */
+export function appointmentIsRecurring(appointment: {
+  recurrenceFrequency: RecurrenceFrequency;
+  externalSeriesId?: string | null;
+}): boolean {
+  return (
+    appointment.recurrenceFrequency !== "none" || Boolean(appointment.externalSeriesId)
+  );
+}
+
+/** Collapsed recurrence-header label. Google series have no local rule to describe. */
+export function appointmentRecurrenceSummary(appointment: {
+  recurrenceFrequency: RecurrenceFrequency;
+  recurrenceInterval: number;
+  externalSeriesId?: string | null;
+}): string {
+  if (appointment.externalSeriesId) return "Repeats in Google Calendar";
+  if (appointment.recurrenceFrequency === "none") return "Does not repeat";
+  const n = Math.max(1, appointment.recurrenceInterval || 1);
+  const unit = {
+    daily: "day",
+    weekly: "week",
+    monthly: "month",
+    yearly: "year",
+  }[appointment.recurrenceFrequency];
+  return n === 1 ? `Every ${unit}` : `Every ${n} ${unit}s`;
+}
 
 function durationMs(start: Date, end: Date): number {
   return Math.max(0, end.getTime() - start.getTime());
@@ -59,7 +96,7 @@ function occurrenceOf(master: RecurrenceInput, start: Date): Occurrence {
     allDay: master.allDay,
     checkState: master.checkState,
     projectId: master.projectId,
-    isRecurring: master.recurrenceFrequency !== "none",
+    isRecurring: appointmentIsRecurring(master),
   };
 }
 
@@ -232,6 +269,7 @@ export function appointmentToRecurrenceInput(a: Appointment): RecurrenceInput {
     recurrenceEnd: a.recurrenceEnd,
     recurrenceCount: a.recurrenceCount,
     recurrenceUntil: a.recurrenceUntil,
+    externalSeriesId: a.externalSeriesId,
   };
 }
 

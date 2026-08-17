@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { appointments, users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import {
@@ -478,6 +478,28 @@ describeDb("loadSchedule", () => {
     expect(payload.occurrences).toHaveLength(1);
     expect(payload.occurrences[0].startAt.getDay()).toBe(1);
     expect(payload.occurrences[0].isRecurring).toBe(true);
+  });
+
+  it("marks a Google series instance as recurring even though its frequency is none", async () => {
+    // The mirror stores each expanded day with recurrenceFrequency = "none". If
+    // loadSchedule only looked at that column, standup would draw as a one-off.
+    const { startAt, endAt } = hourAt("2026-03-03");
+    await db.insert(appointments).values({
+      userId,
+      subject: "Dev Team Standup",
+      startAt,
+      endAt,
+      recurrenceFrequency: "none",
+      externalSource: "google",
+      externalId: "evt1_20260303T130000Z",
+      externalSeriesId: "evt1",
+      externalCalendarId: "primary",
+    });
+    const payload = await loadSchedule(userId, {
+      range: weekRange(fromDateKey("2026-03-01")),
+    });
+    expect(payload.occurrences).toHaveLength(1);
+    expect(payload.occurrences[0]?.isRecurring).toBe(true);
   });
 
   it("omits a one-off appointment from a week it does not touch", async () => {
