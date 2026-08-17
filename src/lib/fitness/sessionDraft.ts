@@ -28,6 +28,8 @@ export type DraftExercise = {
   equipment: ExerciseEquipment;
   barWeight: number;
   unilateral: boolean;
+  /** That lift, that day — not catalog notes. */
+  notes: string;
   sets: DraftSet[];
 };
 
@@ -203,6 +205,7 @@ export function draftToSessionInput(
       return {
         exerciseId: known?.id || block.exerciseId || undefined,
         exerciseName: name || known?.name,
+        notes: block.notes,
         sets,
       };
     })
@@ -232,6 +235,7 @@ export function draftBlockFromCatalog(
     equipment: exercise.equipment,
     barWeight: exercise.barWeight,
     unilateral: exercise.unilateral,
+    notes: "",
     sets: [emptySetForExercise(exercise)],
   };
 }
@@ -244,6 +248,7 @@ export function emptyDraftBlock(): DraftExercise {
     equipment: "barbell",
     barWeight: DEFAULT_BAR_WEIGHT_LB,
     unilateral: false,
+    notes: "",
     sets: [emptyBilateralSet("lb")],
   };
 }

@@ -57,6 +57,7 @@ function draftFromDetail(
         equipment,
         barWeight,
         unilateral,
+        notes: ex.notes,
         sets: ex.sets.map((s) => ({
           reps: s.reps == null ? "" : String(s.reps),
           repsLeft: s.repsLeft == null ? "" : String(s.repsLeft),
@@ -424,6 +425,11 @@ export function SessionEditor({
                 onRemoveSet={(si) => removeSet(bi, si)}
                 onAddSet={() => addSet(bi)}
                 onCopyLast={(sets) => copyLastSets(bi, sets)}
+                onUpdateNotes={(notes) =>
+                  setBlocksAndSave((current) =>
+                    current.map((b, i) => (i === bi ? { ...b, notes } : b)),
+                  )
+                }
               />
             ))}
 
@@ -474,6 +480,7 @@ function ExerciseBlock({
   onRemoveSet,
   onAddSet,
   onCopyLast,
+  onUpdateNotes,
 }: {
   block: DraftExercise;
   catalog: ExerciseSummary[];
@@ -487,6 +494,7 @@ function ExerciseBlock({
   onRemoveSet: (setIndex: number) => void;
   onAddSet: () => void;
   onCopyLast: (sets: WorkoutSetView[]) => void;
+  onUpdateNotes: (notes: string) => void;
 }) {
   const uni = effectiveUnilateral(block.equipment, block.unilateral);
   const showWeight = usesWeight(block.equipment);
@@ -579,6 +587,11 @@ function ExerciseBlock({
           >
             + Add set
           </button>
+          <ExerciseNotes
+            key={block.exerciseId}
+            value={block.notes}
+            onChange={onUpdateNotes}
+          />
         </>
       )}
     </div>
@@ -819,6 +832,46 @@ function PlateLine({
   const hint = plateHint(parseWeight(weight), unit, barWeightLb);
   if (!hint) return null;
   return <p className="pl-8 font-mono text-[0.6875rem] text-ink-faint">{hint}</p>;
+}
+
+function ExerciseNotes({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (notes: string) => void;
+}) {
+  const [open, setOpen] = useState(value.trim() !== "");
+  const snippet = value.trim().replace(/\s+/g, " ");
+  const collapsedLabel = snippet.length > 48 ? `${snippet.slice(0, 47)}…` : snippet;
+
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        aria-expanded={open}
+        className="flex max-w-full items-center gap-1.5 text-[0.75rem] text-ink-muted hover:text-ink"
+      >
+        <span aria-hidden>{open ? "▾" : "▸"}</span>
+        <span>Notes</span>
+        {!open && collapsedLabel ? (
+          <span className="min-w-0 truncate font-normal text-ink-faint">
+            {collapsedLabel}
+          </span>
+        ) : null}
+      </button>
+      {open ? (
+        <textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          rows={2}
+          placeholder="Form, setup, how it felt…"
+          className="mt-1 w-full rounded border border-rule bg-surface px-2 py-1.5 text-[0.875rem] text-ink"
+        />
+      ) : null}
+    </div>
+  );
 }
 
 function LastSessionHint({

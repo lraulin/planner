@@ -11,6 +11,7 @@ import {
   deleteExercise,
   deleteSession,
   findOrCreateExercise,
+  replaceSession,
   updateExercise,
 } from "./mutations";
 import {
@@ -141,6 +142,74 @@ describeDb("fitness sessions", () => {
       barWeight: 15,
       notes: "elbows in",
     });
+  });
+
+  it("persists a per-exercise session note independently of the other lift", async () => {
+    const bench = await createExercise(userId, "Bench Press");
+    const ohp = await createExercise(userId, "OHP");
+    const sessionId = await createSession(userId, {
+      performedAt: new Date("2026-08-17T18:00:00Z"),
+      exercises: [
+        {
+          exerciseId: bench,
+          notes: "paused at chest",
+          sets: [{ reps: 5, weight: 185 }],
+        },
+        {
+          exerciseId: ohp,
+          sets: [{ reps: 8, weight: 95 }],
+        },
+      ],
+    });
+
+    let detail = await getSessionDetail(userId, sessionId);
+    expect(detail!.exercises[0].notes).toBe("paused at chest");
+    expect(detail!.exercises[1].notes).toBe("");
+
+    await replaceSession(userId, sessionId, {
+      performedAt: detail!.performedAt,
+      title: detail!.title,
+      notes: detail!.notes,
+      durationMinutes: detail!.durationMinutes,
+      exercises: [
+        {
+          exerciseId: bench,
+          notes: "belt on last set",
+          sets: [{ reps: 5, weight: 185 }],
+        },
+        {
+          exerciseId: ohp,
+          notes: "",
+          sets: [{ reps: 8, weight: 95 }],
+        },
+      ],
+    });
+
+    detail = await getSessionDetail(userId, sessionId);
+    expect(detail!.exercises[0].notes).toBe("belt on last set");
+    expect(detail!.exercises[1].notes).toBe("");
+
+    await replaceSession(userId, sessionId, {
+      performedAt: detail!.performedAt,
+      title: detail!.title,
+      notes: detail!.notes,
+      durationMinutes: detail!.durationMinutes,
+      exercises: [
+        {
+          exerciseId: bench,
+          notes: "",
+          sets: [{ reps: 5, weight: 185 }],
+        },
+        {
+          exerciseId: ohp,
+          notes: "",
+          sets: [{ reps: 8, weight: 95 }],
+        },
+      ],
+    });
+
+    detail = await getSessionDetail(userId, sessionId);
+    expect(detail!.exercises[0].notes).toBe("");
   });
 
   it("reuses an existing exercise by name", async () => {

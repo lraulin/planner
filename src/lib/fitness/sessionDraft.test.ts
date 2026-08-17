@@ -26,6 +26,7 @@ function baseDraft(overrides: Partial<SessionDraft> = {}): SessionDraft {
         equipment: "barbell",
         barWeight: 45,
         unilateral: false,
+        notes: "",
         sets: [
           {
             reps: "5",
@@ -76,6 +77,7 @@ describe("draftToSessionInput", () => {
             equipment: "dumbbell",
             barWeight: 45,
             unilateral: true,
+            notes: "",
             sets: [
               {
                 reps: "",
@@ -97,6 +99,22 @@ describe("draftToSessionInput", () => {
       weight: 50,
       unit: "lb",
     });
+  });
+
+  it("includes a per-exercise note so replaceSession cannot wipe it", () => {
+    const input = draftToSessionInput(
+      baseDraft({
+        exercises: [{ ...baseDraft().exercises[0], notes: "paused at chest" }],
+      }),
+      catalog,
+    );
+    expect(input?.exercises[0].notes).toBe("paused at chest");
+  });
+
+  it("sends an empty string when the note is blank", () => {
+    const input = draftToSessionInput(baseDraft(), catalog);
+    // Omit this and replaceSession writes notes: undefined ?? "" over a stored note.
+    expect(input?.exercises[0].notes).toBe("");
   });
 });
 
