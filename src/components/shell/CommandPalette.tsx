@@ -11,6 +11,7 @@ import {
 } from "@/lib/commands/registry";
 import { formatBindings, matchBindings } from "@/lib/commands/bindings";
 import { OPEN_PALETTE } from "@/lib/commands/chords";
+import { CommandGlyph } from "@/components/icons/commandIcons";
 import { COMMAND_PALETTE_EVENT } from "./commandEvent";
 import { useCommands } from "./CommandProvider";
 import { useGlobalCommands } from "./globalCommands";
@@ -24,8 +25,8 @@ import { useGlobalCommands } from "./globalCommands";
  * one registry, listed here and rendered again behind each module's `⋯` (`registry.ts`).
  *
  * Built on `ModalShell` per `modal-pattern.md`, so it gets the roles, capture-phase Escape,
- * focus handling, and the below-`md` bottom sheet for free — though on a phone this is
- * reached only from the More sheet's Search row, since there is no `⌘K` on touch.
+ * and focus handling for free. There is no palette below `md` (`responsive.md`): `⋯` is the
+ * phone's menu, and the More sheet is destinations only — it has no Search row.
  *
  * Unmounted rather than hidden while closed, per the same standard: the query is a draft,
  * and the next `⌘K` should start empty rather than showing the last thing you searched for.
@@ -175,7 +176,7 @@ function PaletteDialog({ onClose }: { onClose: () => void }) {
                   data-active={index === active}
                   onClick={() => choose(command)}
                   onMouseEnter={() => !command.disabled && setActive(index)}
-                  className={`flex w-full items-center gap-6 px-4 py-1.5 text-left text-[0.8125rem] leading-6 ${
+                  className={`flex w-full items-center gap-2 px-4 py-1.5 text-left text-[0.8125rem] leading-6 ${
                     command.disabled
                       ? "cursor-not-allowed text-ink-faint"
                       : command.destructive
@@ -183,6 +184,9 @@ function PaletteDialog({ onClose }: { onClose: () => void }) {
                         : "text-ink"
                   } ${!command.disabled && index === active ? "bg-surface-raised" : ""}`}
                 >
+                  <span className="flex h-4 w-4 flex-none items-center justify-center">
+                    <CommandGlyph icon={command.icon} />
+                  </span>
                   <span className="flex-1 truncate">{command.label}</span>
                   {formatBindings(command.bindings) && (
                     <span className="tabular flex-none text-[0.6875rem] text-ink-faint">

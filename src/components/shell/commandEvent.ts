@@ -2,7 +2,7 @@
  * How a button reaches the command palette.
  *
  * Same shape and the same reason as `capture/event.ts`: the palette owns its own open
- * state, and the buttons that open it (the sidebar's Search row, the phone's More sheet)
+ * state, and the buttons that open it (the sidebar's Search… row, View ▸ Command palette)
  * are not its children. An event on `window` beats hoisting that state into a provider
  * whose only job would be a boolean.
  *

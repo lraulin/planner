@@ -9,16 +9,24 @@ be a permanent tab and the eleventh was already too many.
 
 Six surfaces now, each answering a different question.
 
-| Surface                      | Question it answers              | Role                              | Where                                  |
-| ---------------------------- | -------------------------------- | --------------------------------- | -------------------------------------- |
-| **Sidebar** (`⌘K` to search) | "Where can I go?"                | Visual catalog of destinations    | Desktop, always                        |
-| **Menu bar**                 | "What can I do here?"            | **Complete catalog of commands**  | Application chrome, above the page bar |
-| **Page bar**                 | "Where else can I go _in here_?" | Destinations inside this module   | Below the menu, above page toolbars    |
-| **Commands panel**           | "…show me all of it at once"     | The same tree left open           | Desktop, opt-in, remembered            |
-| **Row context menu**         | "What can I do to _this_ row?"   | Narrow, row-scoped subset         | Right-click / long-press a row         |
-| **Command palette** (`⌘K`)   | "What can this app do?"          | Searchable overlay + Go-to extras | Desktop, on demand                     |
+| Surface                    | Question it answers              | Role                                               | Where                                  |
+| -------------------------- | -------------------------------- | -------------------------------------------------- | -------------------------------------- |
+| **Sidebar**                | "Where can I go?"                | Visual catalog of destinations. Search… opens `⌘K` | Desktop, always                        |
+| **Menu bar**               | "What can I do here?"            | **Complete catalog of commands**                   | Application chrome, above the page bar |
+| **Page bar**               | "Where else can I go _in here_?" | Destinations inside this module                    | Below the menu, above page toolbars    |
+| **Commands panel**         | "…show me all of it at once"     | The same tree left open                            | Desktop, opt-in, remembered            |
+| **Row context menu**       | "What can I do to _this_ row?"   | Narrow, row-scoped subset                          | Right-click / long-press a row         |
+| **Command palette** (`⌘K`) | "What can this app do?"          | Searchable overlay + Go-to extras                  | Desktop, on demand                     |
 
 The menu bar is the **source of truth for completeness**. Toolbars and the Commands panel / palette are accelerators. A user who never opens `⌘K` must still be able to find every command by reading the menus.
+
+**Panel vs palette.** Complementary accelerators of the same catalog, not two versions of
+one control. The panel is the menu tree left open — spatial, hierarchical, no typing. The
+palette is the only command-search surface (`⌘K`, View ▸ Command palette, and the sidebar
+Search… row, which teaches the chord rather than implementing a second search). Do **not**
+add a filter box to the panel: that would make the two compete, and the panel's value is
+that the organization stays visible. Nested families stay expanded as headed groups in the
+panel; folding is for the menu bar and the row menu, where space is scarce.
 
 Below `md` the sidebar is replaced by the bottom nav plus the More sheet, there is no palette and
 no desktop menu bar, and no panel — **`⋯` becomes the menu bar**, rendering the same tree with the
@@ -311,12 +319,13 @@ organization removed.
   toolbar item must also be a menu command, because that row is hidden below `md`. Frequency
   and immediacy, not completeness.
 - The **Commands panel is the same tree left open.** Same labels, same sections, same
-  disabled reasons. Register File and the named menus at the shell — a File menu that exists
-  only as a `CommandBar` prop is invisible to the panel, to `⋯`, and to any destination that
-  never mounts a `CommandBar`.
-- The **palette lists every menu command, plus Go-to.** Shortcuts are printed. **View ▸
-  Command palette** is the discoverable invocation; do not rely on people already knowing
-  `⌘K`.
+  disabled reasons. Nested families stay expanded as headed groups — folding is a menu-bar
+  and row-menu concern. It is not a search surface. Register File and the named menus at the
+  shell — a File menu that exists only as a `CommandBar` prop is invisible to the panel, to
+  `⋯`, and to any destination that never mounts a `CommandBar`.
+- The **palette lists every menu command, plus Go-to.** Shortcuts and icons are printed.
+  **View ▸ Command palette** and the sidebar Search… row are the discoverable invocations;
+  do not rely on people already knowing `⌘K`.
 - The **row menu is the one narrow surface**, because it is about one row. A command opts in
   with `rowMenu`, and it is the same command with the same label — not a hand-written
   near-copy.
