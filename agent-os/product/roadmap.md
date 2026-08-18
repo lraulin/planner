@@ -806,6 +806,19 @@ period)` so money already spent stops being held twice and only going over bites
   _within_ one. Wants more thought before a spec: whether a quasi-account is a row
   on an account or a third commitment table, whether contributions can be skipped
   without breaking the target date, and how it reads against Goals below.
+
+  **Why this matters, from the real data (2026-08-18).** 360 Savings was fed by an
+  automatic "Paycheck Percentage Transfer" of ~$693 per paycheck. Over the 13 months
+  to Aug 2026 that moved **$20,168.81 in** and **$19,760.49 back out** — net **+$408**
+  from transfers plus $30 of interest, with the balance orbiting $1,100–$2,700 the
+  whole time and touching $0.96 once. Automatic saving that is reversible on a whim is
+  not saving; it is a two-week delay. Lee's reading: stop the automatic transfer and
+  make putting money into savings a **deliberate decision against what is actually
+  available**. That removes the only friction currently in place, which is exactly what
+  earmarking has to replace — a named, visible reserve you must decide to spend, rather
+  than an unlabelled balance you can quietly drain. The feature's job is to make the
+  savings account behave like savings, not to add bookkeeping.
+
 - **Then:** **integration with Goals** (save for X, fund project Y) — the natural
   consumer of set-asides above; AI advice on top of commitment + history data.
 - **Later — classification that isn't the merchant's name.** Raised 2026-08-12; not in
