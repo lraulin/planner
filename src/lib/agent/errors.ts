@@ -54,6 +54,7 @@ export function toAgentError(err: unknown): AgentError {
   if (
     lower.includes("cannot go under") ||
     lower.includes("must be after") ||
+    lower.includes("cannot be before") ||
     lower.includes("cannot be moved") ||
     lower.includes("effort is only tracked") ||
     lower.includes("sibling") ||

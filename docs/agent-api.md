@@ -86,7 +86,7 @@ complete input/output JSON Schemas.
 
 List the focused core surface or one tool domain.
 
-- Use when: Use first, or when a task moves into notes, schedule, planning, metrics, or finances.
+- Use when: Use first, or when a task moves into notes, schedule, planning, metrics, finances, or history.
 - Avoid when: Do not request all domains unless you truly need a broad inventory.
 - Returns: Compact selection metadata without full schemas.
 - Effects: read; destructive=false; retry=safe; confirmation=none
@@ -660,6 +660,263 @@ Find compact transaction rows and the income/spend/net of the whole match set.
 - Exposure: domain
 - Arguments: `{ query?, from?, to?, accountId?, category?, flow?, direction*, minCents?, maxCents?, offset*, limit* }`
 - Output: `{ transactions*, pageInfo*, matchedIncomeCents*, matchedSpendCents*, matchedNetCents* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `list_commitments`
+
+List declared subscriptions/bills and recurring spend, with next due and rates.
+
+- Use when: Use to see what is already spoken for before creating or updating a commitment.
+- Avoid when: Do not use it to detect undeclared merchants — that is list_commitment_candidates.
+- Returns: Both tables: bills with next due and annual cost, spend with auto/pinned rates.
+- Effects: read; destructive=false; retry=safe; confirmation=none
+- Exposure: domain
+- Arguments: `{  }`
+- Output: `{ bills*, spend* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `list_commitment_candidates`
+
+Detected recurring merchants not yet claimed by a commitment.
+
+- Use when: Use after the user pastes a list of subscriptions, to see what is still unclaimed.
+- Avoid when: Do not use it to list declared commitments; that is list_commitments.
+- Returns: Unclaimed merchant strings, sorted.
+- Effects: read; destructive=false; retry=safe; confirmation=none
+- Exposure: domain
+- Arguments: `{  }`
+- Output: `{ merchants* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `upsert_subscription`
+
+Create or correct a subscription or bill.
+
+- Use when: Use to declare a bill, rename its matchers, set the amount, or mark it cancelled.
+- Avoid when: Use upsert_recurring_spend for pizza and groceries.
+- Returns: The saved bill's name, matchers, and status.
+- Effects: write; destructive=false; retry=safe; confirmation=user_intent
+- Exposure: domain
+- Arguments: `{ name*, matchers?, cadenceMonths*, expectedCents?, anchorDate?, status?, cancelUrl?, scheduled?, setAside?, dueDay?, notes? }`
+- Output: `{ name*, matchers*, status* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `upsert_recurring_spend`
+
+Create or correct a recurring-spend group.
+
+- Use when: Use to group merchants like Pizza Hut and Domino's under one weekly rate.
+- Avoid when: Use upsert_subscription for things that charge unless cancelled.
+- Returns: The saved entry's name, matchers, and period.
+- Effects: write; destructive=false; retry=safe; confirmation=user_intent
+- Exposure: domain
+- Arguments: `{ name*, matchers?, period?, amountSource?, expectedCents?, setAside?, active?, notes? }`
+- Output: `{ name*, matchers*, period* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `delete_commitment`
+
+Remove a bill or recurring-spend entry.
+
+- Use when: Use when the user undeclares a commitment entirely.
+- Avoid when: Use upsert_subscription with status cancelled to keep the history.
+- Returns: Confirmation of the kind and name removed.
+- Effects: write; destructive=true; retry=unsafe; confirmation=explicit
+- Exposure: domain
+- Arguments: `{ kind*, name* }`
+- Output: `{ deleted*, kind*, name* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+## History
+
+### `list_jobs`
+
+Find jobs with compact employer, title, dates, and location.
+
+- Use when: Use to resolve an employer or scan employment history before reading or changing it.
+- Avoid when: Use get_job for duties, pay, supervisor, or notes.
+- Returns: A compact job page plus total and next offset.
+- Effects: read; destructive=false; retry=safe; confirmation=none
+- Exposure: domain
+- Arguments: `{ currentOnly*, query?, from?, to?, offset*, limit* }`
+- Output: `{ jobs*, pageInfo* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `get_job`
+
+Read one job and its full employment form.
+
+- Use when: Use after list_jobs resolves the intended job.
+- Avoid when: Do not use to scan the whole catalog.
+- Returns: Full job detail including address, pay, supervisor, and notes.
+- Effects: read; destructive=false; retry=safe; confirmation=none
+- Exposure: domain
+- Arguments: `{ id* }`
+- Output: `{ job* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `create_job`
+
+Create one employment record.
+
+- Use when: Use when the employer or role is known, or a résumé row is being imported.
+- Avoid when: Do not create a second job for a natural-key retry.
+- Returns: Full created or replayed job and whether this call created it.
+- Effects: write; destructive=false; retry=safe_with_external_ref; confirmation=user_intent
+- Exposure: domain
+- Arguments: `{ employer?, jobTitle?, employmentType?, startDate?, endDate?, duties?, reasonForLeaving?, startingPay?, endingPay?, payPeriod?, phone?, streetAddress?, extendedAddress?, city?, region?, postalCode?, country?, countryCode?, supervisorName?, supervisorTitle?, supervisorPhone?, supervisorEmail?, mayContactSupervisor?, notes? } or { employer?, jobTitle?, employmentType?, startDate?, endDate?, duties?, reasonForLeaving?, startingPay?, endingPay?, payPeriod?, phone?, streetAddress?, extendedAddress?, city?, region?, postalCode?, country?, countryCode?, supervisorName?, supervisorTitle?, supervisorPhone?, supervisorEmail?, mayContactSupervisor?, notes?, externalSource*, externalId* }`
+- Output: `{ job*, created* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `update_job`
+
+Apply a strict partial update to one job.
+
+- Use when: Use after resolving the job id.
+- Avoid when: Do not guess an id or use it to create work.
+- Returns: The full job after the update.
+- Effects: write; destructive=false; retry=safe; confirmation=user_intent
+- Exposure: domain
+- Arguments: `{ id*, employer?, jobTitle?, employmentType?, startDate?, endDate?, duties?, reasonForLeaving?, startingPay?, endingPay?, payPeriod?, phone?, streetAddress?, extendedAddress?, city?, region?, postalCode?, country?, countryCode?, supervisorName?, supervisorTitle?, supervisorPhone?, supervisorEmail?, mayContactSupervisor?, notes? }`
+- Output: `{ job* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `list_residences`
+
+Find residences with compact address and move-in/out dates.
+
+- Use when: Use to resolve a place lived or scan housing history before reading or changing it.
+- Avoid when: Use get_residence for landlord, rent, or notes.
+- Returns: A compact residence page plus total and next offset.
+- Effects: read; destructive=false; retry=safe; confirmation=none
+- Exposure: domain
+- Arguments: `{ currentOnly*, query?, from?, to?, offset*, limit* }`
+- Output: `{ residences*, pageInfo* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `get_residence`
+
+Read one residence and its full housing form.
+
+- Use when: Use after list_residences resolves the intended place.
+- Avoid when: Do not use to scan the whole catalog.
+- Returns: Full residence detail including address, rent, landlord, and notes.
+- Effects: read; destructive=false; retry=safe; confirmation=none
+- Exposure: domain
+- Arguments: `{ id* }`
+- Output: `{ residence* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `create_residence`
+
+Create one housing record.
+
+- Use when: Use when the place or move-in date is known.
+- Avoid when: Do not create a second residence for a natural-key retry.
+- Returns: Full created or replayed residence and whether this call created it.
+- Effects: write; destructive=false; retry=safe_with_external_ref; confirmation=user_intent
+- Exposure: domain
+- Arguments: `{ label?, streetAddress?, extendedAddress?, city?, region?, postalCode?, country?, countryCode?, movedIn?, movedOut?, housingType?, monthlyRent?, reasonForLeaving?, landlordName?, landlordPhone?, landlordEmail?, notes? } or { label?, streetAddress?, extendedAddress?, city?, region?, postalCode?, country?, countryCode?, movedIn?, movedOut?, housingType?, monthlyRent?, reasonForLeaving?, landlordName?, landlordPhone?, landlordEmail?, notes?, externalSource*, externalId* }`
+- Output: `{ residence*, created* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `update_residence`
+
+Apply a strict partial update to one residence.
+
+- Use when: Use after resolving the residence id.
+- Avoid when: Do not guess an id or use it to create work.
+- Returns: The full residence after the update.
+- Effects: write; destructive=false; retry=safe; confirmation=user_intent
+- Exposure: domain
+- Arguments: `{ id*, label?, streetAddress?, extendedAddress?, city?, region?, postalCode?, country?, countryCode?, movedIn?, movedOut?, housingType?, monthlyRent?, reasonForLeaving?, landlordName?, landlordPhone?, landlordEmail?, notes? }`
+- Output: `{ residence* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `list_life_events`
+
+Find typed Timeline events by title, category, or date window.
+
+- Use when: Use to resolve a dated life fact before reading or changing it.
+- Avoid when: Do not use it for jobs or residences — those have their own tools. Derived Work/Home rows are not events.
+- Returns: A compact event page plus total and next offset.
+- Effects: read; destructive=false; retry=safe; confirmation=none
+- Exposure: domain
+- Arguments: `{ query?, from?, to?, offset*, limit* }`
+- Output: `{ events*, pageInfo* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `get_life_event`
+
+Read one typed Timeline event including notes.
+
+- Use when: Use after list_life_events resolves the intended event.
+- Avoid when: Do not use to scan the whole catalog.
+- Returns: One complete life event.
+- Effects: read; destructive=false; retry=safe; confirmation=none
+- Exposure: domain
+- Arguments: `{ id* }`
+- Output: `{ event* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `create_life_event`
+
+Create one dated life fact on the Timeline.
+
+- Use when: Use for a one-off historical date that is not a job start/end or a move.
+- Avoid when: Do not create a job or residence as an event. Do not create a second event for a natural-key retry.
+- Returns: Full created or replayed event and whether this call created it.
+- Effects: write; destructive=false; retry=safe_with_external_ref; confirmation=user_intent
+- Exposure: domain
+- Arguments: `{ eventDate*, title?, category?, notes? } or { eventDate*, title?, category?, notes?, externalSource*, externalId* }`
+- Output: `{ event*, created* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `update_life_event`
+
+Apply a strict partial update to one typed Timeline event.
+
+- Use when: Use after resolving the event id.
+- Avoid when: Do not use it to edit a derived Work or Home chronology row.
+- Returns: The full event after the update.
+- Effects: write; destructive=false; retry=safe; confirmation=user_intent
+- Exposure: domain
+- Arguments: `{ id*, eventDate?, title?, category?, notes? }`
+- Output: `{ event* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
 complete input/output JSON Schemas.

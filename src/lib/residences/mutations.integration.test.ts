@@ -3,7 +3,12 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
-import { createResidence, deleteResidence, updateResidence } from "./mutations";
+import {
+  createResidence,
+  createResidenceOnce,
+  deleteResidence,
+  updateResidence,
+} from "./mutations";
 import { getResidenceDetail, listResidenceDates, listResidences } from "./queries";
 
 const dbReachable = await databaseReachable();
@@ -91,6 +96,38 @@ describeDb("residences mutations", () => {
     await expect(getResidenceDetail(userId, id)).resolves.toMatchObject({
       movedOut: null,
     });
+  });
+
+  it("replays a create with the same external key instead of inserting again", async () => {
+    const first = await createResidenceOnce(
+      userId,
+      { city: "Seoul", movedIn: "2014-08-01" },
+      { source: "import", id: "home-1" },
+    );
+    const replay = await createResidenceOnce(
+      userId,
+      { city: "Boston" },
+      { source: "import", id: "home-1" },
+    );
+    expect(replay).toEqual({ id: first.id, created: false });
+    expect((await getResidenceDetail(userId, first.id))?.city).toBe("Seoul");
+    expect(await listResidences(userId)).toHaveLength(1);
+  });
+
+  it("lets two users share the same external key", async () => {
+    const otherId = await makeUser();
+    const first = await createResidenceOnce(
+      userId,
+      { city: "Mine" },
+      { source: "import", id: "shared" },
+    );
+    const second = await createResidenceOnce(
+      otherId,
+      { city: "Theirs" },
+      { source: "import", id: "shared" },
+    );
+    expect(second.created).toBe(true);
+    expect(second.id).not.toBe(first.id);
   });
 
   it("exposes only dated residences' edges to the chronology", async () => {

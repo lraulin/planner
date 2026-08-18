@@ -342,6 +342,155 @@ const metricInputFields = {
   ownerNodeId: nullableId.optional(),
 };
 
+const moneyValue = z.union([z.number(), z.string()]).nullable();
+
+const jobInputFields = {
+  employer: z.string().optional(),
+  jobTitle: z.string().optional(),
+  employmentType: z.string().optional(),
+  startDate: dateKey.nullable().optional(),
+  endDate: dateKey.nullable().optional(),
+  duties: z.string().optional(),
+  reasonForLeaving: z.string().optional(),
+  startingPay: moneyValue.optional(),
+  endingPay: moneyValue.optional(),
+  payPeriod: z.string().optional(),
+  phone: z.string().optional(),
+  streetAddress: z.string().optional(),
+  extendedAddress: z.string().optional(),
+  city: z.string().optional(),
+  region: z.string().optional(),
+  postalCode: z.string().optional(),
+  country: z.string().optional(),
+  countryCode: z.string().optional(),
+  supervisorName: z.string().optional(),
+  supervisorTitle: z.string().optional(),
+  supervisorPhone: z.string().optional(),
+  supervisorEmail: z.string().optional(),
+  mayContactSupervisor: z.boolean().optional(),
+  notes: z.string().optional(),
+};
+
+const residenceInputFields = {
+  label: z.string().optional(),
+  streetAddress: z.string().optional(),
+  extendedAddress: z.string().optional(),
+  city: z.string().optional(),
+  region: z.string().optional(),
+  postalCode: z.string().optional(),
+  country: z.string().optional(),
+  countryCode: z.string().optional(),
+  movedIn: dateKey.nullable().optional(),
+  movedOut: dateKey.nullable().optional(),
+  housingType: z.string().optional(),
+  monthlyRent: moneyValue.optional(),
+  reasonForLeaving: z.string().optional(),
+  landlordName: z.string().optional(),
+  landlordPhone: z.string().optional(),
+  landlordEmail: z.string().optional(),
+  notes: z.string().optional(),
+};
+
+const lifeEventInputFields = {
+  eventDate: dateKey.optional(),
+  title: z.string().optional(),
+  category: z.string().optional(),
+  notes: z.string().optional(),
+};
+
+const historyListInputFields = {
+  query: z.string().optional(),
+  from: dateKey.optional(),
+  to: dateKey.optional(),
+  ...pageInputFields,
+};
+
+const jobSummarySchema = z.strictObject({
+  id,
+  employer: z.string(),
+  jobTitle: z.string(),
+  employmentType: z.string(),
+  startDate: dateKey.nullable(),
+  endDate: dateKey.nullable(),
+  location: z.string(),
+});
+
+const jobDetailSchema = z.strictObject({
+  id,
+  employer: z.string(),
+  jobTitle: z.string(),
+  employmentType: z.string(),
+  startDate: dateKey.nullable(),
+  endDate: dateKey.nullable(),
+  duties: z.string(),
+  reasonForLeaving: z.string(),
+  startingPay: z.string().nullable(),
+  endingPay: z.string().nullable(),
+  payPeriod: z.string(),
+  phone: z.string(),
+  streetAddress: z.string(),
+  extendedAddress: z.string(),
+  city: z.string(),
+  region: z.string(),
+  postalCode: z.string(),
+  country: z.string(),
+  countryCode: z.string(),
+  supervisorName: z.string(),
+  supervisorTitle: z.string(),
+  supervisorPhone: z.string(),
+  supervisorEmail: z.string(),
+  mayContactSupervisor: z.boolean(),
+  notes: z.string(),
+});
+
+const residenceSummarySchema = z.strictObject({
+  id,
+  label: z.string(),
+  city: z.string(),
+  region: z.string(),
+  country: z.string(),
+  movedIn: dateKey.nullable(),
+  movedOut: dateKey.nullable(),
+  housingType: z.string(),
+  address: z.string(),
+});
+
+const residenceDetailSchema = z.strictObject({
+  id,
+  label: z.string(),
+  streetAddress: z.string(),
+  extendedAddress: z.string(),
+  city: z.string(),
+  region: z.string(),
+  postalCode: z.string(),
+  country: z.string(),
+  countryCode: z.string(),
+  movedIn: dateKey.nullable(),
+  movedOut: dateKey.nullable(),
+  housingType: z.string(),
+  monthlyRent: z.string().nullable(),
+  reasonForLeaving: z.string(),
+  landlordName: z.string(),
+  landlordPhone: z.string(),
+  landlordEmail: z.string(),
+  notes: z.string(),
+});
+
+const lifeEventSummarySchema = z.strictObject({
+  id,
+  eventDate: dateKey,
+  title: z.string(),
+  category: z.string(),
+});
+
+const lifeEventDetailSchema = z.strictObject({
+  id,
+  eventDate: dateKey,
+  title: z.string(),
+  category: z.string(),
+  notes: z.string(),
+});
+
 const captureItemSchema = z.strictObject({
   name: z.string().min(1),
   note: z.string().optional(),
@@ -482,6 +631,7 @@ export const inputSchemas = {
         "planning",
         "metrics",
         "finances",
+        "history",
         "all",
       ])
       .default("core"),
@@ -686,6 +836,27 @@ export const inputSchemas = {
     kind: z.enum(["bill", "spend"]).describe("Which table the name lives in."),
     name: z.string().min(1).describe("The commitment's name."),
   }),
+  list_jobs: z.strictObject({
+    currentOnly: z.boolean().default(false),
+    ...historyListInputFields,
+  }),
+  get_job: z.strictObject({ id }),
+  create_job: retryableObject(jobInputFields),
+  update_job: z.strictObject({ id, ...jobInputFields }),
+  list_residences: z.strictObject({
+    currentOnly: z.boolean().default(false),
+    ...historyListInputFields,
+  }),
+  get_residence: z.strictObject({ id }),
+  create_residence: retryableObject(residenceInputFields),
+  update_residence: z.strictObject({ id, ...residenceInputFields }),
+  list_life_events: z.strictObject(historyListInputFields),
+  get_life_event: z.strictObject({ id }),
+  create_life_event: retryableObject({
+    ...lifeEventInputFields,
+    eventDate: dateKey,
+  }),
+  update_life_event: z.strictObject({ id, ...lifeEventInputFields }),
 } as const;
 
 const healthOutput = z.strictObject({
@@ -1097,4 +1268,31 @@ export const outputSchemas = {
     kind: z.enum(["bill", "spend"]),
     name: z.string(),
   }),
+  list_jobs: z.strictObject({
+    jobs: z.array(jobSummarySchema),
+    pageInfo: pageInfoSchema,
+  }),
+  get_job: z.strictObject({ job: jobDetailSchema }),
+  create_job: z.strictObject({ job: jobDetailSchema, created: z.boolean() }),
+  update_job: z.strictObject({ job: jobDetailSchema }),
+  list_residences: z.strictObject({
+    residences: z.array(residenceSummarySchema),
+    pageInfo: pageInfoSchema,
+  }),
+  get_residence: z.strictObject({ residence: residenceDetailSchema }),
+  create_residence: z.strictObject({
+    residence: residenceDetailSchema,
+    created: z.boolean(),
+  }),
+  update_residence: z.strictObject({ residence: residenceDetailSchema }),
+  list_life_events: z.strictObject({
+    events: z.array(lifeEventSummarySchema),
+    pageInfo: pageInfoSchema,
+  }),
+  get_life_event: z.strictObject({ event: lifeEventDetailSchema }),
+  create_life_event: z.strictObject({
+    event: lifeEventDetailSchema,
+    created: z.boolean(),
+  }),
+  update_life_event: z.strictObject({ event: lifeEventDetailSchema }),
 } as const;

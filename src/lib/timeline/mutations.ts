@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { lifeEvents } from "@/db/schema";
+import { lifeEvents, type ExternalRef } from "@/db/schema";
 import { patchText, requireDateKey } from "@/lib/history/fields";
 import type { LifeEventInput } from "./types";
 
@@ -18,18 +18,62 @@ export async function createLifeEvent(
   userId: string,
   input: LifeEventInput & { eventDate: string },
 ): Promise<string> {
+  return (await createLifeEventOnce(userId, input)).id;
+}
+
+export async function createLifeEventOnce(
+  userId: string,
+  input: LifeEventInput & { eventDate: string },
+  external?: ExternalRef,
+): Promise<{ id: string; created: boolean }> {
   const text: Record<string, unknown> = {};
   patchText(text, input, TEXT_FIELDS);
+  const eventDate = requireDateKey(input.eventDate, "Date");
 
-  const [row] = await db
-    .insert(lifeEvents)
-    .values({
-      userId,
-      ...text,
-      eventDate: requireDateKey(input.eventDate, "Date"),
-    })
-    .returning({ id: lifeEvents.id });
-  return row.id;
+  return db.transaction(async (tx) => {
+    if (external) {
+      const [existing] = await tx
+        .select({ id: lifeEvents.id })
+        .from(lifeEvents)
+        .where(
+          and(
+            eq(lifeEvents.userId, userId),
+            eq(lifeEvents.externalSource, external.source),
+            eq(lifeEvents.externalId, external.id),
+          ),
+        )
+        .limit(1);
+      if (existing) return { id: existing.id, created: false };
+    }
+
+    const [row] = await tx
+      .insert(lifeEvents)
+      .values({
+        userId,
+        ...text,
+        eventDate,
+        externalSource: external?.source ?? null,
+        externalId: external?.id ?? null,
+      })
+      .onConflictDoNothing()
+      .returning({ id: lifeEvents.id });
+
+    if (row) return { id: row.id, created: true };
+    if (!external) throw new Error("Event could not be created.");
+    const [existing] = await tx
+      .select({ id: lifeEvents.id })
+      .from(lifeEvents)
+      .where(
+        and(
+          eq(lifeEvents.userId, userId),
+          eq(lifeEvents.externalSource, external.source),
+          eq(lifeEvents.externalId, external.id),
+        ),
+      )
+      .limit(1);
+    if (!existing) throw new Error("Event could not be created.");
+    return { id: existing.id, created: false };
+  });
 }
 
 export async function updateLifeEvent(

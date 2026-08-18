@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { jobs } from "@/db/schema";
+import { jobs, type ExternalRef } from "@/db/schema";
 import {
   dateKeyOrNull,
   moneyOrNull,
@@ -50,6 +50,14 @@ async function requireJob(tx: Executor, userId: string, jobId: string) {
 }
 
 export async function createJob(userId: string, input: JobInput = {}): Promise<string> {
+  return (await createJobOnce(userId, input)).id;
+}
+
+export async function createJobOnce(
+  userId: string,
+  input: JobInput = {},
+  external?: ExternalRef,
+): Promise<{ id: string; created: boolean }> {
   const startDate = dateKeyOrNull(input.startDate, DATE_LABELS.start);
   const endDate = dateKeyOrNull(input.endDate, DATE_LABELS.end);
   requireOrderedDates(startDate, endDate, DATE_LABELS);
@@ -57,19 +65,54 @@ export async function createJob(userId: string, input: JobInput = {}): Promise<s
   const text: Record<string, unknown> = {};
   patchText(text, input, TEXT_FIELDS);
 
-  const [row] = await db
-    .insert(jobs)
-    .values({
-      userId,
-      ...text,
-      startDate,
-      endDate,
-      startingPay: moneyOrNull(input.startingPay, "Starting pay"),
-      endingPay: moneyOrNull(input.endingPay, "Ending pay"),
-      mayContactSupervisor: input.mayContactSupervisor ?? true,
-    })
-    .returning({ id: jobs.id });
-  return row.id;
+  return db.transaction(async (tx) => {
+    if (external) {
+      const [existing] = await tx
+        .select({ id: jobs.id })
+        .from(jobs)
+        .where(
+          and(
+            eq(jobs.userId, userId),
+            eq(jobs.externalSource, external.source),
+            eq(jobs.externalId, external.id),
+          ),
+        )
+        .limit(1);
+      if (existing) return { id: existing.id, created: false };
+    }
+
+    const [row] = await tx
+      .insert(jobs)
+      .values({
+        userId,
+        ...text,
+        startDate,
+        endDate,
+        startingPay: moneyOrNull(input.startingPay, "Starting pay"),
+        endingPay: moneyOrNull(input.endingPay, "Ending pay"),
+        mayContactSupervisor: input.mayContactSupervisor ?? true,
+        externalSource: external?.source ?? null,
+        externalId: external?.id ?? null,
+      })
+      .onConflictDoNothing()
+      .returning({ id: jobs.id });
+
+    if (row) return { id: row.id, created: true };
+    if (!external) throw new Error("Job could not be created.");
+    const [existing] = await tx
+      .select({ id: jobs.id })
+      .from(jobs)
+      .where(
+        and(
+          eq(jobs.userId, userId),
+          eq(jobs.externalSource, external.source),
+          eq(jobs.externalId, external.id),
+        ),
+      )
+      .limit(1);
+    if (!existing) throw new Error("Job could not be created.");
+    return { id: existing.id, created: false };
+  });
 }
 
 export async function updateJob(

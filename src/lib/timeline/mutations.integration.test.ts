@@ -6,7 +6,12 @@ import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { createJob } from "@/lib/jobs/mutations";
 import { createResidence } from "@/lib/residences/mutations";
 import { loadChronology, loadLifeHistory } from "./chronology";
-import { createLifeEvent, deleteLifeEvent, updateLifeEvent } from "./mutations";
+import {
+  createLifeEvent,
+  createLifeEventOnce,
+  deleteLifeEvent,
+  updateLifeEvent,
+} from "./mutations";
 import { getLifeEvent, listLifeEvents } from "./queries";
 
 const dbReachable = await databaseReachable();
@@ -78,6 +83,38 @@ describeDb("life event mutations", () => {
       category: "Family",
       notes: "From the shelter on Elm",
     });
+  });
+
+  it("replays a create with the same external key instead of inserting again", async () => {
+    const first = await createLifeEventOnce(
+      userId,
+      { eventDate: "2010-05-04", title: "Adopted Biscuit" },
+      { source: "import", id: "event-1" },
+    );
+    const replay = await createLifeEventOnce(
+      userId,
+      { eventDate: "2020-01-01", title: "Different" },
+      { source: "import", id: "event-1" },
+    );
+    expect(replay).toEqual({ id: first.id, created: false });
+    expect((await getLifeEvent(userId, first.id))?.title).toBe("Adopted Biscuit");
+    expect(await listLifeEvents(userId)).toHaveLength(1);
+  });
+
+  it("lets two users share the same external key", async () => {
+    const otherId = await makeUser();
+    const first = await createLifeEventOnce(
+      userId,
+      { eventDate: "2010-05-04", title: "Mine" },
+      { source: "import", id: "shared" },
+    );
+    const second = await createLifeEventOnce(
+      otherId,
+      { eventDate: "2011-01-01", title: "Theirs" },
+      { source: "import", id: "shared" },
+    );
+    expect(second.created).toBe(true);
+    expect(second.id).not.toBe(first.id);
   });
 
   it("lists events oldest first", async () => {

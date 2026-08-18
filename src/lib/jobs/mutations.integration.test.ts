@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
-import { createJob, deleteJob, updateJob } from "./mutations";
+import { createJob, createJobOnce, deleteJob, updateJob } from "./mutations";
 import { getJobDetail, listJobDates, listJobs } from "./queries";
 
 const dbReachable = await databaseReachable();
@@ -122,6 +122,38 @@ describeDb("jobs mutations", () => {
     await expect(getJobDetail(userId, id)).resolves.toMatchObject({
       startingPay: "62500.50",
     });
+  });
+
+  it("replays a create with the same external key instead of inserting again", async () => {
+    const first = await createJobOnce(
+      userId,
+      { employer: "Acme", startDate: "2019-03-01" },
+      { source: "import", id: "job-1" },
+    );
+    const replay = await createJobOnce(
+      userId,
+      { employer: "Different" },
+      { source: "import", id: "job-1" },
+    );
+    expect(replay).toEqual({ id: first.id, created: false });
+    expect((await getJobDetail(userId, first.id))?.employer).toBe("Acme");
+    expect(await listJobs(userId)).toHaveLength(1);
+  });
+
+  it("lets two users share the same external key", async () => {
+    const otherId = await makeUser();
+    const first = await createJobOnce(
+      userId,
+      { employer: "Mine" },
+      { source: "import", id: "shared" },
+    );
+    const second = await createJobOnce(
+      otherId,
+      { employer: "Theirs" },
+      { source: "import", id: "shared" },
+    );
+    expect(second.created).toBe(true);
+    expect(second.id).not.toBe(first.id);
   });
 
   it("exposes only dated jobs' edges to the chronology", async () => {

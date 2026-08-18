@@ -676,6 +676,11 @@ flavor; optional palette thinning).
   zoom control outright — narrowing the range _is_ zooming in, and nothing scrolls
   sideways any more. Event titles print beside their dots wherever there is room. Out:
   keyboard access to the range, and panning a narrowed window.
+- **✅ History agent tools.** `specs/2026-08-18-1444-history-agent-tools`. Twelve MCP /
+  agent tools (`domain: history`) for Jobs, Residences, and typed Timeline events:
+  list/get/create/update each, no delete. Optional `externalSource`/`externalId` on
+  create so a retry does not insert a second copy. Compact lists; full form on get.
+  Derived Work/Home chronology rows stay read-time only.
 
 ### AI integration
 
@@ -690,7 +695,7 @@ flavor; optional palette thinning).
 - **✅ Medium-term — MCP + chat clients:** Same registry as a remote MCP server —
   `specs/2026-08-13-1730-remote-mcp-transport`. Stateless Streamable HTTP at
   `POST /api/mcp` (production `https://planner-lee-5344.vercel.app/api/mcp`), Bearer
-  `PLANNER_AGENT_API_KEY`, no second write path. `tools/list` exposes the 33 core and
+  `PLANNER_AGENT_API_KEY`, no second write path. `tools/list` exposes the 50 core and
   domain tools so Grok.com / other chat clients do not need HTTP two-step discovery.
   Still open: OAuth, per-user keys, mapping the key to a real user beyond
   `PLANNER_AGENT_USER_EMAIL`. Skills/prompts from `planner-agent` still apply as system

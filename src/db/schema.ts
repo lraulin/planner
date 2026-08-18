@@ -2874,12 +2874,17 @@ export const lifeEvents = pgTable(
      */
     category: text("category").notNull().default(""),
     notes: text("notes").notNull().default(""),
+    externalSource: text("external_source"),
+    externalId: text("external_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index("life_events_user_date_idx").on(table.userId, table.eventDate),
     index("life_events_user_category_idx").on(table.userId, table.category),
+    uniqueIndex("life_events_external_ref_uq")
+      .on(table.userId, table.externalSource, table.externalId)
+      .where(sql`${table.externalId} is not null`),
   ],
 );
 
@@ -2938,11 +2943,16 @@ export const jobs = pgTable(
     mayContactSupervisor: boolean("may_contact_supervisor").notNull().default(true),
 
     notes: text("notes").notNull().default(""),
+    externalSource: text("external_source"),
+    externalId: text("external_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index("jobs_user_start_idx").on(table.userId, table.startDate),
+    uniqueIndex("jobs_external_ref_uq")
+      .on(table.userId, table.externalSource, table.externalId)
+      .where(sql`${table.externalId} is not null`),
     check(
       "jobs_dates_ordered",
       sql`${table.startDate} is null or ${table.endDate} is null
@@ -2987,11 +2997,16 @@ export const residences = pgTable(
     landlordEmail: text("landlord_email").notNull().default(""),
 
     notes: text("notes").notNull().default(""),
+    externalSource: text("external_source"),
+    externalId: text("external_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index("residences_user_moved_in_idx").on(table.userId, table.movedIn),
+    uniqueIndex("residences_external_ref_uq")
+      .on(table.userId, table.externalSource, table.externalId)
+      .where(sql`${table.externalId} is not null`),
     check(
       "residences_dates_ordered",
       sql`${table.movedIn} is null or ${table.movedOut} is null

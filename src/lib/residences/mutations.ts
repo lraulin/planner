@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { residences } from "@/db/schema";
+import { residences, type ExternalRef } from "@/db/schema";
 import {
   dateKeyOrNull,
   moneyOrNull,
@@ -48,6 +48,14 @@ export async function createResidence(
   userId: string,
   input: ResidenceInput = {},
 ): Promise<string> {
+  return (await createResidenceOnce(userId, input)).id;
+}
+
+export async function createResidenceOnce(
+  userId: string,
+  input: ResidenceInput = {},
+  external?: ExternalRef,
+): Promise<{ id: string; created: boolean }> {
   const movedIn = dateKeyOrNull(input.movedIn, DATE_LABELS.start);
   const movedOut = dateKeyOrNull(input.movedOut, DATE_LABELS.end);
   requireOrderedDates(movedIn, movedOut, DATE_LABELS);
@@ -55,17 +63,52 @@ export async function createResidence(
   const text: Record<string, unknown> = {};
   patchText(text, input, TEXT_FIELDS);
 
-  const [row] = await db
-    .insert(residences)
-    .values({
-      userId,
-      ...text,
-      movedIn,
-      movedOut,
-      monthlyRent: moneyOrNull(input.monthlyRent, "Monthly rent"),
-    })
-    .returning({ id: residences.id });
-  return row.id;
+  return db.transaction(async (tx) => {
+    if (external) {
+      const [existing] = await tx
+        .select({ id: residences.id })
+        .from(residences)
+        .where(
+          and(
+            eq(residences.userId, userId),
+            eq(residences.externalSource, external.source),
+            eq(residences.externalId, external.id),
+          ),
+        )
+        .limit(1);
+      if (existing) return { id: existing.id, created: false };
+    }
+
+    const [row] = await tx
+      .insert(residences)
+      .values({
+        userId,
+        ...text,
+        movedIn,
+        movedOut,
+        monthlyRent: moneyOrNull(input.monthlyRent, "Monthly rent"),
+        externalSource: external?.source ?? null,
+        externalId: external?.id ?? null,
+      })
+      .onConflictDoNothing()
+      .returning({ id: residences.id });
+
+    if (row) return { id: row.id, created: true };
+    if (!external) throw new Error("Residence could not be created.");
+    const [existing] = await tx
+      .select({ id: residences.id })
+      .from(residences)
+      .where(
+        and(
+          eq(residences.userId, userId),
+          eq(residences.externalSource, external.source),
+          eq(residences.externalId, external.id),
+        ),
+      )
+      .limit(1);
+    if (!existing) throw new Error("Residence could not be created.");
+    return { id: existing.id, created: false };
+  });
 }
 
 export async function updateResidence(

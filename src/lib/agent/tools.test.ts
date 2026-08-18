@@ -129,6 +129,27 @@ describe("agent tool registry", () => {
       "delete_commitment",
     ]);
     expect(finances.tools.every((tool) => tool.domain === "finances")).toBe(true);
+
+    const history = (await dispatchAgentTool(
+      "list_tools",
+      { domain: "history" },
+      UNUSED_USER_ID,
+    )) as { tools: { name: string; domain: string }[] };
+    expect(history.tools.map((tool) => tool.name)).toEqual([
+      "list_jobs",
+      "get_job",
+      "create_job",
+      "update_job",
+      "list_residences",
+      "get_residence",
+      "create_residence",
+      "update_residence",
+      "list_life_events",
+      "get_life_event",
+      "create_life_event",
+      "update_life_event",
+    ]);
+    expect(history.tools.every((tool) => tool.domain === "history")).toBe(true);
   });
 
   it("keeps health compatible while pointing to contract discovery", async () => {

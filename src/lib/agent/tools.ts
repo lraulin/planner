@@ -57,12 +57,33 @@ import {
   upsertRecurringSpendTool,
   upsertSubscriptionTool,
 } from "./financeTools";
+import {
+  createJobTool,
+  createLifeEventTool,
+  createResidenceTool,
+  getJobTool,
+  getLifeEventTool,
+  getResidenceTool,
+  listJobsTool,
+  listLifeEventsTool,
+  listResidencesTool,
+  updateJobTool,
+  updateLifeEventTool,
+  updateResidenceTool,
+} from "./historyTools";
 
 export const AGENT_CONTRACT_VERSION = 2 as const;
 const SYSTEM_TOOL_USER_ID = "00000000-0000-4000-8000-000000000000";
 
 export type AgentToolDomain =
-  "system" | "outline" | "notes" | "schedule" | "planning" | "metrics" | "finances";
+  | "system"
+  | "outline"
+  | "notes"
+  | "schedule"
+  | "planning"
+  | "metrics"
+  | "finances"
+  | "history";
 export type AgentToolExposure = "core" | "domain" | "legacy";
 export type AgentToolEffects = {
   kind: "read" | "write";
@@ -147,7 +168,7 @@ const definitions: AgentToolDefinition[] = [
     domain: "system",
     summary: "List the focused core surface or one tool domain.",
     useWhen:
-      "Use first, or when a task moves into notes, schedule, planning, metrics, or finances.",
+      "Use first, or when a task moves into notes, schedule, planning, metrics, finances, or history.",
     avoidWhen: "Do not request all domains unless you truly need a broad inventory.",
     returns: "Compact selection metadata without full schemas.",
     effects: read,
@@ -636,6 +657,132 @@ const definitions: AgentToolDefinition[] = [
     exposure: "domain",
     handler: deleteCommitmentTool,
   }),
+  defineTool("list_jobs", {
+    domain: "history",
+    summary: "Find jobs with compact employer, title, dates, and location.",
+    useWhen:
+      "Use to resolve an employer or scan employment history before reading or changing it.",
+    avoidWhen: "Use get_job for duties, pay, supervisor, or notes.",
+    returns: "A compact job page plus total and next offset.",
+    effects: read,
+    exposure: "domain",
+    examples: [{ title: "Current job", arguments: { currentOnly: true } }],
+    handler: listJobsTool,
+  }),
+  defineTool("get_job", {
+    domain: "history",
+    summary: "Read one job and its full employment form.",
+    useWhen: "Use after list_jobs resolves the intended job.",
+    avoidWhen: "Do not use to scan the whole catalog.",
+    returns: "Full job detail including address, pay, supervisor, and notes.",
+    effects: read,
+    exposure: "domain",
+    handler: getJobTool,
+  }),
+  defineTool("create_job", {
+    domain: "history",
+    summary: "Create one employment record.",
+    useWhen:
+      "Use when the employer or role is known, or a résumé row is being imported.",
+    avoidWhen: "Do not create a second job for a natural-key retry.",
+    returns: "Full created or replayed job and whether this call created it.",
+    effects: keyedWrite,
+    exposure: "domain",
+    handler: createJobTool,
+  }),
+  defineTool("update_job", {
+    domain: "history",
+    summary: "Apply a strict partial update to one job.",
+    useWhen: "Use after resolving the job id.",
+    avoidWhen: "Do not guess an id or use it to create work.",
+    returns: "The full job after the update.",
+    effects: safeWrite,
+    exposure: "domain",
+    handler: updateJobTool,
+  }),
+  defineTool("list_residences", {
+    domain: "history",
+    summary: "Find residences with compact address and move-in/out dates.",
+    useWhen:
+      "Use to resolve a place lived or scan housing history before reading or changing it.",
+    avoidWhen: "Use get_residence for landlord, rent, or notes.",
+    returns: "A compact residence page plus total and next offset.",
+    effects: read,
+    exposure: "domain",
+    handler: listResidencesTool,
+  }),
+  defineTool("get_residence", {
+    domain: "history",
+    summary: "Read one residence and its full housing form.",
+    useWhen: "Use after list_residences resolves the intended place.",
+    avoidWhen: "Do not use to scan the whole catalog.",
+    returns: "Full residence detail including address, rent, landlord, and notes.",
+    effects: read,
+    exposure: "domain",
+    handler: getResidenceTool,
+  }),
+  defineTool("create_residence", {
+    domain: "history",
+    summary: "Create one housing record.",
+    useWhen: "Use when the place or move-in date is known.",
+    avoidWhen: "Do not create a second residence for a natural-key retry.",
+    returns: "Full created or replayed residence and whether this call created it.",
+    effects: keyedWrite,
+    exposure: "domain",
+    handler: createResidenceTool,
+  }),
+  defineTool("update_residence", {
+    domain: "history",
+    summary: "Apply a strict partial update to one residence.",
+    useWhen: "Use after resolving the residence id.",
+    avoidWhen: "Do not guess an id or use it to create work.",
+    returns: "The full residence after the update.",
+    effects: safeWrite,
+    exposure: "domain",
+    handler: updateResidenceTool,
+  }),
+  defineTool("list_life_events", {
+    domain: "history",
+    summary: "Find typed Timeline events by title, category, or date window.",
+    useWhen: "Use to resolve a dated life fact before reading or changing it.",
+    avoidWhen:
+      "Do not use it for jobs or residences — those have their own tools. Derived Work/Home rows are not events.",
+    returns: "A compact event page plus total and next offset.",
+    effects: read,
+    exposure: "domain",
+    handler: listLifeEventsTool,
+  }),
+  defineTool("get_life_event", {
+    domain: "history",
+    summary: "Read one typed Timeline event including notes.",
+    useWhen: "Use after list_life_events resolves the intended event.",
+    avoidWhen: "Do not use to scan the whole catalog.",
+    returns: "One complete life event.",
+    effects: read,
+    exposure: "domain",
+    handler: getLifeEventTool,
+  }),
+  defineTool("create_life_event", {
+    domain: "history",
+    summary: "Create one dated life fact on the Timeline.",
+    useWhen: "Use for a one-off historical date that is not a job start/end or a move.",
+    avoidWhen:
+      "Do not create a job or residence as an event. Do not create a second event for a natural-key retry.",
+    returns: "Full created or replayed event and whether this call created it.",
+    effects: keyedWrite,
+    exposure: "domain",
+    handler: createLifeEventTool,
+  }),
+  defineTool("update_life_event", {
+    domain: "history",
+    summary: "Apply a strict partial update to one typed Timeline event.",
+    useWhen: "Use after resolving the event id.",
+    avoidWhen: "Do not use it to edit a derived Work or Home chronology row.",
+    returns: "The full event after the update.",
+    effects: safeWrite,
+    exposure: "domain",
+    handler: updateLifeEventTool,
+  }),
 ];
 
 export const TOOL_REGISTRY = new Map(definitions.map((tool) => [tool.name, tool]));
@@ -711,6 +858,21 @@ const fieldDescriptions: Record<string, string> = {
   period: "week or month — the unit the recurring-spend rate is quoted in.",
   amountSource: "auto derives the rate from history; pinned stores expectedCents.",
   kind: "bill for a subscription, spend for a recurring-spend group.",
+  employer: "Employer or company name.",
+  jobTitle: "Role or title held at that employer.",
+  employmentType:
+    "Open vocabulary such as Full-time, Contract, or Internship — not a closed list.",
+  startDate: "First day at the job, YYYY-MM-DD. Null while unknown.",
+  endDate: "Last day at the job, YYYY-MM-DD. Null means this is the current job.",
+  currentOnly: "When true, only rows with no end / move-out date.",
+  movedIn: "First day at the residence, YYYY-MM-DD. Null while unknown.",
+  movedOut: "Last day at the residence, YYYY-MM-DD. Null means you still live there.",
+  eventDate: "The calendar day this life fact happened, YYYY-MM-DD.",
+  housingType: "Open vocabulary such as Rented, Owned, or Dorm — not a closed list.",
+  payPeriod: "Open vocabulary such as Hourly, Monthly, or Annual — not a closed list.",
+  location: "Employer city and country, formatted as one line.",
+  address: "Full postal address on one line.",
+  label: "Optional nickname for a residence, such as The Seoul apartment.",
   active: "Whether this recurring-spend entry is still part of the routine.",
   direction: "Keep income rows, spend rows (including refunds), or any flow.",
   minCents:
@@ -797,6 +959,7 @@ function listTools(_userId: string, args: Record<string, unknown>) {
     | "planning"
     | "metrics"
     | "finances"
+    | "history"
     | "all";
   const includeLegacy = args.includeLegacy === true;
   return {
@@ -858,9 +1021,15 @@ export async function dispatchAgentTool(
     if (!tool) throw new AgentError("not_found", `Unknown tool: ${toolName}`);
     const args = asObject(body);
     if (
-      ["create_node", "create_note", "create_metric", "log_metric_entry"].includes(
-        toolName,
-      ) &&
+      [
+        "create_node",
+        "create_note",
+        "create_metric",
+        "log_metric_entry",
+        "create_job",
+        "create_residence",
+        "create_life_event",
+      ].includes(toolName) &&
       "externalSource" in args !== "externalId" in args
     ) {
       throw new AgentError(

@@ -93,6 +93,16 @@ import {
 } from "@/lib/day/queries";
 import { writeUserSetting } from "@/lib/settings/mutations";
 import { loadUserSettings } from "@/lib/settings/queries";
+import { createJob } from "@/lib/jobs/mutations";
+import { getJobDetail, listJobDates, listJobs } from "@/lib/jobs/queries";
+import { createResidence } from "@/lib/residences/mutations";
+import {
+  getResidenceDetail,
+  listResidenceDates,
+  listResidences,
+} from "@/lib/residences/queries";
+import { createLifeEvent } from "@/lib/timeline/mutations";
+import { getLifeEvent, listLifeEvents } from "@/lib/timeline/queries";
 
 /**
  * One invariant, every read path: **no query hands a user another user's rows.**
@@ -158,6 +168,9 @@ type Owned = {
   dayItemId: string;
   day: string;
   weekStart: Date;
+  jobId: string;
+  residenceId: string;
+  lifeEventId: string;
 };
 
 const DAY = "2026-03-11";
@@ -348,6 +361,19 @@ async function seedOwner(): Promise<Owned> {
   });
   await saveJournal(userId, DAY, "owner journal");
 
+  const jobId = await createJob(userId, {
+    employer: "Owner job",
+    startDate: "2019-03-01",
+  });
+  const residenceId = await createResidence(userId, {
+    city: "Owner city",
+    movedIn: "2014-08-01",
+  });
+  const lifeEventId = await createLifeEvent(userId, {
+    eventDate: "2010-05-04",
+    title: "Owner event",
+  });
+
   await writeUserSetting(userId, "shell", { v: 2, sidebarCollapsed: true });
 
   const bankConnectionId = await saveConnection(userId, {
@@ -384,6 +410,9 @@ async function seedOwner(): Promise<Owned> {
     dayItemId,
     day: DAY,
     weekStart: WEEK_START,
+    jobId,
+    residenceId,
+    lifeEventId,
   };
 }
 
@@ -421,6 +450,9 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect((await listSessions(owner.userId)).length).toBeGreaterThan(0);
     expect((await loadDay(owner.userId, owner.day)).items.length).toBeGreaterThan(0);
     expect(await loadNodeDetail(owner.userId, owner.taskId)).not.toBeNull();
+    expect((await listJobs(owner.userId)).length).toBeGreaterThan(0);
+    expect((await listResidences(owner.userId)).length).toBeGreaterThan(0);
+    expect((await listLifeEvents(owner.userId)).length).toBeGreaterThan(0);
     expect(
       corpusRowCount(
         await loadFindCorpus(owner.userId, FIND_SOURCE_IDS, FIND_FIELD_CLASSES),
@@ -576,6 +608,17 @@ describeDb("a second user reads none of the first user's rows", () => {
 
     expect(await plannedDayForNode(intruder, owner.taskId)).toBeNull();
     expect((await plannedNodeIds(intruder)).size).toBe(0);
+  });
+
+  it("jobs, residences, and typed life events", async () => {
+    expect(await listJobs(intruder)).toEqual([]);
+    expect(await listJobDates(intruder)).toEqual([]);
+    expect(await getJobDetail(intruder, owner.jobId)).toBeNull();
+    expect(await listResidences(intruder)).toEqual([]);
+    expect(await listResidenceDates(intruder)).toEqual([]);
+    expect(await getResidenceDetail(intruder, owner.residenceId)).toBeNull();
+    expect(await listLifeEvents(intruder)).toEqual([]);
+    expect(await getLifeEvent(intruder, owner.lifeEventId)).toBeNull();
   });
 
   it("stored view settings", async () => {

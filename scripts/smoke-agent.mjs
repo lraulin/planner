@@ -128,16 +128,18 @@ const checks = [
     },
   },
   {
-    name: "MCP tools/list is the 32-tool chat catalog",
+    name: "MCP tools/list is the 50-tool chat catalog",
     run: async () => {
       const result = await mcp(2, "tools/list");
       const names = result.payload?.result?.tools?.map((tool) => tool.name) ?? [];
       return (
         result.status === 200 &&
-        names.length === 32 &&
+        names.length === 50 &&
         names.includes("get_context") &&
         names.includes("get_finance_overview") &&
         names.includes("search_transactions") &&
+        names.includes("list_jobs") &&
+        names.includes("create_life_event") &&
         names.includes("update_weekly_plan_entries") &&
         !names.includes("list_tools") &&
         !names.includes("capture")
