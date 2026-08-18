@@ -275,6 +275,13 @@ const PAGES = {
       status: "built",
       keywords: "amazon items subscribe receipts",
     },
+    {
+      id: "accounts",
+      label: "Accounts",
+      segment: "accounts",
+      status: "built",
+      keywords: "bank url rename close delete",
+    },
   ],
 
   /*

@@ -31,6 +31,7 @@ import {
   type StoredBillRow,
   type StoredSpend,
 } from "@/lib/finances/commitments";
+import { ACCOUNT_KIND_LABELS } from "@/lib/finances/accountKind";
 import { formatUsd } from "@/lib/finances/money";
 import type { FinanceAccountRow } from "@/lib/finances/types";
 import { localDateKey } from "@/lib/schedule/geometry";
@@ -62,16 +63,6 @@ const PAYDAY_CODEC: SettingCodec<{
 }> = {
   parse: parsePayday,
   serialize: serializePayday,
-};
-
-const KIND_LABELS: Record<string, string> = {
-  checking: "Checking",
-  savings: "Savings",
-  credit_card: "Credit card",
-  cash: "Cash",
-  investment: "Investment",
-  loan: "Loan",
-  other: "Other",
 };
 
 export function DashboardView({
@@ -436,7 +427,8 @@ function AccountBalanceRow({
       <div className="min-w-0">
         <AccountName account={account} />
         <div className="text-[0.75rem] text-ink-muted">
-          {KIND_LABELS[account.kind] ?? account.kind} · {freshness(account, formatDate)}
+          {ACCOUNT_KIND_LABELS[account.kind] ?? account.kind} ·{" "}
+          {freshness(account, formatDate)}
         </div>
       </div>
       <div

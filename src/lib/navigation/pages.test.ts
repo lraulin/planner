@@ -64,6 +64,7 @@ describe("hasPageBar", () => {
       "register",
       "statements",
       "orders",
+      "accounts",
     ]);
     expect(hasPageBar("finances")).toBe(true);
   });
