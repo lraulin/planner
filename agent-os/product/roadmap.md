@@ -707,6 +707,15 @@ flavor; optional palette thinning).
 
 YNAB-like, but simpler — and connected to goals over time.
 
+**The premise, in the user's words (2026-08-18):** _"Even with multiple accounts and
+multiple cards, I can keep things as simple for me as if I only had a single checking
+account that I spend out of, and what I have is what I have."_ The cards are a way of
+spending checking money, paid off in full monthly — not a second pool and not credit.
+That is the whole reason Available to Spend subtracts the **full** card balance rather
+than the statement minimum, and the reason there is exactly one headline number instead
+of a per-account dashboard. Anything that makes the user reason about which account a
+dollar is in is working against the point.
+
 - **MVP:** ✅ Import CSVs; ✅ 360 statement PDF backfill; ✅ Chase Prime Visa
   statement PDFs + statement snapshots; ✅ Capital One card statement PDFs;
   ✅ basic register and balances; ✅ commitments — the "envelopes" line item, shipped
@@ -795,29 +804,44 @@ period)` so money already spent stops being held twice and only going over bites
   what could be cancelled or skipped to fix it. Explicitly wanted, explicitly cut
   from the commitments spec; the annual/monthly cost columns already rank the
   candidates, so what is missing is turning a red number into a guided decision.
-- **Next — set-asides for future needs (open question, not yet designed).** Bills and
-  recurring spend both accrue toward a charge that is _coming_. There is no way to
-  hold money for something with no date: an emergency fund, or saving toward a
-  specific thing. The shape Lee has in mind is a **quasi-account** — a named
-  sub-balance carved out of a real account, with a target and a per-paycheck
-  contribution, deducted from Available to Spend the way a set-aside is. Note that
-  `available.ts` already excludes `savings`-kind accounts wholesale, so today the
-  choice is all-or-nothing per account; what this adds is naming and splitting
-  _within_ one. Wants more thought before a spec: whether a quasi-account is a row
-  on an account or a third commitment table, whether contributions can be skipped
-  without breaking the target date, and how it reads against Goals below.
+- **Next — earmarked savings (open question, not yet designed).** Bills and recurring
+  spend both accrue toward a charge that is _coming_. There is no way to hold money for
+  something with no date: an emergency fund, or saving toward a specific thing. The
+  shape is a **quasi-account** — a named sub-balance carved out of a real account, with
+  a target and progress. `available.ts` already excludes `savings`-kind accounts
+  wholesale, so today the choice is all-or-nothing per account; what this adds is naming
+  and splitting _within_ one.
+
+  **Funded by a sweep, not by an allocation.** Money moves to savings _after_ a pay
+  period is survived, not out of the paycheck that starts it. The user's rule
+  (2026-08-18): transfer only once the next paycheck has landed and something is
+  actually left over. This is the opposite of the set-aside mechanic in tiers 1 and 2,
+  which accrue forward against a known charge, and it is deliberate — see the evidence
+  below. Savings is what **survived**, not what was **promised**.
+
+  **The hard constraint: an earmark must never be a donor bucket.** From the user's
+  YNAB experience — the buckets did their visible job, making it obvious that going over
+  in one area means taking it from another, but the emergency fund and every other
+  nice-to-have were always the "another". Note that the current wholesale exclusion of
+  savings from Available to Spend already has the right property: the reserve is simply
+  not offered as a source. Adding named buckets is the moment that property could be
+  lost, so the feature must add names, targets and visible progress **without** adding a
+  reallocation surface. If moving money out of an earmark is as easy as moving it in,
+  this rebuilds the failure it exists to prevent.
+
+  Still open before a spec: whether a quasi-account is a row on an account or a third
+  commitment table; whether the sweep is suggested by the app or purely recorded after
+  the fact; and how it reads against Goals below.
 
   **Why this matters, from the real data (2026-08-18).** 360 Savings was fed by an
-  automatic "Paycheck Percentage Transfer" of ~$693 per paycheck. Over the 13 months
-  to Aug 2026 that moved **$20,168.81 in** and **$19,760.49 back out** — net **+$408**
-  from transfers plus $30 of interest, with the balance orbiting $1,100–$2,700 the
-  whole time and touching $0.96 once. Automatic saving that is reversible on a whim is
-  not saving; it is a two-week delay. Lee's reading: stop the automatic transfer and
-  make putting money into savings a **deliberate decision against what is actually
-  available**. That removes the only friction currently in place, which is exactly what
-  earmarking has to replace — a named, visible reserve you must decide to spend, rather
-  than an unlabelled balance you can quietly drain. The feature's job is to make the
-  savings account behave like savings, not to add bookkeeping.
+  automatic "Paycheck Percentage Transfer" of ~$693 per paycheck. Over the 13 months to
+  Aug 2026 that moved **$20,168.81 in** and **$19,760.49 back out** — net **+$408** from
+  transfers plus $30 of interest, with the balance orbiting $1,100–$2,700 the whole time
+  and touching $0.96 once. Of what left, $11,924 went back to checking and $7,836 went
+  to Capital One card payments. Automatic saving that is reversible on a whim is not
+  saving; it is a two-week delay. **The transfer was cancelled on 2026-08-18**, and the
+  remaining balance transferred to checking to bring Available to Spend to exactly zero
+  the day before payday.
 
 - **Then:** **integration with Goals** (save for X, fund project Y) — the natural
   consumer of set-asides above; AI advice on top of commitment + history data.
