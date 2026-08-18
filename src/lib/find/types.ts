@@ -103,6 +103,11 @@ export type FindResult = {
   /** Stable grid row id. Unique across kinds, which share an id space only by accident. */
   id: string;
   kind: FindResultKind;
+  /**
+   * What the Type column prints. Usually `resultKindLabel(kind)`, but a sub-record says what
+   * it actually is — "Objective", "Risk", "Email" — which is far more use than "Item".
+   */
+  typeLabel: string;
   source: FindSourceId;
   /** The record's own id. */
   recordId: string;

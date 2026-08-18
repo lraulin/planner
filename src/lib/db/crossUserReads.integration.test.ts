@@ -73,6 +73,8 @@ import {
   listPlanEntries,
   listWeeklyPlans,
 } from "@/lib/planning/queries";
+import { loadFindCorpus } from "@/lib/find/queries";
+import { FIND_FIELD_CLASSES, FIND_SOURCE_IDS } from "@/lib/find/types";
 import { createExercise, createSession } from "@/lib/fitness/mutations";
 import {
   getExercise,
@@ -419,6 +421,11 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect((await listSessions(owner.userId)).length).toBeGreaterThan(0);
     expect((await loadDay(owner.userId, owner.day)).items.length).toBeGreaterThan(0);
     expect(await loadNodeDetail(owner.userId, owner.taskId)).not.toBeNull();
+    expect(
+      corpusRowCount(
+        await loadFindCorpus(owner.userId, FIND_SOURCE_IDS, FIND_FIELD_CLASSES),
+      ),
+    ).toBeGreaterThan(0);
   });
 
   it("the outline and node detail", async () => {
@@ -574,4 +581,19 @@ describeDb("a second user reads none of the first user's rows", () => {
   it("stored view settings", async () => {
     expect(await loadUserSettings(intruder)).toEqual({});
   });
+
+  /**
+   * Advanced Find reads eighteen tables in one call, four of which (`*_details`) carry no
+   * `user_id` at all and inherit ownership through `nodes`. Counting rows across the whole
+   * corpus is the assertion that scales: a new source added to `loadFindCorpus` without a
+   * `userId` filter fails here without anyone remembering to add a line.
+   */
+  it("the whole Advanced Find corpus", async () => {
+    const corpus = await loadFindCorpus(intruder, FIND_SOURCE_IDS, FIND_FIELD_CLASSES);
+    expect(corpusRowCount(corpus)).toBe(0);
+  });
 });
+
+function corpusRowCount(corpus: Record<string, unknown[]>): number {
+  return Object.values(corpus).reduce((total, rows) => total + rows.length, 0);
+}

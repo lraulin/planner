@@ -69,7 +69,8 @@ describe("makeMatcher", () => {
   });
 
   it("does not carry state between calls", () => {
-    // A `g` flag would make the second call resume from `lastIndex` and miss the hit.
+    // The matcher holds a `g` regex, so an unreset `lastIndex` would make the second call
+    // resume where the first stopped and miss the hit.
     const match = matcherFor("foo");
     expect(match("foo")).toEqual({ start: 0, end: 3 });
     expect(match("foo")).toEqual({ start: 0, end: 3 });
