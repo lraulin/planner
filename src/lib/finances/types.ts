@@ -11,7 +11,8 @@ export type FinanceFeed =
   | "csv:capitalone-bank"
   | "csv:coinbase"
   | "api:simplefin"
-  | "scrape:capitalone";
+  | "scrape:capitalone"
+  | "scrape:chase";
 
 export const FINANCE_FEEDS: readonly FinanceFeed[] = [
   "csv:chase-credit",
@@ -20,6 +21,7 @@ export const FINANCE_FEEDS: readonly FinanceFeed[] = [
   "csv:coinbase",
   "api:simplefin",
   "scrape:capitalone",
+  "scrape:chase",
 ] as const;
 
 /** Human label for a feed, for import summaries and warnings. */
@@ -30,6 +32,7 @@ export const FEED_LABELS: Record<FinanceFeed, string> = {
   "csv:coinbase": "Coinbase",
   "api:simplefin": "Bank sync",
   "scrape:capitalone": "Capital One pending",
+  "scrape:chase": "Chase pending",
 };
 
 /** Fail-closed PDF dispatch names every format we actually parse. */
@@ -181,6 +184,11 @@ export type FinanceAccountRow = {
   balanceMismatchCents: number;
   /** When the live balance was read, or null for an account with no bank connection. */
   syncedBalanceAsOf: Date | null;
+  /**
+   * When a scrape last wrote the headline. The dashboard prefers scrape-pending over
+   * SimpleFIN pending while this hold is live, because SimpleFIN can sit a day behind.
+   */
+  scrapeBalanceAsOf: Date | null;
   transactionCount: number;
 };
 

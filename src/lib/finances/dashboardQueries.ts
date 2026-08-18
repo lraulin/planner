@@ -28,6 +28,7 @@ import {
 import { numericStringToCents } from "./money";
 import { listAccounts } from "./queries";
 import type { FinanceAccountRow } from "./types";
+import { selectWorkingPending } from "./workingPending";
 
 /**
  * Reads for the insights dashboard. Every one takes `userId` and scopes on it.
@@ -227,6 +228,7 @@ export async function loadDashboard(userId: string): Promise<DashboardData> {
       .select({
         accountId: financeTransactions.accountId,
         amount: financeTransactions.amount,
+        source: financeTransactions.externalSource,
       })
       .from(financeTransactions)
       .where(
@@ -270,10 +272,15 @@ export async function loadDashboard(userId: string): Promise<DashboardData> {
 
   return {
     accounts,
-    pending: pendingRows.map((row) => ({
-      accountId: row.accountId,
-      amountCents: numericStringToCents(row.amount) ?? 0,
-    })),
+    pending: selectWorkingPending(
+      pendingRows.map((row) => ({
+        accountId: row.accountId,
+        amountCents: numericStringToCents(row.amount) ?? 0,
+        source: row.source ?? "",
+      })),
+      accounts,
+      Date.now(),
+    ).map(({ accountId, amountCents }) => ({ accountId, amountCents })),
     bills,
     spend,
     paydays: paydaysFrom(rows),

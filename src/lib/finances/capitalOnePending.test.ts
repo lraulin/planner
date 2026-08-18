@@ -29,8 +29,14 @@ describe("parsePurchasedDate", () => {
     expect(parsePurchasedDate("2026-08-16")).toBe("2026-08-16");
   });
 
+  it("reads Chase's visible date and data-values slash date", () => {
+    expect(parsePurchasedDate("Aug 18, 2026")).toBe("2026-08-18");
+    expect(parsePurchasedDate("08/18/2026")).toBe("2026-08-18");
+  });
+
   it("rejects a day that does not exist", () => {
     expect(parsePurchasedDate("Sun, Feb 31, 2026")).toBeNull();
+    expect(parsePurchasedDate("02/31/2026")).toBeNull();
     expect(parsePurchasedDate("not a date")).toBeNull();
   });
 });
@@ -41,6 +47,7 @@ describe("parsePlannerPending", () => {
     if (!result.ok) throw new Error(result.error);
 
     expect(result.payload.last4).toBe("3448");
+    expect(result.payload.feed).toBe("scrape:capitalone");
     expect(result.payload.rows).toHaveLength(10);
     expect(result.payload.rows.reduce((sum, row) => sum + row.amountCents, 0)).toBe(
       -37968,
@@ -124,5 +131,31 @@ describe("parsePlannerPending", () => {
     if (!result.ok) throw new Error(result.error);
     expect(result.payload.rows).toEqual([]);
     expect(result.payload.currentCents).toBe(-43946);
+  });
+
+  it("tags a Chase paste so the write path can apply posted current with pending", () => {
+    const text = [
+      "# planner-pending v1",
+      "# account=9910",
+      "# source=chase",
+      "# scraped=2026-08-18",
+      "# current=$148.63",
+      "date\tdescription\tcategory\tamount",
+      "08/18/2026\tCVS\t\t$22.84",
+    ].join("\n");
+    const result = parsePlannerPending(text, "2026-08-18");
+    if (!result.ok) throw new Error(result.error);
+    expect(result.payload.feed).toBe("scrape:chase");
+    expect(result.payload.last4).toBe("9910");
+    expect(result.payload.currentCents).toBe(-14863);
+    expect(result.payload.rows).toEqual([
+      {
+        dateKey: "2026-08-18",
+        description: "CVS",
+        sourceCategory: "",
+        amountCents: -2284,
+        externalId: "9910|CVS|2284|0",
+      },
+    ]);
   });
 });

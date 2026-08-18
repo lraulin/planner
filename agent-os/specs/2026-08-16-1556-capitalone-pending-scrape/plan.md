@@ -8,7 +8,7 @@ Spec folder: `agent-os/specs/2026-08-16-1556-capitalone-pending-scrape/`
 - **Extends:** `agent-os/specs/2026-08-15-1315-live-bank-sync/` — `pending` is a real column; SimpleFIN pending is a replaceable set; there is no `pending_transaction_id`.
 - **Extends:** `agent-os/specs/2026-08-16-1338-finances-dashboard-available/` — available-to-spend adds pending only on synced accounts (D2a). Scraped Cap One pending must land on the linked •••3448 row so they count once.
 - **Supersedes:** live-bank-sync D5a **only** in the sense that Capital One pending becomes available via a human scrape. SimpleFIN itself still does not supply them.
-- **Does not change:** CSV/statement import (insert-or-skip, never update); SimpleFIN's own pending path for Chase.
+- **Does not change:** CSV/statement import (insert-or-skip, never update). Chase pending scrape is a later delta (`2026-08-18-1645-chase-pending-scrape`).
 
 ## Context
 
@@ -48,6 +48,8 @@ SimpleFIN does not supply Capital One pending rows. The dashboard therefore unde
 | 1   | Date comes from the expanded drawer's Purchased field, not only the scrape day.                                                                                                                                                                          | The collapsed table has no date; expanding Chipotle shows `Purchased: Sun, Aug 16, 2026`.                                                                                         |
 | 2   | Posted match is amount + merchant **within 14 days**, not date-blind.                                                                                                                                                                                    | A date-blind match treated last month's SimpliSafe $34.97 as this month's pending and skipped the live row.                                                                       |
 | 3   | An empty pending table is a valid snapshot. The userscript mounts on the card page even when Capital One says there are none. Optional `# current=` rewrites the synced headline so clearing pending does not revert to SimpleFIN's stale posted figure. | The first version required at least one pending row to mount the button and refused a zero-row paste, so leftover scrape-pending could not be cleared once everything had posted. |
+
+| 4 | Chase pending scrape is a later delta: `2026-08-18-1645-chase-pending-scrape`. | SimpleFIN's Chase snapshot lagged a day; same TSV, new feed. |
 
 ## Task 1 — Save spec documentation
 

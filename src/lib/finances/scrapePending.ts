@@ -7,17 +7,20 @@
  * scrape id must never be treated as one that vanished from a SimpleFIN window.
  */
 
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, like } from "drizzle-orm";
 import { db } from "@/db";
 import { bankAccountLinks, financeAccounts, financeTransactions } from "@/db/schema";
 import { normalizeMerchant } from "./classify/merchant";
 import {
+  CHASE_SCRAPE_FEED,
   parsePlannerPending,
   SCRAPE_FEED,
   type ScrapedPendingPayload,
   type ScrapedPendingRow,
 } from "./capitalOnePending";
 import { centsToNumericString, numericStringToCents } from "./money";
+
+const scrapeSource = like(financeTransactions.externalSource, "scrape:%");
 
 export type ReplaceScrapedPendingResult = {
   accountId: string;
@@ -85,7 +88,7 @@ export async function writeScrapedPending(
         and(
           eq(financeTransactions.userId, userId),
           eq(financeTransactions.accountId, account.id),
-          eq(financeTransactions.externalSource, SCRAPE_FEED),
+          scrapeSource,
           eq(financeTransactions.pending, true),
         ),
       )
@@ -102,16 +105,19 @@ export async function writeScrapedPending(
           description: row.description,
           amount: centsToNumericString(row.amountCents),
           sourceCategory: row.sourceCategory,
-          externalSource: SCRAPE_FEED,
+          externalSource: payload.feed,
           externalId: row.externalId,
         })),
       );
     }
 
-    // Only when the bank says pending is empty. Otherwise the headline stays the posted
-    // SimpleFIN figure and pending is added on top (D2a).
+    // Capital One's current includes pending, so it is only safe once the table is empty.
+    // Chase's current is posted-only, so it is the headline even while pending remains.
     let balanceUpdated = false;
-    if (fresh.length === 0 && payload.currentCents !== undefined) {
+    const applyCurrent =
+      payload.currentCents !== undefined &&
+      (fresh.length === 0 || payload.feed === CHASE_SCRAPE_FEED);
+    if (applyCurrent) {
       const now = new Date();
       const updated = await tx
         .update(bankAccountLinks)
@@ -155,12 +161,13 @@ export async function clearScrapedPending(
     .select({
       accountId: financeTransactions.accountId,
       amount: financeTransactions.amount,
+      externalSource: financeTransactions.externalSource,
     })
     .from(financeTransactions)
     .where(
       and(
         eq(financeTransactions.userId, userId),
-        eq(financeTransactions.externalSource, SCRAPE_FEED),
+        scrapeSource,
         eq(financeTransactions.pending, true),
       ),
     );
@@ -216,6 +223,8 @@ export async function clearScrapedPending(
     scrapedOn: todayKey,
     rows: [],
     currentCents,
+    feed:
+      pending[0].externalSource === CHASE_SCRAPE_FEED ? CHASE_SCRAPE_FEED : SCRAPE_FEED,
   });
 }
 
@@ -245,7 +254,7 @@ export async function resolveScrapedPending(
       and(
         eq(financeTransactions.userId, userId),
         inArray(financeTransactions.accountId, [...accountIds]),
-        eq(financeTransactions.externalSource, SCRAPE_FEED),
+        scrapeSource,
         eq(financeTransactions.pending, true),
       ),
     );
@@ -312,7 +321,7 @@ export async function resolveScrapedPending(
     .where(
       and(
         eq(financeTransactions.userId, userId),
-        eq(financeTransactions.externalSource, SCRAPE_FEED),
+        scrapeSource,
         eq(financeTransactions.pending, true),
         inArray(financeTransactions.id, toDelete),
       ),

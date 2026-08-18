@@ -34,12 +34,12 @@ function normalizeHeader(cell: string): string {
 /**
  * Bank CSVs this module parses — the feeds that arrive as a file with a header on row 0.
  *
- * Three `FinanceFeed` members are deliberately not here. Coinbase has a preamble and its
- * own parser. `api:simplefin` and `scrape:capitalone` are not bank CSVs.
+ * Four `FinanceFeed` members are deliberately not here. Coinbase has a preamble and its
+ * own parser. `api:simplefin` and the scrape feeds are not bank CSVs.
  */
 type BankCsvFeed = Exclude<
   FinanceFeed,
-  "csv:coinbase" | "api:simplefin" | "scrape:capitalone"
+  "csv:coinbase" | "api:simplefin" | "scrape:capitalone" | "scrape:chase"
 >;
 
 const HEADERS: Record<BankCsvFeed, readonly string[]> = {

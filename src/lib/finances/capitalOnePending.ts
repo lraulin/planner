@@ -1,9 +1,10 @@
 /**
- * Capital One's pending table, as a tagged TSV the dashboard pastes.
+ * A bank's pending table, as a tagged TSV the dashboard pastes.
  *
- * SimpleFIN never reports these rows. The userscript copies what the bank page shows; this
- * module is the only place that turns that text into cents, a last-4, and a calendar day.
- * The script must not grow a second parser.
+ * Capital One: SimpleFIN never reports these rows. Chase: SimpleFIN reports them a day
+ * late. The userscript copies what the bank page shows; this module is the only place that
+ * turns that text into cents, a last-4, and a calendar day. The script must not grow a
+ * second parser.
  *
  * Sign: the bank shows `$16.91` for a charge. The register stores card charges negative.
  * A payload that is already signed is left alone, so a later script that copies the
@@ -11,9 +12,15 @@
  */
 
 import { parseAmountCents } from "./money";
+import type { FinanceFeed } from "./types";
 
 export const PLANNER_PENDING_HEADER = "# planner-pending v1";
 export const SCRAPE_FEED = "scrape:capitalone";
+export const CHASE_SCRAPE_FEED = "scrape:chase";
+
+export function isScrapeFeed(source: string): boolean {
+  return source.startsWith("scrape:");
+}
 
 const MONTHS: Record<string, string> = {
   jan: "01",
@@ -43,10 +50,13 @@ export type ScrapedPendingPayload = {
   last4: string;
   scrapedOn: string;
   rows: ScrapedPendingRow[];
+  /** Which scrape feed wrote these. Defaults to Capital One for untagged pastes. */
+  feed: FinanceFeed;
   /**
    * Bank current balance, register sign. Present when the userscript could read it.
-   * An empty pending table plus this figure is how we learn that pending posted — SimpleFIN
-   * still reports yesterday's posted number for hours after Capital One shows none.
+   *
+   * Capital One's current includes pending, so it is only applied when the pending table
+   * is empty. Chase's current is posted-only, so it is applied even when pending exists.
    */
   currentCents?: number;
 };
@@ -59,21 +69,44 @@ export function looksLikePlannerPending(text: string): boolean {
 }
 
 /**
- * Turn `Sun, Aug 16, 2026` (Cap One's drawer) or `2026-08-16` into a day key.
+ * Turn a bank-page date into a day key.
  *
- * Parts, not `new Date(that string)` — the latter is UTC-midnight on some engines and
- * rolls back a day in US timezones (`development/dates.md`).
+ * Accepts `2026-08-16`, Cap One's drawer `Sun, Aug 16, 2026`, Chase's visible
+ * `Aug 18, 2026`, and Chase's `data-values` `08/18/2026`. Parts, not `new Date(that
+ * string)` — the latter is UTC-midnight on some engines and rolls back a day in US
+ * timezones (`development/dates.md`).
  */
 export function parsePurchasedDate(raw: string): string | null {
   const trimmed = raw.trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
 
-  const match = /^[A-Za-z]{3}, ([A-Za-z]{3}) (\d{1,2}), (\d{4})$/.exec(trimmed);
-  if (!match) return null;
-  const month = MONTHS[match[1].toLowerCase()];
+  const weekday = /^[A-Za-z]{3}, ([A-Za-z]{3}) (\d{1,2}), (\d{4})$/.exec(trimmed);
+  if (weekday) return fromMonthDayYear(weekday[1], weekday[2], weekday[3]);
+
+  const monthDay = /^([A-Za-z]{3}) (\d{1,2}), (\d{4})$/.exec(trimmed);
+  if (monthDay) return fromMonthDayYear(monthDay[1], monthDay[2], monthDay[3]);
+
+  const slash = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(trimmed);
+  if (slash) {
+    const month = Number(slash[1]);
+    const day = Number(slash[2]);
+    const year = Number(slash[3]);
+    if (!isRealDate(year, month, day)) return null;
+    return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+
+  return null;
+}
+
+function fromMonthDayYear(
+  monthRaw: string,
+  dayRaw: string,
+  yearRaw: string,
+): string | null {
+  const month = MONTHS[monthRaw.toLowerCase()];
   if (!month) return null;
-  const day = Number(match[2]);
-  const year = Number(match[3]);
+  const day = Number(dayRaw);
+  const year = Number(yearRaw);
   if (!isRealDate(year, Number(month), day)) return null;
   return `${year}-${month}-${String(day).padStart(2, "0")}`;
 }
@@ -100,6 +133,7 @@ export function parsePlannerPending(
   let last4: string | null = null;
   let scrapedOn: string | null = null;
   let currentCents: number | undefined;
+  let feed: FinanceFeed = SCRAPE_FEED;
   let columnLine: string | null = null;
   const dataLines: string[] = [];
 
@@ -113,6 +147,13 @@ export function parsePlannerPending(
       const value = meta[2].trim();
       if (key === "account") last4 = value.replace(/\D/g, "").slice(-4);
       if (key === "scraped") scrapedOn = parsePurchasedDate(value);
+      if (key === "source") {
+        const parsed = parseScrapeSource(value);
+        if (parsed === null) {
+          return { ok: false, error: "The paste source must be chase or capitalone." };
+        }
+        feed = parsed;
+      }
       if (key === "current") {
         const shown = parseAmountCents(value);
         if (shown === null) {
@@ -151,7 +192,7 @@ export function parsePlannerPending(
     if (dataLines.length === 0) {
       return {
         ok: true,
-        payload: { last4, scrapedOn: fallbackDay, rows: [], currentCents },
+        payload: { last4, scrapedOn: fallbackDay, rows: [], currentCents, feed },
       };
     }
     return { ok: false, error: "The paste needs description and amount columns." };
@@ -195,8 +236,17 @@ export function parsePlannerPending(
 
   return {
     ok: true,
-    payload: { last4, scrapedOn: fallbackDay, rows, currentCents },
+    payload: { last4, scrapedOn: fallbackDay, rows, currentCents, feed },
   };
+}
+
+function parseScrapeSource(raw: string): FinanceFeed | null {
+  const value = raw.trim().toLowerCase();
+  if (value === "chase" || value === "scrape:chase") return CHASE_SCRAPE_FEED;
+  if (value === "capitalone" || value === "capone" || value === "scrape:capitalone") {
+    return SCRAPE_FEED;
+  }
+  return null;
 }
 
 function fold(description: string): string {

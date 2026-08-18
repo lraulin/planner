@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { financeTransactions, users } from "@/db/schema";
+import { financeAccounts, financeTransactions, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { linkAccount, saveBalance, saveConnection } from "@/lib/banksync/mutations";
 import { importFinanceCsvFiles, type ImportFile } from "./import";
@@ -329,5 +329,74 @@ describeDb("resolveScrapedPending", () => {
     const pending = (await listTransactions(userId)).filter((row) => row.pending);
     expect(pending).toHaveLength(1);
     expect(pending[0].amountCents).toBe(-2445);
+  });
+});
+
+describeDb("chase scrape pending", () => {
+  it("writes scrape:chase, applies posted current, and leaves SimpleFIN pending in the register", async () => {
+    const userId = await makeUser();
+    const [account] = await db
+      .insert(financeAccounts)
+      .values({
+        userId,
+        name: "Chase •••9910",
+        kind: "credit_card",
+        institution: "Chase",
+        externalSource: "csv:chase-credit",
+        externalKey: "9910",
+      })
+      .returning({ id: financeAccounts.id });
+
+    const connectionId = await saveConnection(userId, {
+      accessUrl: "https://a:b@x.test",
+    });
+    const linkId = await linkAccount(userId, {
+      connectionId,
+      externalAccountId: "chase",
+      accountId: account.id,
+    });
+    await saveBalance(userId, {
+      linkId,
+      balanceCents: -8958,
+      availableCents: null,
+      asOf: new Date("2026-08-16T14:53:57Z"),
+    });
+    await db.insert(financeTransactions).values({
+      userId,
+      accountId: account.id,
+      transactionDate: "2026-08-14",
+      pending: true,
+      description: "AMAZON MKTPLACE PMTS",
+      amount: "-39.99",
+      externalSource: "api:simplefin",
+      externalId: "sfin-amazon",
+    });
+
+    const result = await replaceScrapedPending(
+      userId,
+      [
+        "# planner-pending v1",
+        "# account=9910",
+        "# source=chase",
+        "# scraped=2026-08-18",
+        "# current=$148.63",
+        "date\tdescription\tcategory\tamount",
+        "08/18/2026\tCVS\t\t$22.84",
+        "",
+      ].join("\n"),
+      "2026-08-18",
+    );
+    expect(result.inserted).toBe(1);
+    expect(result.balanceUpdated).toBe(true);
+
+    const [listed] = await listAccounts(userId);
+    expect(listed.balanceCents).toBe(-14863);
+
+    const pending = (await listTransactions(userId)).filter((row) => row.pending);
+    expect(pending.map((row) => row.description).sort()).toEqual([
+      "AMAZON MKTPLACE PMTS",
+      "CVS",
+    ]);
+    expect(pending.find((row) => row.description === "CVS")?.amountCents).toBe(-2284);
   });
 });

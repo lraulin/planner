@@ -494,8 +494,9 @@ function RefreshBanksButton() {
 }
 
 /**
- * Capital One does not send pending rows through SimpleFIN. The Tampermonkey script copies
- * the bank page's pending table; this is the paste that writes them.
+ * Capital One never sends pending through SimpleFIN. Chase does, a day late. The
+ * Tampermonkey scripts copy the bank page's pending table; this is the paste that writes
+ * them.
  */
 function CapOnePendingPaste() {
   const today = useToday();
@@ -525,8 +526,8 @@ function CapOnePendingPaste() {
 
   return (
     <Panel
-      title="Capital One pending"
-      subtitle="SimpleFIN does not send these. Copy on the bank page — including when it says there are none — then paste here."
+      title="Card pending"
+      subtitle="Copy on the Chase or Capital One card page — including when it says there are none — then paste here. Chase's current is posted; pending sits on top."
     >
       <div className="flex flex-wrap items-center gap-2">
         <button
@@ -589,7 +590,7 @@ function CapOnePendingPaste() {
         ref={areaRef}
         spellCheck={false}
         rows={3}
-        aria-label="Capital One pending paste"
+        aria-label="Card pending paste"
         placeholder="# planner-pending v1"
         className="mt-2 w-full rounded border border-rule bg-surface px-2 py-1 font-mono text-[0.75rem] text-ink"
       />

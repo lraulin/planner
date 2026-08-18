@@ -131,6 +131,7 @@ export async function listAccounts(userId: string): Promise<FinanceAccountRow[]>
       accountId: bankAccountLinks.accountId,
       balanceCents: bankAccountLinks.balanceCents,
       balanceAsOf: bankAccountLinks.balanceAsOf,
+      scrapeBalanceAsOf: bankAccountLinks.scrapeBalanceAsOf,
     })
     .from(bankAccountLinks)
     .where(eq(bankAccountLinks.userId, userId));
@@ -140,7 +141,11 @@ export async function listAccounts(userId: string): Promise<FinanceAccountRow[]>
       .filter((row) => row.balanceCents !== null && row.balanceAsOf !== null)
       .map((row) => [
         row.accountId,
-        { cents: row.balanceCents as number, asOf: row.balanceAsOf as Date },
+        {
+          cents: row.balanceCents as number,
+          asOf: row.balanceAsOf as Date,
+          scrapeBalanceAsOf: row.scrapeBalanceAsOf,
+        },
       ]),
   );
 
@@ -173,6 +178,7 @@ export async function listAccounts(userId: string): Promise<FinanceAccountRow[]>
       // which is the same as asking whether the register is complete.
       balanceMismatchCents: synced || latest ? ledgerBalanceCents - balanceCents : 0,
       syncedBalanceAsOf: synced?.asOf ?? null,
+      scrapeBalanceAsOf: synced?.scrapeBalanceAsOf ?? null,
       transactionCount: row.transactionCount,
     };
   });
