@@ -52,16 +52,29 @@ describe("resultTarget", () => {
     );
   });
 
-  it("lands the calendar on the appointment's own day", () => {
+  it("lands the calendar on the appointment's own day, drawer open", () => {
     const target = resultTarget(
       result({ kind: "appointment", where: "Schedule ▸ 2026-08-18" }),
     );
-    expect(target.href).toBe("/schedule/calendar?date=2026-08-18");
+    expect(target.href).toBe("/schedule/calendar?start=2026-08-18&detail=r1");
   });
 
-  it("falls back to the bare calendar when the day cannot be read", () => {
+  it("opens the drawer even when the day cannot be read", () => {
     const target = resultTarget(result({ kind: "appointment", where: "Schedule" }));
-    expect(target.href).toBe("/schedule/calendar");
+    expect(target.href).toBe("/schedule/calendar?detail=r1");
+  });
+
+  it("opens a metric, life event, and commitment on their own page", () => {
+    expect(resultTarget(result({ kind: "metric" })).href).toBe("/metrics?detail=r1");
+    expect(resultTarget(result({ kind: "life_event" })).href).toBe(
+      "/library/timeline?detail=r1",
+    );
+    expect(resultTarget(result({ kind: "recurring_bill" })).href).toBe(
+      "/finances/commitments?detail=r1",
+    );
+    expect(resultTarget(result({ kind: "recurring_spend" })).href).toBe(
+      "/finances/commitments?detail=r1",
+    );
   });
 
   it("escapes an id so it cannot break out of the query string", () => {
@@ -71,38 +84,32 @@ describe("resultTarget", () => {
     );
   });
 
-  it("says which kinds actually open the record", () => {
-    // These four views hold the open record in component state, so there is nothing to
-    // deep-link to yet. Saying so is what keeps the command honest.
-    const opensNothing: FindResultKind[] = [
-      "appointment",
-      "life_event",
-      "metric",
-      "recurring_bill",
-      "recurring_spend",
-    ];
-    for (const kind of opensNothing) {
-      expect(resultTarget(result({ kind })).opens, kind).toBe(false);
-    }
-
-    const opensRecord: FindResultKind[] = [
+  it("says every kind actually opens the record", () => {
+    // Appointments, metrics, life events and commitments used to land on the page only.
+    // They consume `?detail=` now, so a command that says Open can mean it.
+    const kinds: FindResultKind[] = [
       "result_area",
       "goal",
       "project",
       "task",
       "node_item",
       "note",
+      "appointment",
       "contact",
       "contact_item",
       "resource",
       "job",
       "residence",
+      "life_event",
+      "metric",
       "exercise",
       "workout_session",
       "transaction",
       "finance_account",
+      "recurring_bill",
+      "recurring_spend",
     ];
-    for (const kind of opensRecord) {
+    for (const kind of kinds) {
       expect(resultTarget(result({ kind })).opens, kind).toBe(true);
     }
   });

@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { getCurrentUserId } from "@/lib/auth";
 import { loadSchedule } from "@/lib/schedule/queries";
 import { loadOutline } from "@/lib/tree/queries";
@@ -63,14 +64,16 @@ export async function ScheduleRangePage({
 
   return (
     <AppShell active="schedule">
-      <ScheduleView
-        page={page}
-        initial={schedule}
-        nodes={nodes}
-        anchorKey={anchorKey}
-        // `Schedule block…` on any grid row lands here. See `ScheduleView`.
-        blockNodeId={params.block ?? null}
-      />
+      <Suspense fallback={<div className="min-h-0 flex-1" />}>
+        <ScheduleView
+          page={page}
+          initial={schedule}
+          nodes={nodes}
+          anchorKey={anchorKey}
+          // `Schedule block…` on any grid row lands here. See `ScheduleView`.
+          blockNodeId={params.block ?? null}
+        />
+      </Suspense>
     </AppShell>
   );
 }

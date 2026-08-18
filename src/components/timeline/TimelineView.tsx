@@ -22,6 +22,7 @@ import type { GridDefaults } from "@/components/grid/useGridState";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { useToday } from "@/components/grid/useToday";
+import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import {
   ErrorBanner,
   TabToolbar,
@@ -108,6 +109,7 @@ export function TimelineView({
   const [pendingDelete, setPendingDelete] = useState<ChronologyRow | null>(null);
   const [, startTransition] = useTransition();
   const todayKey = useToday();
+  const { detail: openId, setDetail: setOpenId } = useViewStateUrl();
   const { value: settings, patch: patchSettings } = useSetting(
     TIMELINE_SCOPE,
     TIMELINE_CODEC,
@@ -144,8 +146,17 @@ export function TimelineView({
 
   const rowIds = useMemo(() => rows.map((row) => row.id), [rows]);
   const { order, onIdsChange } = useNavigableIds(rowIds);
-  const multi = useMultiSelect(order, null);
-  const { selectedId, selectedIds, select, move } = multi;
+  const eventRowId = openId ? `event:${openId}` : null;
+  const multi = useMultiSelect(order, eventRowId);
+  const { selectedId, selectedIds, select, selectOne, move } = multi;
+
+  // Find and a pasted link land on `?detail=<life_events.id>`. The grid row is
+  // `event:<id>` — prefix here so the URL matches every other catalog.
+  const [seenDetailId, setSeenDetailId] = useState(openId);
+  if (openId !== seenDetailId) {
+    setSeenDetailId(openId);
+    if (openId) selectOne(`event:${openId}`);
+  }
 
   const refresh = useCallback(() => {
     startTransition(async () => {
@@ -201,9 +212,9 @@ export function TimelineView({
         return;
       }
       refresh();
-      if (result.id) select(`event:${result.id}`);
+      if (result.id) setOpenId(result.id);
     });
-  }, [refresh, select]);
+  }, [refresh, setOpenId]);
 
   const rowById = useCallback(
     (id: string | null) => rows.find((entry) => entry.id === id) ?? null,
@@ -240,9 +251,12 @@ export function TimelineView({
     startTransition(async () => {
       const result = await deleteLifeEventAction(target.id.slice("event:".length));
       if (!result.ok) setError(result.error);
-      else refresh();
+      else {
+        if (openId && target.id === `event:${openId}`) setOpenId(null);
+        refresh();
+      }
     });
-  }, [pendingDelete, refresh]);
+  }, [pendingDelete, refresh, openId, setOpenId]);
 
   const capabilitiesFor = useCallback(
     (rowId: string | null, count: number) => {
@@ -275,10 +289,24 @@ export function TimelineView({
   );
 
   const setPresentation = useCallback(
-    (next: TimelinePresentation) =>
-      patchSettings((current) => ({ ...current, presentation: next })),
-    [patchSettings],
+    (next: TimelinePresentation) => {
+      // The ribbon is a reading surface; `?detail=` is a grid landing. Leaving the
+      // param in place would force the grid back on the next render.
+      if (next === "ribbon" && openId) setOpenId(null);
+      patchSettings((current) => ({ ...current, presentation: next }));
+    },
+    [openId, setOpenId, patchSettings],
   );
+
+  /**
+   * A Find / pasted link arrives with `?detail=` while the stored presentation may still
+   * be the ribbon. Switch to the grid so the selected row is actually on screen.
+   */
+  useEffect(() => {
+    if (openId && presentation !== "grid") {
+      patchSettings((current) => ({ ...current, presentation: "grid" }));
+    }
+  }, [openId, presentation, patchSettings]);
 
   const setWindow = useCallback(
     (next: TimelineWindow | null) =>
@@ -300,10 +328,13 @@ export function TimelineView({
    */
   const openPin = useCallback(
     (pin: RibbonPin) => {
+      const eventId = pin.id.startsWith("event:")
+        ? pin.id.slice("event:".length)
+        : pin.id;
       setPresentation("grid");
-      select(pin.id);
+      setOpenId(eventId);
     },
-    [setPresentation, select],
+    [setPresentation, setOpenId],
   );
 
   const presentationToggle = (
@@ -348,7 +379,14 @@ export function TimelineView({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [presentation, pendingDelete, move]);
 
-  if (presentation === "ribbon") {
+  /**
+   * `?detail=` is a grid landing. Honour it on the first paint so Find does not flash the
+   * ribbon and then switch. The effect above persists the choice so a later visit without
+   * the param still opens on the grid.
+   */
+  const showingGrid = presentation === "grid" || Boolean(openId);
+
+  if (!showingGrid) {
     return (
       <div className="flex min-h-0 flex-1 flex-col bg-surface">
         {/*

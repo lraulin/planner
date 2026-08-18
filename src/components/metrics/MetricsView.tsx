@@ -30,6 +30,7 @@ import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { useSetting, type SettingCodec } from "@/components/settings/SettingsProvider";
 import { useIsCompact } from "@/components/shell/useIsCompact";
+import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { ToolbarButton, ToolbarToggle } from "@/components/tabs/tabChrome";
 import { isTypingTarget } from "@/lib/keyboard";
 import type { GridRow } from "@/lib/tree/slice";
@@ -108,6 +109,12 @@ export function MetricsView({
   const [busy, startTransition] = useTransition();
   const [pendingDelete, setPendingDelete] = useState<MetricListRow | null>(null);
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
+  /**
+   * `?detail=` is which metric is open. The drawer still loads the record — it needs the
+   * entries — but the URL is the only source of truth for which id to load, the way
+   * Contacts already works.
+   */
+  const { detail: openId, setDetail: setOpenId } = useViewStateUrl();
 
   const { value: layout, patch: patchLayout } = useSetting(
     METRICS_LAYOUT_SCOPE,
@@ -177,10 +184,35 @@ export function MetricsView({
     });
   }, []);
 
-  const openDrawer = useCallback((id: string) => {
-    setDrawerPending(true);
-    startTransition(async () => {
-      const result = await getMetricDetailAction(id);
+  const openDrawer = useCallback(
+    (id: string) => {
+      setDrawerPending(true);
+      setOpenId(id);
+    },
+    [setOpenId],
+  );
+
+  const closeDrawer = useCallback(() => setOpenId(null), [setOpenId]);
+
+  // The URL is the source of truth. Drop a stale payload during render so Back does
+  // not paint the previous metric for one frame, and so this is not an effect.
+  if (drawerDetail && drawerDetail.id !== openId) {
+    setDrawerDetail(null);
+  }
+  if (!openId && drawerPending) {
+    setDrawerPending(false);
+  }
+
+  /**
+   * Load the record the URL names. setState only in the fetch callback — a sync
+   * setState here is the `set-state-in-effect` lint, and the close path above
+   * already unloads.
+   */
+  useEffect(() => {
+    if (!openId) return;
+    let cancelled = false;
+    void getMetricDetailAction(openId).then((result) => {
+      if (cancelled) return;
       setDrawerPending(false);
       if (!result.ok || !result.data || Array.isArray(result.data)) {
         setError(result.ok ? "Metric not found." : result.error);
@@ -189,7 +221,10 @@ export function MetricsView({
       setDrawerDetail(result.data);
       setChartDetail(result.data);
     });
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [openId]);
 
   /**
    * Active only narrows the row set before the grid sees it, rather than becoming a filter on
@@ -257,8 +292,16 @@ export function MetricsView({
     [gridRows],
   );
   const { order, onIdsChange } = useNavigableIds(rowIds);
-  const multi = useMultiSelect(order, initialMetrics[0]?.id ?? null);
-  const { selectedId, selectedIds, select, move } = multi;
+  const multi = useMultiSelect(order, openId ?? initialMetrics[0]?.id ?? null);
+  const { selectedId, selectedIds, select, selectOne, move } = multi;
+
+  // Back / forward and deep-links change `?detail=`. Sync the row highlight during render
+  // so the open drawer has a selected owner without an effect-driven cascade.
+  const [seenDetailId, setSeenDetailId] = useState(openId);
+  if (openId !== seenDetailId) {
+    setSeenDetailId(openId);
+    if (openId) selectOne(openId);
+  }
 
   const selected = selectedId
     ? (rows.find((row) => row.id === selectedId) ?? null)
@@ -284,15 +327,12 @@ export function MetricsView({
         setError(result.ok ? "Create failed." : result.error);
         return;
       }
-      const detail = await getMetricDetailAction(result.id);
-      setDrawerPending(false);
-      if (detail.ok && detail.data && !Array.isArray(detail.data)) {
-        setDrawerDetail(detail.data);
-        setChartDetail(detail.data);
-      }
+      // The `?detail=` effect loads the record. Leave pending up until it does, so a
+      // second Insert cannot fire while the URL is still catching up.
+      setOpenId(result.id);
       refreshList();
     });
-  }, [refreshList]);
+  }, [refreshList, setOpenId]);
 
   const requestDelete = useCallback(
     (id: string) => {
@@ -348,7 +388,7 @@ export function MetricsView({
   // Arrow keys walk the grid's own order. Same document-level handler as the Wish List.
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (drawerDetail || drawerPending || pendingDelete) return;
+      if (openId || drawerPending || pendingDelete) return;
       if (isTypingTarget(event.target)) return;
       if (event.key === "ArrowDown") {
         event.preventDefault();
@@ -360,7 +400,7 @@ export function MetricsView({
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [drawerDetail, drawerPending, pendingDelete, move]);
+  }, [openId, drawerPending, pendingDelete, move]);
 
   const chartSource =
     chartDetail && selected && chartDetail.id === selected.id ? chartDetail : null;
@@ -503,7 +543,7 @@ export function MetricsView({
       <MetricDrawer
         detail={drawerDetail}
         goals={goals}
-        onClose={() => setDrawerDetail(null)}
+        onClose={closeDrawer}
         onChanged={(metricId) => {
           refreshList();
           loadChart(metricId);
@@ -530,7 +570,7 @@ export function MetricsView({
               setError(result.error);
               return;
             }
-            if (drawerDetail?.id === target.id) setDrawerDetail(null);
+            if (openId === target.id) closeDrawer();
             if (chartDetail?.id === target.id) setChartDetail(null);
             refreshList();
           });

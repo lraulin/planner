@@ -59,6 +59,7 @@ import { nextCheckState } from "@/lib/schedule/checkState";
 import { owningProjectId } from "@/lib/tree/owningProject";
 import { CommandBar } from "@/components/grid/CommandBar";
 import { useRegisterCommands } from "@/components/shell/CommandProvider";
+import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 
 import type { Command } from "@/lib/commands/registry";
 
@@ -216,9 +217,24 @@ export function ScheduleView({
           year: "numeric",
         })}`;
 
-  const [editingAppointment, setEditingAppointment] = useState<
-    Appointment | DraftAppointment | null
-  >(null);
+  /**
+   * Existing appointments open through `?detail=`. Drafts (a drag on the calendar, a
+   * `Schedule block…`) have no id yet, so they stay here until Save gives them one.
+   */
+  const { detail: openId, setDetail: setOpenId } = useViewStateUrl();
+  const [draftAppointment, setDraftAppointment] = useState<DraftAppointment | null>(
+    null,
+  );
+  const fromUrl = openId
+    ? (masters.find((master) => master.id === openId) ?? null)
+    : null;
+  const editingAppointment = draftAppointment ?? fromUrl;
+
+  const closeDrawer = useCallback(() => {
+    setDraftAppointment(null);
+    setOpenId(null);
+  }, [setOpenId]);
+
   /** The agenda's focused row, by occurrence key. Selection is per-mode, not shared. */
   const [selectedAgendaId, setSelectedAgendaId] = useState<string | null>(null);
   /** Where the calendar's context menu is open, and what it is about. */
@@ -257,7 +273,7 @@ export function ScheduleView({
         new Date(),
         node.effortLeftMinutes ?? node.effortMinutes ?? 60,
       );
-      setEditingAppointment({
+      setDraftAppointment({
         subject: node.name || "Untitled",
         startAt: start,
         endAt: end,
@@ -389,10 +405,11 @@ export function ScheduleView({
   }, [router]);
 
   function handleCreateRange(start: Date, end: Date, allDay: boolean) {
-    setEditingAppointment({
+    setDraftAppointment({
       subject: "",
       ...draftFromCalendarSelect(start, end, allDay),
     });
+    setOpenId(null);
   }
 
   async function handleCycleCheck(id: string, next: AppointmentCheck) {
@@ -466,16 +483,21 @@ export function ScheduleView({
   function openOccurrence(occ: Occurrence) {
     const master = masters.find((m) => m.id === occ.id);
     if (master) {
-      setEditingAppointment(master);
-    } else {
-      setEditingAppointment({
-        id: occ.id,
-        subject: occ.subject,
-        startAt: occ.startAt,
-        endAt: occ.endAt,
-        projectId: occ.projectId,
-      });
+      setDraftAppointment(null);
+      setOpenId(occ.id);
+      return;
     }
+    // The occurrence is on screen but its master is not in this range (a recurring
+    // series whose first start is off-screen). Open from the occurrence and still
+    // write the id so reload can try again once the range includes the master.
+    setDraftAppointment({
+      id: occ.id,
+      subject: occ.subject,
+      startAt: occ.startAt,
+      endAt: occ.endAt,
+      projectId: occ.projectId,
+    });
+    setOpenId(occ.id);
   }
 
   /**
@@ -523,7 +545,7 @@ export function ScheduleView({
       reportError(result.error);
       return;
     }
-    setEditingAppointment(null);
+    closeDrawer();
     refresh();
   }
 
@@ -692,8 +714,8 @@ export function ScheduleView({
             label: allDay ? "New all-day event…" : "New appointment here…",
             group: "record",
             icon: "new",
-            run: () =>
-              setEditingAppointment(
+            run: () => {
+              setDraftAppointment(
                 allDay
                   ? { subject: "", ...draftFromCalendarSelect(start, start, true) }
                   : {
@@ -702,7 +724,9 @@ export function ScheduleView({
                       endAt: new Date(start.getTime() + view.slotMinutes * 60_000),
                       allDay: false,
                     },
-              ),
+              );
+              setOpenId(null);
+            },
           },
         ],
       },
@@ -1076,7 +1100,7 @@ export function ScheduleView({
         open={editingAppointment != null}
         value={editingAppointment}
         nodes={nodes}
-        onClose={() => setEditingAppointment(null)}
+        onClose={closeDrawer}
         onSaved={() => {
           refresh();
         }}

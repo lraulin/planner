@@ -4,16 +4,12 @@
  * Pure, so the map from eighteen record kinds to their homes can be tested without a router —
  * and so a page that moves breaks one table rather than a click handler nobody re-reads.
  *
- * **Three tiers, and the difference is visible to the user.** Most kinds open their record
- * through `?detail=`, which the destination view already consumes. Sessions and exercises have
- * real routes of their own. Four kinds — appointments, metrics, life events and commitments —
- * have no deep link today: those views hold the open record in memory, so Find lands on the
- * page (on the right day, where there is one) and the record still has to be picked. `opens`
- * says which, so the command can be labelled honestly rather than promising a drawer that
- * will not appear.
+ * Most kinds open through `?detail=`, which the destination view already consumes. Sessions
+ * and exercises have real routes of their own. `opens` is still on the type so a future kind
+ * that can only land on its page can be labelled honestly — today every kind actually opens.
  */
 
-import { notesPath } from "@/lib/url/viewState";
+import { hrefWithViewState, notesPath } from "@/lib/url/viewState";
 import type { FindResult } from "./types";
 
 export type FindTarget = {
@@ -84,27 +80,33 @@ export function resultTarget(result: FindResult): FindTarget {
     case "finance_account":
       return { href: detailPath("/finances/accounts", recordId), opens: true };
 
-    // No deep link yet — these views keep the open record in component state.
     case "appointment":
-      return { href: appointmentPath(result), opens: false };
+      return { href: appointmentPath(result), opens: true };
     case "life_event":
-      return { href: "/library/timeline", opens: false };
+      return { href: detailPath("/library/timeline", recordId), opens: true };
     case "metric":
-      return { href: "/metrics", opens: false };
+      return { href: detailPath("/metrics", recordId), opens: true };
     case "recurring_bill":
     case "recurring_spend":
-      return { href: "/finances/commitments", opens: false };
+      return { href: detailPath("/finances/commitments", recordId), opens: true };
   }
 }
 
 /**
- * The calendar on the appointment's own day.
+ * The calendar on the appointment's own day, drawer open.
  *
  * `where` is built as `Schedule ▸ YYYY-MM-DD`, so the day is already there. Parsed back out
  * rather than carried as a second field: one source for the day means the column and the link
  * cannot disagree about which one it is.
+ *
+ * The day is `?start=`, not `?date=`. `?date=` is Notes / Day; the calendar anchors its
+ * range on `?start=` (`ScheduleRangePage`).
  */
 function appointmentPath(result: FindResult): string {
   const day = /\d{4}-\d{2}-\d{2}/.exec(result.where)?.[0];
-  return day ? `/schedule/calendar?date=${day}` : "/schedule/calendar";
+  const current = new URLSearchParams();
+  if (day) current.set("start", day);
+  return hrefWithViewState("/schedule/calendar", current, {
+    detail: result.recordId,
+  });
 }

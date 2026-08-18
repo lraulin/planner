@@ -106,9 +106,8 @@ export function FindResults({
         pageCommands: [
           {
             id: "record.open",
-            // Honest about the kinds whose views have no deep link yet: those land on the
-            // page and the record still has to be picked. A menu row promising to open
-            // something and then not doing it is worse than one that says what it will do.
+            // Kept for a kind that can only land on its page. Every kind opens today;
+            // a new one that cannot should not inherit a command that lies.
             label: target && !target.opens ? "Show where it lives" : "Open",
             group: "record",
             menu: "item",

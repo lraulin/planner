@@ -1,7 +1,8 @@
 /**
  * Encode and decode the view-state query params shared by the grid tabs.
  *
- *   ?detail=<nodeId>   open detail drawer (Outline, Projects, Tasks, Goals, Wishes, Chooser)
+ *   ?detail=<id>       open this record (drawer where there is one; selected row on
+ *                      Timeline and Commitments, which edit in the grid)
  *   ?select=<nodeId>   select this outline row without opening the drawer (View in Outline)
  *   ?note=<noteId>     open note drawer (Notes)
  *   ?view=<viewId>     the selected view, built-in or saved (every module with a picker)

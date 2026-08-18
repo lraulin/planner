@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import type { GridRow } from "@/lib/tree/slice";
 import type { Payday } from "@/lib/finances/classify/income";
 import type { BillCharge } from "@/lib/finances/available";
@@ -107,7 +108,18 @@ export function CommitmentsView({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [focusedGrid, setFocusedGrid] = useState<"bills" | "spend">("bills");
+  const { detail: openId } = useViewStateUrl();
+  const [focusedGrid, setFocusedGrid] = useState<"bills" | "spend">(() => {
+    // A Find landing on a spend row should not light up the bills grid first.
+    if (
+      openId &&
+      spend.some((row) => row.id === openId) &&
+      !bills.some((row) => row.id === openId)
+    ) {
+      return "spend";
+    }
+    return "bills";
+  });
   const billsToolbar = useRef<GridToolbarHandle>(null);
   const spendToolbar = useRef<GridToolbarHandle>(null);
   const focusedGridRef = useRef(focusedGrid);
@@ -242,8 +254,23 @@ export function CommitmentsView({
   const spendIds = useMemo(() => spendRows.map((row) => row.id), [spendRows]);
   const billsNav = useNavigableIds(billIds);
   const spendNav = useNavigableIds(spendIds);
-  const billsSelect = useMultiSelect(billsNav.order, null);
-  const spendSelect = useMultiSelect(spendNav.order, null);
+  const billMatch = openId !== null && billIds.includes(openId);
+  const spendMatch = openId !== null && spendIds.includes(openId);
+  const billsSelect = useMultiSelect(billsNav.order, billMatch ? openId : null);
+  const spendSelect = useMultiSelect(spendNav.order, spendMatch ? openId : null);
+
+  // Find and a pasted link land on `?detail=`. Select the row and focus its grid.
+  const [seenDetailId, setSeenDetailId] = useState(openId);
+  if (openId !== seenDetailId) {
+    setSeenDetailId(openId);
+    if (openId && billIds.includes(openId)) {
+      setFocusedGrid("bills");
+      billsSelect.selectOne(openId);
+    } else if (openId && spendIds.includes(openId)) {
+      setFocusedGrid("spend");
+      spendSelect.selectOne(openId);
+    }
+  }
 
   const [billCounts, setBillCounts] = useState({ shown: 0, total: 0 });
   const [spendCounts, setSpendCounts] = useState({ shown: 0, total: 0 });
