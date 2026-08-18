@@ -18,6 +18,9 @@ shared project/context tools their links require.
 - The organizer is a dedicated page and a global shell action, not a modal or module.
 - Inbox roots are processed one at a time into Task, Project, Calendar, Defer, Delete, or
   Not actionable → reference note.
+- The organizer keeps the destination picker filter and selected parent across Process so
+  a batch of items can land in the same project. Clear empties the filter; No Project
+  drops the selection. Outcome kind and item-specific fields still reset.
 - Calendar and reference-note outcomes are blocked for branches with descendants. Delete
   intentionally deletes the branch after the user selects Delete and presses Process.
 - Defer requires a future return date, keeps the branch in Inbox, follows Planner's unified
@@ -46,6 +49,8 @@ shared project/context tools their links require.
       create duplicate appointments.
 - [x] Master Contexts is user-scoped, initially contains observed values only, and supplies
       suggestions without constraining free-text record contexts.
+- [x] Processing the next Inbox item keeps the destination filter and selection; Clear
+      empties the filter without dropping the selected parent.
 - [ ] Desktop/mobile, light/dark, tests, migration, smoke, and production build pass.
 
 ## Changes from original plan
@@ -58,6 +63,7 @@ Material refinements during implementation. Pure implementation details are omit
 | 2   | Shared picker is a collapsible name-only tree (expand/collapse), not a flat always-expanded list.                                | This is the one Achieve surface that shows hierarchy as a plain node tree; expand/collapse was missing.                                                                                                       |
 | 3   | Tasks scope and Overview also accept result-area (and goal) selection from the same tree.                                        | Subtree scope already works for any node via `?scope=`; blocking RA selection only made the tree less navigable.                                                                                              |
 | 4   | Flat (ungrouped) picker lists goals and dreams as peers of projects; dream rows keep the dream kind.                             | In Achieve's Tasks picker, goals/dreams are interchangeable with projects as the scope for "show this branch's tasks."                                                                                        |
+| 5   | Destination filter and selected parent survive Process; only item-specific fields remount.                                       | Filing many Inbox items into one project (usually Planner) was resetting both on every Process because the form remounts on `queue[0].id`. Clear still empties the filter.                                    |
 
 ## Verification
 

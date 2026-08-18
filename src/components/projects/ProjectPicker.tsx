@@ -23,6 +23,8 @@ export function ProjectPicker({
   allowNone = false,
   excludedIds,
   listClassName = "max-h-[42dvh]",
+  query: queryProp,
+  onQueryChange,
 }: {
   nodes: readonly OutlineNode[];
   value: ProjectPickerValue;
@@ -31,9 +33,17 @@ export function ProjectPicker({
   allowNone?: boolean;
   excludedIds?: ReadonlySet<string>;
   listClassName?: string;
+  /** Controlled filter. Omit both to keep the filter local to this picker. */
+  query?: string;
+  onQueryChange?: (query: string) => void;
 }) {
   const today = useToday();
-  const [query, setQuery] = useState("");
+  const [uncontrolledQuery, setUncontrolledQuery] = useState("");
+  const query = queryProp ?? uncontrolledQuery;
+  function setQuery(next: string) {
+    onQueryChange?.(next);
+    if (queryProp === undefined) setUncontrolledQuery(next);
+  }
   const [groupByResultArea, setGroupByResultArea] = useState(true);
   const [includeDeferred, setIncludeDeferred] = useState(false);
   const rows = useMemo(

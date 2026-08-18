@@ -23,6 +23,10 @@ The Inbox is still an ordinary project containing real task nodes. Processing ch
 current root's classification or placement rather than introducing a second capture-item
 model. Direct roots are queue units so nested subtasks travel with their parent branch.
 
+The destination picker is session state for the organize visit: filter text and the
+selected parent stay put after Process. Clear empties the filter; choosing No Project
+clears the parent. Outcome kind still starts at Task so Delete/Calendar cannot stick.
+
 Task and Project preserve the branch outside Inbox. Defer preserves it inside Inbox behind
 a dated shelf. Delete removes it deliberately. Calendar and reference note replace only a
 leaf, so both are unavailable while descendants exist.

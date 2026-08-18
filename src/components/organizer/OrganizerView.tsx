@@ -59,6 +59,9 @@ export function OrganizerView({
   today: string;
   nowIso: string;
 }) {
+  const [destination, setDestination] = useState<ProjectPickerValue>({ kind: "none" });
+  const [projectQuery, setProjectQuery] = useState("");
+
   if (queue.length === 0) {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
@@ -75,6 +78,10 @@ export function OrganizerView({
         nodes={nodes}
         today={today}
         nowIso={nowIso}
+        destination={destination}
+        onDestinationChange={setDestination}
+        projectQuery={projectQuery}
+        onProjectQueryChange={setProjectQuery}
       />
     </div>
   );
@@ -120,12 +127,20 @@ function OrganizerItemForm({
   nodes,
   today,
   nowIso,
+  destination,
+  onDestinationChange,
+  projectQuery,
+  onProjectQueryChange,
 }: {
   item: OutlineNode;
   total: number;
   nodes: readonly OutlineNode[];
   today: string;
   nowIso: string;
+  destination: ProjectPickerValue;
+  onDestinationChange: (value: ProjectPickerValue) => void;
+  projectQuery: string;
+  onProjectQueryChange: (query: string) => void;
 }) {
   const router = useRouter();
   const [kind, setKind] = useState<OutcomeKind>("task");
@@ -138,7 +153,6 @@ function OrganizerItemForm({
   const [deadline, setDeadline] = useState<Date | null>(item.deadline);
   const [contexts, setContexts] = useState(item.contexts ?? []);
   const [notes, setNotes] = useState(item.notes);
-  const [destination, setDestination] = useState<ProjectPickerValue>({ kind: "none" });
   const [createProject, setCreateProject] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [newProjectLetter, setNewProjectLetter] = useState<PriorityLetter | null>(null);
@@ -347,7 +361,9 @@ function OrganizerItemForm({
                 }
                 nodes={nodes}
                 value={destination}
-                onChange={setDestination}
+                onChange={onDestinationChange}
+                query={projectQuery}
+                onQueryChange={onProjectQueryChange}
               />
               <CheckboxField
                 label="Create a new project for this task"
@@ -408,7 +424,9 @@ function OrganizerItemForm({
                 label="Parent (result area, goal, or project)"
                 nodes={nodes}
                 value={destination}
-                onChange={setDestination}
+                onChange={onDestinationChange}
+                query={projectQuery}
+                onQueryChange={onProjectQueryChange}
               />
               <FieldGrid>
                 <DateField label="Deadline" value={deadline} onChange={setDeadline} />
@@ -461,7 +479,9 @@ function OrganizerItemForm({
                 label="Project"
                 nodes={nodes}
                 value={destination}
-                onChange={setDestination}
+                onChange={onDestinationChange}
+                query={projectQuery}
+                onQueryChange={onProjectQueryChange}
               />
               <TextArea
                 label="Notes"
@@ -573,11 +593,15 @@ function ProjectDestination({
   nodes,
   value,
   onChange,
+  query,
+  onQueryChange,
 }: {
   label: string;
   nodes: readonly OutlineNode[];
   value: ProjectPickerValue;
   onChange: (value: ProjectPickerValue) => void;
+  query: string;
+  onQueryChange: (query: string) => void;
 }) {
   return (
     <div>
@@ -588,6 +612,8 @@ function ProjectDestination({
         nodes={nodes}
         value={value}
         onChange={onChange}
+        query={query}
+        onQueryChange={onQueryChange}
         allowNone
         listClassName="max-h-64"
       />
