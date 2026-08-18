@@ -100,4 +100,29 @@ describe("parsePlannerPending", () => {
     expect(looksLikePlannerPending("Chipotle\t16.91")).toBe(false);
     expect(parsePlannerPending("Chipotle\t16.91", "2026-08-16").ok).toBe(false);
   });
+
+  it("treats a tagged paste with no rows as an empty snapshot", () => {
+    const text = [
+      "# planner-pending v1",
+      "# account=3448",
+      "# scraped=2026-08-18",
+      "# current=439.46",
+      "date\tdescription\tcategory\tamount",
+      "",
+    ].join("\n");
+    const result = parsePlannerPending(text, "2026-08-18");
+    if (!result.ok) throw new Error(result.error);
+    expect(result.payload.rows).toEqual([]);
+    expect(result.payload.currentCents).toBe(-43946);
+  });
+
+  it("does not flip a current balance that is already signed", () => {
+    const text = ["# planner-pending v1", "# account=3448", "# current=-439.46"].join(
+      "\n",
+    );
+    const result = parsePlannerPending(text, "2026-08-18");
+    if (!result.ok) throw new Error(result.error);
+    expect(result.payload.rows).toEqual([]);
+    expect(result.payload.currentCents).toBe(-43946);
+  });
 });

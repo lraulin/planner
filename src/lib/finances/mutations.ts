@@ -13,6 +13,7 @@ import {
   type RecurringSpendAmountSource,
   type RecurringSpendPeriod,
 } from "@/db/schema";
+import { parseAccountUrl } from "./accountUrl";
 import { changedRows, planReclassify } from "./classify/reclassify";
 import { MatcherConflictError } from "./commitments";
 import { numericStringToCents } from "./money";
@@ -195,6 +196,7 @@ export type AccountEdit = {
   name?: string;
   kind?: FinanceAccountKind;
   institution?: string;
+  url?: string;
 };
 
 /**
@@ -215,6 +217,7 @@ export async function updateAccount(
     name?: string;
     kind?: FinanceAccountKind;
     institution?: string;
+    url?: string;
     updatedAt: Date;
   } = { updatedAt: new Date() };
 
@@ -225,6 +228,11 @@ export async function updateAccount(
   }
   if (edit.kind !== undefined) values.kind = edit.kind;
   if (edit.institution !== undefined) values.institution = edit.institution.trim();
+  if (edit.url !== undefined) {
+    const parsed = parseAccountUrl(edit.url);
+    if (parsed === null) throw new Error("That is not a bank account URL.");
+    values.url = parsed;
+  }
 
   await db
     .update(financeAccounts)

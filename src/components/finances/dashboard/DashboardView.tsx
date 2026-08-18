@@ -4,11 +4,14 @@ import { useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  clearScrapedPendingAction,
   pasteScrapedPendingAction,
   setSubscriptionStatusAction,
 } from "@/app/finances/actions";
+import { syncAction } from "@/app/settings/bankSyncActions";
 import type { BankConnectionRow } from "@/lib/banksync/queries";
 import {
+  accountBalanceTooltip,
   accountBalanceView,
   availableToSpend,
   cashPosition,
@@ -212,6 +215,7 @@ export function DashboardView({
         <Panel
           title="Accounts"
           subtitle="Working balance, and how fresh the posted figure is"
+          actions={connections.length > 0 ? <RefreshBanksButton /> : undefined}
         >
           {openAccounts.length === 0 ? (
             <PanelEmpty>
@@ -425,9 +429,12 @@ function AccountBalanceRow({
   const primary = showPosted ? view.workingCents : view.postedCents;
 
   return (
-    <li className="flex items-baseline justify-between gap-3 border-b border-rule py-1 last:border-b-0">
+    <li
+      className="flex items-baseline justify-between gap-3 border-b border-rule py-1 last:border-b-0"
+      title={accountBalanceTooltip(view)}
+    >
       <div className="min-w-0">
-        <div className="truncate text-[0.8125rem] text-ink">{account.name}</div>
+        <AccountName account={account} />
         <div className="text-[0.75rem] text-ink-muted">
           {KIND_LABELS[account.kind] ?? account.kind} · {freshness(account, formatDate)}
         </div>
@@ -436,11 +443,6 @@ function AccountBalanceRow({
         className={`tabular flex-none text-right text-[0.875rem] ${
           primary < 0 ? "text-[var(--chart-spend)]" : "text-ink"
         }`}
-        title={
-          showPosted
-            ? `${formatUsd(view.postedCents)} posted + ${formatUsd(view.pendingCents)} pending = ${formatUsd(view.workingCents)}`
-            : undefined
-        }
       >
         {formatUsd(primary)}
         {showPosted && (
@@ -450,6 +452,52 @@ function AccountBalanceRow({
         )}
       </div>
     </li>
+  );
+}
+
+function AccountName({ account }: { account: FinanceAccountRow }) {
+  const className =
+    "truncate text-[0.8125rem] text-ink underline-offset-2 hover:underline";
+  if (account.url === "") {
+    return <div className={className}>{account.name}</div>;
+  }
+  return (
+    <a
+      href={account.url}
+      target="_blank"
+      rel="noreferrer noopener"
+      className={className}
+    >
+      {account.name}
+    </a>
+  );
+}
+
+function RefreshBanksButton() {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [notice, setNotice] = useState<string | null>(null);
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <button
+        type="button"
+        disabled={pending}
+        title="Re-read what SimpleFIN currently holds. It cannot make a bank hand over something newer."
+        onClick={() => {
+          setNotice(null);
+          startTransition(async () => {
+            const result = await syncAction();
+            setNotice(result.ok ? "Re-read the bank feed." : result.error);
+            router.refresh();
+          });
+        }}
+        className="min-h-tap rounded border border-rule px-2 text-[0.8125rem] text-ink disabled:opacity-50 md:min-h-0 md:py-1"
+      >
+        {pending ? "Working…" : "Refresh now"}
+      </button>
+      {notice && <span className="text-[0.75rem] text-ink-muted">{notice}</span>}
+    </div>
   );
 }
 
@@ -477,15 +525,7 @@ function CapOnePendingPaste() {
         return;
       }
       const data = outcome.data;
-      setMessage(
-        data
-          ? `Wrote ${data.inserted} pending on ${data.accountName}` +
-              (data.skippedPosted > 0
-                ? ` · ${data.skippedPosted} already posted`
-                : "") +
-              "."
-          : "Updated.",
-      );
+      setMessage(data ? describePendingWrite(data) : "Updated.");
       if (areaRef.current) areaRef.current.value = "";
       router.refresh();
     });
@@ -494,7 +534,7 @@ function CapOnePendingPaste() {
   return (
     <Panel
       title="Capital One pending"
-      subtitle="SimpleFIN does not send these. Copy on the bank page, then paste here."
+      subtitle="SimpleFIN does not send these. Copy on the bank page — including when it says there are none — then paste here."
     >
       <div className="flex flex-wrap items-center gap-2">
         <button
@@ -523,6 +563,29 @@ function CapOnePendingPaste() {
         >
           Apply text
         </button>
+        <button
+          type="button"
+          disabled={pending || today === null}
+          onClick={() => {
+            if (today === null) return;
+            setError(null);
+            setMessage(null);
+            startTransition(async () => {
+              const outcome = await clearScrapedPendingAction(today);
+              if (!outcome.ok) {
+                setError(outcome.error);
+                return;
+              }
+              setMessage(
+                outcome.data ? describePendingWrite(outcome.data) : "Cleared.",
+              );
+              router.refresh();
+            });
+          }}
+          className="min-h-tap rounded border border-rule px-2 text-[0.8125rem] text-ink disabled:opacity-50 md:min-h-0 md:py-1"
+        >
+          None pending
+        </button>
       </div>
       {message && <p className="mt-2 text-[0.8125rem] text-ink">{message}</p>}
       {error && (
@@ -539,6 +602,27 @@ function CapOnePendingPaste() {
         className="mt-2 w-full rounded border border-rule bg-surface px-2 py-1 font-mono text-[0.75rem] text-ink"
       />
     </Panel>
+  );
+}
+
+function describePendingWrite(data: {
+  inserted: number;
+  skippedPosted: number;
+  replaced: number;
+  accountName: string;
+  balanceUpdated: boolean;
+}): string {
+  if (data.inserted === 0) {
+    return (
+      `Cleared pending on ${data.accountName}` +
+      (data.balanceUpdated ? " · current balance updated" : "") +
+      "."
+    );
+  }
+  return (
+    `Wrote ${data.inserted} pending on ${data.accountName}` +
+    (data.skippedPosted > 0 ? ` · ${data.skippedPosted} already posted` : "") +
+    "."
   );
 }
 

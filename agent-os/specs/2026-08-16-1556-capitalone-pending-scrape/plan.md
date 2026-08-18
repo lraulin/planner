@@ -43,10 +43,11 @@ SimpleFIN does not supply Capital One pending rows. The dashboard therefore unde
 
 ## Changes from original plan
 
-| #   | Change                                                                          | Why                                                                                                         |
-| --- | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| 1   | Date comes from the expanded drawer's Purchased field, not only the scrape day. | The collapsed table has no date; expanding Chipotle shows `Purchased: Sun, Aug 16, 2026`.                   |
-| 2   | Posted match is amount + merchant **within 14 days**, not date-blind.           | A date-blind match treated last month's SimpliSafe $34.97 as this month's pending and skipped the live row. |
+| #   | Change                                                                                                                                                                                                                                                   | Why                                                                                                                                                                               |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Date comes from the expanded drawer's Purchased field, not only the scrape day.                                                                                                                                                                          | The collapsed table has no date; expanding Chipotle shows `Purchased: Sun, Aug 16, 2026`.                                                                                         |
+| 2   | Posted match is amount + merchant **within 14 days**, not date-blind.                                                                                                                                                                                    | A date-blind match treated last month's SimpliSafe $34.97 as this month's pending and skipped the live row.                                                                       |
+| 3   | An empty pending table is a valid snapshot. The userscript mounts on the card page even when Capital One says there are none. Optional `# current=` rewrites the synced headline so clearing pending does not revert to SimpleFIN's stale posted figure. | The first version required at least one pending row to mount the button and refused a zero-row paste, so leftover scrape-pending could not be cleared once everything had posted. |
 
 ## Task 1 — Save spec documentation
 

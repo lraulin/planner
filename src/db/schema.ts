@@ -1989,6 +1989,11 @@ export const financeAccounts = pgTable(
     kind: financeAccountKindEnum("kind").notNull().default("other"),
     /** Free text — "Chase", "Capital One". Display only; identity lives in the key. */
     institution: text("institution").notNull().default(""),
+    /**
+     * Deep link to this account at the bank. Empty until the user sets one. Only https
+     * hosts we actually use — see `parseAccountUrl`.
+     */
+    url: text("url").notNull().default(""),
     /** The feed that created this account: `csv:chase-credit`, later `plaid`. */
     externalSource: text("external_source").notNull(),
     /** Stable per-feed account identifier — last four, account number, Plaid id. */
@@ -2640,6 +2645,11 @@ export const bankAccountLinks = pgTable(
      * time we asked. A stale figure stamped "now" is worse than no figure.
      */
     balanceAsOf: timestamp("balance_as_of", { withTimezone: true }),
+    /**
+     * When a scrape last wrote `balanceCents`. SimpleFIN must not overwrite a fresher
+     * scrape with yesterday's posted number; null once the feed has caught up.
+     */
+    scrapeBalanceAsOf: timestamp("scrape_balance_as_of", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

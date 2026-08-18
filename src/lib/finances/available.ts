@@ -38,6 +38,7 @@
 import type { FinanceAccountKind } from "@/db/schema";
 import { daysBetweenKeys, shiftDateKey } from "@/lib/schedule/geometry";
 import { BIWEEKLY_DAYS, type Payday } from "./classify/income";
+import { formatUsd } from "./money";
 import {
   periodIndex,
   periodLengthDays,
@@ -109,6 +110,14 @@ export function accountBalanceView(
     postedCents,
     pendingCents,
   };
+}
+
+/** Hover text for an account row: the current figure, and the posted split when they differ. */
+export function accountBalanceTooltip(view: AccountBalanceView): string {
+  if (view.pendingCents === 0) {
+    return `Current balance ${formatUsd(view.workingCents)}`;
+  }
+  return `Current balance ${formatUsd(view.workingCents)} (${formatUsd(view.postedCents)} posted + ${formatUsd(view.pendingCents)} pending)`;
 }
 
 /**

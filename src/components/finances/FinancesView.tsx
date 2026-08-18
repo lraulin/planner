@@ -65,7 +65,18 @@ function AccountBalances({ accounts }: { accounts: FinanceAccountRow[] }) {
             title={title}
             className="flex items-baseline gap-1.5 text-[0.8125rem]"
           >
-            <span className="text-ink-muted">{account.name}</span>
+            {account.url ? (
+              <a
+                href={account.url}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="text-ink-muted underline-offset-2 hover:underline"
+              >
+                {account.name}
+              </a>
+            ) : (
+              <span className="text-ink-muted">{account.name}</span>
+            )}
             <span
               className={`tabular font-medium ${
                 account.balanceCents < 0 || mismatch ? "text-priority-a" : "text-ink"

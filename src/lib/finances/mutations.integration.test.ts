@@ -148,6 +148,18 @@ describeDb("finance mutations", () => {
     });
   });
 
+  it("stores a bank account URL and refuses one that is not the bank", async () => {
+    const url =
+      "https://secure.chase.com/web/auth/dashboard#/dashboard/transactions/1197428459/CARD/BAC";
+    await updateAccount(userId, accountId, { url });
+    expect((await listAccounts(userId))[0].url).toBe(url);
+
+    await expect(
+      updateAccount(userId, accountId, { url: "javascript:alert(1)" }),
+    ).rejects.toThrow("That is not a bank account URL.");
+    expect((await listAccounts(userId))[0].url).toBe(url);
+  });
+
   it("refuses to blank an account's name", async () => {
     await expect(updateAccount(userId, accountId, { name: "  " })).rejects.toThrow(
       "An account needs a name.",

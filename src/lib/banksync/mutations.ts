@@ -20,6 +20,7 @@ import {
   financeTransactions,
 } from "@/db/schema";
 import { centsToNumericString } from "@/lib/finances/money";
+import { shouldKeepScrapedBalance } from "./scrapeBalance";
 import type { BankInsert, BankUpdate } from "./syncPlan";
 
 async function requireConnection(userId: string, connectionId: string): Promise<void> {
@@ -198,12 +199,28 @@ export async function saveBalance(
     asOf: Date;
   },
 ): Promise<void> {
+  const [existing] = await db
+    .select({
+      id: bankAccountLinks.id,
+      balanceCents: bankAccountLinks.balanceCents,
+      scrapeBalanceAsOf: bankAccountLinks.scrapeBalanceAsOf,
+    })
+    .from(bankAccountLinks)
+    .where(
+      and(eq(bankAccountLinks.id, input.linkId), eq(bankAccountLinks.userId, userId)),
+    )
+    .limit(1);
+  if (!existing) throw new Error("Link not found.");
+
+  if (shouldKeepScrapedBalance(existing, input, Date.now())) return;
+
   const updated = await db
     .update(bankAccountLinks)
     .set({
       balanceCents: input.balanceCents,
       availableCents: input.availableCents,
       balanceAsOf: input.asOf,
+      scrapeBalanceAsOf: null,
       updatedAt: new Date(),
     })
     .where(

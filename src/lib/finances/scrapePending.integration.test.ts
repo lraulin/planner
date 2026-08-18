@@ -3,9 +3,14 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { financeTransactions, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { linkAccount, saveBalance, saveConnection } from "@/lib/banksync/mutations";
 import { importFinanceCsvFiles, type ImportFile } from "./import";
 import { listAccounts, listTransactions } from "./queries";
-import { replaceScrapedPending, resolveScrapedPending } from "./scrapePending";
+import {
+  clearScrapedPending,
+  replaceScrapedPending,
+  resolveScrapedPending,
+} from "./scrapePending";
 import { SCRAPE_FEED } from "./capitalOnePending";
 
 const dbReachable = await databaseReachable();
@@ -171,6 +176,9 @@ describeDb("replaceScrapedPending", () => {
     expect(ownerPending).toHaveLength(1);
 
     expect(await resolveScrapedPending(intruder, [accountId])).toBe(0);
+    await expect(clearScrapedPending(intruder, "2026-08-18")).rejects.toThrow(
+      /no scraped pending/,
+    );
     const stillThere = await db
       .select({ id: financeTransactions.id })
       .from(financeTransactions)
@@ -181,6 +189,114 @@ describeDb("replaceScrapedPending", () => {
         ),
       );
     expect(stillThere).toHaveLength(1);
+  });
+
+  it("treats a paste with no rows as clearing the snapshot", async () => {
+    await replaceScrapedPending(
+      userId,
+      paste(["2026-08-16\tChipotle\tDining\t16.91"]),
+      "2026-08-16",
+    );
+
+    const cleared = await replaceScrapedPending(
+      userId,
+      [
+        "# planner-pending v1",
+        "# account=3448",
+        "# scraped=2026-08-18",
+        "date\tdescription\tcategory\tamount",
+        "",
+      ].join("\n"),
+      "2026-08-18",
+    );
+    expect(cleared.inserted).toBe(0);
+    expect(cleared.replaced).toBe(1);
+    expect((await listTransactions(userId)).filter((row) => row.pending)).toHaveLength(
+      0,
+    );
+  });
+
+  it("writes the scraped current as the headline so clearing pending does not revert to stale posted", async () => {
+    const connectionId = await saveConnection(userId, {
+      accessUrl: "https://a:b@x.test",
+    });
+    const linkId = await linkAccount(userId, {
+      connectionId,
+      externalAccountId: "cap1",
+      accountId,
+    });
+    await saveBalance(userId, {
+      linkId,
+      balanceCents: -5978,
+      availableCents: null,
+      asOf: new Date("2026-08-16T09:00:00Z"),
+    });
+    await replaceScrapedPending(
+      userId,
+      paste(["2026-08-16\tWalmart\tGrocery\t379.68"]),
+      "2026-08-16",
+    );
+
+    const cleared = await replaceScrapedPending(
+      userId,
+      [
+        "# planner-pending v1",
+        "# account=3448",
+        "# scraped=2026-08-18",
+        "# current=439.46",
+        "date\tdescription\tcategory\tamount",
+        "",
+      ].join("\n"),
+      "2026-08-18",
+    );
+    expect(cleared.inserted).toBe(0);
+    expect(cleared.balanceUpdated).toBe(true);
+
+    const [account] = await listAccounts(userId);
+    expect(account.balanceCents).toBe(-43946);
+    expect((await listTransactions(userId)).filter((row) => row.pending)).toHaveLength(
+      0,
+    );
+
+    // A same-session SimpleFIN refresh still holds yesterday's posted number.
+    await saveBalance(userId, {
+      linkId,
+      balanceCents: -5978,
+      availableCents: null,
+      asOf: new Date(),
+    });
+    expect((await listAccounts(userId))[0].balanceCents).toBe(-43946);
+  });
+
+  it("clears leftover scrape-pending from the dashboard and folds them into the current", async () => {
+    const connectionId = await saveConnection(userId, {
+      accessUrl: "https://a:b@x.test",
+    });
+    const linkId = await linkAccount(userId, {
+      connectionId,
+      externalAccountId: "cap1",
+      accountId,
+    });
+    await saveBalance(userId, {
+      linkId,
+      balanceCents: -5978,
+      availableCents: null,
+      asOf: new Date("2026-08-16T09:00:00Z"),
+    });
+    await replaceScrapedPending(
+      userId,
+      paste(["2026-08-16\tWalmart\tGrocery\t379.68"]),
+      "2026-08-16",
+    );
+
+    const cleared = await clearScrapedPending(userId, "2026-08-18");
+    expect(cleared.inserted).toBe(0);
+    expect(cleared.replaced).toBe(1);
+    expect(cleared.balanceUpdated).toBe(true);
+    expect((await listAccounts(userId))[0].balanceCents).toBe(-43946);
+    expect((await listTransactions(userId)).filter((row) => row.pending)).toHaveLength(
+      0,
+    );
   });
 });
 

@@ -9,7 +9,7 @@
 
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { financeAccounts, financeTransactions } from "@/db/schema";
+import { bankAccountLinks, financeAccounts, financeTransactions } from "@/db/schema";
 import { normalizeMerchant } from "./classify/merchant";
 import {
   parsePlannerPending,
@@ -27,6 +27,8 @@ export type ReplaceScrapedPendingResult = {
   skippedPosted: number;
   /** Previous scrape-pending rows removed by the snapshot replace. */
   replaced: number;
+  /** Synced headline was rewritten from the scrape's current balance. */
+  balanceUpdated: boolean;
 };
 
 export async function replaceScrapedPending(
@@ -106,13 +108,114 @@ export async function writeScrapedPending(
       );
     }
 
+    // Only when the bank says pending is empty. Otherwise the headline stays the posted
+    // SimpleFIN figure and pending is added on top (D2a).
+    let balanceUpdated = false;
+    if (fresh.length === 0 && payload.currentCents !== undefined) {
+      const now = new Date();
+      const updated = await tx
+        .update(bankAccountLinks)
+        .set({
+          balanceCents: payload.currentCents,
+          balanceAsOf: now,
+          scrapeBalanceAsOf: now,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(bankAccountLinks.userId, userId),
+            eq(bankAccountLinks.accountId, account.id),
+          ),
+        )
+        .returning({ id: bankAccountLinks.id });
+      balanceUpdated = updated.length > 0;
+    }
+
     return {
       accountId: account.id,
       accountName: account.name,
       inserted: fresh.length,
       skippedPosted,
       replaced: removed.length,
+      balanceUpdated,
     };
+  });
+}
+
+/**
+ * Clear leftover scrape-pending without a paste. The working figure (posted + those
+ * rows) becomes the new current, because that is what the bank is showing once pending
+ * is gone and SimpleFIN has not caught up.
+ */
+export async function clearScrapedPending(
+  userId: string,
+  todayKey: string,
+): Promise<ReplaceScrapedPendingResult> {
+  const pending = await db
+    .select({
+      accountId: financeTransactions.accountId,
+      amount: financeTransactions.amount,
+    })
+    .from(financeTransactions)
+    .where(
+      and(
+        eq(financeTransactions.userId, userId),
+        eq(financeTransactions.externalSource, SCRAPE_FEED),
+        eq(financeTransactions.pending, true),
+      ),
+    );
+  if (pending.length === 0) {
+    throw new Error("There are no scraped pending rows to clear.");
+  }
+
+  const accountIds = [...new Set(pending.map((row) => row.accountId))];
+  if (accountIds.length !== 1) {
+    throw new Error("Scraped pending is on more than one account.");
+  }
+
+  const [account] = await db
+    .select({
+      id: financeAccounts.id,
+      name: financeAccounts.name,
+      externalKey: financeAccounts.externalKey,
+    })
+    .from(financeAccounts)
+    .where(
+      and(eq(financeAccounts.id, accountIds[0]), eq(financeAccounts.userId, userId)),
+    );
+  if (!account) throw new Error("Account not found.");
+
+  const last4 = account.externalKey.replace(/\D/g, "").slice(-4);
+  if (last4.length !== 4) {
+    throw new Error(
+      "The card's last four is missing, so this paste cannot be targeted.",
+    );
+  }
+
+  const [link] = await db
+    .select({ balanceCents: bankAccountLinks.balanceCents })
+    .from(bankAccountLinks)
+    .where(
+      and(
+        eq(bankAccountLinks.userId, userId),
+        eq(bankAccountLinks.accountId, account.id),
+      ),
+    );
+
+  const pendingCents = pending.reduce(
+    (total, row) => total + (numericStringToCents(row.amount) ?? 0),
+    0,
+  );
+  const currentCents =
+    link?.balanceCents !== null && link?.balanceCents !== undefined
+      ? link.balanceCents + pendingCents
+      : undefined;
+
+  return writeScrapedPending(userId, {
+    last4,
+    scrapedOn: todayKey,
+    rows: [],
+    currentCents,
   });
 }
 

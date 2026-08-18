@@ -43,6 +43,12 @@ export type ScrapedPendingPayload = {
   last4: string;
   scrapedOn: string;
   rows: ScrapedPendingRow[];
+  /**
+   * Bank current balance, register sign. Present when the userscript could read it.
+   * An empty pending table plus this figure is how we learn that pending posted — SimpleFIN
+   * still reports yesterday's posted number for hours after Capital One shows none.
+   */
+  currentCents?: number;
 };
 
 export type ParsePendingResult =
@@ -93,6 +99,7 @@ export function parsePlannerPending(
   const lines = text.split(/\r?\n/);
   let last4: string | null = null;
   let scrapedOn: string | null = null;
+  let currentCents: number | undefined;
   let columnLine: string | null = null;
   const dataLines: string[] = [];
 
@@ -106,6 +113,14 @@ export function parsePlannerPending(
       const value = meta[2].trim();
       if (key === "account") last4 = value.replace(/\D/g, "").slice(-4);
       if (key === "scraped") scrapedOn = parsePurchasedDate(value);
+      if (key === "current") {
+        const shown = parseAmountCents(value);
+        if (shown === null) {
+          return { ok: false, error: "Could not read the current balance." };
+        }
+        // Same sign rule as the amount column: the bank shows `$439.46` owed.
+        currentCents = shown > 0 ? -shown : shown;
+      }
       continue;
     }
     if (columnLine === null) {
@@ -132,6 +147,13 @@ export function parsePlannerPending(
   const catIdx = columns.indexOf("category");
   const amountIdx = columns.indexOf("amount");
   if (descIdx < 0 || amountIdx < 0) {
+    // A header-only or metadata-only paste is the empty-pending snapshot.
+    if (dataLines.length === 0) {
+      return {
+        ok: true,
+        payload: { last4, scrapedOn: fallbackDay, rows: [], currentCents },
+      };
+    }
     return { ok: false, error: "The paste needs description and amount columns." };
   }
 
@@ -161,10 +183,8 @@ export function parsePlannerPending(
     });
   }
 
-  if (parsed.length === 0) {
-    return { ok: false, error: "The paste has no pending rows." };
-  }
-
+  // Zero rows is a real snapshot: the bank page said there are no pending transactions.
+  // Refusing that paste is how leftover scrape-pending survived after everything posted.
   const seen = new Map<string, number>();
   const rows: ScrapedPendingRow[] = parsed.map((row) => {
     const stem = `${last4}|${fold(row.description)}|${Math.abs(row.amountCents)}`;
@@ -173,7 +193,10 @@ export function parsePlannerPending(
     return { ...row, externalId: `${stem}|${n}` };
   });
 
-  return { ok: true, payload: { last4, scrapedOn: fallbackDay, rows } };
+  return {
+    ok: true,
+    payload: { last4, scrapedOn: fallbackDay, rows, currentCents },
+  };
 }
 
 function fold(description: string): string {

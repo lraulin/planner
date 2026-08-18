@@ -1,0 +1,6 @@
+ALTER TABLE "bank_account_links" ADD COLUMN "scrape_balance_as_of" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "finance_accounts" ADD COLUMN "url" text DEFAULT '' NOT NULL;--> statement-breakpoint
+UPDATE "finance_accounts" SET "url" = 'https://myaccounts.capitalone.com/Card/bUYVJfmNzUx2MzsklEZuBCO1t1eOQrXRqSdOcvuBrJ8=' WHERE "kind" = 'credit_card' AND "external_key" LIKE '%3448';--> statement-breakpoint
+UPDATE "finance_accounts" SET "url" = 'https://myaccounts.capitalone.com/Bank/jg5mFCxvS9+soKzXLPBNRDRUhDVwyi769es9a2D2t2Y=' WHERE "kind" = 'checking' AND "external_key" LIKE '%2322';--> statement-breakpoint
+UPDATE "finance_accounts" SET "url" = 'https://myaccounts.capitalone.com/Bank/jg5mFCxvS9+soKzXLPBNRGXwqvUqrs1tFF+tyarIJbU=' WHERE "kind" = 'savings' AND "external_key" LIKE '%2603';--> statement-breakpoint
+UPDATE "finance_accounts" SET "url" = 'https://secure.chase.com/web/auth/dashboard#/dashboard/transactions/1197428459/CARD/BAC' WHERE "kind" = 'credit_card' AND "external_key" LIKE '%9910';

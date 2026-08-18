@@ -157,6 +157,8 @@ export type FinanceAccountRow = {
   name: string;
   kind: FinanceAccountKind;
   institution: string;
+  /** Deep link to this account at the bank, or empty. */
+  url: string;
   externalSource: string;
   externalKey: string;
   closedAt: Date | null;

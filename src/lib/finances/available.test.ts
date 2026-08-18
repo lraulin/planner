@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  accountBalanceTooltip,
   accountBalanceView,
   availableToSpend,
   cashPosition,
@@ -130,6 +131,26 @@ describe("accountBalanceView", () => {
 
     expect(view.pendingCents).toBe(0);
     expect(view.workingCents).toBe(-5978);
+  });
+});
+
+describe("accountBalanceTooltip", () => {
+  it("names the current balance, and the posted split only when pending exists", () => {
+    expect(
+      accountBalanceTooltip({
+        workingCents: -43946,
+        postedCents: -5978,
+        pendingCents: -37968,
+      }),
+    ).toBe("Current balance -$439.46 (-$59.78 posted + -$379.68 pending)");
+
+    expect(
+      accountBalanceTooltip({
+        workingCents: -43946,
+        postedCents: -43946,
+        pendingCents: 0,
+      }),
+    ).toBe("Current balance -$439.46");
   });
 });
 

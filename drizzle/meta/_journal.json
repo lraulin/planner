@@ -351,6 +351,13 @@
       "when": 1786991294352,
       "tag": "0049_early_mauler",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1787054995424,
+      "tag": "0050_flat_gabe_jones",
+      "breakpoints": true
     }
   ]
 }

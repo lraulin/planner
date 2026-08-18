@@ -19,7 +19,8 @@ A Tampermonkey userscript copies Capital One's pending table as a tagged TSV. Pl
 
 - Clipboard, not POST: no Planner credential next to a bank tab.
 - Tampermonkey, not a Chrome extension: this is a bridge to retire when Chase is the main card.
-- Snapshot replace: Cap One's table is the current truth.
+- Snapshot replace: Cap One's table is the current truth, including when that table is empty.
+- An empty scrape may carry `# current=` so the synced headline becomes the bank's current instead of yesterday's posted.
 - Separate feed `scrape:capitalone` so `applySync` cannot delete these as vanished SimpleFIN pending.
 - Purchased date from the expanded drawer; scrape day only as fallback.
 - Exclude all pending from SimpleFIN cross-source dedup or a posted Chipotle is skipped as a duplicate of the scrape row.

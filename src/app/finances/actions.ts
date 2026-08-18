@@ -1,6 +1,7 @@
 "use server";
 
 import {
+  clearScrapedPending,
   replaceScrapedPending,
   type ReplaceScrapedPendingResult,
 } from "@/lib/finances/scrapePending";
@@ -134,6 +135,12 @@ export async function pasteScrapedPendingAction(
   todayKey: string,
 ): Promise<DataActionResult<ReplaceScrapedPendingResult>> {
   return runWithData((userId) => replaceScrapedPending(userId, text, todayKey));
+}
+
+export async function clearScrapedPendingAction(
+  todayKey: string,
+): Promise<DataActionResult<ReplaceScrapedPendingResult>> {
+  return runWithData((userId) => clearScrapedPending(userId, todayKey));
 }
 
 export async function getTransactionAction(
