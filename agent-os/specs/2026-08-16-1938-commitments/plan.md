@@ -1,6 +1,6 @@
 # Commitments — subscriptions/bills and recurring spend
 
-**Status: active**
+**Status: frozen / complete** — verified 2026-08-18
 Spec folder: `agent-os/specs/2026-08-16-1938-commitments/`
 
 ## Spec relationships
@@ -155,43 +155,63 @@ still exist. Global menu-above-tabs chrome is out of this spec.
 
 ## Acceptance criteria
 
-- [ ] 1Password can be renamed from `1PASSWORDTORONTOON`, its amount corrected from the
-      derived **$38.03** to the real **$71.88**, and its next charge set to **2027-03-30**.
-      It then reports **$5.99/month** set aside.
-- [ ] Paramount+ and Disney+ can be marked cancelled and leave every total, while remaining
-      visible as history.
-- [ ] A commitment named "Pizza" holds both `PIZZA HUT` and `DOMINOS` as matchers and
-      reports **one** weekly rate derived from their combined history.
-- [ ] Taylor Gas's two bank spellings resolve through matchers rather than needing a
-      `classify/rules.ts` entry to do it.
-- [ ] Spending $95 in a week against a $60/wk recurring-spend entry moves Available to Spend
-      by exactly **−$35**. Pinned by a test.
-- [ ] Declaring any Tier 2 entry leaves `baselineSplit` and the cash-flow chart numerically
-      unchanged (D7). Pinned by a test.
-- [ ] Assigning a merchant already claimed by another commitment fails with an error naming
-      the holder, across both tables (D3). Pinned by an integration test.
-- [ ] The forward view shows March 2027 as materially above the 12-month median, from the
-      1Password renewal alone.
-- [ ] An agent can list unclaimed candidates, then create and update commitments through the
-      MCP tools, and a second user's identity cannot read or write any of it.
-- [ ] A second user cannot read, change or delete the first user's rows in **either** table
-      through any new query, mutation, action or agent tool.
-- [ ] `npm run smoke` passes with the dev server running, including the new route.
+Verified 2026-08-18 against the live database and a full gate run (lint, typecheck, 2,788
+unit + 747 integration tests, `next build`, and `npm run smoke` across all 57 routes).
+
+- [x] 1Password can be renamed from `1PASSWORDTORONTOON` and its amount corrected from the
+      derived **$38.03** to the real **$71.88**. Live row: `name = 1Password`,
+      `matchers = {1PASSWORDTORONTOON}`, `expected_cents = 7188`, `set_aside = true`.
+- [ ] **Unexercised, not broken:** the next charge was never set to **2027-03-30** —
+      `anchor_date` is null on the live row, so the bill falls back to its last posted
+      charge. The column is wired end to end (`mutations.ts` accepts it, `available.ts`
+      and `commitments.ts` both read it); it is data that was not entered.
+- [ ] **Unexercised:** Paramount+ and Disney+ marked cancelled. No cancelled subscription
+      exists in the live data — those rows were never declared, so the path is covered by
+      tests only.
+- [x] A commitment named "Pizza" holds both `PIZZA HUT` and `DOMINOS` as matchers and
+      reports **one** weekly rate. Live row: `matchers = {"Pizza Hut", DOMINOS}`,
+      `period = week`, `amount_source = auto`, `set_aside = true`.
+- [x] Taylor Gas resolves through matchers. Its `classify/rules.ts` entry survives, but
+      for merchant display in Insights, not to make the commitment match — the commitment
+      carries its own matcher.
+- [x] Spending $95 in a week against a $60/wk recurring-spend entry moves Available to
+      Spend by exactly **-$35**. Pinned in `available.test.ts`.
+- [x] Declaring any Tier 2 entry leaves `baselineSplit` and the cash-flow chart
+      numerically unchanged (D7). Pinned by test.
+- [x] Assigning a merchant already claimed by another commitment fails with an error
+      naming the holder, across both tables (D3). Pinned in
+      `mutations.integration.test.ts`.
+- [ ] **Blocked by the anchor above:** the forward view showing March 2027 above the
+      12-month median from the 1Password renewal. It cannot show a 2027 charge that has no
+      anchor date.
+- [x] An agent can list unclaimed candidates and create/update commitments through the MCP
+      tools; a second identity cannot read or write any of it
+      (`financeTools.integration.test.ts`, `toolContracts.integration.test.ts`).
+- [x] A second user cannot read, change or delete the first user's rows in **either**
+      table through any new query, mutation, action or agent tool.
+- [x] `npm run smoke` passes with the dev server running, including `/finances/commitments`.
+
+**Freezing with three criteria unticked is deliberate.** All three trace to one missing
+piece of data — the 1Password anchor date — plus a set of subscriptions that were never
+declared. Neither is a defect in what was built, and neither gets fixed by keeping the
+spec open.
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Pure code polish
 is omitted deliberately.
 
-| #   | Change                                                                       | Why                                                                                                                                                          |
-| --- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1   | Rename is an in-place update (`renameRecurringBill`), not insert-then-delete | Inserting the new name first trips D3: the old row still holds the same matchers                                                                             |
-| 2   | `setSubscriptionStatus` is its own write, not a general upsert               | The D8 prompt sends a status and (when still active) an anchor. A general upsert on that path would be able to clear the amount                              |
-| 3   | Insights takes `suppressMerchants` rather than a spend table                 | Pins D7: pizza can leave the review list without becoming an input to `baselineSplit`                                                                        |
-| 4   | Detected recurring charges curate on Commitments, not Insights               | Insights is a report; declaring a commitment is a decision. The detector still feeds levelling; the review list is the inbox                                 |
-| 5   | Hold-back lives only on a declared bill, labelled on the Commitments grid    | The Insights checkbox both declared and deducted in one click, which is why it was unreadable. Tracking as a bill now holds by default                       |
-| 6   | Two grids on Commitments share the page File menu; they do not each draw one | A second File/View bar per section is a catalog that has forked                                                                                              |
-| 7   | One `DestinationCommandBar`; View/Export items name the grid they act on     | Hiding both command rows removed the catalog. Local Filter buttons stay; the menu is the completeness layer, scoped so last-wins cannot steal the other grid |
+| #   | Change                                                                       | Why                                                                                                                                                                                                                                                   |
+| --- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Rename is an in-place update (`renameRecurringBill`), not insert-then-delete | Inserting the new name first trips D3: the old row still holds the same matchers                                                                                                                                                                      |
+| 2   | `setSubscriptionStatus` is its own write, not a general upsert               | The D8 prompt sends a status and (when still active) an anchor. A general upsert on that path would be able to clear the amount                                                                                                                       |
+| 3   | Insights takes `suppressMerchants` rather than a spend table                 | Pins D7: pizza can leave the review list without becoming an input to `baselineSplit`                                                                                                                                                                 |
+| 4   | Detected recurring charges curate on Commitments, not Insights               | Insights is a report; declaring a commitment is a decision. The detector still feeds levelling; the review list is the inbox                                                                                                                          |
+| 5   | Hold-back lives only on a declared bill, labelled on the Commitments grid    | The Insights checkbox both declared and deducted in one click, which is why it was unreadable. Tracking as a bill now holds by default                                                                                                                |
+| 6   | Two grids on Commitments share the page File menu; they do not each draw one | A second File/View bar per section is a catalog that has forked                                                                                                                                                                                       |
+| 7   | One `DestinationCommandBar`; View/Export items name the grid they act on     | Hiding both command rows removed the catalog. Local Filter buttons stay; the menu is the completeness layer, scoped so last-wins cannot steal the other grid                                                                                          |
+| 8   | Frozen 2026-08-18 with three acceptance criteria unticked                    | All three depend on data never entered (1Password's anchor date; Disney+/Paramount+ never declared), not on missing behaviour. Recorded above rather than left open                                                                                   |
+| 9   | Tier 2's set-aside accrual is **not** the model for savings                  | Follow-up shaping (roadmap § Financial planning) settled that money reaches savings by a sweep after a pay period is survived, not a forward per-paycheck allocation. Nothing here changes; the contrast is recorded so the two are not later unified |
 
 ---
 
