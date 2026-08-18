@@ -18,6 +18,7 @@ import {
   upsertRecurringBill,
   upsertRecurringSpend,
 } from "./mutations";
+import { toDateKey } from "@/lib/schedule/geometry";
 import { getTransaction, listAccounts, listTransactions } from "./queries";
 
 const dbReachable = await databaseReachable();
@@ -148,16 +149,32 @@ describeDb("finance mutations", () => {
     });
   });
 
-  it("stores a bank account URL and refuses one that is not the bank", async () => {
-    const url =
-      "https://secure.chase.com/web/auth/dashboard#/dashboard/transactions/1197428459/CARD/BAC";
+  it("stores an https account URL and refuses anything else", async () => {
+    const url = "https://example.com/account";
     await updateAccount(userId, accountId, { url });
     expect((await listAccounts(userId))[0].url).toBe(url);
 
     await expect(
       updateAccount(userId, accountId, { url: "javascript:alert(1)" }),
-    ).rejects.toThrow("That is not a bank account URL.");
+    ).rejects.toThrow("That is not an https URL.");
     expect((await listAccounts(userId))[0].url).toBe(url);
+  });
+
+  it("closes and reopens an account", async () => {
+    await updateAccount(userId, accountId, { closedOn: "2026-08-18" });
+    const closed = (await listAccounts(userId))[0];
+    expect(closed.closedAt).not.toBeNull();
+    expect(closed.closedAt && toDateKey(closed.closedAt)).toBe("2026-08-18");
+
+    await updateAccount(userId, accountId, { closedOn: null });
+    expect((await listAccounts(userId))[0].closedAt).toBeNull();
+  });
+
+  it("refuses a closed date that is not a calendar day", async () => {
+    await expect(
+      updateAccount(userId, accountId, { closedOn: "2026-02-30" }),
+    ).rejects.toThrow("Closed date must be YYYY-MM-DD.");
+    expect((await listAccounts(userId))[0].closedAt).toBeNull();
   });
 
   it("refuses to blank an account's name", async () => {
@@ -210,7 +227,11 @@ describeDb("finance user isolation", () => {
     await expect(
       updateAccount(intruderId, accountId, { name: "Stolen" }),
     ).rejects.toThrow("Account not found.");
+    await expect(
+      updateAccount(intruderId, accountId, { closedOn: "2026-08-18" }),
+    ).rejects.toThrow("Account not found.");
     expect((await listAccounts(ownerId))[0].name).toBe("Chase •••9910");
+    expect((await listAccounts(ownerId))[0].closedAt).toBeNull();
   });
 
   it("does not let a second user delete another user's account", async () => {

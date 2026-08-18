@@ -13,6 +13,7 @@ import {
   type RecurringSpendAmountSource,
   type RecurringSpendPeriod,
 } from "@/db/schema";
+import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { parseAccountUrl } from "./accountUrl";
 import { changedRows, planReclassify } from "./classify/reclassify";
 import { MatcherConflictError } from "./commitments";
@@ -32,6 +33,19 @@ import type { PaypalResolution } from "./paypalMatch";
  * editing one would make the next import treat the row as new. Categorising and annotating
  * are the user's half; the bank's half stays as the bank wrote it.
  */
+
+function closedAtFromKey(key: string | null): Date | null {
+  if (key === null) return null;
+  const trimmed = key.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    throw new Error("Closed date must be YYYY-MM-DD.");
+  }
+  const date = fromDateKey(trimmed);
+  if (toDateKey(date) !== trimmed) {
+    throw new Error("Closed date must be YYYY-MM-DD.");
+  }
+  return date;
+}
 
 async function requireTransaction(
   userId: string,
@@ -197,6 +211,11 @@ export type AccountEdit = {
   kind?: FinanceAccountKind;
   institution?: string;
   url?: string;
+  /**
+   * Calendar day the account closed (`YYYY-MM-DD`), or `null` to reopen.
+   * Import still never un-closes; this is the user-owned write.
+   */
+  closedOn?: string | null;
 };
 
 /**
@@ -218,6 +237,7 @@ export async function updateAccount(
     kind?: FinanceAccountKind;
     institution?: string;
     url?: string;
+    closedAt?: Date | null;
     updatedAt: Date;
   } = { updatedAt: new Date() };
 
@@ -230,8 +250,11 @@ export async function updateAccount(
   if (edit.institution !== undefined) values.institution = edit.institution.trim();
   if (edit.url !== undefined) {
     const parsed = parseAccountUrl(edit.url);
-    if (parsed === null) throw new Error("That is not a bank account URL.");
+    if (parsed === null) throw new Error("That is not an https URL.");
     values.url = parsed;
+  }
+  if (edit.closedOn !== undefined) {
+    values.closedAt = closedAtFromKey(edit.closedOn);
   }
 
   await db

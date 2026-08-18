@@ -15,10 +15,13 @@ describe("parseAccountUrl", () => {
     expect(parseAccountUrl(chase)).toBe(chase);
   });
 
-  it("clears a blank value and refuses anything that is not those banks", () => {
+  it("accepts any https URL and refuses everything else", () => {
+    expect(parseAccountUrl("https://example.com/account")).toBe(
+      "https://example.com/account",
+    );
     expect(parseAccountUrl("  ")).toBe("");
     expect(parseAccountUrl("javascript:alert(1)")).toBeNull();
     expect(parseAccountUrl("http://secure.chase.com/x")).toBeNull();
-    expect(parseAccountUrl("https://example.com")).toBeNull();
+    expect(parseAccountUrl("not a url")).toBeNull();
   });
 });

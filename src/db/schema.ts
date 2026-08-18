@@ -1990,8 +1990,8 @@ export const financeAccounts = pgTable(
     /** Free text — "Chase", "Capital One". Display only; identity lives in the key. */
     institution: text("institution").notNull().default(""),
     /**
-     * Deep link to this account at the bank. Empty until the user sets one. Only https
-     * hosts we actually use — see `parseAccountUrl`.
+     * Deep link to this account at the bank. Empty until the user sets one. Any
+     * https URL — see `parseAccountUrl`.
      */
     url: text("url").notNull().default(""),
     /** The feed that created this account: `csv:chase-credit`, later `plaid`. */
