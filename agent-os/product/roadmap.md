@@ -709,8 +709,8 @@ YNAB-like, but simpler — and connected to goals over time.
 
 - **MVP:** ✅ Import CSVs; ✅ 360 statement PDF backfill; ✅ Chase Prime Visa
   statement PDFs + statement snapshots; ✅ Capital One card statement PDFs;
-  ✅ basic register and balances; **envelopes**
-  for known expenses and contingencies still outstanding.
+  ✅ basic register and balances; ✅ commitments — the "envelopes" line item, shipped
+  under a name that does not promise YNAB.
   CSV import and the register shipped 2026-08-12 —
   `agent-os/specs/2026-08-12-1048-finances-csv-import-register/`. Capital One 360
   monthly statement PDFs shipped 2026-08-12 —
@@ -728,8 +728,6 @@ YNAB-like, but simpler — and connected to goals over time.
   client-side batching under the 4.5 MB Vercel body limit shipped 2026-08-14 —
   `agent-os/specs/2026-08-14-1854-file-menu-imports/`. A folder of statements no
   longer has to be re-picked a handful at a time.
-  Envelopes were deliberately deferred until there is real spending data to design them
-  against; that is the next piece of this MVP.
   ✅ Insights dashboard shipped 2026-08-13 —
   `agent-os/specs/2026-08-12-2031-finances-insights-dashboard/`. Merchant rules, transfer
   pairing, paycheck cadence and reporting, at `/finances/insights`. Classifying the real
@@ -767,17 +765,49 @@ YNAB-like, but simpler — and connected to goals over time.
   a share per paycheck and re-anchoring when the charge posts. `/finances`
   now opens on Dashboard, with the page bar ordered by how often a page is
   read rather than when it was built.
+  ✅ Commitments shipped 2026-08-16 —
+  `agent-os/specs/2026-08-16-1938-commitments/`. **This closes the envelopes MVP
+  item**, under a name chosen because "envelope" promises the every-dollar-gets-a-
+  bucket bookkeeping the feature exists to reject. Three tiers, only two of which
+  are stored:
+  **Tier 1, subscriptions & bills** (`finance_recurring_bills`) — known charges that
+  land unless you act to prevent them. Exact amount, exact date, `active |
+cancelled | ignored`, cancel URL, and a watchdog for a charge that stops arriving.
+  **Tier 2, recurring spend** (`finance_recurring_spend`) — pizza, groceries: nobody
+  charges you, but the cadence and the amount are predictable, so the money is gone
+  either way. Merchant _groups_ (one `Pizza` covering Pizza Hut and Domino's) with
+  amounts derived from history and pinnable, held as `Σ max(0, rate − spent this
+period)` so money already spent stops being held twice and only going over bites.
+  **Tier 3, everything else** — deliberately no buckets. That is Available to Spend,
+  and the admission test that keeps this from becoming YNAB is: _if you cannot state
+  the cadence, it does not get a bucket._ `/finances/commitments`, Dashboard panels,
+  and the first finance **write** tools on the agent surface (`upsert_subscription`,
+  `upsert_recurring_spend`, `delete_commitment`, plus
+  `list_commitment_candidates`, so a pasted statement can be researched by an AI and
+  written back).
   ✅ Accounts page shipped 2026-08-18 —
   `agent-os/specs/2026-08-18-0856-finance-accounts-page/`. The original register
   spec's unshipped catalog UI: `/finances/accounts` edits name, kind, institution,
   URL and closed on the existing `finance_accounts` table. Bank name-links accept
   any https URL instead of a hardcoded Chase/Cap One host list. Import remains the
-  only create path. Envelopes is unchanged.
-- **Next:** Envelopes. The dashboard delivered the **set-aside primitive** and the
-  surface envelopes will live on; it did not build the envelope model — multiple
-  funded categories, rollover, and reallocation are all still ahead.
-- **Then:** **integration with Goals** (save for X, fund project Y); AI advice on top of
-  envelope + history data.
+  only create path.
+- **Next:** **Shortfall attribution.** When Available to Spend goes negative, name
+  what could be cancelled or skipped to fix it. Explicitly wanted, explicitly cut
+  from the commitments spec; the annual/monthly cost columns already rank the
+  candidates, so what is missing is turning a red number into a guided decision.
+- **Next — set-asides for future needs (open question, not yet designed).** Bills and
+  recurring spend both accrue toward a charge that is _coming_. There is no way to
+  hold money for something with no date: an emergency fund, or saving toward a
+  specific thing. The shape Lee has in mind is a **quasi-account** — a named
+  sub-balance carved out of a real account, with a target and a per-paycheck
+  contribution, deducted from Available to Spend the way a set-aside is. Note that
+  `available.ts` already excludes `savings`-kind accounts wholesale, so today the
+  choice is all-or-nothing per account; what this adds is naming and splitting
+  _within_ one. Wants more thought before a spec: whether a quasi-account is a row
+  on an account or a third commitment table, whether contributions can be skipped
+  without breaking the target date, and how it reads against Goals below.
+- **Then:** **integration with Goals** (save for X, fund project Y) — the natural
+  consumer of set-asides above; AI advice on top of commitment + history data.
 - **Later — classification that isn't the merchant's name.** Raised 2026-08-12; not in
   the insights spec. Two related failures of "vendor → category":
 
@@ -805,7 +835,8 @@ YNAB-like, but simpler — and connected to goals over time.
      purchases go through the app.
 
 - **Eventually:** **Plaid** (or equivalent) to pull bank data by API — only after
-  CSV + envelopes are trustworthy, given lock-in and security cost.
+  CSV + commitments are trustworthy, given lock-in and security cost. Partly
+  overtaken by SimpleFIN live sync (`specs/2026-08-15-1315-live-bank-sync`).
 
 ---
 
@@ -828,7 +859,8 @@ Beyond Achieve (can start MVPs in parallel once Phase 1 core is daily-usable):
         │         ├──► GTD first-class (Inbox / Someday ontology — future, not filters)
         │         ├──► fitness ✅ MVP, financial, …
         ├── Fitness log MVP
-        └── Finance CSV + envelopes MVP
+        └── Finance CSV + commitments MVP ✅
+              └── next: shortfall attribution, set-aside quasi-accounts
               └── later: goals links, AI advice, Plaid / Health
 ```
 
