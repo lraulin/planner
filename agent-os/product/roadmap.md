@@ -748,6 +748,12 @@ YNAB-like, but simpler — and connected to goals over time.
   a share per paycheck and re-anchoring when the charge posts. `/finances`
   now opens on Dashboard, with the page bar ordered by how often a page is
   read rather than when it was built.
+  ✅ Accounts page shipped 2026-08-18 —
+  `agent-os/specs/2026-08-18-0856-finance-accounts-page/`. The original register
+  spec's unshipped catalog UI: `/finances/accounts` edits name, kind, institution,
+  URL and closed on the existing `finance_accounts` table. Bank name-links accept
+  any https URL instead of a hardcoded Chase/Cap One host list. Import remains the
+  only create path. Envelopes is unchanged.
 - **Next:** Envelopes. The dashboard delivered the **set-aside primitive** and the
   surface envelopes will live on; it did not build the envelope model — multiple
   funded categories, rollover, and reallocation are all still ahead.

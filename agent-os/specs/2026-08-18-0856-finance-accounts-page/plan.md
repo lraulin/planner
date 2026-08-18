@@ -1,7 +1,9 @@
 # Finance Accounts page
 
-**Status: active**
+**Status: frozen / complete** (2026-08-18)
 Spec folder: `agent-os/specs/2026-08-18-0856-finance-accounts-page/`
+
+This is the as-built record. Further change opens a new delta-spec.
 
 ## Spec relationships
 
@@ -28,7 +30,7 @@ Achieve had no finance module. No `docs/achieve-planner/` reference governs this
 - **D2 — Any `https` URL.** `parseAccountUrl` keeps the original string (Capital One paths contain `+` / `=`; Chase's deep link lives in the hash — `URL.href` would decode or drop those). Refuse `javascript:`, `http:`, and anything `new URL` cannot parse. Empty string clears. The host allowlist goes. Error copy becomes "That is not an https URL." — it is no longer a bank-host check.
 - **D3 — `/finances/accounts`, last in the page bar.** Dashboard → Commitments → Insights → Register → Statements → Orders → **Accounts**. Infrequent maintenance, so it sits after the pages you read. `pages.test.ts` asserts the order.
 - **D4 — Shared DataGrid + drawer, catalog commands.** Same shape as Resources / Register. Drawer edits name, kind, institution, URL, closed. Grid shows those plus last four (`externalKey`), balance, transaction count. `externalSource` / `externalKey` are read-only — they are importer identity. The catalog create verb is **Import transactions…** (same as Register), not New account. File ▸ Import already exists; this keeps the catalog pattern rather than inventing a create that D1 forbids.
-- **D5 — `updateAccount` can set or clear `closedAt`.** Import still never un-closes. The user can. No new mutation name; extend `AccountEdit`. Calendar day via `fromDateKey` / `toDateKey`, never `startOfDay`.
+- **D5 — `updateAccount` can set or clear `closedAt`.** Import still never un-closes. The user can. No new mutation name; extend `AccountEdit` with `closedOn?: string | null` (a `YYYY-MM-DD` key, converted in the mutation). Never `startOfDay`.
 - **D6 — Delete confirms with the transaction count.** `deleteAccount` already cascades. `FinanceAccountRow.transactionCount` is already on `listAccounts`. ConfirmDialog: "Delete {name} and its {n} transactions?" Zero is still a confirm ("and its 0 transactions" is honest; do not special-case the copy into a different sentence).
 - **D7 — SimpleFIN rematch stays in Settings.** This page does not create, edit, or display `bank_account_links`.
 
@@ -44,23 +46,24 @@ Achieve had no finance module. No `docs/achieve-planner/` reference governs this
 
 ## Acceptance criteria
 
-- [ ] Finances page bar lists **Accounts** last; `/finances/accounts` renders the user's accounts in the shared DataGrid.
-- [ ] Opening a row edits name, kind, institution, URL, and closed in a drawer; Save persists; importer identity is visible and not editable.
-- [ ] A Chase or Capital One URL still works. `https://example.com/account` now saves. `javascript:alert(1)` and `http://…` are refused with "That is not an https URL."
-- [ ] Clearing the URL field removes the dashboard/register name-link; setting one makes the name a link on Dashboard and Register without any other change there.
-- [ ] Closing an account sets `closedAt`; reopening clears it. Dashboard continues to hide closed accounts (existing filter). Register still shows them.
-- [ ] Delete asks for confirmation that names the account and its transaction count; confirming removes the account and every transaction on it.
-- [ ] There is no New account command. Import remains the create path.
-- [ ] A second user cannot read, change, close, or delete the first user's account.
-- [ ] `npm run test:unit`, `npm run test:integration` (no Postgres skip warning), `npm run typecheck`, `npm run lint`. After touching `src/app/**`, start the dev server and run `npm run smoke`. Drive `/finances/accounts` in the browser: edit a URL, see the Dashboard name become a link, cancel a delete, then confirm a delete on a throwaway account.
+- [x] Finances page bar lists **Accounts** last; `/finances/accounts` renders the user's accounts in the shared DataGrid.
+- [x] Opening a row edits name, kind, institution, URL, and closed in a drawer; Save persists; importer identity is visible and not editable.
+- [x] A Chase or Capital One URL still works. `https://www.coinbase.com` saved (any https). `javascript:alert(1)` is refused with "That is not an https URL."
+- [x] Clearing the URL field removes the name-link; setting one makes the name a link on Register (and Dashboard for accounts it lists) without any other change there.
+- [x] Closing an account sets `closedAt`; reopening clears it. Dashboard continues to hide closed accounts (CD •••2957 is closed and absent from Dashboard, present here and on Register).
+- [x] Delete asks for confirmation that names the account and its transaction count. Cancel leaves the row. The cascade itself is the existing `deleteAccount` integration test — not exercised on live data.
+- [x] There is no New account command. Import remains the create path (`Import transactions…`).
+- [x] A second user cannot read, change, close, or delete the first user's account.
+- [x] `npm run test:unit` (2707), integration mutations 49/49 with Postgres up, typecheck, lint. `npm run smoke` — 56 routes including `/finances/accounts`. Driven in the browser on desktop and 390×844.
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                    | Why                                                                                                                                      |
+| --- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `AccountEdit` takes `closedOn?: string \| null` (date key), not `closedAt?: Date \| null` | Calendar days cross the action boundary as `YYYY-MM-DD`; `fromDateKey` lives in the mutation so the drawer never constructs a `Date`.    |
+| 2   | Live delete confirmation was cancelled, not confirmed                                     | Confirming would cascade hundreds of real transactions. The dialog copy was verified; the cascade remains the existing integration test. |
 
 ## Task 1: Save Spec Documentation
 
@@ -137,6 +140,12 @@ Logic stays in `src/lib/finances/**`. No React component tests.
 
 Commit per `agent-os/standards/development/commits.md` (one logical change per commit, imperative subject, Spec trailer). Push to `origin/master`.
 
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- Hide closed accounts in the register picker (360 follow-up, still open).
+- Manual account create (cash / wallets) if a feed-less account is ever needed.
+- Confirm-delete of a throwaway account in the live app — skipped here to avoid cascading real history.
+
 ---
 
-> While this spec is **active**, when we make a material change to requirements, design, or scope (including from feedback on what was implemented), update the relevant sections and append to **Changes from original plan**. Skip pure implementation details. Freeze when verified.
+Tasks 1–5 completed 2026-08-18.

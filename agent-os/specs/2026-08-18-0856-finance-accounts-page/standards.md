@@ -1,6 +1,6 @@
 # Standards for Finance Accounts page
 
-**Status: active**
+**Status: frozen / complete** (2026-08-18)
 
 The following standards apply to this work. Full content, copied so this folder stays a
 self-contained record of what governed the work at the time.
