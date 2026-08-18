@@ -51,6 +51,18 @@ describe("makeMatcher", () => {
     expect(built.error).toContain("Invalid regular expression");
   });
 
+  it("says the reason once, without the engine's echoed pattern", () => {
+    // V8 returns "Invalid regular expression: /plan[che/gi: Unterminated character class".
+    // Prefixing that verbatim printed the phrase twice beside an input already showing the
+    // pattern.
+    const built = makeMatcher("plan[che", { ...DEFAULT_MATCH_OPTIONS, regex: true });
+    expect(built.ok).toBe(false);
+    if (built.ok) return;
+    expect(built.error).toBe(
+      "Invalid regular expression: Unterminated character class",
+    );
+  });
+
   it("escapes a would-be-invalid regex when regex is off", () => {
     // The same string is a fine literal search. Only the regex checkbox makes it an error.
     expect(matcherFor("[unterminated")("say [unterminated here")).toEqual({

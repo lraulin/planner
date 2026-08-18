@@ -145,9 +145,10 @@ The core Achieve Planner loop — plan the week, block the time, work the outlin
   multi-move).
   Persistence, control uniformity and the shared control surface
   shipped above.
-- **Day-to-day friction from living with the MVP** — find-in-outline, seed goals for demos
-  — pick off as they annoy. (Quick capture already shipped in Phase 2 capture track;
-  expand/collapse-all and expand-through-level shipped with the command deck below.)
+- **Day-to-day friction from living with the MVP** — seed goals for demos — pick off as they
+  annoy. (Quick capture already shipped in Phase 2 capture track; expand/collapse-all and
+  expand-through-level shipped with the command deck below. **Find-in-outline was overtaken
+  by Advanced Find**, which searches every record family rather than one grid — see below.)
 
 Phase 1's Achieve core is complete. Remaining Phase 1 items are residual chrome polish, not
 blockers for Phase 2 slices.
@@ -160,6 +161,19 @@ Features that complete or surround the original product, plus making it multi-de
 
 ### Near-term Achieve surfaces
 
+- **✅ Advanced Find.** `specs/2026-08-18-1012-advanced-find`. Achieve's `Edit → Advanced Find`
+  as a `find` module at `/find` (`⇧⌘F`), searching eight record families at once — outline
+  nodes and their four detail tables, `node_items` sub-records, notes, appointments, contacts
+  and contact items, the library, metrics, fitness, and finances. Two independent axes as
+  Achieve drew them: **sources** (what to search) and **field classes** (names & titles /
+  detail text / sub-records). Match case, whole word and **regex**, which
+  `custom-column-filters` had deferred. Results are a `DataGrid` — Type, Name, Where, Field,
+  Match — one row per record with every matching field named, ranked name-hits-first and
+  capped at 1000 with a visible notice. `?q=` is addressable; sources and options persist in
+  `user_settings`. Achieve's reference pack does not document this dialog at all (one release-log
+  line), so the Search In semantics are a stated reconstruction, and its Date Fields box is
+  dropped. Deferred: deep links for Appointments / Metrics / Timeline / Commitments (Find lands
+  on the page and says so), a SQL prefilter for transactions, saved searches.
 - **✅ Metrics tab + import/export.** `specs/2026-08-02-0912-metrics-tab`. First-class
   `metrics` / `metric_entries` (optional goal owner, history survives goal delete). Metrics
   tab lists all metrics with Group by Owner and an SVG performance graph; Metric form

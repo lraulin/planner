@@ -13,6 +13,7 @@ import {
 import {
   ChooserIcon,
   FinancesIcon,
+  FindIcon,
   FitnessIcon,
   LibraryIcon,
   MetricsIcon,
@@ -109,6 +110,19 @@ export const MODULES = [
     href: "/schedule",
     status: "built",
     icon: ScheduleIcon,
+  },
+  {
+    /*
+     * Content search across every record family, as opposed to the palette, which searches
+     * commands. Achieve reached this from Edit ▸ Advanced Find; we have no Edit menu, and it
+     * is a place you go and come back to rather than a verb, so it is a destination and the
+     * sidebar is its catalog. `agent-os/specs/2026-08-18-1012-advanced-find/`.
+     */
+    id: "find",
+    label: "Find",
+    href: "/find",
+    status: "built",
+    icon: FindIcon,
   },
   {
     id: "focus",

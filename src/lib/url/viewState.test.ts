@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   asRecordId,
+  asSearchQuery,
   asViewId,
+  findPath,
   hrefWithViewState,
   notesPath,
   outlineSelectPath,
@@ -51,6 +53,7 @@ describe("readViewState", () => {
       zoom: null,
       scope: null,
       date: null,
+      q: null,
     });
   });
 
@@ -64,6 +67,7 @@ describe("readViewState", () => {
       zoom: "node-1",
       scope: "project-3",
       date: "2026-08-01",
+      q: "quarterly budget",
     });
     expect(readViewState(written)).toEqual({
       detail: "node-1",
@@ -74,6 +78,8 @@ describe("readViewState", () => {
       zoom: "node-1",
       scope: "project-3",
       date: "2026-08-01",
+      // Survives encoding: a query is prose, so a space is the common case.
+      q: "quarterly budget",
     });
   });
 
@@ -139,6 +145,7 @@ describe("readViewState", () => {
       zoom: null,
       scope: null,
       date: null,
+      q: null,
     });
   });
 
@@ -174,5 +181,33 @@ describe("hrefWithViewState", () => {
     });
     expect(next.get("select")).toBe("node-1");
     expect(next.get("detail")).toBe("old");
+  });
+});
+
+describe("asSearchQuery", () => {
+  it("trims and keeps punctuation, which a regex query is full of", () => {
+    expect(asSearchQuery("  ^foo.*bar$  ")).toBe("^foo.*bar$");
+  });
+
+  it("rejects empty and non-string values", () => {
+    expect(asSearchQuery("")).toBeNull();
+    expect(asSearchQuery("   ")).toBeNull();
+    expect(asSearchQuery(null)).toBeNull();
+    expect(asSearchQuery(42)).toBeNull();
+  });
+
+  it("caps length so a pasted document cannot become the URL", () => {
+    expect(asSearchQuery("a".repeat(500))).toHaveLength(200);
+  });
+});
+
+describe("findPath", () => {
+  it("encodes the query", () => {
+    expect(findPath("a b&c")).toBe("/find?q=a%20b%26c");
+  });
+
+  it("is the bare page with no query", () => {
+    expect(findPath(null)).toBe("/find");
+    expect(findPath("  ")).toBe("/find");
   });
 });

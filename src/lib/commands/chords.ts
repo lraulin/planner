@@ -140,6 +140,18 @@ export const OPEN_PALETTE: KeyBinding[] = [{ key: "k", meta: true }];
  */
 export const QUICK_CAPTURE: KeyBinding[] = [{ key: "c" }];
 
+/**
+ * `⇧⌘F` — Advanced Find.
+ *
+ * Not `⌘F`: that is the browser's own find-in-page, and taking it from a document-shaped app
+ * is the kind of override people fight for the life of the product. `⇧⌘F` is what editors
+ * use for find-across-everything, which is exactly what this is.
+ */
+export const OPEN_FIND: KeyBinding[] = [
+  { key: "f", meta: true, shift: true },
+  { key: "f", ctrl: true, shift: true },
+];
+
 /** `⌘B` / `⌘I` — markdown wrap toggles in the note editor. */
 export const MARKDOWN_BOLD: KeyBinding[] = [{ key: "b", meta: true }];
 export const MARKDOWN_ITALIC: KeyBinding[] = [{ key: "i", meta: true }];

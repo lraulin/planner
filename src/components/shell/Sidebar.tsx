@@ -79,6 +79,11 @@ export function Sidebar({ active }: { active: ModuleId | null }) {
         The palette is the Go menu, and a keyboard-only Go menu is the thing
         `ux-principles.md` calls not-a-discoverable-action. This row is what teaches the
         palette chord from `chords.ts`.
+
+        Labelled **Commands…**, not Search…, since Find joined the rail below it. Two rows
+        promising to search, one reaching commands and one reaching records, is exactly the
+        ambiguity `navigation.md` exists to prevent — and the tooltip already said
+        "commands" while the label did not.
       */}
       <button
         type="button"
@@ -91,7 +96,7 @@ export function Sidebar({ active }: { active: ModuleId | null }) {
         <SearchGlyph />
         {!collapsed && (
           <>
-            <span className="flex-1 text-left">Search…</span>
+            <span className="flex-1 text-left">Commands…</span>
             <span className="tabular flex-none text-[0.6875rem]">{PALETTE_CHORD}</span>
           </>
         )}

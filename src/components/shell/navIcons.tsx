@@ -146,6 +146,19 @@ export function LibraryIcon() {
 }
 
 /** Settings, pinned below the sections — chrome, not a view. */
+/** Find: a magnifier over a document, distinct from the palette's bare magnifier. */
+export function FindIcon() {
+  return (
+    <svg {...BASE} className="h-5 w-5">
+      <path d="M4.25 2.75h7l4 4v3.5" />
+      <path d="M10.75 2.75v4h4" />
+      <path d="M4.25 2.75v14.5h4" />
+      <circle cx="13" cy="13.25" r="3" />
+      <path d="m15.25 15.5 2 2" />
+    </svg>
+  );
+}
+
 export function SettingsIcon() {
   return (
     <svg {...BASE} className="h-5 w-5">

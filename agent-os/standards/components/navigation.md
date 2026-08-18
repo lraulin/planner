@@ -9,23 +9,30 @@ be a permanent tab and the eleventh was already too many.
 
 Six surfaces now, each answering a different question.
 
-| Surface                    | Question it answers              | Role                                               | Where                                  |
-| -------------------------- | -------------------------------- | -------------------------------------------------- | -------------------------------------- |
-| **Sidebar**                | "Where can I go?"                | Visual catalog of destinations. Search… opens `⌘K` | Desktop, always                        |
-| **Menu bar**               | "What can I do here?"            | **Complete catalog of commands**                   | Application chrome, above the page bar |
-| **Page bar**               | "Where else can I go _in here_?" | Destinations inside this module                    | Below the menu, above page toolbars    |
-| **Commands panel**         | "…show me all of it at once"     | The same tree left open                            | Desktop, opt-in, remembered            |
-| **Row context menu**       | "What can I do to _this_ row?"   | Narrow, row-scoped subset                          | Right-click / long-press a row         |
-| **Command palette** (`⌘K`) | "What can this app do?"          | Searchable overlay + Go-to extras                  | Desktop, on demand                     |
+| Surface                    | Question it answers              | Role                                                 | Where                                  |
+| -------------------------- | -------------------------------- | ---------------------------------------------------- | -------------------------------------- |
+| **Sidebar**                | "Where can I go?"                | Visual catalog of destinations. Commands… opens `⌘K` | Desktop, always                        |
+| **Menu bar**               | "What can I do here?"            | **Complete catalog of commands**                     | Application chrome, above the page bar |
+| **Page bar**               | "Where else can I go _in here_?" | Destinations inside this module                      | Below the menu, above page toolbars    |
+| **Commands panel**         | "…show me all of it at once"     | The same tree left open                              | Desktop, opt-in, remembered            |
+| **Row context menu**       | "What can I do to _this_ row?"   | Narrow, row-scoped subset                            | Right-click / long-press a row         |
+| **Command palette** (`⌘K`) | "What can this app do?"          | Searchable overlay + Go-to extras                    | Desktop, on demand                     |
 
 The menu bar is the **source of truth for completeness**. Toolbars and the Commands panel / palette are accelerators. A user who never opens `⌘K` must still be able to find every command by reading the menus.
 
 **Panel vs palette.** Complementary accelerators of the same catalog, not two versions of
 one control. The panel is the menu tree left open — spatial, hierarchical, no typing. The
 palette is the only command-search surface (`⌘K`, View ▸ Command palette, and the sidebar
-Search… row, which teaches the chord rather than implementing a second search). Do **not**
-add a filter box to the panel: that would make the two compete, and the panel's value is
-that the organization stays visible. Nested families stay expanded as headed groups in the
+**Commands…** row, which teaches the chord rather than implementing a second search). Do
+**not** add a filter box to the panel: that would make the two compete, and the panel's value
+is that the organization stays visible.
+
+That row was labelled `Search…` until **Find** joined the rail beneath it. Two rows promising
+to search — one reaching commands, one reaching records — is the ambiguity this whole table
+exists to prevent, and the row's own tooltip already said "commands" while its label did not.
+**Searching commands and searching content are different questions and get different
+surfaces**: `⌘K` for what the app can do, `/find` for what is written in it. Neither grows
+into the other. Nested families stay expanded as headed groups in the
 panel; folding is for the menu bar and the row menu, where space is scarce.
 
 Below `md` the sidebar is replaced by the bottom nav plus the More sheet, there is no palette and
@@ -260,6 +267,14 @@ The one exception is `group: "go"` — destinations. Their visual catalog is the
 (and the page bar inside a module). The palette lists them as extras so typing `agenda` still
 works. They do not get a Go menu. App-wide verbs (capture, Process Inbox, Plan Week, Settings,
 Sign out) are **not** this exception; they live in **File**.
+
+**A destination may carry a chord**, and exactly one does: `⇧⌘F` for Find, declared on the
+generated `go.find` in `globalCommands.ts` beside quick capture's, so every surface prints the
+same binding. It is not a second placement rule — the sidebar is still Find's catalog. It
+earns a key because it is reached from the middle of other work, which is not true of a
+destination you navigate to deliberately. Achieve put Advanced Find on **Edit**; we have no
+Edit menu (`menu-completeness`), and Find is a place you go and come back to rather than a
+verb applied to what is in front of you, so it is a destination.
 
 ### The menu belongs to the application, not the tab
 

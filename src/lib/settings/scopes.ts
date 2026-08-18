@@ -33,6 +33,7 @@ export const SCOPE_KINDS = [
   "insights",
   "payday",
   "timeline",
+  "find",
 ] as const;
 export type ScopeKind = (typeof SCOPE_KINDS)[number];
 
@@ -174,6 +175,7 @@ const KIND_LABELS: Record<ScopeKind, string> = {
   insights: "Finances insights",
   payday: "Pay cadence",
   timeline: "Timeline",
+  find: "Advanced Find",
 };
 
 /** `projects.active-status` → `Projects / Active status`. */

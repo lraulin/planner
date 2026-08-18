@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useMemo } from "react";
 import { requestQuickCapture } from "@/components/capture/event";
 import { signOut } from "@/lib/auth/client";
-import { QUICK_CAPTURE } from "@/lib/commands/chords";
+import { OPEN_FIND, QUICK_CAPTURE } from "@/lib/commands/chords";
 import { FILE_COMMAND_PLACEMENTS, FILE_MENU } from "@/lib/commands/fileCommands";
 import type { Command } from "@/lib/commands/registry";
 import { BUILT_MODULES, modulePages } from "./modules";
@@ -38,6 +38,11 @@ export function useGlobalCommands(): readonly Command[] {
         label: entry.label,
         group: "go",
         keywords: GO_KEYWORDS[entry.id],
+        // The one destination with a chord, declared here for the same reason quick
+        // capture's is: the binding belongs on the command so every surface that prints
+        // it prints the same one. Find is reached from anywhere mid-task, which is what
+        // earns it a key; the other destinations are a click in the sidebar.
+        bindings: entry.id === "find" ? OPEN_FIND : undefined,
         run: () => router.push(entry.href),
       };
 
@@ -110,6 +115,7 @@ export function useFileCommands(): readonly Command[] {
 const GO_KEYWORDS: Record<string, string> = {
   plan: "outline overview projects tasks goals wish list result areas hierarchy",
   chooser: "task chooser next action best overall urgent",
+  find: "search advanced find text across everything regex lookup",
   schedule:
     "calendar week weekly time blocking appointments day today daily page franklin covey time charts",
   metrics: "measures tracking numbers graph",

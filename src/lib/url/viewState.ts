@@ -8,6 +8,7 @@
  *   ?mode=<modeId>     a module's own display mode (Notes nested/flat)
  *   ?scope=<nodeId>    narrow a list tab to one branch (Tasks, Projects, Goals)
  *   ?date=YYYY-MM-DD   selected calendar day (Notes journal, Day)
+ *   ?q=<text>          the Advanced Find query
  *
  * `?view=` used to double as the Notes nested/flat mode, which stopped being tenable once
  * Notes gained real views: one param cannot name both which view you are on and how that view
@@ -38,6 +39,16 @@ export const ZOOM_PARAM = "zoom";
  */
 export const SCOPE_PARAM = "scope";
 export const DATE_PARAM = "date";
+/**
+ * What Advanced Find is looking for.
+ *
+ * In the URL where filters are not, and the exception proves the rule: `?q=` is not a lens on
+ * a list that exists anyway — without it `/find` has nothing to show. Reload, Back and a
+ * pasted link all have to reproduce the search, and the first render is server-side because
+ * of it. The sources, field classes and match options *are* filters, and stay in
+ * `user_settings` under the `find` scope.
+ */
+export const Q_PARAM = "q";
 
 export type ViewStatePatch = {
   /** `null` clears the param; `undefined` leaves it alone. */
@@ -49,6 +60,7 @@ export type ViewStatePatch = {
   zoom?: string | null;
   scope?: string | null;
   date?: string | null;
+  q?: string | null;
 };
 
 export type ViewState = {
@@ -60,6 +72,7 @@ export type ViewState = {
   zoom: string | null;
   scope: string | null;
   date: string | null;
+  q: string | null;
 };
 
 /**
@@ -101,6 +114,20 @@ export function asDateKey(value: unknown): string | null {
   return value;
 }
 
+/**
+ * A free-text search query.
+ *
+ * Almost anything is legal — it is prose, and a regex query is deliberately full of
+ * punctuation — so this only trims and caps the length. The cap is not a security control;
+ * it stops a pasted document becoming a URL no browser will keep.
+ */
+export function asSearchQuery(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.slice(0, 200);
+}
+
 export function asViewId(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
@@ -127,6 +154,7 @@ export function readViewState(params: URLSearchParams): ViewState {
     zoom: asRecordId(firstParam(params, ZOOM_PARAM)),
     scope: asRecordId(firstParam(params, SCOPE_PARAM)),
     date: asDateKey(firstParam(params, DATE_PARAM)),
+    q: asSearchQuery(firstParam(params, Q_PARAM)),
   };
 }
 
@@ -204,6 +232,12 @@ export function writeViewState(
     else next.delete(DATE_PARAM);
   }
 
+  if (patch.q !== undefined) {
+    const query = asSearchQuery(patch.q);
+    if (query) next.set(Q_PARAM, query);
+    else next.delete(Q_PARAM);
+  }
+
   return next;
 }
 
@@ -242,6 +276,12 @@ export function notesJournalPath(dateKey: string, noteId?: string | null): strin
  * A fresh params object, not a patch on the current page: View in Outline is a
  * destination, not a lens change, so Projects' `?view=` / `?scope=` must not come along.
  */
+/** Advanced Find, optionally with a query already run. */
+export function findPath(query?: string | null): string {
+  const cleaned = asSearchQuery(query);
+  return cleaned ? `/find?${Q_PARAM}=${encodeURIComponent(cleaned)}` : "/find";
+}
+
 export function outlineSelectPath(nodeId: string): string {
   return hrefWithViewState("/plan/outline", new URLSearchParams(), {
     select: nodeId,

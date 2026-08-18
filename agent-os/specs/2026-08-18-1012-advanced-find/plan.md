@@ -1,6 +1,6 @@
 # Advanced Find — search across every item type
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-18)  
 Spec folder: `agent-os/specs/2026-08-18-1012-advanced-find/`
 
 ## Spec relationships
@@ -114,6 +114,10 @@ field name instead, so a record appears once.
 | Fitness      | `exercises`, `workout_sessions`, `workout_session_exercises`                                     |
 | Finances     | `finance_transactions`, `finance_accounts`, `finance_recurring_bills`, `finance_recurring_spend` |
 
+`node_items`, `contact_items` and `workout_session_exercises` are **not** sources — they are
+sub-records of the Outline, Contacts and Fitness sources, reached through the `subrecord`
+field class. Sources and field classes are the two independent axes Achieve's dialog drew.
+
 **Never searched:** `users`, `sessions`, `accounts` (holds `password`, `accessToken`,
 `refreshToken`), `verifications`, `googleCalendarLinks`, `googleContactSyncs`, `userSettings`.
 
@@ -197,34 +201,42 @@ duplicate the rule. Out of scope here; it is a delta-spec trigger, not a v1 task
 
 ## Acceptance criteria
 
-- [ ] `/find` exists as a module: a sidebar row, a `MoreSheet` row on phone, a `go.find` palette
+- [x] `/find` exists as a module: a sidebar row, a `MoreSheet` row on phone, a `go.find` palette
       entry, and `⌘⇧F` printed and working. No page bar (one destination).
-- [ ] A query finds matches in all nine source families, including `node_items` sub-records and
+- [x] A query finds matches in all eight source families, including `node_items` sub-records and
       the four `*_details` tables.
-- [ ] One row per record. A record matching in three fields appears once, with all three named
+- [x] One row per record. A record matching in three fields appears once, with all three named
       in `Field`.
-- [ ] Sources, field classes and options narrow the search, are visible as chips, and persist
+- [x] Sources, field classes and options narrow the search, are visible as chips, and persist
       across reloads through `user_settings`.
-- [ ] Completed and Shelved/past items are excluded by default and included when toggled.
-- [ ] Match case, whole word and regex all work. An invalid regex shows an inline error and
+- [x] Completed and Shelved/past items are excluded by default and included when toggled.
+- [x] Match case, whole word and regex all work. An invalid regex shows an inline error and
       leaves the previous results alone.
-- [ ] `?q=` round-trips: reload and Back restore the search, and the first load is
-      server-rendered.
-- [ ] Opening a result of every kind lands on the right record with its drawer open.
-- [ ] Over 1000 matches shows the cap notice rather than silently truncating.
-- [ ] Cross-user: a second user searching a word that exists only in the first user's data gets
+- [x] `?q=` round-trips: reload and Back restore the search. The first load is **not**
+      server-rendered — see change 1.
+- [x] Opening a result lands on the right record with its drawer open, **except** for
+      appointments, metrics, life events and commitments, whose views have no deep link —
+      see change 4.
+- [x] Over 1000 matches shows the cap notice rather than silently truncating.
+- [x] Cross-user: a second user searching a word that exists only in the first user's data gets
       zero results from **every** source. Registered in `crossUserReads.integration.test.ts`.
-- [ ] Compact verified at 390×844 (no horizontal scroll, ≥16px query input, 44px rows, tap
+- [x] Compact verified at 390×844 (no horizontal scroll, ≥16px query input, 44px rows, tap
       opens, long-press menus), then re-checked at 1280×800.
-- [ ] `npm test` (integration tests not skipped), lint, typecheck, and `npm run smoke` pass.
+- [x] `npm test` (integration tests not skipped), lint, typecheck, and `npm run smoke` pass.
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                           | Why                                                                                                                                                                                                                                                                                                                                    |
+| --- | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | The first load is **not** server-rendered. The page reads `?q=` and the client runs the search after hydration.                  | Shelf expiry and "is this appointment past" depend on the reader's local day, which the server does not know (`development/dates.md`). Rendering server-side would have searched with "no shelf ever expires" and quietly returned different rows.                                                                                     |
+| 2   | Sources are **eight** families, not nine: sub-records are a field class, not a source.                                           | Achieve's dialog has record types on one row of Search In and Subrecords on the other, and the axes really are independent — `node_items` belong to the Outline, `contact_items` to Contacts, session exercises to Fitness.                                                                                                            |
+| 3   | The outline needed a **second read** (`loadOutlineDetailText`) beyond `loadOutline`.                                             | `loadOutline` selects only the columns a grid draws, so a goal's Vision and a result area's Mission were unreachable. Widening it would have taxed all seven Plan pages to serve one.                                                                                                                                                  |
+| 4   | Results are grouped by a **default sort on Type**, not by grid grouping; and four kinds land on their page rather than opening.  | `GridGroupBy` is a closed union with host-side group building — a new dimension for one page is machinery a sort already buys. Appointments, metrics, life events and commitments keep the open record in component state, so there is nothing to deep-link to; the command says "Show where it lives" rather than promising a drawer. |
+| 5   | The scope chips **collapse below `md`** behind a one-line summary.                                                               | At tap size the sixteen chips are ~950px on an 844px screen, so results began below the fold. `responsive.md`: a different information architecture, not the desktop one scrolled.                                                                                                                                                     |
+| 6   | The **result count** sits on the query row, separate from the grid's `Showing N of M`.                                           | Those answer different questions — how much the search found, versus how much the grid is narrowing — and `GridFilterChips` correctly renders nothing when the grid narrows nothing.                                                                                                                                                   |
+| 7   | `agent-os/standards/components/navigation.md` was edited: the sidebar row is **Commands…**, and a destination may carry a chord. | Two rows promising to search, one for commands and one for records, is the ambiguity that standard exists to prevent. `⇧⌘F` on `go.find` is declared once, on the command, so every surface prints the same binding.                                                                                                                   |
 
 ## Task 1: Save spec documentation
 
@@ -263,6 +275,18 @@ on the row menu; empty, over-cap and no-query states.
 ## Task 7: Compact layout
 
 390×844 verification per `responsive.md`'s checklist, then 1280×800.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- **Deep links for the four remaining kinds.** Appointments, Metrics, Timeline and Commitments
+  hold the open record in component state. Giving each a `?detail=` — as Contacts, Resources,
+  Jobs, Residences, the Register and Accounts already have — would let Find open them, and
+  would be useful on its own. `resultTarget` already reports `opens: false` for exactly these,
+  so the change is local once those views support the param.
+- **An `ILIKE` prefilter for `finance_transactions`** if Find gets slow. A superset that
+  narrows I/O; the JS matcher stays the authority on what matched.
+- **Saving a search.** The results grid gets saved _views_ for free; saving the query, sources
+  and options as a named search is a different idea and was never in scope here.
 
 ## Task 8: Verify, freeze spec, update roadmap
 

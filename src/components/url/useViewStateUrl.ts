@@ -78,6 +78,16 @@ export function useViewStateUrl() {
     [navigate],
   );
 
+  /**
+   * The Advanced Find query. `push`, like a drawer and unlike a lens: each search is
+   * somewhere you went, so Back walks the searches you ran rather than leaving Find
+   * altogether.
+   */
+  const setQuery = useCallback(
+    (query: string | null) => navigate({ q: query }, "push"),
+    [navigate],
+  );
+
   /** Like a view switch, and `replace` for the same reason: it is not a place you came from. */
   const setMode = useCallback(
     (mode: string | null) => navigate({ mode }, "replace"),
@@ -124,6 +134,7 @@ export function useViewStateUrl() {
     zoom: state.zoom,
     scope: state.scope,
     date: state.date,
+    q: state.q,
     setDetail,
     setView,
     setNote,
@@ -131,6 +142,7 @@ export function useViewStateUrl() {
     setZoom,
     setScope,
     setDate,
+    setQuery,
     replaceViewState,
   };
 }

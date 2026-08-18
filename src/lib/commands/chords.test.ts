@@ -18,6 +18,7 @@ import {
   MARKDOWN_ITALIC,
   MOVE_DOWN,
   MOVE_UP,
+  OPEN_FIND,
   OPEN_PALETTE,
   OPEN_RECORD,
   OUTDENT,
@@ -113,6 +114,7 @@ describe("the shared grid chords", () => {
     expect(formatBindings(SAVE)).toBe("⌘S");
     expect(formatBindings(COMMIT_FORM)).toBe("⌘⏎");
     expect(formatBindings(OPEN_PALETTE)).toBe("⌘K");
+    expect(formatBindings(OPEN_FIND)).toBe("⇧⌘F");
     expect(formatBindings(QUICK_CAPTURE)).toBe("C");
     expect(formatBindings(MARKDOWN_BOLD)).toBe("⌘B");
     expect(formatBindings(MARKDOWN_ITALIC)).toBe("⌘I");

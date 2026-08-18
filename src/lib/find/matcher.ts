@@ -60,7 +60,14 @@ export function makeMatcher(query: string, options: FindMatchOptions): MatcherRe
   try {
     regex = new RegExp(pattern, options.matchCase ? "g" : "gi");
   } catch (error) {
-    const detail = error instanceof Error ? error.message : "Invalid pattern";
+    // V8 says `Invalid regular expression: /plan[che/gi: Unterminated character class`.
+    // The prefix and the echoed pattern are both noise beside an input box that already
+    // shows the pattern, and prefixing again produced the message twice over. Keep the
+    // reason, which is the only part that says what to fix.
+    const raw = error instanceof Error ? error.message : "";
+    const detail =
+      raw.replace(/^Invalid regular expression:\s*\/.*\/[a-z]*:\s*/i, "").trim() ||
+      "Invalid pattern";
     return { ok: false, error: `Invalid regular expression: ${detail}` };
   }
 
