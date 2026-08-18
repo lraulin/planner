@@ -1,6 +1,6 @@
 # Chase pending scrape — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-08-18)
 
 ## Scope
 

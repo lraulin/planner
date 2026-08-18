@@ -1,6 +1,6 @@
 # Chase pending scrape
 
-**Status: active**
+**Status: frozen / complete** (2026-08-18)
 Spec folder: `agent-os/specs/2026-08-18-1645-chase-pending-scrape/`
 
 ## Spec relationships
@@ -27,18 +27,20 @@ SimpleFIN's Chase balance-date sat on August 16 after a same-day refresh. Chase 
 
 ## Acceptance criteria
 
-- [ ] Userscript on Chase copies `# planner-pending v1` with `# source=chase`, last-4, current, and the pending table (or zero rows).
-- [ ] Pasting writes `scrape:chase` pending on •••9910 and sets the headline to Chase current.
-- [ ] Dashboard working figure is posted current + scrape pending, not SimpleFIN's stale pending.
-- [ ] Cap One paste behaviour is unchanged (current only when pending is empty).
-- [ ] A second user cannot write the first user's scrape-pending.
-- [ ] `npm run test:unit`; integration tests when Postgres is up.
+- [x] Userscript on Chase copies `# planner-pending v1` with `# source=chase`, last-4, current, and the pending table (or zero rows).
+- [x] Pasting writes `scrape:chase` pending on •••9910 and sets the headline to Chase current.
+- [x] Dashboard working figure is posted current + scrape pending, not SimpleFIN's stale pending.
+- [x] Cap One paste behaviour is unchanged (current only when pending is empty).
+- [x] A second user cannot write the first user's scrape-pending.
+- [x] `npm run test:unit`; integration tests when Postgres is up.
+
+Verified on the live Chase Transactions page (2026-08-18): copy + dashboard paste matched Chase current and the CVS pending.
 
 ## Changes from original plan
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                 | Why |
+| --- | ---------------------- | --- |
+|     | None. Built as shaped. |     |
 
 ## Task 1 — Save spec documentation
 
@@ -48,4 +50,8 @@ This folder.
 
 ## Task 3 — Verify
 
-While this spec is **active**, material requirement/design/scope changes update these files and append to **Changes from original plan**.
+Done. Live Chase copy/paste confirmed.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- Importing Chase's posted activity table so the register, not only the dashboard headline, is current before SimpleFIN catches up.
