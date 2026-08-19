@@ -794,6 +794,16 @@ period)` so money already spent stops being held twice and only going over bites
   `upsert_recurring_spend`, `delete_commitment`, plus
   `list_commitment_candidates`, so a pasted statement can be researched by an AI and
   written back).
+  ✅ Commitments clarity pass shipped 2026-08-18 —
+  `agent-os/specs/2026-08-18-2058-commitments-clarity/`. The envelopes item above was
+  closed by working code that its own designer could not read off the screen: he asked
+  what the Hold checkbox did, and did not know a yearly bill had been accruing 1/26th a
+  paycheck since the feature shipped. The `set_aside` flag is deleted — an active bill
+  with an amount is held, full stop — and the column it left behind shows the accrual
+  itself rather than `annualCost / 12`, a monthly average nothing ever held. The review
+  list now proposes rather than commits, so a detected charge is named and grouped
+  before a row exists, and recurring spend finally has rename and Active. **The envelopes
+  item stays closed; this is what made the closure honest.**
   ✅ Accounts page shipped 2026-08-18 —
   `agent-os/specs/2026-08-18-0856-finance-accounts-page/`. The original register
   spec's unshipped catalog UI: `/finances/accounts` edits name, kind, institution,

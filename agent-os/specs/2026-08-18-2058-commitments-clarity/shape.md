@@ -1,6 +1,6 @@
 # Commitments — say what it does — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-08-18)
 
 ## Scope
 
@@ -107,7 +107,8 @@ Full statements with rationale live in `plan.md` D1–D5. In brief:
 - **References:** See `references.md`.
 - **Product alignment:** No roadmap item opens or closes here. The envelopes item closed with
   `2026-08-16-1938-commitments`; this spec makes that closure honest, since the shipped
-  behaviour was not discoverable by the person who asked for it. Worth a note at freeze.
+  behaviour was not discoverable by the person who asked for it. Recorded on the roadmap at
+  freeze as a clarity pass under that item, which stays closed.
 
 ## Standards Applied
 

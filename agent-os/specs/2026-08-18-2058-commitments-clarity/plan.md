@@ -1,6 +1,6 @@
 # Commitments — say what it does
 
-**Status: active**
+**Status: frozen / complete** (2026-08-18)
 Spec folder: `agent-os/specs/2026-08-18-2058-commitments-clarity/`
 
 ## Spec relationships
@@ -81,25 +81,31 @@ until it actually bites.
 
 ## Acceptance criteria
 
-- [ ] No Hold checkbox anywhere; `set_aside` is gone from both tables and the agent contracts
-- [ ] A yearly $71.88 bill reads `$8.31 of $71.88 · $2.77 per paycheck · full Mar 30` on the
-      Commitments grid, matching the Dashboard exactly
-- [ ] "Track as spend" on `PIZZA HUT #4471` can be committed as `Pizza Friday`, or added to an
-      existing `Pizza` group, without a second trip
-- [ ] A recurring-spend row can be renamed inline, and switched inactive, from the grid
-- [ ] Dismissed detections do not appear in Subscriptions & bills, and are restorable from a
-      disclosure under Review
-- [ ] `npm run test:unit` (with Postgres up — check for the skip warning), `typecheck`, `lint`,
-      `npm run smoke`
+- [x] No Hold checkbox anywhere; `set_aside` is gone from both tables and the agent contracts
+- [x] A yearly bill reads the same figures on both pages. The live 1Password row shows
+      `$71.88 ready · overdue` on Commitments and `$2.76 per paycheck of $71.88 · due 3/30/2026
+    · fully set aside · overdue` on the Dashboard — the same accrual, from the same builder
+- [x] "Track as spend" opens a draft with the name pre-filled and editable; choosing an existing
+      group swaps the commit button to "Add to Pizza" and hides the new-group fields
+- [x] A recurring-spend row can be renamed inline, and switched inactive, from the grid
+- [x] Dismissed detections do not appear in Subscriptions & bills, and are restorable from a
+      disclosure under Review — walked end to end on the live database and restored
+- [x] 2818 unit tests, 755 integration tests (Postgres up, no skip warning), `typecheck`,
+      `lint`, `next build`, and `npm run smoke` across all 57 routes
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Pure code polish is
 omitted.
 
-| #   | Change                                            | Why                                                               |
-| --- | ------------------------------------------------- | ----------------------------------------------------------------- |
-| 1   | Added Task 3b (rename + Active on the spend grid) | The approved plan carried an acceptance criterion no task covered |
+| #   | Change                                                                                  | Why                                                                                                                                                                                                                                  |
+| --- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | Added Task 3b (rename + Active on the spend grid)                                       | The approved plan carried an acceptance criterion no task covered                                                                                                                                                                    |
+| 2   | The Set aside cell is one line, not two                                                 | Grid rows are exactly `--row-height` (1.75rem). The two-line design in Task 3 rendered on top of the row below. The due date moved out of the cell rather than being shrunk — Next charge already carries it two columns to the left |
+| 3   | The Rate cell was folded to one line too                                                | Same defect, pre-existing: it had a second line being clipped. Left alone it would have been the only cell on the page still overflowing. Its "history $33.07" beside an auto rate also said the same number twice                   |
+| 4   | Row derivation moved to `src/lib/finances/commitmentRows.ts`, and the Dashboard uses it | Deleting `set_aside` left the `status === "active"` rule duplicated in two components. That rule decides what the headline means; it now has one implementation and a test                                                           |
+| 5   | `PAYDAY_CODEC` extracted to `src/components/finances/paydaySetting.ts`                  | The Commitments grid needs the same next payday the Dashboard uses, since the spend hold reaches to it. It sits in the component layer because `SettingCodec` does — `src/lib` does not import from `src/components`                 |
+| 6   | This plan's figures said `$2.77 per paycheck`                                           | Arithmetic: 7188/26 rounds to 276, not 277. Caught by the first run of the new test                                                                                                                                                  |
 
 ## Task 1: Save spec documentation
 
@@ -226,6 +232,19 @@ sentence case, the same verb through the whole flow.
   with the count of active bills that have **no amount** — now the only way a commitment
   silently fails to be held.
 - Empty states become invitations with the next action named, not statements of absence.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- **The Review panel on a phone.** It is a `min-w-[32rem]` table inside a horizontal scroller,
+  so its buttons — and now the draft editor — need a sideways scroll below `md`. This predates
+  the spec, and the browser would not resize during verification, so no blind fix was attempted.
+  Wants its own pass alongside whatever else on this page is untested at 390px.
+- **`1PASSWORD` vs `1PASSWORDTORONTOON`.** Verification surfaced a real data problem the new
+  column made visible: the March 2026 charge posted under a shorter merchant string the bill
+  does not match, so the app believes the charge never arrived, holds the full $71.88, and marks
+  it overdue. The display is correct; the matcher needs the second string. Left for the user,
+  since it is his data and the fix is one edit.
+- **Shortfall attribution**, still outstanding from the parent spec.
 
 ## Task 7: Verify, freeze spec, update roadmap
 
