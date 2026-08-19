@@ -115,6 +115,8 @@ export type GridCommandActions = {
   onCollapseAll?: () => void;
   onExpandThroughLevel?: (level: number) => void;
   onChooseExpandThroughLevel?: () => void;
+  /** Opens the prompt; the host applies it to the selection. */
+  onSetPriority?: () => void;
   onConvert?: (id: string, kind: NodeKind) => void;
   onZoomIn?: (id: string) => void;
   onZoomOut?: () => void;
@@ -151,6 +153,8 @@ export type GridCommandCapabilities = {
    */
   createChild?: boolean;
   hierarchy?: boolean;
+  /** Host can set one priority across the whole selection — see `onSetPriority`. */
+  setPriority?: boolean;
   conversionKinds?: readonly NodeKind[];
   outlineZoom?: boolean;
   selection?: GridSelectionCapability;
@@ -794,6 +798,27 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
         );
       }
     }
+  }
+
+  if (capabilities.setPriority && actions.onSetPriority) {
+    out.push(
+      command({
+        id: "record.set-priority",
+        label: "Set priority…",
+        group: "record",
+        menu: "organize",
+        section: "Priority",
+        icon: "priority",
+        rowMenu: true,
+        keywords: "rank abcd a1 reprioritize order",
+        // The reason drag cannot cover this: a run of rows with no letter has nothing to drag
+        // against, since a drop beside an unprioritized row assigns nothing. It is also the
+        // only path below `md`, where drag is off entirely.
+        disabled: !hasSelection,
+        title: selectionTitle,
+        run: actions.onSetPriority,
+      }),
+    );
   }
 
   if (capabilities.conversionKinds && actions.onConvert) {

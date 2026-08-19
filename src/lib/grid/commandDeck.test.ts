@@ -98,6 +98,7 @@ describe("grid command deck", () => {
     const commands = buildGridCommands({
       createKinds: ["task"],
       hierarchy: true,
+      setPriority: true,
       conversionKinds: ["project", "task"],
       outlineZoom: true,
       selection: { id: "task-1" },
@@ -117,6 +118,7 @@ describe("grid command deck", () => {
         onExpandAll: () => {},
         onCollapseAll: () => {},
         onChooseExpandThroughLevel: () => {},
+        onSetPriority: () => {},
         onConvert: () => {},
         onZoomIn: () => {},
         onZoomOut: () => {},
@@ -151,6 +153,7 @@ describe("grid command deck", () => {
       "Insert row",
       "Move",
       "Expand",
+      "Priority",
       "Zoom",
       "Danger",
     ]);
@@ -744,5 +747,20 @@ describe("grid command deck", () => {
         (entry) => entry.id.includes("indent") || entry.id.includes("child"),
       ),
     ).toBe(false);
+  });
+
+  // A command that vanishes teaches you it does not exist; a greyed one with a reason teaches
+  // you how to use it (`navigation.md`). The prompt needs rows to act on.
+  it("explains that Set priority needs a selection", () => {
+    const commands = buildGridCommands({
+      setPriority: true,
+      selection: { id: null },
+      actions: { onSetPriority: () => {} },
+    });
+
+    expect(commands.find((entry) => entry.id === "record.set-priority")).toMatchObject({
+      disabled: true,
+      title: "Select a row first",
+    });
   });
 });

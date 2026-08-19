@@ -37,6 +37,7 @@ import {
   setEffortAction,
   setFocusAction,
   setPriorityAction,
+  setPriorityForNodesAction,
   setStateAction,
 } from "@/app/plan/outline/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
@@ -67,6 +68,7 @@ import { copyAsText, writeClipboardText } from "@/lib/tree/copyAsText";
 import { HintBar } from "./HintBar";
 import { NewChildDialog } from "./NewChildDialog";
 import { ConversionDialog } from "./ConversionDialog";
+import { SetPriorityDialog } from "./SetPriorityDialog";
 import { ExpandLevelDialog, OutlineZoomDialog } from "./OutlineCommandDialogs";
 import {
   buildOutlineColumns,
@@ -161,6 +163,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
    */
   const [virginInsertId, setVirginInsertId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<readonly OutlineNode[]>([]);
+  const [priorityPromptOpen, setPriorityPromptOpen] = useState(false);
   const [pendingConversion, setPendingConversion] = useState<{
     nodeId: string;
     targetKind: NodeKind;
@@ -374,6 +377,22 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     void writeClipboardText(text);
   }, [orderedIds, byId, selectedIds]);
 
+  /**
+   * Rows the priority prompt will act on: the on-screen selection, in on-screen order, or
+   * the cursor row when nothing is multi-selected.
+   *
+   * Deliberately **not** reduced to roots, unlike the move and delete verbs. That reduction
+   * exists because a child selected alongside its parent is already inside that parent's
+   * branch, so acting on both does it twice (`navigation.md`). Priority is sibling-relative:
+   * a parent and its child sit in different ranking groups and each needs its own rank, so
+   * dropping the child here would silently skip a row the user had selected.
+   */
+  const priorityTargets = useMemo(() => {
+    const selected = orderedIds.filter((id) => selectedIds.has(id));
+    if (selected.length > 0) return selected;
+    return selectedId ? [selectedId] : [];
+  }, [orderedIds, selectedIds, selectedId]);
+
   const addSibling = useCallback(
     (node: OutlineNode | null, where: "before" | "after") => {
       if (!node) return;
@@ -525,6 +544,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
           ),
         },
         conversionKinds: NODE_KINDS,
+        setPriority: true,
         outlineZoom: true,
         selection: {
           id,
@@ -594,6 +614,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
           onExpandThroughLevel: (level) =>
             apply(() => expandThroughDepthAction(depthForOutlineLevel(level))),
           onChooseExpandThroughLevel: () => setExpandLevelPickerOpen(true),
+          onSetPriority: () => setPriorityPromptOpen(true),
           onConvert: (nodeId, kind) => {
             setPendingConversion({ nodeId, targetKind: kind });
           },
@@ -1030,6 +1051,22 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
             addChildOfKind(parent.id, kind);
           }}
           onCancel={() => setPendingChildOf(null)}
+        />
+      )}
+
+      {priorityPromptOpen && (
+        <SetPriorityDialog
+          open
+          count={priorityTargets.length}
+          onApply={(letter, rank) => {
+            setPriorityPromptOpen(false);
+            const ids = priorityTargets;
+            for (const id of ids) {
+              patch(id, { priorityLetter: letter, priorityRank: rank });
+            }
+            apply(() => setPriorityForNodesAction(ids, letter, rank));
+          }}
+          onCancel={() => setPriorityPromptOpen(false)}
         />
       )}
 

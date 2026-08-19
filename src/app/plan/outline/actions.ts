@@ -47,6 +47,18 @@ export async function setPriorityAction(
   return run((userId) => tree.setPriority(userId, nodeId, letter, rank));
 }
 
+/**
+ * One priority for a whole selection, ranked in outline order within each sibling group.
+ * The rank is a request the ranking engine answers — see `setPriorityForNodes`.
+ */
+export async function setPriorityForNodesAction(
+  nodeIds: readonly string[],
+  letter: PriorityLetter | null,
+  rank: number | null,
+): Promise<ActionResult> {
+  return run((userId) => tree.setPriorityForNodes(userId, nodeIds, letter, rank));
+}
+
 export async function convertNodeAction(
   nodeId: string,
   targetKind: NodeKind,

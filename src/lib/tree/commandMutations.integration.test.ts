@@ -11,6 +11,7 @@ import {
   createNode,
   deleteNode,
   setPriority,
+  setPriorityForNodes,
   setState,
 } from "./mutations";
 
@@ -124,6 +125,105 @@ describeDb("shared command mutations", () => {
     const rows = await loadOutline(userId);
     expect(rows.find((row) => row.id === visible)?.priorityRank).toBe(1);
     expect(rows.find((row) => row.id === hidden)?.priorityRank).toBe(2);
+  });
+
+  it("ranks a whole selection in outline order, in one action", async () => {
+    // The motivating case: a series of videos to watch in order. Ranking them one at a time
+    // is the busy work the model change exists to remove, so a selection takes one letter
+    // and comes out A1..An in the order they sit in the outline.
+    const project = await createNode({
+      userId,
+      parentId: null,
+      type: "project",
+      name: "Series",
+    });
+    const ids: string[] = [];
+    for (const name of ["one", "two", "three", "four"]) {
+      ids.push(await createNode({ userId, parentId: project, type: "task", name }));
+    }
+
+    // Deliberately not in outline order — the command reads sortKey, not click order, or a
+    // grid sorted by name would rank them alphabetically.
+    await setPriorityForNodes(userId, [ids[2], ids[0], ids[3], ids[1]], "A", null);
+
+    const ranked = (await loadOutline(userId))
+      .filter((row) => row.parentId === project)
+      .map((row) => `${row.name}:${row.priorityLetter}${row.priorityRank}`);
+    expect(ranked).toEqual(["one:A1", "two:A2", "three:A3", "four:A4"]);
+  });
+
+  it("puts a selection at the top and pushes the existing ranks down", async () => {
+    const project = await createNode({
+      userId,
+      parentId: null,
+      type: "project",
+      name: "Series",
+    });
+    const held: string[] = [];
+    for (const name of ["old1", "old2"]) {
+      held.push(await createNode({ userId, parentId: project, type: "task", name }));
+    }
+    for (const id of held) await setPriority(userId, id, "A", null);
+
+    const fresh: string[] = [];
+    for (const name of ["new1", "new2"]) {
+      fresh.push(await createNode({ userId, parentId: project, type: "task", name }));
+    }
+    await setPriorityForNodes(userId, fresh, "A", 1);
+
+    const ranked = Object.fromEntries(
+      (await loadOutline(userId))
+        .filter((row) => row.parentId === project)
+        .map((row) => [row.name, `${row.priorityLetter}${row.priorityRank}`]),
+    );
+    expect(ranked).toEqual({ new1: "A1", new2: "A2", old1: "A3", old2: "A4" });
+  });
+
+  it("ranks each parent as its own group when the selection spans parents", async () => {
+    // Priority is sibling-relative, so two parents both getting an A1 is correct, not a tie.
+    const left = await createNode({
+      userId,
+      parentId: null,
+      type: "project",
+      name: "Left",
+    });
+    const right = await createNode({
+      userId,
+      parentId: null,
+      type: "project",
+      name: "Right",
+    });
+    const l = await createNode({ userId, parentId: left, type: "task", name: "l" });
+    const r = await createNode({ userId, parentId: right, type: "task", name: "r" });
+
+    await setPriorityForNodes(userId, [l, r], "A", null);
+
+    const rows = await loadOutline(userId);
+    expect(rows.find((row) => row.id === l)?.priorityRank).toBe(1);
+    expect(rows.find((row) => row.id === r)?.priorityRank).toBe(1);
+  });
+
+  it("does not let one user rank another user's rows", async () => {
+    const otherUserId = await makeUser();
+    const project = await createNode({
+      userId,
+      parentId: null,
+      type: "project",
+      name: "Mine",
+    });
+    const mine = await createNode({
+      userId,
+      parentId: project,
+      type: "task",
+      name: "task",
+    });
+    await setPriority(userId, mine, "B", null);
+
+    await setPriorityForNodes(otherUserId, [mine], "A", 1).catch(() => undefined);
+
+    const row = (await loadOutline(userId)).find((entry) => entry.id === mine);
+    expect(row?.priorityLetter).toBe("B");
+    expect(row?.priorityRank).toBe(1);
   });
 
   it("replaces detail rows transactionally and auto-hoists a converted child", async () => {

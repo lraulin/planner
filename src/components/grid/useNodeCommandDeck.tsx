@@ -7,6 +7,7 @@ import {
   createNodeAction,
   deleteNodeAction,
   moveNodeAction,
+  setPriorityForNodesAction,
 } from "@/app/plan/outline/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { ConversionDialog } from "@/components/outline/ConversionDialog";
@@ -28,6 +29,7 @@ import type { RowSwipe } from "./CompactRow";
 import { rowMenuFor } from "./rowMenu";
 import { rowSwipeFor } from "@/lib/grid/rowSwipe";
 import { useAttachFromClipboard } from "./useAttachFromClipboard";
+import { SetPriorityDialog } from "@/components/outline/SetPriorityDialog";
 
 /** Shared non-structural commands for list views that are projections of the outline. */
 export function useNodeCommandDeck({
@@ -97,6 +99,7 @@ export function useNodeCommandDeck({
   /** The conversion and delete confirmations. Hosts render this once, anywhere in their tree. */
   dialogs: ReactNode;
 } {
+  const [priorityPromptOpen, setPriorityPromptOpen] = useState(false);
   const [pendingConversion, setPendingConversion] = useState<{
     nodeId: string;
     targetKind: NodeKind;
@@ -137,6 +140,7 @@ export function useNodeCommandDeck({
       onCopyAsText,
       onAttachFromClipboard: attachFromClipboard,
       onConvert,
+      onSetPriority: () => setPriorityPromptOpen(true),
       onSetState: (ids: readonly string[], state: NodeState) => {
         // One `request` per row. `useStateChange` cascades each branch and asks once per row
         // that would settle open work underneath it — which is the honest prompt: two projects
@@ -214,6 +218,20 @@ export function useNodeCommandDeck({
     ],
   );
 
+  /**
+   * Rows the priority prompt acts on: the whole selection in tree order, or the cursor row.
+   *
+   * Deliberately **not** reduced to roots the way the move and delete verbs are. That
+   * reduction exists because a child selected alongside its parent is already inside that
+   * parent's branch (`navigation.md`); priority is sibling-relative, so parent and child are
+   * separate ranking groups and dropping the child would skip a row the user selected.
+   */
+  const priorityTargets = useMemo(() => {
+    const selected = nodes.filter((node) => selectedIds.has(node.id)).map((n) => n.id);
+    if (selected.length > 0) return selected;
+    return selectedId ? [selectedId] : [];
+  }, [nodes, selectedIds, selectedId]);
+
   const capabilitiesFor = useCallback(
     (id: string | null, count: number): GridCommandCapabilities => {
       const node = id ? (byId.get(id) ?? null) : null;
@@ -234,6 +252,7 @@ export function useNodeCommandDeck({
         createKinds,
         createChild,
         conversionKinds: NODE_KINDS,
+        setPriority: true,
         clipboard: {
           pickedUp: clipboard?.count ?? 0,
           pasteAfterRefusal: pasteRefusal(
@@ -362,6 +381,18 @@ export function useNodeCommandDeck({
     />
   );
 
+  const priorityDialog = priorityPromptOpen ? (
+    <SetPriorityDialog
+      open
+      count={priorityTargets.length}
+      onApply={(letter, rank) => {
+        setPriorityPromptOpen(false);
+        apply(() => setPriorityForNodesAction(priorityTargets, letter, rank));
+      }}
+      onCancel={() => setPriorityPromptOpen(false)}
+    />
+  ) : null;
+
   const conversionDialog = pendingConversion ? (
     <ConversionDialog
       open
@@ -384,6 +415,7 @@ export function useNodeCommandDeck({
     dialogs: (
       <>
         {deleteDialog}
+        {priorityDialog}
         {conversionDialog}
         {noticeDialog}
       </>

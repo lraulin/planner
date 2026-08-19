@@ -233,3 +233,114 @@ describe("letterRankEngine renumber writes", () => {
     ]);
   });
 });
+
+describe("planAssign over a block", () => {
+  /** Every ranked row afterwards as `id@LetterRank`, in letter then rank order. */
+  function afterAssign(
+    items: Item[],
+    ids: string[],
+    letter: PriorityLetter | null,
+    rank: number | null,
+  ): string[] {
+    const byId = new Map(
+      engine.planAssign(items, ids, letter, rank).map((a) => [a.id, a]),
+    );
+    return items
+      .map((item) => ({ ...item, ...(byId.get(item.id) ?? {}) }))
+      .filter((item) => item.letter !== null)
+      .sort(
+        (a, b) =>
+          (a.letter ?? "").localeCompare(b.letter ?? "") ||
+          (a.rank ?? 0) - (b.rank ?? 0),
+      )
+      .map((item) => `${item.id}@${item.letter}${item.rank}`);
+  }
+
+  // Selecting a run of rows and giving them one priority is how a long list gets ranked at
+  // all — thirty videos should not need thirty keystrokes. The block lands contiguously and
+  // in the order given, which for a grid selection is the order they read on screen.
+  it("lands a block contiguously from the requested rank, pushing the rest down", () => {
+    const items = [at("A1"), at("A2"), at("A3"), unranked("x"), unranked("y")];
+
+    expect(afterAssign(items, ["x", "y"], "A", 1)).toEqual([
+      "x@A1",
+      "y@A2",
+      "A1@A3",
+      "A2@A4",
+      "A3@A5",
+    ]);
+  });
+
+  it("clamps a rank past the end instead of leaving a gap", () => {
+    // Asking for A10 of a five-long list means "after the ones that exist", not "leave four
+    // empty slots" — the whole point of the model is that a rank is never absent.
+    const items = [at("A1"), at("A2"), unranked("x"), unranked("y")];
+
+    expect(afterAssign(items, ["x", "y"], "A", 10)).toEqual([
+      "A1@A1",
+      "A2@A2",
+      "x@A3",
+      "y@A4",
+    ]);
+  });
+
+  it("appends the block when the letter carries no rank", () => {
+    const items = [at("A1"), unranked("x"), unranked("y")];
+
+    expect(afterAssign(items, ["x", "y"], "A", null)).toEqual([
+      "A1@A1",
+      "x@A2",
+      "y@A3",
+    ]);
+  });
+
+  it("inserts mid-list at exactly the rank asked for", () => {
+    const items = [at("A1"), at("A2"), at("A3"), unranked("x")];
+
+    expect(afterAssign(items, ["x"], "A", 2)).toEqual([
+      "A1@A1",
+      "x@A2",
+      "A2@A3",
+      "A3@A4",
+    ]);
+  });
+
+  it("vacates the old slots when the block is already in that letter", () => {
+    // Re-ranking A2 and A3 to the top must not count them twice: they leave their old
+    // positions rather than colliding with the rows that shift up behind them.
+    const items = [at("A1"), at("A2"), at("A3"), at("A4")];
+
+    expect(afterAssign(items, ["A3", "A4"], "A", 1)).toEqual([
+      "A3@A1",
+      "A4@A2",
+      "A1@A3",
+      "A2@A4",
+    ]);
+  });
+
+  it("closes the gap in every letter the block came from", () => {
+    const items = [at("A1"), at("A2"), at("A3"), at("B1"), at("B2")];
+
+    // Moving A1 and B1 into C empties a slot in each of A and B.
+    expect(afterAssign(items, ["A1", "B1"], "C", null)).toEqual([
+      "A2@A1",
+      "A3@A2",
+      "B2@B1",
+      "A1@C1",
+      "B1@C2",
+    ]);
+  });
+
+  it("unranks a whole block and closes what it leaves", () => {
+    const items = [at("A1"), at("A2"), at("A3")];
+
+    expect(afterAssign(items, ["A1", "A2"], null, null)).toEqual(["A3@A1"]);
+  });
+
+  it("plans nothing for an empty selection or an id that is not there", () => {
+    const items = [at("A1"), at("A2")];
+
+    expect(engine.planAssign(items, [], "A", 1)).toEqual([]);
+    expect(engine.planAssign(items, ["ghost"], "A", 1)).toEqual([]);
+  });
+});

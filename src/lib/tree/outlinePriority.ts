@@ -101,10 +101,13 @@ export function priorityDropFromPosition(
  * loads it from the database rather than from whatever the grid is showing. A renumber that
  * only accounted for visible rows would silently collapse the ranks of everything a filter
  * had hidden.
+ *
+ * Takes one id or a block. A block lands contiguously from the requested rank, in the order
+ * given, so a run of selected rows becomes `A1..An` rather than n rows claiming rank 1.
  */
 export function planOutlinePriorityAssign(
   siblings: readonly PriorityNode[],
-  nodeId: string,
+  nodeId: string | readonly string[],
   letter: PriorityLetter | null,
   rank: number | null,
 ): PriorityAssignment[] {

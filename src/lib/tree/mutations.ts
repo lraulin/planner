@@ -344,6 +344,55 @@ export async function setPriority(
 }
 
 /**
+ * Give one priority to a whole selection, so a long list can be ranked in one action.
+ *
+ * The rank is a *request*, answered per sibling group: `A1` puts the block at the top of A
+ * and pushes the rest down, `A10` inserts at ten, a rank past the end clamps to the end, a
+ * bare letter appends, and blank unprioritizes. Within each group the block takes
+ * consecutive ranks.
+ *
+ * **Ordered by `sortKey`, not by the order the rows were clicked or are currently sorted.**
+ * The point of the command is to make rank agree with the outline — a series of videos
+ * ranked in the order they are meant to be watched — so reading the order off a grid that
+ * might be sorted by name would defeat it.
+ *
+ * A selection may span parents. Priority is sibling-relative, so each parent is ranked as
+ * its own group and the same letter can legitimately produce an `A1` in each.
+ */
+export async function setPriorityForNodes(
+  userId: string,
+  nodeIds: readonly string[],
+  letter: PriorityLetter | null,
+  rank: number | null,
+): Promise<void> {
+  if (nodeIds.length === 0) return;
+
+  await db.transaction(async (tx) => {
+    const selected = await tx
+      .select({ id: nodes.id, parentId: nodes.parentId, sortKey: nodes.sortKey })
+      .from(nodes)
+      .where(and(eq(nodes.userId, userId), inArray(nodes.id, [...nodeIds])))
+      .orderBy(asc(nodes.sortKey));
+
+    const byParent = new Map<string | null, string[]>();
+    for (const row of selected) {
+      const group = byParent.get(row.parentId);
+      if (group) group.push(row.id);
+      else byParent.set(row.parentId, [row.id]);
+    }
+
+    for (const [parentId, ids] of byParent) {
+      const siblings = await siblingPriorityPool(tx, userId, parentId);
+      await applyPriorityAssignments(
+        tx,
+        userId,
+        planOutlinePriorityAssign(siblings, ids, letter, rank),
+      );
+    }
+  });
+}
+
+/**
  * The same assignment inside a transaction the caller already owns.
  *
  * Exists so the drawer's detail save shares one implementation with the grid's inline edit

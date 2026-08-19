@@ -115,21 +115,6 @@ export function letterRankEngine<T extends { id: string }>(
     return out;
   }
 
-  /**
-   * When an item leaves a letter, close the gap it left. No-op when it never had a letter
-   * or is staying put — that is what keeps a reorder *within* a letter from touching
-   * anything outside it.
-   */
-  function compactSourceLetter(
-    items: T[],
-    moved: T,
-    destination: PriorityLetter,
-  ): LetterAssignment[] {
-    const source = read(moved).letter;
-    if (source === null || source === destination) return [];
-    return renumber(itemsInLetter(items, source, moved.id), source);
-  }
-
   /** Drop out of the ranking, closing the gap left behind. Accepts one id or a block. */
   function planClear(items: T[], id: string | readonly string[]): LetterAssignment[] {
     const ids = Array.isArray(id) ? [...id] : [id];
@@ -266,33 +251,46 @@ export function letterRankEngine<T extends { id: string }>(
   }
 
   /**
-   * Assign by typing, the keyboard path onto the same rules.
+   * Assign by typing, the keyboard path onto the same rules. Takes one id or a block.
    *
    * - `"A"` (no rank) appends to the end of A — you know it is an A, not yet where in A.
    * - `"A1"` inserts at that position and pushes the rest down; a rank past the end clamps
    *   to the end rather than leaving a gap.
    * - `null` unranks.
+   *
+   * A block lands **contiguously in the order given**, taking consecutive ranks from the
+   * requested position. That is what makes "select thirty rows and press A" produce A1..A30
+   * in the order they read on screen, rather than thirty rows fighting over rank 1.
    */
   function planAssign(
     items: T[],
-    id: string,
+    id: string | readonly string[],
     letter: PriorityLetter | null,
     rank: number | null,
   ): LetterAssignment[] {
-    if (letter === null) return planClear(items, id);
+    const ids = Array.isArray(id) ? [...id] : [id as string];
+    if (ids.length === 0) return [];
+    if (letter === null) return planClear(items, ids);
 
-    const dragged = items.find((item) => item.id === id);
-    if (!dragged) return [];
+    const idSet = new Set(ids);
+    const assigned = ids
+      .map((entry) => items.find((item) => item.id === entry))
+      .filter((item): item is T => item != null);
+    if (assigned.length !== ids.length) return [];
 
-    const members = itemsInLetter(items, letter, id);
+    // Everything already in the letter *except* what is being placed — a row moving within
+    // its own letter vacates its old slot rather than counting twice.
+    const members = items
+      .filter((item) => read(item).letter === letter && !idSet.has(item.id))
+      .sort(byRank);
     // A bare letter means "somewhere in this letter" — the end is the honest answer.
     const requested = rank === null ? members.length + 1 : rank;
     const insertAt = Math.min(Math.max(requested, 1), members.length + 1) - 1;
-    members.splice(insertAt, 0, dragged);
+    members.splice(insertAt, 0, ...assigned);
 
     return [
       ...renumber(members, letter),
-      ...compactSourceLetter(items, dragged, letter),
+      ...compactSources(items, assigned, letter, idSet),
     ];
   }
 
