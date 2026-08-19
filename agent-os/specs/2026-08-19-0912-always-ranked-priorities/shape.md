@@ -20,24 +20,57 @@ selection. Give the Task Chooser one saved setting covering drag target and item
 
 ## Task detail
 
-### Task 2: Reproduce the drag report before changing anything
+### Task 2: Reproduce the drag report — **done, no regression**
 
-Per `/fix-bug`, name the cause before fixing. Three candidates, in order:
+Per `/fix-bug`, name the cause before fixing. Verified 2026-08-19 against the real dev
+database (mutations made during the probe were snapshotted and restored byte-for-byte).
 
-1. **Viewport.** `DataGrid.dragBindingFor` returns `undefined` when `compact`
-   (`src/components/grid/DataGrid.tsx:771`) — row drag is off below `md` **by design**
-   (`agent-os/standards/components/responsive.md`). Validation happens on the deployed
-   iPhone, so this is the leading candidate, and no priority work would fix it.
-2. **Unprioritized siblings.** `planDrop` delegates to `planClear` when the _target_ has no
-   letter (`letterRank.ts:193`), which for an unlettered dragged row plans nothing. In a
-   project where nothing is prioritized — the video project — dragging looks inert. Correct
-   behaviour, and it stays correct under the new model.
-3. **The gap under an expanded parent.** `resolveDrop` maps `after` on an open parent to
-   "first child" (`src/lib/tree/dnd.ts:98-105`), so between an expanded row and its next
-   sibling only the `before` slot is a sibling drop. Keep this — it is the only way to reach
-   "first child".
+**Finding: nothing is broken. Drag-to-reprioritize works.** Dragging
+`Get refund for nuts…` before `Get a place to live with Samantha` under _Financial_ — three
+siblings all tied at `A1` — correctly produced `A1 / A2 / A3` and moved the row. The three
+candidates resolve as follows.
 
-Record the actual cause here and in the commit body.
+1. **Viewport — by design.** `DataGrid.dragBindingFor` returns `undefined` when `compact`
+   (`src/components/grid/DataGrid.tsx:771`); drag is off below `md`
+   (`components/responsive.md`). If the report came from the iPhone, this is the entire
+   explanation and no priority work changes it.
+2. **Unprioritized siblings — the root cause.** `planDrop` delegates to `planClear` when the
+   _target_ has no letter (`letterRank.ts:193`). Confirmed against the pure planner:
+
+   | Sibling pool            | `planSiblingPriorityDrop` result     |
+   | ----------------------- | ------------------------------------ |
+   | all unprioritized       | `[]` — **nothing happens**           |
+   | target has a bare `A`   | `A1 / A2 / A3` — densifies correctly |
+   | target ranked `A1`,`A2` | `A1 / A2 / A3` — correct             |
+
+   So in a project where nothing has been given a letter — **the video series** — dragging
+   moves the row and assigns no priority, which reads exactly as "drag no longer
+   reprioritizes". Correct under the current rules ("assume the target's priority", which is
+   none), and it stays correct under the new model: a drop next to an unprioritized row
+   leaves the dragged row unprioritized.
+
+   **Note this reverses one assumption in the original plan:** bare letters were never the
+   blocker. A bare-letter target already densifies. What blocks is having _no_ letter.
+
+3. **The gap under an expanded parent — by design.** `resolveDrop` maps `after` on an open
+   parent to "first child" (`dnd.ts:98-105`), a reparent, so no renumber. The `before
+<next sibling>` slot still reprioritizes, so a priority-assigning slot always exists
+   between two rows — but aiming at the bottom third of an expanded row silently reparents
+   instead. Kept: it is the only way to reach "first child".
+
+**Consequence for the plan.** There is no drag bug to fix, so no fix ships. The remedy for
+the reported experience is **Task 5** — give the block a letter in one action, after which
+dragging behaves as expected. This also satisfies `components/data-grid`'s "never make drag
+the only path to an outcome".
+
+**Driver note for whoever probes this next:** two artifacts cost real time and are worth
+knowing. `find` returns coordinates for rows scrolled off-screen (the handle sat at
+`y = -847`), and the synthesized press then lands on nothing — `scrollIntoView` first. And
+`text=` matches the _name span_, not the row, so the before/inside/after fraction is measured
+against a ~20px span rather than the row; aim at
+`[aria-label="…"] >> [data-row-handle]` for the source and expect the zone to be
+approximate. A `before` that was really `inside` silently reparented a node during this
+probe.
 
 ### Task 3: One normalizing write path
 

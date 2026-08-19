@@ -26,11 +26,13 @@ Spec folder: `agent-os/specs/2026-08-19-0912-always-ranked-priorities/`
 
 Two things prompted this.
 
-**The reported symptom.** Dragging a row between its neighbours appeared to have stopped
-reprioritizing. There is **no regression in the code**: no commit reverts
+**The reported symptom, resolved.** Dragging a row between its neighbours appeared to have
+stopped reprioritizing. There is **no regression**: no commit reverts
 `src/lib/tree/outlinePriority.ts` (one commit, never touched since), `useTreeRowDrag.ts`, or
-the drag block in `OutlineGrid.tsx`. The behaviour is _conditional_ — see Task 2 for the
-three conditions and the one that turned out to be responsible.
+the drag block in `OutlineGrid.tsx`, and a drag between three siblings tied at `A1` was
+verified end to end to produce `A1 / A2 / A3`. The cause is that a drop next to an
+**unprioritized** row correctly assigns nothing — and in the video project nothing carries a
+letter yet. Evidence in `shape.md` Task 2. **No drag fix ships; Task 5 is the remedy.**
 
 **The model change.** Achieve treats the numeric rank as optional (`online-help.md:412-418`),
 and we copied that: `nodes.priority_rank` is nullable, bare letters sort last within their
@@ -157,9 +159,10 @@ This work extends that engine's invariant to the outline rather than inventing a
 Material refinements during implementation (requirements, design, scope). Pure code polish
 omitted.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                                              | Why                                                                                                                                                                         |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **No drag fix ships.** Task 2 found no regression: drag-to-reprioritize works on desktop and was verified end to end against real data.             | The reported experience is a sibling group where _nothing_ carries a letter, in which a drop correctly assigns nothing. The remedy is Task 5, not a fix.                    |
+| 2   | **Bare letters were never the blocker.** A drop onto a bare-letter target already densifies correctly; only a wholly unlettered pool plans nothing. | Corrects an assumption made while shaping. It does not change the model decision — bare letters still go — but it removes "drag is broken by bare letters" as a motivation. |
 
 ## Tasks
 
