@@ -213,7 +213,6 @@ describeDb("loadDashboard", () => {
       name: "SimpliSafe",
       cadenceMonths: 1,
       expectedCents: 3_471,
-      setAside: true,
       dueDay: 9,
     });
 
@@ -224,7 +223,7 @@ describeDb("loadDashboard", () => {
       name: "Chase •••9910",
       kind: "credit_card",
     });
-    expect(data.bills[0]).toMatchObject({ setAside: true, dueDay: 9 });
+    expect(data.bills[0]).toMatchObject({ dueDay: 9 });
     // Only charges against a declared merchant — the Walmart row is not one.
     expect(data.billCharges).toEqual([
       { name: "SimpliSafe", dateKey: "2026-03-09" },
@@ -250,7 +249,6 @@ describeDb("loadDashboard", () => {
       name: "SimpliSafe",
       cadenceMonths: 1,
       expectedCents: 3_471,
-      setAside: true,
     });
 
     const intruder = await loadDashboard(intruderId);

@@ -388,7 +388,6 @@ export function CommitmentsView({
           status: patch.status ?? row.status,
           cancelUrl: patch.cancelUrl ?? row.cancelUrl,
           scheduled: patch.scheduled ?? row.scheduled,
-          setAside: patch.setAside ?? row.setAside,
           dueDay: patch.dueDay !== undefined ? patch.dueDay : row.dueDay,
         }),
       );
@@ -407,7 +406,6 @@ export function CommitmentsView({
           period: patch.period,
           amountSource: patch.amountSource,
           expectedCents: patch.expectedCents,
-          setAside: patch.setAside,
           active: patch.active,
         }),
       );
@@ -687,7 +685,6 @@ function NewBillForm({
               cadenceMonths: cadence,
               expectedCents: cents > 0 ? cents : null,
               anchorDate: next || null,
-              setAside: cents > 0,
             }).then((result) => {
               if (!result.ok) onError(result.error);
               else {

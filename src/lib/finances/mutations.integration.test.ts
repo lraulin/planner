@@ -360,7 +360,6 @@ describeDb("declared recurring bills", () => {
         expectedCents: 141_260,
         anchorDate: null,
         scheduled: true,
-        setAside: false,
         dueDay: null,
       },
     ]);
@@ -398,7 +397,6 @@ describeDb("declared recurring bills", () => {
       expectedCents: 141_260,
       anchorDate: "2026-03-03",
       scheduled: true,
-      setAside: false,
       dueDay: null,
     });
   });
@@ -461,51 +459,21 @@ describeDb("declared recurring bills", () => {
     expect(await loadRecurringBills(userId)).toEqual([]);
   });
 
-  it("flags a bill as a set-aside with a due day", async () => {
+  it("keeps the amount and due day when only the cadence is corrected", async () => {
+    // The grid sends one field at a time, and a blanket write would silently stop deducting
+    // rent from the headline by clearing the figure the accrual runs on.
     await upsertRecurringBill(userId, {
       name: "RENT:RAULIN",
       cadenceMonths: 1,
       expectedCents: 210_000,
-      setAside: true,
-      dueDay: 1,
-    });
-
-    expect((await loadRecurringBills(userId))[0]).toMatchObject({
-      setAside: true,
-      dueDay: 1,
-    });
-  });
-
-  it("keeps the set-aside flag when only the cadence is corrected", async () => {
-    // Same hazard as the declared amount: the recurring table sends one field, and a blanket
-    // write would silently stop deducting rent from the headline.
-    await upsertRecurringBill(userId, {
-      name: "RENT:RAULIN",
-      cadenceMonths: 1,
-      expectedCents: 210_000,
-      setAside: true,
       dueDay: 1,
     });
     await upsertRecurringBill(userId, { name: "RENT:RAULIN", cadenceMonths: 1 });
 
     expect((await loadRecurringBills(userId))[0]).toMatchObject({
-      setAside: true,
       dueDay: 1,
       expectedCents: 210_000,
     });
-  });
-
-  it("refuses a set-aside with no stated cost", async () => {
-    // A median estimate is fine for a report and wrong when the figure is subtracted from a
-    // real balance the user is about to spend against.
-    await expect(
-      upsertRecurringBill(userId, {
-        name: "RENT:RAULIN",
-        cadenceMonths: 1,
-        setAside: true,
-      }),
-    ).rejects.toThrow("A set-aside needs its cost for the period.");
-    expect(await loadRecurringBills(userId)).toEqual([]);
   });
 
   it("refuses a due day the column would reject with a database error", async () => {
@@ -553,7 +521,6 @@ describeDb("declared recurring bill isolation", () => {
       name: "Geico",
       cadenceMonths: 6,
       expectedCents: 141_260,
-      setAside: true,
       dueDay: 3,
     });
   });
@@ -562,18 +529,18 @@ describeDb("declared recurring bill isolation", () => {
     expect(await loadRecurringBills(intruderId)).toEqual([]);
   });
 
-  it("does not let a second user change another user's set-aside", async () => {
-    // Turning someone else's set-aside off would silently change the number they budget by.
+  it("does not let a second user change another user's declared amount", async () => {
+    // Rewriting someone else's cost would silently change the number they budget by, since
+    // every active bill with an amount is held back from their headline.
     await upsertRecurringBill(intruderId, {
       name: "Geico",
       cadenceMonths: 6,
       expectedCents: 1,
-      setAside: false,
       dueDay: 28,
     });
 
     expect((await loadRecurringBills(ownerId))[0]).toMatchObject({
-      setAside: true,
+      expectedCents: 141_260,
       dueDay: 3,
     });
   });
@@ -713,7 +680,6 @@ describeDb("recurring spend", () => {
       period: "week",
       amountSource: "auto",
       expectedCents: null,
-      setAside: true,
       active: true,
     });
   });
@@ -793,7 +759,6 @@ describeDb("subscription status", () => {
       name: "Paramount+",
       cadenceMonths: 1,
       expectedCents: 1299,
-      setAside: true,
     });
   });
 
@@ -806,7 +771,6 @@ describeDb("subscription status", () => {
       status: "cancelled",
       cancelledOn: "2026-08-16",
       expectedCents: 1299,
-      setAside: true,
     });
   });
 

@@ -574,7 +574,6 @@ export async function listCommitmentsTool(userId: string) {
             ? nextDueFrom(anchor, bill.cadenceMonths, today)
             : null,
         scheduled: bill.scheduled,
-        setAside: bill.setAside,
       };
     }),
     spend: data.spend.map((entry) => {
@@ -590,7 +589,6 @@ export async function listCommitmentsTool(userId: string) {
         amountSource: entry.amountSource,
         ratePerPeriodCents: rate.ratePerPeriodCents,
         observedCents: rate.observedCents,
-        setAside: entry.setAside,
         active: entry.active,
       };
     }),
@@ -631,7 +629,6 @@ export async function upsertSubscriptionTool(
         "active" | "cancelled" | "ignored" | undefined,
       cancelUrl: optionalString(args, "cancelUrl"),
       scheduled: args.scheduled === undefined ? undefined : args.scheduled === true,
-      setAside: args.setAside === undefined ? undefined : args.setAside === true,
       dueDay: args.dueDay === null ? null : optionalNumber(args, "dueDay"),
       notes: optionalString(args, "notes"),
     }),
@@ -660,7 +657,6 @@ export async function upsertRecurringSpendTool(
         "auto" | "pinned" | undefined,
       expectedCents:
         args.expectedCents === null ? null : optionalNumber(args, "expectedCents"),
-      setAside: args.setAside === undefined ? undefined : args.setAside === true,
       active: args.active === undefined ? undefined : args.active === true,
       notes: optionalString(args, "notes"),
     }),

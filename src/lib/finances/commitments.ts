@@ -53,7 +53,6 @@ export type StoredSpend = {
   period: RecurringSpendPeriod;
   amountSource: "auto" | "pinned";
   expectedCents: number | null;
-  setAside: boolean;
   active: boolean;
   notes?: string;
 };
@@ -77,7 +76,6 @@ export type Commitment = {
   id: string;
   name: string;
   matchers: readonly string[];
-  setAside: boolean;
 };
 
 export function asBillCommitment(bill: StoredBillRow): Commitment {
@@ -86,7 +84,6 @@ export function asBillCommitment(bill: StoredBillRow): Commitment {
     id: bill.id,
     name: bill.name,
     matchers: bill.matchers,
-    setAside: bill.setAside,
   };
 }
 
@@ -96,7 +93,6 @@ export function asSpendCommitment(entry: StoredSpend): Commitment {
     id: entry.id,
     name: entry.name,
     matchers: entry.matchers,
-    setAside: entry.setAside,
   };
 }
 

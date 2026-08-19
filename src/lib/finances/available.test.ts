@@ -46,7 +46,6 @@ function bill(over: Partial<StoredBill> = {}): StoredBill {
     expectedCents: 210000,
     anchorDate: null,
     scheduled: true,
-    setAside: true,
     dueDay: null,
     ...over,
   };
@@ -454,12 +453,6 @@ describe("setAsideHeld", () => {
     expect(held?.periodStartKey).toBe("2026-08-01");
   });
 
-  it("returns null for a bill that is not a set-aside", () => {
-    expect(
-      setAsideHeld(bill({ setAside: false }), [payday("2026-08-07")], [], "2026-08-16"),
-    ).toBe(null);
-  });
-
   it("returns null rather than inventing a figure when no amount is declared", () => {
     // A median of the charges on file is a fine estimate for a report and the wrong basis for
     // deducting money from a number the user is about to spend against.
@@ -474,7 +467,8 @@ describe("setAsideHeld", () => {
   });
 
   it("accrues an unscheduled bill, whose date is unknown but whose cost is not", () => {
-    // scheduled and setAside are orthogonal: propane's $500 a year has to come from somewhere.
+    // The date being unknown says nothing about the cost: propane's $500 a year still has to
+    // come from somewhere before the truck arrives.
     const held = setAsideHeld(
       bill({
         name: "Taylor Gas",
@@ -526,7 +520,6 @@ function spendEntry(over: Partial<StoredSpend> = {}): StoredSpend {
     period: "week",
     amountSource: "auto",
     expectedCents: null,
-    setAside: true,
     active: true,
     ...over,
   };
@@ -628,12 +621,9 @@ describe("recurringSpendHeld", () => {
     expect(held?.heldCents).toBe(6000);
   });
 
-  it("holds nothing for an inactive entry, one opted out, or a zero rate", () => {
+  it("holds nothing for an inactive entry or a zero rate", () => {
     expect(
       recurringSpendHeld(spendEntry({ active: false }), 6000, [], MONDAY, PAYDAY),
-    ).toBeNull();
-    expect(
-      recurringSpendHeld(spendEntry({ setAside: false }), 6000, [], MONDAY, PAYDAY),
     ).toBeNull();
     expect(recurringSpendHeld(spendEntry(), 0, [], MONDAY, PAYDAY)).toBeNull();
   });

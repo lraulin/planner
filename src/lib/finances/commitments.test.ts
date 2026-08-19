@@ -27,7 +27,6 @@ function bill(overrides: Partial<StoredBillRow> = {}): StoredBillRow {
     expectedCents: 59498,
     anchorDate: null,
     scheduled: true,
-    setAside: false,
     dueDay: null,
     ...overrides,
   };
@@ -41,7 +40,6 @@ function spend(overrides: Partial<StoredSpend> = {}): StoredSpend {
     period: "week",
     amountSource: "auto",
     expectedCents: null,
-    setAside: true,
     active: true,
     ...overrides,
   };

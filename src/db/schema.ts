@@ -2330,6 +2330,13 @@ export const financeRecurringBills = pgTable(
      * the review list permanently. Two states would force those into one bucket, and a year
      * later nobody could tell "I cancelled Paramount+" from "that was never a subscription".
      *
+     * **This column is also the whole answer to "is it budgeted".** A `set_aside` flag sat
+     * beside it until 2026-08-18, from the era when declaring a bill only meant keeping it off
+     * the review list. Once `status` existed it covered every reason to opt out — not a
+     * commitment is `ignored`, no longer charged is `cancelled`, amount unknown accrues nothing
+     * on its own — so the flag was two ways to say one thing and the user could not tell from
+     * the screen which one was in force. Active with an amount is held; that is the rule.
+     *
      * Text with a CHECK rather than a `pgEnum`, for the reason recorded at
      * `financeAccountKindEnum`: `ALTER TYPE … ADD VALUE` fails on Neon's transaction-mode
      * pooler, so a vocabulary that might plausibly grow should not be an enum.
@@ -2376,20 +2383,6 @@ export const financeRecurringBills = pgTable(
      * Null means the latest charge on file is the anchor.
      */
     anchorDate: date("anchor_date", { mode: "string" }),
-    /**
-     * Hold this bill's cost back from "available to spend", accruing a share out of each
-     * paycheck rather than appearing as a cliff on the due date.
-     *
-     * **Orthogonal to `scheduled`**, which is the pair of facts that column exists to keep
-     * apart: `scheduled` says whether the *date* is knowable, this says whether the *cost*
-     * accrues. Propane is unscheduled and a perfectly good set-aside — $500 a year has to come
-     * from somewhere whenever the truck arrives.
-     *
-     * Defaults false: a declaration made to keep a bill off the review list said nothing about
-     * budgeting, and turning every existing one into a deduction from the headline would be a
-     * silent, and large, change to a number the user reads daily.
-     */
-    setAside: boolean("set_aside").notNull().default(false),
     /**
      * Day of the period the charge is expected, 1–31. Null keeps the existing behaviour, where
      * `nextDueDate` walks forward from the last charge on file.
@@ -2485,14 +2478,12 @@ export const financeRecurringSpend = pgTable(
     /** The pinned rate per `period`. Null — and ignored — while `amountSource` is `auto`. */
     expectedCents: integer("expected_cents"),
     /**
-     * Hold this back from "available to spend".
+     * Whether it is still part of the routine. No cancellation state — nothing to cancel.
      *
-     * Defaults **true**, the opposite of the bills table, because deducting it is the entire
-     * reason the row exists. A bill declaration was originally about keeping something off a
-     * review list and said nothing about budgeting; there is no such second purpose here.
+     * As with `financeRecurringBills.status`, this alone decides whether the rate is held back:
+     * an active group is held, an inactive one is not. The `set_aside` flag that used to sit
+     * here defaulted true and had no UI, so it could only ever be true.
      */
-    setAside: boolean("set_aside").notNull().default(true),
-    /** Whether it is still part of the routine. No cancellation state — nothing to cancel. */
     active: boolean("active").notNull().default(true),
     notes: text("notes").notNull().default(""),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

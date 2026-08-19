@@ -64,13 +64,6 @@ export type DeclaredBill = {
  * wherever a `DeclaredBill` is wanted, so the read is one query either way.
  */
 export type StoredBill = DeclaredBill & {
-  /**
-   * Hold this bill's cost back from "available to spend", a share out of each paycheck.
-   *
-   * Independent of `scheduled` — that one is about the date, this one is about the money, and
-   * an unscheduled bill is a perfectly good set-aside.
-   */
-  setAside: boolean;
   /** Day of the period the charge is expected, 1–31, or null to walk from the last charge. */
   dueDay: number | null;
 };

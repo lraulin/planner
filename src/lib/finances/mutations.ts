@@ -478,12 +478,6 @@ export type RecurringBillEdit = {
    * yearly figure is solid and whose delivery date is a tank sensor and the weather.
    */
   scheduled?: boolean;
-  /**
-   * Hold this bill's cost back from the dashboard's "available to spend", accruing a share out
-   * of each paycheck. Independent of `scheduled`: that one is about the date, this is about
-   * the money.
-   */
-  setAside?: boolean;
   /** Day of the period the charge is expected, 1–31, or null to walk from the last charge. */
   dueDay?: number | null;
 };
@@ -591,14 +585,6 @@ export async function upsertRecurringBill(
   ) {
     throw new Error("A due day must be a whole number from 1 to 31.");
   }
-  // A set-aside with no stated cost has nothing to accrue. Falling back to the median of the
-  // charges on file is right for a report and wrong here: this figure is subtracted from money
-  // the user is about to spend against, and an estimate deducted from a real balance is the
-  // one guess this page must not make.
-  if (edit.setAside === true && !(Number(edit.expectedCents) > 0)) {
-    throw new Error("A set-aside needs its cost for the period.");
-  }
-
   const existing = await db
     .select({ id: financeRecurringBills.id })
     .from(financeRecurringBills)
@@ -629,7 +615,6 @@ export async function upsertRecurringBill(
     ...(edit.anchorDate !== undefined ? { anchorDate: edit.anchorDate } : {}),
     ...(edit.notes !== undefined ? { notes: edit.notes.trim() } : {}),
     ...(edit.scheduled !== undefined ? { scheduled: edit.scheduled } : {}),
-    ...(edit.setAside !== undefined ? { setAside: edit.setAside } : {}),
     ...(edit.dueDay !== undefined ? { dueDay: edit.dueDay } : {}),
     ...(edit.status !== undefined ? { status: edit.status } : {}),
     // Cancelling stamps the date and reactivating clears it, so the pair cannot disagree —
@@ -655,7 +640,6 @@ export async function upsertRecurringBill(
       anchorDate: edit.anchorDate ?? null,
       notes: edit.notes?.trim() ?? "",
       scheduled: edit.scheduled ?? true,
-      setAside: edit.setAside ?? false,
       dueDay: edit.dueDay ?? null,
       status: edit.status ?? "active",
       cancelledOn:
@@ -715,7 +699,6 @@ export type RecurringSpendEdit = {
   amountSource?: RecurringSpendAmountSource;
   /** The pinned rate per period. Ignored while `amountSource` is `auto`. */
   expectedCents?: number | null;
-  setAside?: boolean;
   active?: boolean;
   notes?: string;
 };
@@ -769,7 +752,6 @@ export async function upsertRecurringSpend(
     ...(edit.period !== undefined ? { period: edit.period } : {}),
     ...(edit.amountSource !== undefined ? { amountSource: edit.amountSource } : {}),
     ...(edit.expectedCents !== undefined ? { expectedCents: edit.expectedCents } : {}),
-    ...(edit.setAside !== undefined ? { setAside: edit.setAside } : {}),
     ...(edit.active !== undefined ? { active: edit.active } : {}),
     ...(edit.notes !== undefined ? { notes: edit.notes.trim() } : {}),
     updatedAt: new Date(),
@@ -784,7 +766,6 @@ export async function upsertRecurringSpend(
       period: edit.period ?? "week",
       amountSource: edit.amountSource ?? "auto",
       expectedCents: edit.expectedCents ?? null,
-      setAside: edit.setAside ?? true,
       active: edit.active ?? true,
       notes: edit.notes?.trim() ?? "",
     })

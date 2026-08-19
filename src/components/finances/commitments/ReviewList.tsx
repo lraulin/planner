@@ -100,7 +100,6 @@ export function ReviewList({
                           cadenceMonths: cadenceOf(entry),
                           expectedCents: entry.typicalCents,
                           scheduled: true,
-                          setAside: true,
                         }),
                       )
                     }
@@ -134,7 +133,6 @@ export function ReviewList({
                           matchers: [entry.merchant],
                           cadenceMonths: cadenceOf(entry),
                           status: "ignored",
-                          setAside: false,
                         }),
                       )
                     }

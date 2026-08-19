@@ -152,36 +152,6 @@ export const billColumns: ColumnDef<BillColumnCtx, BillGridRow>[] = [
       ),
   },
   {
-    id: "hold",
-    label: "Hold",
-    fieldLabel: "Hold from available",
-    width: "4.5rem",
-    filterKind: "enum",
-    filterValue: (row) => (row.node.setAside ? "yes" : "no"),
-    filterLabel: (value) => (value === "yes" ? "Held from available" : "Not held"),
-    sortValue: (row) => (row.node.setAside ? 1 : 0),
-    render: (row, ctx) => (
-      <input
-        type="checkbox"
-        checked={row.node.setAside}
-        disabled={ctx.pending || row.node.amountCents <= 0}
-        aria-label={`Hold ${row.node.name} back from available to spend`}
-        title={
-          row.node.amountCents <= 0
-            ? "Set an amount first — a hold with no figure would deduct nothing"
-            : "Subtract this from Available to Spend on the dashboard"
-        }
-        onChange={(event) =>
-          ctx.onPatch(row.node.name, {
-            setAside: event.target.checked,
-            ...(event.target.checked ? { expectedCents: row.node.amountCents } : {}),
-          })
-        }
-        className="size-4 align-middle accent-[var(--chart-spend)]"
-      />
-    ),
-  },
-  {
     id: "status",
     label: "Status",
     width: "7rem",

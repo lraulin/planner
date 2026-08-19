@@ -333,8 +333,7 @@ export function setAsideHeld(
   charges: readonly BillCharge[],
   todayKey: string,
 ): SetAside | null {
-  if (!bill.setAside || bill.expectedCents === null || bill.expectedCents <= 0)
-    return null;
+  if (bill.expectedCents === null || bill.expectedCents <= 0) return null;
 
   // A charge dated ahead of today cannot have reset anything yet.
   const mine = charges
@@ -415,7 +414,7 @@ export function recurringSpendHeld(
   todayKey: string,
   nextPaydayKey: string | null,
 ): SpendHeld | null {
-  if (!entry.active || !entry.setAside || ratePerPeriodCents <= 0) return null;
+  if (!entry.active || ratePerPeriodCents <= 0) return null;
 
   const currentPeriod = periodIndex(todayKey, entry.period);
   const spentThisPeriodCents = charges

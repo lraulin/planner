@@ -151,7 +151,6 @@ export async function loadRecurringBills(userId: string): Promise<StoredBillRow[
       expectedCents: financeRecurringBills.expectedCents,
       anchorDate: financeRecurringBills.anchorDate,
       scheduled: financeRecurringBills.scheduled,
-      setAside: financeRecurringBills.setAside,
       dueDay: financeRecurringBills.dueDay,
       notes: financeRecurringBills.notes,
     })
@@ -172,7 +171,6 @@ export async function loadRecurringSpend(userId: string): Promise<StoredSpend[]>
       period: financeRecurringSpend.period,
       amountSource: financeRecurringSpend.amountSource,
       expectedCents: financeRecurringSpend.expectedCents,
-      setAside: financeRecurringSpend.setAside,
       active: financeRecurringSpend.active,
       notes: financeRecurringSpend.notes,
     })

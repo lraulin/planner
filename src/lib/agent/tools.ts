@@ -853,7 +853,6 @@ const fieldDescriptions: Record<string, string> = {
   status: "active, cancelled, or ignored.",
   cancelUrl: "Where to cancel the subscription. Stored, never followed.",
   scheduled: "Whether the dates are predictable. False for propane.",
-  setAside: "Whether to hold this back from available-to-spend.",
   dueDay: "Day of the period the charge is expected, 1-31.",
   period: "week or month — the unit the recurring-spend rate is quoted in.",
   amountSource: "auto derives the rate from history; pinned stores expectedCents.",
