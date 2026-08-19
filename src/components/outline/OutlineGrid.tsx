@@ -186,7 +186,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     defaultsFor: viewDefaults,
   });
   const gridState = views.grid;
-  const { sort: headerSort, clearSort: clearHeaderSort } = gridState;
+  const { sorts: headerSorts, clearSort: clearHeaderSort } = gridState;
   // `useGridState` returns a fresh object every render. Depend on the stable pieces it
   // memoises inside, not on `gridState` itself — a Set rebuilt every render was cascading
   // into `visible` → `navigable` → `copySelectionAsText` → command re-registration until
@@ -793,8 +793,12 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
           drop = withRootCategoryFromPlacement(drop, primary, byId);
         }
 
-        // Priority sort is the Achieve default and matches sibling renumber; other sorts hide it.
-        if (headerSort && headerSort.columnId !== "priority") clearHeaderSort();
+        // Priority sort is the Achieve default and matches sibling renumber; other sorts hide
+        // it. Every key counts, not just the primary one — a secondary key still decides
+        // where the ties land, so a row dropped under it would not stay where it was put.
+        if (headerSorts.some((entry) => entry.columnId !== "priority")) {
+          clearHeaderSort();
+        }
 
         const placement = drop;
         // The same plan the server will compute, applied straight to the rows so the ranks do
@@ -866,7 +870,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     nodes,
     apply,
     patch,
-    headerSort,
+    headerSorts,
     clearHeaderSort,
     selectOne,
     toggleCollapsed,

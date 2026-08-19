@@ -147,6 +147,42 @@ describe("priorityDropFromPosition", () => {
   });
 });
 
+describe("dropping at a letter boundary", () => {
+  // Between the last A and the first B there are two slots, not one, and they mean different
+  // things. Achieve offers both and so must we, or the only way to become the last A would be
+  // to become a B first and drag back.
+  const parent = "ra";
+  const rows = () => [
+    node("a1", parent, "A", 1),
+    node("a2", parent, "A", 2),
+    node("b1", parent, "B", 1),
+    node("b2", parent, "B", 2),
+    node("mover", parent, null, null),
+  ];
+
+  it("after the last A appends to A, leaving the Bs alone", () => {
+    expect(planSiblingPriorityDrop(rows(), ["mover"], "a2", "after", parent)).toEqual([
+      { id: "mover", letter: "A", rank: 3 },
+    ]);
+  });
+
+  it("before the first B joins B at rank 1 and pushes the Bs down", () => {
+    expect(planSiblingPriorityDrop(rows(), ["mover"], "b1", "before", parent)).toEqual([
+      { id: "mover", letter: "B", rank: 1 },
+      { id: "b1", letter: "B", rank: 2 },
+      { id: "b2", letter: "B", rank: 3 },
+    ]);
+  });
+
+  it("moves a row across the boundary, closing the letter it left", () => {
+    // a1 becomes the last B; A closes up behind it so no rank is skipped.
+    expect(planSiblingPriorityDrop(rows(), ["a1"], "b2", "after", parent)).toEqual([
+      { id: "a1", letter: "B", rank: 3 },
+      { id: "a2", letter: "A", rank: 1 },
+    ]);
+  });
+});
+
 describe("planOutlinePriorityMove", () => {
   const OLD = "old";
   const NEW = "new";
