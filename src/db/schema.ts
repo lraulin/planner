@@ -2103,6 +2103,20 @@ export const financeTransactions = pgTable(
     excludeFromBaseline: boolean("exclude_from_baseline").notNull().default(false),
     /** Names the one-off — "Wedding", "House move" — so it totals as an event, not a blip. */
     eventLabel: text("event_label").notNull().default(""),
+    /**
+     * This withdrawal from savings is the thing the money was saved for.
+     *
+     * Meaningful only on an outflow from a savings account, where it is the difference
+     * between a purchase that was planned for and a reserve being raided to cover an
+     * overspend — the period result counts the second against you and exempts the first
+     * (`src/lib/finances/periodResult.ts`).
+     *
+     * Deliberately its own column rather than "has an `eventLabel`": that column already
+     * means "part of a named one-off spend event" in the baseline split, and inferring
+     * intent from it would let a stray label quietly excuse a raid
+     * (`agent-os/specs/2026-08-18-2005-period-result/` D5).
+     */
+    plannedWithdrawal: boolean("planned_withdrawal").notNull().default(false),
     externalSource: text("external_source"),
     externalId: text("external_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

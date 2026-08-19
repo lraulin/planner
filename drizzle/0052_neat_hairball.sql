@@ -1,0 +1,1 @@
+ALTER TABLE "finance_transactions" ADD COLUMN "planned_withdrawal" boolean DEFAULT false NOT NULL;

@@ -48,11 +48,20 @@ import {
 } from "./commitments";
 import { shiftDateKeyMonths, type StoredBill } from "./recurringBills";
 
-/** Kinds whose balance is money you could spend this fortnight without a decision. */
-const SPENDABLE_KINDS: ReadonlySet<FinanceAccountKind> = new Set(["checking", "cash"]);
+/**
+ * Kinds whose balance is money you could spend this fortnight without a decision.
+ *
+ * Exported because `periodResult.ts` measures the same wallet looking backward, and two
+ * copies of "what counts as spendable" would let the forward and backward figures on one
+ * page disagree about which accounts they describe.
+ */
+export const SPENDABLE_KINDS: ReadonlySet<FinanceAccountKind> = new Set([
+  "checking",
+  "cash",
+]);
 
 /** Kinds held in reserve — real money, deliberately outside the spendable figure. */
-const SAVINGS_KINDS: ReadonlySet<FinanceAccountKind> = new Set(["savings"]);
+export const SAVINGS_KINDS: ReadonlySet<FinanceAccountKind> = new Set(["savings"]);
 
 /**
  * What the arithmetic needs from an account. A structural subset of `FinanceAccountRow`, so

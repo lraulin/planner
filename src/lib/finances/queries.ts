@@ -212,6 +212,7 @@ export async function listTransactions(
       flowOverride: financeTransactions.flowOverride,
       excludeFromBaseline: financeTransactions.excludeFromBaseline,
       eventLabel: financeTransactions.eventLabel,
+      plannedWithdrawal: financeTransactions.plannedWithdrawal,
       notes: financeTransactions.notes,
       balanceAfter: financeTransactions.balanceAfter,
     })
@@ -242,6 +243,7 @@ export async function listTransactions(
     flowOverride: row.flowOverride,
     excludeFromBaseline: row.excludeFromBaseline,
     eventLabel: row.eventLabel,
+    plannedWithdrawal: row.plannedWithdrawal,
     notes: row.notes,
     balanceAfterCents: numericStringToCents(row.balanceAfter),
   }));
@@ -282,6 +284,7 @@ export async function getTransaction(
       flowOverride: financeTransactions.flowOverride,
       excludeFromBaseline: financeTransactions.excludeFromBaseline,
       eventLabel: financeTransactions.eventLabel,
+      plannedWithdrawal: financeTransactions.plannedWithdrawal,
       notes: financeTransactions.notes,
       balanceAfter: financeTransactions.balanceAfter,
     })
@@ -312,6 +315,7 @@ export async function getTransaction(
     flowOverride: row.flowOverride,
     excludeFromBaseline: row.excludeFromBaseline,
     eventLabel: row.eventLabel,
+    plannedWithdrawal: row.plannedWithdrawal,
     notes: row.notes,
     balanceAfterCents: numericStringToCents(row.balanceAfter),
   };

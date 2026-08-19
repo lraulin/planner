@@ -12,6 +12,7 @@ import {
   deleteRecurringSpend,
   deleteTransaction,
   renameRecurringBill,
+  setPlannedWithdrawal,
   setSubscriptionStatus,
   updateAccount,
   updateTransaction,
@@ -240,6 +241,91 @@ describeDb("finance user isolation", () => {
     );
     expect(await listAccounts(ownerId)).toHaveLength(1);
     expect(await listTransactions(ownerId)).toHaveLength(2);
+  });
+});
+
+describeDb("planned withdrawals", () => {
+  let userId: string;
+  let transactionId: string;
+
+  beforeEach(async () => {
+    userId = await makeUser();
+    ({ transactionId } = await seed(userId));
+  });
+
+  it("declares a withdrawal planned and names it", async () => {
+    expect(
+      await setPlannedWithdrawal(userId, [transactionId], {
+        plannedWithdrawal: true,
+        eventLabel: "  Handgun  ",
+      }),
+    ).toBe(1);
+    const saved = await getTransaction(userId, transactionId);
+    expect(saved?.plannedWithdrawal).toBe(true);
+    expect(saved?.eventLabel).toBe("Handgun");
+  });
+
+  it("clears the label when the declaration is taken back", async () => {
+    await setPlannedWithdrawal(userId, [transactionId], {
+      plannedWithdrawal: true,
+      eventLabel: "Handgun",
+    });
+    await setPlannedWithdrawal(userId, [transactionId], { plannedWithdrawal: false });
+    const saved = await getTransaction(userId, transactionId);
+    expect(saved?.plannedWithdrawal).toBe(false);
+    expect(saved?.eventLabel).toBe("");
+  });
+
+  it("leaves an existing label alone when none is supplied", async () => {
+    await setPlannedWithdrawal(userId, [transactionId], {
+      plannedWithdrawal: true,
+      eventLabel: "Handgun",
+    });
+    await setPlannedWithdrawal(userId, [transactionId], { plannedWithdrawal: true });
+    expect((await getTransaction(userId, transactionId))?.eventLabel).toBe("Handgun");
+  });
+
+  it("writes nothing for an empty id list", async () => {
+    expect(await setPlannedWithdrawal(userId, [], { plannedWithdrawal: true })).toBe(0);
+  });
+});
+
+describeDb("planned withdrawal isolation", () => {
+  let ownerId: string;
+  let intruderId: string;
+  let transactionId: string;
+
+  beforeEach(async () => {
+    ownerId = await makeUser();
+    intruderId = await makeUser();
+    ({ transactionId } = await seed(ownerId));
+    await setPlannedWithdrawal(ownerId, [transactionId], {
+      plannedWithdrawal: true,
+      eventLabel: "Handgun",
+    });
+  });
+
+  it("does not let a second user read the flag", async () => {
+    expect(await getTransaction(intruderId, transactionId)).toBeNull();
+    expect(await listTransactions(intruderId)).toEqual([]);
+  });
+
+  it("does not let a second user change the flag", async () => {
+    await expect(
+      setPlannedWithdrawal(intruderId, [transactionId], { plannedWithdrawal: false }),
+    ).rejects.toThrow("Transaction not found.");
+    const saved = await getTransaction(ownerId, transactionId);
+    expect(saved?.plannedWithdrawal).toBe(true);
+    expect(saved?.eventLabel).toBe("Handgun");
+  });
+
+  it("does not let a second user delete the row the flag sits on", async () => {
+    await expect(deleteTransaction(intruderId, transactionId)).rejects.toThrow(
+      "Transaction not found.",
+    );
+    expect((await getTransaction(ownerId, transactionId))?.plannedWithdrawal).toBe(
+      true,
+    );
   });
 });
 

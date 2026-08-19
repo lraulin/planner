@@ -197,8 +197,8 @@ export type FinanceAccountRow = {
  *
  * Carries both halves of the classification split: `derived*` is what the classifier worked
  * out and is rewritten by every reclassify, while `category`, `flowOverride`,
- * `excludeFromBaseline` and `eventLabel` are yours and survive one. The register shows the
- * effective value of each and marks which is which.
+ * `excludeFromBaseline`, `eventLabel` and `plannedWithdrawal` are yours and survive one.
+ * The register shows the effective value of each and marks which is which.
  */
 export type TransactionListRow = {
   id: string;
@@ -220,6 +220,8 @@ export type TransactionListRow = {
   flowOverride: FinanceFlowKind | null;
   excludeFromBaseline: boolean;
   eventLabel: string;
+  /** Declared: this savings withdrawal is what the money was saved for. */
+  plannedWithdrawal: boolean;
   notes: string;
   balanceAfterCents: number | null;
 };
