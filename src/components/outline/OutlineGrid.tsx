@@ -776,6 +776,9 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         if (headerSort && headerSort.columnId !== "priority") clearHeaderSort();
 
         const placement = drop;
+        // The same plan the server will compute, applied straight to the rows so the ranks do
+        // not flicker through their old values while the round trip is in flight. The server
+        // is the authority; this is only what the eye sees in the meantime.
         const priSlot = priorityDropFromPosition(placement.position);
         const priorityPlan = priSlot
           ? planSiblingPriorityDrop(
@@ -812,17 +815,12 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
               position,
               // Category only applies to the first root landing at the root level.
               category: previousId === null ? placement.category : undefined,
+              // Likewise the priority slot: only the first root lands there, and the rest
+              // follow it, appending in order behind it.
+              priorityPlacement: previousId === null && priSlot ? priSlot : undefined,
             });
             if (!lastResult.ok) return lastResult;
             previousId = nodeId;
-          }
-          for (const assignment of priorityPlan) {
-            lastResult = await setPriorityAction(
-              assignment.id,
-              assignment.letter,
-              assignment.rank,
-            );
-            if (!lastResult.ok) return lastResult;
           }
           // Dropping into a closed row would otherwise read as the node vanishing.
           if (

@@ -10,11 +10,7 @@ import {
 import { selectionMoveRoots } from "@/lib/grid/selection";
 import type { GridSort } from "@/lib/settings/grid";
 import type { RowDrag } from "./DataGrid";
-import {
-  moveNodeAction,
-  setCollapsedAction,
-  setPriorityAction,
-} from "@/app/plan/outline/actions";
+import { moveNodeAction, setCollapsedAction } from "@/app/plan/outline/actions";
 
 type ApplyResult = { ok: true } | { ok: false; error: string };
 
@@ -73,6 +69,9 @@ export function useTreeRowDrag({
           clearHeaderSort();
         }
 
+        // The same plan the server will compute, applied straight to the rows so the ranks
+        // do not flicker through their old values while the round trip is in flight. The
+        // server is the authority; this is only what the eye sees in the meantime.
         const priSlot = priorityDropFromPosition(placement.position);
         const priorityPlan = priSlot
           ? planSiblingPriorityDrop(
@@ -104,17 +103,12 @@ export function useTreeRowDrag({
               nodeId,
               parentId: placement.parentId,
               position,
+              // Only the first root lands at the named slot; the rest follow it, so each
+              // takes the rank after the one before by appending in order.
+              priorityPlacement: previousId === null && priSlot ? priSlot : undefined,
             });
             if (!lastResult.ok) return lastResult;
             previousId = nodeId;
-          }
-          for (const assignment of priorityPlan) {
-            lastResult = await setPriorityAction(
-              assignment.id,
-              assignment.letter,
-              assignment.rank,
-            );
-            if (!lastResult.ok) return lastResult;
           }
           if (
             lastResult.ok &&

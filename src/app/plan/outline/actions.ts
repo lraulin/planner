@@ -128,6 +128,12 @@ export async function moveNodeAction(params: {
   position: Position;
   /** Result areas only — destination category when dropping into a root-level group. */
   category?: string | null;
+  /**
+   * Where the row lands among its new peers' priorities. Only a drag before or after a
+   * sibling knows; the move otherwise appends to the end of its letter. Sent with the move
+   * so both sibling groups are renumbered in the same transaction.
+   */
+  priorityPlacement?: { targetId: string; zone: "before" | "after" };
 }): Promise<ActionResult> {
   return run((userId) => tree.moveNode({ userId, ...params }));
 }

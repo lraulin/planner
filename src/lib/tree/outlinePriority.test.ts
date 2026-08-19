@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  planOutlinePriorityMove,
   planSiblingPriorityDrop,
   priorityDropFromPosition,
   type PriorityNode,
@@ -143,5 +144,122 @@ describe("priorityDropFromPosition", () => {
   it("ignores first/last (reparent slots)", () => {
     expect(priorityDropFromPosition({ at: "first" })).toBeNull();
     expect(priorityDropFromPosition({ at: "last" })).toBeNull();
+  });
+});
+
+describe("planOutlinePriorityMove", () => {
+  const OLD = "old";
+  const NEW = "new";
+
+  /** Three A's under `old`, two under `new`. `b2` is the node that moves. */
+  function groups() {
+    return {
+      source: [
+        node("a1", OLD, "A", 1),
+        node("b2", OLD, "A", 2),
+        node("c3", OLD, "A", 3),
+      ],
+      destination: [node("x1", NEW, "A", 1), node("x2", NEW, "A", 2)],
+    };
+  }
+
+  it("carries the letter to the end of it under the new parent, and closes the old gap", () => {
+    const { source, destination } = groups();
+
+    const plan = planOutlinePriorityMove({
+      source,
+      destination,
+      nodeId: "b2",
+      destinationParentId: NEW,
+    });
+
+    // A2 vacated under `old`, so c3 slides up; b2 lands after the destination's existing As.
+    expect(plan).toEqual([
+      { id: "c3", letter: "A", rank: 2 },
+      { id: "b2", letter: "A", rank: 3 },
+    ]);
+  });
+
+  it("leaves an unprioritized node alone — a structural move is not a priority claim", () => {
+    const source = [node("a1", OLD, "A", 1), node("plain", OLD, null, null)];
+
+    expect(
+      planOutlinePriorityMove({
+        source,
+        destination: [node("x1", NEW, "A", 1)],
+        nodeId: "plain",
+        destinationParentId: NEW,
+      }),
+    ).toEqual([]);
+  });
+
+  it("does nothing when the parent has not changed and no placement was given", () => {
+    // Outline order and priority are independent: sliding a row up the outline says nothing
+    // about its rank, so Move Up must not silently reprioritize.
+    const { source } = groups();
+
+    expect(
+      planOutlinePriorityMove({
+        source,
+        destination: source,
+        nodeId: "b2",
+        destinationParentId: OLD,
+      }),
+    ).toEqual([]);
+  });
+
+  it("takes the slot a drag names, within one parent", () => {
+    const { source } = groups();
+
+    expect(
+      planOutlinePriorityMove({
+        source,
+        destination: source,
+        nodeId: "c3",
+        destinationParentId: OLD,
+        placement: { targetId: "a1", zone: "before" },
+      }),
+    ).toEqual([
+      { id: "c3", letter: "A", rank: 1 },
+      { id: "a1", letter: "A", rank: 2 },
+      { id: "b2", letter: "A", rank: 3 },
+    ]);
+  });
+
+  it("closes the old gap as well when a drag crosses parents", () => {
+    const { source, destination } = groups();
+
+    const plan = planOutlinePriorityMove({
+      source,
+      destination,
+      nodeId: "b2",
+      destinationParentId: NEW,
+      placement: { targetId: "x1", zone: "before" },
+    });
+
+    // Landing first under `new` pushes x1/x2 down; `old` closes the hole b2 left at A2.
+    expect(plan).toEqual([
+      { id: "b2", letter: "A", rank: 1 },
+      { id: "x1", letter: "A", rank: 2 },
+      { id: "x2", letter: "A", rank: 3 },
+      { id: "c3", letter: "A", rank: 2 },
+    ]);
+  });
+
+  it("unprioritizes a node dropped beside an unprioritized row", () => {
+    const { source } = groups();
+    const destination = [node("loose", NEW, null, null)];
+
+    const plan = planOutlinePriorityMove({
+      source,
+      destination,
+      nodeId: "b2",
+      destinationParentId: NEW,
+      placement: { targetId: "loose", zone: "after" },
+    });
+
+    expect(plan).toContainEqual({ id: "b2", letter: null, rank: null });
+    // And the letter it left still closes up.
+    expect(plan).toContainEqual({ id: "c3", letter: "A", rank: 2 });
   });
 });

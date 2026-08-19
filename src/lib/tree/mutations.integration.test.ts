@@ -539,6 +539,118 @@ describeDb("tree mutations", () => {
       expect(await outlineOf(userId)).toEqual(["Work", "Home", "  P", "    T"]);
     });
 
+    it("renumbers both sibling groups when a ranked node changes parent", async () => {
+      // Neither group may be left inconsistent: the letter the node leaves closes its gap,
+      // and the letter it joins makes room. Cut/paste, indent, outdent, a drawer parent
+      // change and the agent tools all land here, so this is the one place to enforce it.
+      const from = await createNode({
+        userId,
+        parentId: null,
+        type: "result_area",
+        name: "From",
+      });
+      const to = await createNode({
+        userId,
+        parentId: null,
+        type: "result_area",
+        name: "To",
+      });
+
+      const mk = async (parent: string, name: string) =>
+        createNode({ userId, parentId: parent, type: "project", name });
+      const a1 = await mk(from, "a1");
+      const a2 = await mk(from, "a2");
+      const a3 = await mk(from, "a3");
+      const t1 = await mk(to, "t1");
+      for (const id of [a1, a2, a3, t1]) await setPriority(userId, id, "A", null);
+
+      await moveNode({ userId, nodeId: a2, parentId: to, position: { at: "last" } });
+
+      const ranks = Object.fromEntries(
+        (await loadOutline(userId)).map((row) => [
+          row.name,
+          `${row.priorityLetter ?? "-"}${row.priorityRank ?? ""}`,
+        ]),
+      );
+      // `from` closes the hole at A2; `a2` keeps its letter and appends after `to`'s A1.
+      expect(ranks).toMatchObject({ a1: "A1", a3: "A2", t1: "A1", a2: "A2" });
+    });
+
+    it("takes the slot a drag names, and still closes the gap it left", async () => {
+      const from = await createNode({
+        userId,
+        parentId: null,
+        type: "result_area",
+        name: "From",
+      });
+      const to = await createNode({
+        userId,
+        parentId: null,
+        type: "result_area",
+        name: "To",
+      });
+      const mk = async (parent: string, name: string) =>
+        createNode({ userId, parentId: parent, type: "project", name });
+      const a1 = await mk(from, "a1");
+      const a2 = await mk(from, "a2");
+      const t1 = await mk(to, "t1");
+      const t2 = await mk(to, "t2");
+      for (const id of [a1, a2, t1, t2]) await setPriority(userId, id, "A", null);
+
+      await moveNode({
+        userId,
+        nodeId: a1,
+        parentId: to,
+        position: { at: "first" },
+        priorityPlacement: { targetId: t1, zone: "before" },
+      });
+
+      const ranks = Object.fromEntries(
+        (await loadOutline(userId)).map((row) => [
+          row.name,
+          `${row.priorityLetter ?? "-"}${row.priorityRank ?? ""}`,
+        ]),
+      );
+      expect(ranks).toMatchObject({ a1: "A1", t1: "A2", t2: "A3", a2: "A1" });
+    });
+
+    it("leaves priority alone when a move stays under one parent", async () => {
+      // Outline order and priority are independent. Sliding a row up the outline is not a
+      // claim about its rank, and silently reprioritizing here would make Move Up unusable
+      // for anyone who had ranked the group deliberately.
+      const area = await createNode({
+        userId,
+        parentId: null,
+        type: "result_area",
+        name: "Area",
+      });
+      const first = await createNode({
+        userId,
+        parentId: area,
+        type: "project",
+        name: "first",
+      });
+      const second = await createNode({
+        userId,
+        parentId: area,
+        type: "project",
+        name: "second",
+      });
+      await setPriority(userId, first, "A", null);
+      await setPriority(userId, second, "A", null);
+
+      await moveNode({
+        userId,
+        nodeId: second,
+        parentId: area,
+        position: { at: "before", siblingId: first },
+      });
+
+      const rows = await loadOutline(userId);
+      expect(rows.find((r) => r.id === first)?.priorityRank).toBe(1);
+      expect(rows.find((r) => r.id === second)?.priorityRank).toBe(2);
+    });
+
     it("inherits category when a result area is nested under another", async () => {
       const work = await createNode({
         userId,
