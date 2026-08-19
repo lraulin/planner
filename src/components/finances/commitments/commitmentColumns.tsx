@@ -290,7 +290,9 @@ export const billColumns: ColumnDef<BillColumnCtx, BillGridRow>[] = [
       >
         <option value="active">Active</option>
         <option value="cancelled">Cancelled</option>
-        <option value="ignored">Ignored</option>
+        {/* The word the Review list's button uses. Picking it moves the row into Review's
+            dismissed list, which is where it can be brought back. */}
+        <option value="ignored">Dismissed</option>
       </select>
     ),
   },

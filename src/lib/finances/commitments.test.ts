@@ -9,6 +9,7 @@ import {
   recurringSpendRate,
   resolveMerchant,
   staleSubscriptions,
+  suggestCommitmentName,
   unclaimedMerchants,
   type CommitmentCharge,
   type StoredBillRow,
@@ -370,5 +371,27 @@ describe("unclaimedMerchants", () => {
         [spend({ matchers: ["PIZZA HUT", "DOMINOS"] })],
       ),
     ).toEqual(["WM SUPERCENTER"]);
+  });
+});
+
+describe("suggestCommitmentName", () => {
+  it("drops the store number, so one branch does not name the commitment", () => {
+    expect(suggestCommitmentName("PIZZA HUT #4471")).toBe("Pizza Hut");
+    expect(suggestCommitmentName("WM SUPERCENTER  1234")).toBe("Wm Supercenter");
+  });
+
+  it("leaves a name someone already typed alone", () => {
+    expect(suggestCommitmentName("Comcast / Xfinity")).toBe("Comcast / Xfinity");
+    expect(suggestCommitmentName("MetLife Pet")).toBe("MetLife Pet");
+  });
+
+  it("title-cases a terminal's shouting", () => {
+    expect(suggestCommitmentName("TAYLOR GAS CO")).toBe("Taylor Gas Co");
+    // No rule recovers "1Password" from this. The guess is still easier to fix than to retype.
+    expect(suggestCommitmentName("1PASSWORDTORONTOON")).toBe("1Passwordtorontoon");
+  });
+
+  it("keeps a name that is nothing but digits rather than emptying the field", () => {
+    expect(suggestCommitmentName("76767")).toBe("76767");
   });
 });

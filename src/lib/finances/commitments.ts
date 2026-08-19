@@ -729,6 +729,43 @@ export function projectForwardPayPeriods(
 }
 
 /** Detected merchants not yet claimed by either table — the Commitments create list. */
+/**
+ * A first guess at what to call a commitment, from the bank's string.
+ *
+ * Prefills an editable field and nothing more, so a mediocre guess costs a keystroke. It exists
+ * because the review list used to write the raw merchant as the name with no chance to change
+ * it, and the bank's spelling is a poor name twice over: it carries the store number of one
+ * branch, and it names one shop where the commitment is usually a group of them.
+ *
+ * Store numbers go, all-caps runs get title case, and mixed-case strings are left alone on the
+ * grounds that whoever wrote "Comcast / Xfinity" already did this job. `1PASSWORDTORONTOON`
+ * becomes `1Passwordtorontoon`, which is not right either — no rule recovers "1Password" from
+ * that, and pretending otherwise would mean a dictionary. It is still easier to correct than to
+ * retype.
+ */
+export function suggestCommitmentName(merchant: string): string {
+  const withoutStoreNumber = merchant
+    .replace(/\s*#\s*\d+\s*$/, "")
+    .replace(/\s+\d{2,}\s*$/, "")
+    .trim();
+  const base = withoutStoreNumber === "" ? merchant.trim() : withoutStoreNumber;
+
+  return base
+    .split(/\s+/)
+    .map((word) =>
+      // Only shout-case words are rewritten. A word with any lowercase in it was typed by
+      // someone rather than by a payment terminal.
+      /[a-z]/.test(word)
+        ? word
+        : word.replace(
+            /^([^A-Za-z]*)([A-Za-z])(.*)$/,
+            (_, lead, first, rest) =>
+              `${lead}${first.toUpperCase()}${rest.toLowerCase()}`,
+          ),
+    )
+    .join(" ");
+}
+
 export function unclaimedMerchants(
   detected: readonly string[],
   bills: readonly StoredBillRow[],

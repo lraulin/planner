@@ -125,9 +125,20 @@ export function CommitmentsView({
   const nextPaydayKey =
     todayKey === null ? null : nextPayday(paydays, paydayOverride, todayKey).dateKey;
 
-  const billRows: BillGridRow[] = useMemo(
+  const allBillRows = useMemo(
     () => buildBillRows(bills, billCharges, paydays, todayKey),
     [bills, billCharges, paydays, todayKey],
+  );
+  // Dismissed detections are stored as ignored bills — they are the record of "this merchant is
+  // not a commitment" — but they are not bills and do not belong in a list of them. They come
+  // back under Review, where they were dismissed from and where restoring one makes sense.
+  const billRows: BillGridRow[] = useMemo(
+    () => allBillRows.filter((row) => row.status !== "ignored"),
+    [allBillRows],
+  );
+  const dismissed = useMemo(
+    () => allBillRows.filter((row) => row.status === "ignored"),
+    [allBillRows],
   );
 
   const spendRows: SpendGridRow[] = useMemo(
@@ -394,11 +405,17 @@ export function CommitmentsView({
             <h2 className="text-[0.9375rem] font-medium text-ink">Review</h2>
             <p className="text-[0.75rem] text-ink-muted">
               Detected charges that are not yet a commitment. Track as a bill (it
-              charges unless you cancel), track as recurring spend (pizza, groceries),
-              or dismiss.
+              charges unless you cancel) or as recurring spend (pizza, groceries) — you
+              name it before it is written. Dismissing one hides it here and puts it in
+              the dismissed list below, where you can bring it back.
             </p>
           </header>
-          <ReviewList items={review} onError={setError} />
+          <ReviewList
+            items={review}
+            dismissed={dismissed}
+            spend={spend}
+            onError={setError}
+          />
         </section>
 
         <section
@@ -467,8 +484,8 @@ export function CommitmentsView({
               density={billGrid.density}
               empty={
                 <p className="p-4 text-center text-[0.8125rem] text-ink-muted">
-                  No subscriptions declared yet. Pick a merchant below, or declare one
-                  from Insights.
+                  Nothing declared yet. Track one from Review above, or add it below
+                  with its cost — that cost is what gets held back.
                 </p>
               }
             />
@@ -536,8 +553,9 @@ export function CommitmentsView({
               density={spendGrid.density}
               empty={
                 <p className="p-4 text-center text-[0.8125rem] text-ink-muted">
-                  Nothing tracked as recurring spend. Group Pizza Hut and Domino&apos;s
-                  here.
+                  Nothing tracked yet. Name a group — Pizza, Groceries — and list the
+                  merchants that count toward it; Pizza Hut and Domino&apos;s are one
+                  commitment, not two.
                 </p>
               }
             />

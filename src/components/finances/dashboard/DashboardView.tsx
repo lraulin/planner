@@ -180,6 +180,9 @@ export function DashboardView({
     today,
   ]);
 
+  const unpricedBillCount = bills.filter(
+    (bill) => bill.status === "active" && (bill.expectedCents ?? 0) <= 0,
+  ).length;
   const { available, position, payday, setAsides, spendHeld, stale, scorecard } =
     analysis;
   const openAccounts = accounts.filter((account) => account.closedAt === null);
@@ -267,13 +270,13 @@ export function DashboardView({
 
         <Panel
           title="Bills"
-          subtitle="Held back out of each paycheck until the bill is paid"
+          subtitle="A slice of each one, out of every paycheck, until the charge lands"
         >
           {setAsides.length === 0 ? (
             <PanelEmpty>
-              Nothing set aside. Declare a bill on{" "}
-              <Link href="/finances/commitments">Commitments</Link> and mark it a
-              set-aside.
+              Nothing set aside yet. Declare a bill with its cost on{" "}
+              <Link href="/finances/commitments">Commitments</Link> and a slice of it
+              starts coming out of every paycheck.
             </PanelEmpty>
           ) : (
             <ul className="flex flex-col gap-2">
@@ -424,11 +427,16 @@ export function DashboardView({
               is the last statement close plus whatever has been imported since.
             </li>
           )}
-          <li>
-            {setAsides.length} of{" "}
-            {bills.filter((bill) => bill.status === "active").length} active bill(s) are
-            set aside. The rest are not held back from the figure above.
-          </li>
+          {/* Every active bill with an amount is held back now, so the old "N of M are set
+              aside" count could only ever read N of N. What can still go quietly missing is a
+              bill nobody has priced, which accrues nothing while looking tracked. */}
+          {unpricedBillCount > 0 && (
+            <li>
+              {unpricedBillCount} active bill(s) have no amount, so nothing is held back
+              for them. Give them a cost on{" "}
+              <Link href="/finances/commitments">Commitments</Link>.
+            </li>
+          )}
           {/* SimpleFIN refreshes on its own roughly daily cadence and offers nothing that
               forces a bank to hand over something newer. Saying so beats a button that
               implies otherwise. */}
