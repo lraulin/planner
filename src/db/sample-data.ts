@@ -226,6 +226,40 @@ function priorityOf(priority: string | undefined) {
   return parsed;
 }
 
+/**
+ * Ranks for one parent's children, positional so the seed can keep saying `"A"` where the
+ * exact number is not the point.
+ *
+ * A node's priority is blank or a letter *with* a rank, dense and unique among its siblings
+ * (`nodes_priority_letter_ranked`), so the seed cannot write a bare letter even though that
+ * is the honest way to express "an A, and I do not care which". This resolves it the same
+ * way the backfill migration and the Achieve import do: an explicit rank wins, a bare letter
+ * falls in behind, and document order breaks the rest.
+ */
+function rankLevel(items: Seed[]): (number | null)[] {
+  const out: (number | null)[] = items.map(() => null);
+  const byLetter = new Map<string, number[]>();
+
+  items.forEach((item, index) => {
+    const { letter } = priorityOf(item.priority);
+    if (letter === null) return;
+    byLetter.set(letter, [...(byLetter.get(letter) ?? []), index]);
+  });
+
+  for (const indices of byLetter.values()) {
+    const ordered = [...indices].sort((a, b) => {
+      const rankA = priorityOf(items[a].priority).rank ?? Number.MAX_SAFE_INTEGER;
+      const rankB = priorityOf(items[b].priority).rank ?? Number.MAX_SAFE_INTEGER;
+      return rankA - rankB || a - b;
+    });
+    ordered.forEach((index, position) => {
+      out[index] = position + 1;
+    });
+  }
+
+  return out;
+}
+
 async function insertLevel(
   userId: string,
   parentId: string | null,
@@ -234,12 +268,14 @@ async function insertLevel(
 ): Promise<number> {
   let count = 0;
   let sortKey: string | null = null;
+  const ranks = rankLevel(items);
 
-  for (const item of items) {
+  for (const [index, item] of items.entries()) {
     assertCanNest(item.type, parentType);
     sortKey = between(sortKey, null);
 
-    const { letter, rank } = priorityOf(item.priority);
+    const { letter } = priorityOf(item.priority);
+    const rank = ranks[index];
     const [row] = await db
       .insert(nodes)
       .values({

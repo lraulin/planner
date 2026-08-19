@@ -74,8 +74,29 @@ describeDb("importAchieveXml", () => {
     const nextJob = outline.find((n) => n.name === "Next ESL Job");
     expect(nextJob?.type).toBe("project");
     expect(nextJob?.priorityLetter).toBe("A");
-    expect(nextJob?.priorityRank).toBe(1);
     expect(nextJob?.state).toBe("completed");
+
+    // An Achieve file may carry bare letters, ties and gaps; none is representable here, so
+    // the import densifies every sibling group on the way in. This fixture relies on it:
+    // several Career projects are all stored as A1, and one result area carries a bare 2500.
+    expect(
+      outline.filter((n) => n.priorityLetter !== null && n.priorityRank === null),
+    ).toEqual([]);
+
+    // Every (parent, letter) group runs 1..n with no gap and no repeat.
+    const groups = new Map<string, number[]>();
+    for (const n of outline) {
+      if (n.priorityLetter === null || n.priorityRank === null) continue;
+      const key = `${n.parentId}:${n.priorityLetter}`;
+      groups.set(key, [...(groups.get(key) ?? []), n.priorityRank]);
+    }
+    expect(groups.size).toBeGreaterThan(0);
+    for (const [key, ranks] of groups) {
+      expect([key, [...ranks].sort((a, b) => a - b)]).toEqual([
+        key,
+        ranks.map((_, index) => index + 1),
+      ]);
+    }
 
     const nested = outline.find((n) => n.name === "Copy Social Circle DVDs");
     expect(nested?.parentId).toBeTruthy();

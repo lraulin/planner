@@ -457,6 +457,19 @@ export const nodes = pgTable(
       "nodes_lifecycle_state_by_type",
       sql`(${table.type} = 'result_area'::node_type and ${table.state} is null and ${table.completedAt} is null and ${table.deferredDate} is null) or (${table.type} <> 'result_area'::node_type and ${table.state} is not null)`,
     ),
+    // A priority is blank or a letter *with* a rank. Achieve treats the rank as optional and
+    // we copied that, which bought a bare letter nobody used, ties that made "the next
+    // action" ambiguous, and two repair commands to clean up after both. The letter and the
+    // rank now live and die together — see the always-ranked spec.
+    //
+    // Uniqueness and density within a sibling group are *not* enforced here: a renumber
+    // applies its updates one row at a time, and a non-deferrable unique index would fail
+    // mid-transaction on the intermediate state. That invariant is held by routing every
+    // write through `letterRankEngine` and proved by the integration tests.
+    check(
+      "nodes_priority_letter_ranked",
+      sql`(${table.priorityLetter} is null) = (${table.priorityRank} is null)`,
+    ),
   ],
 );
 

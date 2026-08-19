@@ -190,7 +190,12 @@ export async function writeMappedImport(params: {
             name: n.name,
             sortKey,
             priorityLetter: n.priority.letter,
-            priorityRank: n.priority.rank,
+            // Achieve's rank is optional and ours is not, so a bare letter gets a provisional
+            // rank that sorts after every real one. The densify pass below turns the whole
+            // import into dense 1..n groups once every node and its final parent are known.
+            priorityRank: n.priority.letter
+              ? (n.priority.rank ?? BARE_LETTER_PROVISIONAL_RANK)
+              : null,
             tcPriorityLetter: n.tcPriority.letter,
             tcPriorityRank: n.tcPriority.rank,
             state: n.state,
@@ -290,6 +295,24 @@ export async function writeMappedImport(params: {
         .where(and(eq(nodes.id, projectId), eq(nodes.userId, userId)));
     }
 
+    // Densify every sibling group, now that the relinking above has settled which nodes are
+    // siblings. An Achieve file can carry bare letters, ties and gaps — all three are legal
+    // there and none is representable here — so this is the boundary that reconciles them.
+    // Same window function as the backfill migration, scoped to this user.
+    await tx.execute(sql`
+      with ranked as (
+        select id, row_number() over (
+          partition by parent_id, priority_letter
+          order by priority_rank asc, sort_key asc
+        ) as rn
+        from nodes
+        where user_id = ${userId} and priority_letter is not null
+      )
+      update nodes set priority_rank = ranked.rn
+      from ranked
+      where nodes.id = ranked.id and nodes.priority_rank is distinct from ranked.rn
+    `);
+
     const extraCounts = await writeExtras(
       tx,
       userId,
@@ -308,6 +331,13 @@ export async function writeMappedImport(params: {
     };
   });
 }
+
+/**
+ * What a bare Achieve letter is given until the densify pass runs. Past the 2499 top of a
+ * letter's band, so it lands after every rank the file actually named — which is where
+ * Achieve displays a bare letter too.
+ */
+const BARE_LETTER_PROVISIONAL_RANK = 2500;
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 

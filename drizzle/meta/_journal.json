@@ -379,6 +379,13 @@
       "when": 1787101592515,
       "tag": "0053_worthless_electro",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1787155551907,
+      "tag": "0054_typical_steel_serpent",
+      "breakpoints": true
     }
   ]
 }
