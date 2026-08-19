@@ -4,20 +4,12 @@ import type { ColumnDef } from "@/components/grid/columns";
 import { CADENCE_CHOICES, cadenceLabel } from "@/lib/finances/recurringBills";
 import { formatUsd } from "@/lib/finances/money";
 import type { CommitmentStatus, RecurringSpendPeriod } from "@/db/schema";
-import type { StoredBillRow, StoredSpend, SpendRate } from "@/lib/finances/commitments";
+import type { StoredBillRow, StoredSpend } from "@/lib/finances/commitments";
+import type { BillRow, SpendRow } from "@/lib/finances/commitmentRows";
+import { FundingMeter } from "./FundingMeter";
 
-export type BillGridRow = StoredBillRow & {
-  nextDueKey: string | null;
-  amountCents: number;
-  annualCostCents: number;
-  monthlySetAsideCents: number;
-};
-
-export type SpendGridRow = StoredSpend & {
-  rate: SpendRate;
-  weeklyCents: number;
-  monthlyCents: number;
-};
+export type BillGridRow = BillRow;
+export type SpendGridRow = SpendRow;
 
 export type BillColumnCtx = {
   pending: boolean;
@@ -32,8 +24,105 @@ export type BillColumnCtx = {
 export type SpendColumnCtx = {
   pending: boolean;
   onPatch: (name: string, patch: Partial<StoredSpend>) => void;
+  onRename: (from: string, to: string) => void;
   onDelete: (name: string) => void;
 };
+
+/** The muted "nothing is being held, and here is why" cell both tiers fall back to. */
+function NotHeld({ reason }: { reason: string }) {
+  return (
+    <span title={reason} className="text-[0.8125rem] text-ink-muted">
+      {reason}
+    </span>
+  );
+}
+
+/**
+ * What a bill is putting aside, and how far along it is.
+ *
+ * The one cell this whole redesign is for. It replaces a Hold checkbox and a column showing
+ * `annualCost / 12` — a monthly average that was never the figure being held — with the accrual
+ * itself. On a yearly bill it reads `$8.28 of $71.88 · $2.76 a paycheck`, which is the entire
+ * explanation of how saving up for an annual charge works here, in the row where you decide.
+ *
+ * One line, because grid rows are exactly `--row-height` tall and a second line lands on top of
+ * the row below. The due date is already two columns to the left under Next charge, so the only
+ * thing worth the width here is the slice and the progress.
+ */
+function BillSetAside({ row }: { row: BillRow }) {
+  if (row.held === null) {
+    if (row.status === "cancelled") return <NotHeld reason="Cancelled" />;
+    if (row.status === "ignored") return <NotHeld reason="Dismissed" />;
+    return <NotHeld reason="Needs an amount" />;
+  }
+
+  const { heldCents, expectedCents, perPaycheckCents, fullyFunded } = row.held;
+  const tone = row.overdue ? "over" : fullyFunded ? "funded" : "accruing";
+
+  return (
+    <span className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+      <FundingMeter
+        heldCents={heldCents}
+        targetCents={expectedCents}
+        tone={tone}
+        title={`${formatUsd(heldCents)} of ${formatUsd(expectedCents)} put aside`}
+      />
+      <span className="tabular flex-none text-[0.8125rem] text-ink">
+        {fullyFunded
+          ? `${formatUsd(expectedCents)} ready`
+          : `${formatUsd(heldCents)} of ${formatUsd(expectedCents)}`}
+      </span>
+      <span
+        className={`min-w-0 truncate text-[0.7rem] ${row.overdue ? "text-[var(--chart-spend)]" : "text-ink-muted"}`}
+      >
+        {row.overdue
+          ? "· overdue"
+          : fullyFunded
+            ? "· covered"
+            : `· ${formatUsd(perPaycheckCents)} a paycheck`}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * What a recurring-spend group is holding back before the next payday.
+ *
+ * The bar drains rather than fills: this tier starts each period holding the whole rate and
+ * releases it as the money is actually spent, so spending what you budgeted costs nothing and
+ * only going over bites. A full red bar is that overspend.
+ */
+function SpendSetAside({ row }: { row: SpendRow }) {
+  if (row.held === null) {
+    if (!row.active) return <NotHeld reason="Paused" />;
+    return <NotHeld reason="No rate yet" />;
+  }
+
+  const { heldCents, spentThisPeriodCents, ratePerPeriodCents, overCents } = row.held;
+  const over = overCents > 0;
+  const remainingCents = Math.max(0, ratePerPeriodCents - spentThisPeriodCents);
+
+  return (
+    <span className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+      <FundingMeter
+        heldCents={over ? ratePerPeriodCents : remainingCents}
+        targetCents={ratePerPeriodCents}
+        tone={over ? "over" : "accruing"}
+        title={`${formatUsd(remainingCents)} of this period's ${formatUsd(ratePerPeriodCents)} unspent`}
+      />
+      <span className="tabular flex-none text-[0.8125rem] text-ink">
+        {formatUsd(heldCents)} held
+      </span>
+      <span
+        className={`min-w-0 truncate text-[0.7rem] ${over ? "text-[var(--chart-spend)]" : "text-ink-muted"}`}
+      >
+        {over
+          ? `· over by ${formatUsd(overCents)}`
+          : `· spent ${formatUsd(spentThisPeriodCents)} of ${formatUsd(ratePerPeriodCents)}`}
+      </span>
+    </span>
+  );
+}
 
 function dollarsInput(
   cents: number,
@@ -57,6 +146,23 @@ function dollarsInput(
       className="tabular w-20 rounded border border-rule bg-surface px-1 text-right text-base text-ink md:text-[0.8125rem]"
     />
   );
+}
+
+/** How to name a bill's hold in a filter chip — the same five words the cell shows. */
+function billHoldState(row: BillRow): string {
+  if (row.held === null) {
+    if (row.status === "cancelled") return "Cancelled";
+    if (row.status === "ignored") return "Dismissed";
+    return "Needs an amount";
+  }
+  if (row.overdue) return "Overdue";
+  return row.held.fullyFunded ? "Ready" : "Accruing";
+}
+
+/** The same, for a spend group. */
+function spendHoldState(row: SpendRow): string {
+  if (row.held === null) return row.active ? "No rate yet" : "Paused";
+  return row.held.overCents > 0 ? "Over" : "Holding";
 }
 
 export const billColumns: ColumnDef<BillColumnCtx, BillGridRow>[] = [
@@ -152,6 +258,18 @@ export const billColumns: ColumnDef<BillColumnCtx, BillGridRow>[] = [
       ),
   },
   {
+    id: "setAside",
+    label: "Set aside",
+    fieldLabel: "Set aside so far",
+    width: "minmax(13rem,17rem)",
+    align: "right",
+    filterKind: "enum",
+    filterValue: (row) => billHoldState(row.node),
+    sortValue: (row) => row.node.held?.heldCents ?? -1,
+    compact: "meta",
+    render: (row) => <BillSetAside row={row.node} />,
+  },
+  {
     id: "status",
     label: "Status",
     width: "7rem",
@@ -185,18 +303,6 @@ export const billColumns: ColumnDef<BillColumnCtx, BillGridRow>[] = [
     render: (row) => (
       <span className="tabular text-[0.8125rem] text-[var(--chart-spend)]">
         {formatUsd(row.node.annualCostCents)}
-      </span>
-    ),
-  },
-  {
-    id: "monthly",
-    label: "Set aside",
-    width: "6rem",
-    align: "right",
-    sortValue: (row) => row.node.monthlySetAsideCents,
-    render: (row) => (
-      <span className="tabular text-[0.8125rem] text-ink">
-        {formatUsd(row.node.monthlySetAsideCents)}
       </span>
     ),
   },
@@ -270,7 +376,20 @@ export const spendColumns: ColumnDef<SpendColumnCtx, SpendGridRow>[] = [
     filterValue: (row) => row.node.name,
     sortValue: (row) => row.node.name.toLowerCase(),
     compact: "primary",
-    render: (row) => <span className="text-[0.8125rem] text-ink">{row.node.name}</span>,
+    render: (row, ctx) => (
+      <input
+        type="text"
+        defaultValue={row.node.name}
+        disabled={ctx.pending}
+        aria-label={`Name for ${row.node.name}`}
+        title="What you call this group — Pizza, not the bank's spelling of one shop"
+        onBlur={(event) => {
+          const next = event.target.value.trim();
+          if (next !== "" && next !== row.node.name) ctx.onRename(row.node.name, next);
+        }}
+        className="w-full truncate rounded border border-transparent bg-transparent px-1 text-[0.8125rem] text-ink hover:border-rule focus:border-rule"
+      />
+    ),
   },
   {
     id: "matchers",
@@ -326,7 +445,10 @@ export const spendColumns: ColumnDef<SpendColumnCtx, SpendGridRow>[] = [
     sortValue: (row) => row.node.rate.ratePerPeriodCents,
     compact: "meta",
     render: (row, ctx) => (
-      <div className="text-right">
+      // One line, like every other cell: the row is `--row-height` tall and a second line
+      // lands on the row below. When the rate is auto it *is* the observed history, so
+      // repeating the history figure beside it said the same number twice.
+      <span className="flex items-center justify-end gap-1.5 whitespace-nowrap">
         {row.node.rate.pinned ? (
           dollarsInput(
             row.node.rate.ratePerPeriodCents,
@@ -336,16 +458,56 @@ export const spendColumns: ColumnDef<SpendColumnCtx, SpendGridRow>[] = [
             ctx.pending,
           )
         ) : (
-          <span className="tabular text-[0.8125rem] text-ink">
+          <span className="tabular flex-none text-[0.8125rem] text-ink">
             {formatUsd(row.node.rate.ratePerPeriodCents)}
           </span>
         )}
-        <div className="text-[0.7rem] text-ink-muted">
-          {row.node.rate.pinned ? "pinned" : "auto"}
-          {row.node.rate.periodsObserved > 0 &&
-            ` · history ${formatUsd(row.node.rate.observedCents)}`}
-        </div>
-      </div>
+        <span className="min-w-0 truncate text-[0.7rem] text-ink-muted">
+          {row.node.rate.pinned
+            ? row.node.rate.periodsObserved > 0
+              ? `pinned · you spend ${formatUsd(row.node.rate.observedCents)}`
+              : "pinned"
+            : "from your history"}
+        </span>
+      </span>
+    ),
+  },
+  {
+    id: "setAside",
+    label: "Set aside",
+    fieldLabel: "Held before payday",
+    width: "minmax(13rem,17rem)",
+    align: "right",
+    filterKind: "enum",
+    filterValue: (row) => spendHoldState(row.node),
+    sortValue: (row) => row.node.held?.heldCents ?? -1,
+    compact: "meta",
+    render: (row) => <SpendSetAside row={row.node} />,
+  },
+  {
+    id: "active",
+    label: "Active",
+    fieldLabel: "Still part of the routine",
+    width: "4.5rem",
+    filterKind: "enum",
+    filterValue: (row) => (row.node.active ? "Active" : "Paused"),
+    sortValue: (row) => (row.node.active ? 1 : 0),
+    render: (row, ctx) => (
+      <input
+        type="checkbox"
+        checked={row.node.active}
+        disabled={ctx.pending}
+        aria-label={`${row.node.name} is still part of the routine`}
+        title={
+          row.node.active
+            ? "Stop holding this back without losing the group or its history"
+            : "Start holding this back again"
+        }
+        onChange={(event) =>
+          ctx.onPatch(row.node.name, { active: event.target.checked })
+        }
+        className="size-4 align-middle accent-[var(--chart-average)]"
+      />
     ),
   },
   {

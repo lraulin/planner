@@ -775,6 +775,37 @@ export async function upsertRecurringSpend(
     });
 }
 
+/**
+ * Rename a recurring-spend group in place.
+ *
+ * A direct column update for the same reason as `renameRecurringBill`: insert-then-delete would
+ * leave the old row holding the same bank strings for a moment, and `checkedMatchers` would
+ * reject the new one as claiming a merchant that already belongs to something.
+ *
+ * The grid had no way to do this at all until 2026-08-18, which is how "Track as spend" on
+ * Pizza Hut produced a permanent group named after one shop rather than the Pizza group it was
+ * meant to join.
+ */
+export async function renameRecurringSpend(
+  userId: string,
+  from: string,
+  to: string,
+): Promise<void> {
+  const next = to.trim();
+  if (next === "") throw new Error("A recurring spend needs a name.");
+  const result = await db
+    .update(financeRecurringSpend)
+    .set({ name: next, updatedAt: new Date() })
+    .where(
+      and(
+        eq(financeRecurringSpend.userId, userId),
+        eq(financeRecurringSpend.name, from),
+      ),
+    )
+    .returning({ id: financeRecurringSpend.id });
+  if (result.length === 0) throw new Error("Recurring spend not found.");
+}
+
 /** Remove a recurring-spend entry. Its charges go back to being ordinary spending. */
 export async function deleteRecurringSpend(
   userId: string,

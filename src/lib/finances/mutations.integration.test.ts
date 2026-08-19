@@ -12,6 +12,7 @@ import {
   deleteRecurringSpend,
   deleteTransaction,
   renameRecurringBill,
+  renameRecurringSpend,
   setSubscriptionStatus,
   updateAccount,
   updateTransaction,
@@ -671,8 +672,9 @@ describeDb("recurring spend", () => {
     userId = await makeUser();
   });
 
-  it("defaults to an auto rate that is held back", async () => {
-    // The opposite defaults from a bill: deducting it is the whole reason the row exists.
+  it("defaults to an active group on an auto rate", async () => {
+    // Active is the whole condition for being held back, and deducting it is the reason the
+    // row exists, so a new group starts held with a rate read from history.
     await upsertRecurringSpend(userId, { name: "Pizza", matchers: ["PIZZA HUT"] });
 
     expect((await loadRecurringSpend(userId))[0]).toMatchObject({
@@ -701,8 +703,8 @@ describeDb("recurring spend", () => {
   });
 
   it("refuses a pinned amount with no figure behind it", async () => {
-    // Same rule as a set-aside bill: this is subtracted from money about to be spent, so
-    // "pinned to nothing" would deduct zero while claiming to be deliberate.
+    // This is subtracted from money about to be spent, so "pinned to nothing" would deduct
+    // zero while claiming to be deliberate.
     await expect(
       upsertRecurringSpend(userId, { name: "Pizza", amountSource: "pinned" }),
     ).rejects.toThrow("A pinned amount needs a figure above zero.");
@@ -711,6 +713,38 @@ describeDb("recurring spend", () => {
     );
 
     expect(await loadRecurringSpend(userId)).toEqual([]);
+  });
+
+  it("renames a group in place, keeping the merchants it already claims", async () => {
+    // The Pizza Hut case: a group created from the review list carried the bank's string as
+    // its name, and insert-then-delete would have tripped matcher exclusivity on the way out.
+    await upsertRecurringSpend(userId, {
+      name: "PIZZA HUT #4471",
+      matchers: ["PIZZA HUT #4471"],
+      amountSource: "pinned",
+      expectedCents: 6000,
+    });
+    await renameRecurringSpend(userId, "PIZZA HUT #4471", "Pizza Friday");
+
+    expect(await loadRecurringSpend(userId)).toMatchObject([
+      {
+        name: "Pizza Friday",
+        matchers: ["PIZZA HUT #4471"],
+        expectedCents: 6000,
+      },
+    ]);
+  });
+
+  it("refuses a rename of nothing, or to nothing", async () => {
+    await upsertRecurringSpend(userId, { name: "Pizza", matchers: ["PIZZA HUT"] });
+
+    await expect(renameRecurringSpend(userId, "Pizza", "  ")).rejects.toThrow(
+      "A recurring spend needs a name.",
+    );
+    await expect(renameRecurringSpend(userId, "Groceries", "Food")).rejects.toThrow(
+      "Recurring spend not found.",
+    );
+    expect((await loadRecurringSpend(userId))[0].name).toBe("Pizza");
   });
 });
 
@@ -747,6 +781,14 @@ describeDb("recurring spend isolation", () => {
   it("does not let a second user delete another user's entry", async () => {
     await deleteRecurringSpend(intruderId, "Pizza");
     expect(await loadRecurringSpend(ownerId)).toHaveLength(1);
+  });
+
+  it("does not let a second user rename another user's entry", async () => {
+    await expect(
+      renameRecurringSpend(intruderId, "Pizza", "Not Yours"),
+    ).rejects.toThrow("Recurring spend not found.");
+
+    expect((await loadRecurringSpend(ownerId))[0].name).toBe("Pizza");
   });
 });
 

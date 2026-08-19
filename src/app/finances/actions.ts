@@ -13,6 +13,7 @@ import {
   deleteTransaction,
   reclassifyTransactions,
   renameRecurringBill,
+  renameRecurringSpend,
   setOneOff,
   setSubscriptionStatus,
   updateAccount,
@@ -113,6 +114,13 @@ export async function renameRecurringBillAction(
   to: string,
 ): Promise<ActionResult> {
   return run((userId) => renameRecurringBill(userId, from, to));
+}
+
+export async function renameRecurringSpendAction(
+  from: string,
+  to: string,
+): Promise<ActionResult> {
+  return run((userId) => renameRecurringSpend(userId, from, to));
 }
 
 export async function setSubscriptionStatusAction(

@@ -16,13 +16,17 @@ import {
   availableToSpend,
   cashPosition,
   nextPayday,
-  recurringSpendHeld,
-  setAsideHeld,
   type BillCharge,
   type PendingRow,
   type SetAside,
   type SpendHeld,
 } from "@/lib/finances/available";
+import {
+  billRows,
+  heldSetAsides,
+  heldSpend,
+  spendRows,
+} from "@/lib/finances/commitmentRows";
 import type { Payday } from "@/lib/finances/classify/income";
 import { buildPayPeriods } from "@/lib/finances/classify/payPeriods";
 import {
@@ -31,7 +35,6 @@ import {
   type PeriodLedgerRow,
 } from "@/lib/finances/periodResult";
 import {
-  recurringSpendRate,
   staleSubscriptions,
   type CommitmentCharge,
   type StoredBillRow,
@@ -121,26 +124,14 @@ export function DashboardView({
       ? nextPayday(paydays, override, today)
       : { dateKey: null, daysAway: null, source: "unknown" as const };
 
-    const activeBills = bills.filter((bill) => bill.status === "active");
-    const setAsides: SetAside[] = today
-      ? activeBills
-          .map((bill) => setAsideHeld(bill, paydays, billCharges, today))
-          .filter((entry): entry is SetAside => entry !== null)
-      : [];
-
-    const spendHeld: SpendHeld[] = today
-      ? spend.flatMap((entry) => {
-          const rate = recurringSpendRate(entry, spendCharges[entry.name] ?? [], today);
-          const held = recurringSpendHeld(
-            entry,
-            rate.ratePerPeriodCents,
-            spendCharges[entry.name] ?? [],
-            today,
-            payday.dateKey,
-          );
-          return held === null ? [] : [held];
-        })
-      : [];
+    // The same builders the Commitments grids use, so "which commitments are held back" has
+    // one answer rather than one per page.
+    const setAsides: SetAside[] = heldSetAsides(
+      billRows(bills, billCharges, paydays, today),
+    );
+    const spendHeld: SpendHeld[] = heldSpend(
+      spendRows(spend, spendCharges, today, payday.dateKey),
+    );
 
     const chargesByName = new Map<string, CommitmentCharge[]>();
     for (const charge of billCharges) {

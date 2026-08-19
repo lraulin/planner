@@ -1,0 +1,152 @@
+import { describe, expect, it } from "vitest";
+import { billRows, heldSetAsides, heldSpend, spendRows } from "./commitmentRows";
+import type { BillCharge } from "./available";
+import type { Payday } from "./classify/income";
+import type { CommitmentCharge, StoredBillRow, StoredSpend } from "./commitments";
+
+function payday(dateKey: string): Payday {
+  return { dateKey, employer: "ACME", amountCents: 200_000, transactionIds: [] };
+}
+
+function bill(over: Partial<StoredBillRow> = {}): StoredBillRow {
+  return {
+    id: "bill-1",
+    name: "1Password",
+    matchers: ["1PASSWORDTORONTOON"],
+    status: "active",
+    cancelledOn: null,
+    cancelUrl: "",
+    cadenceMonths: 12,
+    expectedCents: 7188,
+    anchorDate: null,
+    scheduled: true,
+    dueDay: null,
+    ...over,
+  };
+}
+
+function spendEntry(over: Partial<StoredSpend> = {}): StoredSpend {
+  return {
+    id: "spend-1",
+    name: "Pizza",
+    matchers: ["PIZZA HUT", "DOMINOS"],
+    period: "week",
+    amountSource: "pinned",
+    expectedCents: 6000,
+    active: true,
+    ...over,
+  };
+}
+
+const CHARGES: BillCharge[] = [{ name: "1Password", dateKey: "2026-03-30" }];
+const PAYDAYS = [payday("2026-04-10"), payday("2026-04-24"), payday("2026-05-08")];
+
+describe("billRows", () => {
+  it("accrues a yearly bill over 26 paychecks, which is the whole envelope feature", () => {
+    // $71.88 a year is $2.76 a paycheck. Three paydays since the last charge is $8.28, and it
+    // reaches the full figure by the time the next charge lands. Nothing has to be topped up
+    // by hand, which is the difference between this and a bucket you can raid.
+    const [row] = billRows([bill()], CHARGES, PAYDAYS, "2026-05-10");
+
+    expect(row.held).toMatchObject({
+      perPaycheckCents: 276,
+      heldCents: 828,
+      expectedCents: 7188,
+      periodStartKey: "2026-03-30",
+      nextDueKey: "2027-03-30",
+    });
+    expect(row.annualCostCents).toBe(7188);
+    expect(row.overdue).toBe(false);
+  });
+
+  it("holds nothing for a cancelled or dismissed bill, but keeps its cost on the books", () => {
+    // The status filter used to live in each component. If it goes missing, a cancelled
+    // subscription quietly keeps deducting from the headline and nothing on screen says so.
+    for (const status of ["cancelled", "ignored"] as const) {
+      const [row] = billRows([bill({ status })], CHARGES, PAYDAYS, "2026-05-10");
+
+      expect(row.held).toBeNull();
+      expect(row.annualCostCents).toBe(7188);
+    }
+  });
+
+  it("holds nothing for a bill with no declared amount", () => {
+    const [row] = billRows(
+      [bill({ expectedCents: null })],
+      CHARGES,
+      PAYDAYS,
+      "2026-05-10",
+    );
+
+    expect(row.held).toBeNull();
+    expect(row.amountCents).toBe(0);
+    expect(row.annualCostCents).toBe(0);
+  });
+
+  it("holds nothing before the browser has said what day it is", () => {
+    const [row] = billRows([bill()], CHARGES, PAYDAYS, null);
+
+    expect(row.held).toBeNull();
+    expect(row.nextDueKey).toBeNull();
+  });
+
+  it("walks the next charge past a due date that has already gone by", () => {
+    // The date column is the field the user corrects, so it looks forward. `held.nextDueKey`
+    // stops at the missed date instead, which is what makes an unpaid bill visible.
+    const [row] = billRows(
+      [bill({ cadenceMonths: 1, expectedCents: 210_000, name: "Rent" })],
+      [{ name: "Rent", dateKey: "2026-03-01" }],
+      PAYDAYS,
+      "2026-05-10",
+    );
+
+    expect(row.nextDueKey).toBe("2026-06-01");
+    expect(row.held?.nextDueKey).toBe("2026-04-01");
+    expect(row.overdue).toBe(true);
+  });
+
+  it("reports only the accruals in force", () => {
+    const rows = billRows(
+      [bill(), bill({ id: "bill-2", name: "Paramount+", status: "cancelled" })],
+      CHARGES,
+      PAYDAYS,
+      "2026-05-10",
+    );
+
+    expect(heldSetAsides(rows).map((entry) => entry.name)).toEqual(["1Password"]);
+  });
+});
+
+describe("spendRows", () => {
+  const charges: Record<string, CommitmentCharge[]> = {
+    Pizza: [{ dateKey: "2026-05-08", costCents: 4500 }],
+  };
+
+  it("holds the unspent remainder of the period's rate", () => {
+    const [row] = spendRows([spendEntry()], charges, "2026-05-10", "2026-05-22");
+
+    expect(row.held?.spentThisPeriodCents).toBe(4500);
+    expect(row.rate.ratePerPeriodCents).toBe(6000);
+    expect(row.monthlyCents).toBe(26_000);
+  });
+
+  it("holds nothing for an inactive group", () => {
+    const [row] = spendRows(
+      [spendEntry({ active: false })],
+      charges,
+      "2026-05-10",
+      "2026-05-22",
+    );
+
+    expect(row.held).toBeNull();
+    // Still rated, so the grid can show what resuming it would cost.
+    expect(row.rate.ratePerPeriodCents).toBe(6000);
+    expect(heldSpend([row])).toEqual([]);
+  });
+
+  it("holds nothing before the browser has said what day it is", () => {
+    const [row] = spendRows([spendEntry()], charges, null, null);
+
+    expect(row.held).toBeNull();
+  });
+});

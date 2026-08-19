@@ -10,28 +10,31 @@ import type { RecurringMerchant } from "@/lib/finances/analytics";
 import {
   projectForwardMonths,
   projectForwardPayPeriods,
-  recurringSpendRate,
   unclaimedMerchants,
   type CommitmentCharge,
   type StoredBillRow,
   type StoredSpend,
 } from "@/lib/finances/commitments";
 import {
-  annualCents,
-  CADENCE_CHOICES,
-  cadenceLabel,
-  nextDueFrom,
-} from "@/lib/finances/recurringBills";
+  billRows as buildBillRows,
+  spendRows as buildSpendRows,
+} from "@/lib/finances/commitmentRows";
+import { nextPayday } from "@/lib/finances/available";
+import { PAYDAY_SCOPE } from "@/lib/settings/scopes";
+import { PAYDAY_CODEC } from "../paydaySetting";
+import { CADENCE_CHOICES, cadenceLabel } from "@/lib/finances/recurringBills";
 import { formatUsd } from "@/lib/finances/money";
 import {
   deleteCommitmentAction,
   renameRecurringBillAction,
+  renameRecurringSpendAction,
   setRecurringBillAction,
   setRecurringSpendAction,
 } from "@/app/finances/actions";
 import { dualGridViewCommands } from "@/lib/commands/gridViewCommands";
 import { hasAnyNarrowing } from "@/lib/settings/grid";
 import { useRegisterCommands } from "@/components/shell/CommandProvider";
+import { useSetting } from "@/components/settings/SettingsProvider";
 import { DataGrid } from "@/components/grid/DataGrid";
 import { GridToolbar, type GridToolbarHandle } from "@/components/grid/GridToolbar";
 import { useGridState, type GridDefaults } from "@/components/grid/useGridState";
@@ -73,18 +76,6 @@ function spendDefaults(): GridDefaults {
     order: spendColumns.map((column) => column.id),
     sorts: [{ columnId: "monthly", direction: "desc" }],
   };
-}
-
-function lastChargeOn(
-  name: string,
-  charges: readonly BillCharge[],
-  fallback: string | null,
-): string | null {
-  const mine = charges
-    .filter((charge) => charge.name === name)
-    .map((charge) => charge.dateKey)
-    .sort();
-  return mine.length > 0 ? mine[mine.length - 1] : fallback;
 }
 
 export function CommitmentsView({
@@ -129,53 +120,19 @@ export function CommitmentsView({
   }, [focusedGrid]);
 
   const todayKey = today;
+  const { value: paydayOverride } = useSetting(PAYDAY_SCOPE, PAYDAY_CODEC);
+  // The same next payday the dashboard uses, because the spend hold reaches to it.
+  const nextPaydayKey =
+    todayKey === null ? null : nextPayday(paydays, paydayOverride, todayKey).dateKey;
 
   const billRows: BillGridRow[] = useMemo(
-    () =>
-      bills.map((bill) => {
-        const amountCents = bill.expectedCents ?? 0;
-        const annualCostCents =
-          amountCents > 0 ? annualCents(amountCents, bill.cadenceMonths) : 0;
-        const lastPosted = lastChargeOn(bill.name, billCharges, null);
-        const nextDueKey =
-          todayKey === null || !bill.scheduled
-            ? null
-            : bill.anchorDate !== null &&
-                (lastPosted === null || bill.anchorDate > lastPosted)
-              ? bill.anchorDate
-              : lastPosted !== null
-                ? nextDueFrom(lastPosted, bill.cadenceMonths, todayKey)
-                : null;
-        return {
-          ...bill,
-          nextDueKey,
-          amountCents,
-          annualCostCents,
-          monthlySetAsideCents: Math.round(annualCostCents / 12),
-        };
-      }),
-    [bills, billCharges, todayKey],
+    () => buildBillRows(bills, billCharges, paydays, todayKey),
+    [bills, billCharges, paydays, todayKey],
   );
 
   const spendRows: SpendGridRow[] = useMemo(
-    () =>
-      spend.map((entry) => {
-        const rate = recurringSpendRate(
-          entry,
-          spendCharges[entry.name] ?? [],
-          todayKey ?? "9999-12-31",
-        );
-        const weeklyCents =
-          entry.period === "week"
-            ? rate.ratePerPeriodCents
-            : Math.round((rate.ratePerPeriodCents * 12) / 52);
-        const monthlyCents =
-          entry.period === "month"
-            ? rate.ratePerPeriodCents
-            : Math.round((rate.ratePerPeriodCents * 52) / 12);
-        return { ...entry, rate, weeklyCents, monthlyCents };
-      }),
-    [spend, spendCharges, todayKey],
+    () => buildSpendRows(spend, spendCharges, todayKey, nextPaydayKey),
+    [spend, spendCharges, todayKey, nextPaydayKey],
   );
 
   const chargesByName = useMemo(() => {
@@ -410,6 +367,7 @@ export function CommitmentsView({
         }),
       );
     },
+    onRename: (from, to) => run(() => renameRecurringSpendAction(from, to)),
     onDelete: (name) => run(() => deleteCommitmentAction({ kind: "spend", name })),
   };
 
@@ -418,10 +376,9 @@ export function CommitmentsView({
     (total, row) => total + row.annualCostCents,
     0,
   );
-  const monthlyTotal = activeBills.reduce(
-    (total, row) => total + row.monthlySetAsideCents,
-    0,
-  );
+  // What the active bills cost per month on average — a headline for the section, not the
+  // figure any one of them is holding back. The Set aside column says that, per bill.
+  const monthlyTotal = Math.round(annualTotal / 12);
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -457,9 +414,10 @@ export function CommitmentsView({
                 Subscriptions & bills
               </h2>
               <p className="text-[0.75rem] text-ink-muted">
-                Charges unless you cancel. {formatUsd(monthlyTotal)} / month ·{" "}
-                {formatUsd(annualTotal)} / year. Tick <strong>Hold</strong> to subtract
-                a bill from Available to Spend.
+                Charges unless you cancel. Every active bill with an amount is held out
+                of each paycheck, a slice at a time, so the money is there when it lands
+                — a yearly bill saves up over 26 of them. {formatUsd(monthlyTotal)} /
+                month · {formatUsd(annualTotal)} / year.
               </p>
             </div>
           </header>
@@ -527,7 +485,9 @@ export function CommitmentsView({
           <header className="px-2 pt-2">
             <h2 className="text-[0.9375rem] font-medium text-ink">Recurring spend</h2>
             <p className="text-[0.75rem] text-ink-muted">
-              Pizza, groceries — a cadence you choose, an amount that follows history.
+              Pizza, groceries — a cadence you choose, a rate that follows your history.
+              The period&rsquo;s rate is held back before payday, so spending what you
+              budgeted costs you nothing extra and only going over bites.
             </p>
           </header>
           <div className="px-2">
