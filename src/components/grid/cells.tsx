@@ -20,6 +20,7 @@ import { toDateKey } from "@/lib/schedule/geometry";
 import { scheduleStatus, STATUS_LABELS, type ScheduleStatus } from "@/lib/tree/status";
 import { TypeIcon } from "@/components/icons/TypeIcon";
 import { NameIconContext } from "./nameIconContext";
+import { NameToneContext, type NameTone } from "./nameToneContext";
 import { RowDragHandleContext } from "./rowDragContext";
 import { useRowSelected } from "./rowSelectedContext";
 
@@ -41,11 +42,15 @@ const TYPE_STYLE: Record<OutlineNode["type"], string> = {
   task: "text-[0.875rem] font-normal",
 };
 
-/** Name ink matches the priority column so a scan of the grid reads the same way. */
-function nameToneClass(node: OutlineNode, done: boolean): string {
+/**
+ * Name ink matches the priority column so a scan of the grid reads the same way — which
+ * means it has to read *whichever* priority the list is ordered by. See `NameToneContext`.
+ */
+function nameToneClass(node: OutlineNode, done: boolean, tone: NameTone): string {
   if (done) return "text-ink-faint line-through";
   if (!node.name) return "text-ink-faint italic";
-  if (node.priorityLetter) return PRIORITY_COLOR[node.priorityLetter];
+  const letter = tone === "tc" ? node.tcPriorityLetter : node.priorityLetter;
+  if (letter) return PRIORITY_COLOR[letter];
   return "text-ink";
 }
 
@@ -103,6 +108,7 @@ export function NameCell({
   // False while the optional `icon` column is on screen, which is where the glyph goes
   // instead — see `NameIconContext`. The row gutter is still a drag handle either way.
   const showIcon = useContext(NameIconContext);
+  const nameTone = useContext(NameToneContext);
   const iconIsHandle = Boolean(dragHandle && dragApi && showIcon);
 
   return (
@@ -181,7 +187,7 @@ export function NameCell({
           className={[
             "min-w-0 flex-1 self-center truncate",
             TYPE_STYLE[node.type],
-            nameToneClass(node, done),
+            nameToneClass(node, done, nameTone),
           ].join(" ")}
         >
           {node.name || `New ${KIND_LABELS[kind].toLowerCase()}`}

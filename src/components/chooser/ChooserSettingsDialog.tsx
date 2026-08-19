@@ -126,6 +126,16 @@ export function ChooserSettingsDialog({
                 onChange={(useTaskPriorityOrder) => onChange({ useTaskPriorityOrder })}
               />
               <Toggle
+                label="Rank by TC Priority"
+                hint={
+                  settings.rankByTcPriority
+                    ? "Drag to rank; names take the TC Priority colour."
+                    : "No ranking here; names take the outline priority colour."
+                }
+                checked={settings.rankByTcPriority}
+                onChange={(rankByTcPriority) => onChange({ rankByTcPriority })}
+              />
+              <Toggle
                 label="Hide tasks already planned for a day"
                 hint="Once you decide when to do something, it leaves the master list."
                 checked={settings.hidePlanned}

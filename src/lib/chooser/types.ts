@@ -32,6 +32,22 @@ export type ChooserSettings = {
    */
   useTaskPriorityOrder: boolean;
   /**
+   * Rank by **TC Priority** rather than reading the outline's.
+   *
+   * Two things move together because they are one question — "which priority is this list
+   * about?" — and letting them disagree would produce a grid whose colours describe one
+   * ranking while its drag edits another:
+   *
+   * - dragging a row writes TC Priority; with this off, the chooser does not rank at all,
+   *   because the outline's priority is relative to a node's siblings and a flat
+   *   cross-project list has no sibling relationship to express;
+   * - a row's name takes its colour from the TC letter instead of the outline letter.
+   *
+   * Defaults to the view's own `tcPriority`, so the To-do List behaves as it always has and
+   * the scoring views stay read-only.
+   */
+  rankByTcPriority: boolean;
+  /**
    * Which work states appear, per view.
    *
    * Replaces what began as a single `includeDeferred` flag. Two overlapping mechanisms —

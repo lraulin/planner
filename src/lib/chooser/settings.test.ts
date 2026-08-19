@@ -110,4 +110,24 @@ describe("parseChooserSettings", () => {
       "none",
     );
   });
+
+  it("defaults the TC ranking switch from the view, and honours a stored override", () => {
+    // The To-do List is the ranked one; the scoring views are read-only until told otherwise.
+    expect(parseChooserSettings(null, "todo-list").rankByTcPriority).toBe(true);
+    expect(parseChooserSettings(null, "urgent").rankByTcPriority).toBe(false);
+
+    // Both directions have to survive a round trip, or turning it off in the ranked view
+    // would silently come back on next load.
+    expect(
+      parseChooserSettings({ rankByTcPriority: false }, "todo-list").rankByTcPriority,
+    ).toBe(false);
+    expect(
+      parseChooserSettings({ rankByTcPriority: true }, "urgent").rankByTcPriority,
+    ).toBe(true);
+
+    // Malformed falls back rather than poisoning the view.
+    expect(
+      parseChooserSettings({ rankByTcPriority: "yes" }, "urgent").rankByTcPriority,
+    ).toBe(false);
+  });
 });

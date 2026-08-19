@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { DataGrid, type RowDrag } from "@/components/grid/DataGrid";
+import { NameToneContext } from "@/components/grid/nameToneContext";
 import {
   GridToolbar,
   switchValue,
@@ -276,9 +277,14 @@ export function ChooserGrid({
    * TC Priority is ranked by drag. While a header sort is active the on-screen order is
    * not the ranking, so dragging would write ranks the user cannot see — stand down
    * (cycle the column header back to unsorted to drag again).
+   *
+   * Gated on the saved setting rather than the view's static flag, so a scoring view can be
+   * turned into a ranked one and back. With it off the chooser does not rank at all: the
+   * outline's priority is relative to a node's siblings, and dragging one row past another
+   * from a different project says nothing a sibling ranking could store.
    */
   const rowDrag: RowDrag | undefined = useMemo(() => {
-    if (!view.tcPriority || gridState.sort) return undefined;
+    if (!settings.rankByTcPriority || gridState.sort) return undefined;
 
     return {
       resolve: (dragIds, targetId, zone) =>
@@ -288,7 +294,7 @@ export function ChooserGrid({
         applyTcPlan(planTcFor(dragIds, targetId, zone));
       },
     };
-  }, [view.tcPriority, gridState.sort, planTcFor, selectOne, applyTcPlan]);
+  }, [settings.rankByTcPriority, gridState.sort, planTcFor, selectOne, applyTcPlan]);
 
   /** The `Project:` line under the toolbar — the selected row's ancestor path. */
   const breadcrumb = useMemo(() => {
@@ -396,45 +402,47 @@ export function ChooserGrid({
         </span>
       </div>
 
-      <DataGrid
-        rows={rows}
-        columns={gridState.columns}
-        allColumns={allColumns}
-        columnCtx={columnCtx}
-        selectedId={tab.selectedId}
-        selectedIds={tab.selectedIds}
-        onSelect={tab.select}
-        onOpenDetail={tab.openDetail}
-        ariaLabel="Task Chooser"
-        onNavigableIdsChange={tab.setNavigableIds}
-        rowMenu={nodeCommands.rowMenu}
-        rowSwipe={nodeCommands.rowSwipe}
-        rowDrag={rowDrag}
-        rowNumbers
-        enableFilters={advancedFilters}
-        enableSort
-        sorts={gridState.sorts}
-        onSortChange={gridState.toggleSort}
-        onSetSort={gridState.setSort}
-        filters={gridState.filters}
-        onFilterChange={gridState.setFilter}
-        advancedFilter={gridState.advancedFilter}
-        search={gridState.search}
-        distinctValues={distinctValues}
-        onCountsChange={setCounts}
-        widths={gridState.widths}
-        onResizeColumn={gridState.setWidth}
-        onResetColumnWidth={gridState.clearWidth}
-        columnControls={gridState.columnControls}
-        collapsedGroups={gridState.collapsedGroups}
-        onToggleGroup={gridState.toggleGroup}
-        density={gridState.density}
-        empty={
-          <div className="flex h-full items-center justify-center p-8 text-[0.9375rem] text-ink-muted">
-            Nothing to choose from in this view.
-          </div>
-        }
-      />
+      <NameToneContext.Provider value={settings.rankByTcPriority ? "tc" : "outline"}>
+        <DataGrid
+          rows={rows}
+          columns={gridState.columns}
+          allColumns={allColumns}
+          columnCtx={columnCtx}
+          selectedId={tab.selectedId}
+          selectedIds={tab.selectedIds}
+          onSelect={tab.select}
+          onOpenDetail={tab.openDetail}
+          ariaLabel="Task Chooser"
+          onNavigableIdsChange={tab.setNavigableIds}
+          rowMenu={nodeCommands.rowMenu}
+          rowSwipe={nodeCommands.rowSwipe}
+          rowDrag={rowDrag}
+          rowNumbers
+          enableFilters={advancedFilters}
+          enableSort
+          sorts={gridState.sorts}
+          onSortChange={gridState.toggleSort}
+          onSetSort={gridState.setSort}
+          filters={gridState.filters}
+          onFilterChange={gridState.setFilter}
+          advancedFilter={gridState.advancedFilter}
+          search={gridState.search}
+          distinctValues={distinctValues}
+          onCountsChange={setCounts}
+          widths={gridState.widths}
+          onResizeColumn={gridState.setWidth}
+          onResetColumnWidth={gridState.clearWidth}
+          columnControls={gridState.columnControls}
+          collapsedGroups={gridState.collapsedGroups}
+          onToggleGroup={gridState.toggleGroup}
+          density={gridState.density}
+          empty={
+            <div className="flex h-full items-center justify-center p-8 text-[0.9375rem] text-ink-muted">
+              Nothing to choose from in this view.
+            </div>
+          }
+        />
+      </NameToneContext.Provider>
 
       <NodeDetailDrawer
         node={tab.detailNode}

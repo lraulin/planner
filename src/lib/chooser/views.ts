@@ -205,6 +205,8 @@ export function defaultSettings(id: ChooserViewId): ChooserSettings {
     weights: view.weights,
     onlyNextAction: view.defaults.onlyNextAction,
     useTaskPriorityOrder: view.defaults.useTaskPriorityOrder,
+    // The view decides where this starts; the setting lets it be changed per view after that.
+    rankByTcPriority: view.tcPriority,
     states: view.states,
     // The To-do List *is* the master list, so planning something takes it off. The scoring
     // views are answering a different question and keep showing everything.

@@ -53,6 +53,7 @@ export function parseChooserSettings(
       stored.useTaskPriorityOrder,
       base.useTaskPriorityOrder,
     ),
+    rankByTcPriority: asBoolean(stored.rankByTcPriority, base.rankByTcPriority),
     /**
      * Only states that still exist in the schema, so renaming or dropping one degrades to
      * "that state is not shown" rather than to a filter that silently matches nothing. An
