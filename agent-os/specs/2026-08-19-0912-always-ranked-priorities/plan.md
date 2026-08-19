@@ -1,6 +1,6 @@
 # Always-ranked outline priorities
 
-**Status: active**
+**Status: frozen / complete** (2026-08-19)
 Spec folder: `agent-os/specs/2026-08-19-0912-always-ranked-priorities/`
 
 ## Spec relationships
@@ -138,31 +138,36 @@ This work extends that engine's invariant to the outline rather than inventing a
 
 ## Acceptance criteria
 
-- [ ] No node can hold a letter without a rank, or a rank without a letter — enforced by a
+- [x] No node can hold a letter without a rank, or a rank without a letter — enforced by a
       CHECK constraint and by a single normalizing write path.
-- [ ] Within a parent and letter, ranks are dense `1..n` with no ties, after every write path:
+- [x] Within a parent and letter, ranks are dense `1..n` with no ties, after every write path:
       typing, drag, structural move, delete, import, agent tool.
-- [ ] Typing `A` appends to the end of A; `A1` inserts and pushes the rest down; a rank past
+- [x] Typing `A` appends to the end of A; `A1` inserts and pushes the rest down; a rank past
       the end clamps; blank unprioritizes and closes the gap.
-- [ ] `aa`, `ba`, `ca`, `da` all resolve to that letter's rank 1.
-- [ ] A multi-row selection can be given a priority in one action, landing in outline order.
-- [ ] Dragging between two ranked siblings renumbers; both slots at a letter boundary are
+- [x] `aa`, `ba`, `ca`, `da` all resolve to that letter's rank 1.
+- [x] A multi-row selection can be given a priority in one action, landing in outline order.
+- [x] Dragging between two ranked siblings renumbers; both slots at a letter boundary are
       reachable.
-- [ ] A structural move renumbers the source and destination sibling groups.
-- [ ] The migration leaves zero bare letters and zero duplicate ranks in the real database.
-- [ ] `Remove priority gaps` and `Reprioritize unique` no longer exist anywhere.
-- [ ] The Task Chooser's saved setting switches both drag target and name colour, per view.
-- [ ] The video project shows the _next_ unwatched video as its next action.
+- [x] A structural move renumbers the source and destination sibling groups.
+- [x] The migration leaves zero bare letters and zero duplicate ranks in the real database.
+- [x] `Remove priority gaps` and `Reprioritize unique` no longer exist anywhere.
+- [x] The Task Chooser's saved setting switches both drag target and name colour, per view.
+- [x] The video project shows the _next_ unwatched video as its next action.
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Pure code polish
 omitted.
 
-| #   | Change                                                                                                                                              | Why                                                                                                                                                                         |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **No drag fix ships.** Task 2 found no regression: drag-to-reprioritize works on desktop and was verified end to end against real data.             | The reported experience is a sibling group where _nothing_ carries a letter, in which a drop correctly assigns nothing. The remedy is Task 5, not a fix.                    |
-| 2   | **Bare letters were never the blocker.** A drop onto a bare-letter target already densifies correctly; only a wholly unlettered pool plans nothing. | Corrects an assumption made while shaping. It does not change the model decision — bare letters still go — but it removes "drag is broken by bare letters" as a motivation. |
+| #   | Change                                                                                                                                                                          | Why                                                                                                                                                                                                                                             |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **No drag fix ships.** Task 2 found no regression: drag-to-reprioritize works on desktop and was verified end to end against real data.                                         | The reported experience is a sibling group where _nothing_ carries a letter, in which a drop correctly assigns nothing. The remedy is Task 5, not a fix.                                                                                        |
+| 2   | **Bare letters were never the blocker.** A drop onto a bare-letter target already densifies correctly; only a wholly unlettered pool plans nothing.                             | Corrects an assumption made while shaping. It does not change the model decision — bare letters still go — but it removes "drag is broken by bare letters" as a motivation.                                                                     |
+| 3   | **Tasks 3 and 8 landed in one commit.** Normalizing the write path is what makes the repair commands meaningless, and splitting them left the integration suite red in between. | One logical change, honestly drawn. The alternative was a commit whose only content was updating a test to assert behaviour the next commit deleted.                                                                                            |
+| 4   | **`moveNode` gained an optional `priorityPlacement`,** and drag sends its landing slot with the move rather than following it with one `setPriorityAction` per affected row.    | Forced by the plan rather than added to it: once every write renumbers a whole group, N sequential writes meant N full renumbers racing to converge on the answer the first had already reached.                                                |
+| 5   | **The selection is not reduced to roots** for the new command, unlike every other plural verb.                                                                                  | `navigation.md` reduces to roots because a child inside a selected parent's branch would be acted on twice. Priority is sibling-relative, so parent and child are separate ranking groups and the reduction would silently skip a selected row. |
+| 6   | **The CHECK constraint caught two writers the plan had not identified** — the Achieve XML import and the sample-data seed. Both now densify.                                    | Neither was reachable from the two write paths the plan enumerated, and both produced bare letters. The constraint earned its place on day one.                                                                                                 |
+| 7   | **`PriorityCell` deleted, and the `Ranked` / `Unranked` / `Only Ranked As` / `Only Unranked As` filter presets removed.**                                                       | Both described a distinction that no longer exists. A filter that cannot exclude anything reads as broken, and a second priority cell storing input verbatim is exactly the bug the model change removes.                                       |
 
 ## Tasks
 
@@ -179,6 +184,43 @@ omitted.
 11. **Verify, freeze, update roadmap.**
 
 Full task detail is in `shape.md`.
+
+## Verification record (2026-08-19)
+
+- `npm run lint`, `npm run typecheck` clean; **3596 tests across 276 files** against real
+  Postgres, with no skip warning — the database cases ran.
+- `npm run smoke` — all 57 routes render.
+- **The migration was dry-run against a full copy of the real database before it was
+  applied**, then verified again after: 0 bare letters, 0 orphan ranks, 0 ties, every
+  `(user, parent, letter)` group dense. The three tied `A1`s under _Financial_ became
+  `A1/A2/A3`, and the ten bare root-level `B`s became `B1..B10`, both in outline order.
+- `db:generate` reports no schema changes, so the snapshot chain survived the hand-written
+  backfill.
+- **In the browser, against real data:** selecting five unprioritized siblings and typing `a`
+  in `Set priority…` produced `A1..A5` in outline order from one action — the motivating
+  case. Dragging a ranked row to the top of its letter renumbered the rest through the new
+  single-transaction path. The chooser's settings dialog renders the new toggle and its hint.
+  Every probe mutation was snapshotted first and restored byte-for-byte after; the database
+  is exactly as the migration left it.
+- **The next-action claim was checked directly:** with tied bare `A`s, `applyNextActionFilter`
+  keeps all three videos; with unique ranks it keeps exactly one. With _Use task priority
+  order_ off it still falls through to score — so ranking alone does not fix the
+  shortest-video symptom, and the toggle has to be on.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- **Move Up / Move Down do not reprioritize.** Achieve's manual says they do in a prioritized
+  list (`user-manual.md:1441`). Here outline order and priority are independent, so a move
+  within one parent deliberately leaves rank alone — which means that under the default
+  priority sort, Move Up has no visible effect. Worth deciding on its own terms.
+- **Drag below `md` is still absent.** `Set priority…` now covers the ranking half by touch,
+  but reparenting by touch has no command yet (`responsive.md` asks for one).
+- **`node_items`, `appointments` and `metrics`** still carry the old optional-rank shape.
+  They have no sibling-pool semantics, so they were left alone; if any of them grows a
+  ranking, it should reuse `letterRankEngine` rather than repeat this.
+- **The existing Inbox project still holds `D1`.** Newly created inboxes are unprioritized;
+  the one already in the database predates the change and was deliberately not migrated,
+  since clearing a user's priority is their call.
 
 ---
 

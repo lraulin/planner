@@ -27,7 +27,9 @@ The core Achieve Planner loop — plan the week, block the time, work the outlin
   tree set on the Outline, open/rename on Projects / Tasks / Goals, open owner on Wish
   List. Its three deferrals — Priority/State submenus and multi-select actions — closed under
   "Right-click completion" below; `Shift+F10` is still out.
-- **✅ Priorities & scheduling fields.** Priority (A/B/C/D + rank), deadline, focus, effort
+- **✅ Priorities & scheduling fields.** Priority (A/B/C/D + rank — always ranked and unique
+  within a sibling group since `specs/2026-08-19-0912-always-ranked-priorities`), deadline,
+  focus, effort
   (with rollups), plus lifecycle state for Goals, Projects, and Tasks. Result Areas are
   enduring roles and deliberately have no state (see the delta below). Effort Left, Actual
   Effort, and % complete are editable in the Task form
@@ -264,9 +266,11 @@ Features that complete or surround the original product, plus making it multi-de
   Chooser gets only the Open/Rename deck `GridToolbar` synthesises from `rowActions`, and
   **Metrics has no deck at all** — it does not use `GridToolbar`. The Outline's legacy strip
   is gone and its row menu is built from the same registry. Also lands: priority repair
-  against the complete persisted sibling set rather than the filtered rows, type
-  conversion with a loss/conflict preview and one transactional write, and Outline zoom as
-  shareable URL state. Deferred: Wish → Dream/Goal conversion, the scheduling / pickup /
+  against the complete persisted sibling set rather than the filtered rows (**both repair
+  commands later removed** — `specs/2026-08-19-0912-always-ranked-priorities` made the states
+  they repaired unrepresentable, and replaced them with `Set priority…` over a whole
+  selection), type conversion with a loss/conflict preview and one transactional write, and
+  Outline zoom as shareable URL state. Deferred: Wish → Dream/Goal conversion, the scheduling / pickup /
   drop command families, and a conversion dialog with server-loaded detail previews.
 - **✅ Command surface: menus, icon toolbar, Commands panel.**
   `specs/2026-08-06-1010-command-surface`. The deck above got the plumbing right and the surface

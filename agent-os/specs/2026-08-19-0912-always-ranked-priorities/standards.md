@@ -1,6 +1,6 @@
 # Standards for Always-ranked outline priorities
 
-**Status: active**
+**Status: frozen / complete** (2026-08-19)
 
 The standards below apply. Each entry says why it binds _this_ work and quotes the rules that
 actually constrain it; the full text lives at the named path.
