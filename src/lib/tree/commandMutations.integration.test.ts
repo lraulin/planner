@@ -10,8 +10,6 @@ import {
   convertNode,
   createNode,
   deleteNode,
-  removePriorityGaps,
-  reprioritizeUnique,
   setPriority,
   setState,
 } from "./mutations";
@@ -42,51 +40,90 @@ describeDb("shared command mutations", () => {
     userId = await makeUser();
   });
 
-  it("repairs complete sibling priorities and keeps hidden siblings in the set", async () => {
+  it("keeps a sibling group dense and unique however the ranks are typed", async () => {
+    // The invariant this guards: a node's priority is blank or a letter *with* a rank, and
+    // within one parent and letter the ranks run 1..n with no gaps and no ties. It cannot be
+    // maintained one row at a time, so every write renumbers the whole group.
     const area = await createNode({
       userId,
       parentId: null,
       type: "result_area",
       name: "Area",
     });
-    const first = await createNode({
-      userId,
-      parentId: area,
-      type: "task",
-      name: "First",
-    });
-    const second = await createNode({
-      userId,
-      parentId: area,
-      type: "task",
-      name: "Second",
-    });
-    const third = await createNode({
-      userId,
-      parentId: area,
-      type: "task",
-      name: "Third",
-    });
-    await setPriority(userId, first, "A", 1);
-    await setPriority(userId, second, "A", 7);
-    await setPriority(userId, third, "A", null);
+    const ids: Record<string, string> = {};
+    for (const name of ["First", "Second", "Third"]) {
+      ids[name] = await createNode({ userId, parentId: area, type: "task", name });
+    }
 
-    await removePriorityGaps(userId, second);
-    const rows = await loadOutline(userId);
-    expect(
-      rows
+    const ranksIn = async (): Promise<[string, string | null, number | null][]> =>
+      (await loadOutline(userId))
         .filter((row) => row.parentId === area)
-        .map((row) => [row.name, row.priorityRank]),
-    ).toEqual([
-      ["First", 1],
-      ["Second", 2],
-      ["Third", null],
+        .map((row) => [row.name, row.priorityLetter, row.priorityRank]);
+
+    // A bare letter appends rather than storing a letter with no rank.
+    await setPriority(userId, ids.First, "A", null);
+    await setPriority(userId, ids.Second, "A", null);
+    expect(await ranksIn()).toEqual([
+      ["First", "A", 1],
+      ["Second", "A", 2],
+      ["Third", null, null],
     ]);
 
-    await reprioritizeUnique(userId, second);
-    const afterUnique = await loadOutline(userId);
-    expect(afterUnique.find((row) => row.id === second)?.priorityRank).toBe(1);
-    expect(afterUnique.find((row) => row.id === first)?.priorityRank).toBe(2);
+    // A rank past the end clamps instead of leaving a gap.
+    await setPriority(userId, ids.Third, "A", 99);
+    expect(await ranksIn()).toEqual([
+      ["First", "A", 1],
+      ["Second", "A", 2],
+      ["Third", "A", 3],
+    ]);
+
+    // Claiming a taken rank pushes the rest down rather than tying with it.
+    await setPriority(userId, ids.Third, "A", 1);
+    expect(await ranksIn()).toEqual([
+      ["First", "A", 2],
+      ["Second", "A", 3],
+      ["Third", "A", 1],
+    ]);
+
+    // Clearing closes the gap it leaves behind.
+    await setPriority(userId, ids.Third, null, null);
+    expect(await ranksIn()).toEqual([
+      ["First", "A", 1],
+      ["Second", "A", 2],
+      ["Third", null, null],
+    ]);
+  });
+
+  it("renumbers siblings a grid filter would have hidden", async () => {
+    // The pool is the complete child set, never the rows on screen. Renumbering only what a
+    // filter left visible would silently collapse the ranks of everything it hid.
+    const area = await createNode({
+      userId,
+      parentId: null,
+      type: "result_area",
+      name: "Area",
+    });
+    const hidden = await createNode({
+      userId,
+      parentId: area,
+      type: "task",
+      name: "Hidden",
+    });
+    const visible = await createNode({
+      userId,
+      parentId: area,
+      type: "task",
+      name: "Visible",
+    });
+    await setPriority(userId, hidden, "A", 1);
+    await setState(userId, hidden, "completed");
+
+    // A completed sibling is filtered out of most views but still holds A1.
+    await setPriority(userId, visible, "A", 1);
+
+    const rows = await loadOutline(userId);
+    expect(rows.find((row) => row.id === visible)?.priorityRank).toBe(1);
+    expect(rows.find((row) => row.id === hidden)?.priorityRank).toBe(2);
   });
 
   it("replaces detail rows transactionally and auto-hoists a converted child", async () => {
@@ -212,7 +249,7 @@ describeDb("shared command mutations", () => {
     expect((await loadOutline(otherUserId)).some((row) => row.id === nodeId)).toBe(
       false,
     );
-    await removePriorityGaps(otherUserId, nodeId).catch(() => undefined);
+    await setPriority(otherUserId, nodeId, "A", 1).catch(() => undefined);
     await convertNode(otherUserId, nodeId, "project").catch(() => undefined);
     await deleteNode(otherUserId, nodeId);
 
@@ -222,6 +259,10 @@ describeDb("shared command mutations", () => {
       .where(and(eq(nodes.userId, userId), eq(nodes.id, nodeId)));
     expect(row.name).toBe("Private");
     expect(row.type).toBe("task");
+    // setPriority renumbers a whole sibling group, so a dropped userId would not just edit
+    // one foreign row — it would rewrite every sibling of it.
+    expect(row.priorityLetter).toBeNull();
+    expect(row.priorityRank).toBeNull();
   });
 
   // `syncDayLineToTargetStart` only acts on tasks, so converting a planned task to a

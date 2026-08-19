@@ -30,11 +30,11 @@ import {
   FocusCell,
   NameCell,
   PercentCell,
-  PriorityCell,
   ReadOnlyCell,
   StateCell,
   StatusCell,
 } from "./cells";
+import { LetterRankCell } from "@/components/grid/LetterRankCell";
 
 /**
  * Column definitions shared by the node grids.
@@ -91,7 +91,14 @@ const STATE_LABEL_BY_CODE: Record<string, string> = Object.fromEntries(
   ]),
 );
 
-/** ABCD priority with its rank — `A1`, `B`, or blank. */
+/**
+ * ABCD priority with its rank — `A1`, or blank.
+ *
+ * Edited through `LetterRankCell`, the same cell the Task Chooser and the Day list use,
+ * because outline priority is now the same kind of thing they are: a hand-maintained
+ * ranking where a letter always resolves to a position. What you type is a request the
+ * ranking engine answers, and the cell shows the rank you actually got.
+ */
 export function priorityColumn(): ColumnDef<OutlineColumnCtx> {
   return {
     id: "priority",
@@ -101,14 +108,15 @@ export function priorityColumn(): ColumnDef<OutlineColumnCtx> {
     filterKind: "priority",
     filterValue: (row) =>
       formatPriority(row.node.priorityLetter, row.node.priorityRank) || null,
-    // A1 < A2 < A10 < bare A < B1, and blank sorts last (null) — see `lib/priority/order`.
+    // A1 < A2 < A10 < B1, and blank sorts last (null) — see `lib/priority/order`.
     sortValue: (row) =>
       priorityOrderValue(row.node.priorityLetter, row.node.priorityRank),
     render: (row, ctx) => (
-      <PriorityCell
-        key={`priority:${formatPriority(row.node.priorityLetter, row.node.priorityRank)}`}
-        node={row.node}
-        onChange={(letter, rank) => ctx.onPriorityChange(row.node, letter, rank)}
+      <LetterRankCell
+        letter={row.node.priorityLetter}
+        rank={row.node.priorityRank}
+        onAssign={(letter, rank) => ctx.onPriorityChange(row.node, letter, rank)}
+        ariaLabel="Priority — A, B, C or D with a rank"
       />
     ),
   };

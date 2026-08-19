@@ -35,11 +35,8 @@ import {
   type NodeKind,
 } from "./hierarchy";
 import { planNodeConversion } from "./conversion";
-import {
-  removePriorityGaps as planRemovePriorityGaps,
-  reprioritizeUnique as planReprioritizeUnique,
-} from "@/lib/priority/maintenance";
 import { assertRankedLetterPriorities } from "@/lib/priority/letterRank";
+import { planOutlinePriorityAssign, type PriorityNode } from "./outlinePriority";
 import { promoteUrlsFromTaskName } from "@/lib/url/taskNameLinks";
 import { loadOutline } from "./queries";
 import { between } from "./sortKey";
@@ -54,7 +51,7 @@ import { assertSupportsLifecycleState, initialStateForType } from "./lifecycle";
 
 type Db = typeof db;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
-type Executor = Db | Tx;
+export type Executor = Db | Tx;
 
 function parentMatches(parentId: string | null) {
   return parentId === null ? isNull(nodes.parentId) : eq(nodes.parentId, parentId);
@@ -293,21 +290,75 @@ export async function renameNode(
   await promoteUrlsFromTaskName(userId, nodeId);
 }
 
+/**
+ * One parent's complete child set, in outline order, as the ranking engine wants it.
+ *
+ * Deliberately reads every child rather than the rows a grid happens to be showing: a
+ * renumber that only accounted for visible rows would silently collapse the ranks of
+ * everything a filter had hidden.
+ */
+async function siblingPriorityPool(
+  tx: Executor,
+  userId: string,
+  parentId: string | null,
+): Promise<PriorityNode[]> {
+  return tx
+    .select({
+      id: nodes.id,
+      parentId: nodes.parentId,
+      priorityLetter: nodes.priorityLetter,
+      priorityRank: nodes.priorityRank,
+    })
+    .from(nodes)
+    .where(and(eq(nodes.userId, userId), parentMatches(parentId)))
+    .orderBy(asc(nodes.sortKey));
+}
+
+/**
+ * Set one node's priority, normalising its whole sibling group.
+ *
+ * A node's priority is either blank or an A-D letter **with a rank** — there is no bare
+ * letter — and within one parent and letter the ranks are dense `1..n` with no ties. That
+ * invariant cannot be maintained one row at a time, so this does not write the letter and
+ * rank it was handed: it asks the shared ranking engine where the node lands among its
+ * siblings and writes every row the answer moves.
+ *
+ * So `A` appends to the end of A, `A1` inserts and pushes the rest down, a rank past the end
+ * clamps, and clearing closes the gap. See `lib/tree/outlinePriority`.
+ */
 export async function setPriority(
   userId: string,
   nodeId: string,
   letter: PriorityLetter | null,
   rank: number | null,
 ): Promise<void> {
-  await db
-    .update(nodes)
-    .set({
-      priorityLetter: letter,
-      // A rank without a letter is meaningless, so clear it alongside.
-      priorityRank: letter === null ? null : rank,
-      updatedAt: new Date(),
-    })
-    .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+  await db.transaction(async (tx) => {
+    const node = await requireNode(tx, userId, nodeId);
+    await assignPriorityAmongSiblings(tx, userId, nodeId, node.parentId, letter, rank);
+  });
+}
+
+/**
+ * The same assignment inside a transaction the caller already owns.
+ *
+ * Exists so the drawer's detail save shares one implementation with the grid's inline edit
+ * rather than writing the letter and rank verbatim — two paths that disagreed about what
+ * `A1` means would break the invariant from whichever side nobody was testing.
+ */
+export async function assignPriorityAmongSiblings(
+  tx: Executor,
+  userId: string,
+  nodeId: string,
+  parentId: string | null,
+  letter: PriorityLetter | null,
+  rank: number | null,
+): Promise<void> {
+  const siblings = await siblingPriorityPool(tx, userId, parentId);
+  await applyPriorityAssignments(
+    tx,
+    userId,
+    planOutlinePriorityAssign(siblings, nodeId, letter, rank),
+  );
 }
 
 async function applyPriorityAssignments(
@@ -325,50 +376,6 @@ async function applyPriorityAssignments(
       })
       .where(and(eq(nodes.userId, userId), eq(nodes.id, assignment.id)));
   }
-}
-
-/** Repair all ranked sibling values, including siblings hidden by a grid filter. */
-export async function removePriorityGaps(
-  userId: string,
-  nodeId: string,
-): Promise<void> {
-  await db.transaction(async (tx) => {
-    const node = await requireNode(tx, userId, nodeId);
-    const siblings = await tx
-      .select({
-        id: nodes.id,
-        priorityLetter: nodes.priorityLetter,
-        priorityRank: nodes.priorityRank,
-      })
-      .from(nodes)
-      .where(and(eq(nodes.userId, userId), parentMatches(node.parentId)))
-      .orderBy(asc(nodes.sortKey));
-    await applyPriorityAssignments(tx, userId, planRemovePriorityGaps(siblings));
-  });
-}
-
-/** Make one sibling's current letter/rank unique, shifting only that sibling group. */
-export async function reprioritizeUnique(
-  userId: string,
-  nodeId: string,
-): Promise<void> {
-  await db.transaction(async (tx) => {
-    const node = await requireNode(tx, userId, nodeId);
-    const siblings = await tx
-      .select({
-        id: nodes.id,
-        priorityLetter: nodes.priorityLetter,
-        priorityRank: nodes.priorityRank,
-      })
-      .from(nodes)
-      .where(and(eq(nodes.userId, userId), parentMatches(node.parentId)))
-      .orderBy(asc(nodes.sortKey));
-    await applyPriorityAssignments(
-      tx,
-      userId,
-      planReprioritizeUnique(siblings, nodeId),
-    );
-  });
 }
 
 /**

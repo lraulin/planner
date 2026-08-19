@@ -126,7 +126,8 @@ export function formatPriority(
  *
  * Achieve also accepts `aa` as a typing shortcut for `A1` (home-row convenience —
  * no shift needed to reach `1`). See `docs/achieve-planner/release-log.txt`
- * (1.1.10).
+ * (1.1.10). We extend it to every letter — `ba`, `ca`, `da` — since a rank is no longer
+ * optional and "top of this letter" is worth two keystrokes on all four.
  */
 export function parsePriority(
   text: string,
@@ -134,8 +135,12 @@ export function parsePriority(
   const input = text.trim().toUpperCase();
   if (input === "") return { letter: null, rank: null };
 
-  // Achieve shortcut: "aa" → A1. Not generalized to bb/cc/dd — release note names only aa.
-  if (input === "AA") return { letter: "A", rank: 1 };
+  // Achieve's "aa" → A1 shortcut, generalized: a trailing `a` means rank 1, so `ba` is B1,
+  // `ca` is C1 and `da` is D1. Achieve only ever documented `aa`, but now that every letter
+  // carries a rank the shortcut is worth having on every letter — and `A` is the only suffix
+  // the grammar below cannot already mean, since a rank is digits.
+  const topOfLetter = /^([ABCD])A$/.exec(input);
+  if (topOfLetter) return { letter: topOfLetter[1] as PriorityLetter, rank: 1 };
 
   const match = /^([ABCD])(\d{1,2})?$/.exec(input);
   if (!match) return undefined;

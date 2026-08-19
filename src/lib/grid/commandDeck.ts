@@ -115,8 +115,6 @@ export type GridCommandActions = {
   onCollapseAll?: () => void;
   onExpandThroughLevel?: (level: number) => void;
   onChooseExpandThroughLevel?: () => void;
-  onRemovePriorityGaps?: () => void;
-  onReprioritizeUnique?: (id: string) => void;
   onConvert?: (id: string, kind: NodeKind) => void;
   onZoomIn?: (id: string) => void;
   onZoomOut?: () => void;
@@ -153,7 +151,6 @@ export type GridCommandCapabilities = {
    */
   createChild?: boolean;
   hierarchy?: boolean;
-  priorityMaintenance?: boolean;
   conversionKinds?: readonly NodeKind[];
   outlineZoom?: boolean;
   selection?: GridSelectionCapability;
@@ -796,44 +793,6 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
           }),
         );
       }
-    }
-  }
-
-  if (capabilities.priorityMaintenance) {
-    if (actions.onRemovePriorityGaps) {
-      out.push(
-        command({
-          id: "record.remove-priority-gaps",
-          label: "Remove priority gaps",
-          group: "record",
-          menu: "organize",
-          section: "Priority",
-          icon: "priority",
-          rowMenu: true,
-          keywords: "dense ranks renumber priority",
-          // Repair is scoped to one sibling group, and the selected row is what names it.
-          // Both hosts already no-op without a selection; saying so beats a dead click.
-          disabled: !hasSelection,
-          title: selectionTitle,
-          run: actions.onRemovePriorityGaps,
-        }),
-      );
-    }
-    if (actions.onReprioritizeUnique) {
-      out.push(
-        command({
-          id: "record.reprioritize-unique",
-          label: "Reprioritize unique",
-          group: "record",
-          menu: "organize",
-          section: "Priority",
-          icon: "priority",
-          rowMenu: true,
-          disabled: !hasSelection,
-          title: selectionTitle,
-          run: () => id && actions.onReprioritizeUnique?.(id),
-        }),
-      );
     }
   }
 

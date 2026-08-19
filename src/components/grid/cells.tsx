@@ -7,12 +7,7 @@ import { formatFullDateKey } from "@/lib/dateFormat";
 import { isSettled } from "@/lib/tree/completionCascade";
 import { isDeadlineOverdue } from "@/lib/tree/status";
 import type { OutlineNode } from "@/lib/tree/types";
-import {
-  formatEffort,
-  formatPriority,
-  parseEffort,
-  parsePriority,
-} from "@/lib/tree/format";
+import { formatEffort, parseEffort } from "@/lib/tree/format";
 import { displayPercentComplete } from "@/lib/tree/percent";
 import {
   KIND_LABELS,
@@ -278,71 +273,6 @@ function NameEditor({
 // ---------------------------------------------------------------------------
 // Priority / Effort / Deadline
 // ---------------------------------------------------------------------------
-
-/**
- * Priority is typed the way Achieve writes it — "A1", "A", empty to clear. Typing beats a
- * dropdown when there are 40-odd values. Unparseable input reverts and flags.
- */
-export function PriorityCell({
-  node,
-  onChange,
-}: {
-  node: OutlineNode;
-  onChange: (letter: PriorityLetter | null, rank: number | null) => void;
-}) {
-  const current = formatPriority(node.priorityLetter, node.priorityRank);
-  const [value, setValue] = useState(current);
-  const [invalid, setInvalid] = useState(false);
-
-  function commit() {
-    const parsed = parsePriority(value);
-
-    if (!parsed) {
-      setInvalid(true);
-      setValue(current);
-      return;
-    }
-
-    setInvalid(false);
-    onChange(parsed.letter, parsed.rank);
-  }
-
-  return (
-    <input
-      value={value}
-      onClick={(event) => event.stopPropagation()}
-      onChange={(event) => {
-        setInvalid(false);
-        setValue(event.target.value);
-      }}
-      onBlur={commit}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") {
-          event.preventDefault();
-          commit();
-          event.currentTarget.blur();
-        } else if (event.key === "Escape") {
-          event.preventDefault();
-          setValue(current);
-          setInvalid(false);
-          event.currentTarget.blur();
-        }
-      }}
-      aria-label="Priority — A, B, C or D, with an optional rank"
-      aria-invalid={invalid}
-      placeholder="—"
-      maxLength={3}
-      className={[
-        "tabular w-full border-none bg-transparent text-center text-[0.8125rem] font-medium uppercase outline-none placeholder:text-ink-faint/50",
-        invalid
-          ? "text-priority-a"
-          : node.priorityLetter
-            ? PRIORITY_COLOR[node.priorityLetter]
-            : "text-ink-faint",
-      ].join(" ")}
-    />
-  );
-}
 
 /**
  * Effort is typed Achieve-style ("2 h", "45 min"). Only a leaf task is editable; a parent

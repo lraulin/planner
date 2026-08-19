@@ -71,16 +71,19 @@ export const BLANK_PRESETS: FilterOption[] = [
 /**
  * Priority presets from screenshot 10.55.58, plus the "up to letter + unprioritized"
  * bands that keep blanks visible so you can still assign them. Values are the strings
- * `formatPriority` produces (`A1`, `A`, `B2`, …) or `""` / null for unset.
+ * `formatPriority` produces (`A1`, `B2`, …) or `""` / null for unset.
  *
  * Achieve's "Only As / Only As & Bs / …" hide blanks. The `*-and-unprioritized` variants
  * are the daily-use pattern: drop letters already decided (often D) without hiding work
  * that still needs a letter.
+ *
+ * Achieve's `Ranked` / `Unranked` / `Only Ranked As` / `Only Unranked As` are **gone**. They
+ * split a letter into the numbered and the bare, and a node no longer has a bare letter —
+ * `Ranked` would mean the same as `Prioritized` and `Unranked` would always be empty. A
+ * filter that cannot exclude anything is worse than absent: it reads as a broken filter.
  */
 export const PRIORITY_PRESETS: FilterOption[] = [
   { id: "only-a1", label: "Only A1" },
-  { id: "only-ranked-as", label: "Only Ranked As" },
-  { id: "only-unranked-as", label: "Only Unranked As" },
   { id: "only-as", label: "Only As" },
   { id: "as-and-unprioritized", label: "As & Unprioritized" },
   { id: "only-as-bs", label: "Only As & Bs" },
@@ -91,8 +94,6 @@ export const PRIORITY_PRESETS: FilterOption[] = [
   { id: "only-bs-cs", label: "Only Bs & Cs" },
   { id: "only-cs", label: "Only Cs" },
   { id: "only-ds", label: "Only Ds" },
-  { id: "ranked", label: "Ranked" },
-  { id: "unranked", label: "Unranked" },
   { id: "prioritized", label: "Prioritized" },
   { id: "unprioritized", label: "Unprioritized" },
 ];
@@ -251,17 +252,12 @@ function matchesOption(
 function matchesPriority(value: string | null, id: string): boolean {
   const raw = value ?? "";
   const letter = raw.charAt(0);
-  const ranked = raw.length > 1;
   const prioritized =
     letter === "A" || letter === "B" || letter === "C" || letter === "D";
 
   switch (id) {
     case "only-a1":
       return raw === "A1";
-    case "only-ranked-as":
-      return letter === "A" && ranked;
-    case "only-unranked-as":
-      return raw === "A";
     case "only-as":
       return letter === "A";
     case "as-and-unprioritized":
@@ -283,11 +279,6 @@ function matchesPriority(value: string | null, id: string): boolean {
       return letter === "C";
     case "only-ds":
       return letter === "D";
-    case "ranked":
-      return prioritized && ranked;
-    case "unranked":
-      // Unranked among those that have a letter: bare A/B/C/D, not empty.
-      return prioritized && !ranked;
     case "prioritized":
       return prioritized;
     case "unprioritized":

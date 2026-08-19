@@ -132,13 +132,18 @@ describe("parsePriority", () => {
     expect(parsePriority(" a1 ")).toEqual({ letter: "A", rank: 1 });
   });
 
-  it("maps Achieve's aa shortcut to A1", () => {
-    // Release log 1.1.10: "Use 'aa' as a shortcut for typing priority a1".
+  it("maps Achieve's aa shortcut to A1, on every letter", () => {
+    // Release log 1.1.10: "Use 'aa' as a shortcut for typing priority a1". Generalized to
+    // every letter now that a rank is not optional — a trailing `a` means rank 1.
     expect(parsePriority("aa")).toEqual({ letter: "A", rank: 1 });
     expect(parsePriority("AA")).toEqual({ letter: "A", rank: 1 });
     expect(parsePriority(" aa ")).toEqual({ letter: "A", rank: 1 });
-    // Not generalized — only aa is documented.
+    expect(parsePriority("ba")).toEqual({ letter: "B", rank: 1 });
+    expect(parsePriority("ca")).toEqual({ letter: "C", rank: 1 });
+    expect(parsePriority("da")).toEqual({ letter: "D", rank: 1 });
+    // Only a trailing `a` is a shortcut; a doubled letter is still a typo.
     expect(parsePriority("bb")).toBeUndefined();
+    expect(parsePriority("ab")).toBeUndefined();
   });
 
   it("clears the priority on empty input", () => {

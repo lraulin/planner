@@ -65,7 +65,10 @@ describeDb("ensureInbox", () => {
     expect(inbox.name).toBe(INBOX_NAME);
     expect(inbox.isInbox).toBe(true);
     expect(inbox.parentId).toBeNull();
-    expect(inbox.priorityLetter).toBe("D");
+    // Deliberately unprioritized rather than Achieve's D. D means "don't do — hide this",
+    // which is the wrong claim about work nobody has triaged yet.
+    expect(inbox.priorityLetter).toBeNull();
+    expect(inbox.priorityRank).toBeNull();
     expect(inbox.state).toBe("in_progress");
   });
 
@@ -236,7 +239,9 @@ describeDb("captureItems", () => {
     for (const id of nodeIds) {
       const node = await nodeById(userId, id);
       expect(node.priorityLetter).toBe("A");
-      expect(node.priorityRank).toBe(2);
+      // The requested rank is a *request*, not a value: "One" and its child "Two" are each
+      // the only A in their own sibling group, so A2 clamps to A1 rather than leaving a gap.
+      expect(node.priorityRank).toBe(1);
       expect(node.deadline?.toISOString()).toBe(deadline.toISOString());
 
       const detail = await loadNodeDetail(userId, id);

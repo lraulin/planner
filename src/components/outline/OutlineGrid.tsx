@@ -29,8 +29,6 @@ import {
   indentNodeAction,
   moveNodeAction,
   moveNodeVerticallyAction,
-  removePriorityGapsAction,
-  reprioritizeUniqueAction,
   outdentNodeAction,
   renameNodeAction,
   setAllCollapsedAction,
@@ -526,7 +524,6 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
             id ? { at: "child", targetId: id } : null,
           ),
         },
-        priorityMaintenance: true,
         conversionKinds: NODE_KINDS,
         outlineZoom: true,
         selection: {
@@ -597,14 +594,6 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
           onExpandThroughLevel: (level) =>
             apply(() => expandThroughDepthAction(depthForOutlineLevel(level))),
           onChooseExpandThroughLevel: () => setExpandLevelPickerOpen(true),
-          // Priority repair is scoped to one sibling group and the row names it, so it takes the
-          // row rather than the selection — right-clicking an unselected row must not renumber
-          // the selected row's siblings.
-          onRemovePriorityGaps: () => {
-            if (id) apply(() => removePriorityGapsAction(id));
-          },
-          onReprioritizeUnique: (nodeId) =>
-            apply(() => reprioritizeUniqueAction(nodeId)),
           onConvert: (nodeId, kind) => {
             setPendingConversion({ nodeId, targetKind: kind });
           },

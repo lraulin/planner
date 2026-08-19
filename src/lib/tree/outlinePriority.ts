@@ -88,3 +88,25 @@ export function priorityDropFromPosition(
   }
   return null;
 }
+
+/**
+ * Priority assignment by typing, over one parent's complete child set.
+ *
+ * The counterpart to `planSiblingPriorityDrop` for the keyboard path, and the reason the
+ * outline can promise that a letter always carries a rank: `A` appends to the end of that
+ * letter, `A1` inserts and pushes the rest down, a rank past the end clamps to the end, and
+ * `null` unranks and closes the gap left behind.
+ *
+ * `siblings` must be the **complete** set of children of the node's parent — every caller
+ * loads it from the database rather than from whatever the grid is showing. A renumber that
+ * only accounted for visible rows would silently collapse the ranks of everything a filter
+ * had hidden.
+ */
+export function planOutlinePriorityAssign(
+  siblings: readonly PriorityNode[],
+  nodeId: string,
+  letter: PriorityLetter | null,
+  rank: number | null,
+): PriorityAssignment[] {
+  return engine.planAssign([...siblings], nodeId, letter, rank);
+}

@@ -65,39 +65,25 @@ describe("matchesFilter — priority presets", () => {
   const p = (id: string, value: string | null) =>
     matchesFilter(value, optionsFilter([id]), "priority", TODAY);
 
-  it("isolates A1, ranked As, and bare As", () => {
+  it("isolates A1 from the rest of the As", () => {
     expect(p("only-a1", "A1")).toBe(true);
     expect(p("only-a1", "A2")).toBe(false);
-    expect(p("only-a1", "A")).toBe(false);
 
-    expect(p("only-ranked-as", "A1")).toBe(true);
-    expect(p("only-ranked-as", "A")).toBe(false);
-    expect(p("only-ranked-as", "B1")).toBe(false);
-
-    expect(p("only-unranked-as", "A")).toBe(true);
-    expect(p("only-unranked-as", "A1")).toBe(false);
-
-    expect(p("only-as", "A")).toBe(true);
+    expect(p("only-as", "A1")).toBe(true);
     expect(p("only-as", "A3")).toBe(true);
-    expect(p("only-as", "B")).toBe(false);
+    expect(p("only-as", "B1")).toBe(false);
   });
 
-  it("covers letter bands and ranked/unranked", () => {
+  it("covers letter bands and prioritized/unprioritized", () => {
     expect(p("only-as-bs", "B2")).toBe(true);
-    expect(p("only-as-bs", "C")).toBe(false);
+    expect(p("only-as-bs", "C1")).toBe(false);
     expect(p("only-as-bs-cs", "C1")).toBe(true);
-    expect(p("only-as-bs-cs", "D")).toBe(false);
+    expect(p("only-as-bs-cs", "D1")).toBe(false);
 
-    expect(p("ranked", "B2")).toBe(true);
-    expect(p("ranked", "B")).toBe(false);
-    expect(p("unranked", "B")).toBe(true);
-    expect(p("unranked", "B2")).toBe(false);
-    expect(p("unranked", null)).toBe(false);
-
-    expect(p("prioritized", "D")).toBe(true);
+    expect(p("prioritized", "D1")).toBe(true);
     expect(p("unprioritized", null)).toBe(true);
     expect(p("unprioritized", "")).toBe(true);
-    expect(p("unprioritized", "A")).toBe(false);
+    expect(p("unprioritized", "A1")).toBe(false);
   });
 
   it("keeps unprioritized rows in the 'up to letter' bands", () => {

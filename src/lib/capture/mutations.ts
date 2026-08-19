@@ -67,9 +67,13 @@ export async function ensureInbox(userId: string): Promise<string> {
   });
 
   await saveNodeDetail(userId, id, {
-    // Achieve's defaults: lowest priority, because nothing in here has been prioritised
-    // yet, and in-progress, because an inbox with something in it is work outstanding.
-    priorityLetter: "D",
+    // In-progress, because an inbox with something in it is work outstanding.
+    //
+    // Deliberately **not** Achieve's `D` default. Unprioritized and D are different claims:
+    // D means "don't do — hide this, but keep it in case I reconsider", which is precisely
+    // the wrong thing to say about work nobody has looked at yet. Leaving it blank keeps the
+    // inbox in the state it actually occupies, undecided, and stops it being filed away with
+    // Someday/Maybe by any view that hides D.
     state: "in_progress",
   });
 

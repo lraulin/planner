@@ -7,8 +7,6 @@ import {
   createNodeAction,
   deleteNodeAction,
   moveNodeAction,
-  removePriorityGapsAction,
-  reprioritizeUniqueAction,
 } from "@/app/plan/outline/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { ConversionDialog } from "@/components/outline/ConversionDialog";
@@ -138,8 +136,6 @@ export function useNodeCommandDeck({
       onRename,
       onCopyAsText,
       onAttachFromClipboard: attachFromClipboard,
-      onRemovePriorityGaps: () => {},
-      onReprioritizeUnique: (id: string) => apply(() => reprioritizeUniqueAction(id)),
       onConvert,
       onSetState: (ids: readonly string[], state: NodeState) => {
         // One `request` per row. `useStateChange` cascades each branch and asks once per row
@@ -237,7 +233,6 @@ export function useNodeCommandDeck({
       return {
         createKinds,
         createChild,
-        priorityMaintenance: true,
         conversionKinds: NODE_KINDS,
         clipboard: {
           pickedUp: clipboard?.count ?? 0,
@@ -274,9 +269,6 @@ export function useNodeCommandDeck({
         },
         actions: {
           ...actions,
-          onRemovePriorityGaps: () => {
-            if (id) apply(() => removePriorityGapsAction(id));
-          },
           /*
            * Bound to the row this capability set is *about*, not to the selection: the row menu
            * asks about the row that was right-clicked, and `New subtask` there has to file the

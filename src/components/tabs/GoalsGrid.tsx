@@ -20,18 +20,14 @@ import {
   purposeColumn,
   stateColumn,
 } from "@/components/grid/commonColumns";
-import {
-  DeadlineCell,
-  NameCell,
-  PriorityCell,
-  TextCell,
-} from "@/components/grid/cells";
+import { DeadlineCell, NameCell, TextCell } from "@/components/grid/cells";
 import { NodeDetailDrawer } from "@/components/detail/NodeDetailDrawer";
 import { setGoalFieldAction } from "@/app/plan/outline/detail-actions";
 import { ToolbarSelect, ToolbarToggle } from "./tabChrome";
 import { useGridTab } from "./useGridTab";
 import { useNodeCommandDeck } from "@/components/grid/useNodeCommandDeck";
 import type { OutlineColumnCtx } from "@/components/outline/outlineColumns";
+import { LetterRankCell } from "@/components/grid/LetterRankCell";
 
 type ViewId = "all" | "active" | "completed";
 
@@ -79,10 +75,11 @@ function buildColumns(today: string | null): ColumnDef<GoalsCtx>[] {
       sortValue: (row) =>
         formatPriority(row.node.priorityLetter, row.node.priorityRank),
       render: (row, ctx) => (
-        <PriorityCell
-          key={`priority:${formatPriority(row.node.priorityLetter, row.node.priorityRank)}`}
-          node={row.node}
-          onChange={(letter, rank) => ctx.onPriorityChange(row.node, letter, rank)}
+        <LetterRankCell
+          letter={row.node.priorityLetter}
+          rank={row.node.priorityRank}
+          onAssign={(letter, rank) => ctx.onPriorityChange(row.node, letter, rank)}
+          ariaLabel="Priority — A, B, C or D with a rank"
         />
       ),
     },

@@ -16,6 +16,7 @@ import {
 } from "@/lib/day/sync";
 import {
   applyStateTransition,
+  assignPriorityAmongSiblings,
   moveNode,
   reopenSettledAncestors,
 } from "@/lib/tree/mutations";
@@ -324,6 +325,10 @@ async function requireNode(tx: Executor, userId: string, nodeId: string) {
       state: nodes.state,
       deferredDate: nodes.deferredDate,
       targetStartDate: nodes.targetStartDate,
+      // Read so a patch carrying only half a priority can supply the other half from the
+      // row rather than silently clearing it.
+      priorityLetter: nodes.priorityLetter,
+      priorityRank: nodes.priorityRank,
     })
     .from(nodes)
     .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)))
@@ -480,6 +485,24 @@ export async function saveNodeDetail(
       nextStart != null &&
       toDateKey(nextStart) < toDateKey(nextDeferred);
 
+    // Take priority out of the verbatim write; it is applied below through the ranking
+    // engine instead. A patch may carry only one of the two fields (the agent API requires
+    // a letter alongside a rank, but the drawer may clear just the letter), so the missing
+    // half comes from the row as it stands.
+    const touchesPriority = "priorityLetter" in core || "priorityRank" in core;
+    const priorityEdit = touchesPriority
+      ? {
+          letter:
+            "priorityLetter" in core
+              ? (core.priorityLetter ?? null)
+              : node.priorityLetter,
+          rank:
+            "priorityRank" in core ? (core.priorityRank ?? null) : node.priorityRank,
+        }
+      : null;
+    delete (core as { priorityLetter?: unknown }).priorityLetter;
+    delete (core as { priorityRank?: unknown }).priorityRank;
+
     await tx
       .update(nodes)
       .set({
@@ -495,14 +518,25 @@ export async function saveNodeDetail(
         toDateKey(node.deferredDate) <= localDateKey(new Date())
           ? { deferredDate: null }
           : {}),
-        // A rank without a letter is meaningless, so clear it alongside — matching
-        // `setPriority` in the tree mutations.
-        ...("priorityLetter" in core && core.priorityLetter === null
-          ? { priorityRank: null }
-          : {}),
         updatedAt: new Date(),
       })
       .where(and(eq(nodes.id, nodeId), eq(nodes.userId, userId)));
+
+    // Priority is not written verbatim. A node's priority is blank or a letter *with* a
+    // rank, dense and unique among its siblings, which cannot be maintained one row at a
+    // time — so the assignment goes through the shared ranking engine, which decides where
+    // this node lands and renumbers whatever else moves. Same path as the grid's inline
+    // edit; see `setPriority` in the tree mutations.
+    if (priorityEdit) {
+      await assignPriorityAmongSiblings(
+        tx,
+        userId,
+        nodeId,
+        node.parentId,
+        priorityEdit.letter,
+        priorityEdit.rank,
+      );
+    }
 
     if (node.type === "result_area") {
       const set = pick(values.resultArea, RESULT_AREA_KEYS);
