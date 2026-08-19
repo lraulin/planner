@@ -12,6 +12,7 @@ import {
   TextField,
 } from "@/components/detail/fields";
 import { effectiveCategory, effectiveFlow } from "@/lib/finances/analytics";
+import { SAVINGS_KINDS } from "@/lib/finances/available";
 import { FLOW_KINDS, flowLabel } from "@/lib/finances/flowLabels";
 import { formatUsd } from "@/lib/finances/money";
 import type { TransactionListRow } from "@/lib/finances/types";
@@ -127,7 +128,12 @@ function TransactionForm({
     flowOverride: row.flowOverride,
     excludeFromBaseline: row.excludeFromBaseline,
     eventLabel: row.eventLabel,
+    plannedWithdrawal: row.plannedWithdrawal,
   }));
+  // Money leaving a savings account: the only row where "was this planned?" is a real
+  // question. `SAVINGS_KINDS` rather than a literal so this and the arithmetic cannot drift
+  // apart about what a reserve account is.
+  const isSavingsWithdrawal = SAVINGS_KINDS.has(row.accountKind) && row.amountCents < 0;
   const [dirty, setDirty] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -150,8 +156,13 @@ function TransactionForm({
           notes: draft.notes,
           flowOverride: draft.flowOverride,
           excludeFromBaseline: draft.excludeFromBaseline,
-          // Clearing the flag clears the name with it, the same rule `setOneOff` follows.
-          eventLabel: draft.excludeFromBaseline ? draft.eventLabel : "",
+          // Clearing either flag clears the name with it, the same rule `setOneOff` follows.
+          // The two share one label column, so the name survives while *either* holds it.
+          eventLabel:
+            draft.excludeFromBaseline || draft.plannedWithdrawal
+              ? draft.eventLabel
+              : "",
+          plannedWithdrawal: draft.plannedWithdrawal,
         });
         if (!result.ok) {
           setError(result.error);
@@ -208,16 +219,38 @@ function TransactionForm({
               onChange={(checked) => patch("excludeFromBaseline", checked)}
               hint="For real money that says nothing about what next month costs. An annual premium is not one of these."
             />
-            {draft.excludeFromBaseline && (
+            {(draft.excludeFromBaseline || draft.plannedWithdrawal) && (
               <TextField
                 label="Event"
                 value={draft.eventLabel}
                 onChange={(value) => patch("eventLabel", value)}
-                placeholder="Wedding, House move"
-                hint="Names the event so its charges total together on the dashboard."
+                placeholder={
+                  draft.plannedWithdrawal
+                    ? "Handgun, New laptop"
+                    : "Wedding, House move"
+                }
+                hint={
+                  draft.plannedWithdrawal
+                    ? "Names what the money was saved for, so the dashboard can say why this draw was fine."
+                    : "Names the event so its charges total together on the dashboard."
+                }
               />
             )}
           </Section>
+
+          {/* Only offered where it can mean anything. On a card charge or a deposit the
+              checkbox would be a question with no answer, and a flag that can be set on
+              rows it does not describe is a flag nobody can trust on the rows it does. */}
+          {isSavingsWithdrawal && (
+            <Section title="Savings">
+              <CheckboxField
+                label="Planned — this is what the money was saved for"
+                checked={draft.plannedWithdrawal}
+                onChange={(checked) => patch("plannedWithdrawal", checked)}
+                hint="Keeps the pay period it falls in counted as covering itself. Leave off for a draw that covered an overspend — that is the one this dashboard is meant to catch."
+              />
+            </Section>
+          )}
 
           <Section title="From the bank">
             <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">

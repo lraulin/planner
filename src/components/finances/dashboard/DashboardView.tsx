@@ -24,6 +24,12 @@ import {
   type SpendHeld,
 } from "@/lib/finances/available";
 import type { Payday } from "@/lib/finances/classify/income";
+import { buildPayPeriods } from "@/lib/finances/classify/payPeriods";
+import {
+  periodResults,
+  periodScorecard,
+  type PeriodLedgerRow,
+} from "@/lib/finances/periodResult";
 import {
   recurringSpendRate,
   staleSubscriptions,
@@ -44,6 +50,7 @@ import {
   type SettingCodec,
 } from "@/components/settings/SettingsProvider";
 import { Panel, PanelEmpty, StatRow, StatTile } from "../insights/Panel";
+import { PeriodScorecardPanel } from "./PeriodScorecard";
 
 /**
  * The Finances dashboard: current position, and what is left to spend before the next paycheck.
@@ -56,6 +63,22 @@ import { Panel, PanelEmpty, StatRow, StatTile } from "../insights/Panel";
  * `today` is the reader's local day and is null until hydration, so the day count renders as a
  * dash rather than flashing a wrong one (`agent-os/standards/development/dates.md`).
  */
+
+/**
+ * Where the pay-period calendar starts: the oldest row the scorecard was given.
+ *
+ * `buildPayPeriods` tiles a range, so handing it a range wider than the ledger would invent
+ * windows with no transactions in them, and every one of those would score as a period with
+ * nothing in it. Falling back to `today` yields an empty calendar, which is the honest
+ * answer when there are no rows at all.
+ */
+function earliestKey(rows: readonly PeriodLedgerRow[], today: string): string {
+  let earliest = today;
+  for (const row of rows) {
+    if (row.transactionDate < earliest) earliest = row.transactionDate;
+  }
+  return earliest;
+}
 
 const PAYDAY_CODEC: SettingCodec<{
   anchorDate: string | null;
@@ -74,6 +97,7 @@ export function DashboardView({
   billCharges,
   spendCharges,
   connections,
+  periodRows,
 }: {
   accounts: readonly FinanceAccountRow[];
   pending: readonly PendingRow[];
@@ -83,6 +107,7 @@ export function DashboardView({
   billCharges: readonly BillCharge[];
   spendCharges: Record<string, CommitmentCharge[]>;
   connections: readonly BankConnectionRow[];
+  periodRows: readonly PeriodLedgerRow[];
 }) {
   const today = useToday();
   const formatDate = useDateFormatter();
@@ -125,12 +150,30 @@ export function DashboardView({
     }
     const stale = today ? staleSubscriptions(bills, chargesByName, today) : [];
 
+    // The backward figure. Periods are rebuilt here rather than on the server for the same
+    // reason the day count is: the calendar has to end on the reader's today, and a
+    // server-decided today makes the last bar depend on the deploy region.
+    const scorecard = today
+      ? periodScorecard(
+          periodResults(
+            accounts,
+            periodRows,
+            buildPayPeriods(paydays, {
+              startKey: earliestKey(periodRows, today),
+              endKey: today,
+            }),
+            today,
+          ),
+        )
+      : { latest: null, history: [], selfFundedCount: 0 };
+
     return {
       position,
       payday,
       setAsides,
       spendHeld,
       stale,
+      scorecard,
       available: availableToSpend(accounts, pending, setAsides, spendHeld),
     };
   }, [
@@ -141,11 +184,13 @@ export function DashboardView({
     paydays,
     billCharges,
     spendCharges,
+    periodRows,
     override,
     today,
   ]);
 
-  const { available, position, payday, setAsides, spendHeld, stale } = analysis;
+  const { available, position, payday, setAsides, spendHeld, stale, scorecard } =
+    analysis;
   const openAccounts = accounts.filter((account) => account.closedAt === null);
 
   return (
@@ -201,6 +246,8 @@ export function DashboardView({
           detail="Checking + savings − cards"
         />
       </StatRow>
+
+      <PeriodScorecardPanel scorecard={scorecard} formatDate={formatDate} />
 
       <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2">
         <Panel

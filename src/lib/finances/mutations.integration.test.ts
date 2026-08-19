@@ -12,7 +12,6 @@ import {
   deleteRecurringSpend,
   deleteTransaction,
   renameRecurringBill,
-  setPlannedWithdrawal,
   setSubscriptionStatus,
   updateAccount,
   updateTransaction,
@@ -255,38 +254,43 @@ describeDb("planned withdrawals", () => {
 
   it("declares a withdrawal planned and names it", async () => {
     expect(
-      await setPlannedWithdrawal(userId, [transactionId], {
+      await updateTransaction(userId, transactionId, {
         plannedWithdrawal: true,
         eventLabel: "  Handgun  ",
       }),
-    ).toBe(1);
+    ).toBeUndefined();
     const saved = await getTransaction(userId, transactionId);
     expect(saved?.plannedWithdrawal).toBe(true);
     expect(saved?.eventLabel).toBe("Handgun");
   });
 
   it("clears the label when the declaration is taken back", async () => {
-    await setPlannedWithdrawal(userId, [transactionId], {
+    await updateTransaction(userId, transactionId, {
       plannedWithdrawal: true,
       eventLabel: "Handgun",
     });
-    await setPlannedWithdrawal(userId, [transactionId], { plannedWithdrawal: false });
+    await updateTransaction(userId, transactionId, {
+      plannedWithdrawal: false,
+      eventLabel: "",
+    });
     const saved = await getTransaction(userId, transactionId);
     expect(saved?.plannedWithdrawal).toBe(false);
     expect(saved?.eventLabel).toBe("");
   });
 
   it("leaves an existing label alone when none is supplied", async () => {
-    await setPlannedWithdrawal(userId, [transactionId], {
+    await updateTransaction(userId, transactionId, {
       plannedWithdrawal: true,
       eventLabel: "Handgun",
     });
-    await setPlannedWithdrawal(userId, [transactionId], { plannedWithdrawal: true });
+    await updateTransaction(userId, transactionId, { plannedWithdrawal: true });
     expect((await getTransaction(userId, transactionId))?.eventLabel).toBe("Handgun");
   });
 
-  it("writes nothing for an empty id list", async () => {
-    expect(await setPlannedWithdrawal(userId, [], { plannedWithdrawal: true })).toBe(0);
+  it("leaves the flag alone when the edit does not mention it", async () => {
+    await updateTransaction(userId, transactionId, { plannedWithdrawal: true });
+    await updateTransaction(userId, transactionId, { notes: "unrelated" });
+    expect((await getTransaction(userId, transactionId))?.plannedWithdrawal).toBe(true);
   });
 });
 
@@ -299,7 +303,7 @@ describeDb("planned withdrawal isolation", () => {
     ownerId = await makeUser();
     intruderId = await makeUser();
     ({ transactionId } = await seed(ownerId));
-    await setPlannedWithdrawal(ownerId, [transactionId], {
+    await updateTransaction(ownerId, transactionId, {
       plannedWithdrawal: true,
       eventLabel: "Handgun",
     });
@@ -312,7 +316,7 @@ describeDb("planned withdrawal isolation", () => {
 
   it("does not let a second user change the flag", async () => {
     await expect(
-      setPlannedWithdrawal(intruderId, [transactionId], { plannedWithdrawal: false }),
+      updateTransaction(intruderId, transactionId, { plannedWithdrawal: false }),
     ).rejects.toThrow("Transaction not found.");
     const saved = await getTransaction(ownerId, transactionId);
     expect(saved?.plannedWithdrawal).toBe(true);

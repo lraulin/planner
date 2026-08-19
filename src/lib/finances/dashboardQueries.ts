@@ -26,9 +26,11 @@ import {
   type StoredSpend,
 } from "./commitments";
 import { numericStringToCents } from "./money";
+import type { PeriodLedgerRow } from "./periodResult";
 import { listAccounts } from "./queries";
 import type { FinanceAccountRow } from "./types";
 import { selectWorkingPending } from "./workingPending";
+import { shiftDateKey, toDateKey } from "@/lib/schedule/geometry";
 
 /**
  * Reads for the insights dashboard. Every one takes `userId` and scopes on it.
@@ -84,6 +86,7 @@ export async function loadInsightsRows(
       transferGroupId: financeTransactions.transferGroupId,
       excludeFromBaseline: financeTransactions.excludeFromBaseline,
       eventLabel: financeTransactions.eventLabel,
+      plannedWithdrawal: financeTransactions.plannedWithdrawal,
     })
     .from(financeTransactions)
     .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
@@ -106,6 +109,7 @@ export async function loadInsightsRows(
     transferGroupId: row.transferGroupId,
     excludeFromBaseline: row.excludeFromBaseline,
     eventLabel: row.eventLabel,
+    plannedWithdrawal: row.plannedWithdrawal,
   }));
 }
 
@@ -216,7 +220,22 @@ export type DashboardData = {
    * list — propose, never apply.
    */
   review: RecurringMerchant[];
+  /**
+   * Recent ledger rows, for the period scorecard (`src/lib/finances/periodResult.ts`).
+   *
+   * Trimmed to {@link PERIOD_LEDGER_DAYS}, because a historical balance is reconstructed by
+   * undoing what posted *after* a date — so only rows newer than the oldest period shown are
+   * ever read, and shipping three years of history to the client to display six bars would
+   * be a payload nobody looks at.
+   */
+  periodRows: PeriodLedgerRow[];
 };
+
+/**
+ * How far back the scorecard's ledger reaches: comfortably more than the six fortnights the
+ * panel shows, so the oldest bar still has every row it needs to walk back through.
+ */
+export const PERIOD_LEDGER_DAYS = 300;
 
 export async function loadDashboard(userId: string): Promise<DashboardData> {
   const [accounts, rows, bills, spend, pendingRows, connections] = await Promise.all([
@@ -292,7 +311,29 @@ export async function loadDashboard(userId: string): Promise<DashboardData> {
       if (entry.declared) return false;
       return !index.has(entry.merchant);
     }),
+    periodRows: rows
+      .filter((row) => row.transactionDate >= periodLedgerCutoff())
+      .map((row) => ({
+        accountId: row.accountId,
+        transactionDate: row.transactionDate,
+        description: row.description,
+        amountCents: row.amountCents,
+        transferGroupId: row.transferGroupId,
+        plannedWithdrawal: row.plannedWithdrawal,
+        eventLabel: row.eventLabel,
+      })),
   };
+}
+
+/**
+ * The oldest date the scorecard's ledger keeps.
+ *
+ * Uses the server's day only to size a window, never to decide what "today" is — the figures
+ * themselves take `todayKey` from the reader (`agent-os/standards/development/dates.md`). A
+ * window an hour off at a timezone boundary costs nothing; a headline an hour off would not.
+ */
+function periodLedgerCutoff(): string {
+  return shiftDateKey(toDateKey(new Date()), -PERIOD_LEDGER_DAYS);
 }
 
 export type AccountCarryingCost = {

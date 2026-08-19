@@ -1,6 +1,6 @@
 # Period result — living within my means, measured
 
-**Status: active**
+**Status: frozen / complete** — verified 2026-08-18
 Spec folder: `agent-os/specs/2026-08-18-2005-period-result/`
 
 ## Spec relationships
@@ -98,30 +98,62 @@ second one.
 
 ## Acceptance criteria
 
-- [ ] The Dashboard shows the last **closed** pay period's result in dollars, and whether
-      it was self-funded.
-- [ ] The previous ~6 closed periods appear as a compact history with a "N of 6
-      self-funded" summary.
-- [ ] A period that closed positive only because of an unplanned savings withdrawal is
-      **not** marked self-funded, and says so.
-- [ ] Marking that same withdrawal as planned flips the period to self-funded, and the
-      label ("Handgun") is visible as the reason.
-- [ ] The in-progress period is shown as in progress, never as a failure.
-- [ ] Reconstructed balances agree with `balance_after` on the checking and savings rows
-      that carry it — verified against the live database, which has it on 183/185 and
-      78/80 rows since Aug 2025.
-- [ ] A second user cannot read or change the first user's flag through any query,
-      mutation, action or agent tool.
-- [ ] `npm run smoke` passes with the dev server running.
+Verified 2026-08-18 against the live database and a full gate run (lint, typecheck, 3,560
+tests across 276 files, `next build`, `npm run smoke` over all 57 routes).
+
+- [x] The Dashboard shows the last **closed** pay period's result and whether it was
+      self-funded. Live: **−$1,510.40 · short · period ending 8/4/2026**, under Available
+      to Spend.
+- [x] The previous 6 closed periods appear as a dated bar history with an "N of 6" line.
+      Live: **1 of 6**, bars ending 5/26 · 6/9 · 6/23 · 7/7 · 7/21 · 8/4.
+- [x] Reconstruction is exact. Hand-computed from the raw ledger, the 8/4 close is
+      −$2,463.24; the cards' headline-minus-ledger anchor offset is $952.84; the panel
+      shows −$1,510.40, which is the sum to the cent. This is the check that proves the
+      module anchors to the headline instead of summing a ledger that does not start at
+      account opening.
+- [x] A period that closed positive only on an unplanned savings withdrawal is not marked
+      self-funded and names the draw. Pinned in `periodResult.test.ts`; the live latest
+      period had no draws, so the message path is covered by test only.
+- [x] Marking a withdrawal planned removes it from the period's charge. Walked end to end
+      on the real 2026-06-29 −$1,463.00 savings draw: ticked in the register drawer, saved,
+      and the 7/7 bar shortened by that amount on reload. **Test data reverted afterwards.**
+- [x] The in-progress period is never scored. Live: today is 2026-08-18, the current period
+      ends 8/18 and payday is 8/19, and the newest bar shown is 8/4.
+- [x] A second user cannot read or change the flag
+      (`mutations.integration.test.ts`, "planned withdrawal isolation").
+- [x] `npm run smoke` passes with the dev server running.
+
+### Known limitation, found during verification
+
+**The verdict is sensitive to where a period boundary falls in the card-payment cycle.**
+The position subtracts the full card balance, so a period closing just after a card payment
+scores better than one closing just before, for reasons that are not behaviour. The single
+self-funded period in the live history (ending 7/21) had card payments of $633.94 and
+$299.36 land on 7/17 and 7/21.
+
+This is not a defect in the arithmetic — under this app's premise the card balance _is_
+money already spent, and the user's own rule is to end the period at zero or better on
+exactly that basis. But it means **adjacent periods are noisier than the trend**, and the
+row of bars should be read as a shape rather than six independent verdicts. Left as-is
+rather than smoothed: a measure that quietly adjusted for when the cards were paid would be
+easier to like and harder to trust. Worth revisiting if the noise makes the panel
+ignorable — the follow-up would be scoring against the card cycle rather than the pay
+cycle, which is a different spec.
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Pure code polish
 is omitted deliberately.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                               | Why                                                                                                                                                                                                                           |
+| --- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Success is `resultCents − unplannedSavings`, not "closed positive and drew nothing"  | Sharper and fairer. Drawing $500 and closing at $600 means the period would have held at $100 on its own, so it passes; drawing $500 and closing at $200 is a $300 shortfall. The plan's phrasing would have failed the first |
+| 2   | A savings draw whose other leg lands outside checking/cards does not count           | Money moved to a brokerage never funded this period's living, and penalising it would be wrong. Uses `transfer_group_id`, which the classifier had set on all 26 real draws; an unpaired draw still counts                    |
+| 3   | `updateTransaction` carries the flag; the planned `setPlannedWithdrawal` was dropped | The drawer already writes through `updateTransaction`. A second mutation for one field would be two write paths for one concern, against `development/clean-code`. Written, then removed before the UI landed                 |
+| 4   | `TransactionListRow` gained `accountKind`                                            | The checkbox is offered only on a savings outflow. A flag settable on rows it does not describe is a flag nobody can trust on the rows it does — and the register row did not know its account's kind                         |
+| 5   | The flag shares `event_label` with the one-off flag                                  | One label column, two owners. The name is cleared only when _neither_ flag holds it, so ticking one does not wipe the other's name                                                                                            |
+| 6   | Bars carry their end date                                                            | Undated bars are a shape. The date is what lets a bad period be looked up in the register, which is the only action the panel can prompt                                                                                      |
+| 7   | Known limitation recorded rather than fixed: card-cycle sensitivity                  | See the acceptance section. Adjusting for when the cards were paid would make the number easier to like and harder to trust                                                                                                   |
 
 ---
 

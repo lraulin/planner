@@ -804,6 +804,20 @@ period)` so money already spent stops being held twice and only going over bites
   what could be cancelled or skipped to fix it. Explicitly wanted, explicitly cut
   from the commitments spec; the annual/monthly cost columns already rank the
   candidates, so what is missing is turning a red number into a guided decision.
+- **✅ Period result — "living within my means", shipped 2026-08-18.**
+  `agent-os/specs/2026-08-18-2005-period-result/`. The measurement half of the item below,
+  and the first surface that scores rather than reports. For every **closed** pay period:
+  checking plus cash less card balances at the close, with savings excluded and any
+  unplanned draw from it subtracted — so a period rescued from the reserve is not a
+  success. Cash flow could not answer this: it is a flow over an interval and ignores both
+  the opening position and a card balance carried in. Balances are reconstructed by
+  anchoring to today's headline and walking backwards. A withdrawal can be declared
+  **planned** (the thing the money was saved for) and then does not count against its
+  period. Sits under Available to Spend on the Dashboard with a dated six-period history.
+  On the real data at ship: **1 of 6** recent periods covered themselves.
+  _Known limitation, recorded not smoothed:_ subtracting the full card balance makes the
+  verdict sensitive to where a period boundary falls relative to card payments, so the row
+  of bars is a trend rather than six independent verdicts.
 - **Next — earmarked savings (open question, not yet designed).** Bills and recurring
   spend both accrue toward a charge that is _coming_. There is no way to hold money for
   something with no date: an emergency fund, or saving toward a specific thing. The

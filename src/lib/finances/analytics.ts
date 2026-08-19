@@ -65,6 +65,8 @@ export type AnalyticsRow = {
   transferGroupId: string | null;
   excludeFromBaseline: boolean;
   eventLabel: string;
+  /** Declared: this savings withdrawal is what the money was saved for. */
+  plannedWithdrawal: boolean;
 };
 
 /**

@@ -81,6 +81,8 @@ export type TransactionEdit = {
   flowOverride?: FinanceFlowKind | null;
   excludeFromBaseline?: boolean;
   eventLabel?: string;
+  /** Declares a savings withdrawal to be what the money was saved for. */
+  plannedWithdrawal?: boolean;
 };
 
 /**
@@ -103,6 +105,7 @@ export async function updateTransaction(
     flowOverride?: FinanceFlowKind | null;
     excludeFromBaseline?: boolean;
     eventLabel?: string;
+    plannedWithdrawal?: boolean;
     updatedAt: Date;
   } = { updatedAt: new Date() };
 
@@ -118,6 +121,9 @@ export async function updateTransaction(
     values.excludeFromBaseline = edit.excludeFromBaseline;
   }
   if (edit.eventLabel !== undefined) values.eventLabel = edit.eventLabel.trim();
+  if (edit.plannedWithdrawal !== undefined) {
+    values.plannedWithdrawal = edit.plannedWithdrawal;
+  }
 
   await db
     .update(financeTransactions)
@@ -426,59 +432,6 @@ export async function setOneOff(
   // baseline would show up in the events breakdown with nothing behind it.
   if (edit.eventLabel !== undefined) values.eventLabel = edit.eventLabel.trim();
   else if (!edit.excludeFromBaseline) values.eventLabel = "";
-
-  await db
-    .update(financeTransactions)
-    .set(values)
-    .where(
-      and(
-        eq(financeTransactions.userId, userId),
-        inArray(financeTransactions.id, [...transactionIds]),
-      ),
-    );
-
-  return owned.length;
-}
-
-/**
- * Declare a savings withdrawal planned — the thing the money was being saved for — or take
- * that declaration back.
- *
- * Separate from {@link setOneOff} despite the near-identical shape, because the two flags
- * answer different questions and share nothing but a table. `excludeFromBaseline` says "do
- * not average this into what a month costs"; this says "this reserve draw was the point of
- * the reserve". Folding them into one edit would make it possible to clear one by writing
- * the other.
- *
- * The label travels with it so the panel can name the purchase. Clearing the flag clears
- * the label for the same reason `setOneOff` does: a name with no declaration behind it
- * shows up in the reasons list attached to nothing.
- */
-export async function setPlannedWithdrawal(
-  userId: string,
-  transactionIds: readonly string[],
-  edit: { plannedWithdrawal: boolean; eventLabel?: string },
-): Promise<number> {
-  if (transactionIds.length === 0) return 0;
-
-  const owned = await db
-    .select({ id: financeTransactions.id })
-    .from(financeTransactions)
-    .where(
-      and(
-        eq(financeTransactions.userId, userId),
-        inArray(financeTransactions.id, [...transactionIds]),
-      ),
-    );
-  if (owned.length !== transactionIds.length) throw new Error("Transaction not found.");
-
-  const values: {
-    plannedWithdrawal: boolean;
-    eventLabel?: string;
-    updatedAt: Date;
-  } = { plannedWithdrawal: edit.plannedWithdrawal, updatedAt: new Date() };
-  if (edit.eventLabel !== undefined) values.eventLabel = edit.eventLabel.trim();
-  else if (!edit.plannedWithdrawal) values.eventLabel = "";
 
   await db
     .update(financeTransactions)

@@ -204,6 +204,8 @@ export type TransactionListRow = {
   id: string;
   accountId: string;
   accountName: string;
+  /** Decides which per-row controls make sense — savings withdrawals get the planned flag. */
+  accountKind: FinanceAccountKind;
   transactionDate: string;
   postedDate: string | null;
   /**

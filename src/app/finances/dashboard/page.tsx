@@ -35,6 +35,7 @@ export default async function FinancesDashboardPage() {
           billCharges={data.billCharges}
           spendCharges={Object.fromEntries(data.spendCharges)}
           connections={data.connections}
+          periodRows={data.periodRows}
         />
       </Suspense>
     </AppShell>

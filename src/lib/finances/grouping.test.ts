@@ -11,6 +11,7 @@ function row(
     id,
     accountId: "acct",
     accountName: extras.accountName ?? "Checking",
+    accountKind: extras.accountKind ?? "checking",
     transactionDate: date,
     postedDate: null,
     pending: false,
