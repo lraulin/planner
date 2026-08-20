@@ -950,23 +950,29 @@ describeDb("shelving and day lines", () => {
       type: "task",
       name: "File in September",
     });
-    // Explicit calendar days, not MON (tomorrow). MON is 2026-08-15 now, which is
-    // the old shelf date, so startKey < untilKey would be false and the plan would stay.
-    await planNodeForDay(userId, early, "2026-08-01");
-    await planNodeForDay(userId, late, "2026-09-15");
+    // Relative to today, never absolute: the shelf date has to stay in the *future* or
+    // the deferral has already expired, the project is no longer postponed, and nothing
+    // gets cleared. Two earlier versions of this test hard-coded a date that later
+    // arrived.
+    const shelfUntil = dayKey(10);
+    const beforeShelf = dayKey(1);
+    const afterShelf = dayKey(30);
+
+    await planNodeForDay(userId, early, beforeShelf);
+    await planNodeForDay(userId, late, afterShelf);
 
     await saveNodeDetail(userId, projectId, {
       name: "Pay Taxes",
-      deferredDate: fromDateKey("2026-08-20"),
+      deferredDate: fromDateKey(shelfUntil),
     });
 
     expect(await plannedDayForNode(userId, early)).toBeNull();
     const [earlyRow] = await db.select().from(nodes).where(eq(nodes.id, early));
     expect(earlyRow.targetStartDate).toBeNull();
 
-    expect(await plannedDayForNode(userId, late)).toBe("2026-09-15");
+    expect(await plannedDayForNode(userId, late)).toBe(afterShelf);
     const [lateRow] = await db.select().from(nodes).where(eq(nodes.id, late));
-    expect(toDateKey(lateRow.targetStartDate!)).toBe("2026-09-15");
+    expect(toDateKey(lateRow.targetStartDate!)).toBe(afterShelf);
   });
 
   it("hides a task's day line when it is re-parented under a shelved project", async () => {
