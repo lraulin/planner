@@ -1,3 +1,5 @@
+import { formatDurationClock } from "./duration";
+
 /** Pure rest-timer helpers — countdown math and formatting, no React. */
 
 export const REST_PRESETS_SEC = [60, 90, 120, 180] as const;
@@ -13,10 +15,7 @@ export function clampRestDuration(seconds: number): number {
 
 /** `m:ss` countdown display. Accepts fractional remaining and ceils so 0.1 → 1. */
 export function formatRestClock(remainingSec: number): string {
-  const s = Math.max(0, Math.ceil(remainingSec));
-  const m = Math.floor(s / 60);
-  const r = s % 60;
-  return `${m}:${String(r).padStart(2, "0")}`;
+  return formatDurationClock(remainingSec);
 }
 
 export function nudgeRestDuration(current: number, direction: 1 | -1): number {

@@ -16,6 +16,7 @@ import { useRegisterCommands } from "@/components/shell/CommandProvider";
 import type { Command } from "@/lib/commands/registry";
 import { INSERT_AFTER } from "@/lib/commands/chords";
 import { formatEquipmentBadge } from "@/lib/fitness/equipment";
+import { formatMeasureTag } from "@/lib/fitness/measure";
 import {
   fitnessExerciseEditPath,
   fitnessExerciseNewPath,
@@ -337,7 +338,12 @@ export function FitnessView({
                 >
                   <div className="text-[0.875rem] font-medium text-ink">{ex.name}</div>
                   <div className="text-[0.75rem] text-ink-faint">
-                    {formatEquipmentBadge(ex.equipment, ex.barWeight, ex.unilateral)}
+                    {[
+                      formatEquipmentBadge(ex.equipment, ex.barWeight, ex.unilateral),
+                      formatMeasureTag(ex.measure),
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                     {ex.notes ? ` · ${ex.notes}` : ""}
                   </div>
                 </button>

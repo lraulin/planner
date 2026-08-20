@@ -9,11 +9,19 @@ export type WeightUnit = "lb" | "kg";
 export type ExerciseEquipment =
   "barbell" | "dumbbell" | "kettlebell" | "club" | "mace" | "bodyweight";
 
+/**
+ * What a set is measured in. Independent of `equipment` — a weighted plank is `time`
+ * and still records a load.
+ */
+export type ExerciseMeasure = "reps" | "time" | "reps_and_time";
+
 export type ExerciseSummary = {
   id: string;
   name: string;
   notes: string;
   equipment: ExerciseEquipment;
+  /** Reps, a timed hold, or reps then a hold. */
+  measure: ExerciseMeasure;
   /** Bar mass in lb when equipment is barbell. */
   barWeight: number;
   /** Left/right reps when the equipment allows unilateral. */
@@ -26,6 +34,7 @@ export type ExercisePrefs = {
   name?: string;
   notes?: string;
   equipment?: ExerciseEquipment;
+  measure?: ExerciseMeasure;
   barWeight?: number;
   unilateral?: boolean;
 };
@@ -34,6 +43,8 @@ export type SetInput = {
   reps?: number | null;
   repsLeft?: number | null;
   repsRight?: number | null;
+  /** Hold or carry seconds; set alongside reps for a reps-then-hold set. */
+  durationSeconds?: number | null;
   weight?: number | null;
   unit?: WeightUnit | string;
   completed?: boolean;
@@ -61,6 +72,7 @@ export type WorkoutSetView = {
   reps: number | null;
   repsLeft: number | null;
   repsRight: number | null;
+  durationSeconds: number | null;
   weight: number | null;
   unit: string;
   completed: boolean;
@@ -71,6 +83,7 @@ export type SessionExerciseView = {
   exerciseId: string;
   exerciseName: string;
   equipment: ExerciseEquipment;
+  measure: ExerciseMeasure;
   barWeight: number;
   unilateral: boolean;
   sortKey: string;

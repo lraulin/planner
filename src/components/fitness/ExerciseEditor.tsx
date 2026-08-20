@@ -9,12 +9,18 @@ import {
   coerceExercisePrefs,
   EQUIPMENT_OPTIONS,
 } from "@/lib/fitness/equipment";
-import type { ExerciseEquipment, ExerciseSummary } from "@/lib/fitness/types";
+import { MEASURE_OPTIONS, tracksReps } from "@/lib/fitness/measure";
+import type {
+  ExerciseEquipment,
+  ExerciseMeasure,
+  ExerciseSummary,
+} from "@/lib/fitness/types";
 
 type Draft = {
   name: string;
   notes: string;
   equipment: ExerciseEquipment;
+  measure: ExerciseMeasure;
   barWeight: number;
   unilateral: boolean;
 };
@@ -25,6 +31,7 @@ function toDraft(exercise: ExerciseSummary | null, seedName?: string): Draft {
       name: seedName?.trim() ?? "",
       notes: "",
       equipment: "barbell",
+      measure: "reps",
       barWeight: 45,
       unilateral: false,
     };
@@ -33,13 +40,14 @@ function toDraft(exercise: ExerciseSummary | null, seedName?: string): Draft {
     name: exercise.name,
     notes: exercise.notes,
     equipment: exercise.equipment,
+    measure: exercise.measure,
     barWeight: exercise.barWeight,
     unilateral: exercise.unilateral,
   };
 }
 
 /**
- * Catalog exercise config drawer — equipment, bar, unilateral.
+ * Catalog exercise config drawer — equipment, measure, bar, unilateral.
  * Shared by Exercises tab and session “New/Edit exercise”.
  */
 export function ExerciseEditor({
@@ -124,6 +132,7 @@ function ExerciseForm({
         const result = await updateExerciseAction(exercise.id, {
           name,
           notes: draft.notes,
+          measure: draft.measure,
           ...prefs,
         });
         if (!result.ok) {
@@ -135,6 +144,7 @@ function ExerciseForm({
           name,
           notes: draft.notes,
           equipment: prefs.equipment,
+          measure: draft.measure,
           barWeight: prefs.barWeight,
           unilateral: prefs.unilateral,
           updatedAt: new Date(),
@@ -142,6 +152,7 @@ function ExerciseForm({
       } else {
         const result = await createExerciseAction(name, {
           notes: draft.notes,
+          measure: draft.measure,
           ...prefs,
         });
         if (!result.ok || !result.id) {
@@ -153,6 +164,7 @@ function ExerciseForm({
           name,
           notes: draft.notes,
           equipment: prefs.equipment,
+          measure: draft.measure,
           barWeight: prefs.barWeight,
           unilateral: prefs.unilateral,
           createdAt: new Date(),
@@ -229,6 +241,35 @@ function ExerciseForm({
           </div>
         </fieldset>
 
+        <fieldset className="space-y-2">
+          <legend className="text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
+            Measured in
+          </legend>
+          <div className="flex flex-wrap gap-2">
+            {MEASURE_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => patch({ measure: opt.value })}
+                className={`rounded border px-3 py-1.5 text-[0.8125rem] ${
+                  draft.measure === opt.value
+                    ? "border-ink bg-ink text-surface"
+                    : "border-rule text-ink-muted hover:text-ink"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <p className="text-[0.75rem] text-ink-faint">
+            {draft.measure === "time"
+              ? "A hold or a carry — the set records how long, not how many."
+              : draft.measure === "reps_and_time"
+                ? "Reps then a hold. The hold can be left blank on any set."
+                : "The usual: each set records how many."}
+          </p>
+        </fieldset>
+
         {draft.equipment === "barbell" && (
           <label className="flex flex-col gap-1 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
             Bar
@@ -259,22 +300,30 @@ function ExerciseForm({
           </label>
         )}
 
-        {allowsUnilateral(draft.equipment) && (
-          <label className="flex items-center gap-2 text-[0.875rem] text-ink">
-            <input
-              type="checkbox"
-              checked={draft.unilateral}
-              onChange={(e) => patch({ unilateral: e.target.checked })}
-              className="rounded border-rule"
-            />
-            <span>
-              Each side separately
-              <span className="mt-0.5 block text-[0.75rem] text-ink-faint">
-                Log left and right reps when they differ.
+        {allowsUnilateral(draft.equipment) &&
+          (tracksReps(draft.measure) ? (
+            <label className="flex items-center gap-2 text-[0.875rem] text-ink">
+              <input
+                type="checkbox"
+                checked={draft.unilateral}
+                onChange={(e) => patch({ unilateral: e.target.checked })}
+                className="rounded border-rule"
+              />
+              <span>
+                Each side separately
+                <span className="mt-0.5 block text-[0.75rem] text-ink-faint">
+                  Log left and right reps when they differ.
+                </span>
               </span>
-            </span>
-          </label>
-        )}
+            </label>
+          ) : (
+            // Left/right is a reps distinction. Say so here, where someone looking for
+            // it on a side plank will look, rather than leaving a control that does
+            // nothing.
+            <p className="text-[0.75rem] text-ink-faint">
+              Left and right is a reps setting. Log each side as its own set.
+            </p>
+          ))}
 
         <label className="flex flex-col gap-1 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
           Notes

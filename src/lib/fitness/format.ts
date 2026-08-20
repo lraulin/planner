@@ -1,3 +1,4 @@
+import { formatDurationToken, parseDurationSeconds } from "./duration";
 import type { SetInput, WorkoutSetView } from "./types";
 
 /** Stored as set.unit — no weight column, no "0 lb" shame. */
@@ -25,15 +26,41 @@ export function formatSetRepsToken(
 }
 
 /**
+ * What one set did: reps ("5", "8/6"), a hold ("45s", "1:30"), or reps then a hold
+ * ("10 + 20s"). Read off the row's own nulls rather than the catalog `measure`, so the
+ * label renders correctly for a set logged before the exercise was reconfigured.
+ */
+export function formatSetMeasureToken(
+  s: Pick<WorkoutSetView, "reps" | "repsLeft" | "repsRight" | "durationSeconds">,
+): string {
+  const hasReps = s.reps != null || isUnilateralSet(s);
+  const hold =
+    s.durationSeconds == null ? null : formatDurationToken(s.durationSeconds);
+
+  if (hasReps && hold !== null) return `${formatSetRepsToken(s)} + ${hold}`;
+  if (hold !== null) return hold;
+  if (hasReps) return formatSetRepsToken(s);
+  return "?";
+}
+
+/**
  * Compact set list for history rows:
  * - bilateral: "3×5 @ 185 lb", "5, 3 @ 185/195 lb", "3×8 BW"
  * - unilateral L/R: "3×8/6 @ 50 lb", "10/8, 8/6 BW"
+ * - timed: "3×45s BW", "3×1:30 @ 50 lb"
+ * - reps then hold: "3×10 + 20s BW"
  */
 export function formatSetsLabel(
   sets: Array<
     Pick<
       WorkoutSetView,
-      "reps" | "repsLeft" | "repsRight" | "weight" | "unit" | "completed"
+      | "reps"
+      | "repsLeft"
+      | "repsRight"
+      | "durationSeconds"
+      | "weight"
+      | "unit"
+      | "completed"
     >
   >,
 ): string {
@@ -46,14 +73,14 @@ export function formatSetsLabel(
     (unit !== null && isBodyweightUnit(unit)) ||
     done.every((s) => isBodyweightUnit(s.unit));
 
-  const repTokens = done.map(formatSetRepsToken);
-  const allSameReps = repTokens.every((r) => r === repTokens[0]);
+  const tokens = done.map(formatSetMeasureToken);
+  const allSame = tokens.every((t) => t === tokens[0]);
 
   if (bodyweight) {
-    if (allSameReps && repTokens[0] !== "?") {
-      return `${done.length}×${repTokens[0]} BW`;
+    if (allSame && tokens[0] !== "?") {
+      return `${done.length}×${tokens[0]} BW`;
     }
-    return `${repTokens.join(", ")} BW`;
+    return `${tokens.join(", ")} BW`;
   }
 
   const weights = done.map((s) =>
@@ -75,10 +102,10 @@ export function formatSetsLabel(
     return ` @ ${mixed.join("/")}${unit ? ` ${unit}` : ""}`;
   })();
 
-  if (allSameReps && repTokens[0] !== "?") {
-    return `${done.length}×${repTokens[0]}${weightPart}`;
+  if (allSame && tokens[0] !== "?") {
+    return `${done.length}×${tokens[0]}${weightPart}`;
   }
-  return `${repTokens.join(", ")}${weightPart}`;
+  return `${tokens.join(", ")}${weightPart}`;
 }
 
 /** Normalise free-typed weight input; empty/invalid → null. */
@@ -101,6 +128,7 @@ export function normaliseSetInput(set: SetInput): {
   reps: number | null;
   repsLeft: number | null;
   repsRight: number | null;
+  durationSeconds: number | null;
   weight: string | null;
   unit: string;
   completed: boolean;
@@ -109,25 +137,18 @@ export function normaliseSetInput(set: SetInput): {
   const repsLeft = parseReps(set.repsLeft);
   const repsRight = parseReps(set.repsRight);
   const unilateral = repsLeft != null || repsRight != null;
+  // Independent of reps: a reps-then-hold set carries both.
+  const durationSeconds = parseDurationSeconds(set.durationSeconds);
+  const bodyweight = isBodyweightUnit(unit);
+  const weight = bodyweight ? null : parseWeight(set.weight);
 
-  if (isBodyweightUnit(unit)) {
-    return {
-      reps: unilateral ? null : parseReps(set.reps),
-      repsLeft: unilateral ? repsLeft : null,
-      repsRight: unilateral ? repsRight : null,
-      weight: null,
-      unit: "bw",
-      completed: set.completed !== false,
-    };
-  }
-
-  const weight = parseWeight(set.weight);
   return {
     reps: unilateral ? null : parseReps(set.reps),
     repsLeft: unilateral ? repsLeft : null,
     repsRight: unilateral ? repsRight : null,
+    durationSeconds,
     weight: weight === null ? null : String(weight),
-    unit,
+    unit: bodyweight ? "bw" : unit,
     completed: set.completed !== false,
   };
 }

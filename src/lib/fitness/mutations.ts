@@ -10,8 +10,10 @@ import { between } from "@/lib/tree/sortKey";
 import { DEFAULT_BAR_WEIGHT_LB, parseBarWeight } from "./bars";
 import { coerceExercisePrefs, normaliseEquipment } from "./equipment";
 import { normaliseSetInput } from "./format";
+import { normaliseMeasure } from "./measure";
 import type {
   ExerciseEquipment,
+  ExerciseMeasure,
   ExercisePrefs,
   SessionExerciseInput,
   SessionInput,
@@ -57,6 +59,8 @@ function prefsToColumns(prefs?: ExercisePrefs) {
   });
   return {
     equipment: coerced.equipment,
+    // Independent of equipment, so it takes no part in coerceExercisePrefs.
+    measure: normaliseMeasure(prefs?.measure),
     barWeight: String(coerced.barWeight),
     unilateral: coerced.unilateral,
     notes: prefs?.notes,
@@ -80,6 +84,7 @@ export async function createExercise(
       name: trimmed,
       notes: cols.notes ?? "",
       equipment: cols.equipment,
+      measure: cols.measure,
       barWeight: cols.barWeight,
       unilateral: cols.unilateral,
     })
@@ -102,6 +107,7 @@ export async function updateExercise(
     name?: string;
     notes?: string;
     equipment?: ExerciseEquipment;
+    measure?: ExerciseMeasure;
     barWeight?: string;
     unilateral?: boolean;
     updatedAt: Date;
@@ -113,6 +119,7 @@ export async function updateExercise(
     patch.name = trimmed;
   }
   if (prefs.notes !== undefined) patch.notes = prefs.notes;
+  if (prefs.measure !== undefined) patch.measure = normaliseMeasure(prefs.measure);
 
   if (
     prefs.equipment !== undefined ||
@@ -246,6 +253,7 @@ async function insertSets(
       reps: set.reps,
       repsLeft: set.repsLeft,
       repsRight: set.repsRight,
+      durationSeconds: set.durationSeconds,
       weight: set.weight,
       unit: set.unit,
       completed: set.completed,

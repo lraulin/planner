@@ -1,17 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { loadLatestForExerciseAction } from "@/app/fitness/actions";
 import { Drawer } from "@/components/detail/Drawer";
 import { useAutosave, type SaveStatus } from "@/components/notes/useAutosave";
 import {
-  effectiveUnilateral,
-  formatEquipmentBadge,
-  usesPlateCalculator,
-  usesWeight,
-} from "@/lib/fitness/equipment";
+  elapsedSince,
+  formatDurationClock,
+  parseDurationSeconds,
+} from "@/lib/fitness/duration";
+import { formatEquipmentBadge, usesPlateCalculator } from "@/lib/fitness/equipment";
 import { formatSetsLabel, parseWeight } from "@/lib/fitness/format";
+import { formatMeasureTag } from "@/lib/fitness/measure";
 import { plateHint } from "@/lib/fitness/plates";
+import { gridTemplate, setColumns, type SetColumn } from "@/lib/fitness/setColumns";
 import {
   draftBlockFromCatalog,
   draftToSessionInput,
@@ -33,6 +35,7 @@ import type {
 import { bumpWeight, weightStep } from "@/lib/fitness/weightStep";
 import { ExerciseEditor } from "./ExerciseEditor";
 import { ExercisePicker } from "./ExercisePicker";
+import { HoldTimer } from "./HoldTimer";
 import { RestTimer } from "./RestTimer";
 
 function draftFromDetail(
@@ -48,6 +51,7 @@ function draftFromDetail(
     exercises: detail.exercises.map((ex) => {
       const cat = catalog.find((c) => c.id === ex.exerciseId);
       const equipment = cat?.equipment ?? ex.equipment;
+      const measure = cat?.measure ?? ex.measure;
       const unilateral = cat?.unilateral ?? ex.unilateral;
       const barWeight = cat?.barWeight ?? ex.barWeight;
       return {
@@ -55,6 +59,7 @@ function draftFromDetail(
         exerciseId: ex.exerciseId,
         exerciseName: ex.exerciseName,
         equipment,
+        measure,
         barWeight,
         unilateral,
         notes: ex.notes,
@@ -62,6 +67,7 @@ function draftFromDetail(
           reps: s.reps == null ? "" : String(s.reps),
           repsLeft: s.repsLeft == null ? "" : String(s.repsLeft),
           repsRight: s.repsRight == null ? "" : String(s.repsRight),
+          duration: s.durationSeconds == null ? "" : String(s.durationSeconds),
           weight: s.weight == null ? "" : String(s.weight),
           unit:
             equipment === "bodyweight" ? "bw" : s.unit === "bw" ? "lb" : s.unit || "lb",
@@ -69,6 +75,20 @@ function draftFromDetail(
       };
     }),
   };
+}
+
+type RunningHold = { blockKey: string; setIndex: number; startedAt: number };
+
+/**
+ * Wall-clock reads for the hold stopwatch, outside any component so React's purity rule
+ * is satisfied — a clock read during render is exactly what that rule is guarding.
+ */
+function beginHold(blockKey: string, setIndex: number): RunningHold {
+  return { blockKey, setIndex, startedAt: Date.now() };
+}
+
+function secondsHeld(hold: RunningHold): number {
+  return elapsedSince(hold.startedAt, Date.now());
 }
 
 function toLocalInput(date: Date): string {
@@ -143,6 +163,13 @@ export function SessionEditor({
     blockIndex: number;
     seedName?: string;
   } | null>(null);
+
+  /**
+   * The one running hold stopwatch, by block key and set index. Holding it here rather
+   * than inside the row is what keeps a second start from leaving the first counting,
+   * and what lets closing the drawer end it.
+   */
+  const [runningHold, setRunningHold] = useState<RunningHold | null>(null);
 
   const idCatalog = useMemo(
     () => catalog.map((e) => ({ id: e.id, name: e.name })),
@@ -238,13 +265,42 @@ export function SessionEditor({
         return {
           ...draftBlockFromCatalog(ex, b.key),
           sets:
-            b.sets.length > 0 && b.sets.some((s) => s.reps || s.weight || s.repsLeft)
+            b.sets.length > 0 &&
+            b.sets.some((s) => s.reps || s.weight || s.repsLeft || s.duration)
               ? // Keep filled sets when switching? safer reset to empty for equipment change
                 [emptySetForExercise(ex)]
               : [emptySetForExercise(ex)],
         };
       }),
     );
+  }
+
+  function commitHold(hold: RunningHold) {
+    const seconds = secondsHeld(hold);
+    if (seconds <= 0) return;
+    setBlocksAndSave((current) =>
+      current.map((b) =>
+        b.key === hold.blockKey
+          ? {
+              ...b,
+              sets: b.sets.map((s, j) =>
+                j === hold.setIndex ? { ...s, duration: String(seconds) } : s,
+              ),
+            }
+          : b,
+      ),
+    );
+  }
+
+  function startHold(blockKey: string, setIndex: number) {
+    // Starting a second hold records the first rather than dropping it on the floor.
+    if (runningHold) commitHold(runningHold);
+    setRunningHold(beginHold(blockKey, setIndex));
+  }
+
+  function stopHold() {
+    if (runningHold) commitHold(runningHold);
+    setRunningHold(null);
   }
 
   function updateSet(blockIndex: number, setIndex: number, patch: Partial<DraftSet>) {
@@ -323,6 +379,7 @@ export function SessionEditor({
             exerciseId: saved.id,
             exerciseName: saved.name,
             equipment: saved.equipment,
+            measure: saved.measure,
             barWeight: saved.barWeight,
             unilateral: saved.unilateral,
             sets: b.sets.map((s) => ({
@@ -343,6 +400,9 @@ export function SessionEditor({
   }
 
   const closeAfterFlush = useCallback(() => {
+    // A hold you never stopped is not a set you did — drop it rather than racing the
+    // flush below to get its seconds into the draft.
+    setRunningHold(null);
     void flush();
     onClose();
   }, [flush, onClose]);
@@ -421,6 +481,12 @@ export function SessionEditor({
                   const ex = catalog.find((e) => e.id === block.exerciseId);
                   if (ex) setExerciseEditor({ exercise: ex, blockIndex: bi });
                 }}
+                runningHoldSetIndex={
+                  runningHold?.blockKey === block.key ? runningHold.setIndex : null
+                }
+                runningHoldStartedAt={runningHold?.startedAt ?? null}
+                onStartHold={(si) => startHold(block.key, si)}
+                onStopHold={stopHold}
                 onUpdateSet={(si, patch) => updateSet(bi, si, patch)}
                 onRemoveSet={(si) => removeSet(bi, si)}
                 onAddSet={() => addSet(bi)}
@@ -476,6 +542,10 @@ function ExerciseBlock({
   onRemove,
   onNewExercise,
   onEditExercise,
+  runningHoldSetIndex,
+  runningHoldStartedAt,
+  onStartHold,
+  onStopHold,
   onUpdateSet,
   onRemoveSet,
   onAddSet,
@@ -490,15 +560,27 @@ function ExerciseBlock({
   onRemove: () => void;
   onNewExercise: (seedName: string) => void;
   onEditExercise: () => void;
+  /** Which set in this block is being timed, if any. */
+  runningHoldSetIndex: number | null;
+  runningHoldStartedAt: number | null;
+  onStartHold: (setIndex: number) => void;
+  onStopHold: () => void;
   onUpdateSet: (setIndex: number, patch: Partial<DraftSet>) => void;
   onRemoveSet: (setIndex: number) => void;
   onAddSet: () => void;
   onCopyLast: (sets: WorkoutSetView[]) => void;
   onUpdateNotes: (notes: string) => void;
 }) {
-  const uni = effectiveUnilateral(block.equipment, block.unilateral);
-  const showWeight = usesWeight(block.equipment);
   const showPlates = usesPlateCalculator(block.equipment);
+  const columns = useMemo(
+    () =>
+      setColumns({
+        measure: block.measure,
+        equipment: block.equipment,
+        unilateral: block.unilateral,
+      }),
+    [block.measure, block.equipment, block.unilateral],
+  );
 
   const sortedCatalog = useMemo(
     () =>
@@ -540,7 +622,16 @@ function ExerciseBlock({
         {block.exerciseId ? (
           <>
             <span className="text-ink-faint">
-              {formatEquipmentBadge(block.equipment, block.barWeight, block.unilateral)}
+              {[
+                formatEquipmentBadge(
+                  block.equipment,
+                  block.barWeight,
+                  block.unilateral,
+                ),
+                formatMeasureTag(block.measure),
+              ]
+                .filter(Boolean)
+                .join(" · ")}
             </span>
             <button
               type="button"
@@ -565,16 +656,18 @@ function ExerciseBlock({
       {block.exerciseId && (
         <>
           <div className="space-y-1">
-            <SetHeader uni={uni} showWeight={showWeight} />
+            <SetHeader columns={columns} />
             {block.sets.map((set, si) => (
               <SetRow
                 key={si}
                 index={si}
                 set={set}
-                uni={uni}
-                showWeight={showWeight}
+                columns={columns}
                 showPlates={showPlates}
                 barWeight={block.barWeight}
+                holdStartedAt={runningHoldSetIndex === si ? runningHoldStartedAt : null}
+                onStartHold={() => onStartHold(si)}
+                onStopHold={onStopHold}
                 onChange={(patch) => onUpdateSet(si, patch)}
                 onRemove={() => onRemoveSet(si)}
               />
@@ -598,45 +691,15 @@ function ExerciseBlock({
   );
 }
 
-function SetHeader({ uni, showWeight }: { uni: boolean; showWeight: boolean }) {
-  if (!showWeight && !uni) {
-    return (
-      <div className="grid grid-cols-[2rem_1fr_2rem] gap-1 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-faint">
-        <span>#</span>
-        <span>Reps</span>
-        <span />
-      </div>
-    );
-  }
-  if (!showWeight && uni) {
-    return (
-      <div className="grid grid-cols-[2rem_1fr_1fr_2rem] gap-1 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-faint">
-        <span>#</span>
-        <span>L</span>
-        <span>R</span>
-        <span />
-      </div>
-    );
-  }
-  if (showWeight && uni) {
-    return (
-      <div className="grid grid-cols-[2rem_minmax(2.5rem,0.7fr)_minmax(2.5rem,0.7fr)_minmax(6.5rem,1.3fr)_3.5rem_2rem] gap-1 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-faint">
-        <span>#</span>
-        <span>L</span>
-        <span>R</span>
-        <span>Weight</span>
-        <span>Unit</span>
-        <span />
-      </div>
-    );
-  }
+function SetHeader({ columns }: { columns: SetColumn[] }) {
   return (
-    <div className="grid grid-cols-[2rem_minmax(3rem,1fr)_minmax(7rem,1.4fr)_3.5rem_2rem] gap-1 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-faint">
-      <span>#</span>
-      <span>Reps</span>
-      <span>Weight</span>
-      <span>Unit</span>
-      <span />
+    <div
+      className="grid gap-1 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-faint"
+      style={{ gridTemplateColumns: gridTemplate(columns) }}
+    >
+      {columns.map((column) => (
+        <span key={column.key}>{column.label}</span>
+      ))}
     </div>
   );
 }
@@ -644,177 +707,167 @@ function SetHeader({ uni, showWeight }: { uni: boolean; showWeight: boolean }) {
 function SetRow({
   index,
   set,
-  uni,
-  showWeight,
+  columns,
   showPlates,
   barWeight,
+  holdStartedAt,
+  onStartHold,
+  onStopHold,
   onChange,
   onRemove,
 }: {
   index: number;
   set: DraftSet;
-  uni: boolean;
-  showWeight: boolean;
+  columns: SetColumn[];
   showPlates: boolean;
   barWeight: number;
+  /** Non-null while this row's stopwatch is running. */
+  holdStartedAt: number | null;
+  onStartHold: () => void;
+  onStopHold: () => void;
   onChange: (patch: Partial<DraftSet>) => void;
   onRemove: () => void;
 }) {
-  const del = (
-    <button
-      type="button"
-      onClick={onRemove}
-      title="Delete set"
-      className="flex h-7 w-7 items-center justify-center rounded text-ink-faint hover:bg-priority-a/10 hover:text-priority-a"
-    >
-      ×
-    </button>
-  );
+  const unit = set.unit || "lb";
+  // The widest rows squeeze the number fields, exactly as the hand-written grids did.
+  const numberClass = `min-w-0 rounded border border-rule bg-surface ${
+    columns.length >= 6 ? "px-1.5" : "px-2"
+  } py-1 font-mono text-[0.8125rem] text-ink`;
 
-  if (!showWeight && !uni) {
-    return (
-      <div className="grid grid-cols-[2rem_1fr_2rem] items-center gap-1">
-        <span className="font-mono text-[0.75rem] text-ink-faint">{index + 1}</span>
-        <input
-          type="number"
-          min={0}
-          value={set.reps}
-          onChange={(e) => onChange({ reps: e.target.value })}
-          className="rounded border border-rule bg-surface px-2 py-1 font-mono text-[0.8125rem] text-ink"
-        />
-        {del}
-      </div>
-    );
-  }
+  const hold = parseDurationSeconds(set.duration);
 
-  if (!showWeight && uni) {
-    return (
-      <div className="grid grid-cols-[2rem_1fr_1fr_2rem] items-center gap-1">
-        <span className="font-mono text-[0.75rem] text-ink-faint">{index + 1}</span>
-        <input
-          type="number"
-          min={0}
-          value={set.repsLeft}
-          onChange={(e) => onChange({ repsLeft: e.target.value })}
-          className="rounded border border-rule bg-surface px-2 py-1 font-mono text-[0.8125rem] text-ink"
-          placeholder="L"
-        />
-        <input
-          type="number"
-          min={0}
-          value={set.repsRight}
-          onChange={(e) => onChange({ repsRight: e.target.value })}
-          className="rounded border border-rule bg-surface px-2 py-1 font-mono text-[0.8125rem] text-ink"
-          placeholder="R"
-        />
-        {del}
-      </div>
-    );
-  }
-
-  const weightControls = (
-    <div className="flex min-w-0 items-center gap-0.5">
-      <button
-        type="button"
-        title={`−${weightStep(set.unit || "lb")}`}
-        onClick={() =>
-          onChange({
-            weight: bumpWeight(set.weight, set.unit || "lb", -1),
-          })
-        }
-        className="flex h-7 w-6 shrink-0 items-center justify-center rounded border border-rule bg-surface text-[0.75rem] text-ink-muted hover:text-ink"
-      >
-        −
-      </button>
-      <input
-        type="number"
-        min={0}
-        step={weightStep(set.unit || "lb")}
-        value={set.weight}
-        onChange={(e) => onChange({ weight: e.target.value })}
-        className="min-w-0 flex-1 rounded border border-rule bg-surface px-1.5 py-1 font-mono text-[0.8125rem] text-ink"
-      />
-      <button
-        type="button"
-        title={`+${weightStep(set.unit || "lb")}`}
-        onClick={() =>
-          onChange({
-            weight: bumpWeight(set.weight, set.unit || "lb", 1),
-          })
-        }
-        className="flex h-7 w-6 shrink-0 items-center justify-center rounded border border-rule bg-surface text-[0.75rem] text-ink-muted hover:text-ink"
-      >
-        +
-      </button>
-    </div>
-  );
-
-  const unitSelect = (
-    <select
-      value={set.unit === "bw" ? "lb" : set.unit}
-      onChange={(e) => onChange({ unit: e.target.value })}
-      className="rounded border border-rule bg-surface px-1 py-1 text-[0.75rem] text-ink"
-    >
-      <option value="lb">lb</option>
-      <option value="kg">kg</option>
-    </select>
-  );
-
-  if (uni) {
-    return (
-      <div className="space-y-0.5">
-        <div className="grid grid-cols-[2rem_minmax(2.5rem,0.7fr)_minmax(2.5rem,0.7fr)_minmax(6.5rem,1.3fr)_3.5rem_2rem] items-center gap-1">
+  function cell(column: SetColumn) {
+    switch (column.key) {
+      case "index":
+        return (
           <span className="font-mono text-[0.75rem] text-ink-faint">{index + 1}</span>
+        );
+
+      case "reps":
+        return (
           <input
             type="number"
             min={0}
-            value={set.repsLeft}
-            onChange={(e) => onChange({ repsLeft: e.target.value })}
-            className="rounded border border-rule bg-surface px-1.5 py-1 font-mono text-[0.8125rem] text-ink"
+            value={set.reps}
+            onChange={(e) => onChange({ reps: e.target.value })}
+            className={numberClass}
           />
+        );
+
+      case "repsLeft":
+      case "repsRight": {
+        const left = column.key === "repsLeft";
+        return (
           <input
             type="number"
             min={0}
-            value={set.repsRight}
-            onChange={(e) => onChange({ repsRight: e.target.value })}
-            className="rounded border border-rule bg-surface px-1.5 py-1 font-mono text-[0.8125rem] text-ink"
+            value={left ? set.repsLeft : set.repsRight}
+            onChange={(e) =>
+              onChange(
+                left ? { repsLeft: e.target.value } : { repsRight: e.target.value },
+              )
+            }
+            placeholder={left ? "L" : "R"}
+            className={numberClass}
           />
-          {weightControls}
-          {unitSelect}
-          {del}
-        </div>
-        {showPlates && (
-          <PlateLine
-            weight={set.weight}
-            unit={set.unit || "lb"}
-            barWeightLb={barWeight}
-          />
-        )}
-      </div>
-    );
+        );
+      }
+
+      case "duration":
+        return (
+          <div className="flex min-w-0 items-center gap-0.5">
+            <input
+              type="number"
+              min={0}
+              inputMode="numeric"
+              value={holdStartedAt == null ? set.duration : ""}
+              onChange={(e) => onChange({ duration: e.target.value })}
+              placeholder="sec"
+              disabled={holdStartedAt != null}
+              className={`${numberClass} flex-1`}
+            />
+            <HoldTimer
+              startedAt={holdStartedAt}
+              onStart={onStartHold}
+              onStop={onStopHold}
+            />
+          </div>
+        );
+
+      case "weight":
+        return (
+          <div className="flex min-w-0 items-center gap-0.5">
+            <button
+              type="button"
+              title={`−${weightStep(unit)}`}
+              onClick={() => onChange({ weight: bumpWeight(set.weight, unit, -1) })}
+              className="flex h-7 w-6 shrink-0 items-center justify-center rounded border border-rule bg-surface text-[0.75rem] text-ink-muted hover:text-ink"
+            >
+              −
+            </button>
+            <input
+              type="number"
+              min={0}
+              step={weightStep(unit)}
+              value={set.weight}
+              onChange={(e) => onChange({ weight: e.target.value })}
+              className="min-w-0 flex-1 rounded border border-rule bg-surface px-1.5 py-1 font-mono text-[0.8125rem] text-ink"
+            />
+            <button
+              type="button"
+              title={`+${weightStep(unit)}`}
+              onClick={() => onChange({ weight: bumpWeight(set.weight, unit, 1) })}
+              className="flex h-7 w-6 shrink-0 items-center justify-center rounded border border-rule bg-surface text-[0.75rem] text-ink-muted hover:text-ink"
+            >
+              +
+            </button>
+          </div>
+        );
+
+      case "unit":
+        return (
+          <select
+            value={set.unit === "bw" ? "lb" : set.unit}
+            onChange={(e) => onChange({ unit: e.target.value })}
+            className="rounded border border-rule bg-surface px-1 py-1 text-[0.75rem] text-ink"
+          >
+            <option value="lb">lb</option>
+            <option value="kg">kg</option>
+          </select>
+        );
+
+      case "delete":
+        return (
+          <button
+            type="button"
+            onClick={onRemove}
+            title="Delete set"
+            className="flex h-7 w-7 items-center justify-center rounded text-ink-faint hover:bg-priority-a/10 hover:text-priority-a"
+          >
+            ×
+          </button>
+        );
+    }
   }
 
   return (
     <div className="space-y-0.5">
-      <div className="grid grid-cols-[2rem_minmax(3rem,1fr)_minmax(7rem,1.4fr)_3.5rem_2rem] items-center gap-1">
-        <span className="font-mono text-[0.75rem] text-ink-faint">{index + 1}</span>
-        <input
-          type="number"
-          min={0}
-          value={set.reps}
-          onChange={(e) => onChange({ reps: e.target.value })}
-          className="rounded border border-rule bg-surface px-2 py-1 font-mono text-[0.8125rem] text-ink"
-        />
-        {weightControls}
-        {unitSelect}
-        {del}
+      <div
+        className="grid items-center gap-1"
+        style={{ gridTemplateColumns: gridTemplate(columns) }}
+      >
+        {columns.map((column) => (
+          <Fragment key={column.key}>{cell(column)}</Fragment>
+        ))}
       </div>
       {showPlates && (
-        <PlateLine
-          weight={set.weight}
-          unit={set.unit || "lb"}
-          barWeightLb={barWeight}
-        />
+        <PlateLine weight={set.weight} unit={unit} barWeightLb={barWeight} />
+      )}
+      {/* Seconds are what you type; the clock is only worth showing past a minute. */}
+      {hold != null && hold >= 60 && (
+        <p className="pl-8 font-mono text-[0.6875rem] text-ink-faint">
+          {formatDurationClock(hold)}
+        </p>
       )}
     </div>
   );

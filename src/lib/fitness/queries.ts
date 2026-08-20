@@ -8,6 +8,7 @@ import {
 } from "@/db/schema";
 import { DEFAULT_BAR_WEIGHT_LB } from "./bars";
 import { normaliseEquipment } from "./equipment";
+import { normaliseMeasure } from "./measure";
 import { formatSetsLabel } from "./format";
 import type {
   ExerciseHistoryEntry,
@@ -28,6 +29,7 @@ function mapExercise(row: {
   name: string;
   notes: string;
   equipment: string;
+  measure: string;
   barWeight: string;
   unilateral: boolean;
   createdAt: Date;
@@ -38,6 +40,7 @@ function mapExercise(row: {
     name: row.name,
     notes: row.notes,
     equipment: normaliseEquipment(row.equipment),
+    measure: normaliseMeasure(row.measure),
     barWeight: weightNumber(row.barWeight) ?? DEFAULT_BAR_WEIGHT_LB,
     unilateral: row.unilateral,
     createdAt: row.createdAt,
@@ -51,6 +54,7 @@ function mapSet(row: {
   reps: number | null;
   repsLeft: number | null;
   repsRight: number | null;
+  durationSeconds: number | null;
   weight: string | null;
   unit: string;
   completed: boolean;
@@ -61,6 +65,7 @@ function mapSet(row: {
     reps: row.reps,
     repsLeft: row.repsLeft,
     repsRight: row.repsRight,
+    durationSeconds: row.durationSeconds,
     weight: weightNumber(row.weight),
     unit: row.unit,
     completed: row.completed,
@@ -181,6 +186,7 @@ export async function getSessionDetail(
       notes: workoutSessionExercises.notes,
       exerciseName: exercises.name,
       equipment: exercises.equipment,
+      measure: exercises.measure,
       barWeight: exercises.barWeight,
       unilateral: exercises.unilateral,
     })
@@ -229,6 +235,7 @@ export async function getSessionDetail(
       exerciseId: se.exerciseId,
       exerciseName: se.exerciseName,
       equipment: normaliseEquipment(se.equipment),
+      measure: normaliseMeasure(se.measure),
       barWeight: weightNumber(se.barWeight) ?? DEFAULT_BAR_WEIGHT_LB,
       unilateral: se.unilateral,
       sortKey: se.sortKey,

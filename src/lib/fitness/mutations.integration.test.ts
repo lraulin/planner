@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { users, workoutSets } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import {
   createExercise,
@@ -282,6 +282,173 @@ describeDb("fitness sessions", () => {
     ).toEqual([]);
   });
 
+  it("logs a timed hold with no reps", async () => {
+    const exerciseId = await createExercise(userId, "Plank", {
+      equipment: "bodyweight",
+      measure: "time",
+    });
+    expect(await getExercise(userId, exerciseId)).toMatchObject({
+      equipment: "bodyweight",
+      measure: "time",
+    });
+
+    const sessionId = await createSession(userId, {
+      performedAt: new Date("2026-08-20T18:00:00Z"),
+      exercises: [
+        {
+          exerciseId,
+          sets: [
+            { durationSeconds: 45, unit: "bw" },
+            { durationSeconds: 45, unit: "bw" },
+          ],
+        },
+      ],
+    });
+
+    const detail = await getSessionDetail(userId, sessionId);
+    expect(detail!.exercises[0].measure).toBe("time");
+    expect(detail!.exercises[0].sets[0]).toMatchObject({
+      reps: null,
+      repsLeft: null,
+      repsRight: null,
+      durationSeconds: 45,
+      weight: null,
+      unit: "bw",
+    });
+    expect((await listSessions(userId))[0].exerciseLabels[0]).toBe("Plank 2×45s BW");
+  });
+
+  it("keeps the load on a timed carry", async () => {
+    // measure and equipment are separate axes; folding them together loses this weight.
+    const exerciseId = await createExercise(userId, "Farmer's Carry", {
+      equipment: "dumbbell",
+      measure: "time",
+    });
+    const sessionId = await createSession(userId, {
+      performedAt: new Date(),
+      exercises: [
+        { exerciseId, sets: [{ durationSeconds: 90, weight: 50, unit: "lb" }] },
+      ],
+    });
+
+    expect(
+      (await getSessionDetail(userId, sessionId))!.exercises[0].sets[0],
+    ).toMatchObject({ durationSeconds: 90, weight: 50, unit: "lb" });
+    expect((await listSessions(userId))[0].exerciseLabels[0]).toContain("1:30 @ 50 lb");
+  });
+
+  it("stores reps and hold on one set, and allows a blank hold on another", async () => {
+    const exerciseId = await createExercise(userId, "Push-up", {
+      equipment: "bodyweight",
+      measure: "reps_and_time",
+    });
+    const sessionId = await createSession(userId, {
+      performedAt: new Date(),
+      exercises: [
+        {
+          exerciseId,
+          sets: [
+            { reps: 10, unit: "bw" },
+            { reps: 10, durationSeconds: 20, unit: "bw" },
+          ],
+        },
+      ],
+    });
+
+    const sets = (await getSessionDetail(userId, sessionId))!.exercises[0].sets;
+    expect(sets[0]).toMatchObject({ reps: 10, durationSeconds: null });
+    expect(sets[1]).toMatchObject({ reps: 10, durationSeconds: 20 });
+    expect((await listSessions(userId))[0].exerciseLabels[0]).toBe(
+      "Push-up 10, 10 + 20s BW",
+    );
+  });
+
+  it("keeps measure and durations through a replaceSession", async () => {
+    const exerciseId = await createExercise(userId, "Dead Hang", {
+      equipment: "bodyweight",
+      measure: "time",
+    });
+    const sessionId = await createSession(userId, {
+      performedAt: new Date("2026-08-20T12:00:00Z"),
+      exercises: [{ exerciseId, sets: [{ durationSeconds: 30, unit: "bw" }] }],
+    });
+
+    const before = await getSessionDetail(userId, sessionId);
+    await replaceSession(userId, sessionId, {
+      performedAt: before!.performedAt,
+      title: before!.title,
+      notes: before!.notes,
+      durationMinutes: before!.durationMinutes,
+      exercises: [
+        {
+          exerciseId,
+          sets: [
+            { durationSeconds: 30, unit: "bw" },
+            { durationSeconds: 40, unit: "bw" },
+          ],
+        },
+      ],
+    });
+
+    const after = await getSessionDetail(userId, sessionId);
+    expect(after!.exercises[0].measure).toBe("time");
+    expect(after!.exercises[0].sets.map((s) => s.durationSeconds)).toEqual([30, 40]);
+  });
+
+  it("changes an existing exercise to timed without touching its other prefs", async () => {
+    const id = await createExercise(userId, "Side Plank", {
+      equipment: "bodyweight",
+      notes: "hips stacked",
+    });
+    expect(await getExercise(userId, id)).toMatchObject({ measure: "reps" });
+
+    await updateExercise(userId, id, { measure: "time" });
+    expect(await getExercise(userId, id)).toMatchObject({
+      measure: "time",
+      equipment: "bodyweight",
+      notes: "hips stacked",
+    });
+  });
+
+  it("refuses a non-positive duration at the column, not just in the parser", async () => {
+    const exerciseId = await createExercise(userId, "Bad Hold", {
+      equipment: "bodyweight",
+      measure: "time",
+    });
+    const sessionId = await createSession(userId, {
+      performedAt: new Date(),
+      exercises: [{ exerciseId, sets: [{ durationSeconds: 10, unit: "bw" }] }],
+    });
+    const sessionExerciseId = (await getSessionDetail(userId, sessionId))!.exercises[0]
+      .id;
+
+    // normaliseSetInput nulls a zero, so the CHECK is the backstop for anything that
+    // reaches the insert some other way. An otherwise identical positive row must land,
+    // or this would pass on any insert error at all.
+    await expect(
+      db
+        .insert(workoutSets)
+        .values({
+          userId,
+          sessionExerciseId,
+          setIndex: 2,
+          durationSeconds: 5,
+          unit: "bw",
+        }),
+    ).resolves.toBeDefined();
+    await expect(
+      db
+        .insert(workoutSets)
+        .values({
+          userId,
+          sessionExerciseId,
+          setIndex: 3,
+          durationSeconds: 0,
+          unit: "bw",
+        }),
+    ).rejects.toThrow();
+  });
+
   it("isolates second user from first user's fitness rows", async () => {
     const owner = userId;
     const intruder = await makeUser();
@@ -297,5 +464,43 @@ describeDb("fitness sessions", () => {
     await expect(deleteSession(intruder, sessionId)).rejects.toThrow();
     expect(await getSessionDetail(intruder, sessionId)).toBeNull();
     expect(await listExercises(intruder)).toHaveLength(0);
+  });
+
+  it("isolates second user from first user's timed exercise and its holds", async () => {
+    const owner = userId;
+    const intruder = await makeUser();
+    const exerciseId = await createExercise(owner, "Private Plank", {
+      equipment: "bodyweight",
+      measure: "time",
+    });
+    const sessionId = await createSession(owner, {
+      performedAt: new Date(),
+      exercises: [{ exerciseId, sets: [{ durationSeconds: 60, unit: "bw" }] }],
+    });
+
+    expect(await getExercise(intruder, exerciseId)).toBeNull();
+    expect(await getSessionDetail(intruder, sessionId)).toBeNull();
+    expect(await loadExerciseHistory(intruder, exerciseId)).toEqual([]);
+    expect(await listSessions(intruder)).toEqual([]);
+
+    await expect(
+      updateExercise(intruder, exerciseId, { measure: "reps" }),
+    ).rejects.toThrow();
+    await expect(deleteExercise(intruder, exerciseId)).rejects.toThrow();
+    await expect(
+      replaceSession(intruder, sessionId, {
+        performedAt: new Date(),
+        exercises: [{ exerciseId, sets: [{ durationSeconds: 1, unit: "bw" }] }],
+      }),
+    ).rejects.toThrow();
+    await expect(deleteSession(intruder, sessionId)).rejects.toThrow();
+
+    // Nothing the intruder tried may have landed.
+    expect(await getExercise(owner, exerciseId)).toMatchObject({ measure: "time" });
+    expect(
+      (await getSessionDetail(owner, sessionId))!.exercises[0].sets.map(
+        (s) => s.durationSeconds,
+      ),
+    ).toEqual([60]);
   });
 });

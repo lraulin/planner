@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { formatSetRepsToken, formatSetsLabel, parseReps, parseWeight } from "./format";
+import {
+  formatSetMeasureToken,
+  formatSetRepsToken,
+  formatSetsLabel,
+  parseReps,
+  parseWeight,
+} from "./format";
 
 describe("formatSetsLabel", () => {
   it("collapses identical sets to N×reps @ weight", () => {
@@ -9,6 +15,7 @@ describe("formatSetsLabel", () => {
           reps: 5,
           repsLeft: null,
           repsRight: null,
+          durationSeconds: null,
           weight: 185,
           unit: "lb",
           completed: true,
@@ -17,6 +24,7 @@ describe("formatSetsLabel", () => {
           reps: 5,
           repsLeft: null,
           repsRight: null,
+          durationSeconds: null,
           weight: 185,
           unit: "lb",
           completed: true,
@@ -25,6 +33,7 @@ describe("formatSetsLabel", () => {
           reps: 5,
           repsLeft: null,
           repsRight: null,
+          durationSeconds: null,
           weight: 185,
           unit: "lb",
           completed: true,
@@ -40,6 +49,7 @@ describe("formatSetsLabel", () => {
           reps: 5,
           repsLeft: null,
           repsRight: null,
+          durationSeconds: null,
           weight: 185,
           unit: "lb",
           completed: true,
@@ -48,6 +58,7 @@ describe("formatSetsLabel", () => {
           reps: 3,
           repsLeft: null,
           repsRight: null,
+          durationSeconds: null,
           weight: 195,
           unit: "lb",
           completed: true,
@@ -63,6 +74,7 @@ describe("formatSetsLabel", () => {
           reps: 5,
           repsLeft: null,
           repsRight: null,
+          durationSeconds: null,
           weight: 100,
           unit: "lb",
           completed: true,
@@ -71,6 +83,7 @@ describe("formatSetsLabel", () => {
           reps: 5,
           repsLeft: null,
           repsRight: null,
+          durationSeconds: null,
           weight: 100,
           unit: "lb",
           completed: false,
@@ -86,6 +99,7 @@ describe("formatSetsLabel", () => {
           reps: 8,
           repsLeft: null,
           repsRight: null,
+          durationSeconds: null,
           weight: null,
           unit: "bw",
           completed: true,
@@ -94,6 +108,7 @@ describe("formatSetsLabel", () => {
           reps: 8,
           repsLeft: null,
           repsRight: null,
+          durationSeconds: null,
           weight: null,
           unit: "bw",
           completed: true,
@@ -102,6 +117,7 @@ describe("formatSetsLabel", () => {
           reps: 8,
           repsLeft: null,
           repsRight: null,
+          durationSeconds: null,
           weight: null,
           unit: "bw",
           completed: true,
@@ -117,6 +133,7 @@ describe("formatSetsLabel", () => {
           reps: null,
           repsLeft: 8,
           repsRight: 6,
+          durationSeconds: null,
           weight: 50,
           unit: "lb",
           completed: true,
@@ -125,6 +142,7 @@ describe("formatSetsLabel", () => {
           reps: null,
           repsLeft: 8,
           repsRight: 6,
+          durationSeconds: null,
           weight: 50,
           unit: "lb",
           completed: true,
@@ -140,6 +158,7 @@ describe("formatSetsLabel", () => {
           reps: null,
           repsLeft: 10,
           repsRight: 8,
+          durationSeconds: null,
           weight: null,
           unit: "bw",
           completed: true,
@@ -168,5 +187,88 @@ describe("parseWeight / parseReps", () => {
     expect(parseReps(5)).toBe(5);
     expect(parseReps("5.5")).toBeNull();
     expect(parseReps("")).toBeNull();
+  });
+});
+
+describe("formatSetMeasureToken", () => {
+  const base = { reps: null, repsLeft: null, repsRight: null, durationSeconds: null };
+
+  it("reads a hold when there are no reps", () => {
+    expect(formatSetMeasureToken({ ...base, durationSeconds: 45 })).toBe("45s");
+    expect(formatSetMeasureToken({ ...base, durationSeconds: 90 })).toBe("1:30");
+  });
+
+  it("reads reps then hold when the set has both", () => {
+    expect(formatSetMeasureToken({ ...base, reps: 10, durationSeconds: 20 })).toBe(
+      "10 + 20s",
+    );
+    expect(
+      formatSetMeasureToken({
+        ...base,
+        repsLeft: 8,
+        repsRight: 6,
+        durationSeconds: 20,
+      }),
+    ).toBe("8/6 + 20s");
+  });
+
+  it("is unchanged for a plain reps set", () => {
+    expect(formatSetMeasureToken({ ...base, reps: 5 })).toBe("5");
+    expect(formatSetMeasureToken({ ...base, repsLeft: 8, repsRight: 6 })).toBe("8/6");
+  });
+
+  it("is unknown only when the set recorded nothing", () => {
+    expect(formatSetMeasureToken(base)).toBe("?");
+  });
+});
+
+describe("formatSetsLabel — timed sets", () => {
+  function timed(durationSeconds: number, weight: number | null, unit: string) {
+    return {
+      reps: null,
+      repsLeft: null,
+      repsRight: null,
+      durationSeconds,
+      weight,
+      unit,
+      completed: true,
+    };
+  }
+
+  it("collapses identical bodyweight holds", () => {
+    expect(
+      formatSetsLabel([
+        timed(45, null, "bw"),
+        timed(45, null, "bw"),
+        timed(45, null, "bw"),
+      ]),
+    ).toBe("3×45s BW");
+  });
+
+  it("keeps the load on a weighted carry", () => {
+    // The whole point of measure being independent of equipment.
+    expect(formatSetsLabel([timed(90, 50, "lb"), timed(90, 50, "lb")])).toBe(
+      "2×1:30 @ 50 lb",
+    );
+  });
+
+  it("lists varying holds rather than collapsing them", () => {
+    expect(formatSetsLabel([timed(60, null, "bw"), timed(45, null, "bw")])).toBe(
+      "1:00, 45s BW",
+    );
+  });
+
+  it("labels a reps-then-hold exercise, hold optional per set", () => {
+    const set = (reps: number, durationSeconds: number | null) => ({
+      reps,
+      repsLeft: null,
+      repsRight: null,
+      durationSeconds,
+      weight: null,
+      unit: "bw",
+      completed: true,
+    });
+    expect(formatSetsLabel([set(10, 20), set(10, 20)])).toBe("2×10 + 20s BW");
+    expect(formatSetsLabel([set(10, null), set(10, 20)])).toBe("10, 10 + 20s BW");
   });
 });
