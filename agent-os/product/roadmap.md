@@ -657,6 +657,15 @@ flavor; optional palette thinning).
   `specs/2026-08-17-1402-shelve-task-exercise-link` — tasks and the log stay separate
   until a later Goal-level join is worth designing. Out: cardio/runs, routines,
   recurrence, Health import.
+- **✅ Timed and isometric work.** `specs/2026-08-20-1115-timed-isometric-exercises`. The
+  catalog exercise gained a third axis, `measure` — reps, time, or reps-then-hold —
+  orthogonal to `equipment` and `unilateral`, so a plank, a dead hang and a loaded carry
+  are logged as what they are and a weighted plank keeps its weight. Sets carry a nullable
+  `duration_seconds` beside the rep columns, which is what lets one set hold both and lets
+  a hold be blank on any set. A count-up stopwatch on the row captures the hold. The set
+  row's columns are now derived rather than branched, replacing four hand-written grids.
+  Out: distance-based carries, prescribed targets and a countdown, and separate L/R
+  durations — a side plank is two sets.
 - **Medium-term:** Deeper Goal / Result Area progress surfaces; routines/templates.
 - **Long-term:** Optional **Apple Health** (or similar) import — read-only first; cardio.
 

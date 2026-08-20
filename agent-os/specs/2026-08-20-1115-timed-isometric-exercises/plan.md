@@ -1,6 +1,6 @@
 # Timed / isometric exercises
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-20)  
 Spec folder: `agent-os/specs/2026-08-20-1115-timed-isometric-exercises/`
 
 ## Spec relationships
@@ -55,16 +55,16 @@ than estimated.
 
 ## Acceptance criteria
 
-- [ ] A catalog exercise declares **Reps**, **Time**, or **Reps + hold**; existing
+- [x] A catalog exercise declares **Reps**, **Time**, or **Reps + hold**; existing
       exercises keep behaving exactly as before with no migration of their rows.
-- [ ] A `time` exercise logs a duration-only set; a `reps_and_time` exercise logs reps
+- [x] A `time` exercise logs a duration-only set; a `reps_and_time` exercise logs reps
       and an optional hold, blank hold allowed per set.
-- [ ] Weight still records on timed sets wherever `usesWeight(equipment)` is true.
-- [ ] History labels read `Plank 3×45s BW`, `Farmer's Carry 3×0:45 @ 50 lb`,
+- [x] Weight still records on timed sets wherever `usesWeight(equipment)` is true.
+- [x] History labels read `Plank 3×45s BW`, `Farmer's Carry 3×0:45 @ 50 lb`,
       `Push-up 3×10 + 20s BW`.
-- [ ] A stopwatch on a timed set row fills the field with whole elapsed seconds; only one
+- [x] A stopwatch on a timed set row fills the field with whole elapsed seconds; only one
       runs at a time and none survives the drawer closing.
-- [ ] A second user cannot read, change or delete the first user's timed exercise or
+- [x] A second user cannot read, change or delete the first user's timed exercise or
       session.
 
 ## Changes from original plan
@@ -72,9 +72,14 @@ than estimated.
 Material refinements during implementation (requirements, design, scope). Omit pure
 code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                      | Why                                                                                                                                                                                        |
+| --- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | `setColumns` got its own module rather than living in `measure.ts`                          | It is about the editor row's shape, not about the measure concept. Small single-purpose modules, per `clean-code`.                                                                         |
+| 2   | The badge says **Hold** where the catalog select says **Time**                              | The catalog asks what a lift is measured in; the badge says what you will be doing. "Bodyweight · Time" reads worse than "Bodyweight · Hold".                                              |
+| 3   | The unilateral checkbox is replaced by a one-line note when the exercise measures time only | The control would have done nothing there. Saying "left and right is a reps setting; log each side as its own set" puts the shaping decision where someone looks for it on a side plank.   |
+| 4   | Closing the drawer drops a running hold instead of recording it                             | Committing it would have raced the autosave flush — `setBlocksAndSave` queues through a setState updater that may not run before `flush()`. A hold you never stopped is not a set you did. |
+| 5   | Clock reads (`Date.now`) moved to module-scope helpers                                      | `react-hooks/purity` rejects them inside a component, and the first attempt genuinely was wrong: it called `commitHold` from inside a `setRunningHold` updater, which must be pure.        |
+| 6   | `formatSetsLabel` infers a set's shape from its own nulls rather than taking `measure`      | Keeps the existing signature and the `3×token` collapse untouched, and renders history correctly for sets logged before the exercise was reconfigured.                                     |
 
 ## Task 1: Save spec documentation
 
@@ -172,8 +177,32 @@ No beep and no `document.title` takeover — a count-up has no end to announce.
 - Complete **Changes from original plan**, mark **Status: frozen / complete**, and extend
   the Fitness bullet in `agent-os/product/roadmap.md`.
 
+## Verification (2026-08-20)
+
+- 2877 unit tests and the full integration suite against real Postgres — the fitness
+  integration file ran 17 tests with no skip warning.
+- `lint`, `typecheck`, `build`, and `npm run smoke` across all 57 routes.
+- Driven in the browser: `Plank` (Bodyweight + Time) logged `15s, 1:30 BW` with the
+  stopwatch writing 15 s into the field and the `1:30` hint appearing only past a minute;
+  `Farmer's Carry` (Dumbbell + Time) logged `1×1:00 @ 50 lb` with the weight column intact;
+  `Push-up with bottom hold` (reps + hold) logged `10, 10 + 20s BW` with the hold blank on
+  set 1. Each session reopened with its columns and values. Existing reps exercises were
+  byte-identical throughout.
+- Every probe row was deleted afterwards; the dev database is exactly as it was found.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- The exercise **picker** label (`formatExerciseSelectLabel`) still shows only equipment,
+  so two same-named exercises differing only by measure are indistinguishable in the
+  dropdown. The badge under the picker does show it.
+- Distance-based carries, prescribed targets with a countdown, and L/R durations remain
+  deliberately unbuilt.
+- Unrelated and pre-existing: `src/lib/day/mutations.integration.test.ts` >
+  "clears descendant plans that fall inside a dated shelf" fails on today's date. Confirmed
+  present with this work stashed.
+
 ---
 
-**Standing rule while this spec is active:** material changes to requirements, design or
+**Standing rule while this spec was active:** material changes to requirements, design or
 scope — including feedback on what was built — go into `plan.md` / `shape.md` and get a row
 in **Changes from original plan**. Pure implementation details do not.
