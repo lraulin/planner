@@ -18,9 +18,11 @@ function baseDraft(overrides: Partial<SessionDraft> = {}): SessionDraft {
     title: "Push",
     notes: "",
     durationMinutes: "45",
+    groups: [],
     exercises: [
       {
         key: "b1",
+        groupId: null,
         exerciseId: "ex-bench",
         exerciseName: "Bench Press",
         equipment: "barbell",
@@ -65,6 +67,7 @@ describe("draftToSessionInput", () => {
         durationSeconds: null,
         weight: 185,
         unit: "lb",
+        completed: true,
       },
     ]);
   });
@@ -75,6 +78,7 @@ describe("draftToSessionInput", () => {
         exercises: [
           {
             key: "b1",
+            groupId: null,
             exerciseId: "ex-db",
             exerciseName: "DB Row",
             equipment: "dumbbell",
@@ -104,6 +108,7 @@ describe("draftToSessionInput", () => {
       durationSeconds: null,
       weight: 50,
       unit: "lb",
+      completed: true,
     });
   });
 
@@ -179,6 +184,7 @@ describe("draftToSessionInput — timed exercises", () => {
       exercises: [
         {
           key: "t1",
+          groupId: null,
           exerciseId: "ex-plank",
           exerciseName: "Plank",
           equipment: "bodyweight",
@@ -217,6 +223,7 @@ describe("draftToSessionInput — timed exercises", () => {
         durationSeconds: 45,
         weight: null,
         unit: "bw",
+        completed: true,
       },
     ]);
   });
@@ -266,6 +273,7 @@ describe("draftToSessionInput — timed exercises", () => {
       durationSeconds: 60,
       weight: 50,
       unit: "lb",
+      completed: true,
     });
   });
 
@@ -320,6 +328,7 @@ describe("draftToSessionInput — timed exercises", () => {
         durationSeconds: null,
         weight: null,
         unit: "bw",
+        completed: true,
       },
       {
         reps: 10,
@@ -328,6 +337,7 @@ describe("draftToSessionInput — timed exercises", () => {
         durationSeconds: 20,
         weight: null,
         unit: "bw",
+        completed: true,
       },
     ]);
   });
@@ -409,5 +419,172 @@ describe("setsFromHistory — durations", () => {
         { equipment: "bodyweight", measure: "reps", unilateral: false },
       )[0],
     ).toMatchObject({ reps: "10", duration: "" });
+  });
+});
+
+describe("draftToSessionInput — groups", () => {
+  const groupCatalog = [
+    { id: "ex-press", name: "Incline Press" },
+    { id: "ex-row", name: "Chest-Supported Row" },
+    { id: "ex-curl", name: "Curl" },
+  ];
+
+  function block({
+    exerciseId,
+    ...over
+  }: Partial<SessionDraft["exercises"][number]> & {
+    exerciseId: string;
+  }): SessionDraft["exercises"][number] {
+    return {
+      key: exerciseId,
+      groupId: null,
+      exerciseId,
+      exerciseName: groupCatalog.find((e) => e.id === exerciseId)!.name,
+      equipment: "dumbbell",
+      measure: "reps",
+      barWeight: 45,
+      unilateral: false,
+      notes: "",
+      sets: [],
+      ...over,
+    };
+  }
+
+  function reps(...values: string[]): SessionDraft["exercises"][number]["sets"] {
+    return values.map((r) => ({
+      reps: r,
+      repsLeft: "",
+      repsRight: "",
+      duration: "",
+      weight: r === "" ? "" : "50",
+      unit: "lb",
+    }));
+  }
+
+  it("points both members at the group and carries its label and rest", () => {
+    const input = draftToSessionInput(
+      baseDraft({
+        groups: [{ id: "g1", label: " Superset ", rest: "1:30" }],
+        exercises: [
+          block({ exerciseId: "ex-press", groupId: "g1", sets: reps("10", "10") }),
+          block({ exerciseId: "ex-row", groupId: "g1", sets: reps("12", "12") }),
+        ],
+      }),
+      groupCatalog,
+    );
+
+    expect(input?.groups).toEqual([{ label: "Superset", restSeconds: 90 }]);
+    expect(input?.exercises.map((e) => e.groupIndex)).toEqual([0, 0]);
+  });
+
+  it("leaves an ungrouped exercise with a null groupIndex", () => {
+    const input = draftToSessionInput(
+      baseDraft({
+        groups: [{ id: "g1", label: "Superset", rest: "" }],
+        exercises: [
+          block({ exerciseId: "ex-press", groupId: "g1", sets: reps("10") }),
+          block({ exerciseId: "ex-curl", sets: reps("15") }),
+        ],
+      }),
+      groupCatalog,
+    );
+
+    expect(input?.exercises.map((e) => e.groupIndex)).toEqual([0, null]);
+    expect(input?.groups).toHaveLength(1);
+  });
+
+  it("drops a group whose every member lost its sets, and reindexes the survivors", () => {
+    // The empty group sits first, so a stale index would silently point the second
+    // group's members at the first one.
+    const input = draftToSessionInput(
+      baseDraft({
+        groups: [
+          { id: "g1", label: "Warm-up", rest: "" },
+          { id: "g2", label: "Circuit", rest: "60" },
+        ],
+        exercises: [
+          block({ exerciseId: "ex-press", groupId: "g1", sets: reps("") }),
+          block({ exerciseId: "ex-row", groupId: "g2", sets: reps("12") }),
+          block({ exerciseId: "ex-curl", groupId: "g2", sets: reps("15") }),
+        ],
+      }),
+      groupCatalog,
+    );
+
+    expect(input?.groups).toEqual([{ label: "Circuit", restSeconds: 60 }]);
+    expect(input?.exercises.map((e) => e.groupIndex)).toEqual([0, 0]);
+  });
+
+  it("ignores a groupId with no matching group", () => {
+    const input = draftToSessionInput(
+      baseDraft({
+        groups: [],
+        exercises: [
+          block({ exerciseId: "ex-press", groupId: "ghost", sets: reps("10") }),
+        ],
+      }),
+      groupCatalog,
+    );
+
+    expect(input?.groups).toEqual([]);
+    expect(input?.exercises[0].groupIndex).toBeNull();
+  });
+
+  it("keeps a skipped round inside a group, marked not completed", () => {
+    // Set index is the round. Dropping the blank would slide round 3 onto round 2.
+    const input = draftToSessionInput(
+      baseDraft({
+        groups: [{ id: "g1", label: "Circuit", rest: "" }],
+        exercises: [
+          block({ exerciseId: "ex-press", groupId: "g1", sets: reps("10", "", "8") }),
+        ],
+      }),
+      groupCatalog,
+    );
+
+    expect(input?.exercises[0].sets.map((s) => s.completed)).toEqual([
+      true,
+      false,
+      true,
+    ]);
+    expect(input?.exercises[0].sets.map((s) => s.reps)).toEqual([10, null, 8]);
+  });
+
+  it("still trims the blank rounds at the end of a grouped member", () => {
+    const input = draftToSessionInput(
+      baseDraft({
+        groups: [{ id: "g1", label: "Circuit", rest: "" }],
+        exercises: [
+          block({ exerciseId: "ex-press", groupId: "g1", sets: reps("10", "", "") }),
+        ],
+      }),
+      groupCatalog,
+    );
+
+    expect(input?.exercises[0].sets).toHaveLength(1);
+  });
+
+  it("drops blank rows anywhere in an ungrouped exercise, where index means nothing", () => {
+    const input = draftToSessionInput(
+      baseDraft({
+        groups: [],
+        exercises: [block({ exerciseId: "ex-press", sets: reps("10", "", "8") })],
+      }),
+      groupCatalog,
+    );
+
+    expect(input?.exercises[0].sets.map((s) => s.reps)).toEqual([10, 8]);
+  });
+
+  it("treats a zero rest as no rest, since the column refuses it", () => {
+    const input = draftToSessionInput(
+      baseDraft({
+        groups: [{ id: "g1", label: "Circuit", rest: "0" }],
+        exercises: [block({ exerciseId: "ex-press", groupId: "g1", sets: reps("10") })],
+      }),
+      groupCatalog,
+    );
+
+    expect(input?.groups?.[0].restSeconds).toBeNull();
   });
 });

@@ -3,11 +3,13 @@ import { db } from "@/db";
 import {
   exercises,
   workoutSessionExercises,
+  workoutSessionGroups,
   workoutSessions,
   workoutSets,
 } from "@/db/schema";
 import { between } from "@/lib/tree/sortKey";
 import { DEFAULT_BAR_WEIGHT_LB, parseBarWeight } from "./bars";
+import { parseDurationSeconds } from "./duration";
 import { coerceExercisePrefs, normaliseEquipment } from "./equipment";
 import { normaliseSetInput } from "./format";
 import { normaliseMeasure } from "./measure";
@@ -262,6 +264,72 @@ async function insertSets(
   }
 }
 
+/**
+ * Write a session's groups, then its exercises in order, threading membership through.
+ *
+ * Group rows are recreated on every save along with everything else, which is why a group
+ * needs no stable identity and why its members come out contiguous in `sortKey` order —
+ * the property the read side relies on to fold them back into a group.
+ */
+async function insertGroupsAndExercises(
+  tx: Executor,
+  userId: string,
+  sessionId: string,
+  input: SessionInput,
+) {
+  const groupIds: string[] = [];
+  for (const group of input.groups ?? []) {
+    const [row] = await tx
+      .insert(workoutSessionGroups)
+      .values({
+        userId,
+        sessionId,
+        label: group.label?.trim() ?? "",
+        // Same normaliser as a set's hold: zero, negative and absurd all become "no rest".
+        restSeconds: parseDurationSeconds(group.restSeconds),
+      })
+      .returning({ id: workoutSessionGroups.id });
+    groupIds.push(row.id);
+  }
+
+  let prevKey: string | null = null;
+  for (const block of input.exercises) {
+    const exerciseId = await resolveExerciseId(tx, userId, block);
+    const sortKey = between(prevKey, null);
+    prevKey = sortKey;
+
+    const [sessionExercise] = await tx
+      .insert(workoutSessionExercises)
+      .values({
+        userId,
+        sessionId,
+        exerciseId,
+        sortKey,
+        notes: block.notes ?? "",
+        groupId: resolveGroupId(groupIds, block.groupIndex),
+      })
+      .returning({ id: workoutSessionExercises.id });
+
+    await insertSets(tx, userId, sessionExercise.id, block.sets);
+  }
+}
+
+/**
+ * An index past the end of `groups` is a caller bug, and quietly ungrouping the exercise
+ * would hide it until someone noticed their superset had come apart.
+ */
+function resolveGroupId(
+  groupIds: string[],
+  groupIndex: number | null | undefined,
+): string | null {
+  if (groupIndex === null || groupIndex === undefined) return null;
+  const id = groupIds[groupIndex];
+  if (!id) {
+    throw new Error(`Exercise refers to group ${groupIndex}, which was not supplied.`);
+  }
+  return id;
+}
+
 /** Log a full session in one transaction. */
 export async function createSession(
   userId: string,
@@ -283,25 +351,7 @@ export async function createSession(
       })
       .returning({ id: workoutSessions.id });
 
-    let prevKey: string | null = null;
-    for (const block of input.exercises) {
-      const exerciseId = await resolveExerciseId(tx, userId, block);
-      const sortKey = between(prevKey, null);
-      prevKey = sortKey;
-
-      const [sessionExercise] = await tx
-        .insert(workoutSessionExercises)
-        .values({
-          userId,
-          sessionId: session.id,
-          exerciseId,
-          sortKey,
-          notes: block.notes ?? "",
-        })
-        .returning({ id: workoutSessionExercises.id });
-
-      await insertSets(tx, userId, sessionExercise.id, block.sets);
-    }
+    await insertGroupsAndExercises(tx, userId, session.id, input);
 
     return session.id;
   });
@@ -333,6 +383,7 @@ export async function replaceSession(
         and(eq(workoutSessions.id, sessionId), eq(workoutSessions.userId, userId)),
       );
 
+    // Exercises first: their sets cascade, and the group rows are then unreferenced.
     await tx
       .delete(workoutSessionExercises)
       .where(
@@ -342,25 +393,16 @@ export async function replaceSession(
         ),
       );
 
-    let prevKey: string | null = null;
-    for (const block of input.exercises) {
-      const exerciseId = await resolveExerciseId(tx, userId, block);
-      const sortKey = between(prevKey, null);
-      prevKey = sortKey;
+    await tx
+      .delete(workoutSessionGroups)
+      .where(
+        and(
+          eq(workoutSessionGroups.sessionId, sessionId),
+          eq(workoutSessionGroups.userId, userId),
+        ),
+      );
 
-      const [sessionExercise] = await tx
-        .insert(workoutSessionExercises)
-        .values({
-          userId,
-          sessionId,
-          exerciseId,
-          sortKey,
-          notes: block.notes ?? "",
-        })
-        .returning({ id: workoutSessionExercises.id });
-
-      await insertSets(tx, userId, sessionExercise.id, block.sets);
-    }
+    await insertGroupsAndExercises(tx, userId, sessionId, input);
   });
 }
 

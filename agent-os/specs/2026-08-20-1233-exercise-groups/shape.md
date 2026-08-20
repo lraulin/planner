@@ -1,6 +1,6 @@
 # Exercise groups — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-08-20)
 
 ## Scope
 
@@ -61,6 +61,18 @@ one-handed on the phone mid-workout.
   `agent-os/product/roadmap.md`; this is a new `✅` line under the tracker, adjacent to but
   distinct from the medium-term routines/templates entry. Achieve Planner has no fitness
   module, so `docs/achieve-planner/` does not govern it.
+
+## As built — what shaping did not foresee
+
+The decision to derive rounds turned out to carry a rule with it. If round N is set N, then
+a member's sets must line up with the rounds, so a blank round in the middle of a grouped
+member cannot be dropped the way a blank row in a straight exercise is — dropping it slides
+every later set up one round. Grouped members therefore keep interior blanks, written as
+all-null sets with `completed: false`; only trailing blanks are trimmed. Holes are never
+_created_ either: adding a round levels every member first.
+
+This is the part of the feature most likely to look like a bug to someone reading the writer
+in isolation, and it is why `draftToSessionInput` has two paths.
 
 ## Pre-existing loose end fixed here
 

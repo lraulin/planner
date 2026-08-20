@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  clampRestDuration,
   DEFAULT_REST_SEC,
   formatRestClock,
   nudgeRestDuration,
@@ -49,12 +50,13 @@ function playDoneBeep() {
 
 /**
  * Sticky rest countdown for the session drawer. Remembers last duration in
- * localStorage. Parent registers start() so “Add set” can kick the timer.
+ * localStorage. Parent registers start() so finishing a round can kick the timer, passing
+ * the group's own rest — which runs without becoming the remembered preference.
  */
 export function RestTimer({
   onRegisterStart,
 }: {
-  onRegisterStart?: (start: () => void) => void;
+  onRegisterStart?: (start: (seconds?: number) => void) => void;
 }) {
   const [durationSec, setDurationSec] = useState(loadPreferredRest);
   const [endsAt, setEndsAt] = useState<number | null>(null);
@@ -79,14 +81,18 @@ export function RestTimer({
     [running],
   );
 
-  const start = useCallback(() => {
-    doneFired.current = false;
-    setFinished(false);
-    const end = Date.now() + durationSec * 1000;
-    setEndsAt(end);
-    setRunning(true);
-    setRemaining(durationSec);
-  }, [durationSec]);
+  const start = useCallback(
+    (seconds?: number) => {
+      // A group's rest is a property of that group, not a new default for the session.
+      const sec = clampRestDuration(seconds ?? durationSec);
+      doneFired.current = false;
+      setFinished(false);
+      setEndsAt(Date.now() + sec * 1000);
+      setRunning(true);
+      setRemaining(sec);
+    },
+    [durationSec],
+  );
 
   useEffect(() => {
     onRegisterStart?.(start);
@@ -181,7 +187,7 @@ export function RestTimer({
           {!running ? (
             <button
               type="button"
-              onClick={start}
+              onClick={() => start()}
               className="rounded bg-ink px-3 py-1.5 text-[0.8125rem] font-medium text-surface"
             >
               Start

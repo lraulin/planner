@@ -1,6 +1,6 @@
 # Exercise groups — supersets, circuits, mechanical drop sets
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-20)  
 Spec folder: `agent-os/specs/2026-08-20-1233-exercise-groups/`
 
 ## Spec relationships
@@ -101,9 +101,15 @@ work. Migration generated with drizzle-kit; no backfill, every existing block is
 Material refinements during implementation (requirements, design, scope). Omit pure code
 polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                                              | Why                                                                                                                                                                                                                                                                                                                                                                                                              |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Inside a group, an interior blank set is kept and written with `completed: false`.** Only trailing blanks are trimmed.                            | Deriving rounds from set index means the index _is_ the round. Dropping a blank round the way an ungrouped exercise does would slide every later set onto the wrong round — silent misattribution of logged work. `completed` was already on the table and unused, and `formatSetsLabel` already skips it, so a sat-out round keeps the alignment without appearing in history. Ungrouped behavior is unchanged. |
+| 2   | **Round-major logging enforces a "no holes" invariant**: `addRound` levels every member, and a member may only fall _short_ at the end.             | The alternative — arbitrary holes — cannot round-trip through `workout_sets.set_index`, which is assigned sequentially on insert. Trailing shortfall is also the case that actually happens (you ran out of time on the last round).                                                                                                                                                                             |
+| 3   | Two new pure modules beyond the plan: `groupEdit.ts` (join / ungroup / add member / splice round results) and `hold.ts`.                            | Contiguity is the invariant the whole no-sort-key design rests on. Enforced in tested lib code rather than inferred from how the buttons happen to be wired; `hold.ts` shares the stopwatch state between the two block types without a cycle.                                                                                                                                                                   |
+| 4   | `SetHeader` / `SetRow` / `PlateLine` / `ExerciseNotes` / `LastSessionHint` extracted from `SessionEditor` into `SetRow.tsx` and `ExerciseMeta.tsx`. | The group view needs the same rows; one shared implementation per concern. `SetRow` gained an optional `indexLabel` so the gutter can read `A1`, which is the only change to it.                                                                                                                                                                                                                                 |
+| 5   | A group with **no rest typed still starts the timer**, at the session's remembered duration.                                                        | Finishing a round is the moment the timer exists for. The group's rest is an override, not a precondition — requiring it would leave the common case (superset, rest left blank) with no timer at all.                                                                                                                                                                                                           |
+| 6   | Column headers repeat inside a group only where a member's shape differs from the member above it.                                                  | Rendering one header per member made a plain two-barbell superset show the same `# Reps Weight Unit` row twice. Seen in the browser, fixed there.                                                                                                                                                                                                                                                                |
+| 7   | Dropped from Task 2: extending `src/db/sample-data.ts` with a grouped session.                                                                      | The premise was wrong — `sample-data.ts` seeds no fitness rows at all, so there was nothing to extend.                                                                                                                                                                                                                                                                                                           |
 
 ## Task 1: Save spec documentation
 
@@ -215,6 +221,17 @@ reload, ungroup, delete.
 
 Freeze `plan.md`/`shape.md`, complete **Changes from original plan**, and add a `✅` fitness
 line to `agent-os/product/roadmap.md` citing this spec.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- Group structure in the history list. `listSessions` still summarises per exercise, so a
+  superset reads as two independent lines there. Deliberate — the list is a glance surface —
+  but a `Superset: A + B` line is the obvious next ask.
+- Reordering exercises or groups. Still no affordance anywhere in Fitness; "Group with
+  previous / next" works only on neighbours, so grouping two lifts that are not adjacent
+  means deleting and re-adding one.
+- `formatExerciseSelectLabel` still shows only equipment, carried over unresolved from
+  `2026-08-20-1115-timed-isometric-exercises`.
 
 ## Out of scope
 

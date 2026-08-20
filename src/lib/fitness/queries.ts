@@ -3,6 +3,7 @@ import { db } from "@/db";
 import {
   exercises,
   workoutSessionExercises,
+  workoutSessionGroups,
   workoutSessions,
   workoutSets,
 } from "@/db/schema";
@@ -184,6 +185,7 @@ export async function getSessionDetail(
       exerciseId: workoutSessionExercises.exerciseId,
       sortKey: workoutSessionExercises.sortKey,
       notes: workoutSessionExercises.notes,
+      groupId: workoutSessionExercises.groupId,
       exerciseName: exercises.name,
       equipment: exercises.equipment,
       measure: exercises.measure,
@@ -215,6 +217,16 @@ export async function getSessionDetail(
           )
           .orderBy(asc(workoutSets.setIndex));
 
+  const groupRows = await db
+    .select()
+    .from(workoutSessionGroups)
+    .where(
+      and(
+        eq(workoutSessionGroups.userId, userId),
+        eq(workoutSessionGroups.sessionId, sessionId),
+      ),
+    );
+
   const setsBySe = new Map<string, WorkoutSetView[]>();
   for (const set of setRows) {
     const list = setsBySe.get(set.sessionExerciseId) ?? [];
@@ -240,7 +252,14 @@ export async function getSessionDetail(
       unilateral: se.unilateral,
       sortKey: se.sortKey,
       notes: se.notes,
+      groupId: se.groupId,
       sets: setsBySe.get(se.id) ?? [],
+    })),
+    // Unordered on purpose: a group's position comes from its members, not from itself.
+    groups: groupRows.map((g) => ({
+      id: g.id,
+      label: g.label,
+      restSeconds: g.restSeconds,
     })),
   };
 }

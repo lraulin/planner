@@ -26,8 +26,22 @@ export type DraftSet = {
   unit: string;
 };
 
+/**
+ * A superset / circuit / mechanical drop set in the editor. `id` is client-generated and
+ * lives only as long as the draft — groups are rebuilt on every save, so nothing outside the
+ * session references one.
+ */
+export type DraftGroup = {
+  id: string;
+  label: string;
+  /** Rest after a round. Text, like `DraftSet.duration`, so a half-typed value survives. */
+  rest: string;
+};
+
 export type DraftExercise = {
   key: string;
+  /** `DraftGroup.id`, or null for a straight exercise. */
+  groupId: string | null;
   exerciseId: string;
   exerciseName: string;
   equipment: ExerciseEquipment;
@@ -44,6 +58,8 @@ export type SessionDraft = {
   title: string;
   notes: string;
   durationMinutes: string;
+  groups: DraftGroup[];
+  /** Flat and ordered; a group's members are contiguous. */
   exercises: DraftExercise[];
 };
 
@@ -184,7 +200,9 @@ export function draftToSessionInput(
   draft: SessionDraft,
   catalog: Array<{ id: string; name: string }>,
 ): SessionInput | null {
-  const exercises = draft.exercises
+  const groupIds = new Set(draft.groups.map((g) => g.id));
+
+  const blocks = draft.exercises
     .map((block) => {
       const name = block.exerciseName.trim();
       const known = catalog.find((e) => e.id === block.exerciseId || e.name === name);
@@ -192,11 +210,25 @@ export function draftToSessionInput(
       const measure = normaliseMeasure(block.measure);
       const unilateral = effectiveUnilateral(equipment, block.unilateral);
       const bodyweight = equipment === "bodyweight";
+      const grouped = block.groupId !== null && groupIds.has(block.groupId);
+
+      const filled = block.sets.map((s) =>
+        setIsFilled(s, equipment, block.unilateral, measure),
+      );
+
+      /*
+       * Ungrouped, a blank row is just an unused row and drops out. Inside a group the set
+       * index *is* the round, so only the trailing blanks may go: dropping an interior one
+       * would slide every later set onto the wrong round. A kept blank is a round this
+       * member sat out, recorded as `completed: false` so history labels skip it.
+       */
+      const keep = grouped
+        ? filled.map((_, i) => filled.slice(i).some(Boolean))
+        : filled;
 
       // Each axis decides its own fields; nesting them produced a dozen near-copies.
       const sets = block.sets
-        .filter((s) => setIsFilled(s, equipment, block.unilateral, measure))
-        .map((s) => ({
+        .map((s, i) => ({
           reps: tracksReps(measure) && !unilateral ? num(s.reps) : null,
           repsLeft: tracksReps(measure) && unilateral ? num(s.repsLeft) : null,
           repsRight: tracksReps(measure) && unilateral ? num(s.repsRight) : null,
@@ -205,7 +237,9 @@ export function draftToSessionInput(
             : null,
           weight: bodyweight ? null : num(s.weight),
           unit: bodyweight ? "bw" : s.unit || "lb",
-        }));
+          completed: filled[i],
+        }))
+        .filter((_, i) => keep[i]);
 
       if (sets.length === 0) return null;
       if (!known?.id && !name) return null;
@@ -214,12 +248,20 @@ export function draftToSessionInput(
         exerciseId: known?.id || block.exerciseId || undefined,
         exerciseName: name || known?.name,
         notes: block.notes,
+        groupId: grouped ? block.groupId : null,
         sets,
       };
     })
     .filter((block): block is NonNullable<typeof block> => block !== null);
 
-  if (exercises.length === 0) return null;
+  if (blocks.length === 0) return null;
+
+  /*
+   * A group whose every member lost its sets is gone, so the survivors have to be reindexed
+   * — leave the gap and `groupIndex` quietly points at a different group.
+   */
+  const surviving = draft.groups.filter((g) => blocks.some((b) => b.groupId === g.id));
+  const indexById = new Map(surviving.map((g, i) => [g.id, i]));
 
   return {
     performedAt: parseLocalInput(draft.performedAt),
@@ -227,7 +269,14 @@ export function draftToSessionInput(
     notes: draft.notes,
     durationMinutes:
       draft.durationMinutes.trim() === "" ? null : Number(draft.durationMinutes),
-    exercises,
+    groups: surviving.map((g) => ({
+      label: g.label.trim(),
+      restSeconds: parseDurationSeconds(g.rest),
+    })),
+    exercises: blocks.map(({ groupId, ...block }) => ({
+      ...block,
+      groupIndex: groupId === null ? null : (indexById.get(groupId) ?? null),
+    })),
   };
 }
 
@@ -238,6 +287,7 @@ export function draftBlockFromCatalog(
 ): DraftExercise {
   return {
     key,
+    groupId: null,
     exerciseId: exercise.id,
     exerciseName: exercise.name,
     equipment: exercise.equipment,
@@ -252,6 +302,7 @@ export function draftBlockFromCatalog(
 export function emptyDraftBlock(): DraftExercise {
   return {
     key: crypto.randomUUID(),
+    groupId: null,
     exerciseId: "",
     exerciseName: "",
     equipment: "barbell",

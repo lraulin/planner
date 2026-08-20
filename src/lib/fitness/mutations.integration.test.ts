@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { users, workoutSets } from "@/db/schema";
+import { users, workoutSessionGroups, workoutSets } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import {
   createExercise,
@@ -12,6 +12,8 @@ import {
   replaceSession,
   updateExercise,
 } from "./mutations";
+import { formatSetsLabel } from "./format";
+import { groupSessionItems } from "./sessionGroups";
 import {
   getExercise,
   getSessionDetail,
@@ -426,26 +428,22 @@ describeDb("fitness sessions", () => {
     // reaches the insert some other way. An otherwise identical positive row must land,
     // or this would pass on any insert error at all.
     await expect(
-      db
-        .insert(workoutSets)
-        .values({
-          userId,
-          sessionExerciseId,
-          setIndex: 2,
-          durationSeconds: 5,
-          unit: "bw",
-        }),
+      db.insert(workoutSets).values({
+        userId,
+        sessionExerciseId,
+        setIndex: 2,
+        durationSeconds: 5,
+        unit: "bw",
+      }),
     ).resolves.toBeDefined();
     await expect(
-      db
-        .insert(workoutSets)
-        .values({
-          userId,
-          sessionExerciseId,
-          setIndex: 3,
-          durationSeconds: 0,
-          unit: "bw",
-        }),
+      db.insert(workoutSets).values({
+        userId,
+        sessionExerciseId,
+        setIndex: 3,
+        durationSeconds: 0,
+        unit: "bw",
+      }),
     ).rejects.toThrow();
   });
 
@@ -502,5 +500,241 @@ describeDb("fitness sessions", () => {
         (s) => s.durationSeconds,
       ),
     ).toEqual([60]);
+  });
+  it("logs a superset and folds it back into one group", async () => {
+    const sessionId = await createSession(userId, {
+      performedAt: new Date("2026-08-20T18:00:00Z"),
+      title: "Upper",
+      groups: [{ label: "Superset", restSeconds: 90 }],
+      exercises: [
+        {
+          exerciseName: "Incline Press",
+          groupIndex: 0,
+          sets: [
+            { reps: 10, weight: 50 },
+            { reps: 10, weight: 50 },
+          ],
+        },
+        {
+          exerciseName: "Chest-Supported Row",
+          groupIndex: 0,
+          sets: [
+            { reps: 12, weight: 70 },
+            { reps: 12, weight: 70 },
+          ],
+        },
+      ],
+    });
+
+    const detail = (await getSessionDetail(userId, sessionId))!;
+    expect(detail.groups).toHaveLength(1);
+    expect(detail.groups[0]).toMatchObject({ label: "Superset", restSeconds: 90 });
+
+    const items = groupSessionItems(detail.exercises, detail.groups);
+    expect(items).toHaveLength(1);
+    expect(items[0].kind === "group" && items[0].rounds).toBe(2);
+    expect(
+      items[0].kind === "group" &&
+        items[0].members.map((m) => `${m.label} ${m.member.exerciseName}`),
+    ).toEqual(["A1 Incline Press", "A2 Chest-Supported Row"]);
+  });
+
+  it("keeps ungrouped, grouped and ungrouped in order through a rebuild", async () => {
+    const sessionId = await createSession(userId, {
+      performedAt: new Date("2026-08-20T18:00:00Z"),
+      groups: [{ label: "Circuit", restSeconds: 60 }],
+      exercises: [
+        { exerciseName: "Squat", sets: [{ reps: 5, weight: 225 }] },
+        { exerciseName: "Curl", groupIndex: 0, sets: [{ reps: 12, weight: 30 }] },
+        { exerciseName: "Pushdown", groupIndex: 0, sets: [{ reps: 12, weight: 40 }] },
+        { exerciseName: "Calf Raise", sets: [{ reps: 15, weight: 90 }] },
+      ],
+    });
+
+    const before = (await getSessionDetail(userId, sessionId))!;
+
+    // Round-trip the read model back through the writer, the way autosave does.
+    await replaceSession(userId, sessionId, {
+      performedAt: before.performedAt,
+      groups: before.groups.map((g) => ({
+        label: g.label,
+        restSeconds: g.restSeconds,
+      })),
+      exercises: before.exercises.map((e) => ({
+        exerciseId: e.exerciseId,
+        groupIndex:
+          e.groupId === null
+            ? null
+            : before.groups.findIndex((g) => g.id === e.groupId),
+        sets: e.sets,
+      })),
+    });
+
+    const after = (await getSessionDetail(userId, sessionId))!;
+    const items = groupSessionItems(after.exercises, after.groups);
+    expect(
+      items.map((item) =>
+        item.kind === "exercise"
+          ? `${item.letter} ${item.member.exerciseName}`
+          : `${item.letter} [${item.members.map((m) => m.member.exerciseName).join(" + ")}]`,
+      ),
+    ).toEqual(["A Squat", "B [Curl + Pushdown]", "C Calf Raise"]);
+  });
+
+  it("keeps a skipped round aligned rather than sliding the next one onto it", async () => {
+    const sessionId = await createSession(userId, {
+      performedAt: new Date("2026-08-20T18:00:00Z"),
+      groups: [{ label: "Circuit" }],
+      exercises: [
+        {
+          exerciseName: "Goblet Squat",
+          groupIndex: 0,
+          sets: [
+            { reps: 12, weight: 50 },
+            { completed: false },
+            { reps: 10, weight: 50 },
+          ],
+        },
+        {
+          exerciseName: "Push-up",
+          groupIndex: 0,
+          // Stopped after two rounds — a trailing shortfall, not a hole.
+          sets: [
+            { reps: 20, unit: "bw" },
+            { reps: 18, unit: "bw" },
+          ],
+        },
+      ],
+    });
+
+    const detail = (await getSessionDetail(userId, sessionId))!;
+    const [squat, pushup] = detail.exercises;
+
+    expect(squat.sets.map((s) => s.setIndex)).toEqual([1, 2, 3]);
+    expect(squat.sets.map((s) => s.reps)).toEqual([12, null, 10]);
+    expect(squat.sets[1].completed).toBe(false);
+    expect(pushup.sets).toHaveLength(2);
+
+    // The skipped round drops out of the history label without shifting the others.
+    expect(formatSetsLabel(squat.sets)).toBe("12, 10 @ 50 lb");
+    expect(groupSessionItems(detail.exercises, detail.groups)[0]).toMatchObject({
+      rounds: 3,
+    });
+  });
+
+  it("ungroups without losing a single set", async () => {
+    const sessionId = await createSession(userId, {
+      performedAt: new Date("2026-08-20T18:00:00Z"),
+      groups: [{ label: "Superset", restSeconds: 90 }],
+      exercises: [
+        { exerciseName: "Fly", groupIndex: 0, sets: [{ reps: 12, weight: 30 }] },
+        { exerciseName: "Dip", groupIndex: 0, sets: [{ reps: 8, unit: "bw" }] },
+      ],
+    });
+
+    const before = (await getSessionDetail(userId, sessionId))!;
+    await replaceSession(userId, sessionId, {
+      performedAt: before.performedAt,
+      exercises: before.exercises.map((e) => ({
+        exerciseId: e.exerciseId,
+        sets: e.sets,
+      })),
+    });
+
+    const after = (await getSessionDetail(userId, sessionId))!;
+    expect(after.groups).toEqual([]);
+    expect(after.exercises.map((e) => e.groupId)).toEqual([null, null]);
+    expect(after.exercises.map((e) => e.sets.length)).toEqual([1, 1]);
+    expect(after.exercises[0].sets[0].reps).toBe(12);
+    expect(after.exercises[1].sets[0].reps).toBe(8);
+  });
+
+  it("drops the group rows when its session is rebuilt without them", async () => {
+    const sessionId = await createSession(userId, {
+      performedAt: new Date("2026-08-20T18:00:00Z"),
+      groups: [{ label: "Superset" }],
+      exercises: [
+        { exerciseName: "Fly", groupIndex: 0, sets: [{ reps: 12, weight: 30 }] },
+      ],
+    });
+
+    await replaceSession(userId, sessionId, {
+      performedAt: new Date("2026-08-20T18:00:00Z"),
+      exercises: [{ exerciseName: "Fly", sets: [{ reps: 12, weight: 30 }] }],
+    });
+
+    const rows = await db
+      .select()
+      .from(workoutSessionGroups)
+      .where(eq(workoutSessionGroups.sessionId, sessionId));
+    expect(rows).toEqual([]);
+  });
+
+  it("treats a zero or negative rest as no rest, so the check constraint holds", async () => {
+    const sessionId = await createSession(userId, {
+      performedAt: new Date("2026-08-20T18:00:00Z"),
+      groups: [{ label: "Circuit", restSeconds: 0 }, { restSeconds: -30 }],
+      exercises: [
+        { exerciseName: "Fly", groupIndex: 0, sets: [{ reps: 12, weight: 30 }] },
+        { exerciseName: "Dip", groupIndex: 1, sets: [{ reps: 8, unit: "bw" }] },
+      ],
+    });
+
+    const detail = (await getSessionDetail(userId, sessionId))!;
+    expect(detail.groups.map((g) => g.restSeconds)).toEqual([null, null]);
+  });
+
+  it("refuses an exercise pointing at a group that was not supplied", async () => {
+    await expect(
+      createSession(userId, {
+        performedAt: new Date("2026-08-20T18:00:00Z"),
+        groups: [{ label: "Superset" }],
+        exercises: [
+          { exerciseName: "Fly", groupIndex: 3, sets: [{ reps: 12, weight: 30 }] },
+        ],
+      }),
+    ).rejects.toThrow(/group 3/);
+  });
+
+  it("isolates a second user from the first user's groups", async () => {
+    const owner = userId;
+    const intruder = await makeUser();
+    const sessionId = await createSession(owner, {
+      performedAt: new Date("2026-08-20T18:00:00Z"),
+      groups: [{ label: "Private Superset", restSeconds: 90 }],
+      exercises: [
+        { exerciseName: "Secret Fly", groupIndex: 0, sets: [{ reps: 12, weight: 30 }] },
+        { exerciseName: "Secret Dip", groupIndex: 0, sets: [{ reps: 8, unit: "bw" }] },
+      ],
+    });
+
+    // Read
+    expect(await getSessionDetail(intruder, sessionId)).toBeNull();
+    expect(await listSessions(intruder)).toEqual([]);
+
+    // Change
+    await expect(
+      replaceSession(intruder, sessionId, {
+        performedAt: new Date(),
+        groups: [{ label: "Hijacked", restSeconds: 15 }],
+        exercises: [
+          { exerciseName: "Secret Fly", groupIndex: 0, sets: [{ reps: 1, weight: 1 }] },
+        ],
+      }),
+    ).rejects.toThrow();
+
+    // Delete
+    await expect(deleteSession(intruder, sessionId)).rejects.toThrow();
+
+    const rows = await db
+      .select()
+      .from(workoutSessionGroups)
+      .where(eq(workoutSessionGroups.sessionId, sessionId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ userId: owner, label: "Private Superset" });
+
+    const detail = (await getSessionDetail(owner, sessionId))!;
+    expect(detail.groups[0].label).toBe("Private Superset");
+    expect(detail.exercises.every((e) => e.groupId === detail.groups[0].id)).toBe(true);
   });
 });

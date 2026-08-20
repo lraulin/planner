@@ -1,19 +1,26 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { loadLatestForExerciseAction } from "@/app/fitness/actions";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Drawer } from "@/components/detail/Drawer";
 import { useAutosave, type SaveStatus } from "@/components/notes/useAutosave";
-import {
-  elapsedSince,
-  formatDurationClock,
-  parseDurationSeconds,
-} from "@/lib/fitness/duration";
+import { parseDurationSeconds } from "@/lib/fitness/duration";
 import { formatEquipmentBadge, usesPlateCalculator } from "@/lib/fitness/equipment";
-import { formatSetsLabel, parseWeight } from "@/lib/fitness/format";
+import {
+  addMember,
+  joinWithNext,
+  joinWithPrevious,
+  patchGroup,
+  pruneGroups,
+  removeGroup,
+  removeMember,
+  ungroup,
+  withMembers,
+  type Grouping,
+} from "@/lib/fitness/groupEdit";
+import { beginHold, secondsHeld, type RunningHold } from "@/lib/fitness/hold";
 import { formatMeasureTag } from "@/lib/fitness/measure";
-import { plateHint } from "@/lib/fitness/plates";
-import { gridTemplate, setColumns, type SetColumn } from "@/lib/fitness/setColumns";
+import { addRound, extendMemberTo, removeRound } from "@/lib/fitness/rounds";
+import { setColumns } from "@/lib/fitness/setColumns";
 import {
   draftBlockFromCatalog,
   draftToSessionInput,
@@ -22,21 +29,23 @@ import {
   setFromPrevious,
   setsFromHistory,
   type DraftExercise,
+  type DraftGroup,
   type DraftSet,
   type SessionDraft,
 } from "@/lib/fitness/sessionDraft";
+import { groupSessionItems } from "@/lib/fitness/sessionGroups";
 import type {
-  ExerciseHistoryEntry,
   ExerciseSummary,
   SessionDetail,
   SessionInput,
   WorkoutSetView,
 } from "@/lib/fitness/types";
-import { bumpWeight, weightStep } from "@/lib/fitness/weightStep";
 import { ExerciseEditor } from "./ExerciseEditor";
+import { ExerciseGroupBlock } from "./ExerciseGroupBlock";
+import { ExerciseNotes, LastSessionHint } from "./ExerciseMeta";
 import { ExercisePicker } from "./ExercisePicker";
-import { HoldTimer } from "./HoldTimer";
 import { RestTimer } from "./RestTimer";
+import { SetHeader, SetRow } from "./SetRow";
 
 function draftFromDetail(
   detail: SessionDetail,
@@ -48,6 +57,11 @@ function draftFromDetail(
     notes: detail.notes,
     durationMinutes:
       detail.durationMinutes == null ? "" : String(detail.durationMinutes),
+    groups: detail.groups.map((g) => ({
+      id: g.id,
+      label: g.label,
+      rest: g.restSeconds == null ? "" : String(g.restSeconds),
+    })),
     exercises: detail.exercises.map((ex) => {
       const cat = catalog.find((c) => c.id === ex.exerciseId);
       const equipment = cat?.equipment ?? ex.equipment;
@@ -56,6 +70,7 @@ function draftFromDetail(
       const barWeight = cat?.barWeight ?? ex.barWeight;
       return {
         key: ex.id,
+        groupId: ex.groupId,
         exerciseId: ex.exerciseId,
         exerciseName: ex.exerciseName,
         equipment,
@@ -75,20 +90,6 @@ function draftFromDetail(
       };
     }),
   };
-}
-
-type RunningHold = { blockKey: string; setIndex: number; startedAt: number };
-
-/**
- * Wall-clock reads for the hold stopwatch, outside any component so React's purity rule
- * is satisfied — a clock read during render is exactly what that rule is guarding.
- */
-function beginHold(blockKey: string, setIndex: number): RunningHold {
-  return { blockKey, setIndex, startedAt: Date.now() };
-}
-
-function secondsHeld(hold: RunningHold): number {
-  return elapsedSince(hold.startedAt, Date.now());
 }
 
 function toLocalInput(date: Date): string {
@@ -146,6 +147,7 @@ export function SessionEditor({
       title: "",
       notes: "",
       durationMinutes: "",
+      groups: [],
       exercises: [seed ? draftBlockFromCatalog(seed) : emptyDraftBlock()],
     } satisfies SessionDraft;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -155,7 +157,15 @@ export function SessionEditor({
   const [title, setTitle] = useState(initial.title);
   const [notes, setNotes] = useState(initial.notes);
   const [durationMinutes, setDurationMinutes] = useState(initial.durationMinutes);
-  const [blocks, setBlocks] = useState(initial.exercises);
+  /**
+   * Groups and exercises move together — a block's membership and the group it points at
+   * are one fact — so they are one piece of state rather than two that must be kept in step.
+   */
+  const [grouping, setGrouping] = useState<Grouping>({
+    groups: initial.groups,
+    exercises: initial.exercises,
+  });
+  const blocks = grouping.exercises;
   const sessionIdRef = useRef<string | null>(existing?.id ?? null);
   const [sessionId, setSessionId] = useState<string | null>(existing?.id ?? null);
   const [exerciseEditor, setExerciseEditor] = useState<{
@@ -171,14 +181,30 @@ export function SessionEditor({
    */
   const [runningHold, setRunningHold] = useState<RunningHold | null>(null);
 
+  /**
+   * `RestTimer` has always offered this hook and nothing ever took it. Finishing a round is
+   * the moment it was meant for.
+   */
+  const restStartRef = useRef<((seconds?: number) => void) | null>(null);
+  const registerRestStart = useCallback((start: (seconds?: number) => void) => {
+    restStartRef.current = start;
+  }, []);
+
   const idCatalog = useMemo(
     () => catalog.map((e) => ({ id: e.id, name: e.name })),
     [catalog],
   );
 
   const buildDraft = useCallback((): SessionDraft => {
-    return { performedAt, title, notes, durationMinutes, exercises: blocks };
-  }, [performedAt, title, notes, durationMinutes, blocks]);
+    return {
+      performedAt,
+      title,
+      notes,
+      durationMinutes,
+      groups: grouping.groups,
+      exercises: grouping.exercises,
+    };
+  }, [performedAt, title, notes, durationMinutes, grouping]);
 
   const save = useCallback(
     async (draft: SessionDraft) => {
@@ -230,24 +256,78 @@ export function SessionEditor({
         partial.durationMinutes !== undefined
           ? partial.durationMinutes
           : durationMinutes,
-      exercises: blocks,
+      groups: grouping.groups,
+      exercises: grouping.exercises,
+    });
+  }
+
+  function setGroupingAndSave(updater: (current: Grouping) => Grouping) {
+    setGrouping((current) => {
+      const next = updater(current);
+      queueSave({
+        performedAt,
+        title,
+        notes,
+        durationMinutes,
+        groups: next.groups,
+        exercises: next.exercises,
+      });
+      return next;
     });
   }
 
   function setBlocksAndSave(
     updater: DraftExercise[] | ((current: DraftExercise[]) => DraftExercise[]),
   ) {
-    setBlocks((current) => {
-      const nextBlocks = typeof updater === "function" ? updater(current) : updater;
-      queueSave({
-        performedAt,
-        title,
-        notes,
-        durationMinutes,
-        exercises: nextBlocks,
-      });
-      return nextBlocks;
-    });
+    // Pruning here is what stops removing a group's last member leaving a ghost group.
+    setGroupingAndSave((current) =>
+      pruneGroups({
+        groups: current.groups,
+        exercises: typeof updater === "function" ? updater(current.exercises) : updater,
+      }),
+    );
+  }
+
+  function patchGroupAndSave(groupId: string, patch: Partial<Omit<DraftGroup, "id">>) {
+    setGroupingAndSave((current) => patchGroup(current, groupId, patch));
+  }
+
+  function addRoundAndSave(groupId: string, rest: string) {
+    setGroupingAndSave((current) => withMembers(current, groupId, addRound));
+    /*
+     * The round is over the moment the next one is queued up — that is the rest. A group
+     * with no rest typed still starts the timer, at whatever duration the session has been
+     * using; the group's own value is an override, not a precondition.
+     */
+    restStartRef.current?.(parseDurationSeconds(rest) ?? undefined);
+  }
+
+  function removeRoundAndSave(groupId: string, round: number) {
+    setGroupingAndSave((current) =>
+      withMembers(current, groupId, (members) => removeRound(members, round)),
+    );
+  }
+
+  function extendMemberAndSave(groupId: string, memberIndex: number, round: number) {
+    setGroupingAndSave((current) =>
+      withMembers(current, groupId, (members) =>
+        extendMemberTo(members, memberIndex, round),
+      ),
+    );
+  }
+
+  /** Blank a round rather than delete it — deleting would shift later rounds up a place. */
+  function clearSet(blockIndex: number, setIndex: number) {
+    setBlocksAndSave((current) =>
+      current.map((b, i) =>
+        i === blockIndex
+          ? {
+              ...b,
+              sets: b.sets.map((s, j) => (j === setIndex ? emptySetForExercise(b) : s)),
+            }
+          : b,
+      ),
+    );
   }
 
   function selectExercise(blockIndex: number, exerciseId: string) {
@@ -465,39 +545,101 @@ export function SessionEditor({
               />
             </label>
 
-            {blocks.map((block, bi) => (
-              <ExerciseBlock
-                key={block.key}
-                block={block}
-                catalog={catalog}
-                canRemove={blocks.length > 1}
-                sessionId={sessionId}
-                onSelect={(id) => selectExercise(bi, id)}
-                onRemove={() => setBlocksAndSave((c) => c.filter((_, i) => i !== bi))}
-                onNewExercise={(seedName) =>
-                  setExerciseEditor({ exercise: null, blockIndex: bi, seedName })
-                }
-                onEditExercise={() => {
-                  const ex = catalog.find((e) => e.id === block.exerciseId);
-                  if (ex) setExerciseEditor({ exercise: ex, blockIndex: bi });
-                }}
-                runningHoldSetIndex={
-                  runningHold?.blockKey === block.key ? runningHold.setIndex : null
-                }
-                runningHoldStartedAt={runningHold?.startedAt ?? null}
-                onStartHold={(si) => startHold(block.key, si)}
-                onStopHold={stopHold}
-                onUpdateSet={(si, patch) => updateSet(bi, si, patch)}
-                onRemoveSet={(si) => removeSet(bi, si)}
-                onAddSet={() => addSet(bi)}
-                onCopyLast={(sets) => copyLastSets(bi, sets)}
-                onUpdateNotes={(notes) =>
-                  setBlocksAndSave((current) =>
-                    current.map((b, i) => (i === bi ? { ...b, notes } : b)),
-                  )
-                }
-              />
-            ))}
+            {groupSessionItems(blocks, grouping.groups).map((item) => {
+              if (item.kind === "group") {
+                return (
+                  <ExerciseGroupBlock
+                    key={item.group.id}
+                    letter={item.letter}
+                    group={item.group}
+                    members={item.members}
+                    rounds={item.rounds}
+                    catalog={catalog}
+                    sessionId={sessionId}
+                    runningHold={runningHold}
+                    onPatchGroup={(patch) => patchGroupAndSave(item.group.id, patch)}
+                    onUngroup={() =>
+                      setGroupingAndSave((c) => ungroup(c, item.group.id))
+                    }
+                    onRemoveGroup={() =>
+                      setGroupingAndSave((c) => removeGroup(c, item.group.id))
+                    }
+                    onAddRound={() => addRoundAndSave(item.group.id, item.group.rest)}
+                    onRemoveRound={(round) => removeRoundAndSave(item.group.id, round)}
+                    onExtendMember={(memberIndex, round) =>
+                      extendMemberAndSave(item.group.id, memberIndex, round)
+                    }
+                    onAddMember={() =>
+                      setGroupingAndSave((c) => addMember(c, item.group.id))
+                    }
+                    onRemoveMember={(bi) =>
+                      setGroupingAndSave((c) => removeMember(c, bi))
+                    }
+                    onSelect={(bi, id) => selectExercise(bi, id)}
+                    onNewExercise={(bi, seedName) =>
+                      setExerciseEditor({ exercise: null, blockIndex: bi, seedName })
+                    }
+                    onEditExercise={(bi) => {
+                      const ex = catalog.find((e) => e.id === blocks[bi]?.exerciseId);
+                      if (ex) setExerciseEditor({ exercise: ex, blockIndex: bi });
+                    }}
+                    onUpdateSet={updateSet}
+                    onClearSet={clearSet}
+                    onCopyLast={copyLastSets}
+                    onUpdateNotes={(bi, notes) =>
+                      setBlocksAndSave((current) =>
+                        current.map((b, i) => (i === bi ? { ...b, notes } : b)),
+                      )
+                    }
+                    onStartHold={startHold}
+                    onStopHold={stopHold}
+                  />
+                );
+              }
+
+              const block = item.member;
+              const bi = item.index;
+              return (
+                <ExerciseBlock
+                  key={block.key}
+                  letter={item.letter}
+                  block={block}
+                  catalog={catalog}
+                  canRemove={blocks.length > 1}
+                  canGroupWithPrevious={bi > 0}
+                  canGroupWithNext={bi < blocks.length - 1}
+                  onGroupWithPrevious={() =>
+                    setGroupingAndSave((c) => joinWithPrevious(c, bi))
+                  }
+                  onGroupWithNext={() => setGroupingAndSave((c) => joinWithNext(c, bi))}
+                  sessionId={sessionId}
+                  onSelect={(id) => selectExercise(bi, id)}
+                  onRemove={() => setBlocksAndSave((c) => c.filter((_, i) => i !== bi))}
+                  onNewExercise={(seedName) =>
+                    setExerciseEditor({ exercise: null, blockIndex: bi, seedName })
+                  }
+                  onEditExercise={() => {
+                    const ex = catalog.find((e) => e.id === block.exerciseId);
+                    if (ex) setExerciseEditor({ exercise: ex, blockIndex: bi });
+                  }}
+                  runningHoldSetIndex={
+                    runningHold?.blockKey === block.key ? runningHold.setIndex : null
+                  }
+                  runningHoldStartedAt={runningHold?.startedAt ?? null}
+                  onStartHold={(si) => startHold(block.key, si)}
+                  onStopHold={stopHold}
+                  onUpdateSet={(si, patch) => updateSet(bi, si, patch)}
+                  onRemoveSet={(si) => removeSet(bi, si)}
+                  onAddSet={() => addSet(bi)}
+                  onCopyLast={(sets) => copyLastSets(bi, sets)}
+                  onUpdateNotes={(notes) =>
+                    setBlocksAndSave((current) =>
+                      current.map((b, i) => (i === bi ? { ...b, notes } : b)),
+                    )
+                  }
+                />
+              );
+            })}
 
             <button
               type="button"
@@ -518,7 +660,7 @@ export function SessionEditor({
             </label>
           </div>
 
-          <RestTimer />
+          <RestTimer onRegisterStart={registerRestStart} />
         </div>
       </Drawer>
 
@@ -534,9 +676,14 @@ export function SessionEditor({
 }
 
 function ExerciseBlock({
+  letter,
   block,
   catalog,
   canRemove,
+  canGroupWithPrevious,
+  canGroupWithNext,
+  onGroupWithPrevious,
+  onGroupWithNext,
   sessionId,
   onSelect,
   onRemove,
@@ -552,9 +699,14 @@ function ExerciseBlock({
   onCopyLast,
   onUpdateNotes,
 }: {
+  letter: string;
   block: DraftExercise;
   catalog: ExerciseSummary[];
   canRemove: boolean;
+  canGroupWithPrevious: boolean;
+  canGroupWithNext: boolean;
+  onGroupWithPrevious: () => void;
+  onGroupWithNext: () => void;
   sessionId: string | null;
   onSelect: (id: string) => void;
   onRemove: () => void;
@@ -595,6 +747,9 @@ function ExerciseBlock({
   return (
     <div className="rounded border border-rule bg-shell/40 p-3">
       <div className="mb-1 flex items-end gap-2">
+        <span className="pb-1.5 font-mono text-[0.8125rem] font-semibold text-ink-muted">
+          {letter}
+        </span>
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
             Exercise
@@ -673,13 +828,35 @@ function ExerciseBlock({
               />
             ))}
           </div>
-          <button
-            type="button"
-            onClick={onAddSet}
-            className="mt-2 text-[0.75rem] text-ink-muted hover:text-ink"
-          >
-            + Add set
-          </button>
+          <div className="mt-2 flex flex-wrap items-center gap-4">
+            <button
+              type="button"
+              onClick={onAddSet}
+              className="text-[0.75rem] text-ink-muted hover:text-ink"
+            >
+              + Add set
+            </button>
+            {/* Joining a neighbour always yields a contiguous span, so grouping needs no
+                drag affordance — and fitness has none to extend. */}
+            {canGroupWithPrevious ? (
+              <button
+                type="button"
+                onClick={onGroupWithPrevious}
+                className="text-[0.75rem] text-ink-faint hover:text-ink"
+              >
+                ⌃ Group with previous
+              </button>
+            ) : null}
+            {canGroupWithNext ? (
+              <button
+                type="button"
+                onClick={onGroupWithNext}
+                className="text-[0.75rem] text-ink-faint hover:text-ink"
+              >
+                ⌄ Group with next
+              </button>
+            ) : null}
+          </div>
           <ExerciseNotes
             key={block.exerciseId}
             value={block.notes}
@@ -688,295 +865,6 @@ function ExerciseBlock({
         </>
       )}
     </div>
-  );
-}
-
-function SetHeader({ columns }: { columns: SetColumn[] }) {
-  return (
-    <div
-      className="grid gap-1 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-faint"
-      style={{ gridTemplateColumns: gridTemplate(columns) }}
-    >
-      {columns.map((column) => (
-        <span key={column.key}>{column.label}</span>
-      ))}
-    </div>
-  );
-}
-
-function SetRow({
-  index,
-  set,
-  columns,
-  showPlates,
-  barWeight,
-  holdStartedAt,
-  onStartHold,
-  onStopHold,
-  onChange,
-  onRemove,
-}: {
-  index: number;
-  set: DraftSet;
-  columns: SetColumn[];
-  showPlates: boolean;
-  barWeight: number;
-  /** Non-null while this row's stopwatch is running. */
-  holdStartedAt: number | null;
-  onStartHold: () => void;
-  onStopHold: () => void;
-  onChange: (patch: Partial<DraftSet>) => void;
-  onRemove: () => void;
-}) {
-  const unit = set.unit || "lb";
-  // The widest rows squeeze the number fields, exactly as the hand-written grids did.
-  const numberClass = `min-w-0 rounded border border-rule bg-surface ${
-    columns.length >= 6 ? "px-1.5" : "px-2"
-  } py-1 font-mono text-[0.8125rem] text-ink`;
-
-  const hold = parseDurationSeconds(set.duration);
-
-  function cell(column: SetColumn) {
-    switch (column.key) {
-      case "index":
-        return (
-          <span className="font-mono text-[0.75rem] text-ink-faint">{index + 1}</span>
-        );
-
-      case "reps":
-        return (
-          <input
-            type="number"
-            min={0}
-            value={set.reps}
-            onChange={(e) => onChange({ reps: e.target.value })}
-            className={numberClass}
-          />
-        );
-
-      case "repsLeft":
-      case "repsRight": {
-        const left = column.key === "repsLeft";
-        return (
-          <input
-            type="number"
-            min={0}
-            value={left ? set.repsLeft : set.repsRight}
-            onChange={(e) =>
-              onChange(
-                left ? { repsLeft: e.target.value } : { repsRight: e.target.value },
-              )
-            }
-            placeholder={left ? "L" : "R"}
-            className={numberClass}
-          />
-        );
-      }
-
-      case "duration":
-        return (
-          <div className="flex min-w-0 items-center gap-0.5">
-            <input
-              type="number"
-              min={0}
-              inputMode="numeric"
-              value={holdStartedAt == null ? set.duration : ""}
-              onChange={(e) => onChange({ duration: e.target.value })}
-              placeholder="sec"
-              disabled={holdStartedAt != null}
-              className={`${numberClass} flex-1`}
-            />
-            <HoldTimer
-              startedAt={holdStartedAt}
-              onStart={onStartHold}
-              onStop={onStopHold}
-            />
-          </div>
-        );
-
-      case "weight":
-        return (
-          <div className="flex min-w-0 items-center gap-0.5">
-            <button
-              type="button"
-              title={`−${weightStep(unit)}`}
-              onClick={() => onChange({ weight: bumpWeight(set.weight, unit, -1) })}
-              className="flex h-7 w-6 shrink-0 items-center justify-center rounded border border-rule bg-surface text-[0.75rem] text-ink-muted hover:text-ink"
-            >
-              −
-            </button>
-            <input
-              type="number"
-              min={0}
-              step={weightStep(unit)}
-              value={set.weight}
-              onChange={(e) => onChange({ weight: e.target.value })}
-              className="min-w-0 flex-1 rounded border border-rule bg-surface px-1.5 py-1 font-mono text-[0.8125rem] text-ink"
-            />
-            <button
-              type="button"
-              title={`+${weightStep(unit)}`}
-              onClick={() => onChange({ weight: bumpWeight(set.weight, unit, 1) })}
-              className="flex h-7 w-6 shrink-0 items-center justify-center rounded border border-rule bg-surface text-[0.75rem] text-ink-muted hover:text-ink"
-            >
-              +
-            </button>
-          </div>
-        );
-
-      case "unit":
-        return (
-          <select
-            value={set.unit === "bw" ? "lb" : set.unit}
-            onChange={(e) => onChange({ unit: e.target.value })}
-            className="rounded border border-rule bg-surface px-1 py-1 text-[0.75rem] text-ink"
-          >
-            <option value="lb">lb</option>
-            <option value="kg">kg</option>
-          </select>
-        );
-
-      case "delete":
-        return (
-          <button
-            type="button"
-            onClick={onRemove}
-            title="Delete set"
-            className="flex h-7 w-7 items-center justify-center rounded text-ink-faint hover:bg-priority-a/10 hover:text-priority-a"
-          >
-            ×
-          </button>
-        );
-    }
-  }
-
-  return (
-    <div className="space-y-0.5">
-      <div
-        className="grid items-center gap-1"
-        style={{ gridTemplateColumns: gridTemplate(columns) }}
-      >
-        {columns.map((column) => (
-          <Fragment key={column.key}>{cell(column)}</Fragment>
-        ))}
-      </div>
-      {showPlates && (
-        <PlateLine weight={set.weight} unit={unit} barWeightLb={barWeight} />
-      )}
-      {/* Seconds are what you type; the clock is only worth showing past a minute. */}
-      {hold != null && hold >= 60 && (
-        <p className="pl-8 font-mono text-[0.6875rem] text-ink-faint">
-          {formatDurationClock(hold)}
-        </p>
-      )}
-    </div>
-  );
-}
-
-function PlateLine({
-  weight,
-  unit,
-  barWeightLb,
-}: {
-  weight: string;
-  unit: string;
-  barWeightLb: number;
-}) {
-  const hint = plateHint(parseWeight(weight), unit, barWeightLb);
-  if (!hint) return null;
-  return <p className="pl-8 font-mono text-[0.6875rem] text-ink-faint">{hint}</p>;
-}
-
-function ExerciseNotes({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (notes: string) => void;
-}) {
-  const [open, setOpen] = useState(value.trim() !== "");
-  const snippet = value.trim().replace(/\s+/g, " ");
-  const collapsedLabel = snippet.length > 48 ? `${snippet.slice(0, 47)}…` : snippet;
-
-  return (
-    <div className="mt-2">
-      <button
-        type="button"
-        onClick={() => setOpen((current) => !current)}
-        aria-expanded={open}
-        className="flex max-w-full items-center gap-1.5 text-[0.75rem] text-ink-muted hover:text-ink"
-      >
-        <span aria-hidden>{open ? "▾" : "▸"}</span>
-        <span>Notes</span>
-        {!open && collapsedLabel ? (
-          <span className="min-w-0 truncate font-normal text-ink-faint">
-            {collapsedLabel}
-          </span>
-        ) : null}
-      </button>
-      {open ? (
-        <textarea
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          rows={2}
-          placeholder="Form, setup, how it felt…"
-          className="mt-1 w-full rounded border border-rule bg-surface px-2 py-1.5 text-[0.875rem] text-ink"
-        />
-      ) : null}
-    </div>
-  );
-}
-
-function LastSessionHint({
-  exerciseId,
-  excludeSessionId,
-  onCopy,
-}: {
-  exerciseId: string;
-  excludeSessionId: string | null;
-  onCopy: (sets: WorkoutSetView[]) => void;
-}) {
-  const [fetched, setFetched] = useState<{
-    exerciseId: string;
-    excludeSessionId: string | null;
-    entry: ExerciseHistoryEntry | null;
-  } | null>(null);
-
-  useEffect(() => {
-    if (!exerciseId) return;
-    let cancelled = false;
-    const exclude = excludeSessionId;
-    void loadLatestForExerciseAction(exerciseId, exclude).then((result) => {
-      if (cancelled || !result.ok) return;
-      setFetched({
-        exerciseId,
-        excludeSessionId: exclude,
-        entry: (result.data as ExerciseHistoryEntry | null) ?? null,
-      });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [exerciseId, excludeSessionId]);
-
-  const latest =
-    fetched &&
-    fetched.exerciseId === exerciseId &&
-    fetched.excludeSessionId === excludeSessionId
-      ? fetched.entry
-      : null;
-
-  if (!latest || latest.sets.length === 0) return null;
-
-  return (
-    <button
-      type="button"
-      onClick={() => onCopy(latest.sets)}
-      title="Copy last session’s sets"
-      className="font-mono text-[0.75rem] text-ink-faint underline-offset-2 hover:text-ink hover:underline"
-    >
-      Last time: {formatSetsLabel(latest.sets)} · tap to copy
-    </button>
   );
 }
 

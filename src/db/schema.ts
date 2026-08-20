@@ -1384,6 +1384,40 @@ export const workoutSessions = pgTable(
 );
 
 /**
+ * A superset, circuit or mechanical drop set: exercises performed back-to-back with rest
+ * only at the end of a round. All three are the same structure, so `label` is display
+ * chrome and changes no behavior.
+ *
+ * Deliberately has **no** sort key and **no** round count. Position comes from the members'
+ * existing `sortKey`s, which are contiguous because a session is rebuilt from one flat
+ * ordered array on every save; round count is `max(sets)` across members, so a stored
+ * count could only ever disagree with the log.
+ */
+export const workoutSessionGroups = pgTable(
+  "workout_session_groups",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => workoutSessions.id, { onDelete: "cascade" }),
+    /** "Superset", "Circuit", "Drop set", or anything typed. Display only. */
+    label: text("label").notNull().default(""),
+    /** Rest after each round. Members are always back-to-back, so there is no member rest. */
+    restSeconds: integer("rest_seconds"),
+  },
+  (table) => [
+    index("workout_session_groups_session_idx").on(table.userId, table.sessionId),
+    check(
+      "workout_session_groups_rest_positive",
+      sql`${table.restSeconds} is null or ${table.restSeconds} > 0`,
+    ),
+  ],
+);
+
+/**
  * An exercise performed inside a session, in order. Cascades with the session only —
  * never with outline nodes. The catalog row (`exercises`) is restricted so deleting a
  * used exercise cannot silently orphan or wipe set history.
@@ -1401,6 +1435,13 @@ export const workoutSessionExercises = pgTable(
     exerciseId: uuid("exercise_id")
       .notNull()
       .references(() => exercises.id, { onDelete: "restrict" }),
+    /**
+     * Superset / circuit membership, null for a straight exercise. `set null` rather than
+     * cascade: dropping a group ungroups its members, it never deletes logged work.
+     */
+    groupId: uuid("group_id").references(() => workoutSessionGroups.id, {
+      onDelete: "set null",
+    }),
     /** Lexicographic sibling order within the session (same idea as outline sort keys). */
     sortKey: text("sort_key").notNull(),
     notes: text("notes").notNull().default(""),
@@ -1461,6 +1502,7 @@ export type Exercise = typeof exercises.$inferSelect;
 export type NewExercise = typeof exercises.$inferInsert;
 export type WorkoutSession = typeof workoutSessions.$inferSelect;
 export type WorkoutSessionExercise = typeof workoutSessionExercises.$inferSelect;
+export type WorkoutSessionGroup = typeof workoutSessionGroups.$inferSelect;
 
 /**
  * One line on one day's task list — the Franklin Covey daily list, beside Achieve's own

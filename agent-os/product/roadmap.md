@@ -666,6 +666,17 @@ flavor; optional palette thinning).
   row's columns are now derived rather than branched, replacing four hand-written grids.
   Out: distance-based carries, prescribed targets and a countdown, and separate L/R
   durations — a side plank is two sets.
+- **✅ Supersets, circuits and mechanical drop sets.**
+  `specs/2026-08-20-1233-exercise-groups`. All three are one structure — ordered exercises
+  done back to back, rest only at the end, repeated for N rounds — so they are one
+  `workout_session_groups` row whose label is display chrome. The group stores no round
+  count (round N is set N of each member) and no sort key (members are contiguous in the
+  existing order, which a rebuild-on-every-save session gives for free). Grouped work is
+  logged **round major**, each member keeping its own derived set columns, and finishing a
+  round starts the rest timer — the hook `RestTimer` had exposed since the MVP and nothing
+  had ever connected. Out: routines/templates, drag-to-reorder, per-member rest, and group
+  structure in the history list or Find. Straight drop sets are a non-feature: weight is
+  already per set.
 - **Medium-term:** Deeper Goal / Result Area progress surfaces; routines/templates.
 - **Long-term:** Optional **Apple Health** (or similar) import — read-only first; cardio.
 
