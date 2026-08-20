@@ -198,8 +198,10 @@ No beep and no `document.title` takeover — a count-up has no end to announce.
 - Distance-based carries, prescribed targets with a countdown, and L/R durations remain
   deliberately unbuilt.
 - Unrelated and pre-existing: `src/lib/day/mutations.integration.test.ts` >
-  "clears descendant plans that fall inside a dated shelf" fails on today's date. Confirmed
-  present with this work stashed.
+  "clears descendant plans that fall inside a dated shelf" was failing on today's date
+  (confirmed present with this work stashed) and blocked pre-push for everyone. Fixed
+  separately in `03351dd` — its hard-coded shelf date had arrived, so a deferral dated
+  today had already expired; the days are now derived from today.
 
 ---
 
