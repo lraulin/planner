@@ -493,6 +493,18 @@ export const exerciseEquipmentEnum = pgEnum("exercise_equipment", [
   "bodyweight",
 ]);
 
+/**
+ * What a set of this lift is measured in — a third axis, orthogonal to `equipment` and
+ * `unilateral`. `time` is an isometric or a carry (plank, dead hang, farmer's walk);
+ * `reps_and_time` is reps followed by a hold. Load is decided by `equipment`, never by
+ * this, so a weighted plank still records its weight.
+ */
+export const exerciseMeasureEnum = pgEnum("exercise_measure", [
+  "reps",
+  "time",
+  "reps_and_time",
+]);
+
 export const exercises = pgTable(
   "exercises",
   {
@@ -503,6 +515,8 @@ export const exercises = pgTable(
     name: text("name").notNull(),
     notes: text("notes").notNull().default(""),
     equipment: exerciseEquipmentEnum("equipment").notNull().default("barbell"),
+    /** Reps, a timed hold, or reps then a hold. Drives which set fields the log shows. */
+    measure: exerciseMeasureEnum("measure").notNull().default("reps"),
     /**
      * Bar mass in **lb** for plate calc when equipment is barbell.
      * Olympic 45, EZ ~15, training ~35. Ignored for other equipment.
@@ -1421,6 +1435,11 @@ export const workoutSets = pgTable(
     /** Unilateral left / right reps when catalog exercise.unilateral is true. */
     repsLeft: integer("reps_left"),
     repsRight: integer("reps_right"),
+    /**
+     * Hold or carry time. Independent of the rep columns rather than an alternative to
+     * them, so a `reps_and_time` set records both and a hold can be left off any set.
+     */
+    durationSeconds: integer("duration_seconds"),
     weight: numeric("weight", { precision: 10, scale: 2 }),
     unit: text("unit").notNull().default("lb"),
     completed: boolean("completed").notNull().default(true),
@@ -1430,6 +1449,10 @@ export const workoutSets = pgTable(
       table.userId,
       table.sessionExerciseId,
       table.setIndex,
+    ),
+    check(
+      "workout_sets_duration_positive",
+      sql`${table.durationSeconds} is null or ${table.durationSeconds} > 0`,
     ),
   ],
 );
