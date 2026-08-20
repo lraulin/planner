@@ -2,6 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  readNotifyPermission,
+  restDonePayload,
+  shouldRequestPermission,
+  shouldShowBanner,
+} from "@/lib/fitness/restNotify";
+import {
   clampRestDuration,
   DEFAULT_REST_SEC,
   formatRestClock,
@@ -48,6 +54,35 @@ function playDoneBeep() {
   }
 }
 
+function currentNotifyPermission() {
+  return readNotifyPermission(
+    typeof Notification === "undefined" ? undefined : Notification,
+  );
+}
+
+function requestRestNotifyPermission() {
+  try {
+    if (!shouldRequestPermission(currentNotifyPermission())) return;
+    void Notification.requestPermission();
+  } catch {
+    // Permission is best-effort — never break the workout log.
+  }
+}
+
+function notifyRestDone() {
+  try {
+    if (!shouldShowBanner(currentNotifyPermission())) return;
+    const { title, body, tag, icon } = restDonePayload();
+    const banner = new Notification(title, { body, tag, icon });
+    banner.onclick = () => {
+      window.focus();
+      banner.close();
+    };
+  } catch {
+    // Notifications are best-effort — never break the workout log.
+  }
+}
+
 /**
  * Sticky rest countdown for the session drawer. Remembers last duration in
  * localStorage. Parent registers start() so finishing a round can kick the timer, passing
@@ -90,6 +125,7 @@ export function RestTimer({
       setEndsAt(Date.now() + sec * 1000);
       setRunning(true);
       setRemaining(sec);
+      requestRestNotifyPermission();
     },
     [durationSec],
   );
@@ -110,6 +146,7 @@ export function RestTimer({
         if (!doneFired.current) {
           doneFired.current = true;
           playDoneBeep();
+          notifyRestDone();
         }
       }
     };

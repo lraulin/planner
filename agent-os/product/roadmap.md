@@ -677,6 +677,11 @@ flavor; optional palette thinning).
   had ever connected. Out: routines/templates, drag-to-reorder, per-member rest, and group
   structure in the history list or Find. Straight drop sets are a non-feature: weight is
   already per set.
+- **✅ Rest-done OS banner.** `specs/2026-08-20-1501-rest-timer-notification`. The rest
+  countdown already beeped and rewrote the tab title at 0:00; it now also asks for
+  notification permission on first Start and fires a "Rest done" banner. Denied or a
+  missing API keeps the beep. Out: wake lock, service worker, hold-timer notify, and a
+  shared notify helper.
 - **Medium-term:** Deeper Goal / Result Area progress surfaces; routines/templates.
 - **Long-term:** Optional **Apple Health** (or similar) import — read-only first; cardio.
 
