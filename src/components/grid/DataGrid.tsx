@@ -840,7 +840,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   return (
     <NameIconContext.Provider value={nameShowsIcon}>
       <div
-        className="flex min-h-0 flex-1 flex-col"
+        className="flex h-full min-h-0 flex-1 flex-col"
         // Compact is a genuine trade, not a default: more rows per screen against a smaller
         // target for the inline editors that live in those rows. Left to the user per grid.
         style={
