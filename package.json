@@ -52,7 +52,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/d3-sankey": "^0.12.5",
-    "@types/node": "^20",
+    "@types/node": "^26",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "dotenv": "^17.2.3",
