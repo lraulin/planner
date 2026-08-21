@@ -277,6 +277,7 @@ export const billColumns: ColumnDef<BillColumnCtx, BillGridRow>[] = [
     label: "Amount",
     width: "7rem",
     align: "right",
+    filterValue: (row) => formatUsd(row.node.amountCents),
     sortValue: (row) => row.node.amountCents,
     compact: "meta",
     render: (row, ctx) =>
@@ -355,6 +356,7 @@ export const billColumns: ColumnDef<BillColumnCtx, BillGridRow>[] = [
     label: "A year",
     width: "6rem",
     align: "right",
+    filterValue: (row) => formatUsd(row.node.annualCostCents),
     sortValue: (row) => row.node.annualCostCents,
     render: (row) => (
       <span className="tabular text-[0.8125rem] text-[var(--chart-spend)]">
@@ -367,6 +369,7 @@ export const billColumns: ColumnDef<BillColumnCtx, BillGridRow>[] = [
     label: "Monthly",
     width: "5.5rem",
     align: "right",
+    filterValue: (row) => formatUsd(row.node.monthlyCents),
     sortValue: (row) => row.node.monthlyCents,
     render: (row) => (
       <span className="tabular text-[0.8125rem] text-ink">
@@ -380,6 +383,7 @@ export const billColumns: ColumnDef<BillColumnCtx, BillGridRow>[] = [
     fieldLabel: "Per pay period",
     width: "6rem",
     align: "right",
+    filterValue: (row) => formatUsd(row.node.paycheckCents),
     sortValue: (row) => row.node.paycheckCents,
     render: (row) => (
       <span className="tabular text-[0.8125rem] text-ink">
@@ -558,6 +562,7 @@ export const spendColumns: ColumnDef<SpendColumnCtx, SpendGridRow>[] = [
     label: "Rate",
     width: "11rem",
     align: "right",
+    filterValue: (row) => formatUsd(row.node.rate.ratePerPeriodCents),
     sortValue: (row) => row.node.rate.ratePerPeriodCents,
     compact: "meta",
     render: (row, ctx) => (
@@ -631,6 +636,7 @@ export const spendColumns: ColumnDef<SpendColumnCtx, SpendGridRow>[] = [
     label: "Weekly",
     width: "5.5rem",
     align: "right",
+    filterValue: (row) => formatUsd(row.node.weeklyCents),
     sortValue: (row) => row.node.weeklyCents,
     render: (row) => (
       <span className="tabular text-[0.8125rem] text-ink">
@@ -643,6 +649,7 @@ export const spendColumns: ColumnDef<SpendColumnCtx, SpendGridRow>[] = [
     label: "Monthly",
     width: "5.5rem",
     align: "right",
+    filterValue: (row) => formatUsd(row.node.monthlyCents),
     sortValue: (row) => row.node.monthlyCents,
     render: (row) => (
       <span className="tabular text-[0.8125rem] text-ink">
@@ -656,6 +663,7 @@ export const spendColumns: ColumnDef<SpendColumnCtx, SpendGridRow>[] = [
     fieldLabel: "Per pay period",
     width: "6rem",
     align: "right",
+    filterValue: (row) => formatUsd(row.node.paycheckCents),
     sortValue: (row) => row.node.paycheckCents,
     render: (row) => (
       <span className="tabular text-[0.8125rem] text-ink">

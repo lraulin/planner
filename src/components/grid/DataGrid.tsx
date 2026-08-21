@@ -224,6 +224,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   rowNumbers = false,
   exportCommands: registerExportCommands = true,
   commandScope,
+  exportFocused = false,
 }: {
   rows: GridRow<TRow>[];
   /**
@@ -266,6 +267,13 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   exportCommands?: boolean;
   /** Stamp export ids/labels when two grids share File ▸ Export. */
   commandScope?: CommandScope;
+  /**
+   * Also register the unscoped File ▸ Export / Copy rows, acting on this grid.
+   * Dual-grid pages set this on the focused grid so `CSV` means the one with the
+   * focus ring, and the scoped `CSV — Subscriptions & bills` rows stay as well
+   * (`navigation.md`).
+   */
+  exportFocused?: boolean;
   /**
    * Sort and filters are controlled when a host passes them, which is what lets a tab
    * persist them. Omitting both keeps the grid's own state, so a tab can adopt one at a
@@ -657,19 +665,17 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
     });
     return [...downloads, ...copies];
   }, []);
-  const scopedExportCommands = useMemo(
-    () =>
-      commandScope
-        ? exportCommands.map((command) =>
-            scopeCommand(
-              command,
-              commandScope,
-              scopedFormatLabel(command.label, commandScope),
-            ),
-          )
-        : exportCommands,
-    [exportCommands, commandScope],
-  );
+  const scopedExportCommands = useMemo(() => {
+    if (!commandScope) return exportCommands;
+    const scoped = exportCommands.map((command) =>
+      scopeCommand(
+        command,
+        commandScope,
+        scopedFormatLabel(command.label, commandScope),
+      ),
+    );
+    return exportFocused ? [...exportCommands, ...scoped] : scoped;
+  }, [exportCommands, commandScope, exportFocused]);
   useRegisterCommands(
     registerExportCommands ? scopedExportCommands : EMPTY_EXPORT_COMMANDS,
   );

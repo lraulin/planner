@@ -49,6 +49,13 @@ the grid's blur-commit / layout persistence would fight that.
 the same one every other grid uses. New columns appear on saved layouts via `GridSettings.known`
 (curation spec correction). No second picker.
 
+**D6 — Both grids are ordinary DataGrids.** File ▸ Export / Copy (CSV, JSON, YAML) register
+on each grid, scoped (`CSV — Subscriptions & bills`) plus a focused shortcut for the grid
+with the ring. Money columns export as `formatUsd` so a spreadsheet sees the same figures
+as the cells. Group by Category / State, saved views, and row numbers match the other
+list grids. In-app totals stay — export is a way to take the view elsewhere, not a
+substitute for the footer.
+
 ## Scope
 
 **In**
@@ -60,6 +67,8 @@ the same one every other grid uses. New columns appear on saved layouts via `Gri
 - Bills/spend grids scroll inside the section (the wrapper is a flex column, DataGrid fills
   a bounded parent)
 - Matcher / name / amount cells remount when the server value they display changes
+- File ▸ Export ▸ CSV includes Monthly / Pay period / A year (and Amount, Rate, Weekly)
+- Group by Category or State; saved views on each grid
 
 **Out**
 
@@ -80,6 +89,7 @@ the same one every other grid uses. New columns appear on saved layouts via `Gri
 
 ## Changes from original plan
 
-| What                                                             | Why                                                                                 |
-| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| Mobile sections are `h-auto`; the 26rem/22rem clip is `md:` only | A phone stacks the add form so tall that a 26rem pane left zero height for the rows |
+| What                                                             | Why                                                                                           |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Mobile sections are `h-auto`; the 26rem/22rem clip is `md:` only | A phone stacks the add form so tall that a 26rem pane left zero height for the rows           |
+| Both grids get File ▸ Export, Group by, views, row numbers       | Asked for full standard grid capabilities so a CSV can be opened in Excel; in-app totals stay |

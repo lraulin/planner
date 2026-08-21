@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
-import type { GridRow } from "@/lib/tree/slice";
 import type { Payday } from "@/lib/finances/classify/income";
 import type { BillCharge } from "@/lib/finances/available";
 import type { RecurringMerchant } from "@/lib/finances/analytics";
@@ -25,6 +24,11 @@ import {
   spendingVsIncome,
   type SpendingVsIncome,
 } from "@/lib/finances/expectedSpending";
+import {
+  COMMITMENT_GROUP_BY_VALUES,
+  groupBills,
+  groupSpend,
+} from "@/lib/finances/commitmentGrouping";
 import { nextPayday } from "@/lib/finances/available";
 import { PAYDAY_SCOPE } from "@/lib/settings/scopes";
 import { PAYDAY_CODEC } from "../paydaySetting";
@@ -44,7 +48,8 @@ import { useRegisterCommands } from "@/components/shell/CommandProvider";
 import { useSetting } from "@/components/settings/SettingsProvider";
 import { DataGrid } from "@/components/grid/DataGrid";
 import { GridToolbar, type GridToolbarHandle } from "@/components/grid/GridToolbar";
-import { useGridState, type GridDefaults } from "@/components/grid/useGridState";
+import { useModuleViews } from "@/components/grid/useModuleViews";
+import type { GridDefaults } from "@/components/grid/useGridState";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { useToday } from "@/components/grid/useToday";
@@ -67,9 +72,8 @@ const BILLS_SCOPE = {
 } as const;
 const SPEND_SCOPE = { id: "spend", label: "Recurring spend" } as const;
 
-function asRows<T extends { id: string }>(items: T[]): GridRow<T>[] {
-  return items.map((node) => ({ kind: "node" as const, id: node.id, node, depth: 0 }));
-}
+const BILL_VIEWS = [{ id: "all", label: "All bills" }] as const;
+const SPEND_VIEWS = [{ id: "all", label: "All spend" }] as const;
 
 function billDefaults(): GridDefaults {
   return {
@@ -201,19 +205,31 @@ export function CommitmentsView({
     [merchants, bills, spend],
   );
 
-  const billGrid = useGridState(
-    "finance-commitments-bills",
-    billColumns,
-    billDefaults(),
-  );
-  const spendGrid = useGridState(
-    "finance-commitments-spend",
-    spendColumns,
-    spendDefaults(),
-  );
+  const billViews = useModuleViews({
+    moduleId: "finance-commitments-bills",
+    builtIn: BILL_VIEWS,
+    defaultViewId: "all",
+    columns: billColumns,
+    defaultsFor: billDefaults,
+  });
+  const spendViews = useModuleViews({
+    moduleId: "finance-commitments-spend",
+    builtIn: SPEND_VIEWS,
+    defaultViewId: "all",
+    columns: spendColumns,
+    defaultsFor: spendDefaults,
+  });
+  const billGrid = billViews.grid;
+  const spendGrid = spendViews.grid;
 
-  const billGridRows = useMemo(() => asRows(billRows), [billRows]);
-  const spendGridRows = useMemo(() => asRows(spendRows), [spendRows]);
+  const billGridRows = useMemo(
+    () => groupBills(billRows, billGrid.groupBy),
+    [billRows, billGrid.groupBy],
+  );
+  const spendGridRows = useMemo(
+    () => groupSpend(spendRows, spendGrid.groupBy),
+    [spendRows, spendGrid.groupBy],
+  );
 
   const billDistinct = useMemo(
     () =>
@@ -256,6 +272,8 @@ export function CommitmentsView({
 
   const [billCounts, setBillCounts] = useState({ shown: 0, total: 0 });
   const [spendCounts, setSpendCounts] = useState({ shown: 0, total: 0 });
+  const [billGroupIds, setBillGroupIds] = useState<readonly string[]>([]);
+  const [spendGroupIds, setSpendGroupIds] = useState<readonly string[]>([]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -427,6 +445,9 @@ export function CommitmentsView({
             allColumns={billColumns}
             distinctValues={billDistinct}
             counts={billCounts}
+            views={billViews}
+            groupDimensions={COMMITMENT_GROUP_BY_VALUES}
+            groupIds={billGroupIds}
             commandRow={false}
             commandScope={BILLS_SCOPE}
             toolbarRef={billsToolbar}
@@ -445,6 +466,9 @@ export function CommitmentsView({
               }}
               ariaLabel="Subscriptions and bills"
               commandScope={BILLS_SCOPE}
+              exportFocused={focusedGrid === "bills"}
+              rowNumbers
+              rowLabel={(row) => row.node.name || "Bill"}
               enableFilters
               enableSort
               sorts={billGrid.sorts}
@@ -461,6 +485,9 @@ export function CommitmentsView({
               onResizeColumn={billGrid.setWidth}
               onResetColumnWidth={billGrid.clearWidth}
               columnControls={billGrid.columnControls}
+              collapsedGroups={billGrid.collapsedGroups}
+              onToggleGroup={billGrid.toggleGroup}
+              onGroupIdsChange={setBillGroupIds}
               density={billGrid.density}
               empty={
                 <p className="p-4 text-center text-[0.8125rem] text-ink-muted">
@@ -503,6 +530,9 @@ export function CommitmentsView({
             allColumns={spendColumns}
             distinctValues={spendDistinct}
             counts={spendCounts}
+            views={spendViews}
+            groupDimensions={COMMITMENT_GROUP_BY_VALUES}
+            groupIds={spendGroupIds}
             commandRow={false}
             commandScope={SPEND_SCOPE}
             toolbarRef={spendToolbar}
@@ -521,6 +551,9 @@ export function CommitmentsView({
               }}
               ariaLabel="Recurring spend"
               commandScope={SPEND_SCOPE}
+              exportFocused={focusedGrid === "spend"}
+              rowNumbers
+              rowLabel={(row) => row.node.name || "Spend group"}
               enableFilters
               enableSort
               sorts={spendGrid.sorts}
@@ -537,6 +570,9 @@ export function CommitmentsView({
               onResizeColumn={spendGrid.setWidth}
               onResetColumnWidth={spendGrid.clearWidth}
               columnControls={spendGrid.columnControls}
+              collapsedGroups={spendGrid.collapsedGroups}
+              onToggleGroup={spendGrid.toggleGroup}
+              onGroupIdsChange={setSpendGroupIds}
               density={spendGrid.density}
               empty={
                 <p className="p-4 text-center text-[0.8125rem] text-ink-muted">

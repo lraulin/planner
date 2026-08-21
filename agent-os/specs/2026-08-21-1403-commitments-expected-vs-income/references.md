@@ -14,7 +14,10 @@
 - `src/lib/finances/expectedSpending.ts` — `spendingVsIncome`
 - `src/lib/finances/reviewSort.ts` — Review comparator
 - `src/lib/finances/classify/income.ts` — `PAYCHECKS_PER_YEAR`, `incomeFromPaydays`
-- `src/components/finances/commitments/CommitmentsView.tsx` — totals footer, comparison table
-- `src/components/finances/commitments/commitmentColumns.tsx` — Monthly / Pay period columns
+- `src/components/finances/commitments/CommitmentsView.tsx` — totals footer, comparison table,
+  views, Group by, focused File ▸ Export
+- `src/components/finances/commitments/commitmentColumns.tsx` — Monthly / Pay period columns;
+  money cells export via `filterValue`
 - `src/components/finances/commitments/ReviewList.tsx` — Last charge + click-to-sort
-- `src/components/grid/DataGrid.tsx` — `h-full` so a bounded block parent can scroll
+- `src/lib/finances/commitmentGrouping.ts` — Category / State group headers
+- `src/components/grid/DataGrid.tsx` — `h-full`; `exportFocused` for dual-grid File ▸ Export
