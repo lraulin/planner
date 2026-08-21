@@ -12,26 +12,36 @@ import { CadenceSelect } from "../CadenceSelect";
 import { UrlCell } from "./UrlCell";
 import { formatUsd } from "@/lib/finances/money";
 import type { CommitmentStatus, RecurringSpendPeriod } from "@/db/schema";
-import type { StoredBillRow, StoredSpend } from "@/lib/finances/commitments";
+import type { RecurringBillEdit, RecurringSpendEdit } from "@/lib/finances/mutations";
 import type { BillRow, SpendRow } from "@/lib/finances/commitmentRows";
 import { FundingMeter } from "./FundingMeter";
 
 export type BillGridRow = BillRow;
 export type SpendGridRow = SpendRow;
 
+/**
+ * What a cell may change, typed as **what the write accepts** rather than as the row shape.
+ *
+ * These were `Partial<StoredBillRow>` / `Partial<StoredSpend>`, which let a column patch a
+ * field the mutation has no idea what to do with — `id`, or a raw `cadenceMonths` — and said
+ * nothing when a field went missing on the way there. Derived from the edit types, the
+ * compiler now refuses a patch the write cannot honour.
+ */
+export type BillPatch = Omit<RecurringBillEdit, "name" | "cadence"> & {
+  cadence?: Cadence;
+};
+export type SpendPatch = Omit<RecurringSpendEdit, "name">;
+
 export type BillColumnCtx = {
   pending: boolean;
-  onPatch: (
-    name: string,
-    patch: Partial<StoredBillRow> & { cadence?: Cadence },
-  ) => void;
+  onPatch: (name: string, patch: BillPatch) => void;
   onRename: (from: string, to: string) => void;
   onDelete: (name: string) => void;
 };
 
 export type SpendColumnCtx = {
   pending: boolean;
-  onPatch: (name: string, patch: Partial<StoredSpend>) => void;
+  onPatch: (name: string, patch: SpendPatch) => void;
   onRename: (from: string, to: string) => void;
   onDelete: (name: string) => void;
 };

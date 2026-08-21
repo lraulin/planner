@@ -785,6 +785,27 @@ describeDb("adding matchers to an existing commitment", () => {
     expect((await loadRecurringBills(userId))[0].matchers).toEqual(["GEICO *AUTO"]);
   });
 
+  it("names a dismissed holder, which is otherwise a refusal nobody can act on", async () => {
+    // Dismissing a merchant keeps its matchers — that is what stops it coming back to the
+    // review list — so a dismissed row can refuse a merge while naming a commitment the user
+    // cannot see anywhere on the page.
+    await upsertRecurringBill(userId, {
+      name: "CVS",
+      matchers: ["CVS"],
+      cadence: { unit: "month", n: 1 },
+      status: "ignored",
+    });
+    await upsertRecurringSpend(userId, { name: "Groceries", matchers: ["Walmart"] });
+
+    await expect(
+      addMatchersToCommitment(userId, {
+        kind: "spend",
+        name: "Groceries",
+        matchers: ["CVS"],
+      }),
+    ).rejects.toThrow('belongs to the commitment "CVS, which you dismissed"');
+  });
+
   it("does not let a second user add to another user's commitment", async () => {
     await upsertRecurringBill(userId, {
       name: "Geico",

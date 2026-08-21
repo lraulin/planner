@@ -344,6 +344,33 @@ included.
 > above and append a row to **Changes from original plan**. Skip pure implementation details.
 > Freeze when verified.
 
+## Corrections after freeze (2026-08-21)
+
+Recorded rather than re-ticked: the criteria below were marked verified on the strength of
+tests and a browser pass that did not cover the write path from the grid. What the user found
+within the hour, and what it cost, is the useful part of the record.
+
+- **"Both tiers carry a category … and it recategorises the charges it matches"** was true of
+  the mechanism and false of the surface on the spend grid. `spendCtx.onPatch` copied the
+  patch **field by field**, and `category` was not in the list, so the select wrote nothing
+  and snapped back on refresh. The bills handler had been updated and the spend one had not.
+  Both now forward the patch whole, and both patch types are derived from the edit types, so
+  the compiler refuses a field the write cannot honour — this class of bug cannot recur by
+  omission.
+- **The Category column was invisible on any grid whose layout had been saved before it
+  shipped.** A stored `order` is a list of the _visible_ columns, so a column added later is
+  indistinguishable from one the user hid. `GridSettings.known` now records the column set a
+  layout was written against, and `withNewColumns` shows anything neither listed nor known.
+  This was never specific to Commitments: it applied to every column ever added to a grid
+  someone had arranged.
+- **A refused write in Review reported itself off-screen.** Moving Review to the foot of the
+  page (D8) left its errors rendering in the page-level line above the two grids, a full
+  screen away, so a refusal read as the change silently undoing itself. Review now reports its
+  own failures in Review.
+- **A dismissed row can refuse a merge while naming a commitment nobody can see.** Dismissed
+  bills keep their matchers on purpose, so `"CVS" already belongs to the commitment "CVS"` was
+  a true sentence about an invisible row. The message now says which holder is dismissed.
+
 ## Follow-ups (new work — not amendments to this frozen spec)
 
 - **`1PASSWORD` vs `1PASSWORDTORONTOON`**, still outstanding from the clarity spec. The row

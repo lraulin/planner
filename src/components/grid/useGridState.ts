@@ -22,7 +22,13 @@ import {
 } from "@/lib/settings/grid";
 import { EMPTY_CROSS_FILTER, type CrossColumnFilter } from "@/lib/grid/crossFilter";
 import type { ColumnFilter } from "@/lib/grid/customFilter";
-import { hideField, moveField, placeField, showField } from "@/lib/grid/fieldOrder";
+import {
+  hideField,
+  moveField,
+  placeField,
+  showField,
+  withNewColumns,
+} from "@/lib/grid/fieldOrder";
 import { gridScope } from "@/lib/settings/scopes";
 import type { ColumnControls, ColumnMeta } from "./columns";
 
@@ -229,8 +235,11 @@ export function useGridState<TCol extends ColumnMeta>(
   const order = useMemo(() => {
     if (settings.order === null) return validDefault;
     const cleaned = settings.order.filter((id) => byId.has(id));
-    return cleaned.length > 0 ? cleaned : validDefault;
-  }, [settings.order, byId, validDefault]);
+    if (cleaned.length === 0) return validDefault;
+
+    // A column the saved layout never saw is new, not hidden, and it belongs on screen.
+    return withNewColumns(cleaned, settings.known, validDefault);
+  }, [settings.order, settings.known, byId, validDefault]);
 
   const columns = useMemo(
     () => order.map((id) => byId.get(id)).filter((column) => column !== undefined),
@@ -275,9 +284,15 @@ export function useGridState<TCol extends ColumnMeta>(
     [collapsedGroupList],
   );
 
+  // Every write of `order` records the column set it was written against, so the next column
+  // to ship can be told apart from one this user deliberately hid.
   const setOrder = useCallback(
     (next: string[]) => {
-      patch((current) => ({ ...current, order: next.filter((id) => byId.has(id)) }));
+      patch((current) => ({
+        ...current,
+        order: next.filter((id) => byId.has(id)),
+        known: [...byId.keys()],
+      }));
     },
     [patch, byId],
   );

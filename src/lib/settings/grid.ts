@@ -54,6 +54,21 @@ export type GridSettings = {
   /** Visible column ids in order, or null to follow the view's preset. */
   order: string[] | null;
   /**
+   * Every column id the grid **offered** when `order` was last written.
+   *
+   * `order` is a list of the visible columns, so hiding one is simply leaving it out — and a
+   * column shipped *after* a layout was saved is also left out, which made it invisible to
+   * exactly the people who use a grid enough to have arranged it. There is no way to tell
+   * "the user hid this" from "this did not exist yet" out of `order` alone, so the column set
+   * of the day is recorded beside it: absent from `order` **and** from `known` means new, and
+   * new columns appear.
+   *
+   * Null on every layout saved before this existed. Those are read as "known = order", so a
+   * column the user hid before today comes back once — the alternative is that no new column
+   * ever appears on their most-used grids, which is the bug this fixes.
+   */
+  known: string[] | null;
+  /**
    * Column id → pixel width, or null to follow the view's saved widths.
    * `{}` is the deliberate "use every column's declared track".
    */
@@ -140,6 +155,7 @@ export type GridSettings = {
  */
 export const DEFAULT_GRID_SETTINGS: GridSettings = {
   order: null,
+  known: null,
   widths: null,
   filters: null,
   advancedFilter: null,
@@ -213,6 +229,7 @@ export function parseGridSettings(value: unknown): GridSettings {
 
   return {
     order: Array.isArray(record.order) ? asStringArray(record.order, []) : null,
+    known: Array.isArray(record.known) ? asStringArray(record.known, []) : null,
     widths: parseWidths(record),
     filters: parseFilters(record),
     advancedFilter: parseCrossColumnFilter(record.advancedFilter),

@@ -55,6 +55,7 @@ describe("parseGridSettings", () => {
         { columnId: "deadline", direction: "desc" as const },
         { columnId: "priority", direction: "asc" as const },
       ],
+      known: ["name", "priority", "deadline", "state"] as string[] | null,
       groupBy: ["resultArea", "state"] as string[] | null,
       collapsedGroups: ["area:health"],
       density: "compact" as const,
@@ -64,6 +65,16 @@ describe("parseGridSettings", () => {
     };
 
     expect(parseGridSettings(serializeGridSettings(settings))).toEqual(settings);
+  });
+
+  it("reads a layout saved before `known` existed as knowing only what it lists", () => {
+    // The distinction the field exists for: absent from `order` *and* from `known` means the
+    // column shipped after the layout was saved, and `useGridState` shows it. An old blob has
+    // no `known`, so it can only speak for the columns it named.
+    expect(parseGridSettings({ order: ["name", "priority"] }).known).toBeNull();
+    expect(
+      parseGridSettings({ order: ["name"], known: ["name", "effort"] }).known,
+    ).toEqual(["name", "effort"]);
   });
 
   it("defaults includeDeferred to showing when absent", () => {

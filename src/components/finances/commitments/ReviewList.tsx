@@ -83,7 +83,6 @@ export function ReviewList({
   spend,
   billCharges,
   todayKey,
-  onError,
 }: {
   items: RecurringMerchant[];
   dismissed: StoredBillRow[];
@@ -94,12 +93,20 @@ export function ReviewList({
   billCharges: ReadonlyMap<string, readonly CommitmentCharge[]>;
   /** Null until the client knows its own date, which is when a prefill is skipped. */
   todayKey: string | null;
-  onError: (message: string | null) => void;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [draft, setDraft] = useState<Draft | null>(null);
   const [showDismissed, setShowDismissed] = useState(false);
+  /**
+   * Review reports its own failures, in Review.
+   *
+   * The page-level error line sits above the two grids, which was fine when this list did
+   * too. Once Review moved to the foot of the page a refused write — a merchant another
+   * commitment already claims, most often — put its explanation a full screen above the
+   * button that caused it, so the change simply appeared to undo itself.
+   */
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (draft === null) return;
@@ -111,11 +118,12 @@ export function ReviewList({
   }, [draft]);
 
   function run(work: () => Promise<{ ok: boolean; error?: string }>) {
-    onError(null);
+    setError(null);
     startTransition(async () => {
       const result = await work();
-      if (!result.ok) onError(result.error ?? "Could not save.");
+      if (!result.ok) setError(result.error ?? "Could not save.");
       else {
+        setError(null);
         setDraft(null);
         router.refresh();
       }
@@ -133,6 +141,14 @@ export function ReviewList({
 
   return (
     <div className="min-w-0">
+      {error !== null && (
+        <p
+          role="alert"
+          className="mb-2 rounded border border-[var(--chart-spend)] px-2 py-1 text-[0.75rem] text-ink"
+        >
+          {error}
+        </p>
+      )}
       {/* Tall enough for an expanded draft and its warning. At `max-h-64` the commit button
           sat below the fold the moment a row was opened. */}
       <div className="max-h-96 min-w-0 overflow-auto">

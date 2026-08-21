@@ -567,6 +567,7 @@ async function claimedMatchers(
       .select({
         id: financeRecurringBills.id,
         name: financeRecurringBills.name,
+        status: financeRecurringBills.status,
         matchers: financeRecurringBills.matchers,
       })
       .from(financeRecurringBills)
@@ -584,7 +585,13 @@ async function claimedMatchers(
   const claimed = new Map<string, string>();
   for (const row of bills) {
     if (exclude?.table === "bill" && exclude.id === row.id) continue;
-    for (const merchant of row.matchers) claimed.set(merchant, row.name);
+    // A dismissed row still holds its matchers — that is what keeps the merchant off the
+    // review list — so it can refuse a merge, and the refusal has to say so. "CVS already
+    // belongs to CVS" is a true sentence that explains nothing when the CVS in question is
+    // a row the user dismissed weeks ago and cannot see.
+    const held =
+      row.status === "ignored" ? `${row.name}, which you dismissed` : row.name;
+    for (const merchant of row.matchers) claimed.set(merchant, held);
   }
   for (const row of spend) {
     if (exclude?.table === "spend" && exclude.id === row.id) continue;

@@ -124,7 +124,9 @@ export class MatcherConflictError extends Error {
     readonly merchant: string,
     readonly heldBy: string,
   ) {
-    super(`"${merchant}" already belongs to the commitment "${heldBy}".`);
+    super(
+      `"${merchant}" already belongs to the commitment "${heldBy}". Free it there first.`,
+    );
     this.name = "MatcherConflictError";
   }
 }

@@ -349,23 +349,18 @@ export function CommitmentsView({
 
   const billCtx: BillColumnCtx = {
     pending,
+    // The patch goes through whole. It used to be copied field by field, and a cell whose
+    // field was missing from that list wrote nothing at all and snapped back on refresh —
+    // which is what a Category column shipped straight into. `cadence` is the only field
+    // filled in from the row, because the edit type requires it.
     onPatch: (name, patch) => {
       const row = bills.find((bill) => bill.name === name);
       if (!row) return;
       run(() =>
         setRecurringBillAction({
+          ...patch,
           name,
           cadence: patch.cadence ?? cadenceOf(row),
-          matchers: patch.matchers ?? row.matchers,
-          expectedCents:
-            patch.expectedCents !== undefined ? patch.expectedCents : row.expectedCents,
-          anchorDate:
-            patch.anchorDate !== undefined ? patch.anchorDate : row.anchorDate,
-          status: patch.status ?? row.status,
-          url: patch.url ?? row.url,
-          category: patch.category ?? row.category,
-          scheduled: patch.scheduled ?? row.scheduled,
-          dueDay: patch.dueDay !== undefined ? patch.dueDay : row.dueDay,
         }),
       );
     },
@@ -375,17 +370,9 @@ export function CommitmentsView({
 
   const spendCtx: SpendColumnCtx = {
     pending,
+    // As above: forwarded whole, so a new column cannot go missing on the way to the write.
     onPatch: (name, patch) => {
-      run(() =>
-        setRecurringSpendAction({
-          name,
-          matchers: patch.matchers,
-          period: patch.period,
-          amountSource: patch.amountSource,
-          expectedCents: patch.expectedCents,
-          active: patch.active,
-        }),
-      );
+      run(() => setRecurringSpendAction({ ...patch, name }));
     },
     onRename: (from, to) => run(() => renameRecurringSpendAction(from, to)),
     onDelete: (name) => run(() => deleteCommitmentAction({ kind: "spend", name })),
@@ -571,7 +558,6 @@ export function CommitmentsView({
             spend={spend}
             billCharges={chargesByName}
             todayKey={todayKey}
-            onError={setError}
           />
         </section>
 
