@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { billRows, heldSetAsides, heldSpend, spendRows } from "./commitmentRows";
+import {
+  activeBillTotals,
+  billRows,
+  heldSetAsides,
+  heldSpend,
+  spendRows,
+} from "./commitmentRows";
 import type { BillCharge } from "./available";
 import type { Payday } from "./classify/income";
 import type { CommitmentCharge, StoredBillRow, StoredSpend } from "./commitments";
@@ -58,7 +64,24 @@ describe("billRows", () => {
       nextDueKey: "2027-03-30",
     });
     expect(row.annualCostCents).toBe(7188);
+    expect(row.monthlyCents).toBe(Math.round(7188 / 12));
+    expect(row.paycheckCents).toBe(Math.round(7188 / 26));
     expect(row.overdue).toBe(false);
+  });
+
+  it("puts a monthly bill's amount in Monthly, not its accrual slice", () => {
+    // $2,100 a month is $2,100 a month. Dividing the cycle by two paychecks ($1,050)
+    // is the set-aside arithmetic and must not leak into the comparable column — that is
+    // what would make rent look half as expensive as it is next to a yearly bill.
+    const [row] = billRows(
+      [bill({ name: "Rent", cadenceMonths: 1, expectedCents: 210_000 })],
+      [{ name: "Rent", dateKey: "2026-05-01" }],
+      PAYDAYS,
+      "2026-05-10",
+    );
+    expect(row.monthlyCents).toBe(210_000);
+    expect(row.paycheckCents).toBe(Math.round((210_000 * 12) / 26));
+    expect(row.held?.perPaycheckCents).toBe(105_000);
   });
 
   it("holds nothing for a cancelled or dismissed bill, but keeps its cost on the books", () => {
@@ -116,6 +139,7 @@ describe("billRows", () => {
     );
 
     expect(heldSetAsides(rows).map((entry) => entry.name)).toEqual(["1Password"]);
+    expect(activeBillTotals(rows).annualCents).toBe(7188);
   });
 });
 
@@ -130,6 +154,7 @@ describe("spendRows", () => {
     expect(row.held?.spentThisPeriodCents).toBe(4500);
     expect(row.rate.ratePerPeriodCents).toBe(6000);
     expect(row.monthlyCents).toBe(26_000);
+    expect(row.paycheckCents).toBe(Math.round((26_000 * 12) / 26));
   });
 
   it("holds nothing for an inactive group", () => {

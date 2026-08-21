@@ -14,6 +14,7 @@ import {
   type StoredBillRow,
   type StoredSpend,
 } from "./commitments";
+import { PAYCHECKS_PER_YEAR } from "./classify/income";
 import { annualCents, cadenceOf } from "./recurringBills";
 
 /**
@@ -42,6 +43,14 @@ export type BillRow = StoredBillRow & {
   amountCents: number;
   /** What it costs over twelve months. Zero without a declared amount. */
   annualCostCents: number;
+  /** `annualCostCents / 12` — comparable across cadences. The Amount column is not. */
+  monthlyCents: number;
+  /**
+   * Annual cost spread over 26 paychecks. Not `held.perPaycheckCents`, which is the accrual
+   * slice of *this* cycle (`expected / paydays in the cadence`) and cannot be summed with a
+   * monthly bill's slice.
+   */
+  paycheckCents: number;
   /** The accrual, or null when nothing is being held back. */
   held: SetAside | null;
   /**
@@ -58,6 +67,8 @@ export type SpendRow = StoredSpend & {
   rate: SpendRate;
   weeklyCents: number;
   monthlyCents: number;
+  /** Monthly rate spread over 26 paychecks, so it sits next to the bills column. */
+  paycheckCents: number;
   /** This period's hold, or null when the group is inactive or has no observed rate. */
   held: SpendHeld | null;
 };
@@ -94,10 +105,14 @@ export function billRows(
       todayKey === null || bill.status !== "active"
         ? null
         : setAsideHeld(bill, paydays, charges, todayKey);
+    const annualCostCents =
+      amountCents > 0 ? annualCents(amountCents, cadenceOf(bill)) : 0;
     return {
       ...bill,
       amountCents,
-      annualCostCents: amountCents > 0 ? annualCents(amountCents, cadenceOf(bill)) : 0,
+      annualCostCents,
+      monthlyCents: Math.round(annualCostCents / 12),
+      paycheckCents: Math.round(annualCostCents / PAYCHECKS_PER_YEAR),
       nextDueKey:
         todayKey === null || !bill.scheduled
           ? null
@@ -125,17 +140,20 @@ export function spendRows(
     // A far-future key before hydration makes every charge on file count as history, which is
     // what an un-dated read of the rate should show: the average so far, held against nothing.
     const rate = recurringSpendRate(entry, mine, todayKey ?? "9999-12-31");
+    const weeklyCents =
+      entry.period === "week"
+        ? rate.ratePerPeriodCents
+        : Math.round((rate.ratePerPeriodCents * 12) / 52);
+    const monthlyCents =
+      entry.period === "month"
+        ? rate.ratePerPeriodCents
+        : Math.round((rate.ratePerPeriodCents * 52) / 12);
     return {
       ...entry,
       rate,
-      weeklyCents:
-        entry.period === "week"
-          ? rate.ratePerPeriodCents
-          : Math.round((rate.ratePerPeriodCents * 12) / 52),
-      monthlyCents:
-        entry.period === "month"
-          ? rate.ratePerPeriodCents
-          : Math.round((rate.ratePerPeriodCents * 52) / 12),
+      weeklyCents,
+      monthlyCents,
+      paycheckCents: Math.round((monthlyCents * 12) / PAYCHECKS_PER_YEAR),
       held:
         todayKey === null
           ? null
@@ -158,4 +176,55 @@ export function heldSetAsides(rows: readonly BillRow[]): SetAside[] {
 /** Every recurring-spend hold in force, for `availableToSpend`. */
 export function heldSpend(rows: readonly SpendRow[]): SpendHeld[] {
   return rows.flatMap((row) => (row.held === null ? [] : [row.held]));
+}
+
+export type MoneyTotals = {
+  annualCents: number;
+  monthlyCents: number;
+  paycheckCents: number;
+  weeklyCents: number;
+};
+
+/** Active bills, summed on the columns that share a period. Amount is excluded on purpose. */
+export function activeBillTotals(rows: readonly BillRow[]): MoneyTotals {
+  return sumMoney(
+    rows.filter((row) => row.status === "active"),
+    (row) => ({
+      annualCents: row.annualCostCents,
+      monthlyCents: row.monthlyCents,
+      paycheckCents: row.paycheckCents,
+      weeklyCents: 0,
+    }),
+  );
+}
+
+/** Active spend groups, summed on weekly / monthly / paycheck. Rate is period-mixed. */
+export function activeSpendTotals(rows: readonly SpendRow[]): MoneyTotals {
+  return sumMoney(
+    rows.filter((row) => row.active),
+    (row) => ({
+      annualCents: row.monthlyCents * 12,
+      monthlyCents: row.monthlyCents,
+      paycheckCents: row.paycheckCents,
+      weeklyCents: row.weeklyCents,
+    }),
+  );
+}
+
+function sumMoney<T>(
+  rows: readonly T[],
+  centsOf: (row: T) => MoneyTotals,
+): MoneyTotals {
+  return rows.reduce(
+    (total, row) => {
+      const cents = centsOf(row);
+      return {
+        annualCents: total.annualCents + cents.annualCents,
+        monthlyCents: total.monthlyCents + cents.monthlyCents,
+        paycheckCents: total.paycheckCents + cents.paycheckCents,
+        weeklyCents: total.weeklyCents + cents.weeklyCents,
+      };
+    },
+    { annualCents: 0, monthlyCents: 0, paycheckCents: 0, weeklyCents: 0 },
+  );
 }

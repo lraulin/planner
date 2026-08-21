@@ -1,9 +1,17 @@
 "use client";
 
-import { Fragment, useEffect, useState, useTransition } from "react";
+import { Fragment, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { RecurringMerchant } from "@/lib/finances/analytics";
 import { formatUsd } from "@/lib/finances/money";
+import { DateText } from "@/components/date/DateText";
+import {
+  DEFAULT_REVIEW_SORT,
+  nextReviewSort,
+  sortReviewItems,
+  type ReviewSort,
+  type ReviewSortColumn,
+} from "@/lib/finances/reviewSort";
 import {
   cadenceFromGapDays,
   cadenceLabel,
@@ -63,6 +71,39 @@ const FIELD =
 const BUTTON =
   "min-h-tap rounded border border-rule px-2 text-[0.75rem] text-ink disabled:opacity-50 md:min-h-0 md:py-1";
 
+function ReviewSortHeader({
+  column,
+  label,
+  align,
+  sort,
+  onSort,
+}: {
+  column: ReviewSortColumn;
+  label: string;
+  align?: "right";
+  sort: ReviewSort;
+  onSort: (next: ReviewSort) => void;
+}) {
+  const active = sort.column === column;
+  return (
+    <th
+      className={`py-1 pr-2 font-normal ${align === "right" ? "text-right" : ""}`}
+      aria-sort={
+        active ? (sort.direction === "asc" ? "ascending" : "descending") : "none"
+      }
+    >
+      <button
+        type="button"
+        onClick={() => onSort(nextReviewSort(sort, column))}
+        className="text-ink-muted hover:text-ink"
+      >
+        {label}
+        {active ? (sort.direction === "asc" ? " ↑" : " ↓") : ""}
+      </button>
+    </th>
+  );
+}
+
 /**
  * Detected charges that are not yet a commitment.
  *
@@ -98,6 +139,8 @@ export function ReviewList({
   const [pending, startTransition] = useTransition();
   const [draft, setDraft] = useState<Draft | null>(null);
   const [showDismissed, setShowDismissed] = useState(false);
+  const [sort, setSort] = useState(DEFAULT_REVIEW_SORT);
+  const rows = useMemo(() => sortReviewItems(items, sort), [items, sort]);
   /**
    * Review reports its own failures, in Review.
    *
@@ -152,18 +195,46 @@ export function ReviewList({
       {/* Tall enough for an expanded draft and its warning. At `max-h-64` the commit button
           sat below the fold the moment a row was opened. */}
       <div className="max-h-96 min-w-0 overflow-auto">
-        <table className="w-full min-w-[32rem] text-[0.8125rem]">
+        <table className="w-full min-w-[40rem] text-[0.8125rem]">
           <thead>
             <tr className="border-b border-rule text-left text-[0.75rem] text-ink-muted">
-              <th className="py-1 pr-2 font-normal">Merchant</th>
-              <th className="py-1 pr-2 font-normal">Looks like</th>
-              <th className="py-1 pr-2 text-right font-normal">Typical</th>
-              <th className="py-1 pr-2 text-right font-normal">A year</th>
+              <ReviewSortHeader
+                column="merchant"
+                label="Merchant"
+                sort={sort}
+                onSort={setSort}
+              />
+              <ReviewSortHeader
+                column="shape"
+                label="Looks like"
+                sort={sort}
+                onSort={setSort}
+              />
+              <ReviewSortHeader
+                column="typical"
+                label="Typical"
+                align="right"
+                sort={sort}
+                onSort={setSort}
+              />
+              <ReviewSortHeader
+                column="annual"
+                label="A year"
+                align="right"
+                sort={sort}
+                onSort={setSort}
+              />
+              <ReviewSortHeader
+                column="lastCharge"
+                label="Last charge"
+                sort={sort}
+                onSort={setSort}
+              />
               <th className="py-1 font-normal"> </th>
             </tr>
           </thead>
           <tbody>
-            {items.map((entry) => {
+            {rows.map((entry) => {
               const open = draft?.merchant === entry.merchant ? draft.kind : null;
               return (
                 // Two rows, not one flex row: the draft has to span the full width while the
@@ -190,6 +261,9 @@ export function ReviewList({
                     </td>
                     <td className="tabular py-1.5 pr-2 text-right text-[var(--chart-spend)]">
                       {formatUsd(entry.annualCents)}
+                    </td>
+                    <td className="py-1.5 pr-2 text-ink-muted">
+                      <DateText dateKey={entry.lastChargeOn} className="inline" />
                     </td>
                     <td className="py-1.5">
                       <div className="flex flex-wrap justify-end gap-1">
@@ -246,7 +320,7 @@ export function ReviewList({
                   </tr>
                   {open !== null && (
                     <tr className="border-b border-rule">
-                      <td colSpan={5} className="pb-2">
+                      <td colSpan={6} className="pb-2">
                         {open === "bill" ? (
                           <BillDraft
                             entry={entry}

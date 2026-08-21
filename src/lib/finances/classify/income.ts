@@ -27,6 +27,8 @@ import { normalizeMerchant } from "./merchant";
 
 /** Typical gap between biweekly paydays. Holiday posting drifts a few days either side. */
 export const BIWEEKLY_DAYS = 14;
+/** Biweekly paychecks in a year — the same 26 `normalizedMonthlyIncome` multiplies by. */
+export const PAYCHECKS_PER_YEAR = 26;
 const BIWEEKLY_GAP_MIN = 12;
 const BIWEEKLY_GAP_MAX = 16;
 
@@ -68,7 +70,28 @@ export type IncomeDetection = {
  * months, so a three-paycheck calendar month and a two-paycheck one report the same need.
  */
 export function normalizedMonthlyIncome(medianPaycheckCents: number): number {
-  return Math.round((medianPaycheckCents * 26) / 12);
+  return Math.round((medianPaycheckCents * PAYCHECKS_PER_YEAR) / 12);
+}
+
+/**
+ * The paycheck figures the Commitments comparison uses, derived from the already-detected
+ * payday series rather than by running detection again.
+ *
+ * `loadDashboard` only ships `paydays`, not the median, and the two must not drift: a second
+ * median here that rounded even-length series differently would make the comparison disagree
+ * with every other income headline.
+ */
+export function incomeFromPaydays(paydays: readonly Payday[]): {
+  medianPaycheckCents: number;
+  monthlyCents: number;
+  annualCents: number;
+} {
+  const medianPaycheckCents = medianCents(paydays.map((payday) => payday.amountCents));
+  return {
+    medianPaycheckCents,
+    monthlyCents: normalizedMonthlyIncome(medianPaycheckCents),
+    annualCents: medianPaycheckCents * PAYCHECKS_PER_YEAR,
+  };
 }
 
 function median(values: readonly number[]): number {

@@ -16,9 +16,15 @@ import {
   type StoredSpend,
 } from "@/lib/finances/commitments";
 import {
+  activeBillTotals,
+  activeSpendTotals,
   billRows as buildBillRows,
   spendRows as buildSpendRows,
 } from "@/lib/finances/commitmentRows";
+import {
+  spendingVsIncome,
+  type SpendingVsIncome,
+} from "@/lib/finances/expectedSpending";
 import { nextPayday } from "@/lib/finances/available";
 import { PAYDAY_SCOPE } from "@/lib/settings/scopes";
 import { PAYDAY_CODEC } from "../paydaySetting";
@@ -378,14 +384,9 @@ export function CommitmentsView({
     onDelete: (name) => run(() => deleteCommitmentAction({ kind: "spend", name })),
   };
 
-  const activeBills = billRows.filter((row) => row.status === "active");
-  const annualTotal = activeBills.reduce(
-    (total, row) => total + row.annualCostCents,
-    0,
-  );
-  // What the active bills cost per month on average — a headline for the section, not the
-  // figure any one of them is holding back. The Set aside column says that, per bill.
-  const monthlyTotal = Math.round(annualTotal / 12);
+  const billTotals = activeBillTotals(billRows);
+  const spendTotals = activeSpendTotals(spendRows);
+  const comparison = spendingVsIncome(billRows, spendRows, paydays);
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -397,7 +398,7 @@ export function CommitmentsView({
         )}
 
         <section
-          className={`flex h-[26rem] min-w-0 shrink-0 flex-col overflow-hidden rounded border ${
+          className={`flex h-auto min-w-0 shrink-0 flex-col overflow-hidden rounded border md:h-[26rem] ${
             focusedGrid === "bills" ? "border-select-edge" : "border-rule"
           }`}
           onMouseDown={() => setFocusedGrid("bills")}
@@ -411,8 +412,9 @@ export function CommitmentsView({
               <p className="text-[0.75rem] text-ink-muted">
                 Charges unless you cancel. Every active bill with an amount is held out
                 of each paycheck, a slice at a time, so the money is there when it lands
-                — a yearly bill saves up over 26 of them. {formatUsd(monthlyTotal)} /
-                month · {formatUsd(annualTotal)} / year.
+                — a yearly bill saves up over 26 of them.{" "}
+                {formatUsd(billTotals.monthlyCents)} / month ·{" "}
+                {formatUsd(billTotals.annualCents)} / year.
               </p>
             </div>
           </header>
@@ -429,7 +431,7 @@ export function CommitmentsView({
             commandScope={BILLS_SCOPE}
             toolbarRef={billsToolbar}
           />
-          <div className="min-h-0 min-w-0 flex-1">
+          <div className="flex min-h-0 min-w-0 flex-col md:flex-1">
             <DataGrid<BillColumnCtx, BillGridRow>
               rows={billGridRows}
               columns={billGrid.columns}
@@ -468,10 +470,17 @@ export function CommitmentsView({
               }
             />
           </div>
+          <GridTotals
+            items={[
+              { label: "Monthly", cents: billTotals.monthlyCents },
+              { label: "Pay period", cents: billTotals.paycheckCents },
+              { label: "A year", cents: billTotals.annualCents },
+            ]}
+          />
         </section>
 
         <section
-          className={`flex h-[22rem] min-w-0 shrink-0 flex-col overflow-hidden rounded border ${
+          className={`flex h-auto min-w-0 shrink-0 flex-col overflow-hidden rounded border md:h-[22rem] ${
             focusedGrid === "spend" ? "border-select-edge" : "border-rule"
           }`}
           onMouseDown={() => setFocusedGrid("spend")}
@@ -498,7 +507,7 @@ export function CommitmentsView({
             commandScope={SPEND_SCOPE}
             toolbarRef={spendToolbar}
           />
-          <div className="min-h-0 min-w-0 flex-1">
+          <div className="flex min-h-0 min-w-0 flex-col md:flex-1">
             <DataGrid<SpendColumnCtx, SpendGridRow>
               rows={spendGridRows}
               columns={spendGrid.columns}
@@ -538,7 +547,16 @@ export function CommitmentsView({
               }
             />
           </div>
+          <GridTotals
+            items={[
+              { label: "Weekly", cents: spendTotals.weeklyCents },
+              { label: "Monthly", cents: spendTotals.monthlyCents },
+              { label: "Pay period", cents: spendTotals.paycheckCents },
+            ]}
+          />
         </section>
+
+        <ExpectedVsIncome comparison={comparison} />
 
         <section className="shrink-0 rounded border border-rule p-2">
           <header className="mb-2">
@@ -809,6 +827,119 @@ function NewSpendForm({
         </details>
       )}
     </div>
+  );
+}
+
+function GridTotals({ items }: { items: readonly { label: string; cents: number }[] }) {
+  return (
+    <div className="flex flex-none flex-wrap items-baseline gap-x-4 gap-y-0.5 border-t border-rule px-2 py-1 text-[0.75rem] text-ink-muted">
+      <span>Active totals</span>
+      {items.map((item) => (
+        <span key={item.label} className="tabular text-ink">
+          {item.label} {formatUsd(item.cents)}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function ExpectedVsIncome({ comparison }: { comparison: SpendingVsIncome }) {
+  const leftover = comparison.remainder.monthlyCents;
+  return (
+    <section className="shrink-0 rounded border border-rule">
+      <header className="border-b border-rule px-3 py-2">
+        <h2 className="text-[0.9375rem] font-medium text-ink">Expected vs income</h2>
+        <p className="text-[0.75rem] text-ink-muted">
+          What the two lists above cost, against a typical paycheck. Amount on a bill is
+          left out — a yearly $72 and a monthly $72 are not the same number.
+        </p>
+      </header>
+      <div className="overflow-x-auto p-2">
+        <table className="w-full min-w-[28rem] text-[0.8125rem]">
+          <thead>
+            <tr className="border-b border-rule text-left text-[0.75rem] text-ink-muted">
+              <th className="py-1 pr-2 font-normal"> </th>
+              <th className="py-1 pr-2 text-right font-normal">Monthly</th>
+              <th className="py-1 pr-2 text-right font-normal">Pay period</th>
+              <th className="py-1 text-right font-normal">A year</th>
+            </tr>
+          </thead>
+          <tbody>
+            <ComparisonRow
+              label="Subscriptions & bills"
+              monthly={comparison.bills.monthlyCents}
+              paycheck={comparison.bills.paycheckCents}
+              annual={comparison.bills.annualCents}
+            />
+            <ComparisonRow
+              label="Recurring spend"
+              monthly={comparison.spend.monthlyCents}
+              paycheck={comparison.spend.paycheckCents}
+              annual={comparison.spend.annualCents}
+            />
+            <ComparisonRow
+              label="Expected spending"
+              monthly={comparison.spending.monthlyCents}
+              paycheck={comparison.spending.paycheckCents}
+              annual={comparison.spending.annualCents}
+              strong
+            />
+            <ComparisonRow
+              label="Expected income"
+              monthly={comparison.income.monthlyCents}
+              paycheck={comparison.income.paycheckCents}
+              annual={comparison.income.annualCents}
+            />
+            <ComparisonRow
+              label={leftover >= 0 ? "Left after commitments" : "Overcommitted"}
+              monthly={comparison.remainder.monthlyCents}
+              paycheck={comparison.remainder.paycheckCents}
+              annual={comparison.remainder.annualCents}
+              strong
+              tone={leftover >= 0 ? "income" : "spend"}
+            />
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function ComparisonRow({
+  label,
+  monthly,
+  paycheck,
+  annual,
+  strong,
+  tone,
+}: {
+  label: string;
+  monthly: number;
+  paycheck: number;
+  annual: number;
+  strong?: boolean;
+  tone?: "income" | "spend";
+}) {
+  const color =
+    tone === "income"
+      ? "text-[var(--chart-income)]"
+      : tone === "spend"
+        ? "text-[var(--chart-spend)]"
+        : "text-ink";
+  const weight = strong ? "font-medium" : "font-normal";
+  return (
+    <tr className="border-b border-rule last:border-b-0">
+      <td className={`py-1.5 pr-2 ${weight} text-ink`}>{label}</td>
+      <td className={`tabular py-1.5 pr-2 text-right ${weight} ${color}`}>
+        {formatUsd(monthly)}
+      </td>
+      <td className={`tabular py-1.5 pr-2 text-right ${weight} ${color}`}>
+        {formatUsd(paycheck)}
+      </td>
+      <td className={`tabular py-1.5 text-right ${weight} ${color}`}>
+        {formatUsd(annual)}
+      </td>
+    </tr>
   );
 }
 

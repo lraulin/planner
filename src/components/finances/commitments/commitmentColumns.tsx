@@ -189,6 +189,7 @@ function dollarsInput(
 ) {
   return (
     <input
+      key={cents}
       type="text"
       inputMode="decimal"
       defaultValue={(cents / 100).toFixed(2)}
@@ -234,6 +235,7 @@ export const billColumns: ColumnDef<BillColumnCtx, BillGridRow>[] = [
     compact: "primary",
     render: (row, ctx) => (
       <input
+        key={row.node.name}
         type="text"
         defaultValue={row.node.name}
         disabled={ctx.pending}
@@ -361,6 +363,31 @@ export const billColumns: ColumnDef<BillColumnCtx, BillGridRow>[] = [
     ),
   },
   {
+    id: "monthly",
+    label: "Monthly",
+    width: "5.5rem",
+    align: "right",
+    sortValue: (row) => row.node.monthlyCents,
+    render: (row) => (
+      <span className="tabular text-[0.8125rem] text-ink">
+        {formatUsd(row.node.monthlyCents)}
+      </span>
+    ),
+  },
+  {
+    id: "paycheck",
+    label: "Pay period",
+    fieldLabel: "Per pay period",
+    width: "6rem",
+    align: "right",
+    sortValue: (row) => row.node.paycheckCents,
+    render: (row) => (
+      <span className="tabular text-[0.8125rem] text-ink">
+        {formatUsd(row.node.paycheckCents)}
+      </span>
+    ),
+  },
+  {
     id: "category",
     label: "Category",
     width: "9rem",
@@ -385,6 +412,7 @@ export const billColumns: ColumnDef<BillColumnCtx, BillGridRow>[] = [
     compact: "meta",
     render: (row, ctx) => (
       <input
+        key={row.node.matchers.join("\0")}
         type="text"
         defaultValue={row.node.matchers.join(", ")}
         disabled={ctx.pending}
@@ -447,6 +475,7 @@ export const spendColumns: ColumnDef<SpendColumnCtx, SpendGridRow>[] = [
     compact: "primary",
     render: (row, ctx) => (
       <input
+        key={row.node.name}
         type="text"
         defaultValue={row.node.name}
         disabled={ctx.pending}
@@ -485,6 +514,7 @@ export const spendColumns: ColumnDef<SpendColumnCtx, SpendGridRow>[] = [
     compact: "meta",
     render: (row, ctx) => (
       <input
+        key={row.node.matchers.join("\0")}
         type="text"
         defaultValue={row.node.matchers.join(", ")}
         disabled={ctx.pending}
@@ -617,6 +647,19 @@ export const spendColumns: ColumnDef<SpendColumnCtx, SpendGridRow>[] = [
     render: (row) => (
       <span className="tabular text-[0.8125rem] text-ink">
         {formatUsd(row.node.monthlyCents)}
+      </span>
+    ),
+  },
+  {
+    id: "paycheck",
+    label: "Pay period",
+    fieldLabel: "Per pay period",
+    width: "6rem",
+    align: "right",
+    sortValue: (row) => row.node.paycheckCents,
+    render: (row) => (
+      <span className="tabular text-[0.8125rem] text-ink">
+        {formatUsd(row.node.paycheckCents)}
       </span>
     ),
   },
