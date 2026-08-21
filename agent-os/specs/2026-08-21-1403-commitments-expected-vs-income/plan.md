@@ -56,6 +56,13 @@ as the cells. Group by Category / State, saved views, and row numbers match the 
 list grids. In-app totals stay — export is a way to take the view elsewhere, not a
 substitute for the footer.
 
+**D7 — Manual create is on demand.** Review is how a bill usually arrives. The always-on
+create form occupied the scanning surface for a rare action (`ux-principles.md` —
+progressive disclosure). New bill / New spend group live in the New menu (`⌘⏎` on the
+focused grid), a quiet header control, and the empty state. The form expands in place —
+not a modal — and Escape / Cancel puts it away. Recurring spend gets the same treatment
+because its form had the same problem.
+
 ## Scope
 
 **In**
@@ -69,6 +76,7 @@ substitute for the footer.
 - Matcher / name / amount cells remount when the server value they display changes
 - File ▸ Export ▸ CSV includes Monthly / Pay period / A year (and Amount, Rate, Weekly)
 - Group by Category or State; saved views on each grid
+- Manual create is New menu / header "Add bill" / empty state — not a persistent form
 
 **Out**
 
@@ -93,3 +101,4 @@ substitute for the footer.
 | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | Mobile sections are `h-auto`; the 26rem/22rem clip is `md:` only | A phone stacks the add form so tall that a 26rem pane left zero height for the rows           |
 | Both grids get File ▸ Export, Group by, views, row numbers       | Asked for full standard grid capabilities so a CSV can be opened in Excel; in-app totals stay |
+| Create form is on demand, not persistent                         | Review is the usual path; the always-on form occupied the list                                |

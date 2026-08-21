@@ -42,7 +42,9 @@ import {
   setRecurringBillAction,
   setRecurringSpendAction,
 } from "@/app/finances/actions";
+import { INSERT_AFTER } from "@/lib/commands/chords";
 import { dualGridViewCommands } from "@/lib/commands/gridViewCommands";
+import type { Command } from "@/lib/commands/registry";
 import { hasAnyNarrowing } from "@/lib/settings/grid";
 import { useRegisterCommands } from "@/components/shell/CommandProvider";
 import { useSetting } from "@/components/settings/SettingsProvider";
@@ -110,6 +112,8 @@ export function CommitmentsView({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  /** Which create form is open. Null until New / Add — Review is the usual path. */
+  const [adding, setAdding] = useState<"bills" | "spend" | null>(null);
   const { detail: openId } = useViewStateUrl();
   const [focusedGrid, setFocusedGrid] = useState<"bills" | "spend">(() => {
     // A Find landing on a spend row should not light up the bills grid first.
@@ -277,6 +281,11 @@ export function CommitmentsView({
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape" && adding !== null) {
+        event.preventDefault();
+        setAdding(null);
+        return;
+      }
       if (isTypingTarget(event.target)) return;
       const select = focusedGridRef.current === "bills" ? billsSelect : spendSelect;
       if (event.key === "ArrowDown") {
@@ -289,7 +298,7 @@ export function CommitmentsView({
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [billsSelect, spendSelect]);
+  }, [adding, billsSelect, spendSelect]);
 
   const focusedLabel = focusedGrid === "bills" ? BILLS_SCOPE.label : SPEND_SCOPE.label;
   const billsNarrowing = hasAnyNarrowing(
@@ -362,6 +371,45 @@ export function CommitmentsView({
   }, [focusedLabel, focusedNarrowing, billsNarrowing, spendNarrowing]);
   useRegisterCommands(viewCommands);
 
+  const createCommands = useMemo((): Command[] => {
+    const openBills = () => {
+      setFocusedGrid("bills");
+      setAdding("bills");
+    };
+    const openSpend = () => {
+      setFocusedGrid("spend");
+      setAdding("spend");
+    };
+    const focusedIsBills = focusedGrid === "bills";
+    return [
+      {
+        id: "grid.create.bills",
+        label: "New bill",
+        group: "record",
+        menu: "new",
+        section: "New",
+        icon: "new",
+        keywords: "add create subscription",
+        title: "A bill Review did not detect — name, amount, cadence",
+        bindings: focusedIsBills ? INSERT_AFTER : undefined,
+        run: openBills,
+      },
+      {
+        id: "grid.create.spend",
+        label: "New spend group",
+        group: "record",
+        menu: "new",
+        section: "New",
+        icon: "new",
+        keywords: "add create groceries pizza",
+        title: "A spend group Review did not detect",
+        bindings: focusedIsBills ? undefined : INSERT_AFTER,
+        run: openSpend,
+      },
+    ];
+  }, [focusedGrid]);
+  useRegisterCommands(createCommands);
+
   function run(work: () => Promise<{ ok: boolean; error?: string }>) {
     setError(null);
     startTransition(async () => {
@@ -422,8 +470,8 @@ export function CommitmentsView({
           onMouseDown={() => setFocusedGrid("bills")}
           onFocusCapture={() => setFocusedGrid("bills")}
         >
-          <header className="flex flex-wrap items-baseline justify-between gap-2 px-2 pt-2">
-            <div>
+          <header className="flex items-start justify-between gap-2 px-2 pt-2">
+            <div className="min-w-0">
               <h2 className="text-[0.9375rem] font-medium text-ink">
                 Subscriptions & bills
               </h2>
@@ -435,10 +483,27 @@ export function CommitmentsView({
                 {formatUsd(billTotals.annualCents)} / year.
               </p>
             </div>
+            {adding !== "bills" && (
+              <AddQuietly
+                label="Add bill"
+                title="A bill Review did not detect"
+                onClick={() => {
+                  setFocusedGrid("bills");
+                  setAdding("bills");
+                }}
+              />
+            )}
           </header>
-          <div className="px-2">
-            <NewBillForm claimed={claimed} pending={pending} onError={setError} />
-          </div>
+          {adding === "bills" && (
+            <div className="px-2">
+              <NewBillForm
+                claimed={claimed}
+                pending={pending}
+                onError={setError}
+                onClose={() => setAdding(null)}
+              />
+            </div>
+          )}
           <GridToolbar
             grid={billGrid}
             gridLabel="Subscriptions"
@@ -491,8 +556,16 @@ export function CommitmentsView({
               density={billGrid.density}
               empty={
                 <p className="p-4 text-center text-[0.8125rem] text-ink-muted">
-                  Nothing declared yet. Add one here with its cost — that cost is what
-                  gets held back — or track one from Review, at the foot of the page.
+                  Nothing declared yet. Track one from Review at the foot of the page,
+                  or{" "}
+                  <button
+                    type="button"
+                    className="text-ink underline-offset-2 hover:underline"
+                    onClick={() => setAdding("bills")}
+                  >
+                    add a bill
+                  </button>{" "}
+                  that the detector missed.
                 </p>
               }
             />
@@ -513,17 +586,36 @@ export function CommitmentsView({
           onMouseDown={() => setFocusedGrid("spend")}
           onFocusCapture={() => setFocusedGrid("spend")}
         >
-          <header className="px-2 pt-2">
-            <h2 className="text-[0.9375rem] font-medium text-ink">Recurring spend</h2>
-            <p className="text-[0.75rem] text-ink-muted">
-              Pizza, groceries — a cadence you choose, a rate that follows your history.
-              The period&rsquo;s rate is held back before payday, so spending what you
-              budgeted costs you nothing extra and only going over bites.
-            </p>
+          <header className="flex items-start justify-between gap-2 px-2 pt-2">
+            <div className="min-w-0">
+              <h2 className="text-[0.9375rem] font-medium text-ink">Recurring spend</h2>
+              <p className="text-[0.75rem] text-ink-muted">
+                Pizza, groceries — a cadence you choose, a rate that follows your
+                history. The period&rsquo;s rate is held back before payday, so spending
+                what you budgeted costs you nothing extra and only going over bites.
+              </p>
+            </div>
+            {adding !== "spend" && (
+              <AddQuietly
+                label="Add spend"
+                title="A spend group Review did not detect"
+                onClick={() => {
+                  setFocusedGrid("spend");
+                  setAdding("spend");
+                }}
+              />
+            )}
           </header>
-          <div className="px-2">
-            <NewSpendForm claimed={claimed} pending={pending} onError={setError} />
-          </div>
+          {adding === "spend" && (
+            <div className="px-2">
+              <NewSpendForm
+                claimed={claimed}
+                pending={pending}
+                onError={setError}
+                onClose={() => setAdding(null)}
+              />
+            </div>
+          )}
           <GridToolbar
             grid={spendGrid}
             gridLabel="Recurring spend"
@@ -576,9 +668,15 @@ export function CommitmentsView({
               density={spendGrid.density}
               empty={
                 <p className="p-4 text-center text-[0.8125rem] text-ink-muted">
-                  Nothing tracked yet. Name a group — Pizza, Groceries — and list the
-                  merchants that count toward it; Pizza Hut and Domino&apos;s are one
-                  commitment, not two.
+                  Nothing tracked yet. Track one from Review, or{" "}
+                  <button
+                    type="button"
+                    className="text-ink underline-offset-2 hover:underline"
+                    onClick={() => setAdding("spend")}
+                  >
+                    add a spend group
+                  </button>{" "}
+                  — Pizza Hut and Domino&apos;s are one commitment, not two.
                 </p>
               }
             />
@@ -621,14 +719,37 @@ export function CommitmentsView({
   );
 }
 
+function AddQuietly({
+  label,
+  title,
+  onClick,
+}: {
+  label: string;
+  title: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      className="min-h-tap shrink-0 px-2 text-[0.75rem] text-ink-muted hover:text-ink md:min-h-0"
+    >
+      {label}
+    </button>
+  );
+}
+
 function NewBillForm({
   claimed,
   pending,
   onError,
+  onClose,
 }: {
   claimed: readonly string[];
   pending: boolean;
   onError: (message: string | null) => void;
+  onClose: () => void;
 }) {
   const router = useRouter();
   const [name, setName] = useState("");
@@ -655,6 +776,7 @@ function NewBillForm({
         <input
           type="text"
           value={name}
+          autoFocus
           onChange={(event) => setName(event.target.value)}
           placeholder="Name"
           aria-label="New bill name"
@@ -713,11 +835,7 @@ function NewBillForm({
             }).then((result) => {
               if (!result.ok) onError(result.error);
               else {
-                setName("");
-                setMatchers([]);
-                setMatcherDraft("");
-                setAmount("");
-                setNext("");
+                onClose();
                 router.refresh();
               }
             });
@@ -725,6 +843,13 @@ function NewBillForm({
           className="min-h-tap rounded border border-rule bg-surface px-2 text-[0.8125rem] text-ink disabled:opacity-50 md:min-h-0 md:py-1"
         >
           Add bill
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="min-h-tap rounded px-2 text-[0.8125rem] text-ink-muted hover:text-ink md:min-h-0 md:py-1"
+        >
+          Cancel
         </button>
       </div>
       {claimed.length > 0 && (
@@ -756,10 +881,12 @@ function NewSpendForm({
   claimed,
   pending,
   onError,
+  onClose,
 }: {
   claimed: readonly string[];
   pending: boolean;
   onError: (message: string | null) => void;
+  onClose: () => void;
 }) {
   const router = useRouter();
   const [name, setName] = useState("");
@@ -782,6 +909,7 @@ function NewSpendForm({
         <input
           type="text"
           value={name}
+          autoFocus
           onChange={(event) => setName(event.target.value)}
           placeholder="Pizza"
           aria-label="New recurring spend name"
@@ -829,9 +957,7 @@ function NewSpendForm({
             }).then((result) => {
               if (!result.ok) onError(result.error);
               else {
-                setName("");
-                setMatchers([]);
-                setMatcherDraft("");
+                onClose();
                 router.refresh();
               }
             });
@@ -839,6 +965,13 @@ function NewSpendForm({
           className="min-h-tap rounded border border-rule bg-surface px-2 text-[0.8125rem] text-ink disabled:opacity-50 md:min-h-0 md:py-1"
         >
           Add spend
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="min-h-tap rounded px-2 text-[0.8125rem] text-ink-muted hover:text-ink md:min-h-0 md:py-1"
+        >
+          Cancel
         </button>
       </div>
       {claimed.length > 0 && (
