@@ -1,6 +1,6 @@
 # Commitments — categories, aliases, and real cadences
 
-**Status: active**
+**Status: frozen / complete** (2026-08-21)
 Spec folder: `agent-os/specs/2026-08-21-1122-commitments-curation/`
 
 ## Spec relationships
@@ -138,27 +138,40 @@ above" changes with it.
 
 ## Acceptance criteria
 
-- [ ] Walmart appears in Review marked as recurring-spend-shaped, showing a weekly rate and the
-      range its charges span, and "Track as spend" creates a weekly group from it
-- [ ] Vetsource can be declared **every 28 days**; its next charge reads 2026-09-11 (not 09-14)
-      and its year reads ≈ $387 (not $356.40)
-- [ ] Detection proposes `every 28 days` for Vetsource and `monthly` for Rent, from the same
-      28–31 day gaps, on day-of-month drift alone
-- [ ] Opening "Track as bill" on a detected merchant shows a Next charge already filled from the
-      last charge plus the cadence, and it follows the cadence dropdown until edited
-- [ ] A second vendor spelling can be added to an existing bill from Review, and doing so shows
-      a dated warning when the two spellings charged inside the same cycle — while still
-      allowing the merge
-- [ ] Merging aliases with a clean handoff (old spelling stops, new one starts) shows **no**
-      warning
-- [ ] Both tiers carry a category from `FINANCE_CATEGORIES`; setting Vetsource → Pets
-      recategorises its eleven charges in Insights, and a per-row category override survives it
-- [ ] The URL cell renders a clickable hostname opening in a new tab, is editable via a
-      keyboard-reachable control, and is labelled **URL** everywhere including the schema
-- [ ] Review is the last section on `/finances/commitments`
-- [ ] A second user cannot read, change or delete the first user's commitments through any new
-      mutation, action, or agent tool — including the new add-matchers path
-- [ ] `lint`, `typecheck`, `test:unit` (Postgres up, no skip warning), `next build`, and
+Verified 2026-08-21 against the live database and a full gate run (lint, typecheck, 2,971 unit
+
+- 788 integration tests with Postgres up, `next build`, `npm run smoke` across all 57 routes),
+  plus a browser pass over `/finances/commitments`.
+
+* [x] Walmart appears in Review marked as recurring-spend-shaped, showing a weekly rate and the
+      range its charges span. Live: **81% of weeks, $194.54 typical, $7.46–$868.62 a visit,
+      $10,150.61 a year**, top of the list, with "Track as spend" as the leading button
+* [x] Vetsource can be declared **every 28 days**. `detectCadence` returns `{ day: 28 }` from its
+      eleven real charge dates; a year of it costs **$387.42** rather than the $356.40 twelve
+      months would price, and the next charge lands 2026-09-11 rather than 09-14
+* [x] Detection proposes `every 28 days` for Vetsource and `monthly` for Rent, from the same
+      28–31 day gaps, on day-of-month drift alone. Both pinned in `recurringBills.test.ts`
+* [x] "Track as bill" opens with Next charge already filled from the last charge plus the
+      cadence, and it follows the cadence dropdown until edited. Walked in the browser: ALDI
+      opened at 08/25/2026
+* [x] A second vendor spelling can be added to an existing bill from Review, with a dated
+      warning when the two charged inside the same cycle — and the commit button stays live.
+      Walked in the browser: joining ALDI to Rent warns **"charged inside the same cycle 18
+      times (8/19/2024 + 8/26/2024, 8/25/2024 + 8/26/2024, and earlier)"**
+* [x] A clean handoff shows **no** warning. Checked against the two real renames in the file:
+      `METLIFE` → `METLIFE PET` (10 + 12 charges) and `ATHLETICGREENSWWW…` →
+      `ATHLETICGREENSHTTPS…` (28 + 6) both report **0 overlaps**, while the two concurrent
+      Walmart spellings report **60**
+* [x] Both tiers carry a category from `FINANCE_CATEGORIES`, and it recategorises the charges it
+      matches while losing to a per-row override. Pinned in `categorize.test.ts` and
+      `reclassify.integration.test.ts`
+* [x] The URL cell renders a clickable hostname opening in a new tab, is editable from a
+      keyboard-reachable pencil, and is labelled **URL** everywhere including the column.
+      Walked in the browser end to end — `geico.com` rendered as a link, then cleared
+* [x] Review is the last section on `/finances/commitments`
+* [x] A second user cannot read, change or delete the first user's commitments through any new
+      mutation, action, or agent tool, including `add_commitment_matchers`
+* [x] `lint`, `typecheck`, `test:unit`, `test:integration` (no skip warning), `next build`, and
       `npm run smoke` with the dev server running
 
 ## Changes from original plan
@@ -166,9 +179,19 @@ above" changes with it.
 Material refinements during implementation (requirements, design, scope). Pure code polish is
 omitted.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                 | Why                                                                                                                                                                                                                                                                 |
+| --- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | The tier-2 detector measures **coverage**, not gap regularity          | The plan's first design was refuted by the data during shaping and the reasoning is recorded in D1. Walmart's gaps are 7, 7, 9, 2, 5, 11, 1 — mid-week trips — so a gap-consistency test rejects it; its weekly _presence_ is 21 of 26                              |
+| 2   | `aliasOverlap` pairs each new charge with its **nearest** existing one | The planned merged-series walk reported every adjacent cross pair, so three double-billed months read as five overlaps. Nearest-charge matching reports once per new charge, which is the number a person would count                                               |
+| 3   | `snapToWeeks` was designed and then deleted                            | It rounded a 29-day median onto 28. The real Vetsource median is already 28, so it existed for no case in the data — and it would have mis-described a series that genuinely runs on 29 days                                                                        |
+| 4   | `DAY_GAP_TOLERANCE` is 3 days, not 2                                   | Vetsource's gaps include a 31 against a median of 28. At two days the one series this branch exists for was rejected                                                                                                                                                |
+| 5   | `billAnchor` returns three dates, not two                              | The plan said `{ periodStartKey, nextDueKey }`. `staleSubscriptions` needs the expected date _even when it has passed_ — that is what overdue means — while the editable column needs the one after today. One field could not be both                              |
+| 6   | `paydaysPerCadence` takes a `Cadence` and counts in days               | It divided 26 paydays by months. A 28-day cadence has no month to divide, and rounding it to one would have accrued a four-week bill over two paychecks by accident rather than by arithmetic                                                                       |
+| 7   | The rename migration was hand-written with a hand-built snapshot       | `db:generate` prompts interactively to disambiguate a column rename and there is no TTY here. The additive columns were generated normally; `0058` renames `cancel_url` → `url` with a snapshot copied and edited, then verified by `db:generate` reporting no diff |
+| 8   | Three right-aligned cells gained `min-w-0 overflow-hidden`             | Adding a Category column tightened the grid enough that the Set aside cell overflowed its column and painted across Cadence. The bug pre-existed; the new column is what made it visible                                                                            |
+| 9   | The Review scroller grew from `max-h-64` to `max-h-96`                 | With a draft expanded and a warning shown, the commit button sat below the fold of its own scroller                                                                                                                                                                 |
+| 10  | `RecurringMerchant.cadenceDays` became `observedGapDays`               | `cadenceDays` is now a stored column meaning a _declared_ day interval. The same name on the observed median gap was a trap for the next reader                                                                                                                     |
+| 11  | `RecurringMerchant` carries `chargeKeys`                               | The overlap check runs in the review draft, on a merchant no commitment claims yet — so its charge dates are not in `billCharges` and had to travel with the candidate                                                                                              |
 
 ---
 
@@ -320,3 +343,16 @@ included.
 > design or scope — including feedback on what was actually built — update the relevant section
 > above and append a row to **Changes from original plan**. Skip pure implementation details.
 > Freeze when verified.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- **`1PASSWORD` vs `1PASSWORDTORONTOON`**, still outstanding from the clarity spec. The row
+  reads `$71.88 ready · overdue` because the March 2026 charge posted under a shorter merchant
+  string the bill does not match. This spec built the fix — the Matchers cell, or a join from
+  Review — but the data edit is the user's to make.
+- **Merging two commitments that both already exist.** Still delete-and-re-add; only the
+  review-list half of the clarity spec's D5 is superseded here.
+- **A double-charge watch after a merge.** The overlap check runs at merge time only. A merged
+  bill that later posts twice in one cycle is not flagged, and could be, alongside the D8 stale
+  check.
+- **The Review panel on a phone**, still open from the clarity spec.

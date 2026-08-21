@@ -1,6 +1,6 @@
 # Commitments — categories, aliases, and real cadences — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-08-21)
 
 ## Scope
 
@@ -53,8 +53,8 @@ Full reasoning is in `plan.md` D1–D8. The ones that were genuinely open during
 
 ## Context
 
-- **Visuals:** None. The URL cell was chosen from two ASCII options during shaping; the selected
-  one is `visuals/url-cell.md`.
+- **Visuals:** None supplied. The URL cell was chosen from two ASCII options during shaping;
+  the selected one is `visuals/url-cell.md`, and it is what shipped.
 - **References:** `references.md`.
 - **Product alignment:** `agent-os/product/roadmap.md` § Financial planning. The envelopes item
   closed with the parent spec; this is curation on top of it, not a new roadmap line.

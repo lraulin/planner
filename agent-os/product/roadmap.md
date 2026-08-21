@@ -833,6 +833,19 @@ period)` so money already spent stops being held twice and only going over bites
   list now proposes rather than commits, so a detected charge is named and grouped
   before a row exists, and recurring spend finally has rename and Active. **The envelopes
   item stays closed; this is what made the closure honest.**
+  ✅ Commitments curation shipped 2026-08-21 —
+  `agent-os/specs/2026-08-21-1122-commitments-curation/`. Six weeks of real use found the
+  feature could only describe a commitment in the vocabulary its one detector spoke.
+  `recurringMerchants` demands regularity in amount _and_ date, so the weekly Walmart run —
+  the largest recurring outflow in the file, $10,150 a year — never reached the review list
+  at all, because its charges run $10.56 to $348. A second detector keyed on **coverage**
+  (charges in 21 of the last 26 weeks) finds it and everything like it. Cadence is now months
+  **or days**, because Vetsource ships dog medication every four weeks and "monthly" priced
+  13.04 cycles a year as twelve. A commitment carries a category that also categorises the
+  charges it matches, ranked above a `rules.ts` guess and below a per-row edit. A renamed
+  vendor's second spelling folds into the bill that already exists, warned when the two
+  series overlap rather than hand off. The URL column is a link you can click. Review moved
+  to the foot of the page: it is an inbox, and the two lists it fills are the reference.
   ✅ Accounts page shipped 2026-08-18 —
   `agent-os/specs/2026-08-18-0856-finance-accounts-page/`. The original register
   spec's unshipped catalog UI: `/finances/accounts` edits name, kind, institution,

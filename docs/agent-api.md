@@ -703,7 +703,7 @@ Create or correct a subscription or bill.
 - Returns: The saved bill's name, matchers, and status.
 - Effects: write; destructive=false; retry=safe; confirmation=user_intent
 - Exposure: domain
-- Arguments: `{ name*, matchers?, cadenceMonths*, expectedCents?, anchorDate?, status?, cancelUrl?, scheduled?, setAside?, dueDay?, notes? }`
+- Arguments: `{ name*, matchers?, cadenceMonths?, cadenceDays?, category?, expectedCents?, anchorDate?, status?, url?, scheduled?, dueDay?, notes? }`
 - Output: `{ name*, matchers*, status* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -718,8 +718,23 @@ Create or correct a recurring-spend group.
 - Returns: The saved entry's name, matchers, and period.
 - Effects: write; destructive=false; retry=safe; confirmation=user_intent
 - Exposure: domain
-- Arguments: `{ name*, matchers?, period?, amountSource?, expectedCents?, setAside?, active?, notes? }`
+- Arguments: `{ name*, matchers?, period?, amountSource?, expectedCents?, active?, category?, notes? }`
 - Output: `{ name*, matchers*, period* }`
+
+Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
+complete input/output JSON Schemas.
+
+### `add_commitment_matchers`
+
+Fold more bank spellings into a commitment that already exists.
+
+- Use when: Use when a vendor's name changed and the same bill now appears under a second string.
+- Avoid when: Use upsert_subscription or upsert_recurring_spend to replace a commitment's whole matcher list.
+- Returns: The commitment's name and its matchers after the merge.
+- Effects: write; destructive=false; retry=safe; confirmation=user_intent
+- Exposure: domain
+- Arguments: `{ kind*, name*, matchers* }`
+- Output: `{ kind*, name*, matchers* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
 complete input/output JSON Schemas.
