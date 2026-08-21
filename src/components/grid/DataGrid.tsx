@@ -33,6 +33,7 @@ import {
 import { withAncestors } from "@/lib/grid/ancestors";
 import { collectColumnValues, distinctValuesOf } from "@/lib/grid/distinct";
 import { rowMatchesSearch, searchActive } from "@/lib/grid/search";
+import { groupMembers } from "@/lib/grid/groupMembers";
 import { sortRowsWithinGroups } from "@/lib/grid/sortRows";
 import { resolveCompactFields } from "@/lib/grid/compactFields";
 import {
@@ -210,6 +211,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   collapsedGroups,
   onToggleGroup,
   onGroupIdsChange,
+  groupSummary,
   onNavigableIdsChange,
   density = "comfortable",
   rowDrag,
@@ -331,6 +333,15 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
    * would only reopen one level per press.
    */
   onGroupIdsChange?: (groupIds: string[]) => void;
+  /**
+   * Extra content on a group header, typically column totals for the rows under it.
+   *
+   * Receives the node payloads that belong to the header on the *filtered* list, including
+   * rows hidden by collapse, so a collapsed section still shows the same figures expanding
+   * it would. Omit it and headers stay label-plus-count, which is every grid except the
+   * ones that already have a totals footer of their own.
+   */
+  groupSummary?: (nodes: TRow[]) => ReactNode;
   /**
    * The node ids actually on screen, in screen order — after column filters, search, grouping
    * and sort.
@@ -535,16 +546,26 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
     today,
   ]);
 
-  const displayRows = useMemo(() => {
-    let next = rows;
+  /**
+   * Filter and empty-group drop, still including collapsed sections. Group summaries and
+   * collapse both read from this: collapsing hides rows without un-asking the total.
+   */
+  const filteredRows = useMemo(() => {
+    if (!passIds) return rows;
+    return dropEmptyGroups(
+      rows.filter((row) => row.kind !== "node" || passIds.has(row.id)),
+      passIds,
+    );
+  }, [rows, passIds]);
 
-    if (passIds) {
-      // Drop filtered-out node rows, then group headers whose section ends up empty.
-      next = dropEmptyGroups(
-        next.filter((row) => row.kind !== "node" || passIds.has(row.id)),
-        passIds,
-      );
-    }
+  const summarizeGroups = groupSummary != null;
+  const membersByGroup = useMemo(() => {
+    if (!summarizeGroups) return null;
+    return groupMembers(filteredRows);
+  }, [summarizeGroups, filteredRows]);
+
+  const displayRows = useMemo(() => {
+    let next = filteredRows;
 
     if (collapsedGroups && collapsedGroups.size > 0) {
       next = applyGroupCollapse(next, collapsedGroups);
@@ -566,7 +587,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
     if (keys.length > 0) next = sortRowsWithinGroups(next, keys);
 
     return next;
-  }, [rows, columns, passIds, sorts, collapsedGroups]);
+  }, [filteredRows, columns, sorts, collapsedGroups]);
 
   /**
    * Counts for the host's "Showing N of M". `total` is the count before any narrowing, so
@@ -949,6 +970,11 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
                             : undefined,
                         )}
                         compact={compact}
+                        summary={
+                          groupSummary && membersByGroup
+                            ? groupSummary(membersByGroup.get(row.id) ?? [])
+                            : undefined
+                        }
                       />
                     );
                   }
@@ -1414,6 +1440,7 @@ const GroupHeader = memo(function GroupHeader({
   onToggle,
   drag,
   compact,
+  summary,
 }: {
   row: Extract<GridRow, { kind: "group" }>;
   gridTemplate: string;
@@ -1423,6 +1450,8 @@ const GroupHeader = memo(function GroupHeader({
   /** Drop target only — group headers are never themselves dragged. */
   drag?: RowDragBinding;
   compact: boolean;
+  /** Totals (or similar) for the rows under this header. */
+  summary?: ReactNode;
 }) {
   return (
     <div
@@ -1473,7 +1502,7 @@ const GroupHeader = memo(function GroupHeader({
       }}
     >
       <div
-        className="flex min-w-0 items-center gap-1.5"
+        className={`flex min-w-0 items-center gap-1.5 ${compact ? "flex-wrap" : ""}`}
         style={compact ? undefined : { gridColumn: `1 / span ${columnCount}` }}
       >
         <span
@@ -1482,10 +1511,23 @@ const GroupHeader = memo(function GroupHeader({
         >
           {collapsed ? "▶" : "▼"}
         </span>
-        <span className="truncate">{row.label}</span>
+        <span className="min-w-0 truncate">{row.label}</span>
         <span className="tabular text-[0.75rem] font-normal text-ink-faint">
           ({row.count})
         </span>
+        {summary != null && (
+          <span
+            className={[
+              // Sit next to the count, not at the far right of the track. The header
+              // spans every column, so `ml-auto` parked the figures under Category —
+              // off-screen in a scrolled grid — while the footer they copy stays in view.
+              "flex items-baseline gap-x-4 gap-y-0.5 pl-3 text-[0.75rem] font-normal text-ink-muted",
+              compact ? "flex-wrap" : "shrink-0",
+            ].join(" ")}
+          >
+            {summary}
+          </span>
+        )}
       </div>
     </div>
   );

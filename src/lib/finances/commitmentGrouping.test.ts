@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { groupMembers } from "@/lib/grid/groupMembers";
 import { groupBills, groupSpend } from "./commitmentGrouping";
-import type { BillRow, SpendRow } from "./commitmentRows";
+import { activeBillTotals, type BillRow, type SpendRow } from "./commitmentRows";
 
 function bill(over: Partial<BillRow> & Pick<BillRow, "id" | "name">): BillRow {
   return {
@@ -67,6 +68,41 @@ describe("groupBills", () => {
     const headers = grouped.filter((entry) => entry.kind === "group");
     expect(headers.map((entry) => entry.label)).toEqual(["(No Category)", "Housing"]);
     expect(headers.map((entry) => entry.count)).toEqual([1, 1]);
+  });
+
+  it("keeps cancelled bills in the group without putting them in the active total", () => {
+    // The footer only sums active rows. A group total that included cancelled rent
+    // would read as if you still paid it.
+    const grouped = groupBills(
+      [
+        bill({
+          id: "a",
+          name: "Rent",
+          category: "Housing",
+          annualCostCents: 25_200_00,
+          monthlyCents: 2_100_00,
+          paycheckCents: 969_23,
+        }),
+        bill({
+          id: "b",
+          name: "Old rent",
+          category: "Housing",
+          status: "cancelled",
+          annualCostCents: 24_000_00,
+          monthlyCents: 2_000_00,
+          paycheckCents: 923_08,
+        }),
+      ],
+      ["category"],
+    );
+    const housing = groupMembers(grouped).get("g:Housing") ?? [];
+    expect(housing.map((row) => row.name)).toEqual(["Rent", "Old rent"]);
+    expect(activeBillTotals(housing)).toEqual({
+      annualCents: 25_200_00,
+      monthlyCents: 2_100_00,
+      paycheckCents: 969_23,
+      weeklyCents: 0,
+    });
   });
 });
 

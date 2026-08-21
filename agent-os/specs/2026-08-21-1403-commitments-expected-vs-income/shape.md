@@ -13,3 +13,8 @@ Review's default sort was annual cost, which is how you find the expensive unkno
 the expensive unknowns have been named, the remaining inbox is "what charged most
 recently?" Last charge newest-first is that, and a sortable column covers the rest without
 turning Review into a DataGrid (the in-place draft would not survive that).
+
+Group-by landed with the rest of the grid capabilities. Once the bills table could be
+sectioned, the footer totals were not enough: a Housing header with a count still made you
+add the rows. Group headers now show the same active figures as the footer, for the rows
+under that header. Cancelled and paused still do not count.

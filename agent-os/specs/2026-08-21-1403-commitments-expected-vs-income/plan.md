@@ -34,7 +34,10 @@ rent look half as expensive as a yearly bill of the same annual cost.
 
 **D2 — Totals skip Amount and Rate.** Those columns do not share a period. Each grid's
 footer totals the period columns it does share. Only active rows count; cancelled, dismissed,
-and paused stay on the books without shrinking the remainder.
+and paused stay on the books without shrinking the remainder. Group headers show the same
+figures for the rows under them (Monthly / Pay period / A year on bills; Weekly / Monthly /
+Pay period on spend), restated after a filter the way the count is. A cancelled or paused
+group therefore reads $0.00 — it is not contributing to what you pay.
 
 **D3 — One comparison table, three periods.** Subscriptions, recurring spend, their sum,
 detected income, and the remainder, each as monthly / pay period / year. Income is
@@ -76,6 +79,7 @@ because its form had the same problem.
 - Matcher / name / amount cells remount when the server value they display changes
 - File ▸ Export ▸ CSV includes Monthly / Pay period / A year (and Amount, Rate, Weekly)
 - Group by Category or State; saved views on each grid
+- Group headers show the same active totals as the footer, for the rows in that group
 - Manual create is New menu / header "Add bill" / empty state — not a persistent form
 
 **Out**
@@ -90,6 +94,8 @@ because its form had the same problem.
 - A yearly $71.88 bill reads ~$5.99 / month and ~$2.76 / pay period, not $71.88 / month
 - A monthly $2,100 bill reads $2,100 / month, not $1,050 (the accrual slice)
 - Summing Amount across mixed cadences is impossible from the footer — it is not there
+- Grouping bills by category puts that category's active Monthly / Pay period / A year on
+  the header; a cancelled-only group reads $0.00
 - Cancelled bills do not change Expected vs income
 - Review opens with the most recently charged merchant at the top
 - More bills than fit in 26rem are reachable with the grid's own scrollbar, not only arrow keys
@@ -102,3 +108,4 @@ because its form had the same problem.
 | Mobile sections are `h-auto`; the 26rem/22rem clip is `md:` only | A phone stacks the add form so tall that a 26rem pane left zero height for the rows           |
 | Both grids get File ▸ Export, Group by, views, row numbers       | Asked for full standard grid capabilities so a CSV can be opened in Excel; in-app totals stay |
 | Create form is on demand, not persistent                         | Review is the usual path; the always-on form occupied the list                                |
+| Group headers show the same active totals as the footer          | Asked once grouping was on the bills table — the footer is the whole list, not the section    |

@@ -19,6 +19,7 @@ import {
   activeSpendTotals,
   billRows as buildBillRows,
   spendRows as buildSpendRows,
+  type MoneyTotals,
 } from "@/lib/finances/commitmentRows";
 import {
   spendingVsIncome,
@@ -568,15 +569,12 @@ export function CommitmentsView({
                   that the detector missed.
                 </p>
               }
+              groupSummary={(nodes) => (
+                <TotalFigures items={billTotalItems(activeBillTotals(nodes))} />
+              )}
             />
           </div>
-          <GridTotals
-            items={[
-              { label: "Monthly", cents: billTotals.monthlyCents },
-              { label: "Pay period", cents: billTotals.paycheckCents },
-              { label: "A year", cents: billTotals.annualCents },
-            ]}
-          />
+          <GridTotals items={billTotalItems(billTotals)} />
         </section>
 
         <section
@@ -679,15 +677,12 @@ export function CommitmentsView({
                   — Pizza Hut and Domino&apos;s are one commitment, not two.
                 </p>
               }
+              groupSummary={(nodes) => (
+                <TotalFigures items={spendTotalItems(activeSpendTotals(nodes))} />
+              )}
             />
           </div>
-          <GridTotals
-            items={[
-              { label: "Weekly", cents: spendTotals.weeklyCents },
-              { label: "Monthly", cents: spendTotals.monthlyCents },
-              { label: "Pay period", cents: spendTotals.paycheckCents },
-            ]}
-          />
+          <GridTotals items={spendTotalItems(spendTotals)} />
         </section>
 
         <ExpectedVsIncome comparison={comparison} />
@@ -999,15 +994,37 @@ function NewSpendForm({
   );
 }
 
-function GridTotals({ items }: { items: readonly { label: string; cents: number }[] }) {
+function billTotalItems(totals: MoneyTotals): TotalItem[] {
+  return [
+    { label: "Monthly", cents: totals.monthlyCents },
+    { label: "Pay period", cents: totals.paycheckCents },
+    { label: "A year", cents: totals.annualCents },
+  ];
+}
+
+function spendTotalItems(totals: MoneyTotals): TotalItem[] {
+  return [
+    { label: "Weekly", cents: totals.weeklyCents },
+    { label: "Monthly", cents: totals.monthlyCents },
+    { label: "Pay period", cents: totals.paycheckCents },
+  ];
+}
+
+type TotalItem = { label: string; cents: number };
+
+function TotalFigures({ items }: { items: readonly TotalItem[] }) {
+  return items.map((item) => (
+    <span key={item.label} className="tabular text-ink">
+      {item.label} {formatUsd(item.cents)}
+    </span>
+  ));
+}
+
+function GridTotals({ items }: { items: readonly TotalItem[] }) {
   return (
     <div className="flex flex-none flex-wrap items-baseline gap-x-4 gap-y-0.5 border-t border-rule px-2 py-1 text-[0.75rem] text-ink-muted">
       <span>Active totals</span>
-      {items.map((item) => (
-        <span key={item.label} className="tabular text-ink">
-          {item.label} {formatUsd(item.cents)}
-        </span>
-      ))}
+      <TotalFigures items={items} />
     </div>
   );
 }
