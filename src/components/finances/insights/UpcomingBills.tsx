@@ -49,7 +49,7 @@ export function UpcomingBills({ bills }: { bills: UpcomingBill[] }) {
               {bill.merchant}
             </span>
             <span className="block truncate text-[0.75rem] text-ink-muted">
-              {formatDate(bill.dueOn)} · {cadenceLabel(bill.cadenceMonths)} · last on{" "}
+              {formatDate(bill.dueOn)} · {cadenceLabel(bill.cadence)} · last on{" "}
               {formatDate(bill.lastChargeOn)}
             </span>
           </span>

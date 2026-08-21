@@ -7,13 +7,14 @@ import {
 } from "./available";
 import type { Payday } from "./classify/income";
 import {
+  billAnchor,
   recurringSpendRate,
   type CommitmentCharge,
   type SpendRate,
   type StoredBillRow,
   type StoredSpend,
 } from "./commitments";
-import { annualCents, nextDueFrom } from "./recurringBills";
+import { annualCents, cadenceOf } from "./recurringBills";
 
 /**
  * What the Commitments grids and the dashboard panels both show for one commitment.
@@ -96,17 +97,11 @@ export function billRows(
     return {
       ...bill,
       amountCents,
-      annualCostCents:
-        amountCents > 0 ? annualCents(amountCents, bill.cadenceMonths) : 0,
+      annualCostCents: amountCents > 0 ? annualCents(amountCents, cadenceOf(bill)) : 0,
       nextDueKey:
         todayKey === null || !bill.scheduled
           ? null
-          : bill.anchorDate !== null &&
-              (lastPosted === null || bill.anchorDate > lastPosted)
-            ? bill.anchorDate
-            : lastPosted !== null
-              ? nextDueFrom(lastPosted, bill.cadenceMonths, todayKey)
-              : null,
+          : billAnchor(bill, lastPosted, todayKey).nextDueKey,
       held,
       overdue: held !== null && todayKey !== null && held.nextDueKey < todayKey,
     };

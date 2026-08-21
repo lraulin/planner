@@ -264,7 +264,7 @@ async function seedOwner(): Promise<Owned> {
   }
   await upsertRecurringBill(userId, {
     name: "Owner Insurance",
-    cadenceMonths: 6,
+    cadence: { unit: "month", n: 6 },
     expectedCents: 141_260,
   });
   await upsertRecurringSpend(userId, {

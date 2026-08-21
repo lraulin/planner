@@ -22,9 +22,14 @@
  * arithmetic in JS is both correct and cheaper than a round trip per panel.
  */
 
-import type { FinanceAccountKind, FinanceFlowKind } from "@/db/schema";
+import type {
+  FinanceAccountKind,
+  FinanceFlowKind,
+  RecurringSpendPeriod,
+} from "@/db/schema";
 import { daysBetweenKeys, shiftDateKey } from "@/lib/schedule/geometry";
 import { categoryFromBank, UNCATEGORIZED } from "./classify/categories";
+import { periodIndex, RATE_LOOKBACK_PERIODS } from "./commitments";
 import { detectIncome, normalizedMonthlyIncome, type Payday } from "./classify/income";
 import { normalizeMerchant } from "./classify/merchant";
 import type { PayPeriod } from "./classify/payPeriods";
@@ -37,7 +42,9 @@ import {
 } from "./reconcile";
 import {
   annualCents as annualFromCharge,
-  cadenceMonthsFromGapDays,
+  cadenceOf,
+  detectCadence,
+  type Cadence,
   type DeclaredBill,
   nextDueFrom,
   spanDays,
@@ -617,7 +624,7 @@ function cadenceSpans(
   const detected = new Map(
     recurringMerchants(rows, bills)
       .filter((entry) => !entry.declared)
-      .map((entry) => [entry.merchant, entry.cadenceDays]),
+      .map((entry) => [entry.merchant, entry.observedGapDays]),
   );
 
   return (merchant, chargeDateKey) => {
@@ -625,7 +632,7 @@ function cadenceSpans(
     if (bill !== undefined) {
       return {
         bill: true,
-        spanDays: bill.scheduled ? spanDays(chargeDateKey, bill.cadenceMonths) : null,
+        spanDays: bill.scheduled ? spanDays(chargeDateKey, cadenceOf(bill)) : null,
       };
     }
     const days = detected.get(merchant);
@@ -1119,16 +1126,20 @@ export type RecurringMerchant = {
   lowCents: number;
   highCents: number;
   chargeCount: number;
-  /** Median days between charges. */
-  cadenceDays: number;
+  /**
+   * Median days between charges — what the history *observed*, as distinct from the cadence
+   * anyone declared. Named for the observation because `cadenceDays` is now a stored column
+   * meaning a declared day interval, and the two must not be confused.
+   */
+  observedGapDays: number;
   /** `typical × 365 ÷ cadence` — what a year of this costs. */
   annualCents: number;
   lastChargeOn: string;
   /**
    * Set when the user declared the cadence rather than the statistics finding it. Null for a
-   * detected merchant, where months would be a rounding of an observed gap and not a fact.
+   * detected merchant, where a cadence would be a rounding of an observed gap and not a fact.
    */
-  cadenceMonths: number | null;
+  cadence: Cadence | null;
   /** True when this row came from a declaration. Drives the marker in the table. */
   declared: boolean;
   /**
@@ -1139,6 +1150,31 @@ export type RecurringMerchant = {
   scheduled: boolean;
   /** Declared bills carry status so cancelled history can stay visible without being costed. */
   status: "active" | "cancelled" | "ignored";
+  /**
+   * Which tier this looks like, and nothing more than a suggestion.
+   *
+   * `bill` means regular in amount *and* date — something that charges you. `spend` means
+   * regular in date alone, which is what groceries are: Walmart is 21 of the last 26 weeks
+   * with charges from $10.56 to $347.86. The shape orders the two tracking buttons and picks
+   * the default draft; both buttons stay on both shapes, because whether Sheetz is petrol or
+   * a subscription is not a question the statistics can answer.
+   */
+  shape: "bill" | "spend";
+  /**
+   * Every charge date on file for this merchant, oldest first.
+   *
+   * Carried because the review list has to answer a question the summary figures cannot: when
+   * a second vendor spelling is folded into an existing bill, whether the two series hand off
+   * or overlap (`aliasOverlap`). Dates only — the amounts are already summarised above.
+   */
+  chargeKeys: readonly string[];
+  /**
+   * Spend-shaped only: the period its rate is quoted in, and the share of those periods that
+   * carried a charge. Null on a bill-shaped row, where neither means anything — a yearly
+   * insurance premium covers 0% of the last 26 weeks and is not thereby irregular.
+   */
+  spendPeriod: RecurringSpendPeriod | null;
+  coverage: number | null;
 };
 
 /** Below six charges there is no cadence to speak of, only a coincidence. */
@@ -1211,13 +1247,17 @@ export function recurringMerchants(
       lowCents: Math.min(...amounts),
       highCents: Math.max(...amounts),
       chargeCount: ordered.length,
-      cadenceDays,
+      observedGapDays: cadenceDays,
       annualCents: Math.round((typicalCents * 365) / cadenceDays),
       lastChargeOn: ordered[ordered.length - 1].transactionDate,
-      cadenceMonths: null,
+      cadence: null,
       declared: false,
       scheduled: true,
       status: "active",
+      shape: "bill",
+      chargeKeys: ordered.map((row) => row.transactionDate),
+      spendPeriod: null,
+      coverage: null,
     });
   }
 
@@ -1244,14 +1284,21 @@ export function recurringMerchants(
       lowCents: amounts.length > 0 ? Math.min(...amounts) : typicalCents,
       highCents: amounts.length > 0 ? Math.max(...amounts) : typicalCents,
       chargeCount: charges.length,
-      cadenceDays: Math.round(bill.cadenceMonths * (365.2425 / 12)),
-      annualCents: annualFromCharge(typicalCents, bill.cadenceMonths),
+      observedGapDays: spanDays(
+        charges[charges.length - 1]?.transactionDate ?? bill.anchorDate ?? "2000-01-01",
+        cadenceOf(bill),
+      ),
+      annualCents: annualFromCharge(typicalCents, cadenceOf(bill)),
       lastChargeOn:
         charges[charges.length - 1]?.transactionDate ?? bill.anchorDate ?? "",
-      cadenceMonths: bill.cadenceMonths,
+      cadence: cadenceOf(bill),
       declared: true,
       scheduled: bill.scheduled,
       status: billStatusOf(bill),
+      shape: "bill",
+      chargeKeys: charges.map((row) => row.transactionDate),
+      spendPeriod: null,
+      coverage: null,
     });
   }
 
@@ -1295,12 +1342,141 @@ function gapsBetween(ordered: readonly AnalyticsRow[]): number[] {
   return gaps;
 }
 
+// — Recurring spend candidates ————————————————————————————————————————————————
+
+/**
+ * Periods a merchant has to span before its regularity means anything. Two months of Fridays
+ * is a habit; three of them is a coincidence.
+ */
+const MIN_SPEND_PERIODS = 8;
+/**
+ * The share of those periods that must carry a charge.
+ *
+ * Three quarters, from the shape of the real data: the weekly Walmart run — "we go Sunday
+ * every week with few exceptions" — is 21 of the last 26 weeks, or 81%. Holidays, a week away
+ * and a stocked-up fortnight are the exceptions it has to survive; a merchant turning up in
+ * half the weeks is not a routine, it is a place that gets visited.
+ */
+const MIN_SPEND_COVERAGE = 0.75;
+
+/**
+ * Merchants that turn up on a rhythm, whatever they cost — the tier 2 detector.
+ *
+ * **Amount is ignored, on purpose.** `recurringMerchants` above demands regularity in amount
+ * *and* in date, because it asserts a subscription unprompted and a subscription that varies
+ * is usually two different things sharing a name. Tier 2 is defined the other way round: the
+ * cadence is known and "the amount fuzzy and derived from history". Walmart's charges run
+ * $10.56 to $347.86 — a 37% deviation against that function's 25% cap — which is why the
+ * weekly grocery run, the single largest recurring outflow in the file, never reached the
+ * review list at all.
+ *
+ * **Coverage, not gap regularity.** The first design here tested whether the gaps between
+ * charges were consistent, and the real data refuted it: Walmart's gaps are 7, 7, 9, 2, 5, 11,
+ * 1 — a weekly shop plus the mid-week trips everyone makes. What is actually regular is
+ * *presence*: charges in 21 of 26 weeks. That is also the question `recurringSpendRate` asks
+ * when it takes a median of per-period totals, so this measures the same buckets over the same
+ * lookback, through the same `periodIndex`, and the rate offered here is the rate the group
+ * will show once it exists.
+ */
+export function spendCandidates(
+  rows: readonly AnalyticsRow[],
+  options: { todayKey: string; suppressMerchants?: readonly string[] } = {
+    todayKey: "",
+  },
+): RecurringMerchant[] {
+  const suppressed = new Set(options.suppressMerchants ?? []);
+  const found: RecurringMerchant[] = [];
+
+  for (const [merchant, ordered] of chargesByMerchant(rows)) {
+    if (suppressed.has(merchant)) continue;
+    const past = ordered.filter((row) => row.transactionDate <= options.todayKey);
+    if (past.length === 0) continue;
+
+    // Week first: a merchant regular enough to be weekly is also trivially "monthly", and the
+    // weekly reading is the one the user can act on.
+    const candidate =
+      coverageOf(past, "week", options.todayKey) ??
+      coverageOf(past, "month", options.todayKey);
+    if (candidate === null) continue;
+
+    const amounts = past.map(spendCentsOf);
+    found.push({
+      merchant,
+      typicalCents: candidate.typicalCents,
+      deviationCents: standardDeviation(amounts),
+      lowCents: Math.min(...amounts),
+      highCents: Math.max(...amounts),
+      chargeCount: past.length,
+      observedGapDays: median(gapsBetween(past)),
+      annualCents: Math.round(
+        candidate.typicalCents * (candidate.period === "week" ? 365.2425 / 7 : 12),
+      ),
+      lastChargeOn: past[past.length - 1].transactionDate,
+      cadence: null,
+      declared: false,
+      scheduled: true,
+      status: "active",
+      shape: "spend",
+      chargeKeys: past.map((row) => row.transactionDate),
+      spendPeriod: candidate.period,
+      coverage: candidate.coverage,
+    });
+  }
+
+  return found.sort(
+    (left, right) =>
+      right.annualCents - left.annualCents ||
+      left.merchant.localeCompare(right.merchant),
+  );
+}
+
+/**
+ * How much of the lookback this merchant actually turns up in, and what a period of it costs.
+ *
+ * The window is the one `recurringSpendRate` uses — the last `RATE_LOOKBACK_PERIODS` complete
+ * periods, current period excluded because it is still running — so the figure offered on the
+ * review list is the figure the tracked group reports. Empty periods count as zero in the
+ * median for the same reason: a fortnight away is part of what a week costs on average.
+ */
+function coverageOf(
+  past: readonly AnalyticsRow[],
+  period: RecurringSpendPeriod,
+  todayKey: string,
+): { period: RecurringSpendPeriod; coverage: number; typicalCents: number } | null {
+  const current = periodIndex(todayKey, period);
+  const first = past.reduce(
+    (earliest, row) => Math.min(earliest, periodIndex(row.transactionDate, period)),
+    current,
+  );
+  const from = Math.max(first, current - RATE_LOOKBACK_PERIODS);
+  const spanned = current - from;
+  if (spanned < MIN_SPEND_PERIODS) return null;
+
+  const totals = new Map<number, number>();
+  for (let index = from; index < current; index++) totals.set(index, 0);
+  for (const row of past) {
+    const index = periodIndex(row.transactionDate, period);
+    if (index < from || index >= current) continue;
+    totals.set(index, (totals.get(index) ?? 0) + spendCentsOf(row));
+  }
+
+  const values = [...totals.values()];
+  const covered = values.filter((cents) => cents > 0).length;
+  const coverage = covered / spanned;
+  if (coverage < MIN_SPEND_COVERAGE) return null;
+
+  const typicalCents = median(values);
+  if (typicalCents <= 0) return null;
+
+  return { period, coverage, typicalCents };
+}
+
 // — Cadence proposals ————————————————————————————————————————————————————————
 
 export type CadenceCandidate = {
   merchant: string;
-  /** The cadence the gaps look like, in months. */
-  cadenceMonths: number;
+  /** The cadence the charges look like — months, or days where they drift off the calendar. */
+  cadence: Cadence;
   typicalCents: number;
   chargeCount: number;
   lastChargeOn: string;
@@ -1340,12 +1516,12 @@ export function cadenceCandidates(
     const widest = Math.max(...amounts.map((cents) => Math.abs(cents - typicalCents)));
     if (widest > typicalCents * RECURRING_VARIANCE_RATIO) continue;
 
-    const cadenceMonths = cadenceMonthsFromGapDays(median(gapsBetween(ordered)));
-    if (cadenceMonths === null) continue;
+    const cadence = detectCadence(ordered.map((row) => row.transactionDate));
+    if (cadence === null) continue;
 
     found.push({
       merchant,
-      cadenceMonths,
+      cadence,
       typicalCents,
       chargeCount: ordered.length,
       lastChargeOn: ordered[ordered.length - 1].transactionDate,
@@ -1359,7 +1535,7 @@ export function cadenceCandidates(
 
 export type UpcomingBill = {
   merchant: string;
-  cadenceMonths: number;
+  cadence: Cadence;
   /** The next date this is expected to land. */
   dueOn: string;
   /** Negative once the expected date has passed without a matching charge. */
@@ -1404,11 +1580,11 @@ export function upcomingBills(
         (charges.length > 0 ? median(charges.map(spendCentsOf)) : 0);
       if (expectedCents <= 0) return [];
 
-      const dueOn = nextDueFrom(lastChargeOn, bill.cadenceMonths, todayKey);
+      const dueOn = nextDueFrom(lastChargeOn, cadenceOf(bill), todayKey);
       return [
         {
           merchant: bill.name,
-          cadenceMonths: bill.cadenceMonths,
+          cadence: cadenceOf(bill),
           dueOn,
           daysAway: daysBetweenKeys(todayKey, dueOn),
           expectedCents,

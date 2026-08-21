@@ -92,7 +92,7 @@ async function seed(userId: string): Promise<void> {
   }
   await upsertRecurringBill(userId, {
     name: "SimpliSafe",
-    cadenceMonths: 1,
+    cadence: { unit: "month", n: 1 },
     expectedCents: 3471,
   });
 }
@@ -341,5 +341,54 @@ describeDb("finance agent tools", () => {
       spend: { name: string }[];
     };
     expect(gone.spend.some((entry) => entry.name === "Pizza")).toBe(false);
+  });
+
+  it("declares a day cadence and folds in a renamed vendor", async () => {
+    const ownerId = await makeUser();
+    const intruderId = await makeUser();
+    await seed(ownerId);
+
+    // Vetsource's four-week autoship: months would price 13.04 cycles a year as twelve.
+    await dispatchAgentTool(
+      "upsert_subscription",
+      {
+        name: "Vetsource",
+        matchers: ["VETSOURCE"],
+        cadenceDays: 28,
+        expectedCents: 2970,
+        category: "Pets",
+      },
+      ownerId,
+    );
+
+    const listed = (await dispatchAgentTool("list_commitments", {}, ownerId)) as {
+      bills: { name: string; cadence: string; annualCents: number }[];
+    };
+    const vetsource = listed.bills.find((bill) => bill.name === "Vetsource");
+    expect(vetsource?.cadence).toBe("Every 4 weeks");
+    expect(vetsource?.annualCents).toBe(38742);
+
+    const merged = (await dispatchAgentTool(
+      "add_commitment_matchers",
+      { kind: "bill", name: "Vetsource", matchers: ["VETSOURCE LLC"] },
+      ownerId,
+    )) as { matchers: string[] };
+    expect(merged.matchers).toEqual(["VETSOURCE", "VETSOURCE LLC"]);
+
+    // A second identity cannot reach it, and gets no hint that it exists.
+    await expect(
+      dispatchAgentTool(
+        "add_commitment_matchers",
+        { kind: "bill", name: "Vetsource", matchers: ["VETSOURCE INC"] },
+        intruderId,
+      ),
+    ).rejects.toMatchObject({ message: expect.stringContaining("not found") });
+    expect(
+      (
+        (await dispatchAgentTool("list_commitments", {}, intruderId)) as {
+          bills: { name: string }[];
+        }
+      ).bills,
+    ).toEqual([]);
   });
 });

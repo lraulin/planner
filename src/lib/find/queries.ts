@@ -232,7 +232,7 @@ export type RecurringBillRow = {
   id: string;
   name: string;
   notes: string;
-  cancelUrl: string;
+  url: string;
   matchers: string[];
 };
 
@@ -717,7 +717,7 @@ async function loadFinancesSource(userId: string): Promise<CorpusPart> {
         id: financeRecurringBills.id,
         name: financeRecurringBills.name,
         notes: financeRecurringBills.notes,
-        cancelUrl: financeRecurringBills.cancelUrl,
+        url: financeRecurringBills.url,
         matchers: financeRecurringBills.matchers,
       })
       .from(financeRecurringBills)

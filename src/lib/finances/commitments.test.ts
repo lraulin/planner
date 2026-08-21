@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  aliasOverlap,
+  billAnchor,
   MatcherConflictError,
   matcherIndex,
   periodIndex,
@@ -23,7 +25,8 @@ function bill(overrides: Partial<StoredBillRow> = {}): StoredBillRow {
     matchers: ["GEICO"],
     status: "active",
     cancelledOn: null,
-    cancelUrl: "",
+    url: "",
+    category: "",
     cadenceMonths: 6,
     expectedCents: 59498,
     anchorDate: null,
@@ -38,6 +41,7 @@ function spend(overrides: Partial<StoredSpend> = {}): StoredSpend {
     id: "spend-1",
     name: "Pizza",
     matchers: ["PIZZA HUT", "DOMINOS"],
+    category: "",
     period: "week",
     amountSource: "auto",
     expectedCents: null,
@@ -393,5 +397,117 @@ describe("suggestCommitmentName", () => {
 
   it("keeps a name that is nothing but digits rather than emptying the field", () => {
     expect(suggestCommitmentName("76767")).toBe("76767");
+  });
+});
+
+describe("aliasOverlap", () => {
+  const monthly = { unit: "month", n: 1 } as const;
+
+  function charges(...keys: string[]) {
+    return keys.map((dateKey) => ({ dateKey }));
+  }
+
+  it("says nothing when one spelling hands off to the next", () => {
+    // The vendor renamed itself in April. Merged, this is one clean monthly series.
+    expect(
+      aliasOverlap(
+        charges("2026-01-04", "2026-02-04", "2026-03-04"),
+        charges("2026-04-04", "2026-05-04", "2026-06-04"),
+        monthly,
+      ),
+    ).toEqual([]);
+  });
+
+  it("flags two spellings charging inside the same cycle", () => {
+    const found = aliasOverlap(
+      charges("2026-01-04", "2026-02-04", "2026-03-04"),
+      charges("2026-01-19", "2026-02-19", "2026-03-19"),
+      monthly,
+    );
+
+    expect(found).toHaveLength(3);
+    expect(found[0]).toEqual({
+      existingKey: "2026-01-04",
+      candidateKey: "2026-01-19",
+      gapDays: 15,
+    });
+  });
+
+  it("ignores two charges from the same spelling landing close together", () => {
+    // A double charge inside one series is not evidence about the *other* series, which is
+    // the only thing this function is being asked about.
+    expect(
+      aliasOverlap(
+        charges("2026-01-04", "2026-01-06", "2026-02-04"),
+        charges("2026-03-04"),
+        monthly,
+      ),
+    ).toEqual([]);
+  });
+
+  it("scales with the cadence rather than with the calendar month", () => {
+    const weekly = { unit: "day", n: 7 } as const;
+    // The same five-day gap: an ordinary handoff on a weekly cadence, and two charges in one
+    // cycle on a monthly one. Bucketing by calendar month could not tell these apart.
+    expect(aliasOverlap(charges("2026-01-04"), charges("2026-01-09"), weekly)).toEqual(
+      [],
+    );
+    expect(
+      aliasOverlap(charges("2026-01-04"), charges("2026-01-09"), monthly),
+    ).toHaveLength(1);
+  });
+});
+
+describe("billAnchor", () => {
+  const monthly = bill({ cadenceMonths: 1, matchers: ["RENT"] });
+
+  it("reads an anchor later than the last charge as the charge being waited for", () => {
+    expect(
+      billAnchor({ ...monthly, anchorDate: "2026-09-01" }, null, "2026-08-21"),
+    ).toEqual({
+      periodStartKey: "2026-08-01",
+      expectedKey: "2026-09-01",
+      nextDueKey: "2026-09-01",
+    });
+  });
+
+  it("keeps an overdue anchor as what is expected, while pointing the next charge past today", () => {
+    // The two fields differ on purpose: the accrual and the stale check need the date that
+    // has already passed, and the editable column needs the one that has not.
+    expect(
+      billAnchor({ ...monthly, anchorDate: "2026-07-01" }, null, "2026-08-21"),
+    ).toEqual({
+      periodStartKey: "2026-06-01",
+      expectedKey: "2026-07-01",
+      nextDueKey: "2026-09-01",
+    });
+  });
+
+  it("prefers the last posted charge over a stale anchor", () => {
+    expect(
+      billAnchor({ ...monthly, anchorDate: "2026-01-01" }, "2026-08-03", "2026-08-21"),
+    ).toEqual({
+      periodStartKey: "2026-08-03",
+      expectedKey: "2026-09-03",
+      nextDueKey: "2026-09-03",
+    });
+  });
+
+  it("has nothing to say with neither a charge nor an anchor", () => {
+    expect(billAnchor({ ...monthly, anchorDate: null }, null, "2026-08-21")).toEqual({
+      periodStartKey: null,
+      expectedKey: null,
+      nextDueKey: null,
+    });
+  });
+
+  it("walks a day cadence in days", () => {
+    expect(
+      billAnchor(
+        bill({ cadenceMonths: 1, cadenceDays: 28, anchorDate: null }),
+        "2026-08-14",
+        "2026-08-21",
+      ),
+    ).toMatchObject({ expectedKey: "2026-09-11", nextDueKey: "2026-09-11" });
   });
 });

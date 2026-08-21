@@ -13,6 +13,7 @@ import {
   effectiveMerchant,
   paydaysFrom,
   recurringMerchants,
+  spendCandidates,
   spendCentsOf,
   type AnalyticsRow,
   type RecurringMerchant,
@@ -146,8 +147,10 @@ export async function loadRecurringBills(userId: string): Promise<StoredBillRow[
       matchers: financeRecurringBills.matchers,
       status: financeRecurringBills.status,
       cancelledOn: financeRecurringBills.cancelledOn,
-      cancelUrl: financeRecurringBills.cancelUrl,
+      url: financeRecurringBills.url,
       cadenceMonths: financeRecurringBills.cadenceMonths,
+      cadenceDays: financeRecurringBills.cadenceDays,
+      category: financeRecurringBills.category,
       expectedCents: financeRecurringBills.expectedCents,
       anchorDate: financeRecurringBills.anchorDate,
       scheduled: financeRecurringBills.scheduled,
@@ -172,6 +175,7 @@ export async function loadRecurringSpend(userId: string): Promise<StoredSpend[]>
       amountSource: financeRecurringSpend.amountSource,
       expectedCents: financeRecurringSpend.expectedCents,
       active: financeRecurringSpend.active,
+      category: financeRecurringSpend.category,
       notes: financeRecurringSpend.notes,
     })
     .from(financeRecurringSpend)
@@ -305,10 +309,7 @@ export async function loadDashboard(userId: string): Promise<DashboardData> {
     spendCharges,
     connections,
     merchants: [...merchantSet].sort((left, right) => left.localeCompare(right)),
-    review: recurringMerchants(rows, bills).filter((entry) => {
-      if (entry.declared) return false;
-      return !index.has(entry.merchant);
-    }),
+    review: reviewCandidates(rows, bills, index),
     periodRows: rows
       .filter((row) => row.transactionDate >= periodLedgerCutoff())
       .map((row) => ({
@@ -321,6 +322,39 @@ export async function loadDashboard(userId: string): Promise<DashboardData> {
         eventLabel: row.eventLabel,
       })),
   };
+}
+
+/**
+ * Everything the review list offers, from both detectors, most expensive first.
+ *
+ * One list rather than two, with `shape` on each row, because "is this a bill or is it
+ * groceries" is a single decision and splitting it across two panels would ask it twice. A
+ * merchant both detectors claim is bill-shaped: regular in amount *and* date is the stronger
+ * finding, and the spend buttons are on every row anyway.
+ *
+ * `todayKey` comes from the server's day, which is allowed here for the same reason
+ * `periodLedgerCutoff` is: it sizes the window a candidate is measured over, and never decides
+ * a figure anyone reads. A candidate list an hour off at a timezone boundary costs nothing.
+ */
+function reviewCandidates(
+  rows: readonly AnalyticsRow[],
+  bills: readonly StoredBillRow[],
+  index: ReturnType<typeof matcherIndex>,
+): RecurringMerchant[] {
+  const billShaped = recurringMerchants(rows, bills).filter(
+    (entry) => !entry.declared && !index.has(entry.merchant),
+  );
+  const claimed = new Set(billShaped.map((entry) => entry.merchant));
+
+  const spendShaped = spendCandidates(rows, {
+    todayKey: toDateKey(new Date()),
+  }).filter((entry) => !index.has(entry.merchant) && !claimed.has(entry.merchant));
+
+  return [...billShaped, ...spendShaped].sort(
+    (left, right) =>
+      right.annualCents - left.annualCents ||
+      left.merchant.localeCompare(right.merchant),
+  );
 }
 
 /**

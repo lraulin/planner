@@ -24,8 +24,15 @@ import {
   recurringSpendRate,
   unclaimedMerchants,
 } from "@/lib/finances/commitments";
-import { annualCents, nextDueFrom } from "@/lib/finances/recurringBills";
 import {
+  annualCents,
+  cadenceLabel,
+  cadenceOf,
+  nextDueFrom,
+  type Cadence,
+} from "@/lib/finances/recurringBills";
+import {
+  addMatchersToCommitment,
   deleteCommitment,
   upsertRecurringBill,
   upsertRecurringSpend,
@@ -357,8 +364,8 @@ export async function listRecurringBillsTool(
       highCents: entry.highCents,
       deviationCents: entry.deviationCents,
       chargeCount: entry.chargeCount,
-      cadenceDays: entry.cadenceDays,
-      cadenceMonths: entry.cadenceMonths,
+      observedGapDays: entry.observedGapDays,
+      cadence: entry.cadence === null ? null : cadenceLabel(entry.cadence),
       annualCents: entry.annualCents,
       lastChargeOn: entry.lastChargeOn,
       declared: entry.declared,
@@ -560,18 +567,18 @@ export async function listCommitmentsTool(userId: string) {
       const anchor = last ?? bill.anchorDate;
       const annual =
         bill.expectedCents !== null
-          ? annualCents(bill.expectedCents, bill.cadenceMonths)
+          ? annualCents(bill.expectedCents, cadenceOf(bill))
           : 0;
       return {
         name: bill.name,
         matchers: [...bill.matchers],
         status: bill.status,
-        cadenceMonths: bill.cadenceMonths,
+        cadence: cadenceLabel(cadenceOf(bill)),
         expectedCents: bill.expectedCents,
         annualCents: annual,
         nextDue:
           bill.scheduled && bill.status === "active" && anchor !== null
-            ? nextDueFrom(anchor, bill.cadenceMonths, today)
+            ? nextDueFrom(anchor, cadenceOf(bill), today)
             : null,
         scheduled: bill.scheduled,
       };
@@ -612,6 +619,16 @@ export async function listCommitmentCandidatesTool(userId: string) {
   };
 }
 
+/**
+ * The cadence an agent asked for. Days win over months, matching the column rule, and a
+ * caller that names neither gets monthly — the cadence a bill is on unless told otherwise.
+ */
+function cadenceFromArgs(args: Record<string, unknown>): Cadence {
+  const days = args.cadenceDays === null ? null : optionalNumber(args, "cadenceDays");
+  if (days !== undefined && days !== null && days > 0) return { unit: "day", n: days };
+  return { unit: "month", n: optionalNumber(args, "cadenceMonths") ?? 1 };
+}
+
 export async function upsertSubscriptionTool(
   userId: string,
   args: Record<string, unknown>,
@@ -621,13 +638,14 @@ export async function upsertSubscriptionTool(
     upsertRecurringBill(userId, {
       name,
       matchers: asStringList(args.matchers),
-      cadenceMonths: optionalNumber(args, "cadenceMonths") ?? 1,
+      cadence: cadenceFromArgs(args),
+      category: optionalString(args, "category"),
       expectedCents:
         args.expectedCents === null ? null : optionalNumber(args, "expectedCents"),
       anchorDate: args.anchorDate === null ? null : optionalString(args, "anchorDate"),
       status: optionalString(args, "status") as
         "active" | "cancelled" | "ignored" | undefined,
-      cancelUrl: optionalString(args, "cancelUrl"),
+      url: optionalString(args, "url"),
       scheduled: args.scheduled === undefined ? undefined : args.scheduled === true,
       dueDay: args.dueDay === null ? null : optionalNumber(args, "dueDay"),
       notes: optionalString(args, "notes"),
@@ -658,6 +676,7 @@ export async function upsertRecurringSpendTool(
       expectedCents:
         args.expectedCents === null ? null : optionalNumber(args, "expectedCents"),
       active: args.active === undefined ? undefined : args.active === true,
+      category: optionalString(args, "category"),
       notes: optionalString(args, "notes"),
     }),
   );
@@ -668,6 +687,31 @@ export async function upsertRecurringSpendTool(
     name: row?.name ?? name.trim(),
     matchers: row ? [...row.matchers] : [],
     period: row?.period ?? "week",
+  };
+}
+
+export async function addCommitmentMatchersTool(
+  userId: string,
+  args: Record<string, unknown>,
+) {
+  const kind = optionalString(args, "kind") === "spend" ? "spend" : "bill";
+  const name = optionalString(args, "name") ?? "";
+  await writeOrConflict(() =>
+    addMatchersToCommitment(userId, {
+      kind,
+      name,
+      matchers: asStringList(args.matchers) ?? [],
+    }),
+  );
+  const rows =
+    kind === "bill"
+      ? await loadRecurringBills(userId)
+      : await loadRecurringSpend(userId);
+  const row = rows.find((entry) => entry.name === name.trim());
+  return {
+    kind,
+    name: row?.name ?? name.trim(),
+    matchers: row ? [...row.matchers] : [],
   };
 }
 

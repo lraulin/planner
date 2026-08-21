@@ -105,6 +105,8 @@ export function planReclassify(
   accounts: readonly ReclassifyAccount[],
   mintGroupId: () => string,
   resolutions: readonly PaypalResolution[] = [],
+  /** Merchant → the category its commitment declares. Outranks a `rules.ts` match. */
+  commitmentCategories: ReadonlyMap<string, string> = new Map(),
 ): ReclassifyPlan {
   const transferRows: TransferRow[] = rows.map((row) => ({
     id: row.id,
@@ -121,10 +123,18 @@ export function planReclassify(
   // should see — the bank description is only the rail.
   const perRow = new Map(
     rows.map((row) => {
-      const fromBank = categorize(row.description, row.sourceCategory);
+      const fromBank = categorize(
+        row.description,
+        row.sourceCategory,
+        commitmentCategories,
+      );
       const resolution = named.get(row.id);
       if (!resolution?.counterparty) return [row.id, fromBank] as const;
-      const fromPaypal = categorize(resolution.counterparty, row.sourceCategory);
+      const fromPaypal = categorize(
+        resolution.counterparty,
+        row.sourceCategory,
+        commitmentCategories,
+      );
       return [
         row.id,
         {

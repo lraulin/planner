@@ -90,7 +90,7 @@ describe("analyzeInsights", () => {
     const declared = analysis.recurring.find((entry) => entry.merchant === "Geico");
     expect(declared).toMatchObject({
       declared: true,
-      cadenceMonths: 12,
+      cadence: { unit: "month", n: 12 },
       typicalCents: 282500,
     });
     expect(analysis.windowed.some((entry) => entry.description === "GEICO *AUTO")).toBe(

@@ -2371,7 +2371,7 @@ export type RecurringSpendAmountSource =
  * `ALTER TYPE … ADD VALUE` limitation recorded at `financeFlowKindEnum` above.
  *
  * **This is tier 1 of two.** A bill charges *unless you cancel* — which is why `status`,
- * `cancelledOn` and `cancelUrl` live here and have no counterpart on
+ * `cancelledOn` and `url` live here and have no counterpart on
  * `financeRecurringSpend` below, where the default runs the other way.
  */
 export const financeRecurringBills = pgTable(
@@ -2423,12 +2423,35 @@ export const financeRecurringBills = pgTable(
     /** When it was cancelled, for the record. Null while active. */
     cancelledOn: date("cancelled_on", { mode: "string" }),
     /**
-     * Where to go to cancel it. The single most useful thing to have already looked up at the
-     * moment you decide a subscription has to go; the app stores it and never follows it.
+     * Where this bill is managed — the account page, the billing page, the cancel page.
+     *
+     * Named `cancel_url` until 2026-08-21, which turned out to be a comment that had gone
+     * stale in the schema: the link is followed far more often to check an account than to
+     * close one, and a column called `cancel_url` holding a login page misleads the next
+     * reader. The app stores it and never follows it; the grid renders it as a link.
      */
-    cancelUrl: text("cancel_url").notNull().default(""),
-    /** The period `expectedCents` covers. 1 monthly, 3 quarterly, 6 semi-annual, 12 yearly. */
+    url: text("url").notNull().default(""),
+    /**
+     * The period `expectedCents` covers, in months. 1 monthly, 3 quarterly, 6 semi-annual,
+     * 12 yearly. Ignored entirely when `cadenceDays` is set.
+     */
     cadenceMonths: smallint("cadence_months").notNull(),
+    /**
+     * The period in **days**, for a vendor that counts days rather than months. Wins over
+     * `cadenceMonths` when set; null is the ordinary calendar-anchored case.
+     *
+     * Months are still the default and still right for rent, insurance and anything anchored
+     * to a date on the calendar — "semi-annual" means March and September, not every 182.5
+     * days. But some charges are genuinely a day interval: Vetsource ships Dante's Simparico
+     * Trio every four weeks, with gaps of 30, 28, 28, 31, 30, 28, 28, 28, 28, 29 and a day of
+     * the month that walks backward from the 30th to the 14th over eleven charges. Calling
+     * that "monthly" prices 13.04 cycles a year as 12 — about $31 short on this one bill —
+     * and puts the predicted date two days further out every cycle.
+     *
+     * The two are told apart by the day of the month, which is free and exact: a monthly bill
+     * holds it, a day cycle drifts it. See `detectCadence` in `recurringBills.ts`.
+     */
+    cadenceDays: smallint("cadence_days"),
     /**
      * Whether the **dates** are predictable, as distinct from the cost.
      *
@@ -2470,6 +2493,21 @@ export const financeRecurringBills = pgTable(
      * spilling into the next one.
      */
     dueDay: smallint("due_day"),
+    /**
+     * A `FINANCE_CATEGORIES` value, or empty for none.
+     *
+     * **This also categorises the charges it matches.** A commitment's category is a fact the
+     * user stated once about a merchant group, so it outranks a `rules.ts` pattern guess; it
+     * loses to `financeTransactions.category`, which is a statement about one particular
+     * charge. Declaring "Vetsource is Pets" therefore fixes eleven rows in Insights and keeps
+     * fixing them as more arrive, which is the whole reason it is stored here rather than
+     * being a per-row edit repeated forever.
+     *
+     * Free text rather than an enum for the reason recorded at `financeAccountKindEnum`, and
+     * because `financeTransactions.category` is free text too — the taxonomy lives in
+     * `classify/categories.ts` where both can read it.
+     */
+    category: text("category").notNull().default(""),
     notes: text("notes").notNull().default(""),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -2482,6 +2520,12 @@ export const financeRecurringBills = pgTable(
     check(
       "finance_recurring_bills_cadence_months",
       sql`${table.cadenceMonths} >= 1 and ${table.cadenceMonths} <= 24`,
+    ),
+    // Two days is the shortest interval anything bills on; 200 is past every day cycle that
+    // is not better expressed in months, and stops a stray year-in-days landing here.
+    check(
+      "finance_recurring_bills_cadence_days",
+      sql`${table.cadenceDays} is null or (${table.cadenceDays} >= 2 and ${table.cadenceDays} <= 200)`,
     ),
     check(
       "finance_recurring_bills_due_day",
@@ -2563,6 +2607,13 @@ export const financeRecurringSpend = pgTable(
      * here defaulted true and had no UI, so it could only ever be true.
      */
     active: boolean("active").notNull().default(true),
+    /**
+     * A `FINANCE_CATEGORIES` value, or empty for none. Same precedence as
+     * `financeRecurringBills.category`, and on this tier it is doing the most work: groceries
+     * and pizza are exactly the rows a bank labels `Merchandise` and leaves for someone else
+     * to sort out.
+     */
+    category: text("category").notNull().default(""),
     notes: text("notes").notNull().default(""),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

@@ -528,7 +528,7 @@ export function searchCorpus(
         fields: [
           name("Name", bill.name),
           detail("Notes", bill.notes),
-          detail("Cancel URL", bill.cancelUrl),
+          detail("URL", bill.url),
           detail("Matchers", bill.matchers.join(" ")),
         ],
       });

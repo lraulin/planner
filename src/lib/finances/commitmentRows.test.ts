@@ -15,7 +15,8 @@ function bill(over: Partial<StoredBillRow> = {}): StoredBillRow {
     matchers: ["1PASSWORDTORONTOON"],
     status: "active",
     cancelledOn: null,
-    cancelUrl: "",
+    url: "",
+    category: "",
     cadenceMonths: 12,
     expectedCents: 7188,
     anchorDate: null,
@@ -34,6 +35,7 @@ function spendEntry(over: Partial<StoredSpend> = {}): StoredSpend {
     amountSource: "pinned",
     expectedCents: 6000,
     active: true,
+    category: "",
     ...over,
   };
 }

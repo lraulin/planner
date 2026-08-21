@@ -33,7 +33,11 @@ import type { CommitmentStatus, RecurringSpendPeriod } from "@/db/schema";
 import { daysBetweenKeys, shiftDateKey } from "@/lib/schedule/geometry";
 import {
   annualCents,
+  cadenceDaysApprox,
+  cadenceOf,
   nextDueFrom,
+  previousDueDate,
+  type Cadence,
   nextDueDate,
   shiftDateKeyMonths,
   type StoredBill,
@@ -54,6 +58,8 @@ export type StoredSpend = {
   amountSource: "auto" | "pinned";
   expectedCents: number | null;
   active: boolean;
+  /** A `FINANCE_CATEGORIES` value, or empty. Also categorises the charges it matches. */
+  category: string;
   notes?: string;
 };
 
@@ -63,7 +69,9 @@ export type StoredBillRow = StoredBill & {
   matchers: readonly string[];
   status: CommitmentStatus;
   cancelledOn: string | null;
-  cancelUrl: string;
+  url: string;
+  /** A `FINANCE_CATEGORIES` value, or empty. Also categorises the charges it matches. */
+  category: string;
   notes?: string;
 };
 
@@ -357,13 +365,131 @@ export type StaleSubscription = {
 };
 
 /**
+ * The three dates a bill's anchor implies, in one place because the column means two things.
+ *
+ * `anchorDate` was read as **the next charge** by the Commitments grid — a date typed into a
+ * column headed "Next charge" — and as **the period start** by the set-aside accrual, which
+ * treats it as the last charge when no history reaches back far enough. Both readings are
+ * defensible and the column cannot hold both, so a future anchor accruing from itself would
+ * have run the accrual window backwards.
+ *
+ * The rule settled here: **an anchor later than the last posted charge is the charge being
+ * waited for**, and the period it accrues over is the cadence ending on it. Everything else
+ * walks from the last charge on file, which is an observed fact and the better anchor whenever
+ * there is one.
+ */
+export type BillAnchor = {
+  /** Where the current accrual period began. Null when nothing anchors it. */
+  periodStartKey: string | null;
+  /**
+   * The charge being waited for. May be in the past — that is exactly what overdue means, and
+   * why this is not the same field as `nextDueKey`.
+   */
+  expectedKey: string | null;
+  /** The next charge at or after today: what the editable Next charge column shows. */
+  nextDueKey: string | null;
+};
+
+export function billAnchor(
+  bill: StoredBill,
+  lastCharge: string | null,
+  todayKey: string,
+): BillAnchor {
+  const cadence = cadenceOf(bill);
+
+  if (
+    bill.anchorDate !== null &&
+    (lastCharge === null || bill.anchorDate > lastCharge)
+  ) {
+    return {
+      periodStartKey: previousDueDate(bill.anchorDate, cadence),
+      expectedKey: bill.anchorDate,
+      nextDueKey:
+        bill.anchorDate >= todayKey
+          ? bill.anchorDate
+          : nextDueFrom(bill.anchorDate, cadence, todayKey),
+    };
+  }
+
+  if (lastCharge === null) {
+    return { periodStartKey: bill.anchorDate, expectedKey: null, nextDueKey: null };
+  }
+
+  return {
+    periodStartKey: lastCharge,
+    expectedKey: nextDueDate(lastCharge, cadence),
+    nextDueKey: nextDueFrom(lastCharge, cadence, todayKey),
+  };
+}
+
+/**
+ * Two charges from different spellings of the same bill, arriving too close together.
+ *
+ * **What this is for.** A vendor renames itself and the same bill turns up twice on the review
+ * list, so its second spelling gets added to the commitment that already exists. That is a
+ * rename when the two series *hand off* — the old string stops, the new one starts, and the
+ * merged history is one clean run of charges about a cadence apart. It is two separate bills
+ * when they overlap, and the merge would then quietly double what the commitment costs.
+ *
+ * **The test is a cadence, not the calendar.** For each charge from the spelling being added,
+ * find the nearest charge already on the commitment: closer than 60% of a cadence and the two
+ * were charged in the same cycle, which a rename could not produce. This needs no notion of
+ * "the same month", so it reads the same way for a 28-day autoship as for a quarterly bill —
+ * and it reports once per new charge rather than once per adjacent pair, so three double-billed
+ * months read as three.
+ *
+ * Reports, never blocks. A vendor migrating billing systems really can charge twice in the
+ * month it moves, and this module has proposed rather than applied since the cadence specs.
+ */
+export type AliasOverlap = {
+  /** The charge already on the commitment. */
+  existingKey: string;
+  /** The charge from the spelling being added. */
+  candidateKey: string;
+  /** Days between them. */
+  gapDays: number;
+};
+
+/** Below this share of a cadence, two charges are not one series. */
+const OVERLAP_RATIO = 0.6;
+
+export function aliasOverlap(
+  existing: readonly { dateKey: string }[],
+  candidate: readonly { dateKey: string }[],
+  cadence: Cadence,
+): AliasOverlap[] {
+  const limit = cadenceDaysApprox(cadence) * OVERLAP_RATIO;
+  const overlaps: AliasOverlap[] = [];
+
+  for (const charge of candidate) {
+    let nearest: { dateKey: string; gapDays: number } | null = null;
+    for (const other of existing) {
+      const gapDays = Math.abs(daysBetweenKeys(other.dateKey, charge.dateKey));
+      if (nearest === null || gapDays < nearest.gapDays) {
+        nearest = { dateKey: other.dateKey, gapDays };
+      }
+    }
+    if (nearest === null || nearest.gapDays >= limit) continue;
+    overlaps.push({
+      existingKey: nearest.dateKey,
+      candidateKey: charge.dateKey,
+      gapDays: nearest.gapDays,
+    });
+  }
+
+  return overlaps.sort((left, right) =>
+    left.candidateKey.localeCompare(right.candidateKey),
+  );
+}
+
+/**
  * How late a charge may be before its absence means something.
  *
  * Proportional with a floor: a monthly bill needs a few days for weekend drift, and a yearly
  * one drifts by more than five days without anything being wrong.
  */
-function graceDays(cadenceMonths: number): number {
-  return Math.max(5, Math.ceil(cadenceMonths * 30.44 * 0.1));
+function graceDays(cadence: Cadence): number {
+  return Math.max(5, Math.ceil(cadenceDaysApprox(cadence) * 0.1));
 }
 
 /**
@@ -394,34 +520,19 @@ export function staleSubscriptions(
             mine[0].dateKey,
           )
         : null;
-    // A next-charge the user has already set in the future is the answer, not a
-    // one-cadence step from the last posted row. Without this, setting 1Password to
-    // 2027-03-30 still flagged 2026-03-30 as missing.
-    if (
-      bill.anchorDate !== null &&
-      (lastCharge === null || bill.anchorDate > lastCharge)
-    ) {
-      const overdueDays = daysBetweenKeys(bill.anchorDate, todayKey);
-      if (overdueDays <= graceDays(bill.cadenceMonths)) continue;
-      stale.push({
-        billId: bill.id,
-        name: bill.name,
-        expectedOn: bill.anchorDate,
-        expectedCents: bill.expectedCents,
-        overdueDays,
-      });
-      continue;
-    }
-    if (lastCharge === null) continue;
+    // `billAnchor` is what decides whether a declared future date is the charge being waited
+    // for or the one already had — the rule that stopped 1Password's 2027 anchor from
+    // flagging 2026-03-30 as missing, and it now lives in one place.
+    const { expectedKey } = billAnchor(bill, lastCharge, todayKey);
+    if (expectedKey === null) continue;
 
-    const expectedOn = nextDueDate(lastCharge, bill.cadenceMonths);
-    const overdueDays = daysBetweenKeys(expectedOn, todayKey);
-    if (overdueDays <= graceDays(bill.cadenceMonths)) continue;
+    const overdueDays = daysBetweenKeys(expectedKey, todayKey);
+    if (overdueDays <= graceDays(cadenceOf(bill))) continue;
 
     stale.push({
       billId: bill.id,
       name: bill.name,
-      expectedOn,
+      expectedOn: expectedKey,
       expectedCents: bill.expectedCents,
       overdueDays,
     });
@@ -535,7 +646,7 @@ function billOccurrences(
       : lastPosted;
   if (lastCharge === null) return [];
   const dates: string[] = [];
-  let due = nextDueFrom(lastCharge, bill.cadenceMonths, todayKey);
+  let due = nextDueFrom(lastCharge, cadenceOf(bill), todayKey);
   // 24 months of cadences is the same bound `nextDueFrom` uses.
   for (let step = 0; step < 24 && due < horizonKey; step++) {
     if (due >= todayKey) dates.push(due);
@@ -571,7 +682,7 @@ export function projectForwardMonths(
     if (amount === null || amount <= 0) continue;
 
     if (!bill.scheduled) {
-      const monthly = Math.round(annualCents(amount, bill.cadenceMonths) / 12);
+      const monthly = Math.round(annualCents(amount, cadenceOf(bill)) / 12);
       for (const items of byMonth.values()) {
         items.push({ name: bill.name, cents: monthly, dated: false, dateKey: null });
       }
@@ -670,7 +781,7 @@ export function projectForwardPayPeriods(
 
     if (!bill.scheduled) {
       const perPeriod = Math.round(
-        (annualCents(amount, bill.cadenceMonths) * cadenceDays) / 365,
+        (annualCents(amount, cadenceOf(bill)) * cadenceDays) / 365,
       );
       for (const bucket of buckets) {
         bucket.items.push({

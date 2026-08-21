@@ -4,7 +4,13 @@ import { db } from "@/db";
 import { financeTransactions, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { importFinanceCsvFiles, type ImportFile } from "./import";
-import { reclassifyTransactions, setOneOff, updateTransaction } from "./mutations";
+import {
+  addMatchersToCommitment,
+  reclassifyTransactions,
+  setOneOff,
+  updateTransaction,
+  upsertRecurringSpend,
+} from "./mutations";
 import { listAccounts, listTransactions } from "./queries";
 
 const dbReachable = await databaseReachable();
@@ -216,6 +222,83 @@ describeDb("reclassifyTransactions", () => {
       .where(eq(financeTransactions.id, rent.id));
 
     expect(row).toMatchObject({ excludeFromBaseline: false, eventLabel: "" });
+  });
+});
+
+describeDb("a commitment's category", () => {
+  let userId: string;
+
+  beforeEach(async () => {
+    userId = await makeUser();
+    await seed(userId);
+    await reclassifyTransactions(userId);
+  });
+
+  function categoryOf(
+    rows: Awaited<ReturnType<typeof classifiedRows>>,
+    needle: string,
+  ) {
+    return rows.find((row) => row.description.includes(needle))?.derivedCategory;
+  }
+
+  it("recategorises the charges it matches, without being reclassified by hand", async () => {
+    // `WM SUPERCENTER #1981` arrives labelled Groceries by a rule. Declaring the commitment
+    // as Shopping is the user disagreeing, once, about a merchant rather than a charge.
+    expect(categoryOf(await classifiedRows(userId), "WM SUPERCENTER")).toBe(
+      "Groceries",
+    );
+
+    await upsertRecurringSpend(userId, {
+      name: "Walmart run",
+      matchers: ["Walmart"],
+      category: "Shopping",
+    });
+
+    expect(categoryOf(await classifiedRows(userId), "WM SUPERCENTER")).toBe("Shopping");
+  });
+
+  it("loses to a category set on the charge itself", async () => {
+    const [row] = (await listTransactions(userId)).filter((entry) =>
+      entry.description.includes("WM SUPERCENTER"),
+    );
+    await updateTransaction(userId, row.id, { category: "Pets" });
+    await upsertRecurringSpend(userId, {
+      name: "Walmart run",
+      matchers: ["Walmart"],
+      category: "Shopping",
+    });
+
+    // `derivedCategory` still moves — it is the derivation — but the row's own category is
+    // what any reader sees, and nothing here touched it.
+    const stored = await listTransactions(userId);
+    expect(
+      stored.find((entry) => entry.description.includes("WM SUPERCENTER"))?.category,
+    ).toBe("Pets");
+  });
+
+  it("follows the matchers when a second spelling is folded in", async () => {
+    await upsertRecurringSpend(userId, {
+      name: "Dog supplies",
+      matchers: ["Nothing At All"],
+      category: "Pets",
+    });
+    expect(categoryOf(await classifiedRows(userId), "WM SUPERCENTER")).toBe(
+      "Groceries",
+    );
+
+    await addMatchersToCommitment(userId, {
+      kind: "spend",
+      name: "Dog supplies",
+      matchers: ["Walmart"],
+    });
+
+    expect(categoryOf(await classifiedRows(userId), "WM SUPERCENTER")).toBe("Pets");
+  });
+
+  it("changes nothing when the commitment carries no category", async () => {
+    const before = await classifiedRows(userId);
+    await upsertRecurringSpend(userId, { name: "Walmart run", matchers: ["Walmart"] });
+    expect(await classifiedRows(userId)).toEqual(before);
   });
 });
 

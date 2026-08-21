@@ -352,10 +352,10 @@ describe("nextPayday", () => {
 
 describe("paydaysPerCadence", () => {
   it("gives a monthly bill two paychecks and a yearly one twenty-six", () => {
-    expect(paydaysPerCadence(1)).toBe(2);
-    expect(paydaysPerCadence(3)).toBe(7);
-    expect(paydaysPerCadence(6)).toBe(13);
-    expect(paydaysPerCadence(12)).toBe(26);
+    expect(paydaysPerCadence({ unit: "month", n: 1 })).toBe(2);
+    expect(paydaysPerCadence({ unit: "month", n: 3 })).toBe(7);
+    expect(paydaysPerCadence({ unit: "month", n: 6 })).toBe(13);
+    expect(paydaysPerCadence({ unit: "month", n: 12 })).toBe(26);
   });
 });
 
@@ -438,7 +438,12 @@ describe("setAsideHeld", () => {
       "2026-08-16",
     );
 
-    expect(held?.periodStartKey).toBe("2026-08-01");
+    // The anchor is the charge being *waited for* (`billAnchor`), so the period accruing
+    // toward it is the cadence ending there — not one starting there. Read the other way,
+    // an anchor set to a future date accrued over a window that had not begun and held
+    // nothing at all.
+    expect(held?.periodStartKey).toBe("2026-07-01");
+    expect(held?.nextDueKey).toBe("2026-08-01");
     expect(held?.heldCents).toBe(105000);
   });
 
@@ -450,7 +455,23 @@ describe("setAsideHeld", () => {
       "2026-08-16",
     );
 
+    expect(held?.periodStartKey).toBe("2026-07-01");
+  });
+
+  it("accrues toward an anchor set in the future rather than holding nothing", () => {
+    // The regression `billAnchor` exists for: a bill declared with its next charge and no
+    // history read that date as the *start* of the accrual period, so the window ran from a
+    // day that had not happened and every payday fell outside it.
+    const held = setAsideHeld(
+      bill({ anchorDate: "2026-09-01" }),
+      [payday("2026-08-07"), payday("2026-08-21")],
+      [],
+      "2026-08-25",
+    );
+
     expect(held?.periodStartKey).toBe("2026-08-01");
+    expect(held?.nextDueKey).toBe("2026-09-01");
+    expect(held?.heldCents).toBe(210000);
   });
 
   it("returns null rather than inventing a figure when no amount is declared", () => {
@@ -517,6 +538,7 @@ function spendEntry(over: Partial<StoredSpend> = {}): StoredSpend {
     id: "spend-1",
     name: "Pizza",
     matchers: ["PIZZA HUT", "DOMINOS"],
+    category: "",
     period: "week",
     amountSource: "auto",
     expectedCents: null,

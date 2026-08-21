@@ -572,8 +572,8 @@ const recurringBillSchema = z.strictObject({
   highCents: cents,
   deviationCents: cents,
   chargeCount: z.number().int().min(0),
-  cadenceDays: z.number().int(),
-  cadenceMonths: z.number().int().nullable(),
+  observedGapDays: z.number().int(),
+  cadence: z.string().nullable(),
   annualCents: cents,
   lastChargeOn: z.string(),
   declared: z.boolean(),
@@ -582,7 +582,7 @@ const recurringBillSchema = z.strictObject({
 
 const upcomingBillSchema = z.strictObject({
   merchant: z.string(),
-  cadenceMonths: z.number().int(),
+  cadence: z.strictObject({ unit: z.enum(["month", "day"]), n: z.number().int() }),
   dueOn: dateKey,
   daysAway: z.number().int(),
   expectedCents: cents,
@@ -809,11 +809,28 @@ export const inputSchemas = {
       .array(z.string())
       .optional()
       .describe("Bank merchant strings this bill covers."),
-    cadenceMonths: z.number().int().min(1).max(24).describe("Cadence in months."),
+    cadenceMonths: z
+      .number()
+      .int()
+      .min(1)
+      .max(24)
+      .optional()
+      .describe("Cadence in whole months. Ignored when cadenceDays is given."),
+    cadenceDays: z
+      .number()
+      .int()
+      .min(2)
+      .max(200)
+      .nullable()
+      .optional()
+      .describe(
+        "Cadence in days, for a vendor that counts days — a four-week autoship is 28. Wins over cadenceMonths.",
+      ),
+    category: z.string().optional(),
     expectedCents: z.number().int().nullable().optional(),
     anchorDate: dateKey.nullable().optional(),
     status: z.enum(["active", "cancelled", "ignored"]).optional(),
-    cancelUrl: z.string().optional(),
+    url: z.string().optional(),
     scheduled: z.boolean().optional(),
     dueDay: z.number().int().min(1).max(31).nullable().optional(),
     notes: z.string().optional(),
@@ -828,7 +845,16 @@ export const inputSchemas = {
     amountSource: z.enum(["auto", "pinned"]).optional(),
     expectedCents: z.number().int().nullable().optional(),
     active: z.boolean().optional(),
+    category: z.string().optional(),
     notes: z.string().optional(),
+  }),
+  add_commitment_matchers: z.strictObject({
+    kind: z.enum(["bill", "spend"]).describe("Which table the name lives in."),
+    name: z.string().min(1).describe("The commitment to add to."),
+    matchers: z
+      .array(z.string())
+      .min(1)
+      .describe("Bank merchant strings to fold in, e.g. a vendor's new spelling."),
   }),
   delete_commitment: z.strictObject({
     kind: z.enum(["bill", "spend"]).describe("Which table the name lives in."),
@@ -1227,7 +1253,7 @@ export const outputSchemas = {
         name: z.string(),
         matchers: z.array(z.string()),
         status: z.enum(["active", "cancelled", "ignored"]),
-        cadenceMonths: z.number().int(),
+        cadence: z.string(),
         expectedCents: cents.nullable(),
         annualCents: cents,
         nextDue: dateKey.nullable(),
@@ -1258,6 +1284,11 @@ export const outputSchemas = {
     name: z.string(),
     matchers: z.array(z.string()),
     period: z.enum(["week", "month"]),
+  }),
+  add_commitment_matchers: z.strictObject({
+    kind: z.enum(["bill", "spend"]),
+    name: z.string(),
+    matchers: z.array(z.string()),
   }),
   delete_commitment: z.strictObject({
     deleted: z.literal(true),

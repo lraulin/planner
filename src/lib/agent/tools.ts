@@ -54,6 +54,7 @@ import {
   listRecurringBillsTool,
   listStatementsTool,
   searchTransactionsTool,
+  addCommitmentMatchersTool,
   upsertRecurringSpendTool,
   upsertSubscriptionTool,
 } from "./financeTools";
@@ -647,6 +648,18 @@ const definitions: AgentToolDefinition[] = [
     exposure: "domain",
     handler: upsertRecurringSpendTool,
   }),
+  defineTool("add_commitment_matchers", {
+    domain: "finances",
+    summary: "Fold more bank spellings into a commitment that already exists.",
+    useWhen:
+      "Use when a vendor's name changed and the same bill now appears under a second string.",
+    avoidWhen:
+      "Use upsert_subscription or upsert_recurring_spend to replace a commitment's whole matcher list.",
+    returns: "The commitment's name and its matchers after the merge.",
+    effects: safeWrite,
+    exposure: "domain",
+    handler: addCommitmentMatchersTool,
+  }),
   defineTool("delete_commitment", {
     domain: "finances",
     summary: "Remove a bill or recurring-spend entry.",
@@ -851,7 +864,7 @@ const fieldDescriptions: Record<string, string> = {
   anchorDate:
     "YYYY-MM-DD the next-due walk starts from when history does not reach it.",
   status: "active, cancelled, or ignored.",
-  cancelUrl: "Where to cancel the subscription. Stored, never followed.",
+  url: "Where the bill is managed — account, billing or cancel page. Stored, never followed.",
   scheduled: "Whether the dates are predictable. False for propane.",
   dueDay: "Day of the period the charge is expected, 1-31.",
   period: "week or month — the unit the recurring-spend rate is quoted in.",

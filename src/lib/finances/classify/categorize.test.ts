@@ -134,6 +134,46 @@ describe("categorize", () => {
   });
 });
 
+describe("categorize with a commitment's category", () => {
+  it("beats a rule that claimed the same merchant", () => {
+    // The rule files Pizza Hut under Dining. A user who declared their Pizza commitment as
+    // Groceries has said something a pattern cannot know, and said it on purpose.
+    const declared = new Map([["Pizza Hut", "Groceries"]]);
+    expect(categorize("PIZZA HUT 036874", "Dining", declared).category).toBe(
+      "Groceries",
+    );
+  });
+
+  it("beats the bank's own label where no rule fired", () => {
+    const declared = new Map([["VETSOURCE", "Pets"]]);
+    expect(categorize("VETSOURCE", "Merchandise", declared).category).toBe("Pets");
+  });
+
+  it("is keyed on the merchant a rule resolves to, not the bank's spelling", () => {
+    // `WAL-MART #1981` and `WM SUPERCENTER #1981` both resolve to Walmart, which is the
+    // string a commitment's matchers hold — so one declaration covers both spellings.
+    const declared = new Map([["Walmart", "Groceries"]]);
+    expect(categorize("WAL-MART #1981", "Merchandise", declared).category).toBe(
+      "Groceries",
+    );
+    expect(categorize("WM SUPERCENTER #1981", "Merchandise", declared).category).toBe(
+      "Groceries",
+    );
+  });
+
+  it("still reports the rule that fired, which decided the merchant", () => {
+    const declared = new Map([["Pizza Hut", "Groceries"]]);
+    const result = categorize("PIZZA HUT 036874", "Dining", declared);
+    expect(result.ruleId).toBe("pizza-hut");
+    expect(result.merchant).toBe("Pizza Hut");
+  });
+
+  it("changes nothing for a merchant no commitment claims", () => {
+    const declared = new Map([["VETSOURCE", "Pets"]]);
+    expect(categorize("PIZZA HUT 036874", "Dining", declared).category).toBe("Dining");
+  });
+});
+
 describe("CLASSIFY_RULES", () => {
   it("has unique rule ids", () => {
     const ids = CLASSIFY_RULES.map((rule) => rule.id);

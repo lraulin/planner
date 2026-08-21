@@ -17,6 +17,7 @@ import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { parseAccountUrl } from "./accountUrl";
 import { changedRows, planReclassify } from "./classify/reclassify";
 import { MatcherConflictError } from "./commitments";
+import { cadenceColumns, cadenceOf, type Cadence } from "./recurringBills";
 import { numericStringToCents } from "./money";
 import type { PaypalResolution } from "./paypalMatch";
 
@@ -301,39 +302,54 @@ export type ReclassifySummary = {
 export async function reclassifyTransactions(
   userId: string,
 ): Promise<ReclassifySummary> {
-  const [rows, accounts, storedResolutions] = await Promise.all([
-    db
-      .select({
-        id: financeTransactions.id,
-        accountId: financeTransactions.accountId,
-        transactionDate: financeTransactions.transactionDate,
-        description: financeTransactions.description,
-        amount: financeTransactions.amount,
-        sourceCategory: financeTransactions.sourceCategory,
-        transferGroupId: financeTransactions.transferGroupId,
-        derivedCategory: financeTransactions.derivedCategory,
-        derivedFlow: financeTransactions.derivedFlow,
-      })
-      .from(financeTransactions)
-      .where(eq(financeTransactions.userId, userId)),
-    db
-      .select({
-        id: financeAccounts.id,
-        externalKey: financeAccounts.externalKey,
-      })
-      .from(financeAccounts)
-      .where(eq(financeAccounts.userId, userId)),
-    db
-      .select({
-        externalId: financePaymentResolutions.externalId,
-        transactionDate: financePaymentResolutions.transactionDate,
-        amount: financePaymentResolutions.amount,
-        counterparty: financePaymentResolutions.counterparty,
-        direction: financePaymentResolutions.direction,
-      })
-      .from(financePaymentResolutions)
-      .where(eq(financePaymentResolutions.userId, userId)),
-  ]);
+  const [rows, accounts, storedResolutions, billCategories, spendCategories] =
+    await Promise.all([
+      db
+        .select({
+          id: financeTransactions.id,
+          accountId: financeTransactions.accountId,
+          transactionDate: financeTransactions.transactionDate,
+          description: financeTransactions.description,
+          amount: financeTransactions.amount,
+          sourceCategory: financeTransactions.sourceCategory,
+          transferGroupId: financeTransactions.transferGroupId,
+          derivedCategory: financeTransactions.derivedCategory,
+          derivedFlow: financeTransactions.derivedFlow,
+        })
+        .from(financeTransactions)
+        .where(eq(financeTransactions.userId, userId)),
+      db
+        .select({
+          id: financeAccounts.id,
+          externalKey: financeAccounts.externalKey,
+        })
+        .from(financeAccounts)
+        .where(eq(financeAccounts.userId, userId)),
+      db
+        .select({
+          externalId: financePaymentResolutions.externalId,
+          transactionDate: financePaymentResolutions.transactionDate,
+          amount: financePaymentResolutions.amount,
+          counterparty: financePaymentResolutions.counterparty,
+          direction: financePaymentResolutions.direction,
+        })
+        .from(financePaymentResolutions)
+        .where(eq(financePaymentResolutions.userId, userId)),
+      db
+        .select({
+          matchers: financeRecurringBills.matchers,
+          category: financeRecurringBills.category,
+        })
+        .from(financeRecurringBills)
+        .where(eq(financeRecurringBills.userId, userId)),
+      db
+        .select({
+          matchers: financeRecurringSpend.matchers,
+          category: financeRecurringSpend.category,
+        })
+        .from(financeRecurringSpend)
+        .where(eq(financeRecurringSpend.userId, userId)),
+    ]);
 
   const parsed = rows.map((row) => ({
     id: row.id,
@@ -362,7 +378,23 @@ export async function reclassifyTransactions(
     ];
   });
 
-  const plan = planReclassify(parsed, accounts, randomUUID, resolutions);
+  // A commitment's category outranks a `rules.ts` guess for every charge it matches, so the
+  // whole map goes in and the plan decides per row. Both tiers, one map: the merchant strings
+  // are exclusive across the two tables, so they cannot disagree.
+  const commitmentCategories = new Map<string, string>();
+  for (const row of [...billCategories, ...spendCategories]) {
+    if (row.category === "") continue;
+    for (const merchant of row.matchers)
+      commitmentCategories.set(merchant, row.category);
+  }
+
+  const plan = planReclassify(
+    parsed,
+    accounts,
+    randomUUID,
+    resolutions,
+    commitmentCategories,
+  );
   const changed = changedRows(parsed, plan);
 
   if (changed.length > 0) {
@@ -454,6 +486,32 @@ export async function deleteAccount(userId: string, accountId: string): Promise<
     .where(and(eq(financeAccounts.id, accountId), eq(financeAccounts.userId, userId)));
 }
 
+/**
+ * Re-derive the categories on this user's history when a commitment changed what they are.
+ *
+ * A commitment's category outranks a `rules.ts` match for every charge it matches, so both
+ * the category *and* the merchant list can move rows. `reclassifyTransactions` is a whole-
+ * history pass, which sounds heavy for one edit and is not: `changedRows` diffs the plan
+ * against what is stored, so an edit that moves nothing writes nothing.
+ */
+async function reclassifyIfCategoriesMoved(
+  userId: string,
+  before: { category: string; matchers: readonly string[] } | undefined,
+  after: { category?: string; matchers?: readonly string[] },
+): Promise<void> {
+  const category = after.category?.trim() ?? before?.category ?? "";
+  const categoryMoved =
+    after.category !== undefined && after.category.trim() !== (before?.category ?? "");
+  const matchersMoved =
+    after.matchers !== undefined &&
+    (before === undefined ||
+      after.matchers.length !== before.matchers.length ||
+      after.matchers.some((entry, index) => entry !== before.matchers[index]));
+
+  if (!categoryMoved && !(matchersMoved && category !== "")) return;
+  await reclassifyTransactions(userId);
+}
+
 export type RecurringBillEdit = {
   /** The user's name for the bill, and the upsert key. */
   name: string;
@@ -467,8 +525,15 @@ export type RecurringBillEdit = {
   status?: CommitmentStatus;
   /** When it was cancelled. Defaults to today when `status` becomes `cancelled`. */
   cancelledOn?: string | null;
-  cancelUrl?: string;
-  cadenceMonths: number;
+  /** Where the bill is managed — account page, billing page, cancel page. */
+  url?: string;
+  /** How often it charges: whole months, or a fixed number of days. */
+  cadence: Cadence;
+  /**
+   * A `FINANCE_CATEGORIES` value, or empty for none. Changing it recategorises the charges
+   * this bill matches, so the caller reclassifies after writing.
+   */
+  category?: string;
   /** Null keeps the median of the charges on file as the amount. */
   expectedCents?: number | null;
   anchorDate?: string | null;
@@ -564,12 +629,16 @@ export async function upsertRecurringBill(
 ): Promise<void> {
   const name = edit.name.trim();
   if (name === "") throw new Error("A bill needs a name.");
-  if (
-    !Number.isInteger(edit.cadenceMonths) ||
-    edit.cadenceMonths < 1 ||
-    edit.cadenceMonths > 24
-  ) {
-    throw new Error("A cadence must be a whole number of months, from 1 to 24.");
+  // The bounds are the CHECK constraints on both columns. Validated here as well so a bad
+  // cadence fails with a sentence rather than as a constraint violation the caller cannot read.
+  if (!Number.isInteger(edit.cadence.n)) {
+    throw new Error("A cadence must be a whole number.");
+  }
+  if (edit.cadence.unit === "month" && (edit.cadence.n < 1 || edit.cadence.n > 24)) {
+    throw new Error("A cadence in months must be from 1 to 24.");
+  }
+  if (edit.cadence.unit === "day" && (edit.cadence.n < 2 || edit.cadence.n > 200)) {
+    throw new Error("A cadence in days must be from 2 to 200.");
   }
   // An unscheduled bill has no cadence to infer an amount from and no forecast to fall back
   // on, so the stated cost is the only thing it knows. Without it there is nothing to
@@ -586,7 +655,11 @@ export async function upsertRecurringBill(
     throw new Error("A due day must be a whole number from 1 to 31.");
   }
   const existing = await db
-    .select({ id: financeRecurringBills.id })
+    .select({
+      id: financeRecurringBills.id,
+      category: financeRecurringBills.category,
+      matchers: financeRecurringBills.matchers,
+    })
     .from(financeRecurringBills)
     .where(
       and(
@@ -609,8 +682,9 @@ export async function upsertRecurringBill(
   // nothing else, and a blanket write would silently clear the declared amount — after which
   // the bill's figure would quietly fall back to whatever the visible window's median was.
   const changes = {
-    cadenceMonths: edit.cadenceMonths,
+    ...cadenceColumns(edit.cadence),
     ...(matchers !== undefined ? { matchers } : {}),
+    ...(edit.category !== undefined ? { category: edit.category.trim() } : {}),
     ...(edit.expectedCents !== undefined ? { expectedCents: edit.expectedCents } : {}),
     ...(edit.anchorDate !== undefined ? { anchorDate: edit.anchorDate } : {}),
     ...(edit.notes !== undefined ? { notes: edit.notes.trim() } : {}),
@@ -625,7 +699,7 @@ export async function upsertRecurringBill(
             edit.status === "cancelled" ? (edit.cancelledOn ?? todayInUtc()) : null,
         }
       : {}),
-    ...(edit.cancelUrl !== undefined ? { cancelUrl: edit.cancelUrl.trim() } : {}),
+    ...(edit.url !== undefined ? { url: edit.url.trim() } : {}),
     updatedAt: new Date(),
   };
 
@@ -635,7 +709,8 @@ export async function upsertRecurringBill(
       userId,
       name,
       matchers: matchers ?? [name],
-      cadenceMonths: edit.cadenceMonths,
+      ...cadenceColumns(edit.cadence),
+      category: edit.category?.trim() ?? "",
       expectedCents: edit.expectedCents ?? null,
       anchorDate: edit.anchorDate ?? null,
       notes: edit.notes?.trim() ?? "",
@@ -644,7 +719,7 @@ export async function upsertRecurringBill(
       status: edit.status ?? "active",
       cancelledOn:
         edit.status === "cancelled" ? (edit.cancelledOn ?? todayInUtc()) : null,
-      cancelUrl: edit.cancelUrl?.trim() ?? "",
+      url: edit.url?.trim() ?? "",
     })
     // The unique index is on (user_id, name), so this can only ever collide with this user's
     // own row — another user's identical name is a different row entirely.
@@ -652,6 +727,11 @@ export async function upsertRecurringBill(
       target: [financeRecurringBills.userId, financeRecurringBills.name],
       set: changes,
     });
+
+  await reclassifyIfCategoriesMoved(userId, existing[0], {
+    category: edit.category,
+    matchers,
+  });
 }
 
 /**
@@ -700,6 +780,8 @@ export type RecurringSpendEdit = {
   /** The pinned rate per period. Ignored while `amountSource` is `auto`. */
   expectedCents?: number | null;
   active?: boolean;
+  /** A `FINANCE_CATEGORIES` value, or empty for none. See `RecurringBillEdit.category`. */
+  category?: string;
   notes?: string;
 };
 
@@ -729,7 +811,11 @@ export async function upsertRecurringSpend(
   }
 
   const existing = await db
-    .select({ id: financeRecurringSpend.id })
+    .select({
+      id: financeRecurringSpend.id,
+      category: financeRecurringSpend.category,
+      matchers: financeRecurringSpend.matchers,
+    })
     .from(financeRecurringSpend)
     .where(
       and(
@@ -753,6 +839,7 @@ export async function upsertRecurringSpend(
     ...(edit.amountSource !== undefined ? { amountSource: edit.amountSource } : {}),
     ...(edit.expectedCents !== undefined ? { expectedCents: edit.expectedCents } : {}),
     ...(edit.active !== undefined ? { active: edit.active } : {}),
+    ...(edit.category !== undefined ? { category: edit.category.trim() } : {}),
     ...(edit.notes !== undefined ? { notes: edit.notes.trim() } : {}),
     updatedAt: new Date(),
   };
@@ -767,12 +854,18 @@ export async function upsertRecurringSpend(
       amountSource: edit.amountSource ?? "auto",
       expectedCents: edit.expectedCents ?? null,
       active: edit.active ?? true,
+      category: edit.category?.trim() ?? "",
       notes: edit.notes?.trim() ?? "",
     })
     .onConflictDoUpdate({
       target: [financeRecurringSpend.userId, financeRecurringSpend.name],
       set: changes,
     });
+
+  await reclassifyIfCategoriesMoved(userId, existing[0], {
+    category: edit.category,
+    matchers,
+  });
 }
 
 /**
@@ -839,7 +932,10 @@ export async function setSubscriptionStatus(
 ): Promise<void> {
   const trimmed = name.trim();
   const [existing] = await db
-    .select({ cadenceMonths: financeRecurringBills.cadenceMonths })
+    .select({
+      cadenceMonths: financeRecurringBills.cadenceMonths,
+      cadenceDays: financeRecurringBills.cadenceDays,
+    })
     .from(financeRecurringBills)
     .where(
       and(
@@ -852,13 +948,62 @@ export async function setSubscriptionStatus(
 
   await upsertRecurringBill(userId, {
     name: trimmed,
-    cadenceMonths: existing.cadenceMonths,
+    cadence: cadenceOf(existing),
     status,
     ...(options.cancelledOn !== undefined ? { cancelledOn: options.cancelledOn } : {}),
     ...(status === "active" && options.reanchorOn !== undefined
       ? { anchorDate: options.reanchorOn }
       : {}),
   });
+}
+
+/**
+ * Add bank merchant strings to a commitment that already exists, on either tier.
+ *
+ * **Append, not replace.** The alternative — reading the row, spreading its matchers, and
+ * sending the whole list back through the upsert — is what the review list did for spend
+ * groups, and it makes every join a read-modify-write that silently drops whatever changed in
+ * between. This is one statement, and the exclusivity check still runs, so claiming a merchant
+ * another commitment holds fails by name rather than moving it.
+ *
+ * Strings already on the row are ignored rather than duplicated: joining twice is a slip, not
+ * an error worth an exception.
+ */
+export async function addMatchersToCommitment(
+  userId: string,
+  input: { kind: "bill" | "spend"; name: string; matchers: readonly string[] },
+): Promise<void> {
+  const name = input.name.trim();
+  const table = input.kind === "bill" ? financeRecurringBills : financeRecurringSpend;
+
+  const [existing] = await db
+    .select({ id: table.id, matchers: table.matchers, category: table.category })
+    .from(table)
+    .where(and(eq(table.userId, userId), eq(table.name, name)))
+    .limit(1);
+  if (!existing) throw new Error("Commitment not found.");
+
+  const added = input.matchers.map((entry) => entry.trim()).filter(Boolean);
+  const merged = [...new Set([...existing.matchers, ...added])];
+  if (merged.length === existing.matchers.length) return;
+
+  await checkedMatchers(userId, merged, {
+    table: input.kind,
+    id: existing.id,
+  });
+
+  await db
+    .update(table)
+    .set({ matchers: merged, updatedAt: new Date() })
+    // Scoped on the id *and* the user: the id came from a row this user owns, and saying so
+    // twice is what makes a mistaken id a no-op rather than someone else's row.
+    .where(and(eq(table.userId, userId), eq(table.id, existing.id)));
+
+  await reclassifyIfCategoriesMoved(
+    userId,
+    { category: existing.category, matchers: existing.matchers },
+    { matchers: merged },
+  );
 }
 
 /** Remove a commitment from either table. Kind is required because names are unique per table, not across both. */

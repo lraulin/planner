@@ -126,6 +126,7 @@ describe("agent tool registry", () => {
       "list_commitment_candidates",
       "upsert_subscription",
       "upsert_recurring_spend",
+      "add_commitment_matchers",
       "delete_commitment",
     ]);
     expect(finances.tools.every((tool) => tool.domain === "finances")).toBe(true);

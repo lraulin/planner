@@ -3,7 +3,8 @@
 import { useState, useTransition } from "react";
 import type { CadenceCandidate, OneOffSuggestion } from "@/lib/finances/analytics";
 import { formatUsd } from "@/lib/finances/money";
-import { CADENCE_CHOICES, cadenceLabel } from "@/lib/finances/recurringBills";
+import { cadenceLabel, type Cadence } from "@/lib/finances/recurringBills";
+import { CadenceSelect } from "../CadenceSelect";
 import {
   setOneOffAction,
   setRecurringBillAction,
@@ -42,7 +43,7 @@ export function OneOffReview({
   const [pending, startTransition] = useTransition();
   const [declaring, setDeclaring] = useState<string | null>(null);
   /** Cadence chosen per row, keyed by transaction id. Absent means "whatever was proposed". */
-  const [cadences, setCadences] = useState<Record<string, number>>({});
+  const [cadences, setCadences] = useState<Record<string, Cadence>>({});
 
   if (suggestions.length === 0) {
     return <PanelEmpty>Nothing in this window looks like a one-off.</PanelEmpty>;
@@ -78,8 +79,8 @@ export function OneOffReview({
     });
   }
 
-  function declare(suggestion: OneOffSuggestion, cadenceMonths: number) {
-    if (cadenceMonths <= 0) return;
+  function declare(suggestion: OneOffSuggestion, cadence: Cadence | null) {
+    if (cadence === null) return;
     setError(null);
     setDeclaring(suggestion.row.id);
     startTransition(async () => {
@@ -87,7 +88,7 @@ export function OneOffReview({
       // is what lets the bill keep its figure in a window holding none of its charges.
       const result = await setRecurringBillAction({
         name: suggestion.merchant,
-        cadenceMonths,
+        cadence,
         expectedCents: suggestion.cents,
         anchorDate: suggestion.row.transactionDate,
       });
@@ -140,29 +141,25 @@ export function OneOffReview({
               <div className="flex flex-wrap items-center gap-2 pl-6">
                 <span className="text-[0.75rem] text-ink-muted">
                   {proposed
-                    ? `Looks like a bill ${cadenceLabel(proposed.cadenceMonths).toLowerCase()} —`
+                    ? `Looks like a bill ${cadenceLabel(proposed.cadence).toLowerCase()} —`
                     : "Or, if it repeats:"}
                 </span>
-                <select
-                  value={cadences[suggestion.row.id] ?? proposed?.cadenceMonths ?? 0}
+                <CadenceSelect
+                  value={
+                    cadences[suggestion.row.id] ??
+                    proposed?.cadence ?? { unit: "month", n: 1 }
+                  }
                   disabled={pending}
-                  aria-label={`Bill cadence for ${suggestion.merchant || suggestion.row.description}`}
-                  onChange={(event) =>
+                  ariaLabel={`Bill cadence for ${suggestion.merchant || suggestion.row.description}`}
+                  onChange={(cadence) =>
                     setCadences((current) => ({
                       ...current,
-                      [suggestion.row.id]: Number(event.target.value),
+                      [suggestion.row.id]: cadence,
                     }))
                   }
                   // 16px, or iOS zooms the whole page on focus.
                   className="min-h-tap rounded border border-rule bg-surface px-2 py-1 text-base text-ink md:min-h-0 md:text-[0.75rem]"
-                >
-                  <option value={0}>Choose a cadence…</option>
-                  {CADENCE_CHOICES.map((months) => (
-                    <option key={months} value={months}>
-                      {cadenceLabel(months)}
-                    </option>
-                  ))}
-                </select>
+                />
                 {/*
                  * A button rather than declaring on change. When the cadence arrives
                  * pre-filled — the case this whole flow exists for — picking the option
@@ -174,12 +171,12 @@ export function OneOffReview({
                   onClick={() =>
                     declare(
                       suggestion,
-                      cadences[suggestion.row.id] ?? proposed?.cadenceMonths ?? 0,
+                      cadences[suggestion.row.id] ?? proposed?.cadence ?? null,
                     )
                   }
                   disabled={
                     pending ||
-                    (cadences[suggestion.row.id] ?? proposed?.cadenceMonths ?? 0) === 0
+                    (cadences[suggestion.row.id] ?? proposed?.cadence ?? null) === null
                   }
                   className="min-h-tap rounded border border-rule bg-surface-raised px-2 text-[0.75rem] text-ink disabled:opacity-50 md:min-h-0 md:py-1"
                 >

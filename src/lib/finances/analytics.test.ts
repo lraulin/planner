@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { shiftDateKey } from "@/lib/schedule/geometry";
 import {
   balanceSeries,
   baselineSplit,
@@ -12,6 +13,7 @@ import {
   monthlyIncome,
   oneOffSuggestions,
   paydaysFrom,
+  spendCandidates,
   payPeriodBuckets,
   recurringMerchants,
   rowsInRange,
@@ -554,7 +556,7 @@ describe("recurringMerchants", () => {
       chargeCount: 12,
     });
     // $34.71 a month is invisible; $408 a year is a decision.
-    expect(found[0].cadenceDays).toBe(31);
+    expect(found[0].observedGapDays).toBe(31);
     expect(found[0].annualCents).toBe(40868);
   });
 
@@ -713,7 +715,7 @@ describe("recurringMerchants with declared bills", () => {
       merchant: "Geico",
       typicalCents: 141260,
       annualCents: 282520,
-      cadenceMonths: 6,
+      cadence: { unit: "month", n: 6 },
       chargeCount: 0,
       declared: true,
     });
@@ -791,7 +793,10 @@ describe("recurringMerchants with declared bills", () => {
     ]);
 
     expect(found).toHaveLength(1);
-    expect(found[0]).toMatchObject({ cadenceMonths: 3, declared: true });
+    expect(found[0]).toMatchObject({
+      cadence: { unit: "month", n: 3 },
+      declared: true,
+    });
     expect(found[0].annualCents).toBe(13884);
   });
 
@@ -837,6 +842,81 @@ describe("recurringMerchants with declared bills", () => {
   });
 });
 
+describe("spendCandidates", () => {
+  /**
+   * The real Walmart shape: a weekly shop, mid-week trips, amounts from $10 to $348, and
+   * five weeks in the last twenty-six with no visit at all.
+   */
+  function walmartWeeks(weeks: number, skip: readonly number[] = []) {
+    const rows = [];
+    for (let week = 0; week < weeks; week++) {
+      if (skip.includes(week)) continue;
+      rows.push(
+        row({
+          description: "WM SUPERCENTER #1981",
+          transactionDate: shiftDateKey("2026-02-22", week * 7),
+          // Wildly variable on purpose: this is what the bill detector rejects.
+          amountCents: -(1056 + ((week * 7919) % 33_700)),
+        }),
+      );
+    }
+    return rows;
+  }
+
+  it("finds the weekly shop the bill detector throws away", () => {
+    const found = spendCandidates(walmartWeeks(26, [3, 9, 14, 20, 24]), {
+      todayKey: "2026-08-21",
+    });
+
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({
+      merchant: "Walmart",
+      shape: "spend",
+      spendPeriod: "week",
+      cadence: null,
+    });
+    expect(found[0].coverage).toBeGreaterThan(0.75);
+    // The amounts that disqualify it as a bill are exactly what it reports as its range.
+    expect(found[0].highCents - found[0].lowCents).toBeGreaterThan(20_000);
+  });
+
+  it("is what `recurringMerchants` cannot do, on the same rows", () => {
+    // Both detectors, same input: the variance gate is the whole difference, and it is why
+    // the largest recurring outflow in the file never reached the review list.
+    const rows = walmartWeeks(26, [3, 9, 14, 20, 24]);
+    expect(recurringMerchants(rows, [])).toEqual([]);
+    expect(spendCandidates(rows, { todayKey: "2026-08-21" })).toHaveLength(1);
+  });
+
+  it("does not call an occasional visit a routine", () => {
+    // Charges in 5 of 26 weeks. A place that gets visited, not a weekly shop.
+    expect(
+      spendCandidates(
+        walmartWeeks(
+          26,
+          [...Array(26).keys()].filter((w) => w % 5 !== 0),
+        ),
+        {
+          todayKey: "2026-08-21",
+        },
+      ),
+    ).toEqual([]);
+  });
+
+  it("needs more than a couple of months before regularity means anything", () => {
+    expect(spendCandidates(walmartWeeks(6), { todayKey: "2026-04-04" })).toEqual([]);
+  });
+
+  it("leaves a claimed merchant alone", () => {
+    expect(
+      spendCandidates(walmartWeeks(26, [3, 9, 14, 20, 24]), {
+        todayKey: "2026-08-21",
+        suppressMerchants: ["Walmart"],
+      }),
+    ).toEqual([]);
+  });
+});
+
 describe("cadenceCandidates", () => {
   it("proposes semi-annual from the two charges detection cannot use", () => {
     const premiums = [
@@ -855,7 +935,7 @@ describe("cadenceCandidates", () => {
     expect(cadenceCandidates(premiums)).toEqual([
       {
         merchant: "Geico",
-        cadenceMonths: 6,
+        cadence: { unit: "month", n: 6 },
         typicalCents: 140080,
         chargeCount: 2,
         lastChargeOn: "2026-03-03",
@@ -909,7 +989,7 @@ describe("upcomingBills", () => {
     expect(upcomingBills([charge], [geicoBill], "2026-08-14")).toEqual([
       {
         merchant: "Geico",
-        cadenceMonths: 6,
+        cadence: { unit: "month", n: 6 },
         dueOn: "2026-09-03",
         daysAway: 20,
         expectedCents: 141260,
@@ -966,7 +1046,7 @@ describe("unscheduled bills", () => {
     expect(found[0]).toMatchObject({
       merchant: "Taylor Gas",
       annualCents: 50_000,
-      cadenceMonths: 12,
+      cadence: { unit: "month", n: 12 },
       declared: true,
       scheduled: false,
     });

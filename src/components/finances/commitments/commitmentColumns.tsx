@@ -1,7 +1,15 @@
 "use client";
 
 import type { ColumnDef } from "@/components/grid/columns";
-import { CADENCE_CHOICES, cadenceLabel } from "@/lib/finances/recurringBills";
+import {
+  cadenceDaysApprox,
+  cadenceLabel,
+  cadenceOf,
+  type Cadence,
+} from "@/lib/finances/recurringBills";
+import { FINANCE_CATEGORIES } from "@/lib/finances/classify/categories";
+import { CadenceSelect } from "../CadenceSelect";
+import { UrlCell } from "./UrlCell";
 import { formatUsd } from "@/lib/finances/money";
 import type { CommitmentStatus, RecurringSpendPeriod } from "@/db/schema";
 import type { StoredBillRow, StoredSpend } from "@/lib/finances/commitments";
@@ -15,7 +23,7 @@ export type BillColumnCtx = {
   pending: boolean;
   onPatch: (
     name: string,
-    patch: Partial<StoredBillRow> & { cadenceMonths?: number },
+    patch: Partial<StoredBillRow> & { cadence?: Cadence },
   ) => void;
   onRename: (from: string, to: string) => void;
   onDelete: (name: string) => void;
@@ -27,6 +35,42 @@ export type SpendColumnCtx = {
   onRename: (from: string, to: string) => void;
   onDelete: (name: string) => void;
 };
+
+/**
+ * The category a commitment files its charges under — and, through it, the charges themselves.
+ *
+ * Shared by both grids because the question and its answers are identical on both tiers; the
+ * blank option is "none", which is a real answer and not an unset control.
+ */
+function CategoryCell({
+  value,
+  label,
+  disabled,
+  onCommit,
+}: {
+  value: string;
+  label: string;
+  disabled?: boolean;
+  onCommit: (category: string) => void;
+}) {
+  return (
+    <select
+      value={value}
+      disabled={disabled}
+      aria-label={`Category for ${label}`}
+      title="Also categorises every charge this matches"
+      onChange={(event) => onCommit(event.target.value)}
+      className="min-h-tap w-full rounded border border-transparent bg-transparent px-1 text-base text-ink-muted hover:border-rule focus:border-rule md:min-h-0 md:text-[0.8125rem]"
+    >
+      <option value="">—</option>
+      {FINANCE_CATEGORIES.map((category) => (
+        <option key={category} value={category}>
+          {category}
+        </option>
+      ))}
+    </select>
+  );
+}
 
 /** The muted "nothing is being held, and here is why" cell both tiers fall back to. */
 function NotHeld({ reason }: { reason: string }) {
@@ -60,7 +104,10 @@ function BillSetAside({ row }: { row: BillRow }) {
   const tone = row.overdue ? "over" : fullyFunded ? "funded" : "accruing";
 
   return (
-    <span className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+    // `min-w-0 overflow-hidden` is what keeps this inside its column. Without them the flex
+    // container grows past the cell and, being right-aligned, spills leftward across Cadence
+    // — which is exactly what surfaced the moment a Category column made the grid tighter.
+    <span className="flex min-w-0 items-center justify-end gap-1.5 overflow-hidden whitespace-nowrap">
       <FundingMeter
         heldCents={heldCents}
         targetCents={expectedCents}
@@ -103,7 +150,7 @@ function SpendSetAside({ row }: { row: SpendRow }) {
   const remainingCents = Math.max(0, ratePerPeriodCents - spentThisPeriodCents);
 
   return (
-    <span className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+    <span className="flex min-w-0 items-center justify-end gap-1.5 overflow-hidden whitespace-nowrap">
       <FundingMeter
         heldCents={over ? ratePerPeriodCents : remainingCents}
         targetCents={ratePerPeriodCents}
@@ -234,27 +281,22 @@ export const billColumns: ColumnDef<BillColumnCtx, BillGridRow>[] = [
     width: "8rem",
     filterKind: "enum",
     filterValue: (row) =>
-      row.node.scheduled ? cadenceLabel(row.node.cadenceMonths) : "Irregular",
-    sortValue: (row) => row.node.cadenceMonths,
+      row.node.scheduled ? cadenceLabel(cadenceOf(row.node)) : "Irregular",
+    // Days and months rank together by the length of a cycle, so a 28-day autoship sorts
+    // just under a monthly bill rather than beside a yearly one. Sorting on the stored
+    // `cadenceMonths` would tie them: a day cadence carries its nearest month in that column.
+    sortValue: (row) => cadenceDaysApprox(cadenceOf(row.node)),
     render: (row, ctx) =>
       !row.node.scheduled ? (
         <span className="text-[0.8125rem] text-ink-muted">Irregular</span>
       ) : (
-        <select
-          value={row.node.cadenceMonths}
+        <CadenceSelect
+          value={cadenceOf(row.node)}
           disabled={ctx.pending}
-          aria-label={`Cadence for ${row.node.name}`}
-          onChange={(event) =>
-            ctx.onPatch(row.node.name, { cadenceMonths: Number(event.target.value) })
-          }
-          className="min-h-tap rounded border border-rule bg-surface px-1 text-base text-ink md:min-h-0 md:text-[0.8125rem]"
-        >
-          {CADENCE_CHOICES.map((months) => (
-            <option key={months} value={months}>
-              {cadenceLabel(months)}
-            </option>
-          ))}
-        </select>
+          ariaLabel={`Cadence for ${row.node.name}`}
+          onChange={(cadence) => ctx.onPatch(row.node.name, { cadence })}
+          className="min-h-tap w-full rounded border border-rule bg-surface px-1 text-base text-ink md:min-h-0 md:text-[0.8125rem]"
+        />
       ),
   },
   {
@@ -309,6 +351,23 @@ export const billColumns: ColumnDef<BillColumnCtx, BillGridRow>[] = [
     ),
   },
   {
+    id: "category",
+    label: "Category",
+    width: "9rem",
+    filterKind: "enum",
+    filterValue: (row) => row.node.category,
+    sortValue: (row) => row.node.category,
+    compact: "meta",
+    render: (row, ctx) => (
+      <CategoryCell
+        value={row.node.category}
+        label={row.node.name}
+        disabled={ctx.pending}
+        onCommit={(category) => ctx.onPatch(row.node.name, { category })}
+      />
+    ),
+  },
+  {
     id: "matchers",
     label: "Matchers",
     width: "minmax(8rem,1fr)",
@@ -332,19 +391,17 @@ export const billColumns: ColumnDef<BillColumnCtx, BillGridRow>[] = [
     ),
   },
   {
-    id: "cancelUrl",
-    label: "Cancel URL",
+    id: "url",
+    label: "URL",
     width: "minmax(7rem,0.8fr)",
+    filterKind: "text",
+    filterValue: (row) => row.node.url,
     render: (row, ctx) => (
-      <input
-        type="url"
-        defaultValue={row.node.cancelUrl}
+      <UrlCell
+        value={row.node.url}
+        label={row.node.name}
         disabled={ctx.pending}
-        aria-label={`Cancel URL for ${row.node.name}`}
-        onBlur={(event) =>
-          ctx.onPatch(row.node.name, { cancelUrl: event.target.value })
-        }
-        className="w-full truncate rounded border border-transparent bg-transparent px-1 text-[0.75rem] text-ink-muted hover:border-rule focus:border-rule"
+        onCommit={(url) => ctx.onPatch(row.node.name, { url })}
       />
     ),
   },
@@ -390,6 +447,23 @@ export const spendColumns: ColumnDef<SpendColumnCtx, SpendGridRow>[] = [
           if (next !== "" && next !== row.node.name) ctx.onRename(row.node.name, next);
         }}
         className="w-full truncate rounded border border-transparent bg-transparent px-1 text-[0.8125rem] text-ink hover:border-rule focus:border-rule"
+      />
+    ),
+  },
+  {
+    id: "category",
+    label: "Category",
+    width: "9rem",
+    filterKind: "enum",
+    filterValue: (row) => row.node.category,
+    sortValue: (row) => row.node.category,
+    compact: "meta",
+    render: (row, ctx) => (
+      <CategoryCell
+        value={row.node.category}
+        label={row.node.name}
+        disabled={ctx.pending}
+        onCommit={(category) => ctx.onPatch(row.node.name, { category })}
       />
     ),
   },
@@ -450,7 +524,7 @@ export const spendColumns: ColumnDef<SpendColumnCtx, SpendGridRow>[] = [
       // One line, like every other cell: the row is `--row-height` tall and a second line
       // lands on the row below. When the rate is auto it *is* the observed history, so
       // repeating the history figure beside it said the same number twice.
-      <span className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+      <span className="flex min-w-0 items-center justify-end gap-1.5 overflow-hidden whitespace-nowrap">
         {row.node.rate.pinned ? (
           dollarsInput(
             row.node.rate.ratePerPeriodCents,

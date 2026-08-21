@@ -211,7 +211,7 @@ describeDb("loadDashboard", () => {
     await reclassifyTransactions(userId);
     await upsertRecurringBill(userId, {
       name: "SimpliSafe",
-      cadenceMonths: 1,
+      cadence: { unit: "month", n: 1 },
       expectedCents: 3_471,
       dueDay: 9,
     });
@@ -247,7 +247,7 @@ describeDb("loadDashboard", () => {
     await reclassifyTransactions(ownerId);
     await upsertRecurringBill(ownerId, {
       name: "SimpliSafe",
-      cadenceMonths: 1,
+      cadence: { unit: "month", n: 1 },
       expectedCents: 3_471,
     });
 

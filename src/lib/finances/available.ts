@@ -40,13 +40,21 @@ import { daysBetweenKeys, shiftDateKey } from "@/lib/schedule/geometry";
 import { BIWEEKLY_DAYS, type Payday } from "./classify/income";
 import { formatUsd } from "./money";
 import {
+  billAnchor,
   periodIndex,
   periodLengthDays,
   periodStartKey,
   type CommitmentCharge,
   type StoredSpend,
 } from "./commitments";
-import { shiftDateKeyMonths, type StoredBill } from "./recurringBills";
+import {
+  cadenceDaysApprox,
+  cadenceOf,
+  nextDueDate,
+  previousDueDate,
+  type Cadence,
+  type StoredBill,
+} from "./recurringBills";
 
 /**
  * Kinds whose balance is money you could spend this fortnight without a decision.
@@ -279,9 +287,14 @@ function medianGapDays(sorted: readonly Payday[]): number {
     : Math.round((gaps[middle - 1] + gaps[middle]) / 2);
 }
 
-/** Paychecks in one cadence period. Monthly → 2, quarterly → 7, yearly → 26. */
-export function paydaysPerCadence(cadenceMonths: number): number {
-  return Math.max(1, Math.round((26 * cadenceMonths) / 12));
+/**
+ * Paychecks in one cadence period. Monthly → 2, quarterly → 7, yearly → 26.
+ *
+ * Measured in days rather than months so a day cadence gets the same treatment: a 28-day
+ * autoship accrues over two paychecks, which is what its 28 days actually contain.
+ */
+export function paydaysPerCadence(cadence: Cadence): number {
+  return Math.max(1, Math.round(cadenceDaysApprox(cadence) / (365.2425 / 26)));
 }
 
 export type SetAside = {
@@ -343,7 +356,7 @@ export function setAsideHeld(
 
   const periodStartKey = periodStart(bill, lastCharge, paydays, todayKey);
   const perPaycheckCents = Math.round(
-    bill.expectedCents / paydaysPerCadence(bill.cadenceMonths),
+    bill.expectedCents / paydaysPerCadence(cadenceOf(bill)),
   );
 
   const accrued = paydays.filter(
@@ -360,7 +373,7 @@ export function setAsideHeld(
     periodStartKey,
     // One cadence on, not `nextDueFrom`'s walk to the future: a due date that has already
     // passed unpaid is the one thing worth seeing, and walking past it would hide it.
-    nextDueKey: shiftDateKeyMonths(periodStartKey, bill.cadenceMonths),
+    nextDueKey: nextDueDate(periodStartKey, cadenceOf(bill)),
   };
 }
 
@@ -470,8 +483,11 @@ function periodStart(
   paydays: readonly Payday[],
   todayKey: string,
 ): string {
-  if (lastCharge !== null) return lastCharge;
-  if (bill.anchorDate !== null) return bill.anchorDate;
+  // `billAnchor` owns what a declared anchor means. It matters here for the case this used to
+  // get backwards: an anchor set to a *future* charge is the end of the accrual window, not
+  // its start, and returning it directly ran the period from a date that has not happened.
+  const anchored = billAnchor(bill, lastCharge, todayKey).periodStartKey;
+  if (anchored !== null) return anchored;
 
   if (bill.dueDay !== null) {
     // The most recent occurrence of the due day at or before today.
@@ -479,7 +495,7 @@ function periodStart(
     const thisMonth = `${todayKey.slice(0, 7)}-${day}`;
     return thisMonth <= todayKey
       ? thisMonth
-      : shiftDateKeyMonths(thisMonth, -bill.cadenceMonths);
+      : previousDueDate(thisMonth, cadenceOf(bill));
   }
 
   // Nothing to anchor to. The first payday on file at least makes the accrual start somewhere

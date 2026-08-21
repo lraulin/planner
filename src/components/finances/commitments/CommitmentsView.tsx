@@ -22,7 +22,8 @@ import {
 import { nextPayday } from "@/lib/finances/available";
 import { PAYDAY_SCOPE } from "@/lib/settings/scopes";
 import { PAYDAY_CODEC } from "../paydaySetting";
-import { CADENCE_CHOICES, cadenceLabel } from "@/lib/finances/recurringBills";
+import { cadenceOf, type Cadence } from "@/lib/finances/recurringBills";
+import { CadenceSelect } from "../CadenceSelect";
 import { formatUsd } from "@/lib/finances/money";
 import {
   deleteCommitmentAction,
@@ -139,6 +140,13 @@ export function CommitmentsView({
   const dismissed = useMemo(
     () => allBillRows.filter((row) => row.status === "ignored"),
     [allBillRows],
+  );
+  // Bills a second vendor spelling could belong to. Cancelled and dismissed ones are excluded:
+  // folding a live merchant into a bill that no longer charges would hide it from every
+  // forward-looking figure on the page.
+  const liveBills = useMemo(
+    () => bills.filter((bill) => bill.status === "active"),
+    [bills],
   );
 
   const spendRows: SpendGridRow[] = useMemo(
@@ -347,14 +355,15 @@ export function CommitmentsView({
       run(() =>
         setRecurringBillAction({
           name,
-          cadenceMonths: patch.cadenceMonths ?? row.cadenceMonths,
+          cadence: patch.cadence ?? cadenceOf(row),
           matchers: patch.matchers ?? row.matchers,
           expectedCents:
             patch.expectedCents !== undefined ? patch.expectedCents : row.expectedCents,
           anchorDate:
             patch.anchorDate !== undefined ? patch.anchorDate : row.anchorDate,
           status: patch.status ?? row.status,
-          cancelUrl: patch.cancelUrl ?? row.cancelUrl,
+          url: patch.url ?? row.url,
+          category: patch.category ?? row.category,
           scheduled: patch.scheduled ?? row.scheduled,
           dueDay: patch.dueDay !== undefined ? patch.dueDay : row.dueDay,
         }),
@@ -399,24 +408,6 @@ export function CommitmentsView({
             {error}
           </p>
         )}
-
-        <section className="shrink-0 rounded border border-rule p-2">
-          <header className="mb-2">
-            <h2 className="text-[0.9375rem] font-medium text-ink">Review</h2>
-            <p className="text-[0.75rem] text-ink-muted">
-              Detected charges that are not yet a commitment. Track as a bill (it
-              charges unless you cancel) or as recurring spend (pizza, groceries) — you
-              name it before it is written. Dismissing one hides it here and puts it in
-              the dismissed list below, where you can bring it back.
-            </p>
-          </header>
-          <ReviewList
-            items={review}
-            dismissed={dismissed}
-            spend={spend}
-            onError={setError}
-          />
-        </section>
 
         <section
           className={`flex h-[26rem] min-w-0 shrink-0 flex-col overflow-hidden rounded border ${
@@ -484,8 +475,8 @@ export function CommitmentsView({
               density={billGrid.density}
               empty={
                 <p className="p-4 text-center text-[0.8125rem] text-ink-muted">
-                  Nothing declared yet. Track one from Review above, or add it below
-                  with its cost — that cost is what gets held back.
+                  Nothing declared yet. Add one here with its cost — that cost is what
+                  gets held back — or track one from Review, at the foot of the page.
                 </p>
               }
             />
@@ -562,6 +553,28 @@ export function CommitmentsView({
           </div>
         </section>
 
+        <section className="shrink-0 rounded border border-rule p-2">
+          <header className="mb-2">
+            <h2 className="text-[0.9375rem] font-medium text-ink">Review</h2>
+            <p className="text-[0.75rem] text-ink-muted">
+              Detected charges that are not yet a commitment — the inbox for the two
+              lists above, which is why it sits at the foot of the page. Track as a bill
+              (it charges unless you cancel) or as recurring spend (pizza, groceries);
+              you name it before it is written. Dismissing one puts it in the dismissed
+              list below, where you can bring it back.
+            </p>
+          </header>
+          <ReviewList
+            items={review}
+            dismissed={dismissed}
+            bills={liveBills}
+            spend={spend}
+            billCharges={chargesByName}
+            todayKey={todayKey}
+            onError={setError}
+          />
+        </section>
+
         <ForwardPanel months={months} periods={periods} />
       </div>
     </div>
@@ -581,7 +594,7 @@ function NewBillForm({
   const [name, setName] = useState("");
   const [matchers, setMatchers] = useState<string[]>([]);
   const [matcherDraft, setMatcherDraft] = useState("");
-  const [cadence, setCadence] = useState(1);
+  const [cadence, setCadence] = useState<Cadence>({ unit: "month", n: 1 });
   const [amount, setAmount] = useState("");
   const [next, setNext] = useState("");
 
@@ -607,18 +620,12 @@ function NewBillForm({
           aria-label="New bill name"
           className="min-h-tap w-40 rounded border border-rule bg-surface px-2 text-base text-ink md:min-h-0 md:text-[0.8125rem]"
         />
-        <select
+        <CadenceSelect
           value={cadence}
-          onChange={(event) => setCadence(Number(event.target.value))}
-          aria-label="New bill cadence"
+          onChange={setCadence}
+          ariaLabel="New bill cadence"
           className="min-h-tap rounded border border-rule bg-surface px-2 text-base text-ink md:min-h-0 md:text-[0.8125rem]"
-        >
-          {CADENCE_CHOICES.map((months) => (
-            <option key={months} value={months}>
-              {cadenceLabel(months)}
-            </option>
-          ))}
-        </select>
+        />
         <input
           type="text"
           inputMode="decimal"
@@ -660,7 +667,7 @@ function NewBillForm({
             void setRecurringBillAction({
               name: name.trim(),
               matchers: nextMatchers.length > 0 ? nextMatchers : [name.trim()],
-              cadenceMonths: cadence,
+              cadence,
               expectedCents: cents > 0 ? cents : null,
               anchorDate: next || null,
             }).then((result) => {
