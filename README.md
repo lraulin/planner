@@ -166,8 +166,10 @@ Vercel also aliases `planner-sable-three.vercel.app` to the same deployment, but
 `BETTER_AUTH_URL` names the first one, and **that is the origin that matters** — see the
 Google callback note below.
 
-Authentication is **Better Auth** (email/password, no public sign-up). Unauthenticated
-visitors are redirected to `/login`. The agent API uses a separate Bearer key (see above).
+Authentication is **Better Auth** (email/password). Public sign-up on the Better Auth
+handler is disabled; friends create accounts by redeeming an invite minted in Settings.
+Unauthenticated visitors are redirected to `/login` (`/signup` is allowlisted but inert
+without a valid token). The agent API uses a separate Bearer key (see above).
 
 Hosting targets the free tiers: Vercel Hobby for the app, Neon for Postgres.
 

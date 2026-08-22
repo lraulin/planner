@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { accounts, nodes, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
-import { upsertUser } from "./provision";
+import { createCredentialUser, upsertUser } from "./provision";
 
 /**
  * Integration tests against the local Postgres (`npm run db:up`), following the harness in
@@ -58,6 +58,7 @@ describeDb("upsertUser", () => {
     const [user] = await db.select().from(users).where(eq(users.id, result.id));
     expect(user.email).toBe(email);
     expect(user.name).toBe("Someone");
+    expect(user.canInvite).toBe(true);
 
     // The stored hash has to be one Better Auth accepts, not merely present — writing a
     // row it cannot verify produces an account that exists and cannot be used.
@@ -153,6 +154,21 @@ describeDb("upsertUser with renameFrom", () => {
     });
 
     expect(second.id).toBe(first.id);
+  });
+});
+
+describeDb("createCredentialUser", () => {
+  it("inserts an account that cannot mint invites and does not upsert", async () => {
+    const email = freshEmail("credential");
+    const first = await createCredentialUser({ email, password: "password12345678" });
+    createdUserIds.push(first.id);
+
+    const [user] = await db.select().from(users).where(eq(users.id, first.id));
+    expect(user.canInvite).toBe(false);
+
+    await expect(
+      createCredentialUser({ email, password: "different4567890" }),
+    ).rejects.toThrow(/already exists/);
   });
 });
 

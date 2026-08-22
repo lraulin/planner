@@ -1,3 +1,28 @@
+# Standards for Invite-gated sign-up
+
+**Status: frozen / complete** (2026-08-22)
+
+The following standards apply to this work. Full text is copied below so the spec
+folder stays readable after a standard file moves.
+
+Key constraints for this slice:
+
+- Every authenticated mutation takes `userId` first and proves ownership. Redeem is
+  keyed by invite token and must insert the **new** user's id, never the inviter's.
+- Proxy allowlisting `/signup` is not the auth gate; invalid tokens cannot create
+  accounts.
+- Integration tests: mint/list/revoke scoping, redeem isolation, change-password
+  cross-user. Register `listInvites` in `crossUserReads.integration.test.ts`.
+- Generate the migration; hand-write only the existing-users `can_invite = true`
+  backfill, keeping the snapshot.
+- Logic in `src/lib/auth/`; thin actions; no db from components.
+- `/signup` matches `/login`; 16px inputs / 44px tap targets; revoke is
+  `ConfirmDialog`.
+
+---
+
+## development/security
+
 # Security
 
 This file exists because real bank data landed in the app on 2026-08-12. The application
@@ -107,20 +132,16 @@ preload-qualified one with a weaker one.
 ## Rate limiting
 
 Better Auth's in-memory sign-in limit (3 per 10s) is adequate against a 36-character
-password from a manager, with Better Auth's public sign-up handler disabled. Database-backed
-storage would buy DoS/cost control at the price of a table and a write per auth request on
-Neon's free tier.
+password from a manager, with public sign-up disabled. Database-backed storage would
+buy DoS/cost control at the price of a table and a write per auth request on Neon's
+free tier.
 
-Invite-gated second users (`specs/2026-08-22-1204-invite-signup`) do **not** by themselves
-require that storage: invite tokens are unguessable, `/api/auth/sign-up/email` stays
-closed, and `minPasswordLength` stays 16. Revisit when any of these become true: fully
-public unauthenticated sign-up, an invite URL posted widely, or a password that is not
-from a manager on an account that can reach real data.
+Revisit when any of these become true: a second human user, public sign-up, or a
+password that is not from a manager.
 
-`minPasswordLength` is 16 in `src/lib/auth/server.ts` and `src/lib/auth/passwordPolicy.ts`
-(imported by provisioning, password change, and the login/signup forms). The shared
-constant exists because a script that hashed a 4-character password would write a row
-Better Auth then refused to sign in.
+`minPasswordLength` is 16 in both `src/lib/auth/server.ts` and
+`src/lib/auth/provision.ts`. The provision copy exists because a script that hashed a
+short password would write a row Better Auth then refused to sign in.
 
 ## Dependencies
 
@@ -133,3 +154,39 @@ production/development minor+patch. Majors stay ungrouped so they get read.
 
 `rehype-raw` stays out of `react-markdown`. Notes are a stored-XSS surface if HTML in
 a note becomes executable. See `src/components/notes/MarkdownPreviewBody.tsx`.
+
+---
+
+## development/testing
+
+See `agent-os/standards/development/testing.md`. Tripwires for this feature:
+
+- A `can_invite = false` user cannot mint
+- User B cannot list or revoke A's invites
+- Redeeming an invite does not let the new user read A's rows
+- Duplicate email on redeem does not reset the existing password
+- Revoked token is inert; prior accounts keep working
+- Change-password with the wrong current password fails; B's hash is untouched
+
+---
+
+## database/migrations
+
+See `agent-os/standards/database/migrations.md`. Generate `can_invite` + `invites`.
+If `db:generate` cannot emit `UPDATE users SET can_invite = true`, append that
+statement with a breakpoint marker and keep the snapshot.
+
+---
+
+## development/clean-code
+
+See `agent-os/standards/development/clean-code.md`. Invite/redeem/password live in
+`src/lib/auth/`. Settings and signup actions resolve the user (or not, for redeem)
+and delegate.
+
+---
+
+## components/ux-principles, responsive, modal-pattern
+
+See those files. `/signup` is the login card; inputs are 16px on phone; revoke is
+`ConfirmDialog`. Accessibility-as-compliance is still out; tap targets are not.

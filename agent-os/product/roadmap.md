@@ -501,7 +501,12 @@ View · Tools`) with an icon gutter and shortcut column; an **icon row** for the
   question. Session / dev-bypass / agent identities resolve separately — they were one
   function, which is how the local app ended up writing to a real Google Calendar with
   nobody signed in. Settings gained **Disconnect Google** and shows which account it is
-  serving. Invite UI and per-user agent API keys still open.
+  serving. Per-user agent API keys still open.
+- **✅ Invite-gated sign-up.** `specs/2026-08-22-1204-invite-signup`. Settings mints a
+  reusable link; `/signup?invite=` creates an isolated empty planner. Better Auth
+  `disableSignUp` stays true so `/api/auth/sign-up/email` cannot create accounts.
+  Self-service password change lives on Settings → Account. Per-user agent API keys
+  remain open.
 - **Sync / multi-device.** Already implied by web + Neon; polish only if friction appears.
 - **Responsive / mobile (iPhone-first).** `specs/2026-07-31-1938-responsive-mobile`. The app is
   installable as a PWA but was built as a desktop instrument — a 13px, 28px-row grid driven by

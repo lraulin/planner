@@ -3,27 +3,21 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { accounts, users } from "@/db/schema";
 import { normalizeEmail } from "@/lib/auth/identity";
+import { MIN_PASSWORD_LENGTH } from "./passwordPolicy";
+
+export { MIN_PASSWORD_LENGTH };
 
 /**
- * Account provisioning, without a sign-up endpoint.
+ * Account provisioning, without Better Auth's public sign-up endpoint.
  *
- * Public sign-up stays disabled (`disableSignUp: true` in `@/lib/auth/server`), so accounts
- * are created out of band. This module is that band: it writes the two rows Better Auth
- * needs for a credential login — the `users` row and an `accounts` row with
- * `providerId: "credential"` — and nothing else.
+ * `disableSignUp` stays true in `@/lib/auth/server`, so `/api/auth/sign-up/email` cannot
+ * create accounts. This module writes the two rows Better Auth needs for a credential
+ * login — the `users` row and an `accounts` row with `providerId: "credential"`.
  *
- * Provisioning happens a handful of times in this app's life (a test account, the owner, a
- * second person later), which is why it is a script rather than a UI. A sign-up route or an
- * admin panel would be permanent surface bought for a rare act.
+ * Two callers:
+ * - `upsertUser` / `npm run user:create` — admin path; sets `can_invite`.
+ * - `createCredentialUser` — invite redeem; `can_invite` stays false.
  */
-
-/**
- * Matches `minPasswordLength` in `@/lib/auth/server`. Enforced here too, because nothing
- * else will: a script that hashes a 4-character password writes a perfectly valid row that
- * Better Auth then refuses to sign in, and the failure surfaces at the login screen rather
- * than at the command that caused it.
- */
-export const MIN_PASSWORD_LENGTH = 16;
 
 export type UpsertUserInput = {
   email: string;
@@ -110,6 +104,7 @@ export async function upsertUser({
           email: target,
           ...(name ? { name } : {}),
           emailVerified: true,
+          canInvite: true,
           updatedAt: new Date(),
         })
         .where(eq(users.id, previousId));
@@ -126,6 +121,7 @@ export async function upsertUser({
         .set({
           ...(name ? { name } : {}),
           emailVerified: true,
+          canInvite: true,
           updatedAt: new Date(),
         })
         .where(eq(users.id, existingId));
@@ -139,6 +135,7 @@ export async function upsertUser({
           // A name is cosmetic; defaulting from the address beats requiring a flag.
           name: name ?? target.split("@")[0],
           emailVerified: true,
+          canInvite: true,
         })
         .returning({ id: users.id });
       userId = created.id;
@@ -149,6 +146,39 @@ export async function upsertUser({
   await upsertCredential(userId, password);
 
   return { id: userId, email: target, outcome: outcome ?? "updated" };
+}
+
+/**
+ * Insert a credential account that does not already exist. Invite redeem uses this so a
+ * colliding email cannot reset someone else's password the way `upsertUser` would.
+ */
+export async function createCredentialUser(input: {
+  email: string;
+  password: string;
+  name?: string;
+  canInvite?: boolean;
+}): Promise<{ id: string; email: string }> {
+  const target = normalizeEmail(input.email);
+  assertUsableEmail(target);
+  assertUsablePassword(input.password);
+
+  const existingId = await findIdByEmail(target);
+  if (existingId) {
+    throw new Error("An account with that email already exists.");
+  }
+
+  const [created] = await db
+    .insert(users)
+    .values({
+      email: target,
+      name: input.name ?? target.split("@")[0],
+      emailVerified: true,
+      canInvite: input.canInvite ?? false,
+    })
+    .returning({ id: users.id });
+
+  await upsertCredential(created.id, input.password);
+  return { id: created.id, email: target };
 }
 
 /**

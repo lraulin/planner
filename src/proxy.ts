@@ -15,6 +15,7 @@ import { buildCsp, createNonce } from "@/lib/security/csp";
  *
  * Allowed without a session cookie:
  * - `/login`
+ * - `/signup` (invite redeem; the page is public, creating an account still needs a token)
  * - `/api/auth/*` (Better Auth)
  * - `/api/agent/*` and `/api/mcp` (Bearer / OAuth checked in the route handler)
  * - `/.well-known/*` and `/api/oauth/*` (MCP OAuth discovery and token/register)
@@ -47,6 +48,7 @@ export function proxy(request: NextRequest) {
 
   if (
     pathname.startsWith("/login") ||
+    pathname.startsWith("/signup") ||
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/api/agent") ||
     pathname.startsWith("/api/mcp") ||

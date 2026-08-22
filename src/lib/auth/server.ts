@@ -44,12 +44,14 @@ export const googleConfigured = Boolean(googleProvider);
 
 /**
  * Self-run Better Auth. Tables live in our schema (see `users`, `sessions`, `accounts`,
- * `verifications`). Sign-up is disabled — the owner account is provisioned by seed/env.
+ * `verifications`). Public sign-up on this handler stays disabled — accounts are created
+ * by `npm run user:create` or by redeeming an invite (`src/lib/auth/invites.ts`), never
+ * by `POST /api/auth/sign-up/email`.
  *
  * Google is here for **linking Calendar and Contacts to an existing account**, not for
  * signing in.
- * `disableSignUp` stays on, so connecting Google to the owner account grants calendar
- * access without opening a second way to create accounts.
+ * `disableSignUp` stays on, so connecting Google grants calendar access without opening
+ * a second way to create accounts.
  */
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
@@ -85,9 +87,9 @@ export const auth = betterAuth({
      * match a real Google address. Without it, linking dies with `email_doesn't_match`.
      *
      * Safe here because linking is only ever reached from `linkSocial` by an
-     * already-authenticated user deliberately connecting their own calendar — this is a
-     * personal single-owner app, so there is no second account to be confused with. It
-     * would be the wrong setting for an app with public sign-up.
+     * already-authenticated user deliberately connecting a Google account. Invite-created
+     * accounts can link their own Google the same way. This would be the wrong setting
+     * if Google were a sign-up path; it is not.
      */
     accountLinking: {
       enabled: true,

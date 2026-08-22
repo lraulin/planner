@@ -7,7 +7,19 @@ import { disconnectGoogle, setCalendarSyncEnabled } from "@/lib/google/mutations
 import { refreshCalendarsFromGoogle } from "@/lib/google/sync";
 import { syncGoogleContacts } from "@/lib/google/contacts/sync";
 import { safeErrorMessage } from "@/lib/security/safeError";
-import { run as runAction, type ActionResult } from "../actionResult";
+import { changePassword } from "@/lib/auth/password";
+import {
+  createInvite,
+  revokeInvite,
+  serializeInvite,
+  type InviteListItem,
+} from "@/lib/auth/invites";
+import {
+  run as runAction,
+  runWithData,
+  type ActionResult,
+  type DataActionResult,
+} from "../actionResult";
 
 /**
  * Thin wrappers: resolve the user, delegate, and return `{ ok: false, error }` rather than
@@ -132,4 +144,23 @@ export async function syncGoogleContactsAction(): Promise<ActionResult> {
       ),
     };
   }
+}
+
+export async function createInviteAction(): Promise<DataActionResult<InviteListItem>> {
+  return runWithData(async (userId) => serializeInvite(await createInvite(userId)), {
+    revalidate: [],
+  });
+}
+
+export async function revokeInviteAction(inviteId: string): Promise<ActionResult> {
+  return runAction((userId) => revokeInvite(userId, inviteId), { revalidate: [] });
+}
+
+export async function changePasswordAction(
+  currentPassword: string,
+  newPassword: string,
+): Promise<ActionResult> {
+  return runAction((userId) => changePassword(userId, currentPassword, newPassword), {
+    revalidate: [],
+  });
 }

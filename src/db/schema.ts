@@ -215,6 +215,12 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   emailVerified: boolean("email_verified").notNull().default(false),
   image: text("image"),
+  /**
+   * Who may mint invite links. CLI/`upsertUser` accounts are true; accounts created by
+   * redeeming an invite are false. Existing rows are backfilled true at migration because
+   * they were all provisioned out of band.
+   */
+  canInvite: boolean("can_invite").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -300,6 +306,25 @@ export const verifications = pgTable("verifications", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * Invite links that create a new empty account. Reusable until revoked. Token is a
+ * capability secret stored like `sessions.token` so Settings can copy the URL again.
+ */
+export const invites = pgTable(
+  "invites",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    token: text("token").notNull().unique(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    useCount: integer("use_count").notNull().default(0),
+  },
+  (table) => [index("invites_user_idx").on(table.userId)],
+);
 
 /**
  * Every item in the hierarchy, of any type. Holds the tree structure plus every field

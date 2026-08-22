@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
+import { createInvite, listInvites } from "@/lib/auth/invites";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 
 import { createNode } from "@/lib/tree/mutations";
@@ -171,6 +172,7 @@ type Owned = {
   jobId: string;
   residenceId: string;
   lifeEventId: string;
+  inviteId: string;
 };
 
 const DAY = "2026-03-11";
@@ -180,6 +182,8 @@ const RANGE_TO = new Date(2026, 2, 31);
 
 async function seedOwner(): Promise<Owned> {
   const userId = await makeUser();
+  await db.update(users).set({ canInvite: true }).where(eq(users.id, userId));
+  const invite = await createInvite(userId);
 
   const areaId = await createNode({ userId, parentId: null, type: "result_area" });
   const goalId = await createNode({ userId, parentId: areaId, type: "goal" });
@@ -413,6 +417,7 @@ async function seedOwner(): Promise<Owned> {
     jobId,
     residenceId,
     lifeEventId,
+    inviteId: invite.id,
   };
 }
 
@@ -453,6 +458,9 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect((await listJobs(owner.userId)).length).toBeGreaterThan(0);
     expect((await listResidences(owner.userId)).length).toBeGreaterThan(0);
     expect((await listLifeEvents(owner.userId)).length).toBeGreaterThan(0);
+    expect((await listInvites(owner.userId)).map((row) => row.id)).toContain(
+      owner.inviteId,
+    );
     expect(
       corpusRowCount(
         await loadFindCorpus(owner.userId, FIND_SOURCE_IDS, FIND_FIELD_CLASSES),
@@ -513,6 +521,10 @@ describeDb("a second user reads none of the first user's rows", () => {
   it("resources", async () => {
     expect(await listResources(intruder)).toEqual([]);
     expect(await getResourceDetail(intruder, owner.resourceId)).toBeNull();
+  });
+
+  it("invites", async () => {
+    expect(await listInvites(intruder)).toEqual([]);
   });
 
   it("amazon order items", async () => {

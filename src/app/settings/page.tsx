@@ -2,6 +2,7 @@ import { Suspense, type ReactNode } from "react";
 import Link from "next/link";
 import { SettingsPage } from "@/components/settings/SettingsPage";
 import { getCurrentAccount } from "@/lib/auth";
+import { listInvites, serializeInvite, userCanInvite } from "@/lib/auth/invites";
 import { googleConfigured } from "@/lib/auth/server";
 import { isGoogleLinked, listCalendarLinks } from "@/lib/google/queries";
 import { getGoogleContactSync } from "@/lib/google/contacts/queries";
@@ -62,15 +63,25 @@ function SettingsPending() {
 
 async function SettingsBody({ initialSection }: { initialSection?: string }) {
   const account = await getCurrentAccount();
-  const [linked, calendars, contactSync, bankConnections, bankLinks, financeAccounts] =
-    await Promise.all([
-      isGoogleLinked(account.id),
-      listCalendarLinks(account.id),
-      getGoogleContactSync(account.id),
-      listConnections(account.id),
-      listLinks(account.id),
-      listAccounts(account.id),
-    ]);
+  const [
+    linked,
+    calendars,
+    contactSync,
+    bankConnections,
+    bankLinks,
+    financeAccounts,
+    canInvite,
+    inviteRows,
+  ] = await Promise.all([
+    isGoogleLinked(account.id),
+    listCalendarLinks(account.id),
+    getGoogleContactSync(account.id),
+    listConnections(account.id),
+    listLinks(account.id),
+    listAccounts(account.id),
+    userCanInvite(account.id),
+    listInvites(account.id),
+  ]);
 
   // Dates cross to the client component as ISO strings: a Date survives the Flight
   // serializer, but the panel only ever renders it as an age.
@@ -96,6 +107,8 @@ async function SettingsBody({ initialSection }: { initialSection?: string }) {
       googleLinked={linked}
       calendars={calendars}
       contactSyncLastSyncedAt={contactSync?.lastSyncedAt.toISOString() ?? null}
+      canInvite={canInvite}
+      invites={inviteRows.map(serializeInvite)}
     />
   );
 }

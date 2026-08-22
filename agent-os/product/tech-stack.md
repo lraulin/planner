@@ -25,9 +25,11 @@ Chosen to run at **$0** on free tiers at personal scale, with minimal ops overhe
 ## Authentication
 
 **Better Auth, self-run**, Drizzle adapter, tables in our schema (`users` + `sessions` /
-`accounts` / `verifications`). Email/password only; public sign-up disabled. Accounts are
-provisioned out of band by `npm run user:create` (create, update, or rename in place);
-`npm run db:seed` provisions only the local test account and refuses to run in production.
+`accounts` / `verifications`). Email/password only; Better Auth's public sign-up handler
+stays disabled (`disableSignUp: true`). Accounts are provisioned by `npm run user:create`
+(create, update, or rename in place) or by redeeming an invite minted in Settings
+(`specs/2026-08-22-1204-invite-signup`). `npm run db:seed` provisions only the local test
+account and refuses to run in production.
 
 Three identities are resolved separately in `src/lib/auth/identity.ts`, because collapsing
 them once meant an unauthenticated local app writing to a real Google Calendar:

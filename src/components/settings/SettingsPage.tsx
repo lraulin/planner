@@ -21,6 +21,9 @@ import {
   bulkResetScopes,
   type PreferenceGroup,
 } from "@/lib/settings/management";
+import type { InviteListItem } from "@/lib/auth/invites";
+import { ChangePasswordForm } from "./ChangePasswordForm";
+import { InvitesPanel } from "./InvitesPanel";
 import { AchieveTransferPanel } from "./AchieveTransferPanel";
 import { GoogleCalendarPanel } from "./GoogleCalendarPanel";
 import { BankSyncPanel } from "./BankSyncPanel";
@@ -73,6 +76,8 @@ type SettingsPageProps = {
   bankLinked: BankLinkedRow[];
   calendars: GoogleCalendarLink[];
   contactSyncLastSyncedAt: string | null;
+  canInvite: boolean;
+  invites: InviteListItem[];
 };
 
 function asSectionId(value: string | undefined): SectionId {
@@ -91,6 +96,8 @@ export function SettingsPage({
   bankLinked,
   calendars,
   contactSyncLastSyncedAt,
+  canInvite,
+  invites,
 }: SettingsPageProps) {
   const [sectionId, setSectionId] = useState<SectionId>(() =>
     asSectionId(initialSection),
@@ -195,7 +202,12 @@ export function SettingsPage({
           )}
           {sectionId === "import-export" && <TransferPanels />}
           {sectionId === "account" && (
-            <AccountPanel email={accountEmail} viaDevBypass={viaDevBypass} />
+            <AccountPanel
+              email={accountEmail}
+              viaDevBypass={viaDevBypass}
+              canInvite={canInvite}
+              invites={invites}
+            />
           )}
         </div>
       </main>
@@ -496,35 +508,44 @@ function TransferDisclosure({
 function AccountPanel({
   email,
   viaDevBypass,
+  canInvite,
+  invites,
 }: {
   email: string;
   viaDevBypass: boolean;
+  canInvite: boolean;
+  invites: InviteListItem[];
 }) {
   return (
-    <section className="border border-rule bg-surface">
-      <PanelHeading title="Signed-in account" />
-      <div className="px-4 py-4">
-        <p className="font-mono text-[0.875rem] text-ink">{email}</p>
-        {viaDevBypass ? (
-          <div className="mt-4 border-l-2 border-priority-b bg-priority-b/10 px-3 py-2">
-            <p className="text-[0.8125rem] font-medium text-ink">
-              Development bypass active
+    <div className="space-y-4">
+      <section className="border border-rule bg-surface">
+        <PanelHeading title="Signed-in account" />
+        <div className="px-4 py-4">
+          <p className="font-mono text-[0.875rem] text-ink">{email}</p>
+          {viaDevBypass ? (
+            <div className="mt-4 border-l-2 border-priority-b bg-priority-b/10 px-3 py-2">
+              <p className="text-[0.8125rem] font-medium text-ink">
+                Development bypass active
+              </p>
+              <p className="mt-1 text-[0.8125rem] leading-relaxed text-ink-muted">
+                No browser session selected this identity. AUTH_DEV_BYPASS serves
+                requests as this development account; Google linking still requires a
+                real sign-in.
+              </p>
+            </div>
+          ) : (
+            <p className="mt-2 text-[0.8125rem] text-ink-muted">
+              Preferences, connections, imports, and Planner records on this page belong
+              to this account.
             </p>
-            <p className="mt-1 text-[0.8125rem] leading-relaxed text-ink-muted">
-              No browser session selected this identity. AUTH_DEV_BYPASS serves requests
-              as this development account; Google linking still requires a real sign-in.
-            </p>
+          )}
+          {viaDevBypass ? null : <ChangePasswordForm />}
+          <div className="mt-5 border-t border-rule pt-4">
+            <LogoutButton className="min-h-tap w-full rounded border border-rule px-3 py-1.5 text-[0.8125rem] font-medium sm:w-auto md:min-h-0" />
           </div>
-        ) : (
-          <p className="mt-2 text-[0.8125rem] text-ink-muted">
-            Preferences, connections, imports, and Planner records on this page belong
-            to this account.
-          </p>
-        )}
-        <div className="mt-5 border-t border-rule pt-4">
-          <LogoutButton className="min-h-tap w-full rounded border border-rule px-3 py-1.5 text-[0.8125rem] font-medium sm:w-auto md:min-h-0" />
         </div>
-      </div>
-    </section>
+      </section>
+      {canInvite ? <InvitesPanel initialInvites={invites} /> : null}
+    </div>
   );
 }
