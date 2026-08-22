@@ -30,6 +30,20 @@ ambiguous, or before deliberately diverging from Achieve:
 Do not re-scrape the Effexis website unless the user asks; `docs/achieve-planner/` is the
 local source of truth.
 
+### Actual Budget reference (how zero-based budgeting works)
+
+The Finances module's envelope budget reimplements
+[Actual Budget](https://github.com/actualbudget/actual) (MIT). Its formulas are load-bearing and
+easy to get subtly wrong, so before changing any budget number:
+
+1. Read [`docs/actual-budget/README.md`](docs/actual-budget/README.md) — it maps each concern to
+   the file in `../actual` that defines it.
+2. Prefer **their semantics** over a plausible-looking reinvention. Where we diverge, the spec
+   that diverged says so.
+
+Clone the reference beside this repo (`git clone https://github.com/actualbudget/actual ../actual`);
+it is not vendored.
+
 ### Tests
 
 Full rules: `agent-os/standards/development/testing.md`. The short version, because tests
