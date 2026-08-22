@@ -846,6 +846,12 @@ period)` so money already spent stops being held twice and only going over bites
   vendor's second spelling folds into the bill that already exists, warned when the two
   series overlap rather than hand off. The URL column is a link you can click. Review moved
   to the foot of the page: it is an inbox, and the two lists it fills are the reference.
+  ✅ Register **Track as bill…** shipped 2026-08-21 —
+  `agent-os/specs/2026-08-21-1810-register-track-as-bill/`. Right-click (or Item menu)
+  a spend row to declare it as a bill, name-first, prefilled from that merchant's
+  history. The hole was that Review never sees a one-charge or semi-annual bill, and
+  the charge is already on screen in the Register. Recurring spend and alias-join stay
+  on Commitments.
   ✅ Accounts page shipped 2026-08-18 —
   `agent-os/specs/2026-08-18-0856-finance-accounts-page/`. The original register
   spec's unshipped catalog UI: `/finances/accounts` edits name, kind, institution,

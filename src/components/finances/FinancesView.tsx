@@ -6,6 +6,11 @@ import { formatUsd } from "@/lib/finances/money";
 import { FINANCE_GROUP_BY_VALUES, groupTransactions } from "@/lib/finances/grouping";
 import type { FinanceAccountRow, TransactionListRow } from "@/lib/finances/types";
 import {
+  claimedMatcherMap,
+  trackAsBillRefusal,
+  type ClaimedMatcher,
+} from "@/lib/finances/registerBillDraft";
+import {
   deleteTransactionAction,
   listAccountsAction,
   listTransactionsAction,
@@ -29,6 +34,7 @@ import { isTypingTarget } from "@/lib/keyboard";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { FinanceImportPanel } from "./FinanceImportPanel";
 import { TransactionDrawer } from "./TransactionDrawer";
+import { TrackAsBillDialog } from "./TrackAsBillDialog";
 import {
   FINANCE_COLUMN_IDS,
   financeColumns,
@@ -108,13 +114,18 @@ function AccountBalances({ accounts }: { accounts: FinanceAccountRow[] }) {
 export function FinancesView({
   initialTransactions,
   initialAccounts,
+  initialClaimed,
 }: {
   initialTransactions: TransactionListRow[];
   initialAccounts: FinanceAccountRow[];
+  initialClaimed: readonly ClaimedMatcher[];
 }) {
   const [rows, setRows] = useState(initialTransactions);
   const [accounts, setAccounts] = useState(initialAccounts);
+  const [claimed, setClaimed] = useState(initialClaimed);
   const [seenServerRows, setSeenServerRows] = useState(initialTransactions);
+  const [seenClaimed, setSeenClaimed] = useState(initialClaimed);
+  const [billRowId, setBillRowId] = useState<string | null>(null);
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
   const [groupIds, setGroupIds] = useState<readonly string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -131,10 +142,12 @@ export function FinancesView({
   const [, startTransition] = useTransition();
   const { detail: openId, setDetail: setOpenId } = useViewStateUrl();
 
-  if (initialTransactions !== seenServerRows) {
+  if (initialTransactions !== seenServerRows || initialClaimed !== seenClaimed) {
     setSeenServerRows(initialTransactions);
+    setSeenClaimed(initialClaimed);
     setRows(initialTransactions);
     setAccounts(initialAccounts);
+    setClaimed(initialClaimed);
   }
 
   const views = useModuleViews({
@@ -214,9 +227,16 @@ export function FinancesView({
     });
   }, [pendingDelete, openId, closeDrawer, refresh]);
 
+  const claimedByMerchant = useMemo(() => claimedMatcherMap(claimed), [claimed]);
+
   const capabilitiesFor = useCallback(
-    (rowId: string | null, count: number) =>
-      catalogCapabilities({
+    (rowId: string | null, count: number) => {
+      const row = rowId ? rows.find((entry) => entry.id === rowId) : undefined;
+      const cannotTrack =
+        rowId === null
+          ? "Select a row first"
+          : trackAsBillRefusal(row, claimedByMerchant);
+      return catalogCapabilities({
         // A transaction is not typed in, it arrives from the bank — so the catalog's
         // "make a new one" verb is the import, not a blank row.
         createLabel: "Import transactions…",
@@ -224,13 +244,31 @@ export function FinancesView({
         selection: {
           id: rowId,
           count,
-          label: rows.find((entry) => entry.id === rowId)?.description,
+          label: row?.description,
         },
         onCreate: openImport,
         onOpen: openDrawer,
         onDelete: requestDelete,
-      }),
-    [rows, openImport, openDrawer, requestDelete],
+        pageCommands: [
+          {
+            id: "record.track-as-bill",
+            label: "Track as bill…",
+            group: "record",
+            menu: "item",
+            section: "Item",
+            icon: "convert",
+            rowMenu: true,
+            keywords: "bill subscription recurring declare",
+            disabled: Boolean(cannotTrack),
+            title: cannotTrack ?? undefined,
+            run: () => {
+              if (rowId && !cannotTrack) setBillRowId(rowId);
+            },
+          },
+        ],
+      });
+    },
+    [rows, claimedByMerchant, openImport, openDrawer, requestDelete],
   );
 
   const commandCapabilities = useMemo(
@@ -330,6 +368,17 @@ export function FinancesView({
         <FinanceImportPanel embedded />
       </FileImportDialog>
 
+      {billRowId && (
+        <TrackAsBillDialog
+          rows={rows}
+          selectedId={billRowId}
+          onClose={() => setBillRowId(null)}
+          onSaved={(entry) => {
+            setClaimed((current) => [...current, entry]);
+            setBillRowId(null);
+          }}
+        />
+      )}
       <TransactionDrawer
         transactionId={openId}
         onClose={closeDrawer}
