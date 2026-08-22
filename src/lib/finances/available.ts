@@ -148,6 +148,11 @@ export type BillCharge = {
   name: string;
   /** `YYYY-MM-DD`. */
   dateKey: string;
+  /**
+   * Positive cost of the charge, when the caller has it. Used for the observed amount
+   * range on a swingy bill. Accrual itself only needs the date.
+   */
+  costCents?: number;
 };
 
 export type CashPosition = {

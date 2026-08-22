@@ -990,6 +990,18 @@ describeDb("subscription status", () => {
     });
   });
 
+  it("pauses a bill without cancelling it, and unpausing restores it", async () => {
+    await setSubscriptionStatus(userId, "Paramount+", "paused");
+    expect((await loadRecurringBills(userId))[0]).toMatchObject({
+      status: "paused",
+      cancelledOn: null,
+      expectedCents: 1299,
+    });
+
+    await setSubscriptionStatus(userId, "Paramount+", "active");
+    expect((await loadRecurringBills(userId))[0].status).toBe("active");
+  });
+
   it("does not let a second user change another user's status", async () => {
     const intruderId = await makeUser();
     await expect(

@@ -414,6 +414,13 @@
       "when": 1787327044612,
       "tag": "0058_rename_cancel_url",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1787361985669,
+      "tag": "0059_lean_major_mapleleaf",
+      "breakpoints": true
     }
   ]
 }

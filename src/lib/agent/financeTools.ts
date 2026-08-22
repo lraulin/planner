@@ -644,7 +644,7 @@ export async function upsertSubscriptionTool(
         args.expectedCents === null ? null : optionalNumber(args, "expectedCents"),
       anchorDate: args.anchorDate === null ? null : optionalString(args, "anchorDate"),
       status: optionalString(args, "status") as
-        "active" | "cancelled" | "ignored" | undefined,
+        "active" | "paused" | "cancelled" | "ignored" | undefined,
       url: optionalString(args, "url"),
       scheduled: args.scheduled === undefined ? undefined : args.scheduled === true,
       dueDay: args.dueDay === null ? null : optionalNumber(args, "dueDay"),

@@ -278,7 +278,11 @@ export async function loadDashboard(userId: string): Promise<DashboardData> {
     if (ref === undefined) continue;
 
     if (ref.kind === "bill" && billNames.has(ref.name)) {
-      billCharges.push({ name: ref.name, dateKey: row.transactionDate });
+      billCharges.push({
+        name: ref.name,
+        dateKey: row.transactionDate,
+        costCents: spendCentsOf(row),
+      });
       continue;
     }
     if (ref.kind === "spend" && spendNames.has(ref.name)) {

@@ -226,8 +226,8 @@ describeDb("loadDashboard", () => {
     expect(data.bills[0]).toMatchObject({ dueDay: 9 });
     // Only charges against a declared merchant — the Walmart row is not one.
     expect(data.billCharges).toEqual([
-      { name: "SimpliSafe", dateKey: "2026-03-09" },
-      { name: "SimpliSafe", dateKey: "2026-04-09" },
+      { name: "SimpliSafe", dateKey: "2026-03-09", costCents: 3471 },
+      { name: "SimpliSafe", dateKey: "2026-04-09", costCents: 3471 },
     ]);
   });
 

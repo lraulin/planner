@@ -1,0 +1,2 @@
+ALTER TABLE "finance_recurring_bills" DROP CONSTRAINT "finance_recurring_bills_status";--> statement-breakpoint
+ALTER TABLE "finance_recurring_bills" ADD CONSTRAINT "finance_recurring_bills_status" CHECK ("finance_recurring_bills"."status" in ('active', 'paused', 'cancelled', 'ignored'));

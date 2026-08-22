@@ -78,6 +78,17 @@ export function formatUsd(cents: number | null): string {
 }
 
 /**
+ * Whole dollars: `$150`, `-$540`. A range is already an admission the figure is soft;
+ * printing it to the cent argues with itself.
+ */
+export function formatUsdWhole(cents: number | null): string {
+  if (cents === null || !Number.isFinite(cents)) return "";
+  const negative = cents < 0;
+  const dollars = Math.round(Math.abs(cents) / CENTS_PER_DOLLAR);
+  return `${negative ? "-" : ""}$${dollars.toLocaleString("en-US")}`;
+}
+
+/**
  * Money at chart scale: `$2.1k`, `-$450`, `$0`.
  *
  * Cents on an axis label are noise — nobody reads a y-axis to the penny, and eight

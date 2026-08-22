@@ -105,6 +105,7 @@ function NotHeld({ reason }: { reason: string }) {
  */
 function BillSetAside({ row }: { row: BillRow }) {
   if (row.held === null) {
+    if (row.status === "paused") return <NotHeld reason="Paused" />;
     if (row.status === "cancelled") return <NotHeld reason="Cancelled" />;
     if (row.status === "ignored") return <NotHeld reason="Dismissed" />;
     return <NotHeld reason="Needs an amount" />;
@@ -209,6 +210,7 @@ function dollarsInput(
 /** How to name a bill's hold in a filter chip — the same five words the cell shows. */
 function billHoldState(row: BillRow): string {
   if (row.held === null) {
+    if (row.status === "paused") return "Paused";
     if (row.status === "cancelled") return "Cancelled";
     if (row.status === "ignored") return "Dismissed";
     return "Needs an amount";
@@ -344,6 +346,7 @@ export const billColumns: ColumnDef<BillColumnCtx, BillGridRow>[] = [
         className="min-h-tap rounded border border-rule bg-surface px-1 text-base text-ink md:min-h-0 md:text-[0.8125rem]"
       >
         <option value="active">Active</option>
+        <option value="paused">Paused</option>
         <option value="cancelled">Cancelled</option>
         {/* The word the Review list's button uses. Picking it moves the row into Review's
             dismissed list, which is where it can be brought back. */}

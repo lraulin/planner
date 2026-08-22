@@ -852,6 +852,12 @@ period)` so money already spent stops being held twice and only going over bites
   history. The hole was that Review never sees a one-charge or semi-annual bill, and
   the charge is already on screen in the Register. Recurring spend and alias-join stay
   on Commitments.
+  ✅ Paused bills + assignment bar shipped 2026-08-21 —
+  `agent-os/specs/2026-08-21-2038-paused-bills-assignment/`. Status `paused` holds
+  nothing (the house-move case) without cancelling. Unscheduled bills no longer grow a
+  fake due date on the dashboard. Available to spend draws its terms as a stacked bar
+  against checking, splitting out rent when it is most of the hold. Catch-up accrual
+  is unchanged. **Envelopes stay closed.**
   ✅ Accounts page shipped 2026-08-18 —
   `agent-os/specs/2026-08-18-0856-finance-accounts-page/`. The original register
   spec's unshipped catalog UI: `/finances/accounts` edits name, kind, institution,

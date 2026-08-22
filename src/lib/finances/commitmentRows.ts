@@ -15,7 +15,41 @@ import {
   type StoredSpend,
 } from "./commitments";
 import { PAYCHECKS_PER_YEAR } from "./classify/income";
+import { formatUsd, formatUsdWhole } from "./money";
 import { annualCents, cadenceOf } from "./recurringBills";
+
+/**
+ * Same 25% band the recurring detector uses (`analytics.ts`). A range is an admission that
+ * the stated amount is soft; printing one for MetLife ($100.24 twelve times) would argue
+ * with a figure that is already a fact.
+ */
+const AMOUNT_SPREAD_RATIO = 0.25;
+
+/**
+ * Observed min–max of a bill's charges, or null when the spread is too tight to mention.
+ *
+ * `(high − low) / high` rather than standard deviation: two fills of $336 and $540 should
+ * show as a range even though n=2 makes stddev a poor story, and a 16% Geico swing stays
+ * under the band.
+ */
+export function observedAmountRange(
+  amounts: readonly number[],
+): { lowCents: number; highCents: number } | null {
+  if (amounts.length < 2) return null;
+  const lowCents = Math.min(...amounts);
+  const highCents = Math.max(...amounts);
+  if (highCents <= 0) return null;
+  if ((highCents - lowCents) / highCents <= AMOUNT_SPREAD_RATIO) return null;
+  return { lowCents, highCents };
+}
+
+/** Whole-dollar range for a swingy bill: `$150–$540`. */
+export function amountRangeLabel(range: {
+  lowCents: number;
+  highCents: number;
+}): string {
+  return `${formatUsdWhole(range.lowCents)}–${formatUsdWhole(range.highCents)}`;
+}
 
 /**
  * What the Commitments grids and the dashboard panels both show for one commitment.
@@ -54,6 +88,11 @@ export type BillRow = StoredBillRow & {
   /** The accrual, or null when nothing is being held back. */
   held: SetAside | null;
   /**
+   * Observed min–max of matched charges when the spread exceeds 25% of the dearest
+   * charge. Null when history is tight, a single fill, or the amounts were not supplied.
+   */
+  amountRange: { lowCents: number; highCents: number } | null;
+  /**
    * The charge being accrued for was due before today and has not posted.
    *
    * Worth its own field rather than a comparison at each call site: the accrual reaching its
@@ -62,6 +101,30 @@ export type BillRow = StoredBillRow & {
    */
   overdue: boolean;
 };
+
+/**
+ * Caption under a dashboard bill row. Unscheduled bills must not grow a due date — a
+ * projected date reads as knowledge (`2026-08-14-1104-unscheduled-bills`).
+ */
+export function billHoldCaption(
+  row: Pick<BillRow, "scheduled" | "held" | "amountRange">,
+  todayKey: string | null,
+  formatDate: (key: string) => string,
+): string {
+  if (row.held === null) return "";
+  const parts = [
+    `${formatUsd(row.held.perPaycheckCents)} per paycheck of ${formatUsd(row.held.expectedCents)}`,
+  ];
+  if (row.scheduled) {
+    parts.push(`due ${formatDate(row.held.nextDueKey)}`);
+    if (todayKey !== null && row.held.nextDueKey < todayKey) parts.push("overdue");
+  } else {
+    parts.push("unscheduled");
+  }
+  if (row.amountRange) parts.push(amountRangeLabel(row.amountRange));
+  if (row.held.fullyFunded) parts.push("fully set aside");
+  return parts.join(" · ");
+}
 
 export type SpendRow = StoredSpend & {
   rate: SpendRate;
@@ -85,9 +148,10 @@ function lastChargeOn(name: string, charges: readonly BillCharge[]): string | nu
 /**
  * The bills tier, with its accrual resolved.
  *
- * **`status === "active"` is the entire gate**, because `setAsideHeld` already declines a bill
- * with no declared amount. A cancelled or dismissed bill keeps its history and its annual
- * figure — both still worth reading — and holds nothing.
+ * **`status === "active"` is the entire hold gate**, because `setAsideHeld` already declines a
+ * bill with no declared amount. Paused, cancelled, and dismissed bills keep their history
+ * and their annual figure — both still worth reading — and hold nothing. Pause is the one
+ * that stays on the grid: still a commitment, not subtracted from available.
  *
  * `todayKey` null is the pre-hydration state: no date means no accrual and no due date, rather
  * than an accrual computed against the server's idea of today.
@@ -118,6 +182,13 @@ export function billRows(
           ? null
           : billAnchor(bill, lastPosted, todayKey).nextDueKey,
       held,
+      amountRange: observedAmountRange(
+        charges.flatMap((charge) =>
+          charge.name === bill.name && charge.costCents !== undefined
+            ? [charge.costCents]
+            : [],
+        ),
+      ),
       overdue: held !== null && todayKey !== null && held.nextDueKey < todayKey,
     };
   });

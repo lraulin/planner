@@ -922,7 +922,7 @@ export async function deleteRecurringSpend(
 }
 
 /**
- * Cancel, ignore, or revive a subscription.
+ * Pause, cancel, dismiss, or revive a subscription.
  *
  * A dedicated write rather than another `upsertRecurringBill` so the dashboard's "still
  * active?" prompt cannot accidentally clear the amount or cadence on the way through — it

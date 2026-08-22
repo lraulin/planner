@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   activeBillTotals,
+  amountRangeLabel,
+  billHoldCaption,
   billRows,
   heldSetAsides,
   heldSpend,
+  observedAmountRange,
   spendRows,
 } from "./commitmentRows";
 import type { BillCharge } from "./available";
@@ -84,15 +87,26 @@ describe("billRows", () => {
     expect(row.held?.perPaycheckCents).toBe(105_000);
   });
 
-  it("holds nothing for a cancelled or dismissed bill, but keeps its cost on the books", () => {
-    // The status filter used to live in each component. If it goes missing, a cancelled
-    // subscription quietly keeps deducting from the headline and nothing on screen says so.
-    for (const status of ["cancelled", "ignored"] as const) {
+  it("holds nothing for a paused, cancelled or dismissed bill, but keeps its cost on the books", () => {
+    // Pause is the house-move case: still on the grid, not subtracted from available. If
+    // this gate misses paused, propane keeps deducting after you said you might not pay it.
+    for (const status of ["paused", "cancelled", "ignored"] as const) {
       const [row] = billRows([bill({ status })], CHARGES, PAYDAYS, "2026-05-10");
 
       expect(row.held).toBeNull();
       expect(row.annualCostCents).toBe(7188);
     }
+  });
+
+  it("does not count a paused bill in leftover-after-commitments", () => {
+    const rows = billRows(
+      [bill(), bill({ id: "bill-2", name: "Gas (Taylor)", status: "paused" })],
+      CHARGES,
+      PAYDAYS,
+      "2026-05-10",
+    );
+    expect(heldSetAsides(rows).map((entry) => entry.name)).toEqual(["1Password"]);
+    expect(activeBillTotals(rows).annualCents).toBe(7188);
   });
 
   it("holds nothing for a bill with no declared amount", () => {
@@ -175,5 +189,64 @@ describe("spendRows", () => {
     const [row] = spendRows([spendEntry()], charges, null, null);
 
     expect(row.held).toBeNull();
+  });
+});
+
+describe("observedAmountRange", () => {
+  it("prints a range when fills swing more than 25%", () => {
+    expect(observedAmountRange([15000, 37932, 53995, 33583])).toEqual({
+      lowCents: 15000,
+      highCents: 53995,
+    });
+    expect(amountRangeLabel({ lowCents: 15000, highCents: 53995 })).toBe("$150–$540");
+  });
+
+  it("stays quiet for a tight bill, or a single charge", () => {
+    expect(observedAmountRange([10024, 10024, 10024])).toBeNull();
+    expect(observedAmountRange([70004, 81204])).toBeNull();
+    expect(observedAmountRange([33583])).toBeNull();
+  });
+});
+
+describe("billHoldCaption", () => {
+  const rentHeld = {
+    name: "Rent",
+    expectedCents: 210_000,
+    perPaycheckCents: 105_000,
+    heldCents: 210_000,
+    fullyFunded: true,
+    periodStartKey: "2026-07-31",
+    nextDueKey: "2026-08-31",
+  };
+
+  it("names a due date only when the bill is scheduled", () => {
+    expect(
+      billHoldCaption(
+        { scheduled: true, held: rentHeld, amountRange: null },
+        "2026-08-21",
+        (key) => key,
+      ),
+    ).toContain("due 2026-08-31");
+    const unscheduled = billHoldCaption(
+      { scheduled: false, held: rentHeld, amountRange: null },
+      "2026-08-21",
+      (key) => key,
+    );
+    expect(unscheduled).toMatch(/unscheduled/);
+    expect(unscheduled).not.toMatch(/due /);
+  });
+
+  it("appends the observed range on a swingy unscheduled bill", () => {
+    expect(
+      billHoldCaption(
+        {
+          scheduled: false,
+          held: rentHeld,
+          amountRange: { lowCents: 15000, highCents: 53995 },
+        },
+        "2026-08-21",
+        (key) => key,
+      ),
+    ).toContain("$150–$540");
   });
 });

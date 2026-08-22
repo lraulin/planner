@@ -40,7 +40,7 @@ export type DeclaredBill = {
    * Live, cancelled, or never a commitment. Absent means `active`, so existing fixtures
    * and the narrower analytics callers keep working.
    */
-  status?: "active" | "cancelled" | "ignored";
+  status?: "active" | "paused" | "cancelled" | "ignored";
   /** The period `expectedCents` covers, in months. Ignored when `cadenceDays` is set. */
   cadenceMonths: number;
   /**

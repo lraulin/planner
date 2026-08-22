@@ -2324,14 +2324,19 @@ export const financeStatementRates = pgTable(
 );
 
 /**
- * Whether a declared bill is still live, cancelled, or was never a commitment at all.
+ * Whether a declared bill is still live, paused, cancelled, or was never a commitment at all.
  *
  * A `const` tuple rather than a `pgEnum` so the column can be a `text` + CHECK: adding a value
  * to a Postgres enum needs `ALTER TYPE … ADD VALUE`, which fails outright on Neon's
  * transaction-mode pooler (see `financeAccountKindEnum`). The tuple still gives the column a
  * literal TypeScript type and gives `z.enum()` its members, so nothing is lost but the risk.
  */
-export const COMMITMENT_STATUSES = ["active", "cancelled", "ignored"] as const;
+export const COMMITMENT_STATUSES = [
+  "active",
+  "paused",
+  "cancelled",
+  "ignored",
+] as const;
 export type CommitmentStatus = (typeof COMMITMENT_STATUSES)[number];
 
 /** The period a recurring-spend rate is quoted in. Same text + CHECK reasoning as above. */
@@ -2405,15 +2410,19 @@ export const financeRecurringBills = pgTable(
      * `cancelled` keeps the row and its history but stops every forward-looking figure — the
      * accrual, the forecast, the annual total. `ignored` is the different admission that
      * detection proposed something which was never a commitment at all, and suppresses it from
-     * the review list permanently. Two states would force those into one bucket, and a year
-     * later nobody could tell "I cancelled Paramount+" from "that was never a subscription".
+     * the review list permanently. `paused` is the house-move case: still a commitment, still
+     * on the grid, not held — so available-to-spend stops subtracting it without pretending
+     * it was never a bill. Two states would force those into one bucket, and a year later
+     * nobody could tell "I cancelled Paramount+" from "that was never a subscription" from
+     * "propane, if I still live here".
      *
      * **This column is also the whole answer to "is it budgeted".** A `set_aside` flag sat
      * beside it until 2026-08-18, from the era when declaring a bill only meant keeping it off
      * the review list. Once `status` existed it covered every reason to opt out — not a
-     * commitment is `ignored`, no longer charged is `cancelled`, amount unknown accrues nothing
-     * on its own — so the flag was two ways to say one thing and the user could not tell from
-     * the screen which one was in force. Active with an amount is held; that is the rule.
+     * commitment is `ignored`, no longer charged is `cancelled`, might not pay is `paused`,
+     * amount unknown accrues nothing on its own — so the flag was two ways to say one thing
+     * and the user could not tell from the screen which one was in force. Active with an
+     * amount is held; that is the rule.
      *
      * Text with a CHECK rather than a `pgEnum`, for the reason recorded at
      * `financeAccountKindEnum`: `ALTER TYPE … ADD VALUE` fails on Neon's transaction-mode
@@ -2533,7 +2542,7 @@ export const financeRecurringBills = pgTable(
     ),
     check(
       "finance_recurring_bills_status",
-      sql`${table.status} in ('active', 'cancelled', 'ignored')`,
+      sql`${table.status} in ('active', 'paused', 'cancelled', 'ignored')`,
     ),
   ],
 );

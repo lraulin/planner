@@ -21,6 +21,7 @@ function bill(over: Partial<BillRow> & Pick<BillRow, "id" | "name">): BillRow {
     monthlyCents: 1000,
     paycheckCents: 462,
     held: null,
+    amountRange: null,
     overdue: false,
     ...over,
   };

@@ -21,11 +21,14 @@ import {
   type SetAside,
   type SpendHeld,
 } from "@/lib/finances/available";
+import { assignmentBreakdown } from "@/lib/finances/assignment";
 import {
+  billHoldCaption,
   billRows,
   heldSetAsides,
   heldSpend,
   spendRows,
+  type BillRow,
 } from "@/lib/finances/commitmentRows";
 import type { Payday } from "@/lib/finances/classify/income";
 import { buildPayPeriods } from "@/lib/finances/classify/payPeriods";
@@ -126,9 +129,8 @@ export function DashboardView({
 
     // The same builders the Commitments grids use, so "which commitments are held back" has
     // one answer rather than one per page.
-    const setAsides: SetAside[] = heldSetAsides(
-      billRows(bills, billCharges, paydays, today),
-    );
+    const resolvedBills = billRows(bills, billCharges, paydays, today);
+    const setAsides: SetAside[] = heldSetAsides(resolvedBills);
     const spendHeld: SpendHeld[] = heldSpend(
       spendRows(spend, spendCharges, today, payday.dateKey),
     );
@@ -165,6 +167,7 @@ export function DashboardView({
       spendHeld,
       stale,
       scorecard,
+      resolvedBills,
       available: availableToSpend(accounts, pending, setAsides, spendHeld),
     };
   }, [
@@ -183,8 +186,20 @@ export function DashboardView({
   const unpricedBillCount = bills.filter(
     (bill) => bill.status === "active" && (bill.expectedCents ?? 0) <= 0,
   ).length;
-  const { available, position, payday, setAsides, spendHeld, stale, scorecard } =
-    analysis;
+  const {
+    available,
+    position,
+    payday,
+    setAsides,
+    spendHeld,
+    stale,
+    scorecard,
+    resolvedBills,
+  } = analysis;
+  const assignment = assignmentBreakdown(available, setAsides);
+  const heldBills = resolvedBills.filter(
+    (row): row is BillRow & { held: NonNullable<BillRow["held"]> } => row.held !== null,
+  );
   const openAccounts = accounts.filter((account) => account.closedAt === null);
 
   return (
@@ -209,6 +224,8 @@ export function DashboardView({
 
         {/* The arithmetic, not a restatement of it: these terms come back from the same call
             that produced the headline, so a breakdown cannot disagree with its own total. */}
+        <AssignmentBar breakdown={assignment} />
+
         <dl className="mt-3 flex flex-col gap-1 border-t border-rule pt-2">
           {available.terms.map((term) => (
             <div key={term.label} className="flex items-baseline justify-between gap-3">
@@ -272,7 +289,7 @@ export function DashboardView({
           title="Bills"
           subtitle="A slice of each one, out of every paycheck, until the charge lands"
         >
-          {setAsides.length === 0 ? (
+          {heldBills.length === 0 ? (
             <PanelEmpty>
               Nothing set aside yet. Declare a bill with its cost on{" "}
               <Link href="/finances/commitments">Commitments</Link> and a slice of it
@@ -280,28 +297,28 @@ export function DashboardView({
             </PanelEmpty>
           ) : (
             <ul className="flex flex-col gap-2">
-              {setAsides.map((entry) => (
-                <li
-                  key={entry.name}
-                  className="border-b border-rule pb-2 last:border-b-0"
-                >
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span className="truncate text-[0.8125rem] text-ink">
-                      {entry.name}
-                    </span>
-                    <span className="tabular flex-none text-[0.875rem] text-ink">
-                      {formatUsd(entry.heldCents)}
-                    </span>
-                  </div>
-                  <div className="text-[0.75rem] text-ink-muted">
-                    {formatUsd(entry.perPaycheckCents)} per paycheck of{" "}
-                    {formatUsd(entry.expectedCents)} · due{" "}
-                    {formatDate(entry.nextDueKey)}
-                    {entry.fullyFunded && " · fully set aside"}
-                    {today !== null && entry.nextDueKey < today && " · overdue"}
-                  </div>
-                </li>
-              ))}
+              {heldBills.map((row) => {
+                const held = row.held;
+                if (held === null) return null;
+                return (
+                  <li
+                    key={row.name}
+                    className="border-b border-rule pb-2 last:border-b-0"
+                  >
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="truncate text-[0.8125rem] text-ink">
+                        {row.name}
+                      </span>
+                      <span className="tabular flex-none text-[0.875rem] text-ink">
+                        {formatUsd(held.heldCents)}
+                      </span>
+                    </div>
+                    <div className="text-[0.75rem] text-ink-muted">
+                      {billHoldCaption(row, today, formatDate)}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </Panel>
@@ -448,6 +465,62 @@ export function DashboardView({
       </Panel>
 
       <CapOnePendingPaste />
+    </div>
+  );
+}
+
+function AssignmentBar({
+  breakdown,
+}: {
+  breakdown: ReturnType<typeof assignmentBreakdown>;
+}) {
+  const claims = breakdown.segments.filter((segment) => segment.role === "claim");
+  const scale = breakdown.scaleCents;
+  if (claims.length === 0 && breakdown.checkingCents === 0) return null;
+
+  return (
+    <div className="mt-3 flex flex-col gap-1.5">
+      <div className="relative h-3 w-full overflow-hidden rounded-sm bg-rule">
+        <div className="flex h-full w-full">
+          {claims.map((segment, index) => (
+            <div
+              key={segment.label}
+              title={`${segment.label} ${formatUsd(segment.cents)}`}
+              className="h-full min-w-0"
+              style={{
+                width: `${(segment.cents / scale) * 100}%`,
+                background: `var(--chart-cat-${(index % 7) + 1})`,
+              }}
+            />
+          ))}
+        </div>
+        <div
+          className="pointer-events-none absolute inset-y-0 w-px bg-ink"
+          style={{
+            left: `${Math.min(100, (breakdown.checkingCents / scale) * 100)}%`,
+          }}
+          title={`Checking & cash ${formatUsd(breakdown.checkingCents)}`}
+        />
+      </div>
+      <ul className="flex flex-wrap gap-x-3 gap-y-0.5 text-[0.7rem] leading-snug text-ink-muted">
+        {claims.map((segment, index) => (
+          <li key={segment.label} className="flex items-center gap-1">
+            <span
+              className="inline-block size-1.5 shrink-0 rounded-sm"
+              style={{ background: `var(--chart-cat-${(index % 7) + 1})` }}
+            />
+            {segment.label}
+          </li>
+        ))}
+        {breakdown.shortfallCents > 0 && (
+          <li className="text-[var(--chart-spend)]">
+            Shortfall {formatUsd(breakdown.shortfallCents)}
+          </li>
+        )}
+        {breakdown.leftoverCents > 0 && (
+          <li>Left to spend {formatUsd(breakdown.leftoverCents)}</li>
+        )}
+      </ul>
     </div>
   );
 }

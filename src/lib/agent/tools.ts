@@ -630,7 +630,7 @@ const definitions: AgentToolDefinition[] = [
     domain: "finances",
     summary: "Create or correct a subscription or bill.",
     useWhen:
-      "Use to declare a bill, rename its matchers, set the amount, or mark it cancelled.",
+      "Use to declare a bill, rename its matchers, set the amount, or mark it paused, cancelled, or dismissed.",
     avoidWhen: "Use upsert_recurring_spend for pizza and groceries.",
     returns: "The saved bill's name, matchers, and status.",
     effects: safeWrite,
@@ -863,7 +863,7 @@ const fieldDescriptions: Record<string, string> = {
   expectedCents: "Stated amount in integer cents. Null means derive from history.",
   anchorDate:
     "YYYY-MM-DD the next-due walk starts from when history does not reach it.",
-  status: "active, cancelled, or ignored.",
+  status: "active, paused, cancelled, or ignored.",
   url: "Where the bill is managed — account, billing or cancel page. Stored, never followed.",
   scheduled: "Whether the dates are predictable. False for propane.",
   dueDay: "Day of the period the charge is expected, 1-31.",

@@ -829,7 +829,7 @@ export const inputSchemas = {
     category: z.string().optional(),
     expectedCents: z.number().int().nullable().optional(),
     anchorDate: dateKey.nullable().optional(),
-    status: z.enum(["active", "cancelled", "ignored"]).optional(),
+    status: z.enum(["active", "paused", "cancelled", "ignored"]).optional(),
     url: z.string().optional(),
     scheduled: z.boolean().optional(),
     dueDay: z.number().int().min(1).max(31).nullable().optional(),
@@ -1252,7 +1252,7 @@ export const outputSchemas = {
       z.strictObject({
         name: z.string(),
         matchers: z.array(z.string()),
-        status: z.enum(["active", "cancelled", "ignored"]),
+        status: z.enum(["active", "paused", "cancelled", "ignored"]),
         cadence: z.string(),
         expectedCents: cents.nullable(),
         annualCents: cents,
@@ -1278,7 +1278,7 @@ export const outputSchemas = {
   upsert_subscription: z.strictObject({
     name: z.string(),
     matchers: z.array(z.string()),
-    status: z.enum(["active", "cancelled", "ignored"]),
+    status: z.enum(["active", "paused", "cancelled", "ignored"]),
   }),
   upsert_recurring_spend: z.strictObject({
     name: z.string(),

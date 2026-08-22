@@ -3,6 +3,7 @@ import {
   centsToNumericString,
   formatUsd,
   formatUsdCompact,
+  formatUsdWhole,
   numericStringToCents,
   parseAmountCents,
   sumCents,
@@ -80,6 +81,14 @@ describe("formatUsd", () => {
 
   it("renders nothing for a missing amount", () => {
     expect(formatUsd(null)).toBe("");
+  });
+});
+
+describe("formatUsdWhole", () => {
+  it("rounds to dollars, because a range to the cent argues with itself", () => {
+    expect(formatUsdWhole(15000)).toBe("$150");
+    expect(formatUsdWhole(53995)).toBe("$540");
+    expect(formatUsdWhole(-33583)).toBe("-$336");
   });
 });
 

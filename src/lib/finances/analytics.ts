@@ -582,7 +582,7 @@ function billStatusOf(bill: DeclaredBill): NonNullable<DeclaredBill["status"]> {
   return bill.status ?? "active";
 }
 
-/** Active bills only — cancelled and ignored stop levelling, forecasting, and accrual. */
+/** Active bills only — paused, cancelled and ignored stop levelling, forecasting, and accrual. */
 function activeBills(bills: readonly DeclaredBill[]): DeclaredBill[] {
   return bills.filter((bill) => billStatusOf(bill) === "active");
 }
@@ -1149,7 +1149,7 @@ export type RecurringMerchant = {
    */
   scheduled: boolean;
   /** Declared bills carry status so cancelled history can stay visible without being costed. */
-  status: "active" | "cancelled" | "ignored";
+  status: "active" | "paused" | "cancelled" | "ignored";
   /**
    * Which tier this looks like, and nothing more than a suggestion.
    *

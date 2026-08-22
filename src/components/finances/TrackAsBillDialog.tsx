@@ -70,6 +70,7 @@ function TrackAsBillForm({
   const [amount, setAmount] = useState((seed.expectedCents / 100).toFixed(2));
   const [next, setNext] = useState(seed.nextDueKey);
   const [nextTouched, setNextTouched] = useState(false);
+  const [scheduled, setScheduled] = useState(true);
   const cents = Math.round(Number(amount.replace(/[$,\s]/g, "")) * 100);
 
   function changeCadence(value: Cadence) {
@@ -91,8 +92,8 @@ function TrackAsBillForm({
               matchers: [seed.merchant],
               cadence,
               expectedCents: cents > 0 ? cents : null,
-              anchorDate: next || null,
-              scheduled: true,
+              anchorDate: scheduled ? next || null : null,
+              scheduled,
             });
             if (!result.ok) {
               setError(result.error);
@@ -147,19 +148,30 @@ function TrackAsBillForm({
             className={`${FIELD} w-28 text-right`}
           />
         </label>
-        <label className="flex flex-col gap-1 text-[0.75rem] text-ink-muted">
-          Next charge
+        <label className="flex items-center gap-2 text-[0.8125rem] text-ink">
           <input
-            type="date"
-            value={next}
-            onChange={(event) => {
-              setNextTouched(true);
-              setNext(event.target.value);
-            }}
-            aria-label="Next charge for this bill"
-            className={FIELD}
+            type="checkbox"
+            checked={!scheduled}
+            onChange={(event) => setScheduled(!event.target.checked)}
+            className="size-4"
           />
+          Dates are unpredictable
         </label>
+        {scheduled && (
+          <label className="flex flex-col gap-1 text-[0.75rem] text-ink-muted">
+            Next charge
+            <input
+              type="date"
+              value={next}
+              onChange={(event) => {
+                setNextTouched(true);
+                setNext(event.target.value);
+              }}
+              aria-label="Next charge for this bill"
+              className={FIELD}
+            />
+          </label>
+        )}
 
         {error && <p className="text-[0.75rem] text-priority-a">{error}</p>}
 
