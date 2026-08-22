@@ -2103,6 +2103,22 @@ export const financeAccounts = pgTable(
     externalKey: text("external_key").notNull(),
     /** Set when the account stops being live. Rows stay; the register can hide them. */
     closedAt: timestamp("closed_at", { withTimezone: true }),
+    /**
+     * Keep this account out of the envelope budget entirely — its balance is not money to
+     * assign and its transactions are not budget activity
+     * (`agent-os/specs/2026-08-22-1948-zero-based-budget/` D3).
+     *
+     * On-budget is checking, cash and credit cards: the user's stated model is that cards are
+     * a way of spending checking money, paid in full monthly, so a card purchase is ordinary
+     * categorised spending and a card payment is a budget-neutral transfer between two
+     * on-budget accounts. Savings, investments and loans are off, which is the same exclusion
+     * `SPENDABLE_KINDS` already applies to Available to Spend.
+     *
+     * A stored column rather than a function of `kind`, because the mapping is a default and
+     * not a law: the first savings account someone actually spends out of would otherwise
+     * need a code change. The migration seeds it from `kind`; after that it is the user's.
+     */
+    offBudget: boolean("off_budget").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -2220,12 +2236,37 @@ export const financeTransactions = pgTable(
      * (`agent-os/specs/2026-08-18-2005-period-result/` D5).
      */
     plannedWithdrawal: boolean("planned_withdrawal").notNull().default(false),
+    /**
+     * Which envelope this row spends from, in the zero-based budget
+     * (`agent-os/specs/2026-08-22-1948-zero-based-budget/` D6).
+     *
+     * **A second, orthogonal axis to `category`** — not a replacement for it. `category` /
+     * `derivedCategory` answer "what was this bought for" against a fixed code taxonomy that
+     * every Insights chart is built on; this answers "whose money paid for it" against a
+     * hierarchy the user creates and renames. Many spending categories routinely map to one
+     * envelope, which is the entire point of the Minimal preset.
+     *
+     * Null means unassigned, and that is load-bearing rather than merely missing: the budget's
+     * invariant — Ready to Assign plus every envelope balance equals the on-budget position —
+     * holds exactly when nothing from the start month forward is null, so the count of nulls
+     * *is* the size of the discrepancy the Budget page reports.
+     *
+     * `on delete set null`, not cascade: deleting an envelope must never delete a transaction.
+     */
+    budgetCategoryId: uuid("budget_category_id").references(
+      (): AnyPgColumn => financeBudgetCategories.id,
+      { onDelete: "set null" },
+    ),
     externalSource: text("external_source"),
     externalId: text("external_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
+    // The budget's monthly rollup: one grouped scan per envelope per month.
+    index("finance_transactions_budget_category_idx")
+      .on(table.userId, table.budgetCategoryId, table.transactionDate)
+      .where(sql`${table.budgetCategoryId} is not null`),
     index("finance_transactions_account_date_idx").on(
       table.userId,
       table.accountId,
@@ -2585,11 +2626,21 @@ export const financeRecurringBills = pgTable(
  * groceries and pizza that were certainly coming, so the headline ran a few hundred dollars a
  * week optimistic — wrong in the comfortable direction, which is the one way that page fails.
  *
- * **What it is deliberately not.** There is no tier 3. Clothes, games and books get no bucket,
- * ever; per-category discretionary envelopes encode a judgement the user already makes
- * correctly without a ledger, and the admission test here is the cadence — if you cannot state
- * one, it is discretionary and `availableToSpend` already covers it. See
- * `agent-os/specs/2026-08-16-1938-commitments/` D0.
+ * **What it is deliberately not — as originally written.** There was no tier 3: clothes, games
+ * and books got no bucket, ever, because per-category discretionary envelopes encode a
+ * judgement the user already makes correctly without a ledger. The admission test here is
+ * still the cadence — if you cannot state one, it does not belong in this table
+ * (`agent-os/specs/2026-08-16-1938-commitments/` D0).
+ *
+ * **That rejection was narrowed on 2026-08-22** by
+ * `agent-os/specs/2026-08-22-1948-zero-based-budget/`, which adds a real envelope budget in
+ * `finance_budget_categories`. The narrowing is precise and worth knowing before you read D0
+ * as still binding: its argument is about a *category list* — a bucket for clothes, a bucket
+ * for games — and the busywork it names came from adopting YNAB's default suggested list,
+ * which is a configuration choice. The argument holds for the list and does not reach the
+ * model. **Nothing in this table changed.** Both tiers still accrue, still feed
+ * `availableToSpend`, and are not the budget; the two systems run in parallel until use
+ * decides between them.
  */
 export const financeRecurringSpend = pgTable(
   "finance_recurring_spend",
@@ -2707,6 +2758,207 @@ export const financePaymentResolutions = pgTable(
       table.userId,
       table.transactionDate,
     ),
+  ],
+);
+
+/**
+ * ─────────────────────────── Zero-based (envelope) budget ───────────────────────────
+ *
+ * Four tables reimplementing Actual Budget's envelope model
+ * (`agent-os/specs/2026-08-22-1948-zero-based-budget/`; see `docs/actual-budget/README.md`
+ * for the file-by-file map into `../actual`, MIT).
+ *
+ * **What is stored is deliberately tiny: an allocation per envelope per month, and a buffer
+ * per month.** Balances, Ready to Assign, group totals and carry-in are all *derived* by a
+ * fold over months in `src/lib/finances/budget/envelope.ts`. Storing a balance would create a
+ * second source of truth that drifts the first time a transaction is backdated, recategorised
+ * or deleted — and every one of those happens routinely here, since the register is fed by
+ * imports and re-imports.
+ *
+ * This runs **beside** the commitment tiers, not instead of them. Available to Spend keeps
+ * accruing, the Dashboard keeps its numbers, and no reader should assume one supersedes the
+ * other yet.
+ */
+
+/**
+ * A named group of envelopes — "Bills", "Discretionary", "Income".
+ *
+ * Exists as its own table only because the budget grid is a two-level tree and totals are read
+ * per group; there is no behaviour on a group beyond `isIncome`.
+ *
+ * **`isIncome` lives here rather than on the category** — as it does in Actual — because it is
+ * a structural fact about a whole branch, and a group holding both income and expense
+ * envelopes has no meaning under the arithmetic: income has no allocation and no balance, it
+ * only feeds Ready to Assign. Putting the flag on the category would make that mixed state
+ * representable and every summation would have to defend against it.
+ */
+export const financeCategoryGroups = pgTable(
+  "finance_category_groups",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** The user's word for it. Nothing joins on it, so renaming is free. */
+    name: text("name").notNull(),
+    /**
+     * This group's categories are income: money arriving, not money assigned.
+     *
+     * Income envelopes have no allocation row and no balance. Their monthly activity is the
+     * whole of `totalIncome`, which is what Ready to Assign is computed from.
+     */
+    isIncome: boolean("is_income").notNull().default(false),
+    /** Lexicographic sibling order, as everywhere else in this schema (`src/lib/tree/sortKey.ts`). */
+    sortKey: text("sort_key").notNull(),
+    /**
+     * Folded away in the grid without being deleted.
+     *
+     * Hidden groups **still count** toward totals and toward Ready to Assign — Actual's
+     * envelope mode does the same, and the alternative is a budget whose parts do not sum to
+     * its whole because something was tidied off screen.
+     */
+    hidden: boolean("hidden").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("finance_category_groups_user_name_uq").on(table.userId, table.name),
+    index("finance_category_groups_user_sort_idx").on(table.userId, table.sortKey),
+  ],
+);
+
+/**
+ * One envelope.
+ *
+ * **Not the same thing as `FINANCE_CATEGORIES`**, and named `finance_budget_categories` so the
+ * difference survives contact with a hurried reader. That constant is the spending taxonomy —
+ * fixed in code, produced by the classifier, and the axis every Insights chart is built on.
+ * This is a hierarchy the user creates, renames and merges, answering "whose money paid for
+ * it". The two are related only through the auto-map, which seeds one from the other once.
+ *
+ * Deleting an envelope sets `finance_transactions.budget_category_id` to null rather than
+ * cascading; `hidden` is the ordinary way to retire one and keeps its history readable.
+ */
+export const financeBudgetCategories = pgTable(
+  "finance_budget_categories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    groupId: uuid("group_id")
+      .notNull()
+      .references(() => financeCategoryGroups.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    sortKey: text("sort_key").notNull(),
+    /** Retired without losing its history. Still counts toward totals — see the group. */
+    hidden: boolean("hidden").notNull().default(false),
+    /** Free text on the envelope. Where a goal template would later be written. */
+    notes: text("notes").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("finance_budget_categories_user_group_name_uq").on(
+      table.userId,
+      table.groupId,
+      table.name,
+    ),
+    index("finance_budget_categories_user_sort_idx").on(
+      table.userId,
+      table.groupId,
+      table.sortKey,
+    ),
+  ],
+);
+
+/**
+ * Per-month state that belongs to the month itself rather than to any one envelope.
+ *
+ * `bufferedCents` is YNAB's fourth rule — money deliberately held back so next month is
+ * funded by this month's income. It is a **deferral, not a sink**: it subtracts from this
+ * month's Ready to Assign and is added straight back in next month's "funds from last month".
+ * Get that pairing wrong in one direction and money vanishes; wrong in the other and it is
+ * created.
+ *
+ * `notes` is an append-only audit line per money movement — *"Reassigned $12.34 from Groceries
+ * → Dining on August 22"* — copied from Actual, which writes the same. It costs one column and
+ * answers the question a budget grid otherwise cannot: why is this envelope not what I left it
+ * at.
+ */
+export const financeBudgetMonths = pgTable(
+  "finance_budget_months",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /**
+     * The month, stored as its first calendar day (`YYYY-MM-01`).
+     *
+     * A real `date` rather than an integer `YYYYMM` (which is what Actual stores) so it sorts,
+     * ranges and compares with every other date in this schema, and so `development/dates`
+     * applies to it unchanged.
+     */
+    month: date("month", { mode: "string" }).notNull(),
+    /** Held back for next month. Non-negative; see the deferral note above. */
+    bufferedCents: integer("buffered_cents").notNull().default(0),
+    /** Append-only movement log for this month. */
+    notes: text("notes").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("finance_budget_months_user_month_uq").on(table.userId, table.month),
+    check("finance_budget_months_buffered_nonneg", sql`${table.bufferedCents} >= 0`),
+  ],
+);
+
+/**
+ * How much was assigned to one envelope in one month. The whole ledger of the budget.
+ *
+ * **Storage is sparse and a missing row means zero**, never null. Nothing pre-creates rows for
+ * months you have not touched, so a budget with five envelopes and one funded month holds one
+ * row, and every derived value must read absence as `{ amountCents: 0, carryover: false }`.
+ * Actual works the same way and it is the difference between a handful of rows and one per
+ * envelope per month forever.
+ *
+ * **`carryover` is consulted from the *previous* month.** `balance(c, m)` carries in the whole
+ * of `balance(c, m-1)` when `carryover(c, m-1)` is set, and only `max(0, balance(c, m-1))`
+ * when it is not — so an overspend either follows the envelope into next month or is charged
+ * against next month's Ready to Assign, and never both. Reading the flag off the wrong month
+ * is the single easiest way to get this table's meaning wrong, which is why it is written here
+ * as well as in `envelope.ts`.
+ *
+ * `amountCents` is signed only because a negative assignment is how you pull money back out of
+ * an envelope; it is normally non-negative.
+ */
+export const financeBudgetAllocations = pgTable(
+  "finance_budget_allocations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** First calendar day of the month, matching `finance_budget_months.month`. */
+    month: date("month", { mode: "string" }).notNull(),
+    categoryId: uuid("category_id")
+      .notNull()
+      .references(() => financeBudgetCategories.id, { onDelete: "cascade" }),
+    amountCents: integer("amount_cents").notNull().default(0),
+    /** Roll a negative balance forward into the envelope instead of onto Ready to Assign. */
+    carryover: boolean("carryover").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("finance_budget_allocations_user_month_category_uq").on(
+      table.userId,
+      table.month,
+      table.categoryId,
+    ),
+    // The fold reads one contiguous month range for every envelope at once.
+    index("finance_budget_allocations_user_month_idx").on(table.userId, table.month),
   ],
 );
 

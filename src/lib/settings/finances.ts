@@ -206,3 +206,54 @@ export function insightsFilterOf(view: InsightsViewSettings): InsightsReportFilt
     merchants: view.merchants,
   };
 }
+
+/**
+ * Where the envelope budget starts, and what was in the pot when it did.
+ *
+ * The budget deliberately does not reconstruct three years of assignments it never made
+ * (`agent-os/specs/2026-08-22-1948-zero-based-budget/` D2). Instead the fold seeds
+ * "funds from last month" at `startMonth` with `openingCents` and treats every earlier month as
+ * absent — which is the same thing Actual does when you create an account with a starting
+ * balance, and the reason a fresh start is the recommended way in.
+ *
+ * **`openingCents` is a recorded fact, not a live query.** It is the on-budget position on the
+ * day before `startMonth` began, computed once at setup. Recomputing it on every load would
+ * make the budget's history move whenever an old statement was imported or a transaction
+ * recategorised, and "why did last month's Ready to Assign change" is exactly the question a
+ * ledger exists to prevent. It can go negative: card balances are on-budget, and starting in
+ * the hole is honest.
+ *
+ * Null `startMonth` means the budget has not been set up. That is the empty state, and it is
+ * the only thing that distinguishes "no budget" from "a budget with nothing assigned".
+ *
+ * Stored under `budget`.
+ */
+export type BudgetSettings = {
+  /** First calendar day of the first budgeted month (`YYYY-MM-01`). Null until setup runs. */
+  startMonth: string | null;
+  /** On-budget position the day before `startMonth`. Signed; negative is possible. */
+  openingCents: number;
+};
+
+export const DEFAULT_BUDGET: BudgetSettings = { startMonth: null, openingCents: 0 };
+
+export function parseBudget(value: unknown): BudgetSettings {
+  const record = asRecord(value);
+  if (!record) return DEFAULT_BUDGET;
+
+  const start = asString(record.startMonth, "");
+  const opening = asFiniteNumber(record.openingCents, 0);
+
+  return {
+    // Anything but the first of a month is not a month key, and honouring it would make the
+    // fold's month arithmetic disagree with the stored allocations' `month`.
+    startMonth: /^\d{4}-\d{2}-01$/.test(start) ? start : null,
+    // Cents are integers everywhere in this module; a fraction here would silently poison
+    // every balance downstream of the opening figure.
+    openingCents: Number.isInteger(opening) ? opening : 0,
+  };
+}
+
+export function serializeBudget(value: BudgetSettings): unknown {
+  return { startMonth: value.startMonth, openingCents: value.openingCents };
+}

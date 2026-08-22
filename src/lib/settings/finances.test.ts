@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_PAYDAY, parsePayday, serializePayday } from "./finances";
+import {
+  DEFAULT_BUDGET,
+  DEFAULT_PAYDAY,
+  parseBudget,
+  parsePayday,
+  serializeBudget,
+  serializePayday,
+} from "./finances";
 
 describe("parsePayday", () => {
   it("defaults to detection when nothing is stored", () => {
@@ -50,5 +57,55 @@ describe("parsePayday", () => {
       anchorDate: "2026-08-03",
       cadenceDays: null,
     });
+  });
+});
+
+describe("parseBudget", () => {
+  it("reads an unset budget as not yet set up", () => {
+    // Null startMonth is the empty state, and the only thing separating "no budget" from
+    // "a budget with nothing assigned".
+    expect(parseBudget(undefined)).toEqual(DEFAULT_BUDGET);
+    expect(parseBudget(null)).toEqual(DEFAULT_BUDGET);
+    expect(parseBudget("2026-08-01")).toEqual(DEFAULT_BUDGET);
+    expect(DEFAULT_BUDGET.startMonth).toBeNull();
+  });
+
+  it("round-trips a configured budget", () => {
+    const settings = { startMonth: "2026-08-01", openingCents: -30_142 };
+    expect(parseBudget(serializeBudget(settings))).toEqual(settings);
+  });
+
+  it("keeps a negative opening position", () => {
+    // Card balances are on-budget, so starting in the hole is the honest case and must
+    // survive the codec rather than being clamped to something more comfortable.
+    expect(parseBudget({ startMonth: "2026-08-01", openingCents: -125_00 })).toEqual({
+      startMonth: "2026-08-01",
+      openingCents: -125_00,
+    });
+  });
+
+  it("rejects a start that is not the first of a month", () => {
+    // Allocations store `month` as YYYY-MM-01. A mid-month start would make the fold's
+    // month arithmetic disagree with every row it reads.
+    expect(
+      parseBudget({ startMonth: "2026-08-15", openingCents: 100 }).startMonth,
+    ).toBeNull();
+    expect(
+      parseBudget({ startMonth: "2026-08", openingCents: 100 }).startMonth,
+    ).toBeNull();
+    expect(
+      parseBudget({ startMonth: 20260801, openingCents: 100 }).startMonth,
+    ).toBeNull();
+  });
+
+  it("rejects a fractional opening figure", () => {
+    // Cents are integers throughout this module; a fraction here poisons every balance
+    // derived from the opening position.
+    expect(
+      parseBudget({ startMonth: "2026-08-01", openingCents: 100.5 }).openingCents,
+    ).toBe(0);
+    expect(
+      parseBudget({ startMonth: "2026-08-01", openingCents: "100" }).openingCents,
+    ).toBe(0);
   });
 });

@@ -32,6 +32,7 @@ export const SCOPE_KINDS = [
   "display",
   "insights",
   "payday",
+  "budget",
   "timeline",
   "find",
 ] as const;
@@ -156,6 +157,17 @@ export const INSIGHTS_SCOPE = "insights";
  */
 export const PAYDAY_SCOPE = "payday";
 
+/**
+ * Where the envelope budget begins, and what it started with.
+ *
+ * Configuration, like `payday` above, and here for the same reasons. Its whole job is to keep
+ * the budget from having to reason about three years of history: the fold seeds
+ * "funds from last month" at the start month with the recorded opening position and treats
+ * every earlier month as absent
+ * (`agent-os/specs/2026-08-22-1948-zero-based-budget/` D2).
+ */
+export const BUDGET_SCOPE = "budget";
+
 /** Cross-module display policy, currently the standalone calendar-day format. */
 export const DISPLAY_SCOPE = "display";
 
@@ -174,6 +186,7 @@ const KIND_LABELS: Record<ScopeKind, string> = {
   display: "Display",
   insights: "Finances insights",
   payday: "Pay cadence",
+  budget: "Budget setup",
   timeline: "Timeline",
   find: "Advanced Find",
 };
