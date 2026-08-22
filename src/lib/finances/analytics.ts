@@ -30,7 +30,12 @@ import type {
 import { daysBetweenKeys, shiftDateKey } from "@/lib/schedule/geometry";
 import { categoryFromBank, UNCATEGORIZED } from "./classify/categories";
 import { periodIndex, RATE_LOOKBACK_PERIODS } from "./commitments";
-import { detectIncome, normalizedMonthlyIncome, type Payday } from "./classify/income";
+import {
+  detectIncome,
+  normalizedMonthlyIncome,
+  PAYCHECKS_PER_YEAR,
+  type Payday,
+} from "./classify/income";
 import { normalizeMerchant } from "./classify/merchant";
 import type { PayPeriod } from "./classify/payPeriods";
 import { matchRule } from "./classify/rules";
@@ -343,6 +348,25 @@ export function monthlyIncome(
     medianPaycheckCents,
     paydayCount: inWindow.length,
   };
+}
+
+/**
+ * Typical income for one bucket of the current axis.
+ *
+ * `totalMonthlyCents` is already a typical-month figure (median paycheck × 26 ÷ 12,
+ * plus other reliable income averaged over the window). On the pay-period axis the
+ * same money is restated per paycheck, so a monthly line does not hover above
+ * two-week bars as if it were a target they could never hit.
+ */
+export function typicalIncomePerBucketCents(
+  income: IncomeBreakdown,
+  axis: "month" | "pay-period",
+): number {
+  if (income.totalMonthlyCents <= 0) return 0;
+  if (axis === "pay-period") {
+    return Math.round((income.totalMonthlyCents * 12) / PAYCHECKS_PER_YEAR);
+  }
+  return income.totalMonthlyCents;
 }
 
 /**

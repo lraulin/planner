@@ -45,7 +45,7 @@ It is a visualization delta, not a data-model spec. Roadmap § Financial plannin
 - [ ] Account / category / merchant multi-filters recompute **every** panel from one filtered row set. Empty selection means all.
 - [ ] Internal transfers stay out of spend, income, Sankey, trends, and payees under every filter and drill. Refunds still net off the category they returned to.
 - [ ] Window presets include 3 months, QTD, and YTD, computed from local today. Existing 6m / 12m / 24m / all and the month vs pay-period axis still work, including the trailing-12 overlay (still computed from the whole history, then sliced).
-- [ ] Spending trends show the top categories (+ Other) as stacked bars over the current axis, with a grouped toggle. Click a segment drills.
+- [ ] Spending trends show the top categories (+ Other) as stacked bars over the current axis, with a grouped toggle. Click a segment drills. A dashed red line marks typical income for one bucket (the same monthly figure as the tile; restated per paycheck on the pay-period axis). Zero income hides the line.
 - [ ] Top payees is a ranked bar list (same encoding as "Where it went"), largest first, click drills.
 - [ ] Sankey shows income sources → Spent/Kept (or From savings) → categories for the window; hover gives amount and share; click drills. Thickness ∝ amount.
 - [ ] Cash-vs-debt shows asset and card-debt series (or bars + overlay) for imported accounts, a debt-to-asset percentage, and per-account contribution. Copy still says this is not net worth.
@@ -67,6 +67,7 @@ Material refinements during implementation (requirements, design, scope). Omit p
 | 2   | Debt is a non-negative magnitude. A reconstructed card _credit_ (payments that outran imported purchases because the feed did not start at zero) sits with assets, so debt-to-asset cannot go negative. | The first render showed −$788 of "debt" and −35%. That is a missing opening balance, not a surplus of borrowing.                                           |
 | 3   | Clicking **Other** on spending trends drills the leftover categories, not a literal category named Other.                                                                                               | Other is a fold, not a taxonomy member.                                                                                                                    |
 | 4   | A spending-trend segment drills the category, not the bucket.                                                                                                                                           | The question the stack answers is "which category", matching the ranked bars.                                                                              |
+| 5   | Spending trends overlay typical income as a dashed red (`--chart-spend`) reference line, restated per pay period when that axis is on.                                                                  | The comparison the stacked bars ask is "did this bucket spend more than I typically earn"; a monthly line on two-week bars would answer a different one.   |
 
 ## Out of scope
 

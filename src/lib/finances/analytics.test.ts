@@ -21,6 +21,7 @@ import {
   spendByCategory,
   spendByCategoryPerBucket,
   spendByMerchant,
+  typicalIncomePerBucketCents,
   upcomingBills,
   spendCentsOf,
   trailingAverage,
@@ -212,6 +213,40 @@ describe("monthlyIncome", () => {
     expect(income.paydayCount).toBe(0);
     expect(income.paycheckMonthlyCents).toBe(0);
     expect(income.otherMonthlyCents).toBe(18000);
+  });
+});
+
+describe("typicalIncomePerBucketCents", () => {
+  const income = {
+    paycheckMonthlyCents: 500762,
+    otherMonthlyCents: 18000,
+    totalMonthlyCents: 518762,
+    medianPaycheckCents: 231121,
+    paydayCount: 13,
+  };
+
+  it("is the typical-month figure on a month axis", () => {
+    expect(typicalIncomePerBucketCents(income, "month")).toBe(518762);
+  });
+
+  it("restates the same money per paycheck so a monthly line does not sit above two-week bars", () => {
+    // 518762 × 12 ÷ 26. Same as median paycheck plus other income per period.
+    expect(typicalIncomePerBucketCents(income, "pay-period")).toBe(239429);
+  });
+
+  it("is absent when there is no typical income to plot", () => {
+    expect(
+      typicalIncomePerBucketCents(
+        {
+          paycheckMonthlyCents: 0,
+          otherMonthlyCents: 0,
+          totalMonthlyCents: 0,
+          medianPaycheckCents: 0,
+          paydayCount: 0,
+        },
+        "month",
+      ),
+    ).toBe(0);
   });
 });
 

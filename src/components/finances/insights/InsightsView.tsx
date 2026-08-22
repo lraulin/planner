@@ -6,6 +6,7 @@ import {
   effectiveCategory,
   spendCentsOf,
   TREND_OTHER,
+  typicalIncomePerBucketCents,
   type AnalyticsRow,
 } from "@/lib/finances/analytics";
 import type { CarryingCost } from "@/lib/finances/dashboardQueries";
@@ -243,6 +244,7 @@ export function InsightsView({
   }
 
   const { split, coverage, reconciliation } = analysis;
+  const incomePerBucket = typicalIncomePerBucketCents(analysis.income, view.axis);
   const netPerBucket =
     analysis.buckets.length > 0
       ? Math.round(
@@ -494,7 +496,11 @@ export function InsightsView({
 
         <Panel
           title={`Spending trends by ${bucketNoun}`}
-          subtitle="Top categories across the window, everything else folded into Other. Click a segment."
+          subtitle={
+            incomePerBucket > 0
+              ? `Top categories across the window, everything else folded into Other. The red line is typical income for a ${bucketNoun}. Click a segment.`
+              : "Top categories across the window, everything else folded into Other. Click a segment."
+          }
           actions={
             <ToolbarSegments
               label="Bars"
@@ -511,6 +517,7 @@ export function InsightsView({
             keys={analysis.trends.keys}
             points={analysis.trends.points}
             mode={view.trendMode}
+            incomeCents={incomePerBucket}
             onSelect={(category) => setDrill({ kind: "category", id: category })}
           />
         </Panel>

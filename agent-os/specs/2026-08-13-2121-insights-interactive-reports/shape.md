@@ -13,7 +13,7 @@ views that comparable apps treat as table stakes, using only data we already hav
 - Shared account / category / merchant filters (empty = all).
 - Time windows: 3m, YTD, QTD added to 6m / 12m / 24m / all.
 - Click-to-drill from any chart to an on-page transaction list.
-- Spending trends (stacked/grouped bars by category over the current axis).
+- Spending trends (stacked/grouped bars by category over the current axis), with typical income as a dashed red reference line.
 - Top payees (ranked bars).
 - Sankey: income sources → Spent/Kept (or From savings) → categories.
 - Richer cash-vs-card-debt among imported accounts (still not net worth).
@@ -59,6 +59,10 @@ Made while writing the plan:
    compact table is the competitive convention.
 10. **Categorical palette is new tokens**, not a reuse of priority/type colours — same
     reason the income/spend/average tokens were invented.
+11. **Spending trends income overlay** uses `--chart-spend` (dashed) rather than
+    `--chart-income`, because the line is a spending ceiling: bars that cross it spent
+    more than typical income. The amount is `typicalIncomePerBucketCents` — monthly
+    income as-is, or × 12 ÷ 26 on the pay-period axis.
 
 ## Context
 

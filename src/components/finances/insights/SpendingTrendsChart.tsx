@@ -4,6 +4,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -12,6 +13,7 @@ import {
 import type { CategoryBucketTotal } from "@/lib/finances/analytics";
 import { TREND_OTHER } from "@/lib/finances/analytics";
 import { formatUsd, formatUsdCompact } from "@/lib/finances/money";
+import { useIsCompact } from "@/components/shell/useIsCompact";
 import { ChartLegend } from "./CashFlowChart";
 import { chartCatVar } from "./chartColors";
 
@@ -19,13 +21,17 @@ export function SpendingTrendsChart({
   keys,
   points,
   mode,
+  incomeCents = 0,
   onSelect,
 }: {
   keys: string[];
   points: CategoryBucketTotal[];
   mode: "stacked" | "grouped";
+  /** Typical income for one bucket. Zero hides the line. */
+  incomeCents?: number;
   onSelect?: (category: string, startKey: string, endKey: string) => void;
 }) {
+  const compact = useIsCompact() ?? false;
   if (points.length === 0 || keys.length === 0) {
     return (
       <p className="rounded border border-dashed border-rule px-3 py-6 text-center text-[0.8125rem] text-ink-muted">
@@ -87,14 +93,45 @@ export function SpendingTrendsChart({
                 onClick={() => onSelect?.(key, "", "")}
               />
             ))}
+            {incomeCents > 0 && (
+              <ReferenceLine
+                y={incomeCents}
+                stroke="var(--chart-spend)"
+                strokeDasharray="4 4"
+                strokeWidth={1.5}
+                ifOverflow="extendDomain"
+                label={
+                  compact
+                    ? false
+                    : {
+                        value: formatUsdCompact(incomeCents),
+                        position: "insideTopRight",
+                        fill: "var(--chart-spend)",
+                        fontSize: 10,
+                      }
+                }
+              />
+            )}
           </BarChart>
         </ResponsiveContainer>
       </div>
       <ChartLegend
-        items={keys.map((key, index) => ({
-          color: key === TREND_OTHER ? "var(--chart-cat-8)" : chartCatVar(index),
-          label: key,
-        }))}
+        items={[
+          ...keys.map((key, index) => ({
+            color: key === TREND_OTHER ? "var(--chart-cat-8)" : chartCatVar(index),
+            label: key,
+          })),
+          ...(incomeCents > 0
+            ? [
+                {
+                  color: "var(--chart-spend)",
+                  label: "Average income",
+                  line: true,
+                  dash: "dashed" as const,
+                },
+              ]
+            : []),
+        ]}
       />
     </div>
   );
