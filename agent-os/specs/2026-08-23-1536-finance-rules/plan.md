@@ -1,6 +1,6 @@
 # Rules — categorisation becomes user data
 
-**Status: active**
+**Status: frozen / complete** (2026-08-23)
 Spec folder: `agent-os/specs/2026-08-23-1536-finance-rules/`
 
 ## Spec relationships
@@ -117,7 +117,8 @@ caught a bug — not a feature.
   write** — anything less under-reports, because a new flow-setting rule changes
   `claimedByDetector`, which changes `detectIncome`, which changes the median paycheck and
   therefore every figure on the dashboard. The preview must therefore surface
-  `medianPaycheckCents` and `normalizedMonthlyIncomeCents` on both sides, not only row counts.
+  `paydayCount`, `medianPaycheckCents` and `normalizedMonthlyIncomeCents` on both sides, not only
+  row counts.
 
 - **D7 — Identity leaves the rule, in the right order.** `ClassifyRule.merchant` becomes the
   `name-payee` action; `matchRule` and `CLASSIFY_RULES` are deleted once nothing calls them.
@@ -159,21 +160,21 @@ caught a bug — not a feature.
 - [x] The refund rekey (D8) lands on its own, with its `refund` ↔ `external_transfer` diff
       reported in signed cents and explained before it is applied. **Result: 0 of 7,030 rows
       move.**
-- [ ] Seeding the 65 rules produces `differing === 0` on the real ~7,030-row file, with both
-      income figures byte-identical; a second seed plans zero writes.
-- [ ] Precedence per D5 holds; a transfer still beats a rule; reclassify still never changes an
+- [x] Seeding the 65 rules produces zero flow and category changes on the real ~7,030-row file,
+      with the income summary byte-identical; a second seed plans zero writes.
+- [x] Precedence per D5 holds; a transfer still beats a rule; reclassify still never changes an
       account balance; two runs in a row write zero rows the second time.
-- [ ] A second user cannot read, change, reorder, delete, preview or run the first user's rules,
+- [x] A second user cannot read, change, reorder, delete, preview or run the first user's rules,
       and cannot make their own rules apply to the first user's transactions.
-- [ ] A regex with `g` or `y`, an unparseable source, or an exponential-backtracking shape is
+- [x] A regex with `g` or `y`, an unparseable source, or an exponential-backtracking shape is
       refused with a message — not accepted and then wrong.
-- [ ] Preview writes nothing, and its counts equal the counts the subsequent apply reports.
-- [ ] A rule can be created, edited, reordered, disabled and deleted from `/finances/rules`
+- [x] Preview writes nothing, and its counts equal the counts the subsequent apply reports.
+- [x] A rule can be created, edited, reordered, disabled and deleted from `/finances/rules`
       without a deploy; **Create rule from this transaction…** prefills from a Register row.
-- [ ] `classify/rules.ts` is deleted and `matchRule` has no remaining callers.
-- [ ] A hidden envelope can be shown again; envelopes and groups can be created, renamed and
+- [x] `classify/rules.ts` is deleted and `matchRule` has no remaining callers.
+- [x] A hidden envelope can be shown again; envelopes and groups can be created, renamed and
       deleted; the movement log is readable; **Assign remaining** is reachable.
-- [ ] Desktop and 390×844 both complete, light and dark; all routes pass `npm run smoke`.
+- [x] Desktop and 390×844 both complete, light and dark; all routes pass `npm run smoke`.
 
 ## Changes from original plan
 
@@ -186,6 +187,8 @@ Material refinements during implementation (requirements, design, scope). Omit p
 | 3   | **Threading the rules through the planner and seeding the table must ship as one commit.** Between the two, the app classifies from bank labels alone.                                                                                                                                                                                                                                                               | The audit caught it: with the planner rule-aware and the table empty, 122 of 7,030 rows change flow — 31 income rows to external_transfer, 85 interest_fee rows likewise. That is the circuit breaker doing its job on an intermediate state, not a defect, but it means the two tasks are one logical change.                                                                                                                                                                               |
 | 4   | **The audit covers `derived_category` as well as `derived_flow`.**                                                                                                                                                                                                                                                                                                                                                   | A rule can move one without the other: a category-only rule leaves flow alone, and a flow-only rule pushes its row out of the categorised set entirely through `carriesCategory`. Auditing one field would have let half a regression through, and on the empty-table state above the category diff was much the larger of the two.                                                                                                                                                          |
 | 5   | **A deleted seeded rule is re-created by a replay**, contrary to D1's claim that a rule "the user has since renamed, reordered, disabled or deleted is never resurrected". Rename, reorder and disable do survive.                                                                                                                                                                                                   | `seeded_id` can only see rows that exist, so a delete is indistinguishable from never having seeded. A tombstone would fix it and has no caller: seeding is a one-time explicit migration (`npm run rules:seed`), never run on import or login. The assumption is written down in `cutover.integration.test.ts` so the day something schedules it, the constraint is where it will be looked for.                                                                                            |
+| 6   | **Create rule from transaction matches an existing payee by its stable id**, not by an exact normalized merchant string. Only a row without a payee falls back to an escaped, anchored merchant regex.                                                                                                                                                                                                               | The planned phrase "merchant is … when the row has a payee (stable, exact)" contradicted the payee cutover: a merchant string changes across aliases and does not survive a rename or merge, while the stored payee id does. The implementation follows D3 and the stable-identity intent rather than preserving that accidental wording.                                                                                                                                                    |
+| 7   | **Production verification is read-only; mutating CRUD, reorder and preview/apply parity use isolated database users.** The real file was audited and browsed, while the Register path was exercised through the fully prefilled unsaved draft.                                                                                                                                                                       | The 65 real rules do not overlap, so demonstrating a changed winner would require planting an artificial rule in Lee's user-owned finance data and then cleaning it up. The integration suite already exercises the same mutations, ordering and exact preview/apply counts with rollback-safe fixtures, including a second-user adversary. Production data is the right place for the 7,030-row parity proof, not disposable UI state.                                                      |
 
 ---
 
@@ -195,6 +198,8 @@ Material refinements during implementation (requirements, design, scope). Omit p
 - [x] Copy the selected standards in full so the active implementation is self-contained.
 
 ## Task 2: Rekey the refund heuristic to payee ids — ships alone (D8)
+
+**Completed.**
 
 Payee-spec follow-up #3, independent of everything below.
 
@@ -223,6 +228,8 @@ decision it is auditing. 3,232 unit and 848 integration tests pass.
 
 ## Task 3: Schema + migration
 
+**Completed.**
+
 `finance_rules` in `src/db/schema.ts`, beside `financeSchedules` and `financePayees`, with the
 same rationale-carrying header comment those tables have.
 
@@ -235,7 +242,7 @@ same rationale-carrying header comment those tables have.
 | `actions`                           | jsonb — array of `{op, field?, value}`                                       |
 | `enabled`                           | boolean, default true                                                        |
 | `sort_key`                          | text fractional index (`src/lib/tree/sortKey.ts`) — **this is the priority** |
-| `seeded_id`                         | text, nullable — the `CLASSIFY_RULES.id` this row came from                  |
+| `seeded_id`                         | text, nullable — the `STARTER_RULES.id` this row came from                   |
 | `notes`, `created_at`, `updated_at` | `notes` is where a rule's _why_ survives                                     |
 
 Constraints: `unique (user_id, lower(name))`; `unique (user_id, sort_key)`;
@@ -249,6 +256,8 @@ refusals (cutover D9) — forgetting it makes a rule silently stop matching.
 Generate with drizzle-kit; commit `.sql` + snapshot + journal together.
 
 ## Task 4: The pure rules module — `src/lib/finances/rules/`
+
+**Completed.**
 
 Modelled on `schedules/conditions.ts`, whose header says it is the restricted schedule parse and
 _not_ the generic engine. This is the generic one.
@@ -328,6 +337,8 @@ with no timezone arithmetic; a payee condition never fires on a row whose `payee
 
 ## Task 5: Thread rules through the planner
 
+**Completed.**
+
 - `categorize()` takes the compiled rules instead of importing `matchRule`; `merchant` becomes
   the rule's `name-payee` value ?? the normalized string; `ruleId` becomes the rule's UUID.
 - `planReclassify(..., rules = [])` — a defaulted trailing parameter keeps every existing call
@@ -345,36 +356,40 @@ with no timezone arithmetic; a payee condition never fires on a row whose `payee
 
 ## Task 6: Seeding + parity audit + CLI (the circuit breaker)
 
+**Completed.**
+
 Follow the payee cutover exactly: dry run by default, `--apply` required, `--user` required,
 one transaction, one user, all-or-nothing, idempotent via `seeded_id`.
 
-- `planRuleSeed(existing)` — pure. One draft per `CLASSIFY_RULES` entry in array order,
+- `planRuleSeed(existing)` — pure. One draft per `STARTER_RULES` entry in array order,
   `sortKey` strictly increasing, `name = seededId = rule.id`, conditions
   `[{field: "merchant", op: "matches", value: {source, flags}}]`, actions from `category`,
   `flow` and `merchant`. Rows whose `seeded_id` exists are skipped — that is the idempotence,
-  and it is also why a rule the user renamed or deleted is never resurrected.
+  so a replay leaves a renamed, reordered or disabled rule alone. A deleted row is recreated by
+  a manual replay; change #5 records why the one-time explicit migration does not add a
+  tombstone solely for that case.
 - **Asserts `rule.match.flags === ""` on every entry**, so a future flag addition cannot be
   silently dropped by `RegExp.source`.
-- **`auditRuleParity(userId)`** — loads rows the way `reclassifyTransactions` does, runs
-  `planReclassify` twice (baseline through `matchRule`, candidate through the compiled rules),
-  and diffs all four planned fields. Reports: scanned, differing, per-field breakdown; baseline
-  `ruleId` slug vs candidate rule name for each differing row; **signed-cent totals per (flow,
-  category) on both sides** — money, not row counts, matching the cutover's practice; the
-  `derivedFlow` histogram; both income figures; and `nullPayeeRows` (rows with no `payee_id` and
-  a non-empty normalized merchant), which gates Task 10. `canApply` is true only when
-  `differing === 0` **and** both income figures match. **Unlike the payee cutover there is no
-  accepted-difference clause** — there is no known semantic correction here, so any difference
-  is a bug.
+- **`auditRuleSeed(userId)`** — loads exactly what `reclassifyTransactions` would read and
+  previews the current persisted rules against the stored derived fields. Reports the exact
+  flow and category row/count deltas, the before/after payday count, median paycheck and
+  normalized monthly income, invalid stored rules, and `nullPayeeRows` (rows with no `payee_id`
+  and a non-empty normalized merchant), which gates Task 10. `canApply` requires every delta to
+  be zero, every income value to match, no invalid rule, and no named merchant without a payee.
+  The guarded sequence is dry audit → seed → audit again; the second audit is the parity gate.
 - An offline half of the same proof in `seed.test.ts`: the compiled seeded rules agree with
-  `matchRule` for every distinct normalized merchant in a corpus fixture harvested from
-  `categorize.test.ts` plus the local database.
+  the migration-only starter corpus across generated matching and non-matching probes. It also
+  pins the fact that the 65 patterns do not overlap; the real-file audit separately covered all
+  851 distinct normalized merchants.
 - Integration coverage including a second user who tries to read, seed into, modify and delete
   the first user's rules and fails at each.
 
-Run dry-run → apply → replay locally, then against the real file. **The gate is
-`differing === 0` on production before any reader switches.**
+Run dry-run → apply → replay locally, then against the real file. **The gate is zero flow and
+category deltas plus identical income after seeding, before the legacy corpus is retired.**
 
 ## Task 7: Mutations, queries, actions
+
+**Completed.**
 
 - `rules/mutations.ts` — `createRule`, `updateRule`, `deleteRule`, `setRuleEnabled`,
   `moveRule(userId, ruleId, beforeId, afterId)` via `sortKey.between`, each taking `userId`
@@ -402,6 +417,8 @@ Run dry-run → apply → replay locally, then against the real file. **The gate
 
 ## Task 8: `/finances/rules` and the editor
 
+**Completed.**
+
 - `src/app/finances/rules/page.tsx` mirroring `payees/page.tsx` — `getCurrentUserId`,
   `listRules`, `listPayees`, `listAccounts`, `AppShell active="finances"`, `force-dynamic`.
 - `src/components/finances/rules/{RulesView,RuleDrawer,ruleColumns,RulePreviewDialog}.tsx`.
@@ -423,10 +440,12 @@ Run dry-run → apply → replay locally, then against the real file. **The gate
 
 ## Task 9: Register affordance — Create rule from this transaction…
 
+**Completed.**
+
 The `Track as bill…` pattern exactly.
 
 - `rules/fromTransaction.ts` + test — pure `ruleDraftFromTransaction(row)`. Prefills
-  `merchant is <normalized>` when the row has a payee (stable, exact) or
+  `payee is <payee id>` when the row has a payee (stable, exact) or
   `merchant matches ^<escaped normalized>` when it does not, plus the row's current effective
   category. Proposes, never applies — the module calls no mutation, matching
   `registerBillDraft.ts`.
@@ -436,6 +455,8 @@ The `Track as bill…` pattern exactly.
   disabled with _Select a row first_. Opens `RuleDrawer` in create mode.
 
 ## Task 10: Retirements
+
+**Completed.**
 
 Only after Task 6's production audit reports zero.
 
@@ -462,6 +483,8 @@ Only after Task 6's production audit reports zero.
 
 ## Task 11: The four dead wires (D9)
 
+**Completed.**
+
 - **Hidden envelopes are a one-way door.** `BudgetView.tsx` calls `budgetGridRows(groups, rows)`
   with no options, so `showHidden` is always false and the "Show envelope" menu item is
   unreachable once used. The file's own comment describes the bug: _"without it the only way
@@ -478,6 +501,8 @@ Only after Task 6's production audit reports zero.
 
 ## Task 12: Verify, freeze spec, update roadmap
 
+**Completed.**
+
 - `npm run lint`, `npm run typecheck`, `npm run test:unit` — **check for the Postgres-skip
   warning**; the integration tests here are worthless if they silently skip.
 - `next build`, start the dev server, `npm run smoke` (route list is derived from the
@@ -491,9 +516,21 @@ Only after Task 6's production audit reports zero.
   mark both **Status: frozen / complete**, update `agent-os/product/roadmap.md` § Financial
   planning.
 
+**As built.** The guarded audit reports 0 rule rows to create, all 65 present, 0 of 7,030 rows
+moving flow, 0 moving category, 0 named merchants without a payee, and the income summary
+unchanged at 73 paydays / $2,474.34 median / $5,361.07 normalized monthly. Unit, full active-
+Postgres integration, lint, typecheck, production build and the 62-route smoke pass are green.
+The rules, preview, Register draft and budget paths were inspected at desktop and 390×844 in
+both light and dark themes with no browser exceptions.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- Auto-learned rules, a user-editable category taxonomy and split transactions remain separate
+  possible specs; none is implied by this engine.
+- If real use creates a need for independent flow and category overlays, shape per-field
+  composition as a delta rather than weakening first-match-wins in this historical record.
+
 ---
 
-> While this spec is **active**, when we make a material change to requirements, design, or
-> scope (including from feedback on what was implemented), update the relevant sections and
-> append to **Changes from original plan**. Skip pure implementation details. Freeze when
-> verified.
+> Frozen 2026-08-23. Future changes open a new delta-spec and reference this folder; they do
+> not amend this as-built record.

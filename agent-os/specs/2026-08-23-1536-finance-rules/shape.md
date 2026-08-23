@@ -1,11 +1,12 @@
 # Rules — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-08-23)
 
 ## Scope
 
-Make transaction categorisation **user data**. Today `src/lib/finances/classify/rules.ts` holds
-65 hardcoded regexes; adding one is a TypeScript edit and a deploy. This spec moves the corpus
+Make transaction categorisation **user data**. Before this work,
+`src/lib/finances/classify/rules.ts` held 65 hardcoded regexes; adding one was a TypeScript edit
+and a deploy. This spec moved the corpus
 into a `finance_rules` table with Actual-shaped `{field, op, value}` conditions, gives it a page
 with a drawer editor and drag-to-reorder, adds a preview before any write, and retires the last
 four places where a rule supplied merchant _identity_ — a job payees now own.
@@ -52,22 +53,27 @@ never-before-seen spelling does get a payee in the same pass — but a _new_ one
 list. Regex is the only op that fires on a merchant nobody has met. Payee conditions earn their
 place separately: they survive a rename and are correct after a merge.
 
-**The refund rekey ships alone, first.** Moving `spendingMerchants` from merchant strings to
-payee ids is payee-spec follow-up #3 and is expected to move rows, because `categorize` always
-prefers a PayPal counterparty's merchant while `aliasFor` prefers it only when the bank line is
-opaque. The rules seeding must move **zero** rows. A circuit breaker that must report zero
-cannot also carry a known-nonzero change, so these are two commits with two audits.
+**A Register draft prefers `payee is <id>`.** When the selected row already has stable identity,
+matching its normalized merchant would throw that identity away and regress across aliases,
+renames and merges. An escaped, anchored merchant regex remains the honest fallback only for a
+row whose payee is still null.
+
+**The refund rekey shipped alone, first.** Moving `spendingMerchants` from merchant strings to
+payee ids is payee-spec follow-up #3. It was expected to move rows, but the preceding matcher
+cutover had already repaired the disagreement; the real audit proved a genuine zero by showing
+that a tripwire could still find all 64 refund rows. Keeping it separate preserved the rule
+seed's stricter zero-difference circuit breaker.
 
 ## Context
 
 - **Visuals:** None.
 - **References:** `../actual/packages/loot-core/src/server/rules/{rule,condition,action,rule-utils}.ts`;
-  in-repo, `src/lib/finances/classify/{rules,categorize,reclassify}.ts`,
+  in-repo, `src/lib/finances/rules/{starterRules,conditions,match}.ts` and
+  `src/lib/finances/classify/{categorize,reclassify}.ts`,
   `src/lib/finances/schedules/conditions.ts`, `src/lib/finances/payees/{seed,resolve}.ts`,
   `src/components/finances/{payees,schedules}/`. Full list in `references.md`.
-- **Product alignment:** `agent-os/product/roadmap.md` § Financial planning closes the payee
-  cutover with _"Rules is the next layer on these same stable ids."_ Three frozen specs name it
-  in their follow-up lists. This is that item.
+- **Product alignment:** This closes the roadmap's _"Rules is the next layer on these same
+  stable ids"_ item and three frozen-spec follow-ups.
 
 ## Why this is one table and not sixteen files
 
@@ -108,3 +114,8 @@ the register. It is refused at parse.
   grid + drawer, drag-to-reorder as a first-class grid affordance, a modal only for the
   preview confirmation, a command registered for every menu entry, and a touch path for
   reordering because drag is disabled below `md`.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+Auto-learning, editable category taxonomy, split transactions and per-field action composition
+remain possible delta-specs. None is required to keep this implementation correct.

@@ -932,7 +932,15 @@ period)` so money already spent stops being held twice and only going over bites
   and removed both legacy matcher columns. Rename is label-only. Merge previews and rewrites
   aliases, transactions, schedules and a compatible commitment claim in one transaction,
   while conflicting claims refuse without a partial write. Desktop and phone both expose
-  rename, merge and payee-picker paths. Rules is the next layer on these same stable ids.
+  rename, merge and payee-picker paths.
+  ✅ **Categorisation rules shipped 2026-08-23.**
+  `agent-os/specs/2026-08-23-1536-finance-rules/`. The 65 deploy-time regexes are now
+  user-owned, ordered rows with a grid/drawer editor, touch reordering and a full-run preview
+  before any write. Register rows propose rules against a stable payee id when they have one,
+  while merchant regexes remain available for first-seen names. The guarded real-file cutover
+  moved 0 of 7,030 flows, 0 categories and no income figure; the old runtime array and matcher
+  are gone. The same slice also connected budget structure editing, hidden-envelope recovery,
+  the movement log and Assign remaining.
 - **Next:** **Shortfall attribution.** When Available to Spend goes negative, name
   what could be cancelled or skipped to fix it. Explicitly wanted, explicitly cut
   from the commitments spec; the annual/monthly cost columns already rank the

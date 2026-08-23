@@ -95,9 +95,11 @@ Cloned beside this repo at `../actual`. See `docs/actual-budget/README.md`.
 
 ### The corpus being migrated
 
-- **Location:** `src/lib/finances/classify/rules.ts` (65 entries), `classify/categorize.ts`
-- **Relevance:** the seed source. Its comments explaining _why_ a rule sits above another become
-  the `notes` column.
+- **Historical location:** `src/lib/finances/classify/rules.ts` (deleted).
+- **As-built location:** `src/lib/finances/rules/starterRules.ts` (65 migration-only entries),
+  with runtime matching in `rules/match.ts`.
+- **Relevance:** the seed source. Its load-bearing comments became the `notes` column; runtime
+  classification reads only the user's persisted rows.
 
 ### List view + drawer editor
 
