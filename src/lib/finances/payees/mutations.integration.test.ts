@@ -16,6 +16,7 @@ import {
   deletePayee,
   mergePayees,
   removeAlias,
+  replaceCommitmentPayees,
   renamePayee,
   updatePayeeDetails,
 } from "./mutations";
@@ -300,6 +301,21 @@ describeDb("payee mutations", () => {
 
     expect((await getPayee(userId, target))?.claim?.id).toBe(bill.id);
     expect(await getPayee(userId, source)).toBeNull();
+  });
+
+  it("replaces a commitment's complete payee set in one scoped transaction", async () => {
+    const [bill] = await db
+      .insert(financeRecurringBills)
+      .values({ userId, name: "Internet", cadenceMonths: 1 })
+      .returning({ id: financeRecurringBills.id });
+    const first = await createPayee(userId, { name: "Comcast" });
+    const second = await createPayee(userId, { name: "Xfinity" });
+    await replaceCommitmentPayees(userId, { kind: "bill", id: bill.id }, [first]);
+
+    await replaceCommitmentPayees(userId, { kind: "bill", id: bill.id }, [second]);
+
+    expect((await getPayee(userId, first))?.claim).toBeNull();
+    expect((await getPayee(userId, second))?.claim?.id).toBe(bill.id);
   });
 
   it("previews the references that will move before merging", async () => {

@@ -34,13 +34,14 @@ import {
 } from "./analytics";
 
 function row(overrides: Partial<AnalyticsRow> = {}): AnalyticsRow {
+  const description = overrides.description ?? "WM SUPERCENTER #1981";
   return {
     id: crypto.randomUUID(),
     accountId: "checking",
     accountName: "360 Checking",
     accountKind: "checking",
     transactionDate: "2026-03-14",
-    description: "WM SUPERCENTER #1981",
+    description,
     amountCents: -8412,
     sourceCategory: "",
     category: null,
@@ -51,6 +52,8 @@ function row(overrides: Partial<AnalyticsRow> = {}): AnalyticsRow {
     excludeFromBaseline: false,
     eventLabel: "",
     plannedWithdrawal: false,
+    payeeId: description,
+    payeeName: null,
     ...overrides,
   };
 }
@@ -735,6 +738,7 @@ describe("oneOffSuggestions", () => {
 /** Geico's real shape: a semi-annual premium, declared because it cannot be detected. */
 const geicoBill = {
   name: "Geico",
+  payeeIds: ["GEICO *AUTO"],
   cadenceMonths: 6,
   expectedCents: 141260,
   anchorDate: null,
@@ -792,6 +796,7 @@ describe("recurringMerchants with declared bills", () => {
     ];
     const bill = {
       name: "Taylor Gas",
+      payeeIds: ["TAYLOR GAS HEATING AIR"],
       cadenceMonths: 6,
       expectedCents: null,
       anchorDate: null,
@@ -820,6 +825,7 @@ describe("recurringMerchants with declared bills", () => {
     const found = recurringMerchants(charges, [
       {
         name: "SimpliSafe",
+        payeeIds: ["SIMPLISAFE 8888957880"],
         cadenceMonths: 3,
         expectedCents: null,
         anchorDate: null,
@@ -853,7 +859,7 @@ describe("recurringMerchants with declared bills", () => {
     const found = recurringMerchants(charges, [
       {
         name: "Groceries",
-        matchers: ["ACME MART", "BOB'S GROCERY"],
+        payeeIds: ["ACME MART", "BOB'S GROCERY"],
         cadenceMonths: 1,
         expectedCents: null,
         anchorDate: null,
@@ -1057,6 +1063,7 @@ describe("unscheduled bills", () => {
   /** Propane: the yearly cost is knowable, the delivery date is a tank sensor. */
   const propane = {
     name: "Taylor Gas",
+    payeeIds: ["TAYLOR GAS COMPANY INC.", "TAYLOR GAS HEATING AIR"],
     cadenceMonths: 12,
     expectedCents: 50_000,
     anchorDate: null,

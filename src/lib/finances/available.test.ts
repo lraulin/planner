@@ -538,6 +538,7 @@ function spendEntry(over: Partial<StoredSpend> = {}): StoredSpend {
     id: "spend-1",
     name: "Pizza",
     matchers: ["PIZZA HUT", "DOMINOS"],
+    payees: [],
     category: "",
     period: "week",
     amountSource: "auto",

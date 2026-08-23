@@ -17,6 +17,8 @@ import { db } from "@/db";
 import {
   financePayeeAliases,
   financePayees,
+  financeRecurringBills,
+  financeRecurringSpend,
   financeSchedules,
   financeTransactions,
 } from "@/db/schema";
@@ -440,4 +442,69 @@ export async function releaseCommitmentClaims(
           : eq(financePayees.commitmentSpendId, claim.id),
       ),
     );
+}
+
+/** Replace a commitment's complete payee set atomically, refusing identities held elsewhere. */
+export async function replaceCommitmentPayees(
+  userId: string,
+  claim: { kind: "bill" | "spend"; id: string },
+  payeeIds: readonly string[],
+): Promise<void> {
+  const ids = [...new Set(payeeIds)];
+  await db.transaction(async (tx) => {
+    const table = claim.kind === "bill" ? financeRecurringBills : financeRecurringSpend;
+    const [commitment] = await tx
+      .select({ id: table.id })
+      .from(table)
+      .where(and(eq(table.userId, userId), eq(table.id, claim.id)));
+    if (!commitment) throw new Error("That commitment does not exist.");
+
+    const selected =
+      ids.length === 0
+        ? []
+        : await tx
+            .select({
+              id: financePayees.id,
+              billId: financePayees.commitmentBillId,
+              spendId: financePayees.commitmentSpendId,
+            })
+            .from(financePayees)
+            .where(
+              and(eq(financePayees.userId, userId), inArray(financePayees.id, ids)),
+            )
+            .for("update");
+    if (selected.length !== ids.length) throw new Error("That payee does not exist.");
+    const held = selected.find(
+      (payee) =>
+        (payee.billId !== null &&
+          (claim.kind !== "bill" || payee.billId !== claim.id)) ||
+        (payee.spendId !== null &&
+          (claim.kind !== "spend" || payee.spendId !== claim.id)),
+    );
+    if (held) {
+      throw new Error("One of those payees already belongs to another commitment.");
+    }
+
+    await tx
+      .update(financePayees)
+      .set({ commitmentBillId: null, commitmentSpendId: null, updatedAt: new Date() })
+      .where(
+        and(
+          eq(financePayees.userId, userId),
+          claim.kind === "bill"
+            ? eq(financePayees.commitmentBillId, claim.id)
+            : eq(financePayees.commitmentSpendId, claim.id),
+        ),
+      );
+    if (ids.length > 0) {
+      await tx
+        .update(financePayees)
+        .set({
+          commitmentBillId: claim.kind === "bill" ? claim.id : null,
+          commitmentSpendId: claim.kind === "spend" ? claim.id : null,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(financePayees.userId, userId), inArray(financePayees.id, ids)));
+    }
+  });
 }

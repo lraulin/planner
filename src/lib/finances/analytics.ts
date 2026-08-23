@@ -79,6 +79,9 @@ export type AnalyticsRow = {
   eventLabel: string;
   /** Declared: this savings withdrawal is what the money was saved for. */
   plannedWithdrawal: boolean;
+  /** Stable identity assigned by reclassification; null means the row cannot be claimed. */
+  payeeId: string | null;
+  payeeName: string | null;
 };
 
 /**
@@ -616,11 +619,9 @@ type ChargeKind = { bill: boolean; spanDays: number | null };
 
 const NOT_A_BILL: ChargeKind = { bill: false, spanDays: null };
 
-/** Every bank string a declaration covers, including the name itself. */
-export function billMatcherKeys(bill: DeclaredBill): readonly string[] {
-  const matchers =
-    bill.matchers && bill.matchers.length > 0 ? bill.matchers : [bill.name];
-  return matchers.includes(bill.name) ? matchers : [...matchers, bill.name];
+/** Stable identities a declaration claims. An empty list matches no charge. */
+function billPayeeIds(bill: DeclaredBill): readonly string[] {
+  return bill.payeeIds ?? [];
 }
 
 function billStatusOf(bill: DeclaredBill): NonNullable<DeclaredBill["status"]> {
@@ -633,13 +634,13 @@ function activeBills(bills: readonly DeclaredBill[]): DeclaredBill[] {
 }
 
 function chargesForBill(
-  byMerchant: Map<string, AnalyticsRow[]>,
+  byPayee: Map<string, AnalyticsRow[]>,
   bill: DeclaredBill,
 ): AnalyticsRow[] {
   const seen = new Set<string>();
   const rows: AnalyticsRow[] = [];
-  for (const key of billMatcherKeys(bill)) {
-    for (const row of byMerchant.get(key) ?? []) {
+  for (const id of billPayeeIds(bill)) {
+    for (const row of byPayee.get(id) ?? []) {
       if (seen.has(row.id)) continue;
       seen.add(row.id);
       rows.push(row);
@@ -656,7 +657,7 @@ function chargesForBill(
 function claimedByBills(bills: readonly DeclaredBill[]): Map<string, DeclaredBill> {
   const index = new Map<string, DeclaredBill>();
   for (const bill of bills) {
-    for (const key of billMatcherKeys(bill)) index.set(key, bill);
+    for (const id of billPayeeIds(bill)) index.set(id, bill);
   }
   return index;
 }
@@ -664,7 +665,7 @@ function claimedByBills(bills: readonly DeclaredBill[]): Map<string, DeclaredBil
 function cadenceSpans(
   rows: readonly AnalyticsRow[],
   bills: readonly DeclaredBill[],
-): (merchant: string, chargeDateKey: string) => ChargeKind {
+): (row: AnalyticsRow, chargeDateKey: string) => ChargeKind {
   const declared = claimedByBills(activeBills(bills));
   const detected = new Map(
     recurringMerchants(rows, bills)
@@ -672,15 +673,15 @@ function cadenceSpans(
       .map((entry) => [entry.merchant, entry.observedGapDays]),
   );
 
-  return (merchant, chargeDateKey) => {
-    const bill = declared.get(merchant);
+  return (row, chargeDateKey) => {
+    const bill = row.payeeId ? declared.get(row.payeeId) : undefined;
     if (bill !== undefined) {
       return {
         bill: true,
         spanDays: bill.scheduled ? spanDays(chargeDateKey, cadenceOf(bill)) : null,
       };
     }
-    const days = detected.get(merchant);
+    const days = detected.get(effectiveMerchant(row));
     return days === undefined ? NOT_A_BILL : { bill: true, spanDays: days };
   };
 }
@@ -722,7 +723,7 @@ export function cashFlow(
     for (const row of grouped.get(bucket.key) ?? []) {
       const cost = spendCentsOf(row);
       if (cost === 0) continue;
-      const charge = spanFor(effectiveMerchant(row), row.transactionDate);
+      const charge = spanFor(row, row.transactionDate);
       if (!charge.bill) {
         variable[index] += cost;
         continue;
@@ -1151,6 +1152,7 @@ export function debtToAssetRatio(assetCents: number, debtCents: number): number 
 
 export type RecurringMerchant = {
   merchant: string;
+  payeeId: string | null;
   /** Typical charge, as a positive cost. */
   typicalCents: number;
   /** Standard deviation of the charges, in cents. Near zero is a subscription. */
@@ -1264,8 +1266,7 @@ export function recurringMerchants(
   billRows: readonly AnalyticsRow[] = rows,
 ): RecurringMerchant[] {
   const byMerchant = chargesByMerchant(rows);
-  const byMerchantForBills =
-    billRows === rows ? byMerchant : chargesByMerchant(billRows);
+  const byPayeeForBills = chargesByPayee(billRows);
   const claimed = claimedByBills(bills);
 
   const found: RecurringMerchant[] = [];
@@ -1273,7 +1274,7 @@ export function recurringMerchants(
     // A declaration is the user's answer to the same question, so the statistics do not get
     // to disagree with it — and a semi-annual bill would fail every threshold below anyway.
     // Cancelled and ignored still claim their matchers, so they cannot reappear as detections.
-    if (claimed.has(merchant)) continue;
+    if (ordered.some((row) => row.payeeId && claimed.has(row.payeeId))) continue;
     if (ordered.length < MIN_RECURRING_CHARGES) continue;
 
     const amounts = ordered.map(spendCentsOf);
@@ -1287,6 +1288,7 @@ export function recurringMerchants(
 
     found.push({
       merchant,
+      payeeId: ordered[0]?.payeeId ?? null,
       typicalCents,
       deviationCents,
       lowCents: Math.min(...amounts),
@@ -1311,7 +1313,7 @@ export function recurringMerchants(
     // the table permanently. Cancelled stays visible as history.
     if (billStatusOf(bill) === "ignored") continue;
 
-    const charges = chargesForBill(byMerchantForBills, bill);
+    const charges = chargesForBill(byPayeeForBills, bill);
     const amounts = charges.map(spendCentsOf);
     // The declared amount first, because it survives a window that contains no charge — which
     // is the normal case for a yearly bill and exactly when the commitment still exists.
@@ -1321,6 +1323,7 @@ export function recurringMerchants(
 
     found.push({
       merchant: bill.name,
+      payeeId: billPayeeIds(bill)[0] ?? null,
       typicalCents,
       deviationCents: standardDeviation(amounts),
       // A declared bill with no charges on file has no observed range; collapsing it onto
@@ -1371,6 +1374,23 @@ function chargesByMerchant(rows: readonly AnalyticsRow[]): Map<string, Analytics
     );
   }
   return byMerchant;
+}
+
+/** Spending charges grouped by stable payee id; unassigned rows cannot satisfy a claim. */
+function chargesByPayee(rows: readonly AnalyticsRow[]): Map<string, AnalyticsRow[]> {
+  const byPayee = new Map<string, AnalyticsRow[]>();
+  for (const row of rows) {
+    if (!row.payeeId || spendCentsOf(row) <= 0) continue;
+    const bucket = byPayee.get(row.payeeId);
+    if (bucket) bucket.push(row);
+    else byPayee.set(row.payeeId, [row]);
+  }
+  for (const charges of byPayee.values()) {
+    charges.sort((left, right) =>
+      left.transactionDate.localeCompare(right.transactionDate),
+    );
+  }
+  return byPayee;
 }
 
 /** Days between consecutive charges. Empty for a single charge, which has no cadence. */
@@ -1425,15 +1445,22 @@ const MIN_SPEND_COVERAGE = 0.75;
  */
 export function spendCandidates(
   rows: readonly AnalyticsRow[],
-  options: { todayKey: string; suppressMerchants?: readonly string[] } = {
+  options: {
+    todayKey: string;
+    suppressMerchants?: readonly string[];
+    suppressPayeeIds?: readonly string[];
+  } = {
     todayKey: "",
   },
 ): RecurringMerchant[] {
   const suppressed = new Set(options.suppressMerchants ?? []);
+  const suppressedPayees = new Set(options.suppressPayeeIds ?? []);
   const found: RecurringMerchant[] = [];
 
   for (const [merchant, ordered] of chargesByMerchant(rows)) {
     if (suppressed.has(merchant)) continue;
+    if (ordered.some((row) => row.payeeId && suppressedPayees.has(row.payeeId)))
+      continue;
     const past = ordered.filter((row) => row.transactionDate <= options.todayKey);
     if (past.length === 0) continue;
 
@@ -1447,6 +1474,7 @@ export function spendCandidates(
     const amounts = past.map(spendCentsOf);
     found.push({
       merchant,
+      payeeId: past[0]?.payeeId ?? null,
       typicalCents: candidate.typicalCents,
       deviationCents: standardDeviation(amounts),
       lowCents: Math.min(...amounts),
@@ -1544,13 +1572,19 @@ const MIN_CANDIDATE_CHARGES = 2;
  */
 export function cadenceCandidates(
   rows: readonly AnalyticsRow[],
-  options: { suppressMerchants?: readonly string[] } = {},
+  options: {
+    suppressMerchants?: readonly string[];
+    suppressPayeeIds?: readonly string[];
+  } = {},
 ): CadenceCandidate[] {
   const suppressed = new Set(options.suppressMerchants ?? []);
+  const suppressedPayees = new Set(options.suppressPayeeIds ?? []);
   const found: CadenceCandidate[] = [];
 
   for (const [merchant, ordered] of chargesByMerchant(rows)) {
     if (suppressed.has(merchant)) continue;
+    if (ordered.some((row) => row.payeeId && suppressedPayees.has(row.payeeId)))
+      continue;
     if (ordered.length < MIN_CANDIDATE_CHARGES) continue;
 
     const amounts = ordered.map(spendCentsOf);
@@ -1610,12 +1644,12 @@ export function upcomingBills(
   bills: readonly DeclaredBill[],
   todayKey: string,
 ): UpcomingBill[] {
-  const byMerchant = chargesByMerchant(rows);
+  const byPayee = chargesByPayee(rows);
 
   return bills
     .flatMap((bill) => {
       if (!bill.scheduled || billStatusOf(bill) !== "active") return [];
-      const charges = chargesForBill(byMerchant, bill);
+      const charges = chargesForBill(byPayee, bill);
       const lastChargeOn =
         charges[charges.length - 1]?.transactionDate ?? bill.anchorDate ?? "";
       if (lastChargeOn === "") return [];
@@ -1667,6 +1701,7 @@ export type OneOffOptions = {
    * pizza does not keep showing up as a one-off after it has been grouped.
    */
   suppressMerchants?: readonly string[];
+  suppressPayeeIds?: readonly string[];
 };
 
 /** How far above a typical row a charge has to sit before it is worth asking about. */
@@ -1692,7 +1727,12 @@ export function oneOffSuggestions(
   rows: readonly AnalyticsRow[],
   options: OneOffOptions = {},
 ): OneOffSuggestion[] {
-  const { limit = 20, bills = [], suppressMerchants = [] } = options;
+  const {
+    limit = 20,
+    bills = [],
+    suppressMerchants = [],
+    suppressPayeeIds = [],
+  } = options;
   const spending = rows.filter((row) => spendCentsOf(row) > 0);
   if (spending.length === 0) return [];
 
@@ -1701,17 +1741,19 @@ export function oneOffSuggestions(
   const recurring = new Set(
     recurringMerchants(rows, bills).map((entry) => entry.merchant),
   );
+  const claimedPayees = new Set([
+    ...bills.flatMap((bill) => billPayeeIds(bill)),
+    ...suppressPayeeIds,
+  ]);
   // A declared bill with no charge in this window is absent from the table above but is
   // still declared, and its charge must not resurface the moment the window narrows.
-  // Matchers (and cancelled/ignored claims) suppress the same way: the answer has been given.
-  for (const bill of bills) {
-    for (const key of billMatcherKeys(bill)) recurring.add(key);
-  }
+  // Cancelled and ignored claims suppress the same way: the answer has been given.
   for (const merchant of suppressMerchants) recurring.add(merchant);
 
   return spending
     .filter((row) => !row.excludeFromBaseline)
     .filter((row) => spendCentsOf(row) >= threshold)
+    .filter((row) => !row.payeeId || !claimedPayees.has(row.payeeId))
     .filter((row) => !recurring.has(effectiveMerchant(row)))
     .map((row) => ({
       row,

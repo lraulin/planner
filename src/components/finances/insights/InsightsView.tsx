@@ -139,7 +139,7 @@ export function InsightsView({
       levelRecurring: view.levelRecurring,
       today,
       statements,
-      suppressMerchants: spend.flatMap((entry) => [...entry.matchers]),
+      suppressPayeeIds: spend.flatMap((entry) => entry.payees.map((payee) => payee.id)),
     });
     if (core.empty) return core;
     return {

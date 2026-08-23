@@ -31,6 +31,8 @@ export type DeclaredBill = {
    * Hut and Domino's, and renaming it cannot orphan a charge.
    */
   name: string;
+  /** Stable identities claimed by this declaration. Empty means no charge is matched. */
+  payeeIds?: readonly string[];
   /**
    * Bank merchant strings this bill covers. Absent or empty means the name is the only
    * matcher — the single-merchant case every pre-split declaration had.

@@ -5,6 +5,7 @@ import {
   financeAccounts,
   financePaymentResolutions,
   financePayeeAliases,
+  financePayees,
   financeRecurringBills,
   financeRecurringSpend,
   financeTransactions,
@@ -320,62 +321,77 @@ export async function reclassifyTransactions(
   // classification path just for payees.
   await ensurePayees(userId);
 
-  const [rows, accounts, storedResolutions, billCategories, spendCategories, aliases] =
-    await Promise.all([
-      db
-        .select({
-          id: financeTransactions.id,
-          accountId: financeTransactions.accountId,
-          transactionDate: financeTransactions.transactionDate,
-          description: financeTransactions.description,
-          amount: financeTransactions.amount,
-          sourceCategory: financeTransactions.sourceCategory,
-          transferGroupId: financeTransactions.transferGroupId,
-          payeeId: financeTransactions.payeeId,
-          derivedCategory: financeTransactions.derivedCategory,
-          derivedFlow: financeTransactions.derivedFlow,
-        })
-        .from(financeTransactions)
-        .where(eq(financeTransactions.userId, userId)),
-      db
-        .select({
-          id: financeAccounts.id,
-          externalKey: financeAccounts.externalKey,
-        })
-        .from(financeAccounts)
-        .where(eq(financeAccounts.userId, userId)),
-      db
-        .select({
-          externalId: financePaymentResolutions.externalId,
-          transactionDate: financePaymentResolutions.transactionDate,
-          amount: financePaymentResolutions.amount,
-          counterparty: financePaymentResolutions.counterparty,
-          direction: financePaymentResolutions.direction,
-        })
-        .from(financePaymentResolutions)
-        .where(eq(financePaymentResolutions.userId, userId)),
-      db
-        .select({
-          matchers: financeRecurringBills.matchers,
-          category: financeRecurringBills.category,
-        })
-        .from(financeRecurringBills)
-        .where(eq(financeRecurringBills.userId, userId)),
-      db
-        .select({
-          matchers: financeRecurringSpend.matchers,
-          category: financeRecurringSpend.category,
-        })
-        .from(financeRecurringSpend)
-        .where(eq(financeRecurringSpend.userId, userId)),
-      db
-        .select({
-          alias: financePayeeAliases.alias,
-          payeeId: financePayeeAliases.payeeId,
-        })
-        .from(financePayeeAliases)
-        .where(eq(financePayeeAliases.userId, userId)),
-    ]);
+  const [
+    rows,
+    accounts,
+    storedResolutions,
+    billCategories,
+    spendCategories,
+    claimedPayees,
+    aliases,
+  ] = await Promise.all([
+    db
+      .select({
+        id: financeTransactions.id,
+        accountId: financeTransactions.accountId,
+        transactionDate: financeTransactions.transactionDate,
+        description: financeTransactions.description,
+        amount: financeTransactions.amount,
+        sourceCategory: financeTransactions.sourceCategory,
+        transferGroupId: financeTransactions.transferGroupId,
+        payeeId: financeTransactions.payeeId,
+        derivedCategory: financeTransactions.derivedCategory,
+        derivedFlow: financeTransactions.derivedFlow,
+      })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.userId, userId)),
+    db
+      .select({
+        id: financeAccounts.id,
+        externalKey: financeAccounts.externalKey,
+      })
+      .from(financeAccounts)
+      .where(eq(financeAccounts.userId, userId)),
+    db
+      .select({
+        externalId: financePaymentResolutions.externalId,
+        transactionDate: financePaymentResolutions.transactionDate,
+        amount: financePaymentResolutions.amount,
+        counterparty: financePaymentResolutions.counterparty,
+        direction: financePaymentResolutions.direction,
+      })
+      .from(financePaymentResolutions)
+      .where(eq(financePaymentResolutions.userId, userId)),
+    db
+      .select({
+        id: financeRecurringBills.id,
+        category: financeRecurringBills.category,
+      })
+      .from(financeRecurringBills)
+      .where(eq(financeRecurringBills.userId, userId)),
+    db
+      .select({
+        id: financeRecurringSpend.id,
+        category: financeRecurringSpend.category,
+      })
+      .from(financeRecurringSpend)
+      .where(eq(financeRecurringSpend.userId, userId)),
+    db
+      .select({
+        id: financePayees.id,
+        billId: financePayees.commitmentBillId,
+        spendId: financePayees.commitmentSpendId,
+      })
+      .from(financePayees)
+      .where(eq(financePayees.userId, userId)),
+    db
+      .select({
+        alias: financePayeeAliases.alias,
+        payeeId: financePayeeAliases.payeeId,
+      })
+      .from(financePayeeAliases)
+      .where(eq(financePayeeAliases.userId, userId)),
+  ]);
 
   const parsed = rows.map((row) => ({
     id: row.id,
@@ -405,14 +421,26 @@ export async function reclassifyTransactions(
     ];
   });
 
-  // A commitment's category outranks a `rules.ts` guess for every charge it matches, so the
-  // whole map goes in and the plan decides per row. Both tiers, one map: the merchant strings
-  // are exclusive across the two tables, so they cannot disagree.
+  // A commitment's category outranks a `rules.ts` guess for every charge its stable payee
+  // claim matches. Both tiers feed one map; the payee CHECK prevents disagreement.
   const commitmentCategories = new Map<string, string>();
-  for (const row of [...billCategories, ...spendCategories]) {
-    if (row.category === "") continue;
-    for (const merchant of row.matchers)
-      commitmentCategories.set(merchant, row.category);
+  const billCategoryById = new Map(
+    billCategories
+      .filter((row) => row.category !== "")
+      .map((row) => [row.id, row.category]),
+  );
+  const spendCategoryById = new Map(
+    spendCategories
+      .filter((row) => row.category !== "")
+      .map((row) => [row.id, row.category]),
+  );
+  for (const payee of claimedPayees) {
+    const category = payee.billId
+      ? billCategoryById.get(payee.billId)
+      : payee.spendId
+        ? spendCategoryById.get(payee.spendId)
+        : undefined;
+    if (category) commitmentCategories.set(payee.id, category);
   }
 
   const plan = planReclassify(

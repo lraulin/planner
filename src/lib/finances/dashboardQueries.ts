@@ -1,7 +1,8 @@
-import { and, asc, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNotNull, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeAccounts,
+  financePayees,
   financeRecurringBills,
   financeRecurringSpend,
   financeStatementRates,
@@ -21,7 +22,7 @@ import {
 import type { BillCharge, PendingRow } from "./available";
 import type { Payday } from "./classify/income";
 import {
-  matcherIndex,
+  payeeClaimIndex,
   type CommitmentCharge,
   type StoredBillRow,
   type StoredSpend,
@@ -88,9 +89,18 @@ export async function loadInsightsRows(
       excludeFromBaseline: financeTransactions.excludeFromBaseline,
       eventLabel: financeTransactions.eventLabel,
       plannedWithdrawal: financeTransactions.plannedWithdrawal,
+      payeeId: financeTransactions.payeeId,
+      payeeName: financePayees.name,
     })
     .from(financeTransactions)
     .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
+    .leftJoin(
+      financePayees,
+      and(
+        eq(financePayees.id, financeTransactions.payeeId),
+        eq(financePayees.userId, userId),
+      ),
+    )
     .where(and(...scopeConditions(userId, filter)))
     .orderBy(asc(financeTransactions.transactionDate), asc(financeTransactions.id));
 
@@ -111,6 +121,8 @@ export async function loadInsightsRows(
     excludeFromBaseline: row.excludeFromBaseline,
     eventLabel: row.eventLabel,
     plannedWithdrawal: row.plannedWithdrawal,
+    payeeId: row.payeeId,
+    payeeName: row.payeeName,
   }));
 }
 
@@ -140,47 +152,93 @@ export async function unclassifiedCount(userId: string): Promise<number> {
  * accrual, the forecast — check `status` themselves and say so.
  */
 export async function loadRecurringBills(userId: string): Promise<StoredBillRow[]> {
-  const rows = await db
-    .select({
-      id: financeRecurringBills.id,
-      name: financeRecurringBills.name,
-      matchers: financeRecurringBills.matchers,
-      status: financeRecurringBills.status,
-      cancelledOn: financeRecurringBills.cancelledOn,
-      url: financeRecurringBills.url,
-      cadenceMonths: financeRecurringBills.cadenceMonths,
-      cadenceDays: financeRecurringBills.cadenceDays,
-      category: financeRecurringBills.category,
-      expectedCents: financeRecurringBills.expectedCents,
-      anchorDate: financeRecurringBills.anchorDate,
-      scheduled: financeRecurringBills.scheduled,
-      dueDay: financeRecurringBills.dueDay,
-      notes: financeRecurringBills.notes,
-    })
-    .from(financeRecurringBills)
-    .where(eq(financeRecurringBills.userId, userId))
-    .orderBy(asc(financeRecurringBills.name));
+  const [rows, payees] = await Promise.all([
+    db
+      .select({
+        id: financeRecurringBills.id,
+        name: financeRecurringBills.name,
+        matchers: financeRecurringBills.matchers,
+        status: financeRecurringBills.status,
+        cancelledOn: financeRecurringBills.cancelledOn,
+        url: financeRecurringBills.url,
+        cadenceMonths: financeRecurringBills.cadenceMonths,
+        cadenceDays: financeRecurringBills.cadenceDays,
+        category: financeRecurringBills.category,
+        expectedCents: financeRecurringBills.expectedCents,
+        anchorDate: financeRecurringBills.anchorDate,
+        scheduled: financeRecurringBills.scheduled,
+        dueDay: financeRecurringBills.dueDay,
+        notes: financeRecurringBills.notes,
+      })
+      .from(financeRecurringBills)
+      .where(eq(financeRecurringBills.userId, userId))
+      .orderBy(asc(financeRecurringBills.name)),
+    db
+      .select({
+        id: financePayees.id,
+        name: financePayees.name,
+        commitmentId: financePayees.commitmentBillId,
+      })
+      .from(financePayees)
+      .where(
+        and(
+          eq(financePayees.userId, userId),
+          isNotNull(financePayees.commitmentBillId),
+        ),
+      )
+      .orderBy(asc(financePayees.name)),
+  ]);
 
-  return rows;
+  return rows.map((row) => ({
+    ...row,
+    payees: payees
+      .filter((payee) => payee.commitmentId === row.id)
+      .map(({ id, name }) => ({ id, name })),
+    payeeIds: payees
+      .filter((payee) => payee.commitmentId === row.id)
+      .map((payee) => payee.id),
+  }));
 }
 
 /** Every recurring-spend entry — tier 2. Unfiltered by window, for the same reason. */
 export async function loadRecurringSpend(userId: string): Promise<StoredSpend[]> {
-  return db
-    .select({
-      id: financeRecurringSpend.id,
-      name: financeRecurringSpend.name,
-      matchers: financeRecurringSpend.matchers,
-      period: financeRecurringSpend.period,
-      amountSource: financeRecurringSpend.amountSource,
-      expectedCents: financeRecurringSpend.expectedCents,
-      active: financeRecurringSpend.active,
-      category: financeRecurringSpend.category,
-      notes: financeRecurringSpend.notes,
-    })
-    .from(financeRecurringSpend)
-    .where(eq(financeRecurringSpend.userId, userId))
-    .orderBy(asc(financeRecurringSpend.name));
+  const [rows, payees] = await Promise.all([
+    db
+      .select({
+        id: financeRecurringSpend.id,
+        name: financeRecurringSpend.name,
+        matchers: financeRecurringSpend.matchers,
+        period: financeRecurringSpend.period,
+        amountSource: financeRecurringSpend.amountSource,
+        expectedCents: financeRecurringSpend.expectedCents,
+        active: financeRecurringSpend.active,
+        category: financeRecurringSpend.category,
+        notes: financeRecurringSpend.notes,
+      })
+      .from(financeRecurringSpend)
+      .where(eq(financeRecurringSpend.userId, userId))
+      .orderBy(asc(financeRecurringSpend.name)),
+    db
+      .select({
+        id: financePayees.id,
+        name: financePayees.name,
+        commitmentId: financePayees.commitmentSpendId,
+      })
+      .from(financePayees)
+      .where(
+        and(
+          eq(financePayees.userId, userId),
+          isNotNull(financePayees.commitmentSpendId),
+        ),
+      )
+      .orderBy(asc(financePayees.name)),
+  ]);
+  return rows.map((row) => ({
+    ...row,
+    payees: payees
+      .filter((payee) => payee.commitmentId === row.id)
+      .map(({ id, name }) => ({ id, name })),
+  }));
 }
 
 /**
@@ -263,7 +321,7 @@ export async function loadDashboard(userId: string): Promise<DashboardData> {
 
   // One index, built once, and the only route from a bank string to a commitment. Resolving
   // per panel is how Pizza Hut ends up folded into "Pizza" on one surface and not another.
-  const index = matcherIndex(bills, spend);
+  const index = payeeClaimIndex(bills, spend);
   const billNames = new Set(bills.map((bill) => bill.name));
   const spendNames = new Set(spend.map((entry) => entry.name));
 
@@ -274,7 +332,7 @@ export async function loadDashboard(userId: string): Promise<DashboardData> {
   for (const row of rows) {
     const merchant = effectiveMerchant(row);
     if (merchant !== "") merchantSet.add(merchant);
-    const ref = index.get(merchant);
+    const ref = row.payeeId ? index.get(row.payeeId) : undefined;
     if (ref === undefined) continue;
 
     if (ref.kind === "bill" && billNames.has(ref.name)) {
@@ -343,16 +401,19 @@ export async function loadDashboard(userId: string): Promise<DashboardData> {
 function reviewCandidates(
   rows: readonly AnalyticsRow[],
   bills: readonly StoredBillRow[],
-  index: ReturnType<typeof matcherIndex>,
+  index: ReturnType<typeof payeeClaimIndex>,
 ): RecurringMerchant[] {
   const billShaped = recurringMerchants(rows, bills).filter(
-    (entry) => !entry.declared && !index.has(entry.merchant),
+    (entry) => !entry.declared && (!entry.payeeId || !index.has(entry.payeeId)),
   );
   const claimed = new Set(billShaped.map((entry) => entry.merchant));
 
   const spendShaped = spendCandidates(rows, {
     todayKey: toDateKey(new Date()),
-  }).filter((entry) => !index.has(entry.merchant) && !claimed.has(entry.merchant));
+  }).filter(
+    (entry) =>
+      (!entry.payeeId || !index.has(entry.payeeId)) && !claimed.has(entry.merchant),
+  );
 
   return [...billShaped, ...spendShaped].sort(
     (left, right) =>

@@ -73,11 +73,8 @@ export type InsightsAnalysisOptions = {
    * full filtered history, the same way a named window does.
    */
   range?: DateRange;
-  /**
-   * Merchants already claimed by recurring spend. Withheld from the review list and
-   * cadence proposals. Never fed into `baselineSplit` — that is D7.
-   */
-  suppressMerchants?: readonly string[];
+  /** Recurring-spend payee identities withheld from review and cadence proposals. */
+  suppressPayeeIds?: readonly string[];
 };
 
 export type InsightsAnalysisEmpty = {
@@ -251,20 +248,16 @@ export function analyzeInsights(
     recurring,
     suggestions: oneOffSuggestions(windowed, {
       bills,
-      suppressMerchants: options.suppressMerchants,
+      suppressPayeeIds: options.suppressPayeeIds,
     }),
     // Both of these read the **whole** filtered history, not the window. The two charges
     // that make a semi-annual pattern are eight months apart, and the anchor a forecast
     // walks from is the most recent charge — a window that hides either produces a
     // confident wrong answer rather than no answer.
     candidates: cadenceCandidates(filtered, {
-      suppressMerchants: [
-        ...bills.flatMap((bill) =>
-          bill.matchers && bill.matchers.length > 0
-            ? [...bill.matchers, bill.name]
-            : [bill.name],
-        ),
-        ...(options.suppressMerchants ?? []),
+      suppressPayeeIds: [
+        ...bills.flatMap((bill) => bill.payeeIds ?? []),
+        ...(options.suppressPayeeIds ?? []),
       ],
     }),
     upcoming: upcomingBills(filtered, bills, options.today ?? full.endKey),

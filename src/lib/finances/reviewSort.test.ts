@@ -6,6 +6,7 @@ function item(
   over: Partial<RecurringMerchant> & Pick<RecurringMerchant, "merchant">,
 ): RecurringMerchant {
   return {
+    payeeId: null,
     typicalCents: 1000,
     deviationCents: 0,
     lowCents: 1000,

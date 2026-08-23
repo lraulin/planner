@@ -340,6 +340,22 @@ describe("planReclassify", () => {
     ]);
   });
 
+  it("applies commitment category precedence through the stable payee id", () => {
+    const plan = planReclassify(
+      [row("charge", "checking", "2026-03-14", "ACME MYSTERY SHOP", -2500)],
+      ACCOUNTS,
+      minter(),
+      [],
+      new Map([["payee-acme", "Housing"]]),
+      new Map([["ACME MYSTERY SHOP", "payee-acme"]]),
+    );
+
+    expect(plan.rows[0]).toMatchObject({
+      payeeId: "payee-acme",
+      derivedCategory: "Housing",
+    });
+  });
+
   it("pairs a Coinbase withdrawal with checking and leaves the Sell as the liquidation", () => {
     const plan = planOf([
       row(

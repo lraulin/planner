@@ -13,6 +13,8 @@ import {
 import { importFinanceCsvFiles, type ImportFile } from "./import";
 import { reclassifyTransactions, setOneOff, upsertRecurringBill } from "./mutations";
 import { listTransactions } from "./queries";
+import { renamePayee } from "./payees/mutations";
+import { listPayees } from "./payees/queries";
 
 const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
@@ -111,6 +113,9 @@ describeDb("loadInsightsRows", () => {
     expect(rows.every((row) => row.accountName === "Chase •••9910")).toBe(true);
     expect(effectiveFlow(rows[0])).toBe("spend");
     expect(effectiveCategory(rows[0])).toBe("Groceries");
+    expect(rows.every((row) => row.payeeId !== null && row.payeeName !== null)).toBe(
+      true,
+    );
   });
 
   it("carries the user-owned fields the panels split baseline from one-off with", async () => {
@@ -215,6 +220,11 @@ describeDb("loadDashboard", () => {
       expectedCents: 3_471,
       dueDay: 9,
     });
+    const alarmPayee = (await listPayees(userId)).find(
+      (payee) => payee.claim?.name === "SimpliSafe",
+    );
+    if (!alarmPayee) throw new Error("SimpliSafe payee was not claimed");
+    await renamePayee(userId, alarmPayee.id, "Home Alarm");
 
     const data = await loadDashboard(userId);
 
@@ -224,6 +234,7 @@ describeDb("loadDashboard", () => {
       kind: "credit_card",
     });
     expect(data.bills[0]).toMatchObject({ dueDay: 9 });
+    expect(data.bills[0].payees).toEqual([{ id: alarmPayee.id, name: "Home Alarm" }]);
     // Only charges against a declared merchant — the Walmart row is not one.
     expect(data.billCharges).toEqual([
       { name: "SimpliSafe", dateKey: "2026-03-09", costCents: 3471 },

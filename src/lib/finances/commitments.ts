@@ -54,6 +54,7 @@ export type StoredSpend = {
   id: string;
   name: string;
   matchers: readonly string[];
+  payees: readonly CommitmentPayee[];
   period: RecurringSpendPeriod;
   amountSource: "auto" | "pinned";
   expectedCents: number | null;
@@ -67,6 +68,7 @@ export type StoredSpend = {
 export type StoredBillRow = StoredBill & {
   id: string;
   matchers: readonly string[];
+  payees: readonly CommitmentPayee[];
   status: CommitmentStatus;
   cancelledOn: string | null;
   url: string;
@@ -84,7 +86,10 @@ export type Commitment = {
   id: string;
   name: string;
   matchers: readonly string[];
+  payees: readonly CommitmentPayee[];
 };
+
+export type CommitmentPayee = { id: string; name: string };
 
 export function asBillCommitment(bill: StoredBillRow): Commitment {
   return {
@@ -92,6 +97,7 @@ export function asBillCommitment(bill: StoredBillRow): Commitment {
     id: bill.id,
     name: bill.name,
     matchers: bill.matchers,
+    payees: bill.payees,
   };
 }
 
@@ -101,6 +107,7 @@ export function asSpendCommitment(entry: StoredSpend): Commitment {
     id: entry.id,
     name: entry.name,
     matchers: entry.matchers,
+    payees: entry.payees,
   };
 }
 
@@ -111,6 +118,25 @@ export type CommitmentRef = {
   /** The user's name for it — and the key everything downstream groups by. */
   name: string;
 };
+
+/** Every stable payee id mapped to the commitment whose database claim names it. */
+export function payeeClaimIndex(
+  bills: readonly StoredBillRow[],
+  spend: readonly StoredSpend[],
+): Map<string, CommitmentRef> {
+  const index = new Map<string, CommitmentRef>();
+  for (const bill of bills) {
+    for (const payee of bill.payees) {
+      index.set(payee.id, { kind: "bill", id: bill.id, name: bill.name });
+    }
+  }
+  for (const entry of spend) {
+    for (const payee of entry.payees) {
+      index.set(payee.id, { kind: "spend", id: entry.id, name: entry.name });
+    }
+  }
+  return index;
+}
 
 /**
  * Raised when two commitments claim the same bank merchant.

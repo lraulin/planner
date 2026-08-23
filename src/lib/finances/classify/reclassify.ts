@@ -109,7 +109,7 @@ export function planReclassify(
   accounts: readonly ReclassifyAccount[],
   mintGroupId: () => string,
   resolutions: readonly PaypalResolution[] = [],
-  /** Merchant → the category its commitment declares. Outranks a `rules.ts` match. */
+  /** Payee id → the category its commitment declares. Outranks a `rules.ts` match. */
   commitmentCategories: ReadonlyMap<string, string> = new Map(),
   /** Normalized alias → stable payee id, ensured by the caller before planning. */
   payees: PayeeIndex = new Map(),
@@ -129,18 +129,10 @@ export function planReclassify(
   // should see — the bank description is only the rail.
   const perRow = new Map(
     rows.map((row) => {
-      const fromBank = categorize(
-        row.description,
-        row.sourceCategory,
-        commitmentCategories,
-      );
+      const fromBank = categorize(row.description, row.sourceCategory);
       const resolution = named.get(row.id);
       if (!resolution?.counterparty) return [row.id, fromBank] as const;
-      const fromPaypal = categorize(
-        resolution.counterparty,
-        row.sourceCategory,
-        commitmentCategories,
-      );
+      const fromPaypal = categorize(resolution.counterparty, row.sourceCategory);
       return [
         row.id,
         {
@@ -151,6 +143,13 @@ export function planReclassify(
         },
       ] as const;
     }),
+  );
+
+  const payeeIdByRow = new Map(
+    rows.map((row) => [
+      row.id,
+      payeeForDescription(row.description, payees, named.get(row.id)?.counterparty),
+    ]),
   );
 
   // A rule that names a flow has settled the row. Withholding those from cadence detection
@@ -227,15 +226,13 @@ export function planReclassify(
     return {
       id: row.id,
       derivedCategory: carriesCategory(flow)
-        ? (perRow.get(row.id)?.category ?? null)
+        ? (commitmentCategories.get(payeeIdByRow.get(row.id) ?? "") ??
+          perRow.get(row.id)?.category ??
+          null)
         : null,
       derivedFlow: flow,
       transferGroupId: groupIdByRow.get(row.id) ?? null,
-      payeeId: payeeForDescription(
-        row.description,
-        payees,
-        named.get(row.id)?.counterparty,
-      ),
+      payeeId: payeeIdByRow.get(row.id) ?? null,
     };
   });
 

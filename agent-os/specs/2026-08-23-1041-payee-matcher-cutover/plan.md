@@ -154,6 +154,7 @@ polish.
 | 4   | The production payee rebuild corrected 88 transaction assignments, created four specific payees and claimed five newly observed spellings. Afterward, parity differs only for 13 opaque PayPal rows totaling $319.17: one Dropbox payment ($127.08), nine Spotify payments ($162.09), and three GitHub payments ($30.00). Those rows are accepted as an intentional correction, and the guard permits only payee-only opaque-PayPal enrichments while still reporting them. | PayPal statements identify the actual recipient where the legacy bank merchant was only `P` or a shared transfer rail. Preserving exact old figures would deliberately discard known merchant identity. The semantic guard captures why the correction is safe without hard-coding today's three merchants, while any named-merchant difference or lost legacy row still stops the cutover. |
 | 5   | Stage A assigned 38 production payee claims without creating payees, releasing claims, or rewriting schedules. Its immediate production replay was idempotent and planned zero writes; the deployment-only cutover flag was then removed.                                                                                                                                                                                                                                   | The production audit and transaction completed against the corrected payee catalog, and a separate dry-run build proved the stored result is the complete desired state before any reader switches to claims.                                                                                                                                                                               |
 | 6   | Payee merge treats the same commitment claim repeated across selected payees as one surviving claim; only distinct commitment identities refuse the merge. The confirmation previews normalized aliases, transactions, register total, schedules, and the resulting claim before writing. A searchable selection sheet provides the compact-screen path where tapping a row opens its drawer instead of extending grid selection.                                           | Stage A can legitimately assign one commitment to several payees that were previously separate matcher tokens. Counting claimed rows made those bridge-created aliases impossible to consolidate even though no commitment choice was ambiguous. A phone cannot rely on desktop modifier-key selection, so the operation needs an explicit touch path rather than a disabled command.       |
+| 7   | Dashboard and Insights transaction rows now carry the joined payee id and display name. Commitment charge grouping, recurring detection suppression, forecasts, levelling, one-off suppression, and derived commitment categories resolve through claims; unassigned transactions cannot satisfy a commitment.                                                                                                                                                              | This makes rename and merge label-only identity operations while preserving explicit-category precedence. Falling back to a merchant string for a transaction without a payee would quietly retain the old authority and make an unclassified row claimable, contrary to D1.                                                                                                                |
 
 ---
 
@@ -183,10 +184,10 @@ polish.
 
 ## Task 3: Switch commitment behavior to payee ids
 
-- [ ] Replace `matcherIndex` / `resolveMerchant` with a payee-claim index in every business
+- [x] Replace `matcherIndex` / `resolveMerchant` with a payee-claim index in every business
       reader: Dashboard, Available, Insights, Sankey, commitment rates and review.
-- [ ] Replace commitment category lookup keys with payee ids without changing precedence.
-- [ ] Make claim replacement transactional and ownership-scoped.
+- [x] Replace commitment category lookup keys with payee ids without changing precedence.
+- [x] Make claim replacement transactional and ownership-scoped.
 
 ## Task 4: Complete schedule conversion
 

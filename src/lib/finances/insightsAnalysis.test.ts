@@ -4,13 +4,14 @@ import { analyzeInsights } from "./insightsAnalysis";
 import type { DeclaredBill } from "./recurringBills";
 
 function row(overrides: Partial<AnalyticsRow> = {}): AnalyticsRow {
+  const description = overrides.description ?? "WM SUPERCENTER #1981";
   return {
     id: crypto.randomUUID(),
     accountId: "checking",
     accountName: "360 Checking",
     accountKind: "checking",
     transactionDate: "2026-03-14",
-    description: "WM SUPERCENTER #1981",
+    description,
     amountCents: -8412,
     sourceCategory: "",
     category: null,
@@ -21,6 +22,8 @@ function row(overrides: Partial<AnalyticsRow> = {}): AnalyticsRow {
     excludeFromBaseline: false,
     eventLabel: "",
     plannedWithdrawal: false,
+    payeeId: description,
+    payeeName: null,
     ...overrides,
   };
 }
@@ -49,6 +52,7 @@ function groceryHistory(extras: AnalyticsRow[] = []): AnalyticsRow[] {
 
 const geicoBill: DeclaredBill = {
   name: "Geico",
+  payeeIds: ["GEICO *AUTO"],
   cadenceMonths: 12,
   expectedCents: 282500,
   anchorDate: "2025-01-15",
@@ -122,7 +126,7 @@ describe("analyzeInsights", () => {
       window: "3m",
       today: "2026-03-31",
       levelRecurring: true,
-      suppressMerchants: ["PIZZA HUT", "DOMINOS"],
+      suppressPayeeIds: ["PIZZA HUT #1", "DOMINOS 99"],
     });
     expect(without.empty).toBe(false);
     expect(withSuppress.empty).toBe(false);
