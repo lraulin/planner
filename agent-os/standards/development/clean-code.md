@@ -125,6 +125,36 @@ Tolerate duplicate _shape_. Two components with similar JSX, two queries with a 
 parameter, which is worse than the copy and harder to unpick later. Two occurrences is a
 coincidence; three with the same reason to change is a pattern.
 
+## When the model is wrong, change the model
+
+**Prefer the design that is right for the app over the one that is cheap given what exists
+today.** When work reveals that the current model is wrong — not merely inconvenient — the
+default is to fix the model, including when that means a large migration across several
+tables and every reader. "That would touch a lot of files" is a cost to plan around, not a
+reason to choose the lesser design.
+
+The tell is a justification that appeals only to the present shape of the code: _the string
+is already the join key everywhere_, _those columns already exist_, _the other tables
+already assume it_. None of those say the design is right; they say it is entrenched. Weigh
+what the app should be in a year, and if today's model is not it, say so plainly and price
+the refactor.
+
+**This is not a licence for speculative generality**, and it does not soften the section
+above. The distinction is whose problem is being solved:
+
+- **Speculative generality** builds for a caller that does not exist yet. Still forbidden.
+- **A model correction** fixes a model that is _already_ wrong for cases that _already_
+  exist, and is currently being worked around. That is the one to take.
+
+The practical test: if a workaround is being added because the model cannot express
+something true about the data, the model is the bug. Two workarounds for the same missing
+concept is the signal — a rule enforced in application code because the schema cannot say
+it, a fact recomputed at read time because nothing stores it, a value copied into three
+tables because there is no row to point at.
+
+When such a refactor is taken, it gets a spec, and the spec records what was superseded and
+why — so the next reader sees a decision, not churn. Large is fine; unexplained is not.
+
 ## When an agent writes it
 
 - **Small, reviewable diffs.** A change that touches one domain folder gets read properly;

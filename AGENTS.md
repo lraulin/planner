@@ -72,6 +72,27 @@ are the one gate that cannot be automated into a hook:
   not in a git hook because it needs a server running; it is a step you take, not one that
   takes itself.
 
+### Choosing the design
+
+Full rule: **"When the model is wrong, change the model"** in
+`agent-os/standards/development/clean-code.md`.
+
+**Prefer the design that is right for the app long-term over the one that is cheap given
+what exists today.** When work reveals the current model is wrong — not merely inconvenient
+— fix the model, even when that means a migration across several tables and every reader.
+"That would touch a lot of files" is a cost to plan around, not a reason to pick the lesser
+design. A justification that appeals only to the present shape of the code (_the string is
+already the join key everywhere_) says the design is entrenched, not that it is right.
+
+This does **not** licence speculative generality, which stays forbidden: that builds for a
+caller who does not exist. A model correction fixes what is _already_ wrong and _already_
+being worked around. The signal is two workarounds for the same missing concept — a rule
+enforced in application code because the schema cannot express it, a fact recomputed at read
+time because nothing stores it, a value copied into three tables because there is no row to
+point at.
+
+Such a refactor gets a spec, and the spec records what it supersedes and why.
+
 ### Fixing bugs
 
 Full protocol: `/fix-bug` (`.agents/skills/fix-bug/SKILL.md`). It applies to anything
