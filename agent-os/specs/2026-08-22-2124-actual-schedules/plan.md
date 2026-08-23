@@ -1,7 +1,9 @@
 # Actual-style Schedules & Recurring Transactions
 
-**Status: active**
+**Status: frozen / complete** (2026-08-22)
 Spec folder: `agent-os/specs/2026-08-22-2124-actual-schedules/`
+
+This is the as-built record. Further change opens a new delta-spec.
 
 ## Spec relationships
 
@@ -129,27 +131,47 @@ and any future import/export — transfer.
 
 ## Acceptance criteria
 
-- [ ] One action turns every **active** declared bill into a schedule with the correct next
+- [x] One action turns every **active** declared bill into a schedule with the correct next
       date; re-running creates nothing new and picks up bills added since.
-- [ ] A schedule for "the 2nd Tuesday of every other month" lists the correct next three dates
+- [x] A schedule for "the 2nd Tuesday of every other month" lists the correct next three dates
       in the editor preview.
-- [ ] An imported bank transaction matching a schedule flips its status to `paid`, links via
+- [x] An imported bank transaction matching a schedule flips its status to `paid`, links via
       `schedule_id`, and advances `next_date`.
-- [ ] **Skip** advances past an occurrence without writing a transaction.
-- [ ] **Post now** inserts exactly one linked transaction and advances the schedule.
-- [ ] The Register shows upcoming occurrences within the chosen horizon, and no balance,
+- [x] **Skip** advances past an occurrence without writing a transaction.
+- [x] **Post now** inserts exactly one linked transaction and advances the schedule.
+- [x] The Register shows upcoming occurrences within the chosen horizon, and no balance,
       Available to Spend figure, or budget number changes because of them.
-- [ ] Discover proposes recurring payments that are not already declared, and creates the
+- [x] Discover proposes recurring payments that are not already declared, and creates the
       confirmed ones.
-- [ ] A second user cannot read, update or delete the first user's schedules — proven in
+- [x] A second user cannot read, update or delete the first user's schedules — proven in
       `*.integration.test.ts`.
-- [ ] `npm run smoke` passes with the new route.
+- [x] `npm run smoke` passes with the new route.
 
 ## Changes from original plan
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                                             | Why                                                                                                                 |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| 1   | `sort_key` text (fractional indexing) instead of an integer `sort_order`.                                                                          | House pattern on every other ordered catalog; drag-reorder later does not need a migration.                         |
+| 2   | Status and the upcoming strip recompute with the client's `localDateKey` after hydrate, rather than trusting the server's `toDateKey(new Date())`. | UTC noon of "now" is tomorrow evening in the Americas. First render called due-today **Missed**. `dates.md` rule 8. |
+| 3   | Import-from-bills reports as a muted notice, not the grid error bar.                                                                               | A green import is not a failure; putting it on `error` painted the toolbar red.                                     |
+| 4   | **Post now** is disabled with a title until the schedule names an account.                                                                         | Actual no-ops without `_account`. Bills have none, so an imported schedule cannot post until the user picks one.    |
+
+---
+
+## As built (2026-08-22)
+
+Shipped `/finances/schedules` beside Budget, a `finance_schedules` table whose `conditions` JSONB is Actual's `{field, op, value}` shape, and `finance_transactions.schedule_id`. The recurrence engine is ours (`src/lib/finances/schedules/recur.ts`) over `YYYY-MM-DD` keys: day 31 in a 30-day month is **skipped**, matching rschedule / RFC 5545, not clamped as bill cadences are.
+
+On the real file: **Import from bills** created 4 schedules (1Password, Rent, Taylor Gas, Geico) and reported drift on next-due where the bill walks from last charge and the schedule starts from today. Skip moved Geico from 12/26/2026 to 6/26/2027 without writing a row. The Register strip listed due-today schedules above the grid; the GEICO-filtered register still showed 1Password/Rent/Taylor Gas/Test Netflix in that strip and did not change any balance.
+
+**Gate:** 3,141 unit tests, schedule + cross-user integration tests run (not skipped), lint, typecheck, and all 60 routes under `npm run smoke`.
+
+### Follow-ups (new work — not amendments to this frozen spec)
+
+- **Goal templates**, including `#template schedule <name>` — the reason this spec was taken before the rest of Actual's budget follow-ons.
+- **Bills remaining the source of truth.** Drift is on the page so that decision can be made from evidence.
+- **The calendar badge Actual draws on a due envelope.** Named in the budget spec; still out.
+- **Rules / Payees / auto-post.** Flag stored, nothing writes unattended.
 
 ---
 

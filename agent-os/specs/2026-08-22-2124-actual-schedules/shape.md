@@ -1,6 +1,6 @@
 # Actual-style Schedules & Recurring Transactions — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-08-22)
 
 ## Scope
 

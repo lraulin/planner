@@ -21,20 +21,21 @@ semantics transfer; the machinery does not.**
 
 ## Where the semantics live
 
-| Concern                                                                                      | File in `../actual`                                                                |
-| -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| **Balance, carryover and To Budget formulas**                                                | `packages/loot-core/src/server/budget/envelope.ts`                                 |
-| Per-category monthly activity; the on-budget filter                                          | `packages/loot-core/src/server/budget/base.ts`                                     |
-| **Movement operations and their clamps** — cover overspending, transfer, hold for next month | `packages/loot-core/src/server/budget/actions.ts`                                  |
-| Budget table shapes (`zero_budgets`, `zero_budget_months`)                                   | `packages/loot-core/migrations/1632571489012_remove_cache.js`                      |
-| `categories` / `category_groups`                                                             | `packages/loot-core/src/server/sql/init.sql`                                       |
-| Integer-cents assertion                                                                      | `packages/loot-core/src/shared/util.ts` (`safeNumber`)                             |
-| Tracking (non-envelope) budget, for contrast                                                 | `packages/loot-core/src/server/budget/tracking.ts`                                 |
-| Goal templates (`#template …`)                                                               | `packages/loot-core/src/server/budget/goal-template.ts`                            |
-| Schedules and the rule engine beneath them                                                   | `packages/loot-core/src/server/schedules/`, `packages/loot-core/src/server/rules/` |
-| Budget UI and menu vocabulary                                                                | `packages/desktop-client/src/components/budget/envelope/`                          |
-| Cell → UI naming crib                                                                        | `packages/desktop-client/src/spreadsheet/bindings.ts`                              |
-| Their own docs                                                                               | `packages/docs/docs/`                                                              |
+| Concern                                                                                      | File in `../actual`                                                                                             |
+| -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| **Balance, carryover and To Budget formulas**                                                | `packages/loot-core/src/server/budget/envelope.ts`                                                              |
+| Per-category monthly activity; the on-budget filter                                          | `packages/loot-core/src/server/budget/base.ts`                                                                  |
+| **Movement operations and their clamps** — cover overspending, transfer, hold for next month | `packages/loot-core/src/server/budget/actions.ts`                                                               |
+| Budget table shapes (`zero_budgets`, `zero_budget_months`)                                   | `packages/loot-core/migrations/1632571489012_remove_cache.js`                                                   |
+| `categories` / `category_groups`                                                             | `packages/loot-core/src/server/sql/init.sql`                                                                    |
+| Integer-cents assertion                                                                      | `packages/loot-core/src/shared/util.ts` (`safeNumber`)                                                          |
+| Tracking (non-envelope) budget, for contrast                                                 | `packages/loot-core/src/server/budget/tracking.ts`                                                              |
+| Goal templates (`#template …`)                                                               | `packages/loot-core/src/server/budget/goal-template.ts`                                                         |
+| **Schedules** — recurrence, status, skip, next-date cursor, discover                         | `packages/loot-core/src/shared/schedules.ts`, `packages/loot-core/src/server/schedules/{app,find-schedules}.ts` |
+| The rule engine beneath schedules (not ported; we store the condition shape only)            | `packages/loot-core/src/server/rules/`                                                                          |
+| Budget UI and menu vocabulary                                                                | `packages/desktop-client/src/components/budget/envelope/`                                                       |
+| Cell → UI naming crib                                                                        | `packages/desktop-client/src/spreadsheet/bindings.ts`                                                           |
+| Their own docs                                                                               | `packages/docs/docs/`                                                                                           |
 
 ## Reading order (for agents)
 

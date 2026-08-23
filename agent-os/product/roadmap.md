@@ -892,6 +892,14 @@ period)` so money already spent stops being held twice and only going over bites
   load-bearing and subtly easy to get wrong. Reference pack at `docs/actual-budget/`.
   `/finances/budget`, four new tables, an Envelope column on the Register, and
   on/off-budget as an account field.
+  ✅ **Schedules shipped 2026-08-22.**
+  `agent-os/specs/2026-08-22-2124-actual-schedules/`. Actual's Schedules, running
+  beside the declared-bill list rather than replacing it: `finance_schedules` with
+  Actual-shaped conditions, a date-key recurrence engine (rschedule is forbidden by
+  `dates.md`), skip / post-now / discover, and upcoming preview rows in the Register
+  that are not transactions. One click imports every active bill. Drift against the
+  source bill is visible, so the later merge-or-keep decision has evidence. Goal
+  templates (`#template schedule <name>`) were waiting on this and are now unblocked.
 - **Next:** **Goal templates for the budget.** The envelope budget is entirely manual,
   which is the thing the user wants to leave behind: "maybe after improving my situation
   and keeping it that way for some time, we could start to put things more on autopilot."
