@@ -257,3 +257,30 @@ export function parseBudget(value: unknown): BudgetSettings {
 export function serializeBudget(value: BudgetSettings): unknown {
   return { startMonth: value.startMonth, openingCents: value.openingCents };
 }
+
+/**
+ * Upcoming horizon for schedule previews. Tokens match Actual's
+ * `UPCOMING_LENGTH_PRESET_VALUES`. Stored under `schedules`.
+ */
+export type SchedulesSettings = {
+  upcomingLength: string;
+};
+
+export const DEFAULT_SCHEDULES: SchedulesSettings = { upcomingLength: "7" };
+
+const UPCOMING_TOKENS = new Set(["1", "7", "14", "oneMonth", "currentMonth"]);
+
+export function parseSchedules(value: unknown): SchedulesSettings {
+  const record = asRecord(value);
+  if (!record) return DEFAULT_SCHEDULES;
+  const upcoming = asString(record.upcomingLength, DEFAULT_SCHEDULES.upcomingLength);
+  return {
+    upcomingLength: UPCOMING_TOKENS.has(upcoming)
+      ? upcoming
+      : DEFAULT_SCHEDULES.upcomingLength,
+  };
+}
+
+export function serializeSchedules(value: SchedulesSettings): unknown {
+  return { upcomingLength: value.upcomingLength };
+}

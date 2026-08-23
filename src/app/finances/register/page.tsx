@@ -7,6 +7,10 @@ import {
 } from "@/lib/finances/dashboardQueries";
 import { claimedMatchersOf } from "@/lib/finances/registerBillDraft";
 import { loadBudget } from "@/lib/finances/budget/queries";
+import { listPostedLinks, listScheduleRecords } from "@/lib/finances/schedules/queries";
+import { upcomingOccurrences } from "@/lib/finances/schedules/upcoming";
+import { DEFAULT_UPCOMING_LENGTH } from "@/lib/finances/schedules/status";
+import { toDateKey } from "@/lib/schedule/geometry";
 import { AppShell } from "@/components/shell/AppShell";
 import { FinancesView } from "@/components/finances/FinancesView";
 
@@ -15,13 +19,26 @@ export const dynamic = "force-dynamic";
 /** The Register page: every transaction, grouped and filterable. */
 export default async function FinancesRegisterPage() {
   const userId = await getCurrentUserId();
-  const [transactions, accounts, bills, spend, budget] = await Promise.all([
-    listTransactions(userId),
-    listAccounts(userId),
-    loadRecurringBills(userId),
-    loadRecurringSpend(userId),
-    loadBudget(userId, null),
-  ]);
+  const todayKey = toDateKey(new Date());
+  const [transactions, accounts, bills, spend, budget, scheduleRecords] =
+    await Promise.all([
+      listTransactions(userId),
+      listAccounts(userId),
+      loadRecurringBills(userId),
+      loadRecurringSpend(userId),
+      loadBudget(userId, null),
+      listScheduleRecords(userId),
+    ]);
+  const links = await listPostedLinks(
+    userId,
+    scheduleRecords.map((row) => row.id),
+  );
+  const upcoming = upcomingOccurrences(
+    scheduleRecords,
+    links,
+    DEFAULT_UPCOMING_LENGTH,
+    todayKey,
+  );
 
   return (
     <AppShell active="finances">
@@ -34,6 +51,7 @@ export default async function FinancesRegisterPage() {
             id: category.id,
             name: category.name,
           }))}
+          initialUpcoming={upcoming}
         />
       </Suspense>
     </AppShell>

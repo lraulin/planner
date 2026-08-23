@@ -15,7 +15,20 @@ import {
   listAccountsAction,
   listTransactionsAction,
   setTransactionBudgetCategoryAction,
+  unlinkTransactionAction,
+  upcomingOccurrencesAction,
 } from "@/app/finances/actions";
+import { DateText } from "@/components/date/DateText";
+import { useToday } from "@/components/grid/useToday";
+import { useSetting } from "@/components/settings/SettingsProvider";
+import { SCHEDULES_SCOPE } from "@/lib/settings/scopes";
+import { SCHEDULES_CODEC } from "./schedules/schedulesSetting";
+import { LinkScheduleDialog } from "./schedules/LinkScheduleDialog";
+import type { UpcomingOccurrence } from "@/lib/finances/schedules/upcoming";
+import {
+  UPCOMING_LENGTH_LABELS,
+  UPCOMING_LENGTH_PRESETS,
+} from "@/lib/finances/schedules/status";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { DataGrid } from "@/components/grid/DataGrid";
 import {
@@ -117,12 +130,15 @@ export function FinancesView({
   initialAccounts,
   initialClaimed,
   envelopes,
+  initialUpcoming = [],
 }: {
   initialTransactions: TransactionListRow[];
   initialAccounts: FinanceAccountRow[];
   initialClaimed: readonly ClaimedMatcher[];
   /** Budget envelopes, in budget order. Empty until a budget exists. */
   envelopes: readonly { id: string; name: string }[];
+  /** Unposted schedule occurrences. Not transactions; never mixed into `rows`. */
+  initialUpcoming?: UpcomingOccurrence[];
 }) {
   const [rows, setRows] = useState(initialTransactions);
   const [accounts, setAccounts] = useState(initialAccounts);
@@ -134,6 +150,13 @@ export function FinancesView({
   const [groupIds, setGroupIds] = useState<readonly string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<TransactionListRow | null>(null);
+  const [upcoming, setUpcoming] = useState(initialUpcoming);
+  const [linkRowId, setLinkRowId] = useState<string | null>(null);
+  const today = useToday();
+  const { value: scheduleSettings, patch: patchScheduleSettings } = useSetting(
+    SCHEDULES_SCOPE,
+    SCHEDULES_CODEC,
+  );
   const {
     open: importOpen,
     openImport,
@@ -193,8 +216,15 @@ export function FinancesView({
       setRows(transactions.data);
       // Balances move whenever rows do, so they are refreshed together or they disagree.
       if (accountRows.ok) setAccounts(accountRows.data);
+      if (today) {
+        const preview = await upcomingOccurrencesAction(
+          today,
+          scheduleSettings.upcomingLength,
+        );
+        if (preview.ok) setUpcoming(preview.data);
+      }
     });
-  }, []);
+  }, [today, scheduleSettings.upcomingLength]);
 
   const closeImport = useCallback(() => {
     closeFileImport();
@@ -255,6 +285,40 @@ export function FinancesView({
         onDelete: requestDelete,
         pageCommands: [
           {
+            id: "record.link-schedule",
+            label: "Link to schedule…",
+            group: "record",
+            menu: "item",
+            section: "Item",
+            icon: "convert",
+            rowMenu: true,
+            keywords: "schedule recurring",
+            disabled: !rowId,
+            title: rowId ? undefined : "Select a row first",
+            run: () => {
+              if (rowId) setLinkRowId(rowId);
+            },
+          },
+          {
+            id: "record.unlink-schedule",
+            label: "Unlink from schedule",
+            group: "record",
+            menu: "item",
+            section: "Item",
+            icon: "delete",
+            rowMenu: true,
+            disabled: !row?.scheduleId,
+            title: row?.scheduleId ? undefined : "This row is not linked to a schedule",
+            run: () => {
+              if (!rowId || !row?.scheduleId) return;
+              startTransition(async () => {
+                const result = await unlinkTransactionAction(rowId);
+                if (!result.ok) setError(result.error);
+                else refresh();
+              });
+            },
+          },
+          {
             id: "record.track-as-bill",
             label: "Track as bill…",
             group: "record",
@@ -272,7 +336,7 @@ export function FinancesView({
         ],
       });
     },
-    [rows, claimedByMerchant, openImport, openDrawer, requestDelete],
+    [rows, claimedByMerchant, openImport, openDrawer, requestDelete, refresh],
   );
 
   const commandCapabilities = useMemo(
@@ -318,6 +382,48 @@ export function FinancesView({
       />
 
       <AccountBalances accounts={accounts} />
+
+      {upcoming.length > 0 || scheduleSettings.upcomingLength !== "7" ? (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-rule bg-surface-raised px-3 py-1.5">
+          <span className="text-[0.75rem] font-medium uppercase tracking-wider text-ink-muted">
+            Upcoming
+          </span>
+          <select
+            className="bg-transparent text-[0.8125rem] text-ink"
+            value={scheduleSettings.upcomingLength}
+            onChange={(event) => {
+              const next = event.target.value;
+              patchScheduleSettings((current) => ({
+                ...current,
+                upcomingLength: next,
+              }));
+              if (!today) return;
+              startTransition(async () => {
+                const result = await upcomingOccurrencesAction(today, next);
+                if (result.ok) setUpcoming(result.data);
+              });
+            }}
+          >
+            {UPCOMING_LENGTH_PRESETS.map((value) => (
+              <option key={value} value={value}>
+                {UPCOMING_LENGTH_LABELS[value]}
+              </option>
+            ))}
+          </select>
+          {upcoming.map((row) => (
+            <span
+              key={`${row.scheduleId}:${row.date}`}
+              className="flex items-baseline gap-1.5 text-[0.8125rem]"
+            >
+              <span className="text-ink">{row.name}</span>
+              <DateText dateKey={row.date} className="text-ink-muted" />
+              <span className="tabular text-ink-muted">
+                {formatUsd(row.amountCents)}
+              </span>
+            </span>
+          ))}
+        </div>
+      ) : null}
 
       <DataGrid<FinanceColumnCtx, TransactionListRow>
         rows={gridRows}
@@ -386,6 +492,16 @@ export function FinancesView({
         <FinanceImportPanel embedded />
       </FileImportDialog>
 
+      {linkRowId && (
+        <LinkScheduleDialog
+          transactionId={linkRowId}
+          onClose={() => setLinkRowId(null)}
+          onLinked={() => {
+            setLinkRowId(null);
+            refresh();
+          }}
+        />
+      )}
       {billRowId && (
         <TrackAsBillDialog
           rows={rows}

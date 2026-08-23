@@ -33,6 +33,7 @@ export const SCOPE_KINDS = [
   "insights",
   "payday",
   "budget",
+  "schedules",
   "timeline",
   "find",
 ] as const;
@@ -168,6 +169,9 @@ export const PAYDAY_SCOPE = "payday";
  */
 export const BUDGET_SCOPE = "budget";
 
+/** Upcoming-horizon for schedule previews in the Register. */
+export const SCHEDULES_SCOPE = "schedules";
+
 /** Cross-module display policy, currently the standalone calendar-day format. */
 export const DISPLAY_SCOPE = "display";
 
@@ -187,6 +191,7 @@ const KIND_LABELS: Record<ScopeKind, string> = {
   insights: "Finances insights",
   payday: "Pay cadence",
   budget: "Budget setup",
+  schedules: "Schedules",
   timeline: "Timeline",
   find: "Advanced Find",
 };
