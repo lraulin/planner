@@ -1,6 +1,30 @@
 import { describe, expect, it } from "vitest";
-import { categorize } from "./categorize";
+import { compileRules } from "../rules/compile";
+import { planRuleSeed } from "../rules/seed";
+import { categorize as classify } from "./categorize";
 import { CLASSIFY_RULES } from "./rules";
+
+/**
+ * Every case below runs through the **seeded rules**, not the array they came from.
+ *
+ * That makes this file a second parity harness alongside `rules/seed.test.ts`: these are the
+ * real descriptions and real bank labels from the import, and they must keep producing the
+ * same answers now that the corpus is rows rather than code.
+ */
+const SEEDED = compileRules(
+  planRuleSeed([]).create.map((draft) => ({
+    id: draft.seededId,
+    name: draft.name,
+    sortKey: draft.sortKey,
+    enabled: true,
+    conditions: draft.conditions,
+    actions: draft.actions,
+  })),
+).rules;
+
+function categorize(description: string, sourceCategory: string) {
+  return classify(description, sourceCategory, SEEDED);
+}
 
 /** Real descriptions and their real bank labels, as imported. */
 
@@ -134,49 +158,15 @@ describe("categorize", () => {
   });
 });
 
-describe("categorize with a commitment's category", () => {
-  it("beats a rule that claimed the same merchant", () => {
-    // The rule files Pizza Hut under Dining. A user who declared their Pizza commitment as
-    // Groceries has said something a pattern cannot know, and said it on purpose.
-    const declared = new Map([["Pizza Hut", "Groceries"]]);
-    expect(categorize("PIZZA HUT 036874", "Dining", declared).category).toBe(
-      "Groceries",
-    );
-  });
-
-  it("beats the bank's own label where no rule fired", () => {
-    const declared = new Map([["VETSOURCE", "Pets"]]);
-    expect(categorize("VETSOURCE", "Merchandise", declared).category).toBe("Pets");
-  });
-
-  it("is keyed on the merchant a rule resolves to, not the bank's spelling", () => {
-    // `WAL-MART #1981` and `WM SUPERCENTER #1981` both resolve to Walmart, which is the
-    // stable payee a commitment claims — so one declaration covers both spellings.
-    const declared = new Map([["Walmart", "Groceries"]]);
-    expect(categorize("WAL-MART #1981", "Merchandise", declared).category).toBe(
-      "Groceries",
-    );
-    expect(categorize("WM SUPERCENTER #1981", "Merchandise", declared).category).toBe(
-      "Groceries",
-    );
-  });
-
-  it("still reports the rule that fired, which decided the merchant", () => {
-    const declared = new Map([["Pizza Hut", "Groceries"]]);
-    const result = categorize("PIZZA HUT 036874", "Dining", declared);
-    expect(result.ruleId).toBe("pizza-hut");
-    expect(result.merchant).toBe("Pizza Hut");
-  });
-
-  it("changes nothing for a merchant no commitment claims", () => {
-    const declared = new Map([["VETSOURCE", "Pets"]]);
-    expect(categorize("PIZZA HUT 036874", "Dining", declared).category).toBe("Dining");
-  });
-});
-
 describe("CLASSIFY_RULES", () => {
-  it("has unique rule ids", () => {
+  it("has unique rule ids, which seeded_id relies on being unique", () => {
     const ids = CLASSIFY_RULES.map((rule) => rule.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("seeds every one of its rules into the compiled corpus", () => {
+    // If a rule failed to compile it would simply stop firing, and the cases above would be
+    // the only thing to notice. Counting them makes that impossible to miss.
+    expect(SEEDED).toHaveLength(CLASSIFY_RULES.length);
   });
 });

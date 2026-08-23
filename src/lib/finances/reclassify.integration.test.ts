@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { financeTransactions, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { importFinanceCsvFiles, type ImportFile } from "./import";
+import { seedRules } from "./rules/cutover";
 import {
   reclassifyTransactions,
   setOneOff,
@@ -114,6 +115,11 @@ describeDb("reclassifyTransactions", () => {
 
   beforeEach(async () => {
     userId = await makeUser();
+    // The rules a real user has. Without them these fixtures would test a configuration
+    // nobody runs — every row classified from the bank's own label alone — and would stop
+    // exercising the interaction between rules and the flow detectors, which is most of what
+    // this module decides.
+    await seedRules(userId);
     await seed(userId);
   });
 
@@ -269,6 +275,7 @@ describeDb("a commitment's category", () => {
 
   beforeEach(async () => {
     userId = await makeUser();
+    await seedRules(userId);
     await seed(userId);
     await reclassifyTransactions(userId);
   });

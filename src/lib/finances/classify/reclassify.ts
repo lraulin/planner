@@ -27,6 +27,7 @@
 import type { FinanceFlowKind } from "@/db/schema";
 import { matchPaypalResolutions, type PaypalResolution } from "../paypalMatch";
 import { payeeForDescription, type PayeeIndex } from "../payees/resolve";
+import type { CompiledRule } from "../rules/compile";
 import { categorize } from "./categorize";
 import { detectIncome, type IncomeRow, type Payday } from "./income";
 import { matchTransfers, type TransferAccount, type TransferRow } from "./transfers";
@@ -113,6 +114,12 @@ export function planReclassify(
   commitmentCategories: ReadonlyMap<string, string> = new Map(),
   /** Normalized alias → stable payee id, ensured by the caller before planning. */
   payees: PayeeIndex = new Map(),
+  /**
+   * The user's rules, compiled once. Empty means "no rules", which classifies every row from
+   * the bank's own label alone — the honest answer for a user who has none, and the reason
+   * this defaults rather than throwing.
+   */
+  rules: readonly CompiledRule[] = [],
 ): ReclassifyPlan {
   const transferRows: TransferRow[] = rows.map((row) => ({
     id: row.id,
@@ -129,10 +136,34 @@ export function planReclassify(
   // should see — the bank description is only the rail.
   const perRow = new Map(
     rows.map((row) => {
-      const fromBank = categorize(row.description, row.sourceCategory);
+      const context = {
+        description: row.description,
+        payeeId: row.payeeId,
+        accountId: row.accountId,
+        amountCents: row.amountCents,
+        transactionDate: row.transactionDate,
+      };
+      const fromBank = categorize(row.description, row.sourceCategory, rules, context);
       const resolution = named.get(row.id);
       if (!resolution?.counterparty) return [row.id, fromBank] as const;
-      const fromPaypal = categorize(resolution.counterparty, row.sourceCategory);
+      const fromPaypal = categorize(
+        resolution.counterparty,
+        row.sourceCategory,
+        rules,
+        context,
+      );
+      /*
+       * The two passes disagree deliberately, and each field picks a different winner.
+       *
+       * **Category comes from the counterparty**, because a statement naming Spotify is better
+       * evidence than a rail that says only `PAYPAL *`. **Flow comes from the bank line**,
+       * because flow is about how the money moved — `paypal-outbound` files a checking
+       * withdrawal as spend, and the counterparty knows nothing about that. **Merchant uses
+       * `||` rather than `??`**, so an empty string from a counterparty that normalized to
+       * nothing falls back instead of erasing a name the bank did give.
+       *
+       * This asymmetry looks like an oversight and is not. `reclassify.test.ts` pins it.
+       */
       return [
         row.id,
         {

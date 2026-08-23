@@ -8,6 +8,7 @@ import {
   financePayees,
   financeRecurringBills,
   financeRecurringSpend,
+  financeRules,
   financeTransactions,
   type CommitmentStatus,
   type FinanceAccountKind,
@@ -18,7 +19,12 @@ import {
 import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { parseAccountUrl } from "./accountUrl";
 import { changedRows, planReclassify } from "./classify/reclassify";
-import { summarizeFlowChanges, type FlowDiff } from "./classify/flowDiff";
+import { compileRules } from "./rules/compile";
+import {
+  summarizeCategoryChanges,
+  summarizeFlowChanges,
+  type FlowDiff,
+} from "./classify/flowDiff";
 import { cadenceColumns, cadenceOf, type Cadence } from "./recurringBills";
 import { numericStringToCents } from "./money";
 import type { PaypalResolution } from "./paypalMatch";
@@ -335,6 +341,7 @@ async function loadAndPlanReclassify(userId: string) {
     spendCategories,
     claimedPayees,
     aliases,
+    ruleRows,
   ] = await Promise.all([
     db
       .select({
@@ -397,6 +404,17 @@ async function loadAndPlanReclassify(userId: string) {
       })
       .from(financePayeeAliases)
       .where(eq(financePayeeAliases.userId, userId)),
+    db
+      .select({
+        id: financeRules.id,
+        name: financeRules.name,
+        conditions: financeRules.conditions,
+        actions: financeRules.actions,
+        enabled: financeRules.enabled,
+        sortKey: financeRules.sortKey,
+      })
+      .from(financeRules)
+      .where(eq(financeRules.userId, userId)),
   ]);
 
   const parsed = rows.map((row) => ({
@@ -449,6 +467,10 @@ async function loadAndPlanReclassify(userId: string) {
     if (category) commitmentCategories.set(payee.id, category);
   }
 
+  // Compiled once for the whole pass, not once per row: 65 rules over 7,030 transactions is
+  // 457,000 regex constructions if this moves inside the loop.
+  const { rules, problems } = compileRules(ruleRows);
+
   const plan = planReclassify(
     parsed,
     accounts,
@@ -456,9 +478,10 @@ async function loadAndPlanReclassify(userId: string) {
     resolutions,
     commitmentCategories,
     payeeIndex(aliases),
+    rules,
   );
 
-  return { parsed, plan, changed: changedRows(parsed, plan) };
+  return { parsed, plan, problems, changed: changedRows(parsed, plan) };
 }
 
 /**
@@ -468,8 +491,33 @@ async function loadAndPlanReclassify(userId: string) {
  * reported in signed cents and read by a human before anything is written.
  */
 export async function previewFlowChanges(userId: string): Promise<FlowDiff> {
-  const { parsed, plan } = await loadAndPlanReclassify(userId);
-  return summarizeFlowChanges(parsed, plan.rows);
+  return (await previewDerivedChanges(userId)).flow;
+}
+
+export type DerivedPreview = {
+  flow: FlowDiff;
+  category: FlowDiff;
+  /** Rules whose stored JSONB could not be compiled, so they did not run. */
+  problems: { name: string; reason: string }[];
+};
+
+/**
+ * What a reclassify would do to both derived columns, without doing it.
+ *
+ * Both, because a rule change can move one and not the other: a category-only rule leaves flow
+ * alone, and a flow-only rule pushes its row out of the categorised set entirely through
+ * `carriesCategory`. Auditing one field would let half a regression through.
+ */
+export async function previewDerivedChanges(userId: string): Promise<DerivedPreview> {
+  const { parsed, plan, problems } = await loadAndPlanReclassify(userId);
+  return {
+    flow: summarizeFlowChanges(parsed, plan.rows),
+    category: summarizeCategoryChanges(parsed, plan.rows),
+    problems: problems.map((problem) => ({
+      name: problem.name,
+      reason: problem.reason,
+    })),
+  };
 }
 
 export async function reclassifyTransactions(

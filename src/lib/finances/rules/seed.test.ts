@@ -52,11 +52,13 @@ describe("planRuleSeed", () => {
     expect(second.skipped).toHaveLength(CLASSIFY_RULES.length);
   });
 
-  it("does not resurrect a rule the user deleted or renamed", () => {
+  it("plans only the ids the caller says are missing", () => {
     /*
-     * The seeded id survives a rename and a reorder, so those are respected. A deleted rule is
-     * the harder case and it is handled the same way — by planning against ids the caller says
-     * are present, never against the drafts' own content.
+     * The seeded id survives a rename and a reorder, so a replay leaves both alone. A **delete**
+     * is the case this cannot see: the row is gone, so nothing distinguishes it from one that
+     * was never seeded, and a replay would bring it back. That is acceptable only because
+     * seeding is a one-time explicit migration — see `cutover.integration.test.ts`, where the
+     * assumption is written down.
      */
     const kept = CLASSIFY_RULES.map((rule) => rule.id).filter((id) => id !== "spotify");
     const plan = planRuleSeed(kept);
