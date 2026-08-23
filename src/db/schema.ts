@@ -2257,6 +2257,19 @@ export const financeTransactions = pgTable(
       (): AnyPgColumn => financeBudgetCategories.id,
       { onDelete: "set null" },
     ),
+    /**
+     * Which schedule this row posted against, if any
+     * (`agent-os/specs/2026-08-22-2124-actual-schedules/`).
+     *
+     * The join that makes schedules interoperable with the register rather than a parallel
+     * list: linking writes this, **Post now** writes this, and `next_date` advances because
+     * of it. Null is the ordinary unlinked row.
+     *
+     * `on delete set null`, not cascade: deleting a schedule must never delete a transaction.
+     */
+    scheduleId: uuid("schedule_id").references((): AnyPgColumn => financeSchedules.id, {
+      onDelete: "set null",
+    }),
     externalSource: text("external_source"),
     externalId: text("external_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -2267,6 +2280,9 @@ export const financeTransactions = pgTable(
     index("finance_transactions_budget_category_idx")
       .on(table.userId, table.budgetCategoryId, table.transactionDate)
       .where(sql`${table.budgetCategoryId} is not null`),
+    index("finance_transactions_schedule_idx")
+      .on(table.userId, table.scheduleId)
+      .where(sql`${table.scheduleId} is not null`),
     index("finance_transactions_account_date_idx").on(
       table.userId,
       table.accountId,
@@ -2982,6 +2998,71 @@ export const financeBudgetAllocations = pgTable(
 );
 
 /**
+ * ─────────────────────────── Schedules (recurring transactions) ───────────────────────────
+ *
+ * Actual Budget's Schedules feature, reimplemented beside the commitment tiers rather than
+ * replacing them (`agent-os/specs/2026-08-22-2124-actual-schedules/`). A schedule is a named
+ * recurrence plus Actual-shaped `{field, op, value}` conditions — payee, account, amount,
+ * date — and a stored `next_date` cursor. The generic rule engine, payees table and
+ * auto-post service stay out; the condition shape is theirs so a later Rules spec can
+ * consume this data without a migration.
+ *
+ * `next_date` is stored, not derived: skip and being paid early both move the cursor in
+ * ways the recurrence rule alone cannot express. `source_bill_id` is provenance for the
+ * one-click import from `finance_recurring_bills`; the two lists then edit independently
+ * and the page reports drift.
+ */
+
+export const financeSchedules = pgTable(
+  "finance_schedules",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Unique per user so an import cannot silently create "Netflix" twice. */
+    name: text("name").notNull(),
+    /**
+     * Actual-shaped conditions. Restricted to the four schedule fields; validated in
+     * `src/lib/finances/schedules/conditions.ts` so bad JSONB never reaches the math.
+     */
+    conditions: jsonb("conditions").$type<unknown>().notNull().default([]),
+    /**
+     * Honour this in the UI; do not auto-post. Transactions here arrive from bank feeds,
+     * and an unattended poster would race the feed for the same payment (D3).
+     */
+    postsTransaction: boolean("posts_transaction").notNull().default(false),
+    completed: boolean("completed").notNull().default(false),
+    /**
+     * The advancing cursor. Calendar day, `YYYY-MM-DD`. Never derived from the rule
+     * at read time — skip and an early payment both move it off the rrule's next date.
+     */
+    nextDate: date("next_date", { mode: "string" }).notNull(),
+    /** Per-schedule override of the register's upcoming horizon. Actual's token strings. */
+    customUpcomingLength: text("custom_upcoming_length"),
+    /**
+     * Set when this row was imported from a declared bill. Null for hand-made or
+     * discovered schedules. `on delete set null` so deleting the bill does not delete
+     * the schedule — they edit independently after import.
+     */
+    sourceBillId: uuid("source_bill_id").references(
+      (): AnyPgColumn => financeRecurringBills.id,
+      { onDelete: "set null" },
+    ),
+    sortKey: text("sort_key").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("finance_schedules_name_uq").on(table.userId, table.name),
+    index("finance_schedules_user_sort_idx").on(table.userId, table.sortKey),
+    index("finance_schedules_source_bill_idx")
+      .on(table.userId, table.sourceBillId)
+      .where(sql`${table.sourceBillId} is not null`),
+  ],
+);
+
+/**
  * One SimpleFIN access URL — the whole bank connection, however many institutions it covers.
  *
  * **Why a separate table rather than columns on `finance_accounts`.** Account identity there
@@ -3475,6 +3556,8 @@ export type NewFinanceAccount = typeof financeAccounts.$inferInsert;
 export type FinanceAccountKind = (typeof financeAccountKindEnum.enumValues)[number];
 export type FinanceTransaction = typeof financeTransactions.$inferSelect;
 export type NewFinanceTransaction = typeof financeTransactions.$inferInsert;
+export type FinanceSchedule = typeof financeSchedules.$inferSelect;
+export type NewFinanceSchedule = typeof financeSchedules.$inferInsert;
 export type FinanceFlowKind = (typeof financeFlowKindEnum.enumValues)[number];
 export type FinanceStatement = typeof financeStatements.$inferSelect;
 export type NewFinanceStatement = typeof financeStatements.$inferInsert;
