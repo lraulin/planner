@@ -30,7 +30,10 @@ semantics transfer; the machinery does not.**
 | `categories` / `category_groups`                                                             | `packages/loot-core/src/server/sql/init.sql`                                                                    |
 | Integer-cents assertion                                                                      | `packages/loot-core/src/shared/util.ts` (`safeNumber`)                                                          |
 | Tracking (non-envelope) budget, for contrast                                                 | `packages/loot-core/src/server/budget/tracking.ts`                                                              |
-| Goal templates (`#template …`)                                                               | `packages/loot-core/src/server/budget/goal-template.ts`                                                         |
+| **Goal templates** — apply vs overwrite, priority loop, remainder last                       | `packages/loot-core/src/server/budget/goal-template.ts`                                                         |
+| Per-template math — `runSimple`, `runBy`, the limit clamp, `fromLastMonth`                   | `packages/loot-core/src/server/budget/category-template-context.ts`                                             |
+| Schedule templates — pay-this-month vs sinking, the already-funded fallback                  | `packages/loot-core/src/server/budget/schedule-template.ts`                                                     |
+| The stored template shapes (`goal_def`) — dollar floats there, integer cents here            | `packages/loot-core/src/types/models/templates.ts`                                                              |
 | **Schedules** — recurrence, status, skip, next-date cursor, discover                         | `packages/loot-core/src/shared/schedules.ts`, `packages/loot-core/src/server/schedules/{app,find-schedules}.ts` |
 | The rule engine beneath schedules (not ported; we store the condition shape only)            | `packages/loot-core/src/server/rules/`                                                                          |
 | Budget UI and menu vocabulary                                                                | `packages/desktop-client/src/components/budget/envelope/`                                                       |

@@ -900,19 +900,29 @@ period)` so money already spent stops being held twice and only going over bites
   that are not transactions. One click imports every active bill. Drift against the
   source bill is visible, so the later merge-or-keep decision has evidence. Goal
   templates (`#template schedule <name>`) were waiting on this and are now unblocked.
-- **Next:** **Goal templates for the budget.** The envelope budget is entirely manual,
-  which is the thing the user wants to leave behind: "maybe after improving my situation
-  and keeping it that way for some time, we could start to put things more on autopilot."
-  Actual's `#template` system (fixed monthly, save-by-a-date, percentage-of-income,
-  schedule-based, spend-down, and `remainder`, run in global priority order) is the
-  mechanism, and the declared-bill list already knows the amount and cadence of every
-  commitment — so this is also the join that would decide whether the two systems merge.
-- **Also next:** **Shortfall attribution.** When Available to Spend goes negative, name
+  ✅ **Goal templates shipped 2026-08-23.**
+  `agent-os/specs/2026-08-22-2242-budget-goal-templates/`. The budget can now fill
+  itself: four of Actual's template types — a fixed monthly amount (with an optional
+  `up to` refill), a schedule, save-up-`by` a month, and `remainder` — held as validated
+  JSONB on the envelope and edited in a drawer rather than as `#template` text in a note.
+  **Nothing runs unattended**: Apply fills only envelopes still at zero, Overwrite
+  replaces every templated cell, and each writes a month-note line and a `goalCents` the
+  Assigned cell colours against, so a later hand edit still shows whether the goal was
+  met. **Apply is allowed to drive Ready to Assign negative** — on the real file it went
+  $888.12 → −$1,846.84 the moment five schedules were stacked on Bills, and that
+  shortfall is the diagnostic, not something to clamp away. A yearly bill sinks over the
+  months until it is due instead of dumping.
+  **The join now exists and has not been taken.** _Add from schedules…_ attaches every
+  schedule that does not yet fund an envelope, which is the bridge between the
+  declared-bill list and the envelopes — but bills and envelopes still run in parallel,
+  and use, not this spec, decides whether they merge.
+- **Next:** **Shortfall attribution.** When Available to Spend goes negative, name
   what could be cancelled or skipped to fix it. Explicitly wanted, explicitly cut
   from the commitments spec; the annual/monthly cost columns already rank the
   candidates, so what is missing is turning a red number into a guided decision.
   Partly overtaken: the budget now states a shortfall per envelope rather than as one
-  number, which is the same information at a level you can act on.
+  number, and a template says what each envelope was asking for — which is the same
+  information at a level you can act on.
 - **✅ Period result — "living within my means", shipped 2026-08-18.**
   `agent-os/specs/2026-08-18-2005-period-result/`. The measurement half of the item below,
   and the first surface that scores rather than reports. For every **closed** pay period:
