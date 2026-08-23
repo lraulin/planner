@@ -56,6 +56,8 @@ export type BudgetCategoryRow = {
   sortKey: string;
   hidden: boolean;
   notes: string;
+  /** Spending-taxonomy values this envelope claims, for the auto-map and its editor. */
+  sourceCategories: string[];
 };
 
 export type BudgetData = {
@@ -106,6 +108,7 @@ function categoriesOf(userId: string) {
       sortKey: financeBudgetCategories.sortKey,
       hidden: financeBudgetCategories.hidden,
       notes: financeBudgetCategories.notes,
+      sourceCategories: financeBudgetCategories.sourceCategories,
     })
     .from(financeBudgetCategories)
     .where(eq(financeBudgetCategories.userId, userId))

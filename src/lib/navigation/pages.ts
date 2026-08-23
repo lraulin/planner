@@ -241,6 +241,14 @@ const PAGES = {
         "available to spend payday balances set aside envelopes budget now commitments",
     },
     {
+      id: "budget",
+      label: "Budget",
+      segment: "budget",
+      status: "built",
+      keywords:
+        "envelope zero-based ready to assign assign categories ynab actual carryover rollover",
+    },
+    {
       id: "commitments",
       label: "Commitments",
       segment: "commitments",

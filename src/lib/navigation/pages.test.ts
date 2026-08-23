@@ -56,9 +56,11 @@ describe("hasPageBar", () => {
     expect(hasPageBar("fitness")).toBe(true);
     expect(hasPageBar("notes")).toBe(true);
     expect(hasPageBar("library")).toBe(true);
-    // Finances is ordered by how often a page is opened, not by when it was built.
+    // Finances is ordered by how often a page is opened, not by when it was built. Budget
+    // sits second because assigning is a daily act, ahead of the reference lists behind it.
     expect(builtPagesForModule("finances").map((page) => page.id)).toEqual([
       "dashboard",
+      "budget",
       "commitments",
       "insights",
       "register",
