@@ -32,6 +32,8 @@ export type MatchableRow = {
   /** `YYYY-MM-DD`. */
   transactionDate: string;
   amountCents: number;
+  /** The bank description proves that this row actually travelled over PayPal. */
+  description: string;
 };
 
 export type PaypalMatch = {
@@ -43,6 +45,8 @@ function gap(left: string, right: string): number {
   return Math.abs(daysBetweenKeys(left, right));
 }
 
+const PAYPAL_RAIL = /\bPAYPAL\b|^PP\*/i;
+
 /**
  * Pair each resolution with at most one unused row of the same signed amount
  * within the posting window. Closest date wins; id is the tiebreak so two
@@ -52,7 +56,12 @@ export function matchPaypalResolutions(
   rows: readonly MatchableRow[],
   resolutions: readonly PaypalResolution[],
 ): PaypalMatch {
-  const unused = rows.map((row) => ({ row, used: false }));
+  // PayPal names a purchase that the bank recorded through the PayPal rail. Date and
+  // amount disambiguate those processor rows; they are not evidence that an unrelated
+  // purchase at CVS (or anywhere else) was a PayPal event.
+  const unused = rows
+    .filter((row) => PAYPAL_RAIL.test(row.description))
+    .map((row) => ({ row, used: false }));
   const byRowId = new Map<string, PaypalResolution>();
 
   const ordered = [...resolutions].sort(

@@ -5,7 +5,7 @@ import {
   type PaypalResolution,
 } from "./paypalMatch";
 
-function row(id: string, date: string, amountCents: number, description = "") {
+function row(id: string, date: string, amountCents: number, description = "PAYPAL *") {
   return { id, transactionDate: date, amountCents, description };
 }
 
@@ -69,6 +69,19 @@ describe("matchPaypalResolutions", () => {
     );
     expect(byRowId.get("same")?.counterparty).toBe("Dennis Raulin");
     expect(byRowId.has("near")).toBe(false);
+  });
+
+  it("never attaches a PayPal resolution to an unrelated same-amount purchase", () => {
+    const { byRowId } = matchPaypalResolutions(
+      [
+        row("a-cvs", "2025-03-13", -1801, "CVS/PHARMACY #1234"),
+        row("z-paypal", "2025-03-13", -1801, "PAYPAL *SPOTIFY USA INC"),
+      ],
+      [resolution("pp-1", "2025-03-13", -1801, "Spotify USA Inc")],
+    );
+
+    expect(byRowId.has("a-cvs")).toBe(false);
+    expect(byRowId.get("z-paypal")?.counterparty).toBe("Spotify USA Inc");
   });
 
   it("refuses a pair further apart than the posting window", () => {

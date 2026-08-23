@@ -261,15 +261,21 @@ describe("planReclassify", () => {
     expect(byId.get("b")).toBeNull();
   });
 
-  it("lets a PayPal resolution keep a named gift out of refunds", () => {
-    // Without the resolution this credit would look like a refund from a merchant we
-    // spend at. The statement is what says it is a person, not a store credit.
+  it("keeps a named inbound PayPal gift out of refunds", () => {
+    // The bank names the rail and the statement names the sender. Either way this is an
+    // external transfer, not a refund from a merchant that happens to share the sender's name.
     const rows = [
       row("out", "capone-card", "2025-04-01", "Dennis Raulin", -5000),
-      row("gift", "checking", "2025-04-20", "Dennis Raulin", 200000),
+      row(
+        "gift",
+        "checking",
+        "2025-04-20",
+        "Deposit from PAYPAL from LEE RAULIN TRANSFER",
+        200000,
+      ),
     ];
     const without = planOf(rows);
-    expect(flowOf(without, "gift")).toBe("refund");
+    expect(flowOf(without, "gift")).toBe("external_transfer");
 
     const withName = planReclassify(rows, ACCOUNTS, minter(), [
       {

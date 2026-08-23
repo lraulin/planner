@@ -91,6 +91,7 @@ async function loadSources(userId: string): Promise<{
       id: row.id,
       transactionDate: row.transactionDate,
       amountCents: numericStringToCents(row.amount) ?? 0,
+      description: row.description,
     })),
     resolutions,
   ).byRowId;
