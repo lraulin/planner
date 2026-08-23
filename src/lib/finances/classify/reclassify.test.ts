@@ -29,6 +29,7 @@ function row(
     amountCents,
     sourceCategory: "",
     transferGroupId: null,
+    payeeId: null,
     ...extra,
   };
 }
@@ -293,6 +294,44 @@ describe("planReclassify", () => {
       ),
     ]);
     expect(flowOf(plan, "out")).toBe("spend");
+  });
+
+  it("assigns processor rows through each resolved counterparty's payee", () => {
+    const rows = [
+      row("coffee", "checking", "2026-03-14", "PAYPAL *", -1234),
+      row("feed", "checking", "2026-03-15", "PAYPAL *", -5678),
+    ];
+    const plan = planReclassify(
+      rows,
+      ACCOUNTS,
+      minter(),
+      [
+        {
+          externalId: "paypal-coffee",
+          date: "2026-03-14",
+          amountCents: -1234,
+          counterparty: "Blue Bottle Coffee",
+          direction: "out",
+        },
+        {
+          externalId: "paypal-feed",
+          date: "2026-03-15",
+          amountCents: -5678,
+          counterparty: "Tractor Supply",
+          direction: "out",
+        },
+      ],
+      new Map(),
+      new Map([
+        ["BLUE BOTTLE COFFEE", "coffee-payee"],
+        ["TRACTOR SUPPLY", "feed-payee"],
+      ]),
+    );
+
+    expect(plan.rows.map((entry) => entry.payeeId)).toEqual([
+      "coffee-payee",
+      "feed-payee",
+    ]);
   });
 
   it("pairs a Coinbase withdrawal with checking and leaves the Sell as the liquidation", () => {

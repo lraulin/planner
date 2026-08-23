@@ -26,6 +26,7 @@
 
 import type { FinanceFlowKind } from "@/db/schema";
 import { matchPaypalResolutions, type PaypalResolution } from "../paypalMatch";
+import { payeeForDescription, type PayeeIndex } from "../payees/resolve";
 import { categorize } from "./categorize";
 import { detectIncome, type IncomeRow, type Payday } from "./income";
 import { matchTransfers, type TransferAccount, type TransferRow } from "./transfers";
@@ -41,6 +42,8 @@ export type ReclassifyRow = {
   sourceCategory: string;
   /** What the previous run wrote. Reused when this run pairs the same two rows. */
   transferGroupId: string | null;
+  /** What the previous run wrote. Recomputed from the alias index on every pass. */
+  payeeId: string | null;
 };
 
 export type ReclassifyAccount = TransferAccount;
@@ -51,6 +54,7 @@ export type RowPlan = {
   derivedCategory: string | null;
   derivedFlow: FinanceFlowKind;
   transferGroupId: string | null;
+  payeeId: string | null;
 };
 
 export type ReclassifyPlan = {
@@ -107,6 +111,8 @@ export function planReclassify(
   resolutions: readonly PaypalResolution[] = [],
   /** Merchant → the category its commitment declares. Outranks a `rules.ts` match. */
   commitmentCategories: ReadonlyMap<string, string> = new Map(),
+  /** Normalized alias → stable payee id, ensured by the caller before planning. */
+  payees: PayeeIndex = new Map(),
 ): ReclassifyPlan {
   const transferRows: TransferRow[] = rows.map((row) => ({
     id: row.id,
@@ -225,6 +231,11 @@ export function planReclassify(
         : null,
       derivedFlow: flow,
       transferGroupId: groupIdByRow.get(row.id) ?? null,
+      payeeId: payeeForDescription(
+        row.description,
+        payees,
+        named.get(row.id)?.counterparty,
+      ),
     };
   });
 
@@ -251,7 +262,8 @@ export function changedRows(
     return (
       row.derivedCategory !== planned.derivedCategory ||
       row.derivedFlow !== planned.derivedFlow ||
-      row.transferGroupId !== planned.transferGroupId
+      row.transferGroupId !== planned.transferGroupId ||
+      row.payeeId !== planned.payeeId
     );
   });
 }

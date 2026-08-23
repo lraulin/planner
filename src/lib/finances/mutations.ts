@@ -4,6 +4,7 @@ import { db } from "@/db";
 import {
   financeAccounts,
   financePaymentResolutions,
+  financePayeeAliases,
   financeRecurringBills,
   financeRecurringSpend,
   financeTransactions,
@@ -20,6 +21,8 @@ import { MatcherConflictError } from "./commitments";
 import { cadenceColumns, cadenceOf, type Cadence } from "./recurringBills";
 import { numericStringToCents } from "./money";
 import type { PaypalResolution } from "./paypalMatch";
+import { ensurePayees } from "./payees/backfill";
+import { payeeIndex } from "./payees/resolve";
 
 /**
  * Writes for the register.
@@ -303,14 +306,20 @@ export type ReclassifySummary = {
  * touches `amount`, so a reclassify that moves one is a bug by construction — which makes it
  * the sharpest test available for this whole layer, and it is written down as one.
  *
- * Only `derived_*` and `transfer_group_id` are written. `category`, `flow_override`,
- * `exclude_from_baseline` and `event_label` belong to the user and are not in the update
- * statement at all, so no amount of re-running can erase a correction.
+ * Only `derived_*`, `transfer_group_id` and the recomputable `payee_id` are written.
+ * `category`, `flow_override`, `exclude_from_baseline` and `event_label` belong to the user
+ * and are not in the update statement at all, so no amount of re-running can erase a
+ * correction.
  */
 export async function reclassifyTransactions(
   userId: string,
 ): Promise<ReclassifySummary> {
-  const [rows, accounts, storedResolutions, billCategories, spendCategories] =
+  // Mint the stable ids before planning. The planner then assigns those ids in the same
+  // row-shaped update as the other recomputable facts rather than maintaining a second
+  // classification path just for payees.
+  await ensurePayees(userId);
+
+  const [rows, accounts, storedResolutions, billCategories, spendCategories, aliases] =
     await Promise.all([
       db
         .select({
@@ -321,6 +330,7 @@ export async function reclassifyTransactions(
           amount: financeTransactions.amount,
           sourceCategory: financeTransactions.sourceCategory,
           transferGroupId: financeTransactions.transferGroupId,
+          payeeId: financeTransactions.payeeId,
           derivedCategory: financeTransactions.derivedCategory,
           derivedFlow: financeTransactions.derivedFlow,
         })
@@ -357,6 +367,13 @@ export async function reclassifyTransactions(
         })
         .from(financeRecurringSpend)
         .where(eq(financeRecurringSpend.userId, userId)),
+      db
+        .select({
+          alias: financePayeeAliases.alias,
+          payeeId: financePayeeAliases.payeeId,
+        })
+        .from(financePayeeAliases)
+        .where(eq(financePayeeAliases.userId, userId)),
     ]);
 
   const parsed = rows.map((row) => ({
@@ -367,6 +384,7 @@ export async function reclassifyTransactions(
     amountCents: numericStringToCents(row.amount) ?? 0,
     sourceCategory: row.sourceCategory,
     transferGroupId: row.transferGroupId,
+    payeeId: row.payeeId,
     derivedCategory: row.derivedCategory,
     derivedFlow: row.derivedFlow,
   }));
@@ -402,6 +420,7 @@ export async function reclassifyTransactions(
     randomUUID,
     resolutions,
     commitmentCategories,
+    payeeIndex(aliases),
   );
   const changed = changedRows(parsed, plan);
 
@@ -412,7 +431,7 @@ export async function reclassifyTransactions(
         const values = sql.join(
           chunk.map(
             (row) =>
-              sql`(${row.id}::uuid, ${row.derivedCategory}::text, ${row.derivedFlow}::finance_flow_kind, ${row.transferGroupId}::uuid)`,
+              sql`(${row.id}::uuid, ${row.derivedCategory}::text, ${row.derivedFlow}::finance_flow_kind, ${row.transferGroupId}::uuid, ${row.payeeId}::uuid)`,
           ),
           sql`, `,
         );
@@ -421,8 +440,9 @@ export async function reclassifyTransactions(
           set derived_category = v.derived_category,
               derived_flow = v.derived_flow,
               transfer_group_id = v.transfer_group_id,
+              payee_id = v.payee_id,
               updated_at = now()
-          from (values ${values}) as v(id, derived_category, derived_flow, transfer_group_id)
+          from (values ${values}) as v(id, derived_category, derived_flow, transfer_group_id, payee_id)
           where t.id = v.id and t.user_id = ${userId}::uuid
         `);
       }

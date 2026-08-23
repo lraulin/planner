@@ -11,6 +11,8 @@ import {
   updateTransaction,
   upsertRecurringSpend,
 } from "./mutations";
+import { addAlias, removeAlias } from "./payees/mutations";
+import { listPayees } from "./payees/queries";
 import { listAccounts, listTransactions } from "./queries";
 
 const dbReachable = await databaseReachable();
@@ -90,6 +92,7 @@ async function classifiedRows(userId: string) {
       derivedFlow: financeTransactions.derivedFlow,
       derivedCategory: financeTransactions.derivedCategory,
       transferGroupId: financeTransactions.transferGroupId,
+      payeeId: financeTransactions.payeeId,
     })
     .from(financeTransactions)
     .where(eq(financeTransactions.userId, userId));
@@ -160,6 +163,43 @@ describeDb("reclassifyTransactions", () => {
     expect(
       rows.find((row) => row.description.includes("RENT:RAULI"))?.derivedCategory,
     ).toBe("Rent & Housing");
+  });
+
+  it("mints the payee set and points each row at its stable identity", async () => {
+    await reclassifyTransactions(userId);
+
+    const rows = await classifiedRows(userId);
+    const walmart = rows.find((row) => row.description.includes("WM SUPERCENTER"));
+    const payees = await listPayees(userId);
+    const payee = payees.find((row) => row.id === walmart?.payeeId);
+
+    expect(payee).toMatchObject({
+      name: "Walmart",
+      aliases: ["WM SUPERCENTER"],
+    });
+  });
+
+  it("moves every matching row after an alias is reassigned", async () => {
+    await reclassifyTransactions(userId);
+
+    const rows = await classifiedRows(userId);
+    const walmart = rows.find((row) => row.description.includes("WM SUPERCENTER"));
+    const payees = await listPayees(userId);
+    const original = payees.find((payee) => payee.id === walmart?.payeeId);
+    const target = payees.find((payee) => payee.id !== original?.id);
+
+    if (!original || !target) throw new Error("Expected two seeded payees");
+    expect(original.aliases).toContain("WM SUPERCENTER");
+
+    await removeAlias(userId, original.id, "WM SUPERCENTER");
+    await addAlias(userId, target.id, "WM SUPERCENTER");
+    await reclassifyTransactions(userId);
+
+    const moved = (await classifiedRows(userId)).find((row) =>
+      row.description.includes("WM SUPERCENTER"),
+    );
+    expect(moved?.payeeId).toBe(target.id);
+    expect((await reclassifyTransactions(userId)).updated).toBe(0);
   });
 
   it("writes nothing on a second run and keeps every hand-made correction", async () => {

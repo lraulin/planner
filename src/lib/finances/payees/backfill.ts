@@ -206,20 +206,18 @@ async function assignPayees(
   return { assigned, unresolved };
 }
 
-/**
- * Create the payees this history implies, then point every row at one.
- *
- * Safe to re-run: the planner only ever proposes aliases nobody holds, and the assignment pass
- * writes only rows whose payee would change. A second call therefore reports zeroes.
- */
-export async function seedPayees(userId: string): Promise<SeedPayeesSummary> {
-  const [{ sources, byRowId }, existing] = await Promise.all([
-    loadSources(userId),
-    loadExisting(userId),
-  ]);
+export type EnsurePayeesSummary = Pick<
+  SeedPayeesSummary,
+  "createdPayees" | "addedAliases" | "conflicts"
+>;
 
+/** Apply the pure seed plan for a source set, without assigning any transaction yet. */
+async function applyPayeePlan(
+  userId: string,
+  sources: readonly SeedSource[],
+  existing: readonly ExistingPayee[],
+): Promise<EnsurePayeesSummary> {
   const plan = planSeed(sources, existing);
-
   let createdPayees = 0;
   let addedAliases = 0;
 
@@ -257,14 +255,46 @@ export async function seedPayees(userId: string): Promise<SeedPayeesSummary> {
     }
   }
 
+  return { createdPayees, addedAliases, conflicts: plan.conflicts };
+}
+
+/**
+ * Make sure every merchant in this user's history has a payee and an alias.
+ *
+ * This is the write-time half shared by the initial page action and the ordinary
+ * reclassification pass. It deliberately does not assign transactions: `planReclassify`
+ * resolves the resulting alias index and writes `payee_id` beside the other recomputable
+ * columns in one plan.
+ */
+export async function ensurePayees(userId: string): Promise<EnsurePayeesSummary> {
+  const [{ sources }, existing] = await Promise.all([
+    loadSources(userId),
+    loadExisting(userId),
+  ]);
+  return applyPayeePlan(userId, sources, existing);
+}
+
+/**
+ * Create the payees this history implies, then point every row at one.
+ *
+ * Safe to re-run: the planner only ever proposes aliases nobody holds, and the assignment pass
+ * writes only rows whose payee would change. A second call therefore reports zeroes.
+ */
+export async function seedPayees(userId: string): Promise<SeedPayeesSummary> {
+  const [{ sources, byRowId }, existing] = await Promise.all([
+    loadSources(userId),
+    loadExisting(userId),
+  ]);
+  const ensured = await applyPayeePlan(userId, sources, existing);
+
   const { assigned, unresolved } = await assignPayees(userId, byRowId);
 
   return {
-    createdPayees,
-    addedAliases,
+    createdPayees: ensured.createdPayees,
+    addedAliases: ensured.addedAliases,
     assigned,
     unresolved,
-    conflicts: plan.conflicts,
+    conflicts: ensured.conflicts,
   };
 }
 

@@ -238,7 +238,13 @@ export async function listTransactions(
     )
     .leftJoin(financeSchedules, eq(financeSchedules.id, financeTransactions.scheduleId))
     // Left for the same reason: a row imported since the last pass has no payee yet.
-    .leftJoin(financePayees, eq(financePayees.id, financeTransactions.payeeId))
+    .leftJoin(
+      financePayees,
+      and(
+        eq(financePayees.id, financeTransactions.payeeId),
+        eq(financePayees.userId, userId),
+      ),
+    )
     .where(and(...scopeConditions(userId, filter)))
     .orderBy(
       desc(financeTransactions.transactionDate),
@@ -331,7 +337,13 @@ export async function getTransaction(
     )
     .leftJoin(financeSchedules, eq(financeSchedules.id, financeTransactions.scheduleId))
     // Left for the same reason: a row imported since the last pass has no payee yet.
-    .leftJoin(financePayees, eq(financePayees.id, financeTransactions.payeeId))
+    .leftJoin(
+      financePayees,
+      and(
+        eq(financePayees.id, financeTransactions.payeeId),
+        eq(financePayees.userId, userId),
+      ),
+    )
     .where(
       and(
         eq(financeTransactions.id, transactionId),
