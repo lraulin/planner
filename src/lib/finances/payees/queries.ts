@@ -12,10 +12,13 @@ import {
   financePayees,
   financeRecurringBills,
   financeRecurringSpend,
+  financeSchedules,
   financeTransactions,
 } from "@/db/schema";
 import { numericStringToCents } from "../money";
 import type { AliasRow } from "./resolve";
+import { mergeClaimDecision } from "./merge";
+import { storedSchedulePayeeIds } from "./references";
 
 /** Which commitment claims a payee, if any. At most one, by the table's CHECK. */
 export type PayeeClaim = { kind: "bill" | "spend"; id: string; name: string };
@@ -30,6 +33,17 @@ export type PayeeRow = {
   /** Signed sum in cents; spending is negative, as everywhere else in this module. */
   totalCents: number;
   claim: PayeeClaim | null;
+};
+
+export type PayeeMergePreview = {
+  target: Pick<PayeeRow, "id" | "name" | "claim">;
+  sources: Pick<PayeeRow, "id" | "name">[];
+  movedAliases: string[];
+  movedTransactions: number;
+  movedTotalCents: number;
+  affectedSchedules: { id: string; name: string }[];
+  resultingClaim: PayeeClaim | null;
+  refusal: string | null;
 };
 
 /** Alias → payee for the whole user, the input to `payeeIndex`. */
@@ -187,4 +201,53 @@ export async function aliasesOf(
       ),
     );
   return rows.map((row) => row.alias);
+}
+
+/** Everything a person should see before selected payees are consolidated. */
+export async function previewPayeeMerge(
+  userId: string,
+  targetId: string,
+  sourceIds: readonly string[],
+): Promise<PayeeMergePreview> {
+  const sources = [...new Set(sourceIds)].filter((id) => id !== targetId);
+  if (sources.length === 0) throw new Error("Select at least two payees to merge.");
+
+  const rows = await listPayees(userId);
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const target = byId.get(targetId);
+  const sourceRows = sources.map((id) => byId.get(id));
+  if (!target || sourceRows.some((row) => row === undefined)) {
+    throw new Error("That payee does not exist.");
+  }
+  const ownedSources = sourceRows.filter((row): row is PayeeRow => row !== undefined);
+  const claim = mergeClaimDecision([target, ...ownedSources]);
+  const sourceSet = new Set(sources);
+
+  const schedules = await db
+    .select({
+      id: financeSchedules.id,
+      name: financeSchedules.name,
+      conditions: financeSchedules.conditions,
+    })
+    .from(financeSchedules)
+    .where(eq(financeSchedules.userId, userId))
+    .orderBy(asc(sql`lower(${financeSchedules.name})`));
+
+  return {
+    target: { id: target.id, name: target.name, claim: target.claim },
+    sources: ownedSources.map((row) => ({ id: row.id, name: row.name })),
+    movedAliases: ownedSources.flatMap((row) => row.aliases).sort(),
+    movedTransactions: ownedSources.reduce(
+      (total, row) => total + row.transactionCount,
+      0,
+    ),
+    movedTotalCents: ownedSources.reduce((total, row) => total + row.totalCents, 0),
+    affectedSchedules: schedules
+      .filter((schedule) =>
+        storedSchedulePayeeIds(schedule.conditions).some((id) => sourceSet.has(id)),
+      )
+      .map(({ id, name }) => ({ id, name })),
+    resultingClaim: claim.claim,
+    refusal: claim.refusal,
+  };
 }

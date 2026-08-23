@@ -22,6 +22,8 @@ import {
 } from "@/db/schema";
 import { isUniqueViolation } from "@/lib/db/constraints";
 import { normalizeMerchant } from "../classify/merchant";
+import { mergeClaimDecision } from "./merge";
+import { storedSchedulePayeeIds } from "./references";
 
 async function requirePayee(userId: string, payeeId: string) {
   const [row] = await db
@@ -184,10 +186,39 @@ export async function removeAlias(
  * promises rather than a hole someone has to notice.
  */
 export async function deletePayee(userId: string, payeeId: string): Promise<void> {
-  await requirePayee(userId, payeeId);
-  await db
-    .delete(financePayees)
-    .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)));
+  await db.transaction(async (tx) => {
+    const [payee] = await tx
+      .select({
+        id: financePayees.id,
+        commitmentBillId: financePayees.commitmentBillId,
+        commitmentSpendId: financePayees.commitmentSpendId,
+      })
+      .from(financePayees)
+      .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)));
+    if (!payee) throw new Error("That payee does not exist.");
+    if (payee.commitmentBillId || payee.commitmentSpendId) {
+      throw new Error(
+        "That payee belongs to a commitment. Merge it or release the claim before deleting.",
+      );
+    }
+
+    const schedules = await tx
+      .select({ name: financeSchedules.name, conditions: financeSchedules.conditions })
+      .from(financeSchedules)
+      .where(eq(financeSchedules.userId, userId));
+    const referencedBy = schedules.find((schedule) =>
+      storedSchedulePayeeIds(schedule.conditions).includes(payeeId),
+    );
+    if (referencedBy) {
+      throw new Error(
+        `That payee is used by the schedule "${referencedBy.name}". Merge it or edit the schedule before deleting.`,
+      );
+    }
+
+    await tx
+      .delete(financePayees)
+      .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)));
+  });
 }
 
 /**
@@ -215,18 +246,19 @@ export async function mergePayees(
   const target = await requirePayee(userId, targetId);
   const merged = await Promise.all(sources.map((id) => requirePayee(userId, id)));
 
-  // Two claims cannot survive one row, and choosing which commitment keeps the merchant is a
-  // decision with money attached. Refuse and say so rather than dropping one.
-  const claimed = merged.filter(
-    (row) => row.commitmentBillId !== null || row.commitmentSpendId !== null,
-  );
-  const targetClaimed =
-    target.commitmentBillId !== null || target.commitmentSpendId !== null;
-  if (claimed.length > 1 || (claimed.length === 1 && targetClaimed)) {
-    throw new Error(
-      "Those payees are claimed by different commitments. Release one before merging.",
-    );
-  }
+  // Distinct claims cannot survive one row, and choosing which commitment keeps the merchant is
+  // a decision with money attached. The bridge may legitimately put the same claim on several
+  // aliases, so compare commitment identities rather than merely counting claimed rows.
+  const claimOf = (row: typeof target) => ({
+    claim: row.commitmentBillId
+      ? ({ kind: "bill", id: row.commitmentBillId } as const)
+      : row.commitmentSpendId
+        ? ({ kind: "spend", id: row.commitmentSpendId } as const)
+        : null,
+  });
+  const claimDecision = mergeClaimDecision([claimOf(target), ...merged.map(claimOf)]);
+  if (claimDecision.refusal) throw new Error(claimDecision.refusal);
+  const targetClaimed = claimOf(target).claim !== null;
 
   return db.transaction(async (tx) => {
     const movedAliasRows = await tx
@@ -255,13 +287,13 @@ export async function mergePayees(
 
     // Carry a lone claim across, so merging into an unclaimed payee does not quietly
     // un-declare a commitment.
-    const carried = claimed[0];
+    const carried = claimDecision.claim;
     if (carried && !targetClaimed) {
       await tx
         .update(financePayees)
         .set({
-          commitmentBillId: carried.commitmentBillId,
-          commitmentSpendId: carried.commitmentSpendId,
+          commitmentBillId: carried.kind === "bill" ? carried.id : null,
+          commitmentSpendId: carried.kind === "spend" ? carried.id : null,
           updatedAt: new Date(),
         })
         .where(and(eq(financePayees.userId, userId), eq(financePayees.id, targetId)));

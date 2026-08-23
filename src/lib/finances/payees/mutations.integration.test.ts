@@ -18,7 +18,7 @@ import {
   removeAlias,
   renamePayee,
 } from "./mutations";
-import { getPayee, listAliasRows, listPayees } from "./queries";
+import { getPayee, listAliasRows, listPayees, previewPayeeMerge } from "./queries";
 import { payeeForDescription, payeeIndex } from "./resolve";
 
 const dbReachable = await databaseReachable();
@@ -271,6 +271,54 @@ describeDb("payee mutations", () => {
     expect(await getPayee(userId, source)).not.toBeNull();
   });
 
+  it("merges payees that already carry the same commitment claim", async () => {
+    const [bill] = await db
+      .insert(financeRecurringBills)
+      .values({ userId, name: "Internet", cadenceMonths: 1 })
+      .returning({ id: financeRecurringBills.id });
+    const target = await createPayee(userId, { name: "Comcast" });
+    const source = await createPayee(userId, { name: "Xfinity" });
+    await claimPayeeForCommitment(userId, target, { kind: "bill", id: bill.id });
+    await claimPayeeForCommitment(userId, source, { kind: "bill", id: bill.id });
+
+    await mergePayees(userId, target, [source]);
+
+    expect((await getPayee(userId, target))?.claim?.id).toBe(bill.id);
+    expect(await getPayee(userId, source)).toBeNull();
+  });
+
+  it("previews the references that will move before merging", async () => {
+    const target = await createPayee(userId, { name: "Netflix" });
+    const source = await createPayee(userId, {
+      name: "Netflix Inc",
+      aliases: ["NETFLIX.COM"],
+    });
+    await addTransaction(userId, accountId, {
+      description: "NETFLIX.COM",
+      amount: "-15.99",
+      payeeId: source,
+    });
+    await db.insert(financeSchedules).values({
+      userId,
+      name: "Netflix",
+      nextDate: "2026-09-01",
+      sortKey: "a0",
+      conditions: [{ field: "payee", op: "is", value: source }],
+    });
+
+    const preview = await previewPayeeMerge(userId, target, [source]);
+
+    expect(preview).toMatchObject({
+      target: { id: target, name: "Netflix" },
+      sources: [{ id: source, name: "Netflix Inc" }],
+      movedAliases: ["NETFLIX"],
+      movedTransactions: 1,
+      movedTotalCents: -1599,
+      affectedSchedules: [{ name: "Netflix" }],
+      refusal: null,
+    });
+  });
+
   it("keeps a transaction when its payee is deleted", async () => {
     const payeeId = await createPayee(userId, {
       name: "Walmart",
@@ -291,6 +339,29 @@ describeDb("payee mutations", () => {
     // on delete set null, never cascade: deleting a payee must not delete money.
     expect(tx.id).toBe(txId);
     expect(tx.payeeId).toBeNull();
+  });
+
+  it("refuses to delete a payee referenced by a commitment or schedule", async () => {
+    const [bill] = await db
+      .insert(financeRecurringBills)
+      .values({ userId, name: "Internet", cadenceMonths: 1 })
+      .returning({ id: financeRecurringBills.id });
+    const claimed = await createPayee(userId, { name: "Comcast" });
+    await claimPayeeForCommitment(userId, claimed, { kind: "bill", id: bill.id });
+    await expect(deletePayee(userId, claimed)).rejects.toThrow(/commitment/i);
+
+    const scheduled = await createPayee(userId, { name: "Netflix" });
+    await db.insert(financeSchedules).values({
+      userId,
+      name: "Netflix",
+      nextDate: "2026-09-01",
+      sortKey: "a0",
+      conditions: [{ field: "payee", op: "is", value: scheduled }],
+    });
+    await expect(deletePayee(userId, scheduled)).rejects.toThrow(/schedule/i);
+
+    expect(await getPayee(userId, claimed)).not.toBeNull();
+    expect(await getPayee(userId, scheduled)).not.toBeNull();
   });
 
   it("removes an alias without touching the payee", async () => {
@@ -333,6 +404,11 @@ describeDb("payee mutations — cross-user isolation", () => {
     expect(await listPayees(intruderId)).toEqual([]);
     expect(await listAliasRows(intruderId)).toEqual([]);
     expect(await getPayee(intruderId, ownedPayeeId)).toBeNull();
+
+    const intruderPayee = await createPayee(intruderId, { name: "Mine" });
+    await expect(
+      previewPayeeMerge(intruderId, intruderPayee, [ownedPayeeId]),
+    ).rejects.toThrow();
   });
 
   it("refuses every write the intruder attempts on the owner's payee", async () => {

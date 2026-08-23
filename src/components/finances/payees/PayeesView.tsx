@@ -22,6 +22,7 @@ import { collectDistinctValues } from "@/lib/grid/distinct";
 import { isTypingTarget } from "@/lib/keyboard";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { PayeeDrawer } from "./PayeeDrawer";
+import { PayeeMergeDialog } from "./PayeeMergeDialog";
 import { PAYEE_COLUMN_IDS, payeeColumns, type PayeeColumnCtx } from "./payeeColumns";
 
 const PAYEE_VIEWS = [{ id: "all", label: "All Payees" }] as const;
@@ -48,6 +49,7 @@ export function PayeesView({ initialPayees }: { initialPayees: PayeeRow[] }) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PayeeRow | null>(null);
+  const [pendingMerge, setPendingMerge] = useState<PayeeRow[] | null>(null);
   const [, startTransition] = useTransition();
   const { detail: openId, setDetail: setOpenId } = useViewStateUrl();
 
@@ -81,6 +83,7 @@ export function PayeesView({ initialPayees }: { initialPayees: PayeeRow[] }) {
   const { order, onIdsChange } = useNavigableIds(rowIds);
   const multi = useMultiSelect(order, null);
   const { selectedId, selectedIds, select, move } = multi;
+  const clearSelection = multi.selectOne;
 
   const refresh = useCallback(() => {
     startTransition(async () => {
@@ -163,6 +166,21 @@ export function PayeesView({ initialPayees }: { initialPayees: PayeeRow[] }) {
     });
   }, [pendingDelete, openId, closeDrawer, refresh]);
 
+  const requestMerge = useCallback(() => {
+    const selected = rows.filter((row) => selectedIds.has(row.id));
+    if (selected.length >= 2) setPendingMerge(selected);
+  }, [rows, selectedIds]);
+
+  const finishMerge = useCallback(
+    (message: string) => {
+      setPendingMerge(null);
+      setNotice(message);
+      clearSelection(null);
+      refresh();
+    },
+    [clearSelection, refresh],
+  );
+
   const capabilitiesFor = useCallback(
     (rowId: string | null, count: number) =>
       catalogCapabilities({
@@ -176,8 +194,22 @@ export function PayeesView({ initialPayees }: { initialPayees: PayeeRow[] }) {
         onCreate: rebuild,
         onOpen: openDrawer,
         onDelete: requestDelete,
+        pageCommands: [
+          {
+            id: "payees.merge",
+            label: "Merge selected payees…",
+            group: "record",
+            menu: "item",
+            section: "Item",
+            icon: "convert",
+            rowMenu: true,
+            disabled: count < 2,
+            title: count < 2 ? "Select at least two payees first" : undefined,
+            run: requestMerge,
+          },
+        ],
       }),
-    [rows, rebuild, openDrawer, requestDelete],
+    [rows, rebuild, openDrawer, requestDelete, requestMerge],
   );
 
   const commandCapabilities = useMemo(
@@ -192,7 +224,8 @@ export function PayeesView({ initialPayees }: { initialPayees: PayeeRow[] }) {
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (openId || pendingDelete || isTypingTarget(event.target)) return;
+      if (openId || pendingDelete || pendingMerge || isTypingTarget(event.target))
+        return;
       if (event.key === "ArrowDown") {
         event.preventDefault();
         move(1, event.shiftKey);
@@ -205,7 +238,7 @@ export function PayeesView({ initialPayees }: { initialPayees: PayeeRow[] }) {
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [openId, pendingDelete, move]);
+  }, [openId, pendingDelete, pendingMerge, move]);
 
   const openPayee = openId ? (rows.find((row) => row.id === openId) ?? null) : null;
 
@@ -293,6 +326,13 @@ export function PayeesView({ initialPayees }: { initialPayees: PayeeRow[] }) {
         onConfirm={confirmDelete}
         onCancel={() => setPendingDelete(null)}
       />
+      {pendingMerge && (
+        <PayeeMergeDialog
+          payees={pendingMerge}
+          onClose={() => setPendingMerge(null)}
+          onMerged={finishMerge}
+        />
+      )}
     </div>
   );
 }

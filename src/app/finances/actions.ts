@@ -4,10 +4,16 @@ import { seedPayees, type SeedPayeesSummary } from "@/lib/finances/payees/backfi
 import {
   addAlias,
   deletePayee,
+  mergePayees,
   removeAlias,
   setPayeeNotes,
 } from "@/lib/finances/payees/mutations";
-import { listPayees, type PayeeRow } from "@/lib/finances/payees/queries";
+import {
+  listPayees,
+  previewPayeeMerge,
+  type PayeeMergePreview,
+  type PayeeRow,
+} from "@/lib/finances/payees/queries";
 import {
   clearScrapedPending,
   replaceScrapedPending,
@@ -444,10 +450,9 @@ export async function upcomingOccurrencesAction(
 
 // ─────────────────────────────── Payees ───────────────────────────────
 //
-// Rename and merge are deliberately absent. Both change the key `resolveMerchant` looks a
-// commitment up by, so exposing them before commitment matchers become payee claims would let
-// one rename silently take a commitment's charges away
-// (`agent-os/specs/2026-08-23-0748-finance-payees/`, Changes row 3).
+// Claims are now populated by the guarded matcher bridge. The id-authoritative cutover exposes
+// merge here because it rewrites every payee reference transactionally rather than changing a
+// display string that business logic joins on.
 
 export async function listPayeesAction(): Promise<QueryResult<PayeeRow[]>> {
   return runQuery(listPayees);
@@ -480,4 +485,18 @@ export async function setPayeeNotesAction(
 
 export async function deletePayeeAction(payeeId: string): Promise<ActionResult> {
   return run((userId) => deletePayee(userId, payeeId));
+}
+
+export async function previewPayeeMergeAction(
+  targetId: string,
+  sourceIds: readonly string[],
+): Promise<QueryResult<PayeeMergePreview>> {
+  return runQuery((userId) => previewPayeeMerge(userId, targetId, sourceIds));
+}
+
+export async function mergePayeesAction(
+  targetId: string,
+  sourceIds: readonly string[],
+): Promise<DataActionResult<{ movedTransactions: number; movedAliases: number }>> {
+  return runWithData((userId) => mergePayees(userId, targetId, sourceIds));
 }
