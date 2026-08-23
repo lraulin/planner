@@ -2201,6 +2201,29 @@ export const financeTransactions = pgTable(
     derivedCategory: text("derived_category"),
     /** Classifier's flow. Recomputable on the same terms as `derivedCategory`. */
     derivedFlow: financeFlowKindEnum("derived_flow"),
+    /**
+     * Who was paid, as a row rather than a string
+     * (`agent-os/specs/2026-08-23-0748-finance-payees/`).
+     *
+     * **Recomputable, exactly like `derivedCategory` above** — resolved from the alias table by
+     * the reclassify pass, so wiping this column and re-running must be a no-op. That is what
+     * keeps it honest: the payee is a function of the description, and correcting one is an
+     * *alias* edit, which fixes every row that merchant ever produced rather than the one in
+     * front of you. There is deliberately no per-row override; Actual has one, and it buys a
+     * correction that leaves the next import just as wrong.
+     *
+     * Where a PayPal resolution names who was actually paid, that name resolves the payee
+     * instead of the bank's line — the same substitution `classify/reclassify.ts` already makes
+     * for the category. Without it every bare `PAYPAL *` row would collapse into one payee.
+     *
+     * Null means unresolved: a row whose merchant has never been seen before the next
+     * reclassify mints a payee for it.
+     *
+     * `on delete set null`, not cascade: deleting a payee must never delete a transaction.
+     */
+    payeeId: uuid("payee_id").references((): AnyPgColumn => financePayees.id, {
+      onDelete: "set null",
+    }),
     /** The user disagreeing with `derivedFlow`. Wins, and survives every reclassify. */
     flowOverride: financeFlowKindEnum("flow_override"),
     /**
@@ -2283,6 +2306,9 @@ export const financeTransactions = pgTable(
     index("finance_transactions_schedule_idx")
       .on(table.userId, table.scheduleId)
       .where(sql`${table.scheduleId} is not null`),
+    index("finance_transactions_payee_idx")
+      .on(table.userId, table.payeeId, table.transactionDate)
+      .where(sql`${table.payeeId} is not null`),
     index("finance_transactions_account_date_idx").on(
       table.userId,
       table.accountId,
@@ -3077,6 +3103,132 @@ export const financeSchedules = pgTable(
     index("finance_schedules_source_bill_idx")
       .on(table.userId, table.sourceBillId)
       .where(sql`${table.sourceBillId} is not null`),
+  ],
+);
+
+/**
+ * ─────────────────────────────────── Payees ───────────────────────────────────
+ *
+ * **Merchant identity as a row, instead of a function re-run on every read.**
+ * Reimplemented from Actual Budget's payees (`packages/loot-core/src/server/accounts/payees.ts`,
+ * MIT) — see `agent-os/specs/2026-08-23-0748-finance-payees/` and `docs/actual-budget/README.md`.
+ *
+ * Before this, "who was paid" was `effectiveMerchant()`: `normalizeMerchant(description)`
+ * followed by a linear scan of the hardcoded `CLASSIFY_RULES`, evaluated per row at read time
+ * in a dozen callers. That produced three workarounds for one missing concept, which is the
+ * signal `agent-os/standards/development/clean-code.md` names:
+ *
+ * 1. The canonical name — the knowledge that `WM SUPERCENTER` and `WAL-MART` are one company —
+ *    could only be changed by editing TypeScript.
+ * 2. `finance_recurring_bills.matchers`, `finance_recurring_spend.matchers` and
+ *    `finance_schedules.conditions` each **copied the string** as a join key, because there was
+ *    no row to point at.
+ * 3. "A merchant belongs to at most one commitment" spanned two tables and so could not be a
+ *    constraint at all; it lived in two mutations and an integration test.
+ *
+ * All three are the same absence. A payee fixes them together, and the claim below is what
+ * turns (3) into a CHECK.
+ */
+export const financePayees = pgTable(
+  "finance_payees",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /**
+     * What the user calls this merchant. Theirs to change, and **nothing joins on it** — the
+     * aliases below carry the join, which is what makes a rename safe.
+     *
+     * Seeded from the `merchant:` entries in `classify/rules.ts`, not title-cased from the bank
+     * string the way Actual does (`accounts/sync.ts:416-483`). Title-casing invents
+     * `Wm Supercenter`; the rule list already holds the name a person would write.
+     */
+    name: text("name").notNull(),
+    /**
+     * The commitment this payee's charges belong to, if any — at most one, across both tiers.
+     *
+     * **This is the constraint that could not previously exist.** `financeRecurringBills` and
+     * `financeRecurringSpend` each held a `matchers text[]`, and the rule that a merchant may
+     * appear on only one of them spanned two tables, so Postgres could not express it and two
+     * mutations enforced it by hand. Held here it is a property of a single row: one payee, one
+     * claim, one CHECK. Ownership inverts — "which payees does this bill claim" is now a query
+     * — which is the ordinary direction for a many-to-one and is what buys the guarantee.
+     *
+     * `on delete set null`, not cascade: deleting a commitment must never delete the payee or
+     * orphan its transactions.
+     */
+    commitmentBillId: uuid("commitment_bill_id").references(
+      () => financeRecurringBills.id,
+      { onDelete: "set null" },
+    ),
+    commitmentSpendId: uuid("commitment_spend_id").references(
+      () => financeRecurringSpend.id,
+      { onDelete: "set null" },
+    ),
+    /** Free text about the merchant. Not a matcher, and never read by the resolver. */
+    notes: text("notes").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // Case-insensitive, matching Actual's `UNICODE_LOWER(name)` lookup in `payees.ts:3-16`.
+    // Two payees called "Costco" is precisely the state `mergePayees` exists to leave behind,
+    // so the database should not let one arrive by accident in the first place.
+    uniqueIndex("finance_payees_user_name_uq").on(
+      table.userId,
+      sql`lower(${table.name})`,
+    ),
+    // The whole point of D2: at most one commitment claim per payee, now expressible.
+    check(
+      "finance_payees_single_commitment",
+      sql`num_nonnulls(${table.commitmentBillId}, ${table.commitmentSpendId}) <= 1`,
+    ),
+    index("finance_payees_commitment_bill_idx")
+      .on(table.userId, table.commitmentBillId)
+      .where(sql`${table.commitmentBillId} is not null`),
+    index("finance_payees_commitment_spend_idx")
+      .on(table.userId, table.commitmentSpendId)
+      .where(sql`${table.commitmentSpendId} is not null`),
+  ],
+);
+
+/**
+ * The `normalizeMerchant()` strings one payee answers to.
+ *
+ * **A child table rather than a `text[]` on the payee, and the reason is the unique index
+ * below.** One normalized merchant string must belong to at most one payee — otherwise a
+ * charge has two answers to "who was paid" and every total downstream can double-count. An
+ * array column cannot carry uniqueness *across* rows; a child table can, so the rule becomes
+ * the database's job instead of a mutation everyone has to remember to route through. That is
+ * the same trade `financeBudgetCategories.sourceCategories` declined — and it declined it
+ * knowingly, noting that a duplicate there costs a row in the wrong envelope rather than a
+ * lost transaction. Here it would corrupt a total, so it is worth a table.
+ *
+ * Aliases are what a merge moves and what a rename leaves alone: `1PASSWORDTORONTOON` stays an
+ * alias forever while the payee it points at is renamed to `1Password`.
+ */
+export const financePayeeAliases = pgTable(
+  "finance_payee_aliases",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    payeeId: uuid("payee_id")
+      .notNull()
+      .references(() => financePayees.id, { onDelete: "cascade" }),
+    /**
+     * A `normalizeMerchant()` output, uppercase as that function leaves it. Never a raw bank
+     * description and never a pattern — matching is exact, so an alias that drifts from what
+     * the normalizer produces silently claims nothing.
+     */
+    alias: text("alias").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("finance_payee_aliases_user_alias_uq").on(table.userId, table.alias),
+    index("finance_payee_aliases_user_payee_idx").on(table.userId, table.payeeId),
   ],
 );
 
