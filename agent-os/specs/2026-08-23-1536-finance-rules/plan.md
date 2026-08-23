@@ -147,8 +147,9 @@ caught a bug — not a feature.
 
 ## Acceptance criteria
 
-- [ ] The refund rekey (D8) lands on its own, with its nonzero `refund` ↔ `external_transfer`
-      diff reported in signed cents and explained before it is applied.
+- [x] The refund rekey (D8) lands on its own, with its `refund` ↔ `external_transfer` diff
+      reported in signed cents and explained before it is applied. **Result: 0 of 7,030 rows
+      move.**
 - [ ] Seeding the 65 rules produces `differing === 0` on the real ~7,030-row file, with both
       income figures byte-identical; a second seed plans zero writes.
 - [ ] Precedence per D5 holds; a transfer still beats a rule; reclassify still never changes an
@@ -169,9 +170,9 @@ caught a bug — not a feature.
 
 Material refinements during implementation (requirements, design, scope). Omit pure code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                                                                                                                                                                                                             | Why                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | The refund rekey's expected nonzero diff is **zero**: 0 of 7,030 classified rows change flow on the real file. D8's separate-commit sequencing is kept anyway, and the audit it produced (`classify/flowDiff.ts`, `npm run flow:audit`) stays as the standing gate for any future detector change. | The prediction assumed the merchant-string and payee-id keys still disagreed on PayPal rows. They did — until the payee matcher cutover rebuilt the catalog and corrected 88 assignments, which had already repaired that disagreement. This change only removes the dependency on `ClassifyRule.merchant`. A tripwire forcing the refund branch off moved exactly the 64 refund rows and $1,991.49, proving the zero is a real zero rather than an audit that cannot see. |
 
 ---
 
@@ -198,7 +199,14 @@ Payee-spec follow-up #3, independent of everything below.
   is an external transfer; two spellings of one payee share the refund set (the case the string
   key got right only via `ClassifyRule.merchant`); a row with no payee is never a refund.
 
-Ship and verify on production data before continuing.
+**As built.** `summarizeFlowChanges` / `formatFlowDiff` in `classify/flowDiff.ts` with eight
+tests; `previewFlowChanges` in `mutations.ts` over a new `loadAndPlanReclassify` that a run and
+a preview now share, so the count a person confirms cannot drift from the count that lands; and
+`npm run flow:audit -- --user <id>`, which has no `--apply` because it cannot write.
+
+On the real 7,030-row file: **0 rows change flow** — see change #1 above. Forcing the refund
+branch off moves 64 rows / $1,991.49, which is the tripwire proving the audit can see the
+decision it is auditing. 3,232 unit and 848 integration tests pass.
 
 ## Task 3: Schema + migration
 

@@ -124,11 +124,24 @@ describe("planReclassify", () => {
     expect(plan.medianPaycheckCents).toBe(250000);
   });
 
-  it("files a credit from a merchant we spend at as a refund", () => {
-    const plan = planOf([
-      row("out", "capone-card", "2026-02-02", "WM SUPERCENTER #1981", -8412),
-      row("back", "capone-card", "2026-02-09", "WAL-MART #1981", 8412),
+  it("files a credit from a payee we spend at as a refund", () => {
+    // Two spellings, one payee — which is the point. The refund set is keyed on identity, so
+    // the store's second spelling is the same shop rather than a stranger sending money.
+    const walmart = new Map([
+      ["WM SUPERCENTER", "walmart-payee"],
+      ["WAL-MART", "walmart-payee"],
     ]);
+    const plan = planReclassify(
+      [
+        row("out", "capone-card", "2026-02-02", "WM SUPERCENTER #1981", -8412),
+        row("back", "capone-card", "2026-02-09", "WAL-MART #1981", 8412),
+      ],
+      ACCOUNTS,
+      minter(),
+      [],
+      new Map(),
+      walmart,
+    );
 
     expect(flowOf(plan, "out")).toBe("spend");
     // Money came back from a shop money went out to, so it is negative spending.
@@ -138,6 +151,45 @@ describe("planReclassify", () => {
       "Groceries",
       "Groceries",
     ]);
+  });
+
+  it("does not call a credit a refund when the payee was never paid", () => {
+    // Same shape as above, but the money comes back from somewhere money never went. A
+    // string key could still call this a refund by collision; an identity key cannot.
+    const plan = planReclassify(
+      [
+        row("out", "capone-card", "2026-02-02", "WM SUPERCENTER #1981", -8412),
+        row("in", "capone-card", "2026-02-09", "ACME MYSTERY SHOP", 8412),
+      ],
+      ACCOUNTS,
+      minter(),
+      [],
+      new Map(),
+      new Map([
+        ["WM SUPERCENTER", "walmart-payee"],
+        ["ACME MYSTERY SHOP", "acme-payee"],
+      ]),
+    );
+
+    expect(flowOf(plan, "out")).toBe("spend");
+    expect(flowOf(plan, "in")).toBe("external_transfer");
+  });
+
+  it("never treats a row with no payee as a refund", () => {
+    /*
+     * The trap this pins: keying the refund set on a nullable id and letting `null` join it.
+     * Every unresolved row would then share one absent identity, and any credit would be a
+     * refund of any unrelated debit. A merchant seen for the first time has no payee yet, so
+     * this is the ordinary state of a freshly imported row, not an edge case.
+     */
+    const plan = planOf([
+      row("out", "capone-card", "2026-02-02", "ACME MYSTERY SHOP", -8412),
+      row("in", "capone-card", "2026-02-09", "SOME OTHER PLACE", 8412),
+    ]);
+
+    expect(plan.rows.map((entry) => entry.payeeId)).toEqual([null, null]);
+    expect(flowOf(plan, "out")).toBe("spend");
+    expect(flowOf(plan, "in")).toBe("external_transfer");
   });
 
   it("does not call a deposit a refund just because it is money coming in", () => {

@@ -187,17 +187,30 @@ export function planReclassify(
     else if (row.amountCents <= 0) claimed.set(row.id, "spend");
   }
 
-  // Merchants money actually goes out to. A credit only counts as a refund if it comes back
-  // from one of these.
-  const spendingMerchants = new Set<string>();
+  /*
+   * Payees money actually goes out to. A credit only counts as a refund if it comes back
+   * from one of these.
+   *
+   * **Keyed on the payee, not on the merchant string.** Two spellings of one shop are one
+   * identity, and until payees existed the only thing that knew so was `ClassifyRule.merchant`
+   * — a canonical name compiled into the app. Now that identity is a row, the string is the
+   * wrong key: it would split `WM SUPERCENTER` from `WAL-MART` again the moment a rule stopped
+   * naming them, and it disagrees with the payee on every PayPal row where the bank names a
+   * merchant (`categorize` always prefers the counterparty; `aliasFor` prefers it only when the
+   * bank line is opaque). The payee is the answer to "who was paid", so it is the key here too.
+   *
+   * A row with no payee is **never** a member. Null is not an identity, and grouping every
+   * unresolved row under one absent key would make any credit a refund of any other.
+   */
+  const spendingPayees = new Set<string>();
   for (const row of rows) {
     if (claimed.get(row.id) !== "spend") continue;
-    const merchant = perRow.get(row.id)?.merchant;
-    if (merchant) spendingMerchants.add(merchant);
+    const payeeId = payeeIdByRow.get(row.id);
+    if (payeeId) spendingPayees.add(payeeId);
   }
 
   const planned = rows.map((row) => {
-    const merchant = perRow.get(row.id)?.merchant ?? "";
+    const payeeId = payeeIdByRow.get(row.id) ?? null;
     const flow: FinanceFlowKind =
       claimed.get(row.id) ??
       /*
@@ -219,20 +232,20 @@ export function planReclassify(
        */
       (named.has(row.id)
         ? "external_transfer"
-        : spendingMerchants.has(merchant)
+        : payeeId !== null && spendingPayees.has(payeeId)
           ? "refund"
           : "external_transfer");
 
     return {
       id: row.id,
       derivedCategory: carriesCategory(flow)
-        ? (commitmentCategories.get(payeeIdByRow.get(row.id) ?? "") ??
+        ? ((payeeId === null ? undefined : commitmentCategories.get(payeeId)) ??
           perRow.get(row.id)?.category ??
           null)
         : null,
       derivedFlow: flow,
       transferGroupId: groupIdByRow.get(row.id) ?? null,
-      payeeId: payeeIdByRow.get(row.id) ?? null,
+      payeeId,
     };
   });
 

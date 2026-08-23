@@ -18,6 +18,7 @@ import {
 import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { parseAccountUrl } from "./accountUrl";
 import { changedRows, planReclassify } from "./classify/reclassify";
+import { summarizeFlowChanges, type FlowDiff } from "./classify/flowDiff";
 import { cadenceColumns, cadenceOf, type Cadence } from "./recurringBills";
 import { numericStringToCents } from "./money";
 import type { PaypalResolution } from "./paypalMatch";
@@ -312,14 +313,20 @@ export type ReclassifySummary = {
  * and are not in the update statement at all, so no amount of re-running can erase a
  * correction.
  */
-export async function reclassifyTransactions(
-  userId: string,
-): Promise<ReclassifySummary> {
-  // Mint the stable ids before planning. The planner then assigns those ids in the same
-  // row-shaped update as the other recomputable facts rather than maintaining a second
-  // classification path just for payees.
-  await ensurePayees(userId);
-
+/**
+ * Load everything one user's classification depends on, and plan it. **Writes nothing.**
+ *
+ * Split out because a preview and a run must not be two implementations of the same answer.
+ * The moment they diverge, the count a person confirmed stops being the count that lands —
+ * and the difference would show up as a wrong number rather than as an error. `previewFlow`
+ * and `reclassifyTransactions` therefore share this, and differ only in what they do with the
+ * plan afterwards.
+ *
+ * Deliberately does **not** call `ensurePayees`: minting a payee is a write, and a caller that
+ * only wants to look must be able to. A run calls it first; a preview accepts that a merchant
+ * never seen before is still unclaimed and reports it that way.
+ */
+async function loadAndPlanReclassify(userId: string) {
   const [
     rows,
     accounts,
@@ -450,7 +457,30 @@ export async function reclassifyTransactions(
     commitmentCategories,
     payeeIndex(aliases),
   );
-  const changed = changedRows(parsed, plan);
+
+  return { parsed, plan, changed: changedRows(parsed, plan) };
+}
+
+/**
+ * What a reclassify would do to `derived_flow`, without doing it.
+ *
+ * The audit half of a detector change: see `classify/flowDiff.ts` for why a flow movement is
+ * reported in signed cents and read by a human before anything is written.
+ */
+export async function previewFlowChanges(userId: string): Promise<FlowDiff> {
+  const { parsed, plan } = await loadAndPlanReclassify(userId);
+  return summarizeFlowChanges(parsed, plan.rows);
+}
+
+export async function reclassifyTransactions(
+  userId: string,
+): Promise<ReclassifySummary> {
+  // Mint the stable ids before planning. The planner then assigns those ids in the same
+  // row-shaped update as the other recomputable facts rather than maintaining a second
+  // classification path just for payees.
+  await ensurePayees(userId);
+
+  const { parsed, plan, changed } = await loadAndPlanReclassify(userId);
 
   if (changed.length > 0) {
     await db.transaction(async (tx) => {
@@ -478,7 +508,7 @@ export async function reclassifyTransactions(
   }
 
   return {
-    scanned: rows.length,
+    scanned: parsed.length,
     updated: changed.length,
     paydayCount: plan.paydays.length,
     medianPaycheckCents: plan.medianPaycheckCents,
