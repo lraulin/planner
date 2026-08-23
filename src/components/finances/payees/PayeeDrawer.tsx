@@ -4,7 +4,7 @@ import { useId, useState, useTransition } from "react";
 import {
   addPayeeAliasAction,
   removePayeeAliasAction,
-  setPayeeNotesAction,
+  updatePayeeDetailsAction,
 } from "@/app/finances/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { Drawer, DrawerFooter, DrawerHeader } from "@/components/detail/Drawer";
@@ -53,6 +53,8 @@ function PayeeForm({
   onChanged: () => void;
 }) {
   const aliasId = useId();
+  const nameId = useId();
+  const [name, setName] = useState(payee.name);
   const [notes, setNotes] = useState(payee.notes);
   const [aliasDraft, setAliasDraft] = useState("");
   const [dirty, setDirty] = useState(false);
@@ -69,14 +71,20 @@ function PayeeForm({
 
   function patchNotes(value: string) {
     setNotes(value);
-    setDirty(value !== payee.notes);
+    setDirty(value !== payee.notes || name !== payee.name);
+    setJustSaved(false);
+  }
+
+  function patchName(value: string) {
+    setName(value);
+    setDirty(value !== payee.name || notes !== payee.notes);
     setJustSaved(false);
   }
 
   function save(thenClose: boolean) {
     setError(null);
     startTransition(async () => {
-      const result = await setPayeeNotesAction(payee.id, notes);
+      const result = await updatePayeeDetailsAction(payee.id, { name, notes });
       if (!result.ok) {
         setError(result.error);
         return;
@@ -136,6 +144,18 @@ function PayeeForm({
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
           <div className="flex flex-col gap-7">
             <Section title="Identity">
+              <label
+                htmlFor={nameId}
+                className="flex flex-col gap-1 text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted"
+              >
+                Display name
+                <input
+                  id={nameId}
+                  value={name}
+                  onChange={(event) => patchName(event.target.value)}
+                  className="min-h-tap rounded border border-rule bg-surface px-2 py-1.5 text-base font-normal normal-case tracking-normal text-ink outline-none focus:border-select-edge md:min-h-0 md:text-[0.8125rem]"
+                />
+              </label>
               <dl className="grid grid-cols-1 gap-3 rounded border border-rule bg-surface-raised/40 p-3 text-[0.8125rem] sm:grid-cols-3">
                 <div>
                   <dt className="text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
@@ -262,7 +282,7 @@ function PayeeForm({
       <ConfirmDialog
         open={confirmClose}
         title="Discard changes?"
-        message="You have unsaved notes. Close without saving?"
+        message="You have unsaved payee changes. Close without saving?"
         confirmLabel="Discard"
         destructive
         onConfirm={() => {

@@ -7,6 +7,7 @@ import {
   mergePayees,
   removeAlias,
   setPayeeNotes,
+  updatePayeeDetails,
 } from "@/lib/finances/payees/mutations";
 import {
   listPayees,
@@ -481,6 +482,13 @@ export async function setPayeeNotesAction(
   notes: string,
 ): Promise<ActionResult> {
   return run((userId) => setPayeeNotes(userId, payeeId, notes));
+}
+
+export async function updatePayeeDetailsAction(
+  payeeId: string,
+  input: { name: string; notes: string },
+): Promise<ActionResult> {
+  return run((userId) => updatePayeeDetails(userId, payeeId, input));
 }
 
 export async function deletePayeeAction(payeeId: string): Promise<ActionResult> {

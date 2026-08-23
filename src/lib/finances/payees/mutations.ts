@@ -125,6 +125,33 @@ export async function renamePayee(
   }
 }
 
+/** Save the two editable display fields atomically from the payee drawer. */
+export async function updatePayeeDetails(
+  userId: string,
+  payeeId: string,
+  input: { name: string; notes: string },
+): Promise<void> {
+  const name = cleanName(input.name);
+  try {
+    await db.transaction(async (tx) => {
+      const [owned] = await tx
+        .select({ id: financePayees.id })
+        .from(financePayees)
+        .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)));
+      if (!owned) throw new Error("That payee does not exist.");
+      await tx
+        .update(financePayees)
+        .set({ name, notes: input.notes, updatedAt: new Date() })
+        .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)));
+    });
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      throw new Error(`A payee called "${name}" already exists.`);
+    }
+    throw error;
+  }
+}
+
 export async function setPayeeNotes(
   userId: string,
   payeeId: string,

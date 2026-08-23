@@ -17,6 +17,7 @@ import {
   mergePayees,
   removeAlias,
   renamePayee,
+  updatePayeeDetails,
 } from "./mutations";
 import { getPayee, listAliasRows, listPayees, previewPayeeMerge } from "./queries";
 import { payeeForDescription, payeeIndex } from "./resolve";
@@ -141,6 +142,20 @@ describeDb("payee mutations", () => {
     expect(after?.aliases).toEqual(["WM SUPERCENTER"]);
     expect(after?.transactionCount).toBe(1);
     expect(after?.totalCents).toBe(-4000);
+  });
+
+  it("saves a payee name and notes together", async () => {
+    const payeeId = await createPayee(userId, { name: "Walmart" });
+
+    await updatePayeeDetails(userId, payeeId, {
+      name: "Wally World",
+      notes: "Same merchant, friendlier label.",
+    });
+
+    expect(await getPayee(userId, payeeId)).toMatchObject({
+      name: "Wally World",
+      notes: "Same merchant, friendlier label.",
+    });
   });
 
   it("counts each payee's activity once, however many aliases it has", async () => {
@@ -413,6 +428,12 @@ describeDb("payee mutations — cross-user isolation", () => {
 
   it("refuses every write the intruder attempts on the owner's payee", async () => {
     await expect(renamePayee(intruderId, ownedPayeeId, "Stolen")).rejects.toThrow();
+    await expect(
+      updatePayeeDetails(intruderId, ownedPayeeId, {
+        name: "Stolen",
+        notes: "Not mine",
+      }),
+    ).rejects.toThrow();
     await expect(addAlias(intruderId, ownedPayeeId, "TARGET")).rejects.toThrow();
     await expect(deletePayee(intruderId, ownedPayeeId)).rejects.toThrow();
     await expect(

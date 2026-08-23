@@ -23,9 +23,11 @@ import { isTypingTarget } from "@/lib/keyboard";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { PayeeDrawer } from "./PayeeDrawer";
 import { PayeeMergeDialog } from "./PayeeMergeDialog";
+import { PayeeMergePickerDialog } from "./PayeeMergePickerDialog";
 import { PAYEE_COLUMN_IDS, payeeColumns, type PayeeColumnCtx } from "./payeeColumns";
 
 const PAYEE_VIEWS = [{ id: "all", label: "All Payees" }] as const;
+const NO_PAYEES_SELECTED: ReadonlySet<string> = new Set();
 
 function viewDefaults(): GridDefaults {
   return {
@@ -50,6 +52,7 @@ export function PayeesView({ initialPayees }: { initialPayees: PayeeRow[] }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<PayeeRow | null>(null);
   const [pendingMerge, setPendingMerge] = useState<PayeeRow[] | null>(null);
+  const [choosingMerge, setChoosingMerge] = useState(false);
   const [, startTransition] = useTransition();
   const { detail: openId, setDetail: setOpenId } = useViewStateUrl();
 
@@ -169,6 +172,7 @@ export function PayeesView({ initialPayees }: { initialPayees: PayeeRow[] }) {
   const requestMerge = useCallback(() => {
     const selected = rows.filter((row) => selectedIds.has(row.id));
     if (selected.length >= 2) setPendingMerge(selected);
+    else setChoosingMerge(true);
   }, [rows, selectedIds]);
 
   const finishMerge = useCallback(
@@ -197,14 +201,12 @@ export function PayeesView({ initialPayees }: { initialPayees: PayeeRow[] }) {
         pageCommands: [
           {
             id: "payees.merge",
-            label: "Merge selected payees…",
+            label: count >= 2 ? "Merge selected payees…" : "Select payees to merge…",
             group: "record",
             menu: "item",
             section: "Item",
             icon: "convert",
             rowMenu: true,
-            disabled: count < 2,
-            title: count < 2 ? "Select at least two payees first" : undefined,
             run: requestMerge,
           },
         ],
@@ -224,7 +226,13 @@ export function PayeesView({ initialPayees }: { initialPayees: PayeeRow[] }) {
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (openId || pendingDelete || pendingMerge || isTypingTarget(event.target))
+      if (
+        openId ||
+        pendingDelete ||
+        pendingMerge ||
+        choosingMerge ||
+        isTypingTarget(event.target)
+      )
         return;
       if (event.key === "ArrowDown") {
         event.preventDefault();
@@ -238,7 +246,7 @@ export function PayeesView({ initialPayees }: { initialPayees: PayeeRow[] }) {
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [openId, pendingDelete, pendingMerge, move]);
+  }, [openId, pendingDelete, pendingMerge, choosingMerge, move]);
 
   const openPayee = openId ? (rows.find((row) => row.id === openId) ?? null) : null;
 
@@ -331,6 +339,17 @@ export function PayeesView({ initialPayees }: { initialPayees: PayeeRow[] }) {
           payees={pendingMerge}
           onClose={() => setPendingMerge(null)}
           onMerged={finishMerge}
+        />
+      )}
+      {choosingMerge && (
+        <PayeeMergePickerDialog
+          payees={rows}
+          initiallySelected={selectedIds.size >= 2 ? selectedIds : NO_PAYEES_SELECTED}
+          onClose={() => setChoosingMerge(false)}
+          onContinue={(selected) => {
+            setChoosingMerge(false);
+            setPendingMerge(selected);
+          }}
         />
       )}
     </div>
