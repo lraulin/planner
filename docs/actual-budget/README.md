@@ -35,7 +35,8 @@ semantics transfer; the machinery does not.**
 | Schedule templates — pay-this-month vs sinking, the already-funded fallback                  | `packages/loot-core/src/server/budget/schedule-template.ts`                                                     |
 | The stored template shapes (`goal_def`) — dollar floats there, integer cents here            | `packages/loot-core/src/types/models/templates.ts`                                                              |
 | **Schedules** — recurrence, status, skip, next-date cursor, discover                         | `packages/loot-core/src/shared/schedules.ts`, `packages/loot-core/src/server/schedules/{app,find-schedules}.ts` |
-| The rule engine beneath schedules (not ported; we store the condition shape only)            | `packages/loot-core/src/server/rules/`                                                                          |
+| **Payees** — identity, aliases, merge behavior (catalog ported; matcher cutover pending)     | `packages/loot-core/src/server/accounts/{payees,sync}.ts`, `packages/loot-core/src/server/db/index.ts`          |
+| Rules and payee-conditioned schedules (not ported; legacy matcher strings remain active)     | `packages/loot-core/src/server/rules/`                                                                          |
 | Budget UI and menu vocabulary                                                                | `packages/desktop-client/src/components/budget/envelope/`                                                       |
 | Cell → UI naming crib                                                                        | `packages/desktop-client/src/spreadsheet/bindings.ts`                                                           |
 | Their own docs                                                                               | `packages/docs/docs/`                                                                                           |

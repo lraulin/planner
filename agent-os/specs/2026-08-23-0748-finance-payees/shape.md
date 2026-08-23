@@ -1,11 +1,12 @@
 # Payees — one merchant identity — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-08-23)
 
 ## Scope
 
 Give this app a **payee**: a row with a name the user owns, a set of alias strings it
-claims, and a stable id that other tables reference instead of copying a merchant string.
+claims, and a stable id that transactions reference instead of recomputing identity. The
+same id is the prepared join for commitments and schedules once their delta migrates them.
 
 Today merchant identity is a function, not a record — `effectiveMerchant()` recomputes it
 per row at read time from `normalizeMerchant()` plus a linear scan of 66 hardcoded regexes.
@@ -13,19 +14,25 @@ The canonical name lives in code, three tables store the string as a join key, a
 constraint that protects the arithmetic ("a merchant belongs to at most one commitment")
 spans two tables and therefore cannot be a constraint at all.
 
-This is the **first of two Actual specs**. Rules follows immediately, and needs a payee id
-to condition on — the same dependency that put Schedules before Goal templates.
+This is the identity foundation for the remaining Actual work. The matcher-cutover delta
+must take the prepared join before Rules follows, and Rules needs the same payee id to
+condition on — the dependency that put Schedules before Goal templates.
 
 In scope:
 
 - `finance_payees` + `finance_payee_aliases`, and `finance_transactions.payee_id`.
-- Migrating `finance_recurring_bills.matchers`, `finance_recurring_spend.matchers` and
-  `finance_schedules.conditions` onto payee ids.
-- A `/finances/payees` page that renames, merges, and edits aliases.
-- Rewiring `effectiveMerchant()` and its ~15 read-time callers onto the stored name.
+- Idempotently seeding and maintaining payee identities from the register, including
+  processor counterparties, and assigning them during ordinary reclassification.
+- Replacement commitment-claim columns, queries and mutations, without activating them yet.
+- A `/finances/payees` page that displays activity and edits aliases; the Register shows the
+  stored payee name.
 
 ### Out of scope
 
+- **The commitment/schedule matcher cutover and Rename/Merge UI.** Real-file verification
+  proved a partial read cutover moves Available to Spend before legacy matcher strings have
+  migrated. Those readers, editors and agent contracts need one delta spec and one atomic
+  behavioral cutover. The rename/merge mutations remain tested but unreachable until then.
 - **The rules engine, editor and register affordances** — the next spec.
 - Auto-learned category rules (Actual's 3-of-last-5 `updateCategoryRules`).
 - A per-transaction payee override (D4 explains why the alias edit is the correction).
@@ -66,9 +73,10 @@ D1–D7 and the divergence table live in `plan.md`. The shaping arguments behind
 
 - **What could go wrong, and how it is caught.** Every risk here is silent: a matcher that
   resolves to no payee makes a commitment's spend quietly drop to zero; a merged payee
-  leaves a dangling id inside schedule JSONB that no FK protects. Task 5 asserts before it
-  drops, and the Verification section requires driving the real file rather than trusting
-  the gate.
+  leaves a dangling id inside schedule JSONB that no FK protects. The implementation stopped
+  at the additive identity layer when the real-file check caught that partial cutover. The
+  follow-up delta owns the pre-drop assertions; this slice proves seeding itself moves no
+  finance number.
 
 ## Context
 

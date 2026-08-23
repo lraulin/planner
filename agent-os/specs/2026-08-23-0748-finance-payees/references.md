@@ -1,11 +1,14 @@
 # References for Payees — one merchant identity
 
+**Status: frozen / complete** (2026-08-23)
+
 ## Governing specs
 
 ### `agent-os/specs/2026-08-16-1938-commitments/`
 
-- **Relationship:** Supersedes **D2's `matchers text[]` storage** and **D3's cross-table
-  matcher exclusivity**. Everything else extends.
+- **Relationship:** Prepares the replacement for **D2's `matchers text[]` storage** and
+  **D3's cross-table matcher exclusivity**. The legacy behavior remains authoritative until
+  the matcher-cutover delta formally supersedes it; everything else extends.
 - **What carries forward:** the two-tier model (D0), propose-never-apply (D8), the
   one-page/two-section layout (D10), cadence in months.
 - **What changes:** D2 argued that one column doing three jobs — display name, unique key,
@@ -19,10 +22,10 @@
 
 ### `agent-os/specs/2026-08-22-2124-actual-schedules/`
 
-- **Relationship:** Extends. The payee condition's **value type** changes from a merchant
-  string to a payee id; nothing else about the condition model moves.
+- **Relationship:** Extends. This slice creates the payee id that a later delta will put in
+  the payee condition; existing conditions remain merchant strings here.
 - **Relevant decisions:** D1's validating parse — bad JSONB must never reach the matcher or
-  the recurrence math. Widening it to the id shape is a Task 5 obligation, not an
+  the recurrence math. Widening it to the id shape is a matcher-cutover obligation, not an
   afterthought, and its `payee oneOf` widening of Actual's `payee is` stays.
 - **Note:** this is the reference that _predicted_ this spec —
   `src/db/schema.ts:3024`: "The generic rule engine, payees table and auto-post service
@@ -41,8 +44,8 @@
 - **Relationship:** Extends the commitments specs; inherits this change.
 - **Relevance:** `src/lib/finances/registerBillDraft.ts` (`trackAsBillDraft`,
   `trackAsBillRefusal`, `claimedMatchersOf`) is the application-level exclusivity check that
-  D1/D2 here replace with a unique index and a CHECK. Its refusal _message_ is still wanted;
-  only the mechanism that detects the conflict changes.
+  the matcher-cutover delta will replace with payee claims. Its refusal _message_ is still
+  wanted; only the mechanism that detects the conflict changes.
 
 ## Actual Budget (`../actual`, MIT © James Long)
 
@@ -57,9 +60,9 @@
 | Payees management UI                                                   | `packages/desktop-client/src/components/payees/`                                   |
 | **For the Rules spec that follows, not this one**                      | `packages/loot-core/src/server/rules/`, `server/transactions/transaction-rules.ts` |
 
-`docs/actual-budget/README.md` maps each concern to its file and is the entry point. Its
-"the rule engine … not ported; we store the condition shape only" line needs updating at
-freeze (Task 8).
+`docs/actual-budget/README.md` maps each concern to its file and is the entry point. At this
+spec's freeze it now distinguishes the shipped payee catalog from the unported matcher/rules
+cutover.
 
 ## In-repo implementations studied
 
@@ -92,7 +95,7 @@ freeze (Task 8).
 - **`src/lib/finances/import.ts`** — inserts or skips, never updates. Why the raw
   `description` is durable, and why we need no `imported_payee` column.
 
-### The read path to rewire (Task 6)
+### The read path inventoried for the matcher-cutover delta
 
 `effectiveMerchant()` at **`src/lib/finances/analytics.ts:128`**, and its callers:
 `insightsFilter.ts`, `sankeyFlow.ts`, `dashboardQueries.ts`, `commitments.ts`,

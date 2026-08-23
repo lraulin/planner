@@ -1,30 +1,27 @@
 # Payees — one merchant identity
 
-**Status: active**
+**Status: frozen / complete** (2026-08-23)
 Spec folder: `agent-os/specs/2026-08-23-0748-finance-payees/`
 
 ## Spec relationships
 
-- **Extends:** `agent-os/specs/2026-08-22-2124-actual-schedules/` — the Actual-shaped
-  `{field, op, value}` condition model. This spec changes the **payee condition's value
-  type** from a merchant string to a payee id, and widens the validating parse in
-  `src/lib/finances/schedules/conditions.ts` accordingly.
-- **Supersedes:** `agent-os/specs/2026-08-16-1938-commitments/` — **D2's `matchers text[]`
-  storage** and **D3's cross-table matcher exclusivity**. The name/matcher _split_ that D2
-  argued for is upheld and completed, not reversed: this spec keeps the display name
-  separate from the join key and gives the join key a row of its own (D1, D2 here). What is
-  superseded is where the matcher lives and how exclusivity is enforced — a claim on the
-  payee under a CHECK, instead of two `text[]` columns policed by
-  `upsertRecurringBill` / `upsertRecurringSpend`. Every other commitments decision — the
-  two tiers (D0), propose-never-apply (D8), the one-page layout (D10) — carries forward
-  untouched.
+- **Extends:** `agent-os/specs/2026-08-22-2124-actual-schedules/` — adds the stable payee
+  identity that its Actual-shaped conditions can eventually reference. Existing schedule
+  payee conditions remain merchant strings in this slice; converting them to ids is part of
+  the matcher-cutover delta (Changes row 3).
+- **Prepares to supersede:** `agent-os/specs/2026-08-16-1938-commitments/` — this slice
+  installs the replacement shape for **D2's `matchers text[]` storage** and **D3's
+  cross-table matcher exclusivity**, but does not switch the money-sensitive readers or drop
+  the legacy columns. The later matcher-cutover delta becomes the formal superseding spec.
+  Every other commitments decision — the two tiers (D0), propose-never-apply (D8), the
+  one-page layout (D10) — carries forward untouched.
 
-**Downstream specs that extend the superseded decisions**, and so inherit this change:
+**Downstream specs that extend those matcher decisions**, and so must be migrated together:
 `2026-08-18-2058-commitments-clarity`, `2026-08-21-1122-commitments-curation`, and
 `2026-08-21-1810-register-track-as-bill` (whose `claimedMatchersOf` /
 `trackAsBillRefusal` in `src/lib/finances/registerBillDraft.ts` are exactly the
-application-level exclusivity checks this spec's D1/D2 replace). None of their own decisions are
-superseded; their matcher-shaped plumbing is.
+application-level exclusivity checks the prepared D1/D2 shape will replace). None of their own
+decisions are superseded by this slice; their matcher-shaped plumbing is the delta's scope.
 
 ## Context
 
@@ -68,12 +65,13 @@ works, but it is a side effect, not the reason.
   belongs to at most one payee, enforced by Postgres rather than by a mutation everyone must
   remember to route through. An array column on the payee could not express it.
 
-- **D2 — The commitment claim moves onto the payee.** `finance_payees` gains nullable
-  `commitment_bill_id` and `commitment_spend_id` with `CHECK (num_nonnulls(...) <= 1)`,
-  replacing both `matchers` columns. The cross-table exclusivity at `schema.ts:2483` becomes
-  a row-level CHECK, because a payee has one row and therefore one claim. Ownership inverts
-  — "which payees does this bill claim" becomes a query rather than a column — which is the
-  normal shape for a many-to-one and is what buys the constraint.
+- **D2 — The payee carries the replacement commitment claim.** `finance_payees` has nullable
+  `commitment_bill_id` and `commitment_spend_id` with
+  `CHECK (num_nonnulls(...) <= 1)`. The schema, claim queries and mutations ship here, but
+  the existing `matchers` columns remain authoritative until the delta moves every reader.
+  At that cutover, ownership inverts — "which payees does this bill claim" becomes a query
+  rather than a column — which is the normal shape for a many-to-one and is what buys the
+  state constraint.
 
 - **D3 — No `payee_mapping`. A merge rewrites its references, transactionally.** Actual
   carries an indirection table so merged payees keep resolving
@@ -99,17 +97,21 @@ works, but it is a side effect, not the reason.
   bare PayPal line in the file collapses into a single payee called PAYPAL, which the alias
   model has no way to express its way out of.
 
-- **D5 — `CLASSIFY_RULES` stays, and stops being read at render time.** Its 48 `merchant:`
-  entries are the seed for payee _names_ and their alias groupings. Its `category` and
-  `flow` entries keep working exactly as they do now. What changes is that
-  `effectiveMerchant()` no longer calls `matchRule()` — the answer is a column. The list
-  becomes shipped defaults consumed once, which is the shape the Rules spec will build on.
+- **D5 — `CLASSIFY_RULES` stays, and becomes seed data before it leaves render paths.** Its
+  48 `merchant:` entries seed payee _names_ and alias groupings. Payee-aware display reads
+  (the Register and Payees catalog) prefer the stored name. Money-sensitive analytics keep
+  their legacy merchant-string reads in this slice because commitments still use those
+  strings; switching only one side moved Available to Spend on the real file. The matcher
+  delta moves both sides together, after which `effectiveMerchant()` can stop calling
+  `matchRule()` globally. Its `category` and `flow` entries keep working until the later
+  Rules spec replaces those facts with data.
 
   **This is sequencing, not a verdict that a hardcoded list is the right home.** It is not:
   a fact about the world that can only be changed by editing TypeScript is the workaround,
   and the Rules spec retires the list by moving its `category` / `flow` entries into data
-  too. D5 keeps it for exactly one spec so that identity and categorisation are not
-  re-decided in the same change — not because touching it would be inconvenient.
+  too. D5 keeps categorisation and the temporary merchant fallback so that identity,
+  commitment matching and categorisation are not re-decided in one change — not because
+  touching them would be inconvenient.
 
 - **D6 — Payee names are unique per user, case-insensitively.** `unique (user_id,
 lower(name))`, matching Actual's `UNICODE_LOWER(name)` lookup in `payees.ts:3-16`. Two
@@ -134,6 +136,10 @@ lower(name))`, matching Actual's `UNICODE_LOWER(name)` lookup in `payees.ts:3-16
 
 Named, not omitted — these are the next specs.
 
+- **The commitment/schedule matcher cutover, and rename/merge UI.** The replacement columns,
+  mutations and merge rewrite exist, but legacy matcher strings remain authoritative. The
+  delta must move every money-sensitive reader and editor together before rename or merge is
+  safe to expose (Changes row 3).
 - **The rules engine, editor and register affordances.** The immediate follow-on; this spec
   exists to give it a `payee` id to condition on.
 - Auto-learned category rules (Actual's 3-of-last-5 `updateCategoryRules`).
@@ -145,35 +151,48 @@ Named, not omitted — these are the next specs.
 
 ## Acceptance criteria
 
-- [ ] `/finances/payees` lists every payee with its aliases, transaction count and total,
-      and which commitment claims it.
-- [ ] Renaming a payee changes the name everywhere and **cannot** orphan a charge — the
-      thing a bare string could not promise.
-- [ ] Merging two payees moves the aliases, repoints every transaction, rewrites any
-      schedule condition holding the merged id, and leaves no dangling reference.
-- [ ] Adding an alias to a payee reassigns every matching transaction on the next
-      reclassify, and reclassify is still a no-op when nothing moved.
-- [ ] A commitment claims payees, and claiming one already claimed by another commitment is
-      refused **by the database**, not only by the mutation.
-- [ ] Every existing bill matcher, spend matcher and schedule payee condition still matches
-      the same charges after migration — verified against the real file, not only fixtures.
-- [ ] Dashboard, Insights, Commitments, Available to Spend and the Sankey produce identical
-      numbers to before, on the same data.
-- [ ] A second user cannot read, change, or delete the first user's payees or aliases.
+### Delivered here
+
+- [x] `/finances/payees` lists every payee with its aliases, transaction count and total,
+      and any replacement commitment claim already present.
+- [x] Stable payee ids and aliases are seeded idempotently from the register, including
+      resolved PayPal counterparties; ordinary reclassification mints new identities and
+      writes `payee_id` beside its other recomputable fields.
+- [x] Reassigning an alias moves every matching transaction on the next reclassify, and the
+      following pass writes nothing.
+- [x] Rename and merge mutations are ownership-scoped and tested. Merge moves aliases,
+      repoints transactions, carries a lone claim, rewrites schedule JSONB holding a payee id,
+      and leaves no dangling source row. Their UI remains deferred for safety.
+- [x] A payee cannot hold both bill and recurring-spend claims at once; the database CHECK,
+      rather than a component, makes that state unrepresentable. Claim reads and mutations
+      are ready for the cutover.
+- [x] Dashboard, Insights, Commitments, Available to Spend, Budget and the Sankey produce
+      identical numbers before and after seeding on the real file.
+- [x] A second user cannot read, change or delete the first user's payees or aliases.
+
+### Moved to the matcher-cutover delta
+
+- [ ] Rename changes the canonical name on every business surface without orphaning a
+      commitment charge; expose Rename only after this is true.
+- [ ] Commitments claim payee ids instead of matcher strings, and schedule payee conditions
+      hold ids instead of strings.
+- [ ] Every legacy bill matcher, spend matcher and schedule condition selects the same
+      charges after that migration; only then drop both `matchers` columns and expose Merge.
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure code
 polish.
 
-| #   | Change                                                                                                                                                                                                                                                                        | Why                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **Task 5 splits, and the `matchers` drop moves to land with its readers.** The backfill ships first and is purely additive; migrating schedule conditions, converting commitment matchers, and dropping the two columns each land with the readers whose meaning they change. | Dropping `matchers` breaks every reader of it in the same instant, and rewriting a schedule's `payee` conditions to ids silently stops `schedules/match.ts` matching until that file changes too — it compares against `effectiveMerchant`. Landing a cutover apart from its readers means a commit where the app compiles and quietly matches nothing. It also preserves the one state in which "no number moved" is checkable: payees populated but not yet read. |
-| 2   | **`isUniqueViolation` became a shared helper in `src/lib/db/constraints.ts`,** and fixed a live bug in `createSchedule` on the way.                                                                                                                                           | Drizzle wraps the `PostgresError` in a `DrizzleQueryError` and puts the `code` in `cause`, so the existing top-level check never matched: `createSchedule`'s "already exists" message had never been reachable, and the raw SQL plus its parameters travelled instead. The payee mutations needed the same translation four times over, and a second copy would have carried the same defect.                                                                       |
+| #   | Change                                                                                                                                                                                                                                                                                                                                                                                                                                       | Why                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | **Task 5 splits, and the `matchers` drop moves to land with its readers.** The backfill ships first and is purely additive; migrating schedule conditions, converting commitment matchers, and dropping the two columns each land with the readers whose meaning they change.                                                                                                                                                                | Dropping `matchers` breaks every reader of it in the same instant, and rewriting a schedule's `payee` conditions to ids silently stops `schedules/match.ts` matching until that file changes too — it compares against `effectiveMerchant`. Landing a cutover apart from its readers means a commit where the app compiles and quietly matches nothing. It also preserves the one state in which "no number moved" is checkable: payees populated but not yet read.                                                                                          |
+| 2   | **`isUniqueViolation` became a shared helper in `src/lib/db/constraints.ts`,** and fixed a live bug in `createSchedule` on the way.                                                                                                                                                                                                                                                                                                          | Drizzle wraps the `PostgresError` in a `DrizzleQueryError` and puts the `code` in `cause`, so the existing top-level check never matched: `createSchedule`'s "already exists" message had never been reachable, and the raw SQL plus its parameters travelled instead. The payee mutations needed the same translation four times over, and a second copy would have carried the same defect.                                                                                                                                                                |
+| 3   | **The commitment-matcher cutover is larger than this plan assumed and needs its own spec.** Converting `matchers` to payee claims touches 13 lib modules, 8 UI surfaces and the agent tool contracts — including `matcherIndex` / `resolveMerchant`, which the Available to Spend arithmetic runs through. Payees ship additively; money-sensitive read paths, the cutover, and the rename/merge UI that depends on it move to a delta spec. | `matcherIndex` keys on the merchant string while payee-aware reads return the payee name. A deliberately attempted partial read cutover materially moved Available to Spend on the real file before any commitment data had migrated — the exact silent failure this spec's verification section warns about. Making rename safe means moving the whole index onto payee ids and the commitment editors from string lists onto payee pickers. The final replay kept the legacy readers and produced byte-identical finance figures before and after seeding. |
 
 ---
 
-## Task 1: Save spec documentation
+## Task 1: Save spec documentation — complete
 
 Create this folder with `plan.md` (**Status: active**, including the empty Changes table),
 `shape.md`, `standards.md`, `references.md`. No visuals.
@@ -184,7 +203,7 @@ Standards to copy in full, per the house pattern of the last three Actual specs:
 `ux-principles`, `navigation`, `responsive`. (`modal-pattern` is on the list because merge
 is a confirmation dialog — see Task 7.)
 
-## Task 2: Schema and migration
+## Task 2: Schema and migration — complete
 
 In `src/db/schema.ts`, following the finance conventions in that file — `userId` cascade,
 `text` + CHECK over `pgEnum`, doc comments that explain _why_:
@@ -201,7 +220,7 @@ commitment_spend_id) <= 1)`; both FKs `on delete set null`.
 
 Generate with drizzle-kit; never hand-write a migration (`database/migrations`).
 
-## Task 3: The payee resolver
+## Task 3: The payee resolver — complete
 
 New `src/lib/finances/payees/`, pure, no db:
 
@@ -231,7 +250,7 @@ New `src/lib/finances/payees/`, pure, no db:
    PayPal charges with different counterparties must not land on one payee — the failure
    that would make a single payee named PAYPAL absorb unrelated spending.
 
-## Task 4: Queries and mutations
+## Task 4: Queries and mutations — complete
 
 `src/lib/finances/payees/{queries,mutations}.ts` + `mutations.integration.test.ts`. Every
 mutation takes `userId` first and proves ownership before writing (`development/security`).
@@ -242,20 +261,18 @@ mutation takes `userId` first and proves ownership before writing (`development/
   `UPDATE finance_transactions SET payee_id = target`, rewrite schedule condition JSONB
   holding a merged id, carry the commitment claim across (refusing when both sides hold
   one), delete the sources.
-- `claimPayeeForCommitment` / `releaseClaim`, replacing the `matchers` writes in
-  `upsertRecurringBill` / `upsertRecurringSpend` and their application-level
-  `claimedMatchers` / `checkedMatchers` checks — the CHECK plus the unique index now carry
-  it.
+- `claimPayeeForCommitment` / `releaseCommitmentClaims`, ready to replace the `matchers`
+  writes in `upsertRecurringBill` / `upsertRecurringSpend` when the delta moves their readers.
 
 **Integration tests must include:** a merge that leaves no dangling schedule condition; an
 alias uniqueness violation surfacing as a refusal rather than a 500; a rename that moves no
 transactions; and the cross-user case — a second user failing to read, change, and delete
 the first user's payee **and** their alias.
 
-## Task 5: Backfill and cutover
+## Task 5: Backfill complete; matcher cutover deferred
 
-One `seedPayees(userId)` mutation behind an action (D7), then the migration that removes
-what it replaced:
+`seedPayees(userId)` ships behind an action (D7), and reclassification uses the same seed
+planner on every pass. Steps 1–2 are delivered; steps 3–5 move together to the delta:
 
 1. Plan and insert payees + aliases from history.
 2. Write `finance_transactions.payee_id` for every row.
@@ -269,20 +286,19 @@ what it replaced:
 assert every pre-existing matcher resolved and every schedule condition still selects the
 same transactions.
 
-## Task 6: Rewire the read path
+## Task 6: Write and display the identity — analytics cutover deferred
 
-- `effectiveMerchant()` in `src/lib/finances/analytics.ts` stops calling `matchRule()` and
-  reads the joined payee name; keep the export name so the ~15 call sites stay a rename
-  rather than a redesign. `normalizeMerchant` stays — it is the alias key generator.
-- Thread `payeeName` through the row types consumed by `insightsFilter.ts`, `sankeyFlow.ts`,
-  `dashboardQueries.ts`, `commitments.ts`, `schedules/match.ts`, `schedules/discover.ts`,
-  `registerBillDraft.ts`, `financeColumns.tsx` and `agent/financeTools.ts`.
+- `effectiveMerchant()` accepts a joined payee name and the Register supplies it, so the
+  stored identity is visible there. Dashboard, Insights, Sankey, commitment and schedule
+  readers deliberately keep the legacy merchant-string path until their matchers migrate in
+  the same delta; `matchRule()` therefore remains the fallback in this slice (D5).
+- `normalizeMerchant` remains the one alias-key generator.
 - `reclassify.ts` / `planReclassify` resolve and mint payees **through the same
   PayPal-resolution merge that already runs for the category** (D4), adding `payeeId` to `RowPlan`
   and to the three-column update in `mutations.ts:421` — which becomes four. The doc comment
   there listing what is _not_ written stays true and must be re-read, not just edited around.
 
-## Task 7: Payees page
+## Task 7: Payees page — complete
 
 `/finances/payees`, registered in `src/lib/navigation/pages.ts` under `finances` with
 keywords, plus its commands (`navigation` standard: a command without a menu is not
@@ -290,22 +306,25 @@ shipped).
 
 - `DataGrid` of payees — name, aliases, transactions, total, commitment. Drag-reorder is
   not meaningful here; sort and filter are.
-- Row menu: **Rename**, **Merge into…**, **Edit aliases…**, **Delete**.
-- Alias editing in a drawer (`drawer-pattern`), merge in a `ModalShell` confirmation naming
-  exactly what will move (`modal-pattern`).
+- Row menu: **Edit aliases…**, **Delete**. **Rename and Merge are deliberately not here yet** —
+  both change the key `resolveMerchant` looks a commitment up by, so they are unsafe until the
+  matcher cutover lands (Changes row 3). The mutations exist and are tested; only the
+  affordances wait.
+- Alias editing in a drawer (`drawer-pattern`).
 - Register gains a **payee** column reading the stored name.
 
 The smoke script discovers routes from the filesystem (`scripts/smoke.mjs:42`), so the new
 page is covered the day it lands.
 
-## Task 8: Verify, freeze spec, update roadmap
+## Task 8: Verify, freeze spec, update roadmap — complete
 
 - Full gate: `npm run test:unit` (**check for the Postgres skip warning** — the payee and
   cross-user integration tests are exactly the ones that silently skip), lint, typecheck,
   build, then `npm run smoke` against a running dev server.
-- **Drive the real file**: seed payees, confirm Dashboard / Insights / Commitments /
-  Available to Spend / Sankey read identically to before, then rename and merge a payee and
-  confirm nothing detaches.
+- **Drive the real file**: seed payees and confirm Dashboard / Insights / Commitments /
+  Available to Spend / Budget / Sankey read identically to before. Rename and merge stay
+  mutation-tested rather than browser-driven because their affordances are intentionally
+  deferred.
 - Update `plan.md` / `shape.md` for material as-built drift; complete **Changes from
   original plan**.
 - Mark **Status: frozen / complete**; move leftovers to **Follow-ups**.
@@ -321,12 +340,27 @@ because each is a silent failure:
 
 1. **No number moves.** Payees change identity, not arithmetic. Screenshot Dashboard,
    Insights and Commitments before and after the backfill and compare.
-2. **No commitment loses its charges.** Every pre-existing matcher must resolve to a payee;
-   a matcher that silently resolves to nothing shows up as a commitment whose spend drops to
-   zero, which looks like a data problem rather than a migration bug.
-3. **Merge leaves nothing dangling** — specifically a schedule whose payee condition held
-   the merged id, since that reference is JSONB and no FK protects it.
+2. **No commitment loses its charges.** This is the matcher-cutover delta's gate. Every
+   pre-existing matcher must resolve to a payee before those strings stop being authoritative.
+3. **Merge leaves nothing dangling.** The JSONB rewrite is integration-tested here; the
+   delta repeats the check against migrated real schedule conditions before exposing Merge.
 
-> **Standing rule:** while this spec is active, material changes to requirements, design or
-> scope — including feedback on what was built — go into `plan.md` / `shape.md` plus a row
-> in **Changes from original plan**. Skip pure implementation detail. Freeze when verified.
+## As-built verification
+
+- `npm test`: 319 files, 4,065 tests, including Postgres suites; no database skip warning.
+- `npm run lint`, `npm run typecheck`, `npm run build`: pass.
+- `npm run smoke`: all 61 discovered routes render, including `/finances/payees`.
+- Real file: 723 payees, 851 normalized aliases and 7,030 assigned transactions. Dashboard,
+  Insights, Commitments, Available to Spend, Budget and Sankey figures were identical before
+  and after the clean rebuild.
+- Browser: catalog and drawer checked in light/dark desktop and 390×844 phone layouts; alias
+  add/remove completed end to end without leaving test data behind.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+1. Shape the payee-id matcher-cutover delta: migrate both commitment matcher arrays and
+   schedule payee conditions, update every business reader/editor and agent contract, verify
+   the real file, then drop the legacy columns.
+2. Expose Rename and Merge only after that delta proves neither operation can detach charges.
+3. Shape the Rules engine/editor on top of stable payee ids; retire the remaining render-time
+   merchant defaults when identity and categorisation move together.

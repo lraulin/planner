@@ -916,6 +916,19 @@ period)` so money already spent stops being held twice and only going over bites
   schedule that does not yet fund an envelope, which is the bridge between the
   declared-bill list and the envelopes — but bills and envelopes still run in parallel,
   and use, not this spec, decides whether they merge.
+  ✅ **Payee identity shipped 2026-08-23.**
+  `agent-os/specs/2026-08-23-0748-finance-payees/`. Merchant identity now has a durable row,
+  a user-owned name and database-unique normalized aliases; every transaction carries the
+  recomputable payee id, including PayPal rows resolved through their real counterparty.
+  `/finances/payees` shows the catalog, activity and aliases, and the Register shows the
+  stored name. The real file rebuilt 723 payees / 851 aliases across 7,030 transactions
+  without moving a Dashboard, Insights, Commitments, Available-to-Spend, Budget or Sankey
+  figure.
+  **The commitment join is prepared, not taken.** Replacement claim columns and tested
+  rename/merge primitives exist, but legacy bill/spend matchers and schedule payee strings
+  remain authoritative. A partial cutover moved Available to Spend silently; therefore one
+  delta must migrate every business reader, editor and agent contract together before the
+  old columns drop or Rename/Merge become visible. Rules then builds on the same ids.
 - **Next:** **Shortfall attribution.** When Available to Spend goes negative, name
   what could be cancelled or skipped to fix it. Explicitly wanted, explicitly cut
   from the commitments spec; the annual/monthly cost columns already rank the
