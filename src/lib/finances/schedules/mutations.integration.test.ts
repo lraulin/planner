@@ -104,6 +104,17 @@ describeDb("schedule mutations", () => {
     expect((await getSchedule(userId, id))?.name).toBe("Netflix");
   });
 
+  it("names a duplicate schedule rather than leaking the failed statement", async () => {
+    await createSchedule(userId, { name: "Netflix", conditions: monthly() }, TODAY);
+
+    // This message had never once been reachable: drizzle wraps the PostgresError, so the
+    // old `error.code === "23505"` check on the outer error never matched and the raw SQL
+    // plus its parameters travelled instead (`src/lib/db/constraints.ts`).
+    await expect(
+      createSchedule(userId, { name: "Netflix", conditions: monthly() }, TODAY),
+    ).rejects.toThrow('A schedule named "Netflix" already exists.');
+  });
+
   it("skips the next date without writing a transaction", async () => {
     const id = await createSchedule(
       userId,

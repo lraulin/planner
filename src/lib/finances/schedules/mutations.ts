@@ -7,6 +7,7 @@
 
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
+import { isUniqueViolation } from "@/lib/db/constraints";
 import { financeAccounts, financeSchedules, financeTransactions } from "@/db/schema";
 import { loadRecurringBills } from "@/lib/finances/dashboardQueries";
 import { centsToNumericString } from "@/lib/finances/money";
@@ -110,12 +111,7 @@ export async function createSchedule(
   try {
     return await insertSchedule(userId, { ...draft, name }, todayKey);
   } catch (error) {
-    if (
-      typeof error === "object" &&
-      error !== null &&
-      "code" in error &&
-      (error as { code?: string }).code === "23505"
-    ) {
+    if (isUniqueViolation(error)) {
       throw new Error(`A schedule named "${name}" already exists.`);
     }
     throw error;
