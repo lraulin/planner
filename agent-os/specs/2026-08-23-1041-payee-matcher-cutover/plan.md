@@ -152,6 +152,7 @@ polish.
 | 2   | PayPal statement resolutions may match only register rows whose bank description identifies the PayPal rail; date and signed amount then disambiguate those eligible rows.                                                                                                                                                                                                                                                                                                  | Production diagnostics found a Spotify resolution attached to an unrelated CVS purchase. The shared matcher previously omitted descriptions from its input contract, allowing any same-amount row within five days to steal a resolution and corrupt both reclassification and payee assignment.                                                                                            |
 | 3   | A PayPal statement counterparty supplies payee identity only when the bank description is opaque (`PAYPAL *`, a transfer rail, or a one-letter residue). A specific bank merchant remains authoritative.                                                                                                                                                                                                                                                                    | Production held 24 YouTube charges under generic `GOOGLE` and two Sanebox charges under punctuation-only `SANEBOX INC.` because a broader statement name overwrote the more-specific bank line. This refines the prepared payee spec's counterparty precedence before claims make that identity money-sensitive.                                                                            |
 | 4   | The production payee rebuild corrected 88 transaction assignments, created four specific payees and claimed five newly observed spellings. Afterward, parity differs only for 13 opaque PayPal rows totaling $319.17: one Dropbox payment ($127.08), nine Spotify payments ($162.09), and three GitHub payments ($30.00). Those rows are accepted as an intentional correction, and the guard permits only payee-only opaque-PayPal enrichments while still reporting them. | PayPal statements identify the actual recipient where the legacy bank merchant was only `P` or a shared transfer rail. Preserving exact old figures would deliberately discard known merchant identity. The semantic guard captures why the correction is safe without hard-coding today's three merchants, while any named-merchant difference or lost legacy row still stops the cutover. |
+| 5   | Stage A assigned 38 production payee claims without creating payees, releasing claims, or rewriting schedules. Its immediate production replay was idempotent and planned zero writes; the deployment-only cutover flag was then removed.                                                                                                                                                                                                                                   | The production audit and transaction completed against the corrected payee catalog, and a separate dry-run build proved the stored result is the complete desired state before any reader switches to claims.                                                                                                                                                                               |
 
 ---
 
@@ -172,12 +173,12 @@ polish.
 - [x] Run dry-run, apply and repeat locally; capture the audited counts and numeric parity:
       one placeholder, six claims, five schedule rewrites, and no parity differences; the
       replay planned zero writes.
-- [ ] Deploy Stage A, then run the same dry-run, apply and replay against production before
+- [x] Deploy Stage A, then run the same dry-run, apply and replay against production before
       any Stage B code can ship.
-  - Stage A is deployed and the production dry-run applied nothing, as designed. Its parity
-    guard initially found five differing commitment transaction sets. Two payee-resolution
-    defects were corrected and the payees rebuilt; the remaining three PayPal-enrichment
-    groups are the accepted correction recorded in change 4.
+  - Stage A assigned 38 claims and changed no payee, schedule, or existing claim rows beyond
+    those assignments. The replay reported `canApply: true`, `isIdempotent: true`, and zero
+    planned writes; the accepted correction remained reported and no blocking difference
+    remained.
 
 ## Task 3: Switch commitment behavior to payee ids
 
