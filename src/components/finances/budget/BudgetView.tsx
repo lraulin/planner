@@ -411,6 +411,13 @@ function Backlog({
         {data.uncategorizedCount}{" "}
         {data.uncategorizedCount === 1 ? "transaction has" : "transactions have"} no
         envelope
+        {/* The backlog spans the whole budget, not the month on screen. Unqualified, it
+            reads as September's when you have paged forward — and this figure is the one
+            that explains the gap between the budget and the bank, so it has to say what it
+            is counting. */}
+        {data.settings.startMonth
+          ? ` since ${monthLabel(data.settings.startMonth)}`
+          : ""}
       </span>
       <span className="tabular text-ink-muted">
         {formatUsd(data.uncategorizedCents)} unaccounted for

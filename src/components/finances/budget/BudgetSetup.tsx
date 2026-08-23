@@ -45,10 +45,11 @@ export function BudgetSetup({
       <div>
         <h2 className="text-[1.0625rem] font-medium text-ink">Start a budget</h2>
         <p className="mt-1 text-[0.8125rem] leading-snug text-ink-muted">
-          You will start with{" "}
-          <span className="tabular text-ink">{formatUsd(positionCents)}</span> to assign
-          — checking and cash, less what the cards owe. Savings stays out of it. Nothing
-          before this month is touched.
+          This month starts with{" "}
+          <span className="tabular text-ink">{formatUsd(positionCents)}</span> carried
+          in — what checking and cash held at the end of last month, less what the cards
+          owed. Savings stays out of it, and nothing before this month is touched. This
+          month&rsquo;s own income lands on top of it.
         </p>
       </div>
 

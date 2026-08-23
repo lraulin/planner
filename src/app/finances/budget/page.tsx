@@ -35,7 +35,7 @@ export default async function FinancesBudgetPage({
           <div className="min-h-0 flex-1 overflow-auto p-3">
             <BudgetSetup
               todayKey={data.todayKey}
-              positionCents={data.onBudgetPositionCents}
+              positionCents={data.prospectiveOpeningCents}
             />
           </div>
         )}

@@ -83,6 +83,18 @@ export type BudgetData = {
   /** On-budget rows since the start month with no envelope: the size of the backlog. */
   uncategorizedCount: number;
   uncategorizedCents: number;
+  /**
+   * What setup would actually seed "funds from last month" with — the position at the end of
+   * *last* month, not today's.
+   *
+   * A separate field from `onBudgetPositionCents` because the two genuinely differ by this
+   * month's activity so far, and the setup screen names a figure the user then sees again as
+   * their first Ready to Assign. Showing today's position there and seeding last month's is
+   * the exact failure `2026-08-18-2058-commitments-clarity` was written about: the decision
+   * surface reporting a different number than the system uses. Zero once configured, where
+   * the recorded `settings.openingCents` is the answer.
+   */
+  prospectiveOpeningCents: number;
 };
 
 function groupsOf(userId: string) {
@@ -227,10 +239,16 @@ export async function loadBudget(
     onBudgetPositionCents,
     uncategorizedCount: 0,
     uncategorizedCents: 0,
+    prospectiveOpeningCents: 0,
   };
 
   const startMonth = settings.startMonth;
-  if (!startMonth) return empty;
+  if (!startMonth) {
+    return {
+      ...empty,
+      prospectiveOpeningCents: await openingPositionFor(userId, currentMonth),
+    };
+  }
 
   const endMonth = shiftMonthKey(
     currentMonth > startMonth ? currentMonth : startMonth,
