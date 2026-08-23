@@ -37,6 +37,8 @@ function row(
     budgetCategoryName: null,
     scheduleId: null,
     scheduleName: null,
+    payeeId: null,
+    payeeName: null,
   };
 }
 

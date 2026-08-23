@@ -2,7 +2,11 @@
 
 import type { ColumnDef } from "@/components/grid/columns";
 import { DateText } from "@/components/date/DateText";
-import { effectiveCategory, effectiveFlow } from "@/lib/finances/analytics";
+import {
+  effectiveCategory,
+  effectiveFlow,
+  effectiveMerchant,
+} from "@/lib/finances/analytics";
 import { flowLabel } from "@/lib/finances/flowLabels";
 import { formatUsd } from "@/lib/finances/money";
 import type { TransactionListRow } from "@/lib/finances/types";
@@ -122,6 +126,24 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, TransactionListRow>[] =
       >
         {row.node.description}
       </span>
+    ),
+  },
+  {
+    id: "payee",
+    label: "Payee",
+    width: "minmax(8rem,0.8fr)",
+    // The merchant behind the bank's line — one identity across every spelling of it, which is
+    // what the description column cannot give you: `WM SUPERCENTER #1981` and `WAL-MART #2201`
+    // are the same shop and sort nowhere near each other.
+    //
+    // Falls back to the recomputed name while a freshly imported row has no payee yet, exactly
+    // as `effectiveMerchant` does, so this column is never blank on a row that has a merchant.
+    filterKind: "enum",
+    filterValue: (row) => effectiveMerchant(row.node) || null,
+    sortValue: (row) => effectiveMerchant(row.node).toLowerCase(),
+    compact: "meta",
+    render: (row) => (
+      <Text value={effectiveMerchant(row.node)} muted={row.node.payeeId === null} />
     ),
   },
   {

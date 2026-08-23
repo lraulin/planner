@@ -124,8 +124,29 @@ export function effectiveCategory(row: CategoryFields): string {
   return categoryFromBank(row.sourceCategory) ?? UNCATEGORIZED;
 }
 
-/** Merchant identity for grouping — a rule's canonical name when one claimed the row. */
-export function effectiveMerchant(row: { description: string }): string {
+/** The fields that decide merchant identity, on the same terms as {@link FlowFields}. */
+export type MerchantFields = {
+  description: string;
+  /** The stored payee's name, once one claims this row. */
+  payeeName?: string | null;
+};
+
+/**
+ * Merchant identity for grouping.
+ *
+ * **The payee is the answer whenever there is one** — a row, renameable and mergeable, rather
+ * than a string recomputed from the description on every read
+ * (`agent-os/specs/2026-08-23-0748-finance-payees/`).
+ *
+ * The fallback is not dead code, for exactly the reason `effectiveFlow` gives above: a row
+ * imported since the last pass has no payee yet, and grouping it under an empty string would
+ * silently merge every such row into one merchant. It reproduces what this function returned
+ * before payees existed — which is also, deliberately, the name the seed planner gives a payee,
+ * so the two agree for as long as nobody renames anything.
+ */
+export function effectiveMerchant(row: MerchantFields): string {
+  const claimed = row.payeeName?.trim();
+  if (claimed) return claimed;
   const normalized = normalizeMerchant(row.description);
   return matchRule(normalized)?.merchant ?? normalized;
 }

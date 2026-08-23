@@ -243,6 +243,15 @@ export type TransactionListRow = {
   /** Linked schedule, if any. Null is the ordinary unlinked row. */
   scheduleId: string | null;
   scheduleName: string | null;
+  /**
+   * Who was paid, and the name to show for them.
+   *
+   * Derived from the description, not chosen per row: correcting a payee is an alias edit, so
+   * one correction fixes every row that merchant ever produced
+   * (`agent-os/specs/2026-08-23-0748-finance-payees/` D4). Null until the next pass mints one.
+   */
+  payeeId: string | null;
+  payeeName: string | null;
 };
 
 export type TransactionFilter = {

@@ -4,6 +4,7 @@ import {
   financeAccounts,
   financeBudgetCategories,
   financePaymentResolutions,
+  financePayees,
   financeSchedules,
   financeStatementRates,
   financeStatements,
@@ -224,6 +225,8 @@ export async function listTransactions(
       budgetCategoryName: financeBudgetCategories.name,
       scheduleId: financeTransactions.scheduleId,
       scheduleName: financeSchedules.name,
+      payeeId: financeTransactions.payeeId,
+      payeeName: financePayees.name,
     })
     .from(financeTransactions)
     .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
@@ -234,6 +237,8 @@ export async function listTransactions(
       eq(financeBudgetCategories.id, financeTransactions.budgetCategoryId),
     )
     .leftJoin(financeSchedules, eq(financeSchedules.id, financeTransactions.scheduleId))
+    // Left for the same reason: a row imported since the last pass has no payee yet.
+    .leftJoin(financePayees, eq(financePayees.id, financeTransactions.payeeId))
     .where(and(...scopeConditions(userId, filter)))
     .orderBy(
       desc(financeTransactions.transactionDate),
@@ -267,6 +272,8 @@ export async function listTransactions(
     budgetCategoryName: row.budgetCategoryName,
     scheduleId: row.scheduleId,
     scheduleName: row.scheduleName,
+    payeeId: row.payeeId,
+    payeeName: row.payeeName,
   }));
 }
 
@@ -313,6 +320,8 @@ export async function getTransaction(
       budgetCategoryName: financeBudgetCategories.name,
       scheduleId: financeTransactions.scheduleId,
       scheduleName: financeSchedules.name,
+      payeeId: financeTransactions.payeeId,
+      payeeName: financePayees.name,
     })
     .from(financeTransactions)
     .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
@@ -321,6 +330,8 @@ export async function getTransaction(
       eq(financeBudgetCategories.id, financeTransactions.budgetCategoryId),
     )
     .leftJoin(financeSchedules, eq(financeSchedules.id, financeTransactions.scheduleId))
+    // Left for the same reason: a row imported since the last pass has no payee yet.
+    .leftJoin(financePayees, eq(financePayees.id, financeTransactions.payeeId))
     .where(
       and(
         eq(financeTransactions.id, transactionId),
@@ -354,6 +365,8 @@ export async function getTransaction(
     budgetCategoryName: row.budgetCategoryName,
     scheduleId: row.scheduleId,
     scheduleName: row.scheduleName,
+    payeeId: row.payeeId,
+    payeeName: row.payeeName,
   };
 }
 
