@@ -2,7 +2,7 @@
 
 import type { ColumnDef, NodeGridRow } from "@/components/grid/columns";
 import { formatUsd } from "@/lib/finances/money";
-import { balanceTone, type BudgetRow } from "@/lib/finances/budget/rows";
+import { balanceTone, goalTone, type BudgetRow } from "@/lib/finances/budget/rows";
 
 /**
  * Three columns, and only three.
@@ -20,6 +20,20 @@ export type BudgetColumnCtx = {
   pending: boolean;
 };
 
+/**
+ * Goal-met / goal-not-met on the Assigned cell.
+ *
+ * The comparison is against `goalCents` — what Apply last wrote — not a live recompute, so
+ * editing Assigned by hand afterwards still shows whether the template was met rather than
+ * quietly redefining the goal to whatever was just typed.
+ */
+const GOAL_CLASS: Record<"met" | "unmet", string> = {
+  // `ring-inset` rather than a thicker border: it doubles the weight of a 1px tint on a small
+  // input without changing the cell's box, so paging between months cannot nudge the grid.
+  met: "border-[var(--chart-income)] ring-1 ring-inset ring-[var(--chart-income)]",
+  unmet: "border-[var(--goal-unmet)] ring-1 ring-inset ring-[var(--goal-unmet)]",
+};
+
 const TONE_CLASS: Record<ReturnType<typeof balanceTone>, string> = {
   positive: "text-[var(--chart-income)]",
   zero: "text-ink-faint",
@@ -31,9 +45,16 @@ function assignedCell(row: NodeGridRow<BudgetRow>, ctx: BudgetColumnCtx) {
   // blank rather than a zero the user might try to type into.
   if (row.node.isIncome) return <span className="text-ink-faint">—</span>;
 
+  const tone = goalTone(row.node.assignedCents, row.node.goalCents);
+
   return (
     <input
       key={row.node.assignedCents}
+      title={
+        row.node.goalCents === null
+          ? undefined
+          : `Goal ${formatUsd(row.node.goalCents)} \u00b7 assigned ${formatUsd(row.node.assignedCents)}`
+      }
       type="text"
       inputMode="decimal"
       defaultValue={(row.node.assignedCents / 100).toFixed(2)}
@@ -57,7 +78,9 @@ function assignedCell(row: NodeGridRow<BudgetRow>, ctx: BudgetColumnCtx) {
         }
         if (next !== row.node.assignedCents) ctx.onAssign(row.node, next);
       }}
-      className="tabular w-24 rounded border border-rule bg-surface px-1 text-right text-base text-ink md:text-[0.8125rem]"
+      className={`tabular w-24 rounded border bg-surface px-1 text-right text-base text-ink md:text-[0.8125rem] ${
+        tone ? GOAL_CLASS[tone] : "border-rule"
+      }`}
     />
   );
 }

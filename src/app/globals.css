@@ -70,6 +70,16 @@
   --chart-average: #1a66b0;
 
   /*
+   * The template-goal indicator on an Assigned cell: funded to the goal, or short of it.
+   *
+   * Met borrows `--chart-income` because "there is money here" is the job that token already
+   * does on the Balance column. Short of the goal gets its own hue rather than `--chart-spend`:
+   * red in this app means overspent, and an envelope that is merely underfunded has not spent
+   * anything. Amber says "not finished" without saying "you did something wrong".
+   */
+  --goal-unmet: #b45309;
+
+  /*
    * Categorical identities for stacked trends and Sankey only. Ranked lists stay on
    * --chart-spend. These are a third colour job, not a reuse of priority or type tokens.
    * --chart-cat-8 is the fold ("Other") and is deliberately the dullest.
@@ -137,6 +147,7 @@
     --chart-income: #3d9c74;
     --chart-spend: #e2604a;
     --chart-average: #4f8ec4;
+    --goal-unmet: #e07a2f;
 
     --chart-cat-1: #9b7ec8;
     --chart-cat-2: #2a9d8f;

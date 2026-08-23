@@ -4,7 +4,7 @@ import { AppShell } from "@/components/shell/AppShell";
 import { BudgetSetup } from "@/components/finances/budget/BudgetSetup";
 import { BudgetView } from "@/components/finances/budget/BudgetView";
 import { monthKeyFromParam } from "@/lib/finances/budget/envelope";
-import { loadBudget } from "@/lib/finances/budget/queries";
+import { loadBudget, loadBudgetSchedules } from "@/lib/finances/budget/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -24,13 +24,16 @@ export default async function FinancesBudgetPage({
 }) {
   const userId = await getCurrentUserId();
   const { month } = await searchParams;
-  const data = await loadBudget(userId, monthKeyFromParam(month ?? null));
+  const [data, schedules] = await Promise.all([
+    loadBudget(userId, monthKeyFromParam(month ?? null)),
+    loadBudgetSchedules(userId),
+  ]);
 
   return (
     <AppShell active="finances">
       <Suspense fallback={<div className="min-h-0 flex-1" />}>
         {data.configured ? (
-          <BudgetView data={data} />
+          <BudgetView data={data} schedules={schedules} />
         ) : (
           <div className="min-h-0 flex-1 overflow-auto p-3">
             <BudgetSetup

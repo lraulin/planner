@@ -1,18 +1,23 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import {
+  addTemplatesFromSchedulesAction,
+  applyBudgetTemplatesAction,
   autoMapBudgetAction,
   budgetOperationAction,
   setCarryoverAction,
   updateBudgetCategoryAction,
 } from "@/app/finances/actions";
+import type { Command } from "@/lib/commands/registry";
+import { useRegisterCommands } from "@/components/shell/CommandProvider";
 import { ContextMenu, type MenuItem } from "@/components/grid/ContextMenu";
 import { DataGrid } from "@/components/grid/DataGrid";
 import { useGridState } from "@/components/grid/useGridState";
 import {
+  categoryMonth,
   findMonth,
   monthLabel,
   monthParamOf,
@@ -29,10 +34,21 @@ import {
   moveTargets,
   type BudgetRow,
 } from "@/lib/finances/budget/rows";
+import {
+  templateCarryIn,
+  type EnvelopeApplyInput,
+} from "@/lib/finances/budget/templates/apply";
+import {
+  attachedScheduleIds,
+  defaultScheduleTarget,
+} from "@/lib/finances/budget/templates/fromSchedules";
+import type { ScheduleSnapshot } from "@/lib/finances/budget/templates/schedule";
 import { formatUsd } from "@/lib/finances/money";
+import { AddFromSchedulesDialog } from "./AddFromSchedulesDialog";
 import { budgetColumns, type BudgetColumnCtx } from "./budgetColumns";
 import { BudgetSummary } from "./BudgetSummary";
 import { MoveMoneyDialog } from "./MoveMoneyDialog";
+import { TemplateDrawer } from "./TemplateDrawer";
 
 /**
  * The budget, one month at a time.
@@ -41,7 +57,14 @@ import { MoveMoneyDialog } from "./MoveMoneyDialog";
  * `src/lib/finances/budget/envelope.ts`, and every clamp is applied again on the server
  * before anything is written — this component never decides how much money can move.
  */
-export function BudgetView({ data }: { data: BudgetData }) {
+export function BudgetView({
+  data,
+  schedules,
+}: {
+  data: BudgetData;
+  /** Every schedule the template engine can read, so the drawer previews the real numbers. */
+  schedules: readonly ScheduleSnapshot[];
+}) {
   const router = useRouter();
   const params = useSearchParams();
   const [pending, startTransition] = useTransition();
@@ -53,11 +76,14 @@ export function BudgetView({ data }: { data: BudgetData }) {
     null,
   );
   const [selected, setSelected] = useState<string | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const month = findMonth(data.months, data.month);
   const rows = useMemo(
-    () => (month ? budgetRows(data.groups, data.categories, month) : []),
-    [data.groups, data.categories, month],
+    () => (month ? budgetRows(data.groups, data.categories, month, data.goals) : []),
+    [data.groups, data.categories, month, data.goals],
   );
   const gridRows = useMemo(
     () => budgetGridRows(data.groups, rows),
@@ -77,11 +103,134 @@ export function BudgetView({ data }: { data: BudgetData }) {
     });
   }
 
+  /**
+   * Carry-in is last month's balance, and a negative one only carries when the envelope is set
+   * to roll overspending forward — Actual's rule, and the reason `templateCarryIn` is shared
+   * with the server rather than re-derived here.
+   */
+  const previous = month ? findMonth(data.months, prevMonthKey(data.month)) : null;
+
+  function envelopeInput(row: BudgetRow): EnvelopeApplyInput {
+    return {
+      id: row.id,
+      name: row.name,
+      isIncome: row.isIncome,
+      templates: row.templates,
+      assignedCents: row.assignedCents,
+      carryInCents: templateCarryIn(previous ? categoryMonth(previous, row.id) : null),
+    };
+  }
+
+  /**
+   * Apply and Overwrite hand back per-envelope problems (a schedule that was completed, one
+   * that no longer exists) alongside the count. They are shown rather than dropped: the money
+   * that line would have assigned is missing from the total, and nothing else says so.
+   */
+  const runApply = useCallback(
+    (force: boolean, categoryIds?: readonly string[]) => {
+      setError(null);
+      setNotice(null);
+      startTransition(async () => {
+        const result = await applyBudgetTemplatesAction(data.month, force, categoryIds);
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+        const applied = result.data?.applied ?? 0;
+        const problems = result.data?.errors ?? [];
+        setNotice(
+          [
+            applied === 0
+              ? "Nothing to apply — no templated envelope was eligible."
+              : `${applied === 1 ? "1 envelope" : `${applied} envelopes`} filled from templates.`,
+            ...problems,
+          ].join(" "),
+        );
+        router.refresh();
+      });
+    },
+    [data.month, router, startTransition],
+  );
+
   function goToMonth(key: string) {
     const next = new URLSearchParams(params.toString());
     next.set("month", monthParamOf(key));
     router.push(`/finances/budget?${next.toString()}`);
   }
+
+  const spendingRows = useMemo(() => rows.filter((row) => !row.isIncome), [rows]);
+  const templatedCount = useMemo(
+    () => spendingRows.filter((row) => row.templates.length > 0).length,
+    [spendingRows],
+  );
+
+  /** Schedules no envelope funds yet — what "Add from schedules…" has left to offer. */
+  const unattached = useMemo(() => {
+    const attached = attachedScheduleIds(
+      rows.map((row) => ({
+        categoryId: row.id,
+        name: row.name,
+        isIncome: row.isIncome,
+        templates: row.templates,
+      })),
+    );
+    return schedules.filter(
+      (schedule) => !schedule.completed && !attached.has(schedule.id),
+    );
+  }, [rows, schedules]);
+
+  const commands = useMemo((): Command[] => {
+    const nothingTemplated =
+      templatedCount === 0
+        ? "No envelope has a template yet — open an envelope's row menu to add one"
+        : undefined;
+
+    return [
+      {
+        id: "budget.templates.apply",
+        label: "Apply templates",
+        group: "view",
+        menu: "tools",
+        section: "Templates",
+        keywords: "goal fill autofill",
+        title:
+          nothingTemplated ??
+          "Fill every templated envelope whose Assigned is still zero. Leaves the rest alone.",
+        disabled: templatedCount === 0,
+        run: () => runApply(false),
+      },
+      {
+        id: "budget.templates.overwrite",
+        label: "Overwrite with templates",
+        group: "view",
+        menu: "tools",
+        section: "Templates",
+        keywords: "goal replace refill",
+        title:
+          nothingTemplated ??
+          "Replace Assigned on every templated envelope, including ones you have already edited.",
+        disabled: templatedCount === 0,
+        run: () => runApply(true),
+      },
+      {
+        id: "budget.templates.fromSchedules",
+        label: "Add from schedules…",
+        group: "view",
+        menu: "tools",
+        section: "Templates",
+        icon: "schedule",
+        keywords: "bills attach envelope",
+        title:
+          spendingRows.length === 0
+            ? "There is no spending envelope to attach a schedule to"
+            : "Attach the schedules that do not fund an envelope yet, in one go",
+        disabled: spendingRows.length === 0,
+        run: () => setAdding(true),
+      },
+    ];
+  }, [runApply, templatedCount, spendingRows.length]);
+
+  useRegisterCommands(commands);
 
   if (!month) return null;
 
@@ -167,6 +316,25 @@ export function BudgetView({ data }: { data: BudgetData }) {
       },
       "separator",
       {
+        label: "Edit templates…",
+        title: row.isIncome
+          ? "Income feeds Ready to Assign, so it holds no templates"
+          : `What ${row.name} should ask for each month`,
+        disabled: row.isIncome,
+        onSelect: () => setEditing(row.id),
+      },
+      {
+        label: "Overwrite this envelope",
+        title: row.isIncome
+          ? "Income feeds Ready to Assign, so it holds no templates"
+          : row.templates.length === 0
+            ? `${row.name} has no templates to apply`
+            : `Replace ${row.name}'s Assigned with what its templates ask for`,
+        disabled: row.isIncome || row.templates.length === 0,
+        onSelect: () => runApply(true, [row.id]),
+      },
+      "separator",
+      {
         label: row.hidden ? "Show envelope" : "Hide envelope",
         title: "A hidden envelope keeps its history and still counts toward the totals",
         onSelect: () =>
@@ -175,8 +343,16 @@ export function BudgetView({ data }: { data: BudgetData }) {
     ];
   }
 
-  const spending = rows.filter((row) => !row.isIncome);
-  const totals = budgetTotals(spending);
+  const totals = budgetTotals(spendingRows);
+  const editingRow = rows.find((row) => row.id === editing) ?? null;
+  const defaultTarget = defaultScheduleTarget(
+    spendingRows.map((row) => ({
+      categoryId: row.id,
+      name: row.name,
+      isIncome: row.isIncome,
+      templates: row.templates,
+    })),
+  );
   const backlog = data.uncategorizedCount;
 
   return (
@@ -187,6 +363,11 @@ export function BudgetView({ data }: { data: BudgetData }) {
           onPrev={() => goToMonth(prevMonthKey(data.month))}
           onNext={() => goToMonth(nextMonthKey(data.month))}
           pending={pending}
+          templatedCount={templatedCount}
+          hasEnvelopes={spendingRows.length > 0}
+          onApply={() => runApply(false)}
+          onOverwrite={() => runApply(true)}
+          onAddFromSchedules={() => setAdding(true)}
           onCopyPrevious={() =>
             run(() =>
               budgetOperationAction({ kind: "copy-previous", month: data.month }),
@@ -226,6 +407,23 @@ export function BudgetView({ data }: { data: BudgetData }) {
           </p>
         ) : null}
 
+        {notice ? (
+          <p
+            role="status"
+            className="flex items-start gap-3 rounded border border-rule bg-surface px-3 py-2 text-[0.8125rem] text-ink"
+          >
+            <span className="min-w-0 flex-1">{notice}</span>
+            <button
+              type="button"
+              onClick={() => setNotice(null)}
+              aria-label="Dismiss"
+              className="flex-none rounded px-1 text-ink-muted hover:bg-surface-raised hover:text-ink"
+            >
+              ×
+            </button>
+          </p>
+        ) : null}
+
         {backlog > 0 ? <Backlog data={data} pending={pending} onRun={run} /> : null}
 
         <div className="flex min-h-0 min-w-0 flex-col md:flex-1">
@@ -236,6 +434,15 @@ export function BudgetView({ data }: { data: BudgetData }) {
             columnCtx={ctx}
             selectedId={selected}
             onSelect={setSelected}
+            /*
+             * The same menu the Balance cell opens, reachable by right-click and — the reason it
+             * is here — by long-press on a phone, where the compact row draws no Balance button
+             * at all. Without it the template editor would exist only on a desktop.
+             */
+            rowMenu={(rowId) => {
+              const row = rows.find((candidate) => candidate.id === rowId);
+              return row ? balanceMenu(row) : [];
+            }}
             ariaLabel={`Budget for ${monthLabel(data.month)}`}
             empty="No envelopes yet."
             widths={grid.widths}
@@ -283,6 +490,50 @@ export function BudgetView({ data }: { data: BudgetData }) {
         />
       ) : null}
 
+      {editingRow ? (
+        <TemplateDrawer
+          key={editingRow.id}
+          envelope={envelopeInput(editingRow)}
+          month={data.month}
+          todayKey={data.todayKey}
+          readyToAssignCents={month.readyToAssignCents}
+          schedules={schedules}
+          onClose={() => setEditing(null)}
+          onSaved={() => router.refresh()}
+        />
+      ) : null}
+
+      {adding ? (
+        <AddFromSchedulesDialog
+          candidates={unattached}
+          envelopes={spendingRows}
+          defaultCategoryId={defaultTarget ?? spendingRows[0]?.id ?? ""}
+          onCancel={() => setAdding(false)}
+          onAdd={(categoryId, scheduleIds) => {
+            setAdding(false);
+            setError(null);
+            setNotice(null);
+            startTransition(async () => {
+              const result = await addTemplatesFromSchedulesAction(
+                categoryId,
+                scheduleIds,
+              );
+              if (!result.ok) {
+                setError(result.error);
+                return;
+              }
+              const added = result.data?.added ?? 0;
+              setNotice(
+                added === 0
+                  ? "Those schedules already fund an envelope — nothing was added."
+                  : `Added ${added === 1 ? "1 template" : `${added} templates`}. Run Apply templates to fund them.`,
+              );
+              router.refresh();
+            });
+          }}
+        />
+      ) : null}
+
       {move ? (
         <MoveMoneyDialog
           from={move.from}
@@ -317,6 +568,11 @@ function MonthBar({
   onZero,
   onHold,
   onRelease,
+  onApply,
+  onOverwrite,
+  onAddFromSchedules,
+  templatedCount,
+  hasEnvelopes,
   pending,
 }: {
   month: BudgetMonth;
@@ -327,6 +583,12 @@ function MonthBar({
   onZero: () => void;
   onHold: () => void;
   onRelease: () => void;
+  onApply: () => void;
+  onOverwrite: () => void;
+  onAddFromSchedules: () => void;
+  /** How many spending envelopes hold templates — nothing to apply when it is zero. */
+  templatedCount: number;
+  hasEnvelopes: boolean;
   pending: boolean;
 }) {
   const button =
@@ -345,6 +607,50 @@ function MonthBar({
       </button>
 
       <span className="ml-auto flex flex-wrap gap-2">
+        {/*
+         * Templates first: they are the answer to "fill this month in", and the three manual
+         * fills beside them are what you reach for when no template covers the case.
+         * Unavailable is disabled with the reason rather than hidden (`navigation.md`).
+         */}
+        <button
+          type="button"
+          onClick={onApply}
+          disabled={pending || templatedCount === 0}
+          className={button}
+          title={
+            templatedCount === 0
+              ? "No envelope has a template yet — add one from an envelope's row menu"
+              : "Fill every templated envelope whose Assigned is still zero"
+          }
+        >
+          Apply templates
+        </button>
+        <button
+          type="button"
+          onClick={onOverwrite}
+          disabled={pending || templatedCount === 0}
+          className={button}
+          title={
+            templatedCount === 0
+              ? "No envelope has a template yet — add one from an envelope's row menu"
+              : "Replace Assigned on every templated envelope, including ones already edited"
+          }
+        >
+          Overwrite with templates
+        </button>
+        <button
+          type="button"
+          onClick={onAddFromSchedules}
+          disabled={pending || !hasEnvelopes}
+          className={button}
+          title={
+            hasEnvelopes
+              ? "Attach the schedules that do not fund an envelope yet"
+              : "There is no spending envelope to attach a schedule to"
+          }
+        >
+          Add from schedules…
+        </button>
         <button
           type="button"
           onClick={onCopyPrevious}
