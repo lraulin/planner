@@ -869,10 +869,42 @@ period)` so money already spent stops being held twice and only going over bites
   URL and closed on the existing `finance_accounts` table. Bank name-links accept
   any https URL instead of a hardcoded Chase/Cap One host list. Import remains the
   only create path.
-- **Next:** **Shortfall attribution.** When Available to Spend goes negative, name
+  ✅ **Envelopes reopened — zero-based budget shipped 2026-08-22.**
+  `agent-os/specs/2026-08-22-1948-zero-based-budget/`. **This reverses, narrowly, the
+  "no tier 3" decision above.** Available to Spend is correct and stopped being
+  useful: once the annual bills that had never been saved for went in, the headline
+  sat around **−$1,953.85**, of which **−$1,657.35** was set-asides. A large negative
+  number carries one instruction — spend as little as possible — which was already
+  true and cannot be acted on. The defect is expressive, not arithmetic: one collapsed
+  figure cannot tell "four annual bills are each underfunded" from "you are short this
+  week", and only one of those has a move attached to it.
+  **What is narrowed, and what is not.** Commitments D0 rejected discretionary
+  envelopes as busywork. That argument is about a *category list* — a bucket for
+  clothes, a bucket for games — and the busywork came from adopting YNAB's default
+  suggested list, which is a configuration choice. It holds for the list and does not
+  reach the model. The recommended preset is therefore **five envelopes**, and each one
+  claims a dozen spending categories so choosing few costs nothing in categorisation.
+  **Both tiers keep running untouched**; the two systems are deliberately parallel until
+  use decides between them. On the same data the same day, the budget read **+$888.12**
+  to assign with the shortfall named per envelope.
+  Semantics are reimplemented from [Actual Budget](https://github.com/actualbudget/actual)
+  (MIT) rather than invented — its balance/carryover/Ready-to-Assign formulas are
+  load-bearing and subtly easy to get wrong. Reference pack at `docs/actual-budget/`.
+  `/finances/budget`, four new tables, an Envelope column on the Register, and
+  on/off-budget as an account field.
+- **Next:** **Goal templates for the budget.** The envelope budget is entirely manual,
+  which is the thing the user wants to leave behind: "maybe after improving my situation
+  and keeping it that way for some time, we could start to put things more on autopilot."
+  Actual's `#template` system (fixed monthly, save-by-a-date, percentage-of-income,
+  schedule-based, spend-down, and `remainder`, run in global priority order) is the
+  mechanism, and the declared-bill list already knows the amount and cadence of every
+  commitment — so this is also the join that would decide whether the two systems merge.
+- **Also next:** **Shortfall attribution.** When Available to Spend goes negative, name
   what could be cancelled or skipped to fix it. Explicitly wanted, explicitly cut
   from the commitments spec; the annual/monthly cost columns already rank the
   candidates, so what is missing is turning a red number into a guided decision.
+  Partly overtaken: the budget now states a shortfall per envelope rather than as one
+  number, which is the same information at a level you can act on.
 - **✅ Period result — "living within my means", shipped 2026-08-18.**
   `agent-os/specs/2026-08-18-2005-period-result/`. The measurement half of the item below,
   and the first surface that scores rather than reports. For every **closed** pay period:

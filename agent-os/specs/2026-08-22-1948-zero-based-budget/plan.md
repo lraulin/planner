@@ -1,7 +1,9 @@
 # Zero-based budgeting — an envelope budget beside Available to Spend
 
-**Status: active**
+**Status: frozen / complete** (2026-08-22)
 Spec folder: `agent-os/specs/2026-08-22-1948-zero-based-budget/`
+
+This is the as-built record. Further change opens a new delta-spec.
 
 ## Spec relationships
 
@@ -251,12 +253,15 @@ Named rather than omitted, because Actual has each of them and they are the obvi
 
 Material refinements during implementation (requirements, design, scope). Omit pure code polish.
 
-| #   | Change                                                                                                                                                                                                | Why                                                                                                                                                                                                                                                                                           |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **D6 gains `finance_budget_categories.source_categories`** — an envelope claims a list of `FINANCE_CATEGORIES` values, instead of the auto-map matching `effectiveCategory` against envelope _names_. | Name-matching only works for the Detailed preset, which is the one D5 recommends against. It would have left the Minimal preset's grid empty on arrival and made "fewer envelopes" cost a permanent categorisation backlog. Claiming a list is what makes five envelopes as usable as twenty. |
-| 2   | **Income is routed by `effectiveFlow`, not by a claimed category.** Income envelopes claim nothing.                                                                                                   | No value in `FINANCE_CATEGORIES` describes a paycheck, and the classifier already tells income from spending. Routing income through the same claim list would have needed a synthetic taxonomy entry that nothing else uses.                                                                 |
-| 3   | **The activity query excludes transfers whose other leg is also on-budget** — an explicit `NOT EXISTS`, on top of the auto-map's rule.                                                                | Actual gets this free because it never puts a category on a transfer. Our Register lets a person set an envelope on any row, so one enveloped leg of a card payment would record a purchase that never happened. Belt and braces on the one error that silently inflates spending.            |
-| 4   | **`readSetting(userId, scope)` added to `src/lib/settings/queries.ts`.**                                                                                                                              | `loadBudget` is a `lib` function taking `userId`; `loadSettingsForSession` resolves the user itself and would have inverted the dependency direction (`development/clean-code`).                                                                                                              |
+| #   | Change                                                                                                                                                                                                | Why                                                                                                                                                                                                                                                                                                                    |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **D6 gains `finance_budget_categories.source_categories`** — an envelope claims a list of `FINANCE_CATEGORIES` values, instead of the auto-map matching `effectiveCategory` against envelope _names_. | Name-matching only works for the Detailed preset, which is the one D5 recommends against. It would have left the Minimal preset's grid empty on arrival and made "fewer envelopes" cost a permanent categorisation backlog. Claiming a list is what makes five envelopes as usable as twenty.                          |
+| 2   | **Income is routed by `effectiveFlow`, not by a claimed category.** Income envelopes claim nothing.                                                                                                   | No value in `FINANCE_CATEGORIES` describes a paycheck, and the classifier already tells income from spending. Routing income through the same claim list would have needed a synthetic taxonomy entry that nothing else uses.                                                                                          |
+| 3   | **The activity query excludes transfers whose other leg is also on-budget** — an explicit `NOT EXISTS`, on top of the auto-map's rule.                                                                | Actual gets this free because it never puts a category on a transfer. Our Register lets a person set an envelope on any row, so one enveloped leg of a card payment would record a purchase that never happened. Belt and braces on the one error that silently inflates spending.                                     |
+| 5   | **`BudgetData.prospectiveOpeningCents`** — setup shows the position at the end of _last_ month, not today's.                                                                                          | Found by driving the real file. Setup said "you will start with −$161.86" (today's position) and `seedBudget` recorded −$979.80 (last month's close), so the first Ready to Assign was a number the setup screen had never mentioned. Exactly the failure this spec cited `2026-08-18-2058-commitments-clarity` about. |
+| 6   | **The Register's envelope is an inline select, not a row-menu command** (Task 6 said both).                                                                                                           | A submenu of twenty envelopes is not a menu, and the choice is made while reading the description in the next column. `components/ux-principles` prefers inline editing for exactly this.                                                                                                                              |
+| 7   | **`off_budget` folded into `AccountEdit` / `updateAccount`**; the `setAccountOffBudget` this spec first added was deleted.                                                                            | Two write paths to one column is the duplication `development/clean-code` names. `updateAccount` already proves ownership, and the drawer already used it.                                                                                                                                                             |
+| 4   | **`readSetting(userId, scope)` added to `src/lib/settings/queries.ts`.**                                                                                                                              | `loadBudget` is a `lib` function taking `userId`; `loadSettingsForSession` resolves the user itself and would have inverted the dependency direction (`development/clean-code`).                                                                                                                                       |
 
 ---
 
@@ -376,6 +381,53 @@ menu bar and ⌘K (`components/navigation`).
 - Update `agent-os/product/roadmap.md` § Financial planning: record that envelopes were reopened,
   why D0's reasoning was narrowed rather than discarded, and that the two systems now run in
   parallel pending a decision from use.
+
+---
+
+## As built (2026-08-22)
+
+Everything in the acceptance criteria shipped. What the implementation added beyond the plan is
+in **Changes from original plan** above; what it confirmed is below.
+
+**The thesis held on the real file.** On the same data, the same day: Available to Spend read
+**−$1,953.85**, of which **−$1,657.35** was set-asides for bills. The budget read **+$888.12**
+to assign, with the shortfall named per envelope — Discretionary −$762.83, Bills −$4.99. Both
+numbers are correct and describe the same wallet. Only one of them has a move attached to it,
+which is the whole argument of this spec, and it is now checkable rather than asserted.
+
+**The invariant held end to end.** Ready to Assign ($888.12) plus every envelope balance
+(−$767.82) plus the backlog (−$282.16) came to −$161.86, which is the on-budget position the
+Dashboard reports. The gap between the budget and the bank _is_ the unenveloped rows, and the
+page says so.
+
+**Verified in a browser, not only by tests:** seeded Minimal against the real opening position;
+assigned $400 and watched Ready to Assign fall by exactly that; covered a −$43.29 overspend
+from Ready to Assign and watched it move exactly $43.29 and land the envelope on zero; paged to
+September, which carried in $888.12 and charged August's uncovered −$767.82 to leave $120.30;
+set and cleared an envelope from the Register; confirmed the migration seeded on/off budget
+correctly across all six accounts. Dashboard, Available to Spend and Commitments are unchanged.
+
+**Gate:** 3,100 unit tests, 818 integration tests (run, not skipped), lint, typecheck, build,
+and all 59 routes under `npm run smoke`.
+
+### Follow-ups (new work — not amendments to this frozen spec)
+
+- **Goal templates.** The strongest next step and the road back to autopilot: `#template $50 by
+2025-12`, percentage-of-income, schedule-based and `remainder` templates with global priority
+  ordering (`packages/loot-core/src/server/budget/goal-template.ts`). Without them the budget is
+  entirely manual, which is the one thing the user said they wanted to leave behind eventually.
+- **Bills feed the budget.** The declared-bill list already knows the amount and cadence of every
+  commitment. Projecting them into envelope targets is the join between the two systems, and the
+  cheapest way to find out whether they should merge.
+- **A month's movement log has nowhere to be read.** `finance_budget_months.notes` accumulates
+  every reassignment and nothing shows it.
+- **Editing what an envelope claims.** `sourceCategories` is seeded by the preset and writable by
+  `updateBudgetCategory`, but no surface exposes it, so re-aiming the auto-map means a preset.
+- **Creating and reordering envelopes.** The mutations exist and are tested; the grid offers
+  rename, hide and delete but not create or drag-to-reorder.
+- **The Register's envelope select is offered on rows before the start month**, where setting it
+  changes no budget figure. Harmless, and worth either disabling or explaining.
+- **Merging with Available to Spend** — deliberately deferred until both have been lived with.
 
 ---
 
