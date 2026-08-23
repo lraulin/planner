@@ -40,7 +40,7 @@ export function categorize(
   description: string,
   sourceCategory: string,
   /**
-   * Merchant → the category a commitment declares for it, as `matcherIndex` keys them.
+   * Payee id → the category a commitment declares for it.
    * Empty for every caller that has no commitments to consider.
    */
   commitmentCategories: ReadonlyMap<string, string> = new Map(),

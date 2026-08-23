@@ -10,7 +10,6 @@ function bill(overrides: Partial<BillForSchedule> = {}): BillForSchedule {
   return {
     id: "bill-1",
     name: "Netflix",
-    matchers: ["NETFLIX"],
     payeeIds: [PAYEE_A],
     status: "active",
     cadenceMonths: 1,

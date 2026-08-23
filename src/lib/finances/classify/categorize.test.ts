@@ -151,7 +151,7 @@ describe("categorize with a commitment's category", () => {
 
   it("is keyed on the merchant a rule resolves to, not the bank's spelling", () => {
     // `WAL-MART #1981` and `WM SUPERCENTER #1981` both resolve to Walmart, which is the
-    // string a commitment's matchers hold — so one declaration covers both spellings.
+    // stable payee a commitment claims — so one declaration covers both spellings.
     const declared = new Map([["Walmart", "Groceries"]]);
     expect(categorize("WAL-MART #1981", "Merchandise", declared).category).toBe(
       "Groceries",

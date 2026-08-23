@@ -181,7 +181,6 @@ describeDb("schedule mutations", () => {
   it("imports active bills once, then only new ones", async () => {
     await upsertRecurringBill(userId, {
       name: "Netflix",
-      matchers: ["NETFLIX"],
       cadence: { unit: "month", n: 1 },
       expectedCents: 1599,
       anchorDate: "2026-01-15",
@@ -189,7 +188,6 @@ describeDb("schedule mutations", () => {
     });
     await upsertRecurringBill(userId, {
       name: "Paused Mag",
-      matchers: ["MAG"],
       cadence: { unit: "month", n: 1 },
       expectedCents: 500,
       status: "paused",

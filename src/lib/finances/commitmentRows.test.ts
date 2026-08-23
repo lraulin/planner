@@ -21,7 +21,6 @@ function bill(over: Partial<StoredBillRow> = {}): StoredBillRow {
   return {
     id: "bill-1",
     name: "1Password",
-    matchers: ["1PASSWORDTORONTOON"],
     payees: [],
     payeeIds: [],
     status: "active",
@@ -41,7 +40,6 @@ function spendEntry(over: Partial<StoredSpend> = {}): StoredSpend {
   return {
     id: "spend-1",
     name: "Pizza",
-    matchers: ["PIZZA HUT", "DOMINOS"],
     payees: [],
     period: "week",
     amountSource: "pinned",

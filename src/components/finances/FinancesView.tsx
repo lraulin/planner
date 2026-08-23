@@ -6,9 +6,9 @@ import { formatUsd } from "@/lib/finances/money";
 import { FINANCE_GROUP_BY_VALUES, groupTransactions } from "@/lib/finances/grouping";
 import type { FinanceAccountRow, TransactionListRow } from "@/lib/finances/types";
 import {
-  claimedMatcherMap,
+  claimedPayeeMap,
   trackAsBillRefusal,
-  type ClaimedMatcher,
+  type ClaimedPayee,
 } from "@/lib/finances/registerBillDraft";
 import {
   deleteTransactionAction,
@@ -134,7 +134,7 @@ export function FinancesView({
 }: {
   initialTransactions: TransactionListRow[];
   initialAccounts: FinanceAccountRow[];
-  initialClaimed: readonly ClaimedMatcher[];
+  initialClaimed: readonly ClaimedPayee[];
   /** Budget envelopes, in budget order. Empty until a budget exists. */
   envelopes: readonly { id: string; name: string }[];
   /** Unposted schedule occurrences. Not transactions; never mixed into `rows`. */
@@ -272,15 +272,13 @@ export function FinancesView({
     });
   }, [pendingDelete, openId, closeDrawer, refresh]);
 
-  const claimedByMerchant = useMemo(() => claimedMatcherMap(claimed), [claimed]);
+  const claimedByPayee = useMemo(() => claimedPayeeMap(claimed), [claimed]);
 
   const capabilitiesFor = useCallback(
     (rowId: string | null, count: number) => {
       const row = rowId ? rows.find((entry) => entry.id === rowId) : undefined;
       const cannotTrack =
-        rowId === null
-          ? "Select a row first"
-          : trackAsBillRefusal(row, claimedByMerchant);
+        rowId === null ? "Select a row first" : trackAsBillRefusal(row, claimedByPayee);
       return catalogCapabilities({
         // A transaction is not typed in, it arrives from the bank — so the catalog's
         // "make a new one" verb is the import, not a blank row.
@@ -347,7 +345,7 @@ export function FinancesView({
         ],
       });
     },
-    [rows, claimedByMerchant, openImport, openDrawer, requestDelete, refresh],
+    [rows, claimedByPayee, openImport, openDrawer, requestDelete, refresh],
   );
 
   const commandCapabilities = useMemo(

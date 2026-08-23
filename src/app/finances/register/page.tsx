@@ -5,7 +5,7 @@ import {
   loadRecurringBills,
   loadRecurringSpend,
 } from "@/lib/finances/dashboardQueries";
-import { claimedMatchersOf } from "@/lib/finances/registerBillDraft";
+import { claimedPayeesOf } from "@/lib/finances/registerBillDraft";
 import { loadBudget } from "@/lib/finances/budget/queries";
 import { listPostedLinks, listScheduleRecords } from "@/lib/finances/schedules/queries";
 import { upcomingOccurrences } from "@/lib/finances/schedules/upcoming";
@@ -46,7 +46,7 @@ export default async function FinancesRegisterPage() {
         <FinancesView
           initialTransactions={transactions}
           initialAccounts={accounts}
-          initialClaimed={claimedMatchersOf(bills, spend)}
+          initialClaimed={claimedPayeesOf(bills, spend)}
           envelopes={budget.categories.map((category) => ({
             id: category.id,
             name: category.name,

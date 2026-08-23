@@ -1273,7 +1273,7 @@ export function recurringMerchants(
   for (const [merchant, ordered] of byMerchant) {
     // A declaration is the user's answer to the same question, so the statistics do not get
     // to disagree with it — and a semi-annual bill would fail every threshold below anyway.
-    // Cancelled and ignored still claim their matchers, so they cannot reappear as detections.
+    // Cancelled and ignored still claim their payees, so they cannot reappear as detections.
     if (ordered.some((row) => row.payeeId && claimed.has(row.payeeId))) continue;
     if (ordered.length < MIN_RECURRING_CHARGES) continue;
 
@@ -1697,7 +1697,7 @@ export type OneOffOptions = {
    */
   bills?: readonly DeclaredBill[];
   /**
-   * Extra merchants to withhold — typically matchers already claimed by recurring spend, so
+   * Extra merchants to withhold — typically payees already claimed by recurring spend, so
    * pizza does not keep showing up as a one-off after it has been grouped.
    */
   suppressMerchants?: readonly string[];

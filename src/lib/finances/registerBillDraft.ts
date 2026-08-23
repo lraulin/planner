@@ -26,7 +26,7 @@ import {
 } from "./recurringBills";
 import type { TransactionListRow } from "./types";
 
-export type ClaimedMatcher = {
+export type ClaimedPayee = {
   payeeId: string;
   merchant: string;
   name: string;
@@ -45,10 +45,10 @@ export type TrackAsBillDraft = {
 };
 
 /** Compact claimed list for the Register: stable payee → the commitment that holds it. */
-export function claimedMatchersOf(
+export function claimedPayeesOf(
   bills: readonly StoredBillRow[],
   spend: readonly StoredSpend[],
-): ClaimedMatcher[] {
+): ClaimedPayee[] {
   return [...payeeClaimIndex(bills, spend).entries()].map(([payeeId, ref]) => ({
     payeeId,
     merchant:
@@ -61,9 +61,9 @@ export function claimedMatchersOf(
   }));
 }
 
-export function claimedMatcherMap(
-  claimed: readonly ClaimedMatcher[],
-): Map<string, ClaimedMatcher> {
+export function claimedPayeeMap(
+  claimed: readonly ClaimedPayee[],
+): Map<string, ClaimedPayee> {
   return new Map(claimed.map((entry) => [entry.payeeId, entry]));
 }
 
@@ -75,7 +75,7 @@ export function claimedMatcherMap(
  */
 export function trackAsBillRefusal(
   row: TransactionListRow | undefined,
-  claimed: ReadonlyMap<string, ClaimedMatcher>,
+  claimed: ReadonlyMap<string, ClaimedPayee>,
 ): string | null {
   if (row === undefined) return "Select a transaction";
   const flow = effectiveFlow(row);

@@ -5,7 +5,6 @@ import { activeBillTotals, type BillRow, type SpendRow } from "./commitmentRows"
 
 function bill(over: Partial<BillRow> & Pick<BillRow, "id" | "name">): BillRow {
   return {
-    matchers: [over.name],
     payees: [],
     payeeIds: [],
     status: "active",
@@ -31,7 +30,6 @@ function bill(over: Partial<BillRow> & Pick<BillRow, "id" | "name">): BillRow {
 
 function spend(over: Partial<SpendRow> & Pick<SpendRow, "id" | "name">): SpendRow {
   return {
-    matchers: [over.name],
     payees: [],
     period: "week",
     amountSource: "pinned",

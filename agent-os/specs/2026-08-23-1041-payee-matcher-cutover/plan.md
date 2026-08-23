@@ -205,10 +205,10 @@ polish.
 
 ## Task 6: Run Stage B and retire legacy storage
 
-- [ ] Generate a guarded Drizzle migration, including snapshot and journal entry, that drops
+- [x] Generate a guarded Drizzle migration, including snapshot and journal entry, that drops
       both matcher columns only after the data assertions pass.
-- [ ] Remove compatibility branches and obsolete matcher helpers.
-- [ ] Update the Actual reference map to record the shipped cutover and Rules as next.
+- [x] Remove compatibility branches and obsolete matcher helpers.
+- [x] Update the Actual reference map to record the shipped cutover and Rules as next.
 
 ## Task 7: Verify and freeze
 

@@ -8,7 +8,7 @@ import { setRecurringBillAction } from "@/app/finances/actions";
 import { nextDueFrom, type Cadence } from "@/lib/finances/recurringBills";
 import {
   trackAsBillDraft,
-  type ClaimedMatcher,
+  type ClaimedPayee,
   type TrackAsBillDraft,
 } from "@/lib/finances/registerBillDraft";
 import type { TransactionListRow } from "@/lib/finances/types";
@@ -32,7 +32,7 @@ export function TrackAsBillDialog({
   rows: readonly TransactionListRow[];
   selectedId: string;
   onClose: () => void;
-  onSaved: (claimed: ClaimedMatcher) => void;
+  onSaved: (claimed: ClaimedPayee) => void;
 }) {
   const todayKey = useToday();
   const seed = useMemo(
@@ -59,7 +59,7 @@ function TrackAsBillForm({
   seed: TrackAsBillDraft;
   todayKey: string;
   onClose: () => void;
-  onSaved: (claimed: ClaimedMatcher) => void;
+  onSaved: (claimed: ClaimedPayee) => void;
 }) {
   const titleId = useId();
   const router = useRouter();

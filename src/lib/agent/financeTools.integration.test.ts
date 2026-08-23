@@ -277,7 +277,7 @@ describeDb("finance agent tools", () => {
     )) as { name: string; matchers: string[] };
     expect(created).toMatchObject({
       name: "Pizza",
-      matchers: ["PIZZA HUT", "DOMINOS"],
+      matchers: ["DOMINOS", "PIZZA HUT"],
     });
 
     const listed = (await dispatchAgentTool("list_commitments", {}, ownerId)) as {
@@ -319,8 +319,8 @@ describeDb("finance agent tools", () => {
       spend: { name: string; matchers: string[] }[];
     };
     expect(ownerAfter.spend.find((entry) => entry.name === "Pizza")?.matchers).toEqual([
-      "PIZZA HUT",
       "DOMINOS",
+      "PIZZA HUT",
     ]);
 
     await dispatchAgentTool(

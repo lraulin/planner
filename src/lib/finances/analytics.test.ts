@@ -842,7 +842,7 @@ describe("recurringMerchants with declared bills", () => {
   });
 
   it("costs a declared bill from every matcher, not just the name", () => {
-    // Pizza Hut and Domino's are two bank strings and one commitment. Without matchers
+    // Pizza Hut and Domino's are two stable payees and one commitment. Without claims
     // the charges sit under their own names and the declaration would look empty.
     const charges = [
       row({

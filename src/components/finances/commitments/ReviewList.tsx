@@ -110,7 +110,7 @@ function ReviewSortHeader({
  * **Propose, never apply.** Every button here used to write a row on the first click, naming it
  * after the bank's string — which is how tracking Pizza Hut produced a commitment called
  * `PIZZA HUT #4471` rather than joining the Pizza group it was meant for, and how declaring
- * 1Password produced `1PASSWORDTORONTOON`. The name and the matchers were split apart in the
+ * 1Password produced `1PASSWORDTORONTOON`. Display names and stable payee identity are split in the
  * schema to fix exactly that, and the surface that creates rows never got the benefit.
  *
  * So the two tracking buttons now open the row in place — the `ItemList` precedent, not a modal

@@ -2469,14 +2469,10 @@ export type RecurringSpendAmountSource =
  * which understates what a year costs, a little more confidently every year — or to leave
  * them on the list forever. The declaration is the missing third answer.
  *
- * **Keyed on a name you choose, matched on the strings the bank sends.** A cadence is a fact
- * about Geico, not about the March charge, and keying it that way is what stops the row coming
- * back next time. The first version of this table used one `merchant` column for both halves
- * of that idea, and it turned out to be three jobs in one: the display name, the unique key,
- * and the join to `finance_transactions`. Every consequence was a real bug — `1PASSWORDTORONTOON`
- * could not be renamed to `1Password`, Taylor Gas needed a `classify/rules.ts` entry purely to
- * collapse `TAYLOR GAS COMPANY INC.` and `TAYLOR GAS HEATING AIR`, and nothing could ever cover
- * two merchants at once. `name` and `matchers` are that column split in two.
+ * **Keyed on a name you choose, claimed by stable payees.** A cadence is a fact about Geico,
+ * not about the March charge, and keying it that way is what stops the row coming back next
+ * time. The first version used bank strings as join keys; `finance_payees` now owns merchant
+ * identity and its claim columns say which payees belong to this declaration.
  *
  * **Cadence is months, not days.** "Semi-annual" means March and September, not every 182.5
  * days; months keep the next-due date from drifting a fortnight per decade. A `smallint` with
@@ -2499,19 +2495,6 @@ export const financeRecurringBills = pgTable(
      * `1PASSWORDTORONTOON` to `1Password` cannot orphan a single charge.
      */
     name: text("name").notNull(),
-    /**
-     * The `effectiveMerchant()` strings whose charges belong to this bill.
-     *
-     * An array rather than a column because one commitment routinely spans several bank
-     * spellings, and because the alternative — a rule in `classify/rules.ts` for every such
-     * case — makes a user-level fact into a code change.
-     *
-     * **A merchant string may appear on at most one commitment across this table and
-     * `financeRecurringSpend`.** Postgres cannot express that across two tables, so it is
-     * enforced in `upsertRecurringBill` / `upsertRecurringSpend` and pinned by an integration
-     * test. Two claims on one merchant would double-count its charges everywhere downstream.
-     */
-    matchers: text("matchers").array().notNull().default([]),
     /**
      * Whether this bill is still live.
      *
@@ -2631,8 +2614,7 @@ export const financeRecurringBills = pgTable(
   },
   (table) => [
     // One declaration per name: two would mean two answers to "how often is this", and every
-    // reader would have to pick. The uniqueness that actually protects the arithmetic is on
-    // `matchers` and spans both tables, which is why it lives in the mutation instead.
+    // reader would have to pick. Payee claims protect the arithmetic across both tiers.
     uniqueIndex("finance_recurring_bills_name_uq").on(table.userId, table.name),
     check(
       "finance_recurring_bills_cadence_months",
@@ -2693,17 +2675,6 @@ export const financeRecurringSpend = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     /** What the user calls it — "Pizza", "Groceries". Nothing joins on it. */
     name: text("name").notNull(),
-    /**
-     * The `effectiveMerchant()` strings that count toward this. Pizza Hut *and* Domino's.
-     *
-     * Which of them Friday's pizza came from is not a question worth answering, and no rule
-     * here says "one or the other, never both" — that would invent a constraint the data does
-     * not have. The rate is a sum over the group per period, so two pizzas in one week reads
-     * as a higher rate rather than as an error.
-     *
-     * Subject to the same cross-table exclusivity as `financeRecurringBills.matchers`.
-     */
-    matchers: text("matchers").array().notNull().default([]),
     /**
      * The period the rate is quoted in. Weekly is the common case and the one worth entering
      * by hand: pizza and groceries are one payment a week, so a week is the unit the user
@@ -2902,9 +2873,9 @@ export const financeBudgetCategories = pgTable(
      * categorisation. Name-matching alone would have worked only for the preset that mirrors
      * the taxonomy one-for-one — which is the preset we recommend against.
      *
-     * An array on the row rather than a rules table, for the reason `finance_recurring_bills`
-     * keeps `matchers` on the row: one commitment routinely spans several spellings, and the
-     * alternative turns a user-level fact into a code change. **A taxonomy value should appear
+     * An array on the row rather than a rules table because one envelope routinely spans
+     * several taxonomy values and the alternative turns a user-level fact into a code change.
+     * **A taxonomy value should appear
      * on at most one envelope**; the auto-map resolves a duplicate by sort order rather than
      * failing, since the cost is a row in the wrong envelope and not a lost transaction.
      *
@@ -3120,9 +3091,8 @@ export const financeSchedules = pgTable(
  *
  * 1. The canonical name — the knowledge that `WM SUPERCENTER` and `WAL-MART` are one company —
  *    could only be changed by editing TypeScript.
- * 2. `finance_recurring_bills.matchers`, `finance_recurring_spend.matchers` and
- *    `finance_schedules.conditions` each **copied the string** as a join key, because there was
- *    no row to point at.
+ * 2. Recurring commitments and schedules each **copied the string** as a join key, because
+ *    there was no row to point at.
  * 3. "A merchant belongs to at most one commitment" spanned two tables and so could not be a
  *    constraint at all; it lived in two mutations and an integration test.
  *
@@ -3149,9 +3119,9 @@ export const financePayees = pgTable(
      * The commitment this payee's charges belong to, if any — at most one, across both tiers.
      *
      * **This is the constraint that could not previously exist.** `financeRecurringBills` and
-     * `financeRecurringSpend` each held a `matchers text[]`, and the rule that a merchant may
-     * appear on only one of them spanned two tables, so Postgres could not express it and two
-     * mutations enforced it by hand. Held here it is a property of a single row: one payee, one
+     * `financeRecurringSpend` each held matcher arrays, and the rule that a merchant may appear
+     * on only one of them spanned two tables, so Postgres could not express it and two mutations
+     * enforced it by hand. Held here it is a property of a single row: one payee, one
      * claim, one CHECK. Ownership inverts — "which payees does this bill claim" is now a query
      * — which is the ordinary direction for a many-to-one and is what buys the guarantee.
      *

@@ -479,6 +479,7 @@ export async function replaceCommitmentPayeesInTransaction(
       : await tx
           .select({
             id: financePayees.id,
+            name: financePayees.name,
             billId: financePayees.commitmentBillId,
             spendId: financePayees.commitmentSpendId,
           })
@@ -493,7 +494,15 @@ export async function replaceCommitmentPayeesInTransaction(
         (claim.kind !== "spend" || payee.spendId !== claim.id)),
   );
   if (held) {
-    throw new Error("One of those payees already belongs to another commitment.");
+    const heldTable = held.billId ? financeRecurringBills : financeRecurringSpend;
+    const heldId = held.billId ?? held.spendId;
+    const [owner] = await tx
+      .select({ name: heldTable.name })
+      .from(heldTable)
+      .where(and(eq(heldTable.userId, userId), eq(heldTable.id, heldId!)));
+    throw new Error(
+      `"${held.name}" already belongs to the commitment "${owner?.name ?? "another commitment"}". Free it there first.`,
+    );
   }
 
   await tx

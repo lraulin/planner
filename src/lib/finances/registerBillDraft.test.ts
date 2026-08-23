@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { StoredBillRow, StoredSpend } from "./commitments";
 import {
-  claimedMatcherMap,
-  claimedMatchersOf,
+  claimedPayeeMap,
+  claimedPayeesOf,
   trackAsBillDraft,
   trackAsBillRefusal,
 } from "./registerBillDraft";
@@ -49,7 +49,6 @@ function bill(over: Partial<StoredBillRow> = {}): StoredBillRow {
   return {
     id: "bill-1",
     name: "Geico",
-    matchers: ["Geico"],
     payees: [{ id: PAYEE_A, name: "Geico" }],
     payeeIds: [PAYEE_A],
     status: "active",
@@ -69,7 +68,6 @@ function spend(over: Partial<StoredSpend> = {}): StoredSpend {
   return {
     id: "spend-1",
     name: "Walmart",
-    matchers: ["Walmart"],
     payees: [{ id: PAYEE_B, name: "Walmart" }],
     period: "week",
     amountSource: "auto",
@@ -147,16 +145,14 @@ describe("trackAsBillRefusal", () => {
   });
 
   it("names the bill that already claims this merchant", () => {
-    const claimed = claimedMatcherMap(claimedMatchersOf([bill()], []));
+    const claimed = claimedPayeeMap(claimedPayeesOf([bill()], []));
     expect(
       trackAsBillRefusal(row("g", "2026-03-04", { description: "GEICO" }), claimed),
     ).toBe("Already tracked as Geico");
   });
 
   it("names a spend group that already claims this merchant", () => {
-    const claimed = claimedMatcherMap(
-      claimedMatchersOf([], [spend({ matchers: ["Walmart"] })]),
-    );
+    const claimed = claimedPayeeMap(claimedPayeesOf([], [spend()]));
     expect(
       trackAsBillRefusal(
         row("w", "2026-08-16", { description: "WALMART", payeeId: PAYEE_B }),
@@ -165,10 +161,8 @@ describe("trackAsBillRefusal", () => {
     ).toBe("Already tracked as spend (Walmart)");
   });
 
-  it("still refuses a dismissed bill — ignored keeps its matchers", () => {
-    const claimed = claimedMatcherMap(
-      claimedMatchersOf([bill({ status: "ignored" })], []),
-    );
+  it("still refuses a dismissed bill while its payee claim remains", () => {
+    const claimed = claimedPayeeMap(claimedPayeesOf([bill({ status: "ignored" })], []));
     expect(
       trackAsBillRefusal(row("g", "2026-03-04", { description: "GEICO" }), claimed),
     ).toBe("Already tracked as Geico");

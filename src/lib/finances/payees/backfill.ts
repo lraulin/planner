@@ -5,11 +5,8 @@
  * action, **idempotent** — running it twice writes nothing the second time. That is what makes
  * it safe to re-run after every import instead of a one-shot migration nobody dares touch.
  *
- * Deliberately additive. Nothing here removes `finance_recurring_bills.matchers` or rewrites a
- * schedule's conditions; those cutovers change what existing readers mean and land with the
- * readers they affect (`agent-os/specs/2026-08-23-0748-finance-payees/` Tasks 5–6). Until then
- * a payee is a second, unread copy of an identity the register already had, which is the only
- * state in which "no number moved" can actually be checked.
+ * Originally additive so the payee cutover could prove that no number moved. Payees are now
+ * authoritative; this remains idempotent import maintenance for newly encountered merchants.
  */
 
 import { and, eq, inArray, sql } from "drizzle-orm";

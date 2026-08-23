@@ -12,12 +12,8 @@
  *
  * There is no tier 3. See `agent-os/specs/2026-08-16-1938-commitments/` D0.
  *
- * **What this module owns is identity.** A commitment is named by the user and *matched* on the
- * bank's strings — `Pizza` covering both `PIZZA HUT` and `DOMINOS`, `Taylor Gas` covering the
- * two spellings on file. The predecessor design used one column for both jobs, which is why
- * `1PASSWORDTORONTOON` could not be renamed and why nothing could ever span two merchants.
- * `matcherIndex` + `resolveMerchant` are that split, and they are deliberately the only way the
- * rest of the module gets from a transaction to a commitment.
+ * **What this module owns is commitment arithmetic.** Stable payees own merchant identity;
+ * their claim columns connect transactions to a named commitment without copying bank strings.
  *
  * **Period boundaries are fixed, not rolling.** `periodIndex` anchors on a known Monday and
  * divides, so the buckets do not move with `todayKey`. That matters more than it looks: the
@@ -53,7 +49,6 @@ import type { Payday } from "./classify/income";
 export type StoredSpend = {
   id: string;
   name: string;
-  matchers: readonly string[];
   payees: readonly CommitmentPayee[];
   period: RecurringSpendPeriod;
   amountSource: "auto" | "pinned";
@@ -64,10 +59,9 @@ export type StoredSpend = {
   notes?: string;
 };
 
-/** A bill as the table now holds it: named by the user, matched on the bank's strings. */
+/** A bill as the table now holds it, with its claimed stable payees. */
 export type StoredBillRow = StoredBill & {
   id: string;
-  matchers: readonly string[];
   payees: readonly CommitmentPayee[];
   payeeIds: readonly string[];
   status: CommitmentStatus;
@@ -86,7 +80,6 @@ export type Commitment = {
   kind: "bill" | "spend";
   id: string;
   name: string;
-  matchers: readonly string[];
   payees: readonly CommitmentPayee[];
 };
 
@@ -97,7 +90,6 @@ export function asBillCommitment(bill: StoredBillRow): Commitment {
     kind: "bill",
     id: bill.id,
     name: bill.name,
-    matchers: bill.matchers,
     payees: bill.payees,
   };
 }
@@ -107,7 +99,6 @@ export function asSpendCommitment(entry: StoredSpend): Commitment {
     kind: "spend",
     id: entry.id,
     name: entry.name,
-    matchers: entry.matchers,
     payees: entry.payees,
   };
 }
@@ -137,73 +128,6 @@ export function payeeClaimIndex(
     }
   }
   return index;
-}
-
-/**
- * Raised when two commitments claim the same bank merchant.
- *
- * Postgres cannot express "unique across two tables", so this is the enforcement point, and it
- * has to be an error rather than a silent last-writer-wins: a merchant claimed twice has its
- * charges counted twice in the rate, in the accrual, and in every figure built on either.
- */
-export class MatcherConflictError extends Error {
-  constructor(
-    readonly merchant: string,
-    readonly heldBy: string,
-  ) {
-    super(
-      `"${merchant}" already belongs to the commitment "${heldBy}". Free it there first.`,
-    );
-    this.name = "MatcherConflictError";
-  }
-}
-
-/**
- * Every bank merchant string mapped to the commitment that claims it.
- *
- * Throws on a collision rather than picking a winner. Callers that are merely *reading* have
- * already been protected by the mutation, so a throw here means the invariant was broken by
- * something that bypassed it — which is worth surfacing loudly rather than absorbing.
- */
-export function matcherIndex(
-  bills: readonly StoredBillRow[],
-  spend: readonly StoredSpend[],
-): Map<string, CommitmentRef> {
-  const index = new Map<string, CommitmentRef>();
-
-  function claim(matchers: readonly string[], ref: CommitmentRef): void {
-    for (const merchant of matchers) {
-      const existing = index.get(merchant);
-      if (existing && existing.id !== ref.id) {
-        throw new MatcherConflictError(merchant, existing.name);
-      }
-      index.set(merchant, ref);
-    }
-  }
-
-  for (const bill of bills) {
-    claim(bill.matchers, { kind: "bill", id: bill.id, name: bill.name });
-  }
-  for (const entry of spend) {
-    claim(entry.matchers, { kind: "spend", id: entry.id, name: entry.name });
-  }
-
-  return index;
-}
-
-/**
- * The key to group a charge under: the commitment's name where one claims it, else the
- * merchant as it stands.
- *
- * This is the one function that replaces a bare `effectiveMerchant()` in the reporting paths,
- * and doing it in exactly one place is what makes "Pizza" collapse Pizza Hut and Domino's
- * everywhere at once rather than in whichever panels remembered to.
- */
-export function resolveMerchant(
-  effective: string,
-  index: ReadonlyMap<string, CommitmentRef>,
-): string {
-  return index.get(effective)?.name ?? effective;
 }
 
 /**
@@ -911,7 +835,11 @@ export function unclaimedMerchants(
   bills: readonly StoredBillRow[],
   spend: readonly StoredSpend[],
 ): string[] {
-  const claimed = matcherIndex(bills, spend);
+  const claimed = new Set(
+    [...bills, ...spend].flatMap((commitment) =>
+      commitment.payees.map((payee) => payee.name),
+    ),
+  );
   return [...new Set(detected)]
     .filter((merchant) => merchant !== "" && !claimed.has(merchant))
     .sort((left, right) => left.localeCompare(right));

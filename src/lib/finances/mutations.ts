@@ -18,12 +18,10 @@ import {
 import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { parseAccountUrl } from "./accountUrl";
 import { changedRows, planReclassify } from "./classify/reclassify";
-import { MatcherConflictError } from "./commitments";
 import { cadenceColumns, cadenceOf, type Cadence } from "./recurringBills";
 import { numericStringToCents } from "./money";
 import type { PaypalResolution } from "./paypalMatch";
 import { ensurePayees } from "./payees/backfill";
-import { syncLegacyCommitmentClaims } from "./payees/cutoverDb";
 import { replaceCommitmentPayeesInTransaction } from "./payees/mutations";
 import { payeeIndex } from "./payees/resolve";
 
@@ -547,38 +545,27 @@ export async function deleteAccount(userId: string, accountId: string): Promise<
 /**
  * Re-derive the categories on this user's history when a commitment changed what they are.
  *
- * A commitment's category outranks a `rules.ts` match for every charge it matches, so both
- * the category *and* the merchant list can move rows. `reclassifyTransactions` is a whole-
- * history pass, which sounds heavy for one edit and is not: `changedRows` diffs the plan
+ * A commitment's category outranks a `rules.ts` match for every charge its payees own, so both
+ * a category change and a changed payee claim can move rows. `reclassifyTransactions` is a
+ * whole-history pass, which sounds heavy for one edit and is not: `changedRows` diffs the plan
  * against what is stored, so an edit that moves nothing writes nothing.
  */
 async function reclassifyIfCategoriesMoved(
   userId: string,
-  before: { category: string; matchers: readonly string[] } | undefined,
-  after: { category?: string; matchers?: readonly string[] },
+  beforeCategory: string | undefined,
+  after: { category?: string; payeesChanged: boolean },
 ): Promise<void> {
-  const category = after.category?.trim() ?? before?.category ?? "";
+  const category = after.category?.trim() ?? beforeCategory ?? "";
   const categoryMoved =
-    after.category !== undefined && after.category.trim() !== (before?.category ?? "");
-  const matchersMoved =
-    after.matchers !== undefined &&
-    (before === undefined ||
-      after.matchers.length !== before.matchers.length ||
-      after.matchers.some((entry, index) => entry !== before.matchers[index]));
+    after.category !== undefined && after.category.trim() !== (beforeCategory ?? "");
 
-  if (!categoryMoved && !(matchersMoved && category !== "")) return;
+  if (!categoryMoved && !(after.payeesChanged && category !== "")) return;
   await reclassifyTransactions(userId);
 }
 
 export type RecurringBillEdit = {
   /** The user's name for the bill, and the upsert key. */
   name: string;
-  /**
-   * Bank merchant strings whose charges belong to this bill, as `effectiveMerchant()` produces
-   * them. Omitted leaves the existing set alone — correcting a cadence must not silently
-   * unclaim the merchants the declaration was built on.
-   */
-  matchers?: readonly string[];
   /** Stable payees whose transactions belong to this bill. Omitted leaves claims alone. */
   payeeIds?: readonly string[];
   /** Whether it is still live. See `CommitmentStatus`. */
@@ -606,78 +593,6 @@ export type RecurringBillEdit = {
   /** Day of the period the charge is expected, 1–31, or null to walk from the last charge. */
   dueDay?: number | null;
 };
-
-/**
- * Every merchant string this user has already claimed, and the commitment holding it.
- *
- * **The enforcement point for the one invariant Postgres cannot express.** A merchant may
- * belong to at most one commitment across `finance_recurring_bills` and
- * `finance_recurring_spend`; a unique index cannot span two tables, so it is checked here.
- * Letting a second claim through would not fail loudly — it would double-count that merchant's
- * charges in the rate, the accrual and everything built on either, and look plausible doing it.
- *
- * `exclude` is the row being edited, which must not collide with itself.
- */
-async function claimedMatchers(
-  userId: string,
-  exclude: { table: "bill" | "spend"; id?: string } | null,
-): Promise<Map<string, string>> {
-  const [bills, spend] = await Promise.all([
-    db
-      .select({
-        id: financeRecurringBills.id,
-        name: financeRecurringBills.name,
-        status: financeRecurringBills.status,
-        matchers: financeRecurringBills.matchers,
-      })
-      .from(financeRecurringBills)
-      .where(eq(financeRecurringBills.userId, userId)),
-    db
-      .select({
-        id: financeRecurringSpend.id,
-        name: financeRecurringSpend.name,
-        matchers: financeRecurringSpend.matchers,
-      })
-      .from(financeRecurringSpend)
-      .where(eq(financeRecurringSpend.userId, userId)),
-  ]);
-
-  const claimed = new Map<string, string>();
-  for (const row of bills) {
-    if (exclude?.table === "bill" && exclude.id === row.id) continue;
-    // A dismissed row still holds its matchers — that is what keeps the merchant off the
-    // review list — so it can refuse a merge, and the refusal has to say so. "CVS already
-    // belongs to CVS" is a true sentence that explains nothing when the CVS in question is
-    // a row the user dismissed weeks ago and cannot see.
-    const held =
-      row.status === "ignored" ? `${row.name}, which you dismissed` : row.name;
-    for (const merchant of row.matchers) claimed.set(merchant, held);
-  }
-  for (const row of spend) {
-    if (exclude?.table === "spend" && exclude.id === row.id) continue;
-    for (const merchant of row.matchers) claimed.set(merchant, row.name);
-  }
-  return claimed;
-}
-
-/** Normalize, de-duplicate, and refuse matchers another commitment already holds. */
-async function checkedMatchers(
-  userId: string,
-  matchers: readonly string[],
-  exclude: { table: "bill" | "spend"; id?: string } | null,
-): Promise<string[]> {
-  const cleaned = [...new Set(matchers.map((entry) => entry.trim()).filter(Boolean))];
-  if (cleaned.length === 0) return cleaned;
-
-  const claimed = await claimedMatchers(userId, exclude);
-  for (const merchant of cleaned) {
-    const holder = claimed.get(merchant);
-    if (holder !== undefined) {
-      throw new MatcherConflictError(merchant, holder);
-    }
-  }
-  return cleaned;
-}
 
 /**
  * Declare a bill, or change one already declared.
@@ -725,7 +640,6 @@ export async function upsertRecurringBill(
     .select({
       id: financeRecurringBills.id,
       category: financeRecurringBills.category,
-      matchers: financeRecurringBills.matchers,
     })
     .from(financeRecurringBills)
     .where(
@@ -736,21 +650,12 @@ export async function upsertRecurringBill(
     )
     .limit(1);
 
-  const matchers =
-    edit.matchers === undefined
-      ? undefined
-      : await checkedMatchers(userId, edit.matchers, {
-          table: "bill",
-          id: existing[0]?.id,
-        });
-
   // Only the fields supplied are written, the same rule `updateTransaction` follows. It
   // matters here because correcting a cadence from the recurring table sends the cadence and
   // nothing else, and a blanket write would silently clear the declared amount — after which
   // the bill's figure would quietly fall back to whatever the visible window's median was.
   const changes = {
     ...cadenceColumns(edit.cadence),
-    ...(matchers !== undefined ? { matchers } : {}),
     ...(edit.category !== undefined ? { category: edit.category.trim() } : {}),
     ...(edit.expectedCents !== undefined ? { expectedCents: edit.expectedCents } : {}),
     ...(edit.anchorDate !== undefined ? { anchorDate: edit.anchorDate } : {}),
@@ -776,7 +681,6 @@ export async function upsertRecurringBill(
       .values({
         userId,
         name,
-        matchers: matchers ?? (edit.payeeIds !== undefined ? [] : [name]),
         ...cadenceColumns(edit.cadence),
         category: edit.category?.trim() ?? "",
         expectedCents: edit.expectedCents ?? null,
@@ -797,7 +701,6 @@ export async function upsertRecurringBill(
       })
       .returning({
         id: financeRecurringBills.id,
-        matchers: financeRecurringBills.matchers,
       });
 
     if (edit.payeeIds !== undefined) {
@@ -807,32 +710,16 @@ export async function upsertRecurringBill(
         { kind: "bill", id: stored.id },
         edit.payeeIds,
       );
-    } else {
-      await syncLegacyCommitmentClaims(tx, userId, {
-        kind: "bill",
-        id: stored.id,
-        name,
-        matchers: stored.matchers,
-      });
     }
   });
 
-  await reclassifyIfCategoriesMoved(userId, existing[0], {
+  await reclassifyIfCategoriesMoved(userId, existing[0]?.category, {
     category: edit.category,
-    matchers,
+    payeesChanged: edit.payeeIds !== undefined,
   });
-  if (
-    edit.payeeIds !== undefined &&
-    (edit.category ?? existing[0]?.category ?? "") !== ""
-  ) {
-    await reclassifyTransactions(userId);
-  }
 }
 
-/**
- * Rename a bill in place. Insert-then-delete would trip the matcher exclusivity check —
- * the old row still holds the same bank strings — so the name column is updated directly.
- */
+/** Rename a bill in place while its stable payee claims remain untouched. */
 export async function renameRecurringBill(
   userId: string,
   from: string,
@@ -868,8 +755,6 @@ export async function deleteRecurringBill(userId: string, name: string): Promise
 export type RecurringSpendEdit = {
   /** The user's name for it — "Pizza". Also the upsert key. */
   name: string;
-  /** Bank merchant strings whose charges count. Omitted leaves the existing set alone. */
-  matchers?: readonly string[];
   /** Stable payees whose transactions belong to this group. Omitted leaves claims alone. */
   payeeIds?: readonly string[];
   period?: RecurringSpendPeriod;
@@ -911,7 +796,6 @@ export async function upsertRecurringSpend(
     .select({
       id: financeRecurringSpend.id,
       category: financeRecurringSpend.category,
-      matchers: financeRecurringSpend.matchers,
     })
     .from(financeRecurringSpend)
     .where(
@@ -922,16 +806,7 @@ export async function upsertRecurringSpend(
     )
     .limit(1);
 
-  const matchers =
-    edit.matchers === undefined
-      ? undefined
-      : await checkedMatchers(userId, edit.matchers, {
-          table: "spend",
-          id: existing[0]?.id,
-        });
-
   const changes = {
-    ...(matchers !== undefined ? { matchers } : {}),
     ...(edit.period !== undefined ? { period: edit.period } : {}),
     ...(edit.amountSource !== undefined ? { amountSource: edit.amountSource } : {}),
     ...(edit.expectedCents !== undefined ? { expectedCents: edit.expectedCents } : {}),
@@ -947,7 +822,6 @@ export async function upsertRecurringSpend(
       .values({
         userId,
         name,
-        matchers: matchers ?? [],
         period: edit.period ?? "week",
         amountSource: edit.amountSource ?? "auto",
         expectedCents: edit.expectedCents ?? null,
@@ -961,7 +835,6 @@ export async function upsertRecurringSpend(
       })
       .returning({
         id: financeRecurringSpend.id,
-        matchers: financeRecurringSpend.matchers,
       });
 
     if (edit.payeeIds !== undefined) {
@@ -971,34 +844,17 @@ export async function upsertRecurringSpend(
         { kind: "spend", id: stored.id },
         edit.payeeIds,
       );
-    } else {
-      await syncLegacyCommitmentClaims(tx, userId, {
-        kind: "spend",
-        id: stored.id,
-        name,
-        matchers: stored.matchers,
-      });
     }
   });
 
-  await reclassifyIfCategoriesMoved(userId, existing[0], {
+  await reclassifyIfCategoriesMoved(userId, existing[0]?.category, {
     category: edit.category,
-    matchers,
+    payeesChanged: edit.payeeIds !== undefined,
   });
-  if (
-    edit.payeeIds !== undefined &&
-    (edit.category ?? existing[0]?.category ?? "") !== ""
-  ) {
-    await reclassifyTransactions(userId);
-  }
 }
 
 /**
- * Rename a recurring-spend group in place.
- *
- * A direct column update for the same reason as `renameRecurringBill`: insert-then-delete would
- * leave the old row holding the same bank strings for a moment, and `checkedMatchers` would
- * reject the new one as claiming a merchant that already belongs to something.
+ * Rename a recurring-spend group in place while its stable payee claims remain untouched.
  *
  * The grid had no way to do this at all until 2026-08-18, which is how "Track as spend" on
  * Pizza Hut produced a permanent group named after one shop rather than the Pizza group it was
@@ -1080,64 +936,6 @@ export async function setSubscriptionStatus(
       ? { anchorDate: options.reanchorOn }
       : {}),
   });
-}
-
-/**
- * Add bank merchant strings to a commitment that already exists, on either tier.
- *
- * **Append, not replace.** The alternative — reading the row, spreading its matchers, and
- * sending the whole list back through the upsert — is what the review list did for spend
- * groups, and it makes every join a read-modify-write that silently drops whatever changed in
- * between. This is one statement, and the exclusivity check still runs, so claiming a merchant
- * another commitment holds fails by name rather than moving it.
- *
- * Strings already on the row are ignored rather than duplicated: joining twice is a slip, not
- * an error worth an exception.
- */
-export async function addMatchersToCommitment(
-  userId: string,
-  input: { kind: "bill" | "spend"; name: string; matchers: readonly string[] },
-): Promise<void> {
-  const name = input.name.trim();
-  const table = input.kind === "bill" ? financeRecurringBills : financeRecurringSpend;
-
-  const [existing] = await db
-    .select({ id: table.id, matchers: table.matchers, category: table.category })
-    .from(table)
-    .where(and(eq(table.userId, userId), eq(table.name, name)))
-    .limit(1);
-  if (!existing) throw new Error("Commitment not found.");
-
-  const added = input.matchers.map((entry) => entry.trim()).filter(Boolean);
-  const merged = [...new Set([...existing.matchers, ...added])];
-  if (merged.length === existing.matchers.length) return;
-
-  await checkedMatchers(userId, merged, {
-    table: input.kind,
-    id: existing.id,
-  });
-
-  await db.transaction(async (tx) => {
-    await tx
-      .update(table)
-      .set({ matchers: merged, updatedAt: new Date() })
-      // Scoped on the id *and* the user: the id came from a row this user owns, and saying so
-      // twice is what makes a mistaken id a no-op rather than someone else's row.
-      .where(and(eq(table.userId, userId), eq(table.id, existing.id)));
-
-    await syncLegacyCommitmentClaims(tx, userId, {
-      kind: input.kind,
-      id: existing.id,
-      name,
-      matchers: merged,
-    });
-  });
-
-  await reclassifyIfCategoriesMoved(
-    userId,
-    { category: existing.category, matchers: existing.matchers },
-    { matchers: merged },
-  );
 }
 
 /** Remove a commitment from either table. Kind is required because names are unique per table, not across both. */

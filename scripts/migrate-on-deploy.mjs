@@ -44,28 +44,3 @@ const result = spawnSync("npx", ["drizzle-kit", "migrate"], {
 
 // Fail the build rather than deploy code whose tables do not exist yet.
 if (result.status !== 0) process.exit(result.status ?? 1);
-
-/**
- * One deployment-scoped bridge for the payee matcher cutover.
- *
- * Sensitive Vercel variables cannot be exported to a local process, so the audited CLI has
- * to run where the production connection already exists. The explicit mode keeps ordinary
- * deploys inert. Remove this seam with Stage B after the production apply and replay.
- */
-const payeeCutoverMode = process.env.PAYEE_CUTOVER_MODE;
-if (payeeCutoverMode === undefined || payeeCutoverMode === "") process.exit(0);
-if (payeeCutoverMode !== "dry-run" && payeeCutoverMode !== "apply") {
-  console.error(
-    '[payee-cutover] PAYEE_CUTOVER_MODE must be "dry-run", "apply", or unset.',
-  );
-  process.exit(1);
-}
-
-console.log(`[payee-cutover] Running production ${payeeCutoverMode}…`);
-const cutoverArgs = ["tsx", "scripts/cutover-payee-matchers.mts"];
-if (payeeCutoverMode === "apply") cutoverArgs.push("--apply");
-const cutover = spawnSync("npx", cutoverArgs, {
-  stdio: "inherit",
-  env: process.env,
-});
-process.exit(cutover.status ?? 1);

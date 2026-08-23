@@ -2,14 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   aliasOverlap,
   billAnchor,
-  MatcherConflictError,
-  matcherIndex,
   periodIndex,
   periodLengthDays,
   periodStartKey,
   projectForwardMonths,
   recurringSpendRate,
-  resolveMerchant,
   staleSubscriptions,
   suggestCommitmentName,
   unclaimedMerchants,
@@ -22,7 +19,6 @@ function bill(overrides: Partial<StoredBillRow> = {}): StoredBillRow {
   return {
     id: "bill-1",
     name: "Geico",
-    matchers: ["GEICO"],
     payees: [],
     payeeIds: [],
     status: "active",
@@ -42,7 +38,6 @@ function spend(overrides: Partial<StoredSpend> = {}): StoredSpend {
   return {
     id: "spend-1",
     name: "Pizza",
-    matchers: ["PIZZA HUT", "DOMINOS"],
     payees: [],
     category: "",
     period: "week",
@@ -52,52 +47,6 @@ function spend(overrides: Partial<StoredSpend> = {}): StoredSpend {
     ...overrides,
   };
 }
-
-describe("matcherIndex", () => {
-  it("maps every bank spelling onto the one commitment that claims it", () => {
-    // The Taylor Gas case: two descriptions on file, one bill, and previously a
-    // classify/rules.ts entry was the only way to collapse them.
-    const index = matcherIndex(
-      [
-        bill({
-          name: "Taylor Gas",
-          matchers: ["TAYLOR GAS COMPANY INC.", "TAYLOR GAS HEATING AIR"],
-        }),
-      ],
-      [],
-    );
-
-    expect(resolveMerchant("TAYLOR GAS COMPANY INC.", index)).toBe("Taylor Gas");
-    expect(resolveMerchant("TAYLOR GAS HEATING AIR", index)).toBe("Taylor Gas");
-  });
-
-  it("collapses two merchants in a recurring-spend group onto one name", () => {
-    const index = matcherIndex([], [spend()]);
-
-    expect(resolveMerchant("PIZZA HUT", index)).toBe("Pizza");
-    expect(resolveMerchant("DOMINOS", index)).toBe("Pizza");
-  });
-
-  it("leaves an unclaimed merchant as itself", () => {
-    expect(resolveMerchant("WM SUPERCENTER", matcherIndex([], []))).toBe(
-      "WM SUPERCENTER",
-    );
-  });
-
-  it("throws when two commitments claim the same merchant, across the two tables", () => {
-    /*
-     * The invariant Postgres cannot express. Without it the charge is counted once in the
-     * bill's accrual and again in the spend rate, and every figure built on either is wrong
-     * while looking entirely plausible.
-     */
-    expect(() =>
-      matcherIndex(
-        [bill({ matchers: ["PIZZA HUT"] })],
-        [spend({ matchers: ["PIZZA HUT"] })],
-      ),
-    ).toThrow(MatcherConflictError);
-  });
-});
 
 describe("periodIndex", () => {
   it("gives one index per calendar week, changing on the Monday", () => {
@@ -374,8 +323,8 @@ describe("unclaimedMerchants", () => {
     expect(
       unclaimedMerchants(
         ["PIZZA HUT", "NETFLIX.COM", "WM SUPERCENTER"],
-        [bill({ matchers: ["NETFLIX.COM"] })],
-        [spend({ matchers: ["PIZZA HUT", "DOMINOS"] })],
+        [bill({ payees: [{ id: "netflix", name: "NETFLIX.COM" }] })],
+        [spend({ payees: [{ id: "pizza", name: "PIZZA HUT" }] })],
       ),
     ).toEqual(["WM SUPERCENTER"]);
   });
@@ -462,7 +411,7 @@ describe("aliasOverlap", () => {
 });
 
 describe("billAnchor", () => {
-  const monthly = bill({ cadenceMonths: 1, matchers: ["RENT"] });
+  const monthly = bill({ cadenceMonths: 1 });
 
   it("reads an anchor later than the last charge as the charge being waited for", () => {
     expect(

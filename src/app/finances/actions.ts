@@ -22,7 +22,6 @@ import {
   type ReplaceScrapedPendingResult,
 } from "@/lib/finances/scrapePending";
 import {
-  addMatchersToCommitment,
   deleteAccount,
   deleteCommitment,
   deleteRecurringBill,
@@ -187,15 +186,6 @@ export async function setCommitmentPayeesAction(input: {
     );
     await reclassifyTransactions(userId);
   });
-}
-
-/** Fold another bank spelling into a commitment that already exists, on either tier. */
-export async function addCommitmentMatchersAction(input: {
-  kind: "bill" | "spend";
-  name: string;
-  matchers: readonly string[];
-}): Promise<ActionResult> {
-  return run((userId) => addMatchersToCommitment(userId, input));
 }
 
 export async function deleteRecurringSpendAction(name: string): Promise<ActionResult> {

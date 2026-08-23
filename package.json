@@ -13,7 +13,6 @@
     "format:check": "prettier --check .",
     "agent:docs": "tsx scripts/generate-agent-docs.ts",
     "agent:docs:check": "tsx scripts/generate-agent-docs.ts --check",
-    "finance:cutover-payees": "tsx --env-file=.env.local scripts/cutover-payee-matchers.mts",
     "amazon:slim": "tsx scripts/amazon-orders-slim.ts",
     "smoke": "node scripts/smoke.mjs",
     "smoke:agent": "node --env-file=.env.local scripts/smoke-agent.mjs",

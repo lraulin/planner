@@ -5,7 +5,6 @@ import { financeTransactions, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { importFinanceCsvFiles, type ImportFile } from "./import";
 import {
-  addMatchersToCommitment,
   reclassifyTransactions,
   setOneOff,
   updateTransaction,
@@ -288,9 +287,13 @@ describeDb("a commitment's category", () => {
       "Groceries",
     );
 
+    const walmart = (await listPayees(userId)).find(
+      (payee) => payee.name === "Walmart",
+    );
+    if (!walmart) throw new Error("Expected seeded Walmart payee.");
     await upsertRecurringSpend(userId, {
       name: "Walmart run",
-      matchers: ["Walmart"],
+      payeeIds: [walmart.id],
       category: "Shopping",
     });
 
@@ -302,9 +305,13 @@ describeDb("a commitment's category", () => {
       entry.description.includes("WM SUPERCENTER"),
     );
     await updateTransaction(userId, row.id, { category: "Pets" });
+    const walmart = (await listPayees(userId)).find(
+      (payee) => payee.name === "Walmart",
+    );
+    if (!walmart) throw new Error("Expected seeded Walmart payee.");
     await upsertRecurringSpend(userId, {
       name: "Walmart run",
-      matchers: ["Walmart"],
+      payeeIds: [walmart.id],
       category: "Shopping",
     });
 
@@ -316,20 +323,22 @@ describeDb("a commitment's category", () => {
     ).toBe("Pets");
   });
 
-  it("follows the matchers when a second spelling is folded in", async () => {
+  it("follows a payee when its stable claim is added", async () => {
     await upsertRecurringSpend(userId, {
       name: "Dog supplies",
-      matchers: ["Nothing At All"],
       category: "Pets",
     });
     expect(categoryOf(await classifiedRows(userId), "WM SUPERCENTER")).toBe(
       "Groceries",
     );
 
-    await addMatchersToCommitment(userId, {
-      kind: "spend",
+    const walmart = (await listPayees(userId)).find(
+      (payee) => payee.name === "Walmart",
+    );
+    if (!walmart) throw new Error("Expected seeded Walmart payee.");
+    await upsertRecurringSpend(userId, {
       name: "Dog supplies",
-      matchers: ["Walmart"],
+      payeeIds: [walmart.id],
     });
 
     expect(categoryOf(await classifiedRows(userId), "WM SUPERCENTER")).toBe("Pets");
@@ -337,7 +346,14 @@ describeDb("a commitment's category", () => {
 
   it("changes nothing when the commitment carries no category", async () => {
     const before = await classifiedRows(userId);
-    await upsertRecurringSpend(userId, { name: "Walmart run", matchers: ["Walmart"] });
+    const walmart = (await listPayees(userId)).find(
+      (payee) => payee.name === "Walmart",
+    );
+    if (!walmart) throw new Error("Expected seeded Walmart payee.");
+    await upsertRecurringSpend(userId, {
+      name: "Walmart run",
+      payeeIds: [walmart.id],
+    });
     expect(await classifiedRows(userId)).toEqual(before);
   });
 });

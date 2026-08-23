@@ -6,7 +6,6 @@ import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { importFinanceCsvFiles, type ImportFile } from "./import";
 import { loadRecurringBills, loadRecurringSpend } from "./dashboardQueries";
 import {
-  addMatchersToCommitment,
   deleteAccount,
   deleteCommitment,
   deleteRecurringBill,
@@ -22,7 +21,7 @@ import {
 } from "./mutations";
 import { toDateKey } from "@/lib/schedule/geometry";
 import { getTransaction, listAccounts, listTransactions } from "./queries";
-import { claimPayeeForCommitment, createPayee } from "./payees/mutations";
+import { createPayee } from "./payees/mutations";
 import { payeesForCommitment } from "./payees/queries";
 
 const dbReachable = await databaseReachable();
@@ -354,9 +353,7 @@ describeDb("declared recurring bills", () => {
     expect(await loadRecurringBills(userId)).toMatchObject([
       {
         name: "Geico",
-        // Declared with no matchers, so the name is its own: exactly the single-merchant
-        // behaviour every pre-existing declaration had before identity split from matching.
-        matchers: ["Geico"],
+        payees: [],
         status: "active",
         cancelledOn: null,
         url: "",
@@ -532,10 +529,14 @@ describeDb("declared recurring bills", () => {
     expect(await loadRecurringBills(userId)).toEqual([]);
   });
 
-  it("renames a bill without dropping its matchers", async () => {
+  it("renames a bill without disturbing its stable payee claim", async () => {
+    const payeeId = await createPayee(userId, {
+      name: "1Password",
+      aliases: ["1PASSWORDTORONTOON"],
+    });
     await upsertRecurringBill(userId, {
       name: "1PASSWORDTORONTOON",
-      matchers: ["1PASSWORDTORONTOON"],
+      payeeIds: [payeeId],
       cadence: { unit: "month", n: 12 },
       expectedCents: 7188,
       anchorDate: "2027-03-30",
@@ -543,7 +544,7 @@ describeDb("declared recurring bills", () => {
     await renameRecurringBill(userId, "1PASSWORDTORONTOON", "1Password");
     expect((await loadRecurringBills(userId))[0]).toMatchObject({
       name: "1Password",
-      matchers: ["1PASSWORDTORONTOON"],
+      payees: [{ id: payeeId, name: "1Password" }],
       expectedCents: 7188,
       anchorDate: "2027-03-30",
     });
@@ -611,40 +612,18 @@ describeDb("declared recurring bill isolation", () => {
   });
 });
 
-describeDb("commitment matchers", () => {
+describeDb("stable commitment payee claims", () => {
   let userId: string;
 
   beforeEach(async () => {
     userId = await makeUser();
   });
 
-  it("covers several bank spellings with one declaration", async () => {
-    // The Taylor Gas case. Before identity split from matching this needed a code change in
-    // classify/rules.ts to collapse two descriptions the bank happens to send.
-    await upsertRecurringBill(userId, {
-      name: "Taylor Gas",
-      matchers: ["TAYLOR GAS COMPANY INC.", "TAYLOR GAS HEATING AIR"],
-      cadence: { unit: "month", n: 12 },
-      expectedCents: 50_000,
-      scheduled: false,
-    });
-
-    expect((await loadRecurringBills(userId))[0].matchers).toEqual([
-      "TAYLOR GAS COMPANY INC.",
-      "TAYLOR GAS HEATING AIR",
-    ]);
-    const [bill] = await loadRecurringBills(userId);
-    expect(
-      await payeesForCommitment(userId, { kind: "bill", id: bill.id }),
-    ).toHaveLength(2);
-  });
-
-  it("keeps the matchers when only the cadence is corrected", async () => {
-    // Same reasoning as the declared amount: the recurring table sends a cadence and nothing
-    // else, and a blanket write would silently unclaim the merchants the bill was built on.
+  it("claims selected payees and preserves them when only cadence changes", async () => {
+    const payeeId = await createPayee(userId, { name: "Pizza Hut" });
     await upsertRecurringBill(userId, {
       name: "Pizza night",
-      matchers: ["PIZZA HUT"],
+      payeeIds: [payeeId],
       cadence: { unit: "month", n: 1 },
     });
     await upsertRecurringBill(userId, {
@@ -652,206 +631,44 @@ describeDb("commitment matchers", () => {
       cadence: { unit: "month", n: 3 },
     });
 
-    expect((await loadRecurringBills(userId))[0]).toMatchObject({
-      cadenceMonths: 3,
-      cadenceDays: null,
-      matchers: ["PIZZA HUT"],
-    });
+    const [bill] = await loadRecurringBills(userId);
+    expect(bill).toMatchObject({ cadenceMonths: 3, payeeIds: [payeeId] });
+    expect(await payeesForCommitment(userId, { kind: "bill", id: bill.id })).toEqual([
+      { id: payeeId, name: "Pizza Hut" },
+    ]);
   });
 
-  it("refuses a merchant another commitment already holds, naming the holder", async () => {
-    /*
-     * The invariant no SQL constraint can express, because it spans two tables. A merchant
-     * claimed twice is counted twice — in the bill's accrual and again in the spend rate —
-     * and every figure downstream is wrong while looking entirely reasonable.
-     */
-    await upsertRecurringSpend(userId, {
-      name: "Pizza",
-      matchers: ["PIZZA HUT", "DOMINOS"],
+  it("rolls back the row edit when a selected payee belongs elsewhere", async () => {
+    const primary = await createPayee(userId, { name: "Primary" });
+    const held = await createPayee(userId, { name: "Held" });
+    await upsertRecurringBill(userId, {
+      name: "Bill",
+      payeeIds: [primary],
+      cadence: { unit: "month", n: 1 },
     });
+    await upsertRecurringSpend(userId, { name: "Spend", payeeIds: [held] });
 
     await expect(
       upsertRecurringBill(userId, {
-        name: "Pizza Hut Sub",
-        matchers: ["PIZZA HUT"],
-        cadence: { unit: "month", n: 1 },
+        name: "Bill",
+        payeeIds: [held],
+        cadence: { unit: "month", n: 3 },
       }),
-    ).rejects.toThrow('"PIZZA HUT" already belongs to the commitment "Pizza".');
-
-    // And in the other direction, so neither table is the privileged one.
-    await upsertRecurringBill(userId, {
-      name: "Netflix",
-      matchers: ["NETFLIX.COM"],
-      cadence: { unit: "month", n: 1 },
-    });
-    await expect(
-      upsertRecurringSpend(userId, { name: "Streaming", matchers: ["NETFLIX.COM"] }),
-    ).rejects.toThrow('"NETFLIX.COM" already belongs to the commitment "Netflix".');
-  });
-
-  it("lets a commitment keep its own matchers when it is edited", async () => {
-    // The self-collision that a naive check would raise on every single update.
-    await upsertRecurringSpend(userId, { name: "Pizza", matchers: ["PIZZA HUT"] });
-    await upsertRecurringSpend(userId, {
-      name: "Pizza",
-      matchers: ["PIZZA HUT", "DOMINOS"],
-    });
-
-    expect((await loadRecurringSpend(userId))[0].matchers).toEqual([
-      "PIZZA HUT",
-      "DOMINOS",
-    ]);
-  });
-
-  it("does not see another user's claims", async () => {
-    // Two people can both shop at Walmart. Scoping the check by user is what allows that.
-    const otherId = await makeUser();
-    await upsertRecurringSpend(otherId, {
-      name: "Groceries",
-      matchers: ["WM SUPERCENTER"],
-    });
-
-    await expect(
-      upsertRecurringSpend(userId, { name: "Food", matchers: ["WM SUPERCENTER"] }),
-    ).resolves.toBeUndefined();
-  });
-
-  it("rolls back a matcher edit when its payee is already claimed", async () => {
-    await upsertRecurringBill(userId, {
-      name: "Primary",
-      matchers: ["ALPHA"],
-      cadence: { unit: "month", n: 1 },
-    });
-    await upsertRecurringSpend(userId, { name: "Other", matchers: ["OTHER"] });
-    const [other] = await loadRecurringSpend(userId);
-    const beta = await createPayee(userId, { name: "Beta", aliases: ["BETA"] });
-    await claimPayeeForCommitment(userId, beta, { kind: "spend", id: other.id });
-
-    await expect(
-      addMatchersToCommitment(userId, {
-        kind: "bill",
-        name: "Primary",
-        matchers: ["BETA"],
-      }),
-    ).rejects.toThrow(/blocked by the audit/i);
-
-    // The string-array update and the claim update share one transaction. A compatibility
-    // write may not leave Stage A's two representations disagreeing after a refusal.
-    expect((await loadRecurringBills(userId))[0].matchers).toEqual(["ALPHA"]);
-  });
-});
-
-describeDb("adding matchers to an existing commitment", () => {
-  let userId: string;
-  let intruderId: string;
-
-  beforeEach(async () => {
-    userId = await makeUser();
-    intruderId = await makeUser();
-  });
-
-  it("appends a second vendor spelling without disturbing the first", async () => {
-    // The rename case: Geico started billing as GEICO *AUTO and became GEICO AUTO PMT.
-    await upsertRecurringBill(userId, {
-      name: "Geico",
-      matchers: ["GEICO *AUTO"],
-      cadence: { unit: "month", n: 6 },
-      expectedCents: 141_260,
-    });
-
-    await addMatchersToCommitment(userId, {
-      kind: "bill",
-      name: "Geico",
-      matchers: ["GEICO AUTO PMT"],
-    });
+    ).rejects.toThrow("already belongs to the commitment");
 
     expect((await loadRecurringBills(userId))[0]).toMatchObject({
-      matchers: ["GEICO *AUTO", "GEICO AUTO PMT"],
-      expectedCents: 141_260,
-      cadenceMonths: 6,
+      cadenceMonths: 1,
+      payeeIds: [primary],
     });
   });
 
-  it("joins a spend group without a read-modify-write from the caller", async () => {
-    await upsertRecurringSpend(userId, { name: "Pizza", matchers: ["PIZZA HUT"] });
-    await addMatchersToCommitment(userId, {
-      kind: "spend",
-      name: "Pizza",
-      matchers: ["DOMINOS"],
-    });
-
-    expect((await loadRecurringSpend(userId))[0].matchers).toEqual([
-      "PIZZA HUT",
-      "DOMINOS",
-    ]);
-  });
-
-  it("ignores a spelling the commitment already holds", async () => {
-    await upsertRecurringSpend(userId, { name: "Pizza", matchers: ["PIZZA HUT"] });
-    await addMatchersToCommitment(userId, {
-      kind: "spend",
-      name: "Pizza",
-      matchers: ["PIZZA HUT"],
-    });
-
-    expect((await loadRecurringSpend(userId))[0].matchers).toEqual(["PIZZA HUT"]);
-  });
-
-  it("refuses a spelling another commitment already claims, and names the holder", async () => {
-    await upsertRecurringBill(userId, {
-      name: "Geico",
-      matchers: ["GEICO *AUTO"],
-      cadence: { unit: "month", n: 6 },
-    });
-    await upsertRecurringSpend(userId, { name: "Pizza", matchers: ["PIZZA HUT"] });
-
+  it("refuses another user's payee and leaves no partial commitment", async () => {
+    const otherId = await makeUser();
+    const otherPayee = await createPayee(otherId, { name: "Theirs" });
     await expect(
-      addMatchersToCommitment(userId, {
-        kind: "bill",
-        name: "Geico",
-        matchers: ["PIZZA HUT"],
-      }),
-    ).rejects.toThrow('"PIZZA HUT" already belongs to the commitment "Pizza".');
-    expect((await loadRecurringBills(userId))[0].matchers).toEqual(["GEICO *AUTO"]);
-  });
-
-  it("names a dismissed holder, which is otherwise a refusal nobody can act on", async () => {
-    // Dismissing a merchant keeps its matchers — that is what stops it coming back to the
-    // review list — so a dismissed row can refuse a merge while naming a commitment the user
-    // cannot see anywhere on the page.
-    await upsertRecurringBill(userId, {
-      name: "CVS",
-      matchers: ["CVS"],
-      cadence: { unit: "month", n: 1 },
-      status: "ignored",
-    });
-    await upsertRecurringSpend(userId, { name: "Groceries", matchers: ["Walmart"] });
-
-    await expect(
-      addMatchersToCommitment(userId, {
-        kind: "spend",
-        name: "Groceries",
-        matchers: ["CVS"],
-      }),
-    ).rejects.toThrow('belongs to the commitment "CVS, which you dismissed"');
-  });
-
-  it("does not let a second user add to another user's commitment", async () => {
-    await upsertRecurringBill(userId, {
-      name: "Geico",
-      matchers: ["GEICO *AUTO"],
-      cadence: { unit: "month", n: 6 },
-    });
-
-    await expect(
-      addMatchersToCommitment(intruderId, {
-        kind: "bill",
-        name: "Geico",
-        matchers: ["GEICO AUTO PMT"],
-      }),
-    ).rejects.toThrow("Commitment not found.");
-    expect((await loadRecurringBills(userId))[0].matchers).toEqual(["GEICO *AUTO"]);
-    expect(await loadRecurringBills(intruderId)).toEqual([]);
+      upsertRecurringSpend(userId, { name: "Mine", payeeIds: [otherPayee] }),
+    ).rejects.toThrow("That payee does not exist");
+    expect(await loadRecurringSpend(userId)).toEqual([]);
   });
 });
 
@@ -865,7 +682,7 @@ describeDb("recurring spend", () => {
   it("defaults to an active group on an auto rate", async () => {
     // Active is the whole condition for being held back, and deducting it is the reason the
     // row exists, so a new group starts held with a rate read from history.
-    await upsertRecurringSpend(userId, { name: "Pizza", matchers: ["PIZZA HUT"] });
+    await upsertRecurringSpend(userId, { name: "Pizza" });
 
     expect((await loadRecurringSpend(userId))[0]).toMatchObject({
       name: "Pizza",
@@ -879,7 +696,6 @@ describeDb("recurring spend", () => {
   it("pins an amount and keeps it through an unrelated edit", async () => {
     await upsertRecurringSpend(userId, {
       name: "Groceries",
-      matchers: ["WM SUPERCENTER"],
       amountSource: "pinned",
       expectedCents: 21_500,
     });
@@ -905,12 +721,9 @@ describeDb("recurring spend", () => {
     expect(await loadRecurringSpend(userId)).toEqual([]);
   });
 
-  it("renames a group in place, keeping the merchants it already claims", async () => {
-    // The Pizza Hut case: a group created from the review list carried the bank's string as
-    // its name, and insert-then-delete would have tripped matcher exclusivity on the way out.
+  it("renames a group in place", async () => {
     await upsertRecurringSpend(userId, {
       name: "PIZZA HUT #4471",
-      matchers: ["PIZZA HUT #4471"],
       amountSource: "pinned",
       expectedCents: 6000,
     });
@@ -919,14 +732,13 @@ describeDb("recurring spend", () => {
     expect(await loadRecurringSpend(userId)).toMatchObject([
       {
         name: "Pizza Friday",
-        matchers: ["PIZZA HUT #4471"],
         expectedCents: 6000,
       },
     ]);
   });
 
   it("refuses a rename of nothing, or to nothing", async () => {
-    await upsertRecurringSpend(userId, { name: "Pizza", matchers: ["PIZZA HUT"] });
+    await upsertRecurringSpend(userId, { name: "Pizza" });
 
     await expect(renameRecurringSpend(userId, "Pizza", "  ")).rejects.toThrow(
       "A recurring spend needs a name.",
@@ -947,7 +759,6 @@ describeDb("recurring spend isolation", () => {
     intruderId = await makeUser();
     await upsertRecurringSpend(ownerId, {
       name: "Pizza",
-      matchers: ["PIZZA HUT"],
       amountSource: "pinned",
       expectedCents: 6000,
     });
@@ -1041,7 +852,7 @@ describeDb("subscription status", () => {
   });
 
   it("deleteCommitment removes the named row of the named kind only", async () => {
-    await upsertRecurringSpend(userId, { name: "Paramount+", matchers: ["PPLUS"] });
+    await upsertRecurringSpend(userId, { name: "Paramount+" });
     await deleteCommitment(userId, { kind: "bill", name: "Paramount+" });
     expect(await loadRecurringBills(userId)).toEqual([]);
     expect(await loadRecurringSpend(userId)).toHaveLength(1);

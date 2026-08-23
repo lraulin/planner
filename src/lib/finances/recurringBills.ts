@@ -26,18 +26,12 @@ export type DeclaredBill = {
   /**
    * The user's name for it, and the key every reporting path groups its charges under.
    *
-   * Was `merchant` until the commitments spec split identity from matching: the bank strings
-   * this covers now live in `matchers` (`commitments.ts`), so one declaration can span Pizza
-   * Hut and Domino's, and renaming it cannot orphan a charge.
+   * Stable payee claims carry matching, so one declaration can span Pizza Hut and Domino's
+   * while a rename cannot orphan a charge.
    */
   name: string;
   /** Stable identities claimed by this declaration. Empty means no charge is matched. */
   payeeIds?: readonly string[];
-  /**
-   * Bank merchant strings this bill covers. Absent or empty means the name is the only
-   * matcher — the single-merchant case every pre-split declaration had.
-   */
-  matchers?: readonly string[];
   /**
    * Live, cancelled, or never a commitment. Absent means `active`, so existing fixtures
    * and the narrower analytics callers keep working.

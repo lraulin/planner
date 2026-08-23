@@ -19,11 +19,7 @@ import {
   loadRecurringSpend,
   unclassifiedCount,
 } from "@/lib/finances/dashboardQueries";
-import {
-  MatcherConflictError,
-  recurringSpendRate,
-  unclaimedMerchants,
-} from "@/lib/finances/commitments";
+import { recurringSpendRate, unclaimedMerchants } from "@/lib/finances/commitments";
 import {
   annualCents,
   cadenceLabel,
@@ -32,13 +28,17 @@ import {
   type Cadence,
 } from "@/lib/finances/recurringBills";
 import {
-  addMatchersToCommitment,
   deleteCommitment,
   upsertRecurringBill,
   upsertRecurringSpend,
 } from "@/lib/finances/mutations";
-import { replaceCommitmentPayees } from "@/lib/finances/payees/mutations";
-import { listPayees } from "@/lib/finances/payees/queries";
+import {
+  addAlias,
+  createPayee,
+  replaceCommitmentPayees,
+} from "@/lib/finances/payees/mutations";
+import { listPayees, type PayeeRow } from "@/lib/finances/payees/queries";
+import { normalizeMerchant } from "@/lib/finances/classify/merchant";
 import { analyzeInsights } from "@/lib/finances/insightsAnalysis";
 import {
   insightsFilterOptions,
@@ -549,15 +549,74 @@ async function writeOrConflict<T>(work: () => Promise<T>): Promise<T> {
   try {
     return await work();
   } catch (error) {
-    if (error instanceof MatcherConflictError) {
+    if (error instanceof Error && error.message.includes("already belongs")) {
       throw new AgentError("validation", error.message);
     }
     throw error;
   }
 }
 
+/** Resolve the retired string-based tools at their boundary, then use stable payee ids. */
+async function legacyPayeeIds(
+  userId: string,
+  matcherValues: readonly string[],
+): Promise<string[]> {
+  const payees = await listPayees(userId);
+  const byAlias = new Map<string, PayeeRow>();
+  for (const payee of payees) {
+    for (const alias of payee.aliases) byAlias.set(alias, payee);
+    const nameKey = normalizeMerchant(payee.name);
+    if (nameKey !== "" && !byAlias.has(nameKey)) byAlias.set(nameKey, payee);
+  }
+
+  const ids: string[] = [];
+  for (const raw of matcherValues) {
+    const trimmed = raw.trim();
+    const alias = normalizeMerchant(trimmed);
+    if (alias === "") continue;
+    let payee = byAlias.get(alias);
+    if (!payee) {
+      const id = await createPayee(userId, { name: trimmed, aliases: [alias] });
+      payee = {
+        id,
+        name: trimmed,
+        notes: "",
+        aliases: [alias],
+        transactionCount: 0,
+        totalCents: 0,
+        claim: null,
+      };
+      byAlias.set(alias, payee);
+    } else if (!payee.aliases.includes(alias)) {
+      await addAlias(userId, payee.id, alias);
+      payee.aliases.push(alias);
+      byAlias.set(alias, payee);
+    }
+    ids.push(payee.id);
+  }
+  return [...new Set(ids)];
+}
+
+function legacyMatchers(
+  payeeIds: readonly string[],
+  payees: readonly PayeeRow[],
+): string[] {
+  const byId = new Map(payees.map((payee) => [payee.id, payee]));
+  return [
+    ...new Set(
+      payeeIds.flatMap((id) => {
+        const payee = byId.get(id);
+        if (!payee) return [];
+        return payee.aliases.length > 0
+          ? payee.aliases
+          : [normalizeMerchant(payee.name)].filter(Boolean);
+      }),
+    ),
+  ].sort((left, right) => left.localeCompare(right));
+}
+
 export async function listCommitmentsTool(userId: string) {
-  const data = await loadDashboard(userId);
+  const [data, payees] = await Promise.all([loadDashboard(userId), listPayees(userId)]);
   const today = localDateKey();
   return {
     bills: data.bills.map((bill) => {
@@ -573,7 +632,7 @@ export async function listCommitmentsTool(userId: string) {
           : 0;
       return {
         name: bill.name,
-        matchers: [...bill.matchers],
+        matchers: legacyMatchers(bill.payeeIds, payees),
         status: bill.status,
         cadence: cadenceLabel(cadenceOf(bill)),
         expectedCents: bill.expectedCents,
@@ -593,7 +652,10 @@ export async function listCommitmentsTool(userId: string) {
       );
       return {
         name: entry.name,
-        matchers: [...entry.matchers],
+        matchers: legacyMatchers(
+          entry.payees.map((payee) => payee.id),
+          payees,
+        ),
         period: entry.period,
         amountSource: entry.amountSource,
         ratePerPeriodCents: rate.ratePerPeriodCents,
@@ -819,10 +881,15 @@ export async function upsertSubscriptionTool(
   args: Record<string, unknown>,
 ) {
   const name = optionalString(args, "name") ?? "";
+  const requestedMatchers = asStringList(args.matchers);
+  const payeeIds =
+    requestedMatchers === undefined
+      ? undefined
+      : await legacyPayeeIds(userId, requestedMatchers);
   await writeOrConflict(() =>
     upsertRecurringBill(userId, {
       name,
-      matchers: asStringList(args.matchers),
+      payeeIds,
       cadence: cadenceFromArgs(args),
       category: optionalString(args, "category"),
       expectedCents:
@@ -839,9 +906,10 @@ export async function upsertSubscriptionTool(
   const [row] = (await loadRecurringBills(userId)).filter(
     (bill) => bill.name === name.trim(),
   );
+  const payees = await listPayees(userId);
   return {
     name: row?.name ?? name.trim(),
-    matchers: row ? [...row.matchers] : [],
+    matchers: row ? legacyMatchers(row.payeeIds, payees) : [],
     status: row?.status ?? "active",
   };
 }
@@ -851,10 +919,15 @@ export async function upsertRecurringSpendTool(
   args: Record<string, unknown>,
 ) {
   const name = optionalString(args, "name") ?? "";
+  const requestedMatchers = asStringList(args.matchers);
+  const payeeIds =
+    requestedMatchers === undefined
+      ? undefined
+      : await legacyPayeeIds(userId, requestedMatchers);
   await writeOrConflict(() =>
     upsertRecurringSpend(userId, {
       name,
-      matchers: asStringList(args.matchers),
+      payeeIds,
       period: optionalString(args, "period") as "week" | "month" | undefined,
       amountSource: optionalString(args, "amountSource") as
         "auto" | "pinned" | undefined,
@@ -868,9 +941,15 @@ export async function upsertRecurringSpendTool(
   const [row] = (await loadRecurringSpend(userId)).filter(
     (entry) => entry.name === name.trim(),
   );
+  const payees = await listPayees(userId);
   return {
     name: row?.name ?? name.trim(),
-    matchers: row ? [...row.matchers] : [],
+    matchers: row
+      ? legacyMatchers(
+          row.payees.map((payee) => payee.id),
+          payees,
+        )
+      : [],
     period: row?.period ?? "week",
   };
 }
@@ -881,22 +960,27 @@ export async function addCommitmentMatchersTool(
 ) {
   const kind = optionalString(args, "kind") === "spend" ? "spend" : "bill";
   const name = optionalString(args, "name") ?? "";
-  await writeOrConflict(() =>
-    addMatchersToCommitment(userId, {
-      kind,
-      name,
-      matchers: asStringList(args.matchers) ?? [],
-    }),
-  );
   const rows =
     kind === "bill"
       ? await loadRecurringBills(userId)
       : await loadRecurringSpend(userId);
   const row = rows.find((entry) => entry.name === name.trim());
+  if (!row) throw new AgentError("not_found", "Commitment not found.");
+  const addedIds = await legacyPayeeIds(userId, asStringList(args.matchers) ?? []);
+  await writeOrConflict(() =>
+    replaceCommitmentPayees(userId, { kind, id: row.id }, [
+      ...row.payees.map((payee) => payee.id),
+      ...addedIds,
+    ]),
+  );
+  const payees = await listPayees(userId);
   return {
     kind,
-    name: row?.name ?? name.trim(),
-    matchers: row ? [...row.matchers] : [],
+    name: row.name,
+    matchers: legacyMatchers(
+      [...row.payees.map((payee) => payee.id), ...addedIds],
+      payees,
+    ),
   };
 }
 

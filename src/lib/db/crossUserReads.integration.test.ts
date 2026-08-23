@@ -279,7 +279,6 @@ async function seedOwner(): Promise<Owned> {
   });
   await upsertRecurringSpend(userId, {
     name: "Owner Pizza",
-    matchers: ["OWNER PIZZA"],
   });
   const financePayeeId = await createPayee(userId, {
     name: "Owner Merchant",

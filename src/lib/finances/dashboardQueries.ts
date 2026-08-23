@@ -157,7 +157,6 @@ export async function loadRecurringBills(userId: string): Promise<StoredBillRow[
       .select({
         id: financeRecurringBills.id,
         name: financeRecurringBills.name,
-        matchers: financeRecurringBills.matchers,
         status: financeRecurringBills.status,
         cancelledOn: financeRecurringBills.cancelledOn,
         url: financeRecurringBills.url,
@@ -207,7 +206,6 @@ export async function loadRecurringSpend(userId: string): Promise<StoredSpend[]>
       .select({
         id: financeRecurringSpend.id,
         name: financeRecurringSpend.name,
-        matchers: financeRecurringSpend.matchers,
         period: financeRecurringSpend.period,
         amountSource: financeRecurringSpend.amountSource,
         expectedCents: financeRecurringSpend.expectedCents,
