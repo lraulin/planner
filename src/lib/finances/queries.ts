@@ -56,6 +56,7 @@ export async function listAccounts(userId: string): Promise<FinanceAccountRow[]>
       externalSource: financeAccounts.externalSource,
       externalKey: financeAccounts.externalKey,
       closedAt: financeAccounts.closedAt,
+      offBudget: financeAccounts.offBudget,
       balance: sql<string>`coalesce(sum(${financeTransactions.amount}), 0)`,
       transactionCount: sql<number>`count(${financeTransactions.id})::int`,
     })
@@ -169,6 +170,7 @@ export async function listAccounts(userId: string): Promise<FinanceAccountRow[]>
       externalSource: row.externalSource,
       externalKey: row.externalKey,
       closedAt: row.closedAt,
+      offBudget: row.offBudget,
       balanceCents,
       ledgerBalanceCents,
       statementClosingCents: latest?.closingCents ?? null,

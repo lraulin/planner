@@ -166,6 +166,12 @@ export type FinanceAccountRow = {
   externalKey: string;
   closedAt: Date | null;
   /**
+   * Held out of the envelope budget: not money to assign, and its rows are not budget
+   * activity. Seeded from `kind` (savings, investments and loans are out) and then the
+   * user's — see `agent-os/specs/2026-08-22-1948-zero-based-budget/` D3.
+   */
+  offBudget: boolean;
+  /**
    * Headline current balance. Latest statement closing plus later txs when a
    * snapshot exists; otherwise the ledger sum.
    */

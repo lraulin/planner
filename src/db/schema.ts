@@ -2851,6 +2851,25 @@ export const financeBudgetCategories = pgTable(
       .references(() => financeCategoryGroups.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     sortKey: text("sort_key").notNull(),
+    /**
+     * Which `FINANCE_CATEGORIES` values this envelope claims, for the auto-map.
+     *
+     * The join between the two axes described above, and the reason a five-envelope budget is
+     * as usable as a twenty-envelope one: `Discretionary` can claim Shopping, Games,
+     * Entertainment and Travel at once, so choosing fewer envelopes costs nothing in
+     * categorisation. Name-matching alone would have worked only for the preset that mirrors
+     * the taxonomy one-for-one — which is the preset we recommend against.
+     *
+     * An array on the row rather than a rules table, for the reason `finance_recurring_bills`
+     * keeps `matchers` on the row: one commitment routinely spans several spellings, and the
+     * alternative turns a user-level fact into a code change. **A taxonomy value should appear
+     * on at most one envelope**; the auto-map resolves a duplicate by sort order rather than
+     * failing, since the cost is a row in the wrong envelope and not a lost transaction.
+     *
+     * Empty for income envelopes, which claim by *flow* instead — the classifier decides what
+     * a paycheck is, and no spending category ever describes one.
+     */
+    sourceCategories: text("source_categories").array().notNull().default([]),
     /** Retired without losing its history. Still counts toward totals — see the group. */
     hidden: boolean("hidden").notNull().default(false),
     /** Free text on the envelope. Where a goal template would later be written. */

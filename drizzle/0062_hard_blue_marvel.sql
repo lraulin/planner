@@ -1,0 +1,1 @@
+ALTER TABLE "finance_budget_categories" ADD COLUMN "source_categories" text[] DEFAULT '{}' NOT NULL;
