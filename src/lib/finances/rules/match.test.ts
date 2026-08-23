@@ -1,0 +1,199 @@
+import { describe, expect, it } from "vitest";
+import { compileRules, type StoredRule } from "./compile";
+import type { RuleRowInput } from "./conditions";
+import { applyRules, matchRules } from "./match";
+
+const ROW: RuleRowInput = {
+  merchant: "METLIFE PET INSURANCE",
+  description: "METLIFE PET INSURANCE PMT",
+  payeeId: "11111111-1111-4111-8111-111111111111",
+  accountId: "22222222-2222-4222-8222-222222222222",
+  amountCents: -4500,
+  transactionDate: "2026-02-02",
+};
+
+function rule(
+  id: string,
+  sortKey: string,
+  source: string,
+  category: string,
+  extra: Partial<StoredRule> = {},
+): StoredRule {
+  return {
+    id,
+    name: id,
+    sortKey,
+    enabled: true,
+    conditions: [{ field: "merchant", op: "matches", value: { source, flags: "" } }],
+    actions: [{ op: "set", field: "category", value: category }],
+    ...extra,
+  };
+}
+
+/** The pair whose order is load-bearing in the corpus this engine seeds. */
+const PET = rule("metlife-pet", "a1", "^METLIFE PET", "Pets");
+const INSURANCE = rule("metlife", "a2", "^METLIFE", "Insurance");
+
+describe("matchRules", () => {
+  it("lets the earlier rule win", () => {
+    // Pet insurance is a pet cost. The old file kept this true by putting the specific rule
+    // above the general one in an array; the sort key is that array position now.
+    const { rules } = compileRules([PET, INSURANCE]);
+    expect(matchRules(rules, ROW)?.id).toBe("metlife-pet");
+  });
+
+  it("swapping their sort keys swaps the answer", () => {
+    /*
+     * This is the test that makes the ordering claim falsifiable. Without it, the first test
+     * would still pass under an engine that ignored `sortKey` entirely and happened to try
+     * the rules in insertion order.
+     */
+    const { rules } = compileRules([
+      { ...PET, sortKey: "a2" },
+      { ...INSURANCE, sortKey: "a1" },
+    ]);
+    expect(matchRules(rules, ROW)?.id).toBe("metlife");
+  });
+
+  it("orders by sort key regardless of the order rows arrive in", () => {
+    const { rules } = compileRules([INSURANCE, PET]);
+    expect(rules.map((entry) => entry.id)).toEqual(["metlife-pet", "metlife"]);
+  });
+
+  it("never fires a disabled rule", () => {
+    const { rules } = compileRules([{ ...PET, enabled: false }, INSURANCE]);
+    expect(matchRules(rules, ROW)?.id).toBe("metlife");
+  });
+
+  it("requires every condition on a rule to hold", () => {
+    // Conditions are ANDed. An "or" within a field is oneOf; across fields it is two rules.
+    const { rules } = compileRules([
+      {
+        ...PET,
+        conditions: [
+          { field: "merchant", op: "matches", value: { source: "^METLIFE", flags: "" } },
+          { field: "amount", op: "lt", value: -10000 },
+        ],
+      },
+    ]);
+    expect(matchRules(rules, ROW)).toBeNull();
+  });
+
+  it("returns null when nothing claims the row", () => {
+    const { rules } = compileRules([rule("costco", "a1", "^COSTCO", "Groceries")]);
+    expect(matchRules(rules, ROW)).toBeNull();
+  });
+
+  it("gives the same answer for the same row twice", () => {
+    // Compiled rules are reused across 7,000 rows; any state carried between calls would show
+    // up here as an alternating answer.
+    const { rules } = compileRules([PET, INSURANCE]);
+    expect(matchRules(rules, ROW)?.id).toBe("metlife-pet");
+    expect(matchRules(rules, ROW)?.id).toBe("metlife-pet");
+  });
+});
+
+describe("applyRules", () => {
+  it("reports the category, the flow, the name and which rule decided", () => {
+    const { rules } = compileRules([
+      {
+        ...PET,
+        actions: [
+          { op: "set", field: "category", value: "Pets" },
+          { op: "set", field: "flow", value: "spend" },
+          { op: "name-payee", value: "MetLife Pet" },
+        ],
+      },
+    ]);
+
+    expect(applyRules(rules, ROW)).toEqual({
+      category: "Pets",
+      flow: "spend",
+      payeeName: "MetLife Pet",
+      ruleId: "metlife-pet",
+    });
+  });
+
+  it("leaves untouched what the winning rule does not set", () => {
+    // A flow-only rule must not blank a category the caller would otherwise take from
+    // elsewhere; nulls here mean "this rule said nothing", not "make it nothing".
+    const { rules } = compileRules([
+      { ...PET, actions: [{ op: "set", field: "flow", value: "spend" }] },
+    ]);
+    expect(applyRules(rules, ROW)).toMatchObject({
+      category: null,
+      flow: "spend",
+      payeeName: null,
+    });
+  });
+
+  it("says nothing at all when no rule matched", () => {
+    const { rules } = compileRules([rule("costco", "a1", "^COSTCO", "Groceries")]);
+    expect(applyRules(rules, ROW)).toEqual({
+      category: null,
+      flow: null,
+      payeeName: null,
+      ruleId: null,
+    });
+  });
+
+  it("does not consult a later rule for what the winner left unset", () => {
+    /*
+     * The cost of first-match-wins, pinned so it stays a decision rather than a surprise:
+     * a flow-only rule above a category rule means the row gets no category, not both.
+     * Changing this is a spec change (D2), and this test is what makes that visible.
+     */
+    const { rules } = compileRules([
+      {
+        ...PET,
+        sortKey: "a1",
+        actions: [{ op: "set", field: "flow", value: "spend" }],
+      },
+      { ...INSURANCE, sortKey: "a2" },
+    ]);
+    expect(applyRules(rules, ROW)).toMatchObject({ category: null, flow: "spend" });
+  });
+});
+
+describe("compileRules", () => {
+  it("drops a rule whose conditions cannot be read, and says which", () => {
+    // JSONB guarantees no shape. A bad row must not throw on every page that classifies a
+    // transaction — it must be reported so someone can fix it.
+    const { rules, problems } = compileRules([
+      { ...PET, conditions: "not an array" },
+      INSURANCE,
+    ]);
+
+    expect(rules.map((entry) => entry.id)).toEqual(["metlife"]);
+    expect(problems).toEqual([
+      { id: "metlife-pet", name: "metlife-pet", reason: expect.stringContaining("conditions") },
+    ]);
+  });
+
+  it("drops a rule whose actions are invalid, with the reason a person can act on", () => {
+    const { rules, problems } = compileRules([
+      { ...PET, actions: [{ op: "set", field: "category", value: "Restaurants" }] },
+    ]);
+    expect(rules).toEqual([]);
+    expect(problems[0].reason).toBeTruthy();
+  });
+
+  it("does not validate a disabled rule, so a broken one can be switched off", () => {
+    // Otherwise the only way out of a bad row would be deleting it, losing whatever the rule
+    // was trying to say.
+    const { rules, problems } = compileRules([
+      { ...PET, enabled: false, conditions: "not an array" },
+    ]);
+    expect(rules).toEqual([]);
+    expect(problems).toEqual([]);
+  });
+
+  it("breaks a sort-key tie deterministically rather than by arrival order", () => {
+    // The unique index makes a tie impossible in the database; this keeps the pure function
+    // total anyway, so a test fixture or a bad import cannot make the order depend on a query
+    // plan.
+    const a = compileRules([rule("b", "a1", "^B", "Dining"), rule("a", "a1", "^A", "Dining")]);
+    const b = compileRules([rule("a", "a1", "^A", "Dining"), rule("b", "a1", "^B", "Dining")]);
+    expect(a.rules.map((entry) => entry.id)).toEqual(b.rules.map((entry) => entry.id));
+  });
+});
