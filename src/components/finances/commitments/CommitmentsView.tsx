@@ -546,6 +546,10 @@ export function CommitmentsView({
                 setFocusedGrid("bills");
                 billsSelect.select(id, mods);
               }}
+              onOpenDetail={(id) => {
+                const row = billRows.find((entry) => entry.id === id);
+                if (row) billCtx.onEditPayees(row);
+              }}
               ariaLabel="Subscriptions and bills"
               commandScope={BILLS_SCOPE}
               exportFocused={focusedGrid === "bills"}
@@ -654,6 +658,10 @@ export function CommitmentsView({
               onSelect={(id, mods) => {
                 setFocusedGrid("spend");
                 spendSelect.select(id, mods);
+              }}
+              onOpenDetail={(id) => {
+                const row = spendRows.find((entry) => entry.id === id);
+                if (row) spendCtx.onEditPayees(row);
               }}
               ariaLabel="Recurring spend"
               commandScope={SPEND_SCOPE}

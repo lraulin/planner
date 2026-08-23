@@ -7,6 +7,7 @@ import {
   deletePayeeAction,
   listPayeesAction,
   seedPayeesAction,
+  updatePayeeDetailsAction,
 } from "@/app/finances/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { DataGrid } from "@/components/grid/DataGrid";
@@ -21,6 +22,7 @@ import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import { isTypingTarget } from "@/lib/keyboard";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
+import { useIsCompact } from "@/components/shell/useIsCompact";
 import { PayeeDrawer } from "./PayeeDrawer";
 import { PayeeMergeDialog } from "./PayeeMergeDialog";
 import { PayeeMergePickerDialog } from "./PayeeMergePickerDialog";
@@ -45,6 +47,7 @@ function deleteMessage(payee: PayeeRow): string {
 }
 
 export function PayeesView({ initialPayees }: { initialPayees: PayeeRow[] }) {
+  const compact = useIsCompact();
   const [rows, setRows] = useState(initialPayees);
   const [seenServerRows, setSeenServerRows] = useState(initialPayees);
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
@@ -53,7 +56,7 @@ export function PayeesView({ initialPayees }: { initialPayees: PayeeRow[] }) {
   const [pendingDelete, setPendingDelete] = useState<PayeeRow | null>(null);
   const [pendingMerge, setPendingMerge] = useState<PayeeRow[] | null>(null);
   const [choosingMerge, setChoosingMerge] = useState(false);
-  const [, startTransition] = useTransition();
+  const [pending, startTransition] = useTransition();
   const { detail: openId, setDetail: setOpenId } = useViewStateUrl();
 
   if (initialPayees !== seenServerRows) {
@@ -144,6 +147,26 @@ export function PayeesView({ initialPayees }: { initialPayees: PayeeRow[] }) {
     setOpenId(null);
     refresh();
   }, [setOpenId, refresh]);
+
+  const rename = useCallback(
+    (payeeId: string, name: string) => {
+      const payee = rows.find((entry) => entry.id === payeeId);
+      if (!payee) return;
+      setError(null);
+      startTransition(async () => {
+        const result = await updatePayeeDetailsAction(payeeId, {
+          name,
+          notes: payee.notes,
+        });
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+        refresh();
+      });
+    },
+    [rows, refresh],
+  );
 
   const requestDelete = useCallback(
     (id: string) => {
@@ -280,7 +303,7 @@ export function PayeesView({ initialPayees }: { initialPayees: PayeeRow[] }) {
         rows={gridRows}
         columns={gridState.columns}
         allColumns={payeeColumns}
-        columnCtx={{}}
+        columnCtx={{ compact, pending, onRename: rename }}
         selectedId={selectedId}
         selectedIds={selectedIds}
         onSelect={select}

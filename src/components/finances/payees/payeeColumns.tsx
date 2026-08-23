@@ -4,7 +4,11 @@ import type { ColumnDef } from "@/components/grid/columns";
 import { formatUsd } from "@/lib/finances/money";
 import type { PayeeRow } from "@/lib/finances/payees/queries";
 
-export type PayeeColumnCtx = Record<string, never>;
+export type PayeeColumnCtx = {
+  compact: boolean;
+  pending: boolean;
+  onRename: (payeeId: string, name: string) => void;
+};
 
 export const PAYEE_COLUMN_IDS = [
   "name",
@@ -40,11 +44,23 @@ export const payeeColumns: ColumnDef<PayeeColumnCtx, PayeeRow>[] = [
     filterValue: (row) => row.node.name || null,
     sortValue: (row) => row.node.name.toLowerCase(),
     compact: "primary",
-    render: (row) => (
-      <span className="truncate text-[0.8125rem] font-medium text-ink">
-        {row.node.name}
-      </span>
-    ),
+    render: (row, ctx) =>
+      ctx.compact ? (
+        <Text value={row.node.name} muted={false} />
+      ) : (
+        <input
+          key={row.node.name}
+          type="text"
+          defaultValue={row.node.name}
+          disabled={ctx.pending}
+          aria-label={`Payee name for ${row.node.name}`}
+          onBlur={(event) => {
+            const next = event.target.value.trim();
+            if (next !== "" && next !== row.node.name) ctx.onRename(row.node.id, next);
+          }}
+          className="w-full truncate rounded border border-transparent bg-transparent px-1 text-[0.8125rem] font-medium text-ink hover:border-rule focus:border-rule"
+        />
+      ),
   },
   {
     id: "aliases",
