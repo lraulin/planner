@@ -9,13 +9,18 @@ import {
   users,
 } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { createSchedule } from "../schedules/mutations";
+import type { ScheduleCondition } from "../schedules/conditions";
 import {
+  addTemplatesFromSchedules,
+  applyBudgetTemplates,
   autoMapBudgetCategories,
   createBudgetCategory,
   deleteBudgetCategory,
   deleteCategoryGroup,
   performBudgetOperation,
   renameCategoryGroup,
+  saveEnvelopeTemplates,
   seedBudget,
   setCarryover,
   setTransactionBudgetCategory,
@@ -484,6 +489,64 @@ describeDb("budget mutations", () => {
     august = findMonth((await loadBudget(userId, MONTH)).months, MONTH)!;
     expect(categoryMonth(august, ids.get("Discretionary")!).activityCents).toBe(0);
   });
+
+  it("applies a simple template and records the goal", async () => {
+    const { checkingId } = await seedAccounts(userId);
+    await addTransactions(userId, [
+      {
+        accountId: checkingId,
+        date: "2026-07-01",
+        description: "OPENING",
+        amount: "500.00",
+      },
+    ]);
+    await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
+    const ids = await envelopes(userId);
+    const bills = ids.get("Bills")!;
+
+    await saveEnvelopeTemplates(userId, bills, [
+      {
+        id: "t1",
+        directive: "template",
+        type: "simple",
+        priority: 0,
+        monthlyCents: 12_000,
+      },
+    ]);
+
+    const result = await applyBudgetTemplates(userId, { month: MONTH, force: false });
+    expect(result.applied).toBe(1);
+
+    const data = await loadBudget(userId, MONTH);
+    const cell = categoryMonth(findMonth(data.months, MONTH)!, bills);
+    expect(cell.assignedCents).toBe(12_000);
+    expect(data.goals[`${MONTH}|${bills}`]).toBe(12_000);
+  });
+
+  it("adds schedule templates onto Bills and skips a second run", async () => {
+    await seedAccounts(userId);
+    await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
+    const conditions: ScheduleCondition[] = [
+      {
+        field: "date",
+        op: "isapprox",
+        value: { frequency: "monthly", start: "2026-01-15" },
+      },
+      { field: "payee", op: "is", value: "NETFLIX" },
+      { field: "amount", op: "isapprox", value: -1599 },
+    ];
+    await createSchedule(userId, { name: "Netflix", conditions }, TODAY);
+
+    const first = await addTemplatesFromSchedules(userId, {});
+    expect(first.added).toBe(1);
+    const second = await addTemplatesFromSchedules(userId, {});
+    expect(second.added).toBe(0);
+
+    const data = await loadBudget(userId, MONTH);
+    const bills = data.categories.find((category) => category.name === "Bills");
+    expect(bills?.templates).toHaveLength(1);
+    expect(bills?.templates[0]).toMatchObject({ type: "schedule" });
+  });
 });
 
 describeDb("budget mutations — cross-user isolation", () => {
@@ -532,10 +595,24 @@ describeDb("budget mutations — cross-user isolation", () => {
   });
 
   it("shows the intruder nothing of the owner's budget", async () => {
+    // Templates and applied goals ride on the same read, so the owner has both here: an
+    // envelope whose templates leaked would leak the schedules they name along with them.
+    await saveEnvelopeTemplates(ownerId, owned.categoryId, [
+      {
+        id: "t1",
+        directive: "template",
+        type: "simple",
+        priority: 0,
+        monthlyCents: 900,
+      },
+    ]);
+    await applyBudgetTemplates(ownerId, { month: MONTH, force: true });
+
     const data = await loadBudget(intruderId, MONTH);
     expect(data.configured).toBe(false);
     expect(data.groups).toEqual([]);
     expect(data.categories).toEqual([]);
+    expect(data.goals).toEqual({});
     expect(data.onBudgetPositionCents).toBe(0);
   });
 
@@ -569,6 +646,21 @@ describeDb("budget mutations — cross-user isolation", () => {
     await expect(
       setTransactionBudgetCategory(intruderId, owned.transactionId, owned.categoryId),
     ).rejects.toThrow(/does not exist/);
+    await expect(
+      saveEnvelopeTemplates(intruderId, owned.categoryId, [
+        {
+          id: "t1",
+          directive: "template",
+          type: "simple",
+          priority: 0,
+          monthlyCents: 100,
+        },
+      ]),
+    ).rejects.toThrow(/does not exist/);
+    await expect(
+      applyBudgetTemplates(intruderId, { month: MONTH, force: true }),
+    ).rejects.toThrow();
+    await expect(addTemplatesFromSchedules(intruderId, {})).rejects.toThrow();
     await expect(
       updateAccount(intruderId, owned.accountId, { offBudget: true }),
     ).rejects.toThrow();

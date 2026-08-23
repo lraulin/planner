@@ -28,6 +28,8 @@ import {
   type TransactionEdit,
 } from "@/lib/finances/mutations";
 import {
+  addTemplatesFromSchedules,
+  applyBudgetTemplates,
   autoMapBudgetCategories,
   createBudgetCategory,
   createCategoryGroup,
@@ -35,6 +37,7 @@ import {
   deleteCategoryGroup,
   performBudgetOperation,
   renameCategoryGroup,
+  saveEnvelopeTemplates,
   seedBudget,
   setCarryover,
   setTransactionBudgetCategory,
@@ -43,6 +46,7 @@ import {
   type BudgetOperation,
   type SeedResult,
 } from "@/lib/finances/budget/mutations";
+import type { MonthKey } from "@/lib/finances/budget/envelope";
 import type { BudgetPreset } from "@/lib/finances/budget/presets";
 import type { CommitmentStatus } from "@/db/schema";
 import type { DiscoverProposal } from "@/lib/finances/schedules/discover";
@@ -296,6 +300,32 @@ export async function setTransactionBudgetCategoryAction(
 ): Promise<ActionResult> {
   return run((userId) =>
     setTransactionBudgetCategory(userId, transactionId, categoryId),
+  );
+}
+
+export async function saveEnvelopeTemplatesAction(
+  categoryId: string,
+  templates: unknown,
+): Promise<ActionResult> {
+  return run((userId) => saveEnvelopeTemplates(userId, categoryId, templates));
+}
+
+export async function applyBudgetTemplatesAction(
+  month: MonthKey,
+  force: boolean,
+  categoryIds?: readonly string[],
+): Promise<DataActionResult<{ applied: number; errors: string[] }>> {
+  return runWithData((userId) =>
+    applyBudgetTemplates(userId, { month, force, categoryIds }),
+  );
+}
+
+export async function addTemplatesFromSchedulesAction(
+  categoryId?: string,
+  scheduleIds?: readonly string[],
+): Promise<DataActionResult<{ added: number; categoryId: string }>> {
+  return runWithData((userId) =>
+    addTemplatesFromSchedules(userId, { categoryId, scheduleIds }),
   );
 }
 

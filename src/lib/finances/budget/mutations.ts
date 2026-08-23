@@ -14,7 +14,14 @@ import { BUDGET_SCOPE } from "@/lib/settings/scopes";
 import * as sortKey from "@/lib/tree/sortKey";
 import { numericStringToCents } from "../money";
 import { envelopeForRow, envelopeIndex, type MappableRow } from "./autoMap";
-import { findMonth, monthKeyOf, type BudgetMonth, type MonthKey } from "./envelope";
+import {
+  categoryMonth,
+  findMonth,
+  monthKeyOf,
+  prevMonthKey,
+  type BudgetMonth,
+  type MonthKey,
+} from "./envelope";
 import {
   assignFromReadyToAssign,
   copyPreviousMonth,
@@ -31,6 +38,19 @@ import {
 } from "./operations";
 import { PRESET_GROUPS, type BudgetPreset } from "./presets";
 import { AVERAGE_LOOKBACK_MONTHS, loadBudget, openingPositionFor } from "./queries";
+import { applyTemplates as runApply, templateCarryIn } from "./templates/apply";
+import {
+  defaultScheduleTarget,
+  schedulesToAdd,
+  type EnvelopeTemplates,
+} from "./templates/fromSchedules";
+import { scheduleSnapshotMap, scheduleSnapshots } from "./templates/snapshot";
+import {
+  parseTemplates,
+  parseTemplatesOrThrow,
+  type Template,
+} from "./templates/types";
+import { getSchedule, listScheduleRecords } from "../schedules/queries";
 
 /**
  * Writes for the envelope budget.
@@ -438,6 +458,7 @@ async function applyEdit(userId: string, edit: BudgetEdit): Promise<void> {
           month: write.month,
           categoryId: write.categoryId,
           amountCents: write.amountCents,
+          goalCents: write.goalCents ?? null,
         })
         .onConflictDoUpdate({
           target: [
@@ -445,7 +466,11 @@ async function applyEdit(userId: string, edit: BudgetEdit): Promise<void> {
             financeBudgetAllocations.month,
             financeBudgetAllocations.categoryId,
           ],
-          set: { amountCents: write.amountCents, updatedAt: new Date() },
+          set: {
+            amountCents: write.amountCents,
+            ...(write.goalCents === undefined ? {} : { goalCents: write.goalCents }),
+            updatedAt: new Date(),
+          },
         });
     }
 
@@ -722,4 +747,179 @@ export async function setTransactionBudgetCategory(
         eq(financeTransactions.userId, userId),
       ),
     );
+}
+
+async function requireSpendingCategory(
+  userId: string,
+  categoryId: string,
+): Promise<{ id: string; templates: Template[] }> {
+  const [row] = await db
+    .select({
+      id: financeBudgetCategories.id,
+      groupId: financeBudgetCategories.groupId,
+      templates: financeBudgetCategories.templates,
+    })
+    .from(financeBudgetCategories)
+    .where(
+      and(
+        eq(financeBudgetCategories.id, categoryId),
+        eq(financeBudgetCategories.userId, userId),
+      ),
+    )
+    .limit(1);
+  if (!row) throw new Error("That envelope does not exist.");
+
+  const [group] = await db
+    .select({ isIncome: financeCategoryGroups.isIncome })
+    .from(financeCategoryGroups)
+    .where(
+      and(
+        eq(financeCategoryGroups.id, row.groupId),
+        eq(financeCategoryGroups.userId, userId),
+      ),
+    )
+    .limit(1);
+  if (!group) throw new Error("That envelope does not exist.");
+  if (group.isIncome) throw new Error("Income envelopes cannot hold templates.");
+
+  return { id: row.id, templates: parseTemplates(row.templates) ?? [] };
+}
+
+async function requireOwnedSchedule(userId: string, scheduleId: string): Promise<void> {
+  const schedule = await getSchedule(userId, scheduleId);
+  if (!schedule) throw new Error("That schedule does not exist.");
+}
+
+export async function saveEnvelopeTemplates(
+  userId: string,
+  categoryId: string,
+  templates: unknown,
+): Promise<void> {
+  await requireSpendingCategory(userId, categoryId);
+  const parsed = parseTemplatesOrThrow(templates);
+  for (const template of parsed) {
+    if (template.type === "schedule") {
+      await requireOwnedSchedule(userId, template.scheduleId);
+    }
+  }
+  await db
+    .update(financeBudgetCategories)
+    .set({ templates: parsed, updatedAt: new Date() })
+    .where(
+      and(
+        eq(financeBudgetCategories.id, categoryId),
+        eq(financeBudgetCategories.userId, userId),
+      ),
+    );
+}
+
+export async function applyBudgetTemplates(
+  userId: string,
+  params: {
+    month: MonthKey;
+    force: boolean;
+    categoryIds?: readonly string[];
+  },
+): Promise<{ applied: number; errors: string[] }> {
+  const data = await loadBudget(userId, params.month);
+  if (!data.configured) throw new Error("Set the budget up first.");
+  const month = findMonth(data.months, params.month);
+  if (!month) throw new Error("That month is outside the budget.");
+
+  const previous = findMonth(data.months, prevMonthKey(month.month));
+  const incomeIds = new Set(
+    data.groups.filter((group) => group.isIncome).map((group) => group.id),
+  );
+  const envelopes = data.categories.map((category) => {
+    const cell = categoryMonth(month, category.id);
+    const prior = previous ? categoryMonth(previous, category.id) : null;
+    return {
+      id: category.id,
+      name: category.name,
+      isIncome: incomeIds.has(category.groupId),
+      templates: category.templates,
+      assignedCents: cell.assignedCents,
+      carryInCents: templateCarryIn(prior),
+    };
+  });
+
+  const result = runApply({
+    month: month.month,
+    envelopes,
+    schedules: scheduleSnapshotMap(
+      scheduleSnapshots(await listScheduleRecords(userId)),
+    ),
+    readyToAssignCents: month.readyToAssignCents,
+    force: params.force,
+    categoryIds: params.categoryIds,
+    todayKey: data.todayKey,
+  });
+
+  if (result.allocations.length === 0) {
+    return { applied: 0, errors: result.errors.map((error) => error.message) };
+  }
+
+  await applyEdit(userId, {
+    allocations: result.allocations.map((row) => ({
+      month: month.month,
+      categoryId: row.categoryId,
+      amountCents: row.amountCents,
+      goalCents: row.goalCents,
+    })),
+    buffered: null,
+    note: result.note,
+  });
+
+  return {
+    applied: result.allocations.length,
+    errors: result.errors.map((error) => `${error.categoryName}: ${error.message}`),
+  };
+}
+
+export async function addTemplatesFromSchedules(
+  userId: string,
+  params: { categoryId?: string; scheduleIds?: readonly string[] },
+): Promise<{ added: number; categoryId: string }> {
+  const data = await loadBudget(userId, null);
+  if (!data.configured) throw new Error("Set the budget up first.");
+
+  const incomeIds = new Set(
+    data.groups.filter((group) => group.isIncome).map((group) => group.id),
+  );
+  const existing: EnvelopeTemplates[] = data.categories.map((category) => ({
+    categoryId: category.id,
+    name: category.name,
+    isIncome: incomeIds.has(category.groupId),
+    templates: category.templates,
+  }));
+
+  const categoryId = params.categoryId ?? defaultScheduleTarget(existing);
+  if (!categoryId)
+    throw new Error("There is no spending envelope to attach schedules to.");
+  const target = await requireSpendingCategory(userId, categoryId);
+
+  const records = await listScheduleRecords(userId);
+  const lines = schedulesToAdd({
+    existing,
+    candidates: records.map((record) => ({
+      id: record.id,
+      name: record.name,
+      completed: record.completed,
+    })),
+    targetId: categoryId,
+    scheduleIds: params.scheduleIds,
+  });
+  if (lines.length === 0) return { added: 0, categoryId };
+
+  const next = [...target.templates, ...lines];
+  await db
+    .update(financeBudgetCategories)
+    .set({ templates: next, updatedAt: new Date() })
+    .where(
+      and(
+        eq(financeBudgetCategories.id, categoryId),
+        eq(financeBudgetCategories.userId, userId),
+      ),
+    );
+  return { added: lines.length, categoryId };
 }

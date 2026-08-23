@@ -40,6 +40,8 @@ export type AllocationWrite = {
   categoryId: string;
   /** The new assigned amount, absolute. */
   amountCents: number;
+  /** Set only by Apply / Overwrite. Omitted writes leave the stored goal alone. */
+  goalCents?: number | null;
 };
 
 export type BufferedWrite = {

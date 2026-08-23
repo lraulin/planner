@@ -31,6 +31,7 @@ function category(
     hidden,
     notes: "",
     sourceCategories: [],
+    templates: [],
   };
 }
 

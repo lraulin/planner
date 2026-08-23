@@ -2888,7 +2888,17 @@ export const financeBudgetCategories = pgTable(
     sourceCategories: text("source_categories").array().notNull().default([]),
     /** Retired without losing its history. Still counts toward totals — see the group. */
     hidden: boolean("hidden").notNull().default(false),
-    /** Free text on the envelope. Where a goal template would later be written. */
+    /**
+     * Goal templates for this envelope, Actual's `goal_def`.
+     *
+     * JSON array of `{type, …}` lines (`simple` / `schedule` / `by` / `remainder`), amounts
+     * in integer cents. Validated in `src/lib/finances/budget/templates/types.ts` so bad
+     * JSONB never reaches the apply math. Free-text `notes` stay notes — Actual split the
+     * two and so do we (`2026-08-22-2242-budget-goal-templates` supersedes the earlier
+     * comment that templates would later be written here).
+     */
+    templates: jsonb("templates").$type<unknown>().notNull().default([]),
+    /** Free text on the envelope. Not the template store. */
     notes: text("notes").notNull().default(""),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -2981,6 +2991,14 @@ export const financeBudgetAllocations = pgTable(
       .notNull()
       .references(() => financeBudgetCategories.id, { onDelete: "cascade" }),
     amountCents: integer("amount_cents").notNull().default(0),
+    /**
+     * What templates requested this month. Null means no goal.
+     *
+     * Written only by Apply / Overwrite. The indicator compares Assigned to this stored
+     * figure rather than recomputing from templates, so a later manual edit of Assigned
+     * still shows whether the template was met.
+     */
+    goalCents: integer("goal_cents"),
     /** Roll a negative balance forward into the envelope instead of onto Ready to Assign. */
     carryover: boolean("carryover").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

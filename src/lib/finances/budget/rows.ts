@@ -24,6 +24,9 @@ export type BudgetRow = {
   balanceCents: number;
   /** The flag stored on this month, which governs the hand-off to the next one. */
   carryover: boolean;
+  templates: BudgetCategoryRow["templates"];
+  /** Template goal for this month; null when Apply has not written one. */
+  goalCents: number | null;
 };
 
 export type BudgetTotals = {
@@ -55,6 +58,7 @@ export function budgetRows(
   groups: readonly BudgetGroupRow[],
   categories: readonly BudgetCategoryRow[],
   month: BudgetMonth,
+  goals: Readonly<Record<string, number>> = {},
 ): BudgetRow[] {
   const incomeGroups = new Set(
     groups.filter((group) => group.isIncome).map((group) => group.id),
@@ -76,6 +80,8 @@ export function budgetRows(
         hidden: category.hidden,
         notes: category.notes,
         sourceCategories: category.sourceCategories,
+        templates: category.templates,
+        goalCents: goals[`${month.month}|${category.id}`] ?? null,
         assignedCents: cell.assignedCents,
         activityCents: cell.activityCents,
         balanceCents: cell.balanceCents,
@@ -131,6 +137,14 @@ export function balanceTone(cents: number): BalanceTone {
   if (cents > 0) return "positive";
   if (cents < 0) return "negative";
   return "zero";
+}
+
+/** Assigned vs the last-applied template goal. No goal → no colour. */
+export type GoalTone = "met" | "unmet" | null;
+
+export function goalTone(assignedCents: number, goalCents: number | null): GoalTone {
+  if (goalCents === null) return null;
+  return assignedCents >= goalCents ? "met" : "unmet";
 }
 
 /** Envelopes with money in them, for the "cover from…" picker. Never offers the target. */

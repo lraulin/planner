@@ -23,6 +23,10 @@ import {
   type BudgetMonth,
   type MonthKey,
 } from "./envelope";
+import { parseTemplates, type Template } from "./templates/types";
+import type { ScheduleSnapshot } from "./templates/schedule";
+import { scheduleSnapshots } from "./templates/snapshot";
+import { listScheduleRecords } from "../schedules/queries";
 
 /**
  * Reads for the envelope budget. Every one takes `userId` and scopes on it.
@@ -58,6 +62,7 @@ export type BudgetCategoryRow = {
   notes: string;
   /** Spending-taxonomy values this envelope claims, for the auto-map and its editor. */
   sourceCategories: string[];
+  templates: Template[];
 };
 
 export type BudgetData = {
@@ -83,6 +88,11 @@ export type BudgetData = {
   /** On-budget rows since the start month with no envelope: the size of the backlog. */
   uncategorizedCount: number;
   uncategorizedCents: number;
+  /**
+   * Template goals written by Apply / Overwrite, keyed `month|categoryId`.
+   * Absent means no goal for that cell.
+   */
+  goals: Record<string, number>;
   /**
    * What setup would actually seed "funds from last month" with — the position at the end of
    * *last* month, not today's.
@@ -121,10 +131,20 @@ function categoriesOf(userId: string) {
       hidden: financeBudgetCategories.hidden,
       notes: financeBudgetCategories.notes,
       sourceCategories: financeBudgetCategories.sourceCategories,
+      templates: financeBudgetCategories.templates,
     })
     .from(financeBudgetCategories)
     .where(eq(financeBudgetCategories.userId, userId))
     .orderBy(asc(financeBudgetCategories.sortKey));
+}
+
+function parsedCategories(
+  rows: Awaited<ReturnType<typeof categoriesOf>>,
+): BudgetCategoryRow[] {
+  return rows.map((row) => ({
+    ...row,
+    templates: parseTemplates(row.templates) ?? [],
+  }));
 }
 
 /**
@@ -216,12 +236,13 @@ export async function loadBudget(
   const todayKey = toDateKey(new Date());
   const currentMonth = monthKeyOf(todayKey);
 
-  const [stored, groups, categories, accounts] = await Promise.all([
+  const [stored, groups, categoryRows, accounts] = await Promise.all([
     readSetting(userId, BUDGET_SCOPE),
     groupsOf(userId),
     categoriesOf(userId),
     listAccounts(userId),
   ]);
+  const categories = parsedCategories(categoryRows);
 
   const settings = parseBudget(stored);
   const onBudgetPositionCents = accounts
@@ -239,6 +260,7 @@ export async function loadBudget(
     onBudgetPositionCents,
     uncategorizedCount: 0,
     uncategorizedCents: 0,
+    goals: {},
     prospectiveOpeningCents: 0,
   };
 
@@ -262,6 +284,7 @@ export async function loadBudget(
         categoryId: financeBudgetAllocations.categoryId,
         amountCents: financeBudgetAllocations.amountCents,
         carryover: financeBudgetAllocations.carryover,
+        goalCents: financeBudgetAllocations.goalCents,
       })
       .from(financeBudgetAllocations)
       .where(eq(financeBudgetAllocations.userId, userId)),
@@ -283,13 +306,25 @@ export async function loadBudget(
       isIncome:
         groups.find((group) => group.id === category.groupId)?.isIncome ?? false,
     })),
-    allocations,
+    allocations: allocations.map((row) => ({
+      month: row.month,
+      categoryId: row.categoryId,
+      amountCents: row.amountCents,
+      carryover: row.carryover,
+    })),
     activity,
     buffered: bufferedRows,
     startMonth,
     endMonth,
     openingCents: settings.openingCents,
   });
+
+  const goals: Record<string, number> = {};
+  for (const row of allocations) {
+    if (row.goalCents != null) {
+      goals[`${row.month}|${row.categoryId}`] = row.goalCents;
+    }
+  }
 
   const wanted = requestedMonth ?? currentMonth;
   const month = findMonth(months, wanted)
@@ -303,6 +338,7 @@ export async function loadBudget(
     configured: true,
     months,
     month,
+    goals,
     ...backlog,
   };
 }
@@ -350,4 +386,15 @@ export async function openingPositionFor(
   );
 
   return accounts.reduce((total, account) => total + account.balanceCents, 0) - after;
+}
+
+/**
+ * The schedules a template can name, as the apply engine sees them.
+ *
+ * The budget page reads these alongside the budget so the template drawer can name a schedule,
+ * offer the picker, and preview this month's demand by running the same pure engine the server
+ * runs — not a second guess at it.
+ */
+export async function loadBudgetSchedules(userId: string): Promise<ScheduleSnapshot[]> {
+  return scheduleSnapshots(await listScheduleRecords(userId));
 }
