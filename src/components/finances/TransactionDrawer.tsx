@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useId, useState, useTransition } from "react";
-import { getTransactionAction, updateTransactionAction } from "@/app/finances/actions";
+import {
+  getTransactionAction,
+  setTransactionBudgetCategoryAction,
+  updateTransactionAction,
+} from "@/app/finances/actions";
 import { DateText } from "@/components/date/DateText";
 import { Drawer, DrawerFooter, DrawerHeader } from "@/components/detail/Drawer";
 import {
@@ -13,6 +17,7 @@ import {
 } from "@/components/detail/fields";
 import { effectiveCategory, effectiveFlow } from "@/lib/finances/analytics";
 import { SAVINGS_KINDS } from "@/lib/finances/available";
+import { envelopeAssignmentRefusal } from "@/lib/finances/budget/autoMap";
 import { FLOW_KINDS, flowLabel } from "@/lib/finances/flowLabels";
 import { formatUsd } from "@/lib/finances/money";
 import type { TransactionListRow } from "@/lib/finances/types";
@@ -27,10 +32,16 @@ import type { FinanceFlowKind } from "@/db/schema";
  */
 export function TransactionDrawer({
   transactionId,
+  envelopes,
+  budgetStartMonth,
+  offBudgetAccountIds,
   onClose,
   onChanged,
 }: {
   transactionId: string | null;
+  envelopes: readonly { id: string; label: string }[];
+  budgetStartMonth: string | null;
+  offBudgetAccountIds: ReadonlySet<string>;
   onClose: () => void;
   onChanged: () => void;
 }) {
@@ -94,6 +105,9 @@ export function TransactionDrawer({
         <TransactionForm
           key={current.row.id}
           row={current.row}
+          envelopes={envelopes}
+          budgetStartMonth={budgetStartMonth}
+          offBudgetAccountIds={offBudgetAccountIds}
           onClose={onClose}
           onChanged={onChanged}
         />
@@ -115,10 +129,16 @@ function ReadOnly({ label, children }: { label: string; children: React.ReactNod
 
 function TransactionForm({
   row,
+  envelopes,
+  budgetStartMonth,
+  offBudgetAccountIds,
   onClose,
   onChanged,
 }: {
   row: TransactionListRow;
+  envelopes: readonly { id: string; label: string }[];
+  budgetStartMonth: string | null;
+  offBudgetAccountIds: ReadonlySet<string>;
   onClose: () => void;
   onChanged: () => void;
 }) {
@@ -138,6 +158,13 @@ function TransactionForm({
   const [justSaved, setJustSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, startTransition] = useTransition();
+  const [envelopeId, setEnvelopeId] = useState(row.budgetCategoryId);
+  const [savingEnvelope, startEnvelopeTransition] = useTransition();
+  const envelopeRefusal = envelopeAssignmentRefusal({
+    transactionDate: row.transactionDate,
+    budgetStartMonth,
+    accountOffBudget: offBudgetAccountIds.has(row.accountId),
+  });
 
   type Draft = typeof draft;
   function patch<K extends keyof Draft>(key: K, value: Draft[K]) {
@@ -176,6 +203,21 @@ function TransactionForm({
     });
   }
 
+  function setEnvelope(categoryId: string | null) {
+    const previous = envelopeId;
+    setEnvelopeId(categoryId);
+    setError(null);
+    startEnvelopeTransition(async () => {
+      const result = await setTransactionBudgetCategoryAction(row.id, categoryId);
+      if (!result.ok) {
+        setEnvelopeId(previous);
+        setError(result.error ?? "Could not set the envelope.");
+        return;
+      }
+      onChanged();
+    });
+  }
+
   return (
     <>
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
@@ -198,6 +240,26 @@ function TransactionForm({
               value={draft.notes}
               onChange={(value) => patch("notes", value)}
             />
+            {envelopes.length > 0 &&
+              (envelopeRefusal ? (
+                <ReadOnly label="Envelope">
+                  <span className="text-ink-muted">Not budgeted</span>
+                  <span className="mt-1 block text-[0.75rem] text-ink-faint">
+                    {envelopeRefusal}
+                  </span>
+                </ReadOnly>
+              ) : (
+                <SelectField<string>
+                  label="Envelope"
+                  value={envelopeId}
+                  options={envelopes.map(({ id, label }) => ({ value: id, label }))}
+                  onChange={setEnvelope}
+                  allowEmpty
+                  emptyLabel="Unassigned"
+                  disabled={savingEnvelope}
+                  hint="Saved immediately. Category describes the purchase; Envelope decides which pool of money pays. A direct choice is never overwritten by automatic sorting."
+                />
+              ))}
           </Section>
 
           <Section title="Classification">
@@ -297,7 +359,7 @@ function TransactionForm({
         onSave={() => save(false)}
         onSaveAndClose={() => save(true)}
         onClose={onClose}
-        saving={saving}
+        saving={saving || savingEnvelope}
         dirty={dirty}
         justSaved={justSaved}
         error={error}

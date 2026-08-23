@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { FINANCE_CATEGORIES } from "../classify/categories";
-import { envelopeForRow, envelopeIndex, type MappableRow } from "./autoMap";
+import {
+  envelopeAssignmentRefusal,
+  envelopeForRow,
+  envelopeIndex,
+  type MappableRow,
+} from "./autoMap";
 import {
   BUDGET_PRESETS,
   claimedCategories,
@@ -139,6 +144,32 @@ describe("envelopeForRow", () => {
     // Nothing claims Uncategorized. A guess here would be invisible; the backlog is not.
     expect(envelopeForRow(row(), INDEX, new Set())).toBeNull();
     expect(envelopeForRow(row({ category: "Travel" }), INDEX, new Set())).toBeNull();
+  });
+});
+
+describe("envelopeAssignmentRefusal", () => {
+  it("refuses rows outside the budget without blocking the first budgeted day", () => {
+    expect(
+      envelopeAssignmentRefusal({
+        transactionDate: "2026-07-31",
+        budgetStartMonth: "2026-08-01",
+        accountOffBudget: false,
+      }),
+    ).toBe("The envelope budget starts in August 2026.");
+    expect(
+      envelopeAssignmentRefusal({
+        transactionDate: "2026-08-01",
+        budgetStartMonth: "2026-08-01",
+        accountOffBudget: false,
+      }),
+    ).toBeNull();
+    expect(
+      envelopeAssignmentRefusal({
+        transactionDate: "2026-08-01",
+        budgetStartMonth: "2026-08-01",
+        accountOffBudget: true,
+      }),
+    ).toBe("This account is outside the envelope budget.");
   });
 });
 

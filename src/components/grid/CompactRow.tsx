@@ -399,13 +399,15 @@ function SwipeRail({
 function textOf<TCtx, TRow>(
   column: ColumnDef<TCtx, TRow> | null,
   row: NodeGridRow<TRow>,
-  _ctx: TCtx,
+  ctx: TCtx,
   formatDate: (dateKey: string | null | undefined) => string,
 ): string | null {
   if (!column) return null;
-  const raw = column.compactText
-    ? column.compactText(row)
-    : (column.filterValue?.(row) ?? null);
+  const raw = column.compactTextWithCtx
+    ? column.compactTextWithCtx(row, ctx)
+    : column.compactText
+      ? column.compactText(row)
+      : (column.filterValue?.(row) ?? null);
   const text = column.filterKind === "date" ? formatDate(raw) : raw;
   return text && text.trim() !== "" ? text : null;
 }
@@ -413,12 +415,14 @@ function textOf<TCtx, TRow>(
 function fullTextOf<TCtx, TRow>(
   column: ColumnDef<TCtx, TRow> | null,
   row: NodeGridRow<TRow>,
-  _ctx: TCtx,
+  ctx: TCtx,
 ): string | null {
   if (!column) return null;
-  const raw = column.compactText
-    ? column.compactText(row)
-    : (column.filterValue?.(row) ?? null);
+  const raw = column.compactTextWithCtx
+    ? column.compactTextWithCtx(row, ctx)
+    : column.compactText
+      ? column.compactText(row)
+      : (column.filterValue?.(row) ?? null);
   if (!raw || raw.trim() === "") return null;
   return column.filterKind === "date" ? formatFullDateKey(raw) : raw;
 }

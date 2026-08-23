@@ -10,6 +10,7 @@ import {
 import { flowLabel } from "@/lib/finances/flowLabels";
 import { formatUsd } from "@/lib/finances/money";
 import type { TransactionListRow } from "@/lib/finances/types";
+import { envelopeAssignmentRefusal } from "@/lib/finances/budget/autoMap";
 
 /**
  * What the Envelope column needs. Every other column is pure presentation, which is why this
@@ -17,7 +18,9 @@ import type { TransactionListRow } from "@/lib/finances/types";
  */
 export type FinanceColumnCtx = {
   /** Every envelope, in budget order. Empty until a budget is set up. */
-  envelopes: readonly { id: string; name: string }[];
+  envelopes: readonly { id: string; label: string }[];
+  budgetStartMonth: string | null;
+  offBudgetAccountIds: ReadonlySet<string>;
   onSetEnvelope: (transactionId: string, categoryId: string | null) => void;
   pending: boolean;
 };
@@ -177,13 +180,32 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, TransactionListRow>[] =
     filterValue: (row) => row.node.budgetCategoryName ?? "Unassigned",
     sortValue: (row) => (row.node.budgetCategoryName ?? "").toLowerCase(),
     compact: "meta",
-    compactText: (row) => row.node.budgetCategoryName ?? "Unassigned",
+    compactTextWithCtx: (row, ctx) =>
+      envelopeAssignmentRefusal({
+        transactionDate: row.node.transactionDate,
+        budgetStartMonth: ctx.budgetStartMonth,
+        accountOffBudget: ctx.offBudgetAccountIds.has(row.node.accountId),
+      })
+        ? "Not budgeted"
+        : (row.node.budgetCategoryName ?? "Unassigned"),
     // Editable in place rather than behind a row-menu command: the envelope for a row is a
     // one-keystroke decision made while reading the description next to it, and a menu of
     // twenty envelopes is not a menu (`components/ux-principles`).
     render: (row, ctx) => {
       if (ctx.envelopes.length === 0) {
         return <span className="truncate text-[0.8125rem] text-ink-faint">—</span>;
+      }
+      const refusal = envelopeAssignmentRefusal({
+        transactionDate: row.node.transactionDate,
+        budgetStartMonth: ctx.budgetStartMonth,
+        accountOffBudget: ctx.offBudgetAccountIds.has(row.node.accountId),
+      });
+      if (refusal) {
+        return (
+          <span className="truncate text-[0.8125rem] text-ink-faint" title={refusal}>
+            Not budgeted
+          </span>
+        );
       }
       return (
         <select
@@ -203,7 +225,7 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, TransactionListRow>[] =
           <option value="">Unassigned</option>
           {ctx.envelopes.map((envelope) => (
             <option key={envelope.id} value={envelope.id}>
-              {envelope.name}
+              {envelope.label}
             </option>
           ))}
         </select>

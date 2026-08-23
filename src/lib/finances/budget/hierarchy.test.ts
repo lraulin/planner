@@ -4,6 +4,7 @@ import type { BudgetCategoryRow, BudgetGroupRow } from "./queries";
 import type { BudgetRow } from "./rows";
 import {
   budgetChildren,
+  budgetEnvelopeLabel,
   budgetGroupDepths,
   descendantEnvelopeIds,
   nestedBudgetGridRows,
@@ -112,6 +113,12 @@ describe("budget hierarchy", () => {
       "electric",
       "other",
     ]);
+  });
+
+  it("names an envelope by its complete nested path", () => {
+    expect(budgetEnvelopeLabel(groups, category("electric", "utilities", "A"))).toBe(
+      "spending › bills › utilities › electric",
+    );
   });
 
   it("rejects a group inside its descendant and an envelope at the root", () => {

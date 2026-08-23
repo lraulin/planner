@@ -8,10 +8,12 @@ import {
   financeCategoryGroups,
   financeTransactions,
 } from "@/db/schema";
-import { serializeBudget } from "@/lib/settings/finances";
+import { parseBudget, serializeBudget } from "@/lib/settings/finances";
 import { writeUserSetting } from "@/lib/settings/mutations";
+import { readSetting } from "@/lib/settings/queries";
 import { BUDGET_SCOPE } from "@/lib/settings/scopes";
 import * as sortKey from "@/lib/tree/sortKey";
+import { FINANCE_CATEGORIES } from "../classify/categories";
 import { numericStringToCents } from "../money";
 import { envelopeForRow, envelopeIndex, type MappableRow } from "./autoMap";
 import {
@@ -347,6 +349,15 @@ export async function autoMapBudgetCategories(
   return { placed, remaining: rows.length - placed };
 }
 
+/** Run the safe, null-only envelope pass when this user has configured a budget. */
+export async function autoMapConfiguredBudgetCategories(
+  userId: string,
+): Promise<{ placed: number; remaining: number }> {
+  const settings = parseBudget(await readSetting(userId, BUDGET_SCOPE));
+  if (settings.startMonth === null) return { placed: 0, remaining: 0 };
+  return autoMapBudgetCategories(userId, settings.startMonth);
+}
+
 // ─────────────────────────── Moving money ───────────────────────────
 
 /**
@@ -664,7 +675,6 @@ export type BudgetCategoryEdit = {
   name?: string;
   hidden?: boolean;
   notes?: string;
-  sourceCategories?: readonly string[];
   groupId?: string;
 };
 
@@ -698,9 +708,6 @@ export async function updateBudgetCategory(
       ...(edit.notes === undefined ? {} : { notes: edit.notes.trim() }),
       ...(edit.groupId === undefined ? {} : { groupId: edit.groupId }),
       ...(movedSortKey === undefined ? {} : { sortKey: movedSortKey }),
-      ...(edit.sourceCategories === undefined
-        ? {}
-        : { sourceCategories: [...edit.sourceCategories] }),
       updatedAt: new Date(),
     })
     .where(
@@ -709,6 +716,82 @@ export async function updateBudgetCategory(
         eq(financeBudgetCategories.userId, userId),
       ),
     );
+}
+
+/**
+ * Point one reporting-taxonomy category at exactly one spending envelope.
+ *
+ * The JSON arrays predate the editor, so uniqueness is established here rather than assumed:
+ * remove the claim from every envelope, then add it to the selected one while the rows are
+ * locked. Existing transaction assignments are deliberately untouched; the null-only auto-map
+ * is what makes a hand choice authoritative.
+ */
+export async function setTaxonomyCategoryEnvelope(
+  userId: string,
+  sourceCategory: string,
+  categoryId: string | null,
+): Promise<void> {
+  const knownCategories = new Set<string>(FINANCE_CATEGORIES);
+  if (!knownCategories.has(sourceCategory)) {
+    throw new Error("That spending category does not exist.");
+  }
+
+  await db.transaction(async (tx) => {
+    const rows = await tx
+      .select({
+        id: financeBudgetCategories.id,
+        sourceCategories: financeBudgetCategories.sourceCategories,
+        isIncome: financeCategoryGroups.isIncome,
+      })
+      .from(financeBudgetCategories)
+      .innerJoin(
+        financeCategoryGroups,
+        eq(financeCategoryGroups.id, financeBudgetCategories.groupId),
+      )
+      .where(
+        and(
+          eq(financeBudgetCategories.userId, userId),
+          eq(financeCategoryGroups.userId, userId),
+        ),
+      )
+      .for("update");
+
+    if (categoryId !== null) {
+      const target = rows.find((row) => row.id === categoryId);
+      if (!target) throw new Error("That envelope does not exist.");
+      if (target.isIncome) {
+        throw new Error("A spending category cannot sort into an income envelope.");
+      }
+    }
+
+    const order = new Map<string, number>(
+      FINANCE_CATEGORIES.map((name, index) => [name, index]),
+    );
+    for (const row of rows) {
+      const next = row.sourceCategories.filter((name) => name !== sourceCategory);
+      if (row.id === categoryId) next.push(sourceCategory);
+      next.sort(
+        (left, right) =>
+          (order.get(left) ?? Number.MAX_SAFE_INTEGER) -
+          (order.get(right) ?? Number.MAX_SAFE_INTEGER),
+      );
+      if (
+        next.length === row.sourceCategories.length &&
+        next.every((name, index) => name === row.sourceCategories[index])
+      ) {
+        continue;
+      }
+      await tx
+        .update(financeBudgetCategories)
+        .set({ sourceCategories: next, updatedAt: new Date() })
+        .where(
+          and(
+            eq(financeBudgetCategories.id, row.id),
+            eq(financeBudgetCategories.userId, userId),
+          ),
+        );
+    }
+  });
 }
 
 export async function renameCategoryGroup(

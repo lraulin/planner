@@ -112,6 +112,31 @@ describeDb("finance CSV import", () => {
     expect(byDescription.get("Deposit from GA8248 TRUSTEDQA PAYROLL")).toBe(231121);
   });
 
+  it("sorts a newly imported taxonomy category into its claimed envelope", async () => {
+    await seedBudget(userId, {
+      preset: "minimal",
+      startMonth: "2026-08-01",
+      todayKey: "2026-08-23",
+    });
+
+    await importFinanceCsvFiles({
+      userId,
+      files: [
+        {
+          name: "Chase9910_Activity_20260812.csv",
+          text: [
+            CHASE_HEADER,
+            "08/10/2026,08/11/2026,LOCAL CAFE,Dining,Sale,-12.34,",
+            "",
+          ].join("\n"),
+        },
+      ],
+    });
+
+    const [row] = await listTransactions(userId);
+    expect(row.budgetCategoryName).toBe("Discretionary");
+  });
+
   it("classifies and routes a newly imported schedule match into its envelope", async () => {
     await seedBudget(userId, {
       preset: "minimal",

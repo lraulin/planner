@@ -118,6 +118,24 @@ export function budgetGroupDepths(
   return depths;
 }
 
+/** Complete visible label for an envelope when nested groups make its name ambiguous. */
+export function budgetEnvelopeLabel(
+  groups: readonly Pick<BudgetGroupRow, "id" | "name" | "parentGroupId">[],
+  category: Pick<BudgetCategoryRow, "name" | "groupId">,
+): string {
+  const byId = new Map(groups.map((group) => [group.id, group]));
+  const names: string[] = [category.name];
+  const seen = new Set<string>();
+  let current = byId.get(category.groupId);
+  while (current) {
+    if (seen.has(current.id)) throw new Error("Budget groups contain a cycle.");
+    seen.add(current.id);
+    names.unshift(current.name);
+    current = current.parentGroupId ? byId.get(current.parentGroupId) : undefined;
+  }
+  return names.join(" › ");
+}
+
 /**
  * Recursive Budget rows for DataGrid. A group count is every visible descendant envelope,
  * not merely its direct children, so the collapsed header describes the same rows it hides.

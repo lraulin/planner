@@ -19,6 +19,7 @@
 
 import { effectiveCategory, effectiveFlow } from "../analytics";
 import { compare as compareSortKeys } from "@/lib/tree/sortKey";
+import { monthLabel } from "./envelope";
 
 export type MappableRow = {
   description: string;
@@ -51,6 +52,31 @@ export type EnvelopeIndex = {
   byCategory: ReadonlyMap<string, string>;
   incomeId: string | null;
 };
+
+/**
+ * Why the Register must not offer an envelope editor for this transaction.
+ *
+ * An envelope id on either kind of row is stored successfully but contributes no budget
+ * activity: off-budget accounts are excluded from the fold, and the opening position makes
+ * every date before the start month historical context. Refusing the edit is more honest than
+ * accepting a value the Budget page will ignore.
+ */
+export function envelopeAssignmentRefusal(input: {
+  transactionDate: string;
+  budgetStartMonth: string | null;
+  accountOffBudget: boolean;
+}): string | null {
+  if (input.accountOffBudget) {
+    return "This account is outside the envelope budget.";
+  }
+  if (
+    input.budgetStartMonth !== null &&
+    input.transactionDate < input.budgetStartMonth
+  ) {
+    return `The envelope budget starts in ${monthLabel(input.budgetStartMonth)}.`;
+  }
+  return null;
+}
 
 export function envelopeIndex(targets: readonly EnvelopeTarget[]): EnvelopeIndex {
   const ordered = [...targets].sort((left, right) =>

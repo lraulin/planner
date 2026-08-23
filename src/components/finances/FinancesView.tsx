@@ -135,6 +135,7 @@ export function FinancesView({
   initialAccounts,
   initialClaimed,
   envelopes,
+  budgetStartMonth,
   initialUpcoming = [],
   payees,
 }: {
@@ -142,7 +143,9 @@ export function FinancesView({
   initialAccounts: FinanceAccountRow[];
   initialClaimed: readonly ClaimedPayee[];
   /** Budget envelopes, in budget order. Empty until a budget exists. */
-  envelopes: readonly { id: string; name: string }[];
+  envelopes: readonly { id: string; label: string }[];
+  /** First date whose transactions contribute to the envelope budget. */
+  budgetStartMonth: string | null;
   /** Unposted schedule occurrences. Not transactions; never mixed into `rows`. */
   initialUpcoming?: UpcomingOccurrence[];
   payees: readonly { id: string; name: string }[];
@@ -281,6 +284,13 @@ export function FinancesView({
   }, [pendingDelete, openId, closeDrawer, refresh]);
 
   const claimedByPayee = useMemo(() => claimedPayeeMap(claimed), [claimed]);
+  const offBudgetAccountIds = useMemo(
+    () =>
+      new Set(
+        accounts.filter((account) => account.offBudget).map((account) => account.id),
+      ),
+    [accounts],
+  );
 
   const capabilitiesFor = useCallback(
     (rowId: string | null, count: number) => {
@@ -466,6 +476,8 @@ export function FinancesView({
         allColumns={financeColumns}
         columnCtx={{
           envelopes,
+          budgetStartMonth,
+          offBudgetAccountIds,
           pending,
           onSetEnvelope: (transactionId, categoryId) => {
             setError(null);
@@ -550,6 +562,9 @@ export function FinancesView({
       )}
       <TransactionDrawer
         transactionId={openId}
+        envelopes={envelopes}
+        budgetStartMonth={budgetStartMonth}
+        offBudgetAccountIds={offBudgetAccountIds}
         onClose={closeDrawer}
         onChanged={refresh}
       />

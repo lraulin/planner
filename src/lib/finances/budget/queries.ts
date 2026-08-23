@@ -24,6 +24,7 @@ import {
   type MonthKey,
 } from "./envelope";
 import { parseTemplates, type Template } from "./templates/types";
+import { budgetEnvelopeLabel } from "./hierarchy";
 import type { ScheduleSnapshot } from "./templates/schedule";
 import { scheduleSnapshots } from "./templates/snapshot";
 import { listScheduleRecords } from "../schedules/queries";
@@ -81,26 +82,9 @@ export async function listBudgetEnvelopeOptions(
     groupsOf(userId),
     categoriesOf(userId),
   ]);
-  const groupById = new Map(groups.map((group) => [group.id, group]));
-
-  function groupPath(groupId: string): string {
-    const names: string[] = [];
-    const seen = new Set<string>();
-    let current = groupById.get(groupId);
-    while (current) {
-      if (seen.has(current.id)) throw new Error("Budget groups contain a cycle.");
-      seen.add(current.id);
-      names.unshift(current.name);
-      current = current.parentGroupId
-        ? groupById.get(current.parentGroupId)
-        : undefined;
-    }
-    return names.join(" › ");
-  }
-
   return categories.map((category) => ({
     id: category.id,
-    label: `${groupPath(category.groupId)} › ${category.name}`,
+    label: budgetEnvelopeLabel(groups, category),
   }));
 }
 

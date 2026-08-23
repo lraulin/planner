@@ -370,6 +370,7 @@ export function SelectField<T extends string>({
   emptyLabel = "—",
   hint,
   className,
+  disabled = false,
 }: {
   label: string;
   value: T | null;
@@ -379,6 +380,7 @@ export function SelectField<T extends string>({
   emptyLabel?: string;
   hint?: string;
   className?: string;
+  disabled?: boolean;
 }) {
   const id = useId();
   return (
@@ -387,6 +389,7 @@ export function SelectField<T extends string>({
         id={id}
         value={value ?? ""}
         onChange={(event) => onChange((event.target.value || null) as T | null)}
+        disabled={disabled}
         className={`${INPUT_CLASS} cursor-pointer`}
       >
         {allowEmpty && <option value="">{emptyLabel}</option>}

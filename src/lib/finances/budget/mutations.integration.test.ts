@@ -27,6 +27,7 @@ import {
   saveEnvelopeTemplates,
   seedBudget,
   setCarryover,
+  setTaxonomyCategoryEnvelope,
   setTransactionBudgetCategory,
   updateBudgetCategory,
 } from "./mutations";
@@ -286,6 +287,41 @@ describeDb("budget mutations", () => {
       .from(financeTransactions)
       .where(eq(financeTransactions.id, txId));
     expect(row?.budgetCategoryId).toBe(ids.get("Savings"));
+  });
+
+  it("moves a taxonomy claim to one envelope and maps the unassigned backlog there", async () => {
+    const { checkingId } = await seedAccounts(userId);
+    const [txId] = await addTransactions(userId, [
+      {
+        accountId: checkingId,
+        date: "2026-08-05",
+        description: "KROGER",
+        amount: "-50.00",
+        category: "Groceries",
+      },
+    ]);
+    await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
+    const ids = await envelopes(userId);
+    const discretionaryId = ids.get("Discretionary");
+    if (!discretionaryId) throw new Error("Discretionary fixture envelope is missing.");
+
+    await setTaxonomyCategoryEnvelope(userId, "Groceries", discretionaryId);
+    const configured = await loadBudget(userId, MONTH);
+    expect(
+      configured.categories.find((row) => row.name === "Recurring spend")
+        ?.sourceCategories,
+    ).not.toContain("Groceries");
+    expect(
+      configured.categories.find((row) => row.name === "Discretionary")
+        ?.sourceCategories,
+    ).toContain("Groceries");
+
+    await autoMapBudgetCategories(userId, MONTH);
+    const [row] = await db
+      .select({ budgetCategoryId: financeTransactions.budgetCategoryId })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.id, txId));
+    expect(row?.budgetCategoryId).toBe(discretionaryId);
   });
 
   it("assigns, covers, and moves money without changing the total", async () => {
@@ -768,6 +804,9 @@ describeDb("budget mutations — cross-user isolation", () => {
     ).rejects.toThrow(/does not exist/);
     await expect(
       setTransactionBudgetCategory(intruderId, owned.transactionId, owned.categoryId),
+    ).rejects.toThrow(/does not exist/);
+    await expect(
+      setTaxonomyCategoryEnvelope(intruderId, "Groceries", owned.categoryId),
     ).rejects.toThrow(/does not exist/);
     await expect(
       saveEnvelopeTemplates(intruderId, owned.categoryId, [

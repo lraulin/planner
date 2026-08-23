@@ -445,6 +445,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
         columns.filter(
           (column) =>
             column.compact !== undefined ||
+            column.compactTextWithCtx !== undefined ||
             column.compactText !== undefined ||
             column.filterValue !== undefined,
         ),

@@ -72,6 +72,8 @@ export type ColumnDef<TCtx = unknown, TRow = OutlineNode> = {
    * scanning. Inline editing stays the desktop story.
    */
   compactText?: (row: NodeGridRow<TRow>) => string | null;
+  /** Compact text that needs the host grid's context, such as account or budget state. */
+  compactTextWithCtx?: (row: NodeGridRow<TRow>, ctx: TCtx) => string | null;
 };
 
 /**

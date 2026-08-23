@@ -7,6 +7,7 @@ import {
 } from "@/lib/finances/dashboardQueries";
 import { claimedPayeesOf } from "@/lib/finances/registerBillDraft";
 import { loadBudget } from "@/lib/finances/budget/queries";
+import { budgetEnvelopeLabel } from "@/lib/finances/budget/hierarchy";
 import { listPostedLinks, listScheduleRecords } from "@/lib/finances/schedules/queries";
 import { listPayees } from "@/lib/finances/payees/queries";
 import { upcomingOccurrences } from "@/lib/finances/schedules/upcoming";
@@ -51,8 +52,9 @@ export default async function FinancesRegisterPage() {
           initialClaimed={claimedPayeesOf(bills, spend)}
           envelopes={budget.categories.map((category) => ({
             id: category.id,
-            name: category.name,
+            label: budgetEnvelopeLabel(budget.groups, category),
           }))}
+          budgetStartMonth={budget.settings.startMonth}
           initialUpcoming={upcoming}
           payees={payees.map(({ id, name }) => ({ id, name }))}
         />

@@ -17,16 +17,19 @@ import {
   moveBudgetStructureItemAction,
   moveBudgetStructureItemIntoGroupAction,
   renameCategoryGroupAction,
+  setTaxonomyCategoryEnvelopeAction,
   updateBudgetCategoryAction,
 } from "@/app/finances/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { Drawer, DrawerHeader } from "@/components/detail/Drawer";
 import {
   budgetChildren,
+  budgetEnvelopeLabel,
   descendantGroupIds,
   type BudgetStructureRef,
 } from "@/lib/finances/budget/hierarchy";
 import type { BudgetCategoryRow, BudgetGroupRow } from "@/lib/finances/budget/queries";
+import { FINANCE_CATEGORIES } from "@/lib/finances/classify/categories";
 
 type DeleteTarget =
   | { kind: "group"; id: string; name: string }
@@ -175,6 +178,13 @@ export function BudgetStructureDrawer({
             move controls on any device.
           </p>
 
+          <AutomaticSorting
+            groups={groups}
+            categories={categories}
+            pending={pending}
+            run={run}
+          />
+
           <div className="space-y-3">
             {roots.map((root) => (
               <StructureGroup
@@ -235,6 +245,80 @@ type Run = (
   work: () => Promise<{ ok: boolean; error?: string }>,
   after?: () => void,
 ) => void;
+
+function AutomaticSorting({
+  groups,
+  categories,
+  pending,
+  run,
+}: {
+  groups: readonly BudgetGroupRow[];
+  categories: readonly BudgetCategoryRow[];
+  pending: boolean;
+  run: Run;
+}) {
+  const groupById = new Map(groups.map((group) => [group.id, group]));
+  const spendingEnvelopes = categories.filter(
+    (category) => !groupById.get(category.groupId)?.isIncome,
+  );
+  const claimedBy = new Map<string, string>();
+  for (const envelope of spendingEnvelopes) {
+    for (const category of envelope.sourceCategories) {
+      if (!claimedBy.has(category)) claimedBy.set(category, envelope.id);
+    }
+  }
+
+  return (
+    <details className="rounded border border-rule bg-surface-raised">
+      <summary className="flex min-h-tap cursor-pointer items-center px-3 py-2 text-[0.8125rem] font-medium text-ink md:min-h-0">
+        Automatic transaction sorting
+      </summary>
+      <div className="space-y-3 border-t border-rule px-3 py-3">
+        <p className="text-[0.75rem] leading-5 text-ink-muted">
+          Rules decide what a transaction bought by setting Category. This map decides
+          which envelope pays for each Category. It fills only unassigned transactions;
+          a direct Envelope choice in the Register is never overwritten.
+        </p>
+        <div className="grid gap-2 md:grid-cols-2">
+          {FINANCE_CATEGORIES.map((sourceCategory) => (
+            <label
+              key={sourceCategory}
+              className="grid min-h-tap gap-1 rounded border border-rule bg-surface px-2 py-2 text-[0.8125rem] text-ink md:min-h-0 md:grid-cols-[minmax(8rem,0.8fr)_minmax(10rem,1.2fr)] md:items-center"
+            >
+              <span>{sourceCategory}</span>
+              <select
+                value={claimedBy.get(sourceCategory) ?? ""}
+                disabled={pending || spendingEnvelopes.length === 0}
+                onChange={(event) => {
+                  const categoryId = event.target.value;
+                  run(() =>
+                    setTaxonomyCategoryEnvelopeAction(
+                      sourceCategory,
+                      categoryId === "" ? null : categoryId,
+                    ),
+                  );
+                }}
+                className="min-h-tap min-w-0 rounded border border-rule bg-surface px-2 py-1 text-base text-ink md:min-h-0 md:text-[0.8125rem]"
+              >
+                <option value="">Leave unassigned</option>
+                {spendingEnvelopes.map((envelope) => (
+                  <option key={envelope.id} value={envelope.id}>
+                    {budgetEnvelopeLabel(groups, envelope)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ))}
+        </div>
+        <p className="text-[0.75rem] leading-5 text-ink-muted">
+          After changing this map, use <strong>Sort what can be sorted</strong> on the
+          Budget page to fill the existing backlog. Existing envelope assignments stay
+          where they are.
+        </p>
+      </div>
+    </details>
+  );
+}
 
 function StructureGroup({
   groupId,

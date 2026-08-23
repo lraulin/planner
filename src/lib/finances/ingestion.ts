@@ -1,11 +1,12 @@
 import { reclassifyTransactions, type ReclassifySummary } from "./mutations";
+import { autoMapConfiguredBudgetCategories } from "./budget/mutations";
 import { findMatches, type FindMatchesResult } from "./schedules/mutations";
 import { listScheduleRecords } from "./schedules/queries";
 
 /**
- * Finish every transaction-ingestion path in the same order: stable payees first, then
- * schedule matching. A linked schedule can therefore route an otherwise unassigned row to
- * its envelope as part of the same ingestion flow.
+ * Finish every transaction-ingestion path in the same order: stable payees first, schedule
+ * matching second, then the taxonomy-to-envelope map for anything still unassigned. A linked
+ * schedule therefore wins over the broad category claim, and a hand assignment wins over both.
  */
 export async function finalizeTransactionIngestion(
   userId: string,
@@ -19,9 +20,11 @@ export async function finalizeTransactionIngestion(
   // Live bank sync opts in unconditionally because it already promised automatic
   // classification before this shared finish step existed.
   if (!options.forceReclassify && (await listScheduleRecords(userId)).length === 0) {
+    await autoMapConfiguredBudgetCategories(userId);
     return { reclassified: null, matched: { linked: 0 } };
   }
   const reclassified = await reclassifyTransactions(userId);
   const matched = await findMatches(userId);
+  await autoMapConfiguredBudgetCategories(userId);
   return { reclassified, matched };
 }

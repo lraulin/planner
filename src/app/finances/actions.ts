@@ -46,6 +46,7 @@ import {
   addTemplatesFromSchedules,
   applyBudgetTemplates,
   autoMapBudgetCategories,
+  autoMapConfiguredBudgetCategories,
   createBudgetCategory,
   createCategoryGroup,
   deleteBudgetCategory,
@@ -58,6 +59,7 @@ import {
   seedBudget,
   setCarryover,
   setTransactionBudgetCategory,
+  setTaxonomyCategoryEnvelope,
   updateBudgetCategory,
   type BudgetCategoryEdit,
   type BudgetOperation,
@@ -169,7 +171,11 @@ export async function listAccountsAction(): Promise<QueryResult<FinanceAccountRo
 }
 
 export async function reclassifyAction(): Promise<DataActionResult<ReclassifySummary>> {
-  return runWithData(reclassifyTransactions);
+  return runWithData(async (userId) => {
+    const result = await reclassifyTransactions(userId);
+    await autoMapConfiguredBudgetCategories(userId);
+    return result;
+  });
 }
 
 export async function setOneOffAction(
@@ -209,6 +215,7 @@ export async function setCommitmentPayeesAction(input: {
       input.payeeIds,
     );
     await reclassifyTransactions(userId);
+    await autoMapConfiguredBudgetCategories(userId);
   });
 }
 
@@ -355,6 +362,15 @@ export async function updateBudgetCategoryAction(
   edit: BudgetCategoryEdit,
 ): Promise<ActionResult> {
   return run((userId) => updateBudgetCategory(userId, categoryId, edit));
+}
+
+export async function setTaxonomyCategoryEnvelopeAction(
+  sourceCategory: string,
+  categoryId: string | null,
+): Promise<ActionResult> {
+  return run((userId) =>
+    setTaxonomyCategoryEnvelope(userId, sourceCategory, categoryId),
+  );
 }
 
 export async function deleteBudgetCategoryAction(
