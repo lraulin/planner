@@ -249,6 +249,13 @@ const PAGES = {
         "envelope zero-based ready to assign assign categories ynab actual carryover rollover",
     },
     {
+      id: "schedules",
+      label: "Schedules",
+      segment: "schedules",
+      status: "built",
+      keywords: "schedules recurring actual bills upcoming post skip discover",
+    },
+    {
       id: "commitments",
       label: "Commitments",
       segment: "commitments",
