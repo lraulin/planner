@@ -30,16 +30,22 @@ function rule(
   };
 }
 
-/** The pair whose order is load-bearing in the corpus this engine seeds. */
-const PET = rule("metlife-pet", "a1", "^METLIFE PET", "Pets");
-const INSURANCE = rule("metlife", "a2", "^METLIFE", "Insurance");
+/**
+ * A specific rule above a general one that would otherwise swallow it.
+ *
+ * Synthetic: the 65 seeded rules do not actually overlap on any real merchant (see
+ * `seed.test.ts`), so the ordering behaviour has to be exercised with a pair built for it
+ * rather than borrowed from the corpus.
+ */
+const PET = rule("specific", "a1", "^METLIFE PET", "Pets");
+const INSURANCE = rule("general", "a2", "^METLIFE", "Insurance");
 
 describe("matchRules", () => {
   it("lets the earlier rule win", () => {
-    // Pet insurance is a pet cost. The old file kept this true by putting the specific rule
-    // above the general one in an array; the sort key is that array position now.
+    // The specific rule above the general one. The old file kept this kind of thing true by
+    // array position; the sort key is that position now.
     const { rules } = compileRules([PET, INSURANCE]);
-    expect(matchRules(rules, ROW)?.id).toBe("metlife-pet");
+    expect(matchRules(rules, ROW)?.id).toBe("specific");
   });
 
   it("swapping their sort keys swaps the answer", () => {
@@ -52,17 +58,17 @@ describe("matchRules", () => {
       { ...PET, sortKey: "a2" },
       { ...INSURANCE, sortKey: "a1" },
     ]);
-    expect(matchRules(rules, ROW)?.id).toBe("metlife");
+    expect(matchRules(rules, ROW)?.id).toBe("general");
   });
 
   it("orders by sort key regardless of the order rows arrive in", () => {
     const { rules } = compileRules([INSURANCE, PET]);
-    expect(rules.map((entry) => entry.id)).toEqual(["metlife-pet", "metlife"]);
+    expect(rules.map((entry) => entry.id)).toEqual(["specific", "general"]);
   });
 
   it("never fires a disabled rule", () => {
     const { rules } = compileRules([{ ...PET, enabled: false }, INSURANCE]);
-    expect(matchRules(rules, ROW)?.id).toBe("metlife");
+    expect(matchRules(rules, ROW)?.id).toBe("general");
   });
 
   it("requires every condition on a rule to hold", () => {
@@ -71,7 +77,11 @@ describe("matchRules", () => {
       {
         ...PET,
         conditions: [
-          { field: "merchant", op: "matches", value: { source: "^METLIFE", flags: "" } },
+          {
+            field: "merchant",
+            op: "matches",
+            value: { source: "^METLIFE", flags: "" },
+          },
           { field: "amount", op: "lt", value: -10000 },
         ],
       },
@@ -88,8 +98,8 @@ describe("matchRules", () => {
     // Compiled rules are reused across 7,000 rows; any state carried between calls would show
     // up here as an alternating answer.
     const { rules } = compileRules([PET, INSURANCE]);
-    expect(matchRules(rules, ROW)?.id).toBe("metlife-pet");
-    expect(matchRules(rules, ROW)?.id).toBe("metlife-pet");
+    expect(matchRules(rules, ROW)?.id).toBe("specific");
+    expect(matchRules(rules, ROW)?.id).toBe("specific");
   });
 });
 
@@ -110,7 +120,7 @@ describe("applyRules", () => {
       category: "Pets",
       flow: "spend",
       payeeName: "MetLife Pet",
-      ruleId: "metlife-pet",
+      ruleId: "specific",
     });
   });
 
@@ -164,9 +174,13 @@ describe("compileRules", () => {
       INSURANCE,
     ]);
 
-    expect(rules.map((entry) => entry.id)).toEqual(["metlife"]);
+    expect(rules.map((entry) => entry.id)).toEqual(["general"]);
     expect(problems).toEqual([
-      { id: "metlife-pet", name: "metlife-pet", reason: expect.stringContaining("conditions") },
+      {
+        id: "specific",
+        name: "specific",
+        reason: expect.stringContaining("conditions"),
+      },
     ]);
   });
 
@@ -192,8 +206,14 @@ describe("compileRules", () => {
     // The unique index makes a tie impossible in the database; this keeps the pure function
     // total anyway, so a test fixture or a bad import cannot make the order depend on a query
     // plan.
-    const a = compileRules([rule("b", "a1", "^B", "Dining"), rule("a", "a1", "^A", "Dining")]);
-    const b = compileRules([rule("a", "a1", "^A", "Dining"), rule("b", "a1", "^B", "Dining")]);
+    const a = compileRules([
+      rule("b", "a1", "^B", "Dining"),
+      rule("a", "a1", "^A", "Dining"),
+    ]);
+    const b = compileRules([
+      rule("a", "a1", "^A", "Dining"),
+      rule("b", "a1", "^B", "Dining"),
+    ]);
     expect(a.rules.map((entry) => entry.id)).toEqual(b.rules.map((entry) => entry.id));
   });
 });

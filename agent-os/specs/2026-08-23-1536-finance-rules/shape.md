@@ -32,11 +32,17 @@ The full set is D1–D9 in `plan.md`. The three that took the most thought:
 preference question and turned out to be arithmetic. Actual scores condition specificity to rank
 rules, and `matches` scores **0** (`../actual/packages/loot-core/src/server/rules/rule-utils.ts:18-35`);
 the ×2 bonus needs _every_ condition to be `is|isNot|isapprox|oneOf|notOneOf`. All 65 seeded
-rules are regexes, so all 65 would score zero, tie, and be ordered by id. `METLIFE PET` vs
-`METLIFE` would be settled by a UUID sort. Actual's scoring is calibrated for a corpus dominated
-by `payee is <id>`; ours is dominated by the one op the score cannot see into. So the order the
-user drags _is_ the priority, and first match wins — which also keeps `ruleId` singular, so
-"why is this Dining?" stays answerable with one name.
+rules are regexes, so all 65 would score zero, tie, and be ordered by id — which rule wins would
+be a UUID comparison. Actual's scoring is calibrated for a corpus dominated by `payee is <id>`;
+ours is dominated by the one op the score cannot see into. So the order the user drags _is_ the
+priority, and first match wins — which also keeps `ruleId` singular, so "why is this Dining?"
+stays answerable with one name.
+
+Implementation then found that **no two of the 65 patterns claim the same merchant** anywhere in
+the 851 distinct merchant strings the real file contains, so order currently decides nothing.
+That does not change the decision — it changes what the decision is _for_. It is not protecting
+the seeded corpus; it is making sure the first broad rule Lee writes by hand lands somewhere
+legible instead of somewhere arbitrary.
 
 **`merchant matches` is permanent, not a compatibility shim.** The tempting move, now that
 payees are stable, is to convert every regex into `payee oneOf [uuid…]` and be done with

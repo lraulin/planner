@@ -57,10 +57,19 @@ caught a bug — not a feature.
   `../actual/packages/loot-core/src/server/rules/rule-utils.ts:18-35` scores
   `matches: 0`, and `computeScore`'s ×2 bonus applies only when _every_ condition is
   `is|isNot|isapprox|oneOf|notOneOf`. All 65 seeded rules are regexes, so under Actual's
-  ranking every one of them scores **0** and ties — and ties break by id. `METLIFE PET` vs
-  `METLIFE` would be decided by whichever UUID sorted first. Actual's scoring is calibrated for
-  a corpus dominated by `payee is <id>`; ours is dominated by the one op the score cannot see
-  into. Adopting it would not be a behaviour change so much as a _random_ one.
+  ranking every one of them scores **0** and ties — and ties break by id, so which rule wins
+  would be a UUID comparison. Actual's scoring is calibrated for a corpus dominated by
+  `payee is <id>`; ours is dominated by the one op the score cannot see into. Adopting it would
+  not be a behaviour change so much as an _arbitrary_ one.
+
+  **Correction (verified during implementation):** an earlier draft of this decision claimed
+  `METLIFE PET` had to beat a general `METLIFE` rule. There is no general `METLIFE` rule, and
+  more than that — **none of the 65 patterns overlaps another on any of the 851 distinct
+  merchant strings in the real file.** Order decides nothing today. The decision stands
+  unchanged, because the order has to already be legible when the first hand-written rule broad
+  enough to catch two merchants arrives; but the argument is about the rules Lee writes next,
+  not about the ones being seeded. `seed.test.ts` pins the non-overlap so the day it stops being
+  true is the day a test says so.
 
   Second reason: Actual's "every match applies, last wins" makes the answer to _why is this
   Dining?_ a set of rules, so `RowClassification.ruleId` becomes a list and every explanation
@@ -170,9 +179,10 @@ caught a bug — not a feature.
 
 Material refinements during implementation (requirements, design, scope). Omit pure code polish.
 
-| #   | Change                                                                                                                                                                                                                                                                                             | Why                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | The refund rekey's expected nonzero diff is **zero**: 0 of 7,030 classified rows change flow on the real file. D8's separate-commit sequencing is kept anyway, and the audit it produced (`classify/flowDiff.ts`, `npm run flow:audit`) stays as the standing gate for any future detector change. | The prediction assumed the merchant-string and payee-id keys still disagreed on PayPal rows. They did — until the payee matcher cutover rebuilt the catalog and corrected 88 assignments, which had already repaired that disagreement. This change only removes the dependency on `ClassifyRule.merchant`. A tripwire forcing the refund branch off moved exactly the 64 refund rows and $1,991.49, proving the zero is a real zero rather than an audit that cannot see. |
+| #   | Change                                                                                                                                                                                                                                                                                                                                                                                                               | Why                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | The refund rekey's expected nonzero diff is **zero**: 0 of 7,030 classified rows change flow on the real file. D8's separate-commit sequencing is kept anyway, and the audit it produced (`classify/flowDiff.ts`, `npm run flow:audit`) stays as the standing gate for any future detector change.                                                                                                                   | The prediction assumed the merchant-string and payee-id keys still disagreed on PayPal rows. They did — until the payee matcher cutover rebuilt the catalog and corrected 88 assignments, which had already repaired that disagreement. This change only removes the dependency on `ClassifyRule.merchant`. A tripwire forcing the refund branch off moved exactly the 64 refund rows and $1,991.49, proving the zero is a real zero rather than an audit that cannot see.                   |
+| 2   | **The 65 seeded rules do not overlap.** No two patterns claim the same string anywhere in the 851 distinct merchants of the real file, so rule order decides nothing today. D2 is unchanged; its justification is rewritten to be about the rules written next rather than the ones being seeded, and an earlier claim that `METLIFE PET` had to beat a general `METLIFE` rule is withdrawn — there is no such rule. | Found while tripwiring the offline parity test: reversing every seeded sort key changed not a single classification. That is worth knowing in both directions. It means seeding cannot break parity through a mis-ordered key, and it means the parity proof is insensitive to order and so cannot stand in for the strictly-increasing-sort-key test. `seed.test.ts` now pins the non-overlap, so the first overlap added later fails a test instead of silently making order load-bearing. |
 
 ---
 
@@ -306,9 +316,9 @@ rejects a category on a flow that does not carry one; rejects `name-payee` besid
 condition; accepts a flow-only rule (`paypal-outbound`); rejects a rule with no actions.
 
 _match_ — matches `merchant` regexes against the **normalized** merchant, not the raw
-description (`^GITHUB` must claim `PAYPAL *GITHUB INC`); the earlier rule wins (`METLIFE PET`
-above `METLIFE`); **swapping their sort keys swaps the answer**, proving order is load-bearing
-rather than incidental; a disabled rule never fires; re-testing one compiled rule against a
+description (`^GITHUB` must claim `PAYPAL *GITHUB INC`); the earlier of two overlapping rules
+wins; **swapping their sort keys swaps the answer**, proving the sort key is read rather than
+merely stored; a disabled rule never fires; re-testing one compiled rule against a
 second row gives the same answer (the `lastIndex` tripwire); conditions on different fields are
 ANDed; `lt -5000` claims a $60 charge and not a $60 deposit; date compares calendar-day strings
 with no timezone arithmetic; a payee condition never fires on a row whose `payeeId` is null.

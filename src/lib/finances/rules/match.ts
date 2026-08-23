@@ -9,8 +9,14 @@
  * specificity score and lets every matching rule apply, most specific last. That cannot work
  * on this corpus: `OP_SCORES` in `../actual/packages/loot-core/src/server/rules/rule-utils.ts`
  * gives `matches` a score of zero, and the specificity bonus requires *every* condition to be
- * an equality op — so 65 regex rules would all score zero, tie, and be ordered by id.
- * `METLIFE PET` beating `METLIFE` would come down to a UUID comparison.
+ * an equality op — so 65 regex rules would all score zero, tie, and be ordered by id. Which
+ * rule wins would then be a UUID comparison: stable, but not an ordering anyone can reason
+ * about or correct.
+ *
+ * **Nothing in the seeded corpus depends on this yet.** None of the 65 patterns overlaps
+ * another on any of the 851 distinct merchant strings in the real file, so today every row is
+ * claimed by at most one rule. The order matters for the rules a person writes next — a broad
+ * `contains` over a specific one — and it has to already be legible when that happens.
  *
  * Keeping one rule per row also keeps `ruleId` singular, so "why is this Dining?" has one
  * answer with a name on it.

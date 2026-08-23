@@ -3223,9 +3223,12 @@ export const financePayeeAliases = pgTable(
  * **`sort_key` is the priority, and first match wins.** Actual instead scores condition
  * specificity — but `OP_SCORES` gives `matches` zero and the specificity bonus needs every
  * condition to be an equality op, so a corpus of regexes would tie at zero and rank by id.
- * `METLIFE PET` beating `METLIFE` cannot rest on a UUID sort, so the order is the one a
- * person set and can see. The reasoning a rule's position encodes lives in `notes`, which is
- * where the old file's comments went.
+ * Ranking by UUID is not an ordering anyone can reason about, so the order is the one a person
+ * set and can see. (The seeded 65 happen not to overlap on any of the 851 real merchant
+ * strings, so nothing today depends on it — but the first hand-written rule broad enough to
+ * catch two merchants will, and that is a bad moment to discover the order is arbitrary.)
+ * The reasoning a rule's position encodes lives in `notes`, which is where the old file's
+ * comments went.
  */
 export const financeRules = pgTable(
   "finance_rules",
