@@ -3,7 +3,13 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { financeAccounts, financePayees, financeRules, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
-import { createRule, deleteRule, moveRule, setRuleEnabled, updateRule } from "./mutations";
+import {
+  createRule,
+  deleteRule,
+  moveRule,
+  setRuleEnabled,
+  updateRule,
+} from "./mutations";
 import { getRule, listRules } from "./queries";
 
 const dbReachable = await databaseReachable();
@@ -78,9 +84,9 @@ describeDb("rule mutations", () => {
 
   it("refuses a duplicate name, case-insensitively", async () => {
     await createRule(userId, { name: "Costco", ...GROCERIES });
-    await expect(
-      createRule(userId, { name: "COSTCO", ...GROCERIES }),
-    ).rejects.toThrow(/already exists/i);
+    await expect(createRule(userId, { name: "COSTCO", ...GROCERIES })).rejects.toThrow(
+      /already exists/i,
+    );
   });
 
   it("refuses a rule that could never compile", async () => {

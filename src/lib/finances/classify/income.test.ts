@@ -3,6 +3,7 @@ import {
   detectIncome,
   incomeFromPaydays,
   normalizedMonthlyIncome,
+  summarizeClassifiedIncome,
   type IncomeRow,
 } from "./income";
 
@@ -70,6 +71,17 @@ const TRUSTEDQA_JOB: IncomeRow[] = [
 ];
 
 describe("detectIncome", () => {
+  it("summarizes the income rows already stored before a preview", () => {
+    const summary = summarizeClassifiedIncome(
+      ENDAVA_CHECKS.slice(0, 3).map((entry) => ({ ...entry, derivedFlow: "income" })),
+    );
+    expect(summary).toEqual({
+      paydayCount: 3,
+      medianPaycheckCents: 242439,
+      normalizedMonthlyIncomeCents: 525285,
+    });
+  });
+
   it("reads one income history across Endava and both TrustedQA wordings", () => {
     const result = detectIncome([
       ...ENDAVA_CHECKS,

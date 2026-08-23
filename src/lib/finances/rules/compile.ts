@@ -15,7 +15,7 @@
  */
 
 import { parseRuleActions, type RuleAction } from "./actions";
-import { parseRuleConditions, type CompiledCondition } from "./conditions";
+import { parseRuleConditionsDetailed, type CompiledCondition } from "./conditions";
 
 export type StoredRule = {
   id: string;
@@ -69,15 +69,16 @@ export function compileRules(stored: readonly StoredRule[]): CompiledRules {
   for (const row of ordered) {
     if (!row.enabled) continue;
 
-    const conditions = parseRuleConditions(row.conditions);
-    if (!conditions) {
+    const parsedConditions = parseRuleConditionsDetailed(row.conditions);
+    if ("error" in parsedConditions) {
       problems.push({
         id: row.id,
         name: row.name,
-        reason: "Its conditions could not be read.",
+        reason: parsedConditions.error,
       });
       continue;
     }
+    const conditions = parsedConditions.conditions;
 
     const parsed = parseRuleActions(row.actions, {
       hasPayeeCondition: hasPayeeCondition(conditions),

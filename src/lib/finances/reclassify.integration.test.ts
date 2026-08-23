@@ -7,6 +7,7 @@ import { importFinanceCsvFiles, type ImportFile } from "./import";
 import { seedRules } from "./rules/cutover";
 import {
   reclassifyTransactions,
+  previewDerivedChanges,
   setOneOff,
   updateTransaction,
   upsertRecurringSpend,
@@ -14,6 +15,8 @@ import {
 import { addAlias, removeAlias } from "./payees/mutations";
 import { listPayees } from "./payees/queries";
 import { listAccounts, listTransactions } from "./queries";
+import { setRuleEnabled } from "./rules/mutations";
+import { listRules } from "./rules/queries";
 
 const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
@@ -248,6 +251,28 @@ describeDb("reclassifyTransactions", () => {
     });
   });
 
+  it("previews the exact planner result without writing it", async () => {
+    await reclassifyTransactions(userId);
+    const before = await classifiedRows(userId);
+    const rentRule = (await listRules(userId)).find((rule) => rule.seededId === "rent");
+    if (!rentRule) throw new Error("Expected the starter rent rule.");
+    expect(rentRule.matchCount).toBe(1);
+    await setRuleEnabled(userId, rentRule.id, false);
+
+    const preview = await previewDerivedChanges(userId);
+    expect(await classifiedRows(userId)).toEqual(before);
+    expect(preview).toMatchObject({ scanned: before.length, updated: 1 });
+
+    const applied = await reclassifyTransactions(userId);
+    expect(applied.scanned).toBe(preview.scanned);
+    expect(applied.updated).toBe(preview.updated);
+    expect(applied.paydayCount).toBe(preview.income.after.paydayCount);
+    expect(applied.medianPaycheckCents).toBe(preview.income.after.medianPaycheckCents);
+    expect(applied.normalizedMonthlyIncomeCents).toBe(
+      preview.income.after.normalizedMonthlyIncomeCents,
+    );
+  });
+
   it("clears the event label when a row goes back into the baseline", async () => {
     const [rent] = (await listTransactions(userId)).filter((row) =>
       row.description.includes("RENT:RAULI"),
@@ -378,6 +403,14 @@ describeDb("reclassify user isolation", () => {
   it("does not classify another user's rows", async () => {
     const summary = await reclassifyTransactions(intruderId);
     expect(summary).toMatchObject({ scanned: 0, updated: 0 });
+    expect(
+      (await classifiedRows(ownerId)).every((row) => row.derivedFlow === null),
+    ).toBe(true);
+  });
+
+  it("does not preview another user's rows", async () => {
+    const preview = await previewDerivedChanges(intruderId);
+    expect(preview).toMatchObject({ scanned: 0, updated: 0 });
     expect(
       (await classifiedRows(ownerId)).every((row) => row.derivedFlow === null),
     ).toBe(true);

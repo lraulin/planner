@@ -6,12 +6,9 @@
  * nothing to do. That property is what makes this safe to re-run after an import rather than a
  * one-shot migration nobody dares touch twice.
  *
- * **Where the names come from.** `classify/rules.ts` already holds the knowledge that
- * `WM SUPERCENTER` and `WAL-MART` are one company; its 48 `merchant:` entries are exactly the
- * canonical names a person would write. They seed payee names here and then stop being read at
- * render time (`agent-os/specs/2026-08-23-0748-finance-payees/` D5). A rule with no `merchant:`
- * contributes no name at all — `chewy` matches CHEWY, PETSMART and PETCO to categorise them as
- * Pets, and folding three shops into one payee because one rule mentions them would be wrong.
+ * **Where the names come from.** The caller supplies the active rules table's `name-payee`
+ * result. That action applies only while an alias is first minted; later edits to a rule never
+ * rename a payee the user already owns.
  *
  * **Why a re-run cannot undo an edit.** Every decision below is keyed on whether an alias is
  * already claimed, never on whether a payee still has the name this planner would have given
@@ -20,7 +17,6 @@
  * already live, instead of resurrecting a payee under the old name.
  */
 
-import { matchRule } from "../classify/rules";
 import { aliasFor } from "./resolve";
 
 /** One transaction's identifying strings, before any payee exists. */
@@ -65,11 +61,12 @@ function nameKey(name: string): string {
  */
 function groupAliases(
   aliases: readonly string[],
+  nameHint: (alias: string) => string | null,
 ): Map<string, { name: string; aliases: string[] }> {
   const groups = new Map<string, { name: string; aliases: string[]; named: boolean }>();
 
   for (const alias of aliases) {
-    const ruleName = matchRule(alias)?.merchant;
+    const ruleName = nameHint(alias) ?? undefined;
     const name = ruleName ?? alias;
     const key = nameKey(name);
     const existing = groups.get(key);
@@ -102,6 +99,7 @@ function groupAliases(
 export function planSeed(
   sources: readonly SeedSource[],
   existing: readonly ExistingPayee[],
+  nameHint: (alias: string) => string | null,
 ): SeedPlan {
   const observed = new Set<string>();
   for (const source of sources) {
@@ -120,8 +118,8 @@ export function planSeed(
 
   const plan: SeedPlan = { create: [], extend: [], conflicts: [] };
 
-  for (const group of [...groupAliases([...observed].sort()).values()].sort((a, b) =>
-    a.name.localeCompare(b.name),
+  for (const group of [...groupAliases([...observed].sort(), nameHint).values()].sort(
+    (a, b) => a.name.localeCompare(b.name),
   )) {
     const unclaimed = group.aliases.filter((alias) => !owner.has(alias));
     // Every spelling already belongs to someone. This is the ordinary second run, and also

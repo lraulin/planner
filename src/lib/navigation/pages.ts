@@ -284,6 +284,13 @@ const PAGES = {
       keywords: "merchants vendors aliases bank spellings identity",
     },
     {
+      id: "rules",
+      label: "Rules",
+      segment: "rules",
+      status: "built",
+      keywords: "categorize category flow regex merchant automation classify",
+    },
+    {
       id: "statements",
       label: "Statements",
       segment: "statements",

@@ -8,6 +8,7 @@ import {
 import { claimedPayeesOf } from "@/lib/finances/registerBillDraft";
 import { loadBudget } from "@/lib/finances/budget/queries";
 import { listPostedLinks, listScheduleRecords } from "@/lib/finances/schedules/queries";
+import { listPayees } from "@/lib/finances/payees/queries";
 import { upcomingOccurrences } from "@/lib/finances/schedules/upcoming";
 import { DEFAULT_UPCOMING_LENGTH } from "@/lib/finances/schedules/status";
 import { toDateKey } from "@/lib/schedule/geometry";
@@ -20,7 +21,7 @@ export const dynamic = "force-dynamic";
 export default async function FinancesRegisterPage() {
   const userId = await getCurrentUserId();
   const todayKey = toDateKey(new Date());
-  const [transactions, accounts, bills, spend, budget, scheduleRecords] =
+  const [transactions, accounts, bills, spend, budget, scheduleRecords, payees] =
     await Promise.all([
       listTransactions(userId),
       listAccounts(userId),
@@ -28,6 +29,7 @@ export default async function FinancesRegisterPage() {
       loadRecurringSpend(userId),
       loadBudget(userId, null),
       listScheduleRecords(userId),
+      listPayees(userId),
     ]);
   const links = await listPostedLinks(
     userId,
@@ -52,6 +54,7 @@ export default async function FinancesRegisterPage() {
             name: category.name,
           }))}
           initialUpcoming={upcoming}
+          payees={payees.map(({ id, name }) => ({ id, name }))}
         />
       </Suspense>
     </AppShell>

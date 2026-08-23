@@ -15,6 +15,7 @@ import {
   financePayeeAliases,
   financePayees,
   financePaymentResolutions,
+  financeRules,
   financeTransactions,
 } from "@/db/schema";
 import { isUniqueViolation } from "@/lib/db/constraints";
@@ -22,6 +23,8 @@ import { numericStringToCents } from "../money";
 import { matchPaypalResolutions, type PaypalResolution } from "../paypalMatch";
 import { aliasFor, payeeIndex } from "./resolve";
 import { planSeed, type ExistingPayee, type SeedSource } from "./seed";
+import { compileRules } from "../rules/compile";
+import { applyRules } from "../rules/match";
 
 export type SeedPayeesSummary = {
   createdPayees: number;
@@ -214,8 +217,9 @@ async function applyPayeePlan(
   userId: string,
   sources: readonly SeedSource[],
   existing: readonly ExistingPayee[],
+  nameHint: (alias: string) => string | null,
 ): Promise<EnsurePayeesSummary> {
-  const plan = planSeed(sources, existing);
+  const plan = planSeed(sources, existing, nameHint);
   let createdPayees = 0;
   let addedAliases = 0;
 
@@ -256,6 +260,30 @@ async function applyPayeePlan(
   return { createdPayees, addedAliases, conflicts: plan.conflicts };
 }
 
+async function loadNameHint(userId: string): Promise<(alias: string) => string | null> {
+  const stored = await db
+    .select({
+      id: financeRules.id,
+      name: financeRules.name,
+      conditions: financeRules.conditions,
+      actions: financeRules.actions,
+      enabled: financeRules.enabled,
+      sortKey: financeRules.sortKey,
+    })
+    .from(financeRules)
+    .where(eq(financeRules.userId, userId));
+  const rules = compileRules(stored).rules;
+  return (alias) =>
+    applyRules(rules, {
+      merchant: alias,
+      description: alias,
+      payeeId: null,
+      accountId: "00000000-0000-4000-8000-000000000000",
+      amountCents: 0,
+      transactionDate: "1970-01-01",
+    }).payeeName;
+}
+
 /**
  * Make sure every merchant in this user's history has a payee and an alias.
  *
@@ -265,11 +293,12 @@ async function applyPayeePlan(
  * columns in one plan.
  */
 export async function ensurePayees(userId: string): Promise<EnsurePayeesSummary> {
-  const [{ sources }, existing] = await Promise.all([
+  const [{ sources }, existing, nameHint] = await Promise.all([
     loadSources(userId),
     loadExisting(userId),
+    loadNameHint(userId),
   ]);
-  return applyPayeePlan(userId, sources, existing);
+  return applyPayeePlan(userId, sources, existing, nameHint);
 }
 
 /**
@@ -279,11 +308,12 @@ export async function ensurePayees(userId: string): Promise<EnsurePayeesSummary>
  * writes only rows whose payee would change. A second call therefore reports zeroes.
  */
 export async function seedPayees(userId: string): Promise<SeedPayeesSummary> {
-  const [{ sources, byRowId }, existing] = await Promise.all([
+  const [{ sources, byRowId }, existing, nameHint] = await Promise.all([
     loadSources(userId),
     loadExisting(userId),
+    loadNameHint(userId),
   ]);
-  const ensured = await applyPayeePlan(userId, sources, existing);
+  const ensured = await applyPayeePlan(userId, sources, existing, nameHint);
 
   const { assigned, unresolved } = await assignPayees(userId, byRowId);
 

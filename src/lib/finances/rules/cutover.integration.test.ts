@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { financeRules, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
-import { CLASSIFY_RULES } from "../classify/rules";
+import { STARTER_RULES } from "./starterRules";
 import { auditRuleSeed, planSeedFor, seedRules } from "./cutover";
 
 const dbReachable = await databaseReachable();
@@ -43,7 +43,7 @@ describeDb("seedRules", () => {
     const userId = await makeUser();
     const { created } = await seedRules(userId);
 
-    expect(created).toBe(CLASSIFY_RULES.length);
+    expect(created).toBe(STARTER_RULES.length);
 
     const rows = await db
       .select({ seededId: financeRules.seededId, sortKey: financeRules.sortKey })
@@ -51,7 +51,7 @@ describeDb("seedRules", () => {
       .where(eq(financeRules.userId, userId))
       .orderBy(financeRules.sortKey);
 
-    expect(rows.map((row) => row.seededId)).toEqual(CLASSIFY_RULES.map((r) => r.id));
+    expect(rows.map((row) => row.seededId)).toEqual(STARTER_RULES.map((r) => r.id));
   });
 
   it("writes nothing on a replay", async () => {
@@ -62,7 +62,7 @@ describeDb("seedRules", () => {
 
     const again = await seedRules(userId);
     expect(again.created).toBe(0);
-    expect(await ruleCount(userId)).toBe(CLASSIFY_RULES.length);
+    expect(await ruleCount(userId)).toBe(STARTER_RULES.length);
   });
 
   it("re-creates a deleted rule, which is why seeding is a one-time migration", async () => {
@@ -115,7 +115,7 @@ describeDb("seedRules", () => {
       .from(financeRules)
       .where(and(eq(financeRules.userId, userId), eq(financeRules.seededId, "vca")));
 
-    const source = CLASSIFY_RULES.find((rule) => rule.id === "vca")!.match.source;
+    const source = STARTER_RULES.find((rule) => rule.id === "vca")!.match.source;
     expect(row.conditions).toEqual([
       { field: "merchant", op: "matches", value: { source, flags: "" } },
     ]);
@@ -128,7 +128,7 @@ describeDb("seedRules", () => {
     const audit = await auditRuleSeed(userId);
     expect(audit).toMatchObject({
       toCreate: 0,
-      existing: CLASSIFY_RULES.length,
+      existing: STARTER_RULES.length,
       canApply: true,
       problems: [],
     });
@@ -145,16 +145,16 @@ describeDb("rule ownership", () => {
       .select({ id: financeRules.id, name: financeRules.name })
       .from(financeRules)
       .where(eq(financeRules.userId, owner));
-    expect(ownerRows).toHaveLength(CLASSIFY_RULES.length);
+    expect(ownerRows).toHaveLength(STARTER_RULES.length);
 
     // Reading: the intruder's own seeding sees none of the owner's rules as "already present",
     // which is what proves planSeedFor is scoped rather than global.
     const intruderPlan = await planSeedFor(intruder);
-    expect(intruderPlan.create).toHaveLength(CLASSIFY_RULES.length);
+    expect(intruderPlan.create).toHaveLength(STARTER_RULES.length);
     expect(intruderPlan.skipped).toEqual([]);
     await seedRules(intruder);
-    expect(await ruleCount(intruder)).toBe(CLASSIFY_RULES.length);
-    expect(await ruleCount(owner)).toBe(CLASSIFY_RULES.length);
+    expect(await ruleCount(intruder)).toBe(STARTER_RULES.length);
+    expect(await ruleCount(owner)).toBe(STARTER_RULES.length);
 
     const target = ownerRows[0];
 
@@ -173,7 +173,7 @@ describeDb("rule ownership", () => {
     await db
       .delete(financeRules)
       .where(and(eq(financeRules.userId, intruder), eq(financeRules.id, target.id)));
-    expect(await ruleCount(owner)).toBe(CLASSIFY_RULES.length);
+    expect(await ruleCount(owner)).toBe(STARTER_RULES.length);
   });
 
   it("lets two users hold the same seeded id and the same sort key", async () => {
@@ -184,7 +184,7 @@ describeDb("rule ownership", () => {
     const second = await makeUser();
     await seedRules(first);
     await expect(seedRules(second)).resolves.toEqual({
-      created: CLASSIFY_RULES.length,
+      created: STARTER_RULES.length,
     });
   });
 });

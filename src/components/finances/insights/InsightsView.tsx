@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState } from "react";
 import {
   coverageGap,
   effectiveCategory,
@@ -27,7 +27,7 @@ import {
 } from "@/lib/finances/insightsFilter";
 import { formatUsd } from "@/lib/finances/money";
 import { cashFlowSankey } from "@/lib/finances/sankeyFlow";
-import { reclassifyAction } from "@/app/finances/actions";
+import { RulePreviewDialog } from "@/components/finances/rules/RulePreviewDialog";
 import {
   CHART_MODE_LABELS,
   INSIGHTS_AXES,
@@ -121,9 +121,8 @@ export function InsightsView({
   // budgeting exists — it costs a year of a bill, and what to do about that is not its call.
 
   const { value: view, patch } = useSetting(INSIGHTS_SCOPE, INSIGHTS_CODEC);
-  const [reclassifyError, setReclassifyError] = useState<string | null>(null);
   const [reclassified, setReclassified] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const [previewingRules, setPreviewingRules] = useState(false);
 
   const filterOptions = useMemo(() => insightsFilterOptions(rows), [rows]);
   const unresolvedPaypal = useMemo(
@@ -155,24 +154,6 @@ export function InsightsView({
       ...current,
       drill: sameDrill(current.drill, next) ? null : next,
     }));
-  }
-
-  function reclassify() {
-    setReclassifyError(null);
-    setReclassified(null);
-    startTransition(async () => {
-      const result = await reclassifyAction();
-      if (!result.ok) {
-        setReclassifyError(result.error);
-        return;
-      }
-      const summary = result.data;
-      setReclassified(
-        summary
-          ? `Reclassified ${summary.scanned.toLocaleString()} rows; ${summary.updated.toLocaleString()} changed.`
-          : "Reclassified.",
-      );
-    });
   }
 
   const bucketNoun = view.axis === "pay-period" ? "pay period" : "month";
@@ -710,11 +691,10 @@ export function InsightsView({
             actions={
               <button
                 type="button"
-                onClick={reclassify}
-                disabled={pending}
+                onClick={() => setPreviewingRules(true)}
                 className="min-h-tap rounded border border-rule bg-surface-raised px-3 text-[0.8125rem] text-ink disabled:opacity-50"
               >
-                {pending ? "Reclassifying…" : "Reclassify"}
+                Run rules…
               </button>
             }
           >
@@ -763,13 +743,19 @@ export function InsightsView({
                   : "Every row has been classified."}
               </li>
               {reclassified && <li className="text-ink-muted">{reclassified}</li>}
-              {reclassifyError && (
-                <li className="text-priority-a">{reclassifyError}</li>
-              )}
             </ul>
           </Panel>
         </div>
       </div>
+      {previewingRules ? (
+        <RulePreviewDialog
+          onClose={() => setPreviewingRules(false)}
+          onRan={(message) => {
+            setPreviewingRules(false);
+            setReclassified(message);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

@@ -110,7 +110,9 @@ function isNonEmptyString(value: unknown): value is string {
 
 function isStringList(value: unknown): value is string[] {
   return (
-    Array.isArray(value) && value.length > 0 && value.every((entry) => isNonEmptyString(entry))
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every((entry) => isNonEmptyString(entry))
   );
 }
 
@@ -140,10 +142,20 @@ export function regexRisk(source: string): string | null {
   if (nested.test(source)) {
     return "That pattern nests one repeat inside another, which can take exponential time to fail. Simplify it.";
   }
-  // `(a|a)*` — an alternation of identical branches under a quantifier.
-  const overlapping = /\(([^)|]+)\|\1\)\s*[*+]/;
-  if (overlapping.test(source)) {
-    return "That pattern repeats an alternation whose branches are the same. Simplify it.";
+  // `(a|aa)*` — alternatives with the same prefix can partition one input exponentially.
+  for (const match of source.matchAll(/\((?:\?:)?([^()]*)\)\s*[*+]/g)) {
+    const branches = match[1].split("|");
+    if (
+      branches.length > 1 &&
+      branches.some((left, at) =>
+        branches.some(
+          (right, other) =>
+            at !== other && (left.startsWith(right) || right.startsWith(left)),
+        ),
+      )
+    ) {
+      return "That pattern repeats overlapping alternatives, which can take exponential time to fail. Simplify it.";
+    }
   }
   return null;
 }
@@ -174,7 +186,10 @@ export function compileStoredRegex(
   if (risk) return { error: risk };
 
   try {
-    return { regex: new RegExp(value.source, flags), stored: { source: value.source, flags } };
+    return {
+      regex: new RegExp(value.source, flags),
+      stored: { source: value.source, flags },
+    };
   } catch {
     return { error: "That is not a valid pattern." };
   }
@@ -247,7 +262,8 @@ function parseDateCondition(op: string, value: unknown): CompiledCondition | nul
       : null;
   }
   if (op === "isbetween") {
-    if (!isRecord(value) || !isDateKey(value.date1) || !isDateKey(value.date2)) return null;
+    if (!isRecord(value) || !isDateKey(value.date1) || !isDateKey(value.date2))
+      return null;
     return { field: "date", op, value: { date1: value.date1, date2: value.date2 } };
   }
   return null;
@@ -261,7 +277,8 @@ function parseOne(raw: unknown): CompiledCondition | null {
   if (TEXT_FIELDS.has(field)) {
     return TEXT_OPS.has(op) ? parseTextCondition(field as TextField, op, value) : null;
   }
-  if (field === "payee" || field === "account") return parseIdCondition(field, op, value);
+  if (field === "payee" || field === "account")
+    return parseIdCondition(field, op, value);
   if (field === "amount") return parseAmountCondition(op, value);
   if (field === "date") return parseDateCondition(op, value);
   return null;
@@ -275,15 +292,34 @@ function parseOne(raw: unknown): CompiledCondition | null {
  * half-finished rule looks like, so it must not be storable.
  */
 export function parseRuleConditions(raw: unknown): CompiledCondition[] | null {
-  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const result = parseRuleConditionsDetailed(raw);
+  return "conditions" in result ? result.conditions : null;
+}
+
+export function parseRuleConditionsDetailed(
+  raw: unknown,
+): { conditions: CompiledCondition[] } | { error: string } {
+  if (!Array.isArray(raw) || raw.length === 0) {
+    return { error: "Rule conditions need at least one entry." };
+  }
 
   const parsed: CompiledCondition[] = [];
-  for (const entry of raw) {
+  for (const [index, entry] of raw.entries()) {
     const condition = parseOne(entry);
-    if (!condition) return null;
+    if (!condition) {
+      if (
+        isRecord(entry) &&
+        entry.op === "matches" &&
+        (entry.field === "merchant" || entry.field === "description")
+      ) {
+        const regex = compileStoredRegex(entry.value);
+        if ("error" in regex) return { error: regex.error };
+      }
+      return { error: `Condition ${index + 1} is not valid.` };
+    }
     parsed.push(condition);
   }
-  return parsed;
+  return { conditions: parsed };
 }
 
 /** Strip the compiled regex back off, for storage. */

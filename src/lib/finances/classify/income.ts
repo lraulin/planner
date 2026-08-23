@@ -65,6 +65,12 @@ export type IncomeDetection = {
   normalizedMonthlyIncomeCents: number;
 };
 
+export type IncomeSummary = {
+  paydayCount: number;
+  medianPaycheckCents: number;
+  normalizedMonthlyIncomeCents: number;
+};
+
 /**
  * The monthly equivalent of a biweekly paycheck. 26 deposits a year, spread over 12
  * months, so a three-paycheck calendar month and a two-paycheck one report the same need.
@@ -131,6 +137,21 @@ function paydaysOf(rows: readonly IncomeRow[], employer: string): Payday[] {
     amountCents: group.reduce((total, row) => total + row.amountCents, 0),
     transactionIds: group.map((row) => row.id),
   }));
+}
+
+/** Reconstruct the income headline from rows already stored as income. */
+export function summarizeClassifiedIncome(
+  rows: readonly (IncomeRow & { derivedFlow: string | null })[],
+): IncomeSummary {
+  // Flow-bearing rules can label reliable monthly income (VA benefits), but those rows do not
+  // define a biweekly pay period. Re-run the cadence detector over the stored income subset,
+  // exactly as analytics.paydaysFrom does, so preview's "before" is the headline on screen.
+  const income = detectIncome(rows.filter((row) => row.derivedFlow === "income"));
+  return {
+    paydayCount: income.paydays.length,
+    medianPaycheckCents: income.medianPaycheckCents,
+    normalizedMonthlyIncomeCents: income.normalizedMonthlyIncomeCents,
+  };
 }
 
 function gapsBetween(paydays: readonly Payday[]): number[] {

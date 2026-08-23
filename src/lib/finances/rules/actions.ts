@@ -83,9 +83,7 @@ function parseOne(raw: unknown): RuleAction | null {
   return null;
 }
 
-export type ActionParse =
-  | { actions: RuleAction[] }
-  | { error: string };
+export type ActionParse = { actions: RuleAction[] } | { error: string };
 
 /**
  * Parse an actions blob, or say what is wrong with it.

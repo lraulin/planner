@@ -72,7 +72,9 @@ describe("parseRuleActions", () => {
   });
 
   it("rejects an empty payee name", () => {
-    expect(parseRuleActions([{ op: "name-payee", value: "   " }])).toHaveProperty("error");
+    expect(parseRuleActions([{ op: "name-payee", value: "   " }])).toHaveProperty(
+      "error",
+    );
   });
 
   it("rejects setting the same thing twice", () => {

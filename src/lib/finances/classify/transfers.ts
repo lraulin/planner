@@ -65,7 +65,7 @@ const INTERNAL_PATTERNS: readonly RegExp[] = [
  * unreadable: treating an opaque `PAYPAL TO LEE RAULIN` withdrawal as spend would invent
  * purchases we could not see, the same reasoning that still holds for Pentagon Federal.
  * Twenty-five PayPal statements remove the precondition for the outbound half — Lee never
- * carries a PayPal balance, so every `TO` is a purchase and `CLASSIFY_RULES` now files it
+ * carries a PayPal balance, so every `TO` is a purchase and the rules table now files it
  * as spend. The inbound `FROM` half stays here: those are gifts and reimbursements, not
  * earnings, and naming the sender is a resolution, not a reclassification as income.
  *

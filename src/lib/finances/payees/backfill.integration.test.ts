@@ -8,6 +8,7 @@ import {
   users,
 } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
+import { seedRules } from "../rules/cutover";
 import { seedPayees, unresolvedPayeeCount } from "./backfill";
 import { createPayee, renamePayee } from "./mutations";
 import { getPayee, listPayees } from "./queries";
@@ -85,6 +86,9 @@ describeDb("seedPayees", () => {
   beforeEach(async () => {
     userId = await makeUser();
     accountId = await makeAccount(userId);
+    // Canonical names are user-owned rule actions now; each isolated fixture must establish
+    // the rule corpus it expects rather than inheriting names from a runtime TypeScript array.
+    await seedRules(userId);
   });
 
   it("folds the spellings a rule names into one payee and points every row at it", async () => {

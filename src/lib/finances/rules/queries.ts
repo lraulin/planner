@@ -8,8 +8,16 @@
 
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { financeAccounts, financePayees, financeRules } from "@/db/schema";
-import { compileRules, type StoredRule } from "./compile";
+import {
+  financeAccounts,
+  financePayees,
+  financeRules,
+  financeTransactions,
+} from "@/db/schema";
+import { normalizeMerchant } from "../classify/merchant";
+import { numericStringToCents } from "../money";
+import { matchRules } from "./match";
+import { compileRules } from "./compile";
 import { storedSchedulePayeeIds } from "../payees/references";
 
 export type RuleRecord = {
@@ -28,6 +36,8 @@ export type RuleRow = RuleRecord & {
   names: Record<string, string>;
   /** Why this rule did not compile, or null. A page shows it so the row can be fixed. */
   problem: string | null;
+  /** Transactions for which this rule is the first enabled match. */
+  matchCount: number;
 };
 
 export async function getRule(
@@ -94,7 +104,7 @@ export async function listRules(userId: string): Promise<RuleRow[]> {
     for (const id of storedAccountIds(record.conditions)) accountIds.add(id);
   }
 
-  const [payees, accounts] = await Promise.all([
+  const [payees, accounts, transactions] = await Promise.all([
     payeeIds.size === 0
       ? []
       : db
@@ -117,6 +127,16 @@ export async function listRules(userId: string): Promise<RuleRow[]> {
               inArray(financeAccounts.id, [...accountIds]),
             ),
           ),
+    db
+      .select({
+        description: financeTransactions.description,
+        payeeId: financeTransactions.payeeId,
+        accountId: financeTransactions.accountId,
+        amount: financeTransactions.amount,
+        transactionDate: financeTransactions.transactionDate,
+      })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.userId, userId)),
   ]);
 
   const names: Record<string, string> = {};
@@ -124,16 +144,27 @@ export async function listRules(userId: string): Promise<RuleRow[]> {
 
   // Compile the whole set once, so a page can say *which* rule is broken without parsing
   // anything itself — and so "did not compile" comes from the same code that runs a pass.
+  const compiled = compileRules(records);
   const problems = new Map(
-    compileRules(records as StoredRule[]).problems.map((problem) => [
-      problem.id,
-      problem.reason,
-    ]),
+    compiled.problems.map((problem) => [problem.id, problem.reason]),
   );
+  const matches = new Map<string, number>();
+  for (const transaction of transactions) {
+    const winner = matchRules(compiled.rules, {
+      merchant: normalizeMerchant(transaction.description),
+      description: transaction.description,
+      payeeId: transaction.payeeId,
+      accountId: transaction.accountId,
+      amountCents: numericStringToCents(transaction.amount) ?? 0,
+      transactionDate: transaction.transactionDate,
+    });
+    if (winner) matches.set(winner.id, (matches.get(winner.id) ?? 0) + 1);
+  }
 
   return records.map((record) => ({
     ...record,
     names,
     problem: record.enabled ? (problems.get(record.id) ?? null) : null,
+    matchCount: matches.get(record.id) ?? 0,
   }));
 }

@@ -1,5 +1,5 @@
 /**
- * Description rules — the tier that actually categorises this data set.
+ * Starter rules — the historical, one-time corpus used to seed a new rules table.
  *
  * The bank's own label is missing on every row of the 360 feed and too broad on most of the
  * rest (`Merchandise` covers a grocery run and a video game), so the merchant name is the
@@ -7,24 +7,21 @@
  * the **normalized** merchant from `merchant.ts`, never the raw description, so a store
  * number or a PayPal stamp cannot break a match.
  *
- * **First match wins**, and the array order is the priority order. Put the specific rule
- * above the general one — `METLIFE PET` has to beat a bare `METLIFE`, or pet insurance
- * files under Insurance and the Pets total is quietly short.
+ * **First match wins**, and the array order becomes the initial priority order. The runtime
+ * never reads this file: after seeding, the user's rows are the only source of rule truth.
  *
- * A rule may also supply a canonical `merchant`. That is how two spellings become one
- * merchant: `WM SUPERCENTER` and `WAL-MART` normalize differently and always will, because
- * the fact that they are one company is knowledge about the world rather than about the
- * string. Recording it here keeps it visible and correctable as a list.
+ * A starter rule may also supply a canonical `merchant`. Seeding turns that into a
+ * `name-payee` action, so two spellings can become one user-owned payee without leaving a
+ * runtime identity dependency on this corpus.
  *
- * This list is expected to grow by inspection — reclassify, read the register, add the rule
- * that was missing. It is data, not logic; adding a line should never require reading the
- * matcher.
+ * Do not grow this list for an existing user. New and corrected rules belong in the rules
+ * table through the editor; this file exists only to preserve the starter migration.
  */
 
 import type { FinanceFlowKind } from "@/db/schema";
-import type { FinanceCategory } from "./categories";
+import type { FinanceCategory } from "../classify/categories";
 
-export type ClassifyRule = {
+export type StarterRule = {
   /** Stable identifier, so a rule can be cited when explaining why a row was categorised. */
   id: string;
   /** Tested against the normalized merchant, which is already uppercase. */
@@ -36,7 +33,7 @@ export type ClassifyRule = {
   merchant?: string;
 };
 
-export const CLASSIFY_RULES: readonly ClassifyRule[] = [
+export const STARTER_RULES: readonly StarterRule[] = [
   // — Housing and utilities ————————————————————————————————————————————————
   // Rent arrives under three different payer strings for the same $2,100; the memo token
   // `RENT:RAULI` is the only part common to all of them.
@@ -353,9 +350,3 @@ export const CLASSIFY_RULES: readonly ClassifyRule[] = [
     flow: "spend",
   },
 ];
-
-/** The first rule matching this normalized merchant, or null. */
-export function matchRule(normalizedMerchant: string): ClassifyRule | null {
-  if (normalizedMerchant === "") return null;
-  return CLASSIFY_RULES.find((rule) => rule.match.test(normalizedMerchant)) ?? null;
-}

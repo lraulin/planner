@@ -35,6 +35,13 @@ import {
 
 function row(overrides: Partial<AnalyticsRow> = {}): AnalyticsRow {
   const description = overrides.description ?? "WM SUPERCENTER #1981";
+  const seededPayeeName = description.startsWith("WM SUPERCENTER")
+    ? "Walmart"
+    : description.startsWith("GEICO")
+      ? "Geico"
+      : description.startsWith("SIMPLISAFE")
+        ? "SimpliSafe"
+        : null;
   return {
     id: crypto.randomUUID(),
     accountId: "checking",
@@ -53,7 +60,9 @@ function row(overrides: Partial<AnalyticsRow> = {}): AnalyticsRow {
     eventLabel: "",
     plannedWithdrawal: false,
     payeeId: description,
-    payeeName: null,
+    // These fixtures model rows after the required payee pass. Canonical naming is stored on
+    // that relation now; analytics no longer reaches back into the starter-rule corpus.
+    payeeName: seededPayeeName,
     ...overrides,
   };
 }

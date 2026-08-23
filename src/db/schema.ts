@@ -3085,7 +3085,7 @@ export const financeSchedules = pgTable(
  * MIT) — see `agent-os/specs/2026-08-23-0748-finance-payees/` and `docs/actual-budget/README.md`.
  *
  * Before this, "who was paid" was `effectiveMerchant()`: `normalizeMerchant(description)`
- * followed by a linear scan of the hardcoded `CLASSIFY_RULES`, evaluated per row at read time
+ * followed by a linear scan of the user's categorisation rules, evaluated per row
  * in a dozen callers. That produced three workarounds for one missing concept, which is the
  * signal `agent-os/standards/development/clean-code.md` names:
  *
@@ -3110,7 +3110,7 @@ export const financePayees = pgTable(
      * What the user calls this merchant. Theirs to change, and **nothing joins on it** — the
      * aliases below carry the join, which is what makes a rename safe.
      *
-     * Seeded from the `merchant:` entries in `classify/rules.ts`, not title-cased from the bank
+     * Initially named by a rule's `name-payee` action, not title-cased from the bank
      * string the way Actual does (`accounts/sync.ts:416-483`). Title-casing invents
      * `Wm Supercenter`; the rule list already holds the name a person would write.
      */
@@ -3209,7 +3209,7 @@ export const financePayeeAliases = pgTable(
  * Reimplemented from Actual Budget's rules (`packages/loot-core/src/server/rules/`, MIT) —
  * see `agent-os/specs/2026-08-23-1536-finance-rules/` and `docs/actual-budget/README.md`.
  *
- * Before this, "what kind of purchase is this" was `CLASSIFY_RULES`: 65 regexes in
+ * Before this, "what kind of purchase is this" was 65 regexes in application code
  * TypeScript, matched first-hit-wins down a hardcoded array. The file's own header called
  * itself data and said it was expected to grow by inspection — but the only way to add a
  * line was an edit and a deploy, which is the same missing concept payees fixed for merchant
@@ -3262,11 +3262,12 @@ export const financeRules = pgTable(
      */
     sortKey: text("sort_key").notNull(),
     /**
-     * The `CLASSIFY_RULES` id this row was seeded from, or null for a hand-made rule.
+     * The starter-corpus id this row was seeded from, or null for a hand-made rule.
      *
      * What makes seeding idempotent: a second run skips an id it already planted, so a rule
-     * the user has since renamed, reordered or deleted is never resurrected. Also what lets
-     * the parity audit name which rule decided a row in both the old world and the new.
+     * the user has since renamed, reordered or disabled is left alone. A manually replayed
+     * one-time seed recreates a deleted row because no tombstone exists. Also what lets the
+     * parity audit name which rule decided a row in both the old world and the new.
      */
     seededId: text("seeded_id"),
     /** Why this rule sits where it does. The old file kept that in comments. */

@@ -1,6 +1,18 @@
 import { describe, expect, it } from "vitest";
 
-import { isEmptyPlan, planSeed, type ExistingPayee, type SeedPlan } from "./seed";
+import {
+  isEmptyPlan,
+  planSeed as buildPlan,
+  type ExistingPayee,
+  type SeedPlan,
+  type SeedSource,
+} from "./seed";
+
+function planSeed(sources: readonly SeedSource[], existing: readonly ExistingPayee[]) {
+  return buildPlan(sources, existing, (alias) =>
+    /^(WM SUPERCENTER|WAL-?MART)/.test(alias) ? "Walmart" : null,
+  );
+}
 
 /** The plan's own output, fed back in — how every idempotence check here is written. */
 function asExisting(plan: SeedPlan): ExistingPayee[] {

@@ -330,7 +330,7 @@ export async function setTransactionBudgetCategoryAction(
   transactionId: string,
   categoryId: string | null,
 ): Promise<ActionResult> {
-  return run((userId) =>
+  return run<string | void>((userId) =>
     setTransactionBudgetCategory(userId, transactionId, categoryId),
   );
 }
@@ -536,10 +536,8 @@ export async function saveRuleAction(
   ruleId: string | null,
   input: RuleInput,
 ): Promise<ActionResult> {
-  return run((userId) =>
-    ruleId === null
-      ? createRule(userId, input).then(() => undefined)
-      : updateRule(userId, ruleId, input),
+  return run<string | void>((userId) =>
+    ruleId === null ? createRule(userId, input) : updateRule(userId, ruleId, input),
   );
 }
 
@@ -573,6 +571,8 @@ export async function previewRulesAction(): Promise<DataActionResult<DerivedPrev
 }
 
 /** Seed the starter rules. One-time; a replay creates nothing. */
-export async function seedRulesAction(): Promise<DataActionResult<{ created: number }>> {
+export async function seedRulesAction(): Promise<
+  DataActionResult<{ created: number }>
+> {
   return runWithData(seedRules);
 }

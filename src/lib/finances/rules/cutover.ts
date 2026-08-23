@@ -14,8 +14,10 @@
 
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { financeRules } from "@/db/schema";
+import { financeRules, financeTransactions } from "@/db/schema";
 import type { FlowDiff } from "../classify/flowDiff";
+import { normalizeMerchant } from "../classify/merchant";
+import type { IncomeSummary } from "../classify/income";
 import { previewDerivedChanges } from "../mutations";
 import { planRuleSeed, type SeedPlan } from "./seed";
 
@@ -26,6 +28,9 @@ export type RuleSeedAudit = {
   existing: number;
   flow: FlowDiff;
   category: FlowDiff;
+  income: { before: IncomeSummary; after: IncomeSummary };
+  /** Named merchant rows still missing the stable identity analytics now requires. */
+  nullPayeeRows: number;
   /** Rows whose stored JSONB could not be compiled, by name. */
   problems: { name: string; reason: string }[];
   /**
@@ -88,18 +93,40 @@ export async function seedRules(userId: string): Promise<{ created: number }> {
  * that has to say zero.
  */
 export async function auditRuleSeed(userId: string): Promise<RuleSeedAudit> {
-  const plan = await planSeedFor(userId);
-  const preview = await previewDerivedChanges(userId);
+  const [plan, preview, payeeRows] = await Promise.all([
+    planSeedFor(userId),
+    previewDerivedChanges(userId),
+    db
+      .select({
+        description: financeTransactions.description,
+        payeeId: financeTransactions.payeeId,
+      })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.userId, userId)),
+  ]);
+  const nullPayeeRows = payeeRows.filter(
+    (row) => row.payeeId === null && normalizeMerchant(row.description) !== "",
+  ).length;
+  const incomeEqual =
+    preview.income.before.paydayCount === preview.income.after.paydayCount &&
+    preview.income.before.medianPaycheckCents ===
+      preview.income.after.medianPaycheckCents &&
+    preview.income.before.normalizedMonthlyIncomeCents ===
+      preview.income.after.normalizedMonthlyIncomeCents;
 
   return {
     toCreate: plan.create.length,
     existing: plan.skipped.length,
     flow: preview.flow,
     category: preview.category,
+    income: preview.income,
+    nullPayeeRows,
     problems: preview.problems,
     canApply:
       preview.flow.changed === 0 &&
       preview.category.changed === 0 &&
+      incomeEqual &&
+      nullPayeeRows === 0 &&
       preview.problems.length === 0,
   };
 }

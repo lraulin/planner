@@ -15,6 +15,7 @@ import { reclassifyTransactions, setOneOff, upsertRecurringBill } from "./mutati
 import { listTransactions } from "./queries";
 import { renamePayee } from "./payees/mutations";
 import { listPayees } from "./payees/queries";
+import { seedRules } from "./rules/cutover";
 
 const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
@@ -88,6 +89,8 @@ const statementFile: ImportFile = {
 };
 
 async function seed(userId: string): Promise<void> {
+  // Import-time payee naming is driven by this user's persisted rules.
+  await seedRules(userId);
   await importFinanceCsvFiles({ userId, files: [cardFile, statementFile] });
 }
 

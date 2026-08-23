@@ -16,7 +16,7 @@ import { isUniqueViolation } from "@/lib/db/constraints";
 import * as sortKey from "@/lib/tree/sortKey";
 import { storedSchedulePayeeIds } from "../payees/references";
 import { parseRuleActions } from "./actions";
-import { parseRuleConditions, toStoredConditions } from "./conditions";
+import { parseRuleConditionsDetailed, toStoredConditions } from "./conditions";
 import { getRule } from "./queries";
 
 export type RuleInput = {
@@ -49,7 +49,9 @@ async function requireOwnedReferences(
     const rows = await db
       .select({ id: financePayees.id })
       .from(financePayees)
-      .where(and(eq(financePayees.userId, userId), inArray(financePayees.id, payeeIds)));
+      .where(
+        and(eq(financePayees.userId, userId), inArray(financePayees.id, payeeIds)),
+      );
     if (rows.length !== payeeIds.length) {
       throw new Error("One or more payees do not exist.");
     }
@@ -68,7 +70,9 @@ async function requireOwnedReferences(
             }
             const value = (condition as { value?: unknown }).value;
             if (typeof value === "string") return [value];
-            return Array.isArray(value) ? value.filter((v) => typeof v === "string") : [];
+            return Array.isArray(value)
+              ? value.filter((v) => typeof v === "string")
+              : [];
           }),
         ),
       ]
@@ -78,7 +82,10 @@ async function requireOwnedReferences(
       .select({ id: financeAccounts.id })
       .from(financeAccounts)
       .where(
-        and(eq(financeAccounts.userId, userId), inArray(financeAccounts.id, accountIds)),
+        and(
+          eq(financeAccounts.userId, userId),
+          inArray(financeAccounts.id, accountIds),
+        ),
       );
     if (rows.length !== accountIds.length) {
       throw new Error("One or more accounts do not exist.");
@@ -91,10 +98,9 @@ function validate(input: RuleInput) {
   const name = input.name.trim();
   if (name === "") throw new Error("A rule needs a name.");
 
-  const conditions = parseRuleConditions(input.conditions);
-  if (!conditions) {
-    throw new Error("Those conditions are not valid. A rule needs at least one.");
-  }
+  const parsedConditions = parseRuleConditionsDetailed(input.conditions);
+  if ("error" in parsedConditions) throw new Error(parsedConditions.error);
+  const conditions = parsedConditions.conditions;
 
   const parsed = parseRuleActions(input.actions, {
     hasPayeeCondition: conditions.some((condition) => condition.field === "payee"),
@@ -139,7 +145,8 @@ export async function createRule(userId: string, input: RuleInput): Promise<stri
       .returning({ id: financeRules.id });
     return row.id;
   } catch (error) {
-    if (isUniqueViolation(error)) throw new Error(`A rule named "${name}" already exists.`);
+    if (isUniqueViolation(error))
+      throw new Error(`A rule named "${name}" already exists.`);
     throw error;
   }
 }
@@ -166,7 +173,8 @@ export async function updateRule(
       })
       .where(and(eq(financeRules.userId, userId), eq(financeRules.id, ruleId)));
   } catch (error) {
-    if (isUniqueViolation(error)) throw new Error(`A rule named "${name}" already exists.`);
+    if (isUniqueViolation(error))
+      throw new Error(`A rule named "${name}" already exists.`);
     throw error;
   }
 }

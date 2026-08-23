@@ -19,6 +19,7 @@ import {
 import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { parseAccountUrl } from "./accountUrl";
 import { changedRows, planReclassify } from "./classify/reclassify";
+import { summarizeClassifiedIncome, type IncomeSummary } from "./classify/income";
 import { compileRules } from "./rules/compile";
 import {
   summarizeCategoryChanges,
@@ -495,8 +496,14 @@ export async function previewFlowChanges(userId: string): Promise<FlowDiff> {
 }
 
 export type DerivedPreview = {
+  scanned: number;
+  updated: number;
   flow: FlowDiff;
   category: FlowDiff;
+  income: {
+    before: IncomeSummary;
+    after: IncomeSummary;
+  };
   /** Rules whose stored JSONB could not be compiled, so they did not run. */
   problems: { name: string; reason: string }[];
 };
@@ -509,10 +516,20 @@ export type DerivedPreview = {
  * `carriesCategory`. Auditing one field would let half a regression through.
  */
 export async function previewDerivedChanges(userId: string): Promise<DerivedPreview> {
-  const { parsed, plan, problems } = await loadAndPlanReclassify(userId);
+  const { parsed, plan, problems, changed } = await loadAndPlanReclassify(userId);
   return {
+    scanned: parsed.length,
+    updated: changed.length,
     flow: summarizeFlowChanges(parsed, plan.rows),
     category: summarizeCategoryChanges(parsed, plan.rows),
+    income: {
+      before: summarizeClassifiedIncome(parsed),
+      after: {
+        paydayCount: plan.paydays.length,
+        medianPaycheckCents: plan.medianPaycheckCents,
+        normalizedMonthlyIncomeCents: plan.normalizedMonthlyIncomeCents,
+      },
+    },
     problems: problems.map((problem) => ({
       name: problem.name,
       reason: problem.reason,

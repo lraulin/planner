@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CLASSIFY_RULES, matchRule } from "../classify/rules";
+import { STARTER_RULES } from "./starterRules";
 import { compileRules, type StoredRule } from "./compile";
 import type { RuleRowInput } from "./conditions";
 import { applyRules } from "./match";
@@ -31,9 +31,9 @@ function rowFor(merchant: string): RuleRowInput {
 describe("planRuleSeed", () => {
   it("produces one draft per rule, in array order", () => {
     const plan = planRuleSeed([]);
-    expect(plan.create).toHaveLength(CLASSIFY_RULES.length);
+    expect(plan.create).toHaveLength(STARTER_RULES.length);
     expect(plan.create.map((draft) => draft.seededId)).toEqual(
-      CLASSIFY_RULES.map((rule) => rule.id),
+      STARTER_RULES.map((rule) => rule.id),
     );
   });
 
@@ -49,7 +49,7 @@ describe("planRuleSeed", () => {
     const first = planRuleSeed([]);
     const second = planRuleSeed(first.create.map((draft) => draft.seededId));
     expect(isEmptySeedPlan(second)).toBe(true);
-    expect(second.skipped).toHaveLength(CLASSIFY_RULES.length);
+    expect(second.skipped).toHaveLength(STARTER_RULES.length);
   });
 
   it("plans only the ids the caller says are missing", () => {
@@ -60,7 +60,7 @@ describe("planRuleSeed", () => {
      * seeding is a one-time explicit migration — see `cutover.integration.test.ts`, where the
      * assumption is written down.
      */
-    const kept = CLASSIFY_RULES.map((rule) => rule.id).filter((id) => id !== "spotify");
+    const kept = STARTER_RULES.map((rule) => rule.id).filter((id) => id !== "spotify");
     const plan = planRuleSeed(kept);
     expect(plan.create.map((draft) => draft.seededId)).toEqual(["spotify"]);
   });
@@ -87,7 +87,7 @@ describe("planRuleSeed", () => {
   });
 
   it("keeps the reasoning that only existed as a comment", () => {
-    // classify/rules.ts is deleted at the end of this spec, and a comment cannot survive that.
+    // The old classifier was deleted, and a source comment could not survive that cutover.
     const byId = new Map(
       planRuleSeed([]).create.map((draft) => [draft.seededId, draft]),
     );
@@ -96,7 +96,7 @@ describe("planRuleSeed", () => {
   });
 });
 
-describe("the seeded corpus reproduces matchRule", () => {
+describe("the seeded corpus reproduces the starter corpus", () => {
   /**
    * Every distinct normalized merchant the old matcher can be asked about.
    *
@@ -106,7 +106,7 @@ describe("the seeded corpus reproduces matchRule", () => {
    * instead — which is what makes the order part of what is being compared.
    */
   const probes = new Set<string>();
-  for (const rule of CLASSIFY_RULES) {
+  for (const rule of STARTER_RULES) {
     for (const literal of rule.match.source
       .replace(/[$^]/g, "")
       .split(/[|()]/)
@@ -124,7 +124,7 @@ describe("the seeded corpus reproduces matchRule", () => {
     expect(probes.size).toBeGreaterThan(100);
   });
 
-  it("agrees with matchRule on the category for every probe", () => {
+  it("agrees with the seed source on every outcome for every probe", () => {
     /*
      * The offline half of the parity proof. The database half runs the whole planner over the
      * real 7,030 rows; this one is what fails fast, in CI, without Postgres — and it covers
@@ -134,13 +134,13 @@ describe("the seeded corpus reproduces matchRule", () => {
     expect(problems).toEqual([]);
 
     for (const merchant of probes) {
-      const legacy = matchRule(merchant);
+      const starter = STARTER_RULES.find((rule) => rule.match.test(merchant));
       const seeded = applyRules(rules, rowFor(merchant));
 
-      expect(seeded.ruleId, merchant).toBe(legacy?.id ?? null);
-      expect(seeded.category, merchant).toBe(legacy?.category ?? null);
-      expect(seeded.flow, merchant).toBe(legacy?.flow ?? null);
-      expect(seeded.payeeName, merchant).toBe(legacy?.merchant ?? null);
+      expect(seeded.ruleId, merchant).toBe(starter?.id ?? null);
+      expect(seeded.category, merchant).toBe(starter?.category ?? null);
+      expect(seeded.flow, merchant).toBe(starter?.flow ?? null);
+      expect(seeded.payeeName, merchant).toBe(starter?.merchant ?? null);
     }
   });
 
@@ -156,7 +156,7 @@ describe("the seeded corpus reproduces matchRule", () => {
      * anything else.
      */
     for (const merchant of probes) {
-      const claimed = CLASSIFY_RULES.filter((rule) => rule.match.test(merchant));
+      const claimed = STARTER_RULES.filter((rule) => rule.match.test(merchant));
       expect(
         claimed.map((rule) => rule.id),
         merchant,

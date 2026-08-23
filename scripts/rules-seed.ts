@@ -30,6 +30,12 @@ async function main(): Promise<number> {
   console.log(`${audit.toCreate} rules to create, ${audit.existing} already present.`);
   console.log(formatFlowDiff(audit.flow, "flow"));
   console.log(formatFlowDiff(audit.category, "category"));
+  console.log(
+    `income: ${audit.income.before.paydayCount} → ${audit.income.after.paydayCount} paydays; ` +
+      `${audit.income.before.medianPaycheckCents} → ${audit.income.after.medianPaycheckCents} median cents; ` +
+      `${audit.income.before.normalizedMonthlyIncomeCents} → ${audit.income.after.normalizedMonthlyIncomeCents} normalized monthly cents`,
+  );
+  console.log(`${audit.nullPayeeRows} named merchant rows still have no payee.`);
   for (const problem of audit.problems) {
     console.log(`  rule "${problem.name}" did not compile: ${problem.reason}`);
   }
@@ -45,6 +51,7 @@ async function main(): Promise<number> {
   const after = await auditRuleSeed(userId);
   console.log(formatFlowDiff(after.flow, "flow"));
   console.log(formatFlowDiff(after.category, "category"));
+  console.log(`${after.nullPayeeRows} named merchant rows still have no payee.`);
   console.log(
     after.canApply
       ? "Parity holds: classification is unchanged."

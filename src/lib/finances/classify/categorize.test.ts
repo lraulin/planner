@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { compileRules } from "../rules/compile";
 import { planRuleSeed } from "../rules/seed";
 import { categorize as classify } from "./categorize";
-import { CLASSIFY_RULES } from "./rules";
+import { STARTER_RULES } from "../rules/starterRules";
 
 /**
  * Every case below runs through the **seeded rules**, not the array they came from.
@@ -158,15 +158,15 @@ describe("categorize", () => {
   });
 });
 
-describe("CLASSIFY_RULES", () => {
+describe("STARTER_RULES", () => {
   it("has unique rule ids, which seeded_id relies on being unique", () => {
-    const ids = CLASSIFY_RULES.map((rule) => rule.id);
+    const ids = STARTER_RULES.map((rule) => rule.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
   it("seeds every one of its rules into the compiled corpus", () => {
     // If a rule failed to compile it would simply stop firing, and the cases above would be
     // the only thing to notice. Counting them makes that impossible to miss.
-    expect(SEEDED).toHaveLength(CLASSIFY_RULES.length);
+    expect(SEEDED).toHaveLength(STARTER_RULES.length);
   });
 });

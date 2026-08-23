@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CLASSIFY_RULES } from "../classify/rules";
+import { STARTER_RULES } from "./starterRules";
 import {
   compileStoredRegex,
   conditionMatches,
@@ -37,23 +37,29 @@ describe("compileStoredRegex", () => {
   });
 
   it("rejects the y flag for the same reason", () => {
-    expect(compileStoredRegex({ source: "^WALMART", flags: "y" })).toHaveProperty("error");
+    expect(compileStoredRegex({ source: "^WALMART", flags: "y" })).toHaveProperty(
+      "error",
+    );
   });
 
   it("allows the i flag, which is what raw bank descriptions need", () => {
-    expect(compileStoredRegex({ source: "github", flags: "i" })).toHaveProperty("regex");
+    expect(compileStoredRegex({ source: "github", flags: "i" })).toHaveProperty(
+      "regex",
+    );
   });
 
   it("reports an unparseable pattern instead of throwing during a pass", () => {
     // A malformed pattern reaching the matcher would throw once per row, on every page that
     // classifies anything. It has to fail where it is written.
-    expect(compileStoredRegex({ source: "(unclosed", flags: "" })).toHaveProperty("error");
+    expect(compileStoredRegex({ source: "(unclosed", flags: "" })).toHaveProperty(
+      "error",
+    );
   });
 
   it("rejects a pattern longer than the cap", () => {
-    expect(
-      compileStoredRegex({ source: "A".repeat(201), flags: "" }),
-    ).toHaveProperty("error");
+    expect(compileStoredRegex({ source: "A".repeat(201), flags: "" })).toHaveProperty(
+      "error",
+    );
   });
 
   it("rejects an empty pattern, which would claim every row", () => {
@@ -71,6 +77,7 @@ describe("regexRisk", () => {
 
   it("rejects a repeated alternation whose branches are the same", () => {
     expect(regexRisk("(a|a)*")).not.toBeNull();
+    expect(regexRisk("(a|aa)+b")).not.toBeNull();
   });
 
   it("accepts every pattern in the corpus this engine has to seed", () => {
@@ -79,13 +86,13 @@ describe("regexRisk", () => {
      * never dangerous. Running it over all 65 real rules is what keeps "conservative" from
      * becoming "rejects the migration": if this fails, the heuristic is wrong, not the rule.
      */
-    for (const rule of CLASSIFY_RULES) {
+    for (const rule of STARTER_RULES) {
       expect(regexRisk(rule.match.source), rule.id).toBeNull();
     }
   });
 
   it("accepts every corpus pattern through the full compile, flags included", () => {
-    for (const rule of CLASSIFY_RULES) {
+    for (const rule of STARTER_RULES) {
       const built = compileStoredRegex({
         source: rule.match.source,
         flags: rule.match.flags,
@@ -113,13 +120,20 @@ describe("parseRuleConditions", () => {
 
   it("rejects an empty needle for is, contains and startsWith", () => {
     for (const op of ["is", "contains", "startsWith"]) {
-      expect(parseRuleConditions([{ field: "merchant", op, value: "" }]), op).toBeNull();
+      expect(
+        parseRuleConditions([{ field: "merchant", op, value: "" }]),
+        op,
+      ).toBeNull();
     }
   });
 
   it("rejects a non-integer amount and a payee that is not a uuid", () => {
-    expect(parseRuleConditions([{ field: "amount", op: "is", value: 12.5 }])).toBeNull();
-    expect(parseRuleConditions([{ field: "payee", op: "is", value: "walmart" }])).toBeNull();
+    expect(
+      parseRuleConditions([{ field: "amount", op: "is", value: 12.5 }]),
+    ).toBeNull();
+    expect(
+      parseRuleConditions([{ field: "payee", op: "is", value: "walmart" }]),
+    ).toBeNull();
   });
 
   it("rejects a date that is not a calendar day", () => {
@@ -133,7 +147,9 @@ describe("parseRuleConditions", () => {
   });
 
   it("keeps the stored shape recoverable, regex and all", () => {
-    const stored = [{ field: "merchant", op: "matches", value: { source: "^ALDI", flags: "" } }];
+    const stored = [
+      { field: "merchant", op: "matches", value: { source: "^ALDI", flags: "" } },
+    ];
     expect(toStoredConditions(parseRuleConditions(stored)!)).toEqual(stored);
   });
 });
@@ -188,18 +204,18 @@ describe("conditionMatches", () => {
   });
 
   it("treats gte and lte as inclusive and gt and lt as exclusive", () => {
-    expect(conditionMatches(only({ field: "amount", op: "gte", value: -8412 }), ROW)).toBe(
-      true,
-    );
-    expect(conditionMatches(only({ field: "amount", op: "gt", value: -8412 }), ROW)).toBe(
-      false,
-    );
-    expect(conditionMatches(only({ field: "amount", op: "lte", value: -8412 }), ROW)).toBe(
-      true,
-    );
-    expect(conditionMatches(only({ field: "amount", op: "lt", value: -8412 }), ROW)).toBe(
-      false,
-    );
+    expect(
+      conditionMatches(only({ field: "amount", op: "gte", value: -8412 }), ROW),
+    ).toBe(true);
+    expect(
+      conditionMatches(only({ field: "amount", op: "gt", value: -8412 }), ROW),
+    ).toBe(false);
+    expect(
+      conditionMatches(only({ field: "amount", op: "lte", value: -8412 }), ROW),
+    ).toBe(true);
+    expect(
+      conditionMatches(only({ field: "amount", op: "lt", value: -8412 }), ROW),
+    ).toBe(false);
   });
 
   it("borrows isapprox from the schedule parse rather than inventing a second tolerance", () => {
@@ -212,7 +228,9 @@ describe("conditionMatches", () => {
   it("compares calendar days as strings, with no timezone arithmetic", () => {
     const after = only({ field: "date", op: "gte", value: "2026-02-01" });
     expect(conditionMatches(after, ROW)).toBe(true);
-    expect(conditionMatches(after, { ...ROW, transactionDate: "2026-01-31" })).toBe(false);
+    expect(conditionMatches(after, { ...ROW, transactionDate: "2026-01-31" })).toBe(
+      false,
+    );
   });
 
   it("reads isbetween on dates in either order", () => {
@@ -236,7 +254,10 @@ describe("conditionMatches", () => {
 
   it("matches oneOf on payee and account", () => {
     expect(
-      conditionMatches(only({ field: "payee", op: "oneOf", value: [ROW.payeeId!] }), ROW),
+      conditionMatches(
+        only({ field: "payee", op: "oneOf", value: [ROW.payeeId!] }),
+        ROW,
+      ),
     ).toBe(true);
     expect(
       conditionMatches(

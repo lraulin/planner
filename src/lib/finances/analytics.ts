@@ -38,7 +38,6 @@ import {
 } from "./classify/income";
 import { normalizeMerchant } from "./classify/merchant";
 import type { PayPeriod } from "./classify/payPeriods";
-import { matchRule } from "./classify/rules";
 import {
   dateFallsInHole,
   reconcileAccounts,
@@ -144,14 +143,13 @@ export type MerchantFields = {
  * The fallback is not dead code, for exactly the reason `effectiveFlow` gives above: a row
  * imported since the last pass has no payee yet, and grouping it under an empty string would
  * silently merge every such row into one merchant. It reproduces what this function returned
- * before payees existed — which is also, deliberately, the name the seed planner gives a payee,
- * so the two agree for as long as nobody renames anything.
+ * before payees existed: the normalized merchant. Canonical naming is user data now, and is
+ * only available through the stable payee relation.
  */
 export function effectiveMerchant(row: MerchantFields): string {
   const claimed = row.payeeName?.trim();
   if (claimed) return claimed;
-  const normalized = normalizeMerchant(row.description);
-  return matchRule(normalized)?.merchant ?? normalized;
+  return normalizeMerchant(row.description);
 }
 
 /** Flows that are money leaving for good. Transfers are movement, not cost. */

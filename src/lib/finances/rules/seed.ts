@@ -1,5 +1,5 @@
 /**
- * Turn the 65 hardcoded `CLASSIFY_RULES` into rows, once.
+ * Turn the 65 `STARTER_RULES` into rows, once.
  *
  * **Deliberately a transcription, not a translation.** Every rule becomes exactly one
  * `merchant matches` condition with the same pattern, in the same order, so the seeded corpus
@@ -14,13 +14,15 @@
  * contains. Regex stays available afterwards for exactly that reason (D3).
  *
  * Idempotence is `seeded_id`: a second run plans nothing for an id already present, so a rule
- * the user has since renamed, reordered, disabled or deleted is never resurrected.
+ * the user has since renamed, reordered or disabled is left alone. A deleted rule is recreated
+ * if this explicit one-time migration is manually replayed; there is deliberately no runtime
+ * caller that could do that behind the user's back.
  *
  * Spec: `agent-os/specs/2026-08-23-1536-finance-rules/` D1, D3.
  */
 
 import * as sortKey from "@/lib/tree/sortKey";
-import { CLASSIFY_RULES } from "../classify/rules";
+import { STARTER_RULES } from "./starterRules";
 import type { RuleAction } from "./actions";
 import type { RuleCondition } from "./conditions";
 
@@ -34,7 +36,7 @@ export type RuleDraft = {
 };
 
 /**
- * Why a rule sits where it does, carried over from the comments in `classify/rules.ts`.
+ * Why a rule sits where it does, carried over from the old classifier's comments.
  *
  * The array's comments are the only record of several decisions with money attached, and a
  * comment cannot survive the file being deleted. Moving them into `notes` is the point of that
@@ -80,12 +82,12 @@ export type SeedPlan = {
  */
 export function planRuleSeed(existingSeededIds: readonly string[]): SeedPlan {
   const present = new Set(existingSeededIds);
-  const keys = sortKey.sequence(CLASSIFY_RULES.length);
+  const keys = sortKey.sequence(STARTER_RULES.length);
 
   const create: RuleDraft[] = [];
   const skipped: string[] = [];
 
-  CLASSIFY_RULES.forEach((rule, index) => {
+  STARTER_RULES.forEach((rule, index) => {
     if (present.has(rule.id)) {
       skipped.push(rule.id);
       return;

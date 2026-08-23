@@ -180,7 +180,7 @@ describe("matchTransfers", () => {
     const result = matchTransfers(rows, ACCOUNTS);
 
     // Inbound PayPal is still external — a gift, not a wage. Outbound PayPal is no
-    // longer here: those are purchases, and CLASSIFY_RULES files them as spend.
+    // longer here: those are purchases, and the user's rules file them as spend.
     expect(result.flows.get("paypal")).toBe("external_transfer");
     expect(result.flows.get("penfed")).toBe("external_transfer");
     // External legs have no counterpart here, so they never form a group.
@@ -189,7 +189,7 @@ describe("matchTransfers", () => {
 
   it("does not claim an outbound PayPal withdrawal as a transfer", () => {
     // The statements showed these are purchases funded from checking. Leaving them
-    // here would keep CLASSIFY_RULES from ever filing them as spend.
+    // here would keep the user's rules from ever filing them as spend.
     const result = matchTransfers(
       [
         row(
