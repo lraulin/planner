@@ -49,6 +49,8 @@ import {
   unclassifiedCount,
 } from "@/lib/finances/dashboardQueries";
 import { upsertRecurringBill, upsertRecurringSpend } from "@/lib/finances/mutations";
+import { createPayee } from "@/lib/finances/payees/mutations";
+import { getPayee, listAliasRows, listPayees } from "@/lib/finances/payees/queries";
 import { createSchedule } from "@/lib/finances/schedules/mutations";
 import { getSchedule, listSchedules } from "@/lib/finances/schedules/queries";
 import {
@@ -162,6 +164,7 @@ type Owned = {
   financeAccountId: string;
   bankConnectionId: string;
   financeTransactionId: string;
+  financePayeeId: string;
   financeScheduleId: string;
   financeStatementId: string;
   paymentResolutionId: string;
@@ -277,6 +280,10 @@ async function seedOwner(): Promise<Owned> {
   await upsertRecurringSpend(userId, {
     name: "Owner Pizza",
     matchers: ["OWNER PIZZA"],
+  });
+  const financePayeeId = await createPayee(userId, {
+    name: "Owner Merchant",
+    aliases: ["OWNER PURCHASE"],
   });
   const financeScheduleId = await createSchedule(
     userId,
@@ -422,6 +429,7 @@ async function seedOwner(): Promise<Owned> {
     resourceId,
     financeAccountId: financeAccount.id,
     financeTransactionId: financeTransaction.id,
+    financePayeeId,
     financeScheduleId,
     financeStatementId: financeStatement.id,
     paymentResolutionId: paymentResolution.id,
@@ -464,6 +472,9 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect((await listResources(owner.userId)).length).toBeGreaterThan(0);
     expect((await listAccounts(owner.userId)).length).toBeGreaterThan(0);
     expect((await listTransactions(owner.userId)).length).toBeGreaterThan(0);
+    expect((await listPayees(owner.userId)).map((row) => row.id)).toContain(
+      owner.financePayeeId,
+    );
     expect(await getSchedule(owner.userId, owner.financeScheduleId)).not.toBeNull();
     expect((await listAmazonItems(owner.userId)).length).toBeGreaterThan(0);
     expect((await listStatements(owner.userId)).length).toBeGreaterThan(0);
@@ -561,6 +572,9 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect(await getTransaction(intruder, owner.financeTransactionId)).toBeNull();
     expect(await listPaymentResolutions(intruder)).toEqual([]);
     expect(await getPaymentResolution(intruder, owner.paymentResolutionId)).toBeNull();
+    expect(await listPayees(intruder)).toEqual([]);
+    expect(await listAliasRows(intruder)).toEqual([]);
+    expect(await getPayee(intruder, owner.financePayeeId)).toBeNull();
     // The filtered read takes an account id the intruder can guess; it must refuse by user
     // rather than trusting that the id belongs to the caller.
     expect(

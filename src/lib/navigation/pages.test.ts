@@ -65,6 +65,7 @@ describe("hasPageBar", () => {
       "commitments",
       "insights",
       "register",
+      "payees",
       "statements",
       "orders",
       "accounts",

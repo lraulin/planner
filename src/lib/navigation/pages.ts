@@ -277,6 +277,13 @@ const PAGES = {
       keywords: "transactions ledger accounts import",
     },
     {
+      id: "payees",
+      label: "Payees",
+      segment: "payees",
+      status: "built",
+      keywords: "merchants vendors aliases bank spellings identity",
+    },
+    {
       id: "statements",
       label: "Statements",
       segment: "statements",

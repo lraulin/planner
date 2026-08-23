@@ -1,5 +1,13 @@
 "use server";
 
+import { seedPayees, type SeedPayeesSummary } from "@/lib/finances/payees/backfill";
+import {
+  addAlias,
+  deletePayee,
+  removeAlias,
+  setPayeeNotes,
+} from "@/lib/finances/payees/mutations";
+import { listPayees, type PayeeRow } from "@/lib/finances/payees/queries";
 import {
   clearScrapedPending,
   replaceScrapedPending,
@@ -432,4 +440,44 @@ export async function upcomingOccurrencesAction(
     );
     return upcomingOccurrences(records, links, horizon, todayKey);
   });
+}
+
+// ─────────────────────────────── Payees ───────────────────────────────
+//
+// Rename and merge are deliberately absent. Both change the key `resolveMerchant` looks a
+// commitment up by, so exposing them before commitment matchers become payee claims would let
+// one rename silently take a commitment's charges away
+// (`agent-os/specs/2026-08-23-0748-finance-payees/`, Changes row 3).
+
+export async function listPayeesAction(): Promise<QueryResult<PayeeRow[]>> {
+  return runQuery(listPayees);
+}
+
+export async function seedPayeesAction(): Promise<DataActionResult<SeedPayeesSummary>> {
+  return runWithData(seedPayees);
+}
+
+export async function addPayeeAliasAction(
+  payeeId: string,
+  alias: string,
+): Promise<ActionResult> {
+  return run((userId) => addAlias(userId, payeeId, alias));
+}
+
+export async function removePayeeAliasAction(
+  payeeId: string,
+  alias: string,
+): Promise<ActionResult> {
+  return run((userId) => removeAlias(userId, payeeId, alias));
+}
+
+export async function setPayeeNotesAction(
+  payeeId: string,
+  notes: string,
+): Promise<ActionResult> {
+  return run((userId) => setPayeeNotes(userId, payeeId, notes));
+}
+
+export async function deletePayeeAction(payeeId: string): Promise<ActionResult> {
+  return run((userId) => deletePayee(userId, payeeId));
 }
