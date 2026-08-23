@@ -102,8 +102,18 @@ describe("planPayeeCutover", () => {
           },
         ],
         transactions: [
-          { id: "t1", legacyMerchant: "WM SUPERCENTER", payeeId: PAYEE_A },
-          { id: "t2", legacyMerchant: "WAL-MART", payeeId: PAYEE_A },
+          {
+            id: "t1",
+            legacyMerchant: "WM SUPERCENTER",
+            payeeId: PAYEE_A,
+            amountCents: -5_00,
+          },
+          {
+            id: "t2",
+            legacyMerchant: "WAL-MART",
+            payeeId: PAYEE_A,
+            amountCents: -7_00,
+          },
         ],
       }),
     );
@@ -166,7 +176,14 @@ describe("planPayeeCutover", () => {
   it("blocks a cutover when the id join selects different transactions", () => {
     const plan = planPayeeCutover(
       input({
-        transactions: [{ id: "lost", legacyMerchant: "Walmart", payeeId: null }],
+        transactions: [
+          {
+            id: "lost",
+            legacyMerchant: "Walmart",
+            payeeId: null,
+            amountCents: -12_34,
+          },
+        ],
       }),
     );
 
@@ -176,6 +193,15 @@ describe("planPayeeCutover", () => {
         commitment: { kind: "bill", id: BILL_A, name: "Groceries" },
         legacyTransactionIds: ["lost"],
         payeeTransactionIds: [],
+        legacyOnly: [
+          {
+            id: "lost",
+            legacyMerchant: "Walmart",
+            payeeId: null,
+            amountCents: -12_34,
+          },
+        ],
+        payeeOnly: [],
       },
     ]);
   });

@@ -33,6 +33,7 @@ export type ParityTransaction = {
   id: string;
   legacyMerchant: string;
   payeeId: string | null;
+  amountCents: number;
 };
 
 export type PayeeRef =
@@ -65,6 +66,8 @@ export type ParityDifference = {
   commitment: CommitmentRef;
   legacyTransactionIds: string[];
   payeeTransactionIds: string[];
+  legacyOnly: ParityTransaction[];
+  payeeOnly: ParityTransaction[];
 };
 
 export type PayeeCutoverPlan = {
@@ -278,10 +281,18 @@ export function planPayeeCutover(input: PayeeCutoverInput): PayeeCutoverPlan {
         .map((row) => row.id),
     );
     if (!sameStringSet(legacyTransactionIds, payeeTransactionIds)) {
+      const legacyIds = new Set(legacyTransactionIds);
+      const payeeIds = new Set(payeeTransactionIds);
       parityDifferences.push({
         commitment: commitmentRef(commitment),
         legacyTransactionIds,
         payeeTransactionIds,
+        legacyOnly: input.transactions.filter(
+          (row) => legacyIds.has(row.id) && !payeeIds.has(row.id),
+        ),
+        payeeOnly: input.transactions.filter(
+          (row) => payeeIds.has(row.id) && !legacyIds.has(row.id),
+        ),
       });
     }
   }

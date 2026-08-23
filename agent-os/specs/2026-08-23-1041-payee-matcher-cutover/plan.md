@@ -142,8 +142,9 @@ claims and no collision in which one payee is claimed by two commitments.
 Material refinements during implementation (requirements, design, scope). Omit pure code
 polish.
 
-| #   | Change | Why |
-| --- | ------ | --- |
+| #   | Change                                                                                                                                                                                                                                                                                                                          | Why                                                                                                                                                                                                                           |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Production Stage A apply remains blocked after its first dry-run: it plans 38 claims and no schedule rewrites, but five commitments select different transaction sets through legacy merchant strings and payee ids. The audit now reports those differences as merchant-group counts and signed cents without transaction ids. | The local fixture was not representative of production history. Preserving byte-identical finance behavior is an explicit circuit breaker, so the production data shape must be explained before any write or Stage B switch. |
 
 ---
 
@@ -166,6 +167,9 @@ polish.
       replay planned zero writes.
 - [ ] Deploy Stage A, then run the same dry-run, apply and replay against production before
       any Stage B code can ship.
+  - Stage A is deployed and the production dry-run applied nothing, as designed. Its parity
+    guard found five differing commitment transaction sets; grouped diagnostics are the
+    remaining prerequisite for the apply/replay steps.
 
 ## Task 3: Switch commitment behavior to payee ids
 

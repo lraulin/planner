@@ -11,6 +11,7 @@ import {
   financeTransactions,
 } from "@/db/schema";
 import { effectiveMerchant } from "../analytics";
+import { numericStringToCents } from "../money";
 import {
   planPayeeCutover,
   type CutoverPayee,
@@ -81,6 +82,7 @@ async function loadCutoverInput(
           id: financeTransactions.id,
           description: financeTransactions.description,
           payeeId: financeTransactions.payeeId,
+          amount: financeTransactions.amount,
         })
         .from(financeTransactions)
         .where(eq(financeTransactions.userId, userId))
@@ -117,6 +119,7 @@ async function loadCutoverInput(
       id: row.id,
       legacyMerchant: effectiveMerchant({ description: row.description }),
       payeeId: row.payeeId,
+      amountCents: numericStringToCents(row.amount) ?? 0,
     })),
   };
 }

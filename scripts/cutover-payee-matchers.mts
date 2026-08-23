@@ -17,6 +17,27 @@ function requestedUserId(args: readonly string[]): string | null {
 }
 
 function summary(plan: PayeeCutoverPlan) {
+  const parityDifferences = plan.parityDifferences.map((difference) => {
+    const grouped = (rows: typeof difference.legacyOnly) => {
+      const byMerchant = new Map<string, { count: number; cents: number }>();
+      for (const row of rows) {
+        const current = byMerchant.get(row.legacyMerchant) ?? { count: 0, cents: 0 };
+        current.count += 1;
+        current.cents += row.amountCents;
+        byMerchant.set(row.legacyMerchant, current);
+      }
+      return [...byMerchant.entries()]
+        .map(([merchant, values]) => ({ merchant, ...values }))
+        .sort((a, b) => a.merchant.localeCompare(b.merchant));
+    };
+    return {
+      commitment: difference.commitment,
+      legacyCount: difference.legacyTransactionIds.length,
+      payeeCount: difference.payeeTransactionIds.length,
+      legacyOnly: grouped(difference.legacyOnly),
+      payeeOnly: grouped(difference.payeeOnly),
+    };
+  });
   return {
     canApply: plan.canApply,
     isIdempotent: plan.isIdempotent,
@@ -27,7 +48,7 @@ function summary(plan: PayeeCutoverPlan) {
     conflicts: plan.conflicts,
     malformedSchedules: plan.malformedSchedules,
     unresolvedValues: plan.unresolvedValues,
-    parityDifferences: plan.parityDifferences,
+    parityDifferences,
   };
 }
 
