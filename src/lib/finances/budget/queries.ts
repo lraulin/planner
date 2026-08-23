@@ -105,6 +105,8 @@ export type BudgetData = {
    * the recorded `settings.openingCents` is the answer.
    */
   prospectiveOpeningCents: number;
+  /** Append-only movement descriptions for the selected month, newest shown first. */
+  movementNotes: string;
 };
 
 function groupsOf(userId: string) {
@@ -262,6 +264,7 @@ export async function loadBudget(
     uncategorizedCents: 0,
     goals: {},
     prospectiveOpeningCents: 0,
+    movementNotes: "",
   };
 
   const startMonth = settings.startMonth;
@@ -292,6 +295,7 @@ export async function loadBudget(
       .select({
         month: financeBudgetMonths.month,
         bufferedCents: financeBudgetMonths.bufferedCents,
+        notes: financeBudgetMonths.notes,
       })
       .from(financeBudgetMonths)
       .where(eq(financeBudgetMonths.userId, userId)),
@@ -339,6 +343,7 @@ export async function loadBudget(
     months,
     month,
     goals,
+    movementNotes: bufferedRows.find((row) => row.month === month)?.notes ?? "",
     ...backlog,
   };
 }

@@ -363,9 +363,11 @@ describeDb("budget mutations", () => {
       amountCents: 999_999,
     });
 
-    const august = findMonth((await loadBudget(userId, MONTH)).months, MONTH)!;
+    const budget = await loadBudget(userId, MONTH);
+    const august = findMonth(budget.months, MONTH)!;
     expect(categoryMonth(august, ids.get("Bills")!).assignedCents).toBe(10_000);
     expect(august.readyToAssignCents).toBe(0);
+    expect(budget.movementNotes).toContain("Bills");
   });
 
   it("holds money for next month and hands it back", async () => {

@@ -45,8 +45,10 @@ import {
 import type { ScheduleSnapshot } from "@/lib/finances/budget/templates/schedule";
 import { formatUsd } from "@/lib/finances/money";
 import { AddFromSchedulesDialog } from "./AddFromSchedulesDialog";
+import { AssignRemainingDialog } from "./AssignRemainingDialog";
 import { budgetColumns, type BudgetColumnCtx } from "./budgetColumns";
 import { BudgetSummary } from "./BudgetSummary";
+import { BudgetStructureDrawer } from "./BudgetStructureDrawer";
 import { MoveMoneyDialog } from "./MoveMoneyDialog";
 import { TemplateDrawer } from "./TemplateDrawer";
 
@@ -79,6 +81,14 @@ export function BudgetView({
   const [editing, setEditing] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [assigning, setAssigning] = useState(false);
+  const [managingStructure, setManagingStructure] = useState(false);
+
+  const grid = useGridState("budget", budgetColumns, {
+    order: budgetColumns.map((column) => column.id),
+    switches: { "show-hidden": false },
+  });
+  const showHidden = grid.switches["show-hidden"] ?? false;
 
   const month = findMonth(data.months, data.month);
   const rows = useMemo(
@@ -86,13 +96,9 @@ export function BudgetView({
     [data.groups, data.categories, month, data.goals],
   );
   const gridRows = useMemo(
-    () => budgetGridRows(data.groups, rows),
-    [data.groups, rows],
+    () => budgetGridRows(data.groups, rows, { showHidden }),
+    [data.groups, rows, showHidden],
   );
-
-  const grid = useGridState("budget", budgetColumns, {
-    order: budgetColumns.map((column) => column.id),
-  });
 
   function run(work: () => Promise<{ ok: boolean; error?: string }>) {
     setError(null);
@@ -186,6 +192,15 @@ export function BudgetView({
         : undefined;
 
     return [
+      {
+        id: "budget.structure.manage",
+        label: "Manage groups and envelopes…",
+        group: "view",
+        menu: "organize",
+        section: "Budget",
+        keywords: "create rename delete hide group envelope category",
+        run: () => setManagingStructure(true),
+      },
       {
         id: "budget.templates.apply",
         label: "Apply templates",
@@ -397,9 +412,26 @@ export function BudgetView({
               budgetOperationAction({ kind: "release-hold", month: data.month }),
             )
           }
+          showHidden={showHidden}
+          onShowHidden={(next) => grid.setSwitch("show-hidden", next)}
         />
 
-        <BudgetSummary month={month} />
+        <BudgetSummary month={month} onAssignAll={() => setAssigning(true)} />
+
+        {data.movementNotes ? (
+          <details className="rounded border border-rule bg-surface px-3 py-2 text-[0.8125rem]">
+            <summary className="cursor-pointer text-ink">Movement log</summary>
+            <ol className="mt-2 space-y-1 text-ink-muted">
+              {data.movementNotes
+                .split("\n")
+                .filter(Boolean)
+                .reverse()
+                .map((line, index) => (
+                  <li key={`${index}:${line}`}>{line}</li>
+                ))}
+            </ol>
+          </details>
+        ) : null}
 
         {error ? (
           <p className="rounded border border-rule bg-surface px-3 py-2 text-[0.8125rem] text-[var(--chart-spend)]">
@@ -555,6 +587,34 @@ export function BudgetView({
           }}
         />
       ) : null}
+      {assigning ? (
+        <AssignRemainingDialog
+          amountCents={Math.max(0, month.readyToAssignCents)}
+          envelopes={spendingRows}
+          onCancel={() => setAssigning(false)}
+          onAssign={(toId) => {
+            const target = spendingRows.find((row) => row.id === toId);
+            setAssigning(false);
+            if (!target) return;
+            run(() =>
+              budgetOperationAction({
+                kind: "assign-remaining",
+                month: data.month,
+                to: { id: target.id, name: target.name },
+                amountCents: null,
+              }),
+            );
+          }}
+        />
+      ) : null}
+      {managingStructure ? (
+        <BudgetStructureDrawer
+          groups={data.groups}
+          categories={data.categories}
+          onClose={() => setManagingStructure(false)}
+          onChanged={() => router.refresh()}
+        />
+      ) : null}
     </div>
   );
 }
@@ -574,6 +634,8 @@ function MonthBar({
   templatedCount,
   hasEnvelopes,
   pending,
+  showHidden,
+  onShowHidden,
 }: {
   month: BudgetMonth;
   onPrev: () => void;
@@ -590,6 +652,8 @@ function MonthBar({
   templatedCount: number;
   hasEnvelopes: boolean;
   pending: boolean;
+  showHidden: boolean;
+  onShowHidden: (next: boolean) => void;
 }) {
   const button =
     "rounded border border-rule px-2 py-1 text-[0.8125rem] text-ink hover:bg-surface-raised disabled:opacity-60";
@@ -607,6 +671,14 @@ function MonthBar({
       </button>
 
       <span className="ml-auto flex flex-wrap gap-2">
+        <label className="flex min-h-tap items-center gap-2 px-1 text-[0.8125rem] text-ink md:min-h-0">
+          <input
+            type="checkbox"
+            checked={showHidden}
+            onChange={(event) => onShowHidden(event.target.checked)}
+          />
+          Show hidden
+        </label>
         {/*
          * Templates first: they are the answer to "fill this month in", and the three manual
          * fills beside them are what you reach for when no template covers the case.
