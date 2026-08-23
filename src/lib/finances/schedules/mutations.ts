@@ -5,10 +5,15 @@
  * touching it (`agent-os/standards/development/security.md`).
  */
 
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { isUniqueViolation } from "@/lib/db/constraints";
-import { financeAccounts, financeSchedules, financeTransactions } from "@/db/schema";
+import {
+  financeAccounts,
+  financePayees,
+  financeSchedules,
+  financeTransactions,
+} from "@/db/schema";
 import { loadRecurringBills } from "@/lib/finances/dashboardQueries";
 import { centsToNumericString } from "@/lib/finances/money";
 import { shiftDateKey } from "@/lib/schedule/geometry";
@@ -48,6 +53,22 @@ async function requireOwnedAccount(userId: string, accountId: string): Promise<v
   if (!row) throw new Error("That account does not exist.");
 }
 
+async function requireOwnedPayees(
+  userId: string,
+  payeeIds: readonly string[],
+): Promise<Map<string, string>> {
+  const uniqueIds = [...new Set(payeeIds)];
+  if (uniqueIds.length === 0) return new Map();
+  const rows = await db
+    .select({ id: financePayees.id, name: financePayees.name })
+    .from(financePayees)
+    .where(and(eq(financePayees.userId, userId), inArray(financePayees.id, uniqueIds)));
+  if (rows.length !== uniqueIds.length) {
+    throw new Error("One or more payees do not exist.");
+  }
+  return new Map(rows.map((row) => [row.id, row.name]));
+}
+
 async function nextSortKey(userId: string): Promise<string> {
   const [last] = await db
     .select({ sortKey: financeSchedules.sortKey })
@@ -80,6 +101,7 @@ async function insertSchedule(
 ): Promise<string> {
   const conditions = parseConditions(draft.conditions);
   if (!conditions) throw new Error("Those conditions are not a valid schedule.");
+  await requireOwnedPayees(userId, payeeValues(extractScheduleConds(conditions).payee));
   const nextDate = initialNextDate(configOf(conditions), todayKey);
   const [row] = await db
     .insert(financeSchedules)
@@ -141,6 +163,7 @@ export async function updateSchedule(
   if (!conditions) throw new Error("Those conditions are not a valid schedule.");
   const accountId = extractScheduleConds(conditions).account?.value;
   if (accountId) await requireOwnedAccount(userId, accountId);
+  await requireOwnedPayees(userId, payeeValues(extractScheduleConds(conditions).payee));
 
   const nextDate =
     patch.conditions !== undefined
@@ -221,7 +244,9 @@ export async function postScheduleNow(
   if (!accountId) throw new Error("Pick an account on the schedule first.");
   await requireOwnedAccount(userId, accountId);
 
-  const payee = payeeValues(conds.payee)[0] ?? existing.name;
+  const payeeId = payeeValues(conds.payee)[0] ?? null;
+  const payees = await requireOwnedPayees(userId, payeeId ? [payeeId] : []);
+  const description = payeeId ? (payees.get(payeeId) ?? existing.name) : existing.name;
   const amountCents = getScheduledAmount(conds.amount);
   const [inserted] = await db
     .insert(financeTransactions)
@@ -229,7 +254,8 @@ export async function postScheduleNow(
       userId,
       accountId,
       transactionDate: existing.nextDate,
-      description: payee,
+      description,
+      payeeId,
       amount: centsToNumericString(amountCents),
       scheduleId: existing.id,
     })
@@ -445,8 +471,8 @@ function dedupeProposals(
 ): DiscoverProposal[] {
   const best = new Map<string, DiscoverProposal>();
   for (const proposal of proposals) {
-    if (importedPayees.has(proposal.merchant)) continue;
-    const key = `${proposal.accountId}:${proposal.merchant}:${proposal.date.frequency}:${proposal.date.interval ?? 1}`;
+    if (importedPayees.has(proposal.payeeId)) continue;
+    const key = `${proposal.accountId}:${proposal.payeeId}:${proposal.date.frequency}:${proposal.date.interval ?? 1}`;
     const current = best.get(key);
     if (!current || proposal.rank > current.rank) best.set(key, proposal);
   }
@@ -462,7 +488,7 @@ export async function createSchedulesFromDiscover(
   for (const proposal of proposals) {
     const conditions: ScheduleCondition[] = [
       { field: "account", op: "is", value: proposal.accountId },
-      { field: "payee", op: "is", value: proposal.merchant },
+      { field: "payee", op: "is", value: proposal.payeeId },
       { field: "amount", op: "isapprox", value: proposal.amountCents },
       { field: "date", op: "isapprox", value: proposal.date },
     ];

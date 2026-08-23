@@ -1,7 +1,7 @@
 /**
  * Map a declared bill onto Actual-shaped schedule conditions.
  *
- * Cadence → RecurConfig; matchers → payee is/oneOf; expectedCents → amount isapprox
+ * Cadence → RecurConfig; payee ids → payee is/oneOf; expectedCents → amount isapprox
  * (signed, negative, because a bill is money out). Only the mapping is here; the
  * idempotent import lives in `mutations.ts`.
  */
@@ -18,7 +18,7 @@ import type { RecurConfig } from "./recur";
 
 export type BillForSchedule = StoredBill & {
   id: string;
-  matchers: readonly string[];
+  payeeIds: readonly string[];
   status: "active" | "paused" | "cancelled" | "ignored";
 };
 
@@ -64,11 +64,11 @@ export function billToScheduleConditions(
       value: recurOf(cadenceOf(bill), start, dueDay),
     },
   ];
-  const matchers = bill.matchers.filter((entry) => entry !== "");
-  if (matchers.length === 1) {
-    conditions.push({ field: "payee", op: "is", value: matchers[0] });
-  } else if (matchers.length > 1) {
-    conditions.push({ field: "payee", op: "oneOf", value: [...matchers] });
+  const payeeIds = bill.payeeIds.filter((entry) => entry !== "");
+  if (payeeIds.length === 1) {
+    conditions.push({ field: "payee", op: "is", value: payeeIds[0] });
+  } else if (payeeIds.length > 1) {
+    conditions.push({ field: "payee", op: "oneOf", value: [...payeeIds] });
   }
   if (bill.expectedCents != null) {
     conditions.push({

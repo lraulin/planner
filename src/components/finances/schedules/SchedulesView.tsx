@@ -51,9 +51,11 @@ function viewDefaults(): GridDefaults {
 export function SchedulesView({
   initialRows,
   accounts,
+  payees,
 }: {
   initialRows: ScheduleListRow[];
   accounts: FinanceAccountRow[];
+  payees: { id: string; name: string }[];
 }) {
   const today = useToday();
   const [rows, setRows] = useState(initialRows);
@@ -375,6 +377,7 @@ export function SchedulesView({
           record={openRecord}
           creating={creating}
           accounts={accounts}
+          payees={payees}
           onClose={closeDrawer}
           onChanged={refresh}
         />

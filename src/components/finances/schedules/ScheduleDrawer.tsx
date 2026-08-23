@@ -12,6 +12,7 @@ import {
   TextField,
 } from "@/components/detail/fields";
 import { DateText } from "@/components/date/DateText";
+import { PayeePickerField } from "@/components/finances/payees/PayeePickerField";
 import { useToday } from "@/components/grid/useToday";
 import type { FinanceAccountRow } from "@/lib/finances/types";
 import {
@@ -38,7 +39,7 @@ const WEEKDAYS: RecurPattern["type"][] = ["SU", "MO", "TU", "WE", "TH", "FR", "S
 type Draft = {
   name: string;
   accountId: string | null;
-  matchers: string;
+  payeeIds: string[];
   amountOp: AmountCondition["op"];
   amount: string;
   amountHi: string;
@@ -73,7 +74,7 @@ function draftOf(record: ScheduleRecord | null, today: string): Draft {
     return {
       name: "",
       accountId: null,
-      matchers: "",
+      payeeIds: [],
       amountOp: "isapprox",
       amount: "",
       amountHi: "",
@@ -98,11 +99,11 @@ function draftOf(record: ScheduleRecord | null, today: string): Draft {
   return {
     name: record.name,
     accountId: conds.account?.value ?? null,
-    matchers: conds.payee
+    payeeIds: conds.payee
       ? conds.payee.op === "is"
-        ? conds.payee.value
-        : conds.payee.value.join(", ")
-      : "",
+        ? [conds.payee.value]
+        : conds.payee.value
+      : [],
     amountOp: conds.amount?.op ?? "isapprox",
     amount:
       conds.amount && conds.amount.op !== "isbetween"
@@ -171,14 +172,10 @@ function buildConditions(draft: Draft, start: string): ScheduleCondition[] | str
   const conditions: ScheduleCondition[] = [
     { field: "date", op: "isapprox", value: config },
   ];
-  const matchers = draft.matchers
-    .split(",")
-    .map((entry) => entry.trim())
-    .filter((entry) => entry !== "");
-  if (matchers.length === 1)
-    conditions.push({ field: "payee", op: "is", value: matchers[0] });
-  else if (matchers.length > 1)
-    conditions.push({ field: "payee", op: "oneOf", value: matchers });
+  if (draft.payeeIds.length === 1)
+    conditions.push({ field: "payee", op: "is", value: draft.payeeIds[0] });
+  else if (draft.payeeIds.length > 1)
+    conditions.push({ field: "payee", op: "oneOf", value: draft.payeeIds });
   if (draft.accountId)
     conditions.push({ field: "account", op: "is", value: draft.accountId });
   if (draft.amountOp === "isbetween") {
@@ -202,12 +199,14 @@ export function ScheduleDrawer({
   record,
   creating,
   accounts,
+  payees,
   onClose,
   onChanged,
 }: {
   record: ScheduleRecord | null;
   creating: boolean;
   accounts: FinanceAccountRow[];
+  payees: { id: string; name: string }[];
   onClose: () => void;
   onChanged: () => void;
 }) {
@@ -221,6 +220,7 @@ export function ScheduleDrawer({
       record={record}
       creating={creating}
       accounts={accounts}
+      payees={payees}
       today={today}
       titleId={titleId}
       onClose={onClose}
@@ -233,6 +233,7 @@ function ScheduleForm({
   record,
   creating,
   accounts,
+  payees,
   today,
   titleId,
   onClose,
@@ -241,6 +242,7 @@ function ScheduleForm({
   record: ScheduleRecord | null;
   creating: boolean;
   accounts: FinanceAccountRow[];
+  payees: { id: string; name: string }[];
   today: string;
   titleId: string;
   onClose: () => void;
@@ -347,11 +349,10 @@ function ScheduleForm({
                   }))}
                   onChange={(value) => patch("accountId", value)}
                 />
-                <TextField
-                  label="Payee matchers"
-                  value={draft.matchers}
-                  hint="Bank merchant strings, comma-separated."
-                  onChange={(value) => patch("matchers", value)}
+                <PayeePickerField
+                  payees={payees}
+                  value={draft.payeeIds}
+                  onChange={(value) => patch("payeeIds", value)}
                 />
                 <SelectField
                   label="Amount match"

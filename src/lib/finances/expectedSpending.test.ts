@@ -14,6 +14,7 @@ function bill(over: Partial<StoredBillRow> = {}): StoredBillRow {
     name: "Rent",
     matchers: ["RENT"],
     payees: [],
+    payeeIds: [],
     status: "active",
     cancelledOn: null,
     url: "",

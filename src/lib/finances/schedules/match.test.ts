@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import { matchesOccurrence, matchStartDate, type MatchCandidate } from "./match";
 import type { ScheduleConds } from "./conditions";
 
+const PAYEE_A = "11111111-1111-4111-8111-111111111111";
+const PAYEE_B = "22222222-2222-4222-8222-222222222222";
+
 function conds(overrides: Partial<ScheduleConds> = {}): ScheduleConds {
   return {
-    payee: { field: "payee", op: "is", value: "NETFLIX" },
+    payee: { field: "payee", op: "is", value: PAYEE_A },
     account: null,
     amount: { field: "amount", op: "isapprox", value: -1599 },
     date: {
@@ -19,7 +22,7 @@ function conds(overrides: Partial<ScheduleConds> = {}): ScheduleConds {
 function row(overrides: Partial<MatchCandidate> = {}): MatchCandidate {
   return {
     accountId: "acct",
-    payeeId: null,
+    payeeId: PAYEE_A,
     description: "NETFLIX",
     amountCents: -1599,
     transactionDate: "2026-08-15",
@@ -63,9 +66,9 @@ describe("matchesOccurrence", () => {
     ).toBe(false);
   });
 
-  it("rejects a different merchant or an amount outside the threshold", () => {
+  it("rejects a different payee or an amount outside the threshold", () => {
     expect(
-      matchesOccurrence(conds(), "2026-08-15", row({ description: "SPOTIFY" }), false),
+      matchesOccurrence(conds(), "2026-08-15", row({ payeeId: PAYEE_B }), false),
     ).toBe(false);
     expect(
       matchesOccurrence(conds(), "2026-08-15", row({ amountCents: -2000 }), false),
@@ -82,11 +85,12 @@ describe("matchesOccurrence", () => {
     ).toBe(false);
   });
 
-  it("matches a Stage A payee id without treating the UUID as a merchant name", () => {
-    const payeeId = "11111111-1111-4111-8111-111111111111";
-    const named = conds({ payee: { field: "payee", op: "is", value: payeeId } });
+  it("matches the stable payee id and does not fall back to description", () => {
+    const named = conds({ payee: { field: "payee", op: "is", value: PAYEE_A } });
 
-    expect(matchesOccurrence(named, "2026-08-15", row({ payeeId }), false)).toBe(true);
+    expect(
+      matchesOccurrence(named, "2026-08-15", row({ payeeId: PAYEE_A }), false),
+    ).toBe(true);
     expect(matchesOccurrence(named, "2026-08-15", row({ payeeId: null }), false)).toBe(
       false,
     );

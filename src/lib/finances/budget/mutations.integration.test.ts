@@ -11,6 +11,7 @@ import {
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { createSchedule } from "../schedules/mutations";
 import type { ScheduleCondition } from "../schedules/conditions";
+import { createPayee } from "../payees/mutations";
 import {
   addTemplatesFromSchedules,
   applyBudgetTemplates,
@@ -526,13 +527,17 @@ describeDb("budget mutations", () => {
   it("adds schedule templates onto Bills and skips a second run", async () => {
     await seedAccounts(userId);
     await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
+    const payeeId = await createPayee(userId, {
+      name: "Netflix",
+      aliases: ["NETFLIX"],
+    });
     const conditions: ScheduleCondition[] = [
       {
         field: "date",
         op: "isapprox",
         value: { frequency: "monthly", start: "2026-01-15" },
       },
-      { field: "payee", op: "is", value: "NETFLIX" },
+      { field: "payee", op: "is", value: payeeId },
       { field: "amount", op: "isapprox", value: -1599 },
     ];
     await createSchedule(userId, { name: "Netflix", conditions }, TODAY);

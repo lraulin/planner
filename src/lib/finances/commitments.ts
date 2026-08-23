@@ -69,6 +69,7 @@ export type StoredBillRow = StoredBill & {
   id: string;
   matchers: readonly string[];
   payees: readonly CommitmentPayee[];
+  payeeIds: readonly string[];
   status: CommitmentStatus;
   cancelledOn: string | null;
   url: string;

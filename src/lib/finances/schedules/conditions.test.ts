@@ -8,6 +8,9 @@ import {
   payeeValues,
 } from "./conditions";
 
+const PAYEE_A = "11111111-1111-4111-8111-111111111111";
+const PAYEE_B = "22222222-2222-4222-8222-222222222222";
+
 describe("approxThreshold", () => {
   it("is 7.5 percent of the absolute amount, rounded", () => {
     // Actual's getApproxNumberThreshold. A $50 bill (±$3.75) and a $10 coffee (±$0.75).
@@ -20,7 +23,7 @@ describe("approxThreshold", () => {
 describe("parseConditions", () => {
   it("accepts the four schedule fields in Actual's shape", () => {
     const parsed = parseConditions([
-      { field: "payee", op: "oneOf", value: ["NETFLIX", "NETFLIX.COM"] },
+      { field: "payee", op: "oneOf", value: [PAYEE_A, PAYEE_B] },
       { field: "account", op: "is", value: "acct-1" },
       { field: "amount", op: "isapprox", value: -1599 },
       {
@@ -80,12 +83,12 @@ describe("getScheduledAmount", () => {
 });
 
 describe("payeeValues", () => {
-  it("unwraps is and oneOf to a list of matcher strings", () => {
-    expect(payeeValues({ field: "payee", op: "is", value: "NETFLIX" })).toEqual([
-      "NETFLIX",
+  it("unwraps is and oneOf to a list of payee ids", () => {
+    expect(payeeValues({ field: "payee", op: "is", value: PAYEE_A })).toEqual([
+      PAYEE_A,
     ]);
     expect(
-      payeeValues({ field: "payee", op: "oneOf", value: ["NETFLIX", "NETFLIX.COM"] }),
-    ).toEqual(["NETFLIX", "NETFLIX.COM"]);
+      payeeValues({ field: "payee", op: "oneOf", value: [PAYEE_A, PAYEE_B] }),
+    ).toEqual([PAYEE_A, PAYEE_B]);
   });
 });

@@ -191,9 +191,9 @@ polish.
 
 ## Task 4: Complete schedule conversion
 
-- [ ] Parse and match payee conditions as UUIDs after Stage A.
-- [ ] Resolve condition ids to payee names in list/editor surfaces.
-- [ ] Convert bill import, discovery and schedule editing to stable payee ids.
+- [x] Parse and match payee conditions as UUIDs after Stage A.
+- [x] Resolve condition ids to payee names in list/editor surfaces.
+- [x] Convert bill import, discovery and schedule editing to stable payee ids.
 
 ## Task 5: Complete human and agent surfaces
 

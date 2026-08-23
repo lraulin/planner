@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { getCurrentUserId } from "@/lib/auth";
 import { listAccounts } from "@/lib/finances/queries";
 import { listSchedules } from "@/lib/finances/schedules/queries";
+import { listPayees } from "@/lib/finances/payees/queries";
 import { DEFAULT_UPCOMING_LENGTH } from "@/lib/finances/schedules/status";
 import { toDateKey } from "@/lib/schedule/geometry";
 import { AppShell } from "@/components/shell/AppShell";
@@ -16,15 +17,16 @@ export const dynamic = "force-dynamic";
 export default async function FinancesSchedulesPage() {
   const userId = await getCurrentUserId();
   const todayKey = toDateKey(new Date());
-  const [rows, accounts] = await Promise.all([
+  const [rows, accounts, payees] = await Promise.all([
     listSchedules(userId, todayKey, DEFAULT_UPCOMING_LENGTH),
     listAccounts(userId),
+    listPayees(userId),
   ]);
 
   return (
     <AppShell active="finances">
       <Suspense fallback={<div className="min-h-0 flex-1" />}>
-        <SchedulesView initialRows={rows} accounts={accounts} />
+        <SchedulesView initialRows={rows} accounts={accounts} payees={payees} />
       </Suspense>
     </AppShell>
   );

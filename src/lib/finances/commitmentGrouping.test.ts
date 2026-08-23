@@ -7,6 +7,7 @@ function bill(over: Partial<BillRow> & Pick<BillRow, "id" | "name">): BillRow {
   return {
     matchers: [over.name],
     payees: [],
+    payeeIds: [],
     status: "active",
     cancelledOn: null,
     url: "",

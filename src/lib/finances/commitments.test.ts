@@ -24,6 +24,7 @@ function bill(overrides: Partial<StoredBillRow> = {}): StoredBillRow {
     name: "Geico",
     matchers: ["GEICO"],
     payees: [],
+    payeeIds: [],
     status: "active",
     cancelledOn: null,
     url: "",

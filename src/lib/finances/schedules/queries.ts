@@ -4,7 +4,12 @@
 
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/db";
-import { financeAccounts, financeSchedules, financeTransactions } from "@/db/schema";
+import {
+  financeAccounts,
+  financePayees,
+  financeSchedules,
+  financeTransactions,
+} from "@/db/schema";
 import { loadRecurringBills } from "@/lib/finances/dashboardQueries";
 import { numericStringToCents } from "@/lib/finances/money";
 import {
@@ -146,13 +151,17 @@ export async function listSchedules(
   todayKey: string,
   horizon: string = DEFAULT_UPCOMING_LENGTH,
 ): Promise<ScheduleListRow[]> {
-  const [records, bills, accounts] = await Promise.all([
+  const [records, bills, accounts, payees] = await Promise.all([
     listScheduleRecords(userId),
     loadRecurringBills(userId),
     db
       .select({ id: financeAccounts.id, name: financeAccounts.name })
       .from(financeAccounts)
       .where(eq(financeAccounts.userId, userId)),
+    db
+      .select({ id: financePayees.id, name: financePayees.name })
+      .from(financePayees)
+      .where(eq(financePayees.userId, userId)),
   ]);
   const links = await listPostedLinks(
     userId,
@@ -160,6 +169,7 @@ export async function listSchedules(
   );
   const billsById = new Map(bills.map((bill) => [bill.id, bill]));
   const accountsById = new Map(accounts.map((account) => [account.id, account.name]));
+  const payeesById = new Map(payees.map((payee) => [payee.id, payee.name]));
 
   return records.map((record) => {
     const conds = extractScheduleConds(record.conditions);
@@ -171,7 +181,9 @@ export async function listSchedules(
       ...record,
       accountId,
       accountName: accountId ? (accountsById.get(accountId) ?? null) : null,
-      payeeLabel: payeeValues(conds.payee).join(", "),
+      payeeLabel: payeeValues(conds.payee)
+        .map((id) => payeesById.get(id) ?? "Missing payee")
+        .join(", "),
       amountCents: getScheduledAmount(conds.amount),
       status: getStatus(
         record.nextDate,
@@ -210,6 +222,13 @@ export async function listUnlinkedTransactions(userId: string): Promise<
       transferGroupId: financeTransactions.transferGroupId,
     })
     .from(financeTransactions)
+    .leftJoin(
+      financePayees,
+      and(
+        eq(financePayees.id, financeTransactions.payeeId),
+        eq(financePayees.userId, userId),
+      ),
+    )
     .where(
       and(
         eq(financeTransactions.userId, userId),
@@ -235,12 +254,21 @@ export async function listDiscoverableRows(userId: string): Promise<DiscoverTx[]
       id: financeTransactions.id,
       accountId: financeTransactions.accountId,
       description: financeTransactions.description,
+      payeeId: financeTransactions.payeeId,
+      payeeName: financePayees.name,
       amount: financeTransactions.amount,
       date: financeTransactions.transactionDate,
       scheduleId: financeTransactions.scheduleId,
       transferGroupId: financeTransactions.transferGroupId,
     })
     .from(financeTransactions)
+    .leftJoin(
+      financePayees,
+      and(
+        eq(financePayees.id, financeTransactions.payeeId),
+        eq(financePayees.userId, userId),
+      ),
+    )
     .where(eq(financeTransactions.userId, userId));
 
   return rows.map((row) => ({
@@ -248,7 +276,8 @@ export async function listDiscoverableRows(userId: string): Promise<DiscoverTx[]
     accountId: row.accountId,
     date: row.date,
     amountCents: numericStringToCents(row.amount) ?? 0,
-    merchant: effectiveMerchant({ description: row.description }),
+    payeeId: row.payeeId,
+    merchant: row.payeeName ?? effectiveMerchant({ description: row.description }),
     scheduleId: row.scheduleId,
     transferGroupId: row.transferGroupId,
   }));

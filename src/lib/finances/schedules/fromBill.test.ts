@@ -3,11 +3,15 @@ import { CADENCE_CHOICES, cadenceColumns } from "@/lib/finances/recurringBills";
 import { billDrift, billToScheduleConditions, type BillForSchedule } from "./fromBill";
 import { dateConfigOf, extractScheduleConds } from "./conditions";
 
+const PAYEE_A = "11111111-1111-4111-8111-111111111111";
+const PAYEE_B = "22222222-2222-4222-8222-222222222222";
+
 function bill(overrides: Partial<BillForSchedule> = {}): BillForSchedule {
   return {
     id: "bill-1",
     name: "Netflix",
     matchers: ["NETFLIX"],
+    payeeIds: [PAYEE_A],
     status: "active",
     cadenceMonths: 1,
     cadenceDays: null,
@@ -66,17 +70,14 @@ describe("billToScheduleConditions", () => {
     expect(mapped.amount).toEqual({ field: "amount", op: "isapprox", value: -1599 });
   });
 
-  it("uses payee oneOf when the bill has several matchers", () => {
+  it("uses payee oneOf when the bill has several payees", () => {
     const mapped = extractScheduleConds(
-      billToScheduleConditions(
-        bill({ matchers: ["NETFLIX", "NETFLIX.COM"] }),
-        "2026-08-22",
-      ),
+      billToScheduleConditions(bill({ payeeIds: [PAYEE_A, PAYEE_B] }), "2026-08-22"),
     );
     expect(mapped.payee).toEqual({
       field: "payee",
       op: "oneOf",
-      value: ["NETFLIX", "NETFLIX.COM"],
+      value: [PAYEE_A, PAYEE_B],
     });
   });
 });

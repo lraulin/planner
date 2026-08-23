@@ -16,6 +16,7 @@ export type DiscoverTx = {
   accountId: string;
   date: string;
   amountCents: number;
+  payeeId: string | null;
   merchant: string;
   scheduleId: string | null;
   transferGroupId: string | null;
@@ -24,6 +25,7 @@ export type DiscoverTx = {
 export type DiscoverProposal = {
   rank: number;
   accountId: string;
+  payeeId: string;
   merchant: string;
   amountCents: number;
   date: RecurConfig;
@@ -36,7 +38,7 @@ export function getRank(day1: string, day2: string): number {
 }
 
 export function isDiscoverable(row: DiscoverTx): boolean {
-  return row.scheduleId == null && row.transferGroupId == null && row.merchant !== "";
+  return row.scheduleId == null && row.transferGroupId == null && row.payeeId !== null;
 }
 
 /**
@@ -74,7 +76,7 @@ export function matchSchedules(
     const found = later.map((occur) => {
       const matched = occur.transactions.find(
         (row) =>
-          row.merchant === trans.merchant &&
+          row.payeeId === trans.payeeId &&
           row.amountCents >= trans.amountCents - threshold &&
           row.amountCents <= trans.amountCents + threshold,
       );
@@ -95,6 +97,7 @@ export function matchSchedules(
       rank,
       amountCents: trans.amountCents,
       accountId: trans.accountId,
+      payeeId: trans.payeeId!,
       merchant: trans.merchant,
       date: config,
       exactDate: rank === sampled.length,

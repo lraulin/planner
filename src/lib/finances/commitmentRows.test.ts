@@ -23,6 +23,7 @@ function bill(over: Partial<StoredBillRow> = {}): StoredBillRow {
     name: "1Password",
     matchers: ["1PASSWORDTORONTOON"],
     payees: [],
+    payeeIds: [],
     status: "active",
     cancelledOn: null,
     url: "",

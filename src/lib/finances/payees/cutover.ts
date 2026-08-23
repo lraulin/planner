@@ -98,6 +98,46 @@ export type PayeeCutoverInput = {
 
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const VALIDATION_PAYEE_ID = "00000000-0000-4000-8000-000000000000";
+
+/**
+ * Validate a Stage A schedule without asking the Stage B parser to accept merchant text.
+ * The compatibility shape belongs only to this retired cutover planner; runtime schedule
+ * readers remain UUID-only.
+ */
+function parseLegacyConditions(raw: unknown): ScheduleCondition[] | null {
+  if (!Array.isArray(raw)) return null;
+  const validationShape = raw.map((entry) => {
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry))
+      return entry;
+    if (!("field" in entry) || entry.field !== "payee") return entry;
+    if (!("op" in entry) || !("value" in entry)) return entry;
+    if (entry.op === "is" && typeof entry.value === "string") {
+      return { ...entry, value: VALIDATION_PAYEE_ID };
+    }
+    if (
+      entry.op === "oneOf" &&
+      Array.isArray(entry.value) &&
+      entry.value.every((value: unknown) => typeof value === "string")
+    ) {
+      return { ...entry, value: entry.value.map(() => VALIDATION_PAYEE_ID) };
+    }
+    return entry;
+  });
+  const parsed = parseConditions(validationShape);
+  if (!parsed) return null;
+  return parsed.map((condition, index) => {
+    if (condition.field !== "payee") return condition;
+    const original = raw[index];
+    if (typeof original !== "object" || original === null || Array.isArray(original)) {
+      return condition;
+    }
+    const value = "value" in original ? original.value : null;
+    return condition.op === "is"
+      ? { ...condition, value: value as string }
+      : { ...condition, value: value as string[] };
+  });
+}
 
 function refKey(ref: PayeeRef): string {
   return ref.type === "existing" ? `existing:${ref.id}` : `create:${ref.key}`;
@@ -243,7 +283,7 @@ export function planPayeeCutover(input: PayeeCutoverInput): PayeeCutoverPlan {
   const malformedSchedules: PayeeCutoverPlan["malformedSchedules"] = [];
   const scheduleUpdates: ScheduleUpdate[] = [];
   for (const schedule of input.schedules) {
-    const parsed = parseConditions(schedule.conditions);
+    const parsed = parseLegacyConditions(schedule.conditions);
     if (!parsed) {
       malformedSchedules.push({ id: schedule.id, name: schedule.name });
       continue;

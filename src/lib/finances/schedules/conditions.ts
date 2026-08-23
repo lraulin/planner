@@ -11,9 +11,9 @@
  * Amount values are **signed integer cents, positive is money in**, matching
  * `finance_transactions`. A $50 bill is `-5000`.
  *
- * Spec: `agent-os/specs/2026-08-22-2124-actual-schedules/` D1. `payee oneOf` is a small
- * widening of Actual's `payee is`, so one schedule can span both spellings of a merchant
- * the way bills already do.
+ * Spec: `agent-os/specs/2026-08-23-1041-payee-matcher-cutover/` D2. `payee oneOf` is a
+ * small widening of Actual's `payee is`, so one schedule can intentionally span several
+ * stable payee identities.
  */
 
 import type { RecurConfig } from "./recur";
@@ -50,6 +50,8 @@ const END_MODES = new Set(["never", "after_n_occurrences", "on_date"]);
 const WEEKEND_MODES = new Set(["before", "after"]);
 const PATTERN_TYPES = new Set(["SU", "MO", "TU", "WE", "TH", "FR", "SA", "day"]);
 const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
+const UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -134,12 +136,12 @@ function parseRecurConfig(value: unknown): RecurConfig | null {
 
 function parsePayee(raw: Record<string, unknown>): PayeeCondition | null {
   if (raw.op === "is") {
-    if (typeof raw.value !== "string" || raw.value === "") return null;
+    if (typeof raw.value !== "string" || !UUID.test(raw.value)) return null;
     return { field: "payee", op: "is", value: raw.value };
   }
   if (raw.op === "oneOf") {
     if (!Array.isArray(raw.value) || raw.value.length === 0) return null;
-    if (!raw.value.every((entry) => typeof entry === "string" && entry !== ""))
+    if (!raw.value.every((entry) => typeof entry === "string" && UUID.test(entry)))
       return null;
     return { field: "payee", op: "oneOf", value: raw.value };
   }

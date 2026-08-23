@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { getRank, matchSchedules, type DiscoverTx } from "./discover";
 
+const PAYEE_A = "11111111-1111-4111-8111-111111111111";
+const PAYEE_B = "22222222-2222-4222-8222-222222222222";
+
 function tx(overrides: Partial<DiscoverTx> = {}): DiscoverTx {
   return {
     id: "t1",
     accountId: "acct",
     date: "2026-06-15",
     amountCents: -1599,
+    payeeId: PAYEE_A,
     merchant: "NETFLIX",
     scheduleId: null,
     transferGroupId: null,
@@ -28,7 +32,10 @@ describe("matchSchedules", () => {
     const proposals = matchSchedules(
       [
         { date: "2026-04-15", transactions: [tx({ id: "a", date: "2026-04-15" })] },
-        { date: "2026-05-15", transactions: [tx({ id: "b", date: "2026-05-16" })] },
+        {
+          date: "2026-05-15",
+          transactions: [tx({ id: "b", date: "2026-05-16", merchant: "Netflix.com" })],
+        },
         { date: "2026-06-15", transactions: [tx({ id: "c", date: "2026-06-15" })] },
       ],
       config,
@@ -46,7 +53,14 @@ describe("matchSchedules", () => {
           { date: "2026-04-15", transactions: [tx({ id: "a", date: "2026-04-15" })] },
           {
             date: "2026-05-15",
-            transactions: [tx({ id: "b", date: "2026-05-15", merchant: "HULU" })],
+            transactions: [
+              tx({
+                id: "b",
+                date: "2026-05-15",
+                payeeId: PAYEE_B,
+                merchant: "Hulu",
+              }),
+            ],
           },
           { date: "2026-06-15", transactions: [tx({ id: "c", date: "2026-06-15" })] },
         ],

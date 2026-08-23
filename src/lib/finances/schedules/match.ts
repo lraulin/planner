@@ -5,12 +5,9 @@
  * (`packages/loot-core/src/shared/schedules.ts`): exact for `date op 'is'` and for
  * `postsTransaction`, otherwise a 2-day lookback, upper-bounded by the occurrence date.
  *
- * During the payee cutover, a condition may hold either the legacy merchant string or the
- * replacement payee id. Supporting both in Stage A keeps schedule matching live while the
- * data is rewritten; Stage B removes the merchant branch.
+ * Payee conditions hold stable ids. A transaction without a payee cannot satisfy one.
  */
 
-import { effectiveMerchant } from "@/lib/finances/analytics";
 import { shiftDateKey } from "@/lib/schedule/geometry";
 import { amountMatches, payeeValues, type ScheduleConds } from "./conditions";
 
@@ -42,13 +39,9 @@ export function matchesOccurrence(
 ): boolean {
   if (conds.account && candidate.accountId !== conds.account.value) return false;
 
-  const matchers = payeeValues(conds.payee);
-  if (matchers.length > 0) {
-    const merchant = effectiveMerchant({ description: candidate.description });
-    const matchesPayee = candidate.payeeId
-      ? matchers.includes(candidate.payeeId)
-      : false;
-    if (!matchesPayee && !matchers.includes(merchant)) return false;
+  const payeeIds = payeeValues(conds.payee);
+  if (payeeIds.length > 0) {
+    if (!candidate.payeeId || !payeeIds.includes(candidate.payeeId)) return false;
   }
 
   if (conds.amount && !amountMatches(conds.amount, candidate.amountCents)) return false;

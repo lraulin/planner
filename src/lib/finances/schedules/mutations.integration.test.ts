@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { financeAccounts, financeTransactions, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { upsertRecurringBill } from "@/lib/finances/mutations";
+import { createPayee } from "@/lib/finances/payees/mutations";
 import {
   createSchedule,
   deleteSchedule,
@@ -56,14 +57,14 @@ async function seedAccount(userId: string): Promise<string> {
   return account.id;
 }
 
-function monthly(accountId?: string): ScheduleCondition[] {
+function monthly(payeeId: string, accountId?: string): ScheduleCondition[] {
   const conditions: ScheduleCondition[] = [
     {
       field: "date",
       op: "isapprox",
       value: { frequency: "monthly", start: "2026-01-15" },
     },
-    { field: "payee", op: "is", value: "NETFLIX" },
+    { field: "payee", op: "is", value: payeeId },
     { field: "amount", op: "isapprox", value: -1599 },
   ];
   if (accountId) {
@@ -75,16 +76,18 @@ function monthly(accountId?: string): ScheduleCondition[] {
 describeDb("schedule mutations", () => {
   let userId: string;
   let accountId: string;
+  let payeeId: string;
 
   beforeEach(async () => {
     userId = await makeUser();
     accountId = await seedAccount(userId);
+    payeeId = await createPayee(userId, { name: "Netflix", aliases: ["NETFLIX"] });
   });
 
   it("creates a schedule the owner can read and a second user cannot", async () => {
     const id = await createSchedule(
       userId,
-      { name: "Netflix", conditions: monthly() },
+      { name: "Netflix", conditions: monthly(payeeId) },
       TODAY,
     );
     expect(await getSchedule(userId, id)).toMatchObject({
@@ -93,6 +96,7 @@ describeDb("schedule mutations", () => {
     });
 
     const other = await makeUser();
+    const otherPayeeId = await createPayee(other, { name: "Other Netflix" });
     expect(await getSchedule(other, id)).toBeNull();
     expect(await listSchedules(other, TODAY)).toEqual([]);
     await expect(
@@ -102,23 +106,37 @@ describeDb("schedule mutations", () => {
       "That schedule does not exist.",
     );
     expect((await getSchedule(userId, id))?.name).toBe("Netflix");
+    await expect(
+      createSchedule(
+        userId,
+        { name: "Foreign payee", conditions: monthly(otherPayeeId) },
+        TODAY,
+      ),
+    ).rejects.toThrow("One or more payees do not exist.");
+    await expect(
+      updateSchedule(userId, id, { conditions: monthly(otherPayeeId) }, TODAY),
+    ).rejects.toThrow("One or more payees do not exist.");
   });
 
   it("names a duplicate schedule rather than leaking the failed statement", async () => {
-    await createSchedule(userId, { name: "Netflix", conditions: monthly() }, TODAY);
+    await createSchedule(
+      userId,
+      { name: "Netflix", conditions: monthly(payeeId) },
+      TODAY,
+    );
 
     // This message had never once been reachable: drizzle wraps the PostgresError, so the
     // old `error.code === "23505"` check on the outer error never matched and the raw SQL
     // plus its parameters travelled instead (`src/lib/db/constraints.ts`).
     await expect(
-      createSchedule(userId, { name: "Netflix", conditions: monthly() }, TODAY),
+      createSchedule(userId, { name: "Netflix", conditions: monthly(payeeId) }, TODAY),
     ).rejects.toThrow('A schedule named "Netflix" already exists.');
   });
 
   it("skips the next date without writing a transaction", async () => {
     const id = await createSchedule(
       userId,
-      { name: "Netflix", conditions: monthly() },
+      { name: "Netflix", conditions: monthly(payeeId) },
       TODAY,
     );
     await skipSchedule(userId, id);
@@ -134,7 +152,7 @@ describeDb("schedule mutations", () => {
   it("posts one linked transaction and advances the cursor", async () => {
     const id = await createSchedule(
       userId,
-      { name: "Netflix", conditions: monthly(accountId) },
+      { name: "Netflix", conditions: monthly(payeeId, accountId) },
       TODAY,
     );
     const transactionId = await postScheduleNow(userId, id);
@@ -143,6 +161,8 @@ describeDb("schedule mutations", () => {
       .from(financeTransactions)
       .where(eq(financeTransactions.id, transactionId));
     expect(row?.scheduleId).toBe(id);
+    expect(row?.payeeId).toBe(payeeId);
+    expect(row?.description).toBe("Netflix");
     expect(row?.transactionDate).toBe("2026-09-15");
     expect((await getSchedule(userId, id))?.nextDate).toBe("2026-10-15");
   });
@@ -150,7 +170,7 @@ describeDb("schedule mutations", () => {
   it("refuses to post without an account condition", async () => {
     const id = await createSchedule(
       userId,
-      { name: "Netflix", conditions: monthly() },
+      { name: "Netflix", conditions: monthly(payeeId) },
       TODAY,
     );
     await expect(postScheduleNow(userId, id)).rejects.toThrow(
@@ -184,7 +204,7 @@ describeDb("schedule mutations", () => {
   it("links a matching imported charge and advances the schedule", async () => {
     const id = await createSchedule(
       userId,
-      { name: "Netflix", conditions: monthly(accountId) },
+      { name: "Netflix", conditions: monthly(payeeId, accountId) },
       TODAY,
     );
     await db.insert(financeTransactions).values({
@@ -192,6 +212,7 @@ describeDb("schedule mutations", () => {
       accountId,
       transactionDate: "2026-09-14",
       description: "NETFLIX",
+      payeeId,
       amount: "-15.99",
     });
     const result = await findMatches(userId);
