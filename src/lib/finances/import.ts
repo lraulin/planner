@@ -45,6 +45,7 @@ import {
   type ParsedFinanceCsv,
   type ParsedStatement,
 } from "./types";
+import { findMatches } from "./schedules/mutations";
 
 /**
  * Writing parsed CSV or statement rows into the register.
@@ -478,6 +479,10 @@ export async function importFinanceCsvFiles({
       statementsCreated += outcome.statementsCreated;
       statementsSkipped += outcome.statementsSkipped;
     }
+  }
+
+  if (created > 0) {
+    await findMatches(userId);
   }
 
   return {

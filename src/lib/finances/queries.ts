@@ -4,6 +4,7 @@ import {
   financeAccounts,
   financeBudgetCategories,
   financePaymentResolutions,
+  financeSchedules,
   financeStatementRates,
   financeStatements,
   financeTransactions,
@@ -221,6 +222,8 @@ export async function listTransactions(
       balanceAfter: financeTransactions.balanceAfter,
       budgetCategoryId: financeTransactions.budgetCategoryId,
       budgetCategoryName: financeBudgetCategories.name,
+      scheduleId: financeTransactions.scheduleId,
+      scheduleName: financeSchedules.name,
     })
     .from(financeTransactions)
     .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
@@ -230,6 +233,7 @@ export async function listTransactions(
       financeBudgetCategories,
       eq(financeBudgetCategories.id, financeTransactions.budgetCategoryId),
     )
+    .leftJoin(financeSchedules, eq(financeSchedules.id, financeTransactions.scheduleId))
     .where(and(...scopeConditions(userId, filter)))
     .orderBy(
       desc(financeTransactions.transactionDate),
@@ -261,6 +265,8 @@ export async function listTransactions(
     balanceAfterCents: numericStringToCents(row.balanceAfter),
     budgetCategoryId: row.budgetCategoryId,
     budgetCategoryName: row.budgetCategoryName,
+    scheduleId: row.scheduleId,
+    scheduleName: row.scheduleName,
   }));
 }
 
@@ -305,6 +311,8 @@ export async function getTransaction(
       balanceAfter: financeTransactions.balanceAfter,
       budgetCategoryId: financeTransactions.budgetCategoryId,
       budgetCategoryName: financeBudgetCategories.name,
+      scheduleId: financeTransactions.scheduleId,
+      scheduleName: financeSchedules.name,
     })
     .from(financeTransactions)
     .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
@@ -312,6 +320,7 @@ export async function getTransaction(
       financeBudgetCategories,
       eq(financeBudgetCategories.id, financeTransactions.budgetCategoryId),
     )
+    .leftJoin(financeSchedules, eq(financeSchedules.id, financeTransactions.scheduleId))
     .where(
       and(
         eq(financeTransactions.id, transactionId),
@@ -343,6 +352,8 @@ export async function getTransaction(
     balanceAfterCents: numericStringToCents(row.balanceAfter),
     budgetCategoryId: row.budgetCategoryId,
     budgetCategoryName: row.budgetCategoryName,
+    scheduleId: row.scheduleId,
+    scheduleName: row.scheduleName,
   };
 }
 

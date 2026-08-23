@@ -49,6 +49,8 @@ import {
   unclassifiedCount,
 } from "@/lib/finances/dashboardQueries";
 import { upsertRecurringBill, upsertRecurringSpend } from "@/lib/finances/mutations";
+import { createSchedule } from "@/lib/finances/schedules/mutations";
+import { getSchedule, listSchedules } from "@/lib/finances/schedules/queries";
 import {
   getPaymentResolution,
   getTransaction,
@@ -160,6 +162,7 @@ type Owned = {
   financeAccountId: string;
   bankConnectionId: string;
   financeTransactionId: string;
+  financeScheduleId: string;
   financeStatementId: string;
   paymentResolutionId: string;
   amazonItemId: string;
@@ -275,6 +278,20 @@ async function seedOwner(): Promise<Owned> {
     name: "Owner Pizza",
     matchers: ["OWNER PIZZA"],
   });
+  const financeScheduleId = await createSchedule(
+    userId,
+    {
+      name: "Owner Netflix",
+      conditions: [
+        {
+          field: "date",
+          op: "isapprox",
+          value: { frequency: "monthly", start: "2026-01-15" },
+        },
+      ],
+    },
+    "2026-08-22",
+  );
   await importFinanceCsvFiles({
     userId,
     files: [
@@ -405,6 +422,7 @@ async function seedOwner(): Promise<Owned> {
     resourceId,
     financeAccountId: financeAccount.id,
     financeTransactionId: financeTransaction.id,
+    financeScheduleId,
     financeStatementId: financeStatement.id,
     paymentResolutionId: paymentResolution.id,
     amazonItemId: amazonItem.id,
@@ -446,6 +464,7 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect((await listResources(owner.userId)).length).toBeGreaterThan(0);
     expect((await listAccounts(owner.userId)).length).toBeGreaterThan(0);
     expect((await listTransactions(owner.userId)).length).toBeGreaterThan(0);
+    expect(await getSchedule(owner.userId, owner.financeScheduleId)).not.toBeNull();
     expect((await listAmazonItems(owner.userId)).length).toBeGreaterThan(0);
     expect((await listStatements(owner.userId)).length).toBeGreaterThan(0);
     expect((await listPaymentResolutions(owner.userId)).length).toBeGreaterThan(0);
@@ -552,6 +571,8 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect(
       await transactionTotalCents(intruder, { accountId: owner.financeAccountId }),
     ).toBe(0);
+    expect(await listSchedules(intruder, "2026-08-22")).toEqual([]);
+    expect(await getSchedule(intruder, owner.financeScheduleId)).toBeNull();
   });
 
   it("bank sync connections, links and their sync windows", async () => {

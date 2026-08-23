@@ -45,6 +45,37 @@ import {
 } from "@/lib/finances/budget/mutations";
 import type { BudgetPreset } from "@/lib/finances/budget/presets";
 import type { CommitmentStatus } from "@/db/schema";
+import type { DiscoverProposal } from "@/lib/finances/schedules/discover";
+import {
+  completeSchedule,
+  createSchedule,
+  createSchedulesFromDiscover,
+  deleteSchedule,
+  discoverScheduleProposals,
+  findMatches,
+  importSchedulesFromBills,
+  linkTransaction,
+  postScheduleNow,
+  skipSchedule,
+  unlinkTransaction,
+  updateSchedule,
+  type ImportFromBillsResult,
+  type ScheduleDraft,
+  type SchedulePatch,
+} from "@/lib/finances/schedules/mutations";
+import {
+  getSchedule,
+  listPostedLinks,
+  listScheduleRecords,
+  listSchedules,
+  type ScheduleListRow,
+  type ScheduleRecord,
+} from "@/lib/finances/schedules/queries";
+import { DEFAULT_UPCOMING_LENGTH } from "@/lib/finances/schedules/status";
+import {
+  upcomingOccurrences,
+  type UpcomingOccurrence,
+} from "@/lib/finances/schedules/upcoming";
 import { getTransaction, listAccounts, listTransactions } from "@/lib/finances/queries";
 import type {
   FinanceAccountRow,
@@ -266,4 +297,109 @@ export async function setTransactionBudgetCategoryAction(
   return run((userId) =>
     setTransactionBudgetCategory(userId, transactionId, categoryId),
   );
+}
+
+// ─────────────────────────── Schedules ───────────────────────────
+
+export async function listSchedulesAction(
+  todayKey: string,
+  horizon?: string,
+): Promise<QueryResult<ScheduleListRow[]>> {
+  return runQuery((userId) => listSchedules(userId, todayKey, horizon));
+}
+
+export async function getScheduleAction(
+  scheduleId: string,
+): Promise<QueryResult<ScheduleRecord | null>> {
+  return runQuery((userId) => getSchedule(userId, scheduleId));
+}
+
+export async function createScheduleAction(
+  draft: ScheduleDraft,
+  todayKey: string,
+): Promise<DataActionResult<string>> {
+  return runWithData((userId) => createSchedule(userId, draft, todayKey));
+}
+
+export async function updateScheduleAction(
+  scheduleId: string,
+  patch: SchedulePatch,
+  todayKey: string,
+): Promise<ActionResult> {
+  return run((userId) => updateSchedule(userId, scheduleId, patch, todayKey));
+}
+
+export async function deleteScheduleAction(scheduleId: string): Promise<ActionResult> {
+  return run((userId) => deleteSchedule(userId, scheduleId));
+}
+
+export async function skipScheduleAction(scheduleId: string): Promise<ActionResult> {
+  return run((userId) => skipSchedule(userId, scheduleId));
+}
+
+export async function completeScheduleAction(
+  scheduleId: string,
+  completed: boolean,
+): Promise<ActionResult> {
+  return run((userId) => completeSchedule(userId, scheduleId, completed));
+}
+
+export async function postScheduleNowAction(
+  scheduleId: string,
+): Promise<DataActionResult<string>> {
+  return runWithData((userId) => postScheduleNow(userId, scheduleId));
+}
+
+export async function importSchedulesFromBillsAction(
+  todayKey: string,
+): Promise<DataActionResult<ImportFromBillsResult>> {
+  return runWithData((userId) => importSchedulesFromBills(userId, todayKey));
+}
+
+export async function findScheduleMatchesAction(): Promise<
+  DataActionResult<{ linked: number }>
+> {
+  return runWithData((userId) => findMatches(userId));
+}
+
+export async function linkTransactionAction(
+  scheduleId: string,
+  transactionId: string,
+): Promise<ActionResult> {
+  return run((userId) => linkTransaction(userId, scheduleId, transactionId));
+}
+
+export async function unlinkTransactionAction(
+  transactionId: string,
+): Promise<ActionResult> {
+  return run((userId) => unlinkTransaction(userId, transactionId));
+}
+
+export async function discoverSchedulesAction(): Promise<
+  QueryResult<DiscoverProposal[]>
+> {
+  return runQuery((userId) => discoverScheduleProposals(userId));
+}
+
+export async function createDiscoveredSchedulesAction(
+  proposals: DiscoverProposal[],
+  todayKey: string,
+): Promise<DataActionResult<number>> {
+  return runWithData((userId) =>
+    createSchedulesFromDiscover(userId, proposals, todayKey),
+  );
+}
+
+export async function upcomingOccurrencesAction(
+  todayKey: string,
+  horizon: string = DEFAULT_UPCOMING_LENGTH,
+): Promise<QueryResult<UpcomingOccurrence[]>> {
+  return runQuery(async (userId) => {
+    const records = await listScheduleRecords(userId);
+    const links = await listPostedLinks(
+      userId,
+      records.map((row) => row.id),
+    );
+    return upcomingOccurrences(records, links, horizon, todayKey);
+  });
 }

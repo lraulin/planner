@@ -240,6 +240,9 @@ export type TransactionListRow = {
    */
   budgetCategoryId: string | null;
   budgetCategoryName: string | null;
+  /** Linked schedule, if any. Null is the ordinary unlinked row. */
+  scheduleId: string | null;
+  scheduleName: string | null;
 };
 
 export type TransactionFilter = {

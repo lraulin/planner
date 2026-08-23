@@ -29,6 +29,8 @@ function row(
     balanceAfterCents: null,
     budgetCategoryId: null,
     budgetCategoryName: null,
+    scheduleId: null,
+    scheduleName: null,
   };
 }
 
