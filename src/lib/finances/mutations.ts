@@ -22,6 +22,7 @@ import { cadenceColumns, cadenceOf, type Cadence } from "./recurringBills";
 import { numericStringToCents } from "./money";
 import type { PaypalResolution } from "./paypalMatch";
 import { ensurePayees } from "./payees/backfill";
+import { syncLegacyCommitmentClaims } from "./payees/cutoverDb";
 import { payeeIndex } from "./payees/resolve";
 
 /**
@@ -738,30 +739,43 @@ export async function upsertRecurringBill(
     updatedAt: new Date(),
   };
 
-  await db
-    .insert(financeRecurringBills)
-    .values({
-      userId,
+  await db.transaction(async (tx) => {
+    const [stored] = await tx
+      .insert(financeRecurringBills)
+      .values({
+        userId,
+        name,
+        matchers: matchers ?? [name],
+        ...cadenceColumns(edit.cadence),
+        category: edit.category?.trim() ?? "",
+        expectedCents: edit.expectedCents ?? null,
+        anchorDate: edit.anchorDate ?? null,
+        notes: edit.notes?.trim() ?? "",
+        scheduled: edit.scheduled ?? true,
+        dueDay: edit.dueDay ?? null,
+        status: edit.status ?? "active",
+        cancelledOn:
+          edit.status === "cancelled" ? (edit.cancelledOn ?? todayInUtc()) : null,
+        url: edit.url?.trim() ?? "",
+      })
+      // The unique index is on (user_id, name), so this can only ever collide with this user's
+      // own row — another user's identical name is a different row entirely.
+      .onConflictDoUpdate({
+        target: [financeRecurringBills.userId, financeRecurringBills.name],
+        set: changes,
+      })
+      .returning({
+        id: financeRecurringBills.id,
+        matchers: financeRecurringBills.matchers,
+      });
+
+    await syncLegacyCommitmentClaims(tx, userId, {
+      kind: "bill",
+      id: stored.id,
       name,
-      matchers: matchers ?? [name],
-      ...cadenceColumns(edit.cadence),
-      category: edit.category?.trim() ?? "",
-      expectedCents: edit.expectedCents ?? null,
-      anchorDate: edit.anchorDate ?? null,
-      notes: edit.notes?.trim() ?? "",
-      scheduled: edit.scheduled ?? true,
-      dueDay: edit.dueDay ?? null,
-      status: edit.status ?? "active",
-      cancelledOn:
-        edit.status === "cancelled" ? (edit.cancelledOn ?? todayInUtc()) : null,
-      url: edit.url?.trim() ?? "",
-    })
-    // The unique index is on (user_id, name), so this can only ever collide with this user's
-    // own row — another user's identical name is a different row entirely.
-    .onConflictDoUpdate({
-      target: [financeRecurringBills.userId, financeRecurringBills.name],
-      set: changes,
+      matchers: stored.matchers,
     });
+  });
 
   await reclassifyIfCategoriesMoved(userId, existing[0], {
     category: edit.category,
@@ -879,23 +893,36 @@ export async function upsertRecurringSpend(
     updatedAt: new Date(),
   };
 
-  await db
-    .insert(financeRecurringSpend)
-    .values({
-      userId,
+  await db.transaction(async (tx) => {
+    const [stored] = await tx
+      .insert(financeRecurringSpend)
+      .values({
+        userId,
+        name,
+        matchers: matchers ?? [],
+        period: edit.period ?? "week",
+        amountSource: edit.amountSource ?? "auto",
+        expectedCents: edit.expectedCents ?? null,
+        active: edit.active ?? true,
+        category: edit.category?.trim() ?? "",
+        notes: edit.notes?.trim() ?? "",
+      })
+      .onConflictDoUpdate({
+        target: [financeRecurringSpend.userId, financeRecurringSpend.name],
+        set: changes,
+      })
+      .returning({
+        id: financeRecurringSpend.id,
+        matchers: financeRecurringSpend.matchers,
+      });
+
+    await syncLegacyCommitmentClaims(tx, userId, {
+      kind: "spend",
+      id: stored.id,
       name,
-      matchers: matchers ?? [],
-      period: edit.period ?? "week",
-      amountSource: edit.amountSource ?? "auto",
-      expectedCents: edit.expectedCents ?? null,
-      active: edit.active ?? true,
-      category: edit.category?.trim() ?? "",
-      notes: edit.notes?.trim() ?? "",
-    })
-    .onConflictDoUpdate({
-      target: [financeRecurringSpend.userId, financeRecurringSpend.name],
-      set: changes,
+      matchers: stored.matchers,
     });
+  });
 
   await reclassifyIfCategoriesMoved(userId, existing[0], {
     category: edit.category,
@@ -1027,12 +1054,21 @@ export async function addMatchersToCommitment(
     id: existing.id,
   });
 
-  await db
-    .update(table)
-    .set({ matchers: merged, updatedAt: new Date() })
-    // Scoped on the id *and* the user: the id came from a row this user owns, and saying so
-    // twice is what makes a mistaken id a no-op rather than someone else's row.
-    .where(and(eq(table.userId, userId), eq(table.id, existing.id)));
+  await db.transaction(async (tx) => {
+    await tx
+      .update(table)
+      .set({ matchers: merged, updatedAt: new Date() })
+      // Scoped on the id *and* the user: the id came from a row this user owns, and saying so
+      // twice is what makes a mistaken id a no-op rather than someone else's row.
+      .where(and(eq(table.userId, userId), eq(table.id, existing.id)));
+
+    await syncLegacyCommitmentClaims(tx, userId, {
+      kind: input.kind,
+      id: existing.id,
+      name,
+      matchers: merged,
+    });
+  });
 
   await reclassifyIfCategoriesMoved(
     userId,

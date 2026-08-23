@@ -190,6 +190,7 @@ export async function listUnlinkedTransactions(userId: string): Promise<
   {
     id: string;
     accountId: string;
+    payeeId: string | null;
     description: string;
     amountCents: number;
     transactionDate: string;
@@ -201,6 +202,7 @@ export async function listUnlinkedTransactions(userId: string): Promise<
     .select({
       id: financeTransactions.id,
       accountId: financeTransactions.accountId,
+      payeeId: financeTransactions.payeeId,
       description: financeTransactions.description,
       amount: financeTransactions.amount,
       transactionDate: financeTransactions.transactionDate,
@@ -218,6 +220,7 @@ export async function listUnlinkedTransactions(userId: string): Promise<
   return rows.map((row) => ({
     id: row.id,
     accountId: row.accountId,
+    payeeId: row.payeeId,
     description: row.description,
     amountCents: numericStringToCents(row.amount) ?? 0,
     transactionDate: row.transactionDate,

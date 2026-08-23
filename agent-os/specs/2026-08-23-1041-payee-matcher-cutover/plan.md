@@ -154,14 +154,18 @@ polish.
 
 ## Task 2: Build and run Stage A
 
-- [ ] Add a pure cutover planner with adjacent tests for resolution order, placeholders,
+- [x] Add a pure cutover planner with adjacent tests for resolution order, placeholders,
       collisions, malformed conditions, deduplication, parity and idempotence.
-- [ ] Add a user-scoped transactional executor and integration coverage, including a second
+- [x] Add a user-scoped transactional executor and integration coverage, including a second
       user's failed read/change/delete attempts.
-- [ ] Add a CLI that dry-runs by default and requires explicit `--apply`.
-- [ ] Dual-write commitment claims and accept string or UUID schedule payee values during
+- [x] Add a CLI that dry-runs by default and requires explicit `--apply`.
+- [x] Dual-write commitment claims and accept string or UUID schedule payee values during
       the compatibility window.
-- [ ] Run dry-run, apply and repeat locally; capture the audited counts and numeric parity.
+- [x] Run dry-run, apply and repeat locally; capture the audited counts and numeric parity:
+      one placeholder, six claims, five schedule rewrites, and no parity differences; the
+      replay planned zero writes.
+- [ ] Deploy Stage A, then run the same dry-run, apply and replay against production before
+      any Stage B code can ship.
 
 ## Task 3: Switch commitment behavior to payee ids
 

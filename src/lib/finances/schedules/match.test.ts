@@ -19,6 +19,7 @@ function conds(overrides: Partial<ScheduleConds> = {}): ScheduleConds {
 function row(overrides: Partial<MatchCandidate> = {}): MatchCandidate {
   return {
     accountId: "acct",
+    payeeId: null,
     description: "NETFLIX",
     amountCents: -1599,
     transactionDate: "2026-08-15",
@@ -79,5 +80,15 @@ describe("matchesOccurrence", () => {
     expect(
       matchesOccurrence(named, "2026-08-15", row({ accountId: "card" }), false),
     ).toBe(false);
+  });
+
+  it("matches a Stage A payee id without treating the UUID as a merchant name", () => {
+    const payeeId = "11111111-1111-4111-8111-111111111111";
+    const named = conds({ payee: { field: "payee", op: "is", value: payeeId } });
+
+    expect(matchesOccurrence(named, "2026-08-15", row({ payeeId }), false)).toBe(true);
+    expect(matchesOccurrence(named, "2026-08-15", row({ payeeId: null }), false)).toBe(
+      false,
+    );
   });
 });

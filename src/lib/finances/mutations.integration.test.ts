@@ -22,6 +22,8 @@ import {
 } from "./mutations";
 import { toDateKey } from "@/lib/schedule/geometry";
 import { getTransaction, listAccounts, listTransactions } from "./queries";
+import { claimPayeeForCommitment, createPayee } from "./payees/mutations";
+import { payeesForCommitment } from "./payees/queries";
 
 const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
@@ -631,6 +633,10 @@ describeDb("commitment matchers", () => {
       "TAYLOR GAS COMPANY INC.",
       "TAYLOR GAS HEATING AIR",
     ]);
+    const [bill] = await loadRecurringBills(userId);
+    expect(
+      await payeesForCommitment(userId, { kind: "bill", id: bill.id }),
+    ).toHaveLength(2);
   });
 
   it("keeps the matchers when only the cadence is corrected", async () => {
@@ -708,6 +714,30 @@ describeDb("commitment matchers", () => {
     await expect(
       upsertRecurringSpend(userId, { name: "Food", matchers: ["WM SUPERCENTER"] }),
     ).resolves.toBeUndefined();
+  });
+
+  it("rolls back a matcher edit when its payee is already claimed", async () => {
+    await upsertRecurringBill(userId, {
+      name: "Primary",
+      matchers: ["ALPHA"],
+      cadence: { unit: "month", n: 1 },
+    });
+    await upsertRecurringSpend(userId, { name: "Other", matchers: ["OTHER"] });
+    const [other] = await loadRecurringSpend(userId);
+    const beta = await createPayee(userId, { name: "Beta", aliases: ["BETA"] });
+    await claimPayeeForCommitment(userId, beta, { kind: "spend", id: other.id });
+
+    await expect(
+      addMatchersToCommitment(userId, {
+        kind: "bill",
+        name: "Primary",
+        matchers: ["BETA"],
+      }),
+    ).rejects.toThrow(/blocked by the audit/i);
+
+    // The string-array update and the claim update share one transaction. A compatibility
+    // write may not leave Stage A's two representations disagreeing after a refusal.
+    expect((await loadRecurringBills(userId))[0].matchers).toEqual(["ALPHA"]);
   });
 });
 
