@@ -19,16 +19,27 @@ function requestedUserId(args: readonly string[]): string | null {
 function summary(plan: PayeeCutoverPlan) {
   const parityDifferences = plan.parityDifferences.map((difference) => {
     const grouped = (rows: typeof difference.legacyOnly) => {
-      const byMerchant = new Map<string, { count: number; cents: number }>();
+      const byMerchant = new Map<
+        string,
+        { merchant: string; assignedPayee: string | null; count: number; cents: number }
+      >();
       for (const row of rows) {
-        const current = byMerchant.get(row.legacyMerchant) ?? { count: 0, cents: 0 };
+        const key = `${row.legacyMerchant}\u0000${row.payeeName ?? ""}`;
+        const current = byMerchant.get(key) ?? {
+          merchant: row.legacyMerchant,
+          assignedPayee: row.payeeName,
+          count: 0,
+          cents: 0,
+        };
         current.count += 1;
         current.cents += row.amountCents;
-        byMerchant.set(row.legacyMerchant, current);
+        byMerchant.set(key, current);
       }
-      return [...byMerchant.entries()]
-        .map(([merchant, values]) => ({ merchant, ...values }))
-        .sort((a, b) => a.merchant.localeCompare(b.merchant));
+      return [...byMerchant.values()].sort(
+        (a, b) =>
+          a.merchant.localeCompare(b.merchant) ||
+          (a.assignedPayee ?? "").localeCompare(b.assignedPayee ?? ""),
+      );
     };
     return {
       commitment: difference.commitment,

@@ -110,6 +110,7 @@ async function loadCutoverInput(
     ...bills.map((bill) => ({ kind: "bill" as const, ...bill })),
     ...spends.map((spend) => ({ kind: "spend" as const, ...spend })),
   ];
+  const payeeNameById = new Map(payeeRows.map((payee) => [payee.id, payee.name]));
 
   return {
     payees,
@@ -119,6 +120,7 @@ async function loadCutoverInput(
       id: row.id,
       legacyMerchant: effectiveMerchant({ description: row.description }),
       payeeId: row.payeeId,
+      payeeName: row.payeeId ? (payeeNameById.get(row.payeeId) ?? null) : null,
       amountCents: numericStringToCents(row.amount) ?? 0,
     })),
   };

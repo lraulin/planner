@@ -33,6 +33,7 @@ export type ParityTransaction = {
   id: string;
   legacyMerchant: string;
   payeeId: string | null;
+  payeeName: string | null;
   amountCents: number;
 };
 
