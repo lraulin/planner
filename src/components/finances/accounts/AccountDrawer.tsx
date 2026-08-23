@@ -24,6 +24,7 @@ type Draft = {
   institution: string;
   url: string;
   closed: boolean;
+  offBudget: boolean;
 };
 
 function draftOf(account: FinanceAccountRow): Draft {
@@ -33,6 +34,7 @@ function draftOf(account: FinanceAccountRow): Draft {
     institution: account.institution,
     url: account.url,
     closed: account.closedAt !== null,
+    offBudget: account.offBudget,
   };
 }
 
@@ -100,6 +102,7 @@ function AccountForm({
           kind: draft.kind,
           institution: draft.institution,
           url: draft.url,
+          offBudget: draft.offBudget,
         };
         if (draft.closed !== savedClosed) {
           if (draft.closed && today === null) {
@@ -165,6 +168,12 @@ function AccountForm({
                 checked={draft.closed}
                 onChange={(checked) => patch("closed", checked)}
                 hint="Closed accounts stay in the register and drop off the dashboard."
+              />
+              <CheckboxField
+                label="Off budget"
+                checked={draft.offBudget}
+                onChange={(checked) => patch("offBudget", checked)}
+                hint="Kept out of the envelope budget: its balance is not money to assign and its transactions are not budget activity. Savings and investments start off budget; checking, cash and cards start on."
               />
             </Section>
 

@@ -36,7 +36,6 @@ import {
   performBudgetOperation,
   renameCategoryGroup,
   seedBudget,
-  setAccountOffBudget,
   setCarryover,
   setTransactionBudgetCategory,
   updateBudgetCategory,
@@ -267,11 +266,4 @@ export async function setTransactionBudgetCategoryAction(
   return run((userId) =>
     setTransactionBudgetCategory(userId, transactionId, categoryId),
   );
-}
-
-export async function setAccountOffBudgetAction(
-  accountId: string,
-  offBudget: boolean,
-): Promise<ActionResult> {
-  return run((userId) => setAccountOffBudget(userId, accountId, offBudget));
 }

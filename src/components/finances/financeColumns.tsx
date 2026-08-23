@@ -7,7 +7,16 @@ import { flowLabel } from "@/lib/finances/flowLabels";
 import { formatUsd } from "@/lib/finances/money";
 import type { TransactionListRow } from "@/lib/finances/types";
 
-export type FinanceColumnCtx = Record<string, never>;
+/**
+ * What the Envelope column needs. Every other column is pure presentation, which is why this
+ * was `Record<string, never>` until the budget arrived.
+ */
+export type FinanceColumnCtx = {
+  /** Every envelope, in budget order. Empty until a budget is set up. */
+  envelopes: readonly { id: string; name: string }[];
+  onSetEnvelope: (transactionId: string, categoryId: string | null) => void;
+  pending: boolean;
+};
 
 export const FINANCE_COLUMN_IDS = [
   "date",
@@ -22,6 +31,7 @@ export const FINANCE_COLUMN_IDS = [
   "oneOff",
   "event",
   "notes",
+  "envelope",
 ] as const;
 
 function Text({ value, muted = true }: { value: string; muted?: boolean }) {
@@ -131,6 +141,52 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, TransactionListRow>[] =
       // matters, because only one of the two survives a reclassify by right.
       <Text value={effectiveCategory(row.node)} muted={!row.node.category?.trim()} />
     ),
+  },
+  {
+    id: "envelope",
+    label: "Envelope",
+    // Which envelope's money paid for this, in the zero-based budget. A different question
+    // from Category — that says what it bought — and the two are deliberately independent
+    // axes (`agent-os/specs/2026-08-22-1948-zero-based-budget/` D4).
+    width: "minmax(8rem,0.6fr)",
+    filterKind: "enum",
+    // "Unassigned" rather than blank, so the backlog is a value you can filter *to*. It is
+    // the set the Budget page counts, and finding it is the whole workflow.
+    filterValue: (row) => row.node.budgetCategoryName ?? "Unassigned",
+    sortValue: (row) => (row.node.budgetCategoryName ?? "").toLowerCase(),
+    compact: "meta",
+    compactText: (row) => row.node.budgetCategoryName ?? "Unassigned",
+    // Editable in place rather than behind a row-menu command: the envelope for a row is a
+    // one-keystroke decision made while reading the description next to it, and a menu of
+    // twenty envelopes is not a menu (`components/ux-principles`).
+    render: (row, ctx) => {
+      if (ctx.envelopes.length === 0) {
+        return <span className="truncate text-[0.8125rem] text-ink-faint">—</span>;
+      }
+      return (
+        <select
+          value={row.node.budgetCategoryId ?? ""}
+          disabled={ctx.pending}
+          aria-label={`Envelope for ${row.node.description}`}
+          onChange={(event) =>
+            ctx.onSetEnvelope(
+              row.node.id,
+              event.target.value === "" ? null : event.target.value,
+            )
+          }
+          className={`w-full min-w-0 truncate rounded border border-transparent bg-transparent px-1 text-base hover:border-rule md:text-[0.8125rem] ${
+            row.node.budgetCategoryId ? "text-ink" : "text-ink-faint"
+          }`}
+        >
+          <option value="">Unassigned</option>
+          {ctx.envelopes.map((envelope) => (
+            <option key={envelope.id} value={envelope.id}>
+              {envelope.name}
+            </option>
+          ))}
+        </select>
+      );
+    },
   },
   {
     id: "flow",

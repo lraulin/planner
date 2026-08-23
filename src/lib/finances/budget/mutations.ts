@@ -723,22 +723,3 @@ export async function setTransactionBudgetCategory(
       ),
     );
 }
-
-/** Include or exclude an account from the budget. */
-export async function setAccountOffBudget(
-  userId: string,
-  accountId: string,
-  offBudget: boolean,
-): Promise<void> {
-  const [row] = await db
-    .select({ id: financeAccounts.id })
-    .from(financeAccounts)
-    .where(and(eq(financeAccounts.id, accountId), eq(financeAccounts.userId, userId)))
-    .limit(1);
-  if (!row) throw new Error("That account does not exist.");
-
-  await db
-    .update(financeAccounts)
-    .set({ offBudget, updatedAt: new Date() })
-    .where(and(eq(financeAccounts.id, accountId), eq(financeAccounts.userId, userId)));
-}

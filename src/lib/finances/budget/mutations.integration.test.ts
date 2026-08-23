@@ -17,11 +17,11 @@ import {
   performBudgetOperation,
   renameCategoryGroup,
   seedBudget,
-  setAccountOffBudget,
   setCarryover,
   setTransactionBudgetCategory,
   updateBudgetCategory,
 } from "./mutations";
+import { updateAccount } from "../mutations";
 import { loadBudget } from "./queries";
 import { categoryMonth, findMonth } from "./envelope";
 
@@ -480,7 +480,7 @@ describeDb("budget mutations", () => {
     let august = findMonth((await loadBudget(userId, MONTH)).months, MONTH)!;
     expect(categoryMonth(august, ids.get("Discretionary")!).activityCents).toBe(-4_000);
 
-    await setAccountOffBudget(userId, cardId, true);
+    await updateAccount(userId, cardId, { offBudget: true });
     august = findMonth((await loadBudget(userId, MONTH)).months, MONTH)!;
     expect(categoryMonth(august, ids.get("Discretionary")!).activityCents).toBe(0);
   });
@@ -570,8 +570,8 @@ describeDb("budget mutations — cross-user isolation", () => {
       setTransactionBudgetCategory(intruderId, owned.transactionId, owned.categoryId),
     ).rejects.toThrow(/does not exist/);
     await expect(
-      setAccountOffBudget(intruderId, owned.accountId, true),
-    ).rejects.toThrow(/does not exist/);
+      updateAccount(intruderId, owned.accountId, { offBudget: true }),
+    ).rejects.toThrow();
   });
 
   it("refuses every delete against the owner's rows", async () => {

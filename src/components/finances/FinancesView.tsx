@@ -14,6 +14,7 @@ import {
   deleteTransactionAction,
   listAccountsAction,
   listTransactionsAction,
+  setTransactionBudgetCategoryAction,
 } from "@/app/finances/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { DataGrid } from "@/components/grid/DataGrid";
@@ -115,10 +116,13 @@ export function FinancesView({
   initialTransactions,
   initialAccounts,
   initialClaimed,
+  envelopes,
 }: {
   initialTransactions: TransactionListRow[];
   initialAccounts: FinanceAccountRow[];
   initialClaimed: readonly ClaimedMatcher[];
+  /** Budget envelopes, in budget order. Empty until a budget exists. */
+  envelopes: readonly { id: string; name: string }[];
 }) {
   const [rows, setRows] = useState(initialTransactions);
   const [accounts, setAccounts] = useState(initialAccounts);
@@ -139,7 +143,7 @@ export function FinancesView({
     label: "Import transactions…",
     keywords: "csv statement bank card chase capital one pdf coinbase paypal",
   });
-  const [, startTransition] = useTransition();
+  const [pending, startTransition] = useTransition();
   const { detail: openId, setDetail: setOpenId } = useViewStateUrl();
 
   if (initialTransactions !== seenServerRows || initialClaimed !== seenClaimed) {
@@ -319,7 +323,21 @@ export function FinancesView({
         rows={gridRows}
         columns={gridState.columns}
         allColumns={financeColumns}
-        columnCtx={{}}
+        columnCtx={{
+          envelopes,
+          pending,
+          onSetEnvelope: (transactionId, categoryId) => {
+            setError(null);
+            startTransition(async () => {
+              const result = await setTransactionBudgetCategoryAction(
+                transactionId,
+                categoryId,
+              );
+              if (!result.ok) setError(result.error ?? "Could not set the envelope.");
+              else refresh();
+            });
+          },
+        }}
         selectedId={selectedId}
         selectedIds={selectedIds}
         onSelect={select}

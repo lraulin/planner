@@ -223,6 +223,12 @@ export type AccountEdit = {
    * Import still never un-closes; this is the user-owned write.
    */
   closedOn?: string | null;
+  /**
+   * Hold this account out of the envelope budget — its balance is not money to assign and
+   * its rows are not budget activity
+   * (`agent-os/specs/2026-08-22-1948-zero-based-budget/` D3).
+   */
+  offBudget?: boolean;
 };
 
 /**
@@ -245,6 +251,7 @@ export async function updateAccount(
     institution?: string;
     url?: string;
     closedAt?: Date | null;
+    offBudget?: boolean;
     updatedAt: Date;
   } = { updatedAt: new Date() };
 
@@ -263,6 +270,7 @@ export async function updateAccount(
   if (edit.closedOn !== undefined) {
     values.closedAt = closedAtFromKey(edit.closedOn);
   }
+  if (edit.offBudget !== undefined) values.offBudget = edit.offBudget;
 
   await db
     .update(financeAccounts)

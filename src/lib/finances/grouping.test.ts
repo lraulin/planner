@@ -27,6 +27,8 @@ function row(
     plannedWithdrawal: extras.plannedWithdrawal ?? false,
     notes: "",
     balanceAfterCents: null,
+    budgetCategoryId: null,
+    budgetCategoryName: null,
   };
 }
 

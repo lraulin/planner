@@ -16,6 +16,7 @@ export const ACCOUNT_COLUMN_IDS = [
   "lastFour",
   "url",
   "closed",
+  "budget",
   "balance",
   "transactions",
   "source",
@@ -117,6 +118,18 @@ export const accountColumns: ColumnDef<AccountColumnCtx, FinanceAccountRow>[] = 
         dateKey={row.node.closedAt ? toDateKey(asDate(row.node.closedAt)) : null}
       />
     ),
+  },
+  {
+    id: "budget",
+    label: "Budget",
+    width: "7rem",
+    // Says which side of the budget an account is on, because "why is savings not in Ready
+    // to Assign" is otherwise a question with no visible answer.
+    filterKind: "enum",
+    filterValue: (row) => (row.node.offBudget ? "Off budget" : "On budget"),
+    sortValue: (row) => (row.node.offBudget ? 1 : 0),
+    compact: "meta",
+    render: (row) => <Text value={row.node.offBudget ? "Off budget" : "On budget"} />,
   },
   {
     id: "balance",

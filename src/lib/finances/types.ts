@@ -232,6 +232,14 @@ export type TransactionListRow = {
   plannedWithdrawal: boolean;
   notes: string;
   balanceAfterCents: number | null;
+  /**
+   * Which envelope this row spends from, and its name for display.
+   *
+   * A second axis alongside `category`, not a replacement: that says what the row was bought
+   * for, this says whose money paid for it. Null is the backlog the Budget page counts.
+   */
+  budgetCategoryId: string | null;
+  budgetCategoryName: string | null;
 };
 
 export type TransactionFilter = {

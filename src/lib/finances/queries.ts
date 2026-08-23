@@ -2,6 +2,7 @@ import { and, asc, desc, eq, gt, gte, inArray, lte, or, sql } from "drizzle-orm"
 import { db } from "@/db";
 import {
   financeAccounts,
+  financeBudgetCategories,
   financePaymentResolutions,
   financeStatementRates,
   financeStatements,
@@ -218,9 +219,17 @@ export async function listTransactions(
       plannedWithdrawal: financeTransactions.plannedWithdrawal,
       notes: financeTransactions.notes,
       balanceAfter: financeTransactions.balanceAfter,
+      budgetCategoryId: financeTransactions.budgetCategoryId,
+      budgetCategoryName: financeBudgetCategories.name,
     })
     .from(financeTransactions)
     .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
+    // Left, not inner: most rows have no envelope, and an inner join would silently empty
+    // the register for anyone who has not set a budget up.
+    .leftJoin(
+      financeBudgetCategories,
+      eq(financeBudgetCategories.id, financeTransactions.budgetCategoryId),
+    )
     .where(and(...scopeConditions(userId, filter)))
     .orderBy(
       desc(financeTransactions.transactionDate),
@@ -250,6 +259,8 @@ export async function listTransactions(
     plannedWithdrawal: row.plannedWithdrawal,
     notes: row.notes,
     balanceAfterCents: numericStringToCents(row.balanceAfter),
+    budgetCategoryId: row.budgetCategoryId,
+    budgetCategoryName: row.budgetCategoryName,
   }));
 }
 
@@ -292,9 +303,15 @@ export async function getTransaction(
       plannedWithdrawal: financeTransactions.plannedWithdrawal,
       notes: financeTransactions.notes,
       balanceAfter: financeTransactions.balanceAfter,
+      budgetCategoryId: financeTransactions.budgetCategoryId,
+      budgetCategoryName: financeBudgetCategories.name,
     })
     .from(financeTransactions)
     .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
+    .leftJoin(
+      financeBudgetCategories,
+      eq(financeBudgetCategories.id, financeTransactions.budgetCategoryId),
+    )
     .where(
       and(
         eq(financeTransactions.id, transactionId),
@@ -324,6 +341,8 @@ export async function getTransaction(
     plannedWithdrawal: row.plannedWithdrawal,
     notes: row.notes,
     balanceAfterCents: numericStringToCents(row.balanceAfter),
+    budgetCategoryId: row.budgetCategoryId,
+    budgetCategoryName: row.budgetCategoryName,
   };
 }
 

@@ -33,6 +33,8 @@ function row(
     plannedWithdrawal: false,
     notes: "",
     balanceAfterCents: null,
+    budgetCategoryId: null,
+    budgetCategoryName: null,
   };
 }
 

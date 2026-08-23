@@ -6,6 +6,7 @@ import {
   loadRecurringSpend,
 } from "@/lib/finances/dashboardQueries";
 import { claimedMatchersOf } from "@/lib/finances/registerBillDraft";
+import { loadBudget } from "@/lib/finances/budget/queries";
 import { AppShell } from "@/components/shell/AppShell";
 import { FinancesView } from "@/components/finances/FinancesView";
 
@@ -14,11 +15,12 @@ export const dynamic = "force-dynamic";
 /** The Register page: every transaction, grouped and filterable. */
 export default async function FinancesRegisterPage() {
   const userId = await getCurrentUserId();
-  const [transactions, accounts, bills, spend] = await Promise.all([
+  const [transactions, accounts, bills, spend, budget] = await Promise.all([
     listTransactions(userId),
     listAccounts(userId),
     loadRecurringBills(userId),
     loadRecurringSpend(userId),
+    loadBudget(userId, null),
   ]);
 
   return (
@@ -28,6 +30,10 @@ export default async function FinancesRegisterPage() {
           initialTransactions={transactions}
           initialAccounts={accounts}
           initialClaimed={claimedMatchersOf(bills, spend)}
+          envelopes={budget.categories.map((category) => ({
+            id: category.id,
+            name: category.name,
+          }))}
         />
       </Suspense>
     </AppShell>
