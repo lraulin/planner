@@ -3203,6 +3203,87 @@ export const financePayeeAliases = pgTable(
 );
 
 /**
+ * ────────────────────────────────────── Rules ──────────────────────────────────────
+ *
+ * **Categorisation as data the user owns, instead of a deploy.**
+ * Reimplemented from Actual Budget's rules (`packages/loot-core/src/server/rules/`, MIT) —
+ * see `agent-os/specs/2026-08-23-1536-finance-rules/` and `docs/actual-budget/README.md`.
+ *
+ * Before this, "what kind of purchase is this" was `CLASSIFY_RULES`: 65 regexes in
+ * TypeScript, matched first-hit-wins down a hardcoded array. The file's own header called
+ * itself data and said it was expected to grow by inspection — but the only way to add a
+ * line was an edit and a deploy, which is the same missing concept payees fixed for merchant
+ * identity one spec earlier.
+ *
+ * **The engine is not here, and was not written for this.** `classify/reclassify.ts` is
+ * already a pure idempotent planner that runs on import and on demand; these rows replace
+ * one input to it. That is why this is a single table rather than a port of Actual's
+ * sixteen-file package.
+ *
+ * **`sort_key` is the priority, and first match wins.** Actual instead scores condition
+ * specificity — but `OP_SCORES` gives `matches` zero and the specificity bonus needs every
+ * condition to be an equality op, so a corpus of regexes would tie at zero and rank by id.
+ * `METLIFE PET` beating `METLIFE` cannot rest on a UUID sort, so the order is the one a
+ * person set and can see. The reasoning a rule's position encodes lives in `notes`, which is
+ * where the old file's comments went.
+ */
+export const financeRules = pgTable(
+  "finance_rules",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Unique per user, case-insensitively, so a seeded rule cannot be duplicated by hand. */
+    name: text("name").notNull(),
+    /**
+     * Actual-shaped `{field, op, value}` conditions, ANDed. Validated in
+     * `src/lib/finances/rules/conditions.ts` so bad JSONB never reaches a matcher — including
+     * a regex, which is compiled at parse and rejected there rather than thrown mid-pass.
+     *
+     * A `merchant` condition tests `normalizeMerchant(description)`; a `description` one
+     * tests the raw bank line. They are two fields rather than one with a flag, because every
+     * anchor written for the normalized string means something else against the raw one.
+     */
+    conditions: jsonb("conditions").$type<unknown>().notNull().default([]),
+    /**
+     * What the rule does: set a taxonomy category, set a flow, or name a payee at mint time.
+     * Actual's split, formula, schedule-link and delete actions are refused at parse.
+     */
+    actions: jsonb("actions").$type<unknown>().notNull().default([]),
+    enabled: boolean("enabled").notNull().default(true),
+    /**
+     * The priority. Fractional index, so reordering one rule rewrites one row.
+     * Unique per user because two rules at the same position is an unresolved tie, and this
+     * column exists precisely so that ties cannot happen.
+     */
+    sortKey: text("sort_key").notNull(),
+    /**
+     * The `CLASSIFY_RULES` id this row was seeded from, or null for a hand-made rule.
+     *
+     * What makes seeding idempotent: a second run skips an id it already planted, so a rule
+     * the user has since renamed, reordered or deleted is never resurrected. Also what lets
+     * the parity audit name which rule decided a row in both the old world and the new.
+     */
+    seededId: text("seeded_id"),
+    /** Why this rule sits where it does. The old file kept that in comments. */
+    notes: text("notes").notNull().default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("finance_rules_user_name_uq").on(
+      table.userId,
+      sql`lower(${table.name})`,
+    ),
+    uniqueIndex("finance_rules_user_sort_uq").on(table.userId, table.sortKey),
+    uniqueIndex("finance_rules_user_seeded_uq")
+      .on(table.userId, table.seededId)
+      .where(sql`${table.seededId} is not null`),
+  ],
+);
+
+/**
  * One SimpleFIN access URL — the whole bank connection, however many institutions it covers.
  *
  * **Why a separate table rather than columns on `finance_accounts`.** Account identity there
@@ -3698,6 +3779,8 @@ export type FinanceTransaction = typeof financeTransactions.$inferSelect;
 export type NewFinanceTransaction = typeof financeTransactions.$inferInsert;
 export type FinanceSchedule = typeof financeSchedules.$inferSelect;
 export type NewFinanceSchedule = typeof financeSchedules.$inferInsert;
+export type FinanceRule = typeof financeRules.$inferSelect;
+export type NewFinanceRule = typeof financeRules.$inferInsert;
 export type FinanceFlowKind = (typeof financeFlowKindEnum.enumValues)[number];
 export type FinanceStatement = typeof financeStatements.$inferSelect;
 export type NewFinanceStatement = typeof financeStatements.$inferInsert;

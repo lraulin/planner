@@ -4,6 +4,7 @@ import { db } from "@/db";
 import {
   financeAccounts,
   financeRecurringBills,
+  financeRules,
   financeSchedules,
   financeTransactions,
   users,
@@ -263,6 +264,30 @@ describeDb("payee mutations", () => {
     ]);
   });
 
+  it("rewrites a rule condition holding the merged payee, for the same reason", async () => {
+    // Rules hold payee ids in the same unprotected JSONB as schedules. The rewrite is shared
+    // so the two cannot drift; this proves the second table is actually wired to it.
+    const target = await createPayee(userId, { name: "Walmart" });
+    const source = await createPayee(userId, { name: "Wal-Mart" });
+
+    await db.insert(financeRules).values({
+      userId,
+      name: "Walmart is groceries",
+      sortKey: "a0",
+      conditions: [{ field: "payee", op: "oneOf", value: [source, target] }],
+      actions: [{ op: "set", field: "category", value: "Groceries" }],
+    });
+
+    await mergePayees(userId, target, [source]);
+
+    const [rule] = await db
+      .select({ conditions: financeRules.conditions })
+      .from(financeRules)
+      .where(eq(financeRules.userId, userId));
+
+    expect(rule.conditions).toEqual([{ field: "payee", op: "oneOf", value: [target] }]);
+  });
+
   it("refuses a merge that would put two commitments on one payee", async () => {
     const [billA] = await db
       .insert(financeRecurringBills)
@@ -391,8 +416,21 @@ describeDb("payee mutations", () => {
     });
     await expect(deletePayee(userId, scheduled)).rejects.toThrow(/schedule/i);
 
+    // Same absence of a foreign key, same refusal: a rule's payee id lives in JSONB, so
+    // deleting the payee would leave the rule matching nothing instead of failing.
+    const ruled = await createPayee(userId, { name: "Costco" });
+    await db.insert(financeRules).values({
+      userId,
+      name: "Costco is groceries",
+      sortKey: "a0",
+      conditions: [{ field: "payee", op: "is", value: ruled }],
+      actions: [{ op: "set", field: "category", value: "Groceries" }],
+    });
+    await expect(deletePayee(userId, ruled)).rejects.toThrow(/rule/i);
+
     expect(await getPayee(userId, claimed)).not.toBeNull();
     expect(await getPayee(userId, scheduled)).not.toBeNull();
+    expect(await getPayee(userId, ruled)).not.toBeNull();
   });
 
   it("removes an alias without touching the payee", async () => {

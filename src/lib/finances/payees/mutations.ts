@@ -19,13 +19,14 @@ import {
   financePayees,
   financeRecurringBills,
   financeRecurringSpend,
+  financeRules,
   financeSchedules,
   financeTransactions,
 } from "@/db/schema";
 import { isUniqueViolation } from "@/lib/db/constraints";
 import { normalizeMerchant } from "../classify/merchant";
 import { mergeClaimDecision } from "./merge";
-import { storedSchedulePayeeIds } from "./references";
+import { rewriteMergedPayeeIds, storedSchedulePayeeIds } from "./references";
 
 async function requirePayee(userId: string, payeeId: string) {
   const [row] = await db
@@ -244,6 +245,22 @@ export async function deletePayee(userId: string, payeeId: string): Promise<void
       );
     }
 
+    // Same reasoning as the schedule check above, and the same shared reader: a rule's payee
+    // condition is an id inside JSONB with no foreign key behind it, so deleting the payee
+    // would leave the rule quietly matching nothing rather than failing.
+    const rules = await tx
+      .select({ name: financeRules.name, conditions: financeRules.conditions })
+      .from(financeRules)
+      .where(eq(financeRules.userId, userId));
+    const ruledBy = rules.find((rule) =>
+      storedSchedulePayeeIds(rule.conditions).includes(payeeId),
+    );
+    if (ruledBy) {
+      throw new Error(
+        `That payee is used by the rule "${ruledBy.name}". Merge it or edit the rule before deleting.`,
+      );
+    }
+
     await tx
       .delete(financePayees)
       .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)));
@@ -328,7 +345,7 @@ export async function mergePayees(
         .where(and(eq(financePayees.userId, userId), eq(financePayees.id, targetId)));
     }
 
-    await rewriteScheduleConditions(tx, userId, sources, targetId);
+    await rewritePayeeConditions(tx, userId, sources, targetId);
 
     await tx
       .delete(financePayees)
@@ -339,63 +356,46 @@ export async function mergePayees(
 }
 
 /**
- * Point any `payee` condition holding a merged id at the target instead.
+ * Point every `payee` condition holding a merged id at the survivor, in both tables that
+ * hold them.
  *
- * Reads and rewrites in TypeScript rather than in SQL: the conditions blob is a validated
- * shape, and a JSONB path update would have to re-encode that shape in SQL where nothing
- * checks it.
+ * Schedules and rules use the same condition shape, so they get the same rewrite from the same
+ * pure function (`rewriteMergedPayeeIds`). A second copy of this logic for the second table is
+ * exactly how one of them would come to be missed: the merge would succeed, and the rule would
+ * quietly match nothing thereafter.
  */
-async function rewriteScheduleConditions(
+async function rewritePayeeConditions(
   tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
   userId: string,
   sources: readonly string[],
   targetId: string,
 ): Promise<void> {
-  const rows = await tx
+  const merged = new Set(sources);
+
+  const schedules = await tx
     .select({ id: financeSchedules.id, conditions: financeSchedules.conditions })
     .from(financeSchedules)
     .where(eq(financeSchedules.userId, userId));
+  for (const row of schedules) {
+    const next = rewriteMergedPayeeIds(row.conditions, merged, targetId);
+    if (!next) continue;
+    await tx
+      .update(financeSchedules)
+      .set({ conditions: next, updatedAt: new Date() })
+      .where(and(eq(financeSchedules.userId, userId), eq(financeSchedules.id, row.id)));
+  }
 
-  const merged = new Set(sources);
-
-  for (const row of rows) {
-    if (!Array.isArray(row.conditions)) continue;
-    let changed = false;
-
-    const next = row.conditions.map((condition) => {
-      if (
-        typeof condition !== "object" ||
-        condition === null ||
-        (condition as { field?: unknown }).field !== "payee"
-      ) {
-        return condition;
-      }
-      const value = (condition as { value?: unknown }).value;
-
-      if (typeof value === "string" && merged.has(value)) {
-        changed = true;
-        return { ...(condition as object), value: targetId };
-      }
-      if (Array.isArray(value) && value.some((v) => merged.has(v as string))) {
-        changed = true;
-        // De-duplicate: merging two payees a schedule listed separately must not leave the
-        // target named twice.
-        const rewritten = [
-          ...new Set(value.map((v) => (merged.has(v as string) ? targetId : v))),
-        ];
-        return { ...(condition as object), value: rewritten };
-      }
-      return condition;
-    });
-
-    if (changed) {
-      await tx
-        .update(financeSchedules)
-        .set({ conditions: next, updatedAt: new Date() })
-        .where(
-          and(eq(financeSchedules.userId, userId), eq(financeSchedules.id, row.id)),
-        );
-    }
+  const rules = await tx
+    .select({ id: financeRules.id, conditions: financeRules.conditions })
+    .from(financeRules)
+    .where(eq(financeRules.userId, userId));
+  for (const row of rules) {
+    const next = rewriteMergedPayeeIds(row.conditions, merged, targetId);
+    if (!next) continue;
+    await tx
+      .update(financeRules)
+      .set({ conditions: next, updatedAt: new Date() })
+      .where(and(eq(financeRules.userId, userId), eq(financeRules.id, row.id)));
   }
 }
 
