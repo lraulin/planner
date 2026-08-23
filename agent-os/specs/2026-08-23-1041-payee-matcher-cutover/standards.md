@@ -1,6 +1,6 @@
 # Standards for Payee matcher cutover
 
-**Status: active**
+**Status: frozen / complete** (2026-08-23)
 
 These standards were selected during shaping and copied in full so this cross-cutting
 migration keeps its implementation constraints with its governing intent.

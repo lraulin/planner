@@ -1,6 +1,6 @@
 # Shape — Payee matcher cutover
 
-**Status: active**
+**Status: frozen / complete** (2026-08-23)
 
 ## Problem
 

@@ -1,6 +1,6 @@
 # Payee matcher cutover — ids own commitment and schedule matching
 
-**Status: active**
+**Status: frozen / complete** (2026-08-23)
 Spec folder: `agent-os/specs/2026-08-23-1041-payee-matcher-cutover/`
 
 ## Spec relationships
@@ -113,32 +113,32 @@ claims and no collision in which one payee is claimed by two commitments.
 
 ## Acceptance criteria
 
-- [ ] The Stage A planner is deterministic, dry-run by default, all-or-nothing per user,
+- [x] The Stage A planner is deterministic, dry-run by default, all-or-nothing per user,
       idempotent, and reports malformed input, collisions, unresolved tokens and parity
       differences without writing.
-- [ ] The local legacy data resolves to the audited six commitment tokens and five schedule
+- [x] The local legacy data resolves to the audited six commitment tokens and five schedule
       tokens; `DOMINOS` becomes a placeholder payee; a second apply makes zero changes.
-- [ ] A second user cannot read, change or delete the first user's cutover rows, claims,
+- [x] A second user cannot read, change or delete the first user's cutover rows, claims,
       payees or schedules.
-- [ ] Multiple legacy tokens resolving to one payee do not double-count charges, and one
+- [x] Multiple legacy tokens resolving to one payee do not double-count charges, and one
       payee cannot be claimed by two commitments.
-- [ ] Dashboard, Available to Spend, Insights, Sankey, review, commitment rates and every
+- [x] Dashboard, Available to Spend, Insights, Sankey, review, commitment rates and every
       other finance figure are byte-identical before and after the cutover except the
       accepted 13-row/$319.17 PayPal identity correction recorded below.
-- [ ] Commitment category precedence remains explicit row override > commitment category >
+- [x] Commitment category precedence remains explicit row override > commitment category >
       description rule > bank category.
-- [ ] Ignored and cancelled commitments continue to suppress their charges exactly as today.
-- [ ] Commitments, Review, Register and Schedules use payee pickers and stable ids; a
+- [x] Ignored and cancelled commitments continue to suppress their charges exactly as today.
+- [x] Commitments, Review, Register and Schedules use payee pickers and stable ids; a
       transaction without a payee cannot be claimed until reclassification supplies one.
-- [ ] Rename changes labels everywhere without changing any finance figure or breaking a
+- [x] Rename changes labels everywhere without changing any finance figure or breaking a
       schedule or commitment match.
-- [ ] Merge rewrites aliases, transactions, schedules and the lone claim in one transaction;
+- [x] Merge rewrites aliases, transactions, schedules and the lone claim in one transaction;
       different claims are refused with no partial write.
-- [ ] Agent discovery publishes the id-based contracts and hides matcher-shaped adapters;
+- [x] Agent discovery publishes the id-based contracts and hides matcher-shaped adapters;
       adapters preserve existing wire compatibility by resolving or minting payees.
-- [ ] Stage B refuses to run with invalid UUID schedule conditions, unresolved matcher state
+- [x] Stage B refuses to run with invalid UUID schedule conditions, unresolved matcher state
       or dangling claims, then removes both matcher columns and all legacy matcher readers.
-- [ ] Desktop and phone layouts provide complete Rename/Merge/payee-picker paths in light and
+- [x] Desktop and phone layouts provide complete Rename/Merge/payee-picker paths in light and
       dark mode, and every route renders under the smoke gate.
 
 ## Changes from original plan
@@ -209,10 +209,19 @@ polish.
       both matcher columns only after the data assertions pass.
 - [x] Remove compatibility branches and obsolete matcher helpers.
 - [x] Update the Actual reference map to record the shipped cutover and Rules as next.
+- [x] Deploy Stage B to production; its data guard passed, Drizzle applied the migration,
+      both matcher columns dropped, and the production build reached Ready.
 
 ## Task 7: Verify and freeze
 
-- [ ] Run unit and real-Postgres integration tests with no database skips, lint, typecheck,
+- [x] Run unit and real-Postgres integration tests with no database skips, lint, typecheck,
       build, agent-doc validation and route smoke.
-- [ ] Verify desktop and 390×844 phone flows in light and dark mode with the app driver.
-- [ ] Record as-built material changes, check acceptance, update the roadmap and freeze.
+- [x] Verify desktop and 390×844 phone flows in light and dark mode with the app driver.
+- [x] Record as-built material changes, check acceptance, update the roadmap and freeze.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- Shape the generic Rules engine and editor on top of stable payee ids, including rule
+  ordering and conflict semantics.
+- Consider per-transaction payee overrides only if real use shows that alias-level identity
+  cannot express a necessary correction.

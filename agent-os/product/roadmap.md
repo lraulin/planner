@@ -924,11 +924,15 @@ period)` so money already spent stops being held twice and only going over bites
   stored name. The real file rebuilt 723 payees / 851 aliases across 7,030 transactions
   without moving a Dashboard, Insights, Commitments, Available-to-Spend, Budget or Sankey
   figure.
-  **The commitment join is prepared, not taken.** Replacement claim columns and tested
-  rename/merge primitives exist, but legacy bill/spend matchers and schedule payee strings
-  remain authoritative. A partial cutover moved Available to Spend silently; therefore one
-  delta must migrate every business reader, editor and agent contract together before the
-  old columns drop or Rename/Merge become visible. Rules then builds on the same ids.
+  ✅ **The commitment join shipped 2026-08-23.**
+  `agent-os/specs/2026-08-23-1041-payee-matcher-cutover/`. Payee ids and claims now own
+  every commitment, schedule, Dashboard, Available-to-Spend, Insights, Sankey, review and
+  agent join; names are display only. The guarded production migration accepted the audited
+  PayPal identity correction, rejected malformed or cross-user references by construction,
+  and removed both legacy matcher columns. Rename is label-only. Merge previews and rewrites
+  aliases, transactions, schedules and a compatible commitment claim in one transaction,
+  while conflicting claims refuse without a partial write. Desktop and phone both expose
+  rename, merge and payee-picker paths. Rules is the next layer on these same stable ids.
 - **Next:** **Shortfall attribution.** When Available to Spend goes negative, name
   what could be cancelled or skipped to fix it. Explicitly wanted, explicitly cut
   from the commitments spec; the annual/monthly cost columns already rank the
