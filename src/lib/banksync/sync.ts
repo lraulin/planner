@@ -7,7 +7,7 @@
  * *can* be decided without one has been pushed out of this file on purpose.
  */
 
-import { reclassifyTransactions } from "@/lib/finances/mutations";
+import { finalizeTransactionIngestion } from "@/lib/finances/ingestion";
 import { resolveScrapedPending } from "@/lib/finances/scrapePending";
 import {
   BankReauthRequiredError,
@@ -228,7 +228,7 @@ export async function syncAll(userId: string): Promise<SyncResult> {
   const inserted = statuses.some(
     (status) => status.state === "ok" && status.counts.inserted > 0,
   );
-  if (inserted) await reclassifyTransactions(userId);
+  if (inserted) await finalizeTransactionIngestion(userId, { forceReclassify: true });
 
   return { connections: statuses, reclassified: inserted };
 }

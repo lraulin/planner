@@ -12,6 +12,12 @@
 
 const BASE62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
+/** Compare keys by their stored alphabet, matching Postgres' bytewise ordering. */
+export function compare(left: string, right: string): number {
+  if (left === right) return 0;
+  return left < right ? -1 : 1;
+}
+
 function assertValid(key: string, label: string): void {
   if (key === "") return;
   for (const char of key) {

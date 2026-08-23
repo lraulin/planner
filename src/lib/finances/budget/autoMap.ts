@@ -18,6 +18,7 @@
  */
 
 import { effectiveCategory, effectiveFlow } from "../analytics";
+import { compare as compareSortKeys } from "@/lib/tree/sortKey";
 
 export type MappableRow = {
   description: string;
@@ -53,7 +54,7 @@ export type EnvelopeIndex = {
 
 export function envelopeIndex(targets: readonly EnvelopeTarget[]): EnvelopeIndex {
   const ordered = [...targets].sort((left, right) =>
-    left.sortKey.localeCompare(right.sortKey),
+    compareSortKeys(left.sortKey, right.sortKey),
   );
 
   const byCategory = new Map<string, string>();

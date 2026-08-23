@@ -941,6 +941,15 @@ period)` so money already spent stops being held twice and only going over bites
   moved 0 of 7,030 flows, 0 categories and no income figure; the old runtime array and matcher
   are gone. The same slice also connected budget structure editing, hidden-envelope recovery,
   the movement log and Assign remaining.
+  ✅ **Nested budget groups + Commitments import shipped 2026-08-23.**
+  `agent-os/specs/2026-08-23-1807-nested-budget-groups-bill-import/`. Budget groups are now
+  arbitrary-depth organizational containers with recursive Assigned, Activity and Available
+  totals; envelopes still hold every dollar and the Actual-derived fold is unchanged. A
+  previewed, re-runnable import turns active Commitments bills into
+  `Spending › Bills › commitment category › one envelope per bill`, reuses or creates the
+  schedule, moves its template, and routes new matches without overwriting manual envelope
+  choices. Commitments remains parallel and independently editable. The same guarded cutover
+  split `Software & AI` into AI, Productivity & Security, and Software & Development.
 - **Next:** **Shortfall attribution.** When Available to Spend goes negative, name
   what could be cancelled or skipped to fix it. Explicitly wanted, explicitly cut
   from the commitments spec; the annual/monthly cost columns already rank the

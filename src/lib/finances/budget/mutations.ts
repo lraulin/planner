@@ -15,6 +15,12 @@ import * as sortKey from "@/lib/tree/sortKey";
 import { numericStringToCents } from "../money";
 import { envelopeForRow, envelopeIndex, type MappableRow } from "./autoMap";
 import {
+  budgetChildren,
+  resolveBudgetDrop,
+  type BudgetDropZone,
+  type BudgetStructureRef,
+} from "./hierarchy";
+import {
   categoryMonth,
   findMonth,
   monthKeyOf,
@@ -68,9 +74,12 @@ import { getSchedule, listScheduleRecords } from "../schedules/queries";
 /** Guards the note column against unbounded growth from a month of fiddling. */
 const MAX_NOTE_LINES = 200;
 
-async function requireCategory(userId: string, categoryId: string): Promise<void> {
+async function requireCategory(userId: string, categoryId: string) {
   const [row] = await db
-    .select({ id: financeBudgetCategories.id })
+    .select({
+      id: financeBudgetCategories.id,
+      groupId: financeBudgetCategories.groupId,
+    })
     .from(financeBudgetCategories)
     .where(
       and(
@@ -80,11 +89,16 @@ async function requireCategory(userId: string, categoryId: string): Promise<void
     )
     .limit(1);
   if (!row) throw new Error("That envelope does not exist.");
+  return row;
 }
 
-async function requireGroup(userId: string, groupId: string): Promise<void> {
+async function requireGroup(userId: string, groupId: string) {
   const [row] = await db
-    .select({ id: financeCategoryGroups.id })
+    .select({
+      id: financeCategoryGroups.id,
+      parentGroupId: financeCategoryGroups.parentGroupId,
+      isIncome: financeCategoryGroups.isIncome,
+    })
     .from(financeCategoryGroups)
     .where(
       and(
@@ -94,6 +108,42 @@ async function requireGroup(userId: string, groupId: string): Promise<void> {
     )
     .limit(1);
   if (!row) throw new Error("That group does not exist.");
+  return row;
+}
+
+async function lastBudgetChildSortKey(
+  userId: string,
+  parentGroupId: string | null,
+): Promise<string | null> {
+  const [childGroups, envelopes] = await Promise.all([
+    db
+      .select({ sortKey: financeCategoryGroups.sortKey })
+      .from(financeCategoryGroups)
+      .where(
+        and(
+          eq(financeCategoryGroups.userId, userId),
+          parentGroupId === null
+            ? isNull(financeCategoryGroups.parentGroupId)
+            : eq(financeCategoryGroups.parentGroupId, parentGroupId),
+        ),
+      ),
+    parentGroupId === null
+      ? Promise.resolve([])
+      : db
+          .select({ sortKey: financeBudgetCategories.sortKey })
+          .from(financeBudgetCategories)
+          .where(
+            and(
+              eq(financeBudgetCategories.userId, userId),
+              eq(financeBudgetCategories.groupId, parentGroupId),
+            ),
+          ),
+  ]);
+  return (
+    [...childGroups, ...envelopes]
+      .map((row) => row.sortKey)
+      .sort((left, right) => sortKey.compare(right, left))[0] ?? null
+  );
 }
 
 // ─────────────────────────── Setup ───────────────────────────
@@ -154,7 +204,10 @@ export async function seedBudget(
           userId,
           groupId: inserted.id,
           name: category.name,
-          sortKey: `${groupKeys[index] ?? ""}:${categoryKeys[position] ?? ""}`,
+          // Groups and envelopes now share one sibling sequence. The old flat grid used a
+          // `group:category` composite key here; `:` is deliberately outside the fractional
+          // key alphabet and made the first nested insertion impossible.
+          sortKey: categoryKeys[position] ?? sortKey.first(),
           sourceCategories: [...category.sourceCategories],
         })),
       );
@@ -562,25 +615,22 @@ export async function setCarryover(
 
 export async function createCategoryGroup(
   userId: string,
-  params: { name: string; isIncome?: boolean },
+  params: { name: string; isIncome?: boolean; parentGroupId?: string | null },
 ): Promise<string> {
   const name = params.name.trim();
   if (name === "") throw new Error("A group needs a name.");
-
-  const [last] = await db
-    .select({ sortKey: financeCategoryGroups.sortKey })
-    .from(financeCategoryGroups)
-    .where(eq(financeCategoryGroups.userId, userId))
-    .orderBy(sql`${financeCategoryGroups.sortKey} desc`)
-    .limit(1);
+  const parentGroupId = params.parentGroupId ?? null;
+  const parent = parentGroupId ? await requireGroup(userId, parentGroupId) : null;
+  const last = await lastBudgetChildSortKey(userId, parentGroupId);
 
   const [row] = await db
     .insert(financeCategoryGroups)
     .values({
       userId,
+      parentGroupId,
       name,
-      isIncome: params.isIncome ?? false,
-      sortKey: sortKey.after(last?.sortKey ?? sortKey.first()),
+      isIncome: parent?.isIncome ?? params.isIncome ?? false,
+      sortKey: last === null ? sortKey.first() : sortKey.after(last),
     })
     .returning({ id: financeCategoryGroups.id });
   if (!row) throw new Error("Could not create the group.");
@@ -594,18 +644,7 @@ export async function createBudgetCategory(
   const name = params.name.trim();
   if (name === "") throw new Error("An envelope needs a name.");
   await requireGroup(userId, params.groupId);
-
-  const [last] = await db
-    .select({ sortKey: financeBudgetCategories.sortKey })
-    .from(financeBudgetCategories)
-    .where(
-      and(
-        eq(financeBudgetCategories.userId, userId),
-        eq(financeBudgetCategories.groupId, params.groupId),
-      ),
-    )
-    .orderBy(sql`${financeBudgetCategories.sortKey} desc`)
-    .limit(1);
+  const last = await lastBudgetChildSortKey(userId, params.groupId);
 
   const [row] = await db
     .insert(financeBudgetCategories)
@@ -613,7 +652,7 @@ export async function createBudgetCategory(
       userId,
       groupId: params.groupId,
       name,
-      sortKey: sortKey.after(last?.sortKey ?? sortKey.first()),
+      sortKey: last === null ? sortKey.first() : sortKey.after(last),
       sourceCategories: [...(params.sourceCategories ?? [])],
     })
     .returning({ id: financeBudgetCategories.id });
@@ -634,8 +673,19 @@ export async function updateBudgetCategory(
   categoryId: string,
   edit: BudgetCategoryEdit,
 ): Promise<void> {
-  await requireCategory(userId, categoryId);
-  if (edit.groupId !== undefined) await requireGroup(userId, edit.groupId);
+  const category = await requireCategory(userId, categoryId);
+  let movedSortKey: string | undefined;
+  if (edit.groupId !== undefined && edit.groupId !== category.groupId) {
+    const [source, destination] = await Promise.all([
+      requireGroup(userId, category.groupId),
+      requireGroup(userId, edit.groupId),
+    ]);
+    if (source.isIncome !== destination.isIncome) {
+      throw new Error("Income and spending envelopes cannot share a branch.");
+    }
+    const last = await lastBudgetChildSortKey(userId, edit.groupId);
+    movedSortKey = last === null ? sortKey.first() : sortKey.after(last);
+  }
 
   const name = edit.name?.trim();
   if (name !== undefined && name === "") throw new Error("An envelope needs a name.");
@@ -647,6 +697,7 @@ export async function updateBudgetCategory(
       ...(edit.hidden === undefined ? {} : { hidden: edit.hidden }),
       ...(edit.notes === undefined ? {} : { notes: edit.notes.trim() }),
       ...(edit.groupId === undefined ? {} : { groupId: edit.groupId }),
+      ...(movedSortKey === undefined ? {} : { sortKey: movedSortKey }),
       ...(edit.sourceCategories === undefined
         ? {}
         : { sourceCategories: [...edit.sourceCategories] }),
@@ -702,17 +753,170 @@ export async function deleteBudgetCategory(
     );
 }
 
-/** Deletes the group and, by cascade, its envelopes. Their transactions survive. */
+/** Remove an empty organisational group. Money-bearing descendants must be moved first. */
 export async function deleteCategoryGroup(
   userId: string,
   groupId: string,
 ): Promise<void> {
   await requireGroup(userId, groupId);
+  const [childGroup, envelope] = await Promise.all([
+    db
+      .select({ id: financeCategoryGroups.id })
+      .from(financeCategoryGroups)
+      .where(
+        and(
+          eq(financeCategoryGroups.userId, userId),
+          eq(financeCategoryGroups.parentGroupId, groupId),
+        ),
+      )
+      .limit(1),
+    db
+      .select({ id: financeBudgetCategories.id })
+      .from(financeBudgetCategories)
+      .where(
+        and(
+          eq(financeBudgetCategories.userId, userId),
+          eq(financeBudgetCategories.groupId, groupId),
+        ),
+      )
+      .limit(1),
+  ]);
+  if (childGroup.length > 0 || envelope.length > 0) {
+    throw new Error("Move everything out of this group before deleting it.");
+  }
   await db
     .delete(financeCategoryGroups)
     .where(
       and(
         eq(financeCategoryGroups.id, groupId),
+        eq(financeCategoryGroups.userId, userId),
+      ),
+    );
+}
+
+async function budgetStructure(userId: string) {
+  const [groups, categories] = await Promise.all([
+    db
+      .select({
+        id: financeCategoryGroups.id,
+        parentGroupId: financeCategoryGroups.parentGroupId,
+        name: financeCategoryGroups.name,
+        isIncome: financeCategoryGroups.isIncome,
+        sortKey: financeCategoryGroups.sortKey,
+        hidden: financeCategoryGroups.hidden,
+        sourceCommitmentKey: financeCategoryGroups.sourceCommitmentKey,
+      })
+      .from(financeCategoryGroups)
+      .where(eq(financeCategoryGroups.userId, userId)),
+    db
+      .select({
+        id: financeBudgetCategories.id,
+        groupId: financeBudgetCategories.groupId,
+        sortKey: financeBudgetCategories.sortKey,
+      })
+      .from(financeBudgetCategories)
+      .where(eq(financeBudgetCategories.userId, userId)),
+  ]);
+  return { groups, categories };
+}
+
+/** Move or reparent one group/envelope from a target row and drop zone. */
+export async function moveBudgetStructureItem(
+  userId: string,
+  moving: BudgetStructureRef,
+  target: BudgetStructureRef,
+  zone: BudgetDropZone,
+): Promise<void> {
+  if (moving.kind === "group") await requireGroup(userId, moving.id);
+  else await requireCategory(userId, moving.id);
+  if (target.kind === "group") await requireGroup(userId, target.id);
+  else await requireCategory(userId, target.id);
+
+  const structure = await budgetStructure(userId);
+  const placement = resolveBudgetDrop(
+    structure.groups,
+    structure.categories,
+    moving,
+    target,
+    zone,
+  );
+  if (!placement) throw new Error("That item cannot move there.");
+
+  const siblings = budgetChildren(
+    structure.groups,
+    structure.categories,
+    placement.parentGroupId,
+  );
+  const keyOf = (ref: BudgetStructureRef | null) =>
+    ref === null
+      ? null
+      : (siblings.find((item) => item.kind === ref.kind && item.id === ref.id)
+          ?.sortKey ?? null);
+  const nextSortKey = sortKey.between(keyOf(placement.previous), keyOf(placement.next));
+  const updatedAt = new Date();
+
+  if (moving.kind === "group") {
+    await db
+      .update(financeCategoryGroups)
+      .set({
+        parentGroupId: placement.parentGroupId,
+        sortKey: nextSortKey,
+        updatedAt,
+      })
+      .where(
+        and(
+          eq(financeCategoryGroups.id, moving.id),
+          eq(financeCategoryGroups.userId, userId),
+        ),
+      );
+    return;
+  }
+
+  if (!placement.parentGroupId)
+    throw new Error("An envelope must stay inside a group.");
+  await db
+    .update(financeBudgetCategories)
+    .set({
+      groupId: placement.parentGroupId,
+      sortKey: nextSortKey,
+      updatedAt,
+    })
+    .where(
+      and(
+        eq(financeBudgetCategories.id, moving.id),
+        eq(financeBudgetCategories.userId, userId),
+      ),
+    );
+}
+
+/** Move an item to the end of a group, or move a group back to the root. */
+export async function moveBudgetStructureItemIntoGroup(
+  userId: string,
+  moving: BudgetStructureRef,
+  parentGroupId: string | null,
+): Promise<void> {
+  if (parentGroupId !== null) {
+    await moveBudgetStructureItem(
+      userId,
+      moving,
+      { kind: "group", id: parentGroupId },
+      "inside",
+    );
+    return;
+  }
+  if (moving.kind !== "group") throw new Error("An envelope must stay inside a group.");
+  await requireGroup(userId, moving.id);
+  const nextSortKey = await lastBudgetChildSortKey(userId, null);
+  await db
+    .update(financeCategoryGroups)
+    .set({
+      parentGroupId: null,
+      sortKey: nextSortKey === null ? sortKey.first() : sortKey.after(nextSortKey),
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(financeCategoryGroups.id, moving.id),
         eq(financeCategoryGroups.userId, userId),
       ),
     );

@@ -2794,10 +2794,11 @@ export const financePaymentResolutions = pgTable(
  */
 
 /**
- * A named group of envelopes — "Bills", "Discretionary", "Income".
+ * A named group of envelopes — "Spending", "Bills", "Discretionary", "Income".
  *
- * Exists as its own table only because the budget grid is a two-level tree and totals are read
- * per group; there is no behaviour on a group beyond `isIncome`.
+ * Groups are arbitrary-depth organisational containers. They never hold money: every total
+ * shown on one is still derived from the descendant envelopes, so nesting cannot change the
+ * envelope fold or Ready to Assign.
  *
  * **`isIncome` lives here rather than on the category** — as it does in Actual — because it is
  * a structural fact about a whole branch, and a group holding both income and expense
@@ -2812,6 +2813,11 @@ export const financeCategoryGroups = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    /** Null at the root; deleting a non-empty group is refused rather than cascading money. */
+    parentGroupId: uuid("parent_group_id").references(
+      (): AnyPgColumn => financeCategoryGroups.id,
+      { onDelete: "restrict" },
+    ),
     /** The user's word for it. Nothing joins on it, so renaming is free. */
     name: text("name").notNull(),
     /**
@@ -2831,12 +2837,31 @@ export const financeCategoryGroups = pgTable(
      * its whole because something was tidied off screen.
      */
     hidden: boolean("hidden").notNull().default(false),
+    /**
+     * Stable identity for the groups seeded by the explicit Commitments import.
+     *
+     * Names and parents stay user-owned after import. This key is what lets a later replay
+     * add a missing bill without recreating a group the user renamed or moved.
+     */
+    sourceCommitmentKey: text("source_commitment_key"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    uniqueIndex("finance_category_groups_user_name_uq").on(table.userId, table.name),
-    index("finance_category_groups_user_sort_idx").on(table.userId, table.sortKey),
+    uniqueIndex("finance_category_groups_root_name_uq")
+      .on(table.userId, table.name)
+      .where(sql`${table.parentGroupId} is null`),
+    uniqueIndex("finance_category_groups_child_name_uq")
+      .on(table.userId, table.parentGroupId, table.name)
+      .where(sql`${table.parentGroupId} is not null`),
+    uniqueIndex("finance_category_groups_commitment_key_uq")
+      .on(table.userId, table.sourceCommitmentKey)
+      .where(sql`${table.sourceCommitmentKey} is not null`),
+    index("finance_category_groups_user_parent_sort_idx").on(
+      table.userId,
+      table.parentGroupId,
+      table.sortKey,
+    ),
   ],
 );
 
@@ -2861,9 +2886,20 @@ export const financeBudgetCategories = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     groupId: uuid("group_id")
       .notNull()
-      .references(() => financeCategoryGroups.id, { onDelete: "cascade" }),
+      .references(() => financeCategoryGroups.id, { onDelete: "restrict" }),
     name: text("name").notNull(),
     sortKey: text("sort_key").notNull(),
+    /**
+     * The active Commitments bill this envelope was seeded from.
+     *
+     * `on delete set null` keeps the envelope and its history when the old inventory row is
+     * removed. A replay recognises the surviving relationship by this id, never by a mutable
+     * envelope name.
+     */
+    sourceBillId: uuid("source_bill_id").references(
+      (): AnyPgColumn => financeRecurringBills.id,
+      { onDelete: "set null" },
+    ),
     /**
      * Which `FINANCE_CATEGORIES` values this envelope claims, for the auto-map.
      *
@@ -2911,6 +2947,9 @@ export const financeBudgetCategories = pgTable(
       table.groupId,
       table.sortKey,
     ),
+    uniqueIndex("finance_budget_categories_source_bill_uq")
+      .on(table.userId, table.sourceBillId)
+      .where(sql`${table.sourceBillId} is not null`),
   ],
 );
 
@@ -3064,6 +3103,16 @@ export const financeSchedules = pgTable(
       (): AnyPgColumn => financeRecurringBills.id,
       { onDelete: "set null" },
     ),
+    /**
+     * The envelope a posted or newly matched occurrence spends from.
+     *
+     * This is routing, not funding: the envelope's schedule template still owns how much to
+     * assign, and Apply / Overwrite remains an explicit budget action.
+     */
+    budgetCategoryId: uuid("budget_category_id").references(
+      (): AnyPgColumn => financeBudgetCategories.id,
+      { onDelete: "set null" },
+    ),
     sortKey: text("sort_key").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -3074,6 +3123,9 @@ export const financeSchedules = pgTable(
     index("finance_schedules_source_bill_idx")
       .on(table.userId, table.sourceBillId)
       .where(sql`${table.sourceBillId} is not null`),
+    index("finance_schedules_budget_category_idx")
+      .on(table.userId, table.budgetCategoryId)
+      .where(sql`${table.budgetCategoryId} is not null`),
   ],
 );
 

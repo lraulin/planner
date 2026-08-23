@@ -50,6 +50,8 @@ import {
   createCategoryGroup,
   deleteBudgetCategory,
   deleteCategoryGroup,
+  moveBudgetStructureItem,
+  moveBudgetStructureItemIntoGroup,
   performBudgetOperation,
   renameCategoryGroup,
   saveEnvelopeTemplates,
@@ -61,9 +63,20 @@ import {
   type BudgetOperation,
   type SeedResult,
 } from "@/lib/finances/budget/mutations";
+import type {
+  BudgetDropZone,
+  BudgetStructureRef,
+} from "@/lib/finances/budget/hierarchy";
 import type { MonthKey } from "@/lib/finances/budget/envelope";
 import type { BudgetPreset } from "@/lib/finances/budget/presets";
+import {
+  applyCommitmentsImport,
+  previewCommitmentsImport,
+  type CommitmentsImportPreview,
+  type CommitmentsImportResult,
+} from "@/lib/finances/budget/commitmentsImportMutations";
 import type { CommitmentStatus } from "@/db/schema";
+import { finalizeTransactionIngestion } from "@/lib/finances/ingestion";
 import type { DiscoverProposal } from "@/lib/finances/schedules/discover";
 import {
   completeSchedule,
@@ -236,7 +249,11 @@ export async function pasteScrapedPendingAction(
   text: string,
   todayKey: string,
 ): Promise<DataActionResult<ReplaceScrapedPendingResult>> {
-  return runWithData((userId) => replaceScrapedPending(userId, text, todayKey));
+  return runWithData(async (userId) => {
+    const result = await replaceScrapedPending(userId, text, todayKey);
+    if (result.inserted > 0) await finalizeTransactionIngestion(userId);
+    return result;
+  });
 }
 
 export async function clearScrapedPendingAction(
@@ -289,8 +306,11 @@ export async function setCarryoverAction(
 export async function createCategoryGroupAction(
   name: string,
   isIncome: boolean,
+  parentGroupId: string | null = null,
 ): Promise<DataActionResult<string>> {
-  return runWithData((userId) => createCategoryGroup(userId, { name, isIncome }));
+  return runWithData((userId) =>
+    createCategoryGroup(userId, { name, isIncome, parentGroupId }),
+  );
 }
 
 export async function renameCategoryGroupAction(
@@ -304,6 +324,23 @@ export async function deleteCategoryGroupAction(
   groupId: string,
 ): Promise<ActionResult> {
   return run((userId) => deleteCategoryGroup(userId, groupId));
+}
+
+export async function moveBudgetStructureItemAction(
+  moving: BudgetStructureRef,
+  target: BudgetStructureRef,
+  zone: BudgetDropZone,
+): Promise<ActionResult> {
+  return run((userId) => moveBudgetStructureItem(userId, moving, target, zone));
+}
+
+export async function moveBudgetStructureItemIntoGroupAction(
+  moving: BudgetStructureRef,
+  parentGroupId: string | null,
+): Promise<ActionResult> {
+  return run((userId) =>
+    moveBudgetStructureItemIntoGroup(userId, moving, parentGroupId),
+  );
 }
 
 export async function createBudgetCategoryAction(
@@ -359,6 +396,22 @@ export async function addTemplatesFromSchedulesAction(
   return runWithData((userId) =>
     addTemplatesFromSchedules(userId, { categoryId, scheduleIds }),
   );
+}
+
+export async function previewCommitmentsImportAction(input: {
+  targetGroupId: string;
+  legacyEnvelopeId: string | null;
+}): Promise<DataActionResult<CommitmentsImportPreview>> {
+  return runWithData((userId) => previewCommitmentsImport(userId, input));
+}
+
+export async function applyCommitmentsImportAction(input: {
+  targetGroupId: string;
+  legacyEnvelopeId: string | null;
+  fingerprint: string;
+  todayKey: string;
+}): Promise<DataActionResult<CommitmentsImportResult>> {
+  return runWithData((userId) => applyCommitmentsImport(userId, input));
 }
 
 // ─────────────────────────── Schedules ───────────────────────────

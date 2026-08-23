@@ -15,6 +15,7 @@ import { DateText } from "@/components/date/DateText";
 import { PayeePickerField } from "@/components/finances/payees/PayeePickerField";
 import { useToday } from "@/components/grid/useToday";
 import type { FinanceAccountRow } from "@/lib/finances/types";
+import type { BudgetEnvelopeOption } from "@/lib/finances/budget/queries";
 import {
   dateConfigOf,
   extractScheduleConds,
@@ -39,6 +40,7 @@ const WEEKDAYS: RecurPattern["type"][] = ["SU", "MO", "TU", "WE", "TH", "FR", "S
 type Draft = {
   name: string;
   accountId: string | null;
+  budgetCategoryId: string | null;
   payeeIds: string[];
   amountOp: AmountCondition["op"];
   amount: string;
@@ -74,6 +76,7 @@ function draftOf(record: ScheduleRecord | null, today: string): Draft {
     return {
       name: "",
       accountId: null,
+      budgetCategoryId: null,
       payeeIds: [],
       amountOp: "isapprox",
       amount: "",
@@ -99,6 +102,7 @@ function draftOf(record: ScheduleRecord | null, today: string): Draft {
   return {
     name: record.name,
     accountId: conds.account?.value ?? null,
+    budgetCategoryId: record.budgetCategoryId,
     payeeIds: conds.payee
       ? conds.payee.op === "is"
         ? [conds.payee.value]
@@ -200,6 +204,7 @@ export function ScheduleDrawer({
   creating,
   accounts,
   payees,
+  envelopes,
   onClose,
   onChanged,
 }: {
@@ -207,6 +212,7 @@ export function ScheduleDrawer({
   creating: boolean;
   accounts: FinanceAccountRow[];
   payees: { id: string; name: string }[];
+  envelopes: BudgetEnvelopeOption[];
   onClose: () => void;
   onChanged: () => void;
 }) {
@@ -221,6 +227,7 @@ export function ScheduleDrawer({
       creating={creating}
       accounts={accounts}
       payees={payees}
+      envelopes={envelopes}
       today={today}
       titleId={titleId}
       onClose={onClose}
@@ -234,6 +241,7 @@ function ScheduleForm({
   creating,
   accounts,
   payees,
+  envelopes,
   today,
   titleId,
   onClose,
@@ -243,6 +251,7 @@ function ScheduleForm({
   creating: boolean;
   accounts: FinanceAccountRow[];
   payees: { id: string; name: string }[];
+  envelopes: BudgetEnvelopeOption[];
   today: string;
   titleId: string;
   onClose: () => void;
@@ -296,6 +305,7 @@ function ScheduleForm({
               conditions: built,
               postsTransaction: draft.postsTransaction,
               customUpcomingLength: draft.customUpcomingLength,
+              budgetCategoryId: draft.budgetCategoryId,
             },
             today,
           )
@@ -306,6 +316,7 @@ function ScheduleForm({
               conditions: built,
               postsTransaction: draft.postsTransaction,
               customUpcomingLength: draft.customUpcomingLength,
+              budgetCategoryId: draft.budgetCategoryId,
             },
             today,
           );
@@ -353,6 +364,18 @@ function ScheduleForm({
                   payees={payees}
                   value={draft.payeeIds}
                   onChange={(value) => patch("payeeIds", value)}
+                />
+                <SelectField
+                  label="Budget envelope"
+                  value={draft.budgetCategoryId}
+                  allowEmpty
+                  emptyLabel="No envelope"
+                  options={envelopes.map((envelope) => ({
+                    value: envelope.id,
+                    label: envelope.label,
+                  }))}
+                  hint="Post now and automatic matches use this only when the transaction has no envelope."
+                  onChange={(value) => patch("budgetCategoryId", value)}
                 />
                 <SelectField
                   label="Amount match"

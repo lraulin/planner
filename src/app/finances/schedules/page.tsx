@@ -7,6 +7,7 @@ import { DEFAULT_UPCOMING_LENGTH } from "@/lib/finances/schedules/status";
 import { toDateKey } from "@/lib/schedule/geometry";
 import { AppShell } from "@/components/shell/AppShell";
 import { SchedulesView } from "@/components/finances/schedules/SchedulesView";
+import { listBudgetEnvelopeOptions } from "@/lib/finances/budget/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -17,16 +18,22 @@ export const dynamic = "force-dynamic";
 export default async function FinancesSchedulesPage() {
   const userId = await getCurrentUserId();
   const todayKey = toDateKey(new Date());
-  const [rows, accounts, payees] = await Promise.all([
+  const [rows, accounts, payees, envelopes] = await Promise.all([
     listSchedules(userId, todayKey, DEFAULT_UPCOMING_LENGTH),
     listAccounts(userId),
     listPayees(userId),
+    listBudgetEnvelopeOptions(userId),
   ]);
 
   return (
     <AppShell active="finances">
       <Suspense fallback={<div className="min-h-0 flex-1" />}>
-        <SchedulesView initialRows={rows} accounts={accounts} payees={payees} />
+        <SchedulesView
+          initialRows={rows}
+          accounts={accounts}
+          payees={payees}
+          envelopes={envelopes}
+        />
       </Suspense>
     </AppShell>
   );

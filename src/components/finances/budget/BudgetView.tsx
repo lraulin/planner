@@ -43,12 +43,14 @@ import {
   defaultScheduleTarget,
 } from "@/lib/finances/budget/templates/fromSchedules";
 import type { ScheduleSnapshot } from "@/lib/finances/budget/templates/schedule";
+import { descendantEnvelopeIds } from "@/lib/finances/budget/hierarchy";
 import { formatUsd } from "@/lib/finances/money";
 import { AddFromSchedulesDialog } from "./AddFromSchedulesDialog";
 import { AssignRemainingDialog } from "./AssignRemainingDialog";
 import { budgetColumns, type BudgetColumnCtx } from "./budgetColumns";
 import { BudgetSummary } from "./BudgetSummary";
 import { BudgetStructureDrawer } from "./BudgetStructureDrawer";
+import { CommitmentsImportDialog } from "./CommitmentsImportDialog";
 import { MoveMoneyDialog } from "./MoveMoneyDialog";
 import { TemplateDrawer } from "./TemplateDrawer";
 
@@ -83,6 +85,9 @@ export function BudgetView({
   const [notice, setNotice] = useState<string | null>(null);
   const [assigning, setAssigning] = useState(false);
   const [managingStructure, setManagingStructure] = useState(false);
+  const [importingCommitments, setImportingCommitments] = useState(
+    () => params.get("import") === "commitments",
+  );
 
   const grid = useGridState("budget", budgetColumns, {
     order: budgetColumns.map((column) => column.id),
@@ -165,6 +170,7 @@ export function BudgetView({
   }
 
   const spendingRows = useMemo(() => rows.filter((row) => !row.isIncome), [rows]);
+  const hasSpendingGroup = data.groups.some((group) => !group.isIncome);
   const templatedCount = useMemo(
     () => spendingRows.filter((row) => row.templates.length > 0).length,
     [spendingRows],
@@ -200,6 +206,20 @@ export function BudgetView({
         section: "Budget",
         keywords: "create rename delete hide group envelope category",
         run: () => setManagingStructure(true),
+      },
+      {
+        id: "budget.commitments.import",
+        label: "Import commitments…",
+        group: "view",
+        menu: "tools",
+        section: "Setup",
+        icon: "convert",
+        keywords: "bills commitments schedules envelopes seed",
+        title: !hasSpendingGroup
+          ? "There is no spending group to receive imported bills"
+          : "Preview active bills as schedules, envelopes, and templates",
+        disabled: !hasSpendingGroup,
+        run: () => setImportingCommitments(true),
       },
       {
         id: "budget.templates.apply",
@@ -243,7 +263,7 @@ export function BudgetView({
         run: () => setAdding(true),
       },
     ];
-  }, [runApply, templatedCount, spendingRows.length]);
+  }, [runApply, templatedCount, spendingRows.length, hasSpendingGroup]);
 
   useRegisterCommands(commands);
 
@@ -485,9 +505,16 @@ export function BudgetView({
             onToggleGroup={grid.toggleGroup}
             density={grid.density}
             rowLabel={(row) => `Envelope: ${row.node.name}`}
-            groupSummary={(nodes) => {
-              const group = budgetTotals(nodes.filter((node) => !node.isIncome));
-              if (nodes.every((node) => node.isIncome)) return null;
+            groupSummary={(_nodes, header) => {
+              const allIds = descendantEnvelopeIds(
+                data.groups,
+                data.categories,
+                header.id,
+              );
+              const allNodes = rows.filter((row) => allIds.has(row.id));
+              const group = budgetTotals(allNodes.filter((node) => !node.isIncome));
+              if (allNodes.length > 0 && allNodes.every((node) => node.isIncome))
+                return null;
               return (
                 <span className="tabular flex gap-4 text-[0.75rem] text-ink-muted">
                   <span>{formatUsd(group.assignedCents)} assigned</span>
@@ -613,6 +640,19 @@ export function BudgetView({
           categories={data.categories}
           onClose={() => setManagingStructure(false)}
           onChanged={() => router.refresh()}
+        />
+      ) : null}
+      {importingCommitments ? (
+        <CommitmentsImportDialog
+          groups={data.groups}
+          categories={data.categories}
+          todayKey={data.todayKey}
+          onCancel={() => setImportingCommitments(false)}
+          onImported={(message) => {
+            setImportingCommitments(false);
+            setNotice(message);
+            router.refresh();
+          }}
         />
       ) : null}
     </div>

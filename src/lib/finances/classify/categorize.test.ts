@@ -125,13 +125,24 @@ describe("categorize", () => {
 
   it("groups the AI and developer tools that arrive under many names", () => {
     for (const description of ["CLAUDE.AI SUBSCRIPTION", "ANTHROPIC* CLAUDE SUB"]) {
-      expect(categorize(description, "Merchandise").merchant).toBe("Anthropic");
+      const result = categorize(description, "Merchandise");
+      expect(result.merchant).toBe("Anthropic");
+      expect(result.category).toBe("AI");
     }
     for (const description of ["GROK XAI", "XAI LLC"]) {
-      expect(categorize(description, "Merchandise").merchant).toBe("xAI");
+      const result = categorize(description, "Merchandise");
+      expect(result.merchant).toBe("xAI");
+      expect(result.category).toBe("AI");
     }
+    expect(categorize("OPENAI CHATGPT", "Merchandise").category).toBe("AI");
+    expect(categorize("DROPBOX*PLUS", "Merchandise").category).toBe(
+      "Productivity & Security",
+    );
+    expect(categorize("PAYPAL *SANEBOX INC", "Merchandise").category).toBe(
+      "Productivity & Security",
+    );
     expect(categorize("PAYPAL *GITHUB INC", "Merchandise").category).toBe(
-      "Software & AI",
+      "Software & Development",
     );
     expect(categorize("PAYPAL *PADDLE.NET35314369001", "Merchandise").merchant).toBe(
       "Paddle.com Market Limited",
@@ -143,7 +154,7 @@ describe("categorize", () => {
       "Spotify USA Inc",
     );
     expect(categorize("CURSOR, AI POWERED IDE", "Merchandise").category).toBe(
-      "Software & AI",
+      "Software & Development",
     );
   });
 

@@ -34,6 +34,7 @@ export type ScheduleRecord = {
   nextDate: string;
   customUpcomingLength: string | null;
   sourceBillId: string | null;
+  budgetCategoryId: string | null;
   sortKey: string;
 };
 
@@ -56,6 +57,7 @@ function parsedRecord(row: {
   nextDate: string;
   customUpcomingLength: string | null;
   sourceBillId: string | null;
+  budgetCategoryId: string | null;
   sortKey: string;
 }): ScheduleRecord | null {
   const conditions = parseConditions(row.conditions);
@@ -74,6 +76,7 @@ export async function listScheduleRecords(userId: string): Promise<ScheduleRecor
       nextDate: financeSchedules.nextDate,
       customUpcomingLength: financeSchedules.customUpcomingLength,
       sourceBillId: financeSchedules.sourceBillId,
+      budgetCategoryId: financeSchedules.budgetCategoryId,
       sortKey: financeSchedules.sortKey,
     })
     .from(financeSchedules)
@@ -100,6 +103,7 @@ export async function getSchedule(
       nextDate: financeSchedules.nextDate,
       customUpcomingLength: financeSchedules.customUpcomingLength,
       sourceBillId: financeSchedules.sourceBillId,
+      budgetCategoryId: financeSchedules.budgetCategoryId,
       sortKey: financeSchedules.sortKey,
     })
     .from(financeSchedules)

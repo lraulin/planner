@@ -1,7 +1,12 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { financeAccounts, financeTransactions, users } from "@/db/schema";
+import {
+  financeAccounts,
+  financeBudgetCategories,
+  financeTransactions,
+  users,
+} from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { upsertRecurringBill } from "@/lib/finances/mutations";
 import { createPayee } from "@/lib/finances/payees/mutations";
@@ -16,6 +21,7 @@ import {
 } from "./mutations";
 import { getSchedule, listSchedules } from "./queries";
 import type { ScheduleCondition } from "./conditions";
+import { seedBudget } from "../budget/mutations";
 
 const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
@@ -96,7 +102,18 @@ describeDb("schedule mutations", () => {
     });
 
     const other = await makeUser();
+    await seedAccount(other);
+    await seedBudget(other, {
+      preset: "minimal",
+      startMonth: "2026-08-01",
+      todayKey: TODAY,
+    });
     const otherPayeeId = await createPayee(other, { name: "Other Netflix" });
+    const [foreignEnvelope] = await db
+      .select({ id: financeBudgetCategories.id })
+      .from(financeBudgetCategories)
+      .where(eq(financeBudgetCategories.userId, other))
+      .limit(1);
     expect(await getSchedule(other, id)).toBeNull();
     expect(await listSchedules(other, TODAY)).toEqual([]);
     await expect(
@@ -116,6 +133,20 @@ describeDb("schedule mutations", () => {
     await expect(
       updateSchedule(userId, id, { conditions: monthly(otherPayeeId) }, TODAY),
     ).rejects.toThrow("One or more payees do not exist.");
+    await expect(
+      createSchedule(
+        userId,
+        {
+          name: "Foreign envelope",
+          conditions: monthly(payeeId),
+          budgetCategoryId: foreignEnvelope.id,
+        },
+        TODAY,
+      ),
+    ).rejects.toThrow("That envelope does not exist.");
+    await expect(
+      updateSchedule(userId, id, { budgetCategoryId: foreignEnvelope.id }, TODAY),
+    ).rejects.toThrow("That envelope does not exist.");
   });
 
   it("names a duplicate schedule rather than leaking the failed statement", async () => {
@@ -150,9 +181,23 @@ describeDb("schedule mutations", () => {
   });
 
   it("posts one linked transaction and advances the cursor", async () => {
+    await seedBudget(userId, {
+      preset: "minimal",
+      startMonth: "2026-08-01",
+      todayKey: TODAY,
+    });
+    const [envelope] = await db
+      .select({ id: financeBudgetCategories.id })
+      .from(financeBudgetCategories)
+      .where(eq(financeBudgetCategories.userId, userId))
+      .limit(1);
     const id = await createSchedule(
       userId,
-      { name: "Netflix", conditions: monthly(payeeId, accountId) },
+      {
+        name: "Netflix",
+        conditions: monthly(payeeId, accountId),
+        budgetCategoryId: envelope.id,
+      },
       TODAY,
     );
     const transactionId = await postScheduleNow(userId, id);
@@ -161,6 +206,7 @@ describeDb("schedule mutations", () => {
       .from(financeTransactions)
       .where(eq(financeTransactions.id, transactionId));
     expect(row?.scheduleId).toBe(id);
+    expect(row?.budgetCategoryId).toBe(envelope.id);
     expect(row?.payeeId).toBe(payeeId);
     expect(row?.description).toBe("Netflix");
     expect(row?.transactionDate).toBe("2026-09-15");
@@ -200,9 +246,22 @@ describeDb("schedule mutations", () => {
   });
 
   it("links a matching imported charge and advances the schedule", async () => {
+    await seedBudget(userId, {
+      preset: "minimal",
+      startMonth: "2026-08-01",
+      todayKey: TODAY,
+    });
+    const envelopeRows = await db
+      .select({ id: financeBudgetCategories.id })
+      .from(financeBudgetCategories)
+      .where(eq(financeBudgetCategories.userId, userId));
     const id = await createSchedule(
       userId,
-      { name: "Netflix", conditions: monthly(payeeId, accountId) },
+      {
+        name: "Netflix",
+        conditions: monthly(payeeId, accountId),
+        budgetCategoryId: envelopeRows[0].id,
+      },
       TODAY,
     );
     await db.insert(financeTransactions).values({
@@ -220,6 +279,47 @@ describeDb("schedule mutations", () => {
       .from(financeTransactions)
       .where(eq(financeTransactions.userId, userId));
     expect(row?.scheduleId).toBe(id);
+    expect(row?.budgetCategoryId).toBe(envelopeRows[0].id);
     expect((await getSchedule(userId, id))?.nextDate).toBe("2026-10-15");
+  });
+
+  it("keeps a transaction's explicit envelope when schedule matching links it", async () => {
+    await seedBudget(userId, {
+      preset: "minimal",
+      startMonth: "2026-08-01",
+      todayKey: TODAY,
+    });
+    const envelopeRows = await db
+      .select({ id: financeBudgetCategories.id })
+      .from(financeBudgetCategories)
+      .where(eq(financeBudgetCategories.userId, userId));
+    await createSchedule(
+      userId,
+      {
+        name: "Netflix",
+        conditions: monthly(payeeId, accountId),
+        budgetCategoryId: envelopeRows[0].id,
+      },
+      TODAY,
+    );
+    const [transaction] = await db
+      .insert(financeTransactions)
+      .values({
+        userId,
+        accountId,
+        transactionDate: "2026-09-14",
+        description: "NETFLIX",
+        payeeId,
+        amount: "-15.99",
+        budgetCategoryId: envelopeRows[1].id,
+      })
+      .returning({ id: financeTransactions.id });
+
+    expect((await findMatches(userId)).linked).toBe(1);
+    const [row] = await db
+      .select({ budgetCategoryId: financeTransactions.budgetCategoryId })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.id, transaction.id));
+    expect(row?.budgetCategoryId).toBe(envelopeRows[1].id);
   });
 });

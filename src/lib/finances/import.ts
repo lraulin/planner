@@ -45,7 +45,7 @@ import {
   type ParsedFinanceCsv,
   type ParsedStatement,
 } from "./types";
-import { findMatches } from "./schedules/mutations";
+import { finalizeTransactionIngestion } from "./ingestion";
 
 /**
  * Writing parsed CSV or statement rows into the register.
@@ -482,7 +482,7 @@ export async function importFinanceCsvFiles({
   }
 
   if (created > 0) {
-    await findMatches(userId);
+    await finalizeTransactionIngestion(userId);
   }
 
   return {

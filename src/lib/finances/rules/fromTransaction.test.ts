@@ -19,7 +19,7 @@ function transaction(patch: Partial<TransactionListRow> = {}): TransactionListRo
     amountCents: -2000,
     sourceCategory: "",
     category: null,
-    derivedCategory: "Software & AI",
+    derivedCategory: "Software & Development",
     derivedFlow: "spend",
     flowOverride: null,
     excludeFromBaseline: false,
@@ -50,7 +50,9 @@ describe("create rule from transaction", () => {
       op: "is",
       value: "11111111-1111-4111-8111-111111111111",
     });
-    expect(draft.actions).toEqual([{ kind: "category", value: "Software & AI" }]);
+    expect(draft.actions).toEqual([
+      { kind: "category", value: "Software & Development" },
+    ]);
   });
 
   it("falls back to an escaped exact normalized merchant", () => {

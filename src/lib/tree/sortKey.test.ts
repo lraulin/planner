@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { after, before, between, first, sequence } from "./sortKey";
+import { after, before, between, compare, first, sequence } from "./sortKey";
 
 describe("sortKey", () => {
+  it("compares uppercase before lowercase instead of using locale collation", () => {
+    expect(compare("V", "l")).toBeLessThan(0);
+    expect(compare("l", "V")).toBeGreaterThan(0);
+  });
   it("generates a key for an empty list", () => {
     expect(first()).toBe("V");
   });

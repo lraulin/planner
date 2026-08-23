@@ -10,6 +10,7 @@ import { db } from "@/db";
 import { isUniqueViolation } from "@/lib/db/constraints";
 import {
   financeAccounts,
+  financeBudgetCategories,
   financePayees,
   financeSchedules,
   financeTransactions,
@@ -69,6 +70,24 @@ async function requireOwnedPayees(
   return new Map(rows.map((row) => [row.id, row.name]));
 }
 
+async function requireOwnedBudgetCategory(
+  userId: string,
+  categoryId: string | null | undefined,
+): Promise<void> {
+  if (!categoryId) return;
+  const [row] = await db
+    .select({ id: financeBudgetCategories.id })
+    .from(financeBudgetCategories)
+    .where(
+      and(
+        eq(financeBudgetCategories.id, categoryId),
+        eq(financeBudgetCategories.userId, userId),
+      ),
+    )
+    .limit(1);
+  if (!row) throw new Error("That envelope does not exist.");
+}
+
 async function nextSortKey(userId: string): Promise<string> {
   const [last] = await db
     .select({ sortKey: financeSchedules.sortKey })
@@ -92,6 +111,7 @@ export type ScheduleDraft = {
   completed?: boolean;
   customUpcomingLength?: string | null;
   sourceBillId?: string | null;
+  budgetCategoryId?: string | null;
 };
 
 async function insertSchedule(
@@ -102,6 +122,7 @@ async function insertSchedule(
   const conditions = parseConditions(draft.conditions);
   if (!conditions) throw new Error("Those conditions are not a valid schedule.");
   await requireOwnedPayees(userId, payeeValues(extractScheduleConds(conditions).payee));
+  await requireOwnedBudgetCategory(userId, draft.budgetCategoryId);
   const nextDate = initialNextDate(configOf(conditions), todayKey);
   const [row] = await db
     .insert(financeSchedules)
@@ -114,6 +135,7 @@ async function insertSchedule(
       nextDate,
       customUpcomingLength: draft.customUpcomingLength ?? null,
       sourceBillId: draft.sourceBillId ?? null,
+      budgetCategoryId: draft.budgetCategoryId ?? null,
       sortKey: await nextSortKey(userId),
     })
     .returning({ id: financeSchedules.id });
@@ -146,6 +168,7 @@ export type SchedulePatch = {
   postsTransaction?: boolean;
   completed?: boolean;
   customUpcomingLength?: string | null;
+  budgetCategoryId?: string | null;
 };
 
 export async function updateSchedule(
@@ -164,6 +187,7 @@ export async function updateSchedule(
   const accountId = extractScheduleConds(conditions).account?.value;
   if (accountId) await requireOwnedAccount(userId, accountId);
   await requireOwnedPayees(userId, payeeValues(extractScheduleConds(conditions).payee));
+  await requireOwnedBudgetCategory(userId, patch.budgetCategoryId);
 
   const nextDate =
     patch.conditions !== undefined
@@ -181,6 +205,10 @@ export async function updateSchedule(
         patch.customUpcomingLength === undefined
           ? existing.customUpcomingLength
           : patch.customUpcomingLength,
+      budgetCategoryId:
+        patch.budgetCategoryId === undefined
+          ? existing.budgetCategoryId
+          : patch.budgetCategoryId,
       nextDate,
       updatedAt: new Date(),
     })
@@ -257,6 +285,7 @@ export async function postScheduleNow(
       description,
       payeeId,
       amount: centsToNumericString(amountCents),
+      budgetCategoryId: existing.budgetCategoryId,
       scheduleId: existing.id,
     })
     .returning({ id: financeTransactions.id });
@@ -282,6 +311,7 @@ export async function linkTransaction(
     .select({
       id: financeTransactions.id,
       transactionDate: financeTransactions.transactionDate,
+      budgetCategoryId: financeTransactions.budgetCategoryId,
     })
     .from(financeTransactions)
     .where(
@@ -295,7 +325,11 @@ export async function linkTransaction(
 
   const [updated] = await db
     .update(financeTransactions)
-    .set({ scheduleId, updatedAt: new Date() })
+    .set({
+      scheduleId,
+      budgetCategoryId: row.budgetCategoryId ?? existing.budgetCategoryId,
+      updatedAt: new Date(),
+    })
     .where(
       and(
         eq(financeTransactions.id, transactionId),

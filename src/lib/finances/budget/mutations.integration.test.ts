@@ -17,8 +17,11 @@ import {
   applyBudgetTemplates,
   autoMapBudgetCategories,
   createBudgetCategory,
+  createCategoryGroup,
   deleteBudgetCategory,
   deleteCategoryGroup,
+  moveBudgetStructureItem,
+  moveBudgetStructureItemIntoGroup,
   performBudgetOperation,
   renameCategoryGroup,
   saveEnvelopeTemplates,
@@ -30,6 +33,7 @@ import {
 import { updateAccount } from "../mutations";
 import { loadBudget } from "./queries";
 import { categoryMonth, findMonth } from "./envelope";
+import { budgetChildren } from "./hierarchy";
 
 const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
@@ -554,6 +558,96 @@ describeDb("budget mutations", () => {
     expect(bills?.templates).toHaveLength(1);
     expect(bills?.templates[0]).toMatchObject({ type: "schedule" });
   });
+
+  it("nests and reorders groups and envelopes without changing their money", async () => {
+    await seedAccounts(userId);
+    await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
+    const before = await loadBudget(userId, MONTH);
+    const spending = before.groups.find((group) => group.name === "Spending")!;
+    const income = before.groups.find((group) => group.isIncome)!;
+    const billsEnvelope = before.categories.find(
+      (category) => category.name === "Bills",
+    )!;
+
+    const billsGroupId = await createCategoryGroup(userId, {
+      name: "Bill groups",
+      isIncome: false,
+      parentGroupId: spending.id,
+    });
+    const utilitiesId = await createCategoryGroup(userId, {
+      name: "Utilities",
+      isIncome: false,
+      parentGroupId: billsGroupId,
+    });
+    await moveBudgetStructureItemIntoGroup(
+      userId,
+      { kind: "category", id: billsEnvelope.id },
+      utilitiesId,
+    );
+
+    const nested = await loadBudget(userId, MONTH);
+    expect(
+      nested.groups.find((group) => group.id === billsGroupId)?.parentGroupId,
+    ).toBe(spending.id);
+    expect(nested.groups.find((group) => group.id === utilitiesId)?.parentGroupId).toBe(
+      billsGroupId,
+    );
+    expect(nested.categories.find((row) => row.id === billsEnvelope.id)?.groupId).toBe(
+      utilitiesId,
+    );
+    expect(findMonth(nested.months, MONTH)?.readyToAssignCents).toBe(
+      findMonth(before.months, MONTH)?.readyToAssignCents,
+    );
+
+    await expect(deleteCategoryGroup(userId, billsGroupId)).rejects.toThrow(
+      "Move everything out",
+    );
+    await expect(
+      moveBudgetStructureItem(
+        userId,
+        { kind: "group", id: billsGroupId },
+        { kind: "group", id: utilitiesId },
+        "inside",
+      ),
+    ).rejects.toThrow("cannot move");
+    await expect(
+      moveBudgetStructureItem(
+        userId,
+        { kind: "category", id: billsEnvelope.id },
+        { kind: "group", id: income.id },
+        "inside",
+      ),
+    ).rejects.toThrow("cannot move");
+
+    await moveBudgetStructureItemIntoGroup(
+      userId,
+      { kind: "category", id: billsEnvelope.id },
+      spending.id,
+    );
+    await deleteCategoryGroup(userId, utilitiesId);
+    await deleteCategoryGroup(userId, billsGroupId);
+    const flattened = await loadBudget(userId, MONTH);
+    expect(flattened.groups.some((row) => row.id === billsGroupId)).toBe(false);
+
+    const discretionary = flattened.categories.find(
+      (category) => category.name === "Discretionary",
+    )!;
+    await moveBudgetStructureItem(
+      userId,
+      { kind: "category", id: billsEnvelope.id },
+      { kind: "category", id: discretionary.id },
+      "before",
+    );
+    const reordered = await loadBudget(userId, MONTH);
+    const spendingOrder = budgetChildren(
+      reordered.groups,
+      reordered.categories,
+      spending.id,
+    ).map((child) => child.id);
+    expect(spendingOrder.indexOf(billsEnvelope.id)).toBe(
+      spendingOrder.indexOf(discretionary.id) - 1,
+    );
+  });
 });
 
 describeDb("budget mutations — cross-user isolation", () => {
@@ -651,6 +745,28 @@ describeDb("budget mutations — cross-user isolation", () => {
       createBudgetCategory(intruderId, { groupId: owned.groupId, name: "Smuggled" }),
     ).rejects.toThrow(/does not exist/);
     await expect(
+      createCategoryGroup(intruderId, {
+        name: "Smuggled",
+        isIncome: false,
+        parentGroupId: owned.groupId,
+      }),
+    ).rejects.toThrow(/does not exist/);
+    await expect(
+      moveBudgetStructureItemIntoGroup(
+        intruderId,
+        { kind: "category", id: owned.categoryId },
+        owned.groupId,
+      ),
+    ).rejects.toThrow(/does not exist/);
+    await expect(
+      moveBudgetStructureItem(
+        intruderId,
+        { kind: "category", id: owned.categoryId },
+        { kind: "group", id: owned.groupId },
+        "inside",
+      ),
+    ).rejects.toThrow(/does not exist/);
+    await expect(
       setTransactionBudgetCategory(intruderId, owned.transactionId, owned.categoryId),
     ).rejects.toThrow(/does not exist/);
     await expect(
@@ -717,7 +833,7 @@ describeDb("budget mutations — cross-user isolation", () => {
       todayKey: TODAY,
     });
 
-    expect((await envelopes(intruderId)).size).toBe(21);
+    expect((await envelopes(intruderId)).size).toBe(23);
     expect((await envelopes(ownerId)).size).toBe(5);
   });
 });

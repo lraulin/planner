@@ -13,8 +13,24 @@ import {
 import type { BudgetCategoryRow, BudgetGroupRow } from "./queries";
 
 const GROUPS: BudgetGroupRow[] = [
-  { id: "income", name: "Income", isIncome: true, sortKey: "a", hidden: false },
-  { id: "spending", name: "Spending", isIncome: false, sortKey: "b", hidden: false },
+  {
+    id: "income",
+    parentGroupId: null,
+    name: "Income",
+    isIncome: true,
+    sortKey: "a",
+    hidden: false,
+    sourceCommitmentKey: null,
+  },
+  {
+    id: "spending",
+    parentGroupId: null,
+    name: "Spending",
+    isIncome: false,
+    sortKey: "b",
+    hidden: false,
+    sourceCommitmentKey: null,
+  },
 ];
 
 function category(
@@ -26,6 +42,7 @@ function category(
   return {
     id,
     groupId,
+    sourceBillId: null,
     name: id,
     sortKey,
     hidden,

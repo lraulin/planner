@@ -1,19 +1,23 @@
 /**
  * The Budget grid's rows and totals, derived without React.
  *
- * A group header carries its own totals here rather than in the component, so the figure on
- * a collapsed group and the figures under an expanded one cannot come from two different
- * summations — the failure `2026-08-18-2058-commitments-clarity` was written about.
+ * Envelope rows carry all money facts. Group membership is derived here and the grid folds
+ * those same rows recursively, so a collapsed total and its expanded descendants cannot
+ * come from two different sources — the failure
+ * `2026-08-18-2058-commitments-clarity` was written about.
  */
 
 import type { GridRow } from "@/lib/tree/slice";
+import { compare as compareSortKeys } from "@/lib/tree/sortKey";
 
 import { categoryMonth, type BudgetMonth } from "./envelope";
 import type { BudgetCategoryRow, BudgetGroupRow } from "./queries";
+import { nestedBudgetGridRows } from "./hierarchy";
 
 export type BudgetRow = {
   id: string;
   groupId: string;
+  sortKey: string;
   name: string;
   isIncome: boolean;
   hidden: boolean;
@@ -68,13 +72,14 @@ export function budgetRows(
   return [...categories]
     .sort((left, right) => {
       const byGroup = (order.get(left.groupId) ?? 0) - (order.get(right.groupId) ?? 0);
-      return byGroup !== 0 ? byGroup : left.sortKey.localeCompare(right.sortKey);
+      return byGroup !== 0 ? byGroup : compareSortKeys(left.sortKey, right.sortKey);
     })
     .map((category) => {
       const cell = categoryMonth(month, category.id);
       return {
         id: category.id,
         groupId: category.groupId,
+        sortKey: category.sortKey,
         name: category.name,
         isIncome: incomeGroups.has(category.groupId),
         hidden: category.hidden,
@@ -101,28 +106,7 @@ export function budgetGridRows(
   rows: readonly BudgetRow[],
   options: { showHidden: boolean } = { showHidden: false },
 ): GridRow<BudgetRow>[] {
-  const grid: GridRow<BudgetRow>[] = [];
-
-  for (const group of groups) {
-    const members = rows.filter(
-      (row) => row.groupId === group.id && (options.showHidden || !row.hidden),
-    );
-    if (members.length === 0) continue;
-
-    grid.push({
-      kind: "group",
-      id: group.id,
-      label: group.name,
-      count: members.length,
-      depth: 0,
-      collapsed: false,
-    });
-    for (const row of members) {
-      grid.push({ kind: "node", id: row.id, node: row, depth: 1 });
-    }
-  }
-
-  return grid;
+  return nestedBudgetGridRows(groups, rows, rows, options);
 }
 
 /**

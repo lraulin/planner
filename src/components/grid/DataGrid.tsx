@@ -341,7 +341,10 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
    * it would. Omit it and headers stay label-plus-count, which is every grid except the
    * ones that already have a totals footer of their own.
    */
-  groupSummary?: (nodes: TRow[]) => ReactNode;
+  groupSummary?: (
+    nodes: TRow[],
+    group: Extract<GridRow<TRow>, { kind: "group" }>,
+  ) => ReactNode;
   /**
    * The node ids actually on screen, in screen order — after column filters, search, grouping
    * and sort.
@@ -972,7 +975,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
                         compact={compact}
                         summary={
                           groupSummary && membersByGroup
-                            ? groupSummary(membersByGroup.get(row.id) ?? [])
+                            ? groupSummary(membersByGroup.get(row.id) ?? [], row)
                             : undefined
                         }
                       />

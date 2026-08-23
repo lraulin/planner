@@ -168,27 +168,48 @@ export const STARTER_RULES: readonly StarterRule[] = [
     category: "Health",
   },
 
-  // — Software, AI and developer tools ——————————————————————————————————————
+  // — AI, digital utility and developer tools ————————————————————————————————
   {
     id: "anthropic",
     match: /^(ANTHROPIC|CLAUDE)/,
-    category: "Software & AI",
+    category: "AI",
     merchant: "Anthropic",
   },
-  { id: "xai", match: /^(GROK|XAI)/, category: "Software & AI", merchant: "xAI" },
-  { id: "cursor", match: /^CURSOR/, category: "Software & AI", merchant: "Cursor" },
-  { id: "github", match: /^GITHUB/, category: "Software & AI", merchant: "GitHub" },
+  { id: "xai", match: /^(GROK|XAI)/, category: "AI", merchant: "xAI" },
+  { id: "openai", match: /^OPENAI/, category: "AI", merchant: "OpenAI" },
+  {
+    id: "productivity-security",
+    match: /^(DROPBOX|1PASSWORD|SANEBOX|GOOGLE (ONE|STORAGE))/,
+    category: "Productivity & Security",
+  },
+  {
+    id: "cursor",
+    match: /^CURSOR/,
+    category: "Software & Development",
+    merchant: "Cursor",
+  },
+  {
+    id: "github",
+    match: /^GITHUB/,
+    category: "Software & Development",
+    merchant: "GitHub",
+  },
   {
     id: "paddle",
     match: /^PADDLE/,
-    category: "Software & AI",
+    category: "Software & Development",
     merchant: "Paddle.com Market Limited",
   },
-  { id: "apple", match: /^APPLE/, category: "Software & AI", merchant: "Apple" },
+  {
+    id: "apple",
+    match: /^APPLE/,
+    category: "Software & Development",
+    merchant: "Apple",
+  },
   {
     id: "software-vendors",
-    match: /^(OPENAI|MICROSOFT|ADOBE|GOOGLE (ONE|STORAGE)|DROPBOX|JETBRAINS|1PASSWORD)/,
-    category: "Software & AI",
+    match: /^(MICROSOFT|ADOBE|JETBRAINS)/,
+    category: "Software & Development",
   },
 
   // — Games ————————————————————————————————————————————————————————————————

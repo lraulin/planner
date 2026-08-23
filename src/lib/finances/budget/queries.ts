@@ -47,15 +47,18 @@ export const AVERAGE_LOOKBACK_MONTHS = 3;
 
 export type BudgetGroupRow = {
   id: string;
+  parentGroupId: string | null;
   name: string;
   isIncome: boolean;
   sortKey: string;
   hidden: boolean;
+  sourceCommitmentKey: string | null;
 };
 
 export type BudgetCategoryRow = {
   id: string;
   groupId: string;
+  sourceBillId: string | null;
   name: string;
   sortKey: string;
   hidden: boolean;
@@ -64,6 +67,42 @@ export type BudgetCategoryRow = {
   sourceCategories: string[];
   templates: Template[];
 };
+
+export type BudgetEnvelopeOption = {
+  id: string;
+  label: string;
+};
+
+/** Small schedule-editor read; labels include the complete group path for nested budgets. */
+export async function listBudgetEnvelopeOptions(
+  userId: string,
+): Promise<BudgetEnvelopeOption[]> {
+  const [groups, categories] = await Promise.all([
+    groupsOf(userId),
+    categoriesOf(userId),
+  ]);
+  const groupById = new Map(groups.map((group) => [group.id, group]));
+
+  function groupPath(groupId: string): string {
+    const names: string[] = [];
+    const seen = new Set<string>();
+    let current = groupById.get(groupId);
+    while (current) {
+      if (seen.has(current.id)) throw new Error("Budget groups contain a cycle.");
+      seen.add(current.id);
+      names.unshift(current.name);
+      current = current.parentGroupId
+        ? groupById.get(current.parentGroupId)
+        : undefined;
+    }
+    return names.join(" › ");
+  }
+
+  return categories.map((category) => ({
+    id: category.id,
+    label: `${groupPath(category.groupId)} › ${category.name}`,
+  }));
+}
 
 export type BudgetData = {
   /** False until setup has run. The page shows the preset chooser and nothing else. */
@@ -113,10 +152,12 @@ function groupsOf(userId: string) {
   return db
     .select({
       id: financeCategoryGroups.id,
+      parentGroupId: financeCategoryGroups.parentGroupId,
       name: financeCategoryGroups.name,
       isIncome: financeCategoryGroups.isIncome,
       sortKey: financeCategoryGroups.sortKey,
       hidden: financeCategoryGroups.hidden,
+      sourceCommitmentKey: financeCategoryGroups.sourceCommitmentKey,
     })
     .from(financeCategoryGroups)
     .where(eq(financeCategoryGroups.userId, userId))
@@ -128,6 +169,7 @@ function categoriesOf(userId: string) {
     .select({
       id: financeBudgetCategories.id,
       groupId: financeBudgetCategories.groupId,
+      sourceBillId: financeBudgetCategories.sourceBillId,
       name: financeBudgetCategories.name,
       sortKey: financeBudgetCategories.sortKey,
       hidden: financeBudgetCategories.hidden,

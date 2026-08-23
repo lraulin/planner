@@ -1,13 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import type { GridRow } from "@/lib/tree/slice";
 import {
   completeScheduleAction,
   deleteScheduleAction,
   discoverSchedulesAction,
   getScheduleAction,
-  importSchedulesFromBillsAction,
   listSchedulesAction,
   postScheduleNowAction,
   skipScheduleAction,
@@ -27,6 +27,7 @@ import { isTypingTarget } from "@/lib/keyboard";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { useToday } from "@/components/grid/useToday";
 import type { FinanceAccountRow } from "@/lib/finances/types";
+import type { BudgetEnvelopeOption } from "@/lib/finances/budget/queries";
 import type { ScheduleListRow } from "@/lib/finances/schedules/queries";
 import type { ScheduleRecord } from "@/lib/finances/schedules/queries";
 import type { DiscoverProposal } from "@/lib/finances/schedules/discover";
@@ -52,18 +53,20 @@ export function SchedulesView({
   initialRows,
   accounts,
   payees,
+  envelopes,
 }: {
   initialRows: ScheduleListRow[];
   accounts: FinanceAccountRow[];
   payees: { id: string; name: string }[];
+  envelopes: BudgetEnvelopeOption[];
 }) {
+  const router = useRouter();
   const today = useToday();
   const [rows, setRows] = useState(initialRows);
   const [seenServerRows, setSeenServerRows] = useState(initialRows);
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ScheduleListRow | null>(null);
-  const [importSummary, setImportSummary] = useState<string | null>(null);
   const [discover, setDiscover] = useState<DiscoverProposal[] | null>(null);
   const [openRecord, setOpenRecord] = useState<ScheduleRecord | null>(null);
   const [, startTransition] = useTransition();
@@ -179,27 +182,6 @@ export function SchedulesView({
     [refresh],
   );
 
-  const importBills = useCallback(() => {
-    setError(null);
-    startTransition(async () => {
-      if (!today) return;
-      const result = await importSchedulesFromBillsAction(today);
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-      const summary = result.data;
-      if (!summary) {
-        refresh();
-        return;
-      }
-      setImportSummary(
-        `Imported ${summary.created}. Already present ${summary.skippedExisting}. Inactive ${summary.skippedInactive}.`,
-      );
-      refresh();
-    });
-  }, [today, refresh]);
-
   const openDiscover = useCallback(() => {
     setError(null);
     startTransition(async () => {
@@ -230,7 +212,7 @@ export function SchedulesView({
             section: "Schedules",
             icon: "convert",
             keywords: "import bills commitments seed",
-            run: importBills,
+            run: () => router.push("/finances/budget?import=commitments"),
           },
           {
             id: "tools.discover-schedules",
@@ -284,7 +266,7 @@ export function SchedulesView({
         ],
       });
     },
-    [rows, openDrawer, requestDelete, importBills, openDiscover, runOnRow],
+    [rows, openDrawer, requestDelete, openDiscover, runOnRow, router],
   );
 
   const commandCapabilities = useMemo(
@@ -316,11 +298,6 @@ export function SchedulesView({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
-      {importSummary ? (
-        <p className="border-b border-rule px-3 py-1.5 text-[0.8125rem] text-ink-muted">
-          {importSummary}
-        </p>
-      ) : null}
       <GridToolbar
         grid={gridState}
         gridLabel="Schedules"
@@ -378,6 +355,7 @@ export function SchedulesView({
           creating={creating}
           accounts={accounts}
           payees={payees}
+          envelopes={envelopes}
           onClose={closeDrawer}
           onChanged={refresh}
         />
