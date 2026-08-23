@@ -203,6 +203,17 @@ export function FinancesView({
   const multi = useMultiSelect(order, null);
   const { selectedId, selectedIds, select, move } = multi;
 
+  useEffect(() => {
+    if (!today) return;
+    startTransition(async () => {
+      const preview = await upcomingOccurrencesAction(
+        today,
+        scheduleSettings.upcomingLength,
+      );
+      if (preview.ok) setUpcoming(preview.data);
+    });
+  }, [today, scheduleSettings.upcomingLength]);
+
   const refresh = useCallback(() => {
     startTransition(async () => {
       const [transactions, accountRows] = await Promise.all([

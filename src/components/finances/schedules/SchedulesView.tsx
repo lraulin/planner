@@ -99,15 +99,17 @@ export function SchedulesView({
   const { selectedId, selectedIds, select, move } = multi;
 
   const refresh = useCallback(() => {
+    if (!today) return;
     startTransition(async () => {
-      const result = await listSchedulesAction(
-        today ?? "2026-01-01",
-        DEFAULT_UPCOMING_LENGTH,
-      );
+      const result = await listSchedulesAction(today, DEFAULT_UPCOMING_LENGTH);
       if (result.ok) setRows(result.data);
       else setError(result.error);
     });
   }, [today]);
+
+  useEffect(() => {
+    if (today) refresh();
+  }, [today, refresh]);
 
   const creating = openId === NEW_SCHEDULE_ID;
 
@@ -178,7 +180,8 @@ export function SchedulesView({
   const importBills = useCallback(() => {
     setError(null);
     startTransition(async () => {
-      const result = await importSchedulesFromBillsAction(today ?? "2026-01-01");
+      if (!today) return;
+      const result = await importSchedulesFromBillsAction(today);
       if (!result.ok) {
         setError(result.error);
         return;
@@ -311,13 +314,18 @@ export function SchedulesView({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
+      {importSummary ? (
+        <p className="border-b border-rule px-3 py-1.5 text-[0.8125rem] text-ink-muted">
+          {importSummary}
+        </p>
+      ) : null}
       <GridToolbar
         grid={gridState}
         gridLabel="Schedules"
         allColumns={scheduleColumns}
         distinctValues={distinctValues}
         counts={counts}
-        error={error ?? importSummary}
+        error={error}
         views={views}
         commandCapabilities={commandCapabilities}
       />

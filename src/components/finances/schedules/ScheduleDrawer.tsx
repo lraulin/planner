@@ -26,6 +26,10 @@ import {
   type RecurPattern,
 } from "@/lib/finances/schedules/recur";
 import type { ScheduleRecord } from "@/lib/finances/schedules/queries";
+import {
+  UPCOMING_LENGTH_LABELS,
+  UPCOMING_LENGTH_PRESETS,
+} from "@/lib/finances/schedules/status";
 
 export const NEW_SCHEDULE_ID = "new";
 
@@ -49,6 +53,7 @@ type Draft = {
   endOccurrences: string;
   endDate: string;
   postsTransaction: boolean;
+  customUpcomingLength: string | null;
 };
 
 function dollarsFromCents(cents: number): string {
@@ -83,6 +88,7 @@ function draftOf(record: ScheduleRecord | null, today: string): Draft {
       endOccurrences: "12",
       endDate: today,
       postsTransaction: false,
+      customUpcomingLength: null,
     };
   }
   const conds = extractScheduleConds(record.conditions);
@@ -117,6 +123,7 @@ function draftOf(record: ScheduleRecord | null, today: string): Draft {
     endOccurrences: String(config?.endOccurrences ?? 12),
     endDate: config?.endDate ?? today,
     postsTransaction: record.postsTransaction,
+    customUpcomingLength: record.customUpcomingLength,
   };
 }
 
@@ -286,6 +293,7 @@ function ScheduleForm({
               name: draft.name,
               conditions: built,
               postsTransaction: draft.postsTransaction,
+              customUpcomingLength: draft.customUpcomingLength,
             },
             today,
           )
@@ -295,6 +303,7 @@ function ScheduleForm({
               name: draft.name,
               conditions: built,
               postsTransaction: draft.postsTransaction,
+              customUpcomingLength: draft.customUpcomingLength,
             },
             today,
           );
@@ -460,6 +469,17 @@ function ScheduleForm({
                   checked={draft.postsTransaction}
                   hint="Stored and shown. Only Post now writes a row — nothing posts unattended."
                   onChange={(checked) => patch("postsTransaction", checked)}
+                />
+                <SelectField
+                  label="Upcoming horizon"
+                  value={draft.customUpcomingLength}
+                  allowEmpty
+                  emptyLabel="Use register default"
+                  options={UPCOMING_LENGTH_PRESETS.map((value) => ({
+                    value,
+                    label: UPCOMING_LENGTH_LABELS[value],
+                  }))}
+                  onChange={(value) => patch("customUpcomingLength", value)}
                 />
               </FieldGrid>
               <p className="mt-3 text-[0.8125rem] text-ink-muted">Next three dates</p>
