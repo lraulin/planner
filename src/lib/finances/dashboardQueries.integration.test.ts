@@ -214,16 +214,17 @@ describeDb("loadDashboard", () => {
     const userId = await makeUser();
     await seed(userId);
     await reclassifyTransactions(userId);
+    const alarmPayee = (await listPayees(userId)).find(
+      (payee) => payee.name === "SimpliSafe",
+    );
+    if (!alarmPayee) throw new Error("SimpliSafe payee was not seeded");
     await upsertRecurringBill(userId, {
       name: "SimpliSafe",
+      payeeIds: [alarmPayee.id],
       cadence: { unit: "month", n: 1 },
       expectedCents: 3_471,
       dueDay: 9,
     });
-    const alarmPayee = (await listPayees(userId)).find(
-      (payee) => payee.claim?.name === "SimpliSafe",
-    );
-    if (!alarmPayee) throw new Error("SimpliSafe payee was not claimed");
     await renamePayee(userId, alarmPayee.id, "Home Alarm");
 
     const data = await loadDashboard(userId);
