@@ -19,6 +19,16 @@ export type AliasRow = { alias: string; payeeId: string };
 /** Alias → payee id. Built once per pass. */
 export type PayeeIndex = ReadonlyMap<string, string>;
 
+/** Whether PayPal's bank description omits the merchant that its statement supplies. */
+export function isOpaquePaypalDescription(description: string): boolean {
+  const fromBank = normalizeMerchant(description);
+  const paypalRail = /\bPAYPAL\b|^PP\*/i.test(description);
+  return (
+    paypalRail &&
+    (fromBank === "" || fromBank.length < 3 || /^PAYPAL(?:\b|\s)/.test(fromBank))
+  );
+}
+
 export function payeeIndex(rows: readonly AliasRow[]): PayeeIndex {
   const byAlias = new Map<string, string>();
   for (const row of rows) {
@@ -48,12 +58,8 @@ export function aliasFor(
   resolvedCounterparty?: string | null,
 ): string {
   const fromBank = normalizeMerchant(description);
-  const paypalRail = /\bPAYPAL\b|^PP\*/i.test(description);
-  const opaquePaypal =
-    paypalRail &&
-    (fromBank === "" || fromBank.length < 3 || /^PAYPAL(?:\b|\s)/.test(fromBank));
 
-  if (opaquePaypal && resolvedCounterparty) {
+  if (isOpaquePaypalDescription(description) && resolvedCounterparty) {
     const named = normalizeMerchant(resolvedCounterparty);
     if (named !== "") return named;
   }

@@ -12,6 +12,7 @@ import {
 } from "@/db/schema";
 import { effectiveMerchant } from "../analytics";
 import { numericStringToCents } from "../money";
+import { isOpaquePaypalDescription } from "./resolve";
 import {
   planPayeeCutover,
   type CutoverPayee,
@@ -122,6 +123,7 @@ async function loadCutoverInput(
       payeeId: row.payeeId,
       payeeName: row.payeeId ? (payeeNameById.get(row.payeeId) ?? null) : null,
       amountCents: numericStringToCents(row.amount) ?? 0,
+      isOpaquePaypal: isOpaquePaypalDescription(row.description),
     })),
   };
 }

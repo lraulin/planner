@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { aliasFor, payeeForDescription, payeeIndex } from "./resolve";
+import {
+  aliasFor,
+  isOpaquePaypalDescription,
+  payeeForDescription,
+  payeeIndex,
+} from "./resolve";
 
 describe("payeeIndex", () => {
   it("maps each alias to its payee", () => {
@@ -68,5 +73,16 @@ describe("payeeForDescription", () => {
     expect(payeeForDescription("WM SUPERCENTER #1981", index, "PAYPAL *")).toBe(
       "walmart",
     );
+  });
+});
+
+describe("isOpaquePaypalDescription", () => {
+  it("distinguishes PayPal rails needing statement identity from named merchants", () => {
+    expect(isOpaquePaypalDescription("PAYPAL *P")).toBe(true);
+    expect(
+      isOpaquePaypalDescription("Withdrawal from PAYPAL to LEE RAULIN INST XFER"),
+    ).toBe(true);
+    expect(isOpaquePaypalDescription("PAYPAL *SANEBOX INC")).toBe(false);
+    expect(isOpaquePaypalDescription("P")).toBe(false);
   });
 });

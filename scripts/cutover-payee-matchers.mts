@@ -16,8 +16,8 @@ function requestedUserId(args: readonly string[]): string | null {
   return index >= 0 ? (args[index + 1] ?? null) : null;
 }
 
-function summary(plan: PayeeCutoverPlan) {
-  const parityDifferences = plan.parityDifferences.map((difference) => {
+function summarizeParity(differences: PayeeCutoverPlan["parityDifferences"]) {
+  return differences.map((difference) => {
     const grouped = (rows: typeof difference.legacyOnly) => {
       const byMerchant = new Map<
         string,
@@ -49,6 +49,9 @@ function summary(plan: PayeeCutoverPlan) {
       payeeOnly: grouped(difference.payeeOnly),
     };
   });
+}
+
+function summary(plan: PayeeCutoverPlan) {
   return {
     canApply: plan.canApply,
     isIdempotent: plan.isIdempotent,
@@ -59,7 +62,8 @@ function summary(plan: PayeeCutoverPlan) {
     conflicts: plan.conflicts,
     malformedSchedules: plan.malformedSchedules,
     unresolvedValues: plan.unresolvedValues,
-    parityDifferences,
+    acceptedParityCorrections: summarizeParity(plan.acceptedParityCorrections),
+    blockingParityDifferences: summarizeParity(plan.blockingParityDifferences),
   };
 }
 

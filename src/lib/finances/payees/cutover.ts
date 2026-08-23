@@ -35,6 +35,7 @@ export type ParityTransaction = {
   payeeId: string | null;
   payeeName: string | null;
   amountCents: number;
+  isOpaquePaypal: boolean;
 };
 
 export type PayeeRef =
@@ -82,6 +83,8 @@ export type PayeeCutoverPlan = {
   malformedSchedules: { id: string; name: string }[];
   unresolvedValues: { owner: string; value: string }[];
   parityDifferences: ParityDifference[];
+  acceptedParityCorrections: ParityDifference[];
+  blockingParityDifferences: ParityDifference[];
   canApply: boolean;
   isIdempotent: boolean;
 };
@@ -124,6 +127,16 @@ function sortedUnique(values: readonly string[]): string[] {
 function conditionValues(condition: ScheduleCondition): string[] {
   if (condition.field !== "payee") return [];
   return condition.op === "is" ? [condition.value] : condition.value;
+}
+
+function isAcceptedParityCorrection(difference: ParityDifference): boolean {
+  return (
+    difference.legacyOnly.length === 0 &&
+    difference.payeeOnly.length > 0 &&
+    difference.payeeOnly.every(
+      (row) => row.isOpaquePaypal && row.payeeId !== null && row.payeeName !== null,
+    )
+  );
 }
 
 /** Build a deterministic, write-free cutover plan. */
@@ -298,11 +311,17 @@ export function planPayeeCutover(input: PayeeCutoverInput): PayeeCutoverPlan {
     }
   }
 
+  const acceptedParityCorrections = parityDifferences.filter(
+    isAcceptedParityCorrection,
+  );
+  const blockingParityDifferences = parityDifferences.filter(
+    (difference) => !isAcceptedParityCorrection(difference),
+  );
   const canApply =
     conflicts.length === 0 &&
     malformedSchedules.length === 0 &&
     unresolvedValues.length === 0 &&
-    parityDifferences.length === 0;
+    blockingParityDifferences.length === 0;
 
   const createRows = [...creates.values()].sort((a, b) => a.key.localeCompare(b.key));
   return {
@@ -315,6 +334,8 @@ export function planPayeeCutover(input: PayeeCutoverInput): PayeeCutoverPlan {
     malformedSchedules,
     unresolvedValues,
     parityDifferences,
+    acceptedParityCorrections,
+    blockingParityDifferences,
     canApply,
     isIdempotent:
       canApply &&

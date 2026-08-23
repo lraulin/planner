@@ -108,6 +108,7 @@ describe("planPayeeCutover", () => {
             payeeId: PAYEE_A,
             payeeName: "Walmart",
             amountCents: -5_00,
+            isOpaquePaypal: false,
           },
           {
             id: "t2",
@@ -115,6 +116,7 @@ describe("planPayeeCutover", () => {
             payeeId: PAYEE_A,
             payeeName: "Walmart",
             amountCents: -7_00,
+            isOpaquePaypal: false,
           },
         ],
       }),
@@ -185,6 +187,7 @@ describe("planPayeeCutover", () => {
             payeeId: null,
             payeeName: null,
             amountCents: -12_34,
+            isOpaquePaypal: false,
           },
         ],
       }),
@@ -203,11 +206,54 @@ describe("planPayeeCutover", () => {
             payeeId: null,
             payeeName: null,
             amountCents: -12_34,
+            isOpaquePaypal: false,
           },
         ],
         payeeOnly: [],
       },
     ]);
+  });
+
+  it("accepts a payee-only correction supplied by an opaque PayPal rail", () => {
+    const plan = planPayeeCutover(
+      input({
+        transactions: [
+          {
+            id: "resolved",
+            legacyMerchant: "P",
+            payeeId: PAYEE_A,
+            payeeName: "Walmart",
+            amountCents: -12_34,
+            isOpaquePaypal: true,
+          },
+        ],
+      }),
+    );
+
+    expect(plan.canApply).toBe(true);
+    expect(plan.acceptedParityCorrections).toHaveLength(1);
+    expect(plan.blockingParityDifferences).toEqual([]);
+  });
+
+  it("still blocks a payee-only difference from a named bank merchant", () => {
+    const plan = planPayeeCutover(
+      input({
+        transactions: [
+          {
+            id: "named",
+            legacyMerchant: "TARGET",
+            payeeId: PAYEE_A,
+            payeeName: "Walmart",
+            amountCents: -12_34,
+            isOpaquePaypal: false,
+          },
+        ],
+      }),
+    );
+
+    expect(plan.canApply).toBe(false);
+    expect(plan.acceptedParityCorrections).toEqual([]);
+    expect(plan.blockingParityDifferences).toHaveLength(1);
   });
 
   it("is a no-op when claims and schedule values are already ids", () => {
