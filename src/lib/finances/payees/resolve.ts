@@ -34,11 +34,11 @@ export function payeeIndex(rows: readonly AliasRow[]): PayeeIndex {
 /**
  * The alias key for one row: the normalized merchant.
  *
- * **A resolved counterparty wins over the bank's line.** A PayPal statement names who was
- * actually paid where the bank wrote only `PAYPAL *`, and `classify/reclassify.ts` already
- * substitutes it for the category on exactly these terms. Without the same substitution here
- * every bare processor line in the file would collapse into one payee called PAYPAL, and no
- * alias edit could take them apart again — the aliases would be identical.
+ * **A resolved counterparty fills an opaque PayPal line.** A PayPal statement names who was
+ * actually paid where the bank wrote only `PAYPAL *`, `PAYPAL TO …`, or a one-letter residue.
+ * Without that substitution every bare processor line would collapse into one payee. When the
+ * bank already names a merchant, however, that more-specific identity wins: a statement entry
+ * saying `GOOGLE` must not turn `PP*GOOGLE YOUTUBE SUBSCRI` into the generic Google payee.
  *
  * Falls back to the description when the counterparty is absent or normalizes to nothing, so
  * a blank counterparty cannot erase a merchant the bank did name.
@@ -47,11 +47,17 @@ export function aliasFor(
   description: string,
   resolvedCounterparty?: string | null,
 ): string {
-  if (resolvedCounterparty) {
+  const fromBank = normalizeMerchant(description);
+  const paypalRail = /\bPAYPAL\b|^PP\*/i.test(description);
+  const opaquePaypal =
+    paypalRail &&
+    (fromBank === "" || fromBank.length < 3 || /^PAYPAL(?:\b|\s)/.test(fromBank));
+
+  if (opaquePaypal && resolvedCounterparty) {
     const named = normalizeMerchant(resolvedCounterparty);
     if (named !== "") return named;
   }
-  return normalizeMerchant(description);
+  return fromBank;
 }
 
 /**

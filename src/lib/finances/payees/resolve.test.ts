@@ -48,6 +48,20 @@ describe("payeeForDescription", () => {
     );
   });
 
+  it("keeps a specific PayPal merchant instead of replacing it with a generic name", () => {
+    expect(aliasFor("PP*GOOGLE YOUTUBE SUBSCRI", "GOOGLE")).toBe(
+      "GOOGLE YOUTUBE SUBSCRI",
+    );
+    expect(aliasFor("PAYPAL *SANEBOX INC", "SANEBOX INC.")).toBe("SANEBOX INC");
+  });
+
+  it("uses the counterparty for an opaque transfer or one-letter processor residue", () => {
+    expect(aliasFor("Withdrawal from PAYPAL to LEE RAULIN INST XFER", "Dropbox")).toBe(
+      "DROPBOX",
+    );
+    expect(aliasFor("PAYPAL *P", "Spotify USA Inc")).toBe("SPOTIFY USA INC");
+  });
+
   it("falls back to the description when the counterparty names nothing", () => {
     // A blank or unusable counterparty must not erase a merchant the bank did name.
     expect(payeeForDescription("WM SUPERCENTER #1981", index, "")).toBe("walmart");
