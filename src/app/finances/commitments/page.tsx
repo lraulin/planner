@@ -3,6 +3,7 @@ import { getCurrentUserId } from "@/lib/auth";
 import { loadDashboard } from "@/lib/finances/dashboardQueries";
 import { AppShell } from "@/components/shell/AppShell";
 import { CommitmentsView } from "@/components/finances/commitments/CommitmentsView";
+import { listPayees } from "@/lib/finances/payees/queries";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ export const dynamic = "force-dynamic";
  */
 export default async function FinancesCommitmentsPage() {
   const userId = await getCurrentUserId();
-  const data = await loadDashboard(userId);
+  const [data, payees] = await Promise.all([loadDashboard(userId), listPayees(userId)]);
 
   return (
     <AppShell active="finances">
@@ -26,7 +27,7 @@ export default async function FinancesCommitmentsPage() {
           billCharges={data.billCharges}
           spendCharges={Object.fromEntries(data.spendCharges)}
           paydays={data.paydays}
-          merchants={data.merchants}
+          payees={payees}
           review={data.review}
         />
       </Suspense>

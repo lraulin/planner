@@ -24,6 +24,7 @@ import { numericStringToCents } from "./money";
 import type { PaypalResolution } from "./paypalMatch";
 import { ensurePayees } from "./payees/backfill";
 import { syncLegacyCommitmentClaims } from "./payees/cutoverDb";
+import { replaceCommitmentPayeesInTransaction } from "./payees/mutations";
 import { payeeIndex } from "./payees/resolve";
 
 /**
@@ -578,6 +579,8 @@ export type RecurringBillEdit = {
    * unclaim the merchants the declaration was built on.
    */
   matchers?: readonly string[];
+  /** Stable payees whose transactions belong to this bill. Omitted leaves claims alone. */
+  payeeIds?: readonly string[];
   /** Whether it is still live. See `CommitmentStatus`. */
   status?: CommitmentStatus;
   /** When it was cancelled. Defaults to today when `status` becomes `cancelled`. */
@@ -773,7 +776,7 @@ export async function upsertRecurringBill(
       .values({
         userId,
         name,
-        matchers: matchers ?? [name],
+        matchers: matchers ?? (edit.payeeIds !== undefined ? [] : [name]),
         ...cadenceColumns(edit.cadence),
         category: edit.category?.trim() ?? "",
         expectedCents: edit.expectedCents ?? null,
@@ -797,18 +800,33 @@ export async function upsertRecurringBill(
         matchers: financeRecurringBills.matchers,
       });
 
-    await syncLegacyCommitmentClaims(tx, userId, {
-      kind: "bill",
-      id: stored.id,
-      name,
-      matchers: stored.matchers,
-    });
+    if (edit.payeeIds !== undefined) {
+      await replaceCommitmentPayeesInTransaction(
+        tx,
+        userId,
+        { kind: "bill", id: stored.id },
+        edit.payeeIds,
+      );
+    } else {
+      await syncLegacyCommitmentClaims(tx, userId, {
+        kind: "bill",
+        id: stored.id,
+        name,
+        matchers: stored.matchers,
+      });
+    }
   });
 
   await reclassifyIfCategoriesMoved(userId, existing[0], {
     category: edit.category,
     matchers,
   });
+  if (
+    edit.payeeIds !== undefined &&
+    (edit.category ?? existing[0]?.category ?? "") !== ""
+  ) {
+    await reclassifyTransactions(userId);
+  }
 }
 
 /**
@@ -852,6 +870,8 @@ export type RecurringSpendEdit = {
   name: string;
   /** Bank merchant strings whose charges count. Omitted leaves the existing set alone. */
   matchers?: readonly string[];
+  /** Stable payees whose transactions belong to this group. Omitted leaves claims alone. */
+  payeeIds?: readonly string[];
   period?: RecurringSpendPeriod;
   amountSource?: RecurringSpendAmountSource;
   /** The pinned rate per period. Ignored while `amountSource` is `auto`. */
@@ -944,18 +964,33 @@ export async function upsertRecurringSpend(
         matchers: financeRecurringSpend.matchers,
       });
 
-    await syncLegacyCommitmentClaims(tx, userId, {
-      kind: "spend",
-      id: stored.id,
-      name,
-      matchers: stored.matchers,
-    });
+    if (edit.payeeIds !== undefined) {
+      await replaceCommitmentPayeesInTransaction(
+        tx,
+        userId,
+        { kind: "spend", id: stored.id },
+        edit.payeeIds,
+      );
+    } else {
+      await syncLegacyCommitmentClaims(tx, userId, {
+        kind: "spend",
+        id: stored.id,
+        name,
+        matchers: stored.matchers,
+      });
+    }
   });
 
   await reclassifyIfCategoriesMoved(userId, existing[0], {
     category: edit.category,
     matchers,
   });
+  if (
+    edit.payeeIds !== undefined &&
+    (edit.category ?? existing[0]?.category ?? "") !== ""
+  ) {
+    await reclassifyTransactions(userId);
+  }
 }
 
 /**

@@ -10,6 +10,7 @@ import {
   upsertRecurringBill,
 } from "@/lib/finances/mutations";
 import { listTransactions } from "@/lib/finances/queries";
+import { createPayee } from "@/lib/finances/payees/mutations";
 import { dispatchAgentTool } from "./tools";
 
 const dbReachable = await databaseReachable();
@@ -341,6 +342,72 @@ describeDb("finance agent tools", () => {
       spend: { name: string }[];
     };
     expect(gone.spend.some((entry) => entry.name === "Pizza")).toBe(false);
+  });
+
+  it("uses stable ids for payee and commitment discovery and writes", async () => {
+    const extraPayeeId = await createPayee(ownerId, {
+      name: "Paramount+",
+      aliases: ["PARAMOUNT PLUS"],
+    });
+    const payees = (await dispatchAgentTool(
+      "list_payees",
+      { query: "Paramount", limit: 1 },
+      ownerId,
+    )) as {
+      payees: { id: string; name: string }[];
+      pageInfo: { total: number };
+    };
+    expect(payees).toMatchObject({
+      payees: [{ id: extraPayeeId, name: "Paramount+" }],
+      pageInfo: { total: 1 },
+    });
+
+    const saved = (await dispatchAgentTool(
+      "save_subscription",
+      {
+        name: "Paramount+",
+        payeeIds: [extraPayeeId],
+        cadenceMonths: 1,
+        expectedCents: 1299,
+      },
+      ownerId,
+    )) as { id: string; payees: { id: string }[] };
+    expect(saved.payees).toEqual([{ id: extraPayeeId, name: "Paramount+" }]);
+
+    const found = (await dispatchAgentTool(
+      "search_commitments",
+      { query: "Paramount" },
+      ownerId,
+    )) as { commitments: { id: string; kind: string; payees: { id: string }[] }[] };
+    expect(found.commitments).toEqual([
+      expect.objectContaining({
+        id: saved.id,
+        kind: "bill",
+        payees: [{ id: extraPayeeId, name: "Paramount+" }],
+      }),
+    ]);
+
+    const cleared = (await dispatchAgentTool(
+      "set_commitment_payees",
+      { kind: "bill", id: saved.id, payeeIds: [] },
+      ownerId,
+    )) as { commitment: { payees: unknown[] } };
+    expect(cleared.commitment.payees).toEqual([]);
+
+    const candidates = (await dispatchAgentTool(
+      "find_commitment_candidates",
+      {},
+      ownerId,
+    )) as { candidates: { payeeId: string }[]; pageInfo: { total: number } };
+    expect(candidates.pageInfo.total).toBe(candidates.candidates.length);
+
+    await expect(
+      dispatchAgentTool(
+        "set_commitment_payees",
+        { kind: "bill", id: saved.id, payeeIds: [extraPayeeId] },
+        intruderId,
+      ),
+    ).rejects.toMatchObject({ code: "not_found" });
   });
 
   it("declares a day cadence and folds in a renamed vendor", async () => {

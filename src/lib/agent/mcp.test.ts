@@ -17,6 +17,11 @@ const HIDDEN = [
   "capture",
   "list_notes",
   "set_focus_area",
+  "list_commitments",
+  "list_commitment_candidates",
+  "upsert_subscription",
+  "upsert_recurring_spend",
+  "add_commitment_matchers",
 ] as const;
 
 const REQUIRED = [
@@ -53,10 +58,12 @@ const REQUIRED = [
   "get_debt_summary",
   "list_statements",
   "search_transactions",
-  "list_commitments",
-  "list_commitment_candidates",
-  "upsert_subscription",
-  "upsert_recurring_spend",
+  "list_payees",
+  "search_commitments",
+  "find_commitment_candidates",
+  "save_subscription",
+  "save_recurring_spend",
+  "set_commitment_payees",
   "delete_commitment",
   "list_jobs",
   "get_job",
@@ -76,7 +83,7 @@ describe("MCP catalog", () => {
   it("exposes the core and domain tools and hides discovery plus legacy", () => {
     const tools = listMcpToolDefinitions();
     const names = tools.map((tool) => tool.name);
-    expect(names).toHaveLength(51);
+    expect(names).toHaveLength(52);
     expect(names).toEqual(expect.arrayContaining([...REQUIRED]));
     for (const hidden of HIDDEN) {
       expect(names).not.toContain(hidden);
@@ -158,7 +165,7 @@ describe("MCP JSON-RPC", () => {
       method: "tools/list",
     });
     const tools = (response as { result: { tools: { name: string }[] } }).result.tools;
-    expect(tools).toHaveLength(51);
+    expect(tools).toHaveLength(52);
     expect(tools.map((tool) => tool.name)).not.toEqual(
       expect.arrayContaining([...HIDDEN]),
     );

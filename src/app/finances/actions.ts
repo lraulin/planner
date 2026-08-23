@@ -5,6 +5,7 @@ import {
   addAlias,
   deletePayee,
   mergePayees,
+  replaceCommitmentPayees,
   removeAlias,
   setPayeeNotes,
   updatePayeeDetails,
@@ -171,6 +172,21 @@ export async function setRecurringSpendAction(
   edit: RecurringSpendEdit,
 ): Promise<ActionResult> {
   return run((userId) => upsertRecurringSpend(userId, edit));
+}
+
+export async function setCommitmentPayeesAction(input: {
+  kind: "bill" | "spend";
+  id: string;
+  payeeIds: readonly string[];
+}): Promise<ActionResult> {
+  return run(async (userId) => {
+    await replaceCommitmentPayees(
+      userId,
+      { kind: input.kind, id: input.id },
+      input.payeeIds,
+    );
+    await reclassifyTransactions(userId);
+  });
 }
 
 /** Fold another bank spelling into a commitment that already exists, on either tier. */

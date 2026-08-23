@@ -12,7 +12,7 @@
 import { daysBetweenKeys } from "@/lib/schedule/geometry";
 import { effectiveFlow, effectiveMerchant, spendCentsOf } from "./analytics";
 import {
-  matcherIndex,
+  payeeClaimIndex,
   suggestCommitmentName,
   type StoredBillRow,
   type StoredSpend,
@@ -27,12 +27,14 @@ import {
 import type { TransactionListRow } from "./types";
 
 export type ClaimedMatcher = {
+  payeeId: string;
   merchant: string;
   name: string;
   kind: "bill" | "spend";
 };
 
 export type TrackAsBillDraft = {
+  payeeId: string;
   merchant: string;
   name: string;
   cadence: Cadence;
@@ -42,13 +44,18 @@ export type TrackAsBillDraft = {
   chargeCount: number;
 };
 
-/** Compact claimed list for the Register: matcher → the commitment that holds it. */
+/** Compact claimed list for the Register: stable payee → the commitment that holds it. */
 export function claimedMatchersOf(
   bills: readonly StoredBillRow[],
   spend: readonly StoredSpend[],
 ): ClaimedMatcher[] {
-  return [...matcherIndex(bills, spend).entries()].map(([merchant, ref]) => ({
-    merchant,
+  return [...payeeClaimIndex(bills, spend).entries()].map(([payeeId, ref]) => ({
+    payeeId,
+    merchant:
+      bills
+        .flatMap((bill) => bill.payees)
+        .concat(spend.flatMap((entry) => entry.payees))
+        .find((payee) => payee.id === payeeId)?.name ?? "Payee",
     name: ref.name,
     kind: ref.kind,
   }));
@@ -57,7 +64,7 @@ export function claimedMatchersOf(
 export function claimedMatcherMap(
   claimed: readonly ClaimedMatcher[],
 ): Map<string, ClaimedMatcher> {
-  return new Map(claimed.map((entry) => [entry.merchant, entry]));
+  return new Map(claimed.map((entry) => [entry.payeeId, entry]));
 }
 
 /**
@@ -73,7 +80,8 @@ export function trackAsBillRefusal(
   if (row === undefined) return "Select a transaction";
   const flow = effectiveFlow(row);
   if (flow !== "spend") return `${flowLabel(flow)} cannot be a bill`;
-  const holder = claimed.get(effectiveMerchant(row));
+  if (row.payeeId === null) return "Reclassify transactions to assign a payee first";
+  const holder = claimed.get(row.payeeId);
   if (holder === undefined) return null;
   return holder.kind === "spend"
     ? `Already tracked as spend (${holder.name})`
@@ -97,11 +105,12 @@ export function trackAsBillDraft(
   if (selected === undefined) {
     throw new Error("Select a transaction");
   }
+  if (selected.payeeId === null) {
+    throw new Error("Reclassify transactions to assign a payee first");
+  }
   const merchant = effectiveMerchant(selected);
   const charges = rows
-    .filter(
-      (row) => effectiveMerchant(row) === merchant && effectiveFlow(row) === "spend",
-    )
+    .filter((row) => row.payeeId === selected.payeeId && effectiveFlow(row) === "spend")
     .sort((left, right) => left.transactionDate.localeCompare(right.transactionDate));
   const dates = charges.map((row) => row.transactionDate);
   const typicalGap = medianGapDays(dates);
@@ -115,6 +124,7 @@ export function trackAsBillDraft(
     amounts.length > 0 ? median(amounts) : Math.max(0, spendCentsOf(selected));
   const lastChargeOn = dates[dates.length - 1] ?? selected.transactionDate;
   return {
+    payeeId: selected.payeeId,
     merchant,
     name: suggestCommitmentName(merchant),
     cadence,

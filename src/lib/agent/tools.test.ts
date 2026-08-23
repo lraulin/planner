@@ -122,14 +122,27 @@ describe("agent tool registry", () => {
       "get_debt_summary",
       "list_statements",
       "search_transactions",
-      "list_commitments",
-      "list_commitment_candidates",
-      "upsert_subscription",
-      "upsert_recurring_spend",
-      "add_commitment_matchers",
+      "list_payees",
+      "search_commitments",
+      "find_commitment_candidates",
+      "save_subscription",
+      "save_recurring_spend",
+      "set_commitment_payees",
       "delete_commitment",
     ]);
     expect(finances.tools.every((tool) => tool.domain === "finances")).toBe(true);
+
+    const legacyFinances = (await dispatchAgentTool(
+      "list_tools",
+      { domain: "finances", includeLegacy: true },
+      UNUSED_USER_ID,
+    )) as { tools: { name: string; replacedBy?: string }[] };
+    expect(legacyFinances.tools).toContainEqual(
+      expect.objectContaining({
+        name: "add_commitment_matchers",
+        replacedBy: "set_commitment_payees",
+      }),
+    );
 
     const history = (await dispatchAgentTool(
       "list_tools",

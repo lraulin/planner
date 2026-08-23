@@ -197,11 +197,11 @@ polish.
 
 ## Task 5: Complete human and agent surfaces
 
-- [ ] Replace free-form commitment/schedule matchers with payee pickers in Commitments,
+- [x] Replace free-form commitment/schedule matchers with payee pickers in Commitments,
       Review, Register and Schedules; show payees in Advanced Find.
-- [ ] Add inline/drawer Rename and previewed Merge commands to Payees.
-- [ ] Harden delete against claims and schedule references.
-- [ ] Add the id-based agent tools and hidden legacy adapters; regenerate tool docs.
+- [x] Add inline/drawer Rename and previewed Merge commands to Payees.
+- [x] Harden delete against claims and schedule references.
+- [x] Add the id-based agent tools and hidden legacy adapters; regenerate tool docs.
 
 ## Task 6: Run Stage B and retire legacy storage
 

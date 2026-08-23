@@ -42,6 +42,7 @@ function emptyCorpus(): FindCorpus {
     sessionExercises: [],
     transactions: [],
     financeAccounts: [],
+    financePayees: [],
     recurringBills: [],
     recurringSpend: [],
   };
@@ -149,6 +150,27 @@ describe("sources", () => {
     const corpus = { notes: [noteRow("nt1", "foo")] };
     expect(run(corpus, "foo").results).toHaveLength(1);
     expect(run(corpus, "foo", { sources: ["outline"] }).results).toHaveLength(0);
+  });
+
+  it("finds a payee by display name, notes, and normalized alias", () => {
+    const payee = {
+      id: "payee-1",
+      name: "1Password",
+      notes: "Family password manager",
+      aliases: ["1PASSWORDTORONTOON"],
+    };
+
+    expect(run({ financePayees: [payee] }, "1Password").results[0]).toMatchObject({
+      kind: "finance_payee",
+      recordId: "payee-1",
+      where: "Finances ▸ Payees",
+    });
+    expect(run({ financePayees: [payee] }, "TORONTO").results[0]?.hits[0]?.label).toBe(
+      "Aliases",
+    );
+    expect(
+      run({ financePayees: [payee] }, "password manager").results[0]?.hits[0]?.label,
+    ).toBe("Notes");
   });
 });
 

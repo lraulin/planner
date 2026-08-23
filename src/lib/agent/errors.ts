@@ -40,6 +40,7 @@ export function toAgentError(err: unknown): AgentError {
 
   if (
     lower.includes("not found") ||
+    lower.includes("does not exist") ||
     lower.includes("item not found") ||
     lower.includes("note not found") ||
     lower.includes("appointment not found") ||

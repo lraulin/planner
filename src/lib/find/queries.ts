@@ -23,6 +23,8 @@ import {
   contacts,
   exercises,
   financeAccounts,
+  financePayeeAliases,
+  financePayees,
   financeRecurringBills,
   financeRecurringSpend,
   financeTransactions,
@@ -233,14 +235,21 @@ export type RecurringBillRow = {
   name: string;
   notes: string;
   url: string;
-  matchers: string[];
+  payees: string[];
 };
 
 export type RecurringSpendRow = {
   id: string;
   name: string;
   notes: string;
-  matchers: string[];
+  payees: string[];
+};
+
+export type FinancePayeeRow = {
+  id: string;
+  name: string;
+  notes: string;
+  aliases: string[];
 };
 
 /**
@@ -267,6 +276,7 @@ export type FindCorpus = {
   sessionExercises: SessionExerciseRow[];
   transactions: TransactionRow[];
   financeAccounts: FinanceAccountRow[];
+  financePayees: FinancePayeeRow[];
   recurringBills: RecurringBillRow[];
   recurringSpend: RecurringSpendRow[];
 };
@@ -289,6 +299,7 @@ const EMPTY: FindCorpus = {
   sessionExercises: [],
   transactions: [],
   financeAccounts: [],
+  financePayees: [],
   recurringBills: [],
   recurringSpend: [],
 };
@@ -685,59 +696,116 @@ async function loadFitnessSource(
 }
 
 async function loadFinancesSource(userId: string): Promise<CorpusPart> {
-  const [transactionRows, accountRows, billRows, spendRows] = await Promise.all([
-    db
-      .select({
-        id: financeTransactions.id,
-        description: financeTransactions.description,
-        notes: financeTransactions.notes,
-        category: financeTransactions.category,
-        sourceCategory: financeTransactions.sourceCategory,
-        derivedCategory: financeTransactions.derivedCategory,
-        eventLabel: financeTransactions.eventLabel,
-        transactionDate: financeTransactions.transactionDate,
-        accountName: financeAccounts.name,
-      })
-      .from(financeTransactions)
-      .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
-      .where(
-        and(eq(financeTransactions.userId, userId), eq(financeAccounts.userId, userId)),
-      ),
-    db
-      .select({
-        id: financeAccounts.id,
-        name: financeAccounts.name,
-        institution: financeAccounts.institution,
-        url: financeAccounts.url,
-      })
-      .from(financeAccounts)
-      .where(eq(financeAccounts.userId, userId)),
-    db
-      .select({
-        id: financeRecurringBills.id,
-        name: financeRecurringBills.name,
-        notes: financeRecurringBills.notes,
-        url: financeRecurringBills.url,
-        matchers: financeRecurringBills.matchers,
-      })
-      .from(financeRecurringBills)
-      .where(eq(financeRecurringBills.userId, userId)),
-    db
-      .select({
-        id: financeRecurringSpend.id,
-        name: financeRecurringSpend.name,
-        notes: financeRecurringSpend.notes,
-        matchers: financeRecurringSpend.matchers,
-      })
-      .from(financeRecurringSpend)
-      .where(eq(financeRecurringSpend.userId, userId)),
-  ]);
+  const [transactionRows, accountRows, billRows, spendRows, payeeRows, aliasRows] =
+    await Promise.all([
+      db
+        .select({
+          id: financeTransactions.id,
+          description: financeTransactions.description,
+          notes: financeTransactions.notes,
+          category: financeTransactions.category,
+          sourceCategory: financeTransactions.sourceCategory,
+          derivedCategory: financeTransactions.derivedCategory,
+          eventLabel: financeTransactions.eventLabel,
+          transactionDate: financeTransactions.transactionDate,
+          accountName: financeAccounts.name,
+        })
+        .from(financeTransactions)
+        .innerJoin(
+          financeAccounts,
+          eq(financeAccounts.id, financeTransactions.accountId),
+        )
+        .where(
+          and(
+            eq(financeTransactions.userId, userId),
+            eq(financeAccounts.userId, userId),
+          ),
+        ),
+      db
+        .select({
+          id: financeAccounts.id,
+          name: financeAccounts.name,
+          institution: financeAccounts.institution,
+          url: financeAccounts.url,
+        })
+        .from(financeAccounts)
+        .where(eq(financeAccounts.userId, userId)),
+      db
+        .select({
+          id: financeRecurringBills.id,
+          name: financeRecurringBills.name,
+          notes: financeRecurringBills.notes,
+          url: financeRecurringBills.url,
+        })
+        .from(financeRecurringBills)
+        .where(eq(financeRecurringBills.userId, userId)),
+      db
+        .select({
+          id: financeRecurringSpend.id,
+          name: financeRecurringSpend.name,
+          notes: financeRecurringSpend.notes,
+        })
+        .from(financeRecurringSpend)
+        .where(eq(financeRecurringSpend.userId, userId)),
+      db
+        .select({
+          id: financePayees.id,
+          name: financePayees.name,
+          notes: financePayees.notes,
+          billId: financePayees.commitmentBillId,
+          spendId: financePayees.commitmentSpendId,
+        })
+        .from(financePayees)
+        .where(eq(financePayees.userId, userId)),
+      db
+        .select({
+          payeeId: financePayeeAliases.payeeId,
+          alias: financePayeeAliases.alias,
+        })
+        .from(financePayeeAliases)
+        .where(eq(financePayeeAliases.userId, userId)),
+    ]);
+
+  const aliasesByPayee = new Map<string, string[]>();
+  for (const row of aliasRows) {
+    const aliases = aliasesByPayee.get(row.payeeId) ?? [];
+    aliases.push(row.alias);
+    aliasesByPayee.set(row.payeeId, aliases);
+  }
+  const namesByBill = new Map<string, string[]>();
+  const namesBySpend = new Map<string, string[]>();
+  for (const payee of payeeRows) {
+    if (payee.billId) {
+      namesByBill.set(payee.billId, [
+        ...(namesByBill.get(payee.billId) ?? []),
+        payee.name,
+      ]);
+    }
+    if (payee.spendId) {
+      namesBySpend.set(payee.spendId, [
+        ...(namesBySpend.get(payee.spendId) ?? []),
+        payee.name,
+      ]);
+    }
+  }
 
   return {
     transactions: transactionRows,
     financeAccounts: accountRows,
-    recurringBills: billRows,
-    recurringSpend: spendRows,
+    financePayees: payeeRows.map((payee) => ({
+      id: payee.id,
+      name: payee.name,
+      notes: payee.notes,
+      aliases: aliasesByPayee.get(payee.id) ?? [],
+    })),
+    recurringBills: billRows.map((bill) => ({
+      ...bill,
+      payees: namesByBill.get(bill.id) ?? [],
+    })),
+    recurringSpend: spendRows.map((entry) => ({
+      ...entry,
+      payees: namesBySpend.get(entry.id) ?? [],
+    })),
   };
 }
 

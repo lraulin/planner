@@ -518,6 +518,21 @@ export function searchCorpus(
       });
     }
 
+    for (const payee of corpus.financePayees) {
+      seeds.push({
+        kind: "finance_payee",
+        source: "finances",
+        recordId: payee.id,
+        name: firstNonEmpty(payee.name),
+        where: ["Finances", "Payees"].join(SEP),
+        fields: [
+          name("Name", payee.name),
+          detail("Notes", payee.notes),
+          detail("Aliases", payee.aliases.join(" ")),
+        ],
+      });
+    }
+
     for (const bill of corpus.recurringBills) {
       seeds.push({
         kind: "recurring_bill",
@@ -529,7 +544,7 @@ export function searchCorpus(
           name("Name", bill.name),
           detail("Notes", bill.notes),
           detail("URL", bill.url),
-          detail("Matchers", bill.matchers.join(" ")),
+          detail("Payees", bill.payees.join(" ")),
         ],
       });
     }
@@ -544,7 +559,7 @@ export function searchCorpus(
         fields: [
           name("Name", spend.name),
           detail("Notes", spend.notes),
-          detail("Matchers", spend.matchers.join(" ")),
+          detail("Payees", spend.payees.join(" ")),
         ],
       });
     }

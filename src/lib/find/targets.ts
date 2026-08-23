@@ -79,6 +79,8 @@ export function resultTarget(result: FindResult): FindTarget {
       return { href: detailPath("/finances/register", recordId), opens: true };
     case "finance_account":
       return { href: detailPath("/finances/accounts", recordId), opens: true };
+    case "finance_payee":
+      return { href: detailPath("/finances/payees", recordId), opens: true };
 
     case "appointment":
       return { href: appointmentPath(result), opens: true };

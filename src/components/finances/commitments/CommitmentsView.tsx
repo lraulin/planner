@@ -9,7 +9,6 @@ import type { RecurringMerchant } from "@/lib/finances/analytics";
 import {
   projectForwardMonths,
   projectForwardPayPeriods,
-  unclaimedMerchants,
   type CommitmentCharge,
   type StoredBillRow,
   type StoredSpend,
@@ -68,6 +67,8 @@ import {
   type SpendGridRow,
 } from "./commitmentColumns";
 import { ReviewList } from "./ReviewList";
+import { CommitmentPayeeDialog } from "./CommitmentPayeeDialog";
+import { PayeePickerField } from "@/components/finances/payees/PayeePickerField";
 
 const BILLS_SCOPE = {
   id: "bills",
@@ -98,7 +99,7 @@ export function CommitmentsView({
   billCharges,
   spendCharges,
   paydays,
-  merchants,
+  payees,
   review,
 }: {
   bills: StoredBillRow[];
@@ -106,7 +107,7 @@ export function CommitmentsView({
   billCharges: readonly BillCharge[];
   spendCharges: Record<string, CommitmentCharge[]>;
   paydays: readonly Payday[];
-  merchants: readonly string[];
+  payees: readonly { id: string; name: string }[];
   review: RecurringMerchant[];
 }) {
   const today = useToday();
@@ -115,6 +116,12 @@ export function CommitmentsView({
   const [error, setError] = useState<string | null>(null);
   /** Which create form is open. Null until New / Add — Review is the usual path. */
   const [adding, setAdding] = useState<"bills" | "spend" | null>(null);
+  const [editingPayees, setEditingPayees] = useState<{
+    kind: "bill" | "spend";
+    id: string;
+    name: string;
+    payeeIds: string[];
+  } | null>(null);
   const { detail: openId } = useViewStateUrl();
   const [focusedGrid, setFocusedGrid] = useState<"bills" | "spend">(() => {
     // A Find landing on a spend row should not light up the bills grid first.
@@ -203,11 +210,6 @@ export function CommitmentsView({
         ? []
         : projectForwardPayPeriods(bills, spendRates, chargesByName, todayKey, paydays),
     [bills, spendRates, chargesByName, todayKey, paydays],
-  );
-
-  const claimed = useMemo(
-    () => unclaimedMerchants(merchants, bills, spend),
-    [merchants, bills, spend],
   );
 
   const billViews = useModuleViews({
@@ -439,6 +441,13 @@ export function CommitmentsView({
     },
     onRename: (from, to) => run(() => renameRecurringBillAction(from, to)),
     onDelete: (name) => run(() => deleteCommitmentAction({ kind: "bill", name })),
+    onEditPayees: (row) =>
+      setEditingPayees({
+        kind: "bill",
+        id: row.id,
+        name: row.name,
+        payeeIds: row.payees.map((payee) => payee.id),
+      }),
   };
 
   const spendCtx: SpendColumnCtx = {
@@ -449,6 +458,13 @@ export function CommitmentsView({
     },
     onRename: (from, to) => run(() => renameRecurringSpendAction(from, to)),
     onDelete: (name) => run(() => deleteCommitmentAction({ kind: "spend", name })),
+    onEditPayees: (row) =>
+      setEditingPayees({
+        kind: "spend",
+        id: row.id,
+        name: row.name,
+        payeeIds: row.payees.map((payee) => payee.id),
+      }),
   };
 
   const billTotals = activeBillTotals(billRows);
@@ -498,7 +514,7 @@ export function CommitmentsView({
           {adding === "bills" && (
             <div className="px-2">
               <NewBillForm
-                claimed={claimed}
+                payees={payees}
                 pending={pending}
                 onError={setError}
                 onClose={() => setAdding(null)}
@@ -607,7 +623,7 @@ export function CommitmentsView({
           {adding === "spend" && (
             <div className="px-2">
               <NewSpendForm
-                claimed={claimed}
+                payees={payees}
                 pending={pending}
                 onError={setError}
                 onClose={() => setAdding(null)}
@@ -710,6 +726,17 @@ export function CommitmentsView({
 
         <ForwardPanel months={months} periods={periods} />
       </div>
+      {editingPayees ? (
+        <CommitmentPayeeDialog
+          commitment={editingPayees}
+          payees={payees}
+          onClose={() => setEditingPayees(null)}
+          onSaved={() => {
+            setEditingPayees(null);
+            router.refresh();
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -736,34 +763,24 @@ function AddQuietly({
 }
 
 function NewBillForm({
-  claimed,
+  payees,
   pending,
   onError,
   onClose,
 }: {
-  claimed: readonly string[];
+  payees: readonly { id: string; name: string }[];
   pending: boolean;
   onError: (message: string | null) => void;
   onClose: () => void;
 }) {
   const router = useRouter();
   const [name, setName] = useState("");
-  const [matchers, setMatchers] = useState<string[]>([]);
-  const [matcherDraft, setMatcherDraft] = useState("");
+  const [payeeIds, setPayeeIds] = useState<string[]>([]);
   const [cadence, setCadence] = useState<Cadence>({ unit: "month", n: 1 });
   const [amount, setAmount] = useState("");
   const [next, setNext] = useState("");
 
   const cents = Math.round(Number(amount.replace(/[$,\s]/g, "")) * 100);
-
-  function toggle(merchant: string) {
-    setMatchers((current) =>
-      current.includes(merchant)
-        ? current.filter((entry) => entry !== merchant)
-        : [...current, merchant],
-    );
-    if (name === "") setName(merchant);
-  }
 
   return (
     <div className="mb-2 flex flex-col gap-2 rounded border border-rule bg-surface-raised p-2">
@@ -799,31 +816,14 @@ function NewBillForm({
           aria-label="New bill next charge"
           className="min-h-tap rounded border border-rule bg-surface px-2 text-base text-ink md:min-h-0 md:text-[0.8125rem]"
         />
-        <input
-          type="text"
-          value={matcherDraft}
-          onChange={(event) => setMatcherDraft(event.target.value)}
-          placeholder="Matchers"
-          aria-label="New bill matchers"
-          className="min-h-tap min-w-[10rem] flex-1 rounded border border-rule bg-surface px-2 text-base text-ink md:min-h-0 md:text-[0.8125rem]"
-        />
         <button
           type="button"
           disabled={pending || name.trim() === ""}
           onClick={() => {
             onError(null);
-            const nextMatchers = [
-              ...new Set([
-                ...matchers,
-                ...matcherDraft
-                  .split(",")
-                  .map((entry) => entry.trim())
-                  .filter(Boolean),
-              ]),
-            ];
             void setRecurringBillAction({
               name: name.trim(),
-              matchers: nextMatchers.length > 0 ? nextMatchers : [name.trim()],
+              payeeIds,
               cadence,
               expectedCents: cents > 0 ? cents : null,
               anchorDate: next || null,
@@ -847,56 +847,26 @@ function NewBillForm({
           Cancel
         </button>
       </div>
-      {claimed.length > 0 && (
-        <details className="text-[0.75rem] text-ink-muted">
-          <summary className="cursor-pointer select-none">
-            Match bank merchants ({matchers.length} selected)
-          </summary>
-          <fieldset className="mt-1 flex max-h-24 flex-wrap gap-x-3 gap-y-1 overflow-auto">
-            <legend className="sr-only">Bank merchants to match</legend>
-            {claimed.slice(0, 40).map((merchant) => (
-              <label key={merchant} className="flex items-center gap-1 text-ink">
-                <input
-                  type="checkbox"
-                  checked={matchers.includes(merchant)}
-                  onChange={() => toggle(merchant)}
-                  className="size-3.5"
-                />
-                {merchant}
-              </label>
-            ))}
-          </fieldset>
-        </details>
-      )}
+      <PayeePickerField payees={payees} value={payeeIds} onChange={setPayeeIds} />
     </div>
   );
 }
 
 function NewSpendForm({
-  claimed,
+  payees,
   pending,
   onError,
   onClose,
 }: {
-  claimed: readonly string[];
+  payees: readonly { id: string; name: string }[];
   pending: boolean;
   onError: (message: string | null) => void;
   onClose: () => void;
 }) {
   const router = useRouter();
   const [name, setName] = useState("");
-  const [matchers, setMatchers] = useState<string[]>([]);
-  const [matcherDraft, setMatcherDraft] = useState("");
+  const [payeeIds, setPayeeIds] = useState<string[]>([]);
   const [period, setPeriod] = useState<"week" | "month">("week");
-
-  function toggle(merchant: string) {
-    setMatchers((current) =>
-      current.includes(merchant)
-        ? current.filter((entry) => entry !== merchant)
-        : [...current, merchant],
-    );
-    if (name === "") setName(merchant);
-  }
 
   return (
     <div className="mb-2 flex flex-col gap-2 rounded border border-rule bg-surface-raised p-2">
@@ -919,35 +889,14 @@ function NewSpendForm({
           <option value="week">Weekly</option>
           <option value="month">Monthly</option>
         </select>
-        <input
-          type="text"
-          value={matcherDraft}
-          onChange={(event) => setMatcherDraft(event.target.value)}
-          placeholder="PIZZA HUT, DOMINOS"
-          aria-label="New recurring spend matchers"
-          className="min-h-tap min-w-[12rem] flex-1 rounded border border-rule bg-surface px-2 text-base text-ink md:min-h-0 md:text-[0.8125rem]"
-        />
         <button
           type="button"
-          disabled={
-            pending ||
-            name.trim() === "" ||
-            (matchers.length === 0 && matcherDraft.trim() === "")
-          }
+          disabled={pending || name.trim() === ""}
           onClick={() => {
             onError(null);
-            const nextMatchers = [
-              ...new Set([
-                ...matchers,
-                ...matcherDraft
-                  .split(",")
-                  .map((entry) => entry.trim())
-                  .filter(Boolean),
-              ]),
-            ];
             void setRecurringSpendAction({
               name: name.trim(),
-              matchers: nextMatchers,
+              payeeIds,
               period,
             }).then((result) => {
               if (!result.ok) onError(result.error);
@@ -969,27 +918,7 @@ function NewSpendForm({
           Cancel
         </button>
       </div>
-      {claimed.length > 0 && (
-        <details className="text-[0.75rem] text-ink-muted">
-          <summary className="cursor-pointer select-none">
-            Group bank merchants ({matchers.length} selected)
-          </summary>
-          <fieldset className="mt-1 flex max-h-24 flex-wrap gap-x-3 gap-y-1 overflow-auto">
-            <legend className="sr-only">Bank merchants to group</legend>
-            {claimed.slice(0, 40).map((merchant) => (
-              <label key={merchant} className="flex items-center gap-1 text-ink">
-                <input
-                  type="checkbox"
-                  checked={matchers.includes(merchant)}
-                  onChange={() => toggle(merchant)}
-                  className="size-3.5"
-                />
-                {merchant}
-              </label>
-            ))}
-          </fieldset>
-        </details>
-      )}
+      <PayeePickerField payees={payees} value={payeeIds} onChange={setPayeeIds} />
     </div>
   );
 }

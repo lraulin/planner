@@ -65,6 +65,7 @@ export type FindResultKind =
   // Finances
   | "transaction"
   | "finance_account"
+  | "finance_payee"
   | "recurring_bill"
   | "recurring_spend";
 

@@ -8,6 +8,9 @@ import {
 } from "./registerBillDraft";
 import type { TransactionListRow } from "./types";
 
+const PAYEE_A = "11111111-1111-4111-8111-111111111111";
+const PAYEE_B = "22222222-2222-4222-8222-222222222222";
+
 function row(
   id: string,
   date: string,
@@ -37,8 +40,8 @@ function row(
     budgetCategoryName: null,
     scheduleId: null,
     scheduleName: null,
-    payeeId: null,
-    payeeName: null,
+    payeeId: "payeeId" in extras ? (extras.payeeId ?? null) : PAYEE_A,
+    payeeName: "payeeName" in extras ? (extras.payeeName ?? null) : "Geico",
   };
 }
 
@@ -47,8 +50,8 @@ function bill(over: Partial<StoredBillRow> = {}): StoredBillRow {
     id: "bill-1",
     name: "Geico",
     matchers: ["Geico"],
-    payees: [],
-    payeeIds: [],
+    payees: [{ id: PAYEE_A, name: "Geico" }],
+    payeeIds: [PAYEE_A],
     status: "active",
     cancelledOn: null,
     url: "",
@@ -67,7 +70,7 @@ function spend(over: Partial<StoredSpend> = {}): StoredSpend {
     id: "spend-1",
     name: "Walmart",
     matchers: ["Walmart"],
-    payees: [],
+    payees: [{ id: PAYEE_B, name: "Walmart" }],
     period: "week",
     amountSource: "auto",
     expectedCents: null,
@@ -134,6 +137,15 @@ describe("trackAsBillRefusal", () => {
     ).toBeNull();
   });
 
+  it("requires reclassification before an unassigned row can be claimed", () => {
+    expect(
+      trackAsBillRefusal(
+        row("p", "2026-08-21", { description: "GEICO", payeeId: null }),
+        EMPTY,
+      ),
+    ).toBe("Reclassify transactions to assign a payee first");
+  });
+
   it("names the bill that already claims this merchant", () => {
     const claimed = claimedMatcherMap(claimedMatchersOf([bill()], []));
     expect(
@@ -146,7 +158,10 @@ describe("trackAsBillRefusal", () => {
       claimedMatchersOf([], [spend({ matchers: ["Walmart"] })]),
     );
     expect(
-      trackAsBillRefusal(row("w", "2026-08-16", { description: "WALMART" }), claimed),
+      trackAsBillRefusal(
+        row("w", "2026-08-16", { description: "WALMART", payeeId: PAYEE_B }),
+        claimed,
+      ),
     ).toBe("Already tracked as spend (Walmart)");
   });
 
@@ -211,6 +226,7 @@ describe("trackAsBillDraft", () => {
     const rows = dates.map((date, index) =>
       row(`v${index}`, date, {
         description: "VETSOURCE",
+        payeeName: "VetSource",
         amountCents: -2979,
       }),
     );
@@ -222,7 +238,12 @@ describe("trackAsBillDraft", () => {
 
   it("uses the cleaned merchant name, not the bank's string", () => {
     const draft = trackAsBillDraft(
-      [row("p", "2026-08-01", { description: "PIZZA HUT #4471" })],
+      [
+        row("p", "2026-08-01", {
+          description: "PIZZA HUT #4471",
+          payeeName: "Pizza Hut",
+        }),
+      ],
       "p",
       "2026-08-21",
     );
@@ -232,10 +253,19 @@ describe("trackAsBillDraft", () => {
 
   it("takes the median of this merchant's spend, ignoring a refund", () => {
     const rows = [
-      row("a", "2026-01-01", { description: "NETFLIX.COM", amountCents: -1599 }),
-      row("b", "2026-02-01", { description: "NETFLIX.COM", amountCents: -1599 }),
+      row("a", "2026-01-01", {
+        description: "NETFLIX.COM",
+        payeeName: "Netflix",
+        amountCents: -1599,
+      }),
+      row("b", "2026-02-01", {
+        description: "NETFLIX.COM",
+        payeeName: "Netflix",
+        amountCents: -1599,
+      }),
       row("c", "2026-03-01", {
         description: "NETFLIX.COM",
+        payeeName: "Netflix",
         amountCents: 1599,
         derivedFlow: "refund",
       }),

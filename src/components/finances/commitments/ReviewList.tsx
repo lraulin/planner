@@ -28,8 +28,8 @@ import {
   type StoredSpend,
 } from "@/lib/finances/commitments";
 import {
-  addCommitmentMatchersAction,
   deleteCommitmentAction,
+  setCommitmentPayeesAction,
   setRecurringBillAction,
   setRecurringSpendAction,
 } from "@/app/finances/actions";
@@ -279,7 +279,12 @@ export function ReviewList({
                           <button
                             key={kind}
                             type="button"
-                            disabled={pending}
+                            disabled={pending || entry.payeeId === null}
+                            title={
+                              entry.payeeId === null
+                                ? "Reclassify transactions to assign a payee first."
+                                : undefined
+                            }
                             aria-expanded={open === kind}
                             onClick={() =>
                               setDraft(
@@ -299,13 +304,13 @@ export function ReviewList({
                         ))}
                         <button
                           type="button"
-                          disabled={pending}
+                          disabled={pending || entry.payeeId === null}
                           title="Not a commitment. You can bring it back from Dismissed below."
                           onClick={() =>
                             run(() =>
                               setRecurringBillAction({
                                 name: entry.merchant,
-                                matchers: [entry.merchant],
+                                payeeIds: entry.payeeId ? [entry.payeeId] : [],
                                 cadence: proposedCadence(entry),
                                 status: "ignored",
                               }),
@@ -447,20 +452,25 @@ function BillDraft({
       title="Track as a subscription or bill"
       merchant={entry.merchant}
       pending={pending}
-      disabled={joining ? group === undefined : name.trim() === ""}
+      disabled={
+        entry.payeeId === null || (joining ? group === undefined : name.trim() === "")
+      }
       commitLabel={joining ? `Add to ${target}` : "Track as bill"}
       onCancel={onCancel}
       onCommit={() =>
         onCommit(() =>
           joining && group !== undefined
-            ? addCommitmentMatchersAction({
+            ? setCommitmentPayeesAction({
                 kind: "bill",
-                name: group.name,
-                matchers: [entry.merchant],
+                id: group.id,
+                payeeIds: [
+                  ...group.payees.map((payee) => payee.id),
+                  ...(entry.payeeId ? [entry.payeeId] : []),
+                ],
               })
             : setRecurringBillAction({
                 name: name.trim(),
-                matchers: [entry.merchant],
+                payeeIds: entry.payeeId ? [entry.payeeId] : [],
                 cadence,
                 expectedCents: cents > 0 ? cents : null,
                 anchorDate: next || null,
@@ -632,20 +642,25 @@ function SpendDraft({
       title="Track as recurring spend"
       merchant={entry.merchant}
       pending={pending}
-      disabled={joining ? group === undefined : name.trim() === ""}
+      disabled={
+        entry.payeeId === null || (joining ? group === undefined : name.trim() === "")
+      }
       commitLabel={joining ? `Add to ${target}` : "Track as spend"}
       onCancel={onCancel}
       onCommit={() =>
         onCommit(() =>
           joining && group !== undefined
-            ? addCommitmentMatchersAction({
+            ? setCommitmentPayeesAction({
                 kind: "spend",
-                name: group.name,
-                matchers: [entry.merchant],
+                id: group.id,
+                payeeIds: [
+                  ...group.payees.map((payee) => payee.id),
+                  ...(entry.payeeId ? [entry.payeeId] : []),
+                ],
               })
             : setRecurringSpendAction({
                 name: name.trim(),
-                matchers: [entry.merchant],
+                payeeIds: entry.payeeId ? [entry.payeeId] : [],
                 period,
               }),
         )

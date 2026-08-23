@@ -88,6 +88,7 @@ export function OneOffReview({
       // is what lets the bill keep its figure in a window holding none of its charges.
       const result = await setRecurringBillAction({
         name: suggestion.merchant,
+        payeeIds: suggestion.row.payeeId ? [suggestion.row.payeeId] : [],
         cadence,
         expectedCents: suggestion.cents,
         anchorDate: suggestion.row.transactionDate,
@@ -103,7 +104,7 @@ export function OneOffReview({
     startTransition(async () => {
       const result = await setRecurringSpendAction({
         name: suggestion.merchant,
-        matchers: [suggestion.merchant],
+        payeeIds: suggestion.row.payeeId ? [suggestion.row.payeeId] : [],
       });
       setDeclaring(null);
       if (!result.ok) setError(result.error);
@@ -176,7 +177,13 @@ export function OneOffReview({
                   }
                   disabled={
                     pending ||
+                    suggestion.row.payeeId === null ||
                     (cadences[suggestion.row.id] ?? proposed?.cadence ?? null) === null
+                  }
+                  title={
+                    suggestion.row.payeeId === null
+                      ? "Reclassify transactions to assign a payee first."
+                      : undefined
                   }
                   className="min-h-tap rounded border border-rule bg-surface-raised px-2 text-[0.75rem] text-ink disabled:opacity-50 md:min-h-0 md:py-1"
                 >
@@ -185,7 +192,12 @@ export function OneOffReview({
                 <button
                   type="button"
                   onClick={() => declareSpend(suggestion)}
-                  disabled={pending}
+                  disabled={pending || suggestion.row.payeeId === null}
+                  title={
+                    suggestion.row.payeeId === null
+                      ? "Reclassify transactions to assign a payee first."
+                      : undefined
+                  }
                   className="min-h-tap rounded border border-rule px-2 text-[0.75rem] text-ink disabled:opacity-50 md:min-h-0 md:py-1"
                 >
                   Track as spend

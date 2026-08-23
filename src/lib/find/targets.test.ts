@@ -75,6 +75,9 @@ describe("resultTarget", () => {
     expect(resultTarget(result({ kind: "recurring_spend" })).href).toBe(
       "/finances/commitments?detail=r1",
     );
+    expect(resultTarget(result({ kind: "finance_payee" })).href).toBe(
+      "/finances/payees?detail=r1",
+    );
   });
 
   it("escapes an id so it cannot break out of the query string", () => {
@@ -106,6 +109,7 @@ describe("resultTarget", () => {
       "workout_session",
       "transaction",
       "finance_account",
+      "finance_payee",
       "recurring_bill",
       "recurring_spend",
     ];

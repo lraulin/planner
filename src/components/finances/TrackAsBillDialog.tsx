@@ -89,7 +89,7 @@ function TrackAsBillForm({
           startTransition(async () => {
             const result = await setRecurringBillAction({
               name: name.trim(),
-              matchers: [seed.merchant],
+              payeeIds: [seed.payeeId],
               cadence,
               expectedCents: cents > 0 ? cents : null,
               anchorDate: scheduled ? next || null : null,
@@ -100,6 +100,7 @@ function TrackAsBillForm({
               return;
             }
             onSaved({
+              payeeId: seed.payeeId,
               merchant: seed.merchant,
               name: name.trim(),
               kind: "bill",

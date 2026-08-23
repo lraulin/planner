@@ -37,6 +37,8 @@ import {
   upsertRecurringBill,
   upsertRecurringSpend,
 } from "@/lib/finances/mutations";
+import { replaceCommitmentPayees } from "@/lib/finances/payees/mutations";
+import { listPayees } from "@/lib/finances/payees/queries";
 import { analyzeInsights } from "@/lib/finances/insightsAnalysis";
 import {
   insightsFilterOptions,
@@ -617,6 +619,189 @@ export async function listCommitmentCandidatesTool(userId: string) {
       data.spend,
     ),
   };
+}
+
+export async function listPayeesTool(userId: string, args: Record<string, unknown>) {
+  const query = (optionalString(args, "query") ?? "").trim().toLocaleLowerCase();
+  const rows = (await listPayees(userId)).filter(
+    (payee) =>
+      query === "" ||
+      payee.name.toLocaleLowerCase().includes(query) ||
+      payee.aliases.some((alias) => alias.toLocaleLowerCase().includes(query)),
+  );
+  const page = paginate(
+    rows,
+    pageBounds(optionalNumber(args, "offset"), optionalNumber(args, "limit")),
+  );
+  return {
+    payees: page.items.map((payee) => ({
+      id: payee.id,
+      name: payee.name,
+      aliases: payee.aliases,
+      claim: payee.claim
+        ? { kind: payee.claim.kind, id: payee.claim.id, name: payee.claim.name }
+        : null,
+    })),
+    pageInfo: page.pageInfo,
+  };
+}
+
+export async function searchCommitmentsTool(
+  userId: string,
+  args: Record<string, unknown>,
+) {
+  const data = await loadDashboard(userId);
+  const query = (optionalString(args, "query") ?? "").trim().toLocaleLowerCase();
+  const kind = optionalString(args, "kind");
+  const rows = [
+    ...data.bills.map((bill) => ({
+      id: bill.id,
+      kind: "bill" as const,
+      name: bill.name,
+      payees: bill.payees.map((payee) => ({ ...payee })),
+      active: bill.status === "active",
+    })),
+    ...data.spend.map((entry) => ({
+      id: entry.id,
+      kind: "spend" as const,
+      name: entry.name,
+      payees: entry.payees.map((payee) => ({ ...payee })),
+      active: entry.active,
+    })),
+  ].filter(
+    (entry) =>
+      (kind !== "bill" && kind !== "spend" ? true : entry.kind === kind) &&
+      (query === "" ||
+        entry.name.toLocaleLowerCase().includes(query) ||
+        entry.payees.some((payee) => payee.name.toLocaleLowerCase().includes(query))),
+  );
+  const page = paginate(
+    rows,
+    pageBounds(optionalNumber(args, "offset"), optionalNumber(args, "limit")),
+  );
+  return { commitments: page.items, pageInfo: page.pageInfo };
+}
+
+export async function findCommitmentCandidatesTool(
+  userId: string,
+  args: Record<string, unknown>,
+) {
+  const data = await loadDashboard(userId);
+  const query = (optionalString(args, "query") ?? "").trim().toLocaleLowerCase();
+  const kind = optionalString(args, "kind");
+  const rows = data.review
+    .filter((entry) => entry.payeeId !== null)
+    .filter((entry) => (kind !== "bill" && kind !== "spend") || entry.shape === kind)
+    .filter(
+      (entry) => query === "" || entry.merchant.toLocaleLowerCase().includes(query),
+    )
+    .map((entry) => ({
+      payeeId: entry.payeeId!,
+      payeeName: entry.merchant,
+      suggestedKind: entry.shape,
+      typicalCents: entry.typicalCents,
+      chargeCount: entry.chargeCount,
+    }));
+  const page = paginate(
+    rows,
+    pageBounds(optionalNumber(args, "offset"), optionalNumber(args, "limit")),
+  );
+  return { candidates: page.items, pageInfo: page.pageInfo };
+}
+
+export async function saveSubscriptionTool(
+  userId: string,
+  args: Record<string, unknown>,
+) {
+  const name = optionalString(args, "name") ?? "";
+  await upsertRecurringBill(userId, {
+    name,
+    payeeIds: asStringList(args.payeeIds),
+    cadence: cadenceFromArgs(args),
+    category: optionalString(args, "category"),
+    expectedCents:
+      args.expectedCents === null ? null : optionalNumber(args, "expectedCents"),
+    anchorDate: args.anchorDate === null ? null : optionalString(args, "anchorDate"),
+    status: optionalString(args, "status") as
+      "active" | "paused" | "cancelled" | "ignored" | undefined,
+    url: optionalString(args, "url"),
+    scheduled: args.scheduled === undefined ? undefined : args.scheduled === true,
+    dueDay: args.dueDay === null ? null : optionalNumber(args, "dueDay"),
+    notes: optionalString(args, "notes"),
+  });
+  const row = (await loadRecurringBills(userId)).find(
+    (bill) => bill.name === name.trim(),
+  );
+  if (!row) throw new AgentError("not_found", "Saved bill was not found.");
+  return {
+    id: row.id,
+    name: row.name,
+    payees: row.payees.map((payee) => ({ ...payee })),
+    status: row.status,
+  };
+}
+
+export async function saveRecurringSpendTool(
+  userId: string,
+  args: Record<string, unknown>,
+) {
+  const name = optionalString(args, "name") ?? "";
+  await upsertRecurringSpend(userId, {
+    name,
+    payeeIds: asStringList(args.payeeIds),
+    period: optionalString(args, "period") as "week" | "month" | undefined,
+    amountSource: optionalString(args, "amountSource") as "auto" | "pinned" | undefined,
+    expectedCents:
+      args.expectedCents === null ? null : optionalNumber(args, "expectedCents"),
+    active: args.active === undefined ? undefined : args.active === true,
+    category: optionalString(args, "category"),
+    notes: optionalString(args, "notes"),
+  });
+  const row = (await loadRecurringSpend(userId)).find(
+    (entry) => entry.name === name.trim(),
+  );
+  if (!row) throw new AgentError("not_found", "Saved recurring spend was not found.");
+  return {
+    id: row.id,
+    name: row.name,
+    payees: row.payees.map((payee) => ({ ...payee })),
+    period: row.period,
+  };
+}
+
+export async function setCommitmentPayeesTool(
+  userId: string,
+  args: Record<string, unknown>,
+) {
+  const kind = optionalString(args, "kind");
+  const id = optionalString(args, "id") ?? "";
+  if (kind !== "bill" && kind !== "spend") {
+    throw new AgentError("validation", "kind must be bill or spend");
+  }
+  await replaceCommitmentPayees(
+    userId,
+    { kind, id },
+    asStringList(args.payeeIds) ?? [],
+  );
+  const data = await loadDashboard(userId);
+  const row = [
+    ...data.bills.map((bill) => ({
+      id: bill.id,
+      kind: "bill" as const,
+      name: bill.name,
+      payees: bill.payees.map((payee) => ({ ...payee })),
+      active: bill.status === "active",
+    })),
+    ...data.spend.map((entry) => ({
+      id: entry.id,
+      kind: "spend" as const,
+      name: entry.name,
+      payees: entry.payees.map((payee) => ({ ...payee })),
+      active: entry.active,
+    })),
+  ].find((entry) => entry.kind === kind && entry.id === id);
+  if (!row) throw new AgentError("not_found", "Commitment not found.");
+  return { commitment: row };
 }
 
 /**

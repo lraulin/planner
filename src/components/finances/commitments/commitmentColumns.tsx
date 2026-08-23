@@ -37,6 +37,7 @@ export type BillColumnCtx = {
   onPatch: (name: string, patch: BillPatch) => void;
   onRename: (from: string, to: string) => void;
   onDelete: (name: string) => void;
+  onEditPayees: (row: BillGridRow) => void;
 };
 
 export type SpendColumnCtx = {
@@ -44,7 +45,33 @@ export type SpendColumnCtx = {
   onPatch: (name: string, patch: SpendPatch) => void;
   onRename: (from: string, to: string) => void;
   onDelete: (name: string) => void;
+  onEditPayees: (row: SpendGridRow) => void;
 };
+
+function PayeesCell({
+  names,
+  label,
+  disabled,
+  onClick,
+}: {
+  names: readonly string[];
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  const text = names.length > 0 ? names.join(", ") : "No payees";
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      title={`Edit payees for ${label}`}
+      onClick={onClick}
+      className="min-h-tap w-full truncate rounded border border-transparent px-1 text-left text-[0.75rem] text-ink-muted hover:border-rule disabled:opacity-50 md:min-h-0"
+    >
+      {text}
+    </button>
+  );
+}
 
 /**
  * The category a commitment files its charges under — and, through it, the charges themselves.
@@ -412,26 +439,17 @@ export const billColumns: ColumnDef<BillColumnCtx, BillGridRow>[] = [
     ),
   },
   {
-    id: "matchers",
-    label: "Matchers",
+    id: "payees",
+    label: "Payees",
     width: "minmax(8rem,1fr)",
-    filterValue: (row) => row.node.matchers.join(", "),
+    filterValue: (row) => row.node.payees.map((payee) => payee.name).join(", "),
     compact: "meta",
     render: (row, ctx) => (
-      <input
-        key={row.node.matchers.join("\0")}
-        type="text"
-        defaultValue={row.node.matchers.join(", ")}
+      <PayeesCell
+        names={row.node.payees.map((payee) => payee.name)}
+        label={row.node.name}
         disabled={ctx.pending}
-        aria-label={`Matchers for ${row.node.name}`}
-        onBlur={(event) => {
-          const matchers = event.target.value
-            .split(",")
-            .map((entry) => entry.trim())
-            .filter(Boolean);
-          ctx.onPatch(row.node.name, { matchers });
-        }}
-        className="w-full truncate rounded border border-transparent bg-transparent px-1 text-[0.75rem] text-ink-muted hover:border-rule focus:border-rule"
+        onClick={() => ctx.onEditPayees(row.node)}
       />
     ),
   },
@@ -514,26 +532,17 @@ export const spendColumns: ColumnDef<SpendColumnCtx, SpendGridRow>[] = [
     ),
   },
   {
-    id: "matchers",
-    label: "Matchers",
+    id: "payees",
+    label: "Payees",
     width: "minmax(10rem,1.4fr)",
-    filterValue: (row) => row.node.matchers.join(", "),
+    filterValue: (row) => row.node.payees.map((payee) => payee.name).join(", "),
     compact: "meta",
     render: (row, ctx) => (
-      <input
-        key={row.node.matchers.join("\0")}
-        type="text"
-        defaultValue={row.node.matchers.join(", ")}
+      <PayeesCell
+        names={row.node.payees.map((payee) => payee.name)}
+        label={row.node.name}
         disabled={ctx.pending}
-        aria-label={`Matchers for ${row.node.name}`}
-        onBlur={(event) => {
-          const matchers = event.target.value
-            .split(",")
-            .map((entry) => entry.trim())
-            .filter(Boolean);
-          ctx.onPatch(row.node.name, { matchers });
-        }}
-        className="w-full truncate rounded border border-transparent bg-transparent px-1 text-[0.75rem] text-ink-muted hover:border-rule focus:border-rule"
+        onClick={() => ctx.onEditPayees(row.node)}
       />
     ),
   },
