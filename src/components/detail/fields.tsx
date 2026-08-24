@@ -11,6 +11,7 @@ import {
 } from "@/lib/tree/format";
 import { MarkdownEditor } from "@/components/notes/MarkdownEditor";
 import { useMasterContexts } from "@/components/contexts/useMasterContexts";
+import { selectValueOnFocus } from "@/components/selectValueOnFocus";
 import { contextSuggestions } from "@/lib/contexts/catalog";
 
 /**
@@ -762,6 +763,7 @@ export function PriorityField({
           setText(event.target.value);
         }}
         onBlur={commit}
+        {...selectValueOnFocus}
         placeholder="—"
         maxLength={3}
         aria-invalid={invalid}

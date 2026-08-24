@@ -10,6 +10,7 @@ import {
 import { priorityOrderValue } from "@/lib/priority/order";
 import { formatPriority, parsePriority } from "@/lib/tree/format";
 import type { ColumnDef } from "@/components/grid/columns";
+import { selectValueOnFocus } from "@/components/selectValueOnFocus";
 
 /**
  * Callbacks the Wish List columns close over. Same shape as the Notes columns: defs stay
@@ -130,6 +131,7 @@ function WishPriorityCell({
     <input
       value={value}
       onClick={(event) => event.stopPropagation()}
+      {...selectValueOnFocus}
       onChange={(event) => {
         setInvalid(false);
         setValue(event.target.value);

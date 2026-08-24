@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { PriorityLetter } from "@/db/schema";
+import { selectValueOnFocus } from "@/components/selectValueOnFocus";
 import { formatPriority, parsePriority } from "@/lib/tree/format";
 
 /**
@@ -72,6 +73,7 @@ export function LetterRankCell({
     <input
       value={value}
       onClick={(event) => event.stopPropagation()}
+      {...selectValueOnFocus}
       onChange={(event) => {
         setInvalid(false);
         setValue(event.target.value);
