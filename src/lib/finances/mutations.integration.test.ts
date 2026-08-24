@@ -1,7 +1,8 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { financeCategoryGroups, users } from "@/db/schema";
+import { createCategoryGroup } from "./budget/mutations";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { importFinanceCsvFiles, type ImportFile } from "./import";
 import { loadRecurringBills } from "./dashboardQueries";
@@ -335,6 +336,7 @@ describeDb("declared bill envelopes", () => {
 
   beforeEach(async () => {
     userId = await makeUser();
+    await createCategoryGroup(userId, { name: "Household" });
   });
 
   it("declares a cadence and reads it back", async () => {
@@ -513,13 +515,19 @@ describeDb("declared bill envelopes", () => {
     expect(await loadRecurringBills(userId)).toEqual([]);
   });
 
-  it("creates a new bill envelope under a default Spending › Bills group", async () => {
+  it("puts a new bill in an existing group and does not invent Spending › Bills", async () => {
     await upsertBillEnvelope(userId, {
       name: "Geico",
       cadence: { unit: "month", n: 6 },
     });
     const [bill] = await loadRecurringBills(userId);
     expect(bill).toBeDefined();
+
+    const groups = await db
+      .select({ name: financeCategoryGroups.name })
+      .from(financeCategoryGroups)
+      .where(eq(financeCategoryGroups.userId, userId));
+    expect(groups.map((group) => group.name).sort()).toEqual(["Household"]);
 
     // A second declaration by the same name corrects the same row rather than creating a
     // sibling under a fresh group.
@@ -528,6 +536,13 @@ describeDb("declared bill envelopes", () => {
       cadence: { unit: "month", n: 12 },
     });
     expect(await loadRecurringBills(userId)).toHaveLength(1);
+  });
+
+  it("refuses to declare a bill when no group exists", async () => {
+    const bare = await makeUser();
+    await expect(
+      upsertBillEnvelope(bare, { name: "Geico", cadence: { unit: "month", n: 6 } }),
+    ).rejects.toThrow("Create a group before adding a bill.");
   });
 });
 
@@ -538,6 +553,8 @@ describeDb("declared bill envelope isolation", () => {
   beforeEach(async () => {
     ownerId = await makeUser();
     intruderId = await makeUser();
+    await createCategoryGroup(ownerId, { name: "Household" });
+    await createCategoryGroup(intruderId, { name: "Household" });
     await upsertBillEnvelope(ownerId, {
       name: "Geico",
       cadence: { unit: "month", n: 6 },
@@ -591,6 +608,7 @@ describeDb("stable bill envelope payee claims", () => {
 
   beforeEach(async () => {
     userId = await makeUser();
+    await createCategoryGroup(userId, { name: "Household" });
   });
 
   it("claims selected payees and preserves them when only cadence changes", async () => {
@@ -661,6 +679,7 @@ describeDb("subscription status", () => {
 
   beforeEach(async () => {
     userId = await makeUser();
+    await createCategoryGroup(userId, { name: "Household" });
     await upsertBillEnvelope(userId, {
       name: "Paramount+",
       cadence: { unit: "month", n: 1 },

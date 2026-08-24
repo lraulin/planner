@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeAccounts,
@@ -690,59 +690,42 @@ export type BillEnvelopeEdit = {
 };
 
 /**
- * Find (or, at the root, create) the group a new bill lands in by default —
- * `Spending › Bills` — the same default the retired Commitments import used to seed.
+ * Group a new bill envelope lands in. Groups are organisational only
+ * (`agent-os/specs/2026-08-24-0930-envelope-sections/` D2) — never created here. Prefer a
+ * group that already holds a bill so Review's successive "Track as bill" clicks stay
+ * together; otherwise any existing group. No group at all is a setup problem, not a prompt
+ * to invent "Spending › Bills".
  */
-async function defaultBillGroupId(
+async function existingGroupIdForBill(
   tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
   userId: string,
 ): Promise<string> {
-  const findOrCreate = async (name: string, parentGroupId: string | null) => {
-    const [existing] = await tx
-      .select({ id: financeCategoryGroups.id })
-      .from(financeCategoryGroups)
-      .where(
-        and(
-          eq(financeCategoryGroups.userId, userId),
-          eq(financeCategoryGroups.name, name),
-          parentGroupId === null
-            ? sql`${financeCategoryGroups.parentGroupId} is null`
-            : eq(financeCategoryGroups.parentGroupId, parentGroupId),
-        ),
-      )
-      .limit(1);
-    if (existing) return existing.id;
+  const [withBill] = await tx
+    .select({ id: financeCategoryGroups.id })
+    .from(financeCategoryGroups)
+    .innerJoin(
+      financeBudgetCategories,
+      eq(financeBudgetCategories.groupId, financeCategoryGroups.id),
+    )
+    .where(
+      and(
+        eq(financeCategoryGroups.userId, userId),
+        eq(financeBudgetCategories.userId, userId),
+        eq(financeBudgetCategories.kind, "bill"),
+      ),
+    )
+    .orderBy(asc(financeCategoryGroups.sortKey))
+    .limit(1);
+  if (withBill) return withBill.id;
 
-    const siblings = await tx
-      .select({ sortKey: financeCategoryGroups.sortKey })
-      .from(financeCategoryGroups)
-      .where(
-        and(
-          eq(financeCategoryGroups.userId, userId),
-          parentGroupId === null
-            ? sql`${financeCategoryGroups.parentGroupId} is null`
-            : eq(financeCategoryGroups.parentGroupId, parentGroupId),
-        ),
-      );
-    const last = siblings
-      .map((row) => row.sortKey)
-      .sort((left, right) => sortKey.compare(right, left))[0];
-
-    const [created] = await tx
-      .insert(financeCategoryGroups)
-      .values({
-        userId,
-        parentGroupId,
-        name,
-        sortKey: last === undefined ? sortKey.first() : sortKey.after(last),
-      })
-      .returning({ id: financeCategoryGroups.id });
-    if (!created) throw new Error("Could not create the group.");
-    return created.id;
-  };
-
-  const spendingId = await findOrCreate("Spending", null);
-  return findOrCreate("Bills", spendingId);
+  const [any] = await tx
+    .select({ id: financeCategoryGroups.id })
+    .from(financeCategoryGroups)
+    .where(eq(financeCategoryGroups.userId, userId))
+    .orderBy(asc(financeCategoryGroups.sortKey))
+    .limit(1);
+  if (!any) throw new Error("Create a group before adding a bill.");
+  return any.id;
 }
 
 /**
@@ -838,7 +821,7 @@ export async function upsertBillEnvelope(
           ),
         );
     } else {
-      const groupId = edit.groupId ?? (await defaultBillGroupId(tx, userId));
+      const groupId = edit.groupId ?? (await existingGroupIdForBill(tx, userId));
       const siblings = await tx
         .select({ sortKey: financeBudgetCategories.sortKey })
         .from(financeBudgetCategories)

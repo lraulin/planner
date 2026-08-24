@@ -6,7 +6,6 @@ import {
   setRecurringBillAction,
 } from "@/app/finances/actions";
 import { Drawer, DrawerHeader } from "@/components/detail/Drawer";
-import { useToday } from "@/components/grid/useToday";
 import { CadenceSelect } from "@/components/finances/CadenceSelect";
 import { DateText } from "@/components/date/DateText";
 import type { RecurringMerchant } from "@/lib/finances/analytics";
@@ -45,15 +44,16 @@ function proposedCadence(entry: RecurringMerchant): Cadence {
  */
 export function ReviewDrawer({
   review,
+  todayKey,
   onClose,
   onSaved,
 }: {
   review: readonly RecurringMerchant[];
+  todayKey: string;
   onClose: () => void;
   onSaved: (message: string) => void;
 }) {
   const titleId = useId();
-  const todayKey = useToday();
   const [open, setOpen] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -85,7 +85,7 @@ export function ReviewDrawer({
                   , last <DateText dateKey={entry.lastChargeOn} className="inline" />
                 </p>
 
-                {open === entry.merchant && todayKey !== null ? (
+                {open === entry.merchant ? (
                   <ReviewForm
                     entry={entry}
                     todayKey={todayKey}

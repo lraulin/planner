@@ -47,6 +47,7 @@ import {
   loadRecurringBills,
   unclassifiedCount,
 } from "@/lib/finances/dashboardQueries";
+import { createCategoryGroup } from "@/lib/finances/budget/mutations";
 import { upsertBillEnvelope } from "@/lib/finances/mutations";
 import { createPayee } from "@/lib/finances/payees/mutations";
 import { getPayee, listAliasRows, listPayees } from "@/lib/finances/payees/queries";
@@ -269,6 +270,7 @@ async function seedOwner(): Promise<Owned> {
       "expected the finance seed to create an account, row, and statement",
     );
   }
+  await createCategoryGroup(userId, { name: "Household" });
   await upsertBillEnvelope(userId, {
     name: "Owner Insurance",
     cadence: { unit: "month", n: 6 },

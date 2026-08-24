@@ -758,9 +758,9 @@ export function BudgetView({
       {reviewing ? (
         <ReviewDrawer
           review={review}
+          todayKey={data.todayKey}
           onClose={() => setReviewing(false)}
           onSaved={(message) => {
-            setReviewing(false);
             setNotice(message);
             router.refresh();
           }}

@@ -11,6 +11,7 @@ import {
   unclassifiedCount,
 } from "./dashboardQueries";
 import { importFinanceCsvFiles, type ImportFile } from "./import";
+import { createCategoryGroup } from "./budget/mutations";
 import { reclassifyTransactions, setOneOff, upsertBillEnvelope } from "./mutations";
 import { listTransactions } from "./queries";
 import { renamePayee } from "./payees/mutations";
@@ -221,6 +222,7 @@ describeDb("loadDashboard", () => {
       (payee) => payee.name === "SimpliSafe",
     );
     if (!alarmPayee) throw new Error("SimpliSafe payee was not seeded");
+    await createCategoryGroup(userId, { name: "Household" });
     await upsertBillEnvelope(userId, {
       name: "SimpliSafe",
       payeeIds: [alarmPayee.id],
@@ -260,6 +262,7 @@ describeDb("loadDashboard", () => {
     const intruderId = await makeUser();
     await seed(ownerId);
     await reclassifyTransactions(ownerId);
+    await createCategoryGroup(ownerId, { name: "Household" });
     await upsertBillEnvelope(ownerId, {
       name: "SimpliSafe",
       cadence: { unit: "month", n: 1 },

@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { importFinanceCsvFiles, type ImportFile } from "@/lib/finances/import";
+import { createCategoryGroup } from "@/lib/finances/budget/mutations";
 import {
   reclassifyTransactions,
   updateTransaction,
@@ -91,6 +92,7 @@ async function seed(userId: string): Promise<void> {
   if (gift) {
     await updateTransaction(userId, gift.id, { flowOverride: "income" });
   }
+  await createCategoryGroup(userId, { name: "Household" });
   await upsertBillEnvelope(userId, {
     name: "SimpliSafe",
     cadence: { unit: "month", n: 1 },
