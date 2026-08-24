@@ -302,9 +302,11 @@ export function FinancesView({
 
   const openDrawer = useCallback((id: string) => setOpenId(id), [setOpenId]);
   const closeDrawer = useCallback(() => {
+    // Do not refresh here. The Register is every transaction the user has; reloading
+    // it on close is a multi-second freeze, and a successful edit already called
+    // `onChanged`. Deleting the open row refreshes explicitly below.
     setOpenId(null);
-    refresh();
-  }, [setOpenId, refresh]);
+  }, [setOpenId]);
 
   const requestDelete = useCallback(
     (id: string) => {
@@ -326,7 +328,7 @@ export function FinancesView({
         return;
       }
       if (openId === target.id) closeDrawer();
-      else refresh();
+      refresh();
     });
   }, [pendingDelete, openId, closeDrawer, refresh]);
 

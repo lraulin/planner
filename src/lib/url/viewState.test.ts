@@ -11,6 +11,7 @@ import {
   readNoteParam,
   readViewParam,
   readViewState,
+  writesOnlyOpenRecord,
   writeViewState,
 } from "./viewState";
 
@@ -209,5 +210,28 @@ describe("findPath", () => {
   it("is the bare page with no query", () => {
     expect(findPath(null)).toBe("/find");
     expect(findPath("  ")).toBe("/find");
+  });
+});
+
+describe("writesOnlyOpenRecord", () => {
+  it("is the drawer open and the drawer close", () => {
+    expect(writesOnlyOpenRecord({ detail: "tx-1" })).toBe(true);
+    expect(writesOnlyOpenRecord({ detail: null })).toBe(true);
+  });
+
+  it("is not a Find query, a view switch, or a combined patch", () => {
+    // The plausible mistake is treating every view-state write as client-only. Find's
+    // `?q=` is the search the page runs; a History API write would leave the results
+    // on the previous query. A patch that also clears view/mode is a navigation.
+    expect(writesOnlyOpenRecord({ q: "rent" })).toBe(false);
+    expect(writesOnlyOpenRecord({ view: "all" })).toBe(false);
+    expect(writesOnlyOpenRecord({ note: "n1" })).toBe(false);
+    expect(writesOnlyOpenRecord({ detail: "tx-1", view: null })).toBe(false);
+  });
+
+  it("ignores keys the caller left untouched", () => {
+    expect(writesOnlyOpenRecord({ detail: "tx-1", view: undefined })).toBe(true);
+    expect(writesOnlyOpenRecord({})).toBe(false);
+    expect(writesOnlyOpenRecord({ detail: undefined })).toBe(false);
   });
 });

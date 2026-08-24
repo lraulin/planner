@@ -5,14 +5,18 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   hrefWithViewState,
   readViewState,
+  writesOnlyOpenRecord,
   type ViewStatePatch,
 } from "@/lib/url/viewState";
 
 /**
  * Two-way binding between the address bar and the open drawer / sub-view.
  *
- * - **Drawer open/close** uses `push`, so the browser Back button closes the drawer —
- *   the natural gesture for "I opened this; take me back".
+ * - **Drawer open/close** uses `push` on the History API, so the browser Back button
+ *   closes the drawer — the natural gesture for "I opened this; take me back" — without
+ *   re-rendering the page. `router.push` would re-run the server component; on the
+ *   Register that reloads every transaction and leaves the drawer stuck open until the
+ *   payload arrives.
  * - **View switches** use `replace`, so flipping Tasks views does not spam history.
  *
  * Callers that use this must sit under a `<Suspense>` boundary: `useSearchParams`
@@ -38,6 +42,14 @@ export function useViewStateUrl() {
       // Avoid a no-op navigation that still re-renders the page.
       const current = `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
       if (href === current) return;
+
+      // Open-record patches are not page data. Next.js reflects History API writes in
+      // `useSearchParams` without a server round-trip — see `writesOnlyOpenRecord`.
+      if (writesOnlyOpenRecord(patch)) {
+        if (history === "push") window.history.pushState(null, "", href);
+        else window.history.replaceState(null, "", href);
+        return;
+      }
 
       if (history === "push") router.push(href, { scroll: false });
       else router.replace(href, { scroll: false });

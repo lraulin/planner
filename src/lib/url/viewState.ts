@@ -243,6 +243,29 @@ export function writeViewState(
 }
 
 /**
+ * True when the patch writes only `?detail=` — the open record.
+ *
+ * That param is the address bar's copy of "this drawer is open". It is not an input to
+ * any page's data load: the Register already has every row, Contacts already has the
+ * contact. Honouring this with a History API write (rather than a client-router
+ * navigation) is what keeps opening or closing a drawer from re-running the page —
+ * on the Register that refetch left the drawer stuck open until thousands of rows
+ * came back.
+ *
+ * Every other key is page data. Find's `?q=` *is* the search the page runs; a
+ * History API write would leave the results on the previous query.
+ */
+export function writesOnlyOpenRecord(patch: ViewStatePatch): boolean {
+  let sawDetail = false;
+  for (const key of Object.keys(patch) as (keyof ViewStatePatch)[]) {
+    if (patch[key] === undefined) continue;
+    if (key !== "detail") return false;
+    sawDetail = true;
+  }
+  return sawDetail;
+}
+
+/**
  * Build a same-path href with the patched query. Empty query becomes bare pathname so the
  * address bar stays clean after a close.
  */
