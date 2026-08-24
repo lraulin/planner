@@ -7,6 +7,7 @@ function item(
 ): RecurringMerchant {
   return {
     payeeId: null,
+    lastTransactionId: null,
     typicalCents: 1000,
     deviationCents: 0,
     lowCents: 1000,

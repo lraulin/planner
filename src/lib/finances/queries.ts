@@ -19,6 +19,15 @@ import type {
   TransactionFilter,
   TransactionListRow,
 } from "./types";
+import { trackAsBillDraft, type TrackAsBillDraft } from "./registerBillDraft";
+import {
+  parseRegisterQuery,
+  prepareRegister,
+  REGISTER_BLOCK_SIZE,
+  type RegisterPrepared,
+  type RegisterQueryContext,
+  type RegisterRowBlock,
+} from "./registerQuery";
 
 /**
  * Reads for the register. Every one takes `userId` and scopes on it.
@@ -252,7 +261,63 @@ export async function listTransactions(
       asc(financeTransactions.id),
     );
 
-  return rows.map((row) => ({
+  return rows.map(toTransactionListRow);
+}
+
+const TRANSACTION_LIST_COLUMNS = {
+  id: financeTransactions.id,
+  accountId: financeTransactions.accountId,
+  accountName: financeAccounts.name,
+  accountKind: financeAccounts.kind,
+  transactionDate: financeTransactions.transactionDate,
+  postedDate: financeTransactions.postedDate,
+  pending: financeTransactions.pending,
+  description: financeTransactions.description,
+  amount: financeTransactions.amount,
+  sourceCategory: financeTransactions.sourceCategory,
+  category: financeTransactions.category,
+  derivedCategory: financeTransactions.derivedCategory,
+  derivedFlow: financeTransactions.derivedFlow,
+  transferGroupId: financeTransactions.transferGroupId,
+  flowOverride: financeTransactions.flowOverride,
+  excludeFromBaseline: financeTransactions.excludeFromBaseline,
+  eventLabel: financeTransactions.eventLabel,
+  plannedWithdrawal: financeTransactions.plannedWithdrawal,
+  notes: financeTransactions.notes,
+  balanceAfter: financeTransactions.balanceAfter,
+  budgetCategoryId: financeTransactions.budgetCategoryId,
+  budgetCategoryName: financeBudgetCategories.name,
+  payeeId: financeTransactions.payeeId,
+  payeeName: financePayees.name,
+} as const;
+
+function toTransactionListRow(row: {
+  id: string;
+  accountId: string;
+  accountName: string;
+  accountKind: TransactionListRow["accountKind"];
+  transactionDate: string;
+  postedDate: string | null;
+  pending: boolean;
+  description: string;
+  amount: string;
+  sourceCategory: string;
+  category: string | null;
+  derivedCategory: string | null;
+  derivedFlow: TransactionListRow["derivedFlow"];
+  transferGroupId: string | null;
+  flowOverride: TransactionListRow["flowOverride"];
+  excludeFromBaseline: boolean;
+  eventLabel: string;
+  plannedWithdrawal: boolean;
+  notes: string;
+  balanceAfter: string | null;
+  budgetCategoryId: string | null;
+  budgetCategoryName: string | null;
+  payeeId: string | null;
+  payeeName: string | null;
+}): TransactionListRow {
+  return {
     id: row.id,
     accountId: row.accountId,
     accountName: row.accountName,
@@ -278,7 +343,82 @@ export async function listTransactions(
     budgetCategoryName: row.budgetCategoryName,
     payeeId: row.payeeId,
     payeeName: row.payeeName,
-  }));
+  };
+}
+
+/** User-scoped detail rows for a Register block, preserving the requested order. */
+export async function listTransactionsByIds(
+  userId: string,
+  ids: readonly string[],
+): Promise<TransactionListRow[]> {
+  const wanted = [...new Set(ids)].slice(0, 100);
+  if (wanted.length === 0) return [];
+  const rows = await db
+    .select(TRANSACTION_LIST_COLUMNS)
+    .from(financeTransactions)
+    .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
+    .leftJoin(
+      financeBudgetCategories,
+      eq(financeBudgetCategories.id, financeTransactions.budgetCategoryId),
+    )
+    .leftJoin(
+      financePayees,
+      and(
+        eq(financePayees.id, financeTransactions.payeeId),
+        eq(financePayees.userId, userId),
+      ),
+    )
+    .where(
+      and(
+        eq(financeTransactions.userId, userId),
+        inArray(financeTransactions.id, wanted),
+      ),
+    );
+  const byId = new Map(rows.map((row) => [row.id, toTransactionListRow(row)]));
+  return wanted.flatMap((id) => {
+    const row = byId.get(id);
+    return row ? [row] : [];
+  });
+}
+
+export async function loadRegisterPrepared(
+  userId: string,
+  rawQuery: unknown,
+  ctx: RegisterQueryContext,
+): Promise<RegisterPrepared> {
+  const ledger = await listTransactions(userId);
+  return prepareRegister(ledger, parseRegisterQuery(rawQuery), ctx);
+}
+
+export async function loadRegisterBlock(
+  userId: string,
+  ids: readonly string[],
+): Promise<RegisterRowBlock> {
+  const rows = await listTransactionsByIds(userId, ids.slice(0, REGISTER_BLOCK_SIZE));
+  return { queryKey: "", offset: 0, rows };
+}
+
+export async function loadRegisterExportRows(
+  userId: string,
+  rawQuery: unknown,
+  ctx: RegisterQueryContext,
+): Promise<TransactionListRow[]> {
+  const ledger = await listTransactions(userId);
+  const prepared = prepareRegister(ledger, parseRegisterQuery(rawQuery), ctx);
+  const byId = new Map(ledger.map((row) => [row.id, row]));
+  return prepared.index.nodeIds.flatMap((id) => {
+    const row = byId.get(id);
+    return row ? [row] : [];
+  });
+}
+
+export async function loadTrackAsBillDraft(
+  userId: string,
+  transactionId: string,
+  todayKey: string,
+): Promise<TrackAsBillDraft> {
+  const ledger = await listTransactions(userId);
+  return trackAsBillDraft(ledger, transactionId, todayKey);
 }
 
 /** Net of the transactions matching a filter, in cents. Summed in SQL. */

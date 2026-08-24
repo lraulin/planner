@@ -35,7 +35,7 @@ The Category cell is a flat list. Track as bill creates a bill envelope and clai
 
 New income / envelope / savings: name, then `createBudgetCategory` + `setTransactionBudgetCategory`. Do not claim the payee.
 
-**D3 — One Track-as-bill write, every entry point.** Register row menu, Category **New bill…**, Review, Insights one-off, agent `upsert_bill_envelope`, and the payee-claim picker all end in `upsertBillEnvelope` / `replaceCommitmentPayees` plus `applyClaimedPayees`. That helper files every on-budget charge of the claimed payees (no start-month bound) and upserts a `payee is` + set-category rule at the end of the list (later-match-wins beats `/^CVS/`). Do not grow a second filing path for any of those labels.
+**D3 — One Track-as-bill write, every entry point.** Register row menu, Category **New bill…**, Review, and Insights one-off call `trackTransactionAsBill`: load the user-owned transaction, mint or isolate its payee, then `upsertBillEnvelope` with that payee. Agent `upsert_bill_envelope` and the payee-claim picker continue through `upsertBillEnvelope` / `replaceCommitmentPayees` directly — they already hold a known payee. Both paths file every on-budget charge of the claimed payees (no start-month bound) and upsert a `payee is` + set-category rule at the end of the list (later-match-wins beats `/^CVS/`). The browser must not compose `isolatePayeeForBill` and `setRecurringBill` itself.
 
 **D4 — Category is allowed before the budget start.** `envelopeAssignmentRefusal` keeps only the off-budget reason. Pre-start Category is analysis data. Ready to Assign, Assigned, and in-budget Activity still ignore those rows. The Budget uncategorized count still counts only on-budget rows since the start month.
 
@@ -66,6 +66,7 @@ New income / envelope / savings: name, then `createBudgetCategory` + `setTransac
 | 2   | Track as bill / New bill… mint a payee from the merchant on confirm when `payee_id` is null               | The Payee column already shows the merchant; refusing "Reclassify first" blocked the flow. A full-ledger reclassify plus unbounded claims froze the Register. |
 | 3   | Ingest `applyPayeeClaims` is bounded to rows created in that ingest                                       | Unbounded scan on every import/sync was a second way to lock the page                                                                                         |
 | 4   | Track as bill isolates this merchant onto its own payee when the current payee also owns other aliases    | Seeded `/^CVS/` had named ExtraCare's payee "CVS", so a bill would have claimed 211 pharmacy charges                                                          |
+| 5   | Transaction-backed entry points call one `trackTransactionAsBill` mutation                                | Register, New bill…, Review, and Insights were composing isolate + upsert in the browser; Insights still refused `payeeId === null` independently             |
 
 ## Task 1: Save spec documentation
 

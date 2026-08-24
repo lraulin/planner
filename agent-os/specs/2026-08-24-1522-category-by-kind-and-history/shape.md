@@ -20,7 +20,7 @@
 
 ## Decisions
 
-- Track as bill, New bill…, Review, Insights, the agent tool, and the payee-claim picker share one write (`upsertBillEnvelope` / `replaceCommitmentPayees` → `applyClaimedPayees`). Confirmed in review: DRY, same code everywhere those names appear.
+- Track as bill, New bill…, Review, and Insights share `trackTransactionAsBill` (isolate payee from the row, then the canonical envelope write). The agent tool and payee-claim picker still call `upsertBillEnvelope` / `replaceCommitmentPayees` → `applyClaimedPayees` with a known payee. Confirmed in review: DRY filing, one browser action for the transaction-backed path.
 - Filing a bill's payee includes historical on-budget charges; other CVS payees stay unclaimed.
 - Average Spent / Spent Last Month look at categorised spend before the start month. Average Assigned does not invent Assigned before start.
 

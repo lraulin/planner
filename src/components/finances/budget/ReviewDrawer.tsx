@@ -3,7 +3,7 @@
 import { useId, useMemo, useState, useTransition } from "react";
 import {
   setPayeeNotACommitmentAction,
-  setRecurringBillAction,
+  trackTransactionAsBillAction,
 } from "@/app/finances/actions";
 import { Drawer, DrawerHeader } from "@/components/detail/Drawer";
 import { CadenceSelect } from "@/components/finances/CadenceSelect";
@@ -195,9 +195,12 @@ function ReviewForm({
         if (name.trim() === "") return;
         onError("");
         startTransition(async () => {
-          const result = await setRecurringBillAction({
+          if (entry.lastTransactionId === null) {
+            onError("This merchant has no charge to track from.");
+            return;
+          }
+          const result = await trackTransactionAsBillAction(entry.lastTransactionId, {
             name: name.trim(),
-            payeeIds: entry.payeeId ? [entry.payeeId] : undefined,
             cadence,
             expectedCents: cents > 0 ? cents : null,
             anchorDate: next || null,

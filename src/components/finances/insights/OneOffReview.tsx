@@ -5,7 +5,7 @@ import type { CadenceCandidate, OneOffSuggestion } from "@/lib/finances/analytic
 import { formatUsd } from "@/lib/finances/money";
 import { cadenceLabel, type Cadence } from "@/lib/finances/recurringBills";
 import { CadenceSelect } from "../CadenceSelect";
-import { setOneOffAction, setRecurringBillAction } from "@/app/finances/actions";
+import { setOneOffAction, trackTransactionAsBillAction } from "@/app/finances/actions";
 import { useDateFormatter } from "@/components/settings/SettingsProvider";
 import { PanelEmpty } from "./Panel";
 
@@ -82,9 +82,8 @@ export function OneOffReview({
     startTransition(async () => {
       // The charge that prompted the declaration is the best amount available, and storing it
       // is what lets the bill keep its figure in a window holding none of its charges.
-      const result = await setRecurringBillAction({
+      const result = await trackTransactionAsBillAction(suggestion.row.id, {
         name: suggestion.merchant,
-        payeeIds: suggestion.row.payeeId ? [suggestion.row.payeeId] : [],
         cadence,
         expectedCents: suggestion.cents,
         anchorDate: suggestion.row.transactionDate,
@@ -160,13 +159,7 @@ export function OneOffReview({
                   }
                   disabled={
                     pending ||
-                    suggestion.row.payeeId === null ||
                     (cadences[suggestion.row.id] ?? proposed?.cadence ?? null) === null
-                  }
-                  title={
-                    suggestion.row.payeeId === null
-                      ? "Reclassify transactions to assign a payee first."
-                      : undefined
                   }
                   className="min-h-tap rounded border border-rule bg-surface-raised px-2 text-[0.75rem] text-ink disabled:opacity-50 md:min-h-0 md:py-1"
                 >

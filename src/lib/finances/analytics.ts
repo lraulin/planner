@@ -1152,6 +1152,8 @@ export function debtToAssetRatio(assetCents: number, debtCents: number): number 
 export type RecurringMerchant = {
   merchant: string;
   payeeId: string | null;
+  /** Last spend charge on file, so Review can track the bill from that row. */
+  lastTransactionId: string | null;
   /** Typical charge, as a positive cost. */
   typicalCents: number;
   /** Standard deviation of the charges, in cents. Near zero is a subscription. */
@@ -1288,6 +1290,7 @@ export function recurringMerchants(
     found.push({
       merchant,
       payeeId: ordered[0]?.payeeId ?? null,
+      lastTransactionId: ordered[ordered.length - 1]?.id ?? null,
       typicalCents,
       deviationCents,
       lowCents: Math.min(...amounts),
@@ -1322,6 +1325,7 @@ export function recurringMerchants(
     found.push({
       merchant: bill.name,
       payeeId: billPayeeIds(bill)[0] ?? null,
+      lastTransactionId: charges[charges.length - 1]?.id ?? null,
       typicalCents,
       deviationCents: standardDeviation(amounts),
       // A declared bill with no charges on file has no observed range; collapsing it onto
@@ -1473,6 +1477,7 @@ export function spendCandidates(
     found.push({
       merchant,
       payeeId: past[0]?.payeeId ?? null,
+      lastTransactionId: past[past.length - 1]?.id ?? null,
       typicalCents: candidate.typicalCents,
       deviationCents: standardDeviation(amounts),
       lowCents: Math.min(...amounts),

@@ -27,9 +27,12 @@ import { cadenceColumns, cadenceOf, type Cadence } from "./recurringBills";
 import { numericStringToCents } from "./money";
 import type { PaypalResolution } from "./paypalMatch";
 import { ensurePayees } from "./payees/backfill";
-import { replaceCommitmentPayeesInTransaction } from "./payees/mutations";
+import {
+  isolatePayeeForBill,
+  replaceCommitmentPayeesInTransaction,
+} from "./payees/mutations";
 import { applyClaimedPayees } from "./payees/claims";
-import { payeeIndex } from "./payees/resolve";
+import { aliasFor, payeeIndex } from "./payees/resolve";
 import { applyRules, ownedCategoryAction } from "./rules/match";
 import { normalizeMerchant } from "./classify/merchant";
 import { addTagToNotes } from "./tags";
@@ -725,17 +728,16 @@ export type BillEnvelopeEdit = {
  * operation naturally idempotent: declaring Geico semi-annual twice is one declaration, and
  * correcting it to yearly is the same call with a different number.
  *
- * **This is the only Track-as-bill write.** Register, New bill…, Review, Insights, and
- * the agent tool all call it. Claiming payees files those charges (including history) and
+ * **This is the canonical bill-envelope write.** Agent tools, the payee-claim picker, and
+ * cadence edits on an existing bill call it directly. Transaction-backed Track as bill /
+ * New bill… / Review / Insights go through `trackTransactionAsBill`, which isolates the
+ * merchant then lands here. Claiming payees files those charges (including history) and
  * upserts the exact-payee rule here, not in each caller.
  *
  * The cadence is checked here as well as by the column's CHECK — a constraint violation
  * surfaces as a database error the user cannot act on, and the offered list is a closed set.
  */
-export async function upsertBillEnvelope(
-  userId: string,
-  edit: BillEnvelopeEdit,
-): Promise<void> {
+function requireValidBillEnvelope(edit: BillEnvelopeEdit): string {
   const name = edit.name.trim();
   if (name === "") throw new Error("A bill needs a name.");
   if (!Number.isInteger(edit.cadence.n)) {
@@ -757,6 +759,81 @@ export async function upsertBillEnvelope(
   ) {
     throw new Error("A due day must be a whole number from 1 to 31.");
   }
+  return name;
+}
+
+/**
+ * Declare a bill from a Register (or Insights / Review) transaction.
+ *
+ * Isolation, envelope upsert, historical filing, and the exact-payee rule are one domain
+ * write so the browser cannot compose `isolatePayeeForBill` + `upsertBillEnvelope` and
+ * leave a split payee behind a refused cadence. Validation runs before isolation so a
+ * blank name or illegal cadence is a no-op.
+ */
+export async function trackTransactionAsBill(
+  userId: string,
+  transactionId: string,
+  edit: Omit<BillEnvelopeEdit, "payeeIds">,
+): Promise<{ payeeId: string }> {
+  requireValidBillEnvelope(edit);
+  const payeeId = await isolatePayeeForBill(userId, transactionId);
+  await attachUnassignedMerchantHistory(userId, transactionId, payeeId);
+  await upsertBillEnvelope(userId, { ...edit, payeeIds: [payeeId] });
+  return { payeeId };
+}
+
+/**
+ * Minting a payee from one row used to leave the rest of this merchant unassigned, so
+ * filing "this payee" missed the history Track as bill counted in the dialog.
+ */
+async function attachUnassignedMerchantHistory(
+  userId: string,
+  transactionId: string,
+  payeeId: string,
+): Promise<void> {
+  const [row] = await db
+    .select({ description: financeTransactions.description })
+    .from(financeTransactions)
+    .where(
+      and(
+        eq(financeTransactions.id, transactionId),
+        eq(financeTransactions.userId, userId),
+      ),
+    )
+    .limit(1);
+  if (!row) return;
+  const alias = aliasFor(row.description);
+  if (alias === "") return;
+
+  const unassigned = await db
+    .select({
+      id: financeTransactions.id,
+      description: financeTransactions.description,
+    })
+    .from(financeTransactions)
+    .where(
+      and(eq(financeTransactions.userId, userId), isNull(financeTransactions.payeeId)),
+    );
+  const matching = unassigned
+    .filter((entry) => aliasFor(entry.description) === alias)
+    .map((entry) => entry.id);
+  if (matching.length === 0) return;
+  await db
+    .update(financeTransactions)
+    .set({ payeeId, updatedAt: new Date() })
+    .where(
+      and(
+        eq(financeTransactions.userId, userId),
+        inArray(financeTransactions.id, matching),
+      ),
+    );
+}
+
+export async function upsertBillEnvelope(
+  userId: string,
+  edit: BillEnvelopeEdit,
+): Promise<void> {
+  const name = requireValidBillEnvelope(edit);
 
   let categoryId: string | undefined;
   await db.transaction(async (tx) => {

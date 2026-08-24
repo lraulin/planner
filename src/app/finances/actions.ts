@@ -32,6 +32,7 @@ import {
   updateAccount,
   deleteAccount,
   updateTransaction,
+  trackTransactionAsBill,
   upsertBillEnvelope,
   type AccountEdit,
   type BillEnvelopeEdit,
@@ -73,7 +74,21 @@ import {
   finalizeTransactionIngestion,
   transactionIngestionWatermark,
 } from "@/lib/finances/ingestion";
-import { listAccounts, listTransactions } from "@/lib/finances/queries";
+import {
+  getTransaction,
+  listAccounts,
+  listTransactions,
+  loadRegisterBlock,
+  loadRegisterExportRows,
+  loadRegisterPrepared,
+  loadTrackAsBillDraft,
+} from "@/lib/finances/queries";
+import type { TrackAsBillDraft } from "@/lib/finances/registerBillDraft";
+import type { RegisterPrepared, RegisterRowBlock } from "@/lib/finances/registerQuery";
+import { REGISTER_BLOCK_SIZE } from "@/lib/finances/registerQuery";
+import { readSetting } from "@/lib/settings/queries";
+import { BUDGET_SCOPE } from "@/lib/settings/scopes";
+import { parseBudget } from "@/lib/settings/finances";
 import { loadUpcomingBills } from "@/lib/finances/dashboardQueries";
 import type { UpcomingBillRow } from "@/lib/finances/commitments";
 import type {
@@ -143,6 +158,63 @@ export async function listTransactionsAction(
   return runQuery((userId) => listTransactions(userId, filter));
 }
 
+async function registerContext(userId: string) {
+  const [accounts, storedBudget] = await Promise.all([
+    listAccounts(userId),
+    readSetting(userId, BUDGET_SCOPE),
+  ]);
+  return {
+    offBudgetAccountIds: new Set(
+      accounts.filter((account) => account.offBudget).map((account) => account.id),
+    ),
+    budgetStartMonth: parseBudget(storedBudget).startMonth,
+  };
+}
+
+export async function loadRegisterIndexAction(
+  query: unknown,
+): Promise<QueryResult<RegisterPrepared>> {
+  return runQuery(async (userId) =>
+    loadRegisterPrepared(userId, query, await registerContext(userId)),
+  );
+}
+
+export async function loadRegisterBlockAction(
+  ids: readonly string[],
+): Promise<QueryResult<RegisterRowBlock>> {
+  const capped = ids
+    .filter((id) => typeof id === "string")
+    .slice(0, REGISTER_BLOCK_SIZE);
+  return runQuery((userId) => loadRegisterBlock(userId, capped));
+}
+
+export async function loadRegisterExportAction(
+  query: unknown,
+): Promise<QueryResult<TransactionListRow[]>> {
+  return runQuery(async (userId) =>
+    loadRegisterExportRows(userId, query, await registerContext(userId)),
+  );
+}
+
+export async function loadTrackAsBillDraftAction(
+  transactionId: string,
+  todayKey: string,
+): Promise<QueryResult<TrackAsBillDraft>> {
+  if (typeof transactionId !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(todayKey)) {
+    return { ok: false, error: "Select a transaction" };
+  }
+  return runQuery((userId) => loadTrackAsBillDraft(userId, transactionId, todayKey));
+}
+
+export async function getTransactionAction(
+  transactionId: string,
+): Promise<QueryResult<TransactionListRow | null>> {
+  if (typeof transactionId !== "string" || transactionId === "") {
+    return { ok: false, error: "Select a transaction" };
+  }
+  return runQuery((userId) => getTransaction(userId, transactionId));
+}
+
 export async function listAccountsAction(): Promise<QueryResult<FinanceAccountRow[]>> {
   return runQuery(listAccounts);
 }
@@ -193,6 +265,13 @@ export async function setRecurringBillAction(
   edit: BillEnvelopeEdit,
 ): Promise<ActionResult> {
   return run((userId) => upsertBillEnvelope(userId, edit));
+}
+
+export async function trackTransactionAsBillAction(
+  transactionId: string,
+  edit: Omit<BillEnvelopeEdit, "payeeIds">,
+): Promise<DataActionResult<{ payeeId: string }>> {
+  return runWithData((userId) => trackTransactionAsBill(userId, transactionId, edit));
 }
 
 export async function isolatePayeeForBillAction(

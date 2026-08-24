@@ -17,6 +17,7 @@ import {
   deleteAccount,
   deleteTransaction,
   setSubscriptionStatus,
+  trackTransactionAsBill,
   updateAccount,
   updateTransaction,
   upsertBillEnvelope,
@@ -24,7 +25,8 @@ import {
 import { toDateKey } from "@/lib/schedule/geometry";
 import { getTransaction, listAccounts, listTransactions } from "./queries";
 import { createPayee } from "./payees/mutations";
-import { payeesForCommitment } from "./payees/queries";
+import { getPayee, listAliasRows, payeesForCommitment } from "./payees/queries";
+import { payeeForDescription, payeeIndex } from "./payees/resolve";
 
 const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
@@ -804,5 +806,205 @@ describeDb("subscription status", () => {
       setSubscriptionStatus(intruderId, "Paramount+", "cancelled"),
     ).rejects.toThrow("Bill not found.");
     expect((await loadRecurringBills(userId))[0].status).toBe("active");
+  });
+});
+
+describeDb("trackTransactionAsBill", () => {
+  let userId: string;
+  let accountId: string;
+
+  beforeEach(async () => {
+    userId = await makeUser();
+    const [account] = await db
+      .insert(financeAccounts)
+      .values({
+        userId,
+        name: "Card",
+        kind: "credit_card",
+        externalSource: "test",
+        externalKey: `card-${crypto.randomUUID()}`,
+      })
+      .returning({ id: financeAccounts.id });
+    accountId = account.id;
+  });
+
+  async function addCharge(
+    description: string,
+    amount: string,
+    date: string,
+    payeeId?: string | null,
+  ): Promise<string> {
+    const [row] = await db
+      .insert(financeTransactions)
+      .values({
+        userId,
+        accountId,
+        transactionDate: date,
+        description,
+        amount,
+        payeeId: payeeId ?? null,
+      })
+      .returning({ id: financeTransactions.id });
+    return row.id;
+  }
+
+  it("mints a payee, files history, and writes the exact-payee rule from a row with none", async () => {
+    const recent = await addCharge("GEICO *AUTO", "-594.98", "2026-08-04");
+    const history = await addCharge("GEICO *AUTO", "-594.98", "2026-02-04");
+
+    const { payeeId } = await trackTransactionAsBill(userId, recent, {
+      name: "Geico",
+      cadence: { unit: "month", n: 6 },
+      expectedCents: 59498,
+    });
+
+    const bills = await loadRecurringBills(userId);
+    expect(bills).toMatchObject([
+      { name: "Geico", payeeIds: [payeeId], cadenceMonths: 6 },
+    ]);
+    expect(await getPayee(userId, payeeId)).toMatchObject({
+      claim: { id: bills[0].id, name: "Geico" },
+    });
+
+    const filed = await db
+      .select({
+        id: financeTransactions.id,
+        categoryId: financeTransactions.budgetCategoryId,
+        payeeId: financeTransactions.payeeId,
+      })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.userId, userId));
+    expect(filed.find((row) => row.id === recent)).toMatchObject({
+      categoryId: bills[0].id,
+      payeeId,
+    });
+    expect(filed.find((row) => row.id === history)).toMatchObject({
+      categoryId: bills[0].id,
+      payeeId,
+    });
+
+    const rules = await db
+      .select({ conditions: financeRules.conditions, actions: financeRules.actions })
+      .from(financeRules)
+      .where(eq(financeRules.userId, userId));
+    expect(rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          conditions: [{ field: "payee", op: "is", value: payeeId }],
+          actions: [{ op: "set", field: "category", value: bills[0].id }],
+        }),
+      ]),
+    );
+  });
+
+  it("splits ExtraCare off a shared CVS payee so pharmacy charges stay unclaimed", async () => {
+    const cvs = await createPayee(userId, {
+      name: "CVS",
+      aliases: ["CVS", "CVS/PHARMACY", "CVSEXTRACARE"],
+    });
+    const extra = await addCharge(
+      "CVSExtraCare 8007467287RI",
+      "-5.00",
+      "2026-07-05",
+      cvs,
+    );
+    const shop = await addCharge("CVS/PHARMACY #01522", "-22.84", "2026-07-06", cvs);
+
+    const { payeeId } = await trackTransactionAsBill(userId, extra, {
+      name: "CVS ExtraCare",
+      cadence: { unit: "month", n: 1 },
+      expectedCents: 500,
+    });
+    expect(payeeId).not.toBe(cvs);
+
+    const bills = await loadRecurringBills(userId);
+    const envelope = bills.find((bill) => bill.name === "CVS ExtraCare");
+    expect(envelope?.payeeIds).toEqual([payeeId]);
+
+    const filed = await db
+      .select({
+        id: financeTransactions.id,
+        categoryId: financeTransactions.budgetCategoryId,
+        payeeId: financeTransactions.payeeId,
+      })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.userId, userId));
+    expect(filed.find((row) => row.id === extra)).toMatchObject({
+      categoryId: envelope?.id,
+      payeeId,
+    });
+    expect(filed.find((row) => row.id === shop)).toMatchObject({
+      categoryId: null,
+      payeeId: cvs,
+    });
+  });
+
+  it("keeps a dedicated payee when this merchant already has its own alias", async () => {
+    const dedicated = await createPayee(userId, {
+      name: "Netflix",
+      aliases: ["NETFLIX.COM"],
+    });
+    const charge = await addCharge("NETFLIX.COM", "-15.99", "2026-08-01", dedicated);
+
+    const { payeeId } = await trackTransactionAsBill(userId, charge, {
+      name: "Netflix",
+      cadence: { unit: "month", n: 1 },
+      expectedCents: 1599,
+    });
+    expect(payeeId).toBe(dedicated);
+  });
+
+  it("rolls back on an illegal cadence without minting a payee", async () => {
+    const charge = await addCharge("TAYLOR GAS", "-180.00", "2026-08-01");
+    await expect(
+      trackTransactionAsBill(userId, charge, {
+        name: "Taylor Gas",
+        cadence: { unit: "month", n: 0 },
+      }),
+    ).rejects.toThrow(/from 1 to 24/);
+
+    expect(await loadRecurringBills(userId)).toEqual([]);
+    const [row] = await db
+      .select({ payeeId: financeTransactions.payeeId })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.id, charge));
+    expect(row?.payeeId).toBeNull();
+    expect(
+      payeeForDescription("TAYLOR GAS", payeeIndex(await listAliasRows(userId))),
+    ).toBeNull();
+  });
+
+  it("will not let a second user read, change, or delete the owner's bill", async () => {
+    const charge = await addCharge("PARAMOUNT+", "-12.99", "2026-08-01");
+    const { payeeId } = await trackTransactionAsBill(userId, charge, {
+      name: "Paramount+",
+      cadence: { unit: "month", n: 1 },
+      expectedCents: 1299,
+    });
+    const [bill] = await loadRecurringBills(userId);
+    const intruderId = await makeUser();
+
+    await expect(
+      trackTransactionAsBill(intruderId, charge, {
+        name: "Stolen",
+        cadence: { unit: "month", n: 1 },
+        expectedCents: 1299,
+      }),
+    ).rejects.toThrow(/does not exist/);
+    expect(await getPayee(intruderId, payeeId)).toBeNull();
+    expect(await loadRecurringBills(intruderId)).toEqual([]);
+    expect(await getTransaction(intruderId, charge)).toBeNull();
+    await expect(
+      upsertBillEnvelope(intruderId, {
+        name: "Paramount+",
+        cadence: { unit: "month", n: 12 },
+      }),
+    ).resolves.toBeUndefined();
+    expect((await loadRecurringBills(userId))[0]).toMatchObject({
+      id: bill.id,
+      cadenceMonths: 1,
+    });
+    await expect(deleteTransaction(intruderId, charge)).rejects.toThrow(/not found/i);
+    expect(await getTransaction(userId, charge)).not.toBeNull();
   });
 });

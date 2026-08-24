@@ -1,0 +1,150 @@
+/**
+ * Filter, search, and sort accessors for every Register column, including the optionally
+ * hidden Payee column. Shared by `financeColumns` and the server-prepared row pipeline so
+ * a hidden-column filter cannot mean one thing in the header and another on the server.
+ */
+
+import { effectiveFlow, effectiveMerchant } from "./analytics";
+import { flowLabel } from "./flowLabels";
+import { formatUsd } from "./money";
+import type { TransactionListRow } from "./types";
+import type { FilterKind } from "@/lib/grid/customFilter";
+import type { GridFilterValue } from "@/lib/grid/filterValue";
+
+export const REGISTER_VISIBLE_COLUMN_IDS = [
+  "date",
+  "account",
+  "description",
+  "category",
+  "tags",
+  "flow",
+  "sourceCategory",
+  "amount",
+  "posted",
+  "balance",
+  "notes",
+] as const;
+
+export const REGISTER_FIELD_IDS = [
+  "date",
+  "account",
+  "description",
+  "payee",
+  "category",
+  "tags",
+  "flow",
+  "sourceCategory",
+  "amount",
+  "posted",
+  "balance",
+  "notes",
+] as const;
+
+export type RegisterFieldId = (typeof REGISTER_FIELD_IDS)[number];
+
+export const REGISTER_FIELD_ID_SET: ReadonlySet<string> = new Set(REGISTER_FIELD_IDS);
+
+export type RegisterField = {
+  id: RegisterFieldId;
+  filterKind: FilterKind;
+  filterValue?: (row: TransactionListRow) => string | null;
+  filterValues?: (row: TransactionListRow) => readonly string[];
+  sortValue?: (row: TransactionListRow) => string | number | null | undefined;
+};
+
+export const registerFields: Record<RegisterFieldId, RegisterField> = {
+  date: {
+    id: "date",
+    filterKind: "date",
+    filterValue: (row) => row.transactionDate,
+    sortValue: (row) => row.transactionDate,
+  },
+  account: {
+    id: "account",
+    filterKind: "enum",
+    filterValue: (row) => row.accountName,
+    sortValue: (row) => row.accountName.toLowerCase(),
+  },
+  description: {
+    id: "description",
+    filterKind: "text",
+    filterValue: (row) => row.description || null,
+    sortValue: (row) => row.description.toLowerCase(),
+  },
+  payee: {
+    id: "payee",
+    filterKind: "enum",
+    filterValue: (row) => effectiveMerchant(row) || null,
+    sortValue: (row) => effectiveMerchant(row).toLowerCase(),
+  },
+  category: {
+    id: "category",
+    filterKind: "enum",
+    filterValue: (row) => row.budgetCategoryName ?? "Uncategorized",
+    sortValue: (row) => (row.budgetCategoryName ?? "").toLowerCase(),
+  },
+  tags: {
+    id: "tags",
+    filterKind: "tags",
+    filterValues: (row) => row.tags ?? [],
+    sortValue: (row) => (row.tags ?? []).join("\u0000"),
+  },
+  flow: {
+    id: "flow",
+    filterKind: "enum",
+    filterValue: (row) => flowLabel(effectiveFlow(row)),
+    sortValue: (row) => flowLabel(effectiveFlow(row)),
+  },
+  sourceCategory: {
+    id: "sourceCategory",
+    filterKind: "enum",
+    filterValue: (row) => row.sourceCategory || null,
+    sortValue: (row) => row.sourceCategory.toLowerCase(),
+  },
+  amount: {
+    id: "amount",
+    filterKind: "text",
+    filterValue: (row) => formatUsd(row.amountCents),
+    sortValue: (row) => row.amountCents,
+  },
+  posted: {
+    id: "posted",
+    filterKind: "date",
+    filterValue: (row) => (row.pending ? "Pending" : row.postedDate),
+    sortValue: (row) => (row.pending ? "\uffff" : row.postedDate),
+  },
+  balance: {
+    id: "balance",
+    filterKind: "text",
+    filterValue: (row) =>
+      row.balanceAfterCents === null ? null : formatUsd(row.balanceAfterCents),
+    sortValue: (row) => row.balanceAfterCents,
+  },
+  notes: {
+    id: "notes",
+    filterKind: "text",
+    filterValue: (row) => row.notes || null,
+    sortValue: (row) => row.notes.toLowerCase(),
+  },
+};
+
+export const REGISTER_FIELDS: readonly RegisterField[] = REGISTER_FIELD_IDS.map(
+  (id) => registerFields[id],
+);
+
+export function registerFilterValues(
+  row: TransactionListRow,
+): Record<string, GridFilterValue> {
+  const values: Record<string, GridFilterValue> = {};
+  for (const field of REGISTER_FIELDS) {
+    if (field.filterValues) values[field.id] = field.filterValues(row);
+    else if (field.filterValue) values[field.id] = field.filterValue(row);
+  }
+  return values;
+}
+
+export function registerFieldKinds(): Record<string, FilterKind | undefined> {
+  const kinds: Record<string, FilterKind | undefined> = {};
+  for (const field of REGISTER_FIELDS) kinds[field.id] = field.filterKind;
+  return kinds;
+}
