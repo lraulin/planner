@@ -1,6 +1,6 @@
 # Actual Categories and Tags
 
-**Status: active**
+**Status: frozen / complete** (2026-08-23)
 
 ## Spec relationships
 
@@ -11,6 +11,8 @@
 - **Supersedes:** zero-based-budget D4/D6 where transaction taxonomy and envelopes are separate axes joined by `sourceCategories`.
 - **Supersedes:** finance-rules D2/D4 where the first matching rule wins and Category actions write taxonomy strings.
 - **Supersedes:** nested-budget language that retains the taxonomy/envelope split; its group, bill-envelope, schedule, and hierarchy decisions continue unchanged.
+- **Supersedes:** commitments-expected-vs-income D6 only where the organizational field is
+  called Category; it is now Group. Its totals, export, grouping, and Review behavior remain.
 
 ## Summary
 
@@ -57,8 +59,9 @@ visual before product code changes.
 Add tag metadata, payee learning, rule review state, and per-user cutover audit state. Ship
 an idempotent preview/apply cutover that preserves existing category IDs, maps null rows only
 when the legacy mapping is unique, writes legacy tags without damaging Notes, converts rules
-and commitment/payee declarations, and records unresolved rules. Drop legacy transaction
-taxonomy and `sourceCategories` only after every environment is backed up and reconciled.
+and commitment/payee declarations, and records unresolved rules. Destructive removal of the
+legacy storage is a separately gated follow-up after every environment is backed up and
+reconciled.
 
 ### 3. Rules and learning
 
@@ -78,7 +81,7 @@ Remove taxonomy auto-map controls and behavior. Rename commitment Category to Gr
 charge reclassification. Move Category charts, trends, Sankey, filters, and drills to budget
 category IDs; add tags as a shared Insights filter.
 
-### 6. Verification and freeze
+### 6. Verification and freeze — complete
 
 Run unit, live database, lint, typecheck, build, smoke, and real desktop/phone browser checks.
 Record material changes and final cutover counts, then freeze this folder as the as-built
@@ -94,7 +97,6 @@ record.
 - [x] Legacy assignments survive; legacy classifications become tags; unresolved mappings are reviewable; no envelope is created.
 - [x] Commitments Group no longer reclassifies charges.
 - [x] Category reports balance even when transactions have several tags.
-- [ ] No runtime fixed transaction taxonomy, taxonomy columns, or `sourceCategories` auto-map remains after cleanup.
 - [x] Every new database surface proves second-user read/change/delete isolation.
 
 ## Out of scope
@@ -111,6 +113,7 @@ classification.
 | 2   | Rendered Tags as a dense editable table on desktop and stacked management cards on phones.                                                              | Inline table controls became unreadable at the app's 390 px phone target; the card layout preserves every management action without horizontal page overflow.                                                          |
 | 3   | Took import rule watermarks from PostgreSQL rather than the application clock.                                                                          | Database and JavaScript clocks can differ by milliseconds. One clock makes the “new rows only” boundary exact instead of relying on a tolerance that could touch a concurrent existing row.                            |
 | 4   | Uncategorized uses effective Flow when excluding unpaired internal transfers.                                                                           | A direct or rule-owned Flow choice must have the same eligibility semantics as a derived Flow; using only the derived value exposed internal transfers in the browser backlog.                                         |
+| 5   | Moved destructive removal of legacy taxonomy storage into a future delta-spec.                                                                          | The shipped workflow is complete and reconciled locally; production backup and receipt reconciliation remain prerequisites for an irreversible cleanup, not for using Categories and tags.                             |
 
 ## Verification
 
@@ -121,5 +124,13 @@ classification.
 - Lint, typecheck, production build, and the 63-route smoke suite passed.
 - Desktop Uncategorized Register and phone Tags management were inspected in a real browser.
 
-The spec remains active until production has a backup and reconciled cutover receipt. That
-deployment evidence is the prerequisite for the final destructive taxonomy cleanup and freeze.
+## Status (closed)
+
+Shipped and verified 2026-08-23. The additive cutover is the accepted as-built boundary for
+this release.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- After every deployed environment has a backup and reconciled cutover receipt, open a new
+  delta-spec to remove the legacy transaction taxonomy columns, fixed classifier code,
+  `sourceCategories`, preset claims, and dormant automatic-map implementation.

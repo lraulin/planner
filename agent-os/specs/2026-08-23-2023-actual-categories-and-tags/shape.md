@@ -1,6 +1,6 @@
 # Actual Categories and Tags — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-08-23)
 
 ## Problem
 
@@ -25,9 +25,10 @@ cutover's fresh fingerprinted preview is authoritative.
 
 ## Migration stance
 
-This is a model correction, not a compatibility shim. The rollout is additive → preview/apply
-per user → reconcile/backup → destructive cleanup. Existing envelope choices always survive.
-Unresolvable mappings become tag-only rules that remain visible for review.
+This is a model correction, not a compatibility shim. The shipped rollout is additive →
+preview/apply per user → receipt reconciliation. Existing envelope choices always survive,
+and unresolvable mappings become tag-only rules that remain visible for review. Destructive
+cleanup requires its own delta after every deployed environment is backed up and reconciled.
 
 ## Visual direction
 
@@ -44,3 +45,8 @@ desktop inline editing, and phone full-screen drawer conventions.
 - Use one Actual-style stored category value.
 - Build the full coherent tag workflow.
 - Keep unmapped rules tag-only and flag them instead of aborting or creating envelopes.
+
+## Status
+
+Closed as shipped on 2026-08-23. The additive compatibility storage is an explicit as-built
+boundary; its eventual removal is new work rather than an amendment to this record.

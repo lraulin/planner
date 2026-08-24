@@ -1,8 +1,8 @@
 # Standards — Actual Categories and Tags
 
-**Status: active**
+**Status: frozen / complete** (2026-08-23)
 
-The full standards selected during shaping are copied below so this active implementation record is self-contained.
+The full standards selected during shaping are copied below so this frozen implementation record is self-contained.
 
 ---
 

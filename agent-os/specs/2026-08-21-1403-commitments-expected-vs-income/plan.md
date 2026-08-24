@@ -1,7 +1,10 @@
 # Commitments — expected vs income
 
-**Status: active**
+**Status: frozen / complete** (2026-08-23)
 Spec folder: `agent-os/specs/2026-08-21-1403-commitments-expected-vs-income/`
+
+This is the durable as-built record of the comparison and commitments-grid work shipped on
+2026-08-21. Later behavior changes belong to delta-specs rather than edits here.
 
 ## Spec relationships
 
@@ -10,6 +13,10 @@ Spec folder: `agent-os/specs/2026-08-21-1403-commitments-expected-vs-income/`
   decisions.
 - **Extends:** `agent-os/specs/2026-08-16-1938-commitments/` — the two-tier model and the
   26-paycheck year that `normalizedMonthlyIncome` already uses.
+
+The later `agent-os/specs/2026-08-23-2023-actual-categories-and-tags/` delta renamed the
+commitment grouping field from Category to Group. It did not change this spec's comparison,
+totals, export, grouping, or Review behavior.
 
 ## Context
 
@@ -89,17 +96,17 @@ because its form had the same problem.
 - Treating monthly VA / named benefits as paydays (the income detector still excludes them)
 - Totals of Amount, Rate, or Set aside
 
-## Acceptance
+## Acceptance criteria (met)
 
-- A yearly $71.88 bill reads ~$5.99 / month and ~$2.76 / pay period, not $71.88 / month
-- A monthly $2,100 bill reads $2,100 / month, not $1,050 (the accrual slice)
-- Summing Amount across mixed cadences is impossible from the footer — it is not there
-- Grouping bills by category puts that category's active Monthly / Pay period / A year on
-  the header; a cancelled-only group reads $0.00
-- Cancelled bills do not change Expected vs income
-- Review opens with the most recently charged merchant at the top
-- More bills than fit in 26rem are reachable with the grid's own scrollbar, not only arrow keys
-- Adding a merchant to Groceries from Review updates the Matchers cell without a reload
+- [x] A yearly $71.88 bill reads ~$5.99 / month and ~$2.76 / pay period, not $71.88 / month
+- [x] A monthly $2,100 bill reads $2,100 / month, not $1,050 (the accrual slice)
+- [x] Summing Amount across mixed cadences is impossible from the footer — it is not there
+- [x] Grouping bills by category puts that category's active Monthly / Pay period / A year on
+      the header; a cancelled-only group reads $0.00
+- [x] Cancelled bills do not change Expected vs income
+- [x] Review opens with the most recently charged merchant at the top
+- [x] More bills than fit in 26rem are reachable with the grid's own scrollbar, not only arrow keys
+- [x] Adding a merchant to Groceries from Review updates the Matchers cell without a reload
 
 ## Changes from original plan
 
@@ -109,3 +116,22 @@ because its form had the same problem.
 | Both grids get File ▸ Export, Group by, views, row numbers       | Asked for full standard grid capabilities so a CSV can be opened in Excel; in-app totals stay |
 | Create form is on demand, not persistent                         | Review is the usual path; the always-on form occupied the list                                |
 | Group headers show the same active totals as the footer          | Asked once grouping was on the bills table — the footer is the whole list, not the section    |
+
+## Verification and delivery
+
+- Period arithmetic and active-only totals are covered by `commitmentRows.test.ts` and
+  `expectedSpending.test.ts`.
+- Review ordering and per-group totals are covered by `reviewSort.test.ts` and
+  `commitmentGrouping.test.ts`.
+- Delivery commits: `be01058`, `04b41df`, `bb6e898`, and `3adc2e7`.
+- The current full suite passed 4,219 tests before this retrospective freeze.
+
+## Status (closed)
+
+Shipped 2026-08-21 and recorded in the finance roadmap. All acceptance criteria are met.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- Merging two already-declared commitments and watching for a double charge remain separate
+  curation work.
+- Treating monthly VA or named benefits as income requires an income-detector delta.

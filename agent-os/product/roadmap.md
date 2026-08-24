@@ -851,6 +851,12 @@ period)` so money already spent stops being held twice and only going over bites
   vendor's second spelling folds into the bill that already exists, warned when the two
   series overlap rather than hand off. The URL column is a link you can click. Review moved
   to the foot of the page: it is an inbox, and the two lists it fills are the reference.
+  ✅ Commitments expected vs income shipped 2026-08-21 —
+  `agent-os/specs/2026-08-21-1403-commitments-expected-vs-income/`. Bills and recurring
+  spend now expose comparable monthly, pay-period and annual costs, with active-only totals
+  in grid footers and group headers. One table subtracts both commitment tiers from the same
+  detected-income series used by the Dashboard. Review sorts newest charge first; both grids
+  gained export, grouping and saved views, while rare manual creation moved on demand.
   ✅ Register **Track as bill…** shipped 2026-08-21 —
   `agent-os/specs/2026-08-21-1810-register-track-as-bill/`. Right-click (or Item menu)
   a spend row to declare it as a bill, name-first, prefilled from that merchant's
@@ -950,6 +956,14 @@ period)` so money already spent stops being held twice and only going over bites
   schedule, moves its template, and routes new matches without overwriting manual envelope
   choices. Commitments remains parallel and independently editable. The same guarded cutover
   split `Software & AI` into AI, Productivity & Security, and Software & Development.
+  ✅ **Actual Categories and Tags shipped 2026-08-23.**
+  `agent-os/specs/2026-08-23-2023-actual-categories-and-tags/`. Budget envelopes are now the
+  one transaction Category written by the Register and rules; the former reporting taxonomy
+  survives as case-sensitive Notes tags. Budget links to an exact Uncategorized Register,
+  repeated choices can teach exact-payee rules, every matching rule composes in visible order,
+  and Insights filters by tags without using overlapping tag totals. The additive cutover
+  preserved 4,798 tagged transactions and 4,799 Category assignments with no unresolved local
+  rules. Destructive removal of the compatibility storage is a future audited delta.
 - **Next:** **Shortfall attribution.** When Available to Spend goes negative, name
   what could be cancelled or skipped to fix it. Explicitly wanted, explicitly cut
   from the commitments spec; the annual/monthly cost columns already rank the

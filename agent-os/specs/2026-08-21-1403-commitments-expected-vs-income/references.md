@@ -1,5 +1,7 @@
 # References
 
+**Status: frozen / complete** (2026-08-23)
+
 ## Governing specs
 
 - `agent-os/specs/2026-08-21-1122-commitments-curation/` — two grids, Review at the foot,

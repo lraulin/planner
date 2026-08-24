@@ -1,5 +1,7 @@
 # Shaping notes
 
+**Status: frozen / complete** (2026-08-23)
+
 The user had just finished listing bills under the curation spec and asked for six things
 in one message: two bugs, then comparable period columns, Review sorted by last charge,
 totals on both tables, and a view that compares expected spending to expected income.
@@ -18,3 +20,8 @@ Group-by landed with the rest of the grid capabilities. Once the bills table cou
 sectioned, the footer totals were not enough: a Housing header with a count still made you
 add the rows. Group headers now show the same active figures as the footer, for the rows
 under that header. Cancelled and paused still do not count.
+
+## Status
+
+Closed as shipped on 2026-08-21. The later Categories and Tags delta renamed the
+organizational Category field to Group without changing these comparison semantics.
