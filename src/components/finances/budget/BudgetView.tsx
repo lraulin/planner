@@ -4,10 +4,10 @@ import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import {
-  addTemplatesFromSchedulesAction,
   applyBudgetTemplatesAction,
   budgetOperationAction,
   setCarryoverAction,
+  setRecurringBillAction,
   updateBudgetCategoryAction,
 } from "@/app/finances/actions";
 import type { Command } from "@/lib/commands/registry";
@@ -37,21 +37,21 @@ import {
   templateCarryIn,
   type EnvelopeApplyInput,
 } from "@/lib/finances/budget/templates/apply";
-import {
-  attachedScheduleIds,
-  defaultScheduleTarget,
-} from "@/lib/finances/budget/templates/fromSchedules";
-import type { ScheduleSnapshot } from "@/lib/finances/budget/templates/schedule";
 import { descendantEnvelopeIds } from "@/lib/finances/budget/hierarchy";
 import { formatUsd } from "@/lib/finances/money";
-import { AddFromSchedulesDialog } from "./AddFromSchedulesDialog";
+import type { RecurringMerchant } from "@/lib/finances/analytics";
+import { cadenceOf } from "@/lib/finances/recurringBills";
+import type { BillForecast } from "@/lib/finances/dashboardQueries";
 import { AssignRemainingDialog } from "./AssignRemainingDialog";
 import { budgetColumns, type BudgetColumnCtx } from "./budgetColumns";
 import { BudgetSummary } from "./BudgetSummary";
 import { BudgetStructureDrawer } from "./BudgetStructureDrawer";
-import { CommitmentsImportDialog } from "./CommitmentsImportDialog";
+import { CommitmentPayeeDialog } from "./CommitmentPayeeDialog";
+import { withScheme } from "./UrlCell";
+import { ForecastDetails } from "./ForwardPanel";
 import { MoveMoneyDialog } from "./MoveMoneyDialog";
 import { TemplateDrawer } from "./TemplateDrawer";
+import { ReviewDrawer } from "./ReviewDrawer";
 
 /**
  * The budget, one month at a time.
@@ -60,13 +60,25 @@ import { TemplateDrawer } from "./TemplateDrawer";
  * `src/lib/finances/budget/envelope.ts`, and every clamp is applied again on the server
  * before anything is written — this component never decides how much money can move.
  */
+/** Collapsed by default (D8): carried over from Commitments as a lookup, not a fixture. */
+const DEFAULT_HIDDEN_COLUMNS = new Set(["annual", "monthly"]);
+
 export function BudgetView({
   data,
-  schedules,
+  review,
+  nextDueKeys,
+  payees,
+  forecast,
 }: {
   data: BudgetData;
-  /** Every schedule the template engine can read, so the drawer previews the real numbers. */
-  schedules: readonly ScheduleSnapshot[];
+  /** Detected recurring merchants no envelope has claimed yet. */
+  review: readonly RecurringMerchant[];
+  /** Next charge per bill envelope id, from `loadBillSnapshots`. */
+  nextDueKeys: ReadonlyMap<string, string>;
+  /** Every payee, with its current bill/envelope claim if any — for the payees dialog. */
+  payees: readonly { id: string; name: string; budgetCategoryId: string | null }[];
+  /** Next 12 months and Expected vs income — collapsed-by-default reference panels (D8). */
+  forecast: BillForecast;
 }) {
   const router = useRouter();
   const params = useSearchParams();
@@ -80,24 +92,27 @@ export function BudgetView({
   );
   const [selected, setSelected] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
+  const [editingPayeesFor, setEditingPayeesFor] = useState<BudgetRow | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [assigning, setAssigning] = useState(false);
   const [managingStructure, setManagingStructure] = useState(false);
-  const [importingCommitments, setImportingCommitments] = useState(
-    () => params.get("import") === "commitments",
-  );
+  const [reviewing, setReviewing] = useState(false);
 
   const grid = useGridState("budget", budgetColumns, {
-    order: budgetColumns.map((column) => column.id),
+    order: budgetColumns
+      .map((column) => column.id)
+      .filter((id) => !DEFAULT_HIDDEN_COLUMNS.has(id)),
     switches: { "show-hidden": false },
   });
   const showHidden = grid.switches["show-hidden"] ?? false;
 
   const month = findMonth(data.months, data.month);
   const rows = useMemo(
-    () => (month ? budgetRows(data.groups, data.categories, month, data.goals) : []),
-    [data.groups, data.categories, month, data.goals],
+    () =>
+      month
+        ? budgetRows(data.groups, data.categories, month, data.goals, nextDueKeys)
+        : [],
+    [data.groups, data.categories, month, data.goals, nextDueKeys],
   );
   const gridRows = useMemo(
     () => budgetGridRows(data.groups, rows, { showHidden }),
@@ -125,6 +140,7 @@ export function BudgetView({
       id: row.id,
       name: row.name,
       isIncome: row.isIncome,
+      kind: row.kind,
       templates: row.templates,
       assignedCents: row.assignedCents,
       carryInCents: templateCarryIn(previous ? categoryMonth(previous, row.id) : null),
@@ -169,26 +185,17 @@ export function BudgetView({
   }
 
   const spendingRows = useMemo(() => rows.filter((row) => !row.isIncome), [rows]);
-  const hasSpendingGroup = data.groups.some((group) => !group.isIncome);
+  const receivedThisMonthCents = useMemo(
+    () =>
+      rows
+        .filter((row) => row.isIncome)
+        .reduce((total, row) => total + row.activityCents, 0),
+    [rows],
+  );
   const templatedCount = useMemo(
     () => spendingRows.filter((row) => row.templates.length > 0).length,
     [spendingRows],
   );
-
-  /** Schedules no envelope funds yet — what "Add from schedules…" has left to offer. */
-  const unattached = useMemo(() => {
-    const attached = attachedScheduleIds(
-      rows.map((row) => ({
-        categoryId: row.id,
-        name: row.name,
-        isIncome: row.isIncome,
-        templates: row.templates,
-      })),
-    );
-    return schedules.filter(
-      (schedule) => !schedule.completed && !attached.has(schedule.id),
-    );
-  }, [rows, schedules]);
 
   const commands = useMemo((): Command[] => {
     const nothingTemplated =
@@ -207,18 +214,15 @@ export function BudgetView({
         run: () => setManagingStructure(true),
       },
       {
-        id: "budget.commitments.import",
-        label: "Import commitments…",
+        id: "budget.review",
+        label: review.length > 0 ? `Review… (${review.length})` : "Review…",
         group: "view",
         menu: "tools",
         section: "Setup",
         icon: "convert",
-        keywords: "bills commitments schedules envelopes seed",
-        title: !hasSpendingGroup
-          ? "There is no spending group to receive imported bills"
-          : "Preview active bills as schedules, envelopes, and templates",
-        disabled: !hasSpendingGroup,
-        run: () => setImportingCommitments(true),
+        keywords: "detect recurring merchant candidates bills",
+        title: "Detected recurring merchants no envelope has claimed yet",
+        run: () => setReviewing(true),
       },
       {
         id: "budget.templates.apply",
@@ -246,23 +250,8 @@ export function BudgetView({
         disabled: templatedCount === 0,
         run: () => runApply(true),
       },
-      {
-        id: "budget.templates.fromSchedules",
-        label: "Add from schedules…",
-        group: "view",
-        menu: "tools",
-        section: "Templates",
-        icon: "schedule",
-        keywords: "bills attach envelope",
-        title:
-          spendingRows.length === 0
-            ? "There is no spending envelope to attach a schedule to"
-            : "Attach the schedules that do not fund an envelope yet, in one go",
-        disabled: spendingRows.length === 0,
-        run: () => setAdding(true),
-      },
     ];
-  }, [runApply, templatedCount, spendingRows.length, hasSpendingGroup]);
+  }, [runApply, templatedCount, review.length]);
 
   useRegisterCommands(commands);
 
@@ -280,6 +269,21 @@ export function BudgetView({
         }),
       ),
     onBalanceMenu: (row, at) => setMenu({ ...at, items: balanceMenu(row) }),
+    onPatchBill: (row, patch) => {
+      if (!row.bill) return;
+      run(() =>
+        setRecurringBillAction({
+          name: row.name,
+          cadence:
+            patch.cadence ??
+            cadenceOf({
+              cadenceMonths: row.bill!.cadenceMonths ?? 1,
+              cadenceDays: row.bill!.cadenceDays,
+            }),
+          ...patch,
+        }),
+      );
+    },
   };
 
   function balanceMenu(row: BudgetRow): MenuItem[] {
@@ -367,6 +371,22 @@ export function BudgetView({
         disabled: row.isIncome || row.templates.length === 0,
         onSelect: () => runApply(true, [row.id]),
       },
+      ...(row.bill
+        ? ([
+            "separator" as const,
+            {
+              label: "Edit payees…",
+              title: "Charges from these payees belong to this bill",
+              onSelect: () => setEditingPayeesFor(row),
+            },
+            {
+              label: "Open URL",
+              disabled: row.bill.url === "",
+              title: row.bill.url === "" ? "No URL saved for this bill" : row.bill.url,
+              onSelect: () => window.open(withScheme(row.bill!.url), "_blank"),
+            },
+          ] satisfies MenuItem[])
+        : []),
       "separator",
       {
         label: row.hidden ? "Show envelope" : "Hide envelope",
@@ -379,14 +399,6 @@ export function BudgetView({
 
   const totals = budgetTotals(spendingRows);
   const editingRow = rows.find((row) => row.id === editing) ?? null;
-  const defaultTarget = defaultScheduleTarget(
-    spendingRows.map((row) => ({
-      categoryId: row.id,
-      name: row.name,
-      isIncome: row.isIncome,
-      templates: row.templates,
-    })),
-  );
   const backlog = data.uncategorizedCount;
 
   return (
@@ -398,10 +410,8 @@ export function BudgetView({
           onNext={() => goToMonth(nextMonthKey(data.month))}
           pending={pending}
           templatedCount={templatedCount}
-          hasEnvelopes={spendingRows.length > 0}
           onApply={() => runApply(false)}
           onOverwrite={() => runApply(true)}
-          onAddFromSchedules={() => setAdding(true)}
           onCopyPrevious={() =>
             run(() =>
               budgetOperationAction({ kind: "copy-previous", month: data.month }),
@@ -436,6 +446,23 @@ export function BudgetView({
         />
 
         <BudgetSummary month={month} onAssignAll={() => setAssigning(true)} />
+
+        <div className="tabular flex flex-wrap items-baseline gap-x-4 gap-y-1 rounded border border-rule bg-surface px-3 py-2 text-[0.8125rem]">
+          <span className="text-ink-muted">
+            Income received this month{" "}
+            <span className="text-ink">{formatUsd(receivedThisMonthCents)}</span>
+          </span>
+          <span
+            className="text-ink-muted"
+            title="A forecast from a typical paycheck, not money you have — Ready to Assign counts only what's received."
+          >
+            Expected{" "}
+            <span className="text-ink">
+              {formatUsd(forecast.comparison.income.monthlyCents)}
+            </span>
+            /mo
+          </span>
+        </div>
 
         {data.movementNotes ? (
           <details className="rounded border border-rule bg-surface px-3 py-2 text-[0.8125rem]">
@@ -537,6 +564,12 @@ export function BudgetView({
             <span className="text-ink">{formatUsd(totals.balanceCents)}</span>
           </span>
         </footer>
+
+        <ForecastDetails
+          months={forecast.months}
+          periods={forecast.periods}
+          comparison={forecast.comparison}
+        />
       </div>
 
       {menu ? (
@@ -555,40 +588,8 @@ export function BudgetView({
           month={data.month}
           todayKey={data.todayKey}
           readyToAssignCents={month.readyToAssignCents}
-          schedules={schedules}
           onClose={() => setEditing(null)}
           onSaved={() => router.refresh()}
-        />
-      ) : null}
-
-      {adding ? (
-        <AddFromSchedulesDialog
-          candidates={unattached}
-          envelopes={spendingRows}
-          defaultCategoryId={defaultTarget ?? spendingRows[0]?.id ?? ""}
-          onCancel={() => setAdding(false)}
-          onAdd={(categoryId, scheduleIds) => {
-            setAdding(false);
-            setError(null);
-            setNotice(null);
-            startTransition(async () => {
-              const result = await addTemplatesFromSchedulesAction(
-                categoryId,
-                scheduleIds,
-              );
-              if (!result.ok) {
-                setError(result.error);
-                return;
-              }
-              const added = result.data?.added ?? 0;
-              setNotice(
-                added === 0
-                  ? "Those schedules already fund an envelope — nothing was added."
-                  : `Added ${added === 1 ? "1 template" : `${added} templates`}. Run Apply templates to fund them.`,
-              );
-              router.refresh();
-            });
-          }}
         />
       ) : null}
 
@@ -641,15 +642,30 @@ export function BudgetView({
           onChanged={() => router.refresh()}
         />
       ) : null}
-      {importingCommitments ? (
-        <CommitmentsImportDialog
-          groups={data.groups}
-          categories={data.categories}
-          todayKey={data.todayKey}
-          onCancel={() => setImportingCommitments(false)}
-          onImported={(message) => {
-            setImportingCommitments(false);
+      {reviewing ? (
+        <ReviewDrawer
+          review={review}
+          onClose={() => setReviewing(false)}
+          onSaved={(message) => {
+            setReviewing(false);
             setNotice(message);
+            router.refresh();
+          }}
+        />
+      ) : null}
+      {editingPayeesFor ? (
+        <CommitmentPayeeDialog
+          commitment={{
+            id: editingPayeesFor.id,
+            name: editingPayeesFor.name,
+            payeeIds: payees
+              .filter((payee) => payee.budgetCategoryId === editingPayeesFor.id)
+              .map((payee) => payee.id),
+          }}
+          payees={payees}
+          onClose={() => setEditingPayeesFor(null)}
+          onSaved={() => {
+            setEditingPayeesFor(null);
             router.refresh();
           }}
         />
@@ -669,9 +685,7 @@ function MonthBar({
   onRelease,
   onApply,
   onOverwrite,
-  onAddFromSchedules,
   templatedCount,
-  hasEnvelopes,
   pending,
   showHidden,
   onShowHidden,
@@ -686,10 +700,8 @@ function MonthBar({
   onRelease: () => void;
   onApply: () => void;
   onOverwrite: () => void;
-  onAddFromSchedules: () => void;
   /** How many spending envelopes hold templates — nothing to apply when it is zero. */
   templatedCount: number;
-  hasEnvelopes: boolean;
   pending: boolean;
   showHidden: boolean;
   onShowHidden: (next: boolean) => void;
@@ -748,19 +760,6 @@ function MonthBar({
           }
         >
           Overwrite with templates
-        </button>
-        <button
-          type="button"
-          onClick={onAddFromSchedules}
-          disabled={pending || !hasEnvelopes}
-          className={button}
-          title={
-            hasEnvelopes
-              ? "Attach the schedules that do not fund an envelope yet"
-              : "There is no spending envelope to attach a schedule to"
-          }
-        >
-          Add from schedules…
         </button>
         <button
           type="button"

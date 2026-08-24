@@ -6,7 +6,7 @@
  * bill. This module is the prefill for that confirmation: the merchant's spend history
  * already on the Register, a cleaned name, and a cadence guess they can correct.
  *
- * Propose, never apply — the write is `upsertRecurringBill`, and this file does not call it.
+ * Propose, never apply — the write is `upsertBillEnvelope`, and this file does not call it.
  */
 
 import { daysBetweenKeys } from "@/lib/schedule/geometry";
@@ -15,7 +15,6 @@ import {
   payeeClaimIndex,
   suggestCommitmentName,
   type StoredBillRow,
-  type StoredSpend,
 } from "./commitments";
 import { flowLabel } from "./flowLabels";
 import {
@@ -30,7 +29,6 @@ export type ClaimedPayee = {
   payeeId: string;
   merchant: string;
   name: string;
-  kind: "bill" | "spend";
 };
 
 export type TrackAsBillDraft = {
@@ -44,20 +42,14 @@ export type TrackAsBillDraft = {
   chargeCount: number;
 };
 
-/** Compact claimed list for the Register: stable payee → the commitment that holds it. */
-export function claimedPayeesOf(
-  bills: readonly StoredBillRow[],
-  spend: readonly StoredSpend[],
-): ClaimedPayee[] {
-  return [...payeeClaimIndex(bills, spend).entries()].map(([payeeId, ref]) => ({
+/** Compact claimed list for the Register: stable payee → the bill envelope that holds it. */
+export function claimedPayeesOf(bills: readonly StoredBillRow[]): ClaimedPayee[] {
+  return [...payeeClaimIndex(bills).entries()].map(([payeeId, ref]) => ({
     payeeId,
     merchant:
-      bills
-        .flatMap((bill) => bill.payees)
-        .concat(spend.flatMap((entry) => entry.payees))
-        .find((payee) => payee.id === payeeId)?.name ?? "Payee",
+      bills.flatMap((bill) => bill.payees).find((payee) => payee.id === payeeId)
+        ?.name ?? "Payee",
     name: ref.name,
-    kind: ref.kind,
   }));
 }
 
@@ -83,9 +75,7 @@ export function trackAsBillRefusal(
   if (row.payeeId === null) return "Reclassify transactions to assign a payee first";
   const holder = claimed.get(row.payeeId);
   if (holder === undefined) return null;
-  return holder.kind === "spend"
-    ? `Already tracked as spend (${holder.name})`
-    : `Already tracked as ${holder.name}`;
+  return `Already tracked as ${holder.name}`;
 }
 
 /**

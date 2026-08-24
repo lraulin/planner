@@ -243,9 +243,6 @@ export type TransactionListRow = {
    */
   budgetCategoryId: string | null;
   budgetCategoryName: string | null;
-  /** Linked schedule, if any. Null is the ordinary unlinked row. */
-  scheduleId: string | null;
-  scheduleName: string | null;
   /**
    * Who was paid, and the name to show for them.
    *

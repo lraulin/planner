@@ -44,7 +44,6 @@ import {
   updateMetricTool,
 } from "./metricTools";
 import {
-  deleteCommitmentTool,
   getCashFlowTool,
   getDebtSummaryTool,
   getFinanceOverviewTool,
@@ -55,13 +54,10 @@ import {
   searchCommitmentsTool,
   findCommitmentCandidatesTool,
   saveSubscriptionTool,
-  saveRecurringSpendTool,
   setCommitmentPayeesTool,
   listRecurringBillsTool,
   listStatementsTool,
   searchTransactionsTool,
-  addCommitmentMatchersTool,
-  upsertRecurringSpendTool,
   upsertSubscriptionTool,
 } from "./financeTools";
 import {
@@ -609,14 +605,12 @@ const definitions: AgentToolDefinition[] = [
   }),
   defineTool("list_commitments", {
     domain: "finances",
-    summary:
-      "List declared subscriptions/bills and recurring spend, with next due and rates.",
+    summary: "List declared bills, with next due and annual cost.",
     useWhen:
       "Use to see what is already spoken for before creating or updating a commitment.",
     avoidWhen:
       "Do not use it to detect undeclared merchants — that is list_commitment_candidates.",
-    returns:
-      "Both tables: bills with next due and annual cost, spend with auto/pinned rates.",
+    returns: "Declared bills with next due and annual cost.",
     effects: read,
     exposure: "legacy",
     replacedBy: "search_commitments",
@@ -639,37 +633,13 @@ const definitions: AgentToolDefinition[] = [
     summary: "Create or correct a subscription or bill.",
     useWhen:
       "Use to declare a bill, rename its matchers, set the amount, or mark it paused, cancelled, or dismissed.",
-    avoidWhen: "Use upsert_recurring_spend for pizza and groceries.",
+    avoidWhen:
+      "Prefer save_subscription, which uses stable payee ids instead of matcher strings.",
     returns: "The saved bill's name, matchers, and status.",
     effects: safeWrite,
     exposure: "legacy",
     replacedBy: "save_subscription",
     handler: upsertSubscriptionTool,
-  }),
-  defineTool("upsert_recurring_spend", {
-    domain: "finances",
-    summary: "Create or correct a recurring-spend group.",
-    useWhen:
-      "Use to group merchants like Pizza Hut and Domino's under one weekly rate.",
-    avoidWhen: "Use upsert_subscription for things that charge unless cancelled.",
-    returns: "The saved entry's name, matchers, and period.",
-    effects: safeWrite,
-    exposure: "legacy",
-    replacedBy: "save_recurring_spend",
-    handler: upsertRecurringSpendTool,
-  }),
-  defineTool("add_commitment_matchers", {
-    domain: "finances",
-    summary: "Fold more bank spellings into a commitment that already exists.",
-    useWhen:
-      "Use when a vendor's name changed and the same bill now appears under a second string.",
-    avoidWhen:
-      "Use upsert_subscription or upsert_recurring_spend to replace a commitment's whole matcher list.",
-    returns: "The commitment's name and its matchers after the merge.",
-    effects: safeWrite,
-    exposure: "legacy",
-    replacedBy: "set_commitment_payees",
-    handler: addCommitmentMatchersTool,
   }),
   defineTool("list_payees", {
     domain: "finances",
@@ -684,7 +654,7 @@ const definitions: AgentToolDefinition[] = [
   }),
   defineTool("search_commitments", {
     domain: "finances",
-    summary: "Search bills and recurring-spend groups by name or stable payee.",
+    summary: "Search declared bills by name or stable payee.",
     useWhen: "Use to resolve a commitment id before editing its payees.",
     avoidWhen: "Use find_commitment_candidates for undeclared recurring charges.",
     returns: "A compact page of id-bearing commitments and their payees.",
@@ -694,7 +664,7 @@ const definitions: AgentToolDefinition[] = [
   }),
   defineTool("find_commitment_candidates", {
     domain: "finances",
-    summary: "Find unclaimed recurring payees that may be bills or recurring spend.",
+    summary: "Find unclaimed recurring payees that may be bills.",
     useWhen: "Use to propose commitments from transaction history.",
     avoidWhen: "Do not use it to list commitments already declared.",
     returns:
@@ -708,22 +678,11 @@ const definitions: AgentToolDefinition[] = [
     summary: "Create or correct a bill using stable payee ids.",
     useWhen: "Use for subscriptions and bills that charge unless cancelled.",
     avoidWhen:
-      "Use save_recurring_spend for groceries, petrol, and other chosen spending.",
+      "Do not pass matcher strings — resolve payee ids first with list_payees.",
     returns: "The saved bill id, name, payees, and status.",
     effects: safeWrite,
     exposure: "domain",
     handler: saveSubscriptionTool,
-  }),
-  defineTool("save_recurring_spend", {
-    domain: "finances",
-    summary: "Create or correct recurring spend using stable payee ids.",
-    useWhen:
-      "Use for routines such as groceries or pizza that happen only when chosen.",
-    avoidWhen: "Use save_subscription for charges that arrive unless cancelled.",
-    returns: "The saved group id, name, payees, and period.",
-    effects: safeWrite,
-    exposure: "domain",
-    handler: saveRecurringSpendTool,
   }),
   defineTool("set_commitment_payees", {
     domain: "finances",
@@ -735,16 +694,6 @@ const definitions: AgentToolDefinition[] = [
     effects: safeWrite,
     exposure: "domain",
     handler: setCommitmentPayeesTool,
-  }),
-  defineTool("delete_commitment", {
-    domain: "finances",
-    summary: "Remove a bill or recurring-spend entry.",
-    useWhen: "Use when the user undeclares a commitment entirely.",
-    avoidWhen: "Use upsert_subscription with status cancelled to keep the history.",
-    returns: "Confirmation of the kind and name removed.",
-    effects: destructiveWrite,
-    exposure: "domain",
-    handler: deleteCommitmentTool,
   }),
   defineTool("list_jobs", {
     domain: "history",
@@ -939,13 +888,10 @@ const fieldDescriptions: Record<string, string> = {
   expectedCents: "Stated amount in integer cents. Null means derive from history.",
   anchorDate:
     "YYYY-MM-DD the next-due walk starts from when history does not reach it.",
-  status: "active, paused, cancelled, or ignored.",
+  status: "active, paused, or cancelled.",
   url: "Where the bill is managed — account, billing or cancel page. Stored, never followed.",
   scheduled: "Whether the dates are predictable. False for propane.",
   dueDay: "Day of the period the charge is expected, 1-31.",
-  period: "week or month — the unit the recurring-spend rate is quoted in.",
-  amountSource: "auto derives the rate from history; pinned stores expectedCents.",
-  kind: "bill for a subscription, spend for a recurring-spend group.",
   employer: "Employer or company name.",
   jobTitle: "Role or title held at that employer.",
   employmentType:
@@ -961,7 +907,6 @@ const fieldDescriptions: Record<string, string> = {
   location: "Employer city and country, formatted as one line.",
   address: "Full postal address on one line.",
   label: "Optional nickname for a residence, such as The Seoul apartment.",
-  active: "Whether this recurring-spend entry is still part of the routine.",
   direction: "Keep income rows, spend rows (including refunds), or any flow.",
   minCents:
     "Inclusive minimum of abs(amountCents). Values are integer cents (100 = $1.00).",

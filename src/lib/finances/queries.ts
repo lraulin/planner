@@ -5,7 +5,6 @@ import {
   financeBudgetCategories,
   financePaymentResolutions,
   financePayees,
-  financeSchedules,
   financeStatementRates,
   financeStatements,
   financeTransactions,
@@ -225,8 +224,6 @@ export async function listTransactions(
       balanceAfter: financeTransactions.balanceAfter,
       budgetCategoryId: financeTransactions.budgetCategoryId,
       budgetCategoryName: financeBudgetCategories.name,
-      scheduleId: financeTransactions.scheduleId,
-      scheduleName: financeSchedules.name,
       payeeId: financeTransactions.payeeId,
       payeeName: financePayees.name,
     })
@@ -238,7 +235,6 @@ export async function listTransactions(
       financeBudgetCategories,
       eq(financeBudgetCategories.id, financeTransactions.budgetCategoryId),
     )
-    .leftJoin(financeSchedules, eq(financeSchedules.id, financeTransactions.scheduleId))
     // Left for the same reason: a row imported since the last pass has no payee yet.
     .leftJoin(
       financePayees,
@@ -280,8 +276,6 @@ export async function listTransactions(
     balanceAfterCents: numericStringToCents(row.balanceAfter),
     budgetCategoryId: row.budgetCategoryId,
     budgetCategoryName: row.budgetCategoryName,
-    scheduleId: row.scheduleId,
-    scheduleName: row.scheduleName,
     payeeId: row.payeeId,
     payeeName: row.payeeName,
   }));
@@ -329,8 +323,6 @@ export async function getTransaction(
       balanceAfter: financeTransactions.balanceAfter,
       budgetCategoryId: financeTransactions.budgetCategoryId,
       budgetCategoryName: financeBudgetCategories.name,
-      scheduleId: financeTransactions.scheduleId,
-      scheduleName: financeSchedules.name,
       payeeId: financeTransactions.payeeId,
       payeeName: financePayees.name,
     })
@@ -340,7 +332,6 @@ export async function getTransaction(
       financeBudgetCategories,
       eq(financeBudgetCategories.id, financeTransactions.budgetCategoryId),
     )
-    .leftJoin(financeSchedules, eq(financeSchedules.id, financeTransactions.scheduleId))
     // Left for the same reason: a row imported since the last pass has no payee yet.
     .leftJoin(
       financePayees,
@@ -382,8 +373,6 @@ export async function getTransaction(
     balanceAfterCents: numericStringToCents(row.balanceAfter),
     budgetCategoryId: row.budgetCategoryId,
     budgetCategoryName: row.budgetCategoryName,
-    scheduleId: row.scheduleId,
-    scheduleName: row.scheduleName,
     payeeId: row.payeeId,
     payeeName: row.payeeName,
   };

@@ -10,7 +10,6 @@ import {
   previewDerivedChanges,
   setOneOff,
   updateTransaction,
-  upsertRecurringSpend,
 } from "./mutations";
 import { addAlias, removeAlias } from "./payees/mutations";
 import { listPayees } from "./payees/queries";
@@ -292,105 +291,6 @@ describeDb("reclassifyTransactions", () => {
       .where(eq(financeTransactions.id, rent.id));
 
     expect(row).toMatchObject({ excludeFromBaseline: false, eventLabel: "" });
-  });
-});
-
-describeDb("a commitment's category", () => {
-  let userId: string;
-
-  beforeEach(async () => {
-    userId = await makeUser();
-    await seedRules(userId);
-    await seed(userId);
-    await reclassifyTransactions(userId);
-  });
-
-  function categoryOf(
-    rows: Awaited<ReturnType<typeof classifiedRows>>,
-    needle: string,
-  ) {
-    return rows.find((row) => row.description.includes(needle))?.derivedCategory;
-  }
-
-  it("recategorises the charges it matches, without being reclassified by hand", async () => {
-    // `WM SUPERCENTER #1981` arrives labelled Groceries by a rule. Declaring the commitment
-    // as Shopping is the user disagreeing, once, about a merchant rather than a charge.
-    expect(categoryOf(await classifiedRows(userId), "WM SUPERCENTER")).toBe(
-      "Groceries",
-    );
-
-    const walmart = (await listPayees(userId)).find(
-      (payee) => payee.name === "Walmart",
-    );
-    if (!walmart) throw new Error("Expected seeded Walmart payee.");
-    await upsertRecurringSpend(userId, {
-      name: "Walmart run",
-      payeeIds: [walmart.id],
-      category: "Shopping",
-    });
-
-    expect(categoryOf(await classifiedRows(userId), "WM SUPERCENTER")).toBe(
-      "Groceries",
-    );
-  });
-
-  it("loses to a category set on the charge itself", async () => {
-    const [row] = (await listTransactions(userId)).filter((entry) =>
-      entry.description.includes("WM SUPERCENTER"),
-    );
-    await updateTransaction(userId, row.id, { category: "Pets" });
-    const walmart = (await listPayees(userId)).find(
-      (payee) => payee.name === "Walmart",
-    );
-    if (!walmart) throw new Error("Expected seeded Walmart payee.");
-    await upsertRecurringSpend(userId, {
-      name: "Walmart run",
-      payeeIds: [walmart.id],
-      category: "Shopping",
-    });
-
-    // `derivedCategory` still moves — it is the derivation — but the row's own category is
-    // what any reader sees, and nothing here touched it.
-    const stored = await listTransactions(userId);
-    expect(
-      stored.find((entry) => entry.description.includes("WM SUPERCENTER"))?.category,
-    ).toBe("Pets");
-  });
-
-  it("follows a payee when its stable claim is added", async () => {
-    await upsertRecurringSpend(userId, {
-      name: "Dog supplies",
-      category: "Pets",
-    });
-    expect(categoryOf(await classifiedRows(userId), "WM SUPERCENTER")).toBe(
-      "Groceries",
-    );
-
-    const walmart = (await listPayees(userId)).find(
-      (payee) => payee.name === "Walmart",
-    );
-    if (!walmart) throw new Error("Expected seeded Walmart payee.");
-    await upsertRecurringSpend(userId, {
-      name: "Dog supplies",
-      payeeIds: [walmart.id],
-    });
-
-    expect(categoryOf(await classifiedRows(userId), "WM SUPERCENTER")).toBe(
-      "Groceries",
-    );
-  });
-
-  it("changes nothing when the commitment carries no category", async () => {
-    const before = await classifiedRows(userId);
-    const walmart = (await listPayees(userId)).find(
-      (payee) => payee.name === "Walmart",
-    );
-    if (!walmart) throw new Error("Expected seeded Walmart payee.");
-    await upsertRecurringSpend(userId, {
-      name: "Walmart run",
-      payeeIds: [walmart.id],
-    });
-    expect(await classifiedRows(userId)).toEqual(before);
   });
 });
 

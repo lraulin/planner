@@ -6,8 +6,6 @@ import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { importFinanceCsvFiles, type ImportFile } from "./import";
 import { updateAccount, updateTransaction } from "./mutations";
 import { listAccounts, listStatements, listTransactions } from "./queries";
-import { createPayee } from "./payees/mutations";
-import { createSchedule } from "./schedules/mutations";
 import { seedBudget } from "./budget/mutations";
 import { createRule } from "./rules/mutations";
 
@@ -150,68 +148,6 @@ describeDb("finance CSV import", () => {
 
     const [row] = await listTransactions(userId);
     expect(row.budgetCategoryName).toBe("Discretionary");
-  });
-
-  it("classifies and routes a newly imported schedule match into its envelope", async () => {
-    await seedBudget(userId, {
-      preset: "minimal",
-      startMonth: "2026-09-01",
-      todayKey: "2026-08-23",
-    });
-    const [envelope] = await db
-      .select({ id: financeBudgetCategories.id })
-      .from(financeBudgetCategories)
-      .where(eq(financeBudgetCategories.userId, userId))
-      .limit(1);
-    const payeeId = await createPayee(userId, {
-      name: "Netflix",
-      aliases: ["NETFLIX"],
-    });
-    const scheduleId = await createSchedule(
-      userId,
-      {
-        name: "Netflix",
-        conditions: [
-          {
-            field: "date",
-            op: "isapprox",
-            value: { frequency: "monthly", start: "2026-01-15" },
-          },
-          { field: "payee", op: "is", value: payeeId },
-          { field: "amount", op: "isapprox", value: -1599 },
-        ],
-        budgetCategoryId: envelope.id,
-      },
-      "2026-08-23",
-    );
-
-    await importFinanceCsvFiles({
-      userId,
-      files: [
-        {
-          name: "Chase9910_Activity_20260916.csv",
-          text: [
-            CHASE_HEADER,
-            "09/15/2026,09/16/2026,NETFLIX,Shopping,Sale,-15.99,",
-            "",
-          ].join("\n"),
-        },
-      ],
-    });
-
-    const [row] = await db
-      .select({
-        scheduleId: financeTransactions.scheduleId,
-        categoryId: financeTransactions.budgetCategoryId,
-        payeeId: financeTransactions.payeeId,
-      })
-      .from(financeTransactions)
-      .where(eq(financeTransactions.userId, userId));
-    expect(row).toEqual({
-      scheduleId,
-      categoryId: envelope.id,
-      payeeId,
-    });
   });
 
   it("keeps both identical rows and stores the balance the bank reported", async () => {

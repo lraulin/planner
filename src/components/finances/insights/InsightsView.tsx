@@ -11,8 +11,7 @@ import {
 } from "@/lib/finances/analytics";
 import type { CarryingCost } from "@/lib/finances/dashboardQueries";
 import { analyzeInsights } from "@/lib/finances/insightsAnalysis";
-import type { StoredSpend } from "@/lib/finances/commitments";
-import type { StoredBill } from "@/lib/finances/recurringBills";
+import type { StoredBillRow } from "@/lib/finances/commitments";
 import {
   unresolvedPaypalInflows,
   type PaypalResolution,
@@ -102,15 +101,13 @@ export function InsightsView({
   carryingCost,
   unclassified,
   bills,
-  spend = [],
   statements = [],
   resolutions = [],
 }: {
   rows: AnalyticsRow[];
   carryingCost: CarryingCost;
   unclassified: number;
-  bills: StoredBill[];
-  spend?: readonly StoredSpend[];
+  bills: StoredBillRow[];
   statements?: readonly ReconcileStatement[];
   resolutions?: readonly PaymentResolutionRow[];
 }) {
@@ -138,7 +135,7 @@ export function InsightsView({
       levelRecurring: view.levelRecurring,
       today,
       statements,
-      suppressPayeeIds: spend.flatMap((entry) => entry.payees.map((payee) => payee.id)),
+      suppressPayeeIds: bills.flatMap((bill) => bill.payees.map((payee) => payee.id)),
     });
     if (core.empty) return core;
     return {
@@ -147,7 +144,7 @@ export function InsightsView({
       coverage: coverageGap(rows, statements),
       drilled: drilledRows(core.windowed, view.drill, core.trends.keys),
     };
-  }, [rows, today, view, bills, statements, spend]);
+  }, [rows, today, view, bills, statements]);
 
   function setDrill(next: InsightsDrill) {
     patch((current) => ({
@@ -656,20 +653,19 @@ export function InsightsView({
                   {open > 0 ? (
                     <>
                       {open} detected {open === 1 ? "charge" : "charges"} to review on{" "}
-                      <Link href="/finances/commitments">Commitments</Link>
+                      <Link href="/finances/budget">Budget</Link>
                       {declared > 0 && ` · ${declared} already tracked`}.
                     </>
                   ) : declared > 0 ? (
                     <>
-                      {declared} tracked on{" "}
-                      <Link href="/finances/commitments">Commitments</Link>. Nothing new
-                      to review.
+                      {declared} tracked on <Link href="/finances/budget">Budget</Link>.
+                      Nothing new to review.
                     </>
                   ) : (
                     <>
                       Nothing in this window looks regular enough to review.{" "}
-                      <Link href="/finances/commitments">Commitments</Link> is where
-                      declarations live.
+                      <Link href="/finances/budget">Budget</Link> is where declarations
+                      live.
                     </>
                   )}
                 </p>

@@ -498,6 +498,20 @@
       "when": 1787533626684,
       "tag": "0070_safe_microchip",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1787567758000,
+      "tag": "0071_add_bill_envelope_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1787567773971,
+      "tag": "0072_drop_commitment_tables",
+      "breakpoints": true
     }
   ]
 }

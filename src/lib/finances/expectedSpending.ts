@@ -1,16 +1,8 @@
 import { incomeFromPaydays, type Payday } from "./classify/income";
-import {
-  activeBillTotals,
-  activeSpendTotals,
-  type BillRow,
-  type MoneyTotals,
-  type SpendRow,
-} from "./commitmentRows";
+import { activeBillTotals, type BillRow, type MoneyTotals } from "./commitmentRows";
 
 export type SpendingVsIncome = {
   bills: MoneyTotals;
-  spend: MoneyTotals;
-  spending: MoneyTotals;
   income: {
     medianPaycheckCents: number;
     monthlyCents: number;
@@ -24,35 +16,26 @@ export type SpendingVsIncome = {
   };
 };
 
-function addTotals(left: MoneyTotals, right: MoneyTotals): MoneyTotals {
-  return {
-    annualCents: left.annualCents + right.annualCents,
-    monthlyCents: left.monthlyCents + right.monthlyCents,
-    paycheckCents: left.paycheckCents + right.paycheckCents,
-    weeklyCents: left.weeklyCents + right.weeklyCents,
-  };
-}
-
 /**
- * Expected commitments against expected income, on the three periods the grids share.
+ * Expected bills against expected income, on the three periods the grid shares.
+ *
+ * **Recurring spend dropped out of this comparison** when
+ * `agent-os/specs/2026-08-23-2313-one-budget/` retired the tier — pizza and groceries are
+ * ordinary envelopes now, tracked by the budget's own Ready to Assign rather than by a second
+ * income comparison. What remains is bills vs. income, unchanged.
  *
  * Income is the detected biweekly series already on the page (`paydays`), not a second
- * detector pass. Remainder is income minus spending; negative means the declared
- * commitments cost more than a typical paycheck covers.
+ * detector pass. Remainder is income minus bills; negative means declared bills cost more
+ * than a typical paycheck covers.
  */
 export function spendingVsIncome(
   bills: readonly BillRow[],
-  spend: readonly SpendRow[],
   paydays: readonly Payday[],
 ): SpendingVsIncome {
   const billTotals = activeBillTotals(bills);
-  const spendTotals = activeSpendTotals(spend);
-  const spending = addTotals(billTotals, spendTotals);
   const income = incomeFromPaydays(paydays);
   return {
     bills: billTotals,
-    spend: spendTotals,
-    spending,
     income: {
       medianPaycheckCents: income.medianPaycheckCents,
       monthlyCents: income.monthlyCents,
@@ -60,9 +43,9 @@ export function spendingVsIncome(
       annualCents: income.annualCents,
     },
     remainder: {
-      monthlyCents: income.monthlyCents - spending.monthlyCents,
-      paycheckCents: income.medianPaycheckCents - spending.paycheckCents,
-      annualCents: income.annualCents - spending.annualCents,
+      monthlyCents: income.monthlyCents - billTotals.monthlyCents,
+      paycheckCents: income.medianPaycheckCents - billTotals.paycheckCents,
+      annualCents: income.annualCents - billTotals.annualCents,
     },
   };
 }

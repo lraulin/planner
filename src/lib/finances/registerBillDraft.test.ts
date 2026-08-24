@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { StoredBillRow, StoredSpend } from "./commitments";
+import type { StoredBillRow } from "./commitments";
 import {
   claimedPayeeMap,
   claimedPayeesOf,
@@ -9,7 +9,6 @@ import {
 import type { TransactionListRow } from "./types";
 
 const PAYEE_A = "11111111-1111-4111-8111-111111111111";
-const PAYEE_B = "22222222-2222-4222-8222-222222222222";
 
 function row(
   id: string,
@@ -38,8 +37,6 @@ function row(
     balanceAfterCents: null,
     budgetCategoryId: null,
     budgetCategoryName: null,
-    scheduleId: null,
-    scheduleName: null,
     payeeId: "payeeId" in extras ? (extras.payeeId ?? null) : PAYEE_A,
     payeeName: "payeeName" in extras ? (extras.payeeName ?? null) : "Geico",
   };
@@ -54,26 +51,11 @@ function bill(over: Partial<StoredBillRow> = {}): StoredBillRow {
     status: "active",
     cancelledOn: null,
     url: "",
-    category: "",
     cadenceMonths: 6,
     expectedCents: 59498,
     anchorDate: null,
     scheduled: true,
     dueDay: null,
-    ...over,
-  };
-}
-
-function spend(over: Partial<StoredSpend> = {}): StoredSpend {
-  return {
-    id: "spend-1",
-    name: "Walmart",
-    payees: [{ id: PAYEE_B, name: "Walmart" }],
-    period: "week",
-    amountSource: "auto",
-    expectedCents: null,
-    active: true,
-    category: "",
     ...over,
   };
 }
@@ -145,24 +127,14 @@ describe("trackAsBillRefusal", () => {
   });
 
   it("names the bill that already claims this merchant", () => {
-    const claimed = claimedPayeeMap(claimedPayeesOf([bill()], []));
+    const claimed = claimedPayeeMap(claimedPayeesOf([bill()]));
     expect(
       trackAsBillRefusal(row("g", "2026-03-04", { description: "GEICO" }), claimed),
     ).toBe("Already tracked as Geico");
   });
 
-  it("names a spend group that already claims this merchant", () => {
-    const claimed = claimedPayeeMap(claimedPayeesOf([], [spend()]));
-    expect(
-      trackAsBillRefusal(
-        row("w", "2026-08-16", { description: "WALMART", payeeId: PAYEE_B }),
-        claimed,
-      ),
-    ).toBe("Already tracked as spend (Walmart)");
-  });
-
-  it("still refuses a dismissed bill while its payee claim remains", () => {
-    const claimed = claimedPayeeMap(claimedPayeesOf([bill({ status: "ignored" })], []));
+  it("still refuses a paused bill while its payee claim remains", () => {
+    const claimed = claimedPayeeMap(claimedPayeesOf([bill({ status: "paused" })]));
     expect(
       trackAsBillRefusal(row("g", "2026-03-04", { description: "GEICO" }), claimed),
     ).toBe("Already tracked as Geico");

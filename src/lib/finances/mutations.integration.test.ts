@@ -4,20 +4,14 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { importFinanceCsvFiles, type ImportFile } from "./import";
-import { loadRecurringBills, loadRecurringSpend } from "./dashboardQueries";
+import { loadRecurringBills } from "./dashboardQueries";
 import {
   deleteAccount,
-  deleteCommitment,
-  deleteRecurringBill,
-  deleteRecurringSpend,
   deleteTransaction,
-  renameRecurringBill,
-  renameRecurringSpend,
   setSubscriptionStatus,
   updateAccount,
   updateTransaction,
-  upsertRecurringBill,
-  upsertRecurringSpend,
+  upsertBillEnvelope,
 } from "./mutations";
 import { toDateKey } from "@/lib/schedule/geometry";
 import { getTransaction, listAccounts, listTransactions } from "./queries";
@@ -336,7 +330,7 @@ describeDb("planned withdrawal isolation", () => {
   });
 });
 
-describeDb("declared recurring bills", () => {
+describeDb("declared bill envelopes", () => {
   let userId: string;
 
   beforeEach(async () => {
@@ -344,7 +338,7 @@ describeDb("declared recurring bills", () => {
   });
 
   it("declares a cadence and reads it back", async () => {
-    await upsertRecurringBill(userId, {
+    await upsertBillEnvelope(userId, {
       name: "Geico",
       cadence: { unit: "month", n: 6 },
       expectedCents: 141_260,
@@ -357,7 +351,6 @@ describeDb("declared recurring bills", () => {
         status: "active",
         cancelledOn: null,
         url: "",
-        category: "",
         cadenceMonths: 6,
         cadenceDays: null,
         expectedCents: 141_260,
@@ -371,11 +364,11 @@ describeDb("declared recurring bills", () => {
   it("corrects a declaration in place rather than making a second one", async () => {
     // The caller is a review row that knows the merchant and not whether a declaration
     // exists, so declaring twice has to mean correcting — two rows would be two answers.
-    await upsertRecurringBill(userId, {
+    await upsertBillEnvelope(userId, {
       name: "Geico",
       cadence: { unit: "month", n: 6 },
     });
-    await upsertRecurringBill(userId, {
+    await upsertBillEnvelope(userId, {
       name: "Geico",
       cadence: { unit: "month", n: 12 },
       expectedCents: 282_520,
@@ -391,15 +384,15 @@ describeDb("declared recurring bills", () => {
   });
 
   it("keeps the declared amount when only the cadence is corrected", async () => {
-    // What the recurring table sends. A blanket write would clear the amount here, and the
-    // bill's figure would silently fall back to the visible window's median.
-    await upsertRecurringBill(userId, {
+    // What the grid sends. A blanket write would clear the amount here, and the bill's
+    // figure would silently fall back to the visible window's median.
+    await upsertBillEnvelope(userId, {
       name: "Geico",
       cadence: { unit: "month", n: 6 },
       expectedCents: 141_260,
       anchorDate: "2026-03-03",
     });
-    await upsertRecurringBill(userId, {
+    await upsertBillEnvelope(userId, {
       name: "Geico",
       cadence: { unit: "month", n: 12 },
     });
@@ -416,12 +409,12 @@ describeDb("declared recurring bills", () => {
   });
 
   it("clears the amount when null is passed explicitly", async () => {
-    await upsertRecurringBill(userId, {
+    await upsertBillEnvelope(userId, {
       name: "Geico",
       cadence: { unit: "month", n: 6 },
       expectedCents: 141_260,
     });
-    await upsertRecurringBill(userId, {
+    await upsertBillEnvelope(userId, {
       name: "Geico",
       cadence: { unit: "month", n: 6 },
       expectedCents: null,
@@ -432,27 +425,27 @@ describeDb("declared recurring bills", () => {
 
   it("refuses a cadence the column would reject with a database error", async () => {
     await expect(
-      upsertRecurringBill(userId, { name: "Geico", cadence: { unit: "month", n: 0 } }),
+      upsertBillEnvelope(userId, { name: "Geico", cadence: { unit: "month", n: 0 } }),
     ).rejects.toThrow("A cadence in months must be from 1 to 24.");
     await expect(
-      upsertRecurringBill(userId, { name: "Geico", cadence: { unit: "month", n: 36 } }),
+      upsertBillEnvelope(userId, { name: "Geico", cadence: { unit: "month", n: 36 } }),
     ).rejects.toThrow("A cadence in months must be from 1 to 24.");
     // The day column has its own CHECK, so it needs its own sentence rather than a
     // constraint violation nobody upstream can read.
     await expect(
-      upsertRecurringBill(userId, { name: "Geico", cadence: { unit: "day", n: 1 } }),
+      upsertBillEnvelope(userId, { name: "Geico", cadence: { unit: "day", n: 1 } }),
     ).rejects.toThrow("A cadence in days must be from 2 to 200.");
     await expect(
-      upsertRecurringBill(userId, { name: "Geico", cadence: { unit: "day", n: 400 } }),
+      upsertBillEnvelope(userId, { name: "Geico", cadence: { unit: "day", n: 400 } }),
     ).rejects.toThrow("A cadence in days must be from 2 to 200.");
     await expect(
-      upsertRecurringBill(userId, { name: "  ", cadence: { unit: "month", n: 6 } }),
+      upsertBillEnvelope(userId, { name: "  ", cadence: { unit: "month", n: 6 } }),
     ).rejects.toThrow("A bill needs a name.");
     expect(await loadRecurringBills(userId)).toEqual([]);
   });
 
   it("declares a bill that recurs on no schedule", async () => {
-    await upsertRecurringBill(userId, {
+    await upsertBillEnvelope(userId, {
       name: "Taylor Gas",
       cadence: { unit: "month", n: 12 },
       expectedCents: 50_000,
@@ -470,10 +463,10 @@ describeDb("declared recurring bills", () => {
 
   it("refuses an unscheduled bill with no stated cost", async () => {
     // It has no cadence to infer an amount from and no forecast to fall back on, so a
-    // declaration without a number would contribute nothing to the baseline while still
+    // declaration without a number would contribute nothing to the budget while still
     // suppressing its own charges from the review list — strictly worse than not declaring.
     await expect(
-      upsertRecurringBill(userId, {
+      upsertBillEnvelope(userId, {
         name: "Taylor Gas",
         cadence: { unit: "month", n: 12 },
         scheduled: false,
@@ -483,15 +476,15 @@ describeDb("declared recurring bills", () => {
   });
 
   it("keeps the amount and due day when only the cadence is corrected", async () => {
-    // The grid sends one field at a time, and a blanket write would silently stop deducting
-    // rent from the headline by clearing the figure the accrual runs on.
-    await upsertRecurringBill(userId, {
+    // The grid sends one field at a time, and a blanket write would silently clear the
+    // figure the bill envelope's own funding math runs on.
+    await upsertBillEnvelope(userId, {
       name: "RENT:RAULIN",
       cadence: { unit: "month", n: 1 },
       expectedCents: 210_000,
       dueDay: 1,
     });
-    await upsertRecurringBill(userId, {
+    await upsertBillEnvelope(userId, {
       name: "RENT:RAULIN",
       cadence: { unit: "month", n: 1 },
     });
@@ -504,14 +497,14 @@ describeDb("declared recurring bills", () => {
 
   it("refuses a due day the column would reject with a database error", async () => {
     await expect(
-      upsertRecurringBill(userId, {
+      upsertBillEnvelope(userId, {
         name: "Geico",
         cadence: { unit: "month", n: 6 },
         dueDay: 0,
       }),
     ).rejects.toThrow("A due day must be a whole number from 1 to 31.");
     await expect(
-      upsertRecurringBill(userId, {
+      upsertBillEnvelope(userId, {
         name: "Geico",
         cadence: { unit: "month", n: 6 },
         dueDay: 32,
@@ -520,45 +513,32 @@ describeDb("declared recurring bills", () => {
     expect(await loadRecurringBills(userId)).toEqual([]);
   });
 
-  it("undeclares a bill", async () => {
-    await upsertRecurringBill(userId, {
+  it("creates a new bill envelope under a default Spending › Bills group", async () => {
+    await upsertBillEnvelope(userId, {
       name: "Geico",
       cadence: { unit: "month", n: 6 },
     });
-    await deleteRecurringBill(userId, "Geico");
-    expect(await loadRecurringBills(userId)).toEqual([]);
-  });
+    const [bill] = await loadRecurringBills(userId);
+    expect(bill).toBeDefined();
 
-  it("renames a bill without disturbing its stable payee claim", async () => {
-    const payeeId = await createPayee(userId, {
-      name: "1Password",
-      aliases: ["1PASSWORDTORONTOON"],
-    });
-    await upsertRecurringBill(userId, {
-      name: "1PASSWORDTORONTOON",
-      payeeIds: [payeeId],
+    // A second declaration by the same name corrects the same row rather than creating a
+    // sibling under a fresh group.
+    await upsertBillEnvelope(userId, {
+      name: "Geico",
       cadence: { unit: "month", n: 12 },
-      expectedCents: 7188,
-      anchorDate: "2027-03-30",
     });
-    await renameRecurringBill(userId, "1PASSWORDTORONTOON", "1Password");
-    expect((await loadRecurringBills(userId))[0]).toMatchObject({
-      name: "1Password",
-      payees: [{ id: payeeId, name: "1Password" }],
-      expectedCents: 7188,
-      anchorDate: "2027-03-30",
-    });
+    expect(await loadRecurringBills(userId)).toHaveLength(1);
   });
 });
 
-describeDb("declared recurring bill isolation", () => {
+describeDb("declared bill envelope isolation", () => {
   let ownerId: string;
   let intruderId: string;
 
   beforeEach(async () => {
     ownerId = await makeUser();
     intruderId = await makeUser();
-    await upsertRecurringBill(ownerId, {
+    await upsertBillEnvelope(ownerId, {
       name: "Geico",
       cadence: { unit: "month", n: 6 },
       expectedCents: 141_260,
@@ -571,9 +551,8 @@ describeDb("declared recurring bill isolation", () => {
   });
 
   it("does not let a second user change another user's declared amount", async () => {
-    // Rewriting someone else's cost would silently change the number they budget by, since
-    // every active bill with an amount is held back from their headline.
-    await upsertRecurringBill(intruderId, {
+    // Rewriting someone else's cost would silently change the number they budget by.
+    await upsertBillEnvelope(intruderId, {
       name: "Geico",
       cadence: { unit: "month", n: 6 },
       expectedCents: 1,
@@ -587,9 +566,9 @@ describeDb("declared recurring bill isolation", () => {
   });
 
   it("does not let a second user change another user's declaration", async () => {
-    // The uniqueness is per user, so this must create the intruder's own row and leave the
-    // owner's untouched — the failure mode a shared-key upsert would have.
-    await upsertRecurringBill(intruderId, {
+    // The lookup is scoped to this user, so this must create the intruder's own row and
+    // leave the owner's untouched — the failure mode a shared-key upsert would have.
+    await upsertBillEnvelope(intruderId, {
       name: "Geico",
       cadence: { unit: "month", n: 1 },
     });
@@ -605,14 +584,9 @@ describeDb("declared recurring bill isolation", () => {
       expectedCents: null,
     });
   });
-
-  it("does not let a second user delete another user's declaration", async () => {
-    await deleteRecurringBill(intruderId, "Geico");
-    expect(await loadRecurringBills(ownerId)).toHaveLength(1);
-  });
 });
 
-describeDb("stable commitment payee claims", () => {
+describeDb("stable bill envelope payee claims", () => {
   let userId: string;
 
   beforeEach(async () => {
@@ -621,175 +595,64 @@ describeDb("stable commitment payee claims", () => {
 
   it("claims selected payees and preserves them when only cadence changes", async () => {
     const payeeId = await createPayee(userId, { name: "Pizza Hut" });
-    await upsertRecurringBill(userId, {
+    await upsertBillEnvelope(userId, {
       name: "Pizza night",
       payeeIds: [payeeId],
       cadence: { unit: "month", n: 1 },
     });
-    await upsertRecurringBill(userId, {
+    await upsertBillEnvelope(userId, {
       name: "Pizza night",
       cadence: { unit: "month", n: 3 },
     });
 
     const [bill] = await loadRecurringBills(userId);
     expect(bill).toMatchObject({ cadenceMonths: 3, payeeIds: [payeeId] });
-    expect(await payeesForCommitment(userId, { kind: "bill", id: bill.id })).toEqual([
+    expect(await payeesForCommitment(userId, { id: bill.id })).toEqual([
       { id: payeeId, name: "Pizza Hut" },
     ]);
   });
 
-  it("rolls back the row edit when a selected payee belongs elsewhere", async () => {
+  it("rolls back the row edit when a selected payee belongs to another envelope", async () => {
     const primary = await createPayee(userId, { name: "Primary" });
     const held = await createPayee(userId, { name: "Held" });
-    await upsertRecurringBill(userId, {
+    await upsertBillEnvelope(userId, {
       name: "Bill",
       payeeIds: [primary],
       cadence: { unit: "month", n: 1 },
     });
-    await upsertRecurringSpend(userId, { name: "Spend", payeeIds: [held] });
+    await upsertBillEnvelope(userId, {
+      name: "Other bill",
+      payeeIds: [held],
+      cadence: { unit: "month", n: 1 },
+    });
 
     await expect(
-      upsertRecurringBill(userId, {
+      upsertBillEnvelope(userId, {
         name: "Bill",
         payeeIds: [held],
         cadence: { unit: "month", n: 3 },
       }),
-    ).rejects.toThrow("already belongs to the commitment");
+    ).rejects.toThrow("already belongs to");
 
-    expect((await loadRecurringBills(userId))[0]).toMatchObject({
+    expect(
+      (await loadRecurringBills(userId)).find((bill) => bill.name === "Bill"),
+    ).toMatchObject({
       cadenceMonths: 1,
       payeeIds: [primary],
     });
   });
 
-  it("refuses another user's payee and leaves no partial commitment", async () => {
+  it("refuses another user's payee and leaves no partial declaration", async () => {
     const otherId = await makeUser();
     const otherPayee = await createPayee(otherId, { name: "Theirs" });
     await expect(
-      upsertRecurringSpend(userId, { name: "Mine", payeeIds: [otherPayee] }),
+      upsertBillEnvelope(userId, {
+        name: "Mine",
+        payeeIds: [otherPayee],
+        cadence: { unit: "month", n: 1 },
+      }),
     ).rejects.toThrow("That payee does not exist");
-    expect(await loadRecurringSpend(userId)).toEqual([]);
-  });
-});
-
-describeDb("recurring spend", () => {
-  let userId: string;
-
-  beforeEach(async () => {
-    userId = await makeUser();
-  });
-
-  it("defaults to an active group on an auto rate", async () => {
-    // Active is the whole condition for being held back, and deducting it is the reason the
-    // row exists, so a new group starts held with a rate read from history.
-    await upsertRecurringSpend(userId, { name: "Pizza" });
-
-    expect((await loadRecurringSpend(userId))[0]).toMatchObject({
-      name: "Pizza",
-      period: "week",
-      amountSource: "auto",
-      expectedCents: null,
-      active: true,
-    });
-  });
-
-  it("pins an amount and keeps it through an unrelated edit", async () => {
-    await upsertRecurringSpend(userId, {
-      name: "Groceries",
-      amountSource: "pinned",
-      expectedCents: 21_500,
-    });
-    await upsertRecurringSpend(userId, { name: "Groceries", period: "month" });
-
-    expect((await loadRecurringSpend(userId))[0]).toMatchObject({
-      period: "month",
-      amountSource: "pinned",
-      expectedCents: 21_500,
-    });
-  });
-
-  it("refuses a pinned amount with no figure behind it", async () => {
-    // This is subtracted from money about to be spent, so "pinned to nothing" would deduct
-    // zero while claiming to be deliberate.
-    await expect(
-      upsertRecurringSpend(userId, { name: "Pizza", amountSource: "pinned" }),
-    ).rejects.toThrow("A pinned amount needs a figure above zero.");
-    await expect(upsertRecurringSpend(userId, { name: "  " })).rejects.toThrow(
-      "A recurring spend needs a name.",
-    );
-
-    expect(await loadRecurringSpend(userId)).toEqual([]);
-  });
-
-  it("renames a group in place", async () => {
-    await upsertRecurringSpend(userId, {
-      name: "PIZZA HUT #4471",
-      amountSource: "pinned",
-      expectedCents: 6000,
-    });
-    await renameRecurringSpend(userId, "PIZZA HUT #4471", "Pizza Friday");
-
-    expect(await loadRecurringSpend(userId)).toMatchObject([
-      {
-        name: "Pizza Friday",
-        expectedCents: 6000,
-      },
-    ]);
-  });
-
-  it("refuses a rename of nothing, or to nothing", async () => {
-    await upsertRecurringSpend(userId, { name: "Pizza" });
-
-    await expect(renameRecurringSpend(userId, "Pizza", "  ")).rejects.toThrow(
-      "A recurring spend needs a name.",
-    );
-    await expect(renameRecurringSpend(userId, "Groceries", "Food")).rejects.toThrow(
-      "Recurring spend not found.",
-    );
-    expect((await loadRecurringSpend(userId))[0].name).toBe("Pizza");
-  });
-});
-
-describeDb("recurring spend isolation", () => {
-  let ownerId: string;
-  let intruderId: string;
-
-  beforeEach(async () => {
-    ownerId = await makeUser();
-    intruderId = await makeUser();
-    await upsertRecurringSpend(ownerId, {
-      name: "Pizza",
-      amountSource: "pinned",
-      expectedCents: 6000,
-    });
-  });
-
-  it("does not let a second user read another user's entries", async () => {
-    expect(await loadRecurringSpend(intruderId)).toEqual([]);
-  });
-
-  it("does not let a second user change another user's entry", async () => {
-    await upsertRecurringSpend(intruderId, {
-      name: "Pizza",
-      amountSource: "pinned",
-      expectedCents: 99_900,
-    });
-
-    expect((await loadRecurringSpend(ownerId))[0].expectedCents).toBe(6000);
-    expect((await loadRecurringSpend(intruderId))[0].expectedCents).toBe(99_900);
-  });
-
-  it("does not let a second user delete another user's entry", async () => {
-    await deleteRecurringSpend(intruderId, "Pizza");
-    expect(await loadRecurringSpend(ownerId)).toHaveLength(1);
-  });
-
-  it("does not let a second user rename another user's entry", async () => {
-    await expect(
-      renameRecurringSpend(intruderId, "Pizza", "Not Yours"),
-    ).rejects.toThrow("Recurring spend not found.");
-
-    expect((await loadRecurringSpend(ownerId))[0].name).toBe("Pizza");
+    expect(await loadRecurringBills(userId)).toEqual([]);
   });
 });
 
@@ -798,7 +661,7 @@ describeDb("subscription status", () => {
 
   beforeEach(async () => {
     userId = await makeUser();
-    await upsertRecurringBill(userId, {
+    await upsertBillEnvelope(userId, {
       name: "Paramount+",
       cadence: { unit: "month", n: 1 },
       expectedCents: 1299,
@@ -818,8 +681,8 @@ describeDb("subscription status", () => {
   });
 
   it("re-anchors a still-active bill without touching the amount", async () => {
-    // The D8 prompt: the charge never arrived, the user says it is still live, so the walk
-    // starts again from today rather than staying overdue forever.
+    // The charge never arrived, the user says it is still live, so the walk starts again
+    // from today rather than staying overdue forever.
     await setSubscriptionStatus(userId, "Paramount+", "active", {
       reanchorOn: "2026-08-16",
     });
@@ -849,14 +712,5 @@ describeDb("subscription status", () => {
       setSubscriptionStatus(intruderId, "Paramount+", "cancelled"),
     ).rejects.toThrow("Bill not found.");
     expect((await loadRecurringBills(userId))[0].status).toBe("active");
-  });
-
-  it("deleteCommitment removes the named row of the named kind only", async () => {
-    await upsertRecurringSpend(userId, { name: "Paramount+" });
-    await deleteCommitment(userId, { kind: "bill", name: "Paramount+" });
-    expect(await loadRecurringBills(userId)).toEqual([]);
-    expect(await loadRecurringSpend(userId)).toHaveLength(1);
-    await deleteCommitment(userId, { kind: "spend", name: "Paramount+" });
-    expect(await loadRecurringSpend(userId)).toEqual([]);
   });
 });

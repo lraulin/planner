@@ -20,7 +20,6 @@ const GROUPS: BudgetGroupRow[] = [
     isIncome: true,
     sortKey: "a",
     hidden: false,
-    sourceCommitmentKey: null,
   },
   {
     id: "spending",
@@ -29,7 +28,6 @@ const GROUPS: BudgetGroupRow[] = [
     isIncome: false,
     sortKey: "b",
     hidden: false,
-    sourceCommitmentKey: null,
   },
 ];
 
@@ -42,13 +40,14 @@ function category(
   return {
     id,
     groupId,
-    sourceBillId: null,
     name: id,
     sortKey,
     hidden,
     notes: "",
     sourceCategories: [],
     templates: [],
+    kind: "envelope",
+    bill: null,
   };
 }
 

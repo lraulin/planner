@@ -1,26 +1,14 @@
 /**
- * What is left to spend before the next paycheck — the Finances dashboard's arithmetic.
+ * Cash position and the payday series — what is actually held right now, and when the next
+ * paycheck lands.
  *
- * Every other finance surface answers a retrospective question: the register is what happened,
- * insights is what life costs, statements are whether the record is complete. This module
- * answers the forward-looking one, and it is deliberately the only place that does.
- *
- * **Three rules do all the work, and each is a decision that could plausibly have gone the
- * other way.**
- *
- * 1. **Card debt is subtracted.** A card charge does not touch checking until the statement is
- *    paid, so a "spendable" figure built from checking alone overstates by exactly the amount
- *    most easily overspent. The consequence is accepted rather than smoothed: this number is
- *    often negative and must render that way. Clamping it at zero would restore the very
- *    comfort the page exists to remove.
- *
- * 2. **Savings is not spendable.** It sits in `cashPosition` and not in `availableToSpend`.
- *    Two numbers side by side make the gap between them visible, which is the useful signal;
- *    one number folding them together would spend savings without saying so.
- *
- * 3. **Set-asides accrue and then clear.** Half of rent per paycheck rather than the whole of
- *    it the day before it is due. A headline that lurches by a month's rent overnight is a
- *    headline that gets ignored, and being ignored is the only way this page can fail.
+ * **The Available to Spend headline and its set-aside accrual were retired by
+ * `agent-os/specs/2026-08-23-2313-one-budget/` D5.** Ready to Assign
+ * (`src/lib/finances/budget/envelope.ts`) is now the one spendable-money figure; a bill
+ * envelope's own balance says whether it is funded, which is a per-bill answer instead of one
+ * collapsed number. What survives here is genuinely independent of commitments: cash position
+ * (checking + savings + cash − card debt) and the detected payday series, both still read by
+ * the Dashboard and by budget income reporting.
  *
  * **Sign convention, inherited and load-bearing:** positive is money *into* the account, for
  * every account kind (`src/db/schema.ts`, `finance_transactions`). A credit card is simply a
@@ -39,22 +27,7 @@ import type { FinanceAccountKind } from "@/db/schema";
 import { daysBetweenKeys, shiftDateKey } from "@/lib/schedule/geometry";
 import { BIWEEKLY_DAYS, type Payday } from "./classify/income";
 import { formatUsd } from "./money";
-import {
-  billAnchor,
-  periodIndex,
-  periodLengthDays,
-  periodStartKey,
-  type CommitmentCharge,
-  type StoredSpend,
-} from "./commitments";
-import {
-  cadenceDaysApprox,
-  cadenceOf,
-  nextDueDate,
-  previousDueDate,
-  type Cadence,
-  type StoredBill,
-} from "./recurringBills";
+import { cadenceDaysApprox, type Cadence } from "./recurringBills";
 
 /**
  * Kinds whose balance is money you could spend this fortnight without a decision.
@@ -85,8 +58,8 @@ export type DashboardAccount = {
   /**
    * When a live feed last reported this balance, or null for an account with no bank link.
    *
-   * **This is what makes `availableToSpend` correct**, not merely informative — see the
-   * pending rule there.
+   * **This is what made Available to Spend correct**, not merely informative, before that
+   * headline was retired — see the pending rule that used to live here.
    */
   syncedBalanceAsOf: Date | null;
 };
@@ -108,7 +81,8 @@ export type AccountBalanceView = {
 /**
  * What one account should show: the working figure, and the posted figure when they differ.
  *
- * Pending is added only on a synced headline — the same D2a trap as `availableToSpend`.
+ * Pending is added only on a synced headline, the same trap Available to Spend used to
+ * guard against before it was retired.
  * A statement or ledger balance already contains every pending row.
  */
 export function accountBalanceView(
@@ -300,307 +274,4 @@ function medianGapDays(sorted: readonly Payday[]): number {
  */
 export function paydaysPerCadence(cadence: Cadence): number {
   return Math.max(1, Math.round(cadenceDaysApprox(cadence) / (365.2425 / 26)));
-}
-
-export type SetAside = {
-  /** The commitment's name, as the user set it. */
-  name: string;
-  /** What the whole bill costs, per cadence period. */
-  expectedCents: number;
-  /** `expectedCents` divided over the paychecks in one cadence. */
-  perPaycheckCents: number;
-  /** How much of it should already be held back. */
-  heldCents: number;
-  /** `heldCents` has reached `expectedCents` — the next charge is covered. */
-  fullyFunded: boolean;
-  /**
-   * Start of the period being accrued for, `YYYY-MM-DD`. The last posted charge where there is
-   * one, which is what makes the accrual reset on its own.
-   */
-  periodStartKey: string;
-  /** When the charge being accrued for is expected: one cadence after `periodStartKey`. */
-  nextDueKey: string;
-};
-
-/**
- * How much of one declared bill must be held back from today's spendable money.
- *
- * ```
- * perPaycheck = expected / paydaysPerCadence(cadenceMonths)
- * held        = min(expected, perPaycheck × paydays since the period started)
- * ```
- *
- * **It resets when the charge posts, and nothing has to notice.** The accrual is anchored on
- * the last posted charge, so the day rent leaves the account the anchor moves to that day, the
- * payday count drops to zero, and the held amount goes with it. An explicit "has it been paid
- * this period" branch was written first and deleted: with the anchor already being the last
- * charge, the flag was true by construction and the branch could only ever zero a figure that
- * was about to be zero anyway. Two mechanisms for one behaviour, one of them decorative.
- *
- * A bill with no `expectedCents` accrues nothing. A median of the charges on file is a fine
- * estimate for a report and the wrong basis for deducting money from a number the user is
- * about to spend against.
- *
- * The rejected alternative, recorded because it looks more careful: hold back the **full**
- * amount as soon as the due date is nearer than the next payday. Arguably more accurate about
- * what must survive, and it makes the headline drop by a month's rent overnight.
- */
-export function setAsideHeld(
-  bill: StoredBill,
-  paydays: readonly Payday[],
-  charges: readonly BillCharge[],
-  todayKey: string,
-): SetAside | null {
-  if (bill.expectedCents === null || bill.expectedCents <= 0) return null;
-
-  // A charge dated ahead of today cannot have reset anything yet.
-  const mine = charges
-    .filter((charge) => charge.name === bill.name && charge.dateKey <= todayKey)
-    .sort((left, right) => left.dateKey.localeCompare(right.dateKey));
-  const lastCharge = mine.length > 0 ? mine[mine.length - 1].dateKey : null;
-
-  const periodStartKey = periodStart(bill, lastCharge, paydays, todayKey);
-  const perPaycheckCents = Math.round(
-    bill.expectedCents / paydaysPerCadence(cadenceOf(bill)),
-  );
-
-  const accrued = paydays.filter(
-    (payday) => payday.dateKey > periodStartKey && payday.dateKey <= todayKey,
-  ).length;
-  const heldCents = Math.min(bill.expectedCents, perPaycheckCents * accrued);
-
-  return {
-    name: bill.name,
-    expectedCents: bill.expectedCents,
-    perPaycheckCents,
-    heldCents,
-    fullyFunded: heldCents >= bill.expectedCents,
-    periodStartKey,
-    // One cadence on, not `nextDueFrom`'s walk to the future: a due date that has already
-    // passed unpaid is the one thing worth seeing, and walking past it would hide it.
-    nextDueKey: nextDueDate(periodStartKey, cadenceOf(bill)),
-  };
-}
-
-export type SpendHeld = {
-  /** The commitment's name. */
-  name: string;
-  /** What one period of it costs — derived from history, or pinned. */
-  ratePerPeriodCents: number;
-  /** Already spent in the period containing `todayKey`. */
-  spentThisPeriodCents: number;
-  /** What must be held back out of today's spendable money. */
-  heldCents: number;
-  /** How far over the period's rate this period has already gone. Zero when within it. */
-  overCents: number;
-  /** Periods counted, including the current one. */
-  periodsCounted: number;
-};
-
-/**
- * How much of a recurring-spend commitment must be held back before the next paycheck.
- *
- * **This is not `setAsideHeld`, and the difference is the point.** That one accrues *toward* a
- * future charge and assumes the cadence is at least as long as a pay period — right for rent,
- * meaningless for a weekly grocery run against fortnightly pay, where two whole periods fall
- * inside one paycheck. So this sums the periods between today and payday instead:
- *
- * ```
- * current period      → max(0, rate − spent)
- * whole future period → rate
- * period straddling   → rate × daysBeforePayday ÷ periodDays
- *   the payday
- * ```
- *
- * **The clamp at zero is the whole mechanism**, and it is what produces the behaviour asked
- * for. A $60/week entry with fourteen days to payday holds $120. Order a $95 pizza and the
- * balance drops $95 while this period's held falls to `max(0, 60 − 95) = 0`, so the total held
- * drops to $60 and the headline moves by exactly **−$35** — the overage, and nothing else.
- * Money already budgeted is free because it was already held; only going over bites. Without
- * the clamp the overspend would be counted twice, once as a real charge and once as an unmet
- * obligation.
- *
- * **The current period is never pro-rated.** Friday's pizza is a lump, not a trickle, so half a
- * week left does not mean half a pizza. Only a *future* period cut short by payday is
- * pro-rated, because there the question really is "how much of that week does this paycheck
- * have to cover".
- */
-export function recurringSpendHeld(
-  entry: StoredSpend,
-  ratePerPeriodCents: number,
-  charges: readonly CommitmentCharge[],
-  todayKey: string,
-  nextPaydayKey: string | null,
-): SpendHeld | null {
-  if (!entry.active || ratePerPeriodCents <= 0) return null;
-
-  const currentPeriod = periodIndex(todayKey, entry.period);
-  const spentThisPeriodCents = charges
-    .filter((charge) => periodIndex(charge.dateKey, entry.period) === currentPeriod)
-    .reduce((total, charge) => total + charge.costCents, 0);
-
-  // No payday in sight is not a reason to hold nothing: this period's obligation stands
-  // whether or not the next paycheck can be dated.
-  const lastPeriod =
-    nextPaydayKey === null ? currentPeriod : periodIndex(nextPaydayKey, entry.period);
-
-  let heldCents = Math.max(0, ratePerPeriodCents - spentThisPeriodCents);
-  let periodsCounted = 1;
-
-  for (let period = currentPeriod + 1; period <= lastPeriod; period++) {
-    const startKey = periodStartKey(period, entry.period);
-    if (nextPaydayKey !== null && startKey >= nextPaydayKey) break;
-
-    const lengthDays = periodLengthDays(period, entry.period);
-    const endKey = shiftDateKey(startKey, lengthDays);
-    periodsCounted += 1;
-
-    if (nextPaydayKey === null || endKey <= nextPaydayKey) {
-      heldCents += ratePerPeriodCents;
-      continue;
-    }
-    const coveredDays = daysBetweenKeys(startKey, nextPaydayKey);
-    heldCents += Math.round((ratePerPeriodCents * coveredDays) / lengthDays);
-  }
-
-  return {
-    name: entry.name,
-    ratePerPeriodCents,
-    spentThisPeriodCents,
-    heldCents,
-    overCents: Math.max(0, spentThisPeriodCents - ratePerPeriodCents),
-    periodsCounted,
-  };
-}
-
-/**
- * When the current accrual period began.
- *
- * The last posted charge is the best anchor — it is an observed fact, and it is what makes the
- * held amount reset to zero and start climbing again on its own. `anchorDate` is the declared
- * fallback for a bill whose history predates the import coverage. Failing both, the period is
- * derived backwards from `dueDay` so a freshly declared bill with no history still accrues
- * something rather than sitting at zero until its first charge lands.
- */
-function periodStart(
-  bill: StoredBill,
-  lastCharge: string | null,
-  paydays: readonly Payday[],
-  todayKey: string,
-): string {
-  // `billAnchor` owns what a declared anchor means. It matters here for the case this used to
-  // get backwards: an anchor set to a *future* charge is the end of the accrual window, not
-  // its start, and returning it directly ran the period from a date that has not happened.
-  const anchored = billAnchor(bill, lastCharge, todayKey).periodStartKey;
-  if (anchored !== null) return anchored;
-
-  if (bill.dueDay !== null) {
-    // The most recent occurrence of the due day at or before today.
-    const day = String(Math.min(bill.dueDay, 28)).padStart(2, "0");
-    const thisMonth = `${todayKey.slice(0, 7)}-${day}`;
-    return thisMonth <= todayKey
-      ? thisMonth
-      : previousDueDate(thisMonth, cadenceOf(bill));
-  }
-
-  // Nothing to anchor to. The first payday on file at least makes the accrual start somewhere
-  // real rather than at the epoch, which would cap every bill on its first render.
-  const first = paydays.length > 0 ? paydays[0].dateKey : todayKey;
-  return first;
-}
-
-export type AvailableTerm = {
-  label: string;
-  cents: number;
-};
-
-export type AvailableToSpend = {
-  totalCents: number;
-  spendableCents: number;
-  pendingCents: number;
-  cardDebtCents: number;
-  setAsideCents: number;
-  /** Held back for tier 2 recurring spend before the next payday. */
-  recurringSpendCents: number;
-  /**
-   * The arithmetic, in the order it should be read.
-   *
-   * Returned rather than reassembled in the component so the page cannot show a breakdown that
-   * fails to add up to its own headline — the failure mode of every dashboard that formats its
-   * terms twice.
-   */
-  terms: AvailableTerm[];
-};
-
-/**
- * The headline: what is left to spend before the next paycheck.
- *
- * **Pending rows are added only for accounts whose headline is a synced balance**, and that
- * guard is the one genuine trap in this file. `balanceCents` is three-tier — synced, then
- * statement-anchored, then the ledger sum. SimpleFIN reports the *posted* balance, so pending
- * rows have to be applied on top of it. The other two tiers are built by summing transactions,
- * which already includes every pending row on the account. Applying pending unconditionally
- * therefore double-counts exactly the accounts that have pending rows, and does it invisibly:
- * the number is merely wrong, never missing.
- *
- * The provider's own `available-balance` is not the answer — it came back `0` for every
- * account including a checking account holding $571.45, which is why
- * `2026-08-15-1315-live-bank-sync` D8a requires this figure be derived from the balance and
- * the pending rows instead.
- *
- * Amounts are added, never subtracted: pending outflows and card balances are already negative
- * under the module sign convention.
- */
-export function availableToSpend(
-  accounts: readonly DashboardAccount[],
-  pending: readonly PendingRow[],
-  setAsides: readonly SetAside[],
-  spendHeld: readonly SpendHeld[] = [],
-): AvailableToSpend {
-  const position = cashPosition(accounts);
-
-  const countsPending = new Set(
-    accounts
-      .filter(
-        (account) =>
-          account.syncedBalanceAsOf !== null &&
-          (SPENDABLE_KINDS.has(account.kind) || account.kind === "credit_card"),
-      )
-      .map((account) => account.id),
-  );
-  const pendingCents = pending
-    .filter((row) => countsPending.has(row.accountId))
-    .reduce((total, row) => total + row.amountCents, 0);
-
-  const setAsideCents = setAsides.reduce((total, entry) => total + entry.heldCents, 0);
-  const recurringSpendCents = spendHeld.reduce(
-    (total, entry) => total + entry.heldCents,
-    0,
-  );
-
-  const totalCents =
-    position.spendableCents +
-    pendingCents +
-    position.cardDebtCents -
-    setAsideCents -
-    recurringSpendCents;
-
-  return {
-    totalCents,
-    spendableCents: position.spendableCents,
-    pendingCents,
-    cardDebtCents: position.cardDebtCents,
-    setAsideCents,
-    recurringSpendCents,
-    // Two lines, not one. They are held for different reasons and answer different questions —
-    // "the bills are covered" and "the groceries are covered" — and one merged figure would
-    // make the larger of them impossible to interpret.
-    terms: [
-      { label: "Checking & cash", cents: position.spendableCents },
-      { label: "Pending", cents: pendingCents },
-      { label: "Card balances", cents: position.cardDebtCents },
-      { label: "Set aside for bills", cents: -setAsideCents },
-      { label: "Recurring spend", cents: -recurringSpendCents },
-    ],
-  };
 }

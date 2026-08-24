@@ -2280,19 +2280,6 @@ export const financeTransactions = pgTable(
       (): AnyPgColumn => financeBudgetCategories.id,
       { onDelete: "set null" },
     ),
-    /**
-     * Which schedule this row posted against, if any
-     * (`agent-os/specs/2026-08-22-2124-actual-schedules/`).
-     *
-     * The join that makes schedules interoperable with the register rather than a parallel
-     * list: linking writes this, **Post now** writes this, and `next_date` advances because
-     * of it. Null is the ordinary unlinked row.
-     *
-     * `on delete set null`, not cascade: deleting a schedule must never delete a transaction.
-     */
-    scheduleId: uuid("schedule_id").references((): AnyPgColumn => financeSchedules.id, {
-      onDelete: "set null",
-    }),
     externalSource: text("external_source"),
     externalId: text("external_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -2303,9 +2290,6 @@ export const financeTransactions = pgTable(
     index("finance_transactions_budget_category_idx")
       .on(table.userId, table.budgetCategoryId, table.transactionDate)
       .where(sql`${table.budgetCategoryId} is not null`),
-    index("finance_transactions_schedule_idx")
-      .on(table.userId, table.scheduleId)
-      .where(sql`${table.scheduleId} is not null`),
     index("finance_transactions_payee_idx")
       .on(table.userId, table.payeeId, table.transactionDate)
       .where(sql`${table.payeeId} is not null`),
@@ -2432,304 +2416,41 @@ export const financeStatementRates = pgTable(
 );
 
 /**
- * Whether a declared bill is still live, paused, cancelled, or was never a commitment at all.
+ * Whether a bill envelope is still live, paused, or cancelled.
  *
  * A `const` tuple rather than a `pgEnum` so the column can be a `text` + CHECK: adding a value
  * to a Postgres enum needs `ALTER TYPE … ADD VALUE`, which fails outright on Neon's
  * transaction-mode pooler (see `financeAccountKindEnum`). The tuple still gives the column a
  * literal TypeScript type and gives `z.enum()` its members, so nothing is lost but the risk.
+ *
+ * `cancelled` keeps the row and its history but stops every forward-looking figure — the
+ * accrual, the forecast, the annual total. `paused` is the house-move case: still a commitment,
+ * still on the grid, but its balance stops being demanded by Apply — so Ready to Assign stops
+ * being asked for it without pretending it was never a bill. There is no `ignored` state: an
+ * ordinary envelope with `kind = 'envelope'` simply has no bill facet, and a merchant that was
+ * never a commitment is recorded on the payee (`not_a_commitment`) rather than by inventing a
+ * bill row just to mark it dismissed.
  */
-export const COMMITMENT_STATUSES = [
-  "active",
-  "paused",
-  "cancelled",
-  "ignored",
-] as const;
-export type CommitmentStatus = (typeof COMMITMENT_STATUSES)[number];
+export const ENVELOPE_STATUSES = ["active", "paused", "cancelled"] as const;
+export type EnvelopeStatus = (typeof ENVELOPE_STATUSES)[number];
 
-/** The period a recurring-spend rate is quoted in. Same text + CHECK reasoning as above. */
-export const RECURRING_SPEND_PERIODS = ["week", "month"] as const;
-export type RecurringSpendPeriod = (typeof RECURRING_SPEND_PERIODS)[number];
-
-/** Whether a recurring-spend rate is derived from history or stated by the user. */
-export const RECURRING_SPEND_AMOUNT_SOURCES = ["auto", "pinned"] as const;
-export type RecurringSpendAmountSource =
-  (typeof RECURRING_SPEND_AMOUNT_SOURCES)[number];
+/** Whether an envelope is an ordinary bucket or a bill with its own cadence and status. */
+export const ENVELOPE_KINDS = ["envelope", "bill"] as const;
+export type EnvelopeKind = (typeof ENVELOPE_KINDS)[number];
 
 /**
- * A bill the user has **declared** recurring, with the cadence they know it arrives on.
+ * A named group of envelopes — "Spending", "Bills", "Discretionary", "Income".
  *
- * This exists because detection cannot reach the long cadences.
- * `recurringMerchants` (`src/lib/finances/analytics.ts`) finds a subscription by variance
- * alone, but it needs six charges at a gap under 100 days before it will say so — thresholds
- * that are right for something asserted without being asked. A semi-annual propane bill is
- * over the day cap and would need three years of history to reach six charges; an annual
- * insurance premium would need six years. Neither is ever detectable, so both fell through to
- * the one-off review list, where the only offers were to exclude them from the baseline —
- * which understates what a year costs, a little more confidently every year — or to leave
- * them on the list forever. The declaration is the missing third answer.
+ * Groups are arbitrary-depth organisational containers. They never hold money: every total
+ * shown on one is still derived from the descendant envelopes, so nesting cannot change the
+ * envelope fold or Ready to Assign.
  *
- * **Keyed on a name you choose, claimed by stable payees.** A cadence is a fact about Geico,
- * not about the March charge, and keying it that way is what stops the row coming back next
- * time. The first version used bank strings as join keys; `finance_payees` now owns merchant
- * identity and its claim columns say which payees belong to this declaration.
- *
- * **Cadence is months, not days.** "Semi-annual" means March and September, not every 182.5
- * days; months keep the next-due date from drifting a fortnight per decade. A `smallint` with
- * a CHECK rather than an enum leaves room for a cadence nobody predicted and sidesteps the
- * `ALTER TYPE … ADD VALUE` limitation recorded at `financeFlowKindEnum` above.
- *
- * **This is tier 1 of two.** A bill charges *unless you cancel* — which is why `status`,
- * `cancelledOn` and `url` live here and have no counterpart on
- * `financeRecurringSpend` below, where the default runs the other way.
+ * **`isIncome` lives here rather than on the category** — as it does in Actual — because it is
+ * a structural fact about a whole branch, and a group holding both income and expense
+ * envelopes has no meaning under the arithmetic: income has no allocation and no balance, it
+ * only feeds Ready to Assign. Putting the flag on the category would make that mixed state
+ * representable and every summation would have to defend against it.
  */
-export const financeRecurringBills = pgTable(
-  "finance_recurring_bills",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    /**
-     * What the user calls it. Theirs to change, and nothing joins on it — so renaming
-     * `1PASSWORDTORONTOON` to `1Password` cannot orphan a single charge.
-     */
-    name: text("name").notNull(),
-    /**
-     * Whether this bill is still live.
-     *
-     * `cancelled` keeps the row and its history but stops every forward-looking figure — the
-     * accrual, the forecast, the annual total. `ignored` is the different admission that
-     * detection proposed something which was never a commitment at all, and suppresses it from
-     * the review list permanently. `paused` is the house-move case: still a commitment, still
-     * on the grid, not held — so available-to-spend stops subtracting it without pretending
-     * it was never a bill. Two states would force those into one bucket, and a year later
-     * nobody could tell "I cancelled Paramount+" from "that was never a subscription" from
-     * "propane, if I still live here".
-     *
-     * **This column is also the whole answer to "is it budgeted".** A `set_aside` flag sat
-     * beside it until 2026-08-18, from the era when declaring a bill only meant keeping it off
-     * the review list. Once `status` existed it covered every reason to opt out — not a
-     * commitment is `ignored`, no longer charged is `cancelled`, might not pay is `paused`,
-     * amount unknown accrues nothing on its own — so the flag was two ways to say one thing
-     * and the user could not tell from the screen which one was in force. Active with an
-     * amount is held; that is the rule.
-     *
-     * Text with a CHECK rather than a `pgEnum`, for the reason recorded at
-     * `financeAccountKindEnum`: `ALTER TYPE … ADD VALUE` fails on Neon's transaction-mode
-     * pooler, so a vocabulary that might plausibly grow should not be an enum.
-     */
-    status: text("status").$type<CommitmentStatus>().notNull().default("active"),
-    /** When it was cancelled, for the record. Null while active. */
-    cancelledOn: date("cancelled_on", { mode: "string" }),
-    /**
-     * Where this bill is managed — the account page, the billing page, the cancel page.
-     *
-     * Named `cancel_url` until 2026-08-21, which turned out to be a comment that had gone
-     * stale in the schema: the link is followed far more often to check an account than to
-     * close one, and a column called `cancel_url` holding a login page misleads the next
-     * reader. The app stores it and never follows it; the grid renders it as a link.
-     */
-    url: text("url").notNull().default(""),
-    /**
-     * The period `expectedCents` covers, in months. 1 monthly, 3 quarterly, 6 semi-annual,
-     * 12 yearly. Ignored entirely when `cadenceDays` is set.
-     */
-    cadenceMonths: smallint("cadence_months").notNull(),
-    /**
-     * The period in **days**, for a vendor that counts days rather than months. Wins over
-     * `cadenceMonths` when set; null is the ordinary calendar-anchored case.
-     *
-     * Months are still the default and still right for rent, insurance and anything anchored
-     * to a date on the calendar — "semi-annual" means March and September, not every 182.5
-     * days. But some charges are genuinely a day interval: Vetsource ships Dante's Simparico
-     * Trio every four weeks, with gaps of 30, 28, 28, 31, 30, 28, 28, 28, 28, 29 and a day of
-     * the month that walks backward from the 30th to the 14th over eleven charges. Calling
-     * that "monthly" prices 13.04 cycles a year as 12 — about $31 short on this one bill —
-     * and puts the predicted date two days further out every cycle.
-     *
-     * The two are told apart by the day of the month, which is free and exact: a monthly bill
-     * holds it, a day cycle drifts it. See `detectCadence` in `recurringBills.ts`.
-     */
-    cadenceDays: smallint("cadence_days"),
-    /**
-     * Whether the **dates** are predictable, as distinct from the cost.
-     *
-     * These are two facts and the first version of this table conflated them. Propane is a
-     * utility bill whose yearly cost is perfectly knowable — roughly $500 — but Taylor Gas
-     * monitors the tank and refills it at about 25%, so nobody can say when the truck comes:
-     * the three deliveries on file are 69 days apart and then 571. Declaring that "every 6
-     * months" invented both an annual figure and a delivery date.
-     *
-     * False keeps every figure built on `cadenceMonths` — the annual cost, the monthly
-     * set-aside, the baseline accrual — and drops only the forecast, which is the one thing
-     * that needs a calendar. A projected date is worse than no date, because it reads as
-     * knowledge however it is captioned.
-     *
-     * Defaults true so every declaration made before this column existed keeps its behaviour.
-     */
-    scheduled: boolean("scheduled").notNull().default(true),
-    /**
-     * What the user says it costs. Null means "use the median of the charges on file", which
-     * is the better answer once there is history and the only wrong one when there is none.
-     *
-     * The fallback is only ever a guess, and a confident-looking one: 1Password's charges on
-     * file produced a median of $38.03 against a real $71.88 a year. That is why the
-     * Commitments grid makes this editable on every bill rather than only on unscheduled ones.
-     */
-    expectedCents: integer("expected_cents"),
-    /**
-     * Anchors the next-due walk when the imported history does not reach a real charge —
-     * declaring a bill whose last instance predates the import coverage gap, for instance.
-     * Null means the latest charge on file is the anchor.
-     */
-    anchorDate: date("anchor_date", { mode: "string" }),
-    /**
-     * Day of the period the charge is expected, 1–31. Null keeps the existing behaviour, where
-     * `nextDueDate` walks forward from the last charge on file.
-     *
-     * Not clamped to 28: a rent due on the 31st is a real thing, and the month arithmetic in
-     * `recurringBills.ts` already shortens an overlong day to the month's end rather than
-     * spilling into the next one.
-     */
-    dueDay: smallint("due_day"),
-    /**
-     * A `FINANCE_CATEGORIES` value, or empty for none.
-     *
-     * **This also categorises the charges it matches.** A commitment's category is a fact the
-     * user stated once about a merchant group, so it outranks a `rules.ts` pattern guess; it
-     * loses to `financeTransactions.category`, which is a statement about one particular
-     * charge. Declaring "Vetsource is Pets" therefore fixes eleven rows in Insights and keeps
-     * fixing them as more arrive, which is the whole reason it is stored here rather than
-     * being a per-row edit repeated forever.
-     *
-     * Free text rather than an enum for the reason recorded at `financeAccountKindEnum`, and
-     * because `financeTransactions.category` is free text too — the taxonomy lives in
-     * `classify/categories.ts` where both can read it.
-     */
-    category: text("category").notNull().default(""),
-    notes: text("notes").notNull().default(""),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [
-    // One declaration per name: two would mean two answers to "how often is this", and every
-    // reader would have to pick. Payee claims protect the arithmetic across both tiers.
-    uniqueIndex("finance_recurring_bills_name_uq").on(table.userId, table.name),
-    check(
-      "finance_recurring_bills_cadence_months",
-      sql`${table.cadenceMonths} >= 1 and ${table.cadenceMonths} <= 24`,
-    ),
-    // Two days is the shortest interval anything bills on; 200 is past every day cycle that
-    // is not better expressed in months, and stops a stray year-in-days landing here.
-    check(
-      "finance_recurring_bills_cadence_days",
-      sql`${table.cadenceDays} is null or (${table.cadenceDays} >= 2 and ${table.cadenceDays} <= 200)`,
-    ),
-    check(
-      "finance_recurring_bills_due_day",
-      sql`${table.dueDay} is null or (${table.dueDay} >= 1 and ${table.dueDay} <= 31)`,
-    ),
-    check(
-      "finance_recurring_bills_status",
-      sql`${table.status} in ('active', 'paused', 'cancelled', 'ignored')`,
-    ),
-  ],
-);
-
-/**
- * Money that leaves on a cadence because the user chooses to spend it — tier 2.
- *
- * Pizza every Friday, groceries every Saturday. Separate from `financeRecurringBills` because
- * the two have **opposite defaults**: a subscription charges unless you cancel it, and this
- * costs nothing unless you go and buy it. That asymmetry is the whole reason for the split —
- * only tier 1 can be cancelled, only tier 1 can have a charge fail to arrive, and listing
- * pizza among things that bill you automatically would misrepresent both.
- *
- * **Why this exists at all:** `availableToSpend` subtracted declared bills but not the
- * groceries and pizza that were certainly coming, so the headline ran a few hundred dollars a
- * week optimistic — wrong in the comfortable direction, which is the one way that page fails.
- *
- * **What it is deliberately not — as originally written.** There was no tier 3: clothes, games
- * and books got no bucket, ever, because per-category discretionary envelopes encode a
- * judgement the user already makes correctly without a ledger. The admission test here is
- * still the cadence — if you cannot state one, it does not belong in this table
- * (`agent-os/specs/2026-08-16-1938-commitments/` D0).
- *
- * **That rejection was narrowed on 2026-08-22** by
- * `agent-os/specs/2026-08-22-1948-zero-based-budget/`, which adds a real envelope budget in
- * `finance_budget_categories`. The narrowing is precise and worth knowing before you read D0
- * as still binding: its argument is about a *category list* — a bucket for clothes, a bucket
- * for games — and the busywork it names came from adopting YNAB's default suggested list,
- * which is a configuration choice. The argument holds for the list and does not reach the
- * model. **Nothing in this table changed.** Both tiers still accrue, still feed
- * `availableToSpend`, and are not the budget; the two systems run in parallel until use
- * decides between them.
- */
-export const financeRecurringSpend = pgTable(
-  "finance_recurring_spend",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    /** What the user calls it — "Pizza", "Groceries". Nothing joins on it. */
-    name: text("name").notNull(),
-    /**
-     * The period the rate is quoted in. Weekly is the common case and the one worth entering
-     * by hand: pizza and groceries are one payment a week, so a week is the unit the user
-     * actually knows, whatever period the dashboard later reports in.
-     */
-    period: text("period").$type<RecurringSpendPeriod>().notNull().default("week"),
-    /**
-     * Whether `expectedCents` is authoritative or derived.
-     *
-     * `auto` is the default and leaves `expectedCents` null: the rate is recomputed from
-     * history on every read, so it tracks reality without the user touching anything — which
-     * is the only condition under which this tier is worth having rather than being the
-     * bucket-filling busywork it replaces. `pinned` stores a figure so intent is expressible
-     * ("cut pizza to $40 a week"), and the derived number stays on screen beside it so a
-     * pinned value cannot quietly go stale.
-     */
-    amountSource: text("amount_source")
-      .$type<RecurringSpendAmountSource>()
-      .notNull()
-      .default("auto"),
-    /** The pinned rate per `period`. Null — and ignored — while `amountSource` is `auto`. */
-    expectedCents: integer("expected_cents"),
-    /**
-     * Whether it is still part of the routine. No cancellation state — nothing to cancel.
-     *
-     * As with `financeRecurringBills.status`, this alone decides whether the rate is held back:
-     * an active group is held, an inactive one is not. The `set_aside` flag that used to sit
-     * here defaulted true and had no UI, so it could only ever be true.
-     */
-    active: boolean("active").notNull().default(true),
-    /**
-     * A `FINANCE_CATEGORIES` value, or empty for none. Same precedence as
-     * `financeRecurringBills.category`, and on this tier it is doing the most work: groceries
-     * and pizza are exactly the rows a bank labels `Merchandise` and leaves for someone else
-     * to sort out.
-     */
-    category: text("category").notNull().default(""),
-    notes: text("notes").notNull().default(""),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [
-    uniqueIndex("finance_recurring_spend_name_uq").on(table.userId, table.name),
-    check("finance_recurring_spend_period", sql`${table.period} in ('week', 'month')`),
-    check(
-      "finance_recurring_spend_amount_source",
-      sql`${table.amountSource} in ('auto', 'pinned')`,
-    ),
-    check(
-      "finance_recurring_spend_expected_cents",
-      sql`${table.expectedCents} is null or ${table.expectedCents} >= 0`,
-    ),
-  ],
-);
-
 /**
  * PayPal (and later, other rails) naming a register row the bank feed left opaque.
  *
@@ -2777,7 +2498,7 @@ export const financePaymentResolutions = pgTable(
 /**
  * ─────────────────────────── Zero-based (envelope) budget ───────────────────────────
  *
- * Four tables reimplementing Actual Budget's envelope model
+ * Reimplementing Actual Budget's envelope model
  * (`agent-os/specs/2026-08-22-1948-zero-based-budget/`; see `docs/actual-budget/README.md`
  * for the file-by-file map into `../actual`, MIT).
  *
@@ -2788,24 +2509,11 @@ export const financePaymentResolutions = pgTable(
  * or deleted — and every one of those happens routinely here, since the register is fed by
  * imports and re-imports.
  *
- * This runs **beside** the commitment tiers, not instead of them. Available to Spend keeps
- * accruing, the Dashboard keeps its numbers, and no reader should assume one supersedes the
- * other yet.
+ * **This is the only budgeting system in the app.** Bills, Schedules and Commitments ran
+ * beside it in parallel until `agent-os/specs/2026-08-23-2313-one-budget/` collapsed all
+ * three into the envelope model below — a bill is simply an envelope with `kind = 'bill'`.
  */
 
-/**
- * A named group of envelopes — "Spending", "Bills", "Discretionary", "Income".
- *
- * Groups are arbitrary-depth organisational containers. They never hold money: every total
- * shown on one is still derived from the descendant envelopes, so nesting cannot change the
- * envelope fold or Ready to Assign.
- *
- * **`isIncome` lives here rather than on the category** — as it does in Actual — because it is
- * a structural fact about a whole branch, and a group holding both income and expense
- * envelopes has no meaning under the arithmetic: income has no allocation and no balance, it
- * only feeds Ready to Assign. Putting the flag on the category would make that mixed state
- * representable and every summation would have to defend against it.
- */
 export const financeCategoryGroups = pgTable(
   "finance_category_groups",
   {
@@ -2837,13 +2545,6 @@ export const financeCategoryGroups = pgTable(
      * its whole because something was tidied off screen.
      */
     hidden: boolean("hidden").notNull().default(false),
-    /**
-     * Stable identity for the groups seeded by the explicit Commitments import.
-     *
-     * Names and parents stay user-owned after import. This key is what lets a later replay
-     * add a missing bill without recreating a group the user renamed or moved.
-     */
-    sourceCommitmentKey: text("source_commitment_key"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -2854,9 +2555,6 @@ export const financeCategoryGroups = pgTable(
     uniqueIndex("finance_category_groups_child_name_uq")
       .on(table.userId, table.parentGroupId, table.name)
       .where(sql`${table.parentGroupId} is not null`),
-    uniqueIndex("finance_category_groups_commitment_key_uq")
-      .on(table.userId, table.sourceCommitmentKey)
-      .where(sql`${table.sourceCommitmentKey} is not null`),
     index("finance_category_groups_user_parent_sort_idx").on(
       table.userId,
       table.parentGroupId,
@@ -2866,7 +2564,7 @@ export const financeCategoryGroups = pgTable(
 );
 
 /**
- * One envelope.
+ * One envelope — an ordinary bucket, or a bill.
  *
  * **Not the same thing as `FINANCE_CATEGORIES`**, and named `finance_budget_categories` so the
  * difference survives contact with a hurried reader. That constant is the spending taxonomy —
@@ -2876,6 +2574,14 @@ export const financeCategoryGroups = pgTable(
  *
  * Deleting an envelope sets `finance_transactions.budget_category_id` to null rather than
  * cascading; `hidden` is the ordinary way to retire one and keeps its history readable.
+ *
+ * **A bill is an envelope with `kind = 'bill'`, not a separate table joined to one.**
+ * Before `agent-os/specs/2026-08-23-2313-one-budget/`, one bill was three rows across three
+ * tables — a commitment, an envelope pointing at it by `source_bill_id`, and a schedule
+ * pointing at both — edited on three different pages with two vocabularies for "held". The
+ * bill facet below (columns 12 onward) collapses that: the envelope *is* the bill, funds
+ * itself from its own cadence (`src/lib/finances/budget/templates/schedule.ts`), and every
+ * other column above still means the same thing it means for an ordinary envelope.
  */
 export const financeBudgetCategories = pgTable(
   "finance_budget_categories",
@@ -2889,17 +2595,6 @@ export const financeBudgetCategories = pgTable(
       .references(() => financeCategoryGroups.id, { onDelete: "restrict" }),
     name: text("name").notNull(),
     sortKey: text("sort_key").notNull(),
-    /**
-     * The active Commitments bill this envelope was seeded from.
-     *
-     * `on delete set null` keeps the envelope and its history when the old inventory row is
-     * removed. A replay recognises the surviving relationship by this id, never by a mutable
-     * envelope name.
-     */
-    sourceBillId: uuid("source_bill_id").references(
-      (): AnyPgColumn => financeRecurringBills.id,
-      { onDelete: "set null" },
-    ),
     /**
      * Which `FINANCE_CATEGORIES` values this envelope claims, for the auto-map.
      *
@@ -2916,7 +2611,10 @@ export const financeBudgetCategories = pgTable(
      * failing, since the cost is a row in the wrong envelope and not a lost transaction.
      *
      * Empty for income envelopes, which claim by *flow* instead — the classifier decides what
-     * a paycheck is, and no spending category ever describes one.
+     * a paycheck is, and no spending category ever describes one. Empty for bill envelopes
+     * too — a bill's charges are claimed by payee (`finance_payees.budget_category_id`), not
+     * by taxonomy value, since one merchant should route to exactly one bill regardless of
+     * how the classifier happened to tag a given charge.
      */
     sourceCategories: text("source_categories").array().notNull().default([]),
     /** Retired without losing its history. Still counts toward totals — see the group. */
@@ -2924,15 +2622,84 @@ export const financeBudgetCategories = pgTable(
     /**
      * Goal templates for this envelope, Actual's `goal_def`.
      *
-     * JSON array of `{type, …}` lines (`simple` / `schedule` / `by` / `remainder`), amounts
-     * in integer cents. Validated in `src/lib/finances/budget/templates/types.ts` so bad
-     * JSONB never reaches the apply math. Free-text `notes` stay notes — Actual split the
-     * two and so do we (`2026-08-22-2242-budget-goal-templates` supersedes the earlier
-     * comment that templates would later be written here).
+     * JSON array of `{type, …}` lines (`simple` / `by` / `remainder`), amounts in integer
+     * cents. Validated in `src/lib/finances/budget/templates/types.ts` so bad JSONB never
+     * reaches the apply math. Free-text `notes` stay notes — Actual split the two and so do
+     * we. **A bill envelope (`kind = 'bill'`) never holds a template**: its funding demand is
+     * computed from its own cadence and `expectedCents`, not declared as a line here — see
+     * `agent-os/specs/2026-08-23-2313-one-budget/` D4, which retired the `schedule` template
+     * type this comment used to describe.
      */
     templates: jsonb("templates").$type<unknown>().notNull().default([]),
     /** Free text on the envelope. Not the template store. */
     notes: text("notes").notNull().default(""),
+    /** Whether this row is an ordinary bucket or a bill with its own cadence and status. */
+    kind: text("kind").$type<EnvelopeKind>().notNull().default("envelope"),
+    /**
+     * Whether a bill is still live, paused, or cancelled. Meaningless — and always
+     * `'active'` — on an ordinary envelope.
+     *
+     * `cancelled` stops every forward-looking figure — the next-due walk, the annual total —
+     * but keeps the row and its history. `paused` is the house-move case: still a
+     * commitment, still on the grid, but Apply stops demanding its balance, so Ready to
+     * Assign stops being asked for it without pretending it was never a bill.
+     */
+    status: text("status").$type<EnvelopeStatus>().notNull().default("active"),
+    /** When a bill was cancelled, for the record. Null while active or paused. */
+    cancelledOn: date("cancelled_on", { mode: "string" }),
+    /**
+     * Where a bill is managed — the account page, the billing page, the cancel page.
+     * Empty on an ordinary envelope. The app stores it and never follows it; the grid
+     * renders it as a link.
+     */
+    url: text("url").notNull().default(""),
+    /**
+     * The period `expectedCents` covers, in months, for a bill. 1 monthly, 3 quarterly, 6
+     * semi-annual, 12 yearly. Ignored when `cadenceDays` is set. Null on an ordinary envelope.
+     */
+    cadenceMonths: smallint("cadence_months"),
+    /**
+     * The period in **days**, for a bill whose vendor counts days rather than months. Wins
+     * over `cadenceMonths` when set; null is the ordinary calendar-anchored case.
+     *
+     * Months are still the default and still right for rent, insurance and anything anchored
+     * to a date on the calendar — "semi-annual" means March and September, not every 182.5
+     * days. But some charges are genuinely a day interval: Vetsource ships Dante's Simparico
+     * Trio every four weeks, with gaps of 30, 28, 28, 31, 30, 28, 28, 28, 28, 29 and a day of
+     * the month that walks backward from the 30th to the 14th over eleven charges. Calling
+     * that "monthly" prices 13.04 cycles a year as 12 — about $31 short on this one bill — and
+     * puts the predicted date two days further out every cycle. See `detectCadence` in
+     * `recurringBills.ts`.
+     */
+    cadenceDays: smallint("cadence_days"),
+    /**
+     * Day of a bill's period the charge is expected, 1–31, or null to walk from the last
+     * charge on file. Not clamped to 28: a rent due on the 31st is a real thing, and the
+     * month arithmetic in `recurringBills.ts` already shortens an overlong day to the
+     * month's end rather than spilling into the next one.
+     */
+    dueDay: smallint("due_day"),
+    /**
+     * Anchors a bill's next-due walk when the imported history does not reach a real
+     * charge. Null means the latest charge on file is the anchor.
+     */
+    anchorDate: date("anchor_date", { mode: "string" }),
+    /**
+     * Whether a bill's **dates** are predictable, as distinct from its cost.
+     *
+     * Propane is a utility bill whose yearly cost is perfectly knowable — roughly $500 —
+     * but the vendor monitors the tank and refills at about 25%, so nobody can say when the
+     * truck comes. `false` keeps every figure built on cadence — the annual cost, the
+     * monthly sink — and drops only the forecast date, which is the one thing that needs a
+     * calendar. Meaningless, and always `true`, on an ordinary envelope.
+     */
+    scheduled: boolean("scheduled").notNull().default(true),
+    /**
+     * What a bill costs. Null means "use the median of the charges on file" — the better
+     * answer once there is history and the only wrong one when there is none. Null and
+     * unused on an ordinary envelope, which instead states its demand as a `templates` line.
+     */
+    expectedCents: integer("expected_cents"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -2947,9 +2714,44 @@ export const financeBudgetCategories = pgTable(
       table.groupId,
       table.sortKey,
     ),
-    uniqueIndex("finance_budget_categories_source_bill_uq")
-      .on(table.userId, table.sourceBillId)
-      .where(sql`${table.sourceBillId} is not null`),
+    check("finance_budget_categories_kind", sql`${table.kind} in ('envelope', 'bill')`),
+    check(
+      "finance_budget_categories_status",
+      sql`${table.status} in ('active', 'paused', 'cancelled')`,
+    ),
+    // A bill must declare a cadence; an ordinary envelope must carry no bill facet at all,
+    // so the two shapes cannot be confused by a stray column left set from a kind change.
+    check(
+      "finance_budget_categories_bill_facet",
+      sql`(
+        ${table.kind} = 'bill' and ${table.cadenceMonths} is not null
+      ) or (
+        ${table.kind} = 'envelope'
+        and ${table.status} = 'active'
+        and ${table.cancelledOn} is null
+        and ${table.url} = ''
+        and ${table.cadenceMonths} is null
+        and ${table.cadenceDays} is null
+        and ${table.dueDay} is null
+        and ${table.anchorDate} is null
+        and ${table.scheduled} = true
+        and ${table.expectedCents} is null
+      )`,
+    ),
+    check(
+      "finance_budget_categories_cadence_months",
+      sql`${table.cadenceMonths} is null or (${table.cadenceMonths} >= 1 and ${table.cadenceMonths} <= 24)`,
+    ),
+    // Two days is the shortest interval anything bills on; 200 is past every day cycle that
+    // is not better expressed in months, and stops a stray year-in-days landing here.
+    check(
+      "finance_budget_categories_cadence_days",
+      sql`${table.cadenceDays} is null or (${table.cadenceDays} >= 2 and ${table.cadenceDays} <= 200)`,
+    ),
+    check(
+      "finance_budget_categories_due_day",
+      sql`${table.dueDay} is null or (${table.dueDay} >= 1 and ${table.dueDay} <= 31)`,
+    ),
   ],
 );
 
@@ -3052,84 +2854,6 @@ export const financeBudgetAllocations = pgTable(
 );
 
 /**
- * ─────────────────────────── Schedules (recurring transactions) ───────────────────────────
- *
- * Actual Budget's Schedules feature, reimplemented beside the commitment tiers rather than
- * replacing them (`agent-os/specs/2026-08-22-2124-actual-schedules/`). A schedule is a named
- * recurrence plus Actual-shaped `{field, op, value}` conditions — payee, account, amount,
- * date — and a stored `next_date` cursor. The generic rule engine, payees table and
- * auto-post service stay out; the condition shape is theirs so a later Rules spec can
- * consume this data without a migration.
- *
- * `next_date` is stored, not derived: skip and being paid early both move the cursor in
- * ways the recurrence rule alone cannot express. `source_bill_id` is provenance for the
- * one-click import from `finance_recurring_bills`; the two lists then edit independently
- * and the page reports drift.
- */
-
-export const financeSchedules = pgTable(
-  "finance_schedules",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    /** Unique per user so an import cannot silently create "Netflix" twice. */
-    name: text("name").notNull(),
-    /**
-     * Actual-shaped conditions. Restricted to the four schedule fields; validated in
-     * `src/lib/finances/schedules/conditions.ts` so bad JSONB never reaches the math.
-     */
-    conditions: jsonb("conditions").$type<unknown>().notNull().default([]),
-    /**
-     * Honour this in the UI; do not auto-post. Transactions here arrive from bank feeds,
-     * and an unattended poster would race the feed for the same payment (D3).
-     */
-    postsTransaction: boolean("posts_transaction").notNull().default(false),
-    completed: boolean("completed").notNull().default(false),
-    /**
-     * The advancing cursor. Calendar day, `YYYY-MM-DD`. Never derived from the rule
-     * at read time — skip and an early payment both move it off the rrule's next date.
-     */
-    nextDate: date("next_date", { mode: "string" }).notNull(),
-    /** Per-schedule override of the register's upcoming horizon. Actual's token strings. */
-    customUpcomingLength: text("custom_upcoming_length"),
-    /**
-     * Set when this row was imported from a declared bill. Null for hand-made or
-     * discovered schedules. `on delete set null` so deleting the bill does not delete
-     * the schedule — they edit independently after import.
-     */
-    sourceBillId: uuid("source_bill_id").references(
-      (): AnyPgColumn => financeRecurringBills.id,
-      { onDelete: "set null" },
-    ),
-    /**
-     * The envelope a posted or newly matched occurrence spends from.
-     *
-     * This is routing, not funding: the envelope's schedule template still owns how much to
-     * assign, and Apply / Overwrite remains an explicit budget action.
-     */
-    budgetCategoryId: uuid("budget_category_id").references(
-      (): AnyPgColumn => financeBudgetCategories.id,
-      { onDelete: "set null" },
-    ),
-    sortKey: text("sort_key").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [
-    uniqueIndex("finance_schedules_name_uq").on(table.userId, table.name),
-    index("finance_schedules_user_sort_idx").on(table.userId, table.sortKey),
-    index("finance_schedules_source_bill_idx")
-      .on(table.userId, table.sourceBillId)
-      .where(sql`${table.sourceBillId} is not null`),
-    index("finance_schedules_budget_category_idx")
-      .on(table.userId, table.budgetCategoryId)
-      .where(sql`${table.budgetCategoryId} is not null`),
-  ],
-);
-
-/**
  * ─────────────────────────────────── Payees ───────────────────────────────────
  *
  * **Merchant identity as a row, instead of a function re-run on every read.**
@@ -3168,26 +2892,31 @@ export const financePayees = pgTable(
      */
     name: text("name").notNull(),
     /**
-     * The commitment this payee's charges belong to, if any — at most one, across both tiers.
+     * The envelope this payee's charges belong to, if any.
      *
-     * **This is the constraint that could not previously exist.** `financeRecurringBills` and
-     * `financeRecurringSpend` each held matcher arrays, and the rule that a merchant may appear
-     * on only one of them spanned two tables, so Postgres could not express it and two mutations
-     * enforced it by hand. Held here it is a property of a single row: one payee, one
-     * claim, one CHECK. Ownership inverts — "which payees does this bill claim" is now a query
-     * — which is the ordinary direction for a many-to-one and is what buys the guarantee.
+     * **This used to be two nullable ids and a CHECK** — `commitmentBillId` /
+     * `commitmentSpendId`, because a bill and a recurring-spend entry were different tables
+     * (`agent-os/specs/2026-08-23-2313-one-budget/` D3). Now a bill and an ordinary envelope
+     * are the same table, so one column says the same thing for both: "this merchant's
+     * charges belong to this envelope." Ownership inverts — "which payees does this envelope
+     * claim" is now a query — which is the ordinary direction for a many-to-one.
      *
-     * `on delete set null`, not cascade: deleting a commitment must never delete the payee or
+     * `on delete set null`, not cascade: deleting an envelope must never delete the payee or
      * orphan its transactions.
      */
-    commitmentBillId: uuid("commitment_bill_id").references(
-      () => financeRecurringBills.id,
+    budgetCategoryId: uuid("budget_category_id").references(
+      (): AnyPgColumn => financeBudgetCategories.id,
       { onDelete: "set null" },
     ),
-    commitmentSpendId: uuid("commitment_spend_id").references(
-      () => financeRecurringSpend.id,
-      { onDelete: "set null" },
-    ),
+    /**
+     * Detection proposed this merchant as a recurring commitment and the user said no.
+     *
+     * Before this column, "not a commitment" was recorded by creating a bill row with
+     * `status: 'ignored'` — a real envelope that existed only to say nothing should be
+     * created. This says the same thing without inventing a row, and Review reads it to
+     * keep a dismissed merchant off the proposal list.
+     */
+    notACommitment: boolean("not_a_commitment").notNull().default(false),
     /** Free text about the merchant. Not a matcher, and never read by the resolver. */
     notes: text("notes").notNull().default(""),
     /** Whether direct transaction choices may teach an exact-payee Category rule. */
@@ -3203,17 +2932,9 @@ export const financePayees = pgTable(
       table.userId,
       sql`lower(${table.name})`,
     ),
-    // The whole point of D2: at most one commitment claim per payee, now expressible.
-    check(
-      "finance_payees_single_commitment",
-      sql`num_nonnulls(${table.commitmentBillId}, ${table.commitmentSpendId}) <= 1`,
-    ),
-    index("finance_payees_commitment_bill_idx")
-      .on(table.userId, table.commitmentBillId)
-      .where(sql`${table.commitmentBillId} is not null`),
-    index("finance_payees_commitment_spend_idx")
-      .on(table.userId, table.commitmentSpendId)
-      .where(sql`${table.commitmentSpendId} is not null`),
+    index("finance_payees_budget_category_idx")
+      .on(table.userId, table.budgetCategoryId)
+      .where(sql`${table.budgetCategoryId} is not null`),
   ],
 );
 
@@ -3883,8 +3604,6 @@ export type NewFinanceAccount = typeof financeAccounts.$inferInsert;
 export type FinanceAccountKind = (typeof financeAccountKindEnum.enumValues)[number];
 export type FinanceTransaction = typeof financeTransactions.$inferSelect;
 export type NewFinanceTransaction = typeof financeTransactions.$inferInsert;
-export type FinanceSchedule = typeof financeSchedules.$inferSelect;
-export type NewFinanceSchedule = typeof financeSchedules.$inferInsert;
 export type FinanceRule = typeof financeRules.$inferSelect;
 export type NewFinanceRule = typeof financeRules.$inferInsert;
 export type FinanceFlowKind = (typeof financeFlowKindEnum.enumValues)[number];

@@ -1,21 +1,7 @@
-import {
-  recurringSpendHeld,
-  setAsideHeld,
-  type BillCharge,
-  type SetAside,
-  type SpendHeld,
-} from "./available";
-import type { Payday } from "./classify/income";
-import {
-  billAnchor,
-  recurringSpendRate,
-  type CommitmentCharge,
-  type SpendRate,
-  type StoredBillRow,
-  type StoredSpend,
-} from "./commitments";
+import type { BillCharge } from "./available";
+import { billAnchor, type StoredBillRow } from "./commitments";
 import { PAYCHECKS_PER_YEAR } from "./classify/income";
-import { formatUsd, formatUsdWhole } from "./money";
+import { formatUsdWhole } from "./money";
 import { annualCents, cadenceOf } from "./recurringBills";
 
 /**
@@ -52,25 +38,19 @@ export function amountRangeLabel(range: {
 }
 
 /**
- * What the Commitments grids and the dashboard panels both show for one commitment.
+ * A bill envelope with its cost columns and next-due date resolved — what the budget grid's
+ * hideable A year / Monthly / Pay period columns and the URL/status cells read.
  *
- * This module exists to hold **one** answer to "is this money being held back, and how much".
- * Until 2026-08-18 that question had two answers: a `set_aside` column, and a
- * `status === "active"` filter each caller applied for itself. Deleting the flag left the
- * status rule sitting in two components, which is one component too many for a rule that
- * decides what a number on the dashboard means.
- *
- * `held` is the whole of it. Null means nothing is being held and the surface should say why —
- * no amount, cancelled, dismissed, or inactive — rather than showing a zero that looks like a
- * figure.
+ * **The accrual meter this module used to carry (`held`, `SetAside`, `billHoldCaption`) is
+ * gone** — `agent-os/specs/2026-08-23-2313-one-budget/` D5 retired Available to Spend and the
+ * per-paycheck set-aside it accrued. Whether a bill is funded is now its envelope Balance,
+ * read straight off the budget fold; this module only ever answers "what does it cost" and
+ * "when is it next due", neither of which depends on the budget at all.
  */
 export type BillRow = StoredBillRow & {
   /**
-   * When the next charge is expected, for the editable date column.
-   *
-   * Deliberately not `held.nextDueKey`, which stops at a due date that has already passed so an
-   * unpaid bill stays visible. This one walks forward past today, because it is the field the
-   * user corrects rather than a finding.
+   * When the next charge is expected. Null for an unscheduled bill (propane) — a projected
+   * date there would read as knowledge the user never gave.
    */
   nextDueKey: string | null;
   /** `expectedCents`, or zero — the grid's money input has nothing to render for null. */
@@ -79,64 +59,18 @@ export type BillRow = StoredBillRow & {
   annualCostCents: number;
   /** `annualCostCents / 12` — comparable across cadences. The Amount column is not. */
   monthlyCents: number;
-  /**
-   * Annual cost spread over 26 paychecks. Not `held.perPaycheckCents`, which is the accrual
-   * slice of *this* cycle (`expected / paydays in the cadence`) and cannot be summed with a
-   * monthly bill's slice.
-   */
+  /** Annual cost spread over 26 paychecks. */
   paycheckCents: number;
-  /** The accrual, or null when nothing is being held back. */
-  held: SetAside | null;
   /**
    * Observed min–max of matched charges when the spread exceeds 25% of the dearest
    * charge. Null when history is tight, a single fill, or the amounts were not supplied.
    */
   amountRange: { lowCents: number; highCents: number } | null;
-  /**
-   * The charge being accrued for was due before today and has not posted.
-   *
-   * Worth its own field rather than a comparison at each call site: the accrual reaching its
-   * target is good news and the same figure sitting past its due date is not, and they are one
-   * cent apart in every other respect.
-   */
+  /** The next due date has already passed and nothing has posted since. */
   overdue: boolean;
 };
 
-/**
- * Caption under a dashboard bill row. Unscheduled bills must not grow a due date — a
- * projected date reads as knowledge (`2026-08-14-1104-unscheduled-bills`).
- */
-export function billHoldCaption(
-  row: Pick<BillRow, "scheduled" | "held" | "amountRange">,
-  todayKey: string | null,
-  formatDate: (key: string) => string,
-): string {
-  if (row.held === null) return "";
-  const parts = [
-    `${formatUsd(row.held.perPaycheckCents)} per paycheck of ${formatUsd(row.held.expectedCents)}`,
-  ];
-  if (row.scheduled) {
-    parts.push(`due ${formatDate(row.held.nextDueKey)}`);
-    if (todayKey !== null && row.held.nextDueKey < todayKey) parts.push("overdue");
-  } else {
-    parts.push("unscheduled");
-  }
-  if (row.amountRange) parts.push(amountRangeLabel(row.amountRange));
-  if (row.held.fullyFunded) parts.push("fully set aside");
-  return parts.join(" · ");
-}
-
-export type SpendRow = StoredSpend & {
-  rate: SpendRate;
-  weeklyCents: number;
-  monthlyCents: number;
-  /** Monthly rate spread over 26 paychecks, so it sits next to the bills column. */
-  paycheckCents: number;
-  /** This period's hold, or null when the group is inactive or has no observed rate. */
-  held: SpendHeld | null;
-};
-
-/** The last posted charge for a commitment, or null. */
+/** The last posted charge for a bill, or null. */
 function lastChargeOn(name: string, charges: readonly BillCharge[]): string | null {
   const mine = charges
     .filter((charge) => charge.name === name)
@@ -146,42 +80,34 @@ function lastChargeOn(name: string, charges: readonly BillCharge[]): string | nu
 }
 
 /**
- * The bills tier, with its accrual resolved.
+ * Every bill envelope, with its cost columns and next-due date resolved.
  *
- * **`status === "active"` is the entire hold gate**, because `setAsideHeld` already declines a
- * bill with no declared amount. Paused, cancelled, and dismissed bills keep their history
- * and their annual figure — both still worth reading — and hold nothing. Pause is the one
- * that stays on the grid: still a commitment, not subtracted from available.
- *
- * `todayKey` null is the pre-hydration state: no date means no accrual and no due date, rather
- * than an accrual computed against the server's idea of today.
+ * `todayKey` null is the pre-hydration state: no date means no due date, rather than a due
+ * date computed against the server's idea of today.
  */
 export function billRows(
   bills: readonly StoredBillRow[],
   charges: readonly BillCharge[],
-  paydays: readonly Payday[],
   todayKey: string | null,
 ): BillRow[] {
   return bills.map((bill) => {
     const amountCents = bill.expectedCents ?? 0;
     const lastPosted = lastChargeOn(bill.name, charges);
-    const held =
-      todayKey === null || bill.status !== "active"
-        ? null
-        : setAsideHeld(bill, paydays, charges, todayKey);
     const annualCostCents =
       amountCents > 0 ? annualCents(amountCents, cadenceOf(bill)) : 0;
+    const anchor =
+      todayKey === null || !bill.scheduled
+        ? null
+        : billAnchor(bill, lastPosted, todayKey);
     return {
       ...bill,
       amountCents,
       annualCostCents,
       monthlyCents: Math.round(annualCostCents / 12),
       paycheckCents: Math.round(annualCostCents / PAYCHECKS_PER_YEAR),
-      nextDueKey:
-        todayKey === null || !bill.scheduled
-          ? null
-          : billAnchor(bill, lastPosted, todayKey).nextDueKey,
-      held,
+      // The editable "Next charge" column: always today or later. `expectedKey` below is the
+      // one that can sit in the past — that is exactly what "overdue" means.
+      nextDueKey: anchor?.nextDueKey ?? null,
       amountRange: observedAmountRange(
         charges.flatMap((charge) =>
           charge.name === bill.name && charge.costCents !== undefined
@@ -189,64 +115,14 @@ export function billRows(
             : [],
         ),
       ),
-      overdue: held !== null && todayKey !== null && held.nextDueKey < todayKey,
+      overdue:
+        bill.status === "active" &&
+        anchor?.expectedKey !== null &&
+        anchor?.expectedKey !== undefined &&
+        todayKey !== null &&
+        anchor.expectedKey < todayKey,
     };
   });
-}
-
-/**
- * The recurring-spend tier, with its rate and this period's hold resolved.
- *
- * `recurringSpendHeld` gates on `active` itself, so there is no second condition here — the
- * asymmetry with bills is real, not an oversight: spend has no cancelled state to consider.
- */
-export function spendRows(
-  spend: readonly StoredSpend[],
-  charges: Record<string, CommitmentCharge[]>,
-  todayKey: string | null,
-  nextPaydayKey: string | null,
-): SpendRow[] {
-  return spend.map((entry) => {
-    const mine = charges[entry.name] ?? [];
-    // A far-future key before hydration makes every charge on file count as history, which is
-    // what an un-dated read of the rate should show: the average so far, held against nothing.
-    const rate = recurringSpendRate(entry, mine, todayKey ?? "9999-12-31");
-    const weeklyCents =
-      entry.period === "week"
-        ? rate.ratePerPeriodCents
-        : Math.round((rate.ratePerPeriodCents * 12) / 52);
-    const monthlyCents =
-      entry.period === "month"
-        ? rate.ratePerPeriodCents
-        : Math.round((rate.ratePerPeriodCents * 52) / 12);
-    return {
-      ...entry,
-      rate,
-      weeklyCents,
-      monthlyCents,
-      paycheckCents: Math.round((monthlyCents * 12) / PAYCHECKS_PER_YEAR),
-      held:
-        todayKey === null
-          ? null
-          : recurringSpendHeld(
-              entry,
-              rate.ratePerPeriodCents,
-              mine,
-              todayKey,
-              nextPaydayKey,
-            ),
-    };
-  });
-}
-
-/** Every bill accrual in force, for `availableToSpend`. */
-export function heldSetAsides(rows: readonly BillRow[]): SetAside[] {
-  return rows.flatMap((row) => (row.held === null ? [] : [row.held]));
-}
-
-/** Every recurring-spend hold in force, for `availableToSpend`. */
-export function heldSpend(rows: readonly SpendRow[]): SpendHeld[] {
-  return rows.flatMap((row) => (row.held === null ? [] : [row.held]));
 }
 
 export type MoneyTotals = {
@@ -265,19 +141,6 @@ export function activeBillTotals(rows: readonly BillRow[]): MoneyTotals {
       monthlyCents: row.monthlyCents,
       paycheckCents: row.paycheckCents,
       weeklyCents: 0,
-    }),
-  );
-}
-
-/** Active spend groups, summed on weekly / monthly / paycheck. Rate is period-mixed. */
-export function activeSpendTotals(rows: readonly SpendRow[]): MoneyTotals {
-  return sumMoney(
-    rows.filter((row) => row.active),
-    (row) => ({
-      annualCents: row.monthlyCents * 12,
-      monthlyCents: row.monthlyCents,
-      paycheckCents: row.paycheckCents,
-      weeklyCents: row.weeklyCents,
     }),
   );
 }

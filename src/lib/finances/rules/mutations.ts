@@ -19,7 +19,7 @@ import {
 } from "@/db/schema";
 import { isUniqueViolation } from "@/lib/db/constraints";
 import * as sortKey from "@/lib/tree/sortKey";
-import { storedSchedulePayeeIds } from "../payees/references";
+import { storedConditionPayeeIds } from "../payees/references";
 import { parseRuleActions } from "./actions";
 import { parseRuleConditionsDetailed, toStoredConditions } from "./conditions";
 import { getRule } from "./queries";
@@ -50,7 +50,7 @@ async function requireOwnedReferences(
   conditions: unknown,
   actions: readonly import("./actions").RuleAction[],
 ): Promise<void> {
-  const payeeIds = storedSchedulePayeeIds(conditions);
+  const payeeIds = storedConditionPayeeIds(conditions);
   if (payeeIds.length > 0) {
     const rows = await db
       .select({ id: financePayees.id })

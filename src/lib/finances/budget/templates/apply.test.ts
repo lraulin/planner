@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { applyTemplates, templateCarryIn, type EnvelopeApplyInput } from "./apply";
-import type { ScheduleSnapshot } from "./schedule";
+import type { BillSnapshot } from "./schedule";
 import type { Template } from "./types";
 
 const billsSimple: Template = {
@@ -25,6 +25,7 @@ function envelope(overrides: Partial<EnvelopeApplyInput> = {}): EnvelopeApplyInp
     id: "bills",
     name: "Bills",
     isIncome: false,
+    kind: "envelope",
     templates: [billsSimple],
     assignedCents: 0,
     carryInCents: 0,
@@ -38,7 +39,7 @@ describe("applyTemplates", () => {
     const apply = applyTemplates({
       month: "2026-08-01",
       envelopes: [filled],
-      schedules: new Map(),
+      bills: new Map(),
       readyToAssignCents: 100_000,
       force: false,
       todayKey: "2026-08-22",
@@ -48,7 +49,7 @@ describe("applyTemplates", () => {
     const overwrite = applyTemplates({
       month: "2026-08-01",
       envelopes: [filled],
-      schedules: new Map(),
+      bills: new Map(),
       readyToAssignCents: 100_000,
       force: true,
       todayKey: "2026-08-22",
@@ -69,7 +70,7 @@ describe("applyTemplates", () => {
           templates: [remainder],
         }),
       ],
-      schedules: new Map(),
+      bills: new Map(),
       readyToAssignCents: 88_812,
       force: false,
       todayKey: "2026-08-22",
@@ -87,7 +88,7 @@ describe("applyTemplates", () => {
         envelope({ templates: [{ ...billsSimple, monthlyCents: 200_000 }] }),
         envelope({ id: "savings", name: "Savings", templates: [remainder] }),
       ],
-      schedules: new Map(),
+      bills: new Map(),
       readyToAssignCents: 50_000,
       force: false,
       todayKey: "2026-08-22",
@@ -104,7 +105,7 @@ describe("applyTemplates", () => {
     const result = applyTemplates({
       month: "2026-08-01",
       envelopes: [envelope({ isIncome: true })],
-      schedules: new Map(),
+      bills: new Map(),
       readyToAssignCents: 50_000,
       force: true,
       todayKey: "2026-08-22",
@@ -116,7 +117,7 @@ describe("applyTemplates", () => {
     const result = applyTemplates({
       month: "2026-08-01",
       envelopes: [envelope()],
-      schedules: new Map(),
+      bills: new Map(),
       readyToAssignCents: 50_000,
       force: false,
       todayKey: "2026-08-22",
@@ -134,36 +135,39 @@ describe("templateCarryIn", () => {
   });
 });
 
-describe("schedule apply", () => {
-  it("fills from a monthly schedule snapshot", () => {
-    const snapshot: ScheduleSnapshot = {
+describe("bill envelope apply", () => {
+  it("fills from a monthly bill snapshot with no template lines at all", () => {
+    const snapshot: BillSnapshot = {
       id: "rent",
       name: "Rent",
-      completed: false,
-      amountCents: -185_000,
-      nextDate: "2026-08-01",
-      config: { frequency: "monthly", interval: 1, start: "2026-01-01" },
+      cadenceMonths: 1,
+      cadenceDays: null,
+      expectedCents: 185_000,
+      nextDueKey: "2026-08-01",
     };
     const result = applyTemplates({
       month: "2026-08-01",
-      envelopes: [
-        envelope({
-          templates: [
-            {
-              id: "s1",
-              directive: "template",
-              type: "schedule",
-              priority: 0,
-              scheduleId: "rent",
-            },
-          ],
-        }),
-      ],
-      schedules: new Map([["rent", snapshot]]),
+      envelopes: [envelope({ id: "rent", name: "Rent", kind: "bill", templates: [] })],
+      bills: new Map([["rent", snapshot]]),
       readyToAssignCents: 200_000,
       force: false,
       todayKey: "2026-08-22",
     });
     expect(result.allocations[0]?.amountCents).toBe(185_000);
+  });
+
+  it("assigns nothing and reports an error when there is no snapshot for it", () => {
+    const result = applyTemplates({
+      month: "2026-08-01",
+      envelopes: [envelope({ id: "rent", name: "Rent", kind: "bill", templates: [] })],
+      bills: new Map(),
+      readyToAssignCents: 200_000,
+      force: false,
+      todayKey: "2026-08-22",
+    });
+    expect(result.allocations).toEqual([
+      { categoryId: "rent", amountCents: 0, goalCents: 0 },
+    ]);
+    expect(result.errors[0]?.message).toMatch(/no next-due date/);
   });
 });

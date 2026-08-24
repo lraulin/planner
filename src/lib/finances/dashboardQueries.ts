@@ -4,14 +4,13 @@ import {
   financeAccounts,
   financeBudgetCategories,
   financePayees,
-  financeRecurringBills,
-  financeRecurringSpend,
   financeStatementRates,
   financeStatements,
   financeTransactions,
 } from "@/db/schema";
 import { listConnections, type BankConnectionRow } from "@/lib/banksync/queries";
 import {
+  effectiveFlow,
   effectiveMerchant,
   paydaysFrom,
   recurringMerchants,
@@ -24,10 +23,16 @@ import type { BillCharge, PendingRow } from "./available";
 import type { Payday } from "./classify/income";
 import {
   payeeClaimIndex,
+  projectForwardMonths,
+  projectForwardPayPeriods,
+  upcomingBillOccurrences,
   type CommitmentCharge,
   type StoredBillRow,
-  type StoredSpend,
+  type UpcomingBillRow,
 } from "./commitments";
+import { billRows as billRowsOf, type BillRow } from "./commitmentRows";
+import { spendingVsIncome, type SpendingVsIncome } from "./expectedSpending";
+import { listTransactions } from "./queries";
 import { numericStringToCents } from "./money";
 import type { PeriodLedgerRow } from "./periodResult";
 import { listAccounts } from "./queries";
@@ -168,34 +173,38 @@ export async function loadRecurringBills(userId: string): Promise<StoredBillRow[
   const [rows, payees] = await Promise.all([
     db
       .select({
-        id: financeRecurringBills.id,
-        name: financeRecurringBills.name,
-        status: financeRecurringBills.status,
-        cancelledOn: financeRecurringBills.cancelledOn,
-        url: financeRecurringBills.url,
-        cadenceMonths: financeRecurringBills.cadenceMonths,
-        cadenceDays: financeRecurringBills.cadenceDays,
-        category: financeRecurringBills.category,
-        expectedCents: financeRecurringBills.expectedCents,
-        anchorDate: financeRecurringBills.anchorDate,
-        scheduled: financeRecurringBills.scheduled,
-        dueDay: financeRecurringBills.dueDay,
-        notes: financeRecurringBills.notes,
+        id: financeBudgetCategories.id,
+        name: financeBudgetCategories.name,
+        status: financeBudgetCategories.status,
+        cancelledOn: financeBudgetCategories.cancelledOn,
+        url: financeBudgetCategories.url,
+        cadenceMonths: financeBudgetCategories.cadenceMonths,
+        cadenceDays: financeBudgetCategories.cadenceDays,
+        expectedCents: financeBudgetCategories.expectedCents,
+        anchorDate: financeBudgetCategories.anchorDate,
+        scheduled: financeBudgetCategories.scheduled,
+        dueDay: financeBudgetCategories.dueDay,
+        notes: financeBudgetCategories.notes,
       })
-      .from(financeRecurringBills)
-      .where(eq(financeRecurringBills.userId, userId))
-      .orderBy(asc(financeRecurringBills.name)),
+      .from(financeBudgetCategories)
+      .where(
+        and(
+          eq(financeBudgetCategories.userId, userId),
+          eq(financeBudgetCategories.kind, "bill"),
+        ),
+      )
+      .orderBy(asc(financeBudgetCategories.name)),
     db
       .select({
         id: financePayees.id,
         name: financePayees.name,
-        commitmentId: financePayees.commitmentBillId,
+        commitmentId: financePayees.budgetCategoryId,
       })
       .from(financePayees)
       .where(
         and(
           eq(financePayees.userId, userId),
-          isNotNull(financePayees.commitmentBillId),
+          isNotNull(financePayees.budgetCategoryId),
         ),
       )
       .orderBy(asc(financePayees.name)),
@@ -203,6 +212,7 @@ export async function loadRecurringBills(userId: string): Promise<StoredBillRow[
 
   return rows.map((row) => ({
     ...row,
+    cadenceMonths: row.cadenceMonths ?? 1,
     payees: payees
       .filter((payee) => payee.commitmentId === row.id)
       .map(({ id, name }) => ({ id, name })),
@@ -212,44 +222,81 @@ export async function loadRecurringBills(userId: string): Promise<StoredBillRow[
   }));
 }
 
-/** Every recurring-spend entry — tier 2. Unfiltered by window, for the same reason. */
-export async function loadRecurringSpend(userId: string): Promise<StoredSpend[]> {
-  const [rows, payees] = await Promise.all([
-    db
-      .select({
-        id: financeRecurringSpend.id,
-        name: financeRecurringSpend.name,
-        period: financeRecurringSpend.period,
-        amountSource: financeRecurringSpend.amountSource,
-        expectedCents: financeRecurringSpend.expectedCents,
-        active: financeRecurringSpend.active,
-        category: financeRecurringSpend.category,
-        notes: financeRecurringSpend.notes,
-      })
-      .from(financeRecurringSpend)
-      .where(eq(financeRecurringSpend.userId, userId))
-      .orderBy(asc(financeRecurringSpend.name)),
-    db
-      .select({
-        id: financePayees.id,
-        name: financePayees.name,
-        commitmentId: financePayees.commitmentSpendId,
-      })
-      .from(financePayees)
-      .where(
-        and(
-          eq(financePayees.userId, userId),
-          isNotNull(financePayees.commitmentSpendId),
-        ),
-      )
-      .orderBy(asc(financePayees.name)),
+/**
+ * Bill occurrences due within `horizonDays` — the Register's Upcoming strip.
+ *
+ * Charge history is read from the register itself rather than `loadDashboard`'s heavier
+ * insights pass, which loads three years for the trend charts this strip does not need.
+ */
+export async function loadUpcomingBills(
+  userId: string,
+  todayKey: string,
+  horizonDays: number,
+): Promise<UpcomingBillRow[]> {
+  const [bills, transactions] = await Promise.all([
+    loadRecurringBills(userId),
+    listTransactions(userId),
   ]);
-  return rows.map((row) => ({
-    ...row,
-    payees: payees
-      .filter((payee) => payee.commitmentId === row.id)
-      .map(({ id, name }) => ({ id, name })),
-  }));
+  const claims = payeeClaimIndex(bills);
+  const chargesByName = new Map<string, CommitmentCharge[]>();
+  for (const row of transactions) {
+    if (row.payeeId === null || effectiveFlow(row) !== "spend") continue;
+    const ref = claims.get(row.payeeId);
+    if (!ref) continue;
+    const list = chargesByName.get(ref.name) ?? [];
+    list.push({ dateKey: row.transactionDate, costCents: spendCentsOf(row) });
+    chargesByName.set(ref.name, list);
+  }
+  return upcomingBillOccurrences(bills, chargesByName, todayKey, horizonDays);
+}
+
+export type BillForecast = {
+  billRows: BillRow[];
+  months: ReturnType<typeof projectForwardMonths>;
+  periods: ReturnType<typeof projectForwardPayPeriods>;
+  comparison: SpendingVsIncome;
+};
+
+/**
+ * The Budget page's collapsed-by-default forecast panels — Next 12 months and Expected vs
+ * income (`agent-os/specs/2026-08-23-2313-one-budget/` D8 carries these over from the
+ * retired Commitments page, secondary rather than a permanent section).
+ *
+ * Reads the full three-year `loadInsightsRows` pass rather than the register alone: payday
+ * detection (`paydaysFrom`) needs the same classified history the Dashboard and Insights
+ * pages already read, and there is no cheaper source for "what does a typical paycheck
+ * look like" than the same detector everywhere else uses.
+ */
+export async function loadBillForecast(
+  userId: string,
+  todayKey: string,
+): Promise<BillForecast> {
+  const [rows, bills] = await Promise.all([
+    loadInsightsRows(userId),
+    loadRecurringBills(userId),
+  ]);
+  const claims = payeeClaimIndex(bills);
+  const billNames = new Set(bills.map((bill) => bill.name));
+  const flatCharges: BillCharge[] = [];
+  const chargesByName = new Map<string, CommitmentCharge[]>();
+  for (const row of rows) {
+    const ref = row.payeeId ? claims.get(row.payeeId) : undefined;
+    if (ref === undefined || !billNames.has(ref.name)) continue;
+    const charge = { dateKey: row.transactionDate, costCents: spendCentsOf(row) };
+    flatCharges.push({ name: ref.name, ...charge });
+    const list = chargesByName.get(ref.name) ?? [];
+    list.push(charge);
+    chargesByName.set(ref.name, list);
+  }
+
+  const paydays = paydaysFrom(rows);
+  const rowsOut = billRowsOf(bills, flatCharges, todayKey);
+  return {
+    billRows: rowsOut,
+    months: projectForwardMonths(bills, chargesByName, todayKey),
+    periods: projectForwardPayPeriods(bills, chargesByName, todayKey, paydays),
+    comparison: spendingVsIncome(rowsOut, paydays),
+  };
 }
 
 /**
@@ -271,24 +318,17 @@ export type DashboardData = {
   /** Rows the bank has not yet posted. Signed in module convention. */
   pending: PendingRow[];
   bills: StoredBillRow[];
-  spend: StoredSpend[];
   paydays: Payday[];
   /**
-   * Every posted charge against a tier 1 bill, keyed by the **commitment's name** rather than
-   * by the bank's merchant — so a bill covering two spellings arrives as one series.
+   * Every posted charge against a bill, keyed by the **envelope's name** rather than by the
+   * bank's merchant — so a bill covering two spellings arrives as one series.
    */
   billCharges: BillCharge[];
-  /**
-   * Charges against tier 2 entries, by commitment name, carrying the cost so the rate and the
-   * "spent this period" figure can both be computed from one read.
-   */
-  spendCharges: Map<string, CommitmentCharge[]>;
   connections: BankConnectionRow[];
-  /** Distinct `effectiveMerchant` strings, for the Commitments create picker. */
+  /** Distinct `effectiveMerchant` strings, for Review. */
   merchants: string[];
   /**
-   * Detected recurring merchants that no commitment has claimed. The Commitments review
-   * list — propose, never apply.
+   * Detected recurring merchants no envelope has claimed. Review — propose, never apply.
    */
   review: RecurringMerchant[];
   /**
@@ -309,59 +349,53 @@ export type DashboardData = {
 export const PERIOD_LEDGER_DAYS = 300;
 
 export async function loadDashboard(userId: string): Promise<DashboardData> {
-  const [accounts, rows, bills, spend, pendingRows, connections] = await Promise.all([
-    listAccounts(userId),
-    loadInsightsRows(userId),
-    loadRecurringBills(userId),
-    loadRecurringSpend(userId),
-    db
-      .select({
-        accountId: financeTransactions.accountId,
-        amount: financeTransactions.amount,
-        source: financeTransactions.externalSource,
-      })
-      .from(financeTransactions)
-      .where(
-        and(
-          eq(financeTransactions.userId, userId),
-          eq(financeTransactions.pending, true),
+  const [accounts, rows, bills, pendingRows, connections, dismissedPayeeIds] =
+    await Promise.all([
+      listAccounts(userId),
+      loadInsightsRows(userId),
+      loadRecurringBills(userId),
+      db
+        .select({
+          accountId: financeTransactions.accountId,
+          amount: financeTransactions.amount,
+          source: financeTransactions.externalSource,
+        })
+        .from(financeTransactions)
+        .where(
+          and(
+            eq(financeTransactions.userId, userId),
+            eq(financeTransactions.pending, true),
+          ),
         ),
-      ),
-    listConnections(userId),
-  ]);
+      listConnections(userId),
+      db
+        .select({ id: financePayees.id })
+        .from(financePayees)
+        .where(
+          and(eq(financePayees.userId, userId), eq(financePayees.notACommitment, true)),
+        ),
+    ]);
 
-  // One index, built once, and the only route from a bank string to a commitment. Resolving
-  // per panel is how Pizza Hut ends up folded into "Pizza" on one surface and not another.
-  const index = payeeClaimIndex(bills, spend);
+  // One index, built once, and the only route from a bank string to a bill envelope. Resolving
+  // per panel is how a merchant ends up folded into a bill on one surface and not another.
+  const index = payeeClaimIndex(bills);
   const billNames = new Set(bills.map((bill) => bill.name));
-  const spendNames = new Set(spend.map((entry) => entry.name));
+  const dismissed = new Set(dismissedPayeeIds.map((row) => row.id));
 
   const billCharges: BillCharge[] = [];
-  const spendCharges = new Map<string, CommitmentCharge[]>();
   const merchantSet = new Set<string>();
 
   for (const row of rows) {
     const merchant = effectiveMerchant(row);
     if (merchant !== "") merchantSet.add(merchant);
     const ref = row.payeeId ? index.get(row.payeeId) : undefined;
-    if (ref === undefined) continue;
+    if (ref === undefined || !billNames.has(ref.name)) continue;
 
-    if (ref.kind === "bill" && billNames.has(ref.name)) {
-      billCharges.push({
-        name: ref.name,
-        dateKey: row.transactionDate,
-        costCents: spendCentsOf(row),
-      });
-      continue;
-    }
-    if (ref.kind === "spend" && spendNames.has(ref.name)) {
-      // `spendCentsOf` already returns 0 for anything that is not spending and expresses a
-      // refund as a negative cost, so a card payment landing on a matched merchant cannot
-      // inflate the rate — returning the couch has to reduce what the couch cost.
-      const list = spendCharges.get(ref.name) ?? [];
-      list.push({ dateKey: row.transactionDate, costCents: spendCentsOf(row) });
-      spendCharges.set(ref.name, list);
-    }
+    billCharges.push({
+      name: ref.name,
+      dateKey: row.transactionDate,
+      costCents: spendCentsOf(row),
+    });
   }
 
   return {
@@ -376,13 +410,11 @@ export async function loadDashboard(userId: string): Promise<DashboardData> {
       Date.now(),
     ).map(({ accountId, amountCents }) => ({ accountId, amountCents })),
     bills,
-    spend,
     paydays: paydaysFrom(rows),
     billCharges,
-    spendCharges,
     connections,
     merchants: [...merchantSet].sort((left, right) => left.localeCompare(right)),
-    review: reviewCandidates(rows, bills, index),
+    review: reviewCandidates(rows, bills, index, dismissed),
     periodRows: rows
       .filter((row) => row.transactionDate >= periodLedgerCutoff())
       .map((row) => ({
@@ -395,6 +427,28 @@ export async function loadDashboard(userId: string): Promise<DashboardData> {
         eventLabel: row.eventLabel,
       })),
   };
+}
+
+/**
+ * Review candidates on their own, for pages that want the list without the rest of the
+ * dashboard (the Budget page's Review drawer).
+ */
+export async function loadReviewCandidates(
+  userId: string,
+): Promise<RecurringMerchant[]> {
+  const [rows, bills, dismissedPayeeIds] = await Promise.all([
+    loadInsightsRows(userId),
+    loadRecurringBills(userId),
+    db
+      .select({ id: financePayees.id })
+      .from(financePayees)
+      .where(
+        and(eq(financePayees.userId, userId), eq(financePayees.notACommitment, true)),
+      ),
+  ]);
+  const index = payeeClaimIndex(bills);
+  const dismissed = new Set(dismissedPayeeIds.map((row) => row.id));
+  return reviewCandidates(rows, bills, index, dismissed);
 }
 
 /**
@@ -413,17 +467,26 @@ function reviewCandidates(
   rows: readonly AnalyticsRow[],
   bills: readonly StoredBillRow[],
   index: ReturnType<typeof payeeClaimIndex>,
+  dismissed: ReadonlySet<string>,
 ): RecurringMerchant[] {
   const billShaped = recurringMerchants(rows, bills).filter(
-    (entry) => !entry.declared && (!entry.payeeId || !index.has(entry.payeeId)),
+    (entry) =>
+      !entry.declared &&
+      (!entry.payeeId || !index.has(entry.payeeId)) &&
+      (!entry.payeeId || !dismissed.has(entry.payeeId)),
   );
   const claimed = new Set(billShaped.map((entry) => entry.merchant));
 
+  // A merchant regular enough to look like ordinary spending (groceries, pizza) but not
+  // regular enough to be a bill still surfaces here — Review proposes it as a plain envelope
+  // with a `simple` template, not as a bill.
   const spendShaped = spendCandidates(rows, {
     todayKey: toDateKey(new Date()),
   }).filter(
     (entry) =>
-      (!entry.payeeId || !index.has(entry.payeeId)) && !claimed.has(entry.merchant),
+      (!entry.payeeId || !index.has(entry.payeeId)) &&
+      (!entry.payeeId || !dismissed.has(entry.payeeId)) &&
+      !claimed.has(entry.merchant),
   );
 
   return [...billShaped, ...spendShaped].sort(

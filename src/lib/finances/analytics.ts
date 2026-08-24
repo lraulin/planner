@@ -22,14 +22,10 @@
  * arithmetic in JS is both correct and cheaper than a round trip per panel.
  */
 
-import type {
-  FinanceAccountKind,
-  FinanceFlowKind,
-  RecurringSpendPeriod,
-} from "@/db/schema";
+import type { FinanceAccountKind, FinanceFlowKind } from "@/db/schema";
 import { daysBetweenKeys, shiftDateKey } from "@/lib/schedule/geometry";
 import { categoryFromBank, UNCATEGORIZED } from "./classify/categories";
-import { periodIndex, RATE_LOOKBACK_PERIODS } from "./commitments";
+import { periodIndex, RATE_LOOKBACK_PERIODS, type Period } from "./commitments";
 import {
   detectIncome,
   normalizedMonthlyIncome,
@@ -1223,7 +1219,7 @@ export type RecurringMerchant = {
    * carried a charge. Null on a bill-shaped row, where neither means anything — a yearly
    * insurance premium covers 0% of the last 26 weeks and is not thereby irregular.
    */
-  spendPeriod: RecurringSpendPeriod | null;
+  spendPeriod: Period | null;
   coverage: number | null;
 };
 
@@ -1312,10 +1308,9 @@ export function recurringMerchants(
   }
 
   for (const bill of bills) {
-    // Ignored means "detection proposed this and it was never a commitment". It stays off
-    // the table permanently. Cancelled stays visible as history.
-    if (billStatusOf(bill) === "ignored") continue;
-
+    // A merchant that was never a commitment is recorded on the payee (`notACommitment`) and
+    // never reaches this list at all, so cancelled is the only non-active status still here,
+    // and it stays visible as history.
     const charges = chargesForBill(byPayeeForBills, bill);
     const amounts = charges.map(spendCentsOf);
     // The declared amount first, because it survives a window that contains no charge — which
@@ -1516,9 +1511,9 @@ export function spendCandidates(
  */
 function coverageOf(
   past: readonly AnalyticsRow[],
-  period: RecurringSpendPeriod,
+  period: Period,
   todayKey: string,
-): { period: RecurringSpendPeriod; coverage: number; typicalCents: number } | null {
+): { period: Period; coverage: number; typicalCents: number } | null {
   const current = periodIndex(todayKey, period);
   const first = past.reduce(
     (earliest, row) => Math.min(earliest, periodIndex(row.transactionDate, period)),

@@ -4,37 +4,34 @@
  * Every mutation takes `userId` first, scopes on it, and proves the row was theirs before
  * touching it (`agent-os/standards/development/security.md`).
  *
- * **Two guarantees live in the database, not here**, and that is the point of the whole shape:
- * `(user_id, alias)` is unique, so one merchant string cannot reach two payees; and
- * `num_nonnulls(commitment_bill_id, commitment_spend_id) <= 1` means a payee cannot be claimed
- * by two commitments at once. The functions below translate those refusals into sentences a
- * person can act on — they do not re-implement them, because a check written here would only
- * hold for callers that remembered to come through here.
+ * **One guarantee lives in the database, not here**, and that is the point of the whole shape:
+ * `(user_id, alias)` is unique, so one merchant string cannot reach two payees. `budget_category_id`
+ * is a single nullable column, so "a payee is claimed by at most one envelope" needs no CHECK —
+ * it is what a single column already means. The functions below translate the database's
+ * refusals into sentences a person can act on — they do not re-implement them, because a check
+ * written here would only hold for callers that remembered to come through here.
  */
 
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
+  financeBudgetCategories,
   financePayeeAliases,
   financePayees,
-  financeRecurringBills,
-  financeRecurringSpend,
   financeRules,
-  financeSchedules,
   financeTransactions,
 } from "@/db/schema";
 import { isUniqueViolation } from "@/lib/db/constraints";
 import { normalizeMerchant } from "../classify/merchant";
 import { mergeClaimDecision } from "./merge";
-import { rewriteMergedPayeeIds, storedSchedulePayeeIds } from "./references";
+import { rewriteMergedPayeeIds, storedConditionPayeeIds } from "./references";
 
 async function requirePayee(userId: string, payeeId: string) {
   const [row] = await db
     .select({
       id: financePayees.id,
       name: financePayees.name,
-      commitmentBillId: financePayees.commitmentBillId,
-      commitmentSpendId: financePayees.commitmentSpendId,
+      budgetCategoryId: financePayees.budgetCategoryId,
     })
     .from(financePayees)
     .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)));
@@ -227,40 +224,25 @@ export async function deletePayee(userId: string, payeeId: string): Promise<void
     const [payee] = await tx
       .select({
         id: financePayees.id,
-        commitmentBillId: financePayees.commitmentBillId,
-        commitmentSpendId: financePayees.commitmentSpendId,
+        budgetCategoryId: financePayees.budgetCategoryId,
       })
       .from(financePayees)
       .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)));
     if (!payee) throw new Error("That payee does not exist.");
-    if (payee.commitmentBillId || payee.commitmentSpendId) {
+    if (payee.budgetCategoryId) {
       throw new Error(
-        "That payee belongs to a commitment. Merge it or release the claim before deleting.",
+        "That payee belongs to an envelope. Merge it or release the claim before deleting.",
       );
     }
 
-    const schedules = await tx
-      .select({ name: financeSchedules.name, conditions: financeSchedules.conditions })
-      .from(financeSchedules)
-      .where(eq(financeSchedules.userId, userId));
-    const referencedBy = schedules.find((schedule) =>
-      storedSchedulePayeeIds(schedule.conditions).includes(payeeId),
-    );
-    if (referencedBy) {
-      throw new Error(
-        `That payee is used by the schedule "${referencedBy.name}". Merge it or edit the schedule before deleting.`,
-      );
-    }
-
-    // Same reasoning as the schedule check above, and the same shared reader: a rule's payee
-    // condition is an id inside JSONB with no foreign key behind it, so deleting the payee
-    // would leave the rule quietly matching nothing rather than failing.
+    // A rule's payee condition is an id inside JSONB with no foreign key behind it, so
+    // deleting the payee would leave the rule quietly matching nothing rather than failing.
     const rules = await tx
       .select({ name: financeRules.name, conditions: financeRules.conditions })
       .from(financeRules)
       .where(eq(financeRules.userId, userId));
     const ruledBy = rules.find((rule) =>
-      storedSchedulePayeeIds(rule.conditions).includes(payeeId),
+      storedConditionPayeeIds(rule.conditions).includes(payeeId),
     );
     if (ruledBy) {
       throw new Error(
@@ -299,15 +281,11 @@ export async function mergePayees(
   const target = await requirePayee(userId, targetId);
   const merged = await Promise.all(sources.map((id) => requirePayee(userId, id)));
 
-  // Distinct claims cannot survive one row, and choosing which commitment keeps the merchant is
+  // Distinct claims cannot survive one row, and choosing which envelope keeps the merchant is
   // a decision with money attached. The bridge may legitimately put the same claim on several
-  // aliases, so compare commitment identities rather than merely counting claimed rows.
+  // aliases, so compare envelope identities rather than merely counting claimed rows.
   const claimOf = (row: typeof target) => ({
-    claim: row.commitmentBillId
-      ? ({ kind: "bill", id: row.commitmentBillId } as const)
-      : row.commitmentSpendId
-        ? ({ kind: "spend", id: row.commitmentSpendId } as const)
-        : null,
+    claim: row.budgetCategoryId ? ({ id: row.budgetCategoryId } as const) : null,
   });
   const claimDecision = mergeClaimDecision([claimOf(target), ...merged.map(claimOf)]);
   if (claimDecision.refusal) throw new Error(claimDecision.refusal);
@@ -344,11 +322,7 @@ export async function mergePayees(
     if (carried && !targetClaimed) {
       await tx
         .update(financePayees)
-        .set({
-          commitmentBillId: carried.kind === "bill" ? carried.id : null,
-          commitmentSpendId: carried.kind === "spend" ? carried.id : null,
-          updatedAt: new Date(),
-        })
+        .set({ budgetCategoryId: carried.id, updatedAt: new Date() })
         .where(and(eq(financePayees.userId, userId), eq(financePayees.id, targetId)));
     }
 
@@ -363,12 +337,11 @@ export async function mergePayees(
 }
 
 /**
- * Point every `payee` condition holding a merged id at the survivor, in both tables that
- * hold them.
+ * Point every `payee` condition holding a merged id at the survivor.
  *
- * Schedules and rules use the same condition shape, so they get the same rewrite from the same
- * pure function (`rewriteMergedPayeeIds`). A second copy of this logic for the second table is
- * exactly how one of them would come to be missed: the merge would succeed, and the rule would
+ * Rules hold this condition shape, and get the rewrite from the same pure function
+ * (`rewriteMergedPayeeIds`) that the merge preview uses to find them — a second copy of this
+ * logic is exactly how it would come to be missed: the merge would succeed, and the rule would
  * quietly match nothing thereafter.
  */
 async function rewritePayeeConditions(
@@ -378,19 +351,6 @@ async function rewritePayeeConditions(
   targetId: string,
 ): Promise<void> {
   const merged = new Set(sources);
-
-  const schedules = await tx
-    .select({ id: financeSchedules.id, conditions: financeSchedules.conditions })
-    .from(financeSchedules)
-    .where(eq(financeSchedules.userId, userId));
-  for (const row of schedules) {
-    const next = rewriteMergedPayeeIds(row.conditions, merged, targetId);
-    if (!next) continue;
-    await tx
-      .update(financeSchedules)
-      .set({ conditions: next, updatedAt: new Date() })
-      .where(and(eq(financeSchedules.userId, userId), eq(financeSchedules.id, row.id)));
-  }
 
   const rules = await tx
     .select({ id: financeRules.id, conditions: financeRules.conditions })
@@ -407,54 +367,56 @@ async function rewritePayeeConditions(
 }
 
 /**
- * Attach a payee to a commitment, or release it with `null`.
+ * Attach a payee to an envelope, or release it with `null`.
  *
- * The exclusivity that used to be enforced by hand across two `matchers` columns is the table's
- * CHECK now, so this sets one side and clears the other in the same statement rather than
- * checking first and hoping nothing changed in between.
+ * "A payee is claimed by at most one envelope" is what a single nullable column already
+ * means, so this just sets or clears it — there is no second column to keep in sync.
  */
 export async function claimPayeeForCommitment(
   userId: string,
   payeeId: string,
-  claim: { kind: "bill" | "spend"; id: string } | null,
+  claim: { id: string } | null,
 ): Promise<void> {
   await requirePayee(userId, payeeId);
   await db
     .update(financePayees)
-    .set({
-      commitmentBillId: claim?.kind === "bill" ? claim.id : null,
-      commitmentSpendId: claim?.kind === "spend" ? claim.id : null,
-      updatedAt: new Date(),
-    })
+    .set({ budgetCategoryId: claim?.id ?? null, updatedAt: new Date() })
     .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)));
 }
 
-/** Every payee a commitment claims, released in one statement. */
+/** Dismiss a Review proposal: this merchant is not a bill, and should not be proposed again. */
+export async function setPayeeNotACommitment(
+  userId: string,
+  payeeId: string,
+  notACommitment: boolean,
+): Promise<void> {
+  await requirePayee(userId, payeeId);
+  await db
+    .update(financePayees)
+    .set({ notACommitment, updatedAt: new Date() })
+    .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)));
+}
+
+/** Every payee an envelope claims, released in one statement. */
 export async function releaseCommitmentClaims(
   userId: string,
-  claim: { kind: "bill" | "spend"; id: string },
+  claim: { id: string },
 ): Promise<void> {
   await db
     .update(financePayees)
-    .set({
-      commitmentBillId: null,
-      commitmentSpendId: null,
-      updatedAt: new Date(),
-    })
+    .set({ budgetCategoryId: null, updatedAt: new Date() })
     .where(
       and(
         eq(financePayees.userId, userId),
-        claim.kind === "bill"
-          ? eq(financePayees.commitmentBillId, claim.id)
-          : eq(financePayees.commitmentSpendId, claim.id),
+        eq(financePayees.budgetCategoryId, claim.id),
       ),
     );
 }
 
-/** Replace a commitment's complete payee set atomically, refusing identities held elsewhere. */
+/** Replace an envelope's complete payee set atomically, refusing identities held elsewhere. */
 export async function replaceCommitmentPayees(
   userId: string,
-  claim: { kind: "bill" | "spend"; id: string },
+  claim: { id: string },
   payeeIds: readonly string[],
 ): Promise<void> {
   const ids = [...new Set(payeeIds)];
@@ -465,20 +427,24 @@ export async function replaceCommitmentPayees(
 
 type PayeeTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
-/** Shared transaction body for commitment upserts and standalone picker edits. */
+/** Shared transaction body for envelope upserts and standalone picker edits. */
 export async function replaceCommitmentPayeesInTransaction(
   tx: PayeeTransaction,
   userId: string,
-  claim: { kind: "bill" | "spend"; id: string },
+  claim: { id: string },
   payeeIds: readonly string[],
 ): Promise<void> {
   const ids = [...new Set(payeeIds)];
-  const table = claim.kind === "bill" ? financeRecurringBills : financeRecurringSpend;
-  const [commitment] = await tx
-    .select({ id: table.id })
-    .from(table)
-    .where(and(eq(table.userId, userId), eq(table.id, claim.id)));
-  if (!commitment) throw new Error("That commitment does not exist.");
+  const [envelope] = await tx
+    .select({ id: financeBudgetCategories.id })
+    .from(financeBudgetCategories)
+    .where(
+      and(
+        eq(financeBudgetCategories.userId, userId),
+        eq(financeBudgetCategories.id, claim.id),
+      ),
+    );
+  if (!envelope) throw new Error("That envelope does not exist.");
 
   const selected =
     ids.length === 0
@@ -487,50 +453,43 @@ export async function replaceCommitmentPayeesInTransaction(
           .select({
             id: financePayees.id,
             name: financePayees.name,
-            billId: financePayees.commitmentBillId,
-            spendId: financePayees.commitmentSpendId,
+            claimedId: financePayees.budgetCategoryId,
           })
           .from(financePayees)
           .where(and(eq(financePayees.userId, userId), inArray(financePayees.id, ids)))
           .for("update");
   if (selected.length !== ids.length) throw new Error("That payee does not exist.");
   const held = selected.find(
-    (payee) =>
-      (payee.billId !== null && (claim.kind !== "bill" || payee.billId !== claim.id)) ||
-      (payee.spendId !== null &&
-        (claim.kind !== "spend" || payee.spendId !== claim.id)),
+    (payee) => payee.claimedId !== null && payee.claimedId !== claim.id,
   );
   if (held) {
-    const heldTable = held.billId ? financeRecurringBills : financeRecurringSpend;
-    const heldId = held.billId ?? held.spendId;
     const [owner] = await tx
-      .select({ name: heldTable.name })
-      .from(heldTable)
-      .where(and(eq(heldTable.userId, userId), eq(heldTable.id, heldId!)));
+      .select({ name: financeBudgetCategories.name })
+      .from(financeBudgetCategories)
+      .where(
+        and(
+          eq(financeBudgetCategories.userId, userId),
+          eq(financeBudgetCategories.id, held.claimedId!),
+        ),
+      );
     throw new Error(
-      `"${held.name}" already belongs to the commitment "${owner?.name ?? "another commitment"}". Free it there first.`,
+      `"${held.name}" already belongs to "${owner?.name ?? "another envelope"}". Free it there first.`,
     );
   }
 
   await tx
     .update(financePayees)
-    .set({ commitmentBillId: null, commitmentSpendId: null, updatedAt: new Date() })
+    .set({ budgetCategoryId: null, updatedAt: new Date() })
     .where(
       and(
         eq(financePayees.userId, userId),
-        claim.kind === "bill"
-          ? eq(financePayees.commitmentBillId, claim.id)
-          : eq(financePayees.commitmentSpendId, claim.id),
+        eq(financePayees.budgetCategoryId, claim.id),
       ),
     );
   if (ids.length > 0) {
     await tx
       .update(financePayees)
-      .set({
-        commitmentBillId: claim.kind === "bill" ? claim.id : null,
-        commitmentSpendId: claim.kind === "spend" ? claim.id : null,
-        updatedAt: new Date(),
-      })
+      .set({ budgetCategoryId: claim.id, updatedAt: new Date() })
       .where(and(eq(financePayees.userId, userId), inArray(financePayees.id, ids)));
   }
 }

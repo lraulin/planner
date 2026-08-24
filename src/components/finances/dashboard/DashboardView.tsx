@@ -13,23 +13,11 @@ import type { BankConnectionRow } from "@/lib/banksync/queries";
 import {
   accountBalanceTooltip,
   accountBalanceView,
-  availableToSpend,
   cashPosition,
   nextPayday,
   type BillCharge,
   type PendingRow,
-  type SetAside,
-  type SpendHeld,
 } from "@/lib/finances/available";
-import { assignmentBreakdown } from "@/lib/finances/assignment";
-import {
-  billHoldCaption,
-  billRows,
-  heldSetAsides,
-  heldSpend,
-  spendRows,
-  type BillRow,
-} from "@/lib/finances/commitmentRows";
 import type { Payday } from "@/lib/finances/classify/income";
 import { buildPayPeriods } from "@/lib/finances/classify/payPeriods";
 import {
@@ -41,7 +29,7 @@ import {
   staleSubscriptions,
   type CommitmentCharge,
   type StoredBillRow,
-  type StoredSpend,
+  type UpcomingBillRow,
 } from "@/lib/finances/commitments";
 import { ACCOUNT_KIND_LABELS } from "@/lib/finances/accountKind";
 import { formatUsd } from "@/lib/finances/money";
@@ -98,22 +86,33 @@ export function DashboardView({
   accounts,
   pending,
   bills,
-  spend,
   paydays,
   billCharges,
-  spendCharges,
   connections,
   periodRows,
+  readyToAssignCents,
+  budgetConfigured,
+  underfundedBills,
+  upcoming,
 }: {
   accounts: readonly FinanceAccountRow[];
   pending: readonly PendingRow[];
   bills: readonly StoredBillRow[];
-  spend: readonly StoredSpend[];
   paydays: readonly Payday[];
   billCharges: readonly BillCharge[];
-  spendCharges: Record<string, CommitmentCharge[]>;
   connections: readonly BankConnectionRow[];
   periodRows: readonly PeriodLedgerRow[];
+  /** This month's Ready to Assign, from the envelope budget. Zero when unconfigured. */
+  readyToAssignCents: number;
+  budgetConfigured: boolean;
+  /** Bill envelopes whose Balance has not yet reached their expected cost. */
+  underfundedBills: readonly {
+    name: string;
+    balanceCents: number;
+    expectedCents: number;
+  }[];
+  /** Bill occurrences due within the horizon — not held-back money, just a heads-up. */
+  upcoming: readonly UpcomingBillRow[];
 }) {
   const today = useToday();
   const formatDate = useDateFormatter();
@@ -126,14 +125,6 @@ export function DashboardView({
     const payday = today
       ? nextPayday(paydays, override, today)
       : { dateKey: null, daysAway: null, source: "unknown" as const };
-
-    // The same builders the Commitments grids use, so "which commitments are held back" has
-    // one answer rather than one per page.
-    const resolvedBills = billRows(bills, billCharges, paydays, today);
-    const setAsides: SetAside[] = heldSetAsides(resolvedBills);
-    const spendHeld: SpendHeld[] = heldSpend(
-      spendRows(spend, spendCharges, today, payday.dateKey),
-    );
 
     const chargesByName = new Map<string, CommitmentCharge[]>();
     for (const charge of billCharges) {
@@ -160,52 +151,19 @@ export function DashboardView({
         )
       : { latest: null, history: [], selfFundedCount: 0 };
 
-    return {
-      position,
-      payday,
-      setAsides,
-      spendHeld,
-      stale,
-      scorecard,
-      resolvedBills,
-      available: availableToSpend(accounts, pending, setAsides, spendHeld),
-    };
-  }, [
-    accounts,
-    pending,
-    bills,
-    spend,
-    paydays,
-    billCharges,
-    spendCharges,
-    periodRows,
-    override,
-    today,
-  ]);
+    return { position, payday, stale, scorecard };
+  }, [accounts, bills, paydays, billCharges, periodRows, override, today]);
 
   const unpricedBillCount = bills.filter(
     (bill) => bill.status === "active" && (bill.expectedCents ?? 0) <= 0,
   ).length;
-  const {
-    available,
-    position,
-    payday,
-    setAsides,
-    spendHeld,
-    stale,
-    scorecard,
-    resolvedBills,
-  } = analysis;
-  const assignment = assignmentBreakdown(available, setAsides);
-  const heldBills = resolvedBills.filter(
-    (row): row is BillRow & { held: NonNullable<BillRow["held"]> } => row.held !== null,
-  );
+  const { position, payday, stale, scorecard } = analysis;
   const openAccounts = accounts.filter((account) => account.closedAt === null);
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-auto p-3">
       <Panel
-        title="Available to spend"
+        title="Ready to assign"
         subtitle={
           payday.dateKey === null
             ? "No pay cadence detected yet — set one in Settings."
@@ -213,34 +171,65 @@ export function DashboardView({
                 payday.source === "override" ? "your setting" : "detected from deposits"
               }`
         }
+        actions={
+          <Link
+            href="/finances/budget"
+            className="text-[0.75rem] text-ink-muted hover:text-ink"
+          >
+            Open Budget
+          </Link>
+        }
       >
-        <div
-          className={`tabular text-[2.25rem] leading-none font-medium ${
-            available.totalCents < 0 ? "text-[var(--chart-spend)]" : "text-ink"
-          }`}
-        >
-          {formatUsd(available.totalCents)}
-        </div>
+        {budgetConfigured ? (
+          <div
+            className={`tabular text-[2.25rem] leading-none font-medium ${
+              readyToAssignCents < 0 ? "text-[var(--chart-spend)]" : "text-ink"
+            }`}
+          >
+            {formatUsd(readyToAssignCents)}
+          </div>
+        ) : (
+          <p className="text-[0.8125rem] text-ink-muted">
+            No budget set up yet. <Link href="/finances/budget">Start one</Link> to see
+            what is left to assign.
+          </p>
+        )}
 
-        {/* The arithmetic, not a restatement of it: these terms come back from the same call
-            that produced the headline, so a breakdown cannot disagree with its own total. */}
-        <AssignmentBar breakdown={assignment} />
+        {underfundedBills.length > 0 && (
+          <dl className="mt-3 flex flex-col gap-1 border-t border-rule pt-2">
+            {underfundedBills.map((row) => (
+              <div key={row.name} className="flex items-baseline justify-between gap-3">
+                <dt className="text-[0.8125rem] text-ink-muted">{row.name}</dt>
+                <dd className="tabular text-[0.8125rem] text-ink">
+                  {formatUsd(row.balanceCents)} / {formatUsd(row.expectedCents)}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        )}
 
-        <dl className="mt-3 flex flex-col gap-1 border-t border-rule pt-2">
-          {available.terms.map((term) => (
-            <div key={term.label} className="flex items-baseline justify-between gap-3">
-              <dt className="text-[0.8125rem] text-ink-muted">{term.label}</dt>
-              <dd className="tabular text-[0.8125rem] text-ink">
-                {formatUsd(term.cents)}
-              </dd>
-            </div>
-          ))}
-        </dl>
-
-        <p className="mt-2 text-[0.75rem] leading-snug text-ink-muted">
-          Card balances come out in full: a card charge does not leave checking until
-          the statement is paid. Savings is not counted here.
-        </p>
+        {upcoming.length > 0 && (
+          <div className="mt-3 border-t border-rule pt-2">
+            <p className="text-[0.75rem] font-medium uppercase tracking-wider text-ink-muted">
+              Due soon
+            </p>
+            <ul className="mt-1 flex flex-col gap-1">
+              {upcoming.map((row) => (
+                <li
+                  key={`${row.name}:${row.dateKey}`}
+                  className="flex items-baseline justify-between gap-3 text-[0.8125rem]"
+                >
+                  <span className="text-ink">
+                    {row.name} · {formatDate(row.dateKey)}
+                  </span>
+                  <span className="tabular text-ink-muted">
+                    {formatUsd(row.amountCents)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </Panel>
 
       <StatRow>
@@ -280,81 +269,6 @@ export function DashboardView({
                   pending={pending}
                   formatDate={formatDate}
                 />
-              ))}
-            </ul>
-          )}
-        </Panel>
-
-        <Panel
-          title="Bills"
-          subtitle="A slice of each one, out of every paycheck, until the charge lands"
-        >
-          {heldBills.length === 0 ? (
-            <PanelEmpty>
-              Nothing set aside yet. Declare a bill with its cost on{" "}
-              <Link href="/finances/commitments">Commitments</Link> and a slice of it
-              starts coming out of every paycheck.
-            </PanelEmpty>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {heldBills.map((row) => {
-                const held = row.held;
-                if (held === null) return null;
-                return (
-                  <li
-                    key={row.name}
-                    className="border-b border-rule pb-2 last:border-b-0"
-                  >
-                    <div className="flex items-baseline justify-between gap-3">
-                      <span className="truncate text-[0.8125rem] text-ink">
-                        {row.name}
-                      </span>
-                      <span className="tabular flex-none text-[0.875rem] text-ink">
-                        {formatUsd(held.heldCents)}
-                      </span>
-                    </div>
-                    <div className="text-[0.75rem] text-ink-muted">
-                      {billHoldCaption(row, today, formatDate)}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </Panel>
-      </div>
-
-      <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2">
-        <Panel
-          title="This period"
-          subtitle="Recurring spend already held back before payday"
-        >
-          {spendHeld.length === 0 ? (
-            <PanelEmpty>
-              No recurring spend tracked. Group pizza or groceries on{" "}
-              <Link href="/finances/commitments">Commitments</Link>.
-            </PanelEmpty>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {spendHeld.map((entry) => (
-                <li
-                  key={entry.name}
-                  className="border-b border-rule pb-2 last:border-b-0"
-                >
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span className="truncate text-[0.8125rem] text-ink">
-                      {entry.name}
-                    </span>
-                    <span className="tabular flex-none text-[0.875rem] text-ink">
-                      {formatUsd(entry.heldCents)} held
-                    </span>
-                  </div>
-                  <div className="text-[0.75rem] text-ink-muted">
-                    {formatUsd(entry.spentThisPeriodCents)} /{" "}
-                    {formatUsd(entry.ratePerPeriodCents)} this period
-                    {entry.overCents > 0 && ` · over by ${formatUsd(entry.overCents)}`}
-                  </div>
-                </li>
               ))}
             </ul>
           )}
@@ -444,14 +358,11 @@ export function DashboardView({
               is the last statement close plus whatever has been imported since.
             </li>
           )}
-          {/* Every active bill with an amount is held back now, so the old "N of M are set
-              aside" count could only ever read N of N. What can still go quietly missing is a
-              bill nobody has priced, which accrues nothing while looking tracked. */}
           {unpricedBillCount > 0 && (
             <li>
-              {unpricedBillCount} active bill(s) have no amount, so nothing is held back
-              for them. Give them a cost on{" "}
-              <Link href="/finances/commitments">Commitments</Link>.
+              {unpricedBillCount} active bill(s) have no amount, so nothing funds them
+              on the budget. Give them a cost on{" "}
+              <Link href="/finances/budget">Budget</Link>.
             </li>
           )}
           {/* SimpleFIN refreshes on its own roughly daily cadence and offers nothing that
@@ -465,62 +376,6 @@ export function DashboardView({
       </Panel>
 
       <CapOnePendingPaste />
-    </div>
-  );
-}
-
-function AssignmentBar({
-  breakdown,
-}: {
-  breakdown: ReturnType<typeof assignmentBreakdown>;
-}) {
-  const claims = breakdown.segments.filter((segment) => segment.role === "claim");
-  const scale = breakdown.scaleCents;
-  if (claims.length === 0 && breakdown.checkingCents === 0) return null;
-
-  return (
-    <div className="mt-3 flex flex-col gap-1.5">
-      <div className="relative h-3 w-full overflow-hidden rounded-sm bg-rule">
-        <div className="flex h-full w-full">
-          {claims.map((segment, index) => (
-            <div
-              key={segment.label}
-              title={`${segment.label} ${formatUsd(segment.cents)}`}
-              className="h-full min-w-0"
-              style={{
-                width: `${(segment.cents / scale) * 100}%`,
-                background: `var(--chart-cat-${(index % 7) + 1})`,
-              }}
-            />
-          ))}
-        </div>
-        <div
-          className="pointer-events-none absolute inset-y-0 w-px bg-ink"
-          style={{
-            left: `${Math.min(100, (breakdown.checkingCents / scale) * 100)}%`,
-          }}
-          title={`Checking & cash ${formatUsd(breakdown.checkingCents)}`}
-        />
-      </div>
-      <ul className="flex flex-wrap gap-x-3 gap-y-0.5 text-[0.7rem] leading-snug text-ink-muted">
-        {claims.map((segment, index) => (
-          <li key={segment.label} className="flex items-center gap-1">
-            <span
-              className="inline-block size-1.5 shrink-0 rounded-sm"
-              style={{ background: `var(--chart-cat-${(index % 7) + 1})` }}
-            />
-            {segment.label}
-          </li>
-        ))}
-        {breakdown.shortfallCents > 0 && (
-          <li className="text-[var(--chart-spend)]">
-            Shortfall {formatUsd(breakdown.shortfallCents)}
-          </li>
-        )}
-        {breakdown.leftoverCents > 0 && (
-          <li>Left to spend {formatUsd(breakdown.leftoverCents)}</li>
-        )}
-      </ul>
     </div>
   );
 }

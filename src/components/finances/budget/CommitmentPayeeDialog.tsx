@@ -12,7 +12,6 @@ export function CommitmentPayeeDialog({
   onSaved,
 }: {
   commitment: {
-    kind: "bill" | "spend";
     id: string;
     name: string;
     payeeIds: readonly string[];
@@ -35,7 +34,6 @@ export function CommitmentPayeeDialog({
           setError(null);
           startTransition(async () => {
             const result = await setCommitmentPayeesAction({
-              kind: commitment.kind,
               id: commitment.id,
               payeeIds: selected,
             });

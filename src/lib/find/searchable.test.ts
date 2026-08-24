@@ -43,8 +43,7 @@ function emptyCorpus(): FindCorpus {
     transactions: [],
     financeAccounts: [],
     financePayees: [],
-    recurringBills: [],
-    recurringSpend: [],
+    budgetEnvelopes: [],
   };
 }
 

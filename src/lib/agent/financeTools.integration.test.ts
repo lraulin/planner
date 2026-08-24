@@ -7,7 +7,7 @@ import { importFinanceCsvFiles, type ImportFile } from "@/lib/finances/import";
 import {
   reclassifyTransactions,
   updateTransaction,
-  upsertRecurringBill,
+  upsertBillEnvelope,
 } from "@/lib/finances/mutations";
 import { listTransactions } from "@/lib/finances/queries";
 import { createPayee } from "@/lib/finances/payees/mutations";
@@ -91,7 +91,7 @@ async function seed(userId: string): Promise<void> {
   if (gift) {
     await updateTransaction(userId, gift.id, { flowOverride: "income" });
   }
-  await upsertRecurringBill(userId, {
+  await upsertBillEnvelope(userId, {
     name: "SimpliSafe",
     cadence: { unit: "month", n: 1 },
     expectedCents: 3471,
@@ -240,9 +240,8 @@ describeDb("finance agent tools", () => {
     expect(
       (await dispatchAgentTool("list_commitments", {}, intruderId)) as {
         bills: unknown[];
-        spend: unknown[];
       },
-    ).toMatchObject({ bills: [], spend: [] });
+    ).toMatchObject({ bills: [] });
 
     const snaps = (await dispatchAgentTool("list_statements", {}, intruderId)) as {
       statements: unknown[];
@@ -269,23 +268,22 @@ describeDb("finance agent tools", () => {
     });
   });
 
-  it("creates, lists and deletes commitments, and refuses another user's writes", async () => {
+  it("creates and lists bills, and refuses another user's writes", async () => {
     const created = (await dispatchAgentTool(
-      "upsert_recurring_spend",
-      { name: "Pizza", matchers: ["PIZZA HUT", "DOMINOS"], period: "week" },
+      "upsert_subscription",
+      { name: "Pizza night", matchers: ["PIZZA HUT", "DOMINOS"], cadenceMonths: 1 },
       ownerId,
     )) as { name: string; matchers: string[] };
     expect(created).toMatchObject({
-      name: "Pizza",
+      name: "Pizza night",
       matchers: ["DOMINOS", "PIZZA HUT"],
     });
 
     const listed = (await dispatchAgentTool("list_commitments", {}, ownerId)) as {
       bills: { name: string }[];
-      spend: { name: string }[];
     };
     expect(listed.bills.some((bill) => bill.name === "SimpliSafe")).toBe(true);
-    expect(listed.spend.some((entry) => entry.name === "Pizza")).toBe(true);
+    expect(listed.bills.some((bill) => bill.name === "Pizza night")).toBe(true);
 
     await expect(
       dispatchAgentTool(
@@ -310,38 +308,13 @@ describeDb("finance agent tools", () => {
       ownerId,
     );
 
-    await dispatchAgentTool(
-      "upsert_recurring_spend",
-      { name: "Pizza", matchers: ["DOMINOS"] },
+    // A second user cannot see or change the owner's declared bill.
+    const intruderView = (await dispatchAgentTool(
+      "list_commitments",
+      {},
       intruderId,
-    );
-    const ownerAfter = (await dispatchAgentTool("list_commitments", {}, ownerId)) as {
-      spend: { name: string; matchers: string[] }[];
-    };
-    expect(ownerAfter.spend.find((entry) => entry.name === "Pizza")?.matchers).toEqual([
-      "DOMINOS",
-      "PIZZA HUT",
-    ]);
-
-    await dispatchAgentTool(
-      "delete_commitment",
-      { kind: "spend", name: "Pizza" },
-      intruderId,
-    );
-    const stillThere = (await dispatchAgentTool("list_commitments", {}, ownerId)) as {
-      spend: { name: string }[];
-    };
-    expect(stillThere.spend.some((entry) => entry.name === "Pizza")).toBe(true);
-
-    await dispatchAgentTool(
-      "delete_commitment",
-      { kind: "spend", name: "Pizza" },
-      ownerId,
-    );
-    const gone = (await dispatchAgentTool("list_commitments", {}, ownerId)) as {
-      spend: { name: string }[];
-    };
-    expect(gone.spend.some((entry) => entry.name === "Pizza")).toBe(false);
+    )) as { bills: { name: string }[] };
+    expect(intruderView.bills).toEqual([]);
   });
 
   it("uses stable ids for payee and commitment discovery and writes", async () => {
@@ -378,18 +351,17 @@ describeDb("finance agent tools", () => {
       "search_commitments",
       { query: "Paramount" },
       ownerId,
-    )) as { commitments: { id: string; kind: string; payees: { id: string }[] }[] };
+    )) as { commitments: { id: string; payees: { id: string }[] }[] };
     expect(found.commitments).toEqual([
       expect.objectContaining({
         id: saved.id,
-        kind: "bill",
         payees: [{ id: extraPayeeId, name: "Paramount+" }],
       }),
     ]);
 
     const cleared = (await dispatchAgentTool(
       "set_commitment_payees",
-      { kind: "bill", id: saved.id, payeeIds: [] },
+      { id: saved.id, payeeIds: [] },
       ownerId,
     )) as { commitment: { payees: unknown[] } };
     expect(cleared.commitment.payees).toEqual([]);
@@ -404,7 +376,7 @@ describeDb("finance agent tools", () => {
     await expect(
       dispatchAgentTool(
         "set_commitment_payees",
-        { kind: "bill", id: saved.id, payeeIds: [extraPayeeId] },
+        { id: saved.id, payeeIds: [extraPayeeId] },
         intruderId,
       ),
     ).rejects.toMatchObject({ code: "not_found" });
@@ -423,7 +395,6 @@ describeDb("finance agent tools", () => {
         matchers: ["VETSOURCE"],
         cadenceDays: 28,
         expectedCents: 2970,
-        category: "Pets",
       },
       ownerId,
     );
@@ -435,21 +406,44 @@ describeDb("finance agent tools", () => {
     expect(vetsource?.cadence).toBe("Every 4 weeks");
     expect(vetsource?.annualCents).toBe(38742);
 
-    const merged = (await dispatchAgentTool(
-      "add_commitment_matchers",
-      { kind: "bill", name: "Vetsource", matchers: ["VETSOURCE LLC"] },
+    // A renamed vendor spelling folds in via save_subscription + set_commitment_payees,
+    // once its own payee id is resolved.
+    const found = (await dispatchAgentTool(
+      "search_commitments",
+      { query: "Vetsource" },
       ownerId,
-    )) as { matchers: string[] };
-    expect(merged.matchers).toEqual(["VETSOURCE", "VETSOURCE LLC"]);
+    )) as { commitments: { id: string; payees: { id: string; name: string }[] }[] };
+    const vetsourceCommitment = found.commitments[0];
+    expect(vetsourceCommitment).toBeDefined();
+
+    const vetsourceLlcPayeeId = await createPayee(ownerId, {
+      name: "Vetsource LLC",
+      aliases: ["VETSOURCE LLC"],
+    });
+    const merged = (await dispatchAgentTool(
+      "set_commitment_payees",
+      {
+        id: vetsourceCommitment.id,
+        payeeIds: [
+          ...vetsourceCommitment.payees.map((payee) => payee.id),
+          vetsourceLlcPayeeId,
+        ],
+      },
+      ownerId,
+    )) as { commitment: { payees: { name: string }[] } };
+    expect(merged.commitment.payees.map((payee) => payee.name).sort()).toEqual([
+      "VETSOURCE",
+      "Vetsource LLC",
+    ]);
 
     // A second identity cannot reach it, and gets no hint that it exists.
     await expect(
       dispatchAgentTool(
-        "add_commitment_matchers",
-        { kind: "bill", name: "Vetsource", matchers: ["VETSOURCE INC"] },
+        "set_commitment_payees",
+        { id: vetsourceCommitment.id, payeeIds: [] },
         intruderId,
       ),
-    ).rejects.toMatchObject({ message: expect.stringContaining("not found") });
+    ).rejects.toMatchObject({ code: "not_found" });
     expect(
       (
         (await dispatchAgentTool("list_commitments", {}, intruderId)) as {

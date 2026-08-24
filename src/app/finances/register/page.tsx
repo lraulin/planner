@@ -1,17 +1,12 @@
 import { Suspense } from "react";
 import { getCurrentUserId } from "@/lib/auth";
 import { listAccounts, listTransactions } from "@/lib/finances/queries";
-import {
-  loadRecurringBills,
-  loadRecurringSpend,
-} from "@/lib/finances/dashboardQueries";
+import { loadRecurringBills, loadUpcomingBills } from "@/lib/finances/dashboardQueries";
+import { UPCOMING_HORIZON_DAYS } from "@/lib/finances/commitments";
 import { claimedPayeesOf } from "@/lib/finances/registerBillDraft";
 import { loadBudget } from "@/lib/finances/budget/queries";
 import { budgetEnvelopeLabel } from "@/lib/finances/budget/hierarchy";
-import { listPostedLinks, listScheduleRecords } from "@/lib/finances/schedules/queries";
 import { listPayees } from "@/lib/finances/payees/queries";
-import { upcomingOccurrences } from "@/lib/finances/schedules/upcoming";
-import { DEFAULT_UPCOMING_LENGTH } from "@/lib/finances/schedules/status";
 import { toDateKey } from "@/lib/schedule/geometry";
 import { AppShell } from "@/components/shell/AppShell";
 import { FinancesView } from "@/components/finances/FinancesView";
@@ -28,27 +23,16 @@ export default async function FinancesRegisterPage({
   const userId = await getCurrentUserId();
   const { tag } = await searchParams;
   const todayKey = toDateKey(new Date());
-  const [transactions, accounts, bills, spend, budget, scheduleRecords, payees, tags] =
+  const [transactions, accounts, bills, budget, payees, tags, upcoming] =
     await Promise.all([
       listTransactions(userId),
       listAccounts(userId),
       loadRecurringBills(userId),
-      loadRecurringSpend(userId),
       loadBudget(userId, null),
-      listScheduleRecords(userId),
       listPayees(userId),
       listFinanceTags(userId),
+      loadUpcomingBills(userId, todayKey, UPCOMING_HORIZON_DAYS),
     ]);
-  const links = await listPostedLinks(
-    userId,
-    scheduleRecords.map((row) => row.id),
-  );
-  const upcoming = upcomingOccurrences(
-    scheduleRecords,
-    links,
-    DEFAULT_UPCOMING_LENGTH,
-    todayKey,
-  );
 
   return (
     <AppShell active="finances">
@@ -56,7 +40,7 @@ export default async function FinancesRegisterPage({
         <FinancesView
           initialTransactions={transactions}
           initialAccounts={accounts}
-          initialClaimed={claimedPayeesOf(bills, spend)}
+          initialClaimed={claimedPayeesOf(bills)}
           envelopes={budget.categories.map((category) => ({
             id: category.id,
             label: budgetEnvelopeLabel(budget.groups, category),

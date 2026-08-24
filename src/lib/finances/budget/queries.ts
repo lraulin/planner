@@ -6,14 +6,17 @@ import {
   financeBudgetCategories,
   financeBudgetMonths,
   financeCategoryGroups,
+  financePayees,
   financeTransactions,
 } from "@/db/schema";
+import type { EnvelopeKind, EnvelopeStatus } from "@/db/schema";
 import { readSetting } from "@/lib/settings/queries";
 import { BUDGET_SCOPE } from "@/lib/settings/scopes";
 import { parseBudget, type BudgetSettings } from "@/lib/settings/finances";
 import { toDateKey } from "@/lib/schedule/geometry";
 import { numericStringToCents } from "../money";
 import { listAccounts } from "../queries";
+import { billAnchor } from "../commitments";
 import {
   buildBudget,
   findMonth,
@@ -25,9 +28,7 @@ import {
 } from "./envelope";
 import { parseTemplates, type Template } from "./templates/types";
 import { budgetEnvelopeLabel } from "./hierarchy";
-import type { ScheduleSnapshot } from "./templates/schedule";
-import { scheduleSnapshots } from "./templates/snapshot";
-import { listScheduleRecords } from "../schedules/queries";
+import type { BillSnapshot } from "./templates/schedule";
 
 /**
  * Reads for the envelope budget. Every one takes `userId` and scopes on it.
@@ -53,17 +54,30 @@ export type BudgetGroupRow = {
   isIncome: boolean;
   sortKey: string;
   hidden: boolean;
-  sourceCommitmentKey: string | null;
+};
+
+/** The bill facet of an envelope — meaningful only when `kind === "bill"`. */
+export type BillFacet = {
+  status: EnvelopeStatus;
+  cancelledOn: string | null;
+  url: string;
+  cadenceMonths: number | null;
+  cadenceDays: number | null;
+  dueDay: number | null;
+  anchorDate: string | null;
+  scheduled: boolean;
+  expectedCents: number | null;
 };
 
 export type BudgetCategoryRow = {
   id: string;
   groupId: string;
-  sourceBillId: string | null;
   name: string;
   sortKey: string;
   hidden: boolean;
   notes: string;
+  kind: EnvelopeKind;
+  bill: BillFacet | null;
   /** Spending-taxonomy values this envelope claims, for the auto-map and its editor. */
   sourceCategories: string[];
   templates: Template[];
@@ -141,7 +155,6 @@ function groupsOf(userId: string) {
       isIncome: financeCategoryGroups.isIncome,
       sortKey: financeCategoryGroups.sortKey,
       hidden: financeCategoryGroups.hidden,
-      sourceCommitmentKey: financeCategoryGroups.sourceCommitmentKey,
     })
     .from(financeCategoryGroups)
     .where(eq(financeCategoryGroups.userId, userId))
@@ -153,13 +166,22 @@ function categoriesOf(userId: string) {
     .select({
       id: financeBudgetCategories.id,
       groupId: financeBudgetCategories.groupId,
-      sourceBillId: financeBudgetCategories.sourceBillId,
       name: financeBudgetCategories.name,
       sortKey: financeBudgetCategories.sortKey,
       hidden: financeBudgetCategories.hidden,
       notes: financeBudgetCategories.notes,
       sourceCategories: financeBudgetCategories.sourceCategories,
       templates: financeBudgetCategories.templates,
+      kind: financeBudgetCategories.kind,
+      status: financeBudgetCategories.status,
+      cancelledOn: financeBudgetCategories.cancelledOn,
+      url: financeBudgetCategories.url,
+      cadenceMonths: financeBudgetCategories.cadenceMonths,
+      cadenceDays: financeBudgetCategories.cadenceDays,
+      dueDay: financeBudgetCategories.dueDay,
+      anchorDate: financeBudgetCategories.anchorDate,
+      scheduled: financeBudgetCategories.scheduled,
+      expectedCents: financeBudgetCategories.expectedCents,
     })
     .from(financeBudgetCategories)
     .where(eq(financeBudgetCategories.userId, userId))
@@ -170,8 +192,29 @@ function parsedCategories(
   rows: Awaited<ReturnType<typeof categoriesOf>>,
 ): BudgetCategoryRow[] {
   return rows.map((row) => ({
-    ...row,
+    id: row.id,
+    groupId: row.groupId,
+    name: row.name,
+    sortKey: row.sortKey,
+    hidden: row.hidden,
+    notes: row.notes,
+    sourceCategories: row.sourceCategories,
     templates: parseTemplates(row.templates) ?? [],
+    kind: row.kind,
+    bill:
+      row.kind === "bill"
+        ? {
+            status: row.status,
+            cancelledOn: row.cancelledOn,
+            url: row.url,
+            cadenceMonths: row.cadenceMonths,
+            cadenceDays: row.cadenceDays,
+            dueDay: row.dueDay,
+            anchorDate: row.anchorDate,
+            scheduled: row.scheduled,
+            expectedCents: row.expectedCents,
+          }
+        : null,
   }));
 }
 
@@ -434,12 +477,82 @@ export async function openingPositionFor(
 }
 
 /**
- * The schedules a template can name, as the apply engine sees them.
- *
- * The budget page reads these alongside the budget so the template drawer can name a schedule,
- * offer the picker, and preview this month's demand by running the same pure engine the server
- * runs — not a second guess at it.
+ * The last posted charge date per bill envelope, keyed by envelope id — what `billAnchor`
+ * needs to compute a next-due date. Joined through the payee claim, which is what routes a
+ * charge to a bill (`finance_payees.budget_category_id`), not through the transaction's own
+ * `budget_category_id` — a hand-recategorised charge should not move the due-date anchor.
  */
-export async function loadBudgetSchedules(userId: string): Promise<ScheduleSnapshot[]> {
-  return scheduleSnapshots(await listScheduleRecords(userId));
+async function lastChargeByEnvelope(userId: string): Promise<Map<string, string>> {
+  const rows = await db
+    .select({
+      envelopeId: financePayees.budgetCategoryId,
+      lastChargeKey: sql<string>`max(${financeTransactions.transactionDate})`,
+    })
+    .from(financeTransactions)
+    .innerJoin(financePayees, eq(financePayees.id, financeTransactions.payeeId))
+    .where(
+      and(
+        eq(financeTransactions.userId, userId),
+        eq(financePayees.userId, userId),
+        isNotNull(financePayees.budgetCategoryId),
+      ),
+    )
+    .groupBy(financePayees.budgetCategoryId);
+
+  return new Map(
+    rows
+      .filter((row): row is { envelopeId: string; lastChargeKey: string } =>
+        Boolean(row.envelopeId),
+      )
+      .map((row) => [row.envelopeId, row.lastChargeKey]),
+  );
+}
+
+/**
+ * Every active bill envelope reduced to what the apply engine needs, as of `todayKey`.
+ *
+ * The budget page reads these alongside the budget so the template drawer can preview this
+ * month's demand by running the same pure engine the server runs — not a second guess at it.
+ * Paused and cancelled bills are excluded: `billFundingDemand` only ever runs for `active`.
+ */
+export async function loadBillSnapshots(
+  userId: string,
+  categories: readonly BudgetCategoryRow[],
+  todayKey: string,
+): Promise<BillSnapshot[]> {
+  const lastCharge = await lastChargeByEnvelope(userId);
+  const snapshots: BillSnapshot[] = [];
+
+  for (const category of categories) {
+    if (category.kind !== "bill" || !category.bill) continue;
+    if (category.bill.status !== "active") continue;
+    const cadenceMonths = category.bill.cadenceMonths;
+    if (cadenceMonths === null) continue;
+
+    const anchor = billAnchor(
+      {
+        name: category.name,
+        cadenceMonths,
+        cadenceDays: category.bill.cadenceDays,
+        anchorDate: category.bill.anchorDate,
+        expectedCents: category.bill.expectedCents,
+        scheduled: category.bill.scheduled,
+        dueDay: category.bill.dueDay,
+      },
+      lastCharge.get(category.id) ?? null,
+      todayKey,
+    );
+    if (anchor.nextDueKey === null || category.bill.expectedCents === null) continue;
+
+    snapshots.push({
+      id: category.id,
+      name: category.name,
+      cadenceMonths,
+      cadenceDays: category.bill.cadenceDays,
+      expectedCents: category.bill.expectedCents,
+      nextDueKey: anchor.nextDueKey,
+    });
+  }
+
+  return snapshots;
 }

@@ -9,11 +9,7 @@ import {
   users,
 } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
-import { createSchedule } from "../schedules/mutations";
-import type { ScheduleCondition } from "../schedules/conditions";
-import { createPayee } from "../payees/mutations";
 import {
-  addTemplatesFromSchedules,
   applyBudgetTemplates,
   autoMapBudgetCategories,
   createBudgetCategory,
@@ -582,35 +578,6 @@ describeDb("budget mutations", () => {
     expect(data.goals[`${MONTH}|${bills}`]).toBe(12_000);
   });
 
-  it("adds schedule templates onto Bills and skips a second run", async () => {
-    await seedAccounts(userId);
-    await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
-    const payeeId = await createPayee(userId, {
-      name: "Netflix",
-      aliases: ["NETFLIX"],
-    });
-    const conditions: ScheduleCondition[] = [
-      {
-        field: "date",
-        op: "isapprox",
-        value: { frequency: "monthly", start: "2026-01-15" },
-      },
-      { field: "payee", op: "is", value: payeeId },
-      { field: "amount", op: "isapprox", value: -1599 },
-    ];
-    await createSchedule(userId, { name: "Netflix", conditions }, TODAY);
-
-    const first = await addTemplatesFromSchedules(userId, {});
-    expect(first.added).toBe(1);
-    const second = await addTemplatesFromSchedules(userId, {});
-    expect(second.added).toBe(0);
-
-    const data = await loadBudget(userId, MONTH);
-    const bills = data.categories.find((category) => category.name === "Bills");
-    expect(bills?.templates).toHaveLength(1);
-    expect(bills?.templates[0]).toMatchObject({ type: "schedule" });
-  });
-
   it("nests and reorders groups and envelopes without changing their money", async () => {
     await seedAccounts(userId);
     await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
@@ -838,7 +805,6 @@ describeDb("budget mutations — cross-user isolation", () => {
     await expect(
       applyBudgetTemplates(intruderId, { month: MONTH, force: true }),
     ).rejects.toThrow();
-    await expect(addTemplatesFromSchedules(intruderId, {})).rejects.toThrow();
     await expect(
       updateAccount(intruderId, owned.accountId, { offBudget: true }),
     ).rejects.toThrow();

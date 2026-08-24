@@ -88,9 +88,8 @@ export function resultTarget(result: FindResult): FindTarget {
       return { href: detailPath("/library/timeline", recordId), opens: true };
     case "metric":
       return { href: detailPath("/metrics", recordId), opens: true };
-    case "recurring_bill":
-    case "recurring_spend":
-      return { href: detailPath("/finances/commitments", recordId), opens: true };
+    case "budget_envelope":
+      return { href: detailPath("/finances/budget", recordId), opens: true };
   }
 }
 

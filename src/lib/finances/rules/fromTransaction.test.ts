@@ -29,8 +29,6 @@ function transaction(patch: Partial<TransactionListRow> = {}): TransactionListRo
     balanceAfterCents: null,
     budgetCategoryId: null,
     budgetCategoryName: null,
-    scheduleId: null,
-    scheduleName: null,
     payeeId: null,
     payeeName: null,
     ...patch,

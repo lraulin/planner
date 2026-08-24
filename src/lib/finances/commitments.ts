@@ -1,31 +1,27 @@
 /**
- * Commitments — the money that is already spoken for, in two tiers.
+ * Bill arithmetic — the money that is already spoken for.
  *
- * **Tier 1, subscriptions and bills** (`finance_recurring_bills`): charges *unless you cancel*.
- * Exact amount, exact date, and a status, because the thing most likely to be wrong about a
- * subscription list is that some of it is already dead.
+ * Before `agent-os/specs/2026-08-23-2313-one-budget/`, this module also owned a second tier,
+ * recurring spend (pizza, groceries: cadence known, amount fuzzy and derived from history).
+ * That tier is retired — its charges are ordinary envelopes now, funded by an ordinary
+ * `simple` template — and what remains here is bill-specific: cost math, the forward
+ * projection, and the generic period-bucketing primitives `periodIndex` /
+ * `periodStartKey` / `periodLengthDays` still use by merchant *detection*
+ * (`recurringMerchants` in `analytics.ts`), independent of any stored rate.
  *
- * **Tier 2, recurring spend** (`finance_recurring_spend`): pizza, groceries. Cadence known, the
- * amount fuzzy and derived from history, and it costs nothing unless you go and buy it. It
- * exists because `availableToSpend` subtracted bills but not the groceries that were certainly
- * coming, leaving the headline optimistic by a few hundred dollars a week.
- *
- * There is no tier 3. See `agent-os/specs/2026-08-16-1938-commitments/` D0.
- *
- * **What this module owns is commitment arithmetic.** Stable payees own merchant identity;
- * their claim columns connect transactions to a named commitment without copying bank strings.
+ * **What this module owns is bill arithmetic.** Stable payees own merchant identity; a
+ * payee's `budgetCategoryId` connects transactions to an envelope without copying bank
+ * strings.
  *
  * **Period boundaries are fixed, not rolling.** `periodIndex` anchors on a known Monday and
- * divides, so the buckets do not move with `todayKey`. That matters more than it looks: the
- * rate in `recurringSpendRate` and the "spent so far" in `recurringSpendHeld`
- * (`available.ts`) must measure the *same* week, and a rolling seven-day window would let one
- * count a pizza the other had already dropped.
+ * divides, so the buckets do not move with `todayKey` — a rolling seven-day window would let
+ * two readers of the same history disagree about which week a charge falls in.
  *
  * Pure, `YYYY-MM-DD` keys throughout, no `Date` for calendar arithmetic, `todayKey` always
  * supplied by the caller (`agent-os/standards/development/dates.md`).
  */
 
-import type { CommitmentStatus, RecurringSpendPeriod } from "@/db/schema";
+import type { EnvelopeStatus } from "@/db/schema";
 import { daysBetweenKeys, shiftDateKey } from "@/lib/schedule/geometry";
 import {
   annualCents,
@@ -46,38 +42,21 @@ import type { Payday } from "./classify/income";
  * `expectedCents` is meaningful only when `amountSource` is `"pinned"`; under `"auto"` the rate
  * comes from `recurringSpendRate` on every read, which is what keeps this tier maintenance-free.
  */
-export type StoredSpend = {
-  id: string;
-  name: string;
-  payees: readonly CommitmentPayee[];
-  period: RecurringSpendPeriod;
-  amountSource: "auto" | "pinned";
-  expectedCents: number | null;
-  active: boolean;
-  /** A `FINANCE_CATEGORIES` value, or empty. Also categorises the charges it matches. */
-  category: string;
-  notes?: string;
-};
-
-/** A bill as the table now holds it, with its claimed stable payees. */
+/** A bill envelope as the table now holds it, with its claimed stable payees. */
 export type StoredBillRow = StoredBill & {
   id: string;
   payees: readonly CommitmentPayee[];
   payeeIds: readonly string[];
-  status: CommitmentStatus;
+  status: EnvelopeStatus;
   cancelledOn: string | null;
   url: string;
-  /** A `FINANCE_CATEGORIES` value, or empty. Also categorises the charges it matches. */
-  category: string;
-  notes?: string;
 };
 
 /**
- * The shared view both tables project into, so the dashboard and the Commitments page
- * cannot grow a second, slightly different idea of what a commitment is.
+ * The shared view the dashboard and the budget page project a bill into, so neither grows a
+ * second, slightly different idea of what a commitment is.
  */
 export type Commitment = {
-  kind: "bill" | "spend";
   id: string;
   name: string;
   payees: readonly CommitmentPayee[];
@@ -87,44 +66,27 @@ export type CommitmentPayee = { id: string; name: string };
 
 export function asBillCommitment(bill: StoredBillRow): Commitment {
   return {
-    kind: "bill",
     id: bill.id,
     name: bill.name,
     payees: bill.payees,
   };
 }
 
-export function asSpendCommitment(entry: StoredSpend): Commitment {
-  return {
-    kind: "spend",
-    id: entry.id,
-    name: entry.name,
-    payees: entry.payees,
-  };
-}
-
-/** Which commitment a bank merchant string belongs to. */
+/** Which envelope a bank merchant string belongs to. */
 export type CommitmentRef = {
-  kind: "bill" | "spend";
   id: string;
   /** The user's name for it — and the key everything downstream groups by. */
   name: string;
 };
 
-/** Every stable payee id mapped to the commitment whose database claim names it. */
+/** Every stable payee id mapped to the bill envelope whose claim names it. */
 export function payeeClaimIndex(
   bills: readonly StoredBillRow[],
-  spend: readonly StoredSpend[],
 ): Map<string, CommitmentRef> {
   const index = new Map<string, CommitmentRef>();
   for (const bill of bills) {
     for (const payee of bill.payees) {
-      index.set(payee.id, { kind: "bill", id: bill.id, name: bill.name });
-    }
-  }
-  for (const entry of spend) {
-    for (const payee of entry.payees) {
-      index.set(payee.id, { kind: "spend", id: entry.id, name: entry.name });
+      index.set(payee.id, { id: bill.id, name: bill.name });
     }
   }
   return index;
@@ -136,8 +98,12 @@ export function payeeClaimIndex(
  */
 const PERIOD_EPOCH = "2024-01-01";
 
-/** How many periods of history the auto rate looks back over. Six months of weeks. */
+/** How many periods of history a detector looks back over. Six months of weeks. */
 export const RATE_LOOKBACK_PERIODS = 26;
+
+/** A bucket width for period-based detection. Not a stored preference — recurring spend's
+ * per-entry period concept retired with the tier-2 table. */
+export type Period = "week" | "month";
 
 /**
  * Which period a day falls in, as a stable integer.
@@ -146,7 +112,7 @@ export const RATE_LOOKBACK_PERIODS = 26;
  * involved and a short February cannot shift a boundary. `Math.floor` rather than truncation so
  * dates before the epoch bucket correctly instead of folding two weeks into one at zero.
  */
-export function periodIndex(dateKey: string, period: RecurringSpendPeriod): number {
+export function periodIndex(dateKey: string, period: Period): number {
   if (period === "month") {
     return Number(dateKey.slice(0, 4)) * 12 + Number(dateKey.slice(5, 7));
   }
@@ -154,7 +120,7 @@ export function periodIndex(dateKey: string, period: RecurringSpendPeriod): numb
 }
 
 /** The first day of a period, given the index `periodIndex` produced. */
-export function periodStartKey(index: number, period: RecurringSpendPeriod): string {
+export function periodStartKey(index: number, period: Period): string {
   if (period === "month") {
     // `periodIndex` is `year × 12 + month` with month 1-based, so month 12 of a year lands on
     // the year's own multiple and has to come back out as December rather than as next January.
@@ -166,7 +132,7 @@ export function periodStartKey(index: number, period: RecurringSpendPeriod): str
 }
 
 /** How many days a period spans. Seven, or the length of the calendar month. */
-export function periodLengthDays(index: number, period: RecurringSpendPeriod): number {
+export function periodLengthDays(index: number, period: Period): number {
   if (period === "month") {
     return daysBetweenKeys(
       periodStartKey(index, period),
@@ -181,124 +147,6 @@ export type CommitmentCharge = {
   dateKey: string;
   costCents: number;
 };
-
-export type SpendRate = {
-  /** What a period of this costs — the median, or the pinned figure. */
-  ratePerPeriodCents: number;
-  /** True when the figure was stated by the user rather than derived. */
-  pinned: boolean;
-  /** What history says, always — so a pinned rate cannot quietly go stale beside it. */
-  observedCents: number;
-  /** Periods the median was taken over, including ones with no spend. */
-  periodsObserved: number;
-  lowCents: number;
-  highCents: number;
-  /** The day of week most charges land on, 0 = Sunday, or null when there is no clear one. */
-  modalDayOfWeek: number | null;
-};
-
-/**
- * What a period of this recurring spend costs, from history.
- *
- * **Median of per-period totals, and empty periods count as zero.** Summing the group per
- * period is what makes "either Pizza Hut or Domino's" need no special handling — which of them
- * Friday was is not a question worth answering, and two pizzas in one week should read as a
- * higher rate rather than as an error. Including the empty periods is what keeps the figure
- * honest: if half the weeks have no pizza the median falls, and a median of zero is the correct
- * verdict that this is not a weekly commitment at all.
- *
- * The window starts at the first charge rather than a flat 26 periods back, so a commitment
- * created last month is not averaged against five months of zeroes it could not have spent in.
- */
-export function recurringSpendRate(
-  entry: StoredSpend,
-  charges: readonly CommitmentCharge[],
-  todayKey: string,
-): SpendRate {
-  const pinned = entry.amountSource === "pinned" && entry.expectedCents !== null;
-
-  const past = charges.filter((charge) => charge.dateKey <= todayKey);
-  if (past.length === 0) {
-    return {
-      ratePerPeriodCents: pinned ? (entry.expectedCents ?? 0) : 0,
-      pinned,
-      observedCents: 0,
-      periodsObserved: 0,
-      lowCents: 0,
-      highCents: 0,
-      modalDayOfWeek: null,
-    };
-  }
-
-  const currentPeriod = periodIndex(todayKey, entry.period);
-  const firstPeriod = past.reduce(
-    (earliest, charge) => Math.min(earliest, periodIndex(charge.dateKey, entry.period)),
-    currentPeriod,
-  );
-
-  // The current period is excluded: it is still in progress, and a Monday reading would
-  // otherwise drag the median toward zero with a week that has four days left to run.
-  const from = Math.max(firstPeriod, currentPeriod - RATE_LOOKBACK_PERIODS);
-  const totals = new Map<number, number>();
-  for (let period = from; period < currentPeriod; period++) totals.set(period, 0);
-
-  for (const charge of past) {
-    const period = periodIndex(charge.dateKey, entry.period);
-    if (period < from || period >= currentPeriod) continue;
-    totals.set(period, (totals.get(period) ?? 0) + charge.costCents);
-  }
-
-  const sorted = [...totals.values()].sort((left, right) => left - right);
-  const observedCents = sorted.length === 0 ? 0 : median(sorted);
-
-  return {
-    ratePerPeriodCents: pinned ? (entry.expectedCents ?? 0) : observedCents,
-    pinned,
-    observedCents,
-    periodsObserved: sorted.length,
-    lowCents: sorted.length === 0 ? 0 : sorted[0],
-    highCents: sorted.length === 0 ? 0 : sorted[sorted.length - 1],
-    modalDayOfWeek: modalDayOfWeek(past),
-  };
-}
-
-/** Median of an already-sorted list. Even lengths average the middle pair, rounded to cents. */
-function median(sorted: readonly number[]): number {
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 1
-    ? sorted[middle]
-    : Math.round((sorted[middle - 1] + sorted[middle]) / 2);
-}
-
-/**
- * The weekday most of these charges land on, for display only.
- *
- * Derived rather than stored: it is a description of the history, and a stored copy would be a
- * second answer to a question the charges already settle. Null when nothing has a plurality,
- * because "Fridays" on a habit with no pattern would be an invention.
- */
-function modalDayOfWeek(charges: readonly CommitmentCharge[]): number | null {
-  const counts = new Map<number, number>();
-  for (const charge of charges) {
-    const day = new Date(`${charge.dateKey}T00:00:00Z`).getUTCDay();
-    counts.set(day, (counts.get(day) ?? 0) + 1);
-  }
-
-  let best: number | null = null;
-  let bestCount = 0;
-  let tied = false;
-  for (const [day, count] of counts) {
-    if (count > bestCount) {
-      best = day;
-      bestCount = count;
-      tied = false;
-    } else if (count === bestCount) {
-      tied = true;
-    }
-  }
-
-  return tied || bestCount * 2 <= charges.length ? null : best;
-}
 
 /**
  * A subscription whose expected charge never arrived.
@@ -515,11 +363,6 @@ export type ForwardBucket = {
   aboveMedian: boolean;
 };
 
-export type SpendRateInput = {
-  entry: StoredSpend;
-  ratePerPeriodCents: number;
-};
-
 const FORWARD_MONTHS = 12;
 
 function monthKeyOf(dateKey: string): string {
@@ -572,14 +415,7 @@ function finishBucket(
   };
 }
 
-function monthlySpendCents(input: SpendRateInput): number {
-  if (!input.entry.active || input.ratePerPeriodCents <= 0) return 0;
-  return input.entry.period === "week"
-    ? Math.round((input.ratePerPeriodCents * 52) / 12)
-    : input.ratePerPeriodCents;
-}
-
-function billOccurrences(
+export function billOccurrences(
   bill: StoredBillRow,
   charges: readonly CommitmentCharge[],
   todayKey: string,
@@ -608,17 +444,61 @@ function billOccurrences(
   return dates;
 }
 
+export type UpcomingBillRow = {
+  name: string;
+  dateKey: string;
+  amountCents: number;
+};
+
 /**
- * Every active commitment projected across the next twelve calendar months.
+ * How many days out the Upcoming strip looks — shared by the Register and Dashboard pages
+ * and by `FinancesView.tsx`'s client-side refresh of the same strip.
  *
- * Dated tier 1 charges land on the month they are due. Unscheduled bills and tier 2 rates
- * contribute their monthly cost with **no date** — a projected date on propane or pizza
- * would read as knowledge. Months strictly above the 12-month median are marked so an
- * annual charge is visible months out.
+ * Lives in this DB-free module rather than `dashboardQueries.ts`: a `"use client"` file that
+ * imports even a plain constant from a module with a `db` import pulls the `postgres` driver
+ * into the client bundle, which fails to build (it needs Node's `net`/`tls`).
+ */
+export const UPCOMING_HORIZON_DAYS = 14;
+
+/**
+ * Bill occurrences due within `horizonDays` of today — the Register's Upcoming strip.
+ *
+ * Sourced from the bill's own cadence (`agent-os/specs/2026-08-23-2313-one-budget/` D2), so
+ * a missed or early charge self-corrects the next time this runs rather than needing an
+ * explicit skip. Unscheduled bills (propane) never appear here — a projected date would read
+ * as knowledge the user never gave.
+ */
+export function upcomingBillOccurrences(
+  bills: readonly StoredBillRow[],
+  chargesByName: ReadonlyMap<string, readonly CommitmentCharge[]>,
+  todayKey: string,
+  horizonDays: number,
+): UpcomingBillRow[] {
+  const horizonKey = shiftDateKey(todayKey, horizonDays);
+  const rows: UpcomingBillRow[] = [];
+  for (const bill of bills) {
+    if (bill.expectedCents === null || bill.expectedCents <= 0) continue;
+    for (const dateKey of billOccurrences(
+      bill,
+      chargesByName.get(bill.name) ?? [],
+      todayKey,
+      horizonKey,
+    )) {
+      rows.push({ name: bill.name, dateKey, amountCents: bill.expectedCents });
+    }
+  }
+  return rows.sort((left, right) => left.dateKey.localeCompare(right.dateKey));
+}
+
+/**
+ * Every active bill projected across the next twelve calendar months.
+ *
+ * Dated charges land on the month they are due. Unscheduled bills contribute their monthly
+ * cost with **no date** — a projected date on propane would read as knowledge. Months
+ * strictly above the 12-month median are marked so an annual charge is visible months out.
  */
 export function projectForwardMonths(
   bills: readonly StoredBillRow[],
-  spend: readonly SpendRateInput[],
   chargesByName: ReadonlyMap<string, readonly CommitmentCharge[]>,
   todayKey: string,
 ): ForwardBucket[] {
@@ -653,19 +533,6 @@ export function projectForwardMonths(
     }
   }
 
-  for (const input of spend) {
-    const monthly = monthlySpendCents(input);
-    if (monthly <= 0) continue;
-    for (const items of byMonth.values()) {
-      items.push({
-        name: input.entry.name,
-        cents: monthly,
-        dated: false,
-        dateKey: null,
-      });
-    }
-  }
-
   const buckets = [...byMonth.entries()].map(([key, items]) =>
     finishBucket(key, key, monthStart(key), monthEnd(key), items),
   );
@@ -675,12 +542,11 @@ export function projectForwardMonths(
 /**
  * The same projection, grouped by pay period instead of calendar month.
  *
- * Walks detected (or supplied) payday dates forward 12 months. Unscheduled and tier 2
- * costs are spread evenly across the periods they cover, not given a date.
+ * Walks detected (or supplied) payday dates forward 12 months. Unscheduled bill costs are
+ * spread evenly across the periods they cover, not given a date.
  */
 export function projectForwardPayPeriods(
   bills: readonly StoredBillRow[],
-  spend: readonly SpendRateInput[],
   chargesByName: ReadonlyMap<string, readonly CommitmentCharge[]>,
   todayKey: string,
   paydays: readonly Payday[],
@@ -762,23 +628,6 @@ export function projectForwardPayPeriods(
     }
   }
 
-  for (const input of spend) {
-    if (!input.entry.active || input.ratePerPeriodCents <= 0) continue;
-    const perPeriod =
-      input.entry.period === "week"
-        ? Math.round((input.ratePerPeriodCents * cadenceDays) / 7)
-        : Math.round((input.ratePerPeriodCents * 12 * cadenceDays) / 365);
-    if (perPeriod <= 0) continue;
-    for (const bucket of buckets) {
-      bucket.items.push({
-        name: input.entry.name,
-        cents: perPeriod,
-        dated: false,
-        dateKey: null,
-      });
-    }
-  }
-
   return markAboveMedian(
     buckets.map((bucket) =>
       finishBucket(
@@ -832,14 +681,9 @@ export function suggestCommitmentName(merchant: string): string {
 
 export function unclaimedMerchants(
   detected: readonly string[],
-  bills: readonly StoredBillRow[],
-  spend: readonly StoredSpend[],
+  claimedPayeeNames: readonly string[],
 ): string[] {
-  const claimed = new Set(
-    [...bills, ...spend].flatMap((commitment) =>
-      commitment.payees.map((payee) => payee.name),
-    ),
-  );
+  const claimed = new Set(claimedPayeeNames);
   return [...new Set(detected)]
     .filter((merchant) => merchant !== "" && !claimed.has(merchant))
     .sort((left, right) => left.localeCompare(right));

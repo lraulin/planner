@@ -7,6 +7,7 @@ import {
   mergePayees,
   replaceCommitmentPayees,
   removeAlias,
+  setPayeeNotACommitment,
   setPayeeNotes,
   updatePayeeDetails,
 } from "@/lib/finances/payees/mutations";
@@ -22,29 +23,21 @@ import {
   type ReplaceScrapedPendingResult,
 } from "@/lib/finances/scrapePending";
 import {
-  deleteAccount,
-  deleteCommitment,
-  deleteRecurringBill,
-  deleteRecurringSpend,
   deleteTransaction,
   reclassifyTransactions,
   applyRuleActionsToTransactions,
-  renameRecurringBill,
-  renameRecurringSpend,
   setOneOff,
   setSubscriptionStatus,
   updateAccount,
+  deleteAccount,
   updateTransaction,
-  upsertRecurringBill,
-  upsertRecurringSpend,
+  upsertBillEnvelope,
   type AccountEdit,
-  type RecurringBillEdit,
-  type RecurringSpendEdit,
+  type BillEnvelopeEdit,
   type ReclassifySummary,
   type TransactionEdit,
 } from "@/lib/finances/mutations";
 import {
-  addTemplatesFromSchedules,
   applyBudgetTemplates,
   autoMapBudgetCategories,
   autoMapConfiguredBudgetCategories,
@@ -72,49 +65,14 @@ import type {
 } from "@/lib/finances/budget/hierarchy";
 import type { MonthKey } from "@/lib/finances/budget/envelope";
 import type { BudgetPreset } from "@/lib/finances/budget/presets";
-import {
-  applyCommitmentsImport,
-  previewCommitmentsImport,
-  type CommitmentsImportPreview,
-  type CommitmentsImportResult,
-} from "@/lib/finances/budget/commitmentsImportMutations";
-import type { CommitmentStatus } from "@/db/schema";
+import type { EnvelopeStatus } from "@/db/schema";
 import {
   finalizeTransactionIngestion,
   transactionIngestionWatermark,
 } from "@/lib/finances/ingestion";
-import type { DiscoverProposal } from "@/lib/finances/schedules/discover";
-import {
-  completeSchedule,
-  createSchedule,
-  createSchedulesFromDiscover,
-  deleteSchedule,
-  discoverScheduleProposals,
-  findMatches,
-  importSchedulesFromBills,
-  linkTransaction,
-  postScheduleNow,
-  skipSchedule,
-  unlinkTransaction,
-  updateSchedule,
-  type ImportFromBillsResult,
-  type ScheduleDraft,
-  type SchedulePatch,
-} from "@/lib/finances/schedules/mutations";
-import {
-  getSchedule,
-  listPostedLinks,
-  listScheduleRecords,
-  listSchedules,
-  type ScheduleListRow,
-  type ScheduleRecord,
-} from "@/lib/finances/schedules/queries";
-import { DEFAULT_UPCOMING_LENGTH } from "@/lib/finances/schedules/status";
-import {
-  upcomingOccurrences,
-  type UpcomingOccurrence,
-} from "@/lib/finances/schedules/upcoming";
 import { getTransaction, listAccounts, listTransactions } from "@/lib/finances/queries";
+import { loadUpcomingBills } from "@/lib/finances/dashboardQueries";
+import type { UpcomingBillRow } from "@/lib/finances/commitments";
 import type {
   FinanceAccountRow,
   TransactionFilter,
@@ -225,70 +183,36 @@ export async function setOneOffAction(
 }
 
 export async function setRecurringBillAction(
-  edit: RecurringBillEdit,
+  edit: BillEnvelopeEdit,
 ): Promise<ActionResult> {
-  return run((userId) => upsertRecurringBill(userId, edit));
-}
-
-export async function deleteRecurringBillAction(
-  merchant: string,
-): Promise<ActionResult> {
-  return run((userId) => deleteRecurringBill(userId, merchant));
-}
-
-export async function setRecurringSpendAction(
-  edit: RecurringSpendEdit,
-): Promise<ActionResult> {
-  return run((userId) => upsertRecurringSpend(userId, edit));
+  return run((userId) => upsertBillEnvelope(userId, edit));
 }
 
 export async function setCommitmentPayeesAction(input: {
-  kind: "bill" | "spend";
   id: string;
   payeeIds: readonly string[];
 }): Promise<ActionResult> {
   return run(async (userId) => {
-    await replaceCommitmentPayees(
-      userId,
-      { kind: input.kind, id: input.id },
-      input.payeeIds,
-    );
+    await replaceCommitmentPayees(userId, { id: input.id }, input.payeeIds);
     await reclassifyTransactions(userId);
     await autoMapConfiguredBudgetCategories(userId);
   });
 }
 
-export async function deleteRecurringSpendAction(name: string): Promise<ActionResult> {
-  return run((userId) => deleteRecurringSpend(userId, name));
-}
-
-export async function renameRecurringBillAction(
-  from: string,
-  to: string,
-): Promise<ActionResult> {
-  return run((userId) => renameRecurringBill(userId, from, to));
-}
-
-export async function renameRecurringSpendAction(
-  from: string,
-  to: string,
-): Promise<ActionResult> {
-  return run((userId) => renameRecurringSpend(userId, from, to));
-}
-
 export async function setSubscriptionStatusAction(
   name: string,
-  status: CommitmentStatus,
+  status: EnvelopeStatus,
   options: { reanchorOn?: string; cancelledOn?: string | null } = {},
 ): Promise<ActionResult> {
   return run((userId) => setSubscriptionStatus(userId, name, status, options));
 }
 
-export async function deleteCommitmentAction(target: {
-  kind: "bill" | "spend";
-  name: string;
-}): Promise<ActionResult> {
-  return run((userId) => deleteCommitment(userId, target));
+/** Dismiss (or restore) a Review proposal: this merchant is not a bill. */
+export async function setPayeeNotACommitmentAction(
+  payeeId: string,
+  notACommitment: boolean,
+): Promise<ActionResult> {
+  return run((userId) => setPayeeNotACommitment(userId, payeeId, notACommitment));
 }
 
 export async function pasteScrapedPendingAction(
@@ -315,6 +239,13 @@ export async function getTransactionAction(
   transactionId: string,
 ): Promise<QueryResult<TransactionListRow | null>> {
   return runQuery((userId) => getTransaction(userId, transactionId));
+}
+
+export async function upcomingBillsAction(
+  todayKey: string,
+  horizonDays: number,
+): Promise<QueryResult<UpcomingBillRow[]>> {
+  return runQuery((userId) => loadUpcomingBills(userId, todayKey, horizonDays));
 }
 
 // ─────────────────────────── Envelope budget ───────────────────────────
@@ -445,136 +376,6 @@ export async function applyBudgetTemplatesAction(
   return runWithData((userId) =>
     applyBudgetTemplates(userId, { month, force, categoryIds }),
   );
-}
-
-export async function addTemplatesFromSchedulesAction(
-  categoryId?: string,
-  scheduleIds?: readonly string[],
-): Promise<DataActionResult<{ added: number; categoryId: string }>> {
-  return runWithData((userId) =>
-    addTemplatesFromSchedules(userId, { categoryId, scheduleIds }),
-  );
-}
-
-export async function previewCommitmentsImportAction(input: {
-  targetGroupId: string;
-  legacyEnvelopeId: string | null;
-}): Promise<DataActionResult<CommitmentsImportPreview>> {
-  return runWithData((userId) => previewCommitmentsImport(userId, input));
-}
-
-export async function applyCommitmentsImportAction(input: {
-  targetGroupId: string;
-  legacyEnvelopeId: string | null;
-  fingerprint: string;
-  todayKey: string;
-}): Promise<DataActionResult<CommitmentsImportResult>> {
-  return runWithData((userId) => applyCommitmentsImport(userId, input));
-}
-
-// ─────────────────────────── Schedules ───────────────────────────
-
-export async function listSchedulesAction(
-  todayKey: string,
-  horizon?: string,
-): Promise<QueryResult<ScheduleListRow[]>> {
-  return runQuery((userId) => listSchedules(userId, todayKey, horizon));
-}
-
-export async function getScheduleAction(
-  scheduleId: string,
-): Promise<QueryResult<ScheduleRecord | null>> {
-  return runQuery((userId) => getSchedule(userId, scheduleId));
-}
-
-export async function createScheduleAction(
-  draft: ScheduleDraft,
-  todayKey: string,
-): Promise<DataActionResult<string>> {
-  return runWithData((userId) => createSchedule(userId, draft, todayKey));
-}
-
-export async function updateScheduleAction(
-  scheduleId: string,
-  patch: SchedulePatch,
-  todayKey: string,
-): Promise<ActionResult> {
-  return run((userId) => updateSchedule(userId, scheduleId, patch, todayKey));
-}
-
-export async function deleteScheduleAction(scheduleId: string): Promise<ActionResult> {
-  return run((userId) => deleteSchedule(userId, scheduleId));
-}
-
-export async function skipScheduleAction(scheduleId: string): Promise<ActionResult> {
-  return run((userId) => skipSchedule(userId, scheduleId));
-}
-
-export async function completeScheduleAction(
-  scheduleId: string,
-  completed: boolean,
-): Promise<ActionResult> {
-  return run((userId) => completeSchedule(userId, scheduleId, completed));
-}
-
-export async function postScheduleNowAction(
-  scheduleId: string,
-): Promise<DataActionResult<string>> {
-  return runWithData((userId) => postScheduleNow(userId, scheduleId));
-}
-
-export async function importSchedulesFromBillsAction(
-  todayKey: string,
-): Promise<DataActionResult<ImportFromBillsResult>> {
-  return runWithData((userId) => importSchedulesFromBills(userId, todayKey));
-}
-
-export async function findScheduleMatchesAction(): Promise<
-  DataActionResult<{ linked: number }>
-> {
-  return runWithData((userId) => findMatches(userId));
-}
-
-export async function linkTransactionAction(
-  scheduleId: string,
-  transactionId: string,
-): Promise<ActionResult> {
-  return run((userId) => linkTransaction(userId, scheduleId, transactionId));
-}
-
-export async function unlinkTransactionAction(
-  transactionId: string,
-): Promise<ActionResult> {
-  return run((userId) => unlinkTransaction(userId, transactionId));
-}
-
-export async function discoverSchedulesAction(): Promise<
-  QueryResult<DiscoverProposal[]>
-> {
-  return runQuery((userId) => discoverScheduleProposals(userId));
-}
-
-export async function createDiscoveredSchedulesAction(
-  proposals: DiscoverProposal[],
-  todayKey: string,
-): Promise<DataActionResult<number>> {
-  return runWithData((userId) =>
-    createSchedulesFromDiscover(userId, proposals, todayKey),
-  );
-}
-
-export async function upcomingOccurrencesAction(
-  todayKey: string,
-  horizon: string = DEFAULT_UPCOMING_LENGTH,
-): Promise<QueryResult<UpcomingOccurrence[]>> {
-  return runQuery(async (userId) => {
-    const records = await listScheduleRecords(userId);
-    const links = await listPostedLinks(
-      userId,
-      records.map((row) => row.id),
-    );
-    return upcomingOccurrences(records, links, horizon, todayKey);
-  });
 }
 
 // ─────────────────────────────── Payees ───────────────────────────────

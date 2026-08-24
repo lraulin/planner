@@ -183,7 +183,6 @@ const pageInputFields = {
 const commitmentPayeeSchema = z.strictObject({ id, name: z.string() });
 const commitmentSummarySchema = z.strictObject({
   id,
-  kind: z.enum(["bill", "spend"]),
   name: z.string(),
   payees: z.array(commitmentPayeeSchema),
   active: z.boolean(),
@@ -835,35 +834,13 @@ export const inputSchemas = {
       .describe(
         "Cadence in days, for a vendor that counts days — a four-week autoship is 28. Wins over cadenceMonths.",
       ),
-    category: z.string().optional(),
     expectedCents: z.number().int().nullable().optional(),
     anchorDate: dateKey.nullable().optional(),
-    status: z.enum(["active", "paused", "cancelled", "ignored"]).optional(),
+    status: z.enum(["active", "paused", "cancelled"]).optional(),
     url: z.string().optional(),
     scheduled: z.boolean().optional(),
     dueDay: z.number().int().min(1).max(31).nullable().optional(),
     notes: z.string().optional(),
-  }),
-  upsert_recurring_spend: z.strictObject({
-    name: z.string().min(1).describe("User-chosen name, e.g. Pizza."),
-    matchers: z
-      .array(z.string())
-      .optional()
-      .describe("Bank merchant strings that count toward this."),
-    period: z.enum(["week", "month"]).optional(),
-    amountSource: z.enum(["auto", "pinned"]).optional(),
-    expectedCents: z.number().int().nullable().optional(),
-    active: z.boolean().optional(),
-    category: z.string().optional(),
-    notes: z.string().optional(),
-  }),
-  add_commitment_matchers: z.strictObject({
-    kind: z.enum(["bill", "spend"]).describe("Which table the name lives in."),
-    name: z.string().min(1).describe("The commitment to add to."),
-    matchers: z
-      .array(z.string())
-      .min(1)
-      .describe("Bank merchant strings to fold in, e.g. a vendor's new spelling."),
   }),
   list_payees: z.strictObject({
     query: z.string().optional(),
@@ -871,12 +848,10 @@ export const inputSchemas = {
   }),
   search_commitments: z.strictObject({
     query: z.string().optional(),
-    kind: z.enum(["bill", "spend"]).optional(),
     ...pageInputFields,
   }),
   find_commitment_candidates: z.strictObject({
     query: z.string().optional(),
-    kind: z.enum(["bill", "spend"]).optional(),
     ...pageInputFields,
   }),
   save_subscription: z.strictObject({
@@ -884,33 +859,17 @@ export const inputSchemas = {
     payeeIds: z.array(id).optional(),
     cadenceMonths: z.number().int().min(1).max(24).optional(),
     cadenceDays: z.number().int().min(2).max(200).nullable().optional(),
-    category: z.string().optional(),
     expectedCents: z.number().int().nullable().optional(),
     anchorDate: dateKey.nullable().optional(),
-    status: z.enum(["active", "paused", "cancelled", "ignored"]).optional(),
+    status: z.enum(["active", "paused", "cancelled"]).optional(),
     url: z.string().optional(),
     scheduled: z.boolean().optional(),
     dueDay: z.number().int().min(1).max(31).nullable().optional(),
     notes: z.string().optional(),
   }),
-  save_recurring_spend: z.strictObject({
-    name: z.string().min(1),
-    payeeIds: z.array(id).optional(),
-    period: z.enum(["week", "month"]).optional(),
-    amountSource: z.enum(["auto", "pinned"]).optional(),
-    expectedCents: z.number().int().nullable().optional(),
-    active: z.boolean().optional(),
-    category: z.string().optional(),
-    notes: z.string().optional(),
-  }),
   set_commitment_payees: z.strictObject({
-    kind: z.enum(["bill", "spend"]),
     id,
     payeeIds: z.array(id),
-  }),
-  delete_commitment: z.strictObject({
-    kind: z.enum(["bill", "spend"]).describe("Which table the name lives in."),
-    name: z.string().min(1).describe("The commitment's name."),
   }),
   list_jobs: z.strictObject({
     currentOnly: z.boolean().default(false),
@@ -1304,23 +1263,12 @@ export const outputSchemas = {
       z.strictObject({
         name: z.string(),
         matchers: z.array(z.string()),
-        status: z.enum(["active", "paused", "cancelled", "ignored"]),
+        status: z.enum(["active", "paused", "cancelled"]),
         cadence: z.string(),
         expectedCents: cents.nullable(),
         annualCents: cents,
         nextDue: dateKey.nullable(),
         scheduled: z.boolean(),
-      }),
-    ),
-    spend: z.array(
-      z.strictObject({
-        name: z.string(),
-        matchers: z.array(z.string()),
-        period: z.enum(["week", "month"]),
-        amountSource: z.enum(["auto", "pinned"]),
-        ratePerPeriodCents: cents,
-        observedCents: cents,
-        active: z.boolean(),
       }),
     ),
   }),
@@ -1330,17 +1278,7 @@ export const outputSchemas = {
   upsert_subscription: z.strictObject({
     name: z.string(),
     matchers: z.array(z.string()),
-    status: z.enum(["active", "paused", "cancelled", "ignored"]),
-  }),
-  upsert_recurring_spend: z.strictObject({
-    name: z.string(),
-    matchers: z.array(z.string()),
-    period: z.enum(["week", "month"]),
-  }),
-  add_commitment_matchers: z.strictObject({
-    kind: z.enum(["bill", "spend"]),
-    name: z.string(),
-    matchers: z.array(z.string()),
+    status: z.enum(["active", "paused", "cancelled"]),
   }),
   list_payees: z.strictObject({
     payees: z.array(
@@ -1348,9 +1286,7 @@ export const outputSchemas = {
         id,
         name: z.string(),
         aliases: z.array(z.string()),
-        claim: z
-          .strictObject({ kind: z.enum(["bill", "spend"]), id, name: z.string() })
-          .nullable(),
+        claim: commitmentPayeeSchema.nullable(),
       }),
     ),
     pageInfo: pageInfoSchema,
@@ -1364,7 +1300,6 @@ export const outputSchemas = {
       z.strictObject({
         payeeId: id,
         payeeName: z.string(),
-        suggestedKind: z.enum(["bill", "spend"]),
         typicalCents: cents,
         chargeCount: z.number().int().min(0),
       }),
@@ -1375,20 +1310,9 @@ export const outputSchemas = {
     id,
     name: z.string(),
     payees: z.array(commitmentPayeeSchema),
-    status: z.enum(["active", "paused", "cancelled", "ignored"]),
-  }),
-  save_recurring_spend: z.strictObject({
-    id,
-    name: z.string(),
-    payees: z.array(commitmentPayeeSchema),
-    period: z.enum(["week", "month"]),
+    status: z.enum(["active", "paused", "cancelled"]),
   }),
   set_commitment_payees: z.strictObject({ commitment: commitmentSummarySchema }),
-  delete_commitment: z.strictObject({
-    deleted: z.literal(true),
-    kind: z.enum(["bill", "spend"]),
-    name: z.string(),
-  }),
   list_jobs: z.strictObject({
     jobs: z.array(jobSummarySchema),
     pageInfo: pageInfoSchema,

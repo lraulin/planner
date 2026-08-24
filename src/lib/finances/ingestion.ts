@@ -3,8 +3,6 @@ import {
   reclassifyTransactions,
   type ReclassifySummary,
 } from "./mutations";
-import { findMatches, type FindMatchesResult } from "./schedules/mutations";
-import { listScheduleRecords } from "./schedules/queries";
 import { db } from "@/db";
 import { sql } from "drizzle-orm";
 
@@ -17,35 +15,32 @@ export async function transactionIngestionWatermark(): Promise<Date> {
 }
 
 /**
- * Finish every transaction-ingestion path in the same order: stable payees first, schedule
- * matching second, then the taxonomy-to-envelope map for anything still unassigned. A linked
- * schedule therefore wins over the broad category claim, and a hand assignment wins over both.
+ * Finish every transaction-ingestion path in the same order: stable payees first, then rules,
+ * then the taxonomy-to-envelope map for anything still unassigned. A payee's bill claim
+ * therefore wins over the broad category claim, and a hand assignment wins over both.
+ *
+ * **`forceReclassify` runs the full pass**, walking every transaction rather than only the
+ * ones since a watermark — bank sync opts in unconditionally, since it already promises
+ * automatic classification. CSV and pasted-pending imports run the incremental rules pass
+ * instead, which is cheap enough to run on every import without a gate.
  */
 export async function finalizeTransactionIngestion(
   userId: string,
   options: { forceReclassify?: boolean; applyRulesSince?: Date } = {},
-): Promise<{
-  reclassified: ReclassifySummary | null;
-  matched: FindMatchesResult;
-}> {
-  // CSV and pasted-pending imports historically leave classification to the explicit
-  // Reclassify workflow. They only need the automatic pass once a schedule exists to match.
-  // Live bank sync opts in unconditionally because it already promised automatic
-  // classification before this shared finish step existed.
-  if (!options.forceReclassify && (await listScheduleRecords(userId)).length === 0) {
+): Promise<{ reclassified: ReclassifySummary | null }> {
+  if (!options.forceReclassify) {
     if (options.applyRulesSince) {
       await applyRuleActionsToTransactions(userId, {
         createdSince: options.applyRulesSince,
       });
     }
-    return { reclassified: null, matched: { linked: 0 } };
+    return { reclassified: null };
   }
   const reclassified = await reclassifyTransactions(userId);
-  const matched = await findMatches(userId);
   if (options.applyRulesSince) {
     await applyRuleActionsToTransactions(userId, {
       createdSince: options.applyRulesSince,
     });
   }
-  return { reclassified, matched };
+  return { reclassified };
 }

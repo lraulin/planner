@@ -19,7 +19,7 @@ import { normalizeMerchant } from "../classify/merchant";
 import { numericStringToCents } from "../money";
 import { matchRules } from "./match";
 import { compileRules } from "./compile";
-import { storedSchedulePayeeIds } from "../payees/references";
+import { storedConditionPayeeIds } from "../payees/references";
 
 export type RuleRecord = {
   id: string;
@@ -104,7 +104,7 @@ export async function listRules(userId: string): Promise<RuleRow[]> {
   const payeeIds = new Set<string>();
   const accountIds = new Set<string>();
   for (const record of records) {
-    for (const id of storedSchedulePayeeIds(record.conditions)) payeeIds.add(id);
+    for (const id of storedConditionPayeeIds(record.conditions)) payeeIds.add(id);
     for (const id of storedAccountIds(record.conditions)) accountIds.add(id);
   }
 

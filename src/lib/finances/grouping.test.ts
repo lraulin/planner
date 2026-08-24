@@ -29,8 +29,6 @@ function row(
     balanceAfterCents: null,
     budgetCategoryId: null,
     budgetCategoryName: extras.budgetCategoryName ?? null,
-    scheduleId: null,
-    scheduleName: null,
     payeeId: null,
     payeeName: null,
   };

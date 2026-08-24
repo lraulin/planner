@@ -1,11 +1,6 @@
 /**
  * Rule conditions in Actual's `{field, op, value}` shape — the generic set.
  *
- * `schedules/conditions.ts` is the same contract restricted to the four schedule fields, and
- * its header says outright that it is not the generic rule engine. This is that engine's parse.
- * The amount helpers are imported from there rather than rewritten, because two implementations
- * of "within 7.5%" would eventually disagree about a bill.
- *
  * **Reimplemented from Actual Budget** — `CONDITION_TYPES` in
  * `../actual/packages/loot-core/src/server/rules/condition.ts` (MIT, © James Long).
  * Spec: `agent-os/specs/2026-08-23-1536-finance-rules/` D3.
@@ -20,12 +15,36 @@
  * Amount values are **signed integer cents, positive is money in**, matching
  * `finance_transactions`. A $50 charge is `-5000`.
  *
- * **Parsing is all-or-nothing**, like the schedule parse: one bad entry rejects the list. A
- * partially-applied rule is worse than a refused one, because it would silently claim a
- * different set of rows than the one written down.
+ * **Parsing is all-or-nothing**, like the recurrence parse in `budget/templates/`. One bad
+ * entry rejects the list. A partially-applied rule is worse than a refused one, because it
+ * would silently claim a different set of rows than the one written down.
  */
 
-import { amountMatches, type AmountCondition } from "../schedules/conditions";
+export type AmountRange = { num1: number; num2: number };
+
+export type AmountCondition =
+  | { field: "amount"; op: "is"; value: number }
+  | { field: "amount"; op: "isapprox"; value: number }
+  | { field: "amount"; op: "isbetween"; value: AmountRange };
+
+/**
+ * 7.5% of the absolute amount, rounded — Actual's `getApproxNumberThreshold`.
+ * The tolerance behind every "is this the bill?" decision.
+ */
+function approxThreshold(n: number): number {
+  return Math.round(Math.abs(n) * 0.075);
+}
+
+function amountMatches(condition: AmountCondition, cents: number): boolean {
+  if (condition.op === "is") return cents === condition.value;
+  if (condition.op === "isapprox") {
+    const threshold = approxThreshold(condition.value);
+    return cents >= condition.value - threshold && cents <= condition.value + threshold;
+  }
+  const lo = Math.min(condition.value.num1, condition.value.num2);
+  const hi = Math.max(condition.value.num1, condition.value.num2);
+  return cents >= lo && cents <= hi;
+}
 
 export type TextField = "merchant" | "description";
 export type TextOp = "is" | "contains" | "startsWith" | "oneOf" | "matches";

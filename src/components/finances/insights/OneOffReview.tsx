@@ -5,11 +5,7 @@ import type { CadenceCandidate, OneOffSuggestion } from "@/lib/finances/analytic
 import { formatUsd } from "@/lib/finances/money";
 import { cadenceLabel, type Cadence } from "@/lib/finances/recurringBills";
 import { CadenceSelect } from "../CadenceSelect";
-import {
-  setOneOffAction,
-  setRecurringBillAction,
-  setRecurringSpendAction,
-} from "@/app/finances/actions";
+import { setOneOffAction, setRecurringBillAction } from "@/app/finances/actions";
 import { useDateFormatter } from "@/components/settings/SettingsProvider";
 import { PanelEmpty } from "./Panel";
 
@@ -98,19 +94,6 @@ export function OneOffReview({
     });
   }
 
-  function declareSpend(suggestion: OneOffSuggestion) {
-    setError(null);
-    setDeclaring(suggestion.row.id);
-    startTransition(async () => {
-      const result = await setRecurringSpendAction({
-        name: suggestion.merchant,
-        payeeIds: suggestion.row.payeeId ? [suggestion.row.payeeId] : [],
-      });
-      setDeclaring(null);
-      if (!result.ok) setError(result.error);
-    });
-  }
-
   return (
     <div className="flex flex-col gap-2">
       <ul className="flex flex-col divide-y divide-rule">
@@ -188,19 +171,6 @@ export function OneOffReview({
                   className="min-h-tap rounded border border-rule bg-surface-raised px-2 text-[0.75rem] text-ink disabled:opacity-50 md:min-h-0 md:py-1"
                 >
                   {declaring === suggestion.row.id ? "Declaring…" : "It's a bill"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => declareSpend(suggestion)}
-                  disabled={pending || suggestion.row.payeeId === null}
-                  title={
-                    suggestion.row.payeeId === null
-                      ? "Reclassify transactions to assign a payee first."
-                      : undefined
-                  }
-                  className="min-h-tap rounded border border-rule px-2 text-[0.75rem] text-ink disabled:opacity-50 md:min-h-0 md:py-1"
-                >
-                  Track as spend
                 </button>
               </div>
             </li>

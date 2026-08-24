@@ -237,8 +237,7 @@ const PAGES = {
       segment: "dashboard",
       status: "built",
       isDefault: true,
-      keywords:
-        "available to spend payday balances set aside envelopes budget now commitments",
+      keywords: "available to spend payday balances envelopes budget now",
     },
     {
       id: "budget",
@@ -246,21 +245,7 @@ const PAGES = {
       segment: "budget",
       status: "built",
       keywords:
-        "envelope zero-based ready to assign assign categories ynab actual carryover rollover",
-    },
-    {
-      id: "schedules",
-      label: "Schedules",
-      segment: "schedules",
-      status: "built",
-      keywords: "schedules recurring actual bills upcoming post skip discover",
-    },
-    {
-      id: "commitments",
-      label: "Commitments",
-      segment: "commitments",
-      status: "built",
-      keywords: "subscriptions bills recurring spend pizza envelopes set aside",
+        "envelope zero-based ready to assign assign categories ynab actual carryover rollover schedules recurring bills upcoming subscriptions commitments spend pizza set aside cadence review",
     },
     {
       id: "insights",

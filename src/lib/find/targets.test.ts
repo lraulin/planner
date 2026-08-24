@@ -69,11 +69,8 @@ describe("resultTarget", () => {
     expect(resultTarget(result({ kind: "life_event" })).href).toBe(
       "/library/timeline?detail=r1",
     );
-    expect(resultTarget(result({ kind: "recurring_bill" })).href).toBe(
-      "/finances/commitments?detail=r1",
-    );
-    expect(resultTarget(result({ kind: "recurring_spend" })).href).toBe(
-      "/finances/commitments?detail=r1",
+    expect(resultTarget(result({ kind: "budget_envelope" })).href).toBe(
+      "/finances/budget?detail=r1",
     );
     expect(resultTarget(result({ kind: "finance_payee" })).href).toBe(
       "/finances/payees?detail=r1",
@@ -110,8 +107,7 @@ describe("resultTarget", () => {
       "transaction",
       "finance_account",
       "finance_payee",
-      "recurring_bill",
-      "recurring_spend",
+      "budget_envelope",
     ];
     for (const kind of kinds) {
       expect(resultTarget(result({ kind })).opens, kind).toBe(true);
@@ -139,8 +135,7 @@ describe("resultTarget", () => {
       "workout_session",
       "transaction",
       "finance_account",
-      "recurring_bill",
-      "recurring_spend",
+      "budget_envelope",
     ];
     for (const kind of kinds) {
       expect(resultTarget(result({ kind })).href, kind).toMatch(/^\//);

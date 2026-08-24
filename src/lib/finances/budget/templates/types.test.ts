@@ -69,19 +69,6 @@ describe("summarize", () => {
       }),
     ).toBe("up to $150.00");
     expect(
-      summarize(
-        {
-          id: "t3",
-          directive: "template",
-          type: "schedule",
-          priority: 0,
-          scheduleId: "s1",
-          full: true,
-        },
-        "Rent",
-      ),
-    ).toBe("schedule full Rent");
-    expect(
       summarize({
         id: "t4",
         directive: "template",

@@ -14,8 +14,7 @@ import type { PayeeRow } from "@/lib/finances/payees/queries";
 
 function claimLabel(payee: PayeeRow): string {
   if (!payee.claim) return "Not claimed";
-  const kind = payee.claim.kind === "bill" ? "Subscription / bill" : "Recurring spend";
-  return `${kind} · ${payee.claim.name}`;
+  return `Envelope · ${payee.claim.name}`;
 }
 
 export function PayeeDrawer({

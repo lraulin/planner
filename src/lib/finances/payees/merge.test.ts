@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { mergeClaimDecision, type MergeClaim } from "./merge";
 
-const CLAIM = { kind: "bill" as const, id: "bill-a", name: "Internet" };
+const CLAIM = { id: "bill-a", name: "Internet" };
 
 describe("mergeClaimDecision", () => {
   it("treats the same claim on several payees as one surviving claim", () => {
@@ -14,10 +14,10 @@ describe("mergeClaimDecision", () => {
   it("refuses distinct claims instead of choosing one", () => {
     const decision = mergeClaimDecision<MergeClaim & { name: string }>([
       { claim: CLAIM },
-      { claim: { kind: "spend", id: "spend-a", name: "Shopping" } },
+      { claim: { id: "spend-a", name: "Shopping" } },
     ]);
 
     expect(decision.claim).toBeNull();
-    expect(decision.refusal).toMatch(/different commitments/i);
+    expect(decision.refusal).toMatch(/different envelopes/i);
   });
 });

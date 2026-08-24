@@ -33,13 +33,6 @@ export type SimpleDraft = {
   hold: boolean;
 };
 
-export type ScheduleDraft = {
-  id: string;
-  type: "schedule";
-  scheduleId: string;
-  full: boolean;
-};
-
 export type ByDraft = {
   id: string;
   type: "by";
@@ -57,7 +50,7 @@ export type RemainderDraft = {
   weight: string;
 };
 
-export type Draft = SimpleDraft | ScheduleDraft | ByDraft | RemainderDraft;
+export type Draft = SimpleDraft | ByDraft | RemainderDraft;
 
 function dollars(cents: number): string {
   return (cents / 100).toFixed(2);
@@ -74,13 +67,6 @@ export function draftsFromTemplates(templates: readonly Template[]): Draft[] {
             template.monthlyCents === undefined ? "" : dollars(template.monthlyCents),
           limit: template.limit ? dollars(template.limit.amountCents) : "",
           hold: template.limit?.hold ?? false,
-        };
-      case "schedule":
-        return {
-          id: template.id,
-          type: "schedule",
-          scheduleId: template.scheduleId,
-          full: template.full ?? false,
         };
       case "by":
         return {
@@ -109,8 +95,6 @@ export function newDraft(type: TemplateType, month: MonthKey): Draft {
   switch (type) {
     case "simple":
       return { id, type: "simple", monthly: "", limit: "", hold: false };
-    case "schedule":
-      return { id, type: "schedule", scheduleId: "", full: false };
     case "by":
       return {
         id,
@@ -169,17 +153,6 @@ function convert(draft: Draft): Template | string {
         template.limit = { amountCents: cents, hold: draft.hold };
       }
       return template;
-    }
-    case "schedule": {
-      if (draft.scheduleId === "") return "Pick a schedule for the schedule line.";
-      return {
-        id: draft.id,
-        directive: "template",
-        type: "schedule",
-        priority: 0,
-        scheduleId: draft.scheduleId,
-        ...(draft.full ? { full: true } : {}),
-      };
     }
     case "by": {
       const cents = money(draft.amount, "The target amount");

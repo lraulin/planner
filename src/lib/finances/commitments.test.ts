@@ -6,13 +6,11 @@ import {
   periodLengthDays,
   periodStartKey,
   projectForwardMonths,
-  recurringSpendRate,
+  upcomingBillOccurrences,
   staleSubscriptions,
   suggestCommitmentName,
   unclaimedMerchants,
-  type CommitmentCharge,
   type StoredBillRow,
-  type StoredSpend,
 } from "./commitments";
 
 function bill(overrides: Partial<StoredBillRow> = {}): StoredBillRow {
@@ -24,26 +22,11 @@ function bill(overrides: Partial<StoredBillRow> = {}): StoredBillRow {
     status: "active",
     cancelledOn: null,
     url: "",
-    category: "",
     cadenceMonths: 6,
     expectedCents: 59498,
     anchorDate: null,
     scheduled: true,
     dueDay: null,
-    ...overrides,
-  };
-}
-
-function spend(overrides: Partial<StoredSpend> = {}): StoredSpend {
-  return {
-    id: "spend-1",
-    name: "Pizza",
-    payees: [],
-    category: "",
-    period: "week",
-    amountSource: "auto",
-    expectedCents: null,
-    active: true,
     ...overrides,
   };
 }
@@ -87,103 +70,6 @@ describe("periodIndex", () => {
   });
 });
 
-/** Weekly charges of a fixed size, most recent last. `weeksAgo` counts back from `endKey`. */
-function weekly(endKey: string, amounts: readonly number[]): CommitmentCharge[] {
-  return amounts.map((costCents, index) => {
-    const daysBack = (amounts.length - index) * 7;
-    const ms = Date.parse(`${endKey}T00:00:00Z`) - daysBack * 86_400_000;
-    return { dateKey: new Date(ms).toISOString().slice(0, 10), costCents };
-  });
-}
-
-describe("recurringSpendRate", () => {
-  const today = "2026-08-16";
-
-  it("takes the median of per-period totals, not the mean", () => {
-    // One $200 party pizza must not drag a $60 habit up to $74.
-    const charges = weekly(today, [6000, 6000, 6000, 6000, 20000]);
-    expect(recurringSpendRate(spend(), charges, today).ratePerPeriodCents).toBe(6000);
-  });
-
-  it("sums the merchant group per period, so either-or needs no rule", () => {
-    // Pizza Hut one week, Domino's the next: one commitment, one rate, and nothing anywhere
-    // has to decide which of them Friday was.
-    const charges = weekly(today, [5800, 6200, 5800, 6200]);
-    expect(recurringSpendRate(spend(), charges, today).ratePerPeriodCents).toBe(6000);
-  });
-
-  it("reads two pizzas in one week as a higher rate rather than an error", () => {
-    const charges = weekly(today, [6000, 6000, 6000, 6000]);
-    // A second charge landing in the same week as the last one.
-    charges.push({ dateKey: charges[charges.length - 1].dateKey, costCents: 6000 });
-
-    expect(recurringSpendRate(spend(), charges, today).ratePerPeriodCents).toBe(6000);
-    expect(recurringSpendRate(spend(), charges, today).highCents).toBe(12000);
-  });
-
-  it("counts weeks with no spend as zero", () => {
-    /*
-     * Averaging only the weeks with a charge would overstate the rate on a habit that is not
-     * really weekly. A median of zero here is the correct verdict — this is not a commitment,
-     * and it belongs to discretionary spending instead.
-     */
-    const charges = weekly(today, [0, 0, 0, 6000, 6000]);
-    expect(recurringSpendRate(spend(), charges, today).ratePerPeriodCents).toBe(0);
-  });
-
-  it("starts the window at the first charge, not a flat 26 weeks back", () => {
-    // Otherwise a commitment created last month is averaged against five months of zeroes it
-    // could not possibly have spent in.
-    const charges = weekly(today, [6000, 6000, 6000]);
-    const rate = recurringSpendRate(spend(), charges, today);
-
-    expect(rate.periodsObserved).toBe(3);
-    expect(rate.ratePerPeriodCents).toBe(6000);
-  });
-
-  it("excludes the current period, which is still in progress", () => {
-    // Reading on a Monday would otherwise drag the median toward zero with a week that has
-    // four days left to run.
-    const charges = weekly(today, [6000, 6000, 6000]);
-    charges.push({ dateKey: today, costCents: 500 });
-
-    expect(recurringSpendRate(spend(), charges, today).ratePerPeriodCents).toBe(6000);
-  });
-
-  it("keeps showing what history says beside a pinned figure", () => {
-    const charges = weekly(today, [23700, 23700, 23700]);
-    const rate = recurringSpendRate(
-      spend({ name: "Groceries", amountSource: "pinned", expectedCents: 21500 }),
-      charges,
-      today,
-    );
-
-    expect(rate.ratePerPeriodCents).toBe(21500);
-    expect(rate.pinned).toBe(true);
-    // The number a pinned rate would otherwise hide, which is the point of storing both.
-    expect(rate.observedCents).toBe(23700);
-  });
-
-  it("reports the weekday most charges land on, and nothing when there is no pattern", () => {
-    const fridays = weekly("2026-08-14", [6000, 6000, 6000, 6000]);
-    expect(recurringSpendRate(spend(), fridays, today).modalDayOfWeek).toBe(5);
-
-    const scattered: CommitmentCharge[] = [
-      { dateKey: "2026-07-06", costCents: 100 },
-      { dateKey: "2026-07-14", costCents: 100 },
-      { dateKey: "2026-07-22", costCents: 100 },
-      { dateKey: "2026-07-30", costCents: 100 },
-    ];
-    expect(recurringSpendRate(spend(), scattered, today).modalDayOfWeek).toBeNull();
-  });
-
-  it("says zero rather than guessing when there is no history at all", () => {
-    const rate = recurringSpendRate(spend(), [], today);
-    expect(rate.ratePerPeriodCents).toBe(0);
-    expect(rate.periodsObserved).toBe(0);
-  });
-});
-
 describe("staleSubscriptions", () => {
   const charges = (dateKey: string) =>
     new Map([["Netflix", [{ dateKey, costCents: 1599 }]]]);
@@ -213,13 +99,9 @@ describe("staleSubscriptions", () => {
     );
   });
 
-  it("says nothing about a cancelled, ignored or unscheduled bill", () => {
+  it("says nothing about a cancelled or unscheduled bill", () => {
     const old = charges("2026-01-01");
-    for (const overrides of [
-      { status: "cancelled" as const },
-      { status: "ignored" as const },
-      { scheduled: false },
-    ]) {
+    for (const overrides of [{ status: "cancelled" as const }, { scheduled: false }]) {
       expect(
         staleSubscriptions(
           [bill({ name: "Netflix", cadenceMonths: 1, ...overrides })],
@@ -262,6 +144,48 @@ describe("staleSubscriptions", () => {
   });
 });
 
+describe("upcomingBillOccurrences", () => {
+  it("includes an active scheduled bill due within the horizon", () => {
+    const rent = bill({
+      name: "Rent",
+      cadenceMonths: 1,
+      expectedCents: 210_000,
+      anchorDate: "2026-08-01",
+    });
+    const rows = upcomingBillOccurrences([rent], new Map(), "2026-08-16", 30);
+    expect(rows).toEqual([
+      { name: "Rent", dateKey: "2026-09-01", amountCents: 210_000 },
+    ]);
+  });
+
+  it("excludes a bill due after the horizon", () => {
+    const rent = bill({
+      name: "Rent",
+      cadenceMonths: 1,
+      expectedCents: 210_000,
+      anchorDate: "2026-08-01",
+    });
+    expect(upcomingBillOccurrences([rent], new Map(), "2026-08-16", 7)).toEqual([]);
+  });
+
+  it("excludes an unscheduled bill — a projected date would read as knowledge", () => {
+    const propane = bill({
+      name: "Taylor Gas",
+      cadenceMonths: 12,
+      expectedCents: 50_000,
+      scheduled: false,
+    });
+    expect(upcomingBillOccurrences([propane], new Map(), "2026-08-16", 365)).toEqual(
+      [],
+    );
+  });
+
+  it("excludes a bill with no declared amount", () => {
+    const geico = bill({ expectedCents: null, anchorDate: "2026-08-10" });
+    expect(upcomingBillOccurrences([geico], new Map(), "2026-08-16", 30)).toEqual([]);
+  });
+});
+
 describe("projectForwardMonths", () => {
   it("marks the month of an annual renewal above the 12-month median", () => {
     // The 1Password case: $71.88 due 2027-03-30 is the only dated charge in the year,
@@ -272,7 +196,7 @@ describe("projectForwardMonths", () => {
       expectedCents: 7188,
       anchorDate: "2026-03-30",
     });
-    const months = projectForwardMonths([onePassword], [], new Map(), "2026-08-16");
+    const months = projectForwardMonths([onePassword], new Map(), "2026-08-16");
 
     expect(months).toHaveLength(12);
     const march = months.find((month) => month.key === "2027-03");
@@ -295,7 +219,7 @@ describe("projectForwardMonths", () => {
       expectedCents: 50_000,
       scheduled: false,
     });
-    const months = projectForwardMonths([propane], [], new Map(), "2026-08-16");
+    const months = projectForwardMonths([propane], new Map(), "2026-08-16");
 
     expect(months.every((month) => month.totalCents === Math.round(50_000 / 12))).toBe(
       true,
@@ -312,19 +236,18 @@ describe("projectForwardMonths", () => {
       expectedCents: 1399,
       anchorDate: "2026-08-01",
     });
-    expect(projectForwardMonths([disney], [], new Map(), "2026-08-16")).toEqual(
-      projectForwardMonths([], [], new Map(), "2026-08-16"),
+    expect(projectForwardMonths([disney], new Map(), "2026-08-16")).toEqual(
+      projectForwardMonths([], new Map(), "2026-08-16"),
     );
   });
 });
 
 describe("unclaimedMerchants", () => {
-  it("drops merchants either table already holds", () => {
+  it("drops merchants already claimed", () => {
     expect(
       unclaimedMerchants(
         ["PIZZA HUT", "NETFLIX.COM", "WM SUPERCENTER"],
-        [bill({ payees: [{ id: "netflix", name: "NETFLIX.COM" }] })],
-        [spend({ payees: [{ id: "pizza", name: "PIZZA HUT" }] })],
+        ["NETFLIX.COM", "PIZZA HUT"],
       ),
     ).toEqual(["WM SUPERCENTER"]);
   });

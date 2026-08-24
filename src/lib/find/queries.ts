@@ -23,10 +23,9 @@ import {
   contacts,
   exercises,
   financeAccounts,
+  financeBudgetCategories,
   financePayeeAliases,
   financePayees,
-  financeRecurringBills,
-  financeRecurringSpend,
   financeTransactions,
   goalDetails,
   jobs,
@@ -230,18 +229,12 @@ export type FinanceAccountRow = {
   url: string;
 };
 
-export type RecurringBillRow = {
+export type BudgetEnvelopeRow = {
   id: string;
   name: string;
   notes: string;
+  /** Empty for an ordinary envelope. */
   url: string;
-  payees: string[];
-};
-
-export type RecurringSpendRow = {
-  id: string;
-  name: string;
-  notes: string;
   payees: string[];
 };
 
@@ -277,8 +270,7 @@ export type FindCorpus = {
   transactions: TransactionRow[];
   financeAccounts: FinanceAccountRow[];
   financePayees: FinancePayeeRow[];
-  recurringBills: RecurringBillRow[];
-  recurringSpend: RecurringSpendRow[];
+  budgetEnvelopes: BudgetEnvelopeRow[];
 };
 
 const EMPTY: FindCorpus = {
@@ -300,8 +292,7 @@ const EMPTY: FindCorpus = {
   transactions: [],
   financeAccounts: [],
   financePayees: [],
-  recurringBills: [],
-  recurringSpend: [],
+  budgetEnvelopes: [],
 };
 
 /** One source's contribution. Everything it does not own is left to {@link EMPTY}. */
@@ -696,7 +687,7 @@ async function loadFitnessSource(
 }
 
 async function loadFinancesSource(userId: string): Promise<CorpusPart> {
-  const [transactionRows, accountRows, billRows, spendRows, payeeRows, aliasRows] =
+  const [transactionRows, accountRows, envelopeRows, payeeRows, aliasRows] =
     await Promise.all([
       db
         .select({
@@ -732,28 +723,19 @@ async function loadFinancesSource(userId: string): Promise<CorpusPart> {
         .where(eq(financeAccounts.userId, userId)),
       db
         .select({
-          id: financeRecurringBills.id,
-          name: financeRecurringBills.name,
-          notes: financeRecurringBills.notes,
-          url: financeRecurringBills.url,
+          id: financeBudgetCategories.id,
+          name: financeBudgetCategories.name,
+          notes: financeBudgetCategories.notes,
+          url: financeBudgetCategories.url,
         })
-        .from(financeRecurringBills)
-        .where(eq(financeRecurringBills.userId, userId)),
-      db
-        .select({
-          id: financeRecurringSpend.id,
-          name: financeRecurringSpend.name,
-          notes: financeRecurringSpend.notes,
-        })
-        .from(financeRecurringSpend)
-        .where(eq(financeRecurringSpend.userId, userId)),
+        .from(financeBudgetCategories)
+        .where(eq(financeBudgetCategories.userId, userId)),
       db
         .select({
           id: financePayees.id,
           name: financePayees.name,
           notes: financePayees.notes,
-          billId: financePayees.commitmentBillId,
-          spendId: financePayees.commitmentSpendId,
+          envelopeId: financePayees.budgetCategoryId,
         })
         .from(financePayees)
         .where(eq(financePayees.userId, userId)),
@@ -772,18 +754,11 @@ async function loadFinancesSource(userId: string): Promise<CorpusPart> {
     aliases.push(row.alias);
     aliasesByPayee.set(row.payeeId, aliases);
   }
-  const namesByBill = new Map<string, string[]>();
-  const namesBySpend = new Map<string, string[]>();
+  const namesByEnvelope = new Map<string, string[]>();
   for (const payee of payeeRows) {
-    if (payee.billId) {
-      namesByBill.set(payee.billId, [
-        ...(namesByBill.get(payee.billId) ?? []),
-        payee.name,
-      ]);
-    }
-    if (payee.spendId) {
-      namesBySpend.set(payee.spendId, [
-        ...(namesBySpend.get(payee.spendId) ?? []),
+    if (payee.envelopeId) {
+      namesByEnvelope.set(payee.envelopeId, [
+        ...(namesByEnvelope.get(payee.envelopeId) ?? []),
         payee.name,
       ]);
     }
@@ -798,13 +773,9 @@ async function loadFinancesSource(userId: string): Promise<CorpusPart> {
       notes: payee.notes,
       aliases: aliasesByPayee.get(payee.id) ?? [],
     })),
-    recurringBills: billRows.map((bill) => ({
-      ...bill,
-      payees: namesByBill.get(bill.id) ?? [],
-    })),
-    recurringSpend: spendRows.map((entry) => ({
-      ...entry,
-      payees: namesBySpend.get(entry.id) ?? [],
+    budgetEnvelopes: envelopeRows.map((envelope) => ({
+      ...envelope,
+      payees: namesByEnvelope.get(envelope.id) ?? [],
     })),
   };
 }

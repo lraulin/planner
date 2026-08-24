@@ -533,33 +533,18 @@ export function searchCorpus(
       });
     }
 
-    for (const bill of corpus.recurringBills) {
+    for (const envelope of corpus.budgetEnvelopes) {
       seeds.push({
-        kind: "recurring_bill",
+        kind: "budget_envelope",
         source: "finances",
-        recordId: bill.id,
-        name: firstNonEmpty(bill.name),
-        where: ["Finances", "Commitments"].join(SEP),
+        recordId: envelope.id,
+        name: firstNonEmpty(envelope.name),
+        where: ["Finances", "Budget"].join(SEP),
         fields: [
-          name("Name", bill.name),
-          detail("Notes", bill.notes),
-          detail("URL", bill.url),
-          detail("Payees", bill.payees.join(" ")),
-        ],
-      });
-    }
-
-    for (const spend of corpus.recurringSpend) {
-      seeds.push({
-        kind: "recurring_spend",
-        source: "finances",
-        recordId: spend.id,
-        name: firstNonEmpty(spend.name),
-        where: ["Finances", "Commitments"].join(SEP),
-        fields: [
-          name("Name", spend.name),
-          detail("Notes", spend.notes),
-          detail("Payees", spend.payees.join(" ")),
+          name("Name", envelope.name),
+          detail("Notes", envelope.notes),
+          detail("URL", envelope.url),
+          detail("Payees", envelope.payees.join(" ")),
         ],
       });
     }

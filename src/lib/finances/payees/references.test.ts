@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { rewriteMergedPayeeIds, storedSchedulePayeeIds } from "./references";
+import { rewriteMergedPayeeIds, storedConditionPayeeIds } from "./references";
 
-describe("storedSchedulePayeeIds", () => {
+describe("storedConditionPayeeIds", () => {
   it("finds ids in is and oneOf conditions without trusting the rest of the blob", () => {
     expect(
-      storedSchedulePayeeIds([
+      storedConditionPayeeIds([
         { field: "payee", op: "is", value: "payee-a" },
         { field: "payee", op: "broken", value: ["payee-a", "payee-b", 12] },
         { field: "amount", op: "is", value: -1000 },

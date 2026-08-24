@@ -8,20 +8,19 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
+  financeBudgetCategories,
   financePayeeAliases,
   financePayees,
-  financeRecurringBills,
-  financeRecurringSpend,
-  financeSchedules,
+  financeRules,
   financeTransactions,
 } from "@/db/schema";
 import { numericStringToCents } from "../money";
 import type { AliasRow } from "./resolve";
 import { mergeClaimDecision } from "./merge";
-import { storedSchedulePayeeIds } from "./references";
+import { storedConditionPayeeIds } from "./references";
 
-/** Which commitment claims a payee, if any. At most one, by the table's CHECK. */
-export type PayeeClaim = { kind: "bill" | "spend"; id: string; name: string };
+/** Which envelope claims a payee, if any. At most one column, so at most one claim. */
+export type PayeeClaim = { id: string; name: string };
 
 export type PayeeRow = {
   id: string;
@@ -42,7 +41,7 @@ export type PayeeMergePreview = {
   movedAliases: string[];
   movedTransactions: number;
   movedTotalCents: number;
-  affectedSchedules: { id: string; name: string }[];
+  affectedRules: { id: string; name: string }[];
   resultingClaim: PayeeClaim | null;
   refusal: string | null;
 };
@@ -72,8 +71,7 @@ export async function listPayees(userId: string): Promise<PayeeRow[]> {
       name: financePayees.name,
       notes: financePayees.notes,
       learnCategories: financePayees.learnCategories,
-      commitmentBillId: financePayees.commitmentBillId,
-      commitmentSpendId: financePayees.commitmentSpendId,
+      budgetCategoryId: financePayees.budgetCategoryId,
     })
     .from(financePayees)
     .where(eq(financePayees.userId, userId))
@@ -81,7 +79,7 @@ export async function listPayees(userId: string): Promise<PayeeRow[]> {
 
   if (payees.length === 0) return [];
 
-  const [aliases, activity, bills, spends] = await Promise.all([
+  const [aliases, activity, envelopes] = await Promise.all([
     db
       .select({
         payeeId: financePayeeAliases.payeeId,
@@ -105,13 +103,9 @@ export async function listPayees(userId: string): Promise<PayeeRow[]> {
       )
       .groupBy(financeTransactions.payeeId),
     db
-      .select({ id: financeRecurringBills.id, name: financeRecurringBills.name })
-      .from(financeRecurringBills)
-      .where(eq(financeRecurringBills.userId, userId)),
-    db
-      .select({ id: financeRecurringSpend.id, name: financeRecurringSpend.name })
-      .from(financeRecurringSpend)
-      .where(eq(financeRecurringSpend.userId, userId)),
+      .select({ id: financeBudgetCategories.id, name: financeBudgetCategories.name })
+      .from(financeBudgetCategories)
+      .where(eq(financeBudgetCategories.userId, userId)),
   ]);
 
   const aliasesByPayee = new Map<string, string[]>();
@@ -127,25 +121,16 @@ export async function listPayees(userId: string): Promise<PayeeRow[]> {
       { count: row.count, cents: numericStringToCents(row.amount) ?? 0 },
     ]),
   );
-  const billNames = new Map(bills.map((row) => [row.id, row.name]));
-  const spendNames = new Map(spends.map((row) => [row.id, row.name]));
+  const envelopeNames = new Map(envelopes.map((row) => [row.id, row.name]));
 
   return payees.map((payee) => {
     const seen = activityByPayee.get(payee.id);
-    let claim: PayeeClaim | null = null;
-    if (payee.commitmentBillId) {
-      claim = {
-        kind: "bill",
-        id: payee.commitmentBillId,
-        name: billNames.get(payee.commitmentBillId) ?? "",
-      };
-    } else if (payee.commitmentSpendId) {
-      claim = {
-        kind: "spend",
-        id: payee.commitmentSpendId,
-        name: spendNames.get(payee.commitmentSpendId) ?? "",
-      };
-    }
+    const claim: PayeeClaim | null = payee.budgetCategoryId
+      ? {
+          id: payee.budgetCategoryId,
+          name: envelopeNames.get(payee.budgetCategoryId) ?? "",
+        }
+      : null;
 
     return {
       id: payee.id,
@@ -169,10 +154,10 @@ export async function getPayee(
   return rows.find((row) => row.id === payeeId) ?? null;
 }
 
-/** The payees a commitment claims, for the commitment editors. */
+/** The payees an envelope claims, for the envelope editors. */
 export async function payeesForCommitment(
   userId: string,
-  claim: { kind: "bill" | "spend"; id: string },
+  claim: { id: string },
 ): Promise<{ id: string; name: string }[]> {
   return db
     .select({ id: financePayees.id, name: financePayees.name })
@@ -180,9 +165,7 @@ export async function payeesForCommitment(
     .where(
       and(
         eq(financePayees.userId, userId),
-        claim.kind === "bill"
-          ? eq(financePayees.commitmentBillId, claim.id)
-          : eq(financePayees.commitmentSpendId, claim.id),
+        eq(financePayees.budgetCategoryId, claim.id),
       ),
     )
     .orderBy(asc(sql`lower(${financePayees.name})`));
@@ -226,15 +209,15 @@ export async function previewPayeeMerge(
   const claim = mergeClaimDecision([target, ...ownedSources]);
   const sourceSet = new Set(sources);
 
-  const schedules = await db
+  const rules = await db
     .select({
-      id: financeSchedules.id,
-      name: financeSchedules.name,
-      conditions: financeSchedules.conditions,
+      id: financeRules.id,
+      name: financeRules.name,
+      conditions: financeRules.conditions,
     })
-    .from(financeSchedules)
-    .where(eq(financeSchedules.userId, userId))
-    .orderBy(asc(sql`lower(${financeSchedules.name})`));
+    .from(financeRules)
+    .where(eq(financeRules.userId, userId))
+    .orderBy(asc(sql`lower(${financeRules.name})`));
 
   return {
     target: { id: target.id, name: target.name, claim: target.claim },
@@ -245,9 +228,9 @@ export async function previewPayeeMerge(
       0,
     ),
     movedTotalCents: ownedSources.reduce((total, row) => total + row.totalCents, 0),
-    affectedSchedules: schedules
-      .filter((schedule) =>
-        storedSchedulePayeeIds(schedule.conditions).some((id) => sourceSet.has(id)),
+    affectedRules: rules
+      .filter((rule) =>
+        storedConditionPayeeIds(rule.conditions).some((id) => sourceSet.has(id)),
       )
       .map(({ id, name }) => ({ id, name })),
     resultingClaim: claim.claim,

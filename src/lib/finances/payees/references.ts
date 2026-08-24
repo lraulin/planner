@@ -1,15 +1,15 @@
 /**
  * Payee ids embedded in a conditions blob, and how to move them when payees merge.
  *
- * Two tables hold `{field: "payee", …}` conditions as JSONB — `finance_schedules` and
- * `finance_rules` — and JSONB carries no foreign key, so nothing in the database stops a merge
- * or a delete from leaving an id in there pointing at a payee that no longer exists. The row
- * would not fail; it would quietly match nothing. These functions are the only guard, which is
- * why they are pure and tested rather than inlined into each mutation.
+ * `finance_rules` holds `{field: "payee", …}` conditions as JSONB, which carries no foreign
+ * key, so nothing in the database stops a merge or a delete from leaving an id in there
+ * pointing at a payee that no longer exists. The row would not fail; it would quietly match
+ * nothing. These functions are the only guard, which is why they are pure and tested rather
+ * than inlined into each mutation.
  */
 
 /** Payee ids in a conditions blob, including a malformed-but-recognizable condition. */
-export function storedSchedulePayeeIds(conditions: unknown): string[] {
+export function storedConditionPayeeIds(conditions: unknown): string[] {
   if (!Array.isArray(conditions)) return [];
   const ids: string[] = [];
 

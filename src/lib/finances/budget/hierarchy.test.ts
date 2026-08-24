@@ -24,7 +24,6 @@ function group(
     isIncome,
     sortKey,
     hidden: false,
-    sourceCommitmentKey: null,
   };
 }
 
@@ -32,13 +31,14 @@ function category(id: string, groupId: string, sortKey: string): BudgetCategoryR
   return {
     id,
     groupId,
-    sourceBillId: null,
     name: id,
     sortKey,
     hidden: false,
     notes: "",
     sourceCategories: [],
     templates: [],
+    kind: "envelope",
+    bill: null,
   };
 }
 
@@ -58,6 +58,9 @@ function row(id: string, groupId: string): BudgetRow {
     carryover: true,
     templates: [],
     goalCents: null,
+    kind: "envelope",
+    bill: null,
+    nextDueKey: null,
   };
 }
 

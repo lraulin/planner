@@ -103,7 +103,6 @@ function TrackAsBillForm({
               payeeId: seed.payeeId,
               merchant: seed.merchant,
               name: name.trim(),
-              kind: "bill",
             });
             router.refresh();
           });

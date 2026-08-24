@@ -45,15 +45,12 @@ import {
   loadCarryingCost,
   loadInsightsRows,
   loadRecurringBills,
-  loadRecurringSpend,
   unclassifiedCount,
 } from "@/lib/finances/dashboardQueries";
-import { upsertRecurringBill, upsertRecurringSpend } from "@/lib/finances/mutations";
+import { upsertBillEnvelope } from "@/lib/finances/mutations";
 import { createPayee } from "@/lib/finances/payees/mutations";
 import { getPayee, listAliasRows, listPayees } from "@/lib/finances/payees/queries";
 import { listFinanceTags } from "@/lib/finances/tags/queries";
-import { createSchedule } from "@/lib/finances/schedules/mutations";
-import { getSchedule, listSchedules } from "@/lib/finances/schedules/queries";
 import {
   getPaymentResolution,
   getTransaction,
@@ -166,7 +163,6 @@ type Owned = {
   bankConnectionId: string;
   financeTransactionId: string;
   financePayeeId: string;
-  financeScheduleId: string;
   financeStatementId: string;
   paymentResolutionId: string;
   amazonItemId: string;
@@ -273,32 +269,15 @@ async function seedOwner(): Promise<Owned> {
       "expected the finance seed to create an account, row, and statement",
     );
   }
-  await upsertRecurringBill(userId, {
+  await upsertBillEnvelope(userId, {
     name: "Owner Insurance",
     cadence: { unit: "month", n: 6 },
     expectedCents: 141_260,
-  });
-  await upsertRecurringSpend(userId, {
-    name: "Owner Pizza",
   });
   const financePayeeId = await createPayee(userId, {
     name: "Owner Merchant",
     aliases: ["OWNER PURCHASE"],
   });
-  const financeScheduleId = await createSchedule(
-    userId,
-    {
-      name: "Owner Netflix",
-      conditions: [
-        {
-          field: "date",
-          op: "isapprox",
-          value: { frequency: "monthly", start: "2026-01-15" },
-        },
-      ],
-    },
-    "2026-08-22",
-  );
   await importFinanceCsvFiles({
     userId,
     files: [
@@ -430,7 +409,6 @@ async function seedOwner(): Promise<Owned> {
     financeAccountId: financeAccount.id,
     financeTransactionId: financeTransaction.id,
     financePayeeId,
-    financeScheduleId,
     financeStatementId: financeStatement.id,
     paymentResolutionId: paymentResolution.id,
     amazonItemId: amazonItem.id,
@@ -475,7 +453,6 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect((await listPayees(owner.userId)).map((row) => row.id)).toContain(
       owner.financePayeeId,
     );
-    expect(await getSchedule(owner.userId, owner.financeScheduleId)).not.toBeNull();
     expect((await listAmazonItems(owner.userId)).length).toBeGreaterThan(0);
     expect((await listStatements(owner.userId)).length).toBeGreaterThan(0);
     expect((await listPaymentResolutions(owner.userId)).length).toBeGreaterThan(0);
@@ -586,8 +563,6 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect(
       await transactionTotalCents(intruder, { accountId: owner.financeAccountId }),
     ).toBe(0);
-    expect(await listSchedules(intruder, "2026-08-22")).toEqual([]);
-    expect(await getSchedule(intruder, owner.financeScheduleId)).toBeNull();
   });
 
   it("bank sync connections, links and their sync windows", async () => {
@@ -627,7 +602,6 @@ describeDb("a second user reads none of the first user's rows", () => {
       byAccount: [],
     });
     expect(await loadRecurringBills(intruder)).toEqual([]);
-    expect(await loadRecurringSpend(intruder)).toEqual([]);
   });
 
   it("weekly plans and their entries", async () => {

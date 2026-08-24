@@ -964,13 +964,25 @@ period)` so money already spent stops being held twice and only going over bites
   and Insights filters by tags without using overlapping tag totals. The additive cutover
   preserved 4,798 tagged transactions and 4,799 Category assignments with no unresolved local
   rules. Destructive removal of the compatibility storage is a future audited delta.
-- **Next:** **Shortfall attribution.** When Available to Spend goes negative, name
-  what could be cancelled or skipped to fix it. Explicitly wanted, explicitly cut
-  from the commitments spec; the annual/monthly cost columns already rank the
-  candidates, so what is missing is turning a red number into a guided decision.
-  Partly overtaken: the budget now states a shortfall per envelope rather than as one
-  number, and a template says what each envelope was asking for — which is the same
-  information at a level you can act on.
+  ✅ **Budget, Schedules and Commitments merged into one budget, shipped 2026-08-24.**
+  `agent-os/specs/2026-08-23-2313-one-budget/`. **The parallel-systems phase every entry
+  above deferred is over.** A bill is now a `kind: 'bill'` row on `finance_budget_categories`
+  itself — cadence, status, URL and all — instead of three linked rows across
+  `finance_recurring_bills`, `finance_recurring_spend` and `finance_schedules`, all three of
+  which are dropped along with Actual's `RecurConfig` engine (next-due is derived from charge
+  history instead of a stored skip cursor). Recurring spend is retired as a tracked concept:
+  Pizza and groceries are ordinary envelopes with a `simple` template now. **Available to
+  Spend and its per-paycheck accrual are retired too** — the Dashboard's spendable panel is
+  Ready to Assign, underfunded bill envelopes, and what's due in the next 14 days. One
+  `DataGrid` at `/finances/budget` carries bills and envelopes together, with Review
+  (detected merchants no envelope has claimed) as an on-demand drawer rather than a permanent
+  section, and the Next 12 Months / Expected vs Income panels carried over as collapsed
+  `<details>`. A guarded, previewed cutover moved every real bill, recurring-spend rate and
+  payee claim onto the new shape before the old tables were dropped.
+- **Next:** **Shortfall attribution** is substantially answered by the merge above — the
+  budget states a shortfall per bill envelope rather than as one collapsed number, and a
+  template says what each envelope was asking for. What is still missing is the guided
+  step from a red envelope to "cancel or skip this" as an action, not just a number to read.
 - **✅ Period result — "living within my means", shipped 2026-08-18.**
   `agent-os/specs/2026-08-18-2005-period-result/`. The measurement half of the item below,
   and the first surface that scores rather than reports. For every **closed** pay period:

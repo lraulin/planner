@@ -33,10 +33,10 @@ export type DeclaredBill = {
   /** Stable identities claimed by this declaration. Empty means no charge is matched. */
   payeeIds?: readonly string[];
   /**
-   * Live, cancelled, or never a commitment. Absent means `active`, so existing fixtures
-   * and the narrower analytics callers keep working.
+   * Live, paused or cancelled. Absent means `active`, so existing fixtures and the
+   * narrower analytics callers keep working.
    */
-  status?: "active" | "paused" | "cancelled" | "ignored";
+  status?: "active" | "paused" | "cancelled";
   /** The period `expectedCents` covers, in months. Ignored when `cadenceDays` is set. */
   cadenceMonths: number;
   /**

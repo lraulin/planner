@@ -3,19 +3,17 @@ import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeAccounts,
+  financeBudgetCategories,
+  financeCategoryGroups,
   financePaymentResolutions,
   financePayeeAliases,
-  financePayees,
-  financeRecurringBills,
-  financeRecurringSpend,
   financeRules,
   financeTransactions,
-  type CommitmentStatus,
+  type EnvelopeStatus,
   type FinanceAccountKind,
   type FinanceFlowKind,
-  type RecurringSpendAmountSource,
-  type RecurringSpendPeriod,
 } from "@/db/schema";
+import * as sortKey from "@/lib/tree/sortKey";
 import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { parseAccountUrl } from "./accountUrl";
 import { changedRows, planReclassify } from "./classify/reclassify";
@@ -337,16 +335,7 @@ export type ReclassifySummary = {
  * never seen before is still unclaimed and reports it that way.
  */
 async function loadAndPlanReclassify(userId: string) {
-  const [
-    rows,
-    accounts,
-    storedResolutions,
-    billCategories,
-    spendCategories,
-    claimedPayees,
-    aliases,
-    ruleRows,
-  ] = await Promise.all([
+  const [rows, accounts, storedResolutions, aliases, ruleRows] = await Promise.all([
     db
       .select({
         id: financeTransactions.id,
@@ -379,28 +368,6 @@ async function loadAndPlanReclassify(userId: string) {
       })
       .from(financePaymentResolutions)
       .where(eq(financePaymentResolutions.userId, userId)),
-    db
-      .select({
-        id: financeRecurringBills.id,
-        category: financeRecurringBills.category,
-      })
-      .from(financeRecurringBills)
-      .where(eq(financeRecurringBills.userId, userId)),
-    db
-      .select({
-        id: financeRecurringSpend.id,
-        category: financeRecurringSpend.category,
-      })
-      .from(financeRecurringSpend)
-      .where(eq(financeRecurringSpend.userId, userId)),
-    db
-      .select({
-        id: financePayees.id,
-        billId: financePayees.commitmentBillId,
-        spendId: financePayees.commitmentSpendId,
-      })
-      .from(financePayees)
-      .where(eq(financePayees.userId, userId)),
     db
       .select({
         alias: financePayeeAliases.alias,
@@ -449,28 +416,6 @@ async function loadAndPlanReclassify(userId: string) {
     ];
   });
 
-  // A commitment's category outranks a `rules.ts` guess for every charge its stable payee
-  // claim matches. Both tiers feed one map; the payee CHECK prevents disagreement.
-  const commitmentCategories = new Map<string, string>();
-  const billCategoryById = new Map(
-    billCategories
-      .filter((row) => row.category !== "")
-      .map((row) => [row.id, row.category]),
-  );
-  const spendCategoryById = new Map(
-    spendCategories
-      .filter((row) => row.category !== "")
-      .map((row) => [row.id, row.category]),
-  );
-  for (const payee of claimedPayees) {
-    const category = payee.billId
-      ? billCategoryById.get(payee.billId)
-      : payee.spendId
-        ? spendCategoryById.get(payee.spendId)
-        : undefined;
-    if (category) commitmentCategories.set(payee.id, category);
-  }
-
   // Compiled once for the whole pass, not once per row: 65 rules over 7,030 transactions is
   // 457,000 regex constructions if this moves inside the loop.
   const { rules, problems } = compileRules(ruleRows);
@@ -480,9 +425,9 @@ async function loadAndPlanReclassify(userId: string) {
     accounts,
     randomUUID,
     resolutions,
-    // Commitment categories are organizational Group names now, not transaction
-    // classification. Preserve the stored values during the staged schema rename, but do
-    // not feed them to the classifier.
+    // Commitment categories are organizational Group names, not transaction classification —
+    // the classifier reads the payee's envelope claim through `budget_category_id`, not a
+    // taxonomy string, so nothing is fed to it here.
     new Map(),
     payeeIndex(aliases),
     rules,
@@ -716,32 +661,19 @@ export async function deleteAccount(userId: string, accountId: string): Promise<
     .where(and(eq(financeAccounts.id, accountId), eq(financeAccounts.userId, userId)));
 }
 
-/**
- * Re-derive the categories on this user's history when a commitment changed what they are.
- *
- * A commitment's category outranks a `rules.ts` match for every charge its payees own, so both
- * a category change and a changed payee claim can move rows. `reclassifyTransactions` is a
- * whole-history pass, which sounds heavy for one edit and is not: `changedRows` diffs the plan
- * against what is stored, so an edit that moves nothing writes nothing.
- */
-export type RecurringBillEdit = {
+export type BillEnvelopeEdit = {
   /** The user's name for the bill, and the upsert key. */
   name: string;
   /** Stable payees whose transactions belong to this bill. Omitted leaves claims alone. */
   payeeIds?: readonly string[];
-  /** Whether it is still live. See `CommitmentStatus`. */
-  status?: CommitmentStatus;
+  /** Whether it is still live. See `EnvelopeStatus`. */
+  status?: EnvelopeStatus;
   /** When it was cancelled. Defaults to today when `status` becomes `cancelled`. */
   cancelledOn?: string | null;
   /** Where the bill is managed — account page, billing page, cancel page. */
   url?: string;
   /** How often it charges: whole months, or a fixed number of days. */
   cadence: Cadence;
-  /**
-   * A `FINANCE_CATEGORIES` value, or empty for none. Changing it recategorises the charges
-   * this bill matches, so the caller reclassifies after writing.
-   */
-  category?: string;
   /** Null keeps the median of the charges on file as the amount. */
   expectedCents?: number | null;
   anchorDate?: string | null;
@@ -753,10 +685,74 @@ export type RecurringBillEdit = {
   scheduled?: boolean;
   /** Day of the period the charge is expected, 1–31, or null to walk from the last charge. */
   dueDay?: number | null;
+  /** Which group a **new** bill is created under. Ignored when the bill already exists. */
+  groupId?: string;
 };
 
 /**
+ * Find (or, at the root, create) the group a new bill lands in by default —
+ * `Spending › Bills` — the same default the retired Commitments import used to seed.
+ */
+async function defaultBillGroupId(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  userId: string,
+): Promise<string> {
+  const findOrCreate = async (name: string, parentGroupId: string | null) => {
+    const [existing] = await tx
+      .select({ id: financeCategoryGroups.id })
+      .from(financeCategoryGroups)
+      .where(
+        and(
+          eq(financeCategoryGroups.userId, userId),
+          eq(financeCategoryGroups.name, name),
+          parentGroupId === null
+            ? sql`${financeCategoryGroups.parentGroupId} is null`
+            : eq(financeCategoryGroups.parentGroupId, parentGroupId),
+        ),
+      )
+      .limit(1);
+    if (existing) return existing.id;
+
+    const siblings = await tx
+      .select({ sortKey: financeCategoryGroups.sortKey })
+      .from(financeCategoryGroups)
+      .where(
+        and(
+          eq(financeCategoryGroups.userId, userId),
+          parentGroupId === null
+            ? sql`${financeCategoryGroups.parentGroupId} is null`
+            : eq(financeCategoryGroups.parentGroupId, parentGroupId),
+        ),
+      );
+    const last = siblings
+      .map((row) => row.sortKey)
+      .sort((left, right) => sortKey.compare(right, left))[0];
+
+    const [created] = await tx
+      .insert(financeCategoryGroups)
+      .values({
+        userId,
+        parentGroupId,
+        name,
+        isIncome: false,
+        sortKey: last === undefined ? sortKey.first() : sortKey.after(last),
+      })
+      .returning({ id: financeCategoryGroups.id });
+    if (!created) throw new Error("Could not create the group.");
+    return created.id;
+  };
+
+  const spendingId = await findOrCreate("Spending", null);
+  return findOrCreate("Bills", spendingId);
+}
+
+/**
  * Declare a bill, or change one already declared.
+ *
+ * **A bill is an envelope with `kind = 'bill'`** — before
+ * `agent-os/specs/2026-08-23-2313-one-budget/`, this wrote a separate `finance_recurring_bills`
+ * row and, once imported, a second `finance_budget_categories` row pointing at it. One row now
+ * carries both facets, so declaring a bill *is* creating its envelope.
  *
  * Keyed on the **name** rather than an id, because the caller is often the one-off review row
  * and it knows what it is declaring, not whether a declaration already exists. That makes the
@@ -766,14 +762,12 @@ export type RecurringBillEdit = {
  * The cadence is checked here as well as by the column's CHECK — a constraint violation
  * surfaces as a database error the user cannot act on, and the offered list is a closed set.
  */
-export async function upsertRecurringBill(
+export async function upsertBillEnvelope(
   userId: string,
-  edit: RecurringBillEdit,
+  edit: BillEnvelopeEdit,
 ): Promise<void> {
   const name = edit.name.trim();
   if (name === "") throw new Error("A bill needs a name.");
-  // The bounds are the CHECK constraints on both columns. Validated here as well so a bad
-  // cadence fails with a sentence rather than as a constraint violation the caller cannot read.
   if (!Number.isInteger(edit.cadence.n)) {
     throw new Error("A cadence must be a whole number.");
   }
@@ -783,10 +777,6 @@ export async function upsertRecurringBill(
   if (edit.cadence.unit === "day" && (edit.cadence.n < 2 || edit.cadence.n > 200)) {
     throw new Error("A cadence in days must be from 2 to 200.");
   }
-  // An unscheduled bill has no cadence to infer an amount from and no forecast to fall back
-  // on, so the stated cost is the only thing it knows. Without it there is nothing to
-  // declare — and a bill contributing zero to the baseline would be worse than none, because
-  // it would also suppress its own charges from the one-off review list.
   if (edit.scheduled === false && !(Number(edit.expectedCents) > 0)) {
     throw new Error("A bill with no fixed schedule needs its cost for the period.");
   }
@@ -797,179 +787,101 @@ export async function upsertRecurringBill(
   ) {
     throw new Error("A due day must be a whole number from 1 to 31.");
   }
-  // Only the fields supplied are written, the same rule `updateTransaction` follows. It
-  // matters here because correcting a cadence from the recurring table sends the cadence and
-  // nothing else, and a blanket write would silently clear the declared amount — after which
-  // the bill's figure would quietly fall back to whatever the visible window's median was.
-  const changes = {
-    ...cadenceColumns(edit.cadence),
-    ...(edit.category !== undefined ? { category: edit.category.trim() } : {}),
-    ...(edit.expectedCents !== undefined ? { expectedCents: edit.expectedCents } : {}),
-    ...(edit.anchorDate !== undefined ? { anchorDate: edit.anchorDate } : {}),
-    ...(edit.notes !== undefined ? { notes: edit.notes.trim() } : {}),
-    ...(edit.scheduled !== undefined ? { scheduled: edit.scheduled } : {}),
-    ...(edit.dueDay !== undefined ? { dueDay: edit.dueDay } : {}),
-    ...(edit.status !== undefined ? { status: edit.status } : {}),
-    // Cancelling stamps the date and reactivating clears it, so the pair cannot disagree —
-    // a `cancelledOn` left behind on an active bill would read as a fact about the future.
-    ...(edit.status !== undefined
-      ? {
+
+  await db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select({ id: financeBudgetCategories.id })
+      .from(financeBudgetCategories)
+      .where(
+        and(
+          eq(financeBudgetCategories.userId, userId),
+          eq(financeBudgetCategories.name, name),
+          eq(financeBudgetCategories.kind, "bill"),
+        ),
+      )
+      .limit(1);
+
+    let categoryId: string;
+    if (existing) {
+      categoryId = existing.id;
+      // Only the fields supplied are written, the same rule `updateTransaction` follows. It
+      // matters here because correcting a cadence from the grid sends the cadence and nothing
+      // else, and a blanket write would silently clear the declared amount — after which the
+      // bill's figure would quietly fall back to whatever the visible window's median was.
+      const changes = {
+        ...cadenceColumns(edit.cadence),
+        ...(edit.expectedCents !== undefined
+          ? { expectedCents: edit.expectedCents }
+          : {}),
+        ...(edit.anchorDate !== undefined ? { anchorDate: edit.anchorDate } : {}),
+        ...(edit.notes !== undefined ? { notes: edit.notes.trim() } : {}),
+        ...(edit.scheduled !== undefined ? { scheduled: edit.scheduled } : {}),
+        ...(edit.dueDay !== undefined ? { dueDay: edit.dueDay } : {}),
+        ...(edit.status !== undefined ? { status: edit.status } : {}),
+        // Cancelling stamps the date and reactivating clears it, so the pair cannot disagree —
+        // a `cancelledOn` left behind on an active bill would read as a fact about the future.
+        ...(edit.status !== undefined
+          ? {
+              cancelledOn:
+                edit.status === "cancelled" ? (edit.cancelledOn ?? todayInUtc()) : null,
+            }
+          : {}),
+        ...(edit.url !== undefined ? { url: edit.url.trim() } : {}),
+        updatedAt: new Date(),
+      };
+      await tx
+        .update(financeBudgetCategories)
+        .set(changes)
+        .where(
+          and(
+            eq(financeBudgetCategories.id, categoryId),
+            eq(financeBudgetCategories.userId, userId),
+          ),
+        );
+    } else {
+      const groupId = edit.groupId ?? (await defaultBillGroupId(tx, userId));
+      const siblings = await tx
+        .select({ sortKey: financeBudgetCategories.sortKey })
+        .from(financeBudgetCategories)
+        .where(
+          and(
+            eq(financeBudgetCategories.userId, userId),
+            eq(financeBudgetCategories.groupId, groupId),
+          ),
+        );
+      const last = siblings
+        .map((row) => row.sortKey)
+        .sort((left, right) => sortKey.compare(right, left))[0];
+
+      const [created] = await tx
+        .insert(financeBudgetCategories)
+        .values({
+          userId,
+          groupId,
+          name,
+          sortKey: last === undefined ? sortKey.first() : sortKey.after(last),
+          kind: "bill",
+          ...cadenceColumns(edit.cadence),
+          expectedCents: edit.expectedCents ?? null,
+          anchorDate: edit.anchorDate ?? null,
+          notes: edit.notes?.trim() ?? "",
+          scheduled: edit.scheduled ?? true,
+          dueDay: edit.dueDay ?? null,
+          status: edit.status ?? "active",
           cancelledOn:
             edit.status === "cancelled" ? (edit.cancelledOn ?? todayInUtc()) : null,
-        }
-      : {}),
-    ...(edit.url !== undefined ? { url: edit.url.trim() } : {}),
-    updatedAt: new Date(),
-  };
-
-  await db.transaction(async (tx) => {
-    const [stored] = await tx
-      .insert(financeRecurringBills)
-      .values({
-        userId,
-        name,
-        ...cadenceColumns(edit.cadence),
-        category: edit.category?.trim() ?? "",
-        expectedCents: edit.expectedCents ?? null,
-        anchorDate: edit.anchorDate ?? null,
-        notes: edit.notes?.trim() ?? "",
-        scheduled: edit.scheduled ?? true,
-        dueDay: edit.dueDay ?? null,
-        status: edit.status ?? "active",
-        cancelledOn:
-          edit.status === "cancelled" ? (edit.cancelledOn ?? todayInUtc()) : null,
-        url: edit.url?.trim() ?? "",
-      })
-      // The unique index is on (user_id, name), so this can only ever collide with this user's
-      // own row — another user's identical name is a different row entirely.
-      .onConflictDoUpdate({
-        target: [financeRecurringBills.userId, financeRecurringBills.name],
-        set: changes,
-      })
-      .returning({
-        id: financeRecurringBills.id,
-      });
-
-    if (edit.payeeIds !== undefined) {
-      await replaceCommitmentPayeesInTransaction(
-        tx,
-        userId,
-        { kind: "bill", id: stored.id },
-        edit.payeeIds,
-      );
+          url: edit.url?.trim() ?? "",
+        })
+        .returning({ id: financeBudgetCategories.id });
+      if (!created) throw new Error("Could not create the bill envelope.");
+      categoryId = created.id;
     }
-  });
-}
-
-/** Rename a bill in place while its stable payee claims remain untouched. */
-export async function renameRecurringBill(
-  userId: string,
-  from: string,
-  to: string,
-): Promise<void> {
-  const next = to.trim();
-  if (next === "") throw new Error("A bill needs a name.");
-  const result = await db
-    .update(financeRecurringBills)
-    .set({ name: next, updatedAt: new Date() })
-    .where(
-      and(
-        eq(financeRecurringBills.userId, userId),
-        eq(financeRecurringBills.name, from),
-      ),
-    )
-    .returning({ id: financeRecurringBills.id });
-  if (result.length === 0) throw new Error("Bill not found.");
-}
-
-/** Undeclare a bill. Its charges return to the review list, which is the point of undoing. */
-export async function deleteRecurringBill(userId: string, name: string): Promise<void> {
-  await db
-    .delete(financeRecurringBills)
-    .where(
-      and(
-        eq(financeRecurringBills.userId, userId),
-        eq(financeRecurringBills.name, name),
-      ),
-    );
-}
-
-export type RecurringSpendEdit = {
-  /** The user's name for it — "Pizza". Also the upsert key. */
-  name: string;
-  /** Stable payees whose transactions belong to this group. Omitted leaves claims alone. */
-  payeeIds?: readonly string[];
-  period?: RecurringSpendPeriod;
-  amountSource?: RecurringSpendAmountSource;
-  /** The pinned rate per period. Ignored while `amountSource` is `auto`. */
-  expectedCents?: number | null;
-  active?: boolean;
-  /** A `FINANCE_CATEGORIES` value, or empty for none. See `RecurringBillEdit.category`. */
-  category?: string;
-  notes?: string;
-};
-
-/**
- * Create or correct a recurring-spend entry — tier 2.
- *
- * A pinned amount is required when `amountSource` is `pinned`, for the same reason a set-aside
- * bill needs a stated cost: this figure is subtracted from money the user is about to spend
- * against, and "pinned to nothing" would silently deduct zero while claiming to be deliberate.
- * Under `auto` the amount is not stored at all — the rate is recomputed from history on read.
- */
-export async function upsertRecurringSpend(
-  userId: string,
-  edit: RecurringSpendEdit,
-): Promise<void> {
-  const name = edit.name.trim();
-  if (name === "") throw new Error("A recurring spend needs a name.");
-  if (edit.amountSource === "pinned" && !(Number(edit.expectedCents) > 0)) {
-    throw new Error("A pinned amount needs a figure above zero.");
-  }
-  if (
-    edit.expectedCents !== undefined &&
-    edit.expectedCents !== null &&
-    (!Number.isInteger(edit.expectedCents) || edit.expectedCents < 0)
-  ) {
-    throw new Error("An amount must be a whole number of cents, zero or more.");
-  }
-
-  const changes = {
-    ...(edit.period !== undefined ? { period: edit.period } : {}),
-    ...(edit.amountSource !== undefined ? { amountSource: edit.amountSource } : {}),
-    ...(edit.expectedCents !== undefined ? { expectedCents: edit.expectedCents } : {}),
-    ...(edit.active !== undefined ? { active: edit.active } : {}),
-    ...(edit.category !== undefined ? { category: edit.category.trim() } : {}),
-    ...(edit.notes !== undefined ? { notes: edit.notes.trim() } : {}),
-    updatedAt: new Date(),
-  };
-
-  await db.transaction(async (tx) => {
-    const [stored] = await tx
-      .insert(financeRecurringSpend)
-      .values({
-        userId,
-        name,
-        period: edit.period ?? "week",
-        amountSource: edit.amountSource ?? "auto",
-        expectedCents: edit.expectedCents ?? null,
-        active: edit.active ?? true,
-        category: edit.category?.trim() ?? "",
-        notes: edit.notes?.trim() ?? "",
-      })
-      .onConflictDoUpdate({
-        target: [financeRecurringSpend.userId, financeRecurringSpend.name],
-        set: changes,
-      })
-      .returning({
-        id: financeRecurringSpend.id,
-      });
 
     if (edit.payeeIds !== undefined) {
       await replaceCommitmentPayeesInTransaction(
         tx,
         userId,
-        { kind: "spend", id: stored.id },
+        { id: categoryId },
         edit.payeeIds,
       );
     }
@@ -977,51 +889,9 @@ export async function upsertRecurringSpend(
 }
 
 /**
- * Rename a recurring-spend group in place while its stable payee claims remain untouched.
+ * Pause, cancel, dismiss, or revive a bill.
  *
- * The grid had no way to do this at all until 2026-08-18, which is how "Track as spend" on
- * Pizza Hut produced a permanent group named after one shop rather than the Pizza group it was
- * meant to join.
- */
-export async function renameRecurringSpend(
-  userId: string,
-  from: string,
-  to: string,
-): Promise<void> {
-  const next = to.trim();
-  if (next === "") throw new Error("A recurring spend needs a name.");
-  const result = await db
-    .update(financeRecurringSpend)
-    .set({ name: next, updatedAt: new Date() })
-    .where(
-      and(
-        eq(financeRecurringSpend.userId, userId),
-        eq(financeRecurringSpend.name, from),
-      ),
-    )
-    .returning({ id: financeRecurringSpend.id });
-  if (result.length === 0) throw new Error("Recurring spend not found.");
-}
-
-/** Remove a recurring-spend entry. Its charges go back to being ordinary spending. */
-export async function deleteRecurringSpend(
-  userId: string,
-  name: string,
-): Promise<void> {
-  await db
-    .delete(financeRecurringSpend)
-    .where(
-      and(
-        eq(financeRecurringSpend.userId, userId),
-        eq(financeRecurringSpend.name, name),
-      ),
-    );
-}
-
-/**
- * Pause, cancel, dismiss, or revive a subscription.
- *
- * A dedicated write rather than another `upsertRecurringBill` so the dashboard's "still
+ * A dedicated write rather than another `upsertBillEnvelope` so the dashboard's "still
  * active?" prompt cannot accidentally clear the amount or cadence on the way through — it
  * sends a status and, when the answer is *still active*, a new anchor, and nothing else.
  *
@@ -1031,46 +901,38 @@ export async function deleteRecurringSpend(
 export async function setSubscriptionStatus(
   userId: string,
   name: string,
-  status: CommitmentStatus,
+  status: EnvelopeStatus,
   options: { reanchorOn?: string; cancelledOn?: string | null } = {},
 ): Promise<void> {
   const trimmed = name.trim();
   const [existing] = await db
     .select({
-      cadenceMonths: financeRecurringBills.cadenceMonths,
-      cadenceDays: financeRecurringBills.cadenceDays,
+      cadenceMonths: financeBudgetCategories.cadenceMonths,
+      cadenceDays: financeBudgetCategories.cadenceDays,
     })
-    .from(financeRecurringBills)
+    .from(financeBudgetCategories)
     .where(
       and(
-        eq(financeRecurringBills.userId, userId),
-        eq(financeRecurringBills.name, trimmed),
+        eq(financeBudgetCategories.userId, userId),
+        eq(financeBudgetCategories.name, trimmed),
+        eq(financeBudgetCategories.kind, "bill"),
       ),
     )
     .limit(1);
-  if (!existing) throw new Error("Bill not found.");
+  if (!existing || existing.cadenceMonths === null) throw new Error("Bill not found.");
 
-  await upsertRecurringBill(userId, {
+  await upsertBillEnvelope(userId, {
     name: trimmed,
-    cadence: cadenceOf(existing),
+    cadence: cadenceOf({
+      cadenceMonths: existing.cadenceMonths,
+      cadenceDays: existing.cadenceDays,
+    }),
     status,
     ...(options.cancelledOn !== undefined ? { cancelledOn: options.cancelledOn } : {}),
     ...(status === "active" && options.reanchorOn !== undefined
       ? { anchorDate: options.reanchorOn }
       : {}),
   });
-}
-
-/** Remove a commitment from either table. Kind is required because names are unique per table, not across both. */
-export async function deleteCommitment(
-  userId: string,
-  target: { kind: "bill" | "spend"; name: string },
-): Promise<void> {
-  if (target.kind === "bill") {
-    await deleteRecurringBill(userId, target.name);
-    return;
-  }
-  await deleteRecurringSpend(userId, target.name);
 }
 
 /**

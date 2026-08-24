@@ -3,23 +3,28 @@
  *
  * **Reimplemented from Actual Budget** — `computeTemplates` / `processTemplate` in
  * `packages/loot-core/src/server/budget/goal-template.ts` (MIT, © James Long). Demand
- * templates (simple, schedule, by) write absolute Assigned amounts and may drive Ready to
- * Assign negative. Remainder runs last and only consumes leftover RTA > 0.
+ * templates (simple, by) and bill envelopes write absolute Assigned amounts and may drive
+ * Ready to Assign negative. Remainder runs last and only consumes leftover RTA > 0.
+ *
+ * **A bill envelope (`kind === "bill"`) participates even with an empty `templates` array.**
+ * Its demand is intrinsic to its own cadence (`billFundingDemand` in `./schedule`), not
+ * declared as a template line — `agent-os/specs/2026-08-23-2313-one-budget/` D4 retired the
+ * `schedule` template type that used to carry this.
  *
  * Spec: `agent-os/specs/2026-08-22-2242-budget-goal-templates/` D2 and D4.
  */
 
 import { formatUsd } from "@/lib/finances/money";
 import { monthName, type MonthKey } from "../envelope";
+import type { EnvelopeKind } from "@/db/schema";
 import { runBy } from "./by";
 import { distributeRemainder } from "./remainder";
-import { runSchedules, type ScheduleSnapshot } from "./schedule";
+import { billFundingDemand, type BillSnapshot } from "./schedule";
 import { applyLimit, limitOf, runSimple } from "./simple";
 import {
   assertCents,
   type ByTemplate,
   type RemainderTemplate,
-  type ScheduleTemplate,
   type SimpleTemplate,
   type Template,
 } from "./types";
@@ -28,6 +33,7 @@ export type EnvelopeApplyInput = {
   id: string;
   name: string;
   isIncome: boolean;
+  kind: EnvelopeKind;
   templates: readonly Template[];
   assignedCents: number;
   /** Carry-in into this month: previous balance if carryover, else max(0, previous). */
@@ -37,7 +43,7 @@ export type EnvelopeApplyInput = {
 export type ApplyOptions = {
   month: MonthKey;
   envelopes: readonly EnvelopeApplyInput[];
-  schedules: ReadonlyMap<string, ScheduleSnapshot>;
+  bills: ReadonlyMap<string, BillSnapshot>;
   readyToAssignCents: number;
   /** Overwrite: replace Assigned on every templated envelope. Apply: only empty cells. */
   force: boolean;
@@ -70,7 +76,7 @@ function onDay(todayKey: string): string {
 
 function selected(envelope: EnvelopeApplyInput, options: ApplyOptions): boolean {
   if (envelope.isIncome) return false;
-  if (envelope.templates.length === 0) return false;
+  if (envelope.kind !== "bill" && envelope.templates.length === 0) return false;
   if (options.categoryIds && !options.categoryIds.includes(envelope.id)) return false;
   if (!options.force && envelope.assignedCents !== 0) return false;
   return true;
@@ -78,9 +84,6 @@ function selected(envelope: EnvelopeApplyInput, options: ApplyOptions): boolean 
 
 function simples(templates: readonly Template[]): SimpleTemplate[] {
   return templates.filter((t): t is SimpleTemplate => t.type === "simple");
-}
-function schedules(templates: readonly Template[]): ScheduleTemplate[] {
-  return templates.filter((t): t is ScheduleTemplate => t.type === "schedule");
 }
 function bys(templates: readonly Template[]): ByTemplate[] {
   return templates.filter((t): t is ByTemplate => t.type === "by");
@@ -104,16 +107,15 @@ function demandOf(
   if (byTemplates.length > 0) {
     amount += runBy(byTemplates, options.month, carryIn).toBudget;
   }
-  const scheduleTemplates = schedules(envelope.templates);
-  if (scheduleTemplates.length > 0) {
-    const ran = runSchedules(
-      scheduleTemplates,
-      options.schedules,
-      options.month,
-      carryIn,
-    );
-    amount += ran.toBudget;
-    errors.push(...ran.errors);
+  if (envelope.kind === "bill") {
+    const snapshot = options.bills.get(envelope.id);
+    if (!snapshot) {
+      errors.push("Bill has no next-due date yet");
+    } else {
+      const demand = billFundingDemand(snapshot, options.month, carryIn);
+      amount += demand.toBudgetCents;
+      if (demand.error) errors.push(demand.error);
+    }
   }
 
   amount = applyLimit(amount, carryIn, 0, limitOf(simples(envelope.templates)));
@@ -146,10 +148,8 @@ export function applyTemplates(options: ApplyOptions): ApplyResult {
   for (const envelope of participants) {
     const remainderLines = remainders(envelope.templates);
     const hasDemand =
-      simples(envelope.templates).length +
-        schedules(envelope.templates).length +
-        bys(envelope.templates).length >
-      0;
+      simples(envelope.templates).length + bys(envelope.templates).length > 0 ||
+      envelope.kind === "bill";
 
     let demand = 0;
     if (hasDemand) {

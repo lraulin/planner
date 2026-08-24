@@ -95,7 +95,7 @@ export function UrlCell({
 }
 
 /** A bare `geico.com` is a URL the user meant; the browser needs the scheme spelled out. */
-function withScheme(url: string): string {
+export function withScheme(url: string): string {
   if (url === "") return "";
   return /^[a-z][a-z0-9+.-]*:/i.test(url) ? url : `https://${url}`;
 }

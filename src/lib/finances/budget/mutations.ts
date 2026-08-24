@@ -50,20 +50,18 @@ import {
   type EnvelopeRef,
 } from "./operations";
 import { PRESET_GROUPS, type BudgetPreset } from "./presets";
-import { AVERAGE_LOOKBACK_MONTHS, loadBudget, openingPositionFor } from "./queries";
-import { applyTemplates as runApply, templateCarryIn } from "./templates/apply";
 import {
-  defaultScheduleTarget,
-  schedulesToAdd,
-  type EnvelopeTemplates,
-} from "./templates/fromSchedules";
-import { scheduleSnapshotMap, scheduleSnapshots } from "./templates/snapshot";
+  AVERAGE_LOOKBACK_MONTHS,
+  loadBillSnapshots,
+  loadBudget,
+  openingPositionFor,
+} from "./queries";
+import { applyTemplates as runApply, templateCarryIn } from "./templates/apply";
 import {
   parseTemplates,
   parseTemplatesOrThrow,
   type Template,
 } from "./templates/types";
-import { getSchedule, listScheduleRecords } from "../schedules/queries";
 
 /**
  * Writes for the envelope budget.
@@ -892,7 +890,6 @@ async function budgetStructure(userId: string) {
         isIncome: financeCategoryGroups.isIncome,
         sortKey: financeCategoryGroups.sortKey,
         hidden: financeCategoryGroups.hidden,
-        sourceCommitmentKey: financeCategoryGroups.sourceCommitmentKey,
       })
       .from(financeCategoryGroups)
       .where(eq(financeCategoryGroups.userId, userId)),
@@ -1135,6 +1132,7 @@ async function requireSpendingCategory(
       id: financeBudgetCategories.id,
       groupId: financeBudgetCategories.groupId,
       templates: financeBudgetCategories.templates,
+      kind: financeBudgetCategories.kind,
     })
     .from(financeBudgetCategories)
     .where(
@@ -1145,6 +1143,9 @@ async function requireSpendingCategory(
     )
     .limit(1);
   if (!row) throw new Error("That envelope does not exist.");
+  if (row.kind === "bill") {
+    throw new Error("A bill envelope funds itself from its own cadence.");
+  }
 
   const [group] = await db
     .select({ isIncome: financeCategoryGroups.isIncome })
@@ -1162,11 +1163,6 @@ async function requireSpendingCategory(
   return { id: row.id, templates: parseTemplates(row.templates) ?? [] };
 }
 
-async function requireOwnedSchedule(userId: string, scheduleId: string): Promise<void> {
-  const schedule = await getSchedule(userId, scheduleId);
-  if (!schedule) throw new Error("That schedule does not exist.");
-}
-
 export async function saveEnvelopeTemplates(
   userId: string,
   categoryId: string,
@@ -1174,11 +1170,6 @@ export async function saveEnvelopeTemplates(
 ): Promise<void> {
   await requireSpendingCategory(userId, categoryId);
   const parsed = parseTemplatesOrThrow(templates);
-  for (const template of parsed) {
-    if (template.type === "schedule") {
-      await requireOwnedSchedule(userId, template.scheduleId);
-    }
-  }
   await db
     .update(financeBudgetCategories)
     .set({ templates: parsed, updatedAt: new Date() })
@@ -1214,18 +1205,19 @@ export async function applyBudgetTemplates(
       id: category.id,
       name: category.name,
       isIncome: incomeIds.has(category.groupId),
+      kind: category.kind,
       templates: category.templates,
       assignedCents: cell.assignedCents,
       carryInCents: templateCarryIn(prior),
     };
   });
 
+  const bills = await loadBillSnapshots(userId, data.categories, data.todayKey);
+
   const result = runApply({
     month: month.month,
     envelopes,
-    schedules: scheduleSnapshotMap(
-      scheduleSnapshots(await listScheduleRecords(userId)),
-    ),
+    bills: new Map(bills.map((bill) => [bill.id, bill])),
     readyToAssignCents: month.readyToAssignCents,
     force: params.force,
     categoryIds: params.categoryIds,
@@ -1251,52 +1243,4 @@ export async function applyBudgetTemplates(
     applied: result.allocations.length,
     errors: result.errors.map((error) => `${error.categoryName}: ${error.message}`),
   };
-}
-
-export async function addTemplatesFromSchedules(
-  userId: string,
-  params: { categoryId?: string; scheduleIds?: readonly string[] },
-): Promise<{ added: number; categoryId: string }> {
-  const data = await loadBudget(userId, null);
-  if (!data.configured) throw new Error("Set the budget up first.");
-
-  const incomeIds = new Set(
-    data.groups.filter((group) => group.isIncome).map((group) => group.id),
-  );
-  const existing: EnvelopeTemplates[] = data.categories.map((category) => ({
-    categoryId: category.id,
-    name: category.name,
-    isIncome: incomeIds.has(category.groupId),
-    templates: category.templates,
-  }));
-
-  const categoryId = params.categoryId ?? defaultScheduleTarget(existing);
-  if (!categoryId)
-    throw new Error("There is no spending envelope to attach schedules to.");
-  const target = await requireSpendingCategory(userId, categoryId);
-
-  const records = await listScheduleRecords(userId);
-  const lines = schedulesToAdd({
-    existing,
-    candidates: records.map((record) => ({
-      id: record.id,
-      name: record.name,
-      completed: record.completed,
-    })),
-    targetId: categoryId,
-    scheduleIds: params.scheduleIds,
-  });
-  if (lines.length === 0) return { added: 0, categoryId };
-
-  const next = [...target.templates, ...lines];
-  await db
-    .update(financeBudgetCategories)
-    .set({ templates: next, updatedAt: new Date() })
-    .where(
-      and(
-        eq(financeBudgetCategories.id, categoryId),
-        eq(financeBudgetCategories.userId, userId),
-      ),
-    );
-  return { added: lines.length, categoryId };
 }

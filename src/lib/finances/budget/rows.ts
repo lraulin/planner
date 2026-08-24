@@ -11,8 +11,9 @@ import type { GridRow } from "@/lib/tree/slice";
 import { compare as compareSortKeys } from "@/lib/tree/sortKey";
 
 import { categoryMonth, type BudgetMonth } from "./envelope";
-import type { BudgetCategoryRow, BudgetGroupRow } from "./queries";
+import type { BillFacet, BudgetCategoryRow, BudgetGroupRow } from "./queries";
 import { nestedBudgetGridRows } from "./hierarchy";
+import type { EnvelopeKind } from "@/db/schema";
 
 export type BudgetRow = {
   id: string;
@@ -31,6 +32,15 @@ export type BudgetRow = {
   templates: BudgetCategoryRow["templates"];
   /** Template goal for this month; null when Apply has not written one. */
   goalCents: number | null;
+  kind: EnvelopeKind;
+  /** The bill facet — cadence, status, url — meaningful only when `kind === "bill"`. */
+  bill: BillFacet | null;
+  /**
+   * Next charge, derived from charge history via `billAnchor` — null for a bill with no
+   * charge yet, or an ordinary envelope. Computed by the caller (`loadBillSnapshots`) rather
+   * than here, since it needs a database read this pure module cannot make.
+   */
+  nextDueKey: string | null;
 };
 
 export type BudgetTotals = {
@@ -63,6 +73,7 @@ export function budgetRows(
   categories: readonly BudgetCategoryRow[],
   month: BudgetMonth,
   goals: Readonly<Record<string, number>> = {},
+  nextDueKeys: ReadonlyMap<string, string> = new Map(),
 ): BudgetRow[] {
   const incomeGroups = new Set(
     groups.filter((group) => group.isIncome).map((group) => group.id),
@@ -91,6 +102,9 @@ export function budgetRows(
         activityCents: cell.activityCents,
         balanceCents: cell.balanceCents,
         carryover: cell.carryover,
+        kind: category.kind,
+        bill: category.bill,
+        nextDueKey: nextDueKeys.get(category.id) ?? null,
       };
     });
 }

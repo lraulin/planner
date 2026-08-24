@@ -3,9 +3,9 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeAccounts,
-  financeRecurringBills,
+  financeBudgetCategories,
+  financeCategoryGroups,
   financeRules,
-  financeSchedules,
   financeTransactions,
   users,
 } from "@/db/schema";
@@ -79,6 +79,26 @@ async function addTransaction(
     })
     .returning({ id: financeTransactions.id });
   return row.id;
+}
+
+/** A bare bill envelope, for tests that only need something a payee can claim. */
+async function makeBillEnvelope(userId: string, name: string): Promise<{ id: string }> {
+  const [group] = await db
+    .insert(financeCategoryGroups)
+    .values({ userId, name: `${name} group ${crypto.randomUUID()}`, sortKey: "a0" })
+    .returning({ id: financeCategoryGroups.id });
+  const [row] = await db
+    .insert(financeBudgetCategories)
+    .values({
+      userId,
+      groupId: group.id,
+      name,
+      sortKey: "a0",
+      kind: "bill",
+      cadenceMonths: 1,
+    })
+    .returning({ id: financeBudgetCategories.id });
+  return row;
 }
 
 describeDb("payee mutations", () => {
@@ -184,10 +204,7 @@ describeDb("payee mutations", () => {
   });
 
   it("merges aliases, transactions and a lone commitment claim into the target", async () => {
-    const [bill] = await db
-      .insert(financeRecurringBills)
-      .values({ userId, name: "Groceries", cadenceMonths: 1 })
-      .returning({ id: financeRecurringBills.id });
+    const bill = await makeBillEnvelope(userId, "Groceries");
 
     const target = await createPayee(userId, {
       name: "Walmart",
@@ -197,7 +214,7 @@ describeDb("payee mutations", () => {
       name: "Wal Mart",
       aliases: ["WAL-MART"],
     });
-    await claimPayeeForCommitment(userId, source, { kind: "bill", id: bill.id });
+    await claimPayeeForCommitment(userId, source, { id: bill.id });
 
     const txId = await addTransaction(userId, accountId, {
       description: "WAL-MART #2",
@@ -212,7 +229,7 @@ describeDb("payee mutations", () => {
     expect(merged?.aliases).toEqual(["WAL-MART", "WM SUPERCENTER"]);
     expect(merged?.transactionCount).toBe(1);
     // Merging into an unclaimed payee must not quietly un-declare the commitment.
-    expect(merged?.claim).toEqual({ kind: "bill", id: bill.id, name: "Groceries" });
+    expect(merged?.claim).toEqual({ id: bill.id, name: "Groceries" });
 
     expect(await getPayee(userId, source)).toBeNull();
 
@@ -223,50 +240,7 @@ describeDb("payee mutations", () => {
     expect(tx.payeeId).toBe(target);
   });
 
-  it("rewrites a schedule condition holding the merged payee, which no foreign key protects", async () => {
-    const target = await createPayee(userId, { name: "Netflix" });
-    const source = await createPayee(userId, { name: "Netflix Inc" });
-
-    await db.insert(financeSchedules).values({
-      userId,
-      name: "Netflix",
-      nextDate: "2026-09-01",
-      sortKey: "a0",
-      conditions: [
-        { field: "payee", op: "is", value: source },
-        { field: "amount", op: "isapprox", value: -1599 },
-      ],
-    });
-    await db.insert(financeSchedules).values({
-      userId,
-      name: "Netflix pair",
-      nextDate: "2026-09-01",
-      sortKey: "a1",
-      conditions: [{ field: "payee", op: "oneOf", value: [source, target] }],
-    });
-
-    await mergePayees(userId, target, [source]);
-
-    const rows = await db
-      .select({ name: financeSchedules.name, conditions: financeSchedules.conditions })
-      .from(financeSchedules)
-      .where(eq(financeSchedules.userId, userId))
-      .orderBy(financeSchedules.sortKey);
-
-    // Left alone, this schedule would go on matching a payee that no longer exists.
-    expect(rows[0].conditions).toEqual([
-      { field: "payee", op: "is", value: target },
-      { field: "amount", op: "isapprox", value: -1599 },
-    ]);
-    // A schedule that listed both must not end up naming the survivor twice.
-    expect(rows[1].conditions).toEqual([
-      { field: "payee", op: "oneOf", value: [target] },
-    ]);
-  });
-
-  it("rewrites a rule condition holding the merged payee, for the same reason", async () => {
-    // Rules hold payee ids in the same unprotected JSONB as schedules. The rewrite is shared
-    // so the two cannot drift; this proves the second table is actually wired to it.
+  it("rewrites a rule condition holding the merged payee, which no foreign key protects", async () => {
     const target = await createPayee(userId, { name: "Walmart" });
     const source = await createPayee(userId, { name: "Wal-Mart" });
 
@@ -289,23 +263,17 @@ describeDb("payee mutations", () => {
   });
 
   it("refuses a merge that would put two commitments on one payee", async () => {
-    const [billA] = await db
-      .insert(financeRecurringBills)
-      .values({ userId, name: "Bill A", cadenceMonths: 1 })
-      .returning({ id: financeRecurringBills.id });
-    const [billB] = await db
-      .insert(financeRecurringBills)
-      .values({ userId, name: "Bill B", cadenceMonths: 1 })
-      .returning({ id: financeRecurringBills.id });
+    const billA = await makeBillEnvelope(userId, "Bill A");
+    const billB = await makeBillEnvelope(userId, "Bill B");
 
     const target = await createPayee(userId, { name: "One" });
     const source = await createPayee(userId, { name: "Two" });
-    await claimPayeeForCommitment(userId, target, { kind: "bill", id: billA.id });
-    await claimPayeeForCommitment(userId, source, { kind: "bill", id: billB.id });
+    await claimPayeeForCommitment(userId, target, { id: billA.id });
+    await claimPayeeForCommitment(userId, source, { id: billB.id });
 
-    // Choosing which commitment keeps the merchant is a decision with money attached.
+    // Choosing which envelope keeps the merchant is a decision with money attached.
     await expect(mergePayees(userId, target, [source])).rejects.toThrow(
-      /different commitments/i,
+      /different envelopes/i,
     );
 
     // And the refusal left both payees intact.
@@ -313,14 +281,11 @@ describeDb("payee mutations", () => {
   });
 
   it("merges payees that already carry the same commitment claim", async () => {
-    const [bill] = await db
-      .insert(financeRecurringBills)
-      .values({ userId, name: "Internet", cadenceMonths: 1 })
-      .returning({ id: financeRecurringBills.id });
+    const bill = await makeBillEnvelope(userId, "Internet");
     const target = await createPayee(userId, { name: "Comcast" });
     const source = await createPayee(userId, { name: "Xfinity" });
-    await claimPayeeForCommitment(userId, target, { kind: "bill", id: bill.id });
-    await claimPayeeForCommitment(userId, source, { kind: "bill", id: bill.id });
+    await claimPayeeForCommitment(userId, target, { id: bill.id });
+    await claimPayeeForCommitment(userId, source, { id: bill.id });
 
     await mergePayees(userId, target, [source]);
 
@@ -329,15 +294,12 @@ describeDb("payee mutations", () => {
   });
 
   it("replaces a commitment's complete payee set in one scoped transaction", async () => {
-    const [bill] = await db
-      .insert(financeRecurringBills)
-      .values({ userId, name: "Internet", cadenceMonths: 1 })
-      .returning({ id: financeRecurringBills.id });
+    const bill = await makeBillEnvelope(userId, "Internet");
     const first = await createPayee(userId, { name: "Comcast" });
     const second = await createPayee(userId, { name: "Xfinity" });
-    await replaceCommitmentPayees(userId, { kind: "bill", id: bill.id }, [first]);
+    await replaceCommitmentPayees(userId, { id: bill.id }, [first]);
 
-    await replaceCommitmentPayees(userId, { kind: "bill", id: bill.id }, [second]);
+    await replaceCommitmentPayees(userId, { id: bill.id }, [second]);
 
     expect((await getPayee(userId, first))?.claim).toBeNull();
     expect((await getPayee(userId, second))?.claim?.id).toBe(bill.id);
@@ -354,12 +316,12 @@ describeDb("payee mutations", () => {
       amount: "-15.99",
       payeeId: source,
     });
-    await db.insert(financeSchedules).values({
+    await db.insert(financeRules).values({
       userId,
       name: "Netflix",
-      nextDate: "2026-09-01",
       sortKey: "a0",
       conditions: [{ field: "payee", op: "is", value: source }],
+      actions: [{ op: "set", field: "category", value: "Streaming" }],
     });
 
     const preview = await previewPayeeMerge(userId, target, [source]);
@@ -370,7 +332,7 @@ describeDb("payee mutations", () => {
       movedAliases: ["NETFLIX"],
       movedTransactions: 1,
       movedTotalCents: -1599,
-      affectedSchedules: [{ name: "Netflix" }],
+      affectedRules: [{ name: "Netflix" }],
       refusal: null,
     });
   });
@@ -397,27 +359,14 @@ describeDb("payee mutations", () => {
     expect(tx.payeeId).toBeNull();
   });
 
-  it("refuses to delete a payee referenced by a commitment or schedule", async () => {
-    const [bill] = await db
-      .insert(financeRecurringBills)
-      .values({ userId, name: "Internet", cadenceMonths: 1 })
-      .returning({ id: financeRecurringBills.id });
+  it("refuses to delete a payee referenced by an envelope claim or a rule", async () => {
+    const bill = await makeBillEnvelope(userId, "Internet");
     const claimed = await createPayee(userId, { name: "Comcast" });
-    await claimPayeeForCommitment(userId, claimed, { kind: "bill", id: bill.id });
-    await expect(deletePayee(userId, claimed)).rejects.toThrow(/commitment/i);
+    await claimPayeeForCommitment(userId, claimed, { id: bill.id });
+    await expect(deletePayee(userId, claimed)).rejects.toThrow(/envelope/i);
 
-    const scheduled = await createPayee(userId, { name: "Netflix" });
-    await db.insert(financeSchedules).values({
-      userId,
-      name: "Netflix",
-      nextDate: "2026-09-01",
-      sortKey: "a0",
-      conditions: [{ field: "payee", op: "is", value: scheduled }],
-    });
-    await expect(deletePayee(userId, scheduled)).rejects.toThrow(/schedule/i);
-
-    // Same absence of a foreign key, same refusal: a rule's payee id lives in JSONB, so
-    // deleting the payee would leave the rule matching nothing instead of failing.
+    // Same absence of a foreign key: a rule's payee id lives in JSONB, so deleting the
+    // payee would leave the rule matching nothing instead of failing.
     const ruled = await createPayee(userId, { name: "Costco" });
     await db.insert(financeRules).values({
       userId,
@@ -429,7 +378,6 @@ describeDb("payee mutations", () => {
     await expect(deletePayee(userId, ruled)).rejects.toThrow(/rule/i);
 
     expect(await getPayee(userId, claimed)).not.toBeNull();
-    expect(await getPayee(userId, scheduled)).not.toBeNull();
     expect(await getPayee(userId, ruled)).not.toBeNull();
   });
 

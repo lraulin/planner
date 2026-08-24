@@ -7,9 +7,8 @@ import { formatUsd } from "@/lib/finances/money";
 import type { PayeeMergePreview, PayeeRow } from "@/lib/finances/payees/queries";
 
 function claimLabel(preview: PayeeMergePreview): string {
-  if (!preview.resultingClaim) return "No commitment claim";
-  const kind = preview.resultingClaim.kind === "bill" ? "Bill" : "Recurring spend";
-  return `${kind}: ${preview.resultingClaim.name}`;
+  if (!preview.resultingClaim) return "No envelope claim";
+  return `Envelope: ${preview.resultingClaim.name}`;
 }
 
 /** Choose the surviving payee and inspect every reference the merge will move. */
@@ -137,9 +136,9 @@ export function PayeeMergeDialog({
                 </dd>
               </div>
               <div>
-                <dt className="text-ink-muted">Schedules</dt>
+                <dt className="text-ink-muted">Rules</dt>
                 <dd className="mt-0.5 tabular-nums text-ink">
-                  {preview.affectedSchedules.length}
+                  {preview.affectedRules.length}
                 </dd>
               </div>
             </dl>
@@ -149,9 +148,12 @@ export function PayeeMergeDialog({
                 Spellings: {preview.movedAliases.join(", ")}
               </p>
             )}
-            {preview.affectedSchedules.length > 0 && (
+            {preview.affectedRules.length > 0 && (
               <p className="text-[0.75rem] leading-relaxed text-ink-muted">
-                Schedules: {preview.affectedSchedules.map((row) => row.name).join(", ")}
+                Rules:{" "}
+                {preview.affectedRules
+                  .map((row: { name: string }) => row.name)
+                  .join(", ")}
               </p>
             )}
             <p className="text-[0.75rem] leading-relaxed text-ink-muted">

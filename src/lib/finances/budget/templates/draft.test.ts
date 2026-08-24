@@ -78,16 +78,6 @@ describe("draftsToTemplates", () => {
     });
   });
 
-  it("refuses a schedule line with nothing picked", () => {
-    const draft: Draft = {
-      id: "line-4",
-      type: "schedule",
-      scheduleId: "",
-      full: false,
-    };
-    expect(draftsToTemplates([draft]).ok).toBe(false);
-  });
-
   it("refuses a second remainder line on the same envelope", () => {
     const one: Draft = { id: "a", type: "remainder", weight: "1" };
     const two: Draft = { id: "b", type: "remainder", weight: "2" };
@@ -103,7 +93,6 @@ describe("draftsToTemplates", () => {
   it("produces templates the stored-shape parser accepts", () => {
     const drafts: Draft[] = [
       simple({ monthly: "50", limit: "150", hold: false }),
-      { id: "s", type: "schedule", scheduleId: "sched-1", full: true },
       {
         id: "b",
         type: "by",
@@ -133,14 +122,6 @@ describe("draftsFromTemplates", () => {
         priority: 0,
         monthlyCents: 5_000,
         limit: { amountCents: 15_000, hold: true },
-      },
-      {
-        id: "b",
-        directive: "template",
-        type: "schedule",
-        priority: 0,
-        scheduleId: "sched-1",
-        full: true,
       },
       {
         id: "c",

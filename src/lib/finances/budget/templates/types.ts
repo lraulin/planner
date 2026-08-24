@@ -12,7 +12,7 @@
 import { formatUsd } from "@/lib/finances/money";
 import { monthName } from "../envelope";
 
-export const TEMPLATE_TYPES = ["simple", "schedule", "by", "remainder"] as const;
+export const TEMPLATE_TYPES = ["simple", "by", "remainder"] as const;
 export type TemplateType = (typeof TEMPLATE_TYPES)[number];
 
 export type TemplateLimit = {
@@ -35,14 +35,6 @@ export type SimpleTemplate = Base & {
   limit?: TemplateLimit;
 };
 
-export type ScheduleTemplate = Base & {
-  type: "schedule";
-  priority: number;
-  scheduleId: string;
-  /** Assign the whole amount in the due month only, rather than sinking over time. */
-  full?: boolean;
-};
-
 export type ByTemplate = Base & {
   type: "by";
   priority: number;
@@ -61,8 +53,7 @@ export type RemainderTemplate = Base & {
   weight: number;
 };
 
-export type Template =
-  SimpleTemplate | ScheduleTemplate | ByTemplate | RemainderTemplate;
+export type Template = SimpleTemplate | ByTemplate | RemainderTemplate;
 
 const ID = /^[A-Za-z0-9_-]+$/;
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -118,28 +109,6 @@ function parseSimple(raw: Record<string, unknown>, id: string): SimpleTemplate |
     template.limit = limit;
   }
   if (template.monthlyCents === undefined && template.limit === undefined) return null;
-  if (typeof raw.description === "string") template.description = raw.description;
-  return template;
-}
-
-function parseSchedule(
-  raw: Record<string, unknown>,
-  id: string,
-): ScheduleTemplate | null {
-  const priority = parsePriority(raw.priority);
-  if (priority === null) return null;
-  if (typeof raw.scheduleId !== "string" || raw.scheduleId === "") return null;
-  const template: ScheduleTemplate = {
-    id,
-    directive: "template",
-    type: "schedule",
-    priority,
-    scheduleId: raw.scheduleId,
-  };
-  if (raw.full !== undefined) {
-    if (typeof raw.full !== "boolean") return null;
-    template.full = raw.full;
-  }
   if (typeof raw.description === "string") template.description = raw.description;
   return template;
 }
@@ -206,8 +175,6 @@ function parseOne(raw: unknown): Template | null {
   switch (raw.type) {
     case "simple":
       return parseSimple(raw, id);
-    case "schedule":
-      return parseSchedule(raw, id);
     case "by":
       return parseBy(raw, id);
     case "remainder":
@@ -242,7 +209,7 @@ export function parseTemplatesOrThrow(raw: unknown): Template[] {
 }
 
 /** One-line summary for the editor list. */
-export function summarize(template: Template, scheduleName?: string): string {
+export function summarize(template: Template): string {
   switch (template.type) {
     case "simple": {
       const monthly =
@@ -253,10 +220,6 @@ export function summarize(template: Template, scheduleName?: string): string {
         ? `up to ${formatUsd(template.limit.amountCents)}${template.limit.hold ? " hold" : ""}`
         : null;
       return [monthly, limit].filter(Boolean).join(" ") || "simple";
-    }
-    case "schedule": {
-      const name = scheduleName?.trim() || "schedule";
-      return template.full ? `schedule full ${name}` : `schedule ${name}`;
     }
     case "by": {
       const year = template.month.slice(0, 4);

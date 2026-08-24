@@ -59,3 +59,6 @@ Divergences are recorded in the spec that makes them, not here. As of the first 
 - The budget starts at a chosen month with an opening position, instead of assuming the ledger
   goes back to the beginning.
 - No CRDT, no tombstones, no local-first sync.
+- Recurrence for a bill envelope is derived from charge history (`nextDueFrom`) rather
+  than a stored `RecurConfig` cursor — a missed or early charge self-corrects instead of
+  needing an explicit skip. See `agent-os/specs/2026-08-23-2313-one-budget/` D2.

@@ -82,8 +82,7 @@ export const RESULT_KIND_LABELS: Record<FindResultKind, string> = {
   transaction: "Transaction",
   finance_account: "Account",
   finance_payee: "Payee",
-  recurring_bill: "Bill",
-  recurring_spend: "Recurring spend",
+  budget_envelope: "Envelope",
 };
 
 export function resultKindLabel(kind: FindResultKind): string {

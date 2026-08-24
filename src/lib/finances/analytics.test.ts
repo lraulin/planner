@@ -888,7 +888,6 @@ describe("recurringMerchants with declared bills", () => {
   it("keeps a cancelled bill on the list and off every total that would count it", () => {
     const found = recurringMerchants([], [{ ...geicoBill, status: "cancelled" }]);
     expect(found[0]).toMatchObject({ merchant: "Geico", status: "cancelled" });
-    expect(recurringMerchants([], [{ ...geicoBill, status: "ignored" }])).toEqual([]);
   });
 });
 

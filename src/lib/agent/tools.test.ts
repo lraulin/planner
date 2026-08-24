@@ -126,9 +126,7 @@ describe("agent tool registry", () => {
       "search_commitments",
       "find_commitment_candidates",
       "save_subscription",
-      "save_recurring_spend",
       "set_commitment_payees",
-      "delete_commitment",
     ]);
     expect(finances.tools.every((tool) => tool.domain === "finances")).toBe(true);
 
@@ -139,8 +137,8 @@ describe("agent tool registry", () => {
     )) as { tools: { name: string; replacedBy?: string }[] };
     expect(legacyFinances.tools).toContainEqual(
       expect.objectContaining({
-        name: "add_commitment_matchers",
-        replacedBy: "set_commitment_payees",
+        name: "upsert_subscription",
+        replacedBy: "save_subscription",
       }),
     );
 

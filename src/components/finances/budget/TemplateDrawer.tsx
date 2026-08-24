@@ -11,15 +11,12 @@ import {
   type ByDraft,
   type Draft,
   type RemainderDraft,
-  type ScheduleDraft,
   type SimpleDraft,
 } from "@/lib/finances/budget/templates/draft";
 import {
   applyTemplates,
   type EnvelopeApplyInput,
 } from "@/lib/finances/budget/templates/apply";
-import { scheduleSnapshotMap } from "@/lib/finances/budget/templates/snapshot";
-import type { ScheduleSnapshot } from "@/lib/finances/budget/templates/schedule";
 import {
   summarize,
   TEMPLATE_TYPES,
@@ -35,15 +32,12 @@ const labelClass = "flex flex-col gap-1 text-[0.75rem] text-ink-muted";
 
 const TYPE_LABELS: Record<TemplateType, string> = {
   simple: "Monthly amount",
-  schedule: "Schedule",
   by: "Save up by",
   remainder: "Remainder",
 };
 
 const TYPE_HELP: Record<TemplateType, string> = {
   simple: "A fixed amount each month, a ceiling to refill to, or both.",
-  schedule:
-    "Fund one of your schedules — in full when it is due, sinking when it is not.",
   by: "Reach an amount by a month, spreading the rest over the months left.",
   remainder:
     "Take a share of whatever Ready to Assign is left after every other envelope.",
@@ -65,7 +59,6 @@ export function TemplateDrawer({
   month,
   todayKey,
   readyToAssignCents,
-  schedules,
   onClose,
   onSaved,
 }: {
@@ -73,7 +66,6 @@ export function TemplateDrawer({
   month: MonthKey;
   todayKey: string;
   readyToAssignCents: number;
-  schedules: readonly ScheduleSnapshot[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -86,30 +78,23 @@ export function TemplateDrawer({
   const [error, setError] = useState<string | null>(null);
   const [saving, startSaving] = useTransition();
 
-  const snapshots = useMemo(() => scheduleSnapshotMap(schedules), [schedules]);
-  const open = useMemo(
-    () => schedules.filter((schedule) => !schedule.completed),
-    [schedules],
-  );
-
   const parsed = useMemo(() => draftsToTemplates(drafts), [drafts]);
 
   /**
    * What Overwrite would assign right now. Errors are surfaced beside the total rather than
-   * swallowed: a schedule line naming a completed or deleted schedule contributes nothing, and
-   * a silent zero is indistinguishable from a template that is simply not due.
+   * swallowed.
    */
   const preview = useMemo(() => {
     if (!parsed.ok) return null;
     return applyTemplates({
       month,
       envelopes: [{ ...envelope, templates: parsed.templates }],
-      schedules: snapshots,
+      bills: new Map(),
       readyToAssignCents,
       force: true,
       todayKey,
     });
-  }, [parsed, envelope, month, snapshots, readyToAssignCents, todayKey]);
+  }, [parsed, envelope, month, readyToAssignCents, todayKey]);
 
   function edit(next: Draft[]) {
     setDrafts(next);
@@ -182,7 +167,7 @@ export function TemplateDrawer({
                   {TYPE_LABELS[draft.type]}
                 </span>
                 <span className="min-w-0 flex-1 truncate text-[0.8125rem] text-ink">
-                  {lineSummary(draft, snapshots)}
+                  {lineSummary(draft)}
                 </span>
                 <button
                   type="button"
@@ -196,7 +181,6 @@ export function TemplateDrawer({
 
               <DraftFields
                 draft={draft}
-                schedules={open}
                 onChange={(patch) => update(draft.id, patch)}
               />
             </li>
@@ -262,32 +246,22 @@ export function TemplateDrawer({
   );
 }
 
-function lineSummary(
-  draft: Draft,
-  snapshots: ReadonlyMap<string, ScheduleSnapshot>,
-): string {
+function lineSummary(draft: Draft): string {
   const single = draftsToTemplates([draft]);
   if (!single.ok) return "Incomplete";
-  const template = single.templates[0];
-  const name =
-    template.type === "schedule" ? snapshots.get(template.scheduleId)?.name : undefined;
-  return summarize(template, name);
+  return summarize(single.templates[0]);
 }
 
 function DraftFields({
   draft,
-  schedules,
   onChange,
 }: {
   draft: Draft;
-  schedules: readonly ScheduleSnapshot[];
   onChange: (patch: Partial<Draft>) => void;
 }) {
   switch (draft.type) {
     case "simple":
       return <SimpleFields draft={draft} onChange={onChange} />;
-    case "schedule":
-      return <ScheduleFields draft={draft} schedules={schedules} onChange={onChange} />;
     case "by":
       return <ByFields draft={draft} onChange={onChange} />;
     case "remainder":
@@ -347,55 +321,6 @@ function SimpleFields({
         Leave <em>each month</em> blank to refill to the limit instead of adding a fixed
         amount.
       </p>
-    </div>
-  );
-}
-
-function ScheduleFields({
-  draft,
-  schedules,
-  onChange,
-}: {
-  draft: ScheduleDraft;
-  schedules: readonly ScheduleSnapshot[];
-  onChange: (patch: Partial<ScheduleDraft>) => void;
-}) {
-  // A schedule that has been completed or deleted since this line was written is still named
-  // here, so the select never silently re-points the line at a different schedule.
-  const missing =
-    draft.scheduleId !== "" &&
-    !schedules.some((schedule) => schedule.id === draft.scheduleId);
-
-  return (
-    <div className="mt-2 flex flex-wrap items-end gap-3">
-      <label className={labelClass}>
-        Schedule
-        <select
-          value={draft.scheduleId}
-          onChange={(event) => onChange({ scheduleId: event.target.value })}
-          className={inputClass}
-        >
-          <option value="">Pick a schedule…</option>
-          {missing ? (
-            <option value={draft.scheduleId}>(no longer available)</option>
-          ) : null}
-          {schedules.map((schedule) => (
-            <option key={schedule.id} value={schedule.id}>
-              {schedule.name} ({formatUsd(Math.abs(schedule.amountCents))})
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="flex min-h-tap items-center gap-2 text-[0.8125rem] text-ink-muted md:min-h-0">
-        <input
-          type="checkbox"
-          checked={draft.full}
-          onChange={(event) => onChange({ full: event.target.checked })}
-        />
-        <span title="Assign the whole amount in the month it is due instead of saving towards it">
-          Fund it all in the due month
-        </span>
-      </label>
     </div>
   );
 }

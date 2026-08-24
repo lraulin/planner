@@ -11,7 +11,7 @@ import {
   unclassifiedCount,
 } from "./dashboardQueries";
 import { importFinanceCsvFiles, type ImportFile } from "./import";
-import { reclassifyTransactions, setOneOff, upsertRecurringBill } from "./mutations";
+import { reclassifyTransactions, setOneOff, upsertBillEnvelope } from "./mutations";
 import { listTransactions } from "./queries";
 import { renamePayee } from "./payees/mutations";
 import { listPayees } from "./payees/queries";
@@ -221,7 +221,7 @@ describeDb("loadDashboard", () => {
       (payee) => payee.name === "SimpliSafe",
     );
     if (!alarmPayee) throw new Error("SimpliSafe payee was not seeded");
-    await upsertRecurringBill(userId, {
+    await upsertBillEnvelope(userId, {
       name: "SimpliSafe",
       payeeIds: [alarmPayee.id],
       cadence: { unit: "month", n: 1 },
@@ -260,7 +260,7 @@ describeDb("loadDashboard", () => {
     const intruderId = await makeUser();
     await seed(ownerId);
     await reclassifyTransactions(ownerId);
-    await upsertRecurringBill(ownerId, {
+    await upsertBillEnvelope(ownerId, {
       name: "SimpliSafe",
       cadence: { unit: "month", n: 1 },
       expectedCents: 3_471,
@@ -269,7 +269,6 @@ describeDb("loadDashboard", () => {
     const intruder = await loadDashboard(intruderId);
     expect(intruder.accounts).toEqual([]);
     expect(intruder.bills).toEqual([]);
-    expect(intruder.spend).toEqual([]);
     expect(intruder.review).toEqual([]);
     expect(intruder.billCharges).toEqual([]);
     expect(intruder.pending).toEqual([]);
