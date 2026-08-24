@@ -215,6 +215,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   groupSummary,
   onNavigableIdsChange,
   density = "comfortable",
+  autoHeight = false,
   rowDrag,
   rowMenu,
   rowSwipe,
@@ -363,6 +364,12 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
    * one variable, so density stays a single change instead of three that can drift.
    */
   density?: GridDensity;
+  /**
+   * Size to the rows instead of filling the parent, for a grid that shares a scrolling page
+   * with another one. The default fills its container and scrolls internally, which is right
+   * for a tab that *is* the page and collapses to a single row when two are stacked.
+   */
+  autoHeight?: boolean;
   /** Omit to leave rows undraggable, as every tab but the outline does. */
   rowDrag?: RowDrag;
   /**
@@ -874,7 +881,9 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   return (
     <NameIconContext.Provider value={nameShowsIcon}>
       <div
-        className="flex h-full min-h-0 flex-1 flex-col"
+        className={
+          autoHeight ? "flex min-h-0 flex-col" : "flex h-full min-h-0 flex-1 flex-col"
+        }
         // Compact is a genuine trade, not a default: more rows per screen against a smaller
         // target for the inline editors that live in those rows. Left to the user per grid.
         style={
@@ -912,7 +921,11 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
           tabIndex={0}
           role="treegrid"
           aria-label={ariaLabel}
-          className="min-h-0 flex-1 overflow-auto outline-none"
+          className={
+            autoHeight
+              ? "min-h-0 overflow-x-auto outline-none"
+              : "min-h-0 flex-1 overflow-auto outline-none"
+          }
           /*
            * The blank-area menu. Rows handle their own right-click and mark themselves with
            * `data-node-row`, so this fires for everything else the grid covers: the empty space

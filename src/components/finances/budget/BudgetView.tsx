@@ -26,11 +26,13 @@ import {
 } from "@/lib/finances/budget/envelope";
 import type { BudgetData } from "@/lib/finances/budget/queries";
 import {
-  budgetGridRows,
   budgetRows,
+  budgetSections,
   budgetTotals,
   coverSources,
   moveTargets,
+  sectionGridRows,
+  type BudgetBillRow,
   type BudgetRow,
 } from "@/lib/finances/budget/rows";
 import {
@@ -43,7 +45,7 @@ import type { RecurringMerchant } from "@/lib/finances/analytics";
 import { cadenceOf } from "@/lib/finances/recurringBills";
 import type { BillForecast } from "@/lib/finances/dashboardQueries";
 import { AssignRemainingDialog } from "./AssignRemainingDialog";
-import { budgetColumns, type BudgetColumnCtx } from "./budgetColumns";
+import { billColumns, envelopeColumns, type BudgetColumnCtx } from "./budgetColumns";
 import { BudgetSummary } from "./BudgetSummary";
 import { BudgetStructureDrawer } from "./BudgetStructureDrawer";
 import { CommitmentPayeeDialog } from "./CommitmentPayeeDialog";
@@ -53,16 +55,27 @@ import { MoveMoneyDialog } from "./MoveMoneyDialog";
 import { TemplateDrawer } from "./TemplateDrawer";
 import { ReviewDrawer } from "./ReviewDrawer";
 
+/** Collapsed by default (D8): carried over from Commitments as a lookup, not a fixture. */
+const DEFAULT_HIDDEN_COLUMNS = new Set(["annual", "monthly"]);
+
 /**
- * The budget, one month at a time.
+ * The budget, one month at a time: **Income**, then **Spending** — Bills above Regular
+ * spending.
+ *
+ * **Sections, not one grid.** Only a bill has a cadence, a next charge, a status or a URL, so
+ * putting bills and ordinary envelopes on one table meant six columns reading `—` on most
+ * rows. They stay one budget where it counts: `budgetTotals` runs over both tables and the
+ * Spending footer sums them together.
+ *
+ * The sections are **derived**, not user structure: Income from the group's `isIncome` flag,
+ * Bills from the envelope's `kind`. A user group whose rows all land in one section renders
+ * no header (`sectionGridRows`), so the seeded "Income" and "Spending" groups are invisible
+ * chrome and any group the user makes *inside* a section still shows.
  *
  * **Arranges and formats only.** Every figure arrives already folded by
  * `src/lib/finances/budget/envelope.ts`, and every clamp is applied again on the server
  * before anything is written — this component never decides how much money can move.
  */
-/** Collapsed by default (D8): carried over from Commitments as a lookup, not a fixture. */
-const DEFAULT_HIDDEN_COLUMNS = new Set(["annual", "monthly"]);
-
 export function BudgetView({
   data,
   review,
@@ -98,13 +111,21 @@ export function BudgetView({
   const [managingStructure, setManagingStructure] = useState(false);
   const [reviewing, setReviewing] = useState(false);
 
-  const grid = useGridState("budget", budgetColumns, {
-    order: budgetColumns
+  // One saved layout per table: the two offer different columns, so sharing a key would let
+  // hiding "Cadence" on the bills grid silently reorder the envelopes grid.
+  const billGrid = useGridState("budget-bills", billColumns, {
+    order: billColumns
       .map((column) => column.id)
       .filter((id) => !DEFAULT_HIDDEN_COLUMNS.has(id)),
     switches: { "show-hidden": false },
   });
-  const showHidden = grid.switches["show-hidden"] ?? false;
+  const envelopeGrid = useGridState("budget-envelopes", envelopeColumns, {
+    order: envelopeColumns.map((column) => column.id),
+    switches: { "show-hidden": false },
+  });
+  const showHidden =
+    (billGrid.switches["show-hidden"] ?? false) ||
+    (envelopeGrid.switches["show-hidden"] ?? false);
 
   const month = findMonth(data.months, data.month);
   const rows = useMemo(
@@ -114,9 +135,14 @@ export function BudgetView({
         : [],
     [data.groups, data.categories, month, data.goals, nextDueKeys],
   );
-  const gridRows = useMemo(
-    () => budgetGridRows(data.groups, rows, { showHidden }),
-    [data.groups, rows, showHidden],
+  const sections = useMemo(() => budgetSections(rows), [rows]);
+  const billGridRows = useMemo(
+    () => sectionGridRows(data.groups, sections.bills, { showHidden }),
+    [data.groups, sections.bills, showHidden],
+  );
+  const envelopeGridRows = useMemo(
+    () => sectionGridRows(data.groups, sections.envelopes, { showHidden }),
+    [data.groups, sections.envelopes, showHidden],
   );
 
   function run(work: () => Promise<{ ok: boolean; error?: string }>) {
@@ -270,15 +296,17 @@ export function BudgetView({
       ),
     onBalanceMenu: (row, at) => setMenu({ ...at, items: balanceMenu(row) }),
     onPatchBill: (row, patch) => {
-      if (!row.bill) return;
+      // Every patch carries the cadence because `upsertBillEnvelope` requires one; sending
+      // the row's current cadence when the patch does not change it keeps a URL edit from
+      // rewriting the schedule.
       run(() =>
         setRecurringBillAction({
           name: row.name,
           cadence:
             patch.cadence ??
             cadenceOf({
-              cadenceMonths: row.bill!.cadenceMonths ?? 1,
-              cadenceDays: row.bill!.cadenceDays,
+              cadenceMonths: row.bill.cadenceMonths ?? 1,
+              cadenceDays: row.bill.cadenceDays,
             }),
           ...patch,
         }),
@@ -397,9 +425,29 @@ export function BudgetView({
     ];
   }
 
+  // Three totals from one row set: the two tables each own a subtotal, and the footer sums
+  // both. They are computed from the same `budgetTotals` so a bill can never be counted in
+  // one and missed in the other.
   const totals = budgetTotals(spendingRows);
+  const billTotals = budgetTotals(sections.bills);
+  const envelopeTotals = budgetTotals(sections.envelopes);
   const editingRow = rows.find((row) => row.id === editing) ?? null;
   const backlog = data.uncategorizedCount;
+
+  /** A group header's own subtotal, over the rows that group contributes to this section. */
+  function groupTotals(sectionRows: readonly BudgetRow[], groupId: string) {
+    const ids = descendantEnvelopeIds(data.groups, data.categories, groupId);
+    const mine = sectionRows.filter((row) => ids.has(row.id));
+    if (mine.length === 0) return null;
+    const group = budgetTotals(mine);
+    return (
+      <span className="tabular flex gap-4 text-[0.75rem] text-ink-muted">
+        <span>{formatUsd(group.assignedCents)} assigned</span>
+        <span>{formatUsd(group.activityCents)} spent</span>
+        <span>{formatUsd(group.balanceCents)} left</span>
+      </span>
+    );
+  }
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -442,27 +490,19 @@ export function BudgetView({
             )
           }
           showHidden={showHidden}
-          onShowHidden={(next) => grid.setSwitch("show-hidden", next)}
+          onShowHidden={(next) => {
+            billGrid.setSwitch("show-hidden", next);
+            envelopeGrid.setSwitch("show-hidden", next);
+          }}
         />
 
         <BudgetSummary month={month} onAssignAll={() => setAssigning(true)} />
 
-        <div className="tabular flex flex-wrap items-baseline gap-x-4 gap-y-1 rounded border border-rule bg-surface px-3 py-2 text-[0.8125rem]">
-          <span className="text-ink-muted">
-            Income received this month{" "}
-            <span className="text-ink">{formatUsd(receivedThisMonthCents)}</span>
-          </span>
-          <span
-            className="text-ink-muted"
-            title="A forecast from a typical paycheck, not money you have — Ready to Assign counts only what's received."
-          >
-            Expected{" "}
-            <span className="text-ink">
-              {formatUsd(forecast.comparison.income.monthlyCents)}
-            </span>
-            /mo
-          </span>
-        </div>
+        <IncomeSection
+          rows={sections.income}
+          receivedCents={receivedThisMonthCents}
+          expectedCents={forecast.comparison.income.monthlyCents}
+        />
 
         {data.movementNotes ? (
           <details className="rounded border border-rule bg-surface px-3 py-2 text-[0.8125rem]">
@@ -504,11 +544,50 @@ export function BudgetView({
 
         {backlog > 0 ? <Backlog data={data} /> : null}
 
-        <div className="flex min-h-0 min-w-0 flex-col md:flex-1">
+        {/* `shrink-0`, not `min-h-0`: these are stacked inside the page scroller, and a flex
+            item allowed to shrink below its content collapses both grids to one row. */}
+        <section className="flex min-w-0 shrink-0 flex-col gap-3" aria-label="Spending">
+          <h2 className="text-[1rem] font-semibold text-ink">Spending</h2>
+
+          <SectionHeader
+            title="Bills"
+            caption="Each funds itself from its own cadence — Apply fills what this month owes."
+            totals={billTotals}
+          />
+          <DataGrid<BudgetColumnCtx, BudgetBillRow>
+            rows={billGridRows}
+            columns={billGrid.columns}
+            allColumns={billColumns}
+            columnCtx={ctx}
+            selectedId={selected}
+            onSelect={setSelected}
+            rowMenu={(rowId) => {
+              const row = rows.find((candidate) => candidate.id === rowId);
+              return row ? balanceMenu(row) : [];
+            }}
+            ariaLabel={`Bills for ${monthLabel(data.month)}`}
+            empty="No bills yet — Review proposes them from what actually charges you."
+            widths={billGrid.widths}
+            onResizeColumn={billGrid.setWidth}
+            onResetColumnWidth={billGrid.clearWidth}
+            columnControls={billGrid.columnControls}
+            collapsedGroups={billGrid.collapsedGroups}
+            onToggleGroup={billGrid.toggleGroup}
+            density={billGrid.density}
+            autoHeight
+            rowLabel={(row) => `Bill: ${row.node.name}`}
+            groupSummary={(_nodes, header) => groupTotals(sections.bills, header.id)}
+          />
+
+          <SectionHeader
+            title="Regular spending"
+            caption="Everything that is not a bill. Assign what you have; the balance is what is left."
+            totals={envelopeTotals}
+          />
           <DataGrid<BudgetColumnCtx, BudgetRow>
-            rows={gridRows}
-            columns={grid.columns}
-            allColumns={budgetColumns}
+            rows={envelopeGridRows}
+            columns={envelopeGrid.columns}
+            allColumns={envelopeColumns}
             columnCtx={ctx}
             selectedId={selected}
             onSelect={setSelected}
@@ -521,49 +600,38 @@ export function BudgetView({
               const row = rows.find((candidate) => candidate.id === rowId);
               return row ? balanceMenu(row) : [];
             }}
-            ariaLabel={`Budget for ${monthLabel(data.month)}`}
+            ariaLabel={`Envelopes for ${monthLabel(data.month)}`}
             empty="No envelopes yet."
-            widths={grid.widths}
-            onResizeColumn={grid.setWidth}
-            onResetColumnWidth={grid.clearWidth}
-            columnControls={grid.columnControls}
-            collapsedGroups={grid.collapsedGroups}
-            onToggleGroup={grid.toggleGroup}
-            density={grid.density}
+            widths={envelopeGrid.widths}
+            onResizeColumn={envelopeGrid.setWidth}
+            onResetColumnWidth={envelopeGrid.clearWidth}
+            columnControls={envelopeGrid.columnControls}
+            collapsedGroups={envelopeGrid.collapsedGroups}
+            onToggleGroup={envelopeGrid.toggleGroup}
+            density={envelopeGrid.density}
+            autoHeight
             rowLabel={(row) => `Envelope: ${row.node.name}`}
-            groupSummary={(_nodes, header) => {
-              const allIds = descendantEnvelopeIds(
-                data.groups,
-                data.categories,
-                header.id,
-              );
-              const allNodes = rows.filter((row) => allIds.has(row.id));
-              const group = budgetTotals(allNodes.filter((node) => !node.isIncome));
-              if (allNodes.length > 0 && allNodes.every((node) => node.isIncome))
-                return null;
-              return (
-                <span className="tabular flex gap-4 text-[0.75rem] text-ink-muted">
-                  <span>{formatUsd(group.assignedCents)} assigned</span>
-                  <span>{formatUsd(group.activityCents)} spent</span>
-                  <span>{formatUsd(group.balanceCents)} left</span>
-                </span>
-              );
-            }}
+            groupSummary={(_nodes, header) =>
+              groupTotals(sections.envelopes, header.id)
+            }
           />
-        </div>
 
-        <footer className="tabular flex flex-wrap gap-x-5 gap-y-1 rounded border border-rule bg-surface px-3 py-2 text-[0.8125rem]">
-          <span className="text-ink-muted">
-            Assigned <span className="text-ink">{formatUsd(totals.assignedCents)}</span>
-          </span>
-          <span className="text-ink-muted">
-            Spent <span className="text-ink">{formatUsd(totals.activityCents)}</span>
-          </span>
-          <span className="text-ink-muted">
-            Left in envelopes{" "}
-            <span className="text-ink">{formatUsd(totals.balanceCents)}</span>
-          </span>
-        </footer>
+          <footer className="tabular flex flex-wrap gap-x-5 gap-y-1 rounded border border-rule bg-surface px-3 py-2 text-[0.8125rem]">
+            <span className="text-ink-muted">
+              All spending <span className="text-ink-faint">(bills + regular)</span>
+            </span>
+            <span className="text-ink-muted">
+              Assigned{" "}
+              <span className="text-ink">{formatUsd(totals.assignedCents)}</span>
+            </span>
+            <span className="text-ink-muted">
+              Spent <span className="text-ink">{formatUsd(totals.activityCents)}</span>
+            </span>
+            <span className="text-ink-muted">
+              Left <span className="text-ink">{formatUsd(totals.balanceCents)}</span>
+            </span>
+          </footer>
+        </section>
 
         <ForecastDetails
           months={forecast.months}
@@ -842,5 +910,86 @@ function Backlog({ data }: { data: BudgetData }) {
         </a>
       </span>
     </div>
+  );
+}
+
+/**
+ * A table's heading and its own subtotal.
+ *
+ * The subtotal sits here rather than in a footer under each grid so the two tables read the
+ * same way when one of them is empty, and so the page has exactly one full-width footer —
+ * the combined one, which is the figure that has to be believed.
+ */
+function SectionHeader({
+  title,
+  caption,
+  totals,
+}: {
+  title: string;
+  caption: string;
+  totals: { assignedCents: number; activityCents: number; balanceCents: number };
+}) {
+  return (
+    <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-rule pb-1">
+      <div className="min-w-0">
+        <h2 className="text-[0.9375rem] font-medium text-ink">{title}</h2>
+        <p className="text-[0.75rem] text-ink-muted">{caption}</p>
+      </div>
+      <span className="tabular flex flex-wrap gap-x-4 text-[0.75rem] text-ink-muted">
+        <span>{formatUsd(totals.assignedCents)} assigned</span>
+        <span>{formatUsd(totals.activityCents)} spent</span>
+        <span>{formatUsd(totals.balanceCents)} left</span>
+      </span>
+    </header>
+  );
+}
+
+/**
+ * What came in this month, beside what a typical month brings.
+ *
+ * No Assigned and no Balance: income is not budgeted, it is the thing being budgeted
+ * (`agent-os/specs/2026-08-23-2313-one-budget/` D7). Expected is a forecast from the payday
+ * series and is deliberately not assignable — you assign money you have, which is why the
+ * caption says so rather than leaving the two figures to be read as interchangeable.
+ */
+function IncomeSection({
+  rows,
+  receivedCents,
+  expectedCents,
+}: {
+  rows: readonly BudgetRow[];
+  receivedCents: number;
+  expectedCents: number;
+}) {
+  return (
+    <section className="rounded border border-rule bg-surface px-3 py-2">
+      <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h2 className="text-[0.9375rem] font-medium text-ink">Income</h2>
+        <span className="tabular flex flex-wrap gap-x-4 text-[0.8125rem]">
+          <span className="text-ink-muted">
+            Received <span className="text-ink">{formatUsd(receivedCents)}</span>
+          </span>
+          <span
+            className="text-ink-muted"
+            title="A forecast from your payday series, not money you have."
+          >
+            Expected <span className="text-ink">{formatUsd(expectedCents)}</span>/mo
+          </span>
+        </span>
+      </header>
+      {rows.length > 0 ? (
+        <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-[0.75rem] text-ink-muted">
+          {rows.map((row) => (
+            <li key={row.id}>
+              {row.name}{" "}
+              <span className="tabular text-ink">{formatUsd(row.activityCents)}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <p className="mt-1 text-[0.7rem] text-ink-faint">
+        Ready to Assign counts only what has been received.
+      </p>
+    </section>
   );
 }

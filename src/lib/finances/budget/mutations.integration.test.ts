@@ -11,6 +11,7 @@ import {
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import {
   applyBudgetTemplates,
+  applyPayeeClaims,
   autoMapBudgetCategories,
   createBudgetCategory,
   createCategoryGroup,
@@ -28,6 +29,7 @@ import {
   updateBudgetCategory,
 } from "./mutations";
 import { updateAccount } from "../mutations";
+import { createPayee, replaceCommitmentPayees } from "../payees/mutations";
 import { loadBudget } from "./queries";
 import { categoryMonth, findMonth } from "./envelope";
 import { budgetChildren } from "./hierarchy";
@@ -856,5 +858,104 @@ describeDb("budget mutations — cross-user isolation", () => {
 
     expect((await envelopes(intruderId)).size).toBe(23);
     expect((await envelopes(ownerId)).size).toBe(5);
+  });
+});
+
+describeDb("applyPayeeClaims", () => {
+  let userId: string;
+
+  beforeEach(async () => {
+    userId = await makeUser();
+  });
+
+  /** A claimed payee with one charge inside the budget window and one before it. */
+  async function seedClaim(owner: string) {
+    const { checkingId, savingsId } = await seedAccounts(owner);
+    await seedBudget(owner, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
+    const byName = await envelopes(owner);
+    const rent = byName.get("Bills") ?? [...byName.values()][0];
+    const payeeId = await createPayee(owner, { name: "Landlord" });
+    const [inWindow, beforeWindow, offBudget] = await addTransactions(owner, [
+      {
+        accountId: checkingId,
+        date: "2026-08-05",
+        description: "RENT",
+        amount: "-900.00",
+      },
+      {
+        accountId: checkingId,
+        date: "2026-07-05",
+        description: "RENT",
+        amount: "-900.00",
+      },
+      {
+        accountId: savingsId,
+        date: "2026-08-06",
+        description: "RENT",
+        amount: "-900.00",
+      },
+    ]);
+    await db
+      .update(financeTransactions)
+      .set({ payeeId })
+      .where(eq(financeTransactions.userId, owner));
+    await replaceCommitmentPayees(owner, { id: rent }, [payeeId]);
+    return { rent, payeeId, inWindow, beforeWindow, offBudget, byName };
+  }
+
+  async function envelopeOf(id: string): Promise<string | null> {
+    const [row] = await db
+      .select({ categoryId: financeTransactions.budgetCategoryId })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.id, id));
+    return row?.categoryId ?? null;
+  }
+
+  it("files a claimed payee's charge in the envelope that claims it", async () => {
+    const { rent, inWindow } = await seedClaim(userId);
+    expect(await envelopeOf(inWindow)).toBeNull();
+
+    expect(await applyPayeeClaims(userId, MONTH)).toEqual({ moved: 1 });
+    expect(await envelopeOf(inWindow)).toBe(rent);
+  });
+
+  it("moves a charge the taxonomy pass already pooled somewhere else", async () => {
+    // The defect this exists for: the cutover rewrote every claim and the bill envelopes
+    // still read $0.00, because nothing moved a charge already filed in a broader envelope.
+    const { rent, inWindow, byName } = await seedClaim(userId);
+    const other = [...byName.values()].find((id) => id !== rent)!;
+    await setTransactionBudgetCategory(userId, inWindow, other);
+    expect(await envelopeOf(inWindow)).toBe(other);
+
+    expect(await applyPayeeClaims(userId, MONTH)).toEqual({ moved: 1 });
+    expect(await envelopeOf(inWindow)).toBe(rent);
+  });
+
+  it("is idempotent — a second run moves nothing", async () => {
+    await seedClaim(userId);
+    expect(await applyPayeeClaims(userId, MONTH)).toEqual({ moved: 1 });
+    expect(await applyPayeeClaims(userId, MONTH)).toEqual({ moved: 0 });
+  });
+
+  it("leaves charges before the start month and on off-budget accounts alone", async () => {
+    const { beforeWindow, offBudget } = await seedClaim(userId);
+    await applyPayeeClaims(userId, MONTH);
+
+    expect(await envelopeOf(beforeWindow)).toBeNull();
+    expect(await envelopeOf(offBudget)).toBeNull();
+  });
+
+  it("will not file a second user's charges, or read their claims", async () => {
+    const { inWindow, rent } = await seedClaim(userId);
+    const intruderId = await makeUser();
+    await seedClaim(intruderId);
+
+    // The intruder's pass must not touch the owner's row, and must not resolve the owner's
+    // claim onto its own — a dropped `userId` on either join would show up as one of these.
+    expect(await applyPayeeClaims(intruderId, MONTH)).toEqual({ moved: 1 });
+    expect(await envelopeOf(inWindow)).toBeNull();
+
+    expect(await applyPayeeClaims(userId, MONTH)).toEqual({ moved: 1 });
+    expect(await envelopeOf(inWindow)).toBe(rent);
   });
 });

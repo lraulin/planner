@@ -115,12 +115,66 @@ export function budgetRows(
  * `showHidden` keeps a retired envelope on screen so it can be un-hidden or deleted; without
  * it the only way back would be a database.
  */
-export function budgetGridRows(
+export function budgetGridRows<T extends BudgetRow>(
   groups: readonly BudgetGroupRow[],
-  rows: readonly BudgetRow[],
+  rows: readonly T[],
   options: { showHidden: boolean } = { showHidden: false },
-): GridRow<BudgetRow>[] {
-  return nestedBudgetGridRows(groups, rows, rows, options);
+): GridRow<T>[] {
+  return sectionGridRows(groups, rows, options);
+}
+
+/**
+ * A bill row, narrowed so the bill columns need no null branch.
+ *
+ * The Bills table only ever holds `kind: "bill"` rows, so `bill` is present by construction.
+ * Proving that once here is what lets `billColumns` render a cadence or a status outright
+ * instead of every cell carrying a `— if this is not really a bill` fallback.
+ */
+export type BudgetBillRow = BudgetRow & { bill: NonNullable<BudgetRow["bill"]> };
+
+export function isBillRow(row: BudgetRow): row is BudgetBillRow {
+  return row.kind === "bill" && row.bill !== null;
+}
+
+/**
+ * The three sections the Budget page renders, from one folded row set.
+ *
+ * Bills and ordinary envelopes are separate **tables** rather than one grid with `—` in the
+ * bill columns: only a bill has a cadence, a status or a URL, and a column that is blank on
+ * two thirds of its rows is a column that costs width without answering anything. They stay
+ * one **budget** — `budgetTotals` sums across both, which is the part that has to agree.
+ */
+export function budgetSections(rows: readonly BudgetRow[]): {
+  income: BudgetRow[];
+  bills: BudgetBillRow[];
+  envelopes: BudgetRow[];
+} {
+  return {
+    income: rows.filter((row) => row.isIncome),
+    bills: rows.filter((row): row is BudgetBillRow => !row.isIncome && isBillRow(row)),
+    envelopes: rows.filter((row) => !row.isIncome && !isBillRow(row)),
+  };
+}
+
+/**
+ * One section's grid rows, with a lone top-level group header dropped.
+ *
+ * When every row in a section sits under the same root group, that header repeats what the
+ * section is already called — two "Spending" headers on one page, one above the bills and one
+ * above the envelopes. Deeper nesting still renders, because then the headers are the only
+ * thing saying which envelope belongs to what.
+ */
+export function sectionGridRows<T extends BudgetRow>(
+  groups: readonly BudgetGroupRow[],
+  rows: readonly T[],
+  options: { showHidden: boolean } = { showHidden: false },
+): GridRow<T>[] {
+  const result = nestedBudgetGridRows(groups, rows, rows, options);
+  const headers = result.filter((row) => row.kind === "group");
+  if (headers.length !== 1 || headers[0]?.depth !== 0) return result;
+  return result
+    .filter((row) => row.kind !== "group")
+    .map((row) => ({ ...row, depth: Math.max(0, row.depth - 1) }));
 }
 
 /**

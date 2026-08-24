@@ -1,6 +1,6 @@
 # Collapse Budget, Schedules and Commitments — Shaping Notes
 
-**Status: frozen / complete** (2026-08-24)
+**Status: active** — reopened 2026-08-24; see `plan.md` for why the first freeze did not hold.
 
 ## Scope
 
@@ -63,7 +63,20 @@ See `plan.md` D1–D8. Summary of the two biggest calls, made in conversation:
 
 See `standards.md`.
 
-## Follow-ups (new work — not amendments to this frozen spec)
+## Open question — sections vs. groups
+
+Raised 2026-08-24, and **not settled by this spec**. The page now derives its sections from
+two different places: Income from `finance_category_groups.is_income`, Bills from the
+envelope's `kind`. That works and reads correctly, but it means the seeded "Income" and
+"Spending" groups cannot actually be deleted — income-ness has nowhere else to live, so
+removing the Income group would lose it.
+
+The model correction is to make income a third envelope `kind` (`income | envelope | bill`)
+and retire `is_income` from groups, leaving groups as purely organisational containers
+_inside_ a section. That is a schema migration touching every reader of `isIncome`, so it
+gets its own delta-spec rather than being folded in here.
+
+## Follow-ups (new work — not amendments to this spec)
 
 - Upgrade the Budget grid from `useGridState` to `GridToolbar` / `useModuleViews`
   (module id `finance-budget`) for saved views and export, per D6's original intent — the

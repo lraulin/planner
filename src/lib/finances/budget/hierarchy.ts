@@ -140,15 +140,15 @@ export function budgetEnvelopeLabel(
  * Recursive Budget rows for DataGrid. A group count is every visible descendant envelope,
  * not merely its direct children, so the collapsed header describes the same rows it hides.
  */
-export function nestedBudgetGridRows(
+export function nestedBudgetGridRows<T extends BudgetRow>(
   groups: readonly BudgetGroupRow[],
   categories: readonly Pick<
     BudgetCategoryRow,
     "id" | "groupId" | "sortKey" | "hidden"
   >[],
-  rows: readonly BudgetRow[],
+  rows: readonly T[],
   options: { showHidden: boolean } = { showHidden: false },
-): GridRow<BudgetRow>[] {
+): GridRow<T>[] {
   const groupById = new Map(groups.map((group) => [group.id, group]));
   const rowById = new Map(rows.map((row) => [row.id, row]));
   const visibleGroups = options.showHidden
@@ -160,7 +160,7 @@ export function nestedBudgetGridRows(
       visibleGroupIds.has(category.groupId) && (options.showHidden || !category.hidden),
   );
   const depths = budgetGroupDepths(groups);
-  const result: GridRow<BudgetRow>[] = [];
+  const result: GridRow<T>[] = [];
   const emitted = new Set<string>();
 
   function emitGroup(groupId: string): number {

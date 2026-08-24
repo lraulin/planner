@@ -352,12 +352,88 @@ export async function autoMapBudgetCategories(
   return { placed, remaining: rows.length - placed };
 }
 
-/** Run the safe, null-only envelope pass when this user has configured a budget. */
+/**
+ * File every claimed payee's charges in the envelope that claims them.
+ *
+ * `finance_payees.budget_category_id` says "this merchant's charges belong to this
+ * envelope" (`agent-os/specs/2026-08-23-2313-one-budget/` D3). Nothing read it when filing
+ * a charge until this existed: the cutover rewrote every claim and the bill envelopes still
+ * showed no Activity, because a Rent charge was left in whatever pooled envelope the
+ * taxonomy auto-map had put it in.
+ *
+ * **This one moves rows that are already filed**, unlike {@link autoMapBudgetCategories}.
+ * A claim is an explicit declaration about a merchant, so it outranks a placement the
+ * taxonomy pass made — and until a placement made *by hand* is distinguishable from one made
+ * by the auto-map, it outranks that too. Bounded by `since` for the same reason the auto-map
+ * is: months before the budget started are history nobody is budgeting.
+ */
+export async function applyPayeeClaims(
+  userId: string,
+  since: MonthKey,
+): Promise<{ moved: number }> {
+  const rows = await db
+    .select({
+      id: financeTransactions.id,
+      categoryId: financePayees.budgetCategoryId,
+    })
+    .from(financeTransactions)
+    .innerJoin(financePayees, eq(financePayees.id, financeTransactions.payeeId))
+    .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
+    .where(
+      and(
+        eq(financeTransactions.userId, userId),
+        eq(financePayees.userId, userId),
+        eq(financeAccounts.userId, userId),
+        eq(financeAccounts.offBudget, false),
+        gte(financeTransactions.transactionDate, since),
+        sql`${financePayees.budgetCategoryId} is not null`,
+        sql`${financeTransactions.budgetCategoryId} is distinct from ${financePayees.budgetCategoryId}`,
+      ),
+    );
+  if (rows.length === 0) return { moved: 0 };
+
+  const byCategory = new Map<string, string[]>();
+  for (const row of rows) {
+    if (!row.categoryId) continue;
+    const bucket = byCategory.get(row.categoryId) ?? [];
+    bucket.push(row.id);
+    byCategory.set(row.categoryId, bucket);
+  }
+
+  let moved = 0;
+  await db.transaction(async (tx) => {
+    for (const [categoryId, ids] of byCategory) {
+      // One statement per envelope rather than per row, as the auto-map does: a claim on a
+      // frequent merchant can reach hundreds of charges.
+      await tx
+        .update(financeTransactions)
+        .set({ budgetCategoryId: categoryId, updatedAt: new Date() })
+        .where(
+          and(
+            eq(financeTransactions.userId, userId),
+            inArray(financeTransactions.id, ids),
+          ),
+        );
+      moved += ids.length;
+    }
+  });
+
+  return { moved };
+}
+
+/**
+ * Route claimed payees first, then fill what is left by taxonomy.
+ *
+ * Order is the precedence: a payee claim names one envelope outright, so it must land before
+ * the auto-map — which only ever fills nulls — gets a chance to pool the same charge
+ * somewhere broader.
+ */
 export async function autoMapConfiguredBudgetCategories(
   userId: string,
 ): Promise<{ placed: number; remaining: number }> {
   const settings = parseBudget(await readSetting(userId, BUDGET_SCOPE));
   if (settings.startMonth === null) return { placed: 0, remaining: 0 };
+  await applyPayeeClaims(userId, settings.startMonth);
   return autoMapBudgetCategories(userId, settings.startMonth);
 }
 

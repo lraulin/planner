@@ -13,14 +13,22 @@ import {
   cadenceOf,
   type Cadence,
 } from "@/lib/finances/recurringBills";
-import { balanceTone, goalTone, type BudgetRow } from "@/lib/finances/budget/rows";
+import {
+  balanceTone,
+  goalTone,
+  type BudgetBillRow,
+  type BudgetRow,
+} from "@/lib/finances/budget/rows";
 import { UrlCell } from "./UrlCell";
 
 /**
- * Envelope, Assigned, Activity and Balance apply to every row. The bill-only columns —
- * Next charge, Cadence, Amount, Status, URL, and the hideable annualized trio — render `—`
- * on an ordinary envelope, since only a bill funds itself from its own cadence
- * (`agent-os/specs/2026-08-23-2313-one-budget/` D1/D4).
+ * Two column sets over one row shape: bills and ordinary envelopes are separate tables
+ * (`agent-os/specs/2026-08-23-2313-one-budget/`, revised after use).
+ *
+ * Assigned / Activity / Balance are built by {@link moneyColumns} so the two tables cannot
+ * drift on the figures that have to add up across them. Everything else differs: only a bill
+ * has a cadence, a next charge, a status or a URL, and putting those on one grid meant six
+ * columns reading `—` on every ordinary envelope.
  */
 
 export type BillPatch = Omit<BillEnvelopeEdit, "name" | "cadence"> & {
@@ -32,51 +40,10 @@ export type BudgetColumnCtx = {
   onAssign: (row: BudgetRow, cents: number) => void;
   /** Open the row's menu at the balance cell, where the cover/move actions belong. */
   onBalanceMenu: (row: BudgetRow, at: { x: number; y: number }) => void;
-  /** Patch a bill's facet columns. `row.bill` must be non-null. */
-  onPatchBill: (row: BudgetRow, patch: BillPatch) => void;
+  /** Patch a bill's facet columns. */
+  onPatchBill: (row: BudgetBillRow, patch: BillPatch) => void;
   pending: boolean;
 };
-
-function dollarsInput(
-  cents: number,
-  onCommit: (cents: number) => void,
-  label: string,
-  pending: boolean,
-) {
-  return (
-    <input
-      key={cents}
-      type="text"
-      inputMode="decimal"
-      defaultValue={(cents / 100).toFixed(2)}
-      disabled={pending}
-      aria-label={label}
-      onBlur={(event) => {
-        const next = Math.round(
-          Number(event.target.value.replace(/[$,\s]/g, "")) * 100,
-        );
-        if (Number.isFinite(next) && next !== cents) onCommit(next);
-      }}
-      className="tabular w-20 rounded border border-rule bg-surface px-1 text-right text-base text-ink md:text-[0.8125rem]"
-    />
-  );
-}
-
-const DASH = <span className="text-ink-faint">—</span>;
-
-/** The cadence a bill row is on. `cadenceMonths` is only ever null off a `kind: 'bill'` row. */
-function cadenceOfBill(bill: NonNullable<BudgetRow["bill"]>): Cadence {
-  return cadenceOf({
-    cadenceMonths: bill.cadenceMonths ?? 1,
-    cadenceDays: bill.cadenceDays,
-  });
-}
-
-/** What a bill costs per year, or 0 for an unscheduled bill with no fixed cost. */
-function annualCentsOf(row: BudgetRow): number {
-  if (row.bill === null || row.bill.expectedCents === null) return 0;
-  return annualCents(row.bill.expectedCents, cadenceOfBill(row.bill));
-}
 
 /**
  * Goal-met / goal-not-met on the Assigned cell.
@@ -98,11 +65,7 @@ const TONE_CLASS: Record<ReturnType<typeof balanceTone>, string> = {
   negative: "text-[var(--chart-spend)]",
 };
 
-function assignedCell(row: NodeGridRow<BudgetRow>, ctx: BudgetColumnCtx) {
-  // Income is never assigned — it feeds Ready to Assign and holds no balance — so the cell is
-  // blank rather than a zero the user might try to type into.
-  if (row.node.isIncome) return <span className="text-ink-faint">—</span>;
-
+function assignedCell<T extends BudgetRow>(row: NodeGridRow<T>, ctx: BudgetColumnCtx) {
   const tone = goalTone(row.node.assignedCents, row.node.goalCents);
 
   return (
@@ -111,7 +74,7 @@ function assignedCell(row: NodeGridRow<BudgetRow>, ctx: BudgetColumnCtx) {
       title={
         row.node.goalCents === null
           ? undefined
-          : `Goal ${formatUsd(row.node.goalCents)} \u00b7 assigned ${formatUsd(row.node.assignedCents)}`
+          : `Goal ${formatUsd(row.node.goalCents)} · assigned ${formatUsd(row.node.assignedCents)}`
       }
       type="text"
       inputMode="decimal"
@@ -143,10 +106,62 @@ function assignedCell(row: NodeGridRow<BudgetRow>, ctx: BudgetColumnCtx) {
   );
 }
 
-export const budgetColumns: ColumnDef<BudgetColumnCtx, BudgetRow>[] = [
-  {
+/** The three figures every spending row carries, and the only ones the totals sum. */
+function moneyColumns<T extends BudgetRow>(): ColumnDef<BudgetColumnCtx, T>[] {
+  return [
+    {
+      id: "assigned",
+      label: "Assigned",
+      width: "7rem",
+      align: "right",
+      hideable: false,
+      render: assignedCell,
+      sortValue: (row) => row.node.assignedCents,
+      compactText: (row) => formatUsd(row.node.assignedCents),
+    },
+    {
+      id: "activity",
+      label: "Activity",
+      width: "7rem",
+      align: "right",
+      render: (row) => (
+        <span
+          className={`tabular ${row.node.activityCents === 0 ? "text-ink-faint" : "text-ink"}`}
+        >
+          {formatUsd(row.node.activityCents)}
+        </span>
+      ),
+      sortValue: (row) => row.node.activityCents,
+      compactText: (row) => formatUsd(row.node.activityCents),
+    },
+    {
+      id: "balance",
+      label: "Balance",
+      width: "7.5rem",
+      align: "right",
+      hideable: false,
+      render: (row, ctx) => (
+        <button
+          type="button"
+          onClick={(event) =>
+            ctx.onBalanceMenu(row.node, { x: event.clientX, y: event.clientY })
+          }
+          title="Cover, move money, or roll overspending forward"
+          className={`tabular rounded px-1 hover:bg-surface-raised ${TONE_CLASS[balanceTone(row.node.balanceCents)]}`}
+        >
+          {formatUsd(row.node.balanceCents)}
+        </button>
+      ),
+      sortValue: (row) => row.node.balanceCents,
+      compactText: (row) => formatUsd(row.node.balanceCents),
+    },
+  ];
+}
+
+function nameColumn<T extends BudgetRow>(label: string): ColumnDef<BudgetColumnCtx, T> {
+  return {
     id: "name",
-    label: "Envelope",
+    label,
     width: "minmax(12rem,1fr)",
     hideable: false,
     render: (row) => (
@@ -167,7 +182,57 @@ export const budgetColumns: ColumnDef<BudgetColumnCtx, BudgetRow>[] = [
     sortValue: (row) => row.node.name,
     filterValue: (row) => row.node.name,
     compactText: (row) => row.node.name,
-  },
+  };
+}
+
+/** The cadence a bill row is on. `cadenceMonths` is only ever null off a `kind: 'bill'` row. */
+function cadenceOfBill(bill: BudgetBillRow["bill"]): Cadence {
+  return cadenceOf({
+    cadenceMonths: bill.cadenceMonths ?? 1,
+    cadenceDays: bill.cadenceDays,
+  });
+}
+
+/** What a bill costs per year, or 0 when no amount has been declared. */
+function annualCentsOf(row: BudgetBillRow): number {
+  if (row.bill.expectedCents === null) return 0;
+  return annualCents(row.bill.expectedCents, cadenceOfBill(row.bill));
+}
+
+function dollarsInput(
+  cents: number,
+  onCommit: (cents: number) => void,
+  label: string,
+  pending: boolean,
+) {
+  return (
+    <input
+      key={cents}
+      type="text"
+      inputMode="decimal"
+      defaultValue={(cents / 100).toFixed(2)}
+      disabled={pending}
+      aria-label={label}
+      onBlur={(event) => {
+        const next = Math.round(
+          Number(event.target.value.replace(/[$,\s]/g, "")) * 100,
+        );
+        if (Number.isFinite(next) && next !== cents) onCommit(next);
+      }}
+      className="tabular w-20 rounded border border-rule bg-surface px-1 text-right text-base text-ink md:text-[0.8125rem]"
+    />
+  );
+}
+
+/** Ordinary envelopes: Actual's three columns and nothing else. */
+export const envelopeColumns: ColumnDef<BudgetColumnCtx, BudgetRow>[] = [
+  nameColumn("Envelope"),
+  ...moneyColumns<BudgetRow>(),
+];
+
+/** Bills: the Commitments table's columns, with Assigned/Activity/Balance in place of the meter. */
+export const billColumns: ColumnDef<BudgetColumnCtx, BudgetBillRow>[] = [
+  nameColumn("Bill"),
   {
     id: "nextDue",
     label: "Next charge",
@@ -177,9 +242,7 @@ export const budgetColumns: ColumnDef<BudgetColumnCtx, BudgetRow>[] = [
     sortValue: (row) => row.node.nextDueKey ?? "",
     compact: "meta",
     render: (row) =>
-      row.node.bill === null ? (
-        DASH
-      ) : row.node.nextDueKey === null ? (
+      row.node.nextDueKey === null ? (
         <span className="text-ink-faint">
           {row.node.bill.scheduled ? "—" : "Unscheduled"}
         </span>
@@ -193,176 +256,106 @@ export const budgetColumns: ColumnDef<BudgetColumnCtx, BudgetRow>[] = [
     width: "8rem",
     filterKind: "enum",
     filterValue: (row) =>
-      row.node.bill === null
-        ? ""
-        : row.node.bill.scheduled
-          ? cadenceLabel(cadenceOfBill(row.node.bill))
-          : "Irregular",
-    sortValue: (row) =>
-      row.node.bill === null ? -1 : cadenceDaysApprox(cadenceOfBill(row.node.bill)),
-    render: (row, ctx) => {
-      const bill = row.node.bill;
-      if (bill === null) return DASH;
-      if (!bill.scheduled) return <span className="text-ink-faint">Irregular</span>;
-      const cadence = cadenceOfBill(bill);
-      return (
+      row.node.bill.scheduled
+        ? cadenceLabel(cadenceOfBill(row.node.bill))
+        : "Irregular",
+    // Days and months rank together by the length of a cycle, so a 28-day autoship sorts just
+    // under a monthly bill rather than beside a yearly one.
+    sortValue: (row) => cadenceDaysApprox(cadenceOfBill(row.node.bill)),
+    render: (row, ctx) =>
+      !row.node.bill.scheduled ? (
+        <span className="text-ink-faint">Irregular</span>
+      ) : (
         <CadenceSelect
-          value={cadence}
+          value={cadenceOfBill(row.node.bill)}
           disabled={ctx.pending}
           ariaLabel={`Cadence for ${row.node.name}`}
-          onChange={(next) => ctx.onPatchBill(row.node, { cadence: next })}
+          onChange={(cadence) => ctx.onPatchBill(row.node, { cadence })}
           className="min-h-tap w-full rounded border border-rule bg-surface px-1 text-base text-ink md:min-h-0 md:text-[0.8125rem]"
         />
-      );
-    },
+      ),
   },
   {
     id: "billAmount",
     label: "Amount",
     width: "7rem",
     align: "right",
-    filterValue: (row) =>
-      row.node.bill ? formatUsd(row.node.bill.expectedCents ?? 0) : "",
-    sortValue: (row) => row.node.bill?.expectedCents ?? -1,
+    filterValue: (row) => formatUsd(row.node.bill.expectedCents ?? 0),
+    sortValue: (row) => row.node.bill.expectedCents ?? -1,
     compact: "meta",
     render: (row, ctx) =>
-      row.node.bill === null
-        ? DASH
-        : dollarsInput(
-            row.node.bill.expectedCents ?? 0,
-            (expectedCents) => ctx.onPatchBill(row.node, { expectedCents }),
-            `Amount for ${row.node.name}`,
-            ctx.pending,
-          ),
+      dollarsInput(
+        row.node.bill.expectedCents ?? 0,
+        (expectedCents) => ctx.onPatchBill(row.node, { expectedCents }),
+        `Amount for ${row.node.name}`,
+        ctx.pending,
+      ),
   },
+  ...moneyColumns<BudgetBillRow>(),
   {
     id: "billStatus",
     label: "Status",
     width: "7rem",
     filterKind: "enum",
-    filterValue: (row) => row.node.bill?.status ?? "",
-    sortValue: (row) => row.node.bill?.status ?? "",
-    render: (row, ctx) =>
-      row.node.bill === null ? (
-        DASH
-      ) : (
-        <select
-          value={row.node.bill.status}
-          disabled={ctx.pending}
-          aria-label={`Status for ${row.node.name}`}
-          onChange={(event) =>
-            ctx.onPatchBill(row.node, {
-              status: event.target.value as EnvelopeStatus,
-            })
-          }
-          className="min-h-tap rounded border border-rule bg-surface px-1 text-base text-ink md:min-h-0 md:text-[0.8125rem]"
-        >
-          <option value="active">Active</option>
-          <option value="paused">Paused</option>
-          <option value="cancelled">Cancelled</option>
-        </select>
-      ),
+    filterValue: (row) => row.node.bill.status,
+    sortValue: (row) => row.node.bill.status,
+    render: (row, ctx) => (
+      <select
+        value={row.node.bill.status}
+        disabled={ctx.pending}
+        aria-label={`Status for ${row.node.name}`}
+        onChange={(event) =>
+          ctx.onPatchBill(row.node, {
+            status: event.target.value as EnvelopeStatus,
+          })
+        }
+        className="min-h-tap rounded border border-rule bg-surface px-1 text-base text-ink md:min-h-0 md:text-[0.8125rem]"
+      >
+        <option value="active">Active</option>
+        <option value="paused">Paused</option>
+        <option value="cancelled">Cancelled</option>
+      </select>
+    ),
   },
   {
     id: "billUrl",
     label: "URL",
     width: "minmax(7rem,0.8fr)",
     filterKind: "text",
-    filterValue: (row) => row.node.bill?.url ?? "",
-    render: (row, ctx) =>
-      row.node.bill === null ? (
-        DASH
-      ) : (
-        <UrlCell
-          value={row.node.bill.url}
-          label={row.node.name}
-          disabled={ctx.pending}
-          onCommit={(url) => ctx.onPatchBill(row.node, { url })}
-        />
-      ),
+    filterValue: (row) => row.node.bill.url,
+    render: (row, ctx) => (
+      <UrlCell
+        value={row.node.bill.url}
+        label={row.node.name}
+        disabled={ctx.pending}
+        onCommit={(url) => ctx.onPatchBill(row.node, { url })}
+      />
+    ),
   },
   {
     id: "annual",
     label: "A year",
     width: "6rem",
     align: "right",
-    hideable: true,
     filterValue: (row) => formatUsd(annualCentsOf(row.node)),
     sortValue: (row) => annualCentsOf(row.node),
-    render: (row) =>
-      row.node.bill === null ? (
-        DASH
-      ) : (
-        <span className="tabular text-[0.8125rem] text-[var(--chart-spend)]">
-          {formatUsd(annualCentsOf(row.node))}
-        </span>
-      ),
+    render: (row) => (
+      <span className="tabular text-[0.8125rem] text-[var(--chart-spend)]">
+        {formatUsd(annualCentsOf(row.node))}
+      </span>
+    ),
   },
   {
     id: "monthly",
     label: "Monthly",
     width: "5.5rem",
     align: "right",
-    hideable: true,
     filterValue: (row) => formatUsd(Math.round(annualCentsOf(row.node) / 12)),
     sortValue: (row) => Math.round(annualCentsOf(row.node) / 12),
-    render: (row) =>
-      row.node.bill === null ? (
-        DASH
-      ) : (
-        <span className="tabular text-[0.8125rem] text-ink">
-          {formatUsd(Math.round(annualCentsOf(row.node) / 12))}
-        </span>
-      ),
-  },
-  {
-    id: "assigned",
-    label: "Assigned",
-    width: "7rem",
-    align: "right",
-    hideable: false,
-    render: assignedCell,
-    sortValue: (row) => row.node.assignedCents,
-    compactText: (row) =>
-      row.node.isIncome ? null : formatUsd(row.node.assignedCents),
-  },
-  {
-    id: "activity",
-    label: "Activity",
-    width: "7rem",
-    align: "right",
     render: (row) => (
-      <span
-        className={`tabular ${row.node.activityCents === 0 ? "text-ink-faint" : "text-ink"}`}
-      >
-        {formatUsd(row.node.activityCents)}
+      <span className="tabular text-[0.8125rem] text-ink">
+        {formatUsd(Math.round(annualCentsOf(row.node) / 12))}
       </span>
     ),
-    sortValue: (row) => row.node.activityCents,
-    compactText: (row) => formatUsd(row.node.activityCents),
-  },
-  {
-    id: "balance",
-    label: "Balance",
-    width: "7.5rem",
-    align: "right",
-    hideable: false,
-    render: (row, ctx) => {
-      if (row.node.isIncome) return <span className="text-ink-faint">—</span>;
-      return (
-        <button
-          type="button"
-          onClick={(event) =>
-            ctx.onBalanceMenu(row.node, { x: event.clientX, y: event.clientY })
-          }
-          title="Cover, move money, or roll overspending forward"
-          className={`tabular rounded px-1 hover:bg-surface-raised ${TONE_CLASS[balanceTone(row.node.balanceCents)]}`}
-        >
-          {formatUsd(row.node.balanceCents)}
-        </button>
-      );
-    },
-    sortValue: (row) => row.node.balanceCents,
-    compactText: (row) => (row.node.isIncome ? null : formatUsd(row.node.balanceCents)),
   },
 ];

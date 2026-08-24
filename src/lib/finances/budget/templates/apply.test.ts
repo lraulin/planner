@@ -171,3 +171,94 @@ describe("bill envelope apply", () => {
     expect(result.errors[0]?.message).toMatch(/no next-due date/);
   });
 });
+
+/**
+ * A bill envelope funds itself from its own cadence with no template rows at all
+ * (`agent-os/specs/2026-08-23-2313-one-budget/` D4). Untested when the spec first shipped,
+ * which is exactly how the acceptance criterion came to be ticked without evidence.
+ */
+describe("applyTemplates — bill envelopes", () => {
+  const geico: BillSnapshot = {
+    id: "geico",
+    name: "Geico",
+    cadenceMonths: 6,
+    cadenceDays: null,
+    expectedCents: 59_498,
+    nextDueKey: "2026-12-26",
+  };
+
+  function bill(overrides: Partial<EnvelopeApplyInput> = {}): EnvelopeApplyInput {
+    return envelope({
+      id: "geico",
+      name: "Geico",
+      kind: "bill",
+      templates: [],
+      ...overrides,
+    });
+  }
+
+  function run(envelopes: EnvelopeApplyInput[], bills: BillSnapshot[]) {
+    return applyTemplates({
+      month: "2026-08-01",
+      envelopes,
+      bills: new Map(bills.map((snapshot) => [snapshot.id, snapshot])),
+      readyToAssignCents: 500_000,
+      force: false,
+      todayKey: "2026-08-24",
+    });
+  }
+
+  it("sinks a semi-annual bill over the months until it is due", () => {
+    // $594.98 due in December, five months out from August inclusive → $119.00 a month.
+    const result = run([bill()], [geico]);
+    expect(result.allocations).toEqual([
+      { categoryId: "geico", amountCents: 11_900, goalCents: 11_900 },
+    ]);
+  });
+
+  it("funds a bill due this month in full", () => {
+    const rent: BillSnapshot = {
+      id: "rent",
+      name: "Rent",
+      cadenceMonths: 1,
+      cadenceDays: null,
+      expectedCents: 210_000,
+      nextDueKey: "2026-08-31",
+    };
+    const result = run([bill({ id: "rent", name: "Rent" })], [rent]);
+    expect(result.allocations).toEqual([
+      { categoryId: "rent", amountCents: 210_000, goalCents: 210_000 },
+    ]);
+  });
+
+  it("asks for less when the envelope already carries part of the target", () => {
+    // Carry-in is money already put by, so the sink re-divides only what is still missing:
+    // $594.98 − $94.98 = $500.00 left, over the same five months → $100.00 a month. It does
+    // *not* keep asking for the original $119.00, which is the tempting way to write it.
+    const result = run([bill({ carryInCents: 9_498 })], [geico]);
+    expect(result.allocations).toEqual([
+      { categoryId: "geico", amountCents: 10_000, goalCents: 10_000 },
+    ]);
+  });
+
+  it("reports a bill with no next-due date instead of silently skipping it", () => {
+    const result = run([bill()], []);
+    expect(result.allocations).toEqual([
+      { categoryId: "geico", amountCents: 0, goalCents: 0 },
+    ]);
+    expect(result.errors).toEqual([
+      {
+        categoryId: "geico",
+        categoryName: "Geico",
+        message: "Bill has no next-due date yet",
+      },
+    ]);
+  });
+
+  it("never funds an ordinary envelope that has no templates", () => {
+    // The `kind` check is what lets a bill through with an empty `templates` array; if it
+    // were dropped, every envelope would become a participant asking for nothing.
+    const result = run([envelope({ id: "plain", templates: [] })], []);
+    expect(result.allocations).toEqual([]);
+  });
+});

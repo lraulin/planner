@@ -1,6 +1,9 @@
 # Collapse Budget, Schedules and Commitments into one budget
 
-**Status: frozen / complete** (2026-08-24)
+**Status: active** — reopened 2026-08-24 after the first real look at the page. The freeze
+below was premature: acceptance was confirmed by the implementer rather than by use, and two
+criteria that were ticked had no test behind them. Freeze again only once the page has been
+used.
 
 ## Context
 
@@ -59,11 +62,27 @@ Apply/Overwrite stay explicit clicks — nothing runs unattended.
 cash position, card debt and the payday series — none of which depend on commitments —
 and its spendable panel becomes budget-derived.
 
-**D6 — One page, one grid.** `/finances/budget`. `/finances/schedules` and
-`/finances/commitments` are deleted. Groups already separate Bills from other spending, so
-bills and envelopes render as **one `DataGrid`** over the existing tree, giving one totals
-footer for free; bill columns read `—` on non-bill rows. The grid gains `GridToolbar` /
-`useModuleViews`, which it now needs at a dozen columns.
+**D6 — One page, three sections.** `/finances/budget`. `/finances/schedules` and
+`/finances/commitments` are deleted.
+
+_Revised 2026-08-24, from use._ This first read "one page, one grid", and that was a
+misreading of "Subscriptions & bills, Schedules, and the bills in Budget can be one UI
+element" — one table for the three **bill** representations, not one table for bills and
+envelopes together. Built as one grid it put six columns (Next charge, Cadence, Amount,
+Status, URL, A year) on every ordinary envelope, reading `—` on two thirds of the rows.
+
+The page is now **Income**, then **Spending** containing a **Bills** table and a **Regular
+spending** table:
+
+- Bills keep the Commitments columns, with Assigned / Activity / Balance in place of the
+  retired funding meter. Regular spending is Actual's three columns and nothing else.
+- Each table carries its own subtotal; one footer under Spending sums both, which is the
+  figure that has to agree.
+- Income has neither Assigned nor Balance — see D7.
+- The sections are **derived**, not user structure: Income from the group's `isIncome`,
+  Bills from the envelope's `kind`. A user group whose rows all land in one section renders
+  no header, so the seeded "Income" and "Spending" groups became invisible chrome and any
+  group made _inside_ a section still shows.
 
 **D7 — Income gets a section.** Income envelopes already render (activity only, no
 balance). What is missing is _expected_ income, which the retired Commitments comparison
@@ -90,22 +109,32 @@ by default. Say so if you'd rather drop those two outright.
 - [x] Each recurring-spend row became an envelope holding its payee claims, with a
       `simple` monthly template seeded from its computed rate.
 - [x] Apply/Overwrite funds bill envelopes from their own cadence with no template rows,
-      and reproduces today's sinking-fund numbers for the same bills.
+      and reproduces today's sinking-fund numbers for the same bills. _Ticked without a test
+      on 2026-08-23; `apply.test.ts` now covers a `kind: "bill"` envelope, and the real file
+      dry-runs to 1Password $8.99 / Geico $119.00 / Rent $2,100.00 / Taylor Gas $164.33._
 - [x] The income section shows received and expected for the month, and Ready to Assign
       still counts only received.
-- [x] Totals footer sums bills and ordinary envelopes together.
+- [x] Totals footer sums bills and ordinary envelopes together — now the Spending footer
+      under both tables, with a subtotal on each. `budgetSections` is tested for counting
+      every spending row exactly once, which is the property that keeps the two agreeing.
+- [x] A charge whose payee is claimed by an envelope is **filed in that envelope**. Required
+      by Task 6 and missed: the cutover rewrote every claim and nothing read one when filing
+      a charge, so every bill envelope showed no Activity at all.
 - [x] No page reads a dropped table: `npm run lint`, `npm run typecheck`,
       `npm run test:unit` (with Postgres up), `npm run build`, and `npm run smoke` on a
       running dev server all pass.
 
 ## Changes from original plan
 
-| #   | Change                                                                                                                                                                                                                                | Why                                                                                                                                                                                                                                                    |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1   | The grid kept `useGridState` rather than moving to `GridToolbar` / `useModuleViews` (D6).                                                                                                                                             | Bill columns fit inside the existing show/hide + width + density controls without the heavier module-views machinery; that upgrade is real but separable, and nothing in this spec depended on it. Left as a follow-up, not silently dropped.          |
-| 2   | Dropped **Pay period** from the hideable annualized trio, keeping only A year / Monthly (D8/Task 5).                                                                                                                                  | Per-paycheck figures need the payday cadence, which the grid's pure column module has no access to without threading payday data through every row; A year and Monthly already answer "what does this cost."                                           |
-| 3   | "Bills" vs. "Recurring spend" as two rows of the Expected-vs-income comparison collapsed into one **Bills** row.                                                                                                                      | Recurring spend retired as a tracked tier (D0/D1) — Pizza and groceries are ordinary envelopes now, with no separate comparison line to keep.                                                                                                          |
-| 4   | The failed `drizzle-kit migrate` run (mid-implementation) surfaced that four `DROP CONSTRAINT` statements in the drop migration named constraints Postgres had already removed via `DROP TABLE ... CASCADE`, truncated past 63 bytes. | Root-caused and fixed by deleting the four redundant statements with an explanatory comment, then re-verified with a rollback-wrapped dry run before applying for real. Recorded here per the user's "write the cutover first, then migrate" decision. |
+| #   | Change                                                                                                                                                                                                                                | Why                                                                                                                                                                                                                                                                                              |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | The grid kept `useGridState` rather than moving to `GridToolbar` / `useModuleViews` (D6).                                                                                                                                             | Bill columns fit inside the existing show/hide + width + density controls without the heavier module-views machinery; that upgrade is real but separable, and nothing in this spec depended on it. Left as a follow-up, not silently dropped.                                                    |
+| 2   | Dropped **Pay period** from the hideable annualized trio, keeping only A year / Monthly (D8/Task 5).                                                                                                                                  | Per-paycheck figures need the payday cadence, which the grid's pure column module has no access to without threading payday data through every row; A year and Monthly already answer "what does this cost."                                                                                     |
+| 3   | "Bills" vs. "Recurring spend" as two rows of the Expected-vs-income comparison collapsed into one **Bills** row.                                                                                                                      | Recurring spend retired as a tracked tier (D0/D1) — Pizza and groceries are ordinary envelopes now, with no separate comparison line to keep.                                                                                                                                                    |
+| 4   | The failed `drizzle-kit migrate` run (mid-implementation) surfaced that four `DROP CONSTRAINT` statements in the drop migration named constraints Postgres had already removed via `DROP TABLE ... CASCADE`, truncated past 63 bytes. | Root-caused and fixed by deleting the four redundant statements with an explanatory comment, then re-verified with a rollback-wrapped dry run before applying for real. Recorded here per the user's "write the cutover first, then migrate" decision.                                           |
+| 5   | **Reopened after freezing.** D6 became three sections — Income, then Spending holding a Bills table and a Regular spending table — instead of one grid.                                                                               | The one-grid reading put six bill columns on every ordinary envelope, `—` on two thirds of the rows. The freeze itself was premature: acceptance was self-confirmed rather than confirmed by use.                                                                                                |
+| 6   | Payee claims now file a charge in the envelope that claims it (`applyPayeeClaims`), ahead of the taxonomy auto-map, and it **moves rows already filed elsewhere**.                                                                    | Task 6 required this and it was never implemented, which is why every bill read $0.00. Filling nulls only would have left the existing charges pooled forever. A hand placement is not yet distinguishable from an auto-mapped one, so the claim wins — recorded here rather than left implicit. |
+| 7   | `DataGrid` gained `autoHeight`, for a grid sharing a scrolling page with another.                                                                                                                                                     | The default fills its parent and scrolls internally, which is right for a grid that _is_ the page and collapses both to a single row when two are stacked.                                                                                                                                       |
 
 ---
 
