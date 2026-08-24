@@ -9,8 +9,10 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import type { OutlineNode } from "@/lib/tree/types";
 import type { GridRow } from "@/lib/tree/slice";
 import type { GridDensity } from "@/lib/settings/grid";
@@ -37,6 +39,7 @@ import { rowMatchesSearch, searchActive } from "@/lib/grid/search";
 import type { GridFilterValue } from "@/lib/grid/filterValue";
 import { groupMembers } from "@/lib/grid/groupMembers";
 import { sortRowsWithinGroups } from "@/lib/grid/sortRows";
+import { applyGroupCollapse, dropEmptyGroups } from "@/lib/grid/collapse";
 import { resolveCompactFields } from "@/lib/grid/compactFields";
 import {
   exportableColumns,
@@ -230,6 +233,12 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   exportCommands: registerExportCommands = true,
   commandScope,
   exportFocused = false,
+  preparedDisplay = false,
+  virtualize = false,
+  pendingRowIds,
+  preparedCounts,
+  loadExportRows,
+  onVisibleRange,
 }: {
   rows: GridRow<TRow>[];
   /**
@@ -279,6 +288,24 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
    * (`navigation.md`).
    */
   exportFocused?: boolean;
+  /**
+   * Rows are already the display list: do not filter, search, sort, or collapse them.
+   * Register uses this with a server-prepared index. Every other grid omits it.
+   */
+  preparedDisplay?: boolean;
+  /**
+   * Mount only the rows in view. Opt-in so Outline drag and other local grids keep
+   * mapping every row. Pair with `preparedDisplay` for the Register.
+   */
+  virtualize?: boolean;
+  /** Unloaded prepared rows render as skeletons and should request their block. */
+  pendingRowIds?: ReadonlySet<string>;
+  /** Host-supplied Showing N of M when `preparedDisplay` skips local narrowing. */
+  preparedCounts?: { shown: number; total: number };
+  /** Export/Copy load the complete result instead of whatever is cached in the viewport. */
+  loadExportRows?: () => Promise<NodeGridRow<TRow>[]>;
+  /** Display-index range currently on screen, for prefetching prepared blocks. */
+  onVisibleRange?: (start: number, end: number) => void;
   /**
    * Sort and filters are controlled when a host passes them, which is what lets a tab
    * persist them. Omitting both keeps the grid's own state, so a tab can adopt one at a
@@ -528,6 +555,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
    * a filter had tightened.
    */
   const passIds = useMemo(() => {
+    if (preparedDisplay) return null;
     if (!narrowing) return null;
 
     const pass = new Set<string>();
@@ -559,6 +587,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
     search,
     kinds,
     today,
+    preparedDisplay,
   ]);
 
   /**
@@ -566,12 +595,12 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
    * collapse both read from this: collapsing hides rows without un-asking the total.
    */
   const filteredRows = useMemo(() => {
-    if (!passIds) return rows;
+    if (preparedDisplay || !passIds) return rows;
     return dropEmptyGroups(
       rows.filter((row) => row.kind !== "node" || passIds.has(row.id)),
       passIds,
     );
-  }, [rows, passIds]);
+  }, [preparedDisplay, rows, passIds]);
 
   const summarizeGroups = groupSummary != null;
   const membersByGroup = useMemo(() => {
@@ -580,6 +609,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   }, [summarizeGroups, filteredRows]);
 
   const displayRows = useMemo(() => {
+    if (preparedDisplay) return filteredRows;
     let next = filteredRows;
 
     if (collapsedGroups && collapsedGroups.size > 0) {
@@ -602,20 +632,49 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
     if (keys.length > 0) next = sortRowsWithinGroups(next, keys);
 
     return next;
-  }, [filteredRows, columns, sorts, collapsedGroups]);
+  }, [preparedDisplay, filteredRows, columns, sorts, collapsedGroups]);
 
   /**
    * Counts for the host's "Showing N of M". `total` is the count before any narrowing, so
    * the denominator holds still as the user types — a fraction whose bottom half also moves
    * says nothing about how much has been filtered out.
    */
-  const shownCount = passIds ? passIds.size : narrowingNodeRows.length;
+  const shownCount =
+    preparedCounts?.shown ?? (passIds ? passIds.size : narrowingNodeRows.length);
+  const totalCount = preparedCounts?.total ?? narrowingNodeRows.length;
 
   // Layout, not paint: the chip bar's "Showing N of M" is above the rows. Reporting after
   // paint was a 0.1 CLS on the Outline when the first client frame still said 0 of 0.
   useLayoutEffect(() => {
-    onCountsChange?.({ shown: shownCount, total: narrowingNodeRows.length });
-  }, [onCountsChange, shownCount, narrowingNodeRows.length]);
+    onCountsChange?.({ shown: shownCount, total: totalCount });
+  }, [onCountsChange, shownCount, totalCount]);
+
+  const rowEstimate = compact ? 56 : density === "compact" ? 22 : 28;
+  // TanStack Virtual returns unstable function identities; Register is the only caller.
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const virtualizer = useVirtualizer({
+    count: virtualize ? displayRows.length : 0,
+    getScrollElement: () => gridRef.current,
+    estimateSize: () => rowEstimate,
+    overscan: 12,
+    getItemKey: (index) => displayRows[index]?.id ?? index,
+    enabled: virtualize,
+  });
+  const virtualItems = virtualizer.getVirtualItems();
+
+  useLayoutEffect(() => {
+    if (!virtualize || selectedId === null) return;
+    const index = displayRows.findIndex((row) => row.id === selectedId);
+    if (index >= 0) virtualizer.scrollToIndex(index, { align: "auto" });
+  }, [virtualize, selectedId, displayRows, virtualizer]);
+
+  useLayoutEffect(() => {
+    if (!virtualize || virtualItems.length === 0) return;
+    onVisibleRange?.(
+      virtualItems[0].index,
+      virtualItems[virtualItems.length - 1].index,
+    );
+  }, [virtualize, virtualItems, onVisibleRange]);
 
   // Taken from `rows`, not `displayRows`: collapsing an outer group removes the nested
   // headers beneath it from the visible list, and a toolbar working off that could only
@@ -651,9 +710,9 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
    * tripped `useRegisterCommands`' churn guard (Maximum update depth on Finances). The run
    * closure reads the latest snapshot from a ref instead — same shape as ViewPicker.
    */
-  const exportSnapshot = useRef({ columns, displayRows, ariaLabel });
+  const exportSnapshot = useRef({ columns, displayRows, ariaLabel, loadExportRows });
   useEffect(() => {
-    exportSnapshot.current = { columns, displayRows, ariaLabel };
+    exportSnapshot.current = { columns, displayRows, ariaLabel, loadExportRows };
   });
   const exportCommands = useMemo(() => {
     const downloads = gridExportCommands(() => {}).map((command) => {
@@ -662,27 +721,40 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
       return {
         ...command,
         run: () => {
-          const {
-            columns: visible,
-            displayRows: shown,
-            ariaLabel: label,
-          } = exportSnapshot.current;
-          const nodeRows = shown.filter((row): row is Row => row.kind === "node");
-          downloadTextFile(
-            exportFilename(label, format),
-            serializeGridExport(format, exportableColumns(visible), nodeRows),
-            exportMimeType(format),
-          );
+          void (async () => {
+            const {
+              columns: visible,
+              displayRows: shown,
+              ariaLabel: label,
+              loadExportRows: loadRows,
+            } = exportSnapshot.current;
+            const nodeRows = loadRows
+              ? await loadRows()
+              : shown.filter((row): row is Row => row.kind === "node");
+            downloadTextFile(
+              exportFilename(label, format),
+              serializeGridExport(format, exportableColumns(visible), nodeRows),
+              exportMimeType(format),
+            );
+          })();
         },
         alternate: {
           label: command.alternate?.label ?? "",
           title: command.alternate?.title,
           run: () => {
-            const { columns: visible, displayRows: shown } = exportSnapshot.current;
-            const nodeRows = shown.filter((row): row is Row => row.kind === "node");
-            void writeClipboardText(
-              serializeGridExport(format, exportableColumns(visible), nodeRows),
-            );
+            void (async () => {
+              const {
+                columns: visible,
+                displayRows: shown,
+                loadExportRows: loadRows,
+              } = exportSnapshot.current;
+              const nodeRows = loadRows
+                ? await loadRows()
+                : shown.filter((row): row is Row => row.kind === "node");
+              void writeClipboardText(
+                serializeGridExport(format, exportableColumns(visible), nodeRows),
+              );
+            })();
           },
         },
       };
@@ -693,11 +765,19 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
       return {
         ...command,
         run: () => {
-          const { columns: visible, displayRows: shown } = exportSnapshot.current;
-          const nodeRows = shown.filter((row): row is Row => row.kind === "node");
-          void writeClipboardText(
-            serializeGridExport(format, exportableColumns(visible), nodeRows),
-          );
+          void (async () => {
+            const {
+              columns: visible,
+              displayRows: shown,
+              loadExportRows: loadRows,
+            } = exportSnapshot.current;
+            const nodeRows = loadRows
+              ? await loadRows()
+              : shown.filter((row): row is Row => row.kind === "node");
+            void writeClipboardText(
+              serializeGridExport(format, exportableColumns(visible), nodeRows),
+            );
+          })();
         },
       };
     });
@@ -999,29 +1079,30 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
                 </div>
               ))
             : (() => {
-                // 1-based index among node rows only — group headers do not consume a number.
-                let rowNumber = 0;
+                const nodeNumberAt = (index: number) => {
+                  let number = 0;
+                  for (let i = 0; i <= index; i++) {
+                    if (displayRows[i]?.kind === "node") number += 1;
+                  }
+                  return number;
+                };
 
-                return displayRows.map((row) => {
+                const renderAt = (index: number, style?: CSSProperties) => {
+                  const row = displayRows[index];
+                  if (!row) return null;
                   const isSelected = selectedIds
                     ? selectedIds.has(row.id)
                     : row.id === selectedId;
-                  // Only the focus row scrolls into view — multi-select must not jump the
-                  // viewport to every newly-lit row as the range grows.
                   const isFocus = row.id === selectedId;
-
-                  if (row.kind === "group") {
-                    return (
+                  const pending = pendingRowIds?.has(row.id) ?? false;
+                  const body =
+                    row.kind === "group" ? (
                       <GroupHeader
-                        key={row.id}
                         row={row}
                         gridTemplate={gridTemplate}
-                        // +1 for the handle track so the header still spans the full row.
                         columnCount={columns.length + 1}
                         collapsed={collapsedGroups?.has(row.id) ?? false}
                         onToggle={() => onToggleGroup?.(row.id)}
-                        // Groups are drop targets only (never dragged). Outline category headers
-                        // use this so a root result area can change category by landing on a group.
                         drag={dragBindingFor(
                           row.id,
                           displayNodeIds,
@@ -1036,53 +1117,88 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
                             : undefined
                         }
                       />
+                    ) : pending ? (
+                      <div
+                        role="row"
+                        aria-label="Loading transaction"
+                        className="flex h-[var(--row-height)] items-center px-3"
+                      >
+                        <div className="h-3 w-full max-w-xl animate-pulse rounded bg-surface-raised" />
+                      </div>
+                    ) : compact ? (
+                      <CompactRow
+                        row={row}
+                        columnCtx={columnCtx}
+                        fields={compactFields}
+                        selected={isSelected}
+                        onSelect={selectRow}
+                        onOpenDetail={onOpenDetail ? openDetail : undefined}
+                        onLongPress={rowMenu ? openRowMenu : undefined}
+                        swipe={rowSwipe?.(row.id)}
+                        label={rowLabelFor(row, rowLabel)}
+                        expanded={rowExpansionFor(row, rowExpansion)}
+                      />
+                    ) : (
+                      <DataRow
+                        row={row}
+                        columns={columns}
+                        columnCtx={columnCtx}
+                        gridTemplate={gridTemplate}
+                        handleWidth={handleWidth}
+                        selected={isSelected}
+                        focused={isFocus}
+                        rowNumber={rowNumbers ? nodeNumberAt(index) : null}
+                        onSelect={selectRow}
+                        onOpenDetail={onOpenDetail ? openDetail : undefined}
+                        drag={dragBindingFor(
+                          row.id,
+                          displayNodeIds,
+                          rowExpansionFor(row, rowExpansion) === false &&
+                            rowDrag?.onExpand
+                            ? () => rowDrag.onExpand?.(row.id)
+                            : undefined,
+                        )}
+                        onContextMenu={rowMenu ? openRowMenu : undefined}
+                        rowLabel={rowLabel}
+                        rowExpansion={rowExpansion}
+                      />
                     );
-                  }
 
-                  rowNumber += 1;
-                  const number = rowNumber;
-
-                  return compact ? (
-                    <CompactRow
+                  if (!virtualize) return <div key={row.id}>{body}</div>;
+                  return (
+                    <div
                       key={row.id}
-                      row={row}
-                      columnCtx={columnCtx}
-                      fields={compactFields}
-                      selected={isSelected}
-                      onSelect={selectRow}
-                      onOpenDetail={onOpenDetail ? openDetail : undefined}
-                      onLongPress={rowMenu ? openRowMenu : undefined}
-                      swipe={rowSwipe?.(row.id)}
-                      label={rowLabelFor(row, rowLabel)}
-                      expanded={rowExpansionFor(row, rowExpansion)}
-                    />
-                  ) : (
-                    <DataRow
-                      key={row.id}
-                      row={row}
-                      columns={columns}
-                      columnCtx={columnCtx}
-                      gridTemplate={gridTemplate}
-                      handleWidth={handleWidth}
-                      selected={isSelected}
-                      focused={isFocus}
-                      rowNumber={rowNumbers ? number : null}
-                      onSelect={selectRow}
-                      onOpenDetail={onOpenDetail ? openDetail : undefined}
-                      drag={dragBindingFor(
-                        row.id,
-                        displayNodeIds,
-                        rowExpansionFor(row, rowExpansion) === false &&
-                          rowDrag?.onExpand
-                          ? () => rowDrag.onExpand?.(row.id)
-                          : undefined,
-                      )}
-                      onContextMenu={rowMenu ? openRowMenu : undefined}
-                      rowLabel={rowLabel}
-                      rowExpansion={rowExpansion}
-                    />
+                      data-index={index}
+                      ref={virtualizer.measureElement}
+                      style={style}
+                    >
+                      {body}
+                    </div>
                   );
-                });
+                };
+
+                if (!virtualize) {
+                  return displayRows.map((_, index) => renderAt(index));
+                }
+                return (
+                  <div
+                    style={{
+                      height: virtualizer.getTotalSize(),
+                      width: "100%",
+                      position: "relative",
+                    }}
+                  >
+                    {virtualItems.map((virtualRow) =>
+                      renderAt(virtualRow.index, {
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        width: "100%",
+                        transform: `translateY(${virtualRow.start}px)`,
+                      }),
+                    )}
+                  </div>
+                );
               })()}
         </div>
 
@@ -1598,56 +1714,3 @@ const GroupHeader = memo(function GroupHeader({
  * row is not a rounding error, it is a claim the user can see is false. A count beside a
  * filtered list has to be the count of that list.
  */
-function dropEmptyGroups<TRow>(
-  rows: GridRow<TRow>[],
-  passIds: ReadonlySet<string>,
-): GridRow<TRow>[] {
-  const out: GridRow<TRow>[] = [];
-
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    if (row.kind === "node") {
-      if (passIds.has(row.id)) out.push(row);
-      continue;
-    }
-
-    // Everything under this header, up to the next header at the same or shallower depth.
-    let surviving = 0;
-    for (let j = i + 1; j < rows.length; j++) {
-      const next = rows[j];
-      if (next.kind === "group" && next.depth <= row.depth) break;
-      if (next.kind === "node" && passIds.has(next.id)) surviving += 1;
-    }
-
-    if (surviving > 0) out.push({ ...row, count: surviving });
-  }
-
-  return out;
-}
-
-function applyGroupCollapse<TRow>(
-  rows: GridRow<TRow>[],
-  collapsed: Set<string>,
-): GridRow<TRow>[] {
-  const out: GridRow<TRow>[] = [];
-  let hideUntilDepth: number | null = null;
-
-  for (const row of rows) {
-    if (hideUntilDepth !== null) {
-      if (row.kind === "group" && row.depth <= hideUntilDepth) {
-        hideUntilDepth = null;
-      } else if (
-        row.kind === "node" ||
-        (row.kind === "group" && row.depth > hideUntilDepth)
-      ) {
-        continue;
-      }
-    }
-
-    out.push(row);
-    if (row.kind === "group" && collapsed.has(row.id)) {
-      hideUntilDepth = row.depth;
-    }
-  }
-  return out;
-}

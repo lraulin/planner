@@ -8,23 +8,20 @@ import {
   useSyncExternalStore,
   useTransition,
 } from "react";
-import type { GridRow } from "@/lib/tree/slice";
 import { formatUsd } from "@/lib/finances/money";
-import {
-  collapsedYearGroupIds,
-  FINANCE_GROUP_BY_VALUES,
-  groupTransactions,
-} from "@/lib/finances/grouping";
+import { FINANCE_GROUP_BY_VALUES } from "@/lib/finances/grouping";
 import type { FinanceAccountRow, TransactionListRow } from "@/lib/finances/types";
 import {
   claimedPayeeMap,
   trackAsBillRefusal,
   type ClaimedPayee,
 } from "@/lib/finances/registerBillDraft";
+import { parseRegisterQuery } from "@/lib/finances/registerQuery";
+import type { RegisterPrepared } from "@/lib/finances/registerQuery";
 import {
   deleteTransactionAction,
+  getTransactionAction,
   listAccountsAction,
-  listTransactionsAction,
   setTransactionBudgetCategoryAction,
   upcomingBillsAction,
 } from "@/app/finances/actions";
@@ -47,12 +44,10 @@ import { GridToolbar } from "@/components/grid/GridToolbar";
 import { useModuleViews } from "@/components/grid/useModuleViews";
 import type { GridDefaults } from "@/components/grid/useGridState";
 import { optionsFilter } from "@/lib/grid/customFilter";
-import { categoryEligibleIds } from "@/lib/finances/categoryEligibility";
-import { effectiveFlow } from "@/lib/finances/analytics";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useNavigableIds } from "@/components/grid/useNavigableIds";
-import { collectDistinctValues } from "@/lib/grid/distinct";
 import { isTypingTarget } from "@/lib/keyboard";
+import { useRegisterSource } from "./useRegisterSource";
 import { useSearchParams } from "next/navigation";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { FinanceImportPanel } from "./FinanceImportPanel";
@@ -89,7 +84,6 @@ function viewDefaults(
     sorts: [{ columnId: "date", direction: "desc" }],
     // Year then month so a skipped statement is a missing header, not a hole in a flat list.
     groupBy: ["year", "month"],
-    // Prior years start collapsed so six years of history is not 7,000 DOM rows on open.
     collapsedGroups: collapsedYears,
     filters:
       viewId === "uncategorized"
@@ -167,7 +161,7 @@ function AccountBalances({ accounts }: { accounts: FinanceAccountRow[] }) {
 }
 
 /**
- * The transaction register.
+ * The transaction
  *
  * Every transaction the user has is loaded and the shared grid does the narrowing — its
  * date filter, its account set-filter and its search, all of which persist per user through
@@ -176,7 +170,7 @@ function AccountBalances({ accounts }: { accounts: FinanceAccountRow[] }) {
  * edits patch the in-memory row; reloading the list on those paths is a freeze.
  */
 export function FinancesView({
-  initialTransactions,
+  initialPrepared,
   initialAccounts,
   initialClaimed,
   envelopes,
@@ -185,8 +179,9 @@ export function FinancesView({
   payees,
   tags,
   todayKey,
+  defaultCollapsedGroups,
 }: {
-  initialTransactions: TransactionListRow[];
+  initialPrepared: RegisterPrepared;
   initialAccounts: FinanceAccountRow[];
   initialClaimed: readonly ClaimedPayee[];
   /** Budget envelopes, in budget order. Empty until a budget exists. */
@@ -199,11 +194,11 @@ export function FinancesView({
   tags: readonly { tag: string; color: string | null }[];
   /** Calendar today, so year-collapse defaults are available on the first paint. */
   todayKey: string;
+  defaultCollapsedGroups: string[];
 }) {
-  const [rows, setRows] = useState(initialTransactions);
   const [accounts, setAccounts] = useState(initialAccounts);
   const [claimed, setClaimed] = useState(initialClaimed);
-  const [seenServerRows, setSeenServerRows] = useState(initialTransactions);
+  const [seenPrepared, setSeenPrepared] = useState(initialPrepared);
   const [seenClaimed, setSeenClaimed] = useState(initialClaimed);
   const [billRowId, setBillRowId] = useState<string | null>(null);
   const [newEnvelope, setNewEnvelope] = useState<{
@@ -211,8 +206,6 @@ export function FinancesView({
     kind: Exclude<EnvelopeKind, "bill">;
   } | null>(null);
   const [createdEnvelopes, setCreatedEnvelopes] = useState<EnvelopePickerOption[]>([]);
-  const [counts, setCounts] = useState({ shown: 0, total: 0 });
-  const [groupIds, setGroupIds] = useState<readonly string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<TransactionListRow | null>(null);
   const [upcoming, setUpcoming] = useState(initialUpcoming);
@@ -235,22 +228,14 @@ export function FinancesView({
   // drawer wrote `?detail=`.
   const initialTag = useSearchParams().get("tag");
 
-  if (initialTransactions !== seenServerRows || initialClaimed !== seenClaimed) {
-    setSeenServerRows(initialTransactions);
+  if (initialPrepared !== seenPrepared || initialClaimed !== seenClaimed) {
+    setSeenPrepared(initialPrepared);
     setSeenClaimed(initialClaimed);
-    setRows(initialTransactions);
     setAccounts(initialAccounts);
     setClaimed(initialClaimed);
   }
 
-  const collapsedYears = useMemo(
-    () =>
-      collapsedYearGroupIds(
-        initialTransactions.map((row) => row.transactionDate),
-        todayKey.slice(0, 4),
-      ),
-    [initialTransactions, todayKey],
-  );
+  const collapsedYears = defaultCollapsedGroups;
   const defaultsFor = useCallback(
     (viewId: string) => viewDefaults(viewId, initialTag, collapsedYears),
     [initialTag, collapsedYears],
@@ -279,52 +264,54 @@ export function FinancesView({
     [accounts],
   );
 
-  const eligibleIds = useMemo(
+  const registerQuery = useMemo(
     () =>
-      categoryEligibleIds(
-        rows.map((row) => ({
-          id: row.id,
-          accountId: row.accountId,
-          transactionDate: row.transactionDate,
-          transferGroupId: row.transferGroupId ?? null,
-          effectiveFlow: effectiveFlow(row),
-        })),
-        offBudgetAccountIds,
-        budgetStartMonth,
-      ),
-    [rows, offBudgetAccountIds, budgetStartMonth],
-  );
-  const viewRows = useMemo(
-    () =>
-      rows.filter((row) => {
-        if (views.base === "uncategorized") {
-          return eligibleIds.has(row.id) && row.budgetCategoryId === null;
-        }
-        if (views.base === "tag" && initialTag) {
-          return (row.tags ?? []).includes(initialTag);
-        }
-        return true;
+      parseRegisterQuery({
+        viewId: views.base,
+        tag: initialTag,
+        search: gridState.search,
+        filters: gridState.filters,
+        advancedFilter: gridState.advancedFilter,
+        sorts: gridState.sorts,
+        groupBy: gridState.groupBy,
+        collapsedGroups: [...gridState.collapsedGroups],
+        visibleColumnIds: gridState.columns.map((column) => column.id),
+        today: today ?? todayKey,
       }),
-    [rows, views.base, eligibleIds, initialTag],
+    [
+      views.base,
+      initialTag,
+      gridState.search,
+      gridState.filters,
+      gridState.advancedFilter,
+      gridState.sorts,
+      gridState.groupBy,
+      gridState.collapsedGroups,
+      gridState.columns,
+      today,
+      todayKey,
+    ],
   );
-  const gridRows: GridRow<TransactionListRow>[] = useMemo(
-    () =>
-      groupTransactions(
-        viewRows.map((row) => ({ ...row, budgetEligible: eligibleIds.has(row.id) })),
-        gridState.groupBy,
-      ),
-    [viewRows, eligibleIds, gridState.groupBy],
-  );
-  const distinctValues = useMemo(
-    () =>
-      collectDistinctValues(
-        financeColumns,
-        gridRows.flatMap((row) => (row.kind === "node" ? [row] : [])),
-      ),
-    [gridRows],
-  );
-  const rowIds = useMemo(() => rows.map((row) => row.id), [rows]);
-  const { order, onIdsChange } = useNavigableIds(rowIds);
+  const register = useRegisterSource({
+    initial: initialPrepared,
+    query: registerQuery,
+  });
+  const {
+    index,
+    gridRows,
+    pendingRowIds,
+    distinctValues,
+    counts,
+    groupIds,
+    error: registerError,
+    onVisibleRange,
+    patchRow,
+    reload,
+    loadExportRows,
+    rowById,
+    putRow,
+  } = register;
+  const { order, onIdsChange } = useNavigableIds(index.nodeIds);
   const multi = useMultiSelect(order, null);
   const { selectedId, selectedIds, select, move } = multi;
 
@@ -338,23 +325,15 @@ export function FinancesView({
 
   const refresh = useCallback(() => {
     startTransition(async () => {
-      const [transactions, accountRows] = await Promise.all([
-        listTransactionsAction(),
-        listAccountsAction(),
-      ]);
-      if (!transactions.ok) {
-        setError(transactions.error);
-        return;
-      }
-      setRows(transactions.data);
-      // Balances move whenever rows do, so they are refreshed together or they disagree.
+      await reload();
+      const accountRows = await listAccountsAction();
       if (accountRows.ok) setAccounts(accountRows.data);
       if (today) {
         const preview = await upcomingBillsAction(today, UPCOMING_HORIZON_DAYS);
         if (preview.ok) setUpcoming(preview.data);
       }
     });
-  }, [today]);
+  }, [reload, today]);
 
   const closeImport = useCallback(() => {
     closeFileImport();
@@ -371,15 +350,6 @@ export function FinancesView({
   const envelopeNameById = useMemo(
     () => new Map(envelopeCatalog.map((envelope) => [envelope.id, envelope.name])),
     [envelopeCatalog],
-  );
-
-  const patchRow = useCallback(
-    (transactionId: string, patch: Partial<TransactionListRow>) => {
-      setRows((current) =>
-        current.map((row) => (row.id === transactionId ? { ...row, ...patch } : row)),
-      );
-    },
-    [],
   );
 
   const claimedByPayee = useMemo(() => claimedPayeeMap(claimed), [claimed]);
@@ -401,16 +371,25 @@ export function FinancesView({
         if (!result.ok) {
           setError(result.error ?? "Could not set the envelope.");
           refresh();
+          return;
+        }
+        if (
+          registerQuery.groupBy.includes("category") ||
+          registerQuery.filters.category ||
+          registerQuery.sorts.some((sort) => sort.columnId === "category") ||
+          registerQuery.search.trim() !== ""
+        ) {
+          void reload();
         }
       });
     },
-    [envelopeNameById, patchRow, refresh],
+    [envelopeNameById, refresh, patchRow, reload, registerQuery],
   );
 
   const onCreateEnvelope = useCallback(
     (transactionId: string, kind: EnvelopeKind) => {
       if (kind === "bill") {
-        const row = rows.find((entry) => entry.id === transactionId);
+        const row = rowById(transactionId) ?? undefined;
         const refusal = trackAsBillRefusal(row, claimedByPayee);
         if (refusal) {
           setError(refusal);
@@ -421,7 +400,7 @@ export function FinancesView({
       }
       setNewEnvelope({ transactionId, kind });
     },
-    [rows, claimedByPayee],
+    [rowById, claimedByPayee],
   );
 
   const tagColors = useMemo(
@@ -448,6 +427,13 @@ export function FinancesView({
     ],
   );
 
+  useEffect(() => {
+    if (!openId || rowById(openId)) return;
+    void getTransactionAction(openId).then((result) => {
+      if (result.ok && result.data) putRow(result.data);
+    });
+  }, [openId, rowById, putRow]);
+
   const openDrawer = useCallback((id: string) => setOpenId(id), [setOpenId]);
   const closeDrawer = useCallback(() => {
     // Do not refresh here. The Register is every transaction the user has; reloading
@@ -458,10 +444,10 @@ export function FinancesView({
 
   const requestDelete = useCallback(
     (id: string) => {
-      const row = rows.find((entry) => entry.id === id);
+      const row = rowById(id);
       if (row) setPendingDelete(row);
     },
-    [rows],
+    [rowById],
   );
 
   const confirmDelete = useCallback(() => {
@@ -482,7 +468,7 @@ export function FinancesView({
 
   const capabilitiesFor = useCallback(
     (rowId: string | null, count: number) => {
-      const row = rowId ? rows.find((entry) => entry.id === rowId) : undefined;
+      const row = rowId ? (rowById(rowId) ?? undefined) : undefined;
       const cannotTrack =
         rowId === null ? "Select a row first" : trackAsBillRefusal(row, claimedByPayee);
       const cannotCreateRule = createRuleRefusal(row);
@@ -533,7 +519,7 @@ export function FinancesView({
         ],
       });
     },
-    [rows, claimedByPayee, openImport, openDrawer, requestDelete],
+    [rowById, claimedByPayee, openImport, openDrawer, requestDelete],
   );
 
   const commandCapabilities = useMemo(
@@ -563,7 +549,7 @@ export function FinancesView({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [openId, ruleRowId, pendingDelete, move]);
 
-  const ruleSource = ruleRowId ? rows.find((row) => row.id === ruleRowId) : undefined;
+  const ruleSource = ruleRowId ? rowById(ruleRowId) : undefined;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
@@ -573,7 +559,7 @@ export function FinancesView({
         allColumns={financeColumns}
         distinctValues={distinctValues}
         counts={counts}
-        error={error}
+        error={error ?? registerError}
         views={views}
         commandCapabilities={commandCapabilities}
         groupDimensions={FINANCE_GROUP_BY_VALUES}
@@ -625,7 +611,12 @@ export function FinancesView({
         advancedFilter={gridState.advancedFilter}
         search={gridState.search}
         distinctValues={distinctValues}
-        onCountsChange={setCounts}
+        preparedCounts={counts}
+        preparedDisplay
+        virtualize={isClient}
+        pendingRowIds={pendingRowIds}
+        onVisibleRange={onVisibleRange}
+        loadExportRows={loadExportRows}
         onNavigableIdsChange={onIdsChange}
         widths={gridState.widths}
         onResizeColumn={gridState.setWidth}
@@ -633,7 +624,6 @@ export function FinancesView({
         columnControls={gridState.columnControls}
         collapsedGroups={gridState.collapsedGroups}
         onToggleGroup={gridState.toggleGroup}
-        onGroupIdsChange={setGroupIds}
         density={gridState.density}
         empty={
           !isClient ? (
@@ -669,12 +659,12 @@ export function FinancesView({
 
       {billRowId && (
         <TrackAsBillDialog
-          rows={rows}
           selectedId={billRowId}
           onClose={() => setBillRowId(null)}
           onSaved={(entry) => {
             setClaimed((current) => [...current, entry]);
             setBillRowId(null);
+            void reload();
           }}
         />
       )}
@@ -695,7 +685,7 @@ export function FinancesView({
       )}
       <TransactionDrawer
         transactionId={openId}
-        row={openId ? (rows.find((row) => row.id === openId) ?? null) : null}
+        row={openId ? rowById(openId) : null}
         envelopes={envelopeCatalog}
         budgetStartMonth={budgetStartMonth}
         offBudgetAccountIds={offBudgetAccountIds}

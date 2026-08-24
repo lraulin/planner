@@ -1,11 +1,16 @@
 "use client";
 
-import type { ColumnDef } from "@/components/grid/columns";
+import type { ColumnDef, NodeGridRow } from "@/components/grid/columns";
 import { DateText } from "@/components/date/DateText";
 import { effectiveFlow, effectiveMerchant } from "@/lib/finances/analytics";
 import { flowLabel } from "@/lib/finances/flowLabels";
 import { formatUsd } from "@/lib/finances/money";
 import type { TransactionListRow } from "@/lib/finances/types";
+import {
+  REGISTER_VISIBLE_COLUMN_IDS,
+  registerFields,
+  type RegisterFieldId,
+} from "@/lib/finances/registerFields";
 import { envelopeAssignmentRefusal } from "@/lib/finances/budget/autoMap";
 import type { EnvelopePickerOption } from "@/lib/finances/budget/groupEnvelopeOptions";
 import type { EnvelopeKind } from "@/db/schema";
@@ -25,19 +30,23 @@ export type FinanceColumnCtx = {
   tagColors: Readonly<Record<string, string | null>>;
 };
 
-export const FINANCE_COLUMN_IDS = [
-  "date",
-  "account",
-  "description",
-  "category",
-  "tags",
-  "flow",
-  "sourceCategory",
-  "amount",
-  "posted",
-  "balance",
-  "notes",
-] as const;
+export const FINANCE_COLUMN_IDS = REGISTER_VISIBLE_COLUMN_IDS;
+
+function accessors(id: RegisterFieldId) {
+  const field = registerFields[id];
+  return {
+    filterKind: field.filterKind,
+    filterValue: field.filterValue
+      ? (row: NodeGridRow<TransactionListRow>) => field.filterValue!(row.node)
+      : undefined,
+    filterValues: field.filterValues
+      ? (row: NodeGridRow<TransactionListRow>) => field.filterValues!(row.node)
+      : undefined,
+    sortValue: field.sortValue
+      ? (row: NodeGridRow<TransactionListRow>) => field.sortValue!(row.node)
+      : undefined,
+  };
+}
 
 function Text({ value, muted = true }: { value: string; muted?: boolean }) {
   return (
@@ -90,9 +99,7 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, TransactionListRow>[] =
     label: "Date",
     width: "7rem",
     hideable: false,
-    filterKind: "date",
-    filterValue: (row) => row.node.transactionDate,
-    sortValue: (row) => row.node.transactionDate,
+    ...accessors("date"),
     compact: "meta",
     render: (row) => (
       <DateText
@@ -105,9 +112,7 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, TransactionListRow>[] =
     id: "account",
     label: "Account",
     width: "minmax(9rem,0.7fr)",
-    filterKind: "enum",
-    filterValue: (row) => row.node.accountName,
-    sortValue: (row) => row.node.accountName.toLowerCase(),
+    ...accessors("account"),
     compact: "meta",
     render: (row) => <Text value={row.node.accountName} />,
   },
@@ -116,9 +121,7 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, TransactionListRow>[] =
     label: "Description",
     width: "minmax(14rem,1.6fr)",
     hideable: false,
-    filterKind: "text",
-    filterValue: (row) => row.node.description || null,
-    sortValue: (row) => row.node.description.toLowerCase(),
+    ...accessors("description"),
     compact: "primary",
     render: (row) => (
       <span
@@ -139,9 +142,7 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, TransactionListRow>[] =
     //
     // Falls back to the recomputed name while a freshly imported row has no payee yet, exactly
     // as `effectiveMerchant` does, so this column is never blank on a row that has a merchant.
-    filterKind: "enum",
-    filterValue: (row) => effectiveMerchant(row.node) || null,
-    sortValue: (row) => effectiveMerchant(row.node).toLowerCase(),
+    ...accessors("payee"),
     compact: "meta",
     render: (row) => (
       <Text value={effectiveMerchant(row.node)} muted={row.node.payeeId === null} />
@@ -151,11 +152,7 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, TransactionListRow>[] =
     id: "category",
     label: "Category",
     width: "minmax(8rem,0.6fr)",
-    filterKind: "enum",
-    // "Unassigned" rather than blank, so the backlog is a value you can filter *to*. It is
-    // the set the Budget page counts, and finding it is the whole workflow.
-    filterValue: (row) => row.node.budgetCategoryName ?? "Uncategorized",
-    sortValue: (row) => (row.node.budgetCategoryName ?? "").toLowerCase(),
+    ...accessors("category"),
     compact: "meta",
     compactTextWithCtx: (row, ctx) =>
       envelopeAssignmentRefusal({
@@ -199,9 +196,7 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, TransactionListRow>[] =
     id: "tags",
     label: "Tags",
     width: "minmax(10rem,0.8fr)",
-    filterKind: "tags",
-    filterValues: (row) => row.node.tags ?? [],
-    sortValue: (row) => (row.node.tags ?? []).join("\u0000"),
+    ...accessors("tags"),
     compact: "meta",
     compactText: (row) => (row.node.tags ?? []).map((tag) => `#${tag}`).join(" "),
     render: (row, ctx) => (
@@ -223,9 +218,7 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, TransactionListRow>[] =
     id: "flow",
     label: "Flow",
     width: "minmax(9rem,0.6fr)",
-    filterKind: "enum",
-    filterValue: (row) => flowLabel(effectiveFlow(row.node)),
-    sortValue: (row) => flowLabel(effectiveFlow(row.node)),
+    ...accessors("flow"),
     compact: "hidden",
     render: (row) => (
       <Text
@@ -238,9 +231,7 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, TransactionListRow>[] =
     id: "sourceCategory",
     label: "Bank category",
     width: "minmax(8rem,0.6fr)",
-    filterKind: "enum",
-    filterValue: (row) => row.node.sourceCategory || null,
-    sortValue: (row) => row.node.sourceCategory.toLowerCase(),
+    ...accessors("sourceCategory"),
     compact: "hidden",
     render: (row) => <Text value={row.node.sourceCategory} />,
   },
@@ -250,9 +241,7 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, TransactionListRow>[] =
     width: "7.5rem",
     align: "right",
     hideable: false,
-    filterKind: "text",
-    filterValue: (row) => formatUsd(row.node.amountCents),
-    sortValue: (row) => row.node.amountCents,
+    ...accessors("amount"),
     compact: "meta",
     // Not `strong` while pending: the figure is provisional, and rendering it with the same
     // weight as a settled amount invites it to be added up as though it were final.
@@ -262,13 +251,7 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, TransactionListRow>[] =
     id: "posted",
     label: "Posted",
     width: "7rem",
-    filterKind: "date",
-    // Pending rows filter and sort as "Pending" rather than as an empty cell, so the
-    // register can be narrowed to them without a column of its own.
-    filterValue: (row) => (row.node.pending ? "Pending" : row.node.postedDate),
-    sortValue: (row) => (row.node.pending ? "\uffff" : row.node.postedDate),
-    // Visible on a phone, unlike the posted date itself: on a small screen "has this landed
-    // yet" is the question, and the exact posting day is not.
+    ...accessors("posted"),
     compact: "meta",
     render: (row) =>
       row.node.pending ? (
@@ -294,12 +277,7 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, TransactionListRow>[] =
     width: "7.5rem",
     align: "right",
     // Only the bank feeds report this, so it is blank on every card row.
-    filterKind: "text",
-    filterValue: (row) =>
-      row.node.balanceAfterCents === null
-        ? null
-        : formatUsd(row.node.balanceAfterCents),
-    sortValue: (row) => row.node.balanceAfterCents,
+    ...accessors("balance"),
     compact: "hidden",
     render: (row) => <Amount cents={row.node.balanceAfterCents} />,
   },
@@ -307,9 +285,7 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, TransactionListRow>[] =
     id: "notes",
     label: "Notes",
     width: "minmax(10rem,1fr)",
-    filterKind: "text",
-    filterValue: (row) => row.node.notes || null,
-    sortValue: (row) => row.node.notes.toLowerCase(),
+    ...accessors("notes"),
     compact: "hidden",
     render: (row) => <Text value={row.node.notes} />,
   },

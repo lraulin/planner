@@ -39,6 +39,7 @@
     "@fullcalendar/interaction": "^6.1.21",
     "@fullcalendar/react": "^6.1.21",
     "@fullcalendar/timegrid": "^6.1.21",
+    "@tanstack/react-virtual": "^3.14.10",
     "better-auth": "^1.6.25",
     "d3-sankey": "^0.12.3",
     "drizzle-orm": "^0.45.2",

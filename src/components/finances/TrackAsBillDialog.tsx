@@ -1,20 +1,15 @@
 "use client";
 
-import { useId, useMemo, useState, useTransition } from "react";
+import { useEffect, useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ModalShell } from "@/components/detail/ModalShell";
 import { useToday } from "@/components/grid/useToday";
 import {
-  isolatePayeeForBillAction,
-  setRecurringBillAction,
+  loadTrackAsBillDraftAction,
+  trackTransactionAsBillAction,
 } from "@/app/finances/actions";
 import { nextDueFrom, type Cadence } from "@/lib/finances/recurringBills";
-import {
-  trackAsBillDraft,
-  type ClaimedPayee,
-  type TrackAsBillDraft,
-} from "@/lib/finances/registerBillDraft";
-import type { TransactionListRow } from "@/lib/finances/types";
+import type { ClaimedPayee, TrackAsBillDraft } from "@/lib/finances/registerBillDraft";
 import { CadenceSelect } from "./CadenceSelect";
 
 const FIELD =
@@ -27,22 +22,42 @@ const FIELD =
  * success signal; a refused write stays here with the error.
  */
 export function TrackAsBillDialog({
-  rows,
   selectedId,
   onClose,
   onSaved,
 }: {
-  rows: readonly TransactionListRow[];
   selectedId: string;
   onClose: () => void;
   onSaved: (claimed: ClaimedPayee) => void;
 }) {
   const todayKey = useToday();
-  const seed = useMemo(
-    () => (todayKey === null ? null : trackAsBillDraft(rows, selectedId, todayKey)),
-    [rows, selectedId, todayKey],
-  );
-  if (seed === null || todayKey === null) return null;
+  const [seed, setSeed] = useState<TrackAsBillDraft | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  useEffect(() => {
+    if (todayKey === null) return;
+    void loadTrackAsBillDraftAction(selectedId, todayKey).then((result) => {
+      if (!result.ok) {
+        setLoadError(result.error);
+        return;
+      }
+      setSeed(result.data);
+    });
+  }, [selectedId, todayKey]);
+  if (todayKey === null) return null;
+  if (seed === null) {
+    return (
+      <ModalShell
+        open
+        onClose={onClose}
+        labelledBy="track-as-bill-loading"
+        width="max-w-md"
+      >
+        <div className="p-5 text-[0.8125rem] text-ink-muted">
+          {loadError ?? "Reading this merchant’s charges…"}
+        </div>
+      </ModalShell>
+    );
+  }
   return (
     <TrackAsBillForm
       seed={seed}
@@ -90,30 +105,23 @@ function TrackAsBillForm({
           if (name.trim() === "") return;
           setError(null);
           startTransition(async () => {
-            const isolated = await isolatePayeeForBillAction(seed.transactionId);
-            if (!isolated.ok || !isolated.id) {
-              setError(
-                isolated.ok
-                  ? "Could not assign a payee for this merchant."
-                  : isolated.error,
-              );
-              return;
-            }
-            const payeeId = isolated.id;
-            const result = await setRecurringBillAction({
+            const result = await trackTransactionAsBillAction(seed.transactionId, {
               name: name.trim(),
-              payeeIds: [payeeId],
               cadence,
               expectedCents: cents > 0 ? cents : null,
               anchorDate: scheduled ? next || null : null,
               scheduled,
             });
-            if (!result.ok) {
-              setError(result.error);
+            if (!result.ok || !result.data) {
+              setError(
+                result.ok
+                  ? "Could not assign a payee for this merchant."
+                  : result.error,
+              );
               return;
             }
             onSaved({
-              payeeId,
+              payeeId: result.data.payeeId,
               merchant: seed.merchant,
               name: name.trim(),
             });
