@@ -158,7 +158,11 @@ export function InsightsView({
 
   const bucketNoun = view.axis === "pay-period" ? "pay period" : "month";
   const filterActive =
-    view.accounts.length + view.categories.length + view.merchants.length > 0;
+    view.accounts.length +
+      view.categories.length +
+      view.merchants.length +
+      view.tags.length >
+    0;
 
   if (rows.length === 0) {
     return (
@@ -202,6 +206,12 @@ export function InsightsView({
             selected={view.merchants}
             onChange={(merchants) => patch((current) => ({ ...current, merchants }))}
           />
+          <FilterSelect
+            label="Tags"
+            options={filterOptions.tags.map((tag) => ({ id: tag, label: `#${tag}` }))}
+            selected={view.tags}
+            onChange={(tags) => patch((current) => ({ ...current, tags }))}
+          />
           <button
             type="button"
             onClick={() =>
@@ -210,6 +220,7 @@ export function InsightsView({
                 accounts: [],
                 categories: [],
                 merchants: [],
+                tags: [],
               }))
             }
             className="min-h-tap text-[0.75rem] text-ink-muted hover:text-ink md:min-h-0"
@@ -291,6 +302,12 @@ export function InsightsView({
           selected={view.merchants}
           onChange={(merchants) => patch((current) => ({ ...current, merchants }))}
         />
+        <FilterSelect
+          label="Tags"
+          options={filterOptions.tags.map((tag) => ({ id: tag, label: `#${tag}` }))}
+          selected={view.tags}
+          onChange={(tags) => patch((current) => ({ ...current, tags }))}
+        />
         <label className="flex min-h-tap cursor-pointer items-center gap-1.5 text-[0.75rem] text-ink-muted md:min-h-0">
           <input
             type="checkbox"
@@ -314,6 +331,7 @@ export function InsightsView({
                 accounts: [],
                 categories: [],
                 merchants: [],
+                tags: [],
               }))
             }
             className="min-h-tap text-[0.75rem] text-ink-muted hover:text-ink md:min-h-0"

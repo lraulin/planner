@@ -4,6 +4,7 @@ import { compileRules, type StoredRule } from "./compile";
 import type { RuleRowInput } from "./conditions";
 import { applyRules } from "./match";
 import { isEmptySeedPlan, planRuleSeed } from "./seed";
+import { legacyCategoryTag } from "../tags";
 
 /** The drafts as `compileRules` would see them once written. */
 function seededRules(): StoredRule[] {
@@ -74,7 +75,7 @@ describe("planRuleSeed", () => {
       { op: "set", field: "flow", value: "spend" },
     ]);
     expect(byId.get("interest-earned")?.actions).toEqual([
-      { op: "set", field: "category", value: "Fees & Interest" },
+      { op: "add-tag", value: "fees-and-interest" },
       { op: "set", field: "flow", value: "interest_fee" },
       { op: "name-payee", value: "Interest Paid" },
     ]);
@@ -138,7 +139,10 @@ describe("the seeded corpus reproduces the starter corpus", () => {
       const seeded = applyRules(rules, rowFor(merchant));
 
       expect(seeded.ruleId, merchant).toBe(starter?.id ?? null);
-      expect(seeded.category, merchant).toBe(starter?.category ?? null);
+      expect(seeded.category, merchant).toBeNull();
+      expect(seeded.tags, merchant).toEqual(
+        starter?.category ? [legacyCategoryTag(starter.category)] : [],
+      );
       expect(seeded.flow, merchant).toBe(starter?.flow ?? null);
       expect(seeded.payeeName, merchant).toBe(starter?.merchant ?? null);
     }

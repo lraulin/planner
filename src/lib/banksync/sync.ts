@@ -7,7 +7,10 @@
  * *can* be decided without one has been pushed out of this file on purpose.
  */
 
-import { finalizeTransactionIngestion } from "@/lib/finances/ingestion";
+import {
+  finalizeTransactionIngestion,
+  transactionIngestionWatermark,
+} from "@/lib/finances/ingestion";
 import { resolveScrapedPending } from "@/lib/finances/scrapePending";
 import {
   BankReauthRequiredError,
@@ -215,6 +218,7 @@ async function syncOne(
  * needing re-setup must not stop another from updating.
  */
 export async function syncAll(userId: string): Promise<SyncResult> {
+  const syncStartedAt = await transactionIngestionWatermark();
   const connections = await loadConnectionsForSync(userId);
   if (connections.length === 0) return { connections: [], reclassified: false };
 
@@ -228,7 +232,12 @@ export async function syncAll(userId: string): Promise<SyncResult> {
   const inserted = statuses.some(
     (status) => status.state === "ok" && status.counts.inserted > 0,
   );
-  if (inserted) await finalizeTransactionIngestion(userId, { forceReclassify: true });
+  if (inserted) {
+    await finalizeTransactionIngestion(userId, {
+      forceReclassify: true,
+      applyRulesSince: syncStartedAt,
+    });
+  }
 
   return { connections: statuses, reclassified: inserted };
 }

@@ -6,6 +6,7 @@ import {
   type FilterJoin,
   type FilterOperator,
 } from "./customFilter";
+import type { GridFilterValue } from "./filterValue";
 
 /**
  * The grid's **advanced filter**: one And/Or expression whose conditions may each name a
@@ -64,7 +65,7 @@ export function crossFilterActive(filter: CrossColumnFilter | null): boolean {
  * left to say, so the row passes.
  */
 export function rowPassesCrossFilter(
-  values: Record<string, string | null>,
+  values: Record<string, GridFilterValue>,
   filter: CrossColumnFilter | null,
   kinds: Record<string, FilterKind | undefined>,
 ): boolean {

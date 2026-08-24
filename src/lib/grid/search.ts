@@ -29,15 +29,17 @@ export function searchActive(query: string): boolean {
  * report. That is what people expect from a search box, and it is what makes a second word
  * narrow rather than widen.
  */
+import { scalarFilterValues, type GridFilterValue } from "./filterValue";
+
 export function rowMatchesSearch(
-  values: Record<string, string | null>,
+  values: Record<string, GridFilterValue>,
   query: string,
 ): boolean {
   const terms = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
   if (terms.length === 0) return true;
 
   const haystack = Object.values(values)
-    .filter((value): value is string => value !== null && value !== "")
+    .flatMap(scalarFilterValues)
     .map((value) => value.toLocaleLowerCase());
 
   return terms.every((term) => haystack.some((value) => value.includes(term)));

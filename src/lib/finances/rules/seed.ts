@@ -25,6 +25,7 @@ import * as sortKey from "@/lib/tree/sortKey";
 import { STARTER_RULES } from "./starterRules";
 import type { RuleAction } from "./actions";
 import type { RuleCondition } from "./conditions";
+import { legacyCategoryTag } from "../tags";
 
 export type RuleDraft = {
   seededId: string;
@@ -106,7 +107,7 @@ export function planRuleSeed(existingSeededIds: readonly string[]): SeedPlan {
 
     const actions: RuleAction[] = [];
     if (rule.category)
-      actions.push({ op: "set", field: "category", value: rule.category });
+      actions.push({ op: "add-tag", value: legacyCategoryTag(rule.category) });
     if (rule.flow) actions.push({ op: "set", field: "flow", value: rule.flow });
     if (rule.merchant) actions.push({ op: "name-payee", value: rule.merchant });
 

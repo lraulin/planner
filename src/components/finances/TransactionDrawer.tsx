@@ -15,13 +15,14 @@ import {
   TextArea,
   TextField,
 } from "@/components/detail/fields";
-import { effectiveCategory, effectiveFlow } from "@/lib/finances/analytics";
+import { effectiveFlow } from "@/lib/finances/analytics";
 import { SAVINGS_KINDS } from "@/lib/finances/available";
 import { envelopeAssignmentRefusal } from "@/lib/finances/budget/autoMap";
 import { FLOW_KINDS, flowLabel } from "@/lib/finances/flowLabels";
 import { formatUsd } from "@/lib/finances/money";
 import type { TransactionListRow } from "@/lib/finances/types";
 import type { FinanceFlowKind } from "@/db/schema";
+import { addTagToNotes, normalizeTagInput, tagsInNotes } from "@/lib/finances/tags";
 
 /**
  * Edit the user-owned half of a transaction.
@@ -35,6 +36,7 @@ export function TransactionDrawer({
   envelopes,
   budgetStartMonth,
   offBudgetAccountIds,
+  managedTags,
   onClose,
   onChanged,
 }: {
@@ -42,6 +44,7 @@ export function TransactionDrawer({
   envelopes: readonly { id: string; label: string }[];
   budgetStartMonth: string | null;
   offBudgetAccountIds: ReadonlySet<string>;
+  managedTags: readonly string[];
   onClose: () => void;
   onChanged: () => void;
 }) {
@@ -108,6 +111,7 @@ export function TransactionDrawer({
           envelopes={envelopes}
           budgetStartMonth={budgetStartMonth}
           offBudgetAccountIds={offBudgetAccountIds}
+          managedTags={managedTags}
           onClose={onClose}
           onChanged={onChanged}
         />
@@ -132,6 +136,7 @@ function TransactionForm({
   envelopes,
   budgetStartMonth,
   offBudgetAccountIds,
+  managedTags,
   onClose,
   onChanged,
 }: {
@@ -139,11 +144,11 @@ function TransactionForm({
   envelopes: readonly { id: string; label: string }[];
   budgetStartMonth: string | null;
   offBudgetAccountIds: ReadonlySet<string>;
+  managedTags: readonly string[];
   onClose: () => void;
   onChanged: () => void;
 }) {
   const [draft, setDraft] = useState(() => ({
-    category: row.category ?? "",
     notes: row.notes,
     flowOverride: row.flowOverride,
     excludeFromBaseline: row.excludeFromBaseline,
@@ -160,6 +165,8 @@ function TransactionForm({
   const [saving, startTransition] = useTransition();
   const [envelopeId, setEnvelopeId] = useState(row.budgetCategoryId);
   const [savingEnvelope, startEnvelopeTransition] = useTransition();
+  const [learningNotice, setLearningNotice] = useState<string | null>(null);
+  const [tagDraft, setTagDraft] = useState("");
   const envelopeRefusal = envelopeAssignmentRefusal({
     transactionDate: row.transactionDate,
     budgetStartMonth,
@@ -178,8 +185,6 @@ function TransactionForm({
     startTransition(async () => {
       if (dirty) {
         const result = await updateTransactionAction(row.id, {
-          // Blank means uncategorised, which the mutation stores as null.
-          category: draft.category,
           notes: draft.notes,
           flowOverride: draft.flowOverride,
           excludeFromBaseline: draft.excludeFromBaseline,
@@ -214,6 +219,7 @@ function TransactionForm({
         setError(result.error ?? "Could not set the envelope.");
         return;
       }
+      setLearningNotice(result.id ?? null);
       onChanged();
     });
   }
@@ -223,26 +229,62 @@ function TransactionForm({
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
         <div className="flex flex-col gap-6">
           <Section title="Your notes">
-            <TextField
-              label="Category"
-              value={draft.category}
-              onChange={(value) => patch("category", value)}
-              placeholder={effectiveCategory(row)}
-              hint={
-                row.derivedCategory
-                  ? `Blank uses the classifier's answer, ${row.derivedCategory}. Anything you type wins and survives a reclassify.`
-                  : "Yours to set. Re-importing this file will never overwrite it."
-              }
-            />
             <TextArea
               label="Notes"
               rows={4}
               value={draft.notes}
               onChange={(value) => patch("notes", value)}
             />
+            <div className="flex flex-col gap-2">
+              <span className="text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
+                Tags
+              </span>
+              <div className="flex flex-wrap gap-1">
+                {tagsInNotes(draft.notes).map((tag) => (
+                  <span
+                    key={tag}
+                    className="rounded bg-surface-raised px-1.5 py-px text-[0.75rem] text-ink"
+                  >
+                    #{tag}
+                  </span>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  list="finance-tag-options"
+                  value={tagDraft}
+                  onChange={(event) => setTagDraft(event.target.value)}
+                  placeholder="#tag"
+                  aria-label="Add tag"
+                  className="min-h-tap min-w-0 flex-1 rounded border border-rule bg-surface px-2 text-base text-ink md:min-h-0 md:py-1 md:text-[0.8125rem]"
+                />
+                <datalist id="finance-tag-options">
+                  {managedTags.map((tag) => (
+                    <option key={tag} value={`#${tag}`} />
+                  ))}
+                </datalist>
+                <button
+                  type="button"
+                  className="min-h-tap rounded border border-rule px-3 text-[0.8125rem] text-ink md:min-h-0"
+                  onClick={() => {
+                    try {
+                      const tag = normalizeTagInput(tagDraft);
+                      patch("notes", addTagToNotes(draft.notes, tag));
+                      setTagDraft("");
+                    } catch (tagError) {
+                      setError(
+                        tagError instanceof Error ? tagError.message : "Invalid tag.",
+                      );
+                    }
+                  }}
+                >
+                  Add
+                </button>
+              </div>
+            </div>
             {envelopes.length > 0 &&
               (envelopeRefusal ? (
-                <ReadOnly label="Envelope">
+                <ReadOnly label="Category">
                   <span className="text-ink-muted">Not budgeted</span>
                   <span className="mt-1 block text-[0.75rem] text-ink-faint">
                     {envelopeRefusal}
@@ -250,16 +292,19 @@ function TransactionForm({
                 </ReadOnly>
               ) : (
                 <SelectField<string>
-                  label="Envelope"
+                  label="Category"
                   value={envelopeId}
                   options={envelopes.map(({ id, label }) => ({ value: id, label }))}
                   onChange={setEnvelope}
                   allowEmpty
-                  emptyLabel="Unassigned"
+                  emptyLabel="Uncategorized"
                   disabled={savingEnvelope}
-                  hint="Saved immediately. Category describes the purchase; Envelope decides which pool of money pays. A direct choice is never overwritten by automatic sorting."
+                  hint="Saved immediately. Repeated choices for the same payee can teach a rule."
                 />
               ))}
+            {learningNotice ? (
+              <p className="text-[0.75rem] text-select-edge">{learningNotice}</p>
+            ) : null}
           </Section>
 
           <Section title="Classification">

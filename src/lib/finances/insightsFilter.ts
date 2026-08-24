@@ -23,12 +23,14 @@ export type InsightsReportFilter = {
   accountIds: string[];
   categories: string[];
   merchants: string[];
+  tags?: string[];
 };
 
 export const EMPTY_INSIGHTS_FILTER: InsightsReportFilter = {
   accountIds: [],
   categories: [],
   merchants: [],
+  tags: [],
 };
 
 export const INSIGHTS_WINDOW_KEYS = [
@@ -70,10 +72,12 @@ export function applyInsightsFilter(
   const accounts = new Set(filter.accountIds);
   const categories = new Set(filter.categories);
   const merchants = new Set(filter.merchants);
+  const tags = new Set(filter.tags ?? []);
   return rows.filter((row) => {
     if (accounts.size > 0 && !accounts.has(row.accountId)) return false;
     if (categories.size > 0 && !categories.has(effectiveCategory(row))) return false;
     if (merchants.size > 0 && !merchants.has(effectiveMerchant(row))) return false;
+    if (tags.size > 0 && !(row.tags ?? []).some((tag) => tags.has(tag))) return false;
     return true;
   });
 }
@@ -164,15 +168,18 @@ export function insightsFilterOptions(rows: readonly AnalyticsRow[]): {
   accounts: { id: string; name: string }[];
   categories: string[];
   merchants: string[];
+  tags: string[];
 } {
   const accounts = new Map<string, string>();
   const categories = new Set<string>();
   const merchants = new Set<string>();
+  const tags = new Set<string>();
   for (const row of rows) {
     accounts.set(row.accountId, row.accountName);
     categories.add(effectiveCategory(row));
     const merchant = effectiveMerchant(row);
     if (merchant) merchants.add(merchant);
+    for (const tag of row.tags ?? []) tags.add(tag);
   }
   return {
     accounts: [...accounts.entries()]
@@ -180,6 +187,7 @@ export function insightsFilterOptions(rows: readonly AnalyticsRow[]): {
       .sort((left, right) => left.name.localeCompare(right.name)),
     categories: [...categories].sort((left, right) => left.localeCompare(right)),
     merchants: [...merchants].sort((left, right) => left.localeCompare(right)),
+    tags: [...tags].sort((left, right) => left.localeCompare(right)),
   };
 }
 

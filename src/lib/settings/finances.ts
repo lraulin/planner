@@ -84,6 +84,7 @@ export type InsightsViewSettings = {
   accounts: string[];
   categories: string[];
   merchants: string[];
+  tags: string[];
   drill: InsightsDrill | null;
   /** Stacked vs grouped for the spending-trends panel. */
   trendMode: "stacked" | "grouped";
@@ -104,6 +105,7 @@ export const DEFAULT_INSIGHTS_VIEW: InsightsViewSettings = {
   accounts: [],
   categories: [],
   merchants: [],
+  tags: [],
   drill: null,
   trendMode: "stacked",
   sankeyGrouping: "category",
@@ -126,6 +128,7 @@ export function parseInsightsView(value: unknown): InsightsViewSettings {
     accounts: asStringArray(record.accounts, DEFAULT_INSIGHTS_VIEW.accounts),
     categories: asStringArray(record.categories, DEFAULT_INSIGHTS_VIEW.categories),
     merchants: asStringArray(record.merchants, DEFAULT_INSIGHTS_VIEW.merchants),
+    tags: asStringArray(record.tags, DEFAULT_INSIGHTS_VIEW.tags),
     drill: parseInsightsDrill(record.drill),
     trendMode: asOneOf(record.trendMode, TREND_MODES, DEFAULT_INSIGHTS_VIEW.trendMode),
     sankeyGrouping: asOneOf(
@@ -145,6 +148,7 @@ export function serializeInsightsView(value: InsightsViewSettings): unknown {
     accounts: value.accounts,
     categories: value.categories,
     merchants: value.merchants,
+    tags: value.tags,
     drill: serializeInsightsDrill(value.drill),
     trendMode: value.trendMode,
     sankeyGrouping: value.sankeyGrouping,
@@ -204,6 +208,7 @@ export function insightsFilterOf(view: InsightsViewSettings): InsightsReportFilt
     accountIds: view.accounts,
     categories: view.categories,
     merchants: view.merchants,
+    tags: view.tags,
   };
 }
 

@@ -48,10 +48,12 @@ export function RulesView({
   initialRules,
   payees,
   accounts,
+  categories,
 }: {
   initialRules: RuleRow[];
   payees: readonly { id: string; name: string }[];
   accounts: readonly { id: string; name: string }[];
+  categories: readonly { id: string; label: string }[];
 }) {
   const [rows, setRows] = useState(initialRules);
   const [seenServerRows, setSeenServerRows] = useState(initialRules);
@@ -387,6 +389,7 @@ export function RulesView({
         rule={creating ? null : openRule}
         payees={payees}
         accounts={accounts}
+        categories={categories}
         open={creating || openRule !== null}
         onClose={closeDrawer}
         onSaved={refresh}

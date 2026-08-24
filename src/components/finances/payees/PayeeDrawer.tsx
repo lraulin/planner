@@ -8,7 +8,7 @@ import {
 } from "@/app/finances/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { Drawer, DrawerFooter, DrawerHeader } from "@/components/detail/Drawer";
-import { Section, TextArea } from "@/components/detail/fields";
+import { CheckboxField, Section, TextArea } from "@/components/detail/fields";
 import { formatUsd } from "@/lib/finances/money";
 import type { PayeeRow } from "@/lib/finances/payees/queries";
 
@@ -56,6 +56,7 @@ function PayeeForm({
   const nameId = useId();
   const [name, setName] = useState(payee.name);
   const [notes, setNotes] = useState(payee.notes);
+  const [learnCategories, setLearnCategories] = useState(payee.learnCategories ?? true);
   const [aliasDraft, setAliasDraft] = useState("");
   const [dirty, setDirty] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
@@ -84,7 +85,11 @@ function PayeeForm({
   function save(thenClose: boolean) {
     setError(null);
     startTransition(async () => {
-      const result = await updatePayeeDetailsAction(payee.id, { name, notes });
+      const result = await updatePayeeDetailsAction(payee.id, {
+        name,
+        notes,
+        learnCategories,
+      });
       if (!result.ok) {
         setError(result.error);
         return;
@@ -257,6 +262,16 @@ function PayeeForm({
             </Section>
 
             <Section title="Notes">
+              <CheckboxField
+                label="Learn Categories from my choices"
+                checked={learnCategories}
+                onChange={(checked) => {
+                  setLearnCategories(checked);
+                  setDirty(true);
+                  setJustSaved(false);
+                }}
+                hint="After the same Category appears on 3 of the latest 5 transactions, create or update this payee's rule."
+              />
               <TextArea
                 label="Notes"
                 value={notes}

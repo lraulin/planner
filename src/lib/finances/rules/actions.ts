@@ -1,8 +1,9 @@
 /**
  * What a rule is allowed to do.
  *
- * Three actions, against Actual's six (`../actual/packages/loot-core/src/server/rules/action.ts`,
- * MIT): set a taxonomy category, set a flow, and name a payee at mint time. `set-split-amount`,
+ * Category actions point directly at the user's budget category UUID. Add tag is deliberately
+ * semantic and idempotent rather than Actual's raw append-notes action: rerunning rules must not
+ * duplicate a tag. `set-split-amount`,
  * `link-schedule`, `prepend-notes`, `append-notes` and `delete-transaction` are refused by name
  * rather than merely unhandled, so a reader can see they were considered and why they are out:
  * this app has no split transactions, schedules are linked from the other side, and nothing
@@ -19,12 +20,13 @@
  */
 
 import type { FinanceFlowKind } from "@/db/schema";
-import { FINANCE_CATEGORIES, type FinanceCategory } from "../classify/categories";
+import { isValidTag } from "../tags";
 
 export type RuleAction =
-  | { op: "set"; field: "category"; value: FinanceCategory }
+  | { op: "set"; field: "category"; value: string }
   | { op: "set"; field: "flow"; value: FinanceFlowKind }
-  | { op: "name-payee"; value: string };
+  | { op: "name-payee"; value: string }
+  | { op: "add-tag"; value: string };
 
 /** Actual ops this app deliberately does not implement, named so the refusal is legible. */
 export const REFUSED_ACTION_OPS = [
@@ -35,7 +37,8 @@ export const REFUSED_ACTION_OPS = [
   "delete-transaction",
 ] as const;
 
-const CATEGORIES = new Set<string>(FINANCE_CATEGORIES);
+const UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const FLOWS = new Set<string>([
   "spend",
@@ -55,7 +58,13 @@ const FLOWS = new Set<string>([
  * category would therefore have half of itself silently discarded at plan time, which is worse
  * than being told at save time that the combination means nothing.
  */
-const FLOWS_WITH_CATEGORY = new Set<string>(["spend", "refund", "interest_fee"]);
+const FLOWS_WITH_CATEGORY = new Set<string>([
+  "spend",
+  "income",
+  "refund",
+  "interest_fee",
+  "external_transfer",
+]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -68,11 +77,15 @@ function parseOne(raw: unknown): RuleAction | null {
     const value = typeof raw.value === "string" ? raw.value.trim() : "";
     return value === "" ? null : { op: "name-payee", value };
   }
+  if (raw.op === "add-tag") {
+    const value = typeof raw.value === "string" ? raw.value.trim() : "";
+    return isValidTag(value) ? { op: "add-tag", value } : null;
+  }
   if (raw.op !== "set" || typeof raw.field !== "string") return null;
 
   if (raw.field === "category") {
-    return typeof raw.value === "string" && CATEGORIES.has(raw.value)
-      ? { op: "set", field: "category", value: raw.value as FinanceCategory }
+    return typeof raw.value === "string" && UUID.test(raw.value)
+      ? { op: "set", field: "category", value: raw.value }
       : null;
   }
   if (raw.field === "flow") {
@@ -132,23 +145,33 @@ export function parseRuleActions(
     };
   }
 
-  const fields = actions.map((action) =>
-    action.op === "set" ? action.field : action.op,
-  );
-  if (new Set(fields).size !== fields.length) {
+  const scalarFields = actions
+    .filter((action) => action.op !== "add-tag")
+    .map((action) => (action.op === "set" ? action.field : action.op));
+  if (new Set(scalarFields).size !== scalarFields.length) {
     return { error: "A rule can set each thing at most once." };
   }
+  const tags = actions.flatMap((action) =>
+    action.op === "add-tag" ? [action.value] : [],
+  );
+  if (new Set(tags).size !== tags.length)
+    return { error: "A rule can add each tag once." };
 
   return { actions };
 }
 
 /** One-line description of what a rule does, for a grid cell. */
-export function summarizeActions(actions: readonly RuleAction[]): string {
+export function summarizeActions(
+  actions: readonly RuleAction[],
+  names: Readonly<Record<string, string>> = {},
+): string {
   return actions
     .map((action) =>
       action.op === "name-payee"
         ? `call it ${action.value}`
-        : `${action.field} = ${action.value}`,
+        : action.op === "add-tag"
+          ? `add #${action.value}`
+          : `${action.field} = ${action.field === "category" ? (names[action.value] ?? action.value) : action.value}`,
     )
     .join(", ");
 }

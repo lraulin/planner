@@ -28,7 +28,7 @@ function row(
     notes: "",
     balanceAfterCents: null,
     budgetCategoryId: null,
-    budgetCategoryName: null,
+    budgetCategoryName: extras.budgetCategoryName ?? null,
     scheduleId: null,
     scheduleName: null,
     payeeId: null,
@@ -99,16 +99,17 @@ describe("groupTransactions", () => {
   it("groups by account alphabetically and category by its effective value", () => {
     const grouped = groupTransactions(
       [
-        row("a", "2024-01-01", { accountName: "Savings", category: "Rent" }),
+        row("a", "2024-01-01", {
+          accountName: "Savings",
+          budgetCategoryName: "Rent",
+        }),
         // No category of its own and nothing derived: `Uncategorized` is a real bucket
         // rather than an empty one, and it is the same word the dashboard uses.
         row("b", "2024-01-02", { accountName: "Checking", category: null }),
-        // The classifier's answer groups too — otherwise every classified row would pile
-        // up under one header while the dashboard reported categories for all of them.
+        // The same budget Category used by the register is what reports group by.
         row("c", "2024-01-03", {
           accountName: "Checking",
-          category: null,
-          derivedCategory: "Groceries",
+          budgetCategoryName: "Groceries",
         }),
       ],
       ["account", "category"],

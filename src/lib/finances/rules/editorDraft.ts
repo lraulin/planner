@@ -9,7 +9,7 @@ export type RuleDraftCondition = {
 };
 
 export type RuleDraftAction = {
-  kind: "category" | "flow" | "name-payee";
+  kind: "category" | "flow" | "name-payee" | "tag";
   value: string;
 };
 
@@ -61,6 +61,7 @@ export function draftActions(stored: unknown): RuleDraftAction[] {
     const action = (entry ?? {}) as Record<string, unknown>;
     const value = typeof action.value === "string" ? action.value : "";
     if (action.op === "name-payee") drafts.push({ kind: "name-payee", value });
+    else if (action.op === "add-tag") drafts.push({ kind: "tag", value });
     else if (action.field === "category") drafts.push({ kind: "category", value });
     else if (action.field === "flow") drafts.push({ kind: "flow", value });
   }
@@ -130,6 +131,8 @@ export function storedActions(drafts: readonly RuleDraftAction[]): RuleAction[] 
     .map((draft) =>
       draft.kind === "name-payee"
         ? { op: "name-payee" as const, value: draft.value.trim() }
-        : { op: "set" as const, field: draft.kind, value: draft.value.trim() },
+        : draft.kind === "tag"
+          ? { op: "add-tag" as const, value: draft.value.trim().replace(/^#/, "") }
+          : { op: "set" as const, field: draft.kind, value: draft.value.trim() },
     ) as RuleAction[];
 }

@@ -40,7 +40,7 @@ function Text({ value, muted = true }: { value: string; muted?: boolean }) {
  */
 function actionText(row: RuleRow): string {
   return Array.isArray(row.actions)
-    ? summarizeActions(row.actions as RuleAction[])
+    ? summarizeActions(row.actions as RuleAction[], row.names)
     : "nothing";
 }
 

@@ -5,16 +5,19 @@ import { getCurrentUserId } from "@/lib/auth";
 import { listRules } from "@/lib/finances/rules/queries";
 import { listAccounts } from "@/lib/finances/queries";
 import { listPayees } from "@/lib/finances/payees/queries";
+import { loadBudget } from "@/lib/finances/budget/queries";
+import { budgetEnvelopeLabel } from "@/lib/finances/budget/hierarchy";
 
 export const dynamic = "force-dynamic";
 
 /** What each transaction is, as rules you can read and change rather than code. */
 export default async function FinancesRulesPage() {
   const userId = await getCurrentUserId();
-  const [rules, payees, accounts] = await Promise.all([
+  const [rules, payees, accounts, budget] = await Promise.all([
     listRules(userId),
     listPayees(userId),
     listAccounts(userId),
+    loadBudget(userId, null),
   ]);
 
   return (
@@ -24,6 +27,10 @@ export default async function FinancesRulesPage() {
           initialRules={rules}
           payees={payees.map(({ id, name }) => ({ id, name }))}
           accounts={accounts.map(({ id, name }) => ({ id, name }))}
+          categories={budget.categories.map((category) => ({
+            id: category.id,
+            label: budgetEnvelopeLabel(budget.groups, category),
+          }))}
         />
       </Suspense>
     </AppShell>

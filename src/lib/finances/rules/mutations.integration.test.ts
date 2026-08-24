@@ -38,7 +38,7 @@ afterAll(async () => {
 
 const GROCERIES = {
   conditions: [{ field: "merchant", op: "startsWith", value: "COSTCO" }],
-  actions: [{ op: "set", field: "category", value: "Groceries" }],
+  actions: [{ op: "add-tag", value: "groceries" }],
 };
 
 describeDb("rule mutations", () => {
@@ -59,13 +59,13 @@ describeDb("rule mutations", () => {
     await updateRule(userId, id, {
       name: "Costco runs",
       conditions: GROCERIES.conditions,
-      actions: [{ op: "set", field: "category", value: "Shopping" }],
+      actions: [{ op: "add-tag", value: "shopping" }],
       notes: "changed my mind",
     });
     expect(await getRule(userId, id)).toMatchObject({
       name: "Costco runs",
       notes: "changed my mind",
-      actions: [{ op: "set", field: "category", value: "Shopping" }],
+      actions: [{ op: "add-tag", value: "shopping" }],
     });
   });
 

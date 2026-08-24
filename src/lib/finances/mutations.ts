@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeAccounts,
@@ -32,6 +32,9 @@ import type { PaypalResolution } from "./paypalMatch";
 import { ensurePayees } from "./payees/backfill";
 import { replaceCommitmentPayeesInTransaction } from "./payees/mutations";
 import { payeeIndex } from "./payees/resolve";
+import { applyRules } from "./rules/match";
+import { normalizeMerchant } from "./classify/merchant";
+import { addTagToNotes } from "./tags";
 
 /**
  * Writes for the register.
@@ -477,7 +480,10 @@ async function loadAndPlanReclassify(userId: string) {
     accounts,
     randomUUID,
     resolutions,
-    commitmentCategories,
+    // Commitment categories are organizational Group names now, not transaction
+    // classification. Preserve the stored values during the staged schema rename, but do
+    // not feed them to the classifier.
+    new Map(),
     payeeIndex(aliases),
     rules,
   );
@@ -581,6 +587,79 @@ export async function reclassifyTransactions(
   };
 }
 
+/** Apply user-owned Category and Add tag actions after ingestion or an explicit rules run. */
+export async function applyRuleActionsToTransactions(
+  userId: string,
+  options: { createdSince?: Date } = {},
+): Promise<number> {
+  const [rows, storedRules] = await Promise.all([
+    db
+      .select({
+        id: financeTransactions.id,
+        description: financeTransactions.description,
+        payeeId: financeTransactions.payeeId,
+        accountId: financeTransactions.accountId,
+        amount: financeTransactions.amount,
+        transactionDate: financeTransactions.transactionDate,
+        notes: financeTransactions.notes,
+        budgetCategoryId: financeTransactions.budgetCategoryId,
+        derivedFlow: financeTransactions.derivedFlow,
+      })
+      .from(financeTransactions)
+      .where(
+        and(
+          eq(financeTransactions.userId, userId),
+          ...(options.createdSince
+            ? [gte(financeTransactions.createdAt, options.createdSince)]
+            : []),
+        ),
+      ),
+    db
+      .select({
+        id: financeRules.id,
+        name: financeRules.name,
+        conditions: financeRules.conditions,
+        actions: financeRules.actions,
+        enabled: financeRules.enabled,
+        sortKey: financeRules.sortKey,
+      })
+      .from(financeRules)
+      .where(eq(financeRules.userId, userId)),
+  ]);
+  const { rules } = compileRules(storedRules);
+  let updated = 0;
+  await db.transaction(async (tx) => {
+    for (const row of rows) {
+      const outcome = applyRules(rules, {
+        merchant: normalizeMerchant(row.description),
+        description: row.description,
+        payeeId: row.payeeId,
+        accountId: row.accountId,
+        amountCents: numericStringToCents(row.amount) ?? 0,
+        transactionDate: row.transactionDate,
+      });
+      let notes = row.notes;
+      for (const tag of outcome.tags) notes = addTagToNotes(notes, tag);
+      const categoryId =
+        outcome.flow === "internal_transfer" || row.derivedFlow === "internal_transfer"
+          ? null
+          : (outcome.category ?? row.budgetCategoryId);
+      if (notes === row.notes && categoryId === row.budgetCategoryId) continue;
+      await tx
+        .update(financeTransactions)
+        .set({ notes, budgetCategoryId: categoryId, updatedAt: new Date() })
+        .where(
+          and(
+            eq(financeTransactions.userId, userId),
+            eq(financeTransactions.id, row.id),
+          ),
+        );
+      updated += 1;
+    }
+  });
+  return updated;
+}
+
 /**
  * Flag or unflag a set of transactions as one-off spending, optionally naming the event.
  *
@@ -645,19 +724,6 @@ export async function deleteAccount(userId: string, accountId: string): Promise<
  * whole-history pass, which sounds heavy for one edit and is not: `changedRows` diffs the plan
  * against what is stored, so an edit that moves nothing writes nothing.
  */
-async function reclassifyIfCategoriesMoved(
-  userId: string,
-  beforeCategory: string | undefined,
-  after: { category?: string; payeesChanged: boolean },
-): Promise<void> {
-  const category = after.category?.trim() ?? beforeCategory ?? "";
-  const categoryMoved =
-    after.category !== undefined && after.category.trim() !== (beforeCategory ?? "");
-
-  if (!categoryMoved && !(after.payeesChanged && category !== "")) return;
-  await reclassifyTransactions(userId);
-}
-
 export type RecurringBillEdit = {
   /** The user's name for the bill, and the upsert key. */
   name: string;
@@ -731,20 +797,6 @@ export async function upsertRecurringBill(
   ) {
     throw new Error("A due day must be a whole number from 1 to 31.");
   }
-  const existing = await db
-    .select({
-      id: financeRecurringBills.id,
-      category: financeRecurringBills.category,
-    })
-    .from(financeRecurringBills)
-    .where(
-      and(
-        eq(financeRecurringBills.userId, userId),
-        eq(financeRecurringBills.name, name),
-      ),
-    )
-    .limit(1);
-
   // Only the fields supplied are written, the same rule `updateTransaction` follows. It
   // matters here because correcting a cadence from the recurring table sends the cadence and
   // nothing else, and a blanket write would silently clear the declared amount — after which
@@ -806,11 +858,6 @@ export async function upsertRecurringBill(
         edit.payeeIds,
       );
     }
-  });
-
-  await reclassifyIfCategoriesMoved(userId, existing[0]?.category, {
-    category: edit.category,
-    payeesChanged: edit.payeeIds !== undefined,
   });
 }
 
@@ -887,20 +934,6 @@ export async function upsertRecurringSpend(
     throw new Error("An amount must be a whole number of cents, zero or more.");
   }
 
-  const existing = await db
-    .select({
-      id: financeRecurringSpend.id,
-      category: financeRecurringSpend.category,
-    })
-    .from(financeRecurringSpend)
-    .where(
-      and(
-        eq(financeRecurringSpend.userId, userId),
-        eq(financeRecurringSpend.name, name),
-      ),
-    )
-    .limit(1);
-
   const changes = {
     ...(edit.period !== undefined ? { period: edit.period } : {}),
     ...(edit.amountSource !== undefined ? { amountSource: edit.amountSource } : {}),
@@ -940,11 +973,6 @@ export async function upsertRecurringSpend(
         edit.payeeIds,
       );
     }
-  });
-
-  await reclassifyIfCategoriesMoved(userId, existing[0]?.category, {
-    category: edit.category,
-    payeesChanged: edit.payeeIds !== undefined,
   });
 }
 

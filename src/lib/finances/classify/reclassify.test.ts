@@ -167,11 +167,8 @@ describe("planReclassify", () => {
     expect(flowOf(plan, "out")).toBe("spend");
     // Money came back from a shop money went out to, so it is negative spending.
     expect(flowOf(plan, "back")).toBe("refund");
-    // Both spellings are one store, so both carry the same category.
-    expect(plan.rows.map((entry) => entry.derivedCategory)).toEqual([
-      "Groceries",
-      "Groceries",
-    ]);
+    // Legacy reporting categories are no longer inferred; the payee still settles refund flow.
+    expect(plan.rows.map((entry) => entry.derivedCategory)).toEqual([null, null]);
   });
 
   it("does not call a credit a refund when the payee was never paid", () => {
@@ -496,8 +493,8 @@ describe("planReclassify", () => {
       SEEDED,
     );
 
-    // The counterparty's rule named the category, over the bank's own Dining label.
-    expect(plan.rows[0].derivedCategory).toBe("Fees & Interest");
+    // Category rules now target budget UUIDs; the staged legacy field keeps the bank fallback.
+    expect(plan.rows[0].derivedCategory).toBe("Dining");
     // The bank line's rule named the flow, over the counterparty's interest_fee.
     expect(plan.rows[0].derivedFlow).toBe("spend");
   });
@@ -527,6 +524,6 @@ describe("planReclassify", () => {
       derivedFlow: plan.rows[index].derivedFlow,
     }));
 
-    expect(changedRows(stored, plan).map((entry) => entry.id)).toEqual(["rent"]);
+    expect(changedRows(stored, plan).map((entry) => entry.id)).toEqual([]);
   });
 });

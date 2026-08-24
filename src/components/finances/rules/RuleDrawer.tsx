@@ -6,7 +6,6 @@ import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { Drawer, DrawerFooter, DrawerHeader } from "@/components/detail/Drawer";
 import { Section, TextArea } from "@/components/detail/fields";
 import { PayeePickerField } from "@/components/finances/payees/PayeePickerField";
-import { FINANCE_CATEGORIES } from "@/lib/finances/classify/categories";
 import {
   blankCondition,
   draftActions,
@@ -66,6 +65,7 @@ export function RuleDrawer({
   initialDraft,
   payees,
   accounts,
+  categories,
   open,
   onClose,
   onSaved,
@@ -75,6 +75,7 @@ export function RuleDrawer({
   initialDraft?: RuleDraft;
   payees: readonly { id: string; name: string }[];
   accounts: readonly { id: string; name: string }[];
+  categories: readonly { id: string; label: string }[];
   open: boolean;
   onClose: () => void;
   onSaved: (id?: string) => void;
@@ -88,6 +89,7 @@ export function RuleDrawer({
       initialDraft={initialDraft}
       payees={payees}
       accounts={accounts}
+      categories={categories}
       titleId={titleId}
       onClose={onClose}
       onSaved={onSaved}
@@ -100,6 +102,7 @@ function RuleForm({
   initialDraft,
   payees,
   accounts,
+  categories,
   titleId,
   onClose,
   onSaved,
@@ -108,6 +111,7 @@ function RuleForm({
   initialDraft?: RuleDraft;
   payees: readonly { id: string; name: string }[];
   accounts: readonly { id: string; name: string }[];
+  categories: readonly { id: string; label: string }[];
   titleId: string;
   onClose: () => void;
   onSaved: (id?: string) => void;
@@ -402,10 +406,11 @@ function RuleForm({
                     <option value="category">Set category</option>
                     <option value="flow">Set flow</option>
                     <option value="name-payee">Name a new payee</option>
+                    <option value="tag">Add tag</option>
                   </select>
-                  {action.kind === "name-payee" ? (
+                  {action.kind === "name-payee" || action.kind === "tag" ? (
                     <input
-                      aria-label="Payee name"
+                      aria-label={action.kind === "tag" ? "Tag" : "Payee name"}
                       value={action.value}
                       onChange={(event) => {
                         const value = event.target.value;
@@ -434,14 +439,16 @@ function RuleForm({
                       className="min-h-tap min-w-0 w-full rounded border border-rule bg-surface px-2 py-1 text-[0.8125rem] text-ink md:min-h-0 md:flex-1"
                     >
                       <option value="">Choose…</option>
-                      {(action.kind === "category"
-                        ? FINANCE_CATEGORIES
-                        : FLOW_OPTIONS
-                      ).map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
+                      {(action.kind === "category" ? categories : FLOW_OPTIONS).map(
+                        (option) => (
+                          <option
+                            key={typeof option === "string" ? option : option.id}
+                            value={typeof option === "string" ? option : option.id}
+                          >
+                            {typeof option === "string" ? option : option.label}
+                          </option>
+                        ),
+                      )}
                     </select>
                   )}
                   <button

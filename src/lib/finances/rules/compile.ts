@@ -23,7 +23,7 @@ export type StoredRule = {
   conditions: unknown;
   actions: unknown;
   enabled: boolean;
-  /** The priority. Rules run in ascending order and the first match wins. */
+  /** Rules run in ascending order; later matching actions override the same field. */
   sortKey: string;
 };
 

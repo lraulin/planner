@@ -291,6 +291,13 @@ const PAGES = {
       keywords: "categorize category flow regex merchant automation classify",
     },
     {
+      id: "tags",
+      label: "Tags",
+      segment: "tags",
+      status: "built",
+      keywords: "labels notes reporting classification hashtags",
+    },
+    {
       id: "statements",
       label: "Statements",
       segment: "statements",

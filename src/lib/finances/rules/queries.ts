@@ -10,6 +10,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeAccounts,
+  financeBudgetCategories,
   financePayees,
   financeRules,
   financeTransactions,
@@ -28,6 +29,7 @@ export type RuleRecord = {
   enabled: boolean;
   sortKey: string;
   seededId: string | null;
+  categoryReviewRequired: boolean;
   notes: string;
 };
 
@@ -53,6 +55,7 @@ export async function getRule(
       enabled: financeRules.enabled,
       sortKey: financeRules.sortKey,
       seededId: financeRules.seededId,
+      categoryReviewRequired: financeRules.categoryReviewRequired,
       notes: financeRules.notes,
     })
     .from(financeRules)
@@ -91,6 +94,7 @@ export async function listRules(userId: string): Promise<RuleRow[]> {
       enabled: financeRules.enabled,
       sortKey: financeRules.sortKey,
       seededId: financeRules.seededId,
+      categoryReviewRequired: financeRules.categoryReviewRequired,
       notes: financeRules.notes,
     })
     .from(financeRules)
@@ -104,7 +108,7 @@ export async function listRules(userId: string): Promise<RuleRow[]> {
     for (const id of storedAccountIds(record.conditions)) accountIds.add(id);
   }
 
-  const [payees, accounts, transactions] = await Promise.all([
+  const [payees, accounts, categories, transactions] = await Promise.all([
     payeeIds.size === 0
       ? []
       : db
@@ -128,6 +132,10 @@ export async function listRules(userId: string): Promise<RuleRow[]> {
             ),
           ),
     db
+      .select({ id: financeBudgetCategories.id, name: financeBudgetCategories.name })
+      .from(financeBudgetCategories)
+      .where(eq(financeBudgetCategories.userId, userId)),
+    db
       .select({
         description: financeTransactions.description,
         payeeId: financeTransactions.payeeId,
@@ -140,7 +148,7 @@ export async function listRules(userId: string): Promise<RuleRow[]> {
   ]);
 
   const names: Record<string, string> = {};
-  for (const row of [...payees, ...accounts]) names[row.id] = row.name;
+  for (const row of [...payees, ...accounts, ...categories]) names[row.id] = row.name;
 
   // Compile the whole set once, so a page can say *which* rule is broken without parsing
   // anything itself — and so "did not compile" comes from the same code that runs a pass.
@@ -150,7 +158,7 @@ export async function listRules(userId: string): Promise<RuleRow[]> {
   );
   const matches = new Map<string, number>();
   for (const transaction of transactions) {
-    const winner = matchRules(compiled.rules, {
+    const matching = matchRules(compiled.rules, {
       merchant: normalizeMerchant(transaction.description),
       description: transaction.description,
       payeeId: transaction.payeeId,
@@ -158,7 +166,9 @@ export async function listRules(userId: string): Promise<RuleRow[]> {
       amountCents: numericStringToCents(transaction.amount) ?? 0,
       transactionDate: transaction.transactionDate,
     });
-    if (winner) matches.set(winner.id, (matches.get(winner.id) ?? 0) + 1);
+    for (const rule of matching) {
+      matches.set(rule.id, (matches.get(rule.id) ?? 0) + 1);
+    }
   }
 
   return records.map((record) => ({

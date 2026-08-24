@@ -1,7 +1,7 @@
 /**
  * Which rule claims a row, and what it says about it.
  *
- * **First match wins, in the order the user set.** Every condition on a rule must hold (AND);
+ * **Every match applies, in the order the user set.** Every condition on a rule must hold (AND);
  * an "or" within one field is `oneOf`, and an "or" across fields is two rules.
  *
  * **This is a deliberate divergence from Actual**, recorded in
@@ -18,8 +18,8 @@
  * claimed by at most one rule. The order matters for the rules a person writes next — a broad
  * `contains` over a specific one — and it has to already be legible when that happens.
  *
- * Keeping one rule per row also keeps `ruleId` singular, so "why is this Dining?" has one
- * answer with a name on it.
+ * Scalar fields retain the id of the last rule that wrote them, while `ruleIds` records the
+ * complete ordered match set. That keeps both "what won?" and "what participated?" answerable.
  */
 
 import type { CompiledRule } from "./compile";
@@ -30,24 +30,26 @@ export function ruleMatches(rule: CompiledRule, row: RuleRowInput): boolean {
   return rule.conditions.every((condition) => conditionMatches(condition, row));
 }
 
-/** The first rule in priority order that claims this row, or null. */
+/** Every rule in visible order that matches this row. */
 export function matchRules(
   rules: readonly CompiledRule[],
   row: RuleRowInput,
-): CompiledRule | null {
-  for (const rule of rules) {
-    if (ruleMatches(rule, row)) return rule;
-  }
-  return null;
+): CompiledRule[] {
+  return rules.filter((rule) => ruleMatches(rule, row));
 }
 
-/** What the winning rule says about a row. Every field is null when nothing claimed it. */
+/** The composed result of every matching rule. Every scalar is null when nothing wrote it. */
 export type RuleOutcome = {
   category: string | null;
   flow: string | null;
   /** A name for a payee about to be minted — never a rename of one that exists. */
   payeeName: string | null;
-  /** Which rule decided, for explaining a categorisation. */
+  tags: string[];
+  ruleIds: string[];
+  categoryRuleId: string | null;
+  flowRuleId: string | null;
+  payeeRuleId: string | null;
+  /** Last matching rule, retained for the older classifier audit contract. */
   ruleId: string | null;
 };
 
@@ -55,6 +57,11 @@ export const NO_RULE: RuleOutcome = {
   category: null,
   flow: null,
   payeeName: null,
+  tags: [],
+  ruleIds: [],
+  categoryRuleId: null,
+  flowRuleId: null,
+  payeeRuleId: null,
   ruleId: null,
 };
 
@@ -62,14 +69,32 @@ export function applyRules(
   rules: readonly CompiledRule[],
   row: RuleRowInput,
 ): RuleOutcome {
-  const rule = matchRules(rules, row);
-  if (!rule) return NO_RULE;
+  const matched = matchRules(rules, row);
+  if (matched.length === 0) return NO_RULE;
 
-  const outcome: RuleOutcome = { ...NO_RULE, ruleId: rule.id };
-  for (const action of rule.actions) {
-    if (action.op === "name-payee") outcome.payeeName = action.value;
-    else if (action.field === "category") outcome.category = action.value;
-    else outcome.flow = action.value;
+  const outcome: RuleOutcome = {
+    ...NO_RULE,
+    tags: [],
+    ruleIds: matched.map((rule) => rule.id),
+    ruleId: matched.at(-1)?.id ?? null,
+  };
+  const tags = new Set<string>();
+  for (const rule of matched) {
+    for (const action of rule.actions) {
+      if (action.op === "name-payee") {
+        outcome.payeeName = action.value;
+        outcome.payeeRuleId = rule.id;
+      } else if (action.op === "add-tag") {
+        tags.add(action.value);
+      } else if (action.field === "category") {
+        outcome.category = action.value;
+        outcome.categoryRuleId = rule.id;
+      } else {
+        outcome.flow = action.value;
+        outcome.flowRuleId = rule.id;
+      }
+    }
   }
+  outcome.tags = [...tags];
   return outcome;
 }

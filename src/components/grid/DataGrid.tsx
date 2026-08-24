@@ -33,6 +33,7 @@ import {
 import { withAncestors } from "@/lib/grid/ancestors";
 import { collectColumnValues, distinctValuesOf } from "@/lib/grid/distinct";
 import { rowMatchesSearch, searchActive } from "@/lib/grid/search";
+import type { GridFilterValue } from "@/lib/grid/filterValue";
 import { groupMembers } from "@/lib/grid/groupMembers";
 import { sortRowsWithinGroups } from "@/lib/grid/sortRows";
 import { resolveCompactFields } from "@/lib/grid/compactFields";
@@ -447,7 +448,8 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
             column.compact !== undefined ||
             column.compactTextWithCtx !== undefined ||
             column.compactText !== undefined ||
-            column.filterValue !== undefined,
+            column.filterValue !== undefined ||
+            column.filterValues !== undefined,
         ),
       ),
     [columns],
@@ -522,9 +524,10 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
 
     const pass = new Set<string>();
     for (const row of narrowingNodeRows) {
-      const values: Record<string, string | null> = {};
+      const values: Record<string, GridFilterValue> = {};
       for (const column of filterColumns) {
-        if (column.filterValue) values[column.id] = column.filterValue(row);
+        if (column.filterValues) values[column.id] = column.filterValues(row);
+        else if (column.filterValue) values[column.id] = column.filterValue(row);
       }
       if (
         rowPassesFilters(values, filters, kinds, today) &&

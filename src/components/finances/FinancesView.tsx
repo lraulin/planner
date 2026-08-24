@@ -41,6 +41,9 @@ import { catalogCapabilities } from "@/components/grid/catalogCommands";
 import { GridToolbar } from "@/components/grid/GridToolbar";
 import { useModuleViews } from "@/components/grid/useModuleViews";
 import type { GridDefaults } from "@/components/grid/useGridState";
+import { optionsFilter } from "@/lib/grid/customFilter";
+import { categoryEligibleIds } from "@/lib/finances/categoryEligibility";
+import { effectiveFlow } from "@/lib/finances/analytics";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { collectDistinctValues } from "@/lib/grid/distinct";
@@ -60,15 +63,25 @@ import {
   type FinanceColumnCtx,
 } from "./financeColumns";
 
-const FINANCE_VIEWS = [{ id: "all", label: "All Transactions" }] as const;
+const FINANCE_VIEWS = [
+  { id: "all", label: "All Transactions" },
+  { id: "uncategorized", label: "Uncategorized" },
+  { id: "tag", label: "Tag" },
+] as const;
 
-function viewDefaults(): GridDefaults {
+function viewDefaults(viewId: string, tag: string | null): GridDefaults {
   return {
     order: [...FINANCE_COLUMN_IDS],
     // A register is read newest first; anything else is a deliberate choice the user makes.
     sorts: [{ columnId: "date", direction: "desc" }],
     // Year then month so a skipped statement is a missing header, not a hole in a flat list.
     groupBy: ["year", "month"],
+    filters:
+      viewId === "uncategorized"
+        ? { category: optionsFilter(["Uncategorized"]) }
+        : viewId === "tag" && tag
+          ? { tags: optionsFilter([tag]) }
+          : {},
   };
 }
 
@@ -138,6 +151,8 @@ export function FinancesView({
   budgetStartMonth,
   initialUpcoming = [],
   payees,
+  tags,
+  initialTag = null,
 }: {
   initialTransactions: TransactionListRow[];
   initialAccounts: FinanceAccountRow[];
@@ -149,6 +164,8 @@ export function FinancesView({
   /** Unposted schedule occurrences. Not transactions; never mixed into `rows`. */
   initialUpcoming?: UpcomingOccurrence[];
   payees: readonly { id: string; name: string }[];
+  tags: readonly { tag: string; color: string | null }[];
+  initialTag?: string | null;
 }) {
   const [rows, setRows] = useState(initialTransactions);
   const [accounts, setAccounts] = useState(initialAccounts);
@@ -193,13 +210,60 @@ export function FinancesView({
     builtIn: FINANCE_VIEWS,
     defaultViewId: "all",
     columns: financeColumns,
-    defaultsFor: viewDefaults,
+    defaultsFor: (viewId) => viewDefaults(viewId, initialTag),
   });
   const gridState = views.grid;
+  useEffect(() => {
+    if (views.base === "uncategorized" || views.base === "tag") {
+      gridState.clearViewState();
+    }
+    // Deep links are task entry points: they must open on their exact row set rather than
+    // inheriting an unrelated Register search from the previous visit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deep-link mount reset
+  }, []);
+  const offBudgetAccountIds = useMemo(
+    () =>
+      new Set(
+        accounts.filter((account) => account.offBudget).map((account) => account.id),
+      ),
+    [accounts],
+  );
 
+  const eligibleIds = useMemo(
+    () =>
+      categoryEligibleIds(
+        rows.map((row) => ({
+          id: row.id,
+          accountId: row.accountId,
+          transactionDate: row.transactionDate,
+          transferGroupId: row.transferGroupId ?? null,
+          effectiveFlow: effectiveFlow(row),
+        })),
+        offBudgetAccountIds,
+        budgetStartMonth,
+      ),
+    [rows, offBudgetAccountIds, budgetStartMonth],
+  );
+  const viewRows = useMemo(
+    () =>
+      rows.filter((row) => {
+        if (views.base === "uncategorized") {
+          return eligibleIds.has(row.id) && row.budgetCategoryId === null;
+        }
+        if (views.base === "tag" && initialTag) {
+          return (row.tags ?? []).includes(initialTag);
+        }
+        return true;
+      }),
+    [rows, views.base, eligibleIds, initialTag],
+  );
   const gridRows: GridRow<TransactionListRow>[] = useMemo(
-    () => groupTransactions(rows, gridState.groupBy),
-    [rows, gridState.groupBy],
+    () =>
+      groupTransactions(
+        viewRows.map((row) => ({ ...row, budgetEligible: eligibleIds.has(row.id) })),
+        gridState.groupBy,
+      ),
+    [viewRows, eligibleIds, gridState.groupBy],
   );
   const distinctValues = useMemo(
     () =>
@@ -284,14 +348,6 @@ export function FinancesView({
   }, [pendingDelete, openId, closeDrawer, refresh]);
 
   const claimedByPayee = useMemo(() => claimedPayeeMap(claimed), [claimed]);
-  const offBudgetAccountIds = useMemo(
-    () =>
-      new Set(
-        accounts.filter((account) => account.offBudget).map((account) => account.id),
-      ),
-    [accounts],
-  );
-
   const capabilitiesFor = useCallback(
     (rowId: string | null, count: number) => {
       const row = rowId ? rows.find((entry) => entry.id === rowId) : undefined;
@@ -478,6 +534,7 @@ export function FinancesView({
           envelopes,
           budgetStartMonth,
           offBudgetAccountIds,
+          tagColors: Object.fromEntries(tags.map((tag) => [tag.tag, tag.color])),
           pending,
           onSetEnvelope: (transactionId, categoryId) => {
             setError(null);
@@ -520,14 +577,24 @@ export function FinancesView({
         onGroupIdsChange={setGroupIds}
         density={gridState.density}
         empty={
-          <div className="mx-auto w-full max-w-2xl p-6">
-            <p className="mb-4 text-center text-[0.9375rem] text-ink-muted">
-              No transactions yet. Import a CSV export from your bank to get started.
+          views.base === "uncategorized" ? (
+            <p className="p-8 text-center text-[0.9375rem] text-ink-muted">
+              Everything eligible has a Category.
             </p>
-            <div className="rounded border border-rule">
-              <FinanceImportPanel />
+          ) : views.base === "tag" ? (
+            <p className="p-8 text-center text-[0.9375rem] text-ink-muted">
+              No transactions use {initialTag ? `#${initialTag}` : "this tag"}.
+            </p>
+          ) : (
+            <div className="mx-auto w-full max-w-2xl p-6">
+              <p className="mb-4 text-center text-[0.9375rem] text-ink-muted">
+                No transactions yet. Import a CSV export from your bank to get started.
+              </p>
+              <div className="rounded border border-rule">
+                <FinanceImportPanel />
+              </div>
             </div>
-          </div>
+          )
         }
       />
 
@@ -565,6 +632,7 @@ export function FinancesView({
         envelopes={envelopes}
         budgetStartMonth={budgetStartMonth}
         offBudgetAccountIds={offBudgetAccountIds}
+        managedTags={tags.map((tag) => tag.tag)}
         onClose={closeDrawer}
         onChanged={refresh}
       />
@@ -574,6 +642,7 @@ export function FinancesView({
           initialDraft={ruleDraftFromTransaction(ruleSource)}
           payees={payees}
           accounts={accounts.map(({ id, name }) => ({ id, name }))}
+          categories={envelopes}
           open
           onClose={() => setRuleRowId(null)}
           onSaved={() => undefined}

@@ -1,7 +1,20 @@
-import { reclassifyTransactions, type ReclassifySummary } from "./mutations";
-import { autoMapConfiguredBudgetCategories } from "./budget/mutations";
+import {
+  applyRuleActionsToTransactions,
+  reclassifyTransactions,
+  type ReclassifySummary,
+} from "./mutations";
 import { findMatches, type FindMatchesResult } from "./schedules/mutations";
 import { listScheduleRecords } from "./schedules/queries";
+import { db } from "@/db";
+import { sql } from "drizzle-orm";
+
+/** Database-clock watermark taken before an ingestion begins. */
+export async function transactionIngestionWatermark(): Promise<Date> {
+  const result = await db.execute(sql`select clock_timestamp() as at`);
+  const row = (result as unknown as Array<{ at: Date | string }>)[0];
+  if (!row) throw new Error("Could not read the transaction ingestion watermark");
+  return row.at instanceof Date ? row.at : new Date(row.at);
+}
 
 /**
  * Finish every transaction-ingestion path in the same order: stable payees first, schedule
@@ -10,7 +23,7 @@ import { listScheduleRecords } from "./schedules/queries";
  */
 export async function finalizeTransactionIngestion(
   userId: string,
-  options: { forceReclassify?: boolean } = {},
+  options: { forceReclassify?: boolean; applyRulesSince?: Date } = {},
 ): Promise<{
   reclassified: ReclassifySummary | null;
   matched: FindMatchesResult;
@@ -20,11 +33,19 @@ export async function finalizeTransactionIngestion(
   // Live bank sync opts in unconditionally because it already promised automatic
   // classification before this shared finish step existed.
   if (!options.forceReclassify && (await listScheduleRecords(userId)).length === 0) {
-    await autoMapConfiguredBudgetCategories(userId);
+    if (options.applyRulesSince) {
+      await applyRuleActionsToTransactions(userId, {
+        createdSince: options.applyRulesSince,
+      });
+    }
     return { reclassified: null, matched: { linked: 0 } };
   }
   const reclassified = await reclassifyTransactions(userId);
   const matched = await findMatches(userId);
-  await autoMapConfiguredBudgetCategories(userId);
+  if (options.applyRulesSince) {
+    await applyRuleActionsToTransactions(userId, {
+      createdSince: options.applyRulesSince,
+    });
+  }
   return { reclassified, matched };
 }

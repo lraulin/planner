@@ -1,5 +1,10 @@
 import { priorityOrderValue } from "@/lib/priority/order";
 import { parsePriority } from "@/lib/tree/format";
+import {
+  filterValueBlank,
+  scalarFilterValues,
+  type GridFilterValue,
+} from "./filterValue";
 
 /**
  * Achieve-style custom column filters: multi-condition And/Or with operators restricted
@@ -15,7 +20,7 @@ import { parsePriority } from "@/lib/tree/format";
  * Defined here rather than on `ColumnDef` because it is filter vocabulary, not
  * presentation — `components/grid/columns` re-exports it for the column definitions.
  */
-export type FilterKind = "text" | "priority" | "date" | "enum";
+export type FilterKind = "text" | "priority" | "date" | "enum" | "tags";
 
 export type FilterJoin = "and" | "or";
 
@@ -147,7 +152,7 @@ export function operatorsForKind(kind: FilterKind | undefined): OperatorOption[]
   const ops =
     kind === "priority" || kind === "date"
       ? COMPARE_OPS
-      : kind === "enum"
+      : kind === "enum" || kind === "tags"
         ? ENUM_OPS
         : TEXT_OPS;
 
@@ -163,7 +168,7 @@ export function operatorNeedsOperand(op: FilterOperator): boolean {
  * `kind` selects comparison semantics for gt/lt; text ops stay string-based either way.
  */
 export function matchesCustom(
-  value: string | null,
+  value: GridFilterValue,
   filter: CustomColumnFilter,
   kind: FilterKind | undefined,
 ): boolean {
@@ -176,12 +181,14 @@ export function matchesCustom(
 }
 
 export function matchesCondition(
-  value: string | null,
+  value: GridFilterValue,
   condition: FilterCondition,
   kind: FilterKind | undefined,
 ): boolean {
-  const blank = value === null || value === "";
-  const cell = value ?? "";
+  const blank = filterValueBlank(value);
+  const cells = scalarFilterValues(value);
+  const any = (test: (cell: string) => boolean) => cells.some(test);
+  const none = (test: (cell: string) => boolean) => cells.every((cell) => !test(cell));
 
   switch (condition.op) {
     case "blank":
@@ -189,31 +196,34 @@ export function matchesCondition(
     case "nonblank":
       return !blank;
     case "eq":
-      return !blank && equals(cell, condition.value, kind);
+      return !blank && any((cell) => equals(cell, condition.value, kind));
     case "neq":
       // Blank is not equal to a concrete operand — "≠ Cancelled" keeps empty cells.
       if (blank) return true;
-      return !equals(cell, condition.value, kind);
+      return none((cell) => equals(cell, condition.value, kind));
     case "contains":
-      return !blank && includesInsensitive(cell, condition.value);
+      return !blank && any((cell) => includesInsensitive(cell, condition.value));
     case "not_contains":
       if (blank) return true;
-      return !includesInsensitive(cell, condition.value);
+      return none((cell) => includesInsensitive(cell, condition.value));
     case "starts_with":
-      return !blank && startsInsensitive(cell, condition.value);
+      return !blank && any((cell) => startsInsensitive(cell, condition.value));
     case "ends_with":
-      return !blank && endsInsensitive(cell, condition.value);
+      return !blank && any((cell) => endsInsensitive(cell, condition.value));
     case "lt":
     case "lte":
     case "gt":
-    case "gte":
-      return compare(cell, condition.value, condition.op, kind);
+    case "gte": {
+      const op = condition.op;
+      return any((cell) => compare(cell, condition.value, op, kind));
+    }
     default:
       return true;
   }
 }
 
 function equals(cell: string, operand: string, _kind: FilterKind | undefined): boolean {
+  if (_kind === "tags") return cell === operand;
   // Case-fold so a typed "ns" matches "NS" on enum columns; accents still distinguish.
   void _kind;
   return cell.localeCompare(operand, undefined, { sensitivity: "accent" }) === 0;

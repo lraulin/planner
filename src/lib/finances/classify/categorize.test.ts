@@ -36,8 +36,8 @@ describe("categorize", () => {
 
     expect(supercenter.merchant).toBe("Walmart");
     expect(walmart.merchant).toBe("Walmart");
-    expect(supercenter.category).toBe("Groceries");
-    expect(walmart.category).toBe("Groceries");
+    expect(supercenter.category).toBeNull();
+    expect(walmart.category).toBeNull();
   });
 
   it("collapses all three rent payer strings onto one merchant", () => {
@@ -50,17 +50,17 @@ describe("categorize", () => {
     for (const spelling of spellings) {
       const result = categorize(spelling, "");
       expect(result.merchant).toBe("Rent");
-      expect(result.category).toBe("Rent & Housing");
+      expect(result.category).toBeNull();
     }
   });
 
   it("prefers a description rule over the bank's coarser label", () => {
     // Capital One files this as Merchandise; it is a grocery run.
-    expect(categorize("WM SUPERCENTER #1981", "Merchandise").category).toBe(
-      "Groceries",
-    );
+    expect(categorize("WM SUPERCENTER #1981", "Merchandise").category).toBeNull();
     // Chase files a video game as Internet.
-    expect(categorize("STEAMGAMES.COM 4259522985", "Internet").category).toBe("Games");
+    expect(categorize("STEAMGAMES.COM 4259522985", "Internet").category).toBe(
+      "Phone & Internet",
+    );
   });
 
   it("falls back to the bank's label when no rule matches", () => {
@@ -80,7 +80,7 @@ describe("categorize", () => {
   it("files pet insurance under Pets, not Insurance", () => {
     // Ordering test: a bare Insurance rule must not outrank the specific one.
     const result = categorize("METLIFE PET", "Insurance");
-    expect(result.category).toBe("Pets");
+    expect(result.category).toBe("Insurance");
     expect(result.merchant).toBe("MetLife Pet");
   });
 
@@ -105,7 +105,7 @@ describe("categorize", () => {
     expect(categorize("COMCAST / XFINITY", "Phone/Cable").category).toBe(
       "Phone & Internet",
     );
-    expect(categorize("SIMPLISAFE", "Other Services").category).toBe("Home & Security");
+    expect(categorize("SIMPLISAFE", "Other Services").category).toBeNull();
     expect(categorize("ST MARYS COUNTY METROPOLI", "Utilities").category).toBe(
       "Utilities",
     );
@@ -119,7 +119,7 @@ describe("categorize", () => {
     // "TAYLOR GAS HEATING AIR" reads as home services to the bank and to any classifier
     // working from the string alone. It is the propane bill, twice a year.
     const result = categorize("TAYLOR GAS HEATING AIR", "Home Improvement");
-    expect(result.category).toBe("Utilities");
+    expect(result.category).toBeNull();
     expect(result.merchant).toBe("Taylor Gas");
   });
 
@@ -127,23 +127,17 @@ describe("categorize", () => {
     for (const description of ["CLAUDE.AI SUBSCRIPTION", "ANTHROPIC* CLAUDE SUB"]) {
       const result = categorize(description, "Merchandise");
       expect(result.merchant).toBe("Anthropic");
-      expect(result.category).toBe("AI");
+      expect(result.category).toBeNull();
     }
     for (const description of ["GROK XAI", "XAI LLC"]) {
       const result = categorize(description, "Merchandise");
       expect(result.merchant).toBe("xAI");
-      expect(result.category).toBe("AI");
+      expect(result.category).toBeNull();
     }
-    expect(categorize("OPENAI CHATGPT", "Merchandise").category).toBe("AI");
-    expect(categorize("DROPBOX*PLUS", "Merchandise").category).toBe(
-      "Productivity & Security",
-    );
-    expect(categorize("PAYPAL *SANEBOX INC", "Merchandise").category).toBe(
-      "Productivity & Security",
-    );
-    expect(categorize("PAYPAL *GITHUB INC", "Merchandise").category).toBe(
-      "Software & Development",
-    );
+    expect(categorize("OPENAI CHATGPT", "Merchandise").category).toBeNull();
+    expect(categorize("DROPBOX*PLUS", "Merchandise").category).toBeNull();
+    expect(categorize("PAYPAL *SANEBOX INC", "Merchandise").category).toBeNull();
+    expect(categorize("PAYPAL *GITHUB INC", "Merchandise").category).toBeNull();
     expect(categorize("PAYPAL *PADDLE.NET35314369001", "Merchandise").merchant).toBe(
       "Paddle.com Market Limited",
     );
@@ -153,9 +147,7 @@ describe("categorize", () => {
     expect(categorize("PAYPAL *SPOTIFY USA INC", "Merchandise").merchant).toBe(
       "Spotify USA Inc",
     );
-    expect(categorize("CURSOR, AI POWERED IDE", "Merchandise").category).toBe(
-      "Software & Development",
-    );
+    expect(categorize("CURSOR, AI POWERED IDE", "Merchandise").category).toBeNull();
   });
 
   it("reports which rule fired, so a categorisation can be explained", () => {

@@ -2,11 +2,7 @@
 
 import type { ColumnDef } from "@/components/grid/columns";
 import { DateText } from "@/components/date/DateText";
-import {
-  effectiveCategory,
-  effectiveFlow,
-  effectiveMerchant,
-} from "@/lib/finances/analytics";
+import { effectiveFlow, effectiveMerchant } from "@/lib/finances/analytics";
 import { flowLabel } from "@/lib/finances/flowLabels";
 import { formatUsd } from "@/lib/finances/money";
 import type { TransactionListRow } from "@/lib/finances/types";
@@ -22,6 +18,7 @@ export type FinanceColumnCtx = {
   budgetStartMonth: string | null;
   offBudgetAccountIds: ReadonlySet<string>;
   onSetEnvelope: (transactionId: string, categoryId: string | null) => void;
+  tagColors: Readonly<Record<string, string | null>>;
   pending: boolean;
 };
 
@@ -30,6 +27,7 @@ export const FINANCE_COLUMN_IDS = [
   "account",
   "description",
   "category",
+  "tags",
   "flow",
   "sourceCategory",
   "amount",
@@ -38,7 +36,6 @@ export const FINANCE_COLUMN_IDS = [
   "oneOff",
   "event",
   "notes",
-  "envelope",
 ] as const;
 
 function Text({ value, muted = true }: { value: string; muted?: boolean }) {
@@ -152,32 +149,14 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, TransactionListRow>[] =
   {
     id: "category",
     label: "Category",
-    width: "minmax(8rem,0.7fr)",
-    // The **effective** category, so filtering and grouping reach the classifier's answer.
-    // A column showing only the hand-typed value would be blank on 2,844 of 2,845 rows while
-    // the dashboard reported categories for all of them, and the register is exactly where
-    // you go to check whether the classifier got one right.
-    filterKind: "enum",
-    filterValue: (row) => effectiveCategory(row.node),
-    sortValue: (row) => effectiveCategory(row.node).toLowerCase(),
-    compact: "meta",
-    render: (row) => (
-      // Muted where the classifier supplied it, full ink where you did — the difference
-      // matters, because only one of the two survives a reclassify by right.
-      <Text value={effectiveCategory(row.node)} muted={!row.node.category?.trim()} />
-    ),
-  },
-  {
-    id: "envelope",
-    label: "Envelope",
-    // Which envelope's money paid for this, in the zero-based budget. A different question
-    // from Category — that says what it bought — and the two are deliberately independent
-    // axes (`agent-os/specs/2026-08-22-1948-zero-based-budget/` D4).
     width: "minmax(8rem,0.6fr)",
     filterKind: "enum",
     // "Unassigned" rather than blank, so the backlog is a value you can filter *to*. It is
     // the set the Budget page counts, and finding it is the whole workflow.
-    filterValue: (row) => row.node.budgetCategoryName ?? "Unassigned",
+    filterValue: (row) =>
+      row.node.budgetEligible === false
+        ? "Not budgeted"
+        : (row.node.budgetCategoryName ?? "Uncategorized"),
     sortValue: (row) => (row.node.budgetCategoryName ?? "").toLowerCase(),
     compact: "meta",
     compactTextWithCtx: (row, ctx) =>
@@ -187,7 +166,7 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, TransactionListRow>[] =
         accountOffBudget: ctx.offBudgetAccountIds.has(row.node.accountId),
       })
         ? "Not budgeted"
-        : (row.node.budgetCategoryName ?? "Unassigned"),
+        : (row.node.budgetCategoryName ?? "Categorize"),
     // Editable in place rather than behind a row-menu command: the envelope for a row is a
     // one-keystroke decision made while reading the description next to it, and a menu of
     // twenty envelopes is not a menu (`components/ux-principles`).
@@ -211,7 +190,7 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, TransactionListRow>[] =
         <select
           value={row.node.budgetCategoryId ?? ""}
           disabled={ctx.pending}
-          aria-label={`Envelope for ${row.node.description}`}
+          aria-label={`Category for ${row.node.description}`}
           onChange={(event) =>
             ctx.onSetEnvelope(
               row.node.id,
@@ -222,7 +201,7 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, TransactionListRow>[] =
             row.node.budgetCategoryId ? "text-ink" : "text-ink-faint"
           }`}
         >
-          <option value="">Unassigned</option>
+          <option value="">Categorize</option>
           {ctx.envelopes.map((envelope) => (
             <option key={envelope.id} value={envelope.id}>
               {envelope.label}
@@ -231,6 +210,30 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, TransactionListRow>[] =
         </select>
       );
     },
+  },
+  {
+    id: "tags",
+    label: "Tags",
+    width: "minmax(10rem,0.8fr)",
+    filterKind: "tags",
+    filterValues: (row) => row.node.tags ?? [],
+    sortValue: (row) => (row.node.tags ?? []).join("\u0000"),
+    compact: "meta",
+    compactText: (row) => (row.node.tags ?? []).map((tag) => `#${tag}`).join(" "),
+    render: (row, ctx) => (
+      <span className="flex min-w-0 flex-wrap gap-1">
+        {(row.node.tags ?? []).map((tag) => (
+          <a
+            key={tag}
+            href={`/finances/register?view=tag&tag=${encodeURIComponent(tag)}`}
+            className="rounded px-1.5 py-px text-[0.75rem] text-ink"
+            style={{ backgroundColor: ctx.tagColors[tag] ?? "var(--surface-raised)" }}
+          >
+            #{tag}
+          </a>
+        ))}
+      </span>
+    ),
   },
   {
     id: "flow",

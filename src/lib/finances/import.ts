@@ -45,7 +45,10 @@ import {
   type ParsedFinanceCsv,
   type ParsedStatement,
 } from "./types";
-import { finalizeTransactionIngestion } from "./ingestion";
+import {
+  finalizeTransactionIngestion,
+  transactionIngestionWatermark,
+} from "./ingestion";
 
 /**
  * Writing parsed CSV or statement rows into the register.
@@ -346,6 +349,7 @@ export async function importFinanceCsvFiles({
   userId: string;
   files: readonly ImportFile[];
 }): Promise<ImportResult> {
+  const importStartedAt = await transactionIngestionWatermark();
   const warnings: string[] = [];
   let created = 0;
   let skipped = 0;
@@ -482,7 +486,7 @@ export async function importFinanceCsvFiles({
   }
 
   if (created > 0) {
-    await finalizeTransactionIngestion(userId);
+    await finalizeTransactionIngestion(userId, { applyRulesSince: importStartedAt });
   }
 
   return {

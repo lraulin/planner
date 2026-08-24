@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { parseRuleActions, REFUSED_ACTION_OPS, summarizeActions } from "./actions";
 
+const GROCERIES = "11111111-1111-4111-8111-111111111111";
+const DINING = "22222222-2222-4222-8222-222222222222";
+
 describe("parseRuleActions", () => {
   it("rejects a rule with no actions, which would do nothing", () => {
     expect(parseRuleActions([])).toHaveProperty("error");
@@ -15,19 +18,13 @@ describe("parseRuleActions", () => {
     }
   });
 
-  it("rejects a category outside the taxonomy", () => {
-    /*
-     * The silent failure this prevents: envelopes claim taxonomy categories through
-     * `finance_budget_categories.sourceCategories`, so a rule writing "Restaurants" produces a
-     * derived_category no envelope maps, and the money disappears from the budget with no
-     * error anywhere. The list is closed, so the check is cheap and exact.
-     */
+  it("accepts category UUIDs and rejects labels", () => {
     expect(
       parseRuleActions([{ op: "set", field: "category", value: "Restaurants" }]),
     ).toHaveProperty("error");
     expect(
-      parseRuleActions([{ op: "set", field: "category", value: "Dining" }]),
-    ).toMatchObject({ actions: [{ value: "Dining" }] });
+      parseRuleActions([{ op: "set", field: "category", value: DINING }]),
+    ).toMatchObject({ actions: [{ value: DINING }] });
   });
 
   it("rejects a category on a flow that carries none", () => {
@@ -36,7 +33,7 @@ describe("parseRuleActions", () => {
     expect(
       parseRuleActions([
         { op: "set", field: "flow", value: "internal_transfer" },
-        { op: "set", field: "category", value: "Dining" },
+        { op: "set", field: "category", value: DINING },
       ]),
     ).toMatchObject({ error: expect.stringContaining("internal_transfer") });
   });
@@ -45,7 +42,7 @@ describe("parseRuleActions", () => {
     expect(
       parseRuleActions([
         { op: "set", field: "flow", value: "interest_fee" },
-        { op: "set", field: "category", value: "Fees & Interest" },
+        { op: "set", field: "category", value: GROCERIES },
       ]),
     ).toHaveProperty("actions");
   });
@@ -82,8 +79,8 @@ describe("parseRuleActions", () => {
     // would make the order of a list the user cannot see into decide the outcome.
     expect(
       parseRuleActions([
-        { op: "set", field: "category", value: "Dining" },
-        { op: "set", field: "category", value: "Groceries" },
+        { op: "set", field: "category", value: DINING },
+        { op: "set", field: "category", value: GROCERIES },
       ]),
     ).toHaveProperty("error");
   });
@@ -105,9 +102,10 @@ describe("summarizeActions", () => {
   it("reads as a sentence fragment for a grid cell", () => {
     expect(
       summarizeActions([
-        { op: "set", field: "category", value: "Groceries" },
+        { op: "set", field: "category", value: GROCERIES },
+        { op: "add-tag", value: "groceries" },
         { op: "name-payee", value: "Walmart" },
       ]),
-    ).toBe("category = Groceries, call it Walmart");
+    ).toBe(`category = ${GROCERIES}, add #groceries, call it Walmart`);
   });
 });

@@ -88,7 +88,9 @@ export function categorize(
 
   return {
     merchant: outcome.payeeName ?? normalized,
-    category: outcome.category ?? categoryFromBank(sourceCategory),
+    // Category rule actions target budget envelope UUIDs now. The legacy reporting fallback
+    // remains read-only during the staged cutover and must never receive one of those UUIDs.
+    category: categoryFromBank(sourceCategory),
     flow: (outcome.flow as FinanceFlowKind | null) ?? null,
     ruleId: outcome.ruleId,
   };

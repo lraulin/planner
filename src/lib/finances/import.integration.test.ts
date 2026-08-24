@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { financeBudgetCategories, financeTransactions, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
@@ -9,6 +9,7 @@ import { listAccounts, listStatements, listTransactions } from "./queries";
 import { createPayee } from "./payees/mutations";
 import { createSchedule } from "./schedules/mutations";
 import { seedBudget } from "./budget/mutations";
+import { createRule } from "./rules/mutations";
 
 const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
@@ -112,11 +113,25 @@ describeDb("finance CSV import", () => {
     expect(byDescription.get("Deposit from GA8248 TRUSTEDQA PAYROLL")).toBe(231121);
   });
 
-  it("sorts a newly imported taxonomy category into its claimed envelope", async () => {
+  it("applies a Category rule to a newly imported transaction", async () => {
     await seedBudget(userId, {
       preset: "minimal",
       startMonth: "2026-08-01",
       todayKey: "2026-08-23",
+    });
+    const [category] = await db
+      .select({ id: financeBudgetCategories.id })
+      .from(financeBudgetCategories)
+      .where(
+        and(
+          eq(financeBudgetCategories.userId, userId),
+          eq(financeBudgetCategories.name, "Discretionary"),
+        ),
+      );
+    await createRule(userId, {
+      name: "Local cafe",
+      conditions: [{ field: "merchant", op: "is", value: "LOCAL CAFE" }],
+      actions: [{ op: "set", field: "category", value: category.id }],
     });
 
     await importFinanceCsvFiles({

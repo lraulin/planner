@@ -8,6 +8,11 @@ import {
   type ColumnFilter,
   type FilterKind,
 } from "./customFilter";
+import {
+  filterValueBlank,
+  scalarFilterValues,
+  type GridFilterValue,
+} from "./filterValue";
 
 /**
  * Per-column filter state and the pure matching rules that power the header dropdowns.
@@ -161,7 +166,7 @@ export function presetOptions(kind: FilterKind | undefined): FilterOption[] {
  * named band is Custom criteria, which offers `<` `<=` `>` `>=` joined by And/Or.
  */
 export function usesSetFilter(kind: FilterKind | undefined): boolean {
-  return kind === "enum";
+  return kind === "enum" || kind === "tags";
 }
 
 /**
@@ -209,7 +214,7 @@ export function filterOptions(
  * an unknown today as "match everything", so the server and first paint do not disagree.
  */
 export function matchesFilter(
-  value: string | null,
+  value: GridFilterValue,
   filter: ColumnFilter,
   kind: FilterKind | undefined,
   today: string | null,
@@ -220,7 +225,7 @@ export function matchesFilter(
 }
 
 function matchesOption(
-  value: string | null,
+  value: GridFilterValue,
   id: string,
   kind: FilterKind | undefined,
   today: string | null,
@@ -229,20 +234,26 @@ function matchesOption(
   // which have their own `none` meaning "blank" — so it can never be read as a band.
   if (id === NONE_OPTION_ID) return false;
 
-  if (id === "blanks") return value === null || value === "";
-  if (id === "nonblanks") return value !== null && value !== "";
+  if (id === "blanks") return filterValueBlank(value);
+  if (id === "nonblanks") return !filterValueBlank(value);
 
   if (id.startsWith("value:")) {
     const wanted = id.slice("value:".length);
-    return (value ?? "") === wanted;
+    return scalarFilterValues(value).includes(wanted);
   }
 
   if (kind === "priority") {
-    return matchesPriority(value, id);
+    const values = scalarFilterValues(value);
+    return values.length === 0
+      ? matchesPriority(null, id)
+      : values.some((entry) => matchesPriority(entry, id));
   }
 
   if (kind === "date") {
-    return matchesDeadline(value, id, today);
+    const values = scalarFilterValues(value);
+    return values.length === 0
+      ? matchesDeadline(null, id, today)
+      : values.some((entry) => matchesDeadline(entry, id, today));
   }
 
   // Enum / text with no matching preset id: treat unknown ids as open (do not hide rows).
@@ -359,7 +370,7 @@ export function shiftDays(isoDate: string, delta: number): string {
  * way rather than stranding the tab.
  */
 export function rowPassesFilters(
-  values: Record<string, string | null>,
+  values: Record<string, GridFilterValue>,
   filters: Record<string, ColumnFilter>,
   kinds: Record<string, FilterKind | undefined>,
   today: string | null,

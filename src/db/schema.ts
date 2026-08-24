@@ -3190,6 +3190,8 @@ export const financePayees = pgTable(
     ),
     /** Free text about the merchant. Not a matcher, and never read by the resolver. */
     notes: text("notes").notNull().default(""),
+    /** Whether direct transaction choices may teach an exact-payee Category rule. */
+    learnCategories: boolean("learn_categories").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -3214,6 +3216,50 @@ export const financePayees = pgTable(
       .where(sql`${table.commitmentSpendId} is not null`),
   ],
 );
+
+/**
+ * Presentation metadata for Actual-style `#tags` whose occurrences live in transaction Notes.
+ * Deleting this row never edits Notes; Find existing tags can recreate it later.
+ */
+export const financeTags = pgTable(
+  "finance_tags",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Exact and case-sensitive, stored without the leading `#`. */
+    tag: text("tag").notNull(),
+    color: text("color"),
+    description: text("description").notNull().default(""),
+    hidden: boolean("hidden").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("finance_tags_user_tag_uq").on(table.userId, table.tag),
+    check(
+      "finance_tags_valid_tag",
+      sql`${table.tag} <> '' and ${table.tag} !~ '[#[:space:]]'`,
+    ),
+    check(
+      "finance_tags_valid_color",
+      sql`${table.color} is null or ${table.color} ~ '^#[0-9A-Fa-f]{6}$'`,
+    ),
+    index("finance_tags_user_hidden_idx").on(table.userId, table.hidden),
+  ],
+);
+
+/** Per-user receipt for the staged taxonomy-to-tags cutover. */
+export const financeCategoryCutovers = pgTable("finance_category_cutovers", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  taggedTransactions: integer("tagged_transactions").notNull().default(0),
+  mappedTransactions: integer("mapped_transactions").notNull().default(0),
+  unresolvedRules: integer("unresolved_rules").notNull().default(0),
+  appliedAt: timestamp("applied_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 /**
  * The `normalizeMerchant()` strings one payee answers to.
@@ -3322,6 +3368,10 @@ export const financeRules = pgTable(
      * parity audit name which rule decided a row in both the old world and the new.
      */
     seededId: text("seeded_id"),
+    /** A migrated rule whose tag survived but Category target needs a person. */
+    categoryReviewRequired: boolean("category_review_required")
+      .notNull()
+      .default(false),
     /** Why this rule sits where it does. The old file kept that in comments. */
     notes: text("notes").notNull().default(""),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

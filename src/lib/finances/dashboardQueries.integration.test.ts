@@ -115,7 +115,7 @@ describeDb("loadInsightsRows", () => {
     ]);
     expect(rows.every((row) => row.accountName === "Chase •••9910")).toBe(true);
     expect(effectiveFlow(rows[0])).toBe("spend");
-    expect(effectiveCategory(rows[0])).toBe("Groceries");
+    expect(effectiveCategory(rows[0])).toBe("Uncategorized");
     expect(rows.every((row) => row.payeeId !== null && row.payeeName !== null)).toBe(
       true,
     );

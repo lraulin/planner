@@ -261,7 +261,7 @@ describeDb("budget mutations", () => {
     expect(categoryMonth(august, ids.get("Bills")!).activityCents).toBe(-9_000);
 
     // The card payment stayed out of the budget despite carrying a category.
-    expect(data.uncategorizedCount).toBe(2);
+    expect(data.uncategorizedCount).toBe(0);
   });
 
   it("does not move a transaction someone placed by hand", async () => {
@@ -287,6 +287,22 @@ describeDb("budget mutations", () => {
       .from(financeTransactions)
       .where(eq(financeTransactions.id, txId));
     expect(row?.budgetCategoryId).toBe(ids.get("Savings"));
+  });
+
+  it("keeps an unpaired internal transfer out of the Category backlog", async () => {
+    const { checkingId } = await seedAccounts(userId);
+    await addTransactions(userId, [
+      {
+        accountId: checkingId,
+        date: "2026-08-05",
+        description: "CARD PAYMENT",
+        amount: "-50.00",
+        flow: "internal_transfer",
+      },
+    ]);
+    await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
+
+    expect((await loadBudget(userId, MONTH)).uncategorizedCount).toBe(0);
   });
 
   it("moves a taxonomy claim to one envelope and maps the unassigned backlog there", async () => {

@@ -2,6 +2,7 @@ import { and, asc, desc, eq, gte, isNotNull, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeAccounts,
+  financeBudgetCategories,
   financePayees,
   financeRecurringBills,
   financeRecurringSpend,
@@ -33,6 +34,7 @@ import { listAccounts } from "./queries";
 import type { FinanceAccountRow } from "./types";
 import { selectWorkingPending } from "./workingPending";
 import { shiftDateKey, toDateKey } from "@/lib/schedule/geometry";
+import { tagsInNotes } from "./tags";
 
 /**
  * Reads for the insights dashboard. Every one takes `userId` and scopes on it.
@@ -91,6 +93,8 @@ export async function loadInsightsRows(
       plannedWithdrawal: financeTransactions.plannedWithdrawal,
       payeeId: financeTransactions.payeeId,
       payeeName: financePayees.name,
+      budgetCategoryName: financeBudgetCategories.name,
+      notes: financeTransactions.notes,
     })
     .from(financeTransactions)
     .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
@@ -99,6 +103,13 @@ export async function loadInsightsRows(
       and(
         eq(financePayees.id, financeTransactions.payeeId),
         eq(financePayees.userId, userId),
+      ),
+    )
+    .leftJoin(
+      financeBudgetCategories,
+      and(
+        eq(financeBudgetCategories.id, financeTransactions.budgetCategoryId),
+        eq(financeBudgetCategories.userId, userId),
       ),
     )
     .where(and(...scopeConditions(userId, filter)))
@@ -123,6 +134,8 @@ export async function loadInsightsRows(
     plannedWithdrawal: row.plannedWithdrawal,
     payeeId: row.payeeId,
     payeeName: row.payeeName,
+    budgetCategoryName: row.budgetCategoryName,
+    tags: tagsInNotes(row.notes),
   }));
 }
 

@@ -15,14 +15,20 @@ import { DEFAULT_UPCOMING_LENGTH } from "@/lib/finances/schedules/status";
 import { toDateKey } from "@/lib/schedule/geometry";
 import { AppShell } from "@/components/shell/AppShell";
 import { FinancesView } from "@/components/finances/FinancesView";
+import { listFinanceTags } from "@/lib/finances/tags/queries";
 
 export const dynamic = "force-dynamic";
 
 /** The Register page: every transaction, grouped and filterable. */
-export default async function FinancesRegisterPage() {
+export default async function FinancesRegisterPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tag?: string }>;
+}) {
   const userId = await getCurrentUserId();
+  const { tag } = await searchParams;
   const todayKey = toDateKey(new Date());
-  const [transactions, accounts, bills, spend, budget, scheduleRecords, payees] =
+  const [transactions, accounts, bills, spend, budget, scheduleRecords, payees, tags] =
     await Promise.all([
       listTransactions(userId),
       listAccounts(userId),
@@ -31,6 +37,7 @@ export default async function FinancesRegisterPage() {
       loadBudget(userId, null),
       listScheduleRecords(userId),
       listPayees(userId),
+      listFinanceTags(userId),
     ]);
   const links = await listPostedLinks(
     userId,
@@ -57,6 +64,8 @@ export default async function FinancesRegisterPage() {
           budgetStartMonth={budget.settings.startMonth}
           initialUpcoming={upcoming}
           payees={payees.map(({ id, name }) => ({ id, name }))}
+          tags={tags.map(({ tag, color }) => ({ tag, color }))}
+          initialTag={tag ?? null}
         />
       </Suspense>
     </AppShell>

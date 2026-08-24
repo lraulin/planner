@@ -113,8 +113,9 @@ export function RulePreviewDialog({
           Run rules
         </h2>
         <p className="mt-2 text-[0.8125rem] leading-relaxed text-ink-muted">
-          Re-reads every transaction and rewrites what the rules decide. A category you
-          set on a row yourself is a different column and survives this.
+          Re-reads every transaction and applies every matching rule in visible order.
+          Later Category and Flow actions win; Add tag actions combine without
+          duplicates.
         </p>
 
         {loading && (

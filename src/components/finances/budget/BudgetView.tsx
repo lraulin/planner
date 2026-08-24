@@ -6,7 +6,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   addTemplatesFromSchedulesAction,
   applyBudgetTemplatesAction,
-  autoMapBudgetAction,
   budgetOperationAction,
   setCarryoverAction,
   updateBudgetCategoryAction,
@@ -476,7 +475,7 @@ export function BudgetView({
           </p>
         ) : null}
 
-        {backlog > 0 ? <Backlog data={data} pending={pending} onRun={run} /> : null}
+        {backlog > 0 ? <Backlog data={data} /> : null}
 
         <div className="flex min-h-0 min-w-0 flex-col md:flex-1">
           <DataGrid<BudgetColumnCtx, BudgetRow>
@@ -814,21 +813,16 @@ function MonthBar({
  * nothing since the start month is unenveloped. So this count *is* the discrepancy, and a
  * budget that did not show it would drift quietly instead of asking to be fixed.
  */
-function Backlog({
-  data,
-  pending,
-  onRun,
-}: {
-  data: BudgetData;
-  pending: boolean;
-  onRun: (work: () => Promise<{ ok: boolean; error?: string }>) => void;
-}) {
+function Backlog({ data }: { data: BudgetData }) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded border border-rule bg-surface-raised px-3 py-2 text-[0.8125rem]">
-      <span className="text-ink">
+      <a
+        href="/finances/register?view=uncategorized"
+        className="text-ink hover:underline"
+      >
         {data.uncategorizedCount}{" "}
         {data.uncategorizedCount === 1 ? "transaction has" : "transactions have"} no
-        envelope
+        category
         {/* The backlog spans the whole budget, not the month on screen. Unqualified, it
             reads as September's when you have paged forward — and this figure is the one
             that explains the gap between the budget and the bank, so it has to say what it
@@ -836,31 +830,16 @@ function Backlog({
         {data.settings.startMonth
           ? ` since ${monthLabel(data.settings.startMonth)}`
           : ""}
-      </span>
+      </a>
       <span className="tabular text-ink-muted">
         {formatUsd(data.uncategorizedCents)} unaccounted for
       </span>
       <span className="ml-auto flex gap-2">
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() =>
-            onRun(async () => {
-              const result = await autoMapBudgetAction(
-                data.settings.startMonth ?? data.month,
-              );
-              return { ok: result.ok, error: result.ok ? undefined : result.error };
-            })
-          }
-          className="rounded border border-rule px-2 py-1 text-ink hover:bg-surface disabled:opacity-60"
-        >
-          Sort what can be sorted
-        </button>
         <a
-          href="/finances/register"
+          href="/finances/register?view=uncategorized"
           className="rounded border border-rule px-2 py-1 text-ink hover:bg-surface"
         >
-          Open Register
+          Categorize
         </a>
       </span>
     </div>

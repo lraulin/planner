@@ -11,7 +11,12 @@
 
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { financeAccounts, financePayees, financeRules } from "@/db/schema";
+import {
+  financeAccounts,
+  financeBudgetCategories,
+  financePayees,
+  financeRules,
+} from "@/db/schema";
 import { isUniqueViolation } from "@/lib/db/constraints";
 import * as sortKey from "@/lib/tree/sortKey";
 import { storedSchedulePayeeIds } from "../payees/references";
@@ -43,6 +48,7 @@ async function requireRule(userId: string, ruleId: string) {
 async function requireOwnedReferences(
   userId: string,
   conditions: unknown,
+  actions: readonly import("./actions").RuleAction[],
 ): Promise<void> {
   const payeeIds = storedSchedulePayeeIds(conditions);
   if (payeeIds.length > 0) {
@@ -91,6 +97,24 @@ async function requireOwnedReferences(
       throw new Error("One or more accounts do not exist.");
     }
   }
+
+  const categoryIds = actions.flatMap((action) =>
+    action.op === "set" && action.field === "category" ? [action.value] : [],
+  );
+  if (categoryIds.length > 0) {
+    const rows = await db
+      .select({ id: financeBudgetCategories.id })
+      .from(financeBudgetCategories)
+      .where(
+        and(
+          eq(financeBudgetCategories.userId, userId),
+          inArray(financeBudgetCategories.id, categoryIds),
+        ),
+      );
+    if (rows.length !== new Set(categoryIds).size) {
+      throw new Error("One or more categories do not exist.");
+    }
+  }
 }
 
 /** Parse both blobs together, because one of the action rules depends on the conditions. */
@@ -127,7 +151,7 @@ async function lastSortKey(userId: string): Promise<string | null> {
  */
 export async function createRule(userId: string, input: RuleInput): Promise<string> {
   const { name, conditions, actions } = validate(input);
-  await requireOwnedReferences(userId, conditions);
+  await requireOwnedReferences(userId, conditions, actions);
   const last = await lastSortKey(userId);
 
   try {
@@ -158,7 +182,7 @@ export async function updateRule(
 ): Promise<void> {
   await requireRule(userId, ruleId);
   const { name, conditions, actions } = validate(input);
-  await requireOwnedReferences(userId, conditions);
+  await requireOwnedReferences(userId, conditions, actions);
 
   try {
     await db
@@ -169,6 +193,7 @@ export async function updateRule(
         actions,
         enabled: input.enabled ?? true,
         notes: input.notes ?? "",
+        categoryReviewRequired: false,
         updatedAt: new Date(),
       })
       .where(and(eq(financeRules.userId, userId), eq(financeRules.id, ruleId)));

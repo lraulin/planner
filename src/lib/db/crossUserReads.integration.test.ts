@@ -51,6 +51,7 @@ import {
 import { upsertRecurringBill, upsertRecurringSpend } from "@/lib/finances/mutations";
 import { createPayee } from "@/lib/finances/payees/mutations";
 import { getPayee, listAliasRows, listPayees } from "@/lib/finances/payees/queries";
+import { listFinanceTags } from "@/lib/finances/tags/queries";
 import { createSchedule } from "@/lib/finances/schedules/mutations";
 import { getSchedule, listSchedules } from "@/lib/finances/schedules/queries";
 import {
@@ -572,6 +573,7 @@ describeDb("a second user reads none of the first user's rows", () => {
     expect(await listPaymentResolutions(intruder)).toEqual([]);
     expect(await getPaymentResolution(intruder, owner.paymentResolutionId)).toBeNull();
     expect(await listPayees(intruder)).toEqual([]);
+    expect(await listFinanceTags(intruder)).toEqual([]);
     expect(await listAliasRows(intruder)).toEqual([]);
     expect(await getPayee(intruder, owner.financePayeeId)).toBeNull();
     // The filtered read takes an account id the intruder can guess; it must refuse by user

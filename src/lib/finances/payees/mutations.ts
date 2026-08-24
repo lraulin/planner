@@ -132,7 +132,7 @@ export async function renamePayee(
 export async function updatePayeeDetails(
   userId: string,
   payeeId: string,
-  input: { name: string; notes: string },
+  input: { name: string; notes: string; learnCategories?: boolean },
 ): Promise<void> {
   const name = cleanName(input.name);
   try {
@@ -144,7 +144,14 @@ export async function updatePayeeDetails(
       if (!owned) throw new Error("That payee does not exist.");
       await tx
         .update(financePayees)
-        .set({ name, notes: input.notes, updatedAt: new Date() })
+        .set({
+          name,
+          notes: input.notes,
+          ...(input.learnCategories !== undefined
+            ? { learnCategories: input.learnCategories }
+            : {}),
+          updatedAt: new Date(),
+        })
         .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)));
     });
   } catch (error) {

@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeAccounts,
@@ -6,6 +6,8 @@ import {
   financeBudgetCategories,
   financeBudgetMonths,
   financeCategoryGroups,
+  financePayees,
+  financeRules,
   financeTransactions,
 } from "@/db/schema";
 import { parseBudget, serializeBudget } from "@/lib/settings/finances";
@@ -15,6 +17,9 @@ import { BUDGET_SCOPE } from "@/lib/settings/scopes";
 import * as sortKey from "@/lib/tree/sortKey";
 import { FINANCE_CATEGORIES } from "../classify/categories";
 import { numericStringToCents } from "../money";
+import { learnedCategory } from "../categoryLearning";
+import { parseRuleActions } from "../rules/actions";
+import { createRule, updateRule } from "../rules/mutations";
 import { envelopeForRow, envelopeIndex, type MappableRow } from "./autoMap";
 import {
   budgetChildren,
@@ -1005,16 +1010,98 @@ export async function moveBudgetStructureItemIntoGroup(
     );
 }
 
-/** Put one transaction in an envelope, or take it out of every envelope. */
+function exactPayeeRule(conditions: unknown, payeeId: string): boolean {
+  if (!Array.isArray(conditions) || conditions.length !== 1) return false;
+  const condition = conditions[0] as Record<string, unknown> | null;
+  return (
+    condition?.field === "payee" && condition.op === "is" && condition.value === payeeId
+  );
+}
+
+async function learnCategoryForPayee(
+  userId: string,
+  editedId: string,
+  payeeId: string,
+): Promise<string | void> {
+  const [payee, recent, rules] = await Promise.all([
+    db
+      .select({ name: financePayees.name, learn: financePayees.learnCategories })
+      .from(financePayees)
+      .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)))
+      .limit(1),
+    db
+      .select({
+        id: financeTransactions.id,
+        categoryId: financeTransactions.budgetCategoryId,
+      })
+      .from(financeTransactions)
+      .where(
+        and(
+          eq(financeTransactions.userId, userId),
+          eq(financeTransactions.payeeId, payeeId),
+          gte(
+            financeTransactions.transactionDate,
+            sql`current_date - interval '180 days'`,
+          ),
+        ),
+      )
+      .orderBy(
+        desc(financeTransactions.transactionDate),
+        desc(financeTransactions.createdAt),
+      )
+      .limit(5),
+    db
+      .select({
+        id: financeRules.id,
+        name: financeRules.name,
+        conditions: financeRules.conditions,
+        actions: financeRules.actions,
+        enabled: financeRules.enabled,
+        notes: financeRules.notes,
+      })
+      .from(financeRules)
+      .where(eq(financeRules.userId, userId)),
+  ]);
+  if (!payee[0]?.learn) return;
+  const learned = learnedCategory(editedId, recent);
+  if (!learned) return;
+  const existing = rules.find((rule) => exactPayeeRule(rule.conditions, payeeId));
+  if (existing) {
+    const parsed = parseRuleActions(existing.actions);
+    const actions =
+      "actions" in parsed
+        ? parsed.actions.filter(
+            (action) => !(action.op === "set" && action.field === "category"),
+          )
+        : [];
+    await updateRule(userId, existing.id, {
+      name: existing.name,
+      conditions: existing.conditions,
+      actions: [...actions, { op: "set", field: "category", value: learned }],
+      enabled: existing.enabled,
+      notes: existing.notes,
+    });
+  } else {
+    await createRule(userId, {
+      name: `Categorize ${payee[0].name} (${payeeId.slice(0, 6)})`,
+      conditions: [{ field: "payee", op: "is", value: payeeId }],
+      actions: [{ op: "set", field: "category", value: learned }],
+      notes: "Learned from the same Category on 3 of the latest 5 transactions.",
+    });
+  }
+  return `Future ${payee[0].name} transactions will use this Category.`;
+}
+
+/** Put one transaction in a Category, or make it Uncategorized. */
 export async function setTransactionBudgetCategory(
   userId: string,
   transactionId: string,
   categoryId: string | null,
-): Promise<void> {
+): Promise<string | void> {
   if (categoryId !== null) await requireCategory(userId, categoryId);
 
   const [row] = await db
-    .select({ id: financeTransactions.id })
+    .select({ id: financeTransactions.id, payeeId: financeTransactions.payeeId })
     .from(financeTransactions)
     .where(
       and(
@@ -1034,6 +1121,9 @@ export async function setTransactionBudgetCategory(
         eq(financeTransactions.userId, userId),
       ),
     );
+
+  if (categoryId === null || row.payeeId === null) return;
+  return learnCategoryForPayee(userId, transactionId, row.payeeId);
 }
 
 async function requireSpendingCategory(

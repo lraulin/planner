@@ -94,8 +94,8 @@ function CategoryCell({
     <select
       value={value}
       disabled={disabled}
-      aria-label={`Category for ${label}`}
-      title="Also categorises every charge this matches"
+      aria-label={`Group for ${label}`}
+      title="Organizes this commitment without changing its transactions"
       onChange={(event) => onCommit(event.target.value)}
       className="min-h-tap w-full rounded border border-transparent bg-transparent px-1 text-base text-ink-muted hover:border-rule focus:border-rule md:min-h-0 md:text-[0.8125rem]"
     >
@@ -423,7 +423,7 @@ export const billColumns: ColumnDef<BillColumnCtx, BillGridRow>[] = [
   },
   {
     id: "category",
-    label: "Category",
+    label: "Group",
     width: "9rem",
     filterKind: "enum",
     filterValue: (row) => row.node.category,
@@ -516,7 +516,7 @@ export const spendColumns: ColumnDef<SpendColumnCtx, SpendGridRow>[] = [
   },
   {
     id: "category",
-    label: "Category",
+    label: "Group",
     width: "9rem",
     filterKind: "enum",
     filterValue: (row) => row.node.category,

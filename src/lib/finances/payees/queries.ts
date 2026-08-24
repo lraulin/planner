@@ -27,6 +27,7 @@ export type PayeeRow = {
   id: string;
   name: string;
   notes: string;
+  learnCategories?: boolean;
   /** Sorted, so two reads of an unchanged payee render identically. */
   aliases: string[];
   transactionCount: number;
@@ -70,6 +71,7 @@ export async function listPayees(userId: string): Promise<PayeeRow[]> {
       id: financePayees.id,
       name: financePayees.name,
       notes: financePayees.notes,
+      learnCategories: financePayees.learnCategories,
       commitmentBillId: financePayees.commitmentBillId,
       commitmentSpendId: financePayees.commitmentSpendId,
     })
@@ -149,6 +151,7 @@ export async function listPayees(userId: string): Promise<PayeeRow[]> {
       id: payee.id,
       name: payee.name,
       notes: payee.notes,
+      learnCategories: payee.learnCategories,
       aliases: aliasesByPayee.get(payee.id) ?? [],
       transactionCount: seen?.count ?? 0,
       totalCents: seen?.cents ?? 0,

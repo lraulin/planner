@@ -28,6 +28,7 @@ import {
   deleteRecurringSpend,
   deleteTransaction,
   reclassifyTransactions,
+  applyRuleActionsToTransactions,
   renameRecurringBill,
   renameRecurringSpend,
   setOneOff,
@@ -78,7 +79,10 @@ import {
   type CommitmentsImportResult,
 } from "@/lib/finances/budget/commitmentsImportMutations";
 import type { CommitmentStatus } from "@/db/schema";
-import { finalizeTransactionIngestion } from "@/lib/finances/ingestion";
+import {
+  finalizeTransactionIngestion,
+  transactionIngestionWatermark,
+} from "@/lib/finances/ingestion";
 import type { DiscoverProposal } from "@/lib/finances/schedules/discover";
 import {
   completeSchedule,
@@ -128,6 +132,14 @@ import { listRules, type RuleRow } from "@/lib/finances/rules/queries";
 import { seedRules } from "@/lib/finances/rules/cutover";
 import { previewDerivedChanges, type DerivedPreview } from "@/lib/finances/mutations";
 import {
+  createFinanceTag,
+  deleteFinanceTag,
+  discoverFinanceTags,
+  updateFinanceTag,
+  type FinanceTagEdit,
+} from "@/lib/finances/tags/mutations";
+import { listFinanceTags, type FinanceTagRow } from "@/lib/finances/tags/queries";
+import {
   run,
   runQuery,
   runWithData,
@@ -170,11 +182,38 @@ export async function listAccountsAction(): Promise<QueryResult<FinanceAccountRo
   return runQuery(listAccounts);
 }
 
+export async function listFinanceTagsAction(): Promise<QueryResult<FinanceTagRow[]>> {
+  return runQuery(listFinanceTags);
+}
+
+export async function createFinanceTagAction(
+  tag: string,
+): Promise<DataActionResult<FinanceTagRow>> {
+  return runWithData((userId) => createFinanceTag(userId, { tag }));
+}
+
+export async function updateFinanceTagAction(
+  tagId: string,
+  edit: FinanceTagEdit,
+): Promise<ActionResult> {
+  return run((userId) => updateFinanceTag(userId, tagId, edit));
+}
+
+export async function deleteFinanceTagAction(tagId: string): Promise<ActionResult> {
+  return run((userId) => deleteFinanceTag(userId, tagId));
+}
+
+export async function discoverFinanceTagsAction(): Promise<
+  QueryResult<FinanceTagRow[]>
+> {
+  return runQuery(discoverFinanceTags);
+}
+
 export async function reclassifyAction(): Promise<DataActionResult<ReclassifySummary>> {
   return runWithData(async (userId) => {
     const result = await reclassifyTransactions(userId);
-    await autoMapConfiguredBudgetCategories(userId);
-    return result;
+    const rulesUpdated = await applyRuleActionsToTransactions(userId);
+    return { ...result, updated: result.updated + rulesUpdated };
   });
 }
 
@@ -257,8 +296,11 @@ export async function pasteScrapedPendingAction(
   todayKey: string,
 ): Promise<DataActionResult<ReplaceScrapedPendingResult>> {
   return runWithData(async (userId) => {
+    const startedAt = await transactionIngestionWatermark();
     const result = await replaceScrapedPending(userId, text, todayKey);
-    if (result.inserted > 0) await finalizeTransactionIngestion(userId);
+    if (result.inserted > 0) {
+      await finalizeTransactionIngestion(userId, { applyRulesSince: startedAt });
+    }
     return result;
   });
 }
@@ -572,7 +614,7 @@ export async function setPayeeNotesAction(
 
 export async function updatePayeeDetailsAction(
   payeeId: string,
-  input: { name: string; notes: string },
+  input: { name: string; notes: string; learnCategories?: boolean },
 ): Promise<ActionResult> {
   return run((userId) => updatePayeeDetails(userId, payeeId, input));
 }
