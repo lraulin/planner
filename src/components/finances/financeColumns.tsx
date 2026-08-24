@@ -19,7 +19,6 @@ export type FinanceColumnCtx = {
   offBudgetAccountIds: ReadonlySet<string>;
   onSetEnvelope: (transactionId: string, categoryId: string | null) => void;
   tagColors: Readonly<Record<string, string | null>>;
-  pending: boolean;
 };
 
 export const FINANCE_COLUMN_IDS = [
@@ -189,7 +188,6 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, TransactionListRow>[] =
       return (
         <select
           value={row.node.budgetCategoryId ?? ""}
-          disabled={ctx.pending}
           aria-label={`Category for ${row.node.description}`}
           onChange={(event) =>
             ctx.onSetEnvelope(

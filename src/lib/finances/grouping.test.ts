@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { groupTransactions, transactionDatePart } from "./grouping";
+import {
+  collapsedYearGroupIds,
+  groupTransactions,
+  transactionDatePart,
+} from "./grouping";
 import type { TransactionListRow } from "./types";
 
 function row(
@@ -138,5 +142,35 @@ describe("groupTransactions", () => {
       .filter((entry) => entry.kind === "group")
       .map((entry) => (entry.kind === "group" ? entry.label : ""));
     expect(headers).toEqual(["Refund", "Spend", "Transfer (own accounts)"]);
+  });
+});
+
+describe("collapsedYearGroupIds", () => {
+  it("collapses every year except the one to keep, matching groupTransactions ids", () => {
+    const grouped = groupTransactions(
+      [row("a", "2026-01-01"), row("b", "2025-06-01"), row("c", "2024-12-01")],
+      ["year", "month"],
+    );
+    const collapsed = collapsedYearGroupIds(
+      ["2026-01-01", "2025-06-01", "2024-12-01"],
+      "2026",
+    );
+    const yearIds = grouped
+      .filter((entry) => entry.kind === "group" && entry.depth === 0)
+      .map((entry) => entry.id);
+    expect(collapsed).toEqual(["group:year:2024", "group:year:2025"]);
+    expect(yearIds).toEqual(["group:year:2026", "group:year:2025", "group:year:2024"]);
+    expect(collapsed.every((id) => yearIds.includes(id))).toBe(true);
+    expect(collapsed).not.toContain("group:year:2026");
+  });
+
+  it("returns nothing when every row is already in the keep year", () => {
+    expect(collapsedYearGroupIds(["2026-01-01", "2026-12-31"], "2026")).toEqual([]);
+  });
+
+  it("ignores a value that is not a YYYY-MM-DD key", () => {
+    expect(
+      collapsedYearGroupIds(["12/01/2024", "short", "2025-01-01"], "2026"),
+    ).toEqual(["group:year:2025"]);
   });
 });

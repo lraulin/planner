@@ -130,6 +130,27 @@ function toGridRow(row: TransactionListRow): GridRow<TransactionListRow> {
 }
 
 /**
+ * Year-group ids to collapse on first open, leaving `keepYear` expanded.
+ *
+ * The register groups by year then month and used to expand every year. Six years of
+ * history is ~7,000 DOM rows; collapsing prior years leaves the current year (~800 rows)
+ * on screen and search/filter still see the rest. Ids match `groupTransactions` for a
+ * top-level `year` dimension — if the user has grouped some other way these ids simply
+ * do not match anything.
+ */
+export function collapsedYearGroupIds(
+  dateKeys: readonly string[],
+  keepYear: string,
+): string[] {
+  const years = new Set<string>();
+  for (const key of dateKeys) {
+    const year = key.slice(0, 4);
+    if (/^\d{4}$/.test(year) && year !== keepYear) years.add(year);
+  }
+  return [...years].sort().map((year) => `group:year:${encodeURIComponent(year)}`);
+}
+
+/**
  * Nest register rows under the chosen headers (year, month, account, category).
  *
  * Calendar groups run newest first. Categorical groups run alphabetically, empty

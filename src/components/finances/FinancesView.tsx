@@ -1,9 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  useTransition,
+} from "react";
 import type { GridRow } from "@/lib/tree/slice";
 import { formatUsd } from "@/lib/finances/money";
-import { FINANCE_GROUP_BY_VALUES, groupTransactions } from "@/lib/finances/grouping";
+import {
+  collapsedYearGroupIds,
+  FINANCE_GROUP_BY_VALUES,
+  groupTransactions,
+} from "@/lib/finances/grouping";
 import type { FinanceAccountRow, TransactionListRow } from "@/lib/finances/types";
 import {
   claimedPayeeMap,
@@ -63,13 +74,19 @@ const FINANCE_VIEWS = [
   { id: "tag", label: "Tag" },
 ] as const;
 
-function viewDefaults(viewId: string, tag: string | null): GridDefaults {
+function viewDefaults(
+  viewId: string,
+  tag: string | null,
+  collapsedYears: string[],
+): GridDefaults {
   return {
     order: [...FINANCE_COLUMN_IDS],
     // A register is read newest first; anything else is a deliberate choice the user makes.
     sorts: [{ columnId: "date", direction: "desc" }],
     // Year then month so a skipped statement is a missing header, not a hole in a flat list.
     groupBy: ["year", "month"],
+    // Prior years start collapsed so six years of history is not 7,000 DOM rows on open.
+    collapsedGroups: collapsedYears,
     filters:
       viewId === "uncategorized"
         ? { category: optionsFilter(["Uncategorized"]) }
@@ -77,6 +94,23 @@ function viewDefaults(viewId: string, tag: string | null): GridDefaults {
           ? { tags: optionsFilter([tag]) }
           : {},
   };
+}
+
+function transactionRowLabel(row: { node: TransactionListRow }): string {
+  return row.node.description || "Transaction";
+}
+
+function subscribeNever() {
+  return () => {};
+}
+
+/** False during SSR and hydration; true after the client has painted the shell. */
+function useIsClient() {
+  return useSyncExternalStore(
+    subscribeNever,
+    () => true,
+    () => false,
+  );
 }
 
 /** Balance strip above the register — statement-anchored when a snapshot exists. */
@@ -133,9 +167,9 @@ function AccountBalances({ accounts }: { accounts: FinanceAccountRow[] }) {
  *
  * Every transaction the user has is loaded and the shared grid does the narrowing — its
  * date filter, its account set-filter and its search, all of which persist per user through
- * the `grid:finances` scope. Two years of four accounts is about 2,000 rows, which the grid
- * handles without help; if that stops being true the fix is a server-side date window in
- * `listTransactions`, which already takes one.
+ * the `grid:finances` scope. Prior years start collapsed so the DOM is the current year,
+ * not six years of history; search still sees every row. Reloading the full list on
+ * drawer-close is a freeze (see `closeDrawer`); envelope edits patch the row instead.
  */
 export function FinancesView({
   initialTransactions,
@@ -147,12 +181,13 @@ export function FinancesView({
   payees,
   tags,
   initialTag = null,
+  todayKey,
 }: {
   initialTransactions: TransactionListRow[];
   initialAccounts: FinanceAccountRow[];
   initialClaimed: readonly ClaimedPayee[];
   /** Budget envelopes, in budget order. Empty until a budget exists. */
-  envelopes: readonly { id: string; label: string }[];
+  envelopes: readonly { id: string; label: string; name: string }[];
   /** First date whose transactions contribute to the envelope budget. */
   budgetStartMonth: string | null;
   /** Unposted schedule occurrences. Not transactions; never mixed into `rows`. */
@@ -160,6 +195,8 @@ export function FinancesView({
   payees: readonly { id: string; name: string }[];
   tags: readonly { tag: string; color: string | null }[];
   initialTag?: string | null;
+  /** Calendar today, so year-collapse defaults are available on the first paint. */
+  todayKey: string;
 }) {
   const [rows, setRows] = useState(initialTransactions);
   const [accounts, setAccounts] = useState(initialAccounts);
@@ -183,7 +220,8 @@ export function FinancesView({
     label: "Import transactions…",
     keywords: "csv statement bank card chase capital one pdf coinbase paypal",
   });
-  const [pending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
+  const isClient = useIsClient();
   const { detail: openId, setDetail: setOpenId } = useViewStateUrl();
 
   if (initialTransactions !== seenServerRows || initialClaimed !== seenClaimed) {
@@ -194,12 +232,20 @@ export function FinancesView({
     setClaimed(initialClaimed);
   }
 
+  const collapsedYears = useMemo(
+    () =>
+      collapsedYearGroupIds(
+        initialTransactions.map((row) => row.transactionDate),
+        todayKey.slice(0, 4),
+      ),
+    [initialTransactions, todayKey],
+  );
   const views = useModuleViews({
     moduleId: "finances",
     builtIn: FINANCE_VIEWS,
     defaultViewId: "all",
     columns: financeColumns,
-    defaultsFor: (viewId) => viewDefaults(viewId, initialTag),
+    defaultsFor: (viewId) => viewDefaults(viewId, initialTag, collapsedYears),
   });
   const gridState = views.grid;
   useEffect(() => {
@@ -299,6 +345,57 @@ export function FinancesView({
     closeFileImport();
     refresh();
   }, [closeFileImport, refresh]);
+
+  const envelopeNameById = useMemo(
+    () => new Map(envelopes.map((envelope) => [envelope.id, envelope.name])),
+    [envelopes],
+  );
+
+  const onSetEnvelope = useCallback(
+    (transactionId: string, categoryId: string | null) => {
+      setError(null);
+      setRows((current) =>
+        current.map((row) =>
+          row.id === transactionId
+            ? {
+                ...row,
+                budgetCategoryId: categoryId,
+                budgetCategoryName: categoryId
+                  ? (envelopeNameById.get(categoryId) ?? null)
+                  : null,
+              }
+            : row,
+        ),
+      );
+      startTransition(async () => {
+        const result = await setTransactionBudgetCategoryAction(
+          transactionId,
+          categoryId,
+        );
+        if (!result.ok) {
+          setError(result.error ?? "Could not set the envelope.");
+          refresh();
+        }
+      });
+    },
+    [envelopeNameById, refresh],
+  );
+
+  const tagColors = useMemo(
+    () => Object.fromEntries(tags.map((tag) => [tag.tag, tag.color])),
+    [tags],
+  );
+
+  const columnCtx = useMemo(
+    () => ({
+      envelopes,
+      budgetStartMonth,
+      offBudgetAccountIds,
+      tagColors,
+      onSetEnvelope,
+    }),
+    [envelopes, budgetStartMonth, offBudgetAccountIds, tagColors, onSetEnvelope],
+  );
 
   const openDrawer = useCallback((id: string) => setOpenId(id), [setOpenId]);
   const closeDrawer = useCallback(() => {
@@ -456,27 +553,10 @@ export function FinancesView({
       ) : null}
 
       <DataGrid<FinanceColumnCtx, TransactionListRow>
-        rows={gridRows}
+        rows={isClient ? gridRows : []}
         columns={gridState.columns}
         allColumns={financeColumns}
-        columnCtx={{
-          envelopes,
-          budgetStartMonth,
-          offBudgetAccountIds,
-          tagColors: Object.fromEntries(tags.map((tag) => [tag.tag, tag.color])),
-          pending,
-          onSetEnvelope: (transactionId, categoryId) => {
-            setError(null);
-            startTransition(async () => {
-              const result = await setTransactionBudgetCategoryAction(
-                transactionId,
-                categoryId,
-              );
-              if (!result.ok) setError(result.error ?? "Could not set the envelope.");
-              else refresh();
-            });
-          },
-        }}
+        columnCtx={columnCtx}
         selectedId={selectedId}
         selectedIds={selectedIds}
         onSelect={select}
@@ -484,7 +564,7 @@ export function FinancesView({
         ariaLabel="Transactions"
         rowMenu={rowMenu}
         rowNumbers
-        rowLabel={(row) => row.node.description || "Transaction"}
+        rowLabel={transactionRowLabel}
         enableFilters
         enableSort
         sorts={gridState.sorts}
@@ -506,7 +586,9 @@ export function FinancesView({
         onGroupIdsChange={setGroupIds}
         density={gridState.density}
         empty={
-          views.base === "uncategorized" ? (
+          !isClient ? (
+            <div className="min-h-0 flex-1" />
+          ) : views.base === "uncategorized" ? (
             <p className="p-8 text-center text-[0.9375rem] text-ink-muted">
               Everything eligible has a Category.
             </p>

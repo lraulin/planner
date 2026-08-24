@@ -86,7 +86,10 @@ export type BudgetCategoryRow = {
 
 export type BudgetEnvelopeOption = {
   id: string;
+  /** Group path, for pickers that need to tell two envelopes with the same leaf name apart. */
   label: string;
+  /** Envelope's own name — what the register Category column stores. */
+  name: string;
 };
 
 /** Small schedule-editor read; labels include the complete group path for nested budgets. */
@@ -100,6 +103,7 @@ export async function listBudgetEnvelopeOptions(
   return categories.map((category) => ({
     id: category.id,
     label: budgetEnvelopeLabel(groups, category),
+    name: category.name,
   }));
 }
 
