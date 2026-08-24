@@ -32,8 +32,6 @@ export const FINANCE_COLUMN_IDS = [
   "amount",
   "posted",
   "balance",
-  "oneOff",
-  "event",
   "notes",
 ] as const;
 
@@ -316,29 +314,6 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, TransactionListRow>[] =
     sortValue: (row) => row.node.balanceAfterCents,
     compact: "hidden",
     render: (row) => <Amount cents={row.node.balanceAfterCents} />,
-  },
-  {
-    id: "oneOff",
-    label: "One-off",
-    width: "5.5rem",
-    // An enum rather than a boolean so the set-filter offers both sides by name: "show me
-    // everything still in the baseline" is the more useful of the two questions.
-    filterKind: "enum",
-    filterValue: (row) => (row.node.excludeFromBaseline ? "One-off" : "Baseline"),
-    sortValue: (row) => (row.node.excludeFromBaseline ? 1 : 0),
-    compact: "hidden",
-    render: (row) =>
-      row.node.excludeFromBaseline ? <Text value="One-off" muted={false} /> : null,
-  },
-  {
-    id: "event",
-    label: "Event",
-    width: "minmax(8rem,0.6fr)",
-    filterKind: "enum",
-    filterValue: (row) => row.node.eventLabel || null,
-    sortValue: (row) => row.node.eventLabel.toLowerCase(),
-    compact: "hidden",
-    render: (row) => <Text value={row.node.eventLabel} />,
   },
   {
     id: "notes",
