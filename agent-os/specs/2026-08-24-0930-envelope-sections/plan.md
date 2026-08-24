@@ -40,9 +40,12 @@ and reads as a five-thousand-dollar overspend against income.
 an envelope, so the supertype's name cannot also mean one of its four cases.
 
 **D2 — `is_income` retires from groups.** Groups become purely organisational containers at
-any depth, _inside_ whatever section their envelopes belong to. A group whose envelopes span
-sections renders in each — the UI stops that from being created rather than the schema
-forbidding it, because the constraint spans rows and a CHECK cannot express it.
+any depth, _inside_ whatever section their envelopes belong to, and they are **optional**.
+The sections (Income, Bills, Regular spending, Savings) are the top level — the equivalent
+of Actual's only allowed group layer. An envelope with `group_id` null sits directly in its
+section. Groups exist only if the user wants subtotals inside a section. A group whose
+envelopes span sections renders in each — the UI stops that from being created rather than
+the schema forbidding it, because the constraint spans rows and a CHECK cannot express it.
 
 **D3 — Savings is a peer of Spending, not a child.** Four top-level sections: Income,
 Spending (holding Bills and Regular spending), and Savings. "All spending" stays
@@ -64,6 +67,8 @@ one-off data step rather than by a name rule baked into code.
 - [ ] `finance_category_groups.is_income` is gone from the schema and every reader.
 - [ ] An envelope's section comes from `kind` alone, on the page and in the fold.
 - [ ] The seeded "Income" and "Spending" groups can be deleted without losing a section.
+- [ ] An envelope can have no group. Tracking a bill does not require creating one, and does
+      not invent Spending / Bills.
 - [ ] Four sections render: Income, Spending (Bills + Regular spending), Savings.
 - [ ] "All spending" is bills + regular only; Savings is excluded and totalled separately.
 - [ ] An envelope's section can be changed from the UI, and creating one picks a section.
@@ -74,12 +79,13 @@ one-off data step rather than by a name rule baked into code.
 
 ## Changes from original plan
 
-| #   | Change                                                                                                                                                                                                       | Why                                                                                                                                                                            |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1   | `isIncome` remains a derived field on category/row types (`kind === "income"`), rather than being deleted from the fold, auto-map and apply engine                                                           | Those modules already keyed off a boolean; changing the source of the boolean is the model correction, rewriting every caller to branch on `kind` is not                       |
-| 2   | The structure drawer's section picker is Income / Spending / Savings. A bill is still created from Review, not by picking `bill` here                                                                        | Creating a bill requires a cadence, which the blank-envelope form does not collect                                                                                             |
-| 3   | One-off: `0f8193f0-a01c-42c9-bd82-9865c67c5dca` (Savings, `test@example.com`) set to `kind = 'savings'`. Assigned was 0; Ready to Assign unchanged                                                           | D5: do not bake a name rule into the migration. The local file's Savings envelope is the one this spec named                                                                   |
-| 4   | Declaring a bill no longer creates `Spending › Bills`. It lands in a group that already exists (prefer one that already holds a bill) and refuses if there is none. Review stays open after Track / Dismiss. | Groups are organisational (D2). Recreating the seeded containers after the user deleted them, and closing Review after every accept, fought the work of going through the list |
+| #   | Change                                                                                                                                             | Why                                                                                                                                                                            |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | `isIncome` remains a derived field on category/row types (`kind === "income"`), rather than being deleted from the fold, auto-map and apply engine | Those modules already keyed off a boolean; changing the source of the boolean is the model correction, rewriting every caller to branch on `kind` is not                       |
+| 2   | The structure drawer's section picker is Income / Spending / Savings. A bill is still created from Review, not by picking `bill` here              | Creating a bill requires a cadence, which the blank-envelope form does not collect                                                                                             |
+| 3   | One-off: `0f8193f0-a01c-42c9-bd82-9865c67c5dca` (Savings, `test@example.com`) set to `kind = 'savings'`. Assigned was 0; Ready to Assign unchanged | D5: do not bake a name rule into the migration. The local file's Savings envelope is the one this spec named                                                                   |
+| 4   | Declaring a bill no longer creates `Spending › Bills`. Review stays open after Track / Dismiss.                                                    | Groups are organisational (D2). Recreating the seeded containers after the user deleted them, and closing Review after every accept, fought the work of going through the list |
+| 5   | `group_id` is nullable. A new bill (and a new envelope from the structure drawer at the root) has no group. Sections are the top level.            | "Create a group before adding a bill" was the leftover of required groups. Actual's top-level groups _are_ our sections; further grouping is optional                          |
 
 ---
 

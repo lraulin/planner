@@ -42,16 +42,14 @@ export function budgetChildren(
         parentGroupId: group.parentGroupId,
         sortKey: group.sortKey,
       })),
-    ...(parentGroupId === null
-      ? []
-      : categories
-          .filter((category) => category.groupId === parentGroupId)
-          .map((category) => ({
-            kind: "category" as const,
-            id: category.id,
-            parentGroupId: category.groupId,
-            sortKey: category.sortKey,
-          }))),
+    ...categories
+      .filter((category) => category.groupId === parentGroupId)
+      .map((category) => ({
+        kind: "category" as const,
+        id: category.id,
+        parentGroupId: category.groupId,
+        sortKey: category.sortKey,
+      })),
   ].sort(compareItems);
 }
 
@@ -90,7 +88,7 @@ export function descendantEnvelopeIds(
   groupIds.add(rootId);
   return new Set(
     categories
-      .filter((category) => groupIds.has(category.groupId))
+      .filter((category) => category.groupId !== null && groupIds.has(category.groupId))
       .map((category) => category.id),
   );
 }
@@ -126,7 +124,7 @@ export function budgetEnvelopeLabel(
   const byId = new Map(groups.map((group) => [group.id, group]));
   const names: string[] = [category.name];
   const seen = new Set<string>();
-  let current = byId.get(category.groupId);
+  let current = category.groupId ? byId.get(category.groupId) : undefined;
   while (current) {
     if (seen.has(current.id)) throw new Error("Budget groups contain a cycle.");
     seen.add(current.id);
@@ -157,7 +155,8 @@ export function nestedBudgetGridRows<T extends BudgetRow>(
   const visibleGroupIds = new Set(visibleGroups.map((group) => group.id));
   const visibleCategories = categories.filter(
     (category) =>
-      visibleGroupIds.has(category.groupId) && (options.showHidden || !category.hidden),
+      (category.groupId === null || visibleGroupIds.has(category.groupId)) &&
+      (options.showHidden || !category.hidden),
   );
   const depths = budgetGroupDepths(groups);
   const result: GridRow<T>[] = [];
@@ -207,7 +206,13 @@ export function nestedBudgetGridRows<T extends BudgetRow>(
   }
 
   for (const root of budgetChildren(visibleGroups, visibleCategories, null)) {
-    if (root.kind === "group") emitGroup(root.id);
+    if (root.kind === "group") {
+      emitGroup(root.id);
+      continue;
+    }
+    const row = rowById.get(root.id);
+    if (!row) continue;
+    result.push({ kind: "node", id: row.id, node: row, depth: 0 });
   }
   return result;
 }
@@ -253,7 +258,6 @@ export function resolveBudgetDrop(
     zone === "inside"
       ? targetGroup!.id
       : (targetGroup?.parentGroupId ?? targetCategory?.groupId ?? null);
-  if (moving.kind === "category" && parentGroupId === null) return null;
 
   const sourceSection = movingCategory
     ? pageSectionOf(movingCategory.kind)

@@ -137,17 +137,17 @@ async function lastBudgetChildSortKey(
             : eq(financeCategoryGroups.parentGroupId, parentGroupId),
         ),
       ),
-    parentGroupId === null
-      ? Promise.resolve([])
-      : db
-          .select({ sortKey: financeBudgetCategories.sortKey })
-          .from(financeBudgetCategories)
-          .where(
-            and(
-              eq(financeBudgetCategories.userId, userId),
-              eq(financeBudgetCategories.groupId, parentGroupId),
-            ),
-          ),
+    db
+      .select({ sortKey: financeBudgetCategories.sortKey })
+      .from(financeBudgetCategories)
+      .where(
+        and(
+          eq(financeBudgetCategories.userId, userId),
+          parentGroupId === null
+            ? isNull(financeBudgetCategories.groupId)
+            : eq(financeBudgetCategories.groupId, parentGroupId),
+        ),
+      ),
   ]);
   return (
     [...childGroups, ...envelopes]
@@ -726,7 +726,7 @@ export async function createCategoryGroup(
 export async function createBudgetCategory(
   userId: string,
   params: {
-    groupId: string;
+    groupId?: string | null;
     name: string;
     kind?: EnvelopeSectionKind;
     sourceCategories?: readonly string[];
@@ -738,14 +738,15 @@ export async function createBudgetCategory(
   if (!(ENVELOPE_SECTION_KINDS as readonly string[]).includes(kind)) {
     throw new Error("A bill is created from Review, not as a blank envelope.");
   }
-  await requireGroup(userId, params.groupId);
-  const last = await lastBudgetChildSortKey(userId, params.groupId);
+  const groupId = params.groupId ?? null;
+  if (groupId !== null) await requireGroup(userId, groupId);
+  const last = await lastBudgetChildSortKey(userId, groupId);
 
   const [row] = await db
     .insert(financeBudgetCategories)
     .values({
       userId,
-      groupId: params.groupId,
+      groupId,
       name,
       kind,
       sortKey: last === null ? sortKey.first() : sortKey.after(last),
@@ -760,7 +761,7 @@ export type BudgetCategoryEdit = {
   name?: string;
   hidden?: boolean;
   notes?: string;
-  groupId?: string;
+  groupId?: string | null;
   kind?: EnvelopeSectionKind;
 };
 
@@ -772,20 +773,24 @@ export async function updateBudgetCategory(
   const category = await requireCategory(userId, categoryId);
   let movedSortKey: string | undefined;
   if (edit.groupId !== undefined && edit.groupId !== category.groupId) {
-    await requireGroup(userId, edit.groupId);
-    const structure = await budgetStructure(userId);
-    const nextKind = edit.kind ?? category.kind;
-    const destSection = groupPageSection(
-      structure.groups,
-      structure.categories,
-      edit.groupId,
-    );
-    if (
-      destSection !== null &&
-      destSection !== "mixed" &&
-      pageSectionOf(nextKind) !== destSection
-    ) {
-      throw new Error("Income, spending and savings envelopes cannot share a branch.");
+    if (edit.groupId !== null) {
+      await requireGroup(userId, edit.groupId);
+      const structure = await budgetStructure(userId);
+      const nextKind = edit.kind ?? category.kind;
+      const destSection = groupPageSection(
+        structure.groups,
+        structure.categories,
+        edit.groupId,
+      );
+      if (
+        destSection !== null &&
+        destSection !== "mixed" &&
+        pageSectionOf(nextKind) !== destSection
+      ) {
+        throw new Error(
+          "Income, spending and savings envelopes cannot share a branch.",
+        );
+      }
     }
     const last = await lastBudgetChildSortKey(userId, edit.groupId);
     movedSortKey = last === null ? sortKey.first() : sortKey.after(last);
@@ -1063,8 +1068,6 @@ export async function moveBudgetStructureItem(
     return;
   }
 
-  if (!placement.parentGroupId)
-    throw new Error("An envelope must stay inside a group.");
   await db
     .update(financeBudgetCategories)
     .set({
@@ -1095,14 +1098,32 @@ export async function moveBudgetStructureItemIntoGroup(
     );
     return;
   }
-  if (moving.kind !== "group") throw new Error("An envelope must stay inside a group.");
-  await requireGroup(userId, moving.id);
   const nextSortKey = await lastBudgetChildSortKey(userId, null);
+  const sortKeyValue =
+    nextSortKey === null ? sortKey.first() : sortKey.after(nextSortKey);
+  if (moving.kind === "category") {
+    await requireCategory(userId, moving.id);
+    await db
+      .update(financeBudgetCategories)
+      .set({
+        groupId: null,
+        sortKey: sortKeyValue,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(financeBudgetCategories.id, moving.id),
+          eq(financeBudgetCategories.userId, userId),
+        ),
+      );
+    return;
+  }
+  await requireGroup(userId, moving.id);
   await db
     .update(financeCategoryGroups)
     .set({
       parentGroupId: null,
-      sortKey: nextSortKey === null ? sortKey.first() : sortKey.after(nextSortKey),
+      sortKey: sortKeyValue,
       updatedAt: new Date(),
     })
     .where(

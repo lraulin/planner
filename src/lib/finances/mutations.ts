@@ -1,10 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeAccounts,
   financeBudgetCategories,
-  financeCategoryGroups,
   financePaymentResolutions,
   financePayeeAliases,
   financeRules,
@@ -685,48 +684,9 @@ export type BillEnvelopeEdit = {
   scheduled?: boolean;
   /** Day of the period the charge is expected, 1–31, or null to walk from the last charge. */
   dueDay?: number | null;
-  /** Which group a **new** bill is created under. Ignored when the bill already exists. */
-  groupId?: string;
+  /** Optional group for a **new** bill. Ignored when the bill already exists. Null — the default — sits the bill in the Bills section with no group. */
+  groupId?: string | null;
 };
-
-/**
- * Group a new bill envelope lands in. Groups are organisational only
- * (`agent-os/specs/2026-08-24-0930-envelope-sections/` D2) — never created here. Prefer a
- * group that already holds a bill so Review's successive "Track as bill" clicks stay
- * together; otherwise any existing group. No group at all is a setup problem, not a prompt
- * to invent "Spending › Bills".
- */
-async function existingGroupIdForBill(
-  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
-  userId: string,
-): Promise<string> {
-  const [withBill] = await tx
-    .select({ id: financeCategoryGroups.id })
-    .from(financeCategoryGroups)
-    .innerJoin(
-      financeBudgetCategories,
-      eq(financeBudgetCategories.groupId, financeCategoryGroups.id),
-    )
-    .where(
-      and(
-        eq(financeCategoryGroups.userId, userId),
-        eq(financeBudgetCategories.userId, userId),
-        eq(financeBudgetCategories.kind, "bill"),
-      ),
-    )
-    .orderBy(asc(financeCategoryGroups.sortKey))
-    .limit(1);
-  if (withBill) return withBill.id;
-
-  const [any] = await tx
-    .select({ id: financeCategoryGroups.id })
-    .from(financeCategoryGroups)
-    .where(eq(financeCategoryGroups.userId, userId))
-    .orderBy(asc(financeCategoryGroups.sortKey))
-    .limit(1);
-  if (!any) throw new Error("Create a group before adding a bill.");
-  return any.id;
-}
 
 /**
  * Declare a bill, or change one already declared.
@@ -821,14 +781,16 @@ export async function upsertBillEnvelope(
           ),
         );
     } else {
-      const groupId = edit.groupId ?? (await existingGroupIdForBill(tx, userId));
+      const groupId = edit.groupId ?? null;
       const siblings = await tx
         .select({ sortKey: financeBudgetCategories.sortKey })
         .from(financeBudgetCategories)
         .where(
           and(
             eq(financeBudgetCategories.userId, userId),
-            eq(financeBudgetCategories.groupId, groupId),
+            groupId === null
+              ? isNull(financeBudgetCategories.groupId)
+              : eq(financeBudgetCategories.groupId, groupId),
           ),
         );
       const last = siblings

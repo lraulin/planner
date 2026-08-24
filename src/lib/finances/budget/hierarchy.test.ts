@@ -27,7 +27,7 @@ function group(
 
 function category(
   id: string,
-  groupId: string,
+  groupId: string | null,
   sortKey: string,
   kind: BudgetCategoryRow["kind"] = "spending",
 ): BudgetCategoryRow {
@@ -46,7 +46,7 @@ function category(
   };
 }
 
-function row(id: string, groupId: string): BudgetRow {
+function row(id: string, groupId: string | null): BudgetRow {
   return {
     id,
     groupId,
@@ -128,7 +128,7 @@ describe("budget hierarchy", () => {
     );
   });
 
-  it("rejects a group inside its descendant and an envelope at the root", () => {
+  it("rejects a group inside its own descendant", () => {
     expect(
       resolveBudgetDrop(
         groups,
@@ -136,15 +136,6 @@ describe("budget hierarchy", () => {
         { kind: "group", id: "spending" },
         { kind: "group", id: "utilities" },
         "inside",
-      ),
-    ).toBeNull();
-    expect(
-      resolveBudgetDrop(
-        groups,
-        categories,
-        { kind: "category", id: "electric" },
-        { kind: "group", id: "spending" },
-        "after",
       ),
     ).toBeNull();
   });
@@ -164,6 +155,31 @@ describe("budget hierarchy", () => {
       next: null,
       depth: 2,
     });
+  });
+
+  it("renders an envelope with no group at the section root", () => {
+    const ungrouped = category("rent", null, "A", "bill");
+    expect(budgetChildren(groups, [ungrouped], null).map((item) => item.id)).toEqual([
+      "rent",
+      "spending",
+    ]);
+    expect(
+      nestedBudgetGridRows(groups, [ungrouped], [row("rent", null)]).map(
+        (entry) => `${entry.kind}:${entry.id}`,
+      ),
+    ).toEqual(["node:rent"]);
+  });
+
+  it("allows dropping an envelope out of a group onto the root", () => {
+    expect(
+      resolveBudgetDrop(
+        groups,
+        categories,
+        { kind: "category", id: "discretionary" },
+        { kind: "group", id: "spending" },
+        "before",
+      ),
+    ).toMatchObject({ parentGroupId: null });
   });
 
   it("refuses moves across the income and spending boundary", () => {

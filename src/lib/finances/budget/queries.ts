@@ -70,7 +70,7 @@ export type BillFacet = {
 
 export type BudgetCategoryRow = {
   id: string;
-  groupId: string;
+  groupId: string | null;
   name: string;
   sortKey: string;
   hidden: boolean;

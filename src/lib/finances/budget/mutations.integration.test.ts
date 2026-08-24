@@ -748,6 +748,8 @@ describeDb("budget mutations — cross-user isolation", () => {
       .select({ id: financeBudgetCategories.groupId })
       .from(financeBudgetCategories)
       .where(eq(financeBudgetCategories.id, ids.get("Bills")!));
+    if (group?.id == null)
+      throw new Error("expected the seeded Bills envelope to have a group");
 
     owned = {
       groupId: group.id,

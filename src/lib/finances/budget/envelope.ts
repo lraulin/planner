@@ -144,7 +144,7 @@ export function monthLabel(month: MonthKey): string {
  */
 export type BudgetCategoryInput = {
   id: string;
-  groupId: string;
+  groupId: string | null;
   /** Income envelopes are never assigned and never hold a balance — they feed Ready to Assign. */
   isIncome: boolean;
 };

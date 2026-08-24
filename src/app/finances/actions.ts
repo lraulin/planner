@@ -321,7 +321,7 @@ export async function moveBudgetStructureItemIntoGroupAction(
 }
 
 export async function createBudgetCategoryAction(
-  groupId: string,
+  groupId: string | null,
   name: string,
   kind: EnvelopeSectionKind = "spending",
 ): Promise<DataActionResult<string>> {

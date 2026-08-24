@@ -71,6 +71,8 @@ export function BudgetStructureDrawer({
 }) {
   const titleId = useId();
   const [newGroup, setNewGroup] = useState("");
+  const [newRootEnvelope, setNewRootEnvelope] = useState("");
+  const [newRootKind, setNewRootKind] = useState<EnvelopeSectionKind>("spending");
   const [newEnvelope, setNewEnvelope] = useState<Record<string, string>>({});
   const [newEnvelopeKind, setNewEnvelopeKind] = useState<
     Record<string, EnvelopeSectionKind>
@@ -141,9 +143,7 @@ export function BudgetStructureDrawer({
     run(() => moveBudgetStructureItemAction(dragging, target, zone));
   }
 
-  const roots = budgetChildren(groups, categories, null).filter(
-    (item): item is typeof item & { kind: "group" } => item.kind === "group",
-  );
+  const roots = budgetChildren(groups, categories, null);
 
   return (
     <>
@@ -157,7 +157,49 @@ export function BudgetStructureDrawer({
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4 md:px-5">
           <section>
             <h3 className="text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
-              New top-level group
+              New envelope
+            </h3>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <input
+                aria-label="Envelope name"
+                value={newRootEnvelope}
+                onChange={(event) => setNewRootEnvelope(event.target.value)}
+                className={inputClass}
+              />
+              <select
+                aria-label="Section for new envelope"
+                value={newRootKind}
+                onChange={(event) =>
+                  setNewRootKind(event.target.value as EnvelopeSectionKind)
+                }
+                className={inputClass}
+              >
+                {SECTION_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                disabled={pending || newRootEnvelope.trim() === ""}
+                className={buttonClass}
+                onClick={() =>
+                  run(
+                    () =>
+                      createBudgetCategoryAction(null, newRootEnvelope, newRootKind),
+                    () => setNewRootEnvelope(""),
+                  )
+                }
+              >
+                Add envelope
+              </button>
+            </div>
+          </section>
+
+          <section>
+            <h3 className="text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
+              New group
             </h3>
             <div className="mt-2 flex flex-wrap gap-2">
               <input
@@ -183,34 +225,50 @@ export function BudgetStructureDrawer({
           </section>
 
           <p className="text-[0.75rem] leading-5 text-ink-muted">
-            Groups only organize and total their envelopes. Drag on desktop, or use the
-            move controls on any device.
+            Sections (Income, Bills, Regular spending, Savings) are the top level.
+            Groups are optional folders inside a section, for subtotals.
           </p>
 
           <div className="space-y-3">
-            {roots.map((root) => (
-              <StructureGroup
-                key={root.id}
-                groupId={root.id}
-                depth={0}
-                groups={groups}
-                categories={categories}
-                pending={pending}
-                dragging={dragging}
-                newEnvelope={newEnvelope}
-                newEnvelopeKind={newEnvelopeKind}
-                newSubgroup={newSubgroup}
-                run={run}
-                onDragStart={setDragging}
-                onDragEnd={() => setDragging(null)}
-                onDrop={handleDrop}
-                onMoveRelative={moveRelative}
-                onNewEnvelope={setNewEnvelope}
-                onNewEnvelopeKind={setNewEnvelopeKind}
-                onNewSubgroup={setNewSubgroup}
-                onDelete={setDeleting}
-              />
-            ))}
+            {roots.map((root) =>
+              root.kind === "group" ? (
+                <StructureGroup
+                  key={root.id}
+                  groupId={root.id}
+                  depth={0}
+                  groups={groups}
+                  categories={categories}
+                  pending={pending}
+                  dragging={dragging}
+                  newEnvelope={newEnvelope}
+                  newEnvelopeKind={newEnvelopeKind}
+                  newSubgroup={newSubgroup}
+                  run={run}
+                  onDragStart={setDragging}
+                  onDragEnd={() => setDragging(null)}
+                  onDrop={handleDrop}
+                  onMoveRelative={moveRelative}
+                  onNewEnvelope={setNewEnvelope}
+                  onNewEnvelopeKind={setNewEnvelopeKind}
+                  onNewSubgroup={setNewSubgroup}
+                  onDelete={setDeleting}
+                />
+              ) : (
+                <EnvelopeEditor
+                  key={root.id}
+                  category={categories.find((entry) => entry.id === root.id)!}
+                  groups={groups}
+                  categories={categories}
+                  pending={pending}
+                  run={run}
+                  onDragStart={setDragging}
+                  onDragEnd={() => setDragging(null)}
+                  onDrop={handleDrop}
+                  onMoveRelative={moveRelative}
+                  onDelete={setDeleting}
+                />
+              ),
+            )}
           </div>
           {error ? <p className="text-[0.8125rem] text-priority-a">{error}</p> : null}
         </div>
@@ -685,7 +743,7 @@ function NameEditor({
           id={`move-${moving.kind}-${moving.id}`}
           className={`${buttonClass} max-w-full bg-surface`}
           value=""
-          disabled={pending || destinations.length === 0}
+          disabled={pending}
           onChange={(event) => {
             const value = event.target.value;
             if (value === "") return;
@@ -695,6 +753,9 @@ function NameEditor({
           <option value="">Move to…</option>
           {moving.kind === "group" && parentId !== null ? (
             <option value="__root__">Top level</option>
+          ) : null}
+          {moving.kind === "category" && parentId !== null ? (
+            <option value="__root__">No group</option>
           ) : null}
           {destinations
             .filter((entry) => entry.id !== parentId)

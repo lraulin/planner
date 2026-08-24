@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { financeCategoryGroups, users } from "@/db/schema";
+import { financeBudgetCategories, financeCategoryGroups, users } from "@/db/schema";
 import { createCategoryGroup } from "./budget/mutations";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { importFinanceCsvFiles, type ImportFile } from "./import";
@@ -336,7 +336,6 @@ describeDb("declared bill envelopes", () => {
 
   beforeEach(async () => {
     userId = await makeUser();
-    await createCategoryGroup(userId, { name: "Household" });
   });
 
   it("declares a cadence and reads it back", async () => {
@@ -515,7 +514,7 @@ describeDb("declared bill envelopes", () => {
     expect(await loadRecurringBills(userId)).toEqual([]);
   });
 
-  it("puts a new bill in an existing group and does not invent Spending › Bills", async () => {
+  it("creates a bill with no group and does not invent Spending › Bills", async () => {
     await upsertBillEnvelope(userId, {
       name: "Geico",
       cadence: { unit: "month", n: 6 },
@@ -523,26 +522,23 @@ describeDb("declared bill envelopes", () => {
     const [bill] = await loadRecurringBills(userId);
     expect(bill).toBeDefined();
 
+    const [row] = await db
+      .select({ groupId: financeBudgetCategories.groupId })
+      .from(financeBudgetCategories)
+      .where(eq(financeBudgetCategories.userId, userId));
+    expect(row?.groupId).toBeNull();
+
     const groups = await db
       .select({ name: financeCategoryGroups.name })
       .from(financeCategoryGroups)
       .where(eq(financeCategoryGroups.userId, userId));
-    expect(groups.map((group) => group.name).sort()).toEqual(["Household"]);
+    expect(groups).toEqual([]);
 
-    // A second declaration by the same name corrects the same row rather than creating a
-    // sibling under a fresh group.
     await upsertBillEnvelope(userId, {
       name: "Geico",
       cadence: { unit: "month", n: 12 },
     });
     expect(await loadRecurringBills(userId)).toHaveLength(1);
-  });
-
-  it("refuses to declare a bill when no group exists", async () => {
-    const bare = await makeUser();
-    await expect(
-      upsertBillEnvelope(bare, { name: "Geico", cadence: { unit: "month", n: 6 } }),
-    ).rejects.toThrow("Create a group before adding a bill.");
   });
 });
 

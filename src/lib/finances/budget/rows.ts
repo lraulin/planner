@@ -17,7 +17,7 @@ import type { EnvelopeKind } from "@/db/schema";
 
 export type BudgetRow = {
   id: string;
-  groupId: string;
+  groupId: string | null;
   sortKey: string;
   name: string;
   isIncome: boolean;
@@ -79,7 +79,8 @@ export function budgetRows(
 
   return [...categories]
     .sort((left, right) => {
-      const byGroup = (order.get(left.groupId) ?? 0) - (order.get(right.groupId) ?? 0);
+      const byGroup =
+        (order.get(left.groupId ?? "") ?? -1) - (order.get(right.groupId ?? "") ?? -1);
       return byGroup !== 0 ? byGroup : compareSortKeys(left.sortKey, right.sortKey);
     })
     .map((category) => {

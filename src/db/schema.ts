@@ -2605,9 +2605,17 @@ export const financeBudgetCategories = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    groupId: uuid("group_id")
-      .notNull()
-      .references(() => financeCategoryGroups.id, { onDelete: "restrict" }),
+    /**
+     * Optional organisational folder *inside* a section.
+     *
+     * Null means the envelope sits directly in its section (Income / Bills / Regular
+     * spending / Savings). Groups are not required: those sections *are* the top level
+     * (`agent-os/specs/2026-08-24-0930-envelope-sections/` D2). Restrict on delete so a
+     * group that still holds envelopes cannot vanish out from under them.
+     */
+    groupId: uuid("group_id").references(() => financeCategoryGroups.id, {
+      onDelete: "restrict",
+    }),
     name: text("name").notNull(),
     sortKey: text("sort_key").notNull(),
     /**
