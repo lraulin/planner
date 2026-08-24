@@ -59,18 +59,17 @@ import { ReviewDrawer } from "./ReviewDrawer";
 const DEFAULT_HIDDEN_COLUMNS = new Set(["annual", "monthly"]);
 
 /**
- * The budget, one month at a time: **Income**, then **Spending** — Bills above Regular
- * spending.
+ * The budget, one month at a time: **Income**, **Spending** (Bills above Regular), **Savings**.
  *
  * **Sections, not one grid.** Only a bill has a cadence, a next charge, a status or a URL, so
  * putting bills and ordinary envelopes on one table meant six columns reading `—` on most
- * rows. They stay one budget where it counts: `budgetTotals` runs over both tables and the
- * Spending footer sums them together.
+ * rows. They stay one budget where it counts: `budgetTotals` runs over bills + regular as
+ * "All spending", and Savings is totalled separately so a house fund is not an overspend.
  *
- * The sections are **derived**, not user structure: Income from the group's `isIncome` flag,
- * Bills from the envelope's `kind`. A user group whose rows all land in one section renders
- * no header (`sectionGridRows`), so the seeded "Income" and "Spending" groups are invisible
- * chrome and any group the user makes *inside* a section still shows.
+ * The sections are **derived from the envelope's `kind`**, not from groups. A user group
+ * whose rows all land in one section renders no header (`sectionGridRows`), so the seeded
+ * "Income" and "Spending" groups are invisible chrome — and can be deleted — and any group
+ * the user makes *inside* a section still shows.
  *
  * **Arranges and formats only.** Every figure arrives already folded by
  * `src/lib/finances/budget/envelope.ts`, and every clamp is applied again on the server
@@ -123,9 +122,14 @@ export function BudgetView({
     order: envelopeColumns.map((column) => column.id),
     switches: { "show-hidden": false },
   });
+  const savingsGrid = useGridState("budget-savings", envelopeColumns, {
+    order: envelopeColumns.map((column) => column.id),
+    switches: { "show-hidden": false },
+  });
   const showHidden =
     (billGrid.switches["show-hidden"] ?? false) ||
-    (envelopeGrid.switches["show-hidden"] ?? false);
+    (envelopeGrid.switches["show-hidden"] ?? false) ||
+    (savingsGrid.switches["show-hidden"] ?? false);
 
   const month = findMonth(data.months, data.month);
   const rows = useMemo(
@@ -143,6 +147,10 @@ export function BudgetView({
   const envelopeGridRows = useMemo(
     () => sectionGridRows(data.groups, sections.envelopes, { showHidden }),
     [data.groups, sections.envelopes, showHidden],
+  );
+  const savingsGridRows = useMemo(
+    () => sectionGridRows(data.groups, sections.savings, { showHidden }),
+    [data.groups, sections.savings, showHidden],
   );
 
   function run(work: () => Promise<{ ok: boolean; error?: string }>) {
@@ -210,7 +218,10 @@ export function BudgetView({
     router.push(`/finances/budget?${next.toString()}`);
   }
 
-  const spendingRows = useMemo(() => rows.filter((row) => !row.isIncome), [rows]);
+  const spendingRows = useMemo(
+    () => [...sections.bills, ...sections.envelopes],
+    [sections],
+  );
   const receivedThisMonthCents = useMemo(
     () =>
       rows
@@ -425,12 +436,13 @@ export function BudgetView({
     ];
   }
 
-  // Three totals from one row set: the two tables each own a subtotal, and the footer sums
-  // both. They are computed from the same `budgetTotals` so a bill can never be counted in
-  // one and missed in the other.
+  // Spending totals from one row set: the two tables each own a subtotal, and the footer
+  // sums both. Savings is held out. They are computed from the same `budgetTotals` so a
+  // bill can never be counted in one and missed in the other.
   const totals = budgetTotals(spendingRows);
   const billTotals = budgetTotals(sections.bills);
   const envelopeTotals = budgetTotals(sections.envelopes);
+  const savingsTotals = budgetTotals(sections.savings);
   const editingRow = rows.find((row) => row.id === editing) ?? null;
   const backlog = data.uncategorizedCount;
 
@@ -493,6 +505,7 @@ export function BudgetView({
           onShowHidden={(next) => {
             billGrid.setSwitch("show-hidden", next);
             envelopeGrid.setSwitch("show-hidden", next);
+            savingsGrid.setSwitch("show-hidden", next);
           }}
         />
 
@@ -631,6 +644,38 @@ export function BudgetView({
               Left <span className="text-ink">{formatUsd(totals.balanceCents)}</span>
             </span>
           </footer>
+        </section>
+
+        <section className="flex min-w-0 shrink-0 flex-col gap-3" aria-label="Savings">
+          <SectionHeader
+            title="Savings"
+            caption="Assigned money that is not a monthly expense. Held out of All spending so a house fund is not an overspend."
+            totals={savingsTotals}
+          />
+          <DataGrid<BudgetColumnCtx, BudgetRow>
+            rows={savingsGridRows}
+            columns={savingsGrid.columns}
+            allColumns={envelopeColumns}
+            columnCtx={ctx}
+            selectedId={selected}
+            onSelect={setSelected}
+            rowMenu={(rowId) => {
+              const row = rows.find((candidate) => candidate.id === rowId);
+              return row ? balanceMenu(row) : [];
+            }}
+            ariaLabel={`Savings for ${monthLabel(data.month)}`}
+            empty="No savings envelopes yet — add one from Manage groups and envelopes."
+            widths={savingsGrid.widths}
+            onResizeColumn={savingsGrid.setWidth}
+            onResetColumnWidth={savingsGrid.clearWidth}
+            columnControls={savingsGrid.columnControls}
+            collapsedGroups={savingsGrid.collapsedGroups}
+            onToggleGroup={savingsGrid.toggleGroup}
+            density={savingsGrid.density}
+            autoHeight
+            rowLabel={(row) => `Savings: ${row.node.name}`}
+            groupSummary={(_nodes, header) => groupTotals(sections.savings, header.id)}
+          />
         </section>
 
         <ForecastDetails

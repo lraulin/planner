@@ -734,7 +734,6 @@ async function defaultBillGroupId(
         userId,
         parentGroupId,
         name,
-        isIncome: false,
         sortKey: last === undefined ? sortKey.first() : sortKey.after(last),
       })
       .returning({ id: financeCategoryGroups.id });

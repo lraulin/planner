@@ -75,9 +75,6 @@ export function budgetRows(
   goals: Readonly<Record<string, number>> = {},
   nextDueKeys: ReadonlyMap<string, string> = new Map(),
 ): BudgetRow[] {
-  const incomeGroups = new Set(
-    groups.filter((group) => group.isIncome).map((group) => group.id),
-  );
   const order = new Map(groups.map((group, index) => [group.id, index]));
 
   return [...categories]
@@ -92,7 +89,7 @@ export function budgetRows(
         groupId: category.groupId,
         sortKey: category.sortKey,
         name: category.name,
-        isIncome: incomeGroups.has(category.groupId),
+        isIncome: category.kind === "income",
         hidden: category.hidden,
         notes: category.notes,
         sourceCategories: category.sourceCategories,
@@ -137,22 +134,38 @@ export function isBillRow(row: BudgetRow): row is BudgetBillRow {
 }
 
 /**
- * The three sections the Budget page renders, from one folded row set.
+ * The page section an envelope lives in.
+ *
+ * Bills sit inside Spending: they have their own table, but "All spending" is bills +
+ * regular, and Savings is held out of that total
+ * (`agent-os/specs/2026-08-24-0930-envelope-sections/` D3).
+ */
+export function pageSectionOf(kind: EnvelopeKind): "income" | "spending" | "savings" {
+  if (kind === "income") return "income";
+  if (kind === "savings") return "savings";
+  return "spending";
+}
+
+/**
+ * The four sections the Budget page renders, from one folded row set.
  *
  * Bills and ordinary envelopes are separate **tables** rather than one grid with `—` in the
  * bill columns: only a bill has a cadence, a status or a URL, and a column that is blank on
  * two thirds of its rows is a column that costs width without answering anything. They stay
- * one **budget** — `budgetTotals` sums across both, which is the part that has to agree.
+ * one **budget** — `budgetTotals` sums bills + regular as "All spending", and Savings is
+ * totalled separately so a house fund is not an overspend.
  */
 export function budgetSections(rows: readonly BudgetRow[]): {
   income: BudgetRow[];
   bills: BudgetBillRow[];
   envelopes: BudgetRow[];
+  savings: BudgetRow[];
 } {
   return {
-    income: rows.filter((row) => row.isIncome),
-    bills: rows.filter((row): row is BudgetBillRow => !row.isIncome && isBillRow(row)),
-    envelopes: rows.filter((row) => !row.isIncome && !isBillRow(row)),
+    income: rows.filter((row) => row.kind === "income"),
+    bills: rows.filter((row): row is BudgetBillRow => isBillRow(row)),
+    envelopes: rows.filter((row) => row.kind === "spending"),
+    savings: rows.filter((row) => row.kind === "savings"),
   };
 }
 

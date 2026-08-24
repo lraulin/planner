@@ -29,6 +29,7 @@ import {
 } from "@/db/schema";
 import * as sortKeyLib from "@/lib/tree/sortKey";
 import { toDateKey } from "@/lib/schedule/geometry";
+import { groupPageSection } from "./hierarchy";
 import { parseTemplates, type SimpleTemplate } from "./templates/types";
 
 type OldBillRow = {
@@ -196,18 +197,30 @@ export type CutoverReceipt = {
 };
 
 async function requireSpendingGroupId(userId: string): Promise<string> {
-  const [spending] = await db
-    .select({ id: financeCategoryGroups.id })
-    .from(financeCategoryGroups)
-    .where(
-      and(
-        eq(financeCategoryGroups.userId, userId),
-        eq(financeCategoryGroups.isIncome, false),
-        sql`${financeCategoryGroups.parentGroupId} is null`,
-      ),
-    )
-    .orderBy(financeCategoryGroups.sortKey)
-    .limit(1);
+  const [groups, categories] = await Promise.all([
+    db
+      .select({
+        id: financeCategoryGroups.id,
+        parentGroupId: financeCategoryGroups.parentGroupId,
+        sortKey: financeCategoryGroups.sortKey,
+      })
+      .from(financeCategoryGroups)
+      .where(eq(financeCategoryGroups.userId, userId))
+      .orderBy(financeCategoryGroups.sortKey),
+    db
+      .select({
+        id: financeBudgetCategories.id,
+        groupId: financeBudgetCategories.groupId,
+        kind: financeBudgetCategories.kind,
+      })
+      .from(financeBudgetCategories)
+      .where(eq(financeBudgetCategories.userId, userId)),
+  ]);
+  const spending = groups.find((group) => {
+    if (group.parentGroupId !== null) return false;
+    const section = groupPageSection(groups, categories, group.id);
+    return section !== "income";
+  });
   if (!spending) throw new Error("No spending group exists — set the budget up first.");
   return spending.id;
 }
@@ -333,7 +346,7 @@ export async function applyCommitmentsCutover(
               eq(financeBudgetCategories.userId, userId),
               eq(financeBudgetCategories.groupId, spendingGroupId),
               eq(financeBudgetCategories.name, entry.name),
-              eq(financeBudgetCategories.kind, "envelope"),
+              eq(financeBudgetCategories.kind, "spending"),
             ),
           )
           .limit(1);
@@ -390,7 +403,7 @@ export async function applyCommitmentsCutover(
               groupId: spendingGroupId,
               name: entry.name,
               sortKey: nextSortKey(),
-              kind: "envelope",
+              kind: "spending",
               notes: entry.notes,
               templates,
             })
@@ -439,7 +452,7 @@ export async function applyCommitmentsCutover(
             eq(financeBudgetCategories.userId, userId),
             eq(financeBudgetCategories.groupId, spendingGroupId),
             eq(financeBudgetCategories.name, "Bills"),
-            eq(financeBudgetCategories.kind, "envelope"),
+            eq(financeBudgetCategories.kind, "spending"),
           ),
         )
         .limit(1);

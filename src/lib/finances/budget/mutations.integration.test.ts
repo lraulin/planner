@@ -176,6 +176,49 @@ describeDb("budget mutations", () => {
     ).rejects.toThrow(/already been set up/);
   });
 
+  it("puts section on the envelope so the seeded Income group can be deleted", async () => {
+    await seedAccounts(userId);
+    await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
+    const before = await loadBudget(userId, MONTH);
+    const kinds = Object.fromEntries(
+      before.categories.map((category) => [category.name, category.kind]),
+    );
+    expect(kinds).toMatchObject({
+      Income: "income",
+      Bills: "spending",
+      Savings: "savings",
+    });
+    const ready = findMonth(before.months, MONTH)?.readyToAssignCents;
+
+    const incomeGroup = before.groups.find((group) => group.name === "Income")!;
+    const incomeEnvelope = before.categories.find(
+      (category) => category.name === "Income",
+    )!;
+    const payGroupId = await createCategoryGroup(userId, { name: "Pay" });
+    await moveBudgetStructureItemIntoGroup(
+      userId,
+      { kind: "category", id: incomeEnvelope.id },
+      payGroupId,
+    );
+    await deleteCategoryGroup(userId, incomeGroup.id);
+
+    const after = await loadBudget(userId, MONTH);
+    expect(after.groups.some((group) => group.id === incomeGroup.id)).toBe(false);
+    expect(
+      after.categories.find((category) => category.id === incomeEnvelope.id)?.kind,
+    ).toBe("income");
+    expect(findMonth(after.months, MONTH)?.readyToAssignCents).toBe(ready);
+
+    const savings = after.categories.find((category) => category.name === "Savings")!;
+    await updateBudgetCategory(userId, savings.id, { kind: "spending" });
+    await updateBudgetCategory(userId, savings.id, { kind: "savings" });
+    expect(
+      (await loadBudget(userId, MONTH)).categories.find(
+        (category) => category.id === savings.id,
+      )?.kind,
+    ).toBe("savings");
+  });
+
   it("auto-maps by category and flow, and leaves an on-budget transfer alone", async () => {
     const { checkingId, cardId, savingsId } = await seedAccounts(userId);
     await addTransactions(userId, [
@@ -585,19 +628,17 @@ describeDb("budget mutations", () => {
     await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
     const before = await loadBudget(userId, MONTH);
     const spending = before.groups.find((group) => group.name === "Spending")!;
-    const income = before.groups.find((group) => group.isIncome)!;
+    const income = before.groups.find((group) => group.name === "Income")!;
     const billsEnvelope = before.categories.find(
       (category) => category.name === "Bills",
     )!;
 
     const billsGroupId = await createCategoryGroup(userId, {
       name: "Bill groups",
-      isIncome: false,
       parentGroupId: spending.id,
     });
     const utilitiesId = await createCategoryGroup(userId, {
       name: "Utilities",
-      isIncome: false,
       parentGroupId: billsGroupId,
     });
     await moveBudgetStructureItemIntoGroup(
@@ -768,7 +809,6 @@ describeDb("budget mutations — cross-user isolation", () => {
     await expect(
       createCategoryGroup(intruderId, {
         name: "Smuggled",
-        isIncome: false,
         parentGroupId: owned.groupId,
       }),
     ).rejects.toThrow(/does not exist/);

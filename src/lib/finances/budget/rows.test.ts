@@ -19,7 +19,6 @@ const GROUPS: BudgetGroupRow[] = [
     id: "income",
     parentGroupId: null,
     name: "Income",
-    isIncome: true,
     sortKey: "a",
     hidden: false,
   },
@@ -27,7 +26,6 @@ const GROUPS: BudgetGroupRow[] = [
     id: "spending",
     parentGroupId: null,
     name: "Spending",
-    isIncome: false,
     sortKey: "b",
     hidden: false,
   },
@@ -38,6 +36,7 @@ function category(
   groupId: string,
   sortKey: string,
   hidden = false,
+  kind: BudgetCategoryRow["kind"] = groupId === "income" ? "income" : "spending",
 ): BudgetCategoryRow {
   return {
     id,
@@ -48,7 +47,8 @@ function category(
     notes: "",
     sourceCategories: [],
     templates: [],
-    kind: "envelope",
+    kind,
+    isIncome: kind === "income",
     bill: null,
   };
 }
@@ -66,7 +66,7 @@ function august(): BudgetMonth {
     categories: CATEGORIES.map((row) => ({
       id: row.id,
       groupId: row.groupId,
-      isIncome: row.groupId === "income",
+      isIncome: row.kind === "income",
     })),
     allocations: [
       {
@@ -106,7 +106,7 @@ describe("budgetRows", () => {
     expect(rows[2]?.carryover).toBe(true);
   });
 
-  it("marks income rows from their group, not from the envelope", () => {
+  it("marks income rows from kind, not from the group", () => {
     const rows = budgetRows(GROUPS, CATEGORIES, august());
     expect(rows.find((row) => row.id === "pay")?.isIncome).toBe(true);
     expect(rows.find((row) => row.id === "food")?.isIncome).toBe(false);
@@ -204,13 +204,14 @@ describe("budgetSections", () => {
     );
   }
 
-  it("splits income, bills and ordinary envelopes into three disjoint sets", () => {
+  it("splits income, bills, regular spending and savings into four disjoint sets", () => {
     const rows = budgetRows(GROUPS, withBill(), august());
     const sections = budgetSections(rows);
 
     expect(sections.income.map((row) => row.id)).toEqual(["pay"]);
     expect(sections.bills.map((row) => row.id)).toEqual(["food"]);
     expect(sections.envelopes.map((row) => row.id)).toEqual(["fun", "old"]);
+    expect(sections.savings).toEqual([]);
   });
 
   it("counts every spending row exactly once across the two tables", () => {
@@ -218,11 +219,30 @@ describe("budgetSections", () => {
     // landing in both — or in neither — would silently change the budget's total.
     const rows = budgetRows(GROUPS, withBill(), august());
     const sections = budgetSections(rows);
-    const spending = rows.filter((row) => !row.isIncome);
+    const spending = rows.filter(
+      (row) => row.kind === "bill" || row.kind === "spending",
+    );
 
     expect(sections.bills.length + sections.envelopes.length).toBe(spending.length);
     expect(budgetTotals([...sections.bills, ...sections.envelopes])).toEqual(
       budgetTotals(spending),
+    );
+  });
+
+  it("holds savings out of All spending", () => {
+    const categories = [
+      ...CATEGORIES,
+      category("house", "spending", "d", false, "savings"),
+    ];
+    const rows = budgetRows(GROUPS, categories, august());
+    const sections = budgetSections(rows);
+
+    expect(sections.savings.map((row) => row.id)).toEqual(["house"]);
+    expect(sections.envelopes.map((row) => row.id)).not.toContain("house");
+    expect(budgetTotals([...sections.bills, ...sections.envelopes])).toEqual(
+      budgetTotals(
+        rows.filter((row) => row.kind === "bill" || row.kind === "spending"),
+      ),
     );
   });
 
@@ -252,7 +272,6 @@ describe("sectionGridRows", () => {
         id: "savings",
         parentGroupId: null,
         name: "Savings",
-        isIncome: false,
         sortKey: "c",
         hidden: false,
       },

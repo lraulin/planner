@@ -2,7 +2,7 @@ import type { GridRow } from "@/lib/tree/slice";
 import { compare as compareSortKeys } from "@/lib/tree/sortKey";
 
 import type { BudgetCategoryRow, BudgetGroupRow } from "./queries";
-import type { BudgetRow } from "./rows";
+import { pageSectionOf, type BudgetRow } from "./rows";
 
 export type BudgetStructureRef =
   { kind: "group"; id: string } | { kind: "category"; id: string };
@@ -213,9 +213,25 @@ export function nestedBudgetGridRows<T extends BudgetRow>(
 }
 
 /** Resolve a desktop drop without trusting the client to name a parent or sort key. */
+export function groupPageSection(
+  groups: readonly Pick<BudgetGroupRow, "id" | "parentGroupId">[],
+  categories: readonly Pick<BudgetCategoryRow, "id" | "groupId" | "kind">[],
+  groupId: string,
+): "income" | "spending" | "savings" | "mixed" | null {
+  const ids = descendantEnvelopeIds(groups, categories, groupId);
+  let section: "income" | "spending" | "savings" | null = null;
+  for (const category of categories) {
+    if (!ids.has(category.id)) continue;
+    const next = pageSectionOf(category.kind);
+    if (section === null) section = next;
+    else if (section !== next) return "mixed";
+  }
+  return section;
+}
+
 export function resolveBudgetDrop(
   groups: readonly BudgetGroupRow[],
-  categories: readonly Pick<BudgetCategoryRow, "id" | "groupId" | "sortKey">[],
+  categories: readonly Pick<BudgetCategoryRow, "id" | "groupId" | "sortKey" | "kind">[],
   moving: BudgetStructureRef,
   target: BudgetStructureRef,
   zone: BudgetDropZone,
@@ -239,13 +255,21 @@ export function resolveBudgetDrop(
       : (targetGroup?.parentGroupId ?? targetCategory?.groupId ?? null);
   if (moving.kind === "category" && parentGroupId === null) return null;
 
-  const sourceIncome =
-    movingGroup?.isIncome ?? groupById.get(movingCategory!.groupId)?.isIncome;
-  const destinationIncome = parentGroupId
-    ? groupById.get(parentGroupId)?.isIncome
-    : targetGroup?.isIncome;
-  if (sourceIncome === undefined || destinationIncome === undefined) return null;
-  if (sourceIncome !== destinationIncome) return null;
+  const sourceSection = movingCategory
+    ? pageSectionOf(movingCategory.kind)
+    : groupPageSection(groups, categories, movingGroup!.id);
+  const destinationSection = parentGroupId
+    ? groupPageSection(groups, categories, parentGroupId)
+    : null;
+  if (
+    sourceSection !== null &&
+    destinationSection !== null &&
+    sourceSection !== "mixed" &&
+    destinationSection !== "mixed" &&
+    sourceSection !== destinationSection
+  ) {
+    return null;
+  }
 
   if (movingGroup && parentGroupId) {
     const descendants = descendantGroupIds(groups, movingGroup.id);

@@ -15,19 +15,22 @@ function group(
   id: string,
   parentGroupId: string | null,
   sortKey: string,
-  isIncome = false,
 ): BudgetGroupRow {
   return {
     id,
     parentGroupId,
     name: id,
-    isIncome,
     sortKey,
     hidden: false,
   };
 }
 
-function category(id: string, groupId: string, sortKey: string): BudgetCategoryRow {
+function category(
+  id: string,
+  groupId: string,
+  sortKey: string,
+  kind: BudgetCategoryRow["kind"] = "spending",
+): BudgetCategoryRow {
   return {
     id,
     groupId,
@@ -37,7 +40,8 @@ function category(id: string, groupId: string, sortKey: string): BudgetCategoryR
     notes: "",
     sourceCategories: [],
     templates: [],
-    kind: "envelope",
+    kind,
+    isIncome: kind === "income",
     bill: null,
   };
 }
@@ -58,7 +62,7 @@ function row(id: string, groupId: string): BudgetRow {
     carryover: true,
     templates: [],
     goalCents: null,
-    kind: "envelope",
+    kind: "spending",
     bill: null,
     nextDueKey: null,
   };
@@ -163,11 +167,15 @@ describe("budget hierarchy", () => {
   });
 
   it("refuses moves across the income and spending boundary", () => {
-    const withIncome = [...groups, group("income", null, "Z", true)];
+    const withIncome = [...groups, group("income", null, "Z")];
+    const withIncomeCategories = [
+      ...categories,
+      category("pay", "income", "A", "income"),
+    ];
     expect(
       resolveBudgetDrop(
         withIncome,
-        categories,
+        withIncomeCategories,
         { kind: "group", id: "bills" },
         { kind: "group", id: "income" },
         "inside",

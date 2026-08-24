@@ -21,12 +21,33 @@ import {
 } from "@/app/finances/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { Drawer, DrawerHeader } from "@/components/detail/Drawer";
+import type { EnvelopeSectionKind } from "@/db/schema";
 import {
   budgetChildren,
   descendantGroupIds,
+  groupPageSection,
   type BudgetStructureRef,
 } from "@/lib/finances/budget/hierarchy";
 import type { BudgetCategoryRow, BudgetGroupRow } from "@/lib/finances/budget/queries";
+import { pageSectionOf } from "@/lib/finances/budget/rows";
+
+const SECTION_OPTIONS: { value: EnvelopeSectionKind; label: string }[] = [
+  { value: "spending", label: "Spending" },
+  { value: "income", label: "Income" },
+  { value: "savings", label: "Savings" },
+];
+
+function defaultSectionForGroup(
+  groups: readonly BudgetGroupRow[],
+  categories: readonly BudgetCategoryRow[],
+  groupId: string,
+): EnvelopeSectionKind {
+  const section = groupPageSection(groups, categories, groupId);
+  if (section === "income" || section === "savings" || section === "spending") {
+    return section;
+  }
+  return "spending";
+}
 
 type DeleteTarget =
   | { kind: "group"; id: string; name: string }
@@ -50,8 +71,10 @@ export function BudgetStructureDrawer({
 }) {
   const titleId = useId();
   const [newGroup, setNewGroup] = useState("");
-  const [income, setIncome] = useState(false);
   const [newEnvelope, setNewEnvelope] = useState<Record<string, string>>({});
+  const [newEnvelopeKind, setNewEnvelopeKind] = useState<
+    Record<string, EnvelopeSectionKind>
+  >({});
   const [newSubgroup, setNewSubgroup] = useState<Record<string, string>>({});
   const [dragging, setDragging] = useState<BudgetStructureRef | null>(null);
   const [deleting, setDeleting] = useState<DeleteTarget | null>(null);
@@ -143,25 +166,14 @@ export function BudgetStructureDrawer({
                 onChange={(event) => setNewGroup(event.target.value)}
                 className={inputClass}
               />
-              <label className="flex min-h-tap items-center gap-2 text-[0.8125rem] text-ink md:min-h-0">
-                <input
-                  type="checkbox"
-                  checked={income}
-                  onChange={(event) => setIncome(event.target.checked)}
-                />
-                Income
-              </label>
               <button
                 type="button"
                 disabled={pending || newGroup.trim() === ""}
                 className={buttonClass}
                 onClick={() =>
                   run(
-                    () => createCategoryGroupAction(newGroup, income),
-                    () => {
-                      setNewGroup("");
-                      setIncome(false);
-                    },
+                    () => createCategoryGroupAction(newGroup),
+                    () => setNewGroup(""),
                   )
                 }
               >
@@ -186,6 +198,7 @@ export function BudgetStructureDrawer({
                 pending={pending}
                 dragging={dragging}
                 newEnvelope={newEnvelope}
+                newEnvelopeKind={newEnvelopeKind}
                 newSubgroup={newSubgroup}
                 run={run}
                 onDragStart={setDragging}
@@ -193,6 +206,7 @@ export function BudgetStructureDrawer({
                 onDrop={handleDrop}
                 onMoveRelative={moveRelative}
                 onNewEnvelope={setNewEnvelope}
+                onNewEnvelopeKind={setNewEnvelopeKind}
                 onNewSubgroup={setNewSubgroup}
                 onDelete={setDeleting}
               />
@@ -244,6 +258,7 @@ function StructureGroup({
   pending,
   dragging,
   newEnvelope,
+  newEnvelopeKind,
   newSubgroup,
   run,
   onDragStart,
@@ -251,6 +266,7 @@ function StructureGroup({
   onDrop,
   onMoveRelative,
   onNewEnvelope,
+  onNewEnvelopeKind,
   onNewSubgroup,
   onDelete,
 }: {
@@ -261,6 +277,7 @@ function StructureGroup({
   pending: boolean;
   dragging: BudgetStructureRef | null;
   newEnvelope: Record<string, string>;
+  newEnvelopeKind: Record<string, EnvelopeSectionKind>;
   newSubgroup: Record<string, string>;
   run: Run;
   onDragStart: (target: BudgetStructureRef) => void;
@@ -268,6 +285,7 @@ function StructureGroup({
   onDrop: (event: DragEvent<HTMLElement>, target: BudgetStructureRef) => void;
   onMoveRelative: (target: BudgetStructureRef, direction: -1 | 1) => void;
   onNewEnvelope: Dispatch<SetStateAction<Record<string, string>>>;
+  onNewEnvelopeKind: Dispatch<SetStateAction<Record<string, EnvelopeSectionKind>>>;
   onNewSubgroup: Dispatch<SetStateAction<Record<string, string>>>;
   onDelete: (target: DeleteTarget) => void;
 }) {
@@ -315,6 +333,7 @@ function StructureGroup({
               pending={pending}
               dragging={dragging}
               newEnvelope={newEnvelope}
+              newEnvelopeKind={newEnvelopeKind}
               newSubgroup={newSubgroup}
               run={run}
               onDragStart={onDragStart}
@@ -322,6 +341,7 @@ function StructureGroup({
               onDrop={onDrop}
               onMoveRelative={onMoveRelative}
               onNewEnvelope={onNewEnvelope}
+              onNewEnvelopeKind={onNewEnvelopeKind}
               onNewSubgroup={onNewSubgroup}
               onDelete={onDelete}
             />
@@ -363,11 +383,7 @@ function StructureGroup({
               onClick={() =>
                 run(
                   () =>
-                    createCategoryGroupAction(
-                      newSubgroup[group.id] ?? "",
-                      group.isIncome,
-                      group.id,
-                    ),
+                    createCategoryGroupAction(newSubgroup[group.id] ?? "", group.id),
                   () => onNewSubgroup((current) => ({ ...current, [group.id]: "" })),
                 )
               }
@@ -375,7 +391,7 @@ function StructureGroup({
               Add
             </button>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <input
               aria-label={`New envelope in ${group.name}`}
               placeholder="New envelope"
@@ -388,6 +404,26 @@ function StructureGroup({
               }
               className={inputClass}
             />
+            <select
+              aria-label={`Section for new envelope in ${group.name}`}
+              value={
+                newEnvelopeKind[group.id] ??
+                defaultSectionForGroup(groups, categories, group.id)
+              }
+              onChange={(event) =>
+                onNewEnvelopeKind((current) => ({
+                  ...current,
+                  [group.id]: event.target.value as EnvelopeSectionKind,
+                }))
+              }
+              className={inputClass}
+            >
+              {SECTION_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
             <button
               type="button"
               className={buttonClass}
@@ -395,8 +431,20 @@ function StructureGroup({
               onClick={() =>
                 run(
                   () =>
-                    createBudgetCategoryAction(group.id, newEnvelope[group.id] ?? ""),
-                  () => onNewEnvelope((current) => ({ ...current, [group.id]: "" })),
+                    createBudgetCategoryAction(
+                      group.id,
+                      newEnvelope[group.id] ?? "",
+                      newEnvelopeKind[group.id] ??
+                        defaultSectionForGroup(groups, categories, group.id),
+                    ),
+                  () => {
+                    onNewEnvelope((current) => ({ ...current, [group.id]: "" }));
+                    onNewEnvelopeKind((current) => {
+                      const next = { ...current };
+                      delete next[group.id];
+                      return next;
+                    });
+                  },
                 )
               }
             >
@@ -467,6 +515,31 @@ function EnvelopeEditor({
           onDelete({ kind: "category", id: category.id, name: category.name })
         }
       />
+      <label className="mt-2 flex items-center gap-2 text-[0.8125rem] text-ink">
+        <span className="text-ink-muted">Section</span>
+        <select
+          aria-label={`Section for ${category.name}`}
+          value={category.kind === "bill" ? "bill" : category.kind}
+          disabled={pending}
+          className={inputClass}
+          onChange={(event) => {
+            const next = event.target.value;
+            if (next === "bill") return;
+            run(() =>
+              updateBudgetCategoryAction(category.id, {
+                kind: next as EnvelopeSectionKind,
+              }),
+            );
+          }}
+        >
+          {category.kind === "bill" ? <option value="bill">Bill</option> : null}
+          {SECTION_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
     </div>
   );
 }
@@ -524,9 +597,28 @@ function NameEditor({
   const excluded =
     moving.kind === "group" ? descendantGroupIds(groups, moving.id) : new Set<string>();
   if (moving.kind === "group") excluded.add(moving.id);
-  const destinations = groups.filter(
-    (entry) => entry.isIncome === group?.isIncome && !excluded.has(entry.id),
-  );
+  const movingCategory =
+    moving.kind === "category"
+      ? categories.find((category) => category.id === moving.id)
+      : undefined;
+  const movingSection = movingCategory
+    ? pageSectionOf(movingCategory.kind)
+    : group
+      ? groupPageSection(groups, categories, group.id)
+      : null;
+  const destinations = groups.filter((entry) => {
+    if (excluded.has(entry.id)) return false;
+    const dest = groupPageSection(groups, categories, entry.id);
+    if (
+      movingSection === null ||
+      dest === null ||
+      movingSection === "mixed" ||
+      dest === "mixed"
+    ) {
+      return true;
+    }
+    return movingSection === dest;
+  });
 
   return (
     <div className="grid grid-cols-[auto_1fr] gap-2 md:flex md:flex-wrap md:items-center">

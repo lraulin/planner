@@ -25,7 +25,7 @@ function envelope(overrides: Partial<EnvelopeApplyInput> = {}): EnvelopeApplyInp
     id: "bills",
     name: "Bills",
     isIncome: false,
-    kind: "envelope",
+    kind: "spending",
     templates: [billsSimple],
     assignedCents: 0,
     carryInCents: 0,

@@ -65,7 +65,7 @@ import type {
 } from "@/lib/finances/budget/hierarchy";
 import type { MonthKey } from "@/lib/finances/budget/envelope";
 import type { BudgetPreset } from "@/lib/finances/budget/presets";
-import type { EnvelopeStatus } from "@/db/schema";
+import type { EnvelopeSectionKind, EnvelopeStatus } from "@/db/schema";
 import {
   finalizeTransactionIngestion,
   transactionIngestionWatermark,
@@ -285,12 +285,9 @@ export async function setCarryoverAction(
 
 export async function createCategoryGroupAction(
   name: string,
-  isIncome: boolean,
   parentGroupId: string | null = null,
 ): Promise<DataActionResult<string>> {
-  return runWithData((userId) =>
-    createCategoryGroup(userId, { name, isIncome, parentGroupId }),
-  );
+  return runWithData((userId) => createCategoryGroup(userId, { name, parentGroupId }));
 }
 
 export async function renameCategoryGroupAction(
@@ -326,8 +323,9 @@ export async function moveBudgetStructureItemIntoGroupAction(
 export async function createBudgetCategoryAction(
   groupId: string,
   name: string,
+  kind: EnvelopeSectionKind = "spending",
 ): Promise<DataActionResult<string>> {
-  return runWithData((userId) => createBudgetCategory(userId, { groupId, name }));
+  return runWithData((userId) => createBudgetCategory(userId, { groupId, name, kind }));
 }
 
 export async function updateBudgetCategoryAction(

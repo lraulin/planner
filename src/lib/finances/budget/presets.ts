@@ -11,6 +11,7 @@
  * Spec: `agent-os/specs/2026-08-22-1948-zero-based-budget/` D5.
  */
 
+import type { EnvelopeSectionKind } from "@/db/schema";
 import { FINANCE_CATEGORIES, type FinanceCategory } from "../classify/categories";
 
 export const BUDGET_PRESETS = ["minimal", "detailed"] as const;
@@ -18,12 +19,13 @@ export type BudgetPreset = (typeof BUDGET_PRESETS)[number];
 
 export type PresetCategory = {
   name: string;
+  /** Section this envelope belongs to. Omitted means ordinary spending. */
+  kind?: EnvelopeSectionKind;
   sourceCategories: readonly FinanceCategory[];
 };
 
 export type PresetGroup = {
   name: string;
-  isIncome: boolean;
   categories: readonly PresetCategory[];
 };
 
@@ -68,17 +70,15 @@ const HABITS: readonly FinanceCategory[] = ["Groceries", "Gas & Auto"];
 const MINIMAL: readonly PresetGroup[] = [
   {
     name: "Income",
-    isIncome: true,
-    categories: [{ name: "Income", sourceCategories: [] }],
+    categories: [{ name: "Income", kind: "income", sourceCategories: [] }],
   },
   {
     name: "Spending",
-    isIncome: false,
     categories: [
       { name: "Bills", sourceCategories: BILLS },
       { name: "Recurring spend", sourceCategories: HABITS },
       { name: "Discretionary", sourceCategories: DISCRETIONARY },
-      { name: "Savings", sourceCategories: [] },
+      { name: "Savings", kind: "savings", sourceCategories: [] },
     ],
   },
 ];
@@ -95,12 +95,10 @@ const MINIMAL: readonly PresetGroup[] = [
 const DETAILED: readonly PresetGroup[] = [
   {
     name: "Income",
-    isIncome: true,
-    categories: [{ name: "Income", sourceCategories: [] }],
+    categories: [{ name: "Income", kind: "income", sourceCategories: [] }],
   },
   {
     name: "Home",
-    isIncome: false,
     categories: [
       "Rent & Housing",
       "Utilities",
@@ -111,7 +109,6 @@ const DETAILED: readonly PresetGroup[] = [
   },
   {
     name: "Everyday",
-    isIncome: false,
     categories: [
       "Groceries",
       "Dining",
@@ -123,7 +120,6 @@ const DETAILED: readonly PresetGroup[] = [
   },
   {
     name: "Enjoyment",
-    isIncome: false,
     categories: [
       "Streaming & Media",
       "Entertainment",
@@ -137,7 +133,6 @@ const DETAILED: readonly PresetGroup[] = [
   },
   {
     name: "Obligations",
-    isIncome: false,
     categories: ["Taxes", "Fees & Interest", "Professional Services"].map((name) => ({
       name,
       sourceCategories: [name as FinanceCategory],

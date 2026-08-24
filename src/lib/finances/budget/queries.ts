@@ -51,7 +51,6 @@ export type BudgetGroupRow = {
   id: string;
   parentGroupId: string | null;
   name: string;
-  isIncome: boolean;
   sortKey: string;
   hidden: boolean;
 };
@@ -77,6 +76,8 @@ export type BudgetCategoryRow = {
   hidden: boolean;
   notes: string;
   kind: EnvelopeKind;
+  /** Derived from `kind` — income has no allocation and no balance. */
+  isIncome: boolean;
   bill: BillFacet | null;
   /** Spending-taxonomy values this envelope claims, for the auto-map and its editor. */
   sourceCategories: string[];
@@ -152,7 +153,6 @@ function groupsOf(userId: string) {
       id: financeCategoryGroups.id,
       parentGroupId: financeCategoryGroups.parentGroupId,
       name: financeCategoryGroups.name,
-      isIncome: financeCategoryGroups.isIncome,
       sortKey: financeCategoryGroups.sortKey,
       hidden: financeCategoryGroups.hidden,
     })
@@ -201,6 +201,7 @@ function parsedCategories(
     sourceCategories: row.sourceCategories,
     templates: parseTemplates(row.templates) ?? [],
     kind: row.kind,
+    isIncome: row.kind === "income",
     bill:
       row.kind === "bill"
         ? {
@@ -390,8 +391,7 @@ export async function loadBudget(
     categories: categories.map((category) => ({
       id: category.id,
       groupId: category.groupId,
-      isIncome:
-        groups.find((group) => group.id === category.groupId)?.isIncome ?? false,
+      isIncome: category.kind === "income",
     })),
     allocations: allocations.map((row) => ({
       month: row.month,

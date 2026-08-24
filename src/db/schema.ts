@@ -2427,30 +2427,38 @@ export const financeStatementRates = pgTable(
  * accrual, the forecast, the annual total. `paused` is the house-move case: still a commitment,
  * still on the grid, but its balance stops being demanded by Apply — so Ready to Assign stops
  * being asked for it without pretending it was never a bill. There is no `ignored` state: an
- * ordinary envelope with `kind = 'envelope'` simply has no bill facet, and a merchant that was
+ * ordinary envelope with `kind <> 'bill'` simply has no bill facet, and a merchant that was
  * never a commitment is recorded on the payee (`not_a_commitment`) rather than by inventing a
  * bill row just to mark it dismissed.
  */
 export const ENVELOPE_STATUSES = ["active", "paused", "cancelled"] as const;
 export type EnvelopeStatus = (typeof ENVELOPE_STATUSES)[number];
 
-/** Whether an envelope is an ordinary bucket or a bill with its own cadence and status. */
-export const ENVELOPE_KINDS = ["envelope", "bill"] as const;
+/**
+ * Which **section** of the budget an envelope belongs to.
+ *
+ * One discriminator for a question that used to have three answers: income from a flag on
+ * the group, bills from this column, savings from nothing at all
+ * (`agent-os/specs/2026-08-24-0930-envelope-sections/` D1). Groups are now purely
+ * organisational and sit *inside* a section.
+ *
+ * `spending` rather than `envelope`: every row in this table is an envelope, so the
+ * supertype's name must not also name one of its four cases.
+ *
+ * - `income` — money arriving. No allocation, no balance; its activity is what Ready to
+ *   Assign is computed from.
+ * - `spending` — an ordinary bucket.
+ * - `bill` — a bucket that also has a cadence, a status and a URL, and funds itself.
+ * - `savings` — an ordinary bucket held out of the spending-vs-income total, because a
+ *   large transfer into a house fund is not an overspend (D3).
+ */
+export const ENVELOPE_KINDS = ["income", "spending", "bill", "savings"] as const;
 export type EnvelopeKind = (typeof ENVELOPE_KINDS)[number];
 
-/**
- * A named group of envelopes — "Spending", "Bills", "Discretionary", "Income".
- *
- * Groups are arbitrary-depth organisational containers. They never hold money: every total
- * shown on one is still derived from the descendant envelopes, so nesting cannot change the
- * envelope fold or Ready to Assign.
- *
- * **`isIncome` lives here rather than on the category** — as it does in Actual — because it is
- * a structural fact about a whole branch, and a group holding both income and expense
- * envelopes has no meaning under the arithmetic: income has no allocation and no balance, it
- * only feeds Ready to Assign. Putting the flag on the category would make that mixed state
- * representable and every summation would have to defend against it.
- */
+/** Page sections a user can pick; a bill is created from Review, not this list. */
+export const ENVELOPE_SECTION_KINDS = ["income", "spending", "savings"] as const;
+export type EnvelopeSectionKind = (typeof ENVELOPE_SECTION_KINDS)[number];
+
 /**
  * PayPal (and later, other rails) naming a register row the bank feed left opaque.
  *
@@ -2514,6 +2522,20 @@ export const financePaymentResolutions = pgTable(
  * three into the envelope model below — a bill is simply an envelope with `kind = 'bill'`.
  */
 
+/**
+ * A named group of envelopes — "Insurance", "Utilities", "Everyday".
+ *
+ * Groups are arbitrary-depth organisational containers, and **only** that. They never hold
+ * money: every total shown on one is derived from the descendant envelopes, so nesting cannot
+ * change the envelope fold or Ready to Assign.
+ *
+ * They no longer carry `is_income`
+ * (`agent-os/specs/2026-08-24-0930-envelope-sections/` D2). That flag was here "as Actual
+ * does", from when this budget was a parallel system being copied; once a bill's section
+ * lived on the envelope it made the same question have two answers, and it made the seeded
+ * "Income" group impossible to delete without losing what it meant. A group now sits inside
+ * whichever section its envelopes name through `kind`.
+ */
 export const financeCategoryGroups = pgTable(
   "finance_category_groups",
   {
@@ -2528,13 +2550,6 @@ export const financeCategoryGroups = pgTable(
     ),
     /** The user's word for it. Nothing joins on it, so renaming is free. */
     name: text("name").notNull(),
-    /**
-     * This group's categories are income: money arriving, not money assigned.
-     *
-     * Income envelopes have no allocation row and no balance. Their monthly activity is the
-     * whole of `totalIncome`, which is what Ready to Assign is computed from.
-     */
-    isIncome: boolean("is_income").notNull().default(false),
     /** Lexicographic sibling order, as everywhere else in this schema (`src/lib/tree/sortKey.ts`). */
     sortKey: text("sort_key").notNull(),
     /**
@@ -2633,8 +2648,8 @@ export const financeBudgetCategories = pgTable(
     templates: jsonb("templates").$type<unknown>().notNull().default([]),
     /** Free text on the envelope. Not the template store. */
     notes: text("notes").notNull().default(""),
-    /** Whether this row is an ordinary bucket or a bill with its own cadence and status. */
-    kind: text("kind").$type<EnvelopeKind>().notNull().default("envelope"),
+    /** Which section this envelope belongs to — income, spending, bill, or savings. */
+    kind: text("kind").$type<EnvelopeKind>().notNull().default("spending"),
     /**
      * Whether a bill is still live, paused, or cancelled. Meaningless — and always
      * `'active'` — on an ordinary envelope.
@@ -2714,7 +2729,10 @@ export const financeBudgetCategories = pgTable(
       table.groupId,
       table.sortKey,
     ),
-    check("finance_budget_categories_kind", sql`${table.kind} in ('envelope', 'bill')`),
+    check(
+      "finance_budget_categories_kind",
+      sql`${table.kind} in ('income', 'spending', 'bill', 'savings')`,
+    ),
     check(
       "finance_budget_categories_status",
       sql`${table.status} in ('active', 'paused', 'cancelled')`,
@@ -2726,7 +2744,7 @@ export const financeBudgetCategories = pgTable(
       sql`(
         ${table.kind} = 'bill' and ${table.cadenceMonths} is not null
       ) or (
-        ${table.kind} = 'envelope'
+        ${table.kind} <> 'bill'
         and ${table.status} = 'active'
         and ${table.cancelledOn} is null
         and ${table.url} = ''

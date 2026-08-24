@@ -189,10 +189,18 @@ describe("presets", () => {
   it.each(BUDGET_PRESETS)("%s has exactly one income envelope", (preset) => {
     // Income routes by flow to a single envelope. Two would make which one wins depend on
     // sort order, and zero would silently drop every paycheck out of Ready to Assign.
-    const income = PRESET_GROUPS[preset].filter((group) => group.isIncome);
+    const income = PRESET_GROUPS[preset]
+      .flatMap((group) => group.categories)
+      .filter((category) => category.kind === "income");
     expect(income).toHaveLength(1);
-    expect(income[0]?.categories).toHaveLength(1);
-    expect(income[0]?.categories[0]?.sourceCategories).toEqual([]);
+    expect(income[0]?.sourceCategories).toEqual([]);
+  });
+
+  it("puts the seeded Savings envelope in the savings section", () => {
+    const savings = PRESET_GROUPS.minimal
+      .flatMap((group) => group.categories)
+      .filter((category) => category.kind === "savings");
+    expect(savings.map((category) => category.name)).toEqual(["Savings"]);
   });
 
   it("keeps minimal small and detailed one-for-one", () => {

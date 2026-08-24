@@ -9,6 +9,9 @@ import {
   financePayees,
   financeRules,
   financeTransactions,
+  ENVELOPE_SECTION_KINDS,
+  type EnvelopeKind,
+  type EnvelopeSectionKind,
 } from "@/db/schema";
 import { parseBudget, serializeBudget } from "@/lib/settings/finances";
 import { writeUserSetting } from "@/lib/settings/mutations";
@@ -23,10 +26,12 @@ import { createRule, updateRule } from "../rules/mutations";
 import { envelopeForRow, envelopeIndex, type MappableRow } from "./autoMap";
 import {
   budgetChildren,
+  groupPageSection,
   resolveBudgetDrop,
   type BudgetDropZone,
   type BudgetStructureRef,
 } from "./hierarchy";
+import { pageSectionOf } from "./rows";
 import {
   categoryMonth,
   findMonth,
@@ -84,6 +89,7 @@ async function requireCategory(userId: string, categoryId: string) {
     .select({
       id: financeBudgetCategories.id,
       groupId: financeBudgetCategories.groupId,
+      kind: financeBudgetCategories.kind,
     })
     .from(financeBudgetCategories)
     .where(
@@ -102,7 +108,6 @@ async function requireGroup(userId: string, groupId: string) {
     .select({
       id: financeCategoryGroups.id,
       parentGroupId: financeCategoryGroups.parentGroupId,
-      isIncome: financeCategoryGroups.isIncome,
     })
     .from(financeCategoryGroups)
     .where(
@@ -197,7 +202,6 @@ export async function seedBudget(
         .values({
           userId,
           name: group.name,
-          isIncome: group.isIncome,
           sortKey: groupKeys[index] ?? sortKey.first(),
         })
         .returning({ id: financeCategoryGroups.id });
@@ -213,6 +217,7 @@ export async function seedBudget(
           // `group:category` composite key here; `:` is deliberately outside the fractional
           // key alphabet and made the first nested insertion impossible.
           sortKey: categoryKeys[position] ?? sortKey.first(),
+          kind: category.kind ?? "spending",
           sourceCategories: [...category.sourceCategories],
         })),
       );
@@ -245,19 +250,10 @@ export async function autoMapBudgetCategories(
       id: financeBudgetCategories.id,
       sourceCategories: financeBudgetCategories.sourceCategories,
       sortKey: financeBudgetCategories.sortKey,
-      isIncome: financeCategoryGroups.isIncome,
+      kind: financeBudgetCategories.kind,
     })
     .from(financeBudgetCategories)
-    .innerJoin(
-      financeCategoryGroups,
-      eq(financeCategoryGroups.id, financeBudgetCategories.groupId),
-    )
-    .where(
-      and(
-        eq(financeBudgetCategories.userId, userId),
-        eq(financeCategoryGroups.userId, userId),
-      ),
-    );
+    .where(eq(financeBudgetCategories.userId, userId));
   if (targets.length === 0) return { placed: 0, remaining: 0 };
 
   const rows = await db
@@ -309,7 +305,12 @@ export async function autoMapBudgetCategories(
     ).map((row) => row.groupId as string),
   );
 
-  const index = envelopeIndex(targets);
+  const index = envelopeIndex(
+    targets.map((target) => ({
+      ...target,
+      isIncome: target.kind === "income",
+    })),
+  );
   const assignments = new Map<string, string[]>();
 
   for (const row of rows) {
@@ -473,11 +474,10 @@ export type BudgetOperation =
   | { kind: "zero"; month: MonthKey };
 
 function expenseRefs(
-  categories: readonly { id: string; name: string; groupId: string }[],
-  incomeGroupIds: ReadonlySet<string>,
+  categories: readonly { id: string; name: string; kind: EnvelopeKind }[],
 ): EnvelopeRef[] {
   return categories
-    .filter((category) => !incomeGroupIds.has(category.groupId))
+    .filter((category) => category.kind !== "income")
     .map((category) => ({ id: category.id, name: category.name }));
 }
 
@@ -559,10 +559,7 @@ export async function performBudgetOperation(
   const month = findMonth(data.months, operation.month);
   if (!month) throw new Error("That month is outside the budget.");
 
-  const incomeGroupIds = new Set(
-    data.groups.filter((group) => group.isIncome).map((group) => group.id),
-  );
-  const expenses = expenseRefs(data.categories, incomeGroupIds);
+  const expenses = expenseRefs(data.categories);
 
   for (const ref of touchedRefs(operation)) {
     await requireCategory(userId, ref.id);
@@ -705,12 +702,12 @@ export async function setCarryover(
 
 export async function createCategoryGroup(
   userId: string,
-  params: { name: string; isIncome?: boolean; parentGroupId?: string | null },
+  params: { name: string; parentGroupId?: string | null },
 ): Promise<string> {
   const name = params.name.trim();
   if (name === "") throw new Error("A group needs a name.");
   const parentGroupId = params.parentGroupId ?? null;
-  const parent = parentGroupId ? await requireGroup(userId, parentGroupId) : null;
+  if (parentGroupId) await requireGroup(userId, parentGroupId);
   const last = await lastBudgetChildSortKey(userId, parentGroupId);
 
   const [row] = await db
@@ -719,7 +716,6 @@ export async function createCategoryGroup(
       userId,
       parentGroupId,
       name,
-      isIncome: parent?.isIncome ?? params.isIncome ?? false,
       sortKey: last === null ? sortKey.first() : sortKey.after(last),
     })
     .returning({ id: financeCategoryGroups.id });
@@ -729,10 +725,19 @@ export async function createCategoryGroup(
 
 export async function createBudgetCategory(
   userId: string,
-  params: { groupId: string; name: string; sourceCategories?: readonly string[] },
+  params: {
+    groupId: string;
+    name: string;
+    kind?: EnvelopeSectionKind;
+    sourceCategories?: readonly string[];
+  },
 ): Promise<string> {
   const name = params.name.trim();
   if (name === "") throw new Error("An envelope needs a name.");
+  const kind = params.kind ?? "spending";
+  if (!(ENVELOPE_SECTION_KINDS as readonly string[]).includes(kind)) {
+    throw new Error("A bill is created from Review, not as a blank envelope.");
+  }
   await requireGroup(userId, params.groupId);
   const last = await lastBudgetChildSortKey(userId, params.groupId);
 
@@ -742,6 +747,7 @@ export async function createBudgetCategory(
       userId,
       groupId: params.groupId,
       name,
+      kind,
       sortKey: last === null ? sortKey.first() : sortKey.after(last),
       sourceCategories: [...(params.sourceCategories ?? [])],
     })
@@ -755,6 +761,7 @@ export type BudgetCategoryEdit = {
   hidden?: boolean;
   notes?: string;
   groupId?: string;
+  kind?: EnvelopeSectionKind;
 };
 
 export async function updateBudgetCategory(
@@ -765,12 +772,20 @@ export async function updateBudgetCategory(
   const category = await requireCategory(userId, categoryId);
   let movedSortKey: string | undefined;
   if (edit.groupId !== undefined && edit.groupId !== category.groupId) {
-    const [source, destination] = await Promise.all([
-      requireGroup(userId, category.groupId),
-      requireGroup(userId, edit.groupId),
-    ]);
-    if (source.isIncome !== destination.isIncome) {
-      throw new Error("Income and spending envelopes cannot share a branch.");
+    await requireGroup(userId, edit.groupId);
+    const structure = await budgetStructure(userId);
+    const nextKind = edit.kind ?? category.kind;
+    const destSection = groupPageSection(
+      structure.groups,
+      structure.categories,
+      edit.groupId,
+    );
+    if (
+      destSection !== null &&
+      destSection !== "mixed" &&
+      pageSectionOf(nextKind) !== destSection
+    ) {
+      throw new Error("Income, spending and savings envelopes cannot share a branch.");
     }
     const last = await lastBudgetChildSortKey(userId, edit.groupId);
     movedSortKey = last === null ? sortKey.first() : sortKey.after(last);
@@ -778,6 +793,15 @@ export async function updateBudgetCategory(
 
   const name = edit.name?.trim();
   if (name !== undefined && name === "") throw new Error("An envelope needs a name.");
+  if (edit.kind !== undefined && edit.kind !== category.kind) {
+    if (!(ENVELOPE_SECTION_KINDS as readonly string[]).includes(edit.kind)) {
+      throw new Error(
+        "A bill is created from Review, not by changing an envelope's section.",
+      );
+    }
+  }
+
+  const leavingBill = category.kind === "bill" && edit.kind !== undefined;
 
   await db
     .update(financeBudgetCategories)
@@ -787,6 +811,21 @@ export async function updateBudgetCategory(
       ...(edit.notes === undefined ? {} : { notes: edit.notes.trim() }),
       ...(edit.groupId === undefined ? {} : { groupId: edit.groupId }),
       ...(movedSortKey === undefined ? {} : { sortKey: movedSortKey }),
+      ...(edit.kind === undefined ? {} : { kind: edit.kind }),
+      ...(edit.kind === "income" ? { templates: [] } : {}),
+      ...(leavingBill
+        ? {
+            status: "active" as const,
+            cancelledOn: null,
+            url: "",
+            cadenceMonths: null,
+            cadenceDays: null,
+            dueDay: null,
+            anchorDate: null,
+            scheduled: true,
+            expectedCents: null,
+          }
+        : {}),
       updatedAt: new Date(),
     })
     .where(
@@ -820,25 +859,16 @@ export async function setTaxonomyCategoryEnvelope(
       .select({
         id: financeBudgetCategories.id,
         sourceCategories: financeBudgetCategories.sourceCategories,
-        isIncome: financeCategoryGroups.isIncome,
+        kind: financeBudgetCategories.kind,
       })
       .from(financeBudgetCategories)
-      .innerJoin(
-        financeCategoryGroups,
-        eq(financeCategoryGroups.id, financeBudgetCategories.groupId),
-      )
-      .where(
-        and(
-          eq(financeBudgetCategories.userId, userId),
-          eq(financeCategoryGroups.userId, userId),
-        ),
-      )
+      .where(eq(financeBudgetCategories.userId, userId))
       .for("update");
 
     if (categoryId !== null) {
       const target = rows.find((row) => row.id === categoryId);
       if (!target) throw new Error("That envelope does not exist.");
-      if (target.isIncome) {
+      if (target.kind === "income") {
         throw new Error("A spending category cannot sort into an income envelope.");
       }
     }
@@ -963,7 +993,6 @@ async function budgetStructure(userId: string) {
         id: financeCategoryGroups.id,
         parentGroupId: financeCategoryGroups.parentGroupId,
         name: financeCategoryGroups.name,
-        isIncome: financeCategoryGroups.isIncome,
         sortKey: financeCategoryGroups.sortKey,
         hidden: financeCategoryGroups.hidden,
       })
@@ -974,6 +1003,7 @@ async function budgetStructure(userId: string) {
         id: financeBudgetCategories.id,
         groupId: financeBudgetCategories.groupId,
         sortKey: financeBudgetCategories.sortKey,
+        kind: financeBudgetCategories.kind,
       })
       .from(financeBudgetCategories)
       .where(eq(financeBudgetCategories.userId, userId)),
@@ -1206,7 +1236,6 @@ async function requireSpendingCategory(
   const [row] = await db
     .select({
       id: financeBudgetCategories.id,
-      groupId: financeBudgetCategories.groupId,
       templates: financeBudgetCategories.templates,
       kind: financeBudgetCategories.kind,
     })
@@ -1222,19 +1251,9 @@ async function requireSpendingCategory(
   if (row.kind === "bill") {
     throw new Error("A bill envelope funds itself from its own cadence.");
   }
-
-  const [group] = await db
-    .select({ isIncome: financeCategoryGroups.isIncome })
-    .from(financeCategoryGroups)
-    .where(
-      and(
-        eq(financeCategoryGroups.id, row.groupId),
-        eq(financeCategoryGroups.userId, userId),
-      ),
-    )
-    .limit(1);
-  if (!group) throw new Error("That envelope does not exist.");
-  if (group.isIncome) throw new Error("Income envelopes cannot hold templates.");
+  if (row.kind === "income") {
+    throw new Error("Income envelopes cannot hold templates.");
+  }
 
   return { id: row.id, templates: parseTemplates(row.templates) ?? [] };
 }
@@ -1271,16 +1290,13 @@ export async function applyBudgetTemplates(
   if (!month) throw new Error("That month is outside the budget.");
 
   const previous = findMonth(data.months, prevMonthKey(month.month));
-  const incomeIds = new Set(
-    data.groups.filter((group) => group.isIncome).map((group) => group.id),
-  );
   const envelopes = data.categories.map((category) => {
     const cell = categoryMonth(month, category.id);
     const prior = previous ? categoryMonth(previous, category.id) : null;
     return {
       id: category.id,
       name: category.name,
-      isIncome: incomeIds.has(category.groupId),
+      isIncome: category.kind === "income",
       kind: category.kind,
       templates: category.templates,
       assignedCents: cell.assignedCents,
