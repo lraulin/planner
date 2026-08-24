@@ -5,7 +5,8 @@ import { LetterRankCell } from "@/components/grid/LetterRankCell";
 import type { ColumnDef } from "@/components/grid/columns";
 import { isDayItemSettled } from "@/lib/day/priority";
 import type { DailyItemView } from "@/lib/day/types";
-import { STATE_LABELS, STATE_OPTIONS } from "@/lib/tree/hierarchy";
+import { StateCell } from "@/components/grid/cells";
+import { STATE_LABELS } from "@/lib/tree/hierarchy";
 
 /**
  * Columns for a day's task list.
@@ -186,21 +187,10 @@ export const DAY_COLUMNS: ColumnDef<DayColumnCtx, DailyItemView>[] = [
     // nothing beside it to decode it, and code-plus-label is just a longer label.
     width: "7rem",
     render: (row, ctx) => (
-      <select
-        value={row.node.state}
-        onClick={(event) => event.stopPropagation()}
-        onChange={(event) =>
-          ctx.onSetState(row.node.id, event.target.value as NodeState)
-        }
-        aria-label={`State: ${STATE_LABELS[row.node.state]}`}
-        className="w-full cursor-pointer truncate border-none bg-transparent text-[0.75rem] text-ink-muted focus:text-ink"
-      >
-        {STATE_OPTIONS.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+      <StateCell
+        state={row.node.state}
+        onChange={(state) => ctx.onSetState(row.node.id, state)}
+      />
     ),
     filterKind: "enum",
     filterValue: (row) => STATE_LABELS[row.node.state],

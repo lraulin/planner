@@ -103,7 +103,12 @@ export function FileImportHost({
       title={title}
       width={width}
     >
-      {children}
+      {/*
+        React evaluates children before the dialog can return null, so a closed host
+        would still hydrate the import panel (Achieve XML, Tomboy, statements…). Mount
+        it the first time File ▸ Import actually opens.
+      */}
+      {dialog.open ? children : null}
     </FileImportDialog>
   );
 }

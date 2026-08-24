@@ -19,6 +19,7 @@ import {
 import { toDateKey } from "@/lib/schedule/geometry";
 import { scheduleStatus, STATUS_LABELS, type ScheduleStatus } from "@/lib/tree/status";
 import { TypeIcon } from "@/components/icons/TypeIcon";
+import { closedSelectOptions } from "@/lib/grid/closedSelect";
 import { NameIconContext } from "./nameIconContext";
 import { NameToneContext, type NameTone } from "./nameToneContext";
 import { RowDragHandleContext } from "./rowDragContext";
@@ -478,6 +479,21 @@ export function DateKeyCell({
 // ---------------------------------------------------------------------------
 
 /**
+ * A closed state `<select>` only hydrates the selected option. Focus expands it to the
+ * full list before the native dropdown opens.
+ */
+function useClosedSelectOptions(state: NodeState) {
+  const [expanded, setExpanded] = useState(false);
+  return {
+    list: closedSelectOptions(expanded, STATE_OPTIONS, state),
+    selectProps: {
+      onFocus: () => setExpanded(true),
+      onBlur: () => setExpanded(false),
+    },
+  };
+}
+
+/**
  * Full-label state dropdown — the outline column and the Goals tab's "Status".
  *
  * `state` is the row's *own effective* state (`ownEffectiveState`), not the stored one: a
@@ -491,6 +507,7 @@ export function StateCell({
   state: NodeState;
   onChange: (state: NodeState) => void;
 }) {
+  const options = useClosedSelectOptions(state);
   return (
     <select
       value={state}
@@ -498,8 +515,9 @@ export function StateCell({
       onChange={(event) => onChange(event.target.value as NodeState)}
       aria-label={`State: ${STATE_LABELS[state]}`}
       className="w-full cursor-pointer truncate border-none bg-transparent text-[0.75rem] text-ink-muted focus:text-ink"
+      {...options.selectProps}
     >
-      {STATE_OPTIONS.map((option) => (
+      {options.list.map((option) => (
         <option key={option.value} value={option.value}>
           {option.label}
         </option>
@@ -525,6 +543,7 @@ export function AbbrStateCell({
   state: NodeState;
   onChange: (state: NodeState) => void;
 }) {
+  const options = useClosedSelectOptions(state);
   return (
     <span className="relative block w-full">
       <select
@@ -533,8 +552,9 @@ export function AbbrStateCell({
         onChange={(event) => onChange(event.target.value as NodeState)}
         aria-label={`State: ${STATE_LABELS[state]}`}
         className="peer absolute inset-0 h-full w-full cursor-pointer border-none bg-transparent text-[0.75rem] opacity-0"
+        {...options.selectProps}
       >
-        {STATE_OPTIONS.map((option) => (
+        {options.list.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}
           </option>

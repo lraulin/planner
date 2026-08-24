@@ -7,6 +7,7 @@ import {
   type ReactNode,
   type Ref,
 } from "react";
+import dynamic from "next/dynamic";
 import {
   asGridGroupBy,
   GROUP_BY_LABELS,
@@ -31,10 +32,23 @@ import { gridViewLayoutCommands } from "@/lib/commands/gridViewCommands";
 import { scopeCommand, type CommandScope } from "@/lib/commands/scope";
 import { hasAnyNarrowing } from "@/lib/settings/grid";
 import { GridFilterChips } from "./GridFilterChips";
-import { GridFilterDialog } from "./GridFilterDialog";
 import { GridSearchBox } from "./GridSearchBox";
-import { ShowFieldsDialog } from "./ShowFieldsDialog";
 import { ViewPicker } from "./ViewPicker";
+
+const GridFilterDialog = dynamic(
+  () =>
+    import("./GridFilterDialog").then((mod) => ({
+      default: mod.GridFilterDialog,
+    })),
+  { ssr: false },
+);
+const ShowFieldsDialog = dynamic(
+  () =>
+    import("./ShowFieldsDialog").then((mod) => ({
+      default: mod.ShowFieldsDialog,
+    })),
+  { ssr: false },
+);
 import { CommandBar, hasVerbRow } from "./CommandBar";
 import {
   buildGridCommands,
@@ -395,29 +409,33 @@ export function GridToolbar({
         onClearAll={grid.clearFilters}
       />
 
-      <GridFilterDialog
-        open={filterOpen}
-        gridLabel={gridLabel}
-        columns={allColumns}
-        visibleIds={grid.order}
-        distinctValues={distinctValues}
-        filter={grid.advancedFilter}
-        onApply={grid.setAdvancedFilter}
-        onClose={() => setFilterOpen(false)}
-      />
+      {filterOpen && (
+        <GridFilterDialog
+          open
+          gridLabel={gridLabel}
+          columns={allColumns}
+          visibleIds={grid.order}
+          distinctValues={distinctValues}
+          filter={grid.advancedFilter}
+          onApply={grid.setAdvancedFilter}
+          onClose={() => setFilterOpen(false)}
+        />
+      )}
 
-      <ShowFieldsDialog
-        open={fieldsOpen}
-        allColumns={allColumns}
-        shownIds={grid.order}
-        onShow={grid.show}
-        onHide={grid.hide}
-        onMove={grid.move}
-        onPlace={grid.place}
-        onReset={grid.resetColumns}
-        onResetGrid={grid.reset}
-        onClose={() => setFieldsOpen(false)}
-      />
+      {fieldsOpen && (
+        <ShowFieldsDialog
+          open
+          allColumns={allColumns}
+          shownIds={grid.order}
+          onShow={grid.show}
+          onHide={grid.hide}
+          onMove={grid.move}
+          onPlace={grid.place}
+          onReset={grid.resetColumns}
+          onResetGrid={grid.reset}
+          onClose={() => setFieldsOpen(false)}
+        />
+      )}
     </>
   );
 }

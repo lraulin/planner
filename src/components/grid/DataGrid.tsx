@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -610,7 +611,9 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
    */
   const shownCount = passIds ? passIds.size : narrowingNodeRows.length;
 
-  useEffect(() => {
+  // Layout, not paint: the chip bar's "Showing N of M" is above the rows. Reporting after
+  // paint was a 0.1 CLS on the Outline when the first client frame still said 0 of 0.
+  useLayoutEffect(() => {
     onCountsChange?.({ shown: shownCount, total: narrowingNodeRows.length });
   }, [onCountsChange, shownCount, narrowingNodeRows.length]);
 
@@ -622,7 +625,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
     .map((row) => row.id)
     .join("\0");
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     onGroupIdsChange?.(groupIdKey === "" ? [] : groupIdKey.split("\0"));
   }, [onGroupIdsChange, groupIdKey]);
 
@@ -633,7 +636,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
     .map((row) => row.id)
     .join("\0");
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     onNavigableIdsChange?.(navigableKey === "" ? [] : navigableKey.split("\0"));
   }, [onNavigableIdsChange, navigableKey]);
 
@@ -1144,14 +1147,24 @@ const DataRow = memo(
     rowExpansion,
   }: DataRowProps<TCtx, TRow>) {
     const rowRef = useRef<HTMLDivElement>(null);
+    // Hydrate must not scroll: `block: "nearest"` still moves the scroller when the
+    // focused row is below the fold, and Lighthouse records that as a 0.1 shift of
+    // whichever row ended up in view. Arrow keys and a later selection still scroll.
+    const skipInitialScroll = useRef(focused);
 
     const label = rowLabelFor(row, rowLabel);
     const expanded = rowExpansionFor(row, rowExpansion);
 
     useEffect(() => {
-      if (focused) {
-        rowRef.current?.scrollIntoView({ block: "nearest" });
+      if (!focused) {
+        skipInitialScroll.current = false;
+        return;
       }
+      if (skipInitialScroll.current) {
+        skipInitialScroll.current = false;
+        return;
+      }
+      rowRef.current?.scrollIntoView({ block: "nearest" });
     }, [focused]);
 
     // Stable enough for the provider: rebuilt when `drag` identity changes (per-row binding).
@@ -1247,7 +1260,7 @@ const DataRow = memo(
         }
         onDragEnd={drag && (() => drag.onEnd())}
         className={[
-          "relative grid items-center border-b border-rule/60 pr-3 text-[0.875rem]",
+          "relative grid items-center border-b border-rule/60 pr-3 text-[0.875rem] [content-visibility:auto] [contain-intrinsic-size:auto_var(--row-height)]",
           selected ? "bg-select" : "hover:bg-surface-raised/60",
           drag?.dragging ? "opacity-40" : "",
           // Child-drop: whole row framed so it is not confused with the thin sibling line.

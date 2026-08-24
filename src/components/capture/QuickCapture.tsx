@@ -1,11 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { matchBindings } from "@/lib/commands/bindings";
 import { QUICK_CAPTURE } from "@/lib/commands/chords";
 import { isModalOpen, isTypingTarget } from "@/lib/keyboard";
-import { QuickCaptureDialog } from "./QuickCaptureDialog";
 import { CAPTURE_EVENT } from "./event";
+
+const QuickCaptureDialog = dynamic(
+  () =>
+    import("./QuickCaptureDialog").then((mod) => ({
+      default: mod.QuickCaptureDialog,
+    })),
+  { ssr: false },
+);
 
 /**
  * The app-wide capture shortcut, mounted by `AppShell` so it exists on every signed-in view

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import type { OutlineNode } from "@/lib/tree/types";
 import { categoryLabelFromGroupId } from "@/lib/tree/slice";
@@ -76,7 +77,6 @@ import {
   type OutlineColumnCtx,
 } from "./outlineColumns";
 import { FileImportHost } from "@/components/import/FileImportHost";
-import { AchieveTransferPanel } from "@/components/settings/AchieveTransferPanel";
 import { isModalOpen, isTypingTarget } from "@/lib/keyboard";
 import { useSuspendCommandKeys } from "@/components/shell/CommandProvider";
 import { zoomBranch, zoomOutRoot } from "@/lib/tree/zoom";
@@ -92,6 +92,14 @@ import { useAttachFromClipboard } from "@/components/grid/useAttachFromClipboard
 import { planNodeConversion, type ConversionPlan } from "@/lib/tree/conversion";
 import { depthForOutlineLevel } from "@/lib/tree/outlineLevel";
 import { lifecycleStateRefusal } from "@/lib/tree/lifecycle";
+
+const AchieveTransferPanel = dynamic(
+  () =>
+    import("@/components/settings/AchieveTransferPanel").then((mod) => ({
+      default: mod.AchieveTransferPanel,
+    })),
+  { ssr: false },
+);
 
 /**
  * Achieve's Areas and Goals checkboxes: **on means the level exists.** Turning one off
@@ -1102,28 +1110,32 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         />
       )}
 
-      <ExpandLevelDialog
-        open={expandLevelPickerOpen}
-        onConfirm={(level) => {
-          setExpandLevelPickerOpen(false);
-          apply(() => expandThroughDepthAction(depthForOutlineLevel(level)));
-        }}
-        onCancel={() => setExpandLevelPickerOpen(false)}
-      />
+      {expandLevelPickerOpen && (
+        <ExpandLevelDialog
+          open
+          onConfirm={(level) => {
+            setExpandLevelPickerOpen(false);
+            apply(() => expandThroughDepthAction(depthForOutlineLevel(level)));
+          }}
+          onCancel={() => setExpandLevelPickerOpen(false)}
+        />
+      )}
 
-      <ConfirmDialog
-        open={pendingDelete.length > 0}
-        title={nodeDeleteTitle(pendingDelete)}
-        message={nodeDeleteMessage(pendingDelete)}
-        confirmLabel="Delete"
-        destructive
-        onConfirm={() => {
-          const targets = pendingDelete;
-          setPendingDelete([]);
-          confirmDelete(targets);
-        }}
-        onCancel={() => setPendingDelete([])}
-      />
+      {pendingDelete.length > 0 && (
+        <ConfirmDialog
+          open
+          title={nodeDeleteTitle(pendingDelete)}
+          message={nodeDeleteMessage(pendingDelete)}
+          confirmLabel="Delete"
+          destructive
+          onConfirm={() => {
+            const targets = pendingDelete;
+            setPendingDelete([]);
+            confirmDelete(targets);
+          }}
+          onCancel={() => setPendingDelete([])}
+        />
+      )}
 
       {stateChange.prompt && (
         <ConfirmDialog
