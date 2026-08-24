@@ -979,10 +979,18 @@ period)` so money already spent stops being held twice and only going over bites
   section, and the Next 12 Months / Expected vs Income panels carried over as collapsed
   `<details>`. A guarded, previewed cutover moved every real bill, recurring-spend rate and
   payee claim onto the new shape before the old tables were dropped.
+  ✅ **YNAB-shaped Assign shipped 2026-08-24.**
+  `agent-os/specs/2026-08-24-1311-budget-assign-options/`. Apply / Overwrite / Copy last
+  month / 3-month average / Set all to zero are gone. Ready to Assign has Assign (Auto:
+  eight options, Manually: amount + To), always previewed, never consuming more than you
+  have. Underfunded reads templates + bill cadence + overspend. Right-click Assign targets
+  one envelope. The shortfall is the preview (partial / not funded), not a negative
+  headline.
 - **Next:** **Shortfall attribution** is substantially answered by the merge above — the
-  budget states a shortfall per bill envelope rather than as one collapsed number, and a
-  template says what each envelope was asking for. What is still missing is the guided
-  step from a red envelope to "cancel or skip this" as an action, not just a number to read.
+  budget states a shortfall per bill envelope rather than as one collapsed number, and
+  Assign → Underfunded names which envelopes will not be funded. What is still missing is
+  the guided step from a red envelope to "cancel or skip this" as an action, not just a
+  number to read.
 - **✅ Period result — "living within my means", shipped 2026-08-18.**
   `agent-os/specs/2026-08-18-2005-period-result/`. The measurement half of the item below,
   and the first surface that scores rather than reports. For every **closed** pay period:

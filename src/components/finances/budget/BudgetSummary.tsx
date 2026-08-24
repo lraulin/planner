@@ -15,10 +15,10 @@ import type { BudgetMonth } from "@/lib/finances/budget/envelope";
  */
 export function BudgetSummary({
   month,
-  onAssignAll,
+  onAssign,
 }: {
   month: BudgetMonth;
-  onAssignAll?: () => void;
+  onAssign?: () => void;
 }) {
   const ready = month.readyToAssignCents;
   const tone =
@@ -41,13 +41,13 @@ export function BudgetSummary({
               ? "assigned more than you have"
               : "every dollar has a job"}
         </span>
-        {onAssignAll && ready > 0 ? (
+        {onAssign ? (
           <button
             type="button"
-            onClick={onAssignAll}
+            onClick={onAssign}
             className="ml-auto rounded border border-rule px-2 py-1 text-[0.8125rem] text-ink hover:bg-surface-raised"
           >
-            Assign remaining…
+            Assign
           </button>
         ) : null}
       </div>

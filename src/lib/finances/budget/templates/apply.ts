@@ -17,17 +17,10 @@
 import { formatUsd } from "@/lib/finances/money";
 import { monthName, type MonthKey } from "../envelope";
 import type { EnvelopeKind } from "@/db/schema";
-import { runBy } from "./by";
 import { distributeRemainder } from "./remainder";
-import { billFundingDemand, type BillSnapshot } from "./schedule";
-import { applyLimit, limitOf, runSimple } from "./simple";
-import {
-  assertCents,
-  type ByTemplate,
-  type RemainderTemplate,
-  type SimpleTemplate,
-  type Template,
-} from "./types";
+import type { BillSnapshot } from "./schedule";
+import { assertCents, type Template } from "./types";
+import { demandOf, hasDemandAsk, remainderWeight } from "./demand";
 
 export type EnvelopeApplyInput = {
   id: string;
@@ -82,46 +75,6 @@ function selected(envelope: EnvelopeApplyInput, options: ApplyOptions): boolean 
   return true;
 }
 
-function simples(templates: readonly Template[]): SimpleTemplate[] {
-  return templates.filter((t): t is SimpleTemplate => t.type === "simple");
-}
-function bys(templates: readonly Template[]): ByTemplate[] {
-  return templates.filter((t): t is ByTemplate => t.type === "by");
-}
-function remainders(templates: readonly Template[]): RemainderTemplate[] {
-  return templates.filter((t): t is RemainderTemplate => t.type === "remainder");
-}
-
-function demandOf(
-  envelope: EnvelopeApplyInput,
-  options: ApplyOptions,
-): { amount: number; errors: string[] } {
-  const carryIn = assertCents(envelope.carryInCents, "carry-in");
-  let amount = 0;
-  const errors: string[] = [];
-
-  for (const template of simples(envelope.templates)) {
-    amount += runSimple(template, carryIn);
-  }
-  const byTemplates = bys(envelope.templates);
-  if (byTemplates.length > 0) {
-    amount += runBy(byTemplates, options.month, carryIn).toBudget;
-  }
-  if (envelope.kind === "bill") {
-    const snapshot = options.bills.get(envelope.id);
-    if (!snapshot) {
-      errors.push("Bill has no next-due date yet");
-    } else {
-      const demand = billFundingDemand(snapshot, options.month, carryIn);
-      amount += demand.toBudgetCents;
-      if (demand.error) errors.push(demand.error);
-    }
-  }
-
-  amount = applyLimit(amount, carryIn, 0, limitOf(simples(envelope.templates)));
-  return { amount, errors };
-}
-
 export function applyTemplates(options: ApplyOptions): ApplyResult {
   assertCents(options.readyToAssignCents, "ready to assign");
   const participants = options.envelopes.filter((envelope) =>
@@ -146,22 +99,19 @@ export function applyTemplates(options: ApplyOptions): ApplyResult {
   }[] = [];
 
   for (const envelope of participants) {
-    const remainderLines = remainders(envelope.templates);
-    const hasDemand =
-      simples(envelope.templates).length + bys(envelope.templates).length > 0 ||
-      envelope.kind === "bill";
+    const weight = remainderWeight(envelope.templates);
+    const hasDemand = hasDemandAsk(envelope);
 
     let demand = 0;
     if (hasDemand) {
-      const ran = demandOf(envelope, options);
+      const ran = demandOf(envelope, options.month, options.bills);
       demand = ran.amount;
       for (const message of ran.errors) {
         errors.push({ categoryId: envelope.id, categoryName: envelope.name, message });
       }
     }
 
-    if (remainderLines.length > 0) {
-      const weight = remainderLines.reduce((sum, line) => sum + line.weight, 0);
+    if (weight > 0) {
       remainderEnvelopes.push({ envelope, weight, demand });
     } else {
       allocations.push({

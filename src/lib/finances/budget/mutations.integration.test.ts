@@ -11,6 +11,7 @@ import {
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import {
   applyBudgetTemplates,
+  assignBudget,
   applyPayeeClaims,
   autoMapBudgetCategories,
   createBudgetCategory,
@@ -623,6 +624,54 @@ describeDb("budget mutations", () => {
     expect(data.goals[`${MONTH}|${bills}`]).toBe(12_000);
   });
 
+  it("Underfunded clamps to Ready to Assign and keeps the full ask as the goal", async () => {
+    const { checkingId } = await seedAccounts(userId);
+    await addTransactions(userId, [
+      {
+        accountId: checkingId,
+        date: "2026-07-01",
+        description: "OPENING",
+        amount: "50.00",
+      },
+    ]);
+    await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
+    const ids = await envelopes(userId);
+    const bills = ids.get("Bills")!;
+    const fun = ids.get("Discretionary")!;
+
+    await saveEnvelopeTemplates(userId, bills, [
+      {
+        id: "t1",
+        directive: "template",
+        type: "simple",
+        priority: 0,
+        monthlyCents: 40_000,
+      },
+    ]);
+    await saveEnvelopeTemplates(userId, fun, [
+      {
+        id: "t2",
+        directive: "template",
+        type: "simple",
+        priority: 0,
+        monthlyCents: 40_000,
+      },
+    ]);
+
+    const result = await assignBudget(userId, {
+      month: MONTH,
+      option: "underfunded",
+    });
+    expect(result.applied).toBe(1);
+
+    const data = await loadBudget(userId, MONTH);
+    const month = findMonth(data.months, MONTH)!;
+    expect(month.readyToAssignCents).toBe(0);
+    expect(categoryMonth(month, bills).assignedCents).toBe(5_000);
+    expect(categoryMonth(month, fun).assignedCents).toBe(0);
+    expect(data.goals[`${MONTH}|${bills}`]).toBe(40_000);
+  });
+
   it("nests and reorders groups and envelopes without changing their money", async () => {
     await seedAccounts(userId);
     await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
@@ -848,6 +897,9 @@ describeDb("budget mutations — cross-user isolation", () => {
     ).rejects.toThrow(/does not exist/);
     await expect(
       applyBudgetTemplates(intruderId, { month: MONTH, force: true }),
+    ).rejects.toThrow();
+    await expect(
+      assignBudget(intruderId, { month: MONTH, option: "underfunded" }),
     ).rejects.toThrow();
     await expect(
       updateAccount(intruderId, owned.accountId, { offBudget: true }),

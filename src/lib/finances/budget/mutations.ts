@@ -31,7 +31,7 @@ import {
   type BudgetDropZone,
   type BudgetStructureRef,
 } from "./hierarchy";
-import { pageSectionOf } from "./rows";
+import { budgetRows, pageSectionOf } from "./rows";
 import {
   categoryMonth,
   findMonth,
@@ -62,6 +62,9 @@ import {
   openingPositionFor,
 } from "./queries";
 import { applyTemplates as runApply, templateCarryIn } from "./templates/apply";
+import { planAssign } from "./assign/plan";
+import { assignEnvelopeFromRow, assignHistoryFromMonths } from "./assign/fromBudget";
+import type { AssignOption } from "./assign/types";
 import {
   parseTemplates,
   parseTemplatesOrThrow,
@@ -1354,6 +1357,59 @@ export async function applyBudgetTemplates(
 
   return {
     applied: result.allocations.length,
+    errors: result.errors.map((error) => `${error.categoryName}: ${error.message}`),
+  };
+}
+
+export async function assignBudget(
+  userId: string,
+  params: {
+    month: MonthKey;
+    option: AssignOption;
+    categoryIds?: readonly string[];
+  },
+): Promise<{ applied: number; errors: string[] }> {
+  const data = await loadBudget(userId, params.month);
+  if (!data.configured) throw new Error("Set the budget up first.");
+  const month = findMonth(data.months, params.month);
+  if (!month) throw new Error("That month is outside the budget.");
+
+  const previous = findMonth(data.months, prevMonthKey(month.month));
+  const snapshots = await loadBillSnapshots(userId, data.categories, data.todayKey);
+  const nextDueKeys = new Map(snapshots.map((bill) => [bill.id, bill.nextDueKey]));
+  const rows = budgetRows(data.groups, data.categories, month, data.goals, nextDueKeys);
+  const envelopes = rows.map((row) => assignEnvelopeFromRow(row, previous));
+  const result = planAssign({
+    option: params.option,
+    month: month.month,
+    todayKey: data.todayKey,
+    readyToAssignCents: month.readyToAssignCents,
+    envelopes,
+    bills: new Map(snapshots.map((bill) => [bill.id, bill])),
+    history: assignHistoryFromMonths(
+      data.months,
+      data.categories.map((category) => category.id),
+    ),
+    categoryIds: params.categoryIds,
+  });
+
+  if (result.allocations.length === 0) {
+    return { applied: 0, errors: result.errors.map((error) => error.message) };
+  }
+
+  await applyEdit(userId, {
+    allocations: result.allocations.map((row) => ({
+      month: month.month,
+      categoryId: row.categoryId,
+      amountCents: row.amountCents,
+      goalCents: row.goalCents,
+    })),
+    buffered: null,
+    note: result.note,
+  });
+
+  return {
+    applied: result.lines.filter((line) => line.deltaCents !== 0).length,
     errors: result.errors.map((error) => `${error.categoryName}: ${error.message}`),
   };
 }

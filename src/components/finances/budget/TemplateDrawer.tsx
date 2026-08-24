@@ -47,7 +47,7 @@ const TYPE_HELP: Record<TemplateType, string> = {
  * The envelope's goal templates, edited as a list of lines.
  *
  * The preview under the list is not an estimate — it is `applyTemplates` run over this one
- * envelope with `force`, which is exactly what **Overwrite this envelope** does. Anything that
+ * envelope with `force`, which is the unclamped ask Underfunded will try to fund. Anything that
  * approximated it here would eventually disagree with the button next to it, and the disagreement
  * would be invisible until money moved.
  *
@@ -152,8 +152,8 @@ export function TemplateDrawer({
       <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
         <p className="text-[0.8125rem] text-ink-muted">
           Templates decide what {envelope.name} asks for. Nothing is assigned until you
-          run <strong className="font-medium text-ink">Apply templates</strong> — this
-          list only says what Apply should do.
+          run <strong className="font-medium text-ink">Assign → Underfunded</strong> —
+          this list only says what that option should fund.
         </p>
 
         <ul className="mt-4 flex flex-col gap-3">

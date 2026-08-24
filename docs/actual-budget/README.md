@@ -62,3 +62,7 @@ Divergences are recorded in the spec that makes them, not here. As of the first 
 - Recurrence for a bill envelope is derived from charge history (`nextDueFrom`) rather
   than a stored `RecurConfig` cursor — a missed or early charge self-corrects instead of
   needing an explicit skip. See `agent-os/specs/2026-08-23-2313-one-budget/` D2.
+- **Assign is YNAB-shaped, not Actual's Apply/Overwrite.** Template _math_ (simple / by /
+  remainder / bill sinking) is still Actual's. The fill _gesture_ clamps to Ready to Assign,
+  always previews, and offers eight auto-assign options. Apply may no longer drive Ready to
+  Assign negative. See `agent-os/specs/2026-08-24-1311-budget-assign-options/`.

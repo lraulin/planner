@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import {
-  applyBudgetTemplatesAction,
+  assignBudgetAction,
   budgetOperationAction,
   setCarryoverAction,
   setRecurringBillAction,
@@ -15,6 +15,7 @@ import { useRegisterCommands } from "@/components/shell/CommandProvider";
 import { ContextMenu, type MenuItem } from "@/components/grid/ContextMenu";
 import { DataGrid } from "@/components/grid/DataGrid";
 import { useGridState } from "@/components/grid/useGridState";
+import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import {
   categoryMonth,
   findMonth,
@@ -39,12 +40,24 @@ import {
   templateCarryIn,
   type EnvelopeApplyInput,
 } from "@/lib/finances/budget/templates/apply";
+import { planAssign } from "@/lib/finances/budget/assign/plan";
+import {
+  assignBillsFromRows,
+  assignEnvelopeFromRow,
+  assignHistoryFromMonths,
+} from "@/lib/finances/budget/assign/fromBudget";
+import {
+  ASSIGN_OPTIONS,
+  ASSIGN_OPTION_LABELS,
+  type AssignOption,
+  type AssignResult,
+} from "@/lib/finances/budget/assign/types";
 import { descendantEnvelopeIds } from "@/lib/finances/budget/hierarchy";
 import { formatUsd } from "@/lib/finances/money";
 import type { RecurringMerchant } from "@/lib/finances/analytics";
 import { cadenceOf } from "@/lib/finances/recurringBills";
 import type { BillForecast } from "@/lib/finances/dashboardQueries";
-import { AssignRemainingDialog } from "./AssignRemainingDialog";
+import { AssignDialog, AssignPreviewDialog } from "./AssignDialog";
 import { billColumns, envelopeColumns, type BudgetColumnCtx } from "./budgetColumns";
 import { BudgetSummary } from "./BudgetSummary";
 import { BudgetStructureDrawer } from "./BudgetStructureDrawer";
@@ -102,11 +115,15 @@ export function BudgetView({
   const [move, setMove] = useState<{ from: BudgetRow; targets: BudgetRow[] } | null>(
     null,
   );
-  const [selected, setSelected] = useState<string | null>(null);
+  const [focusedTable, setFocusedTable] = useState<"bills" | "envelopes" | "savings">(
+    "bills",
+  );
   const [editing, setEditing] = useState<string | null>(null);
   const [editingPayeesFor, setEditingPayeesFor] = useState<BudgetRow | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [assigning, setAssigning] = useState(false);
+  const [preview, setPreview] = useState<AssignResult | null>(null);
+  const [previewScope, setPreviewScope] = useState<readonly string[] | undefined>();
   const [managingStructure, setManagingStructure] = useState(false);
   const [reviewing, setReviewing] = useState(false);
 
@@ -152,6 +169,30 @@ export function BudgetView({
     () => sectionGridRows(data.groups, sections.savings, { showHidden }),
     [data.groups, sections.savings, showHidden],
   );
+  const billRowIds = useMemo(() => billGridRows.map((row) => row.id), [billGridRows]);
+  const envelopeRowIds = useMemo(
+    () => envelopeGridRows.map((row) => row.id),
+    [envelopeGridRows],
+  );
+  const savingsRowIds = useMemo(
+    () => savingsGridRows.map((row) => row.id),
+    [savingsGridRows],
+  );
+  const billSelect = useMultiSelect(billRowIds, null, { allowEmpty: true });
+  const envelopeSelect = useMultiSelect(envelopeRowIds, null, { allowEmpty: true });
+  const savingsSelect = useMultiSelect(savingsRowIds, null, { allowEmpty: true });
+
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      if (assigning || preview || menu) return;
+      billSelect.selectOne(null);
+      envelopeSelect.selectOne(null);
+      savingsSelect.selectOne(null);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [assigning, preview, menu, billSelect, envelopeSelect, savingsSelect]);
 
   function run(work: () => Promise<{ ok: boolean; error?: string }>) {
     setError(null);
@@ -181,17 +222,51 @@ export function BudgetView({
     };
   }
 
-  /**
-   * Apply and Overwrite hand back per-envelope problems (a schedule that was completed, one
-   * that no longer exists) alongside the count. They are shown rather than dropped: the money
-   * that line would have assigned is missing from the total, and nothing else says so.
-   */
-  const runApply = useCallback(
-    (force: boolean, categoryIds?: readonly string[]) => {
+  const bannerScope = useMemo(() => {
+    const select =
+      focusedTable === "bills"
+        ? billSelect
+        : focusedTable === "envelopes"
+          ? envelopeSelect
+          : savingsSelect;
+    const sectionRows =
+      focusedTable === "bills"
+        ? sections.bills
+        : focusedTable === "envelopes"
+          ? sections.envelopes
+          : sections.savings;
+    if (select.selectedIds.size === 0) return undefined;
+    const envelopeIds = new Set(sectionRows.map((row) => row.id));
+    const scoped: string[] = [];
+    for (const id of select.selectedIds) {
+      if (envelopeIds.has(id)) {
+        scoped.push(id);
+        continue;
+      }
+      const descendants = descendantEnvelopeIds(data.groups, data.categories, id);
+      for (const row of sectionRows) {
+        if (descendants.has(row.id)) scoped.push(row.id);
+      }
+    }
+    return scoped.length > 0 ? scoped : undefined;
+  }, [
+    focusedTable,
+    billSelect,
+    envelopeSelect,
+    savingsSelect,
+    sections.bills,
+    sections.envelopes,
+    sections.savings,
+    data.groups,
+    data.categories,
+  ]);
+
+  const commitAssign = useCallback(
+    (option: AssignOption, categoryIds?: readonly string[]) => {
       setError(null);
       setNotice(null);
       startTransition(async () => {
-        const result = await applyBudgetTemplatesAction(data.month, force, categoryIds);
+        const result = await assignBudgetAction(data.month, option, categoryIds);
         if (!result.ok) {
           setError(result.error);
           return;
@@ -201,15 +276,17 @@ export function BudgetView({
         setNotice(
           [
             applied === 0
-              ? "Nothing to apply — no templated envelope was eligible."
-              : `${applied === 1 ? "1 envelope" : `${applied} envelopes`} filled from templates.`,
+              ? "Nothing to assign."
+              : `${applied === 1 ? "1 envelope" : `${applied} envelopes`} updated.`,
             ...problems,
           ].join(" "),
         );
+        setPreview(null);
+        setAssigning(false);
         router.refresh();
       });
     },
-    [data.month, router, startTransition],
+    [data.month, router],
   );
 
   function goToMonth(key: string) {
@@ -229,16 +306,57 @@ export function BudgetView({
         .reduce((total, row) => total + row.activityCents, 0),
     [rows],
   );
-  const templatedCount = useMemo(
-    () => spendingRows.filter((row) => row.templates.length > 0).length,
-    [spendingRows],
-  );
+  const assignInputs = useMemo(() => {
+    const envelopes = rows.map((row) => assignEnvelopeFromRow(row, previous));
+    return {
+      envelopes,
+      bills: assignBillsFromRows(rows),
+      history: assignHistoryFromMonths(
+        data.months,
+        rows.map((row) => row.id),
+      ),
+    };
+  }, [rows, previous, data.months]);
+
+  const assignPlans = useMemo(() => {
+    if (!month) return [];
+    return ASSIGN_OPTIONS.map((option) => ({
+      option,
+      result: planAssign({
+        option,
+        month: data.month,
+        todayKey: data.todayKey,
+        readyToAssignCents: month.readyToAssignCents,
+        envelopes: assignInputs.envelopes,
+        bills: assignInputs.bills,
+        history: assignInputs.history,
+        categoryIds: bannerScope,
+      }),
+    }));
+  }, [month, data.month, data.todayKey, assignInputs, bannerScope]);
 
   const commands = useMemo((): Command[] => {
-    const nothingTemplated =
-      templatedCount === 0
-        ? "No envelope has a template yet — open an envelope's row menu to add one"
-        : undefined;
+    const assignCommands: Command[] = ASSIGN_OPTIONS.map((option) => {
+      const planned = assignPlans.find((entry) => entry.option === option);
+      const empty =
+        !planned ||
+        (planned.result.listAmountCents === 0 && planned.result.lines.length === 0);
+      return {
+        id: `budget.assign.${option}`,
+        label: ASSIGN_OPTION_LABELS[option],
+        group: "view",
+        menu: "tools",
+        section: "Assign",
+        keywords: "auto assign underfunded ynab ready",
+        disabled: empty,
+        title: empty ? "Nothing to change for this option" : undefined,
+        run: () => {
+          if (!planned) return;
+          setPreviewScope(bannerScope);
+          setPreview(planned.result);
+        },
+      };
+    });
 
     return [
       {
@@ -261,34 +379,9 @@ export function BudgetView({
         title: "Detected recurring merchants no envelope has claimed yet",
         run: () => setReviewing(true),
       },
-      {
-        id: "budget.templates.apply",
-        label: "Apply templates",
-        group: "view",
-        menu: "tools",
-        section: "Templates",
-        keywords: "goal fill autofill",
-        title:
-          nothingTemplated ??
-          "Fill every templated envelope whose Assigned is still zero. Leaves the rest alone.",
-        disabled: templatedCount === 0,
-        run: () => runApply(false),
-      },
-      {
-        id: "budget.templates.overwrite",
-        label: "Overwrite with templates",
-        group: "view",
-        menu: "tools",
-        section: "Templates",
-        keywords: "goal replace refill",
-        title:
-          nothingTemplated ??
-          "Replace Assigned on every templated envelope, including ones you have already edited.",
-        disabled: templatedCount === 0,
-        run: () => runApply(true),
-      },
+      ...assignCommands,
     ];
-  }, [runApply, templatedCount, review.length]);
+  }, [assignPlans, bannerScope, review.length]);
 
   useRegisterCommands(commands);
 
@@ -401,14 +494,29 @@ export function BudgetView({
         onSelect: () => setEditing(row.id),
       },
       {
-        label: "Overwrite this envelope",
+        label: "Assign",
+        disabled: row.isIncome,
         title: row.isIncome
-          ? "Income feeds Ready to Assign, so it holds no templates"
-          : row.templates.length === 0
-            ? `${row.name} has no templates to apply`
-            : `Replace ${row.name}'s Assigned with what its templates ask for`,
-        disabled: row.isIncome || row.templates.length === 0,
-        onSelect: () => runApply(true, [row.id]),
+          ? "Income feeds Ready to Assign, so it is never assigned"
+          : `Auto-assign options for ${row.name} only`,
+        items: ASSIGN_OPTIONS.map((option) => ({
+          label: ASSIGN_OPTION_LABELS[option],
+          onSelect: () => {
+            if (!month) return;
+            const result = planAssign({
+              option,
+              month: data.month,
+              todayKey: data.todayKey,
+              readyToAssignCents: month.readyToAssignCents,
+              envelopes: assignInputs.envelopes,
+              bills: assignInputs.bills,
+              history: assignInputs.history,
+              categoryIds: [row.id],
+            });
+            setPreviewScope([row.id]);
+            setPreview(result);
+          },
+        })),
       },
       ...(row.bill
         ? ([
@@ -469,20 +577,6 @@ export function BudgetView({
           onPrev={() => goToMonth(prevMonthKey(data.month))}
           onNext={() => goToMonth(nextMonthKey(data.month))}
           pending={pending}
-          templatedCount={templatedCount}
-          onApply={() => runApply(false)}
-          onOverwrite={() => runApply(true)}
-          onCopyPrevious={() =>
-            run(() =>
-              budgetOperationAction({ kind: "copy-previous", month: data.month }),
-            )
-          }
-          onAverage={() =>
-            run(() => budgetOperationAction({ kind: "average", month: data.month }))
-          }
-          onZero={() =>
-            run(() => budgetOperationAction({ kind: "zero", month: data.month }))
-          }
           onHold={() => {
             const amount = window.prompt("Hold how much for next month?", "0");
             if (amount === null) return;
@@ -509,7 +603,7 @@ export function BudgetView({
           }}
         />
 
-        <BudgetSummary month={month} onAssignAll={() => setAssigning(true)} />
+        <BudgetSummary month={month} onAssign={() => setAssigning(true)} />
 
         <IncomeSection
           rows={sections.income}
@@ -564,7 +658,7 @@ export function BudgetView({
 
           <SectionHeader
             title="Bills"
-            caption="Each funds itself from its own cadence — Apply fills what this month owes."
+            caption="Each funds itself from its own cadence — Assign → Underfunded fills what this month owes."
             totals={billTotals}
           />
           <DataGrid<BudgetColumnCtx, BudgetBillRow>
@@ -572,8 +666,12 @@ export function BudgetView({
             columns={billGrid.columns}
             allColumns={billColumns}
             columnCtx={ctx}
-            selectedId={selected}
-            onSelect={setSelected}
+            selectedId={billSelect.selectedId}
+            selectedIds={billSelect.selectedIds}
+            onSelect={(id, mods) => {
+              setFocusedTable("bills");
+              billSelect.select(id, mods);
+            }}
             rowMenu={(rowId) => {
               const row = rows.find((candidate) => candidate.id === rowId);
               return row ? balanceMenu(row) : [];
@@ -602,8 +700,12 @@ export function BudgetView({
             columns={envelopeGrid.columns}
             allColumns={envelopeColumns}
             columnCtx={ctx}
-            selectedId={selected}
-            onSelect={setSelected}
+            selectedId={envelopeSelect.selectedId}
+            selectedIds={envelopeSelect.selectedIds}
+            onSelect={(id, mods) => {
+              setFocusedTable("envelopes");
+              envelopeSelect.select(id, mods);
+            }}
             /*
              * The same menu the Balance cell opens, reachable by right-click and — the reason it
              * is here — by long-press on a phone, where the compact row draws no Balance button
@@ -657,8 +759,12 @@ export function BudgetView({
             columns={savingsGrid.columns}
             allColumns={envelopeColumns}
             columnCtx={ctx}
-            selectedId={selected}
-            onSelect={setSelected}
+            selectedId={savingsSelect.selectedId}
+            selectedIds={savingsSelect.selectedIds}
+            onSelect={(id, mods) => {
+              setFocusedTable("savings");
+              savingsSelect.select(id, mods);
+            }}
             rowMenu={(rowId) => {
               const row = rows.find((candidate) => candidate.id === rowId);
               return row ? balanceMenu(row) : [];
@@ -727,13 +833,37 @@ export function BudgetView({
           }}
         />
       ) : null}
-      {assigning ? (
-        <AssignRemainingDialog
-          amountCents={Math.max(0, month.readyToAssignCents)}
-          envelopes={spendingRows}
+      {assigning && !preview ? (
+        <AssignDialog
+          readyToAssignCents={month.readyToAssignCents}
+          options={assignPlans}
+          envelopes={[
+            ...sections.bills.map((row) => ({
+              id: row.id,
+              name: row.name,
+              section: "Bills" as const,
+            })),
+            ...sections.envelopes.map((row) => ({
+              id: row.id,
+              name: row.name,
+              section: "Regular spending" as const,
+            })),
+            ...sections.savings.map((row) => ({
+              id: row.id,
+              name: row.name,
+              section: "Savings" as const,
+            })),
+          ]}
+          pending={pending}
           onCancel={() => setAssigning(false)}
-          onAssign={(toId) => {
-            const target = spendingRows.find((row) => row.id === toId);
+          onPickOption={(option) => {
+            const planned = assignPlans.find((entry) => entry.option === option);
+            if (!planned) return;
+            setPreviewScope(bannerScope);
+            setPreview(planned.result);
+          }}
+          onManual={(categoryId, amountCents) => {
+            const target = rows.find((row) => row.id === categoryId);
             setAssigning(false);
             if (!target) return;
             run(() =>
@@ -741,10 +871,18 @@ export function BudgetView({
                 kind: "assign-remaining",
                 month: data.month,
                 to: { id: target.id, name: target.name },
-                amountCents: null,
+                amountCents,
               }),
             );
           }}
+        />
+      ) : null}
+      {preview ? (
+        <AssignPreviewDialog
+          result={preview}
+          pending={pending}
+          onCancel={() => setPreview(null)}
+          onConfirm={() => commitAssign(preview.option, previewScope)}
         />
       ) : null}
       {managingStructure ? (
@@ -791,14 +929,8 @@ function MonthBar({
   month,
   onPrev,
   onNext,
-  onCopyPrevious,
-  onAverage,
-  onZero,
   onHold,
   onRelease,
-  onApply,
-  onOverwrite,
-  templatedCount,
   pending,
   showHidden,
   onShowHidden,
@@ -806,15 +938,8 @@ function MonthBar({
   month: BudgetMonth;
   onPrev: () => void;
   onNext: () => void;
-  onCopyPrevious: () => void;
-  onAverage: () => void;
-  onZero: () => void;
   onHold: () => void;
   onRelease: () => void;
-  onApply: () => void;
-  onOverwrite: () => void;
-  /** How many spending envelopes hold templates — nothing to apply when it is zero. */
-  templatedCount: number;
   pending: boolean;
   showHidden: boolean;
   onShowHidden: (next: boolean) => void;
@@ -843,51 +968,6 @@ function MonthBar({
           />
           Show hidden
         </label>
-        {/*
-         * Templates first: they are the answer to "fill this month in", and the three manual
-         * fills beside them are what you reach for when no template covers the case.
-         * Unavailable is disabled with the reason rather than hidden (`navigation.md`).
-         */}
-        <button
-          type="button"
-          onClick={onApply}
-          disabled={pending || templatedCount === 0}
-          className={button}
-          title={
-            templatedCount === 0
-              ? "No envelope has a template yet — add one from an envelope's row menu"
-              : "Fill every templated envelope whose Assigned is still zero"
-          }
-        >
-          Apply templates
-        </button>
-        <button
-          type="button"
-          onClick={onOverwrite}
-          disabled={pending || templatedCount === 0}
-          className={button}
-          title={
-            templatedCount === 0
-              ? "No envelope has a template yet — add one from an envelope's row menu"
-              : "Replace Assigned on every templated envelope, including ones already edited"
-          }
-        >
-          Overwrite with templates
-        </button>
-        <button
-          type="button"
-          onClick={onCopyPrevious}
-          disabled={pending}
-          className={button}
-        >
-          Copy last month
-        </button>
-        <button type="button" onClick={onAverage} disabled={pending} className={button}>
-          Set to 3-month average
-        </button>
-        <button type="button" onClick={onZero} disabled={pending} className={button}>
-          Set all to zero
-        </button>
         {month.bufferedCents > 0 ? (
           <button
             type="button"

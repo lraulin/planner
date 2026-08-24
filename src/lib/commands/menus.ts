@@ -41,7 +41,7 @@ export const MENU_SECTIONS: Record<CommandMenu, readonly string[]> = {
   // way the Outline's does — moves, then ranking, then state.
   organize: ["Move", "Rank", "State", "Expand", "Priority", "Zoom"],
   view: ["Saved views", "Days", "Layout", "Panels"],
-  tools: [],
+  tools: ["Assign"],
 };
 
 /**
@@ -73,6 +73,7 @@ export const NESTED_SECTIONS: ReadonlySet<string> = new Set([
   "Export",
   // File ▸ Copy to Clipboard ▸ — the always-visible twin of Export's Option-swap.
   "Copy to Clipboard",
+  "Assign",
 ]);
 
 export type MenuSection = {

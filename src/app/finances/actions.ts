@@ -39,6 +39,7 @@ import {
 } from "@/lib/finances/mutations";
 import {
   applyBudgetTemplates,
+  assignBudget,
   autoMapBudgetCategories,
   autoMapConfiguredBudgetCategories,
   createBudgetCategory,
@@ -64,6 +65,7 @@ import type {
   BudgetStructureRef,
 } from "@/lib/finances/budget/hierarchy";
 import type { MonthKey } from "@/lib/finances/budget/envelope";
+import type { AssignOption } from "@/lib/finances/budget/assign/types";
 import type { BudgetPreset } from "@/lib/finances/budget/presets";
 import type { EnvelopeSectionKind, EnvelopeStatus } from "@/db/schema";
 import {
@@ -374,6 +376,14 @@ export async function applyBudgetTemplatesAction(
   return runWithData((userId) =>
     applyBudgetTemplates(userId, { month, force, categoryIds }),
   );
+}
+
+export async function assignBudgetAction(
+  month: MonthKey,
+  option: AssignOption,
+  categoryIds?: readonly string[],
+): Promise<DataActionResult<{ applied: number; errors: string[] }>> {
+  return runWithData((userId) => assignBudget(userId, { month, option, categoryIds }));
 }
 
 // ─────────────────────────────── Payees ───────────────────────────────

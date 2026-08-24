@@ -25,6 +25,7 @@ type MultiState = {
 export function useMultiSelect(
   orderedIds: readonly string[],
   initialId: string | null = null,
+  options: { allowEmpty?: boolean } = {},
 ) {
   const [state, setState] = useState<MultiState>(() => ({
     focusId: initialId,
@@ -40,25 +41,29 @@ export function useMultiSelect(
   const orderedKey = orderedIds.join("\0");
   const seenKey = seenIds.join("\0");
   if (orderedKey !== seenKey) {
-    const pruned = pruneSelection(
-      orderedIds,
-      state.selectedIds,
-      state.focusId,
-      state.anchorId,
-      seenIds,
-    );
-    setSeenIds(orderedIds);
-    const sameFocus = pruned.focusId === state.focusId;
-    const sameAnchor = pruned.anchorId === state.anchorId;
-    const sameSet =
-      pruned.selectedIds.size === state.selectedIds.size &&
-      [...pruned.selectedIds].every((id) => state.selectedIds.has(id));
-    if (!sameFocus || !sameAnchor || !sameSet) {
-      setState({
-        focusId: pruned.focusId,
-        anchorId: pruned.anchorId,
-        selectedIds: pruned.selectedIds,
-      });
+    if (options.allowEmpty && state.selectedIds.size === 0) {
+      setSeenIds(orderedIds);
+    } else {
+      const pruned = pruneSelection(
+        orderedIds,
+        state.selectedIds,
+        state.focusId,
+        state.anchorId,
+        seenIds,
+      );
+      setSeenIds(orderedIds);
+      const sameFocus = pruned.focusId === state.focusId;
+      const sameAnchor = pruned.anchorId === state.anchorId;
+      const sameSet =
+        pruned.selectedIds.size === state.selectedIds.size &&
+        [...pruned.selectedIds].every((id) => state.selectedIds.has(id));
+      if (!sameFocus || !sameAnchor || !sameSet) {
+        setState({
+          focusId: pruned.focusId,
+          anchorId: pruned.anchorId,
+          selectedIds: pruned.selectedIds,
+        });
+      }
     }
   }
 
