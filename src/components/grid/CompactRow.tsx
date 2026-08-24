@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactElement,
+} from "react";
 import {
   IDLE,
   LONG_PRESS_MS,
@@ -66,7 +73,20 @@ export type RowSwipe = {
  * and right-click (`responsive.md`). Long press is not decoration: on the Day and Notes grids
  * that menu carries commands that exist nowhere else in the app.
  */
-export function CompactRow<TCtx, TRow>({
+type CompactRowProps<TCtx, TRow> = {
+  row: NodeGridRow<TRow>;
+  columnCtx: TCtx;
+  fields: CompactFields<ColumnDef<TCtx, TRow>>;
+  selected: boolean;
+  onSelect: (id: string) => void;
+  onOpenDetail?: (id: string) => void;
+  onLongPress?: (id: string, x: number, y: number) => void;
+  swipe?: RowSwipe;
+  label?: string;
+  expanded?: boolean;
+};
+
+export const CompactRow = memo(function CompactRow<TCtx, TRow>({
   row,
   columnCtx,
   fields,
@@ -77,18 +97,7 @@ export function CompactRow<TCtx, TRow>({
   swipe,
   label,
   expanded,
-}: {
-  row: NodeGridRow<TRow>;
-  columnCtx: TCtx;
-  fields: CompactFields<ColumnDef<TCtx, TRow>>;
-  selected: boolean;
-  onSelect: () => void;
-  onOpenDetail?: () => void;
-  onLongPress?: (x: number, y: number) => void;
-  swipe?: RowSwipe;
-  label?: string;
-  expanded?: boolean;
-}) {
+}: CompactRowProps<TCtx, TRow>) {
   const formatDate = useDateFormatter();
   const rowRef = useRef<HTMLDivElement>(null);
   const press = useRef<PressState>(IDLE);
@@ -172,7 +181,7 @@ export function CompactRow<TCtx, TRow>({
             if (didFire(press.current)) {
               consumedTap.current = true;
               endSwipe();
-              onLongPress(clientX, clientY);
+              onLongPress(row.id, clientX, clientY);
             }
           }, LONG_PRESS_MS);
         }}
@@ -264,11 +273,11 @@ export function CompactRow<TCtx, TRow>({
           }
           // Inline controls inside a cell (an expander, a checkbox) handle their own tap.
           if ((event.target as HTMLElement).closest("input, select, button")) {
-            onSelect();
+            onSelect(row.id);
             return;
           }
-          onSelect();
-          onOpenDetail?.();
+          onSelect(row.id);
+          onOpenDetail?.(row.id);
         }}
         className={[
           "relative flex min-h-tap w-full items-center gap-2.5 border-b border-rule/60 py-2 pr-3 pl-2.5 text-left",
@@ -335,7 +344,7 @@ export function CompactRow<TCtx, TRow>({
       </div>
     </div>
   );
-}
+}) as <TCtx, TRow>(props: CompactRowProps<TCtx, TRow>) => ReactElement;
 
 /**
  * What the swipe is about to do, revealed as the row slides off it.

@@ -782,6 +782,34 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
     [onFilterChange],
   );
 
+  /**
+   * Row event handlers must be identity-stable across renders. DataRow's memo compares
+   * them by reference; wrapping `onSelect(row.id)` in the map below used to allocate a
+   * fresh closure per row per render, so a click that should repaint one row repainted
+   * every row. The Register is ~7,000 rows — that was a multi-second hitch.
+   *
+   * selectedIds is read from a ref so opening the row menu does not rebuild the handler
+   * (and therefore every row) on each selection change.
+   */
+  const selectedIdsRef = useRef(selectedIds);
+  useEffect(() => {
+    selectedIdsRef.current = selectedIds;
+  });
+
+  const openRowMenu = useCallback(
+    (id: string, x: number, y: number) => {
+      if (!selectedIdsRef.current?.has(id)) onSelect(id);
+      setMenu({ rowId: id, x, y });
+    },
+    [onSelect],
+  );
+
+  const displayNodeIds = useMemo(
+    () =>
+      displayRows.filter((row): row is Row => row.kind === "node").map((row) => row.id),
+    [displayRows],
+  );
+
   function endDrag() {
     clearHoldExpand();
     setDragIds(null);
@@ -958,9 +986,6 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
             : (() => {
                 // 1-based index among node rows only — group headers do not consume a number.
                 let rowNumber = 0;
-                const nodeOrder = displayRows
-                  .filter((r): r is NodeGridRow<TRow> => r.kind === "node")
-                  .map((r) => r.id);
 
                 return displayRows.map((row) => {
                   const isSelected = selectedIds
@@ -984,7 +1009,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
                         // use this so a root result area can change category by landing on a group.
                         drag={dragBindingFor(
                           row.id,
-                          nodeOrder,
+                          displayNodeIds,
                           collapsedGroups?.has(row.id)
                             ? () => onToggleGroup?.(row.id)
                             : undefined,
@@ -1009,19 +1034,9 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
                       columnCtx={columnCtx}
                       fields={compactFields}
                       selected={isSelected}
-                      onSelect={() => onSelect(row.id)}
-                      onOpenDetail={
-                        onOpenDetail ? () => onOpenDetail(row.id) : undefined
-                      }
-                      onLongPress={
-                        rowMenu &&
-                        ((x, y) => {
-                          // Right-click / long-press on an already-selected row keeps the multi
-                          // selection so "Copy as text" can act on all of them.
-                          if (!selectedIds?.has(row.id)) onSelect(row.id);
-                          setMenu({ rowId: row.id, x, y });
-                        })
-                      }
+                      onSelect={onSelect}
+                      onOpenDetail={onOpenDetail}
+                      onLongPress={rowMenu ? openRowMenu : undefined}
                       swipe={rowSwipe?.(row.id)}
                       label={rowLabelFor(row, rowLabel)}
                       expanded={rowExpansionFor(row, rowExpansion)}
@@ -1037,25 +1052,17 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
                       selected={isSelected}
                       focused={isFocus}
                       rowNumber={rowNumbers ? number : null}
-                      onSelect={(mods) => onSelect(row.id, mods)}
-                      onOpenDetail={
-                        onOpenDetail ? () => onOpenDetail(row.id) : undefined
-                      }
+                      onSelect={onSelect}
+                      onOpenDetail={onOpenDetail}
                       drag={dragBindingFor(
                         row.id,
-                        nodeOrder,
+                        displayNodeIds,
                         rowExpansionFor(row, rowExpansion) === false &&
                           rowDrag?.onExpand
                           ? () => rowDrag.onExpand?.(row.id)
                           : undefined,
                       )}
-                      onContextMenu={
-                        rowMenu &&
-                        ((x, y) => {
-                          if (!selectedIds?.has(row.id)) onSelect(row.id);
-                          setMenu({ rowId: row.id, x, y });
-                        })
-                      }
+                      onContextMenu={rowMenu ? openRowMenu : undefined}
                       rowLabel={rowLabel}
                       rowExpansion={rowExpansion}
                     />
@@ -1090,10 +1097,10 @@ type DataRowProps<TCtx, TRow> = {
   focused?: boolean;
   /** 1-based index when the host asked for numbers; null otherwise. */
   rowNumber: number | null;
-  onSelect: (mods?: GridSelectMods) => void;
-  onOpenDetail?: () => void;
+  onSelect: (id: string, mods?: GridSelectMods) => void;
+  onOpenDetail?: (id: string) => void;
   drag?: RowDragBinding;
-  onContextMenu?: (x: number, y: number) => void;
+  onContextMenu?: (id: string, x: number, y: number) => void;
 } & RowMeta<TRow>;
 
 /** Drag bindings rebuild every render; only dragging/hint state should bust the row memo. */
@@ -1181,16 +1188,16 @@ const DataRow = memo(
           ) {
             // Still mark the row selected when focusing a cell control, but without multi
             // modifiers — a click on a date picker should not toggle ⌘-selection.
-            onSelect();
+            onSelect(row.id);
             return;
           }
           // Shift = range, Ctrl (Windows) / ⌘ (Mac) = add/remove one row. Both are standard.
-          onSelect({
+          onSelect(row.id, {
             extend: event.shiftKey,
             toggle: event.metaKey || event.ctrlKey,
           });
         }}
-        onDoubleClick={onOpenDetail}
+        onDoubleClick={onOpenDetail ? () => onOpenDetail(row.id) : undefined}
         onContextMenu={
           onContextMenu &&
           ((event) => {
@@ -1201,11 +1208,11 @@ const DataRow = memo(
             // `click` — only `contextmenu`. Treat Ctrl/⌘+click as multi-select, not the menu.
             if (event.ctrlKey || event.metaKey) {
               event.preventDefault();
-              onSelect({ toggle: true });
+              onSelect(row.id, { toggle: true });
               return;
             }
             event.preventDefault();
-            onContextMenu(event.clientX, event.clientY);
+            onContextMenu(row.id, event.clientX, event.clientY);
           })
         }
         onDragOver={
@@ -1250,7 +1257,11 @@ const DataRow = memo(
       */}
         <RowSelectedContext.Provider value={selected}>
           <RowDragHandleContext.Provider value={handleApi}>
-            <RowHandle number={rowNumber} selected={selected} onSelect={onSelect} />
+            <RowHandle
+              number={rowNumber}
+              selected={selected}
+              onSelect={(mods) => onSelect(row.id, mods)}
+            />
 
             {columns.map((column) => (
               <div
