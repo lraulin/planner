@@ -1,7 +1,14 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { financeBudgetCategories, financeCategoryGroups, users } from "@/db/schema";
+import {
+  financeAccounts,
+  financeBudgetCategories,
+  financeCategoryGroups,
+  financeRules,
+  financeTransactions,
+  users,
+} from "@/db/schema";
 import { createCategoryGroup } from "./budget/mutations";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { importFinanceCsvFiles, type ImportFile } from "./import";
@@ -667,6 +674,76 @@ describeDb("stable bill envelope payee claims", () => {
       }),
     ).rejects.toThrow("That payee does not exist");
     expect(await loadRecurringBills(userId)).toEqual([]);
+  });
+
+  it("files that payee's history as the bill and leaves a different CVS payee alone", async () => {
+    const [account] = await db
+      .insert(financeAccounts)
+      .values({
+        userId,
+        name: "Card",
+        kind: "credit_card",
+        externalSource: "test",
+        externalKey: `card-${crypto.randomUUID()}`,
+      })
+      .returning({ id: financeAccounts.id });
+    const extraCare = await createPayee(userId, { name: "CVS ExtraCare" });
+    const pharmacy = await createPayee(userId, { name: "CVS" });
+    const [billCharge, shopCharge] = await db
+      .insert(financeTransactions)
+      .values([
+        {
+          userId,
+          accountId: account.id,
+          transactionDate: "2026-07-05",
+          description: "CVSExtraCare 8007467287RI",
+          amount: "-5.00",
+          payeeId: extraCare,
+        },
+        {
+          userId,
+          accountId: account.id,
+          transactionDate: "2026-07-06",
+          description: "CVS/PHARMACY #01522",
+          amount: "-22.84",
+          payeeId: pharmacy,
+        },
+      ])
+      .returning({ id: financeTransactions.id });
+
+    await upsertBillEnvelope(userId, {
+      name: "CVS ExtraCare",
+      payeeIds: [extraCare],
+      cadence: { unit: "month", n: 1 },
+      expectedCents: 500,
+    });
+
+    const bills = await loadRecurringBills(userId);
+    const extra = bills.find((bill) => bill.name === "CVS ExtraCare");
+    expect(extra?.payeeIds).toEqual([extraCare]);
+
+    const filed = await db
+      .select({
+        id: financeTransactions.id,
+        categoryId: financeTransactions.budgetCategoryId,
+      })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.userId, userId));
+    expect(filed.find((row) => row.id === billCharge.id)?.categoryId).toBe(extra?.id);
+    expect(filed.find((row) => row.id === shopCharge.id)?.categoryId).toBeNull();
+
+    const rules = await db
+      .select({ conditions: financeRules.conditions, actions: financeRules.actions })
+      .from(financeRules)
+      .where(eq(financeRules.userId, userId));
+    expect(rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          conditions: [{ field: "payee", op: "is", value: extraCare }],
+          actions: [{ op: "set", field: "category", value: extra?.id }],
+        }),
+      ]),
+    );
   });
 });
 

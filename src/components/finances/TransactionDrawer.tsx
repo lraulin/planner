@@ -10,10 +10,12 @@ import { Drawer, DrawerFooter, DrawerHeader } from "@/components/detail/Drawer";
 import { Section, SelectField, TextArea } from "@/components/detail/fields";
 import { effectiveFlow } from "@/lib/finances/analytics";
 import { envelopeAssignmentRefusal } from "@/lib/finances/budget/autoMap";
+import type { EnvelopePickerOption } from "@/lib/finances/budget/groupEnvelopeOptions";
+import type { EnvelopeKind, FinanceFlowKind } from "@/db/schema";
+import { CategorySelect } from "./CategorySelect";
 import { FLOW_KINDS, flowLabel } from "@/lib/finances/flowLabels";
 import { formatUsd } from "@/lib/finances/money";
 import type { TransactionListRow } from "@/lib/finances/types";
-import type { FinanceFlowKind } from "@/db/schema";
 import { addTagToNotes, normalizeTagInput, tagsInNotes } from "@/lib/finances/tags";
 
 /**
@@ -35,15 +37,17 @@ export function TransactionDrawer({
   managedTags,
   onClose,
   onChanged,
+  onCreateEnvelope,
 }: {
   transactionId: string | null;
   row: TransactionListRow | null;
-  envelopes: readonly { id: string; label: string; name: string }[];
+  envelopes: readonly EnvelopePickerOption[];
   budgetStartMonth: string | null;
   offBudgetAccountIds: ReadonlySet<string>;
   managedTags: readonly string[];
   onClose: () => void;
   onChanged: (id: string, patch: Partial<TransactionListRow>) => void;
+  onCreateEnvelope: (transactionId: string, kind: EnvelopeKind) => void;
 }) {
   const titleId = useId();
   if (!transactionId) return null;
@@ -66,6 +70,7 @@ export function TransactionDrawer({
           managedTags={managedTags}
           onClose={onClose}
           onChanged={onChanged}
+          onCreateEnvelope={onCreateEnvelope}
         />
       ) : (
         <p role="alert" className="px-5 py-4 text-[0.875rem] text-priority-a">
@@ -95,14 +100,16 @@ function TransactionForm({
   managedTags,
   onClose,
   onChanged,
+  onCreateEnvelope,
 }: {
   row: TransactionListRow;
-  envelopes: readonly { id: string; label: string; name: string }[];
+  envelopes: readonly EnvelopePickerOption[];
   budgetStartMonth: string | null;
   offBudgetAccountIds: ReadonlySet<string>;
   managedTags: readonly string[];
   onClose: () => void;
   onChanged: (id: string, patch: Partial<TransactionListRow>) => void;
+  onCreateEnvelope: (transactionId: string, kind: EnvelopeKind) => void;
 }) {
   const [draft, setDraft] = useState(() => ({
     notes: row.notes,
@@ -241,16 +248,24 @@ function TransactionForm({
                   </span>
                 </ReadOnly>
               ) : (
-                <SelectField<string>
-                  label="Category"
-                  value={envelopeId}
-                  options={envelopes.map(({ id, label }) => ({ value: id, label }))}
-                  onChange={setEnvelope}
-                  allowEmpty
-                  emptyLabel="Uncategorized"
-                  disabled={savingEnvelope}
-                  hint="Saved immediately. Repeated choices for the same payee can teach a rule."
-                />
+                <label className="flex flex-col gap-1">
+                  <span className="text-[0.6875rem] font-medium uppercase tracking-wider text-ink-muted">
+                    Category
+                  </span>
+                  <CategorySelect
+                    envelopes={envelopes}
+                    value={envelopeId}
+                    onChange={setEnvelope}
+                    onCreate={(kind) => onCreateEnvelope(row.id, kind)}
+                    disabled={savingEnvelope}
+                    ariaLabel="Category"
+                    className="min-h-tap rounded border border-rule bg-surface px-2 text-base text-ink md:min-h-0 md:py-1 md:text-[0.8125rem]"
+                  />
+                  <span className="text-[0.75rem] text-ink-faint">
+                    Saved immediately. Repeated choices for the same payee can teach a
+                    rule.
+                  </span>
+                </label>
               ))}
             {learningNotice ? (
               <p className="text-[0.75rem] text-select-edge">{learningNotice}</p>

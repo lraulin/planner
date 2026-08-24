@@ -44,7 +44,7 @@ import { planAssign } from "@/lib/finances/budget/assign/plan";
 import {
   assignBillsFromRows,
   assignEnvelopeFromRow,
-  assignHistoryFromMonths,
+  assignHistoryWithLookback,
 } from "@/lib/finances/budget/assign/fromBudget";
 import {
   ASSIGN_OPTIONS,
@@ -311,12 +311,14 @@ export function BudgetView({
     return {
       envelopes,
       bills: assignBillsFromRows(rows),
-      history: assignHistoryFromMonths(
+      history: assignHistoryWithLookback(
         data.months,
         rows.map((row) => row.id),
+        data.preStartActivity,
+        data.settings.startMonth,
       ),
     };
-  }, [rows, previous, data.months]);
+  }, [rows, previous, data.months, data.preStartActivity, data.settings.startMonth]);
 
   const assignPlans = useMemo(() => {
     if (!month) return [];

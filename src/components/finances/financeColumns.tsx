@@ -7,6 +7,9 @@ import { flowLabel } from "@/lib/finances/flowLabels";
 import { formatUsd } from "@/lib/finances/money";
 import type { TransactionListRow } from "@/lib/finances/types";
 import { envelopeAssignmentRefusal } from "@/lib/finances/budget/autoMap";
+import type { EnvelopePickerOption } from "@/lib/finances/budget/groupEnvelopeOptions";
+import type { EnvelopeKind } from "@/db/schema";
+import { CategorySelect } from "./CategorySelect";
 
 /**
  * What the Envelope column needs. Every other column is pure presentation, which is why this
@@ -14,10 +17,11 @@ import { envelopeAssignmentRefusal } from "@/lib/finances/budget/autoMap";
  */
 export type FinanceColumnCtx = {
   /** Every envelope, in budget order. Empty until a budget is set up. */
-  envelopes: readonly { id: string; label: string }[];
+  envelopes: readonly EnvelopePickerOption[];
   budgetStartMonth: string | null;
   offBudgetAccountIds: ReadonlySet<string>;
   onSetEnvelope: (transactionId: string, categoryId: string | null) => void;
+  onCreateEnvelope: (transactionId: string, kind: EnvelopeKind) => void;
   tagColors: Readonly<Record<string, string | null>>;
 };
 
@@ -150,10 +154,7 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, TransactionListRow>[] =
     filterKind: "enum",
     // "Unassigned" rather than blank, so the backlog is a value you can filter *to*. It is
     // the set the Budget page counts, and finding it is the whole workflow.
-    filterValue: (row) =>
-      row.node.budgetEligible === false
-        ? "Not budgeted"
-        : (row.node.budgetCategoryName ?? "Uncategorized"),
+    filterValue: (row) => row.node.budgetCategoryName ?? "Uncategorized",
     sortValue: (row) => (row.node.budgetCategoryName ?? "").toLowerCase(),
     compact: "meta",
     compactTextWithCtx: (row, ctx) =>
@@ -168,9 +169,6 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, TransactionListRow>[] =
     // one-keystroke decision made while reading the description next to it, and a menu of
     // twenty envelopes is not a menu (`components/ux-principles`).
     render: (row, ctx) => {
-      if (ctx.envelopes.length === 0) {
-        return <span className="truncate text-[0.8125rem] text-ink-faint">—</span>;
-      }
       const refusal = envelopeAssignmentRefusal({
         transactionDate: row.node.transactionDate,
         budgetStartMonth: ctx.budgetStartMonth,
@@ -184,26 +182,16 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, TransactionListRow>[] =
         );
       }
       return (
-        <select
-          value={row.node.budgetCategoryId ?? ""}
-          aria-label={`Category for ${row.node.description}`}
-          onChange={(event) =>
-            ctx.onSetEnvelope(
-              row.node.id,
-              event.target.value === "" ? null : event.target.value,
-            )
-          }
+        <CategorySelect
+          envelopes={ctx.envelopes}
+          value={row.node.budgetCategoryId}
+          ariaLabel={`Category for ${row.node.description}`}
+          onChange={(categoryId) => ctx.onSetEnvelope(row.node.id, categoryId)}
+          onCreate={(kind) => ctx.onCreateEnvelope(row.node.id, kind)}
           className={`w-full min-w-0 truncate rounded border border-transparent bg-transparent px-1 text-base hover:border-rule md:text-[0.8125rem] ${
             row.node.budgetCategoryId ? "text-ink" : "text-ink-faint"
           }`}
-        >
-          <option value="">Categorize</option>
-          {ctx.envelopes.map((envelope) => (
-            <option key={envelope.id} value={envelope.id}>
-              {envelope.label}
-            </option>
-          ))}
-        </select>
+        />
       );
     },
   },

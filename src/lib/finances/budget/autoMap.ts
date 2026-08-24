@@ -19,7 +19,6 @@
 
 import { effectiveCategory, effectiveFlow } from "../analytics";
 import { compare as compareSortKeys } from "@/lib/tree/sortKey";
-import { monthLabel } from "./envelope";
 
 export type MappableRow = {
   description: string;
@@ -56,10 +55,9 @@ export type EnvelopeIndex = {
 /**
  * Why the Register must not offer an envelope editor for this transaction.
  *
- * An envelope id on either kind of row is stored successfully but contributes no budget
- * activity: off-budget accounts are excluded from the fold, and the opening position makes
- * every date before the start month historical context. Refusing the edit is more honest than
- * accepting a value the Budget page will ignore.
+ * Off-budget accounts never enter the fold. Dates before the start month *may* hold a
+ * Category — that is analysis history for Insights and Average Spent — they just do not
+ * change Ready to Assign (`agent-os/specs/2026-08-24-1522-category-by-kind-and-history/` D4).
  */
 export function envelopeAssignmentRefusal(input: {
   transactionDate: string;
@@ -68,12 +66,6 @@ export function envelopeAssignmentRefusal(input: {
 }): string | null {
   if (input.accountOffBudget) {
     return "This account is outside the envelope budget.";
-  }
-  if (
-    input.budgetStartMonth !== null &&
-    input.transactionDate < input.budgetStartMonth
-  ) {
-    return `The envelope budget starts in ${monthLabel(input.budgetStartMonth)}.`;
   }
   return null;
 }

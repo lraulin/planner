@@ -191,6 +191,11 @@ function RuleForm({
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
           <div className="flex flex-col gap-7">
+            {rule?.categoryReviewRequired ? (
+              <p className="text-[0.75rem] text-priority-a">
+                Category target is missing. Pick an envelope this rule should set.
+              </p>
+            ) : null}
             <Section title="Rule">
               <label
                 htmlFor={nameId}

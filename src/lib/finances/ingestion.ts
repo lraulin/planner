@@ -3,6 +3,7 @@ import {
   reclassifyTransactions,
   type ReclassifySummary,
 } from "./mutations";
+import { applyPayeeClaims } from "./payees/claims";
 import { db } from "@/db";
 import { sql } from "drizzle-orm";
 
@@ -28,19 +29,17 @@ export async function finalizeTransactionIngestion(
   userId: string,
   options: { forceReclassify?: boolean; applyRulesSince?: Date } = {},
 ): Promise<{ reclassified: ReclassifySummary | null }> {
-  if (!options.forceReclassify) {
-    if (options.applyRulesSince) {
-      await applyRuleActionsToTransactions(userId, {
-        createdSince: options.applyRulesSince,
-      });
-    }
-    return { reclassified: null };
+  let reclassified: ReclassifySummary | null = null;
+  if (options.forceReclassify) {
+    reclassified = await reclassifyTransactions(userId);
   }
-  const reclassified = await reclassifyTransactions(userId);
   if (options.applyRulesSince) {
     await applyRuleActionsToTransactions(userId, {
       createdSince: options.applyRulesSince,
     });
   }
+  // Claims beat a broad merchant rule. Track as bill already filed its payee; this
+  // catches charges that arrived after the claim (import / sync).
+  await applyPayeeClaims(userId);
   return { reclassified };
 }

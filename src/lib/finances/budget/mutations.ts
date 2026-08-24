@@ -7,7 +7,6 @@ import {
   financeBudgetMonths,
   financeCategoryGroups,
   financePayees,
-  financeRules,
   financeTransactions,
   ENVELOPE_SECTION_KINDS,
   type EnvelopeKind,
@@ -21,8 +20,7 @@ import * as sortKey from "@/lib/tree/sortKey";
 import { FINANCE_CATEGORIES } from "../classify/categories";
 import { numericStringToCents } from "../money";
 import { learnedCategory } from "../categoryLearning";
-import { parseRuleActions } from "../rules/actions";
-import { createRule, updateRule } from "../rules/mutations";
+import { applyPayeeClaims, upsertPayeeCategoryRule } from "../payees/claims";
 import { envelopeForRow, envelopeIndex, type MappableRow } from "./autoMap";
 import {
   budgetChildren,
@@ -63,7 +61,7 @@ import {
 } from "./queries";
 import { applyTemplates as runApply, templateCarryIn } from "./templates/apply";
 import { planAssign } from "./assign/plan";
-import { assignEnvelopeFromRow, assignHistoryFromMonths } from "./assign/fromBudget";
+import { assignEnvelopeFromRow, assignHistoryWithLookback } from "./assign/fromBudget";
 import type { AssignOption } from "./assign/types";
 import {
   parseTemplates,
@@ -356,74 +354,7 @@ export async function autoMapBudgetCategories(
   return { placed, remaining: rows.length - placed };
 }
 
-/**
- * File every claimed payee's charges in the envelope that claims them.
- *
- * `finance_payees.budget_category_id` says "this merchant's charges belong to this
- * envelope" (`agent-os/specs/2026-08-23-2313-one-budget/` D3). Nothing read it when filing
- * a charge until this existed: the cutover rewrote every claim and the bill envelopes still
- * showed no Activity, because a Rent charge was left in whatever pooled envelope the
- * taxonomy auto-map had put it in.
- *
- * **This one moves rows that are already filed**, unlike {@link autoMapBudgetCategories}.
- * A claim is an explicit declaration about a merchant, so it outranks a placement the
- * taxonomy pass made — and until a placement made *by hand* is distinguishable from one made
- * by the auto-map, it outranks that too. Bounded by `since` for the same reason the auto-map
- * is: months before the budget started are history nobody is budgeting.
- */
-export async function applyPayeeClaims(
-  userId: string,
-  since: MonthKey,
-): Promise<{ moved: number }> {
-  const rows = await db
-    .select({
-      id: financeTransactions.id,
-      categoryId: financePayees.budgetCategoryId,
-    })
-    .from(financeTransactions)
-    .innerJoin(financePayees, eq(financePayees.id, financeTransactions.payeeId))
-    .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
-    .where(
-      and(
-        eq(financeTransactions.userId, userId),
-        eq(financePayees.userId, userId),
-        eq(financeAccounts.userId, userId),
-        eq(financeAccounts.offBudget, false),
-        gte(financeTransactions.transactionDate, since),
-        sql`${financePayees.budgetCategoryId} is not null`,
-        sql`${financeTransactions.budgetCategoryId} is distinct from ${financePayees.budgetCategoryId}`,
-      ),
-    );
-  if (rows.length === 0) return { moved: 0 };
-
-  const byCategory = new Map<string, string[]>();
-  for (const row of rows) {
-    if (!row.categoryId) continue;
-    const bucket = byCategory.get(row.categoryId) ?? [];
-    bucket.push(row.id);
-    byCategory.set(row.categoryId, bucket);
-  }
-
-  let moved = 0;
-  await db.transaction(async (tx) => {
-    for (const [categoryId, ids] of byCategory) {
-      // One statement per envelope rather than per row, as the auto-map does: a claim on a
-      // frequent merchant can reach hundreds of charges.
-      await tx
-        .update(financeTransactions)
-        .set({ budgetCategoryId: categoryId, updatedAt: new Date() })
-        .where(
-          and(
-            eq(financeTransactions.userId, userId),
-            inArray(financeTransactions.id, ids),
-          ),
-        );
-      moved += ids.length;
-    }
-  });
-
-  return { moved };
-}
+export { applyPayeeClaims };
 
 /**
  * Route claimed payees first, then fill what is left by taxonomy.
@@ -437,7 +368,7 @@ export async function autoMapConfiguredBudgetCategories(
 ): Promise<{ placed: number; remaining: number }> {
   const settings = parseBudget(await readSetting(userId, BUDGET_SCOPE));
   if (settings.startMonth === null) return { placed: 0, remaining: 0 };
-  await applyPayeeClaims(userId, settings.startMonth);
+  await applyPayeeClaims(userId, { since: settings.startMonth });
   return autoMapBudgetCategories(userId, settings.startMonth);
 }
 
@@ -1137,20 +1068,12 @@ export async function moveBudgetStructureItemIntoGroup(
     );
 }
 
-function exactPayeeRule(conditions: unknown, payeeId: string): boolean {
-  if (!Array.isArray(conditions) || conditions.length !== 1) return false;
-  const condition = conditions[0] as Record<string, unknown> | null;
-  return (
-    condition?.field === "payee" && condition.op === "is" && condition.value === payeeId
-  );
-}
-
 async function learnCategoryForPayee(
   userId: string,
   editedId: string,
   payeeId: string,
 ): Promise<string | void> {
-  const [payee, recent, rules] = await Promise.all([
+  const [payee, recent] = await Promise.all([
     db
       .select({ name: financePayees.name, learn: financePayees.learnCategories })
       .from(financePayees)
@@ -1177,45 +1100,16 @@ async function learnCategoryForPayee(
         desc(financeTransactions.createdAt),
       )
       .limit(5),
-    db
-      .select({
-        id: financeRules.id,
-        name: financeRules.name,
-        conditions: financeRules.conditions,
-        actions: financeRules.actions,
-        enabled: financeRules.enabled,
-        notes: financeRules.notes,
-      })
-      .from(financeRules)
-      .where(eq(financeRules.userId, userId)),
   ]);
   if (!payee[0]?.learn) return;
   const learned = learnedCategory(editedId, recent);
   if (!learned) return;
-  const existing = rules.find((rule) => exactPayeeRule(rule.conditions, payeeId));
-  if (existing) {
-    const parsed = parseRuleActions(existing.actions);
-    const actions =
-      "actions" in parsed
-        ? parsed.actions.filter(
-            (action) => !(action.op === "set" && action.field === "category"),
-          )
-        : [];
-    await updateRule(userId, existing.id, {
-      name: existing.name,
-      conditions: existing.conditions,
-      actions: [...actions, { op: "set", field: "category", value: learned }],
-      enabled: existing.enabled,
-      notes: existing.notes,
-    });
-  } else {
-    await createRule(userId, {
-      name: `Categorize ${payee[0].name} (${payeeId.slice(0, 6)})`,
-      conditions: [{ field: "payee", op: "is", value: payeeId }],
-      actions: [{ op: "set", field: "category", value: learned }],
-      notes: "Learned from the same Category on 3 of the latest 5 transactions.",
-    });
-  }
+  await upsertPayeeCategoryRule(
+    userId,
+    payeeId,
+    learned,
+    "Learned from the same Category on 3 of the latest 5 transactions.",
+  );
   return `Future ${payee[0].name} transactions will use this Category.`;
 }
 
@@ -1386,9 +1280,11 @@ export async function assignBudget(
     readyToAssignCents: month.readyToAssignCents,
     envelopes,
     bills: new Map(snapshots.map((bill) => [bill.id, bill])),
-    history: assignHistoryFromMonths(
+    history: assignHistoryWithLookback(
       data.months,
       data.categories.map((category) => category.id),
+      data.preStartActivity,
+      data.settings.startMonth,
     ),
     categoryIds: params.categoryIds,
   });

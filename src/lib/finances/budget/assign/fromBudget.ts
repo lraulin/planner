@@ -5,11 +5,26 @@
  * Spec: `agent-os/specs/2026-08-24-1311-budget-assign-options/` Task 3.
  */
 
-import { categoryMonth, type BudgetMonth } from "../envelope";
+import {
+  categoryMonth,
+  shiftMonthKey,
+  type BudgetMonth,
+  type MonthKey,
+} from "../envelope";
 import type { BudgetRow } from "../rows";
 import type { BillSnapshot } from "../templates/schedule";
 import { templateCarryIn } from "../templates/apply";
-import type { AssignEnvelope, AssignHistoryMonth } from "./types";
+import {
+  ASSIGN_AVERAGE_MONTHS,
+  type AssignEnvelope,
+  type AssignHistoryMonth,
+} from "./types";
+
+export type ActivityPoint = {
+  month: MonthKey;
+  categoryId: string;
+  amountCents: number;
+};
 
 export function assignEnvelopeFromRow(
   row: BudgetRow,
@@ -59,6 +74,55 @@ export function assignHistoryFromMonths(
     }
     return { month: month.month, assigned, activity };
   });
+}
+
+/**
+ * Calendar months before the budget start, with Assigned at 0.
+ *
+ * Spent Last Month / Average Spent need this; Average Assigned does not invent
+ * Assigned that was never written.
+ */
+export function preStartAssignHistory(
+  startMonth: MonthKey,
+  categoryIds: readonly string[],
+  activity: readonly ActivityPoint[],
+  lookbackMonths: number = ASSIGN_AVERAGE_MONTHS,
+): AssignHistoryMonth[] {
+  const byMonth = new Map<string, Record<string, number>>();
+  for (const point of activity) {
+    if (point.month >= startMonth) continue;
+    const bucket = byMonth.get(point.month) ?? {};
+    bucket[point.categoryId] = (bucket[point.categoryId] ?? 0) + point.amountCents;
+    byMonth.set(point.month, bucket);
+  }
+
+  const months: AssignHistoryMonth[] = [];
+  for (let offset = lookbackMonths; offset >= 1; offset -= 1) {
+    const month = shiftMonthKey(startMonth, -offset);
+    const spent = byMonth.get(month) ?? {};
+    const assigned: Record<string, number> = {};
+    const activityCents: Record<string, number> = {};
+    for (const id of categoryIds) {
+      assigned[id] = 0;
+      activityCents[id] = spent[id] ?? 0;
+    }
+    months.push({ month, assigned, activity: activityCents });
+  }
+  return months;
+}
+
+export function assignHistoryWithLookback(
+  months: readonly BudgetMonth[],
+  categoryIds: readonly string[],
+  preStartActivity: readonly ActivityPoint[],
+  startMonth: MonthKey | null,
+): AssignHistoryMonth[] {
+  const folded = assignHistoryFromMonths(months, categoryIds);
+  if (!startMonth) return folded;
+  return [
+    ...preStartAssignHistory(startMonth, categoryIds, preStartActivity),
+    ...folded,
+  ];
 }
 
 export function assignBillsFromRows(

@@ -25,6 +25,7 @@ import { isUniqueViolation } from "@/lib/db/constraints";
 import { normalizeMerchant } from "../classify/merchant";
 import { mergeClaimDecision } from "./merge";
 import { rewriteMergedPayeeIds, storedConditionPayeeIds } from "./references";
+import { applyClaimedPayees } from "./claims";
 
 async function requirePayee(userId: string, payeeId: string) {
   const [row] = await db
@@ -382,6 +383,7 @@ export async function claimPayeeForCommitment(
     .update(financePayees)
     .set({ budgetCategoryId: claim?.id ?? null, updatedAt: new Date() })
     .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)));
+  if (claim) await applyClaimedPayees(userId, claim.id, [payeeId]);
 }
 
 /** Dismiss a Review proposal: this merchant is not a bill, and should not be proposed again. */
@@ -423,6 +425,7 @@ export async function replaceCommitmentPayees(
   await db.transaction((tx) =>
     replaceCommitmentPayeesInTransaction(tx, userId, claim, ids),
   );
+  await applyClaimedPayees(userId, claim.id, ids);
 }
 
 type PayeeTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];

@@ -29,6 +29,8 @@ import {
 import { parseTemplates, type Template } from "./templates/types";
 import { budgetEnvelopeLabel } from "./hierarchy";
 import type { BillSnapshot } from "./templates/schedule";
+import { ASSIGN_AVERAGE_MONTHS } from "./assign/types";
+import type { ActivityPoint } from "./assign/fromBudget";
 
 /**
  * Reads for the envelope budget. Every one takes `userId` and scopes on it.
@@ -90,6 +92,7 @@ export type BudgetEnvelopeOption = {
   label: string;
   /** Envelope's own name — what the register Category column stores. */
   name: string;
+  kind: EnvelopeKind;
 };
 
 /** Small schedule-editor read; labels include the complete group path for nested budgets. */
@@ -104,6 +107,7 @@ export async function listBudgetEnvelopeOptions(
     id: category.id,
     label: budgetEnvelopeLabel(groups, category),
     name: category.name,
+    kind: category.kind,
   }));
 }
 
@@ -149,6 +153,11 @@ export type BudgetData = {
   prospectiveOpeningCents: number;
   /** Append-only movement descriptions for the selected month, newest shown first. */
   movementNotes: string;
+  /**
+   * Categorised activity in the 12 months before `startMonth`. Assigned is not stored
+   * there; Average Spent / Spent Last Month still need the spend.
+   */
+  preStartActivity: ActivityPoint[];
 };
 
 function groupsOf(userId: string) {
@@ -353,6 +362,7 @@ export async function loadBudget(
     goals: {},
     prospectiveOpeningCents: 0,
     movementNotes: "",
+    preStartActivity: [],
   };
 
   const startMonth = settings.startMonth;
@@ -387,9 +397,11 @@ export async function loadBudget(
       })
       .from(financeBudgetMonths)
       .where(eq(financeBudgetMonths.userId, userId)),
-    activitySince(userId, startMonth),
+    activitySince(userId, shiftMonthKey(startMonth, -ASSIGN_AVERAGE_MONTHS)),
     backlogSince(userId, startMonth),
   ]);
+  const foldActivity = activity.filter((row) => row.month >= startMonth);
+  const preStartActivity = activity.filter((row) => row.month < startMonth);
 
   const months = buildBudget({
     categories: categories.map((category) => ({
@@ -403,7 +415,7 @@ export async function loadBudget(
       amountCents: row.amountCents,
       carryover: row.carryover,
     })),
-    activity,
+    activity: foldActivity,
     buffered: bufferedRows,
     startMonth,
     endMonth,
@@ -432,6 +444,7 @@ export async function loadBudget(
     goals,
     movementNotes: bufferedRows.find((row) => row.month === month)?.notes ?? "",
     ...backlog,
+    preStartActivity,
   };
 }
 

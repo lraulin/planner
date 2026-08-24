@@ -174,7 +174,10 @@ export async function listRules(userId: string): Promise<RuleRow[]> {
   return records.map((record) => ({
     ...record,
     names,
-    problem: record.enabled ? (problems.get(record.id) ?? null) : null,
+    problem: record.enabled
+      ? (problems.get(record.id) ??
+        (record.categoryReviewRequired ? "Category target is missing." : null))
+      : null,
     matchCount: matches.get(record.id) ?? 0,
   }));
 }

@@ -63,6 +63,9 @@ import {
   ruleDraftFromTransaction,
 } from "@/lib/finances/rules/fromTransaction";
 import { TrackAsBillDialog } from "./TrackAsBillDialog";
+import { NewEnvelopeDialog } from "./NewEnvelopeDialog";
+import type { EnvelopePickerOption } from "@/lib/finances/budget/groupEnvelopeOptions";
+import type { EnvelopeKind } from "@/db/schema";
 import {
   FINANCE_COLUMN_IDS,
   financeColumns,
@@ -187,7 +190,7 @@ export function FinancesView({
   initialAccounts: FinanceAccountRow[];
   initialClaimed: readonly ClaimedPayee[];
   /** Budget envelopes, in budget order. Empty until a budget exists. */
-  envelopes: readonly { id: string; label: string; name: string }[];
+  envelopes: readonly EnvelopePickerOption[];
   /** First date whose transactions contribute to the envelope budget. */
   budgetStartMonth: string | null;
   /** Unposted schedule occurrences. Not transactions; never mixed into `rows`. */
@@ -203,6 +206,11 @@ export function FinancesView({
   const [seenServerRows, setSeenServerRows] = useState(initialTransactions);
   const [seenClaimed, setSeenClaimed] = useState(initialClaimed);
   const [billRowId, setBillRowId] = useState<string | null>(null);
+  const [newEnvelope, setNewEnvelope] = useState<{
+    transactionId: string;
+    kind: Exclude<EnvelopeKind, "bill">;
+  } | null>(null);
+  const [createdEnvelopes, setCreatedEnvelopes] = useState<EnvelopePickerOption[]>([]);
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
   const [groupIds, setGroupIds] = useState<readonly string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -353,9 +361,16 @@ export function FinancesView({
     refresh();
   }, [closeFileImport, refresh]);
 
+  const envelopeCatalog = useMemo(() => {
+    const known = new Set(envelopes.map((envelope) => envelope.id));
+    return [
+      ...envelopes,
+      ...createdEnvelopes.filter((envelope) => !known.has(envelope.id)),
+    ];
+  }, [envelopes, createdEnvelopes]);
   const envelopeNameById = useMemo(
-    () => new Map(envelopes.map((envelope) => [envelope.id, envelope.name])),
-    [envelopes],
+    () => new Map(envelopeCatalog.map((envelope) => [envelope.id, envelope.name])),
+    [envelopeCatalog],
   );
 
   const patchRow = useCallback(
@@ -366,6 +381,8 @@ export function FinancesView({
     },
     [],
   );
+
+  const claimedByPayee = useMemo(() => claimedPayeeMap(claimed), [claimed]);
 
   const onSetEnvelope = useCallback(
     (transactionId: string, categoryId: string | null) => {
@@ -390,6 +407,23 @@ export function FinancesView({
     [envelopeNameById, patchRow, refresh],
   );
 
+  const onCreateEnvelope = useCallback(
+    (transactionId: string, kind: EnvelopeKind) => {
+      if (kind === "bill") {
+        const row = rows.find((entry) => entry.id === transactionId);
+        const refusal = trackAsBillRefusal(row, claimedByPayee);
+        if (refusal) {
+          setError(refusal);
+          return;
+        }
+        setBillRowId(transactionId);
+        return;
+      }
+      setNewEnvelope({ transactionId, kind });
+    },
+    [rows, claimedByPayee],
+  );
+
   const tagColors = useMemo(
     () => Object.fromEntries(tags.map((tag) => [tag.tag, tag.color])),
     [tags],
@@ -397,13 +431,21 @@ export function FinancesView({
 
   const columnCtx = useMemo(
     () => ({
-      envelopes,
+      envelopes: envelopeCatalog,
       budgetStartMonth,
       offBudgetAccountIds,
       tagColors,
       onSetEnvelope,
+      onCreateEnvelope,
     }),
-    [envelopes, budgetStartMonth, offBudgetAccountIds, tagColors, onSetEnvelope],
+    [
+      envelopeCatalog,
+      budgetStartMonth,
+      offBudgetAccountIds,
+      tagColors,
+      onSetEnvelope,
+      onCreateEnvelope,
+    ],
   );
 
   const openDrawer = useCallback((id: string) => setOpenId(id), [setOpenId]);
@@ -438,7 +480,6 @@ export function FinancesView({
     });
   }, [pendingDelete, openId, closeDrawer, refresh]);
 
-  const claimedByPayee = useMemo(() => claimedPayeeMap(claimed), [claimed]);
   const capabilitiesFor = useCallback(
     (rowId: string | null, count: number) => {
       const row = rowId ? rows.find((entry) => entry.id === rowId) : undefined;
@@ -634,18 +675,35 @@ export function FinancesView({
           onSaved={(entry) => {
             setClaimed((current) => [...current, entry]);
             setBillRowId(null);
+            refresh();
+          }}
+        />
+      )}
+      {newEnvelope && (
+        <NewEnvelopeDialog
+          kind={newEnvelope.kind}
+          onClose={() => setNewEnvelope(null)}
+          onCreated={(id, name) => {
+            const transactionId = newEnvelope.transactionId;
+            setCreatedEnvelopes((current) => [
+              ...current,
+              { id, label: name, name, kind: newEnvelope.kind },
+            ]);
+            setNewEnvelope(null);
+            onSetEnvelope(transactionId, id);
           }}
         />
       )}
       <TransactionDrawer
         transactionId={openId}
         row={openId ? (rows.find((row) => row.id === openId) ?? null) : null}
-        envelopes={envelopes}
+        envelopes={envelopeCatalog}
         budgetStartMonth={budgetStartMonth}
         offBudgetAccountIds={offBudgetAccountIds}
         managedTags={tags.map((tag) => tag.tag)}
         onClose={closeDrawer}
         onChanged={patchRow}
+        onCreateEnvelope={onCreateEnvelope}
       />
       {ruleSource ? (
         <RuleDrawer

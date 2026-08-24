@@ -148,17 +148,10 @@ describe("envelopeForRow", () => {
 });
 
 describe("envelopeAssignmentRefusal", () => {
-  it("refuses rows outside the budget without blocking the first budgeted day", () => {
+  it("refuses off-budget accounts and allows dates before the start month", () => {
     expect(
       envelopeAssignmentRefusal({
         transactionDate: "2026-07-31",
-        budgetStartMonth: "2026-08-01",
-        accountOffBudget: false,
-      }),
-    ).toBe("The envelope budget starts in August 2026.");
-    expect(
-      envelopeAssignmentRefusal({
-        transactionDate: "2026-08-01",
         budgetStartMonth: "2026-08-01",
         accountOffBudget: false,
       }),

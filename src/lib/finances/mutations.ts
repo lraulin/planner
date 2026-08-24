@@ -28,8 +28,9 @@ import { numericStringToCents } from "./money";
 import type { PaypalResolution } from "./paypalMatch";
 import { ensurePayees } from "./payees/backfill";
 import { replaceCommitmentPayeesInTransaction } from "./payees/mutations";
+import { applyClaimedPayees } from "./payees/claims";
 import { payeeIndex } from "./payees/resolve";
-import { applyRules } from "./rules/match";
+import { applyRules, ownedCategoryAction } from "./rules/match";
 import { normalizeMerchant } from "./classify/merchant";
 import { addTagToNotes } from "./tags";
 
@@ -536,7 +537,7 @@ export async function applyRuleActionsToTransactions(
   userId: string,
   options: { createdSince?: Date } = {},
 ): Promise<number> {
-  const [rows, storedRules] = await Promise.all([
+  const [rows, storedRules, ownedCategories] = await Promise.all([
     db
       .select({
         id: financeTransactions.id,
@@ -569,8 +570,14 @@ export async function applyRuleActionsToTransactions(
       })
       .from(financeRules)
       .where(eq(financeRules.userId, userId)),
+    db
+      .select({ id: financeBudgetCategories.id })
+      .from(financeBudgetCategories)
+      .where(eq(financeBudgetCategories.userId, userId)),
   ]);
   const { rules } = compileRules(storedRules);
+  const ownedIds = new Set(ownedCategories.map((row) => row.id));
+  const deadRuleIds = new Set<string>();
   let updated = 0;
   await db.transaction(async (tx) => {
     for (const row of rows) {
@@ -582,12 +589,18 @@ export async function applyRuleActionsToTransactions(
         amountCents: numericStringToCents(row.amount) ?? 0,
         transactionDate: row.transactionDate,
       });
+      const resolved = ownedCategoryAction(
+        outcome.category,
+        outcome.categoryRuleId,
+        ownedIds,
+      );
+      if (resolved.deadRuleId) deadRuleIds.add(resolved.deadRuleId);
       let notes = row.notes;
       for (const tag of outcome.tags) notes = addTagToNotes(notes, tag);
       const categoryId =
         outcome.flow === "internal_transfer" || row.derivedFlow === "internal_transfer"
           ? null
-          : (outcome.category ?? row.budgetCategoryId);
+          : (resolved.category ?? row.budgetCategoryId);
       if (notes === row.notes && categoryId === row.budgetCategoryId) continue;
       await tx
         .update(financeTransactions)
@@ -599,6 +612,17 @@ export async function applyRuleActionsToTransactions(
           ),
         );
       updated += 1;
+    }
+    if (deadRuleIds.size > 0) {
+      await tx
+        .update(financeRules)
+        .set({ categoryReviewRequired: true, updatedAt: new Date() })
+        .where(
+          and(
+            eq(financeRules.userId, userId),
+            inArray(financeRules.id, [...deadRuleIds]),
+          ),
+        );
     }
   });
   return updated;
@@ -701,6 +725,10 @@ export type BillEnvelopeEdit = {
  * operation naturally idempotent: declaring Geico semi-annual twice is one declaration, and
  * correcting it to yearly is the same call with a different number.
  *
+ * **This is the only Track-as-bill write.** Register, New bill…, Review, Insights, and
+ * the agent tool all call it. Claiming payees files those charges (including history) and
+ * upserts the exact-payee rule here, not in each caller.
+ *
  * The cadence is checked here as well as by the column's CHECK — a constraint violation
  * surfaces as a database error the user cannot act on, and the offered list is a closed set.
  */
@@ -730,6 +758,7 @@ export async function upsertBillEnvelope(
     throw new Error("A due day must be a whole number from 1 to 31.");
   }
 
+  let categoryId: string | undefined;
   await db.transaction(async (tx) => {
     const [existing] = await tx
       .select({ id: financeBudgetCategories.id })
@@ -742,8 +771,6 @@ export async function upsertBillEnvelope(
         ),
       )
       .limit(1);
-
-    let categoryId: string;
     if (existing) {
       categoryId = existing.id;
       // Only the fields supplied are written, the same rule `updateTransaction` follows. It
@@ -821,7 +848,7 @@ export async function upsertBillEnvelope(
       categoryId = created.id;
     }
 
-    if (edit.payeeIds !== undefined) {
+    if (categoryId && edit.payeeIds !== undefined) {
       await replaceCommitmentPayeesInTransaction(
         tx,
         userId,
@@ -830,6 +857,10 @@ export async function upsertBillEnvelope(
       );
     }
   });
+  if (categoryId === undefined) throw new Error("Could not create the bill envelope.");
+  if (edit.payeeIds !== undefined) {
+    await applyClaimedPayees(userId, categoryId, edit.payeeIds);
+  }
 }
 
 /**

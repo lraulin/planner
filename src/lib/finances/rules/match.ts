@@ -98,3 +98,17 @@ export function applyRules(
   outcome.tags = [...tags];
   return outcome;
 }
+
+/**
+ * Drop a Category action whose envelope no longer exists, so a leftover taxonomy UUID
+ * cannot fail the whole apply pass. The caller marks that rule for review.
+ */
+export function ownedCategoryAction(
+  category: string | null,
+  ruleId: string | null,
+  ownedIds: ReadonlySet<string>,
+): { category: string | null; deadRuleId: string | null } {
+  if (category === null) return { category: null, deadRuleId: null };
+  if (ownedIds.has(category)) return { category, deadRuleId: null };
+  return { category: null, deadRuleId: ruleId };
+}

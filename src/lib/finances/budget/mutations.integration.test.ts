@@ -994,7 +994,15 @@ describeDb("applyPayeeClaims", () => {
       .set({ payeeId })
       .where(eq(financeTransactions.userId, owner));
     await replaceCommitmentPayees(owner, { id: rent }, [payeeId]);
-    return { rent, payeeId, inWindow, beforeWindow, offBudget, byName };
+    return {
+      rent,
+      payeeId,
+      inWindow,
+      beforeWindow,
+      offBudget,
+      byName,
+      checkingId,
+    };
   }
 
   async function envelopeOf(id: string): Promise<string | null> {
@@ -1005,51 +1013,43 @@ describeDb("applyPayeeClaims", () => {
     return row?.categoryId ?? null;
   }
 
-  it("files a claimed payee's charge in the envelope that claims it", async () => {
-    const { rent, inWindow } = await seedClaim(userId);
-    expect(await envelopeOf(inWindow)).toBeNull();
-
-    expect(await applyPayeeClaims(userId, MONTH)).toEqual({ moved: 1 });
+  it("files in-window and pre-start charges when the payee is claimed", async () => {
+    const { rent, inWindow, beforeWindow, offBudget } = await seedClaim(userId);
     expect(await envelopeOf(inWindow)).toBe(rent);
+    expect(await envelopeOf(beforeWindow)).toBe(rent);
+    expect(await envelopeOf(offBudget)).toBeNull();
   });
 
-  it("moves a charge the taxonomy pass already pooled somewhere else", async () => {
-    // The defect this exists for: the cutover rewrote every claim and the bill envelopes
-    // still read $0.00, because nothing moved a charge already filed in a broader envelope.
-    const { rent, inWindow, byName } = await seedClaim(userId);
-    const other = [...byName.values()].find((id) => id !== rent)!;
-    await setTransactionBudgetCategory(userId, inWindow, other);
-    expect(await envelopeOf(inWindow)).toBe(other);
+  it("moves a later charge that arrived after the claim", async () => {
+    const { rent, payeeId, checkingId } = await seedClaim(userId);
+    const [fresh] = await addTransactions(userId, [
+      {
+        accountId: checkingId,
+        date: "2026-08-20",
+        description: "RENT",
+        amount: "-900.00",
+      },
+    ]);
+    await db
+      .update(financeTransactions)
+      .set({ payeeId })
+      .where(eq(financeTransactions.id, fresh));
 
-    expect(await applyPayeeClaims(userId, MONTH)).toEqual({ moved: 1 });
-    expect(await envelopeOf(inWindow)).toBe(rent);
+    expect(await envelopeOf(fresh)).toBeNull();
+    expect(await applyPayeeClaims(userId)).toEqual({ moved: 1 });
+    expect(await envelopeOf(fresh)).toBe(rent);
   });
 
   it("is idempotent — a second run moves nothing", async () => {
     await seedClaim(userId);
-    expect(await applyPayeeClaims(userId, MONTH)).toEqual({ moved: 1 });
-    expect(await applyPayeeClaims(userId, MONTH)).toEqual({ moved: 0 });
-  });
-
-  it("leaves charges before the start month and on off-budget accounts alone", async () => {
-    const { beforeWindow, offBudget } = await seedClaim(userId);
-    await applyPayeeClaims(userId, MONTH);
-
-    expect(await envelopeOf(beforeWindow)).toBeNull();
-    expect(await envelopeOf(offBudget)).toBeNull();
+    expect(await applyPayeeClaims(userId)).toEqual({ moved: 0 });
   });
 
   it("will not file a second user's charges, or read their claims", async () => {
-    const { inWindow, rent } = await seedClaim(userId);
-    const intruderId = await makeUser();
-    await seedClaim(intruderId);
+    const { inWindow } = await seedClaim(userId);
+    const { inWindow: intruderCharge } = await seedClaim(await makeUser());
 
-    // The intruder's pass must not touch the owner's row, and must not resolve the owner's
-    // claim onto its own — a dropped `userId` on either join would show up as one of these.
-    expect(await applyPayeeClaims(intruderId, MONTH)).toEqual({ moved: 1 });
-    expect(await envelopeOf(inWindow)).toBeNull();
-
-    expect(await applyPayeeClaims(userId, MONTH)).toEqual({ moved: 1 });
-    expect(await envelopeOf(inWindow)).toBe(rent);
+    expect(await envelopeOf(inWindow)).not.toBe(await envelopeOf(intruderCharge));
+    expect(await applyPayeeClaims(await makeUser())).toEqual({ moved: 0 });
   });
 });

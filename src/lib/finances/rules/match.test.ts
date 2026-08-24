@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { compileRules, type StoredRule } from "./compile";
 import type { RuleRowInput } from "./conditions";
-import { applyRules, matchRules } from "./match";
+import { applyRules, matchRules, ownedCategoryAction } from "./match";
 
 const ROW: RuleRowInput = {
   merchant: "METLIFE PET INSURANCE",
@@ -185,6 +185,24 @@ describe("applyRules", () => {
       flow: "spend",
       ruleIds: ["specific", "general"],
       categoryRuleId: "general",
+    });
+  });
+});
+
+describe("ownedCategoryAction", () => {
+  it("keeps a Category that still exists and drops one that does not", () => {
+    const owned = new Set([PETS]);
+    expect(ownedCategoryAction(PETS, "specific", owned)).toEqual({
+      category: PETS,
+      deadRuleId: null,
+    });
+    expect(ownedCategoryAction(INSURANCE_ID, "general", owned)).toEqual({
+      category: null,
+      deadRuleId: "general",
+    });
+    expect(ownedCategoryAction(null, null, owned)).toEqual({
+      category: null,
+      deadRuleId: null,
     });
   });
 });
