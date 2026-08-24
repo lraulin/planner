@@ -4,7 +4,10 @@ import { useId, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ModalShell } from "@/components/detail/ModalShell";
 import { useToday } from "@/components/grid/useToday";
-import { setRecurringBillAction } from "@/app/finances/actions";
+import {
+  isolatePayeeForBillAction,
+  setRecurringBillAction,
+} from "@/app/finances/actions";
 import { nextDueFrom, type Cadence } from "@/lib/finances/recurringBills";
 import {
   trackAsBillDraft,
@@ -87,9 +90,19 @@ function TrackAsBillForm({
           if (name.trim() === "") return;
           setError(null);
           startTransition(async () => {
+            const isolated = await isolatePayeeForBillAction(seed.transactionId);
+            if (!isolated.ok || !isolated.id) {
+              setError(
+                isolated.ok
+                  ? "Could not assign a payee for this merchant."
+                  : isolated.error,
+              );
+              return;
+            }
+            const payeeId = isolated.id;
             const result = await setRecurringBillAction({
               name: name.trim(),
-              payeeIds: [seed.payeeId],
+              payeeIds: [payeeId],
               cadence,
               expectedCents: cents > 0 ? cents : null,
               anchorDate: scheduled ? next || null : null,
@@ -100,7 +113,7 @@ function TrackAsBillForm({
               return;
             }
             onSaved({
-              payeeId: seed.payeeId,
+              payeeId,
               merchant: seed.merchant,
               name: name.trim(),
             });

@@ -14,6 +14,8 @@ import {
   addAlias,
   claimPayeeForCommitment,
   createPayee,
+  ensurePayeeForTransaction,
+  isolatePayeeForBill,
   deletePayee,
   mergePayees,
   removeAlias,
@@ -108,6 +110,76 @@ describeDb("payee mutations", () => {
   beforeEach(async () => {
     userId = await makeUser();
     accountId = await makeAccount(userId);
+  });
+
+  it("mints a payee from a transaction that has none yet", async () => {
+    const txId = await addTransaction(userId, accountId, {
+      description: "CVSExtraCare 8007467287RI",
+      amount: "-5.00",
+    });
+    const payeeId = await ensurePayeeForTransaction(userId, txId);
+    const [row] = await db
+      .select({ payeeId: financeTransactions.payeeId })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.id, txId));
+    expect(row?.payeeId).toBe(payeeId);
+    expect(await getPayee(userId, payeeId)).toMatchObject({
+      name: "Cvsextracare",
+    });
+  });
+
+  it("attaches to the payee that already owns this merchant alias", async () => {
+    const existing = await createPayee(userId, {
+      name: "CVS ExtraCare",
+      aliases: ["CVSEXTRACARE"],
+    });
+    const txId = await addTransaction(userId, accountId, {
+      description: "CVSExtraCare 8007467287RI",
+      amount: "-5.00",
+    });
+    expect(await ensurePayeeForTransaction(userId, txId)).toBe(existing);
+  });
+
+  it("splits ExtraCare off a shared CVS payee so a bill cannot claim pharmacy charges", async () => {
+    const cvs = await createPayee(userId, {
+      name: "CVS",
+      aliases: ["CVS", "CVS/PHARMACY", "CVSEXTRACARE"],
+    });
+    const extra = await addTransaction(userId, accountId, {
+      description: "CVSExtraCare 8007467287RI",
+      amount: "-5.00",
+      payeeId: cvs,
+    });
+    const shop = await addTransaction(userId, accountId, {
+      description: "CVS/PHARMACY #01522",
+      amount: "-22.84",
+      payeeId: cvs,
+    });
+
+    const dedicated = await isolatePayeeForBill(userId, extra);
+    expect(dedicated).not.toBe(cvs);
+
+    const [extraRow] = await db
+      .select({ payeeId: financeTransactions.payeeId })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.id, extra));
+    const [shopRow] = await db
+      .select({ payeeId: financeTransactions.payeeId })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.id, shop));
+    expect(extraRow?.payeeId).toBe(dedicated);
+    expect(shopRow?.payeeId).toBe(cvs);
+  });
+
+  it("will not mint a payee for another user's transaction", async () => {
+    const txId = await addTransaction(userId, accountId, {
+      description: "GEICO",
+      amount: "-50.00",
+    });
+    const intruder = await makeUser();
+    await expect(ensurePayeeForTransaction(intruder, txId)).rejects.toThrow(
+      /does not exist/,
+    );
   });
 
   it("resolves a transaction through the alias the payee claims", async () => {

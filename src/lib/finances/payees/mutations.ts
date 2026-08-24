@@ -12,7 +12,7 @@
  * written here would only hold for callers that remembered to come through here.
  */
 
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeBudgetCategories,
@@ -23,6 +23,8 @@ import {
 } from "@/db/schema";
 import { isUniqueViolation } from "@/lib/db/constraints";
 import { normalizeMerchant } from "../classify/merchant";
+import { suggestCommitmentName } from "../commitments";
+import { aliasFor } from "./resolve";
 import { mergeClaimDecision } from "./merge";
 import { rewriteMergedPayeeIds, storedConditionPayeeIds } from "./references";
 import { applyClaimedPayees } from "./claims";
@@ -98,6 +100,167 @@ export async function createPayee(
 
     return payeeId;
   });
+}
+
+/**
+ * Point this transaction at a payee, minting one from the merchant if needed.
+ *
+ * Track as bill / New bill… used to refuse "Reclassify first" when `payee_id` was
+ * null even though the Payee column already showed the merchant. Creating a bill
+ * from a row is the thing that should attach the payee, not a prior full-ledger pass.
+ */
+export async function ensurePayeeForTransaction(
+  userId: string,
+  transactionId: string,
+): Promise<string> {
+  const [row] = await db
+    .select({
+      id: financeTransactions.id,
+      description: financeTransactions.description,
+      payeeId: financeTransactions.payeeId,
+    })
+    .from(financeTransactions)
+    .where(
+      and(
+        eq(financeTransactions.id, transactionId),
+        eq(financeTransactions.userId, userId),
+      ),
+    )
+    .limit(1);
+  if (!row) throw new Error("That transaction does not exist.");
+  if (row.payeeId) return row.payeeId;
+
+  const alias = aliasFor(row.description);
+  if (alias === "") throw new Error("This row has no merchant to match.");
+
+  const [existingAlias] = await db
+    .select({ payeeId: financePayeeAliases.payeeId })
+    .from(financePayeeAliases)
+    .where(
+      and(eq(financePayeeAliases.userId, userId), eq(financePayeeAliases.alias, alias)),
+    )
+    .limit(1);
+
+  let payeeId = existingAlias?.payeeId ?? null;
+  if (payeeId === null) {
+    const name = suggestCommitmentName(alias);
+    const [named] = await db
+      .select({ id: financePayees.id })
+      .from(financePayees)
+      .where(
+        and(
+          eq(financePayees.userId, userId),
+          sql`lower(${financePayees.name}) = ${name.toLowerCase()}`,
+        ),
+      )
+      .limit(1);
+    if (named) {
+      payeeId = named.id;
+      try {
+        await db.insert(financePayeeAliases).values({ userId, payeeId, alias });
+      } catch (error) {
+        if (!isUniqueViolation(error)) throw error;
+      }
+    } else {
+      payeeId = await createPayee(userId, { name, aliases: [alias] });
+    }
+  }
+
+  await db
+    .update(financeTransactions)
+    .set({ payeeId, updatedAt: new Date() })
+    .where(
+      and(
+        eq(financeTransactions.id, transactionId),
+        eq(financeTransactions.userId, userId),
+      ),
+    );
+  return payeeId;
+}
+
+/**
+ * The payee that should own a bill declared from this row: this merchant only.
+ *
+ * Seeded `/^CVS/` named ExtraCare's payee "CVS" and put pharmacy charges on the same
+ * identity. Tracking ExtraCare as a bill must not claim 200 grocery runs. If this
+ * alias shares a payee with others, it is split onto its own payee first.
+ */
+export async function isolatePayeeForBill(
+  userId: string,
+  transactionId: string,
+): Promise<string> {
+  const payeeId = await ensurePayeeForTransaction(userId, transactionId);
+  const [row] = await db
+    .select({ description: financeTransactions.description })
+    .from(financeTransactions)
+    .where(
+      and(
+        eq(financeTransactions.id, transactionId),
+        eq(financeTransactions.userId, userId),
+      ),
+    )
+    .limit(1);
+  if (!row) throw new Error("That transaction does not exist.");
+  const alias = aliasFor(row.description);
+  if (alias === "") return payeeId;
+
+  const aliases = await db
+    .select({ alias: financePayeeAliases.alias })
+    .from(financePayeeAliases)
+    .where(
+      and(
+        eq(financePayeeAliases.userId, userId),
+        eq(financePayeeAliases.payeeId, payeeId),
+      ),
+    );
+  if (aliases.length <= 1) return payeeId;
+
+  const name = suggestCommitmentName(alias);
+  const dedicated = await createPayee(userId, { name, aliases: [] });
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(financePayeeAliases)
+      .where(
+        and(
+          eq(financePayeeAliases.userId, userId),
+          eq(financePayeeAliases.payeeId, payeeId),
+          eq(financePayeeAliases.alias, alias),
+        ),
+      );
+    await tx.insert(financePayeeAliases).values({
+      userId,
+      payeeId: dedicated,
+      alias,
+    });
+  });
+
+  const siblings = await db
+    .select({
+      id: financeTransactions.id,
+      description: financeTransactions.description,
+    })
+    .from(financeTransactions)
+    .where(
+      and(
+        eq(financeTransactions.userId, userId),
+        eq(financeTransactions.payeeId, payeeId),
+      ),
+    );
+  const moving = siblings
+    .filter((entry) => aliasFor(entry.description) === alias)
+    .map((entry) => entry.id);
+  if (moving.length > 0) {
+    await db
+      .update(financeTransactions)
+      .set({ payeeId: dedicated, updatedAt: new Date() })
+      .where(
+        and(
+          eq(financeTransactions.userId, userId),
+          inArray(financeTransactions.id, moving),
+        ),
+      );
+  }
+  return dedicated;
 }
 
 /**

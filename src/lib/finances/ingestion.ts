@@ -37,9 +37,9 @@ export async function finalizeTransactionIngestion(
     await applyRuleActionsToTransactions(userId, {
       createdSince: options.applyRulesSince,
     });
+    // Only the rows this ingest created. Scanning the whole ledger here locked the
+    // Register after every sync (`page not responding`).
+    await applyPayeeClaims(userId, { createdSince: options.applyRulesSince });
   }
-  // Claims beat a broad merchant rule. Track as bill already filed its payee; this
-  // catches charges that arrived after the claim (import / sync).
-  await applyPayeeClaims(userId);
   return { reclassified };
 }

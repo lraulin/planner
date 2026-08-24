@@ -675,7 +675,6 @@ export function FinancesView({
           onSaved={(entry) => {
             setClaimed((current) => [...current, entry]);
             setBillRowId(null);
-            refresh();
           }}
         />
       )}

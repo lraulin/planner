@@ -117,13 +117,22 @@ describe("trackAsBillRefusal", () => {
     ).toBeNull();
   });
 
-  it("requires reclassification before an unassigned row can be claimed", () => {
+  it("allows spend with no payee when the merchant is present", () => {
     expect(
       trackAsBillRefusal(
         row("p", "2026-08-21", { description: "GEICO", payeeId: null }),
         EMPTY,
       ),
-    ).toBe("Reclassify transactions to assign a payee first");
+    ).toBeNull();
+  });
+
+  it("refuses a row whose description has no merchant", () => {
+    expect(
+      trackAsBillRefusal(
+        row("p", "2026-08-21", { description: "", payeeId: null }),
+        EMPTY,
+      ),
+    ).toBe("This row has no merchant to match");
   });
 
   it("names the bill that already claims this merchant", () => {
@@ -159,6 +168,27 @@ describe("trackAsBillDraft", () => {
     });
     // Last charged Oct 24; monthly walks to the first date still ahead of today.
     expect(draft.nextDueKey).toBe("2026-08-24");
+  });
+
+  it("groups same-merchant spend when the row has no payee yet", () => {
+    const rows = [
+      row("a", "2025-03-04", {
+        description: "CVSExtraCare 8007467287RI",
+        amountCents: -500,
+        payeeId: null,
+        payeeName: null,
+      }),
+      row("b", "2025-04-04", {
+        description: "CVSExtraCare 8007467287RI",
+        amountCents: -500,
+        payeeId: null,
+        payeeName: null,
+      }),
+    ];
+    const draft = trackAsBillDraft(rows, "b", "2026-08-21");
+    expect(draft.payeeId).toBeNull();
+    expect(draft.chargeCount).toBe(2);
+    expect(draft.expectedCents).toBe(500);
   });
 
   it("detects a semi-annual Geico from two charges six months apart", () => {

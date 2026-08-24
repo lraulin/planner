@@ -60,9 +60,12 @@ New income / envelope / savings: name, then `createBudgetCategory` + `setTransac
 
 ## Changes from original plan
 
-| #   | Change                                                                                                    | Why                                                                        |
-| --- | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| 1   | D3 is the single write path: `applyClaimedPayees` after every claim, not a Track-as-bill-only side effect | Review comment: DRY — Track as bill by any name must execute the same code |
+| #   | Change                                                                                                    | Why                                                                                                                                                           |
+| --- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | D3 is the single write path: `applyClaimedPayees` after every claim, not a Track-as-bill-only side effect | Review comment: DRY — Track as bill by any name must execute the same code                                                                                    |
+| 2   | Track as bill / New bill… mint a payee from the merchant on confirm when `payee_id` is null               | The Payee column already shows the merchant; refusing "Reclassify first" blocked the flow. A full-ledger reclassify plus unbounded claims froze the Register. |
+| 3   | Ingest `applyPayeeClaims` is bounded to rows created in that ingest                                       | Unbounded scan on every import/sync was a second way to lock the page                                                                                         |
+| 4   | Track as bill isolates this merchant onto its own payee when the current payee also owns other aliases    | Seeded `/^CVS/` had named ExtraCare's payee "CVS", so a bill would have claimed 211 pharmacy charges                                                          |
 
 ## Task 1: Save spec documentation
 

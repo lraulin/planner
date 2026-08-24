@@ -7,6 +7,7 @@ import {
   mergePayees,
   replaceCommitmentPayees,
   removeAlias,
+  isolatePayeeForBill,
   setPayeeNotACommitment,
   setPayeeNotes,
   updatePayeeDetails,
@@ -192,6 +193,14 @@ export async function setRecurringBillAction(
   edit: BillEnvelopeEdit,
 ): Promise<ActionResult> {
   return run((userId) => upsertBillEnvelope(userId, edit));
+}
+
+export async function isolatePayeeForBillAction(
+  transactionId: string,
+): Promise<ActionResult> {
+  return run((userId) => isolatePayeeForBill(userId, transactionId), {
+    revalidate: [],
+  });
 }
 
 export async function setCommitmentPayeesAction(input: {

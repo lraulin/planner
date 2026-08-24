@@ -36,7 +36,11 @@ export function isExactPayeeRule(conditions: unknown, payeeId: string): boolean 
  */
 export async function applyPayeeClaims(
   userId: string,
-  options: { since?: MonthKey; payeeIds?: readonly string[] } = {},
+  options: {
+    since?: MonthKey;
+    createdSince?: Date;
+    payeeIds?: readonly string[];
+  } = {},
 ): Promise<{ moved: number }> {
   const rows = await db
     .select({
@@ -56,6 +60,9 @@ export async function applyPayeeClaims(
         sql`${financeTransactions.budgetCategoryId} is distinct from ${financePayees.budgetCategoryId}`,
         ...(options.since
           ? [gte(financeTransactions.transactionDate, options.since)]
+          : []),
+        ...(options.createdSince
+          ? [gte(financeTransactions.createdAt, options.createdSince)]
           : []),
         ...(options.payeeIds && options.payeeIds.length > 0
           ? [inArray(financePayees.id, [...options.payeeIds])]

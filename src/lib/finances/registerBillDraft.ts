@@ -11,6 +11,7 @@
 
 import { daysBetweenKeys } from "@/lib/schedule/geometry";
 import { effectiveFlow, effectiveMerchant, spendCentsOf } from "./analytics";
+import { normalizeMerchant } from "./classify/merchant";
 import {
   payeeClaimIndex,
   suggestCommitmentName,
@@ -32,7 +33,9 @@ export type ClaimedPayee = {
 };
 
 export type TrackAsBillDraft = {
-  payeeId: string;
+  /** Null when this row has a merchant but no payee yet — minted on confirm. */
+  payeeId: string | null;
+  transactionId: string;
   merchant: string;
   name: string;
   cadence: Cadence;
@@ -72,8 +75,10 @@ export function trackAsBillRefusal(
   if (row === undefined) return "Select a transaction";
   const flow = effectiveFlow(row);
   if (flow !== "spend") return `${flowLabel(flow)} cannot be a bill`;
-  if (row.payeeId === null) return "Reclassify transactions to assign a payee first";
-  const holder = claimed.get(row.payeeId);
+  if (row.payeeId === null && normalizeMerchant(row.description) === "") {
+    return "This row has no merchant to match";
+  }
+  const holder = row.payeeId === null ? undefined : claimed.get(row.payeeId);
   if (holder === undefined) return null;
   return `Already tracked as ${holder.name}`;
 }
@@ -95,12 +100,16 @@ export function trackAsBillDraft(
   if (selected === undefined) {
     throw new Error("Select a transaction");
   }
-  if (selected.payeeId === null) {
-    throw new Error("Reclassify transactions to assign a payee first");
-  }
   const merchant = effectiveMerchant(selected);
+  if (selected.payeeId === null && merchant === "") {
+    throw new Error("This row has no merchant to match");
+  }
   const charges = rows
-    .filter((row) => row.payeeId === selected.payeeId && effectiveFlow(row) === "spend")
+    .filter((row) => {
+      if (effectiveFlow(row) !== "spend") return false;
+      if (selected.payeeId !== null) return row.payeeId === selected.payeeId;
+      return effectiveMerchant(row) === merchant;
+    })
     .sort((left, right) => left.transactionDate.localeCompare(right.transactionDate));
   const dates = charges.map((row) => row.transactionDate);
   const typicalGap = medianGapDays(dates);
@@ -115,6 +124,7 @@ export function trackAsBillDraft(
   const lastChargeOn = dates[dates.length - 1] ?? selected.transactionDate;
   return {
     payeeId: selected.payeeId,
+    transactionId: selected.id,
     merchant,
     name: suggestCommitmentName(merchant),
     cadence,
