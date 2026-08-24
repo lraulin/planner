@@ -788,21 +788,33 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
    * fresh closure per row per render, so a click that should repaint one row repainted
    * every row. The Register is ~7,000 rows — that was a multi-second hitch.
    *
-   * selectedIds is read from a ref so opening the row menu does not rebuild the handler
-   * (and therefore every row) on each selection change.
+   * Host callbacks also churn. Opening the Register drawer writes `?detail=`, which
+   * rebuilds `onOpenDetail` even though the function still does the same thing. Each
+   * visible row owns a native envelope `<select>` of every category, so that identity
+   * change froze the main thread and held the drawer open until the rows committed.
+   * Read the latest from refs, same as the export snapshot above.
    */
   const selectedIdsRef = useRef(selectedIds);
+  const onSelectRef = useRef(onSelect);
+  const onOpenDetailRef = useRef(onOpenDetail);
   useEffect(() => {
     selectedIdsRef.current = selectedIds;
+    onSelectRef.current = onSelect;
+    onOpenDetailRef.current = onOpenDetail;
   });
 
-  const openRowMenu = useCallback(
-    (id: string, x: number, y: number) => {
-      if (!selectedIdsRef.current?.has(id)) onSelect(id);
-      setMenu({ rowId: id, x, y });
-    },
-    [onSelect],
-  );
+  const selectRow = useCallback((id: string, mods?: GridSelectMods) => {
+    onSelectRef.current(id, mods);
+  }, []);
+
+  const openDetail = useCallback((id: string) => {
+    onOpenDetailRef.current?.(id);
+  }, []);
+
+  const openRowMenu = useCallback((id: string, x: number, y: number) => {
+    if (!selectedIdsRef.current?.has(id)) onSelectRef.current(id);
+    setMenu({ rowId: id, x, y });
+  }, []);
 
   const displayNodeIds = useMemo(
     () =>
@@ -1034,8 +1046,8 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
                       columnCtx={columnCtx}
                       fields={compactFields}
                       selected={isSelected}
-                      onSelect={onSelect}
-                      onOpenDetail={onOpenDetail}
+                      onSelect={selectRow}
+                      onOpenDetail={onOpenDetail ? openDetail : undefined}
                       onLongPress={rowMenu ? openRowMenu : undefined}
                       swipe={rowSwipe?.(row.id)}
                       label={rowLabelFor(row, rowLabel)}
@@ -1052,8 +1064,8 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
                       selected={isSelected}
                       focused={isFocus}
                       rowNumber={rowNumbers ? number : null}
-                      onSelect={onSelect}
-                      onOpenDetail={onOpenDetail}
+                      onSelect={selectRow}
+                      onOpenDetail={onOpenDetail ? openDetail : undefined}
                       drag={dragBindingFor(
                         row.id,
                         displayNodeIds,

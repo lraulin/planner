@@ -72,7 +72,7 @@ import {
   finalizeTransactionIngestion,
   transactionIngestionWatermark,
 } from "@/lib/finances/ingestion";
-import { getTransaction, listAccounts, listTransactions } from "@/lib/finances/queries";
+import { listAccounts, listTransactions } from "@/lib/finances/queries";
 import { loadUpcomingBills } from "@/lib/finances/dashboardQueries";
 import type { UpcomingBillRow } from "@/lib/finances/commitments";
 import type {
@@ -112,7 +112,11 @@ export async function updateTransactionAction(
   transactionId: string,
   edit: TransactionEdit,
 ): Promise<ActionResult> {
-  return run((userId) => updateTransaction(userId, transactionId, edit));
+  // The Register already holds the row and patches it. A layout revalidate here
+  // reloads every transaction and freezes the drawer that just saved.
+  return run((userId) => updateTransaction(userId, transactionId, edit), {
+    revalidate: [],
+  });
 }
 
 export async function deleteTransactionAction(
@@ -237,12 +241,6 @@ export async function clearScrapedPendingAction(
   return runWithData((userId) => clearScrapedPending(userId, todayKey));
 }
 
-export async function getTransactionAction(
-  transactionId: string,
-): Promise<QueryResult<TransactionListRow | null>> {
-  return runQuery((userId) => getTransaction(userId, transactionId));
-}
-
 export async function upcomingBillsAction(
   todayKey: string,
   horizonDays: number,
@@ -356,8 +354,9 @@ export async function setTransactionBudgetCategoryAction(
   transactionId: string,
   categoryId: string | null,
 ): Promise<ActionResult> {
-  return run<string | void>((userId) =>
-    setTransactionBudgetCategory(userId, transactionId, categoryId),
+  return run<string | void>(
+    (userId) => setTransactionBudgetCategory(userId, transactionId, categoryId),
+    { revalidate: [] },
   );
 }
 

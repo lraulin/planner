@@ -53,6 +53,7 @@ import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import { isTypingTarget } from "@/lib/keyboard";
+import { useSearchParams } from "next/navigation";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { FinanceImportPanel } from "./FinanceImportPanel";
 import { TransactionDrawer } from "./TransactionDrawer";
@@ -168,8 +169,8 @@ function AccountBalances({ accounts }: { accounts: FinanceAccountRow[] }) {
  * Every transaction the user has is loaded and the shared grid does the narrowing — its
  * date filter, its account set-filter and its search, all of which persist per user through
  * the `grid:finances` scope. Prior years start collapsed so the DOM is the current year,
- * not six years of history; search still sees every row. Reloading the full list on
- * drawer-close is a freeze (see `closeDrawer`); envelope edits patch the row instead.
+ * not six years of history; search still sees every row. Drawer open/close and envelope
+ * edits patch the in-memory row; reloading the list on those paths is a freeze.
  */
 export function FinancesView({
   initialTransactions,
@@ -180,7 +181,6 @@ export function FinancesView({
   initialUpcoming = [],
   payees,
   tags,
-  initialTag = null,
   todayKey,
 }: {
   initialTransactions: TransactionListRow[];
@@ -194,7 +194,6 @@ export function FinancesView({
   initialUpcoming?: UpcomingBillRow[];
   payees: readonly { id: string; name: string }[];
   tags: readonly { tag: string; color: string | null }[];
-  initialTag?: string | null;
   /** Calendar today, so year-collapse defaults are available on the first paint. */
   todayKey: string;
 }) {
@@ -223,6 +222,10 @@ export function FinancesView({
   const [, startTransition] = useTransition();
   const isClient = useIsClient();
   const { detail: openId, setDetail: setOpenId } = useViewStateUrl();
+  // Tag deep-links live on the client so the Register page does not subscribe to
+  // searchParams — that subscription reloaded every transaction whenever the
+  // drawer wrote `?detail=`.
+  const initialTag = useSearchParams().get("tag");
 
   if (initialTransactions !== seenServerRows || initialClaimed !== seenClaimed) {
     setSeenServerRows(initialTransactions);
@@ -240,12 +243,16 @@ export function FinancesView({
       ),
     [initialTransactions, todayKey],
   );
+  const defaultsFor = useCallback(
+    (viewId: string) => viewDefaults(viewId, initialTag, collapsedYears),
+    [initialTag, collapsedYears],
+  );
   const views = useModuleViews({
     moduleId: "finances",
     builtIn: FINANCE_VIEWS,
     defaultViewId: "all",
     columns: financeColumns,
-    defaultsFor: (viewId) => viewDefaults(viewId, initialTag, collapsedYears),
+    defaultsFor,
   });
   const gridState = views.grid;
   useEffect(() => {
@@ -351,22 +358,24 @@ export function FinancesView({
     [envelopes],
   );
 
+  const patchRow = useCallback(
+    (transactionId: string, patch: Partial<TransactionListRow>) => {
+      setRows((current) =>
+        current.map((row) => (row.id === transactionId ? { ...row, ...patch } : row)),
+      );
+    },
+    [],
+  );
+
   const onSetEnvelope = useCallback(
     (transactionId: string, categoryId: string | null) => {
       setError(null);
-      setRows((current) =>
-        current.map((row) =>
-          row.id === transactionId
-            ? {
-                ...row,
-                budgetCategoryId: categoryId,
-                budgetCategoryName: categoryId
-                  ? (envelopeNameById.get(categoryId) ?? null)
-                  : null,
-              }
-            : row,
-        ),
-      );
+      patchRow(transactionId, {
+        budgetCategoryId: categoryId,
+        budgetCategoryName: categoryId
+          ? (envelopeNameById.get(categoryId) ?? null)
+          : null,
+      });
       startTransition(async () => {
         const result = await setTransactionBudgetCategoryAction(
           transactionId,
@@ -378,7 +387,7 @@ export function FinancesView({
         }
       });
     },
-    [envelopeNameById, refresh],
+    [envelopeNameById, patchRow, refresh],
   );
 
   const tagColors = useMemo(
@@ -630,12 +639,13 @@ export function FinancesView({
       )}
       <TransactionDrawer
         transactionId={openId}
+        row={openId ? (rows.find((row) => row.id === openId) ?? null) : null}
         envelopes={envelopes}
         budgetStartMonth={budgetStartMonth}
         offBudgetAccountIds={offBudgetAccountIds}
         managedTags={tags.map((tag) => tag.tag)}
         onClose={closeDrawer}
-        onChanged={refresh}
+        onChanged={patchRow}
       />
       {ruleSource ? (
         <RuleDrawer

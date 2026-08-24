@@ -16,14 +16,16 @@ import { parseBudget } from "@/lib/settings/finances";
 
 export const dynamic = "force-dynamic";
 
-/** The Register page: every transaction, grouped and filterable. */
-export default async function FinancesRegisterPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ tag?: string }>;
-}) {
+/**
+ * The Register page: every transaction, grouped and filterable.
+ *
+ * Deliberately does not read `searchParams`. Awaiting them subscribes this server
+ * component to every query-string write, including `?detail=` for the item drawer.
+ * Opening or closing that drawer then reloaded every transaction and left the
+ * drawer stuck until the payload arrived. The tag deep-link is read on the client.
+ */
+export default async function FinancesRegisterPage() {
   const userId = await getCurrentUserId();
-  const { tag } = await searchParams;
   const todayKey = toDateKey(new Date());
   const [
     transactions,
@@ -57,7 +59,6 @@ export default async function FinancesRegisterPage({
           initialUpcoming={upcoming}
           payees={payees.map(({ id, name }) => ({ id, name }))}
           tags={tags.map(({ tag, color }) => ({ tag, color }))}
-          initialTag={tag ?? null}
           todayKey={todayKey}
         />
       </Suspense>
