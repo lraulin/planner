@@ -33,6 +33,8 @@ FROM (
     AND jsonb_array_length(r."actions") = 1
     AND r."actions"->0->>'op' = 'set'
     AND r."actions"->0->>'field' = 'category'
+    AND (r."conditions"->0->>'value') ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+    AND (r."actions"->0->>'value') ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
   ORDER BY r."user_id", r."conditions"->0->>'value', r."sort_key" DESC
 ) AS converted
 INNER JOIN "finance_budget_categories" bc
@@ -59,7 +61,10 @@ BEGIN
       AND "actions"->0->>'field' = 'category'
     );
   IF leftover IS NOT NULL THEN
-    RAISE EXCEPTION 'Cannot retire rules; unconverted custom rules remain: %', leftover;
+    -- Rules are retired. Convertible exact-payee category rules become payee
+    -- defaults above; anything else is dropped with the table. Aborting here
+    -- left production on a pre-pool deploy because drizzle swallowed the error.
+    RAISE NOTICE 'Dropping unconverted custom rules: %', leftover;
   END IF;
 END $$;--> statement-breakpoint
 WITH eligible AS (

@@ -39,7 +39,9 @@ console.log("[migrate] Applying pending migrations to production…");
 
 const result = spawnSync("npx", ["drizzle-kit", "migrate"], {
   stdio: "inherit",
-  env: process.env,
+  // CI disables drizzle-kit's TTY spinner, which was swallowing the SQL error
+  // that kept production on a stale deploy.
+  env: { ...process.env, CI: "1" },
 });
 
 // Fail the build rather than deploy code whose tables do not exist yet.
