@@ -181,7 +181,15 @@ export function WishesGrid({
   );
   const { order, onIdsChange } = useNavigableIds(rowIds);
   const multi = useMultiSelect(order, null);
-  const { selectedId, selectedIds, select, move } = multi;
+  const {
+    selectedId,
+    selectedIds,
+    select,
+    selectAll,
+    toggleSelectAll,
+    headerState,
+    move,
+  } = multi;
 
   const patchRow = useCallback((id: string, changes: Partial<WishListRow>) => {
     setPatches((current) => ({
@@ -249,7 +257,7 @@ export function WishesGrid({
       const wish = wishId ? (rows.find((row) => row.id === wishId) ?? null) : null;
       return {
         selection: { id: wishId, count, label: wish?.title },
-        actions: { onCopyAsText: copySelectionAsText },
+        actions: { onCopyAsText: copySelectionAsText, onSelectAll: selectAll },
         pageCommands: [
           /*
            * `record.open` by id, overriding the built-in — see `buildGridCommands`.
@@ -290,7 +298,7 @@ export function WishesGrid({
         ],
       };
     },
-    [rows, copySelectionAsText, setDetailNodeId, router],
+    [rows, copySelectionAsText, setDetailNodeId, router, selectAll],
   );
 
   const commandCapabilities = useMemo(
@@ -352,6 +360,8 @@ export function WishesGrid({
         columnCtx={columnCtx}
         selectedId={selectedId}
         selectedIds={selectedIds}
+        selectAllState={headerState}
+        onToggleSelectAll={toggleSelectAll}
         onSelect={select}
         onOpenDetail={(id) => {
           const wish = rows.find((row) => row.id === id);
@@ -359,7 +369,6 @@ export function WishesGrid({
         }}
         ariaLabel="Wish List"
         rowMenu={rowMenu}
-        rowNumbers
         rowLabel={(row) => row.node.title || "Untitled wish"}
         enableFilters
         enableSort

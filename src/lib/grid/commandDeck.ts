@@ -20,6 +20,7 @@ import {
   PASTE_ROWS,
   RENAME,
   SCHEDULE_BLOCK,
+  SELECT_ALL,
   VIEW_PROJECT,
   VIEW_TASKS,
 } from "@/lib/commands/chords";
@@ -103,6 +104,8 @@ export type GridCommandActions = {
   onRename?: (id: string) => void;
   onDelete?: (ids: readonly string[]) => void;
   onCopyAsText?: () => void;
+  /** Select every currently navigable row. Header checkbox and ⌘A. */
+  onSelectAll?: () => void;
   /** Attach clipboard URLs to this project or task. */
   onAttachFromClipboard?: (id: string) => void;
   onMoveUp?: (id: string) => void;
@@ -365,6 +368,22 @@ export function buildGridCommands(capabilities: GridCommandCapabilities): Comman
         disabled: !hasSelection,
         title: selectionTitle,
         run: () => id && actions.onRename?.(id),
+      }),
+    );
+  }
+  if (actions.onSelectAll) {
+    out.push(
+      command({
+        id: "record.select-all",
+        label: "Select all",
+        group: "record",
+        menu: "item",
+        section: "Item",
+        icon: "select-all",
+        rowMenu: true,
+        bindings: SELECT_ALL,
+        keywords: "every row checkbox",
+        run: actions.onSelectAll,
       }),
     );
   }

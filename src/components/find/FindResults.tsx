@@ -70,7 +70,8 @@ export function FindResults({
 
   const rowIds = useMemo(() => results.map((result) => result.id), [results]);
   const { order, onIdsChange } = useNavigableIds(rowIds);
-  const { selectedId, selectedIds, select, move } = useMultiSelect(order, null);
+  const { selectedId, selectedIds, select, toggleSelectAll, headerState, move } =
+    useMultiSelect(order, null);
 
   const byId = useMemo(
     () => new Map(results.map((result) => [result.id, result])),
@@ -176,11 +177,12 @@ export function FindResults({
         columnCtx={{}}
         selectedId={selectedId}
         selectedIds={selectedIds}
+        selectAllState={headerState}
+        onToggleSelectAll={toggleSelectAll}
         onSelect={select}
         onOpenDetail={open}
         ariaLabel="Search results"
         rowMenu={rowMenu}
-        rowNumbers
         rowLabel={(row) => row.node.name}
         enableFilters
         enableSort

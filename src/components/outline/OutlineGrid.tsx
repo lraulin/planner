@@ -65,6 +65,9 @@ import {
   type FlattenableLevel,
 } from "@/lib/tree/flattenLevels";
 import { selectionMoveRoots } from "@/lib/grid/selection";
+import { moveExclusionIds, planBulkMove } from "@/lib/tree/bulkMove";
+import { ProjectPickerDialog } from "@/components/projects/ProjectPickerDialog";
+import type { ProjectPickerValue } from "@/components/projects/ProjectPicker";
 import { copyAsText, writeClipboardText } from "@/lib/tree/copyAsText";
 import { HintBar } from "./HintBar";
 import { NewChildDialog } from "./NewChildDialog";
@@ -155,7 +158,8 @@ function viewDefaults(): GridDefaults {
  * columns, filtered from their column menus like everything else.
  */
 export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
-  const { nodes, byId, patch, apply, error } = useOptimisticNodes(initialNodes);
+  const { nodes, byId, patch, apply, error, setError } =
+    useOptimisticNodes(initialNodes);
   const { attachFromClipboard, noticeDialog } = useAttachFromClipboard(apply);
   const {
     detail: detailId,
@@ -177,6 +181,12 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     targetKind: NodeKind;
   } | null>(null);
   const [zoomPickerOpen, setZoomPickerOpen] = useState(false);
+  const [movePickerOpen, setMovePickerOpen] = useState(false);
+  const [pendingMove, setPendingMove] = useState<{
+    parentId: string | null;
+    legal: string[];
+    skipped: { id: string; name: string; reason: string }[];
+  } | null>(null);
   const [expandLevelPickerOpen, setExpandLevelPickerOpen] = useState(false);
   /** The row a new child is being added to, while its kind is being chosen. */
   const [pendingChildOf, setPendingChildOf] = useState<OutlineNode | null>(null);
@@ -297,7 +307,16 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
     orderedIds,
     detailId ?? selectId ?? initialNodes[0]?.id ?? null,
   );
-  const { selectedId, selectedIds, select, selectOne, move } = multi;
+  const {
+    selectedId,
+    selectedIds,
+    select,
+    selectOne,
+    selectAll,
+    toggleSelectAll,
+    headerState,
+    move,
+  } = multi;
 
   // Back / forward and deep-links change `?detail=` / `?select=`. Sync selection during
   // render so the open drawer (or the View in Outline landing) has a selected owner
@@ -604,6 +623,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
             );
           },
           onCopyAsText: copySelectionAsText,
+          onSelectAll: selectAll,
           onAttachFromClipboard: attachFromClipboard,
           onMoveUp: (nodeId) => apply(() => moveNodeVerticallyAction(nodeId, "up")),
           onMoveDown: (nodeId) => apply(() => moveNodeVerticallyAction(nodeId, "down")),
@@ -661,6 +681,21 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
           onClearZoom: () => setZoom(null, "push"),
           onZoomToItem: () => setZoomPickerOpen(true),
         },
+        pageCommands: [
+          {
+            id: "record.move-to",
+            label: "Move to…",
+            group: "record",
+            menu: "organize",
+            section: "Move",
+            icon: "indent",
+            rowMenu: true,
+            keywords: "file parent destination reparent",
+            disabled: count === 0,
+            title: count === 0 ? "Select a row first" : undefined,
+            run: () => setMovePickerOpen(true),
+          },
+        ],
       };
     },
     [
@@ -686,6 +721,7 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
       clipboard,
       pickUp,
       clearClipboard,
+      selectAll,
     ],
   );
 
@@ -1005,6 +1041,8 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
         columnCtx={columnCtx}
         selectedId={selectedId}
         selectedIds={selectedIds}
+        selectAllState={headerState}
+        onToggleSelectAll={toggleSelectAll}
         onSelect={select}
         onOpenDetail={(id) => {
           selectOne(id);
@@ -1063,6 +1101,67 @@ export function OutlineGrid({ initialNodes }: { initialNodes: OutlineNode[] }) {
             addChildOfKind(parent.id, kind);
           }}
           onCancel={() => setPendingChildOf(null)}
+        />
+      )}
+
+      <ProjectPickerDialog
+        open={movePickerOpen}
+        nodes={nodes}
+        value={{ kind: "none" }}
+        allowNone
+        noneLabel="Top level"
+        includeTasks
+        excludedIds={moveExclusionIds(
+          nodes,
+          selectionMoveRoots(
+            selectedIds,
+            orderedIds,
+            (id) => byId.get(id)?.parentId ?? null,
+          ),
+        )}
+        title="Move to…"
+        description="File the selected rows under a destination, including a task so they become subtasks. Top level unfiles them."
+        onCancel={() => setMovePickerOpen(false)}
+        onConfirm={(value: ProjectPickerValue) => {
+          setMovePickerOpen(false);
+          const parentId = value.kind === "node" ? value.nodeId : null;
+          const roots = selectionMoveRoots(
+            selectedIds,
+            orderedIds,
+            (id) => byId.get(id)?.parentId ?? null,
+          );
+          const plan = planBulkMove(nodes, roots, parentId);
+          if (plan.legal.length === 0) {
+            setError(
+              plan.skipped[0]?.reason ?? "Nothing in the selection can move there.",
+            );
+            return;
+          }
+          if (plan.skipped.length > 0) {
+            setPendingMove({ parentId, ...plan });
+            return;
+          }
+          for (const nodeId of plan.legal) {
+            apply(() => moveNodeAction({ nodeId, parentId, position: { at: "last" } }));
+          }
+        }}
+      />
+      {pendingMove && (
+        <ConfirmDialog
+          open
+          title={`Move ${pendingMove.legal.length} of ${pendingMove.legal.length + pendingMove.skipped.length}?`}
+          message={`${pendingMove.skipped.map((row) => `${row.name}: ${row.reason}`).join(" ")} The others will still move.`}
+          confirmLabel="Move the rest"
+          onConfirm={() => {
+            const { parentId, legal } = pendingMove;
+            setPendingMove(null);
+            for (const nodeId of legal) {
+              apply(() =>
+                moveNodeAction({ nodeId, parentId, position: { at: "last" } }),
+              );
+            }
+          }}
+          onCancel={() => setPendingMove(null)}
         />
       )}
 

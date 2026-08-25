@@ -107,7 +107,8 @@ export function StatementsView({
   );
   const rowIds = useMemo(() => rows.map((row) => row.id), [rows]);
   const { order, onIdsChange } = useNavigableIds(rowIds);
-  const { selectedId, selectedIds, select, move } = useMultiSelect(order, null);
+  const { selectedId, selectedIds, select, toggleSelectAll, headerState, move } =
+    useMultiSelect(order, null);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -172,9 +173,10 @@ export function StatementsView({
         columnCtx={{}}
         selectedId={selectedId}
         selectedIds={selectedIds}
+        selectAllState={headerState}
+        onToggleSelectAll={toggleSelectAll}
         onSelect={select}
         ariaLabel="Statements"
-        rowNumbers
         rowLabel={(row) =>
           `${row.node.accountName} ${row.node.periodStart}–${row.node.periodEnd}`
         }

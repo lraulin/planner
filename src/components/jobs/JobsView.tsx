@@ -87,7 +87,15 @@ export function JobsView({ initialJobs }: { initialJobs: JobListRow[] }) {
   const rowIds = useMemo(() => rows.map((row) => row.id), [rows]);
   const { order, onIdsChange } = useNavigableIds(rowIds);
   const multi = useMultiSelect(order, null);
-  const { selectedId, selectedIds, select, move } = multi;
+  const {
+    selectedId,
+    selectedIds,
+    select,
+    selectAll,
+    toggleSelectAll,
+    headerState,
+    move,
+  } = multi;
 
   const refresh = useCallback(() => {
     startTransition(async () => {
@@ -150,9 +158,12 @@ export function JobsView({ initialJobs }: { initialJobs: JobListRow[] }) {
         },
         onCreate: createNew,
         onOpen: openDrawer,
-        onDelete: requestDelete,
+        onDelete: (ids) => {
+          if (ids[0]) requestDelete(ids[0]);
+        },
+        onSelectAll: selectAll,
       }),
-    [rows, createNew, openDrawer, requestDelete],
+    [rows, createNew, openDrawer, requestDelete, selectAll],
   );
 
   const commandCapabilities = useMemo(
@@ -203,11 +214,12 @@ export function JobsView({ initialJobs }: { initialJobs: JobListRow[] }) {
         columnCtx={{}}
         selectedId={selectedId}
         selectedIds={selectedIds}
+        selectAllState={headerState}
+        onToggleSelectAll={toggleSelectAll}
         onSelect={select}
         onOpenDetail={openDrawer}
         ariaLabel="Jobs"
         rowMenu={rowMenu}
-        rowNumbers
         rowLabel={(row) => row.node.employer || "Untitled job"}
         enableFilters
         enableSort

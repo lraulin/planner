@@ -4,6 +4,8 @@ import { useMemo, useState, type ReactNode } from "react";
 import { DataGrid } from "@/components/grid/DataGrid";
 import { GridToolbar } from "@/components/grid/GridToolbar";
 import { useGridState } from "@/components/grid/useGridState";
+import { useMultiSelect } from "@/components/grid/useMultiSelect";
+import { useNavigableIds } from "@/components/grid/useNavigableIds";
 import { useToday } from "@/components/grid/useToday";
 import { collectDistinctValues } from "@/lib/grid/distinct";
 import type { GridRow } from "@/lib/tree/slice";
@@ -92,6 +94,10 @@ export function AgendaGrid({
     [todayKey, onCycleCheck],
   );
 
+  const fallbackIds = useMemo(() => gridRows.map((row) => row.id), [gridRows]);
+  const { order, onIdsChange } = useNavigableIds(fallbackIds);
+  const multi = useMultiSelect(order, selectedId);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <GridToolbar
@@ -109,15 +115,21 @@ export function AgendaGrid({
         columns={grid.columns}
         allColumns={agendaColumns}
         columnCtx={columnCtx}
-        selectedId={selectedId}
-        onSelect={onSelect}
+        selectedId={multi.selectedId}
+        selectedIds={multi.selectedIds}
+        selectAllState={multi.headerState}
+        onToggleSelectAll={multi.toggleSelectAll}
+        onSelect={(id, mods) => {
+          multi.select(id, mods);
+          onSelect(id);
+        }}
+        onNavigableIdsChange={onIdsChange}
         onOpenDetail={(id) => {
           const row = rows.find((entry) => entry.id === id);
           if (row) onOpenAppointment(row);
         }}
         ariaLabel="Agenda"
         rowLabel={(row) => row.node.subject || "(no subject)"}
-        rowNumbers
         enableFilters
         enableSort
         sorts={grid.sorts}

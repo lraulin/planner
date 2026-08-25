@@ -43,6 +43,7 @@ const rows = [
   node({ id: "alpha", parentId: "goal", type: "project", name: "Alpha" }),
   node({ id: "beta", parentId: "alpha", type: "project", name: "Beta" }),
   node({ id: "inbox", type: "project", name: "Inbox", isInbox: true }),
+  node({ id: "task", parentId: "alpha", type: "task", name: "Call bank" }),
 ];
 
 describe("projectPickerRows", () => {
@@ -169,6 +170,26 @@ describe("visiblePickerRows", () => {
         today: "2026-08-09",
       }).map((row) => row.name),
     ).toEqual(["Work", "Health", "Grow", "Learn Italian", "Alpha", "Beta"]);
+  });
+
+  it("omits tasks unless includeTasks is on", () => {
+    expect(
+      projectPickerRows(rows, {
+        query: "",
+        groupByResultArea: true,
+        includeDeferred: false,
+        today: "2026-08-09",
+      }).map((row) => row.name),
+    ).not.toContain("Call bank");
+    expect(
+      projectPickerRows(rows, {
+        query: "",
+        groupByResultArea: true,
+        includeDeferred: false,
+        today: "2026-08-09",
+        includeTasks: true,
+      }).map((row) => row.name),
+    ).toContain("Call bank");
   });
 
   it("defaultExpandedPickerIds expands every parent", () => {

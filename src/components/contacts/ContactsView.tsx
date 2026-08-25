@@ -21,7 +21,10 @@ import type { GoogleContactSyncStatus } from "@/lib/google/contacts/sync";
 import { DataGrid } from "@/components/grid/DataGrid";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 import { rowMenuFor } from "@/components/grid/rowMenu";
-import { catalogCapabilities } from "@/components/grid/catalogCommands";
+import {
+  catalogCapabilities,
+  catalogTargetIds,
+} from "@/components/grid/catalogCommands";
 import { GridToolbar } from "@/components/grid/GridToolbar";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { collectDistinctValues } from "@/lib/grid/distinct";
@@ -99,7 +102,7 @@ export function ContactsView({
         : null),
   );
   const [backgroundSyncing, setBackgroundSyncing] = useState(false);
-  const [pendingDelete, setPendingDelete] = useState<ContactListRow | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<ContactListRow[]>([]);
   const { detail: openId, setDetail: setOpenId } = useViewStateUrl();
   const [, startTransition] = useTransition();
   // Stale paint + in-flight pull both count as "syncing" without setState on the stale path.
@@ -165,7 +168,15 @@ export function ContactsView({
   const rowIds = useMemo(() => rows.map((row) => row.id), [rows]);
   const { order, onIdsChange } = useNavigableIds(rowIds);
   const multi = useMultiSelect(order, null);
-  const { selectedId, selectedIds, select, move } = multi;
+  const {
+    selectedId,
+    selectedIds,
+    select,
+    selectAll,
+    toggleSelectAll,
+    headerState,
+    move,
+  } = multi;
   const refreshList = useCallback(() => {
     startTransition(async () => {
       const result = await listContactsAction();
@@ -204,25 +215,29 @@ export function ContactsView({
   }, [openDrawer]);
 
   const confirmDelete = useCallback(() => {
-    const target = pendingDelete;
-    setPendingDelete(null);
-    if (!target) return;
+    const targets = pendingDelete;
+    setPendingDelete([]);
+    if (targets.length === 0) return;
     setError(null);
     startTransition(async () => {
-      const result = await deleteContactAction(target.id);
-      if (!result.ok) {
-        setError(result.error);
-        return;
+      for (const target of targets) {
+        const result = await deleteContactAction(target.id);
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
+        if (openId === target.id) closeDrawer();
       }
-      if (openId === target.id) closeDrawer();
-      else refreshList();
+      refreshList();
     });
   }, [pendingDelete, openId, closeDrawer, refreshList]);
 
   const requestDelete = useCallback(
-    (id: string) => {
-      const row = rows.find((entry) => entry.id === id);
-      if (row) setPendingDelete(row);
+    (ids: readonly string[]) => {
+      const found = ids
+        .map((id) => rows.find((entry) => entry.id === id))
+        .filter((row): row is ContactListRow => Boolean(row));
+      if (found.length > 0) setPendingDelete(found);
     },
     [rows],
   );
@@ -236,6 +251,7 @@ export function ContactsView({
           id: rowId,
           count,
           label: rows.find((entry) => entry.id === rowId)?.displayName,
+          ids: catalogTargetIds(rowId, count, selectedIds, order),
         },
         deleteDisabled:
           rows.find((entry) => entry.id === rowId)?.externalSource === "google"
@@ -244,8 +260,9 @@ export function ContactsView({
         onCreate: createNew,
         onOpen: openDrawer,
         onDelete: requestDelete,
+        onSelectAll: selectAll,
       }),
-    [rows, createNew, openDrawer, requestDelete],
+    [rows, createNew, openDrawer, requestDelete, selectedIds, order, selectAll],
   );
 
   const commandCapabilities = useMemo(
@@ -267,7 +284,7 @@ export function ContactsView({
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (openId || pendingDelete) return;
+      if (openId || pendingDelete.length > 0) return;
       if (isTypingTarget(event.target)) return;
 
       // Arrows before the has-a-selection guard: `moveSelection` reads a null focus as
@@ -310,11 +327,12 @@ export function ContactsView({
         columnCtx={columnCtx}
         selectedId={selectedId}
         selectedIds={selectedIds}
+        selectAllState={headerState}
+        onToggleSelectAll={toggleSelectAll}
         onSelect={select}
         onOpenDetail={openDrawer}
         ariaLabel="Contacts"
         rowMenu={rowMenu}
-        rowNumbers
         rowLabel={(row) => row.node.displayName}
         enableFilters
         enableSort
@@ -349,13 +367,21 @@ export function ContactsView({
       <ContactDrawer contactId={openId} onClose={closeDrawer} onChanged={refreshList} />
 
       <ConfirmDialog
-        open={pendingDelete !== null}
-        title="Delete this contact?"
-        message={`"${pendingDelete?.displayName ?? ""}" and their phone numbers, addresses and links will be removed. Discussion items and history notes are kept, unlinked.`}
+        open={pendingDelete.length > 0}
+        title={
+          pendingDelete.length > 1
+            ? `Delete ${pendingDelete.length} contacts?`
+            : "Delete this contact?"
+        }
+        message={
+          pendingDelete.length > 1
+            ? `${pendingDelete.length} contacts and their phone numbers, addresses and links will be removed. Discussion items and history notes are kept, unlinked.`
+            : `"${pendingDelete[0]?.displayName ?? ""}" and their phone numbers, addresses and links will be removed. Discussion items and history notes are kept, unlinked.`
+        }
         confirmLabel="Delete"
         destructive
         onConfirm={confirmDelete}
-        onCancel={() => setPendingDelete(null)}
+        onCancel={() => setPendingDelete([])}
       />
     </div>
   );

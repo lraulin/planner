@@ -31,6 +31,8 @@ export function projectPickerRows(
     includeDeferred: boolean;
     today: string | null;
     excludedIds?: ReadonlySet<string>;
+    /** Outline Move to… can file a task under another task. Organizer stays task-free. */
+    includeTasks?: boolean;
   },
 ): ProjectPickerRow[] {
   const byId = new Map(nodes.map((node) => [node.id, node]));
@@ -50,7 +52,9 @@ export function projectPickerRows(
       candidate.parentId ? byId.get(candidate.parentId) : undefined,
       byId,
     )) {
-      if (shouldShowAncestor(ancestor, options.groupByResultArea)) {
+      if (
+        shouldShowAncestor(ancestor, options.groupByResultArea, options.includeTasks)
+      ) {
         shownIds.add(ancestor.id);
       }
     }
@@ -125,9 +129,11 @@ function isDestinationNode(
   options: {
     includeDeferred: boolean;
     today: string | null;
+    includeTasks?: boolean;
   },
 ): boolean {
-  if (node.isInbox || node.type === "task") return false;
+  if (node.isInbox) return false;
+  if (node.type === "task") return options.includeTasks === true;
   if (node.type === "result_area") return true;
   // Goal covers Dream (isDream is a flag on the same type).
   if (node.type !== "goal" && node.type !== "project") return false;
@@ -142,8 +148,13 @@ function isDestinationNode(
 }
 
 /** Ancestors kept only to hold the tree — skip RAs in flat mode. */
-function shouldShowAncestor(parent: OutlineNode, groupByResultArea: boolean): boolean {
-  if (parent.isInbox || parent.type === "task") return false;
+function shouldShowAncestor(
+  parent: OutlineNode,
+  groupByResultArea: boolean,
+  includeTasks = false,
+): boolean {
+  if (parent.isInbox) return false;
+  if (parent.type === "task") return includeTasks;
   if (parent.type === "result_area") return groupByResultArea;
   return parent.type === "goal" || parent.type === "project";
 }

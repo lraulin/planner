@@ -26,6 +26,7 @@ import {
 } from "@/lib/finances/scrapePending";
 import {
   deleteTransaction,
+  deleteTransactions,
   reclassifyTransactions,
   setOneOff,
   setSubscriptionStatus,
@@ -56,6 +57,7 @@ import {
   seedBudget,
   setCarryover,
   setTransactionBudgetCategory,
+  setTransactionBudgetCategories,
   setTaxonomyCategoryEnvelope,
   updateBudgetCategory,
   type BudgetCategoryEdit,
@@ -128,6 +130,12 @@ export async function deleteTransactionAction(
   transactionId: string,
 ): Promise<ActionResult> {
   return run((userId) => deleteTransaction(userId, transactionId));
+}
+
+export async function deleteTransactionsAction(
+  transactionIds: readonly string[],
+): Promise<ActionResult> {
+  return run((userId) => deleteTransactions(userId, transactionIds));
 }
 
 export async function updateAccountAction(
@@ -431,6 +439,16 @@ export async function setTransactionBudgetCategoryAction(
 ): Promise<ActionResult> {
   return run<string | void>(
     (userId) => setTransactionBudgetCategory(userId, transactionId, categoryId),
+    { revalidate: [] },
+  );
+}
+
+export async function setTransactionBudgetCategoriesAction(
+  transactionIds: readonly string[],
+  categoryId: string | null,
+) {
+  return runWithData(
+    (userId) => setTransactionBudgetCategories(userId, transactionIds, categoryId),
     { revalidate: [] },
   );
 }

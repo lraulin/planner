@@ -75,7 +75,8 @@ export function AmazonOrdersView({
   );
   const rowIds = useMemo(() => rows.map((row) => row.id), [rows]);
   const { order, onIdsChange } = useNavigableIds(rowIds);
-  const { selectedId, selectedIds, select, move } = useMultiSelect(order, null);
+  const { selectedId, selectedIds, select, toggleSelectAll, headerState, move } =
+    useMultiSelect(order, null);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -114,9 +115,10 @@ export function AmazonOrdersView({
         columnCtx={{}}
         selectedId={selectedId}
         selectedIds={selectedIds}
+        selectAllState={headerState}
+        onToggleSelectAll={toggleSelectAll}
         onSelect={select}
         ariaLabel="Amazon orders"
-        rowNumbers
         rowLabel={(row) => row.node.productName || "Amazon item"}
         enableFilters
         enableSort

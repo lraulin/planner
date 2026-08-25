@@ -80,7 +80,15 @@ export function ResourcesView({
   const rowIds = useMemo(() => rows.map((row) => row.id), [rows]);
   const { order, onIdsChange } = useNavigableIds(rowIds);
   const multi = useMultiSelect(order, null);
-  const { selectedId, selectedIds, select, move } = multi;
+  const {
+    selectedId,
+    selectedIds,
+    select,
+    selectAll,
+    toggleSelectAll,
+    headerState,
+    move,
+  } = multi;
   const refresh = useCallback(() => {
     startTransition(async () => {
       const result = await listResourcesAction();
@@ -141,9 +149,12 @@ export function ResourcesView({
         },
         onCreate: createNew,
         onOpen: openDrawer,
-        onDelete: requestDelete,
+        onDelete: (ids) => {
+          if (ids[0]) requestDelete(ids[0]);
+        },
+        onSelectAll: selectAll,
       }),
-    [rows, createNew, openDrawer, requestDelete],
+    [rows, createNew, openDrawer, requestDelete, selectAll],
   );
 
   const commandCapabilities = useMemo(
@@ -195,11 +206,12 @@ export function ResourcesView({
         columnCtx={{}}
         selectedId={selectedId}
         selectedIds={selectedIds}
+        selectAllState={headerState}
+        onToggleSelectAll={toggleSelectAll}
         onSelect={select}
         onOpenDetail={openDrawer}
         ariaLabel="Resources"
         rowMenu={rowMenu}
-        rowNumbers
         rowLabel={(row) => row.node.shortName || "Untitled resource"}
         enableFilters
         enableSort

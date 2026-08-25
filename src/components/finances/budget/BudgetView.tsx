@@ -689,6 +689,8 @@ export function BudgetView({
             columnCtx={ctx}
             selectedId={billSelect.selectedId}
             selectedIds={billSelect.selectedIds}
+            selectAllState={billSelect.headerState}
+            onToggleSelectAll={billSelect.toggleSelectAll}
             onSelect={(id, mods) => {
               setFocusedTable("bills");
               billSelect.select(id, mods);
@@ -723,6 +725,8 @@ export function BudgetView({
             columnCtx={ctx}
             selectedId={envelopeSelect.selectedId}
             selectedIds={envelopeSelect.selectedIds}
+            selectAllState={envelopeSelect.headerState}
+            onToggleSelectAll={envelopeSelect.toggleSelectAll}
             onSelect={(id, mods) => {
               setFocusedTable("envelopes");
               envelopeSelect.select(id, mods);
@@ -782,6 +786,8 @@ export function BudgetView({
             columnCtx={ctx}
             selectedId={savingsSelect.selectedId}
             selectedIds={savingsSelect.selectedIds}
+            selectAllState={savingsSelect.headerState}
+            onToggleSelectAll={savingsSelect.toggleSelectAll}
             onSelect={(id, mods) => {
               setFocusedTable("savings");
               savingsSelect.select(id, mods);

@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useState,
   useSyncExternalStore,
@@ -22,10 +23,10 @@ import {
   type RegisterTransactionRow,
 } from "@/lib/finances/registerQuery";
 import {
-  deleteTransactionAction,
+  deleteTransactionsAction,
   getTransactionAction,
   listAccountsAction,
-  setTransactionBudgetCategoryAction,
+  setTransactionBudgetCategoriesAction,
   upcomingBillsAction,
 } from "@/app/finances/actions";
 import { DateText } from "@/components/date/DateText";
@@ -42,7 +43,10 @@ import {
 } from "@/components/import/FileImportHost";
 import type { MenuItem } from "@/components/grid/ContextMenu";
 import { rowMenuFor } from "@/components/grid/rowMenu";
-import { catalogCapabilities } from "@/components/grid/catalogCommands";
+import {
+  catalogCapabilities,
+  catalogTargetIds,
+} from "@/components/grid/catalogCommands";
 import { GridToolbar } from "@/components/grid/GridToolbar";
 import { useModuleViews } from "@/components/grid/useModuleViews";
 import type { GridDefaults } from "@/components/grid/useGridState";
@@ -54,7 +58,9 @@ import { useRegisterSource } from "./useRegisterSource";
 import { useSearchParams } from "next/navigation";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { FinanceImportPanel } from "./FinanceImportPanel";
+import { CategorySelect } from "./CategorySelect";
 import { TransactionDrawer } from "./TransactionDrawer";
+import { ModalShell } from "@/components/detail/ModalShell";
 import { TrackAsBillDialog } from "./TrackAsBillDialog";
 import { NewEnvelopeDialog } from "./NewEnvelopeDialog";
 import type { EnvelopePickerOption } from "@/lib/finances/budget/groupEnvelopeOptions";
@@ -202,9 +208,9 @@ export function FinancesView({
   } | null>(null);
   const [createdEnvelopes, setCreatedEnvelopes] = useState<EnvelopePickerOption[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<RegisterTransactionRow | null>(
-    null,
-  );
+  const [pendingDelete, setPendingDelete] = useState<RegisterTransactionRow[]>([]);
+  const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
+  const categoryPickerTitleId = useId();
   const [upcoming, setUpcoming] = useState(initialUpcoming);
   const today = useToday();
   const {
@@ -309,7 +315,15 @@ export function FinancesView({
   } = register;
   const { order, onIdsChange } = useNavigableIds(index.nodeIds);
   const multi = useMultiSelect(order, null);
-  const { selectedId, selectedIds, select, move } = multi;
+  const {
+    selectedId,
+    selectedIds,
+    select,
+    selectAll,
+    toggleSelectAll,
+    headerState,
+    move,
+  } = multi;
 
   useEffect(() => {
     if (!today) return;
@@ -352,22 +366,36 @@ export function FinancesView({
 
   const onSetEnvelope = useCallback(
     (transactionId: string, categoryId: string | null) => {
+      const ids =
+        selectedIds.has(transactionId) && selectedIds.size > 1
+          ? order.filter((id) => selectedIds.has(id))
+          : [transactionId];
+      const name = categoryId ? (envelopeNameById.get(categoryId) ?? null) : null;
       setError(null);
-      patchRow(transactionId, {
-        budgetCategoryId: categoryId,
-        budgetCategoryName: categoryId
-          ? (envelopeNameById.get(categoryId) ?? null)
-          : null,
-      });
+      for (const id of ids) {
+        patchRow(id, {
+          budgetCategoryId: categoryId,
+          budgetCategoryName: name,
+        });
+      }
       startTransition(async () => {
-        const result = await setTransactionBudgetCategoryAction(
-          transactionId,
-          categoryId,
-        );
+        const result = await setTransactionBudgetCategoriesAction(ids, categoryId);
         if (!result.ok) {
           setError(result.error ?? "Could not set the envelope.");
           refresh();
           return;
+        }
+        const { updated, skipped } = result.data ?? {
+          updated: ids,
+          skipped: [],
+        };
+        if (skipped.length > 0) {
+          setError(
+            updated.length === 0
+              ? (skipped[0]?.reason ?? "Could not set the envelope.")
+              : `Category set on ${updated.length} of ${ids.length} selected transactions.`,
+          );
+          if (updated.length === 0) refresh();
         }
         if (
           registerQuery.groupBy.includes("category") ||
@@ -379,7 +407,7 @@ export function FinancesView({
         }
       });
     },
-    [envelopeNameById, refresh, patchRow, reload, registerQuery],
+    [envelopeNameById, refresh, patchRow, reload, registerQuery, selectedIds, order],
   );
 
   const onCreateEnvelope = useCallback(
@@ -431,25 +459,27 @@ export function FinancesView({
   }, [setOpenId]);
 
   const requestDelete = useCallback(
-    (id: string) => {
-      const row = rowById(id);
-      if (row) setPendingDelete(row);
+    (ids: readonly string[]) => {
+      const rows = ids
+        .map((id) => rowById(id))
+        .filter((row): row is RegisterTransactionRow => Boolean(row));
+      if (rows.length > 0) setPendingDelete(rows);
     },
     [rowById],
   );
 
   const confirmDelete = useCallback(() => {
-    const target = pendingDelete;
-    setPendingDelete(null);
-    if (!target) return;
+    const targets = pendingDelete;
+    setPendingDelete([]);
+    if (targets.length === 0) return;
     setError(null);
     startTransition(async () => {
-      const result = await deleteTransactionAction(target.id);
+      const result = await deleteTransactionsAction(targets.map((row) => row.id));
       if (!result.ok) {
         setError(result.error);
         return;
       }
-      if (openId === target.id) closeDrawer();
+      if (openId && targets.some((row) => row.id === openId)) closeDrawer();
       refresh();
     });
   }, [pendingDelete, openId, closeDrawer, refresh]);
@@ -468,11 +498,26 @@ export function FinancesView({
           id: rowId,
           count,
           label: row?.description,
+          ids: catalogTargetIds(rowId, count, selectedIds, order),
         },
         onCreate: openImport,
         onOpen: openDrawer,
         onDelete: requestDelete,
+        onSelectAll: selectAll,
         pageCommands: [
+          {
+            id: "record.set-category",
+            label: "Set category…",
+            group: "record",
+            menu: "item",
+            section: "Item",
+            icon: "convert",
+            rowMenu: true,
+            keywords: "envelope categorize file",
+            disabled: count === 0,
+            title: count === 0 ? "Select a row first" : undefined,
+            run: () => setCategoryPickerOpen(true),
+          },
           {
             id: "record.track-as-bill",
             label: "Track as bill…",
@@ -491,7 +536,16 @@ export function FinancesView({
         ],
       });
     },
-    [rowById, claimedByPayee, openImport, openDrawer, requestDelete],
+    [
+      rowById,
+      claimedByPayee,
+      openImport,
+      openDrawer,
+      requestDelete,
+      selectedIds,
+      order,
+      selectAll,
+    ],
   );
 
   const commandCapabilities = useMemo(
@@ -506,7 +560,7 @@ export function FinancesView({
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (openId || pendingDelete || isTypingTarget(event.target)) return;
+      if (openId || pendingDelete.length > 0 || isTypingTarget(event.target)) return;
       if (event.key === "ArrowDown") {
         event.preventDefault();
         move(1, event.shiftKey);
@@ -565,11 +619,12 @@ export function FinancesView({
         columnCtx={columnCtx}
         selectedId={selectedId}
         selectedIds={selectedIds}
+        selectAllState={headerState}
+        onToggleSelectAll={toggleSelectAll}
         onSelect={select}
         onOpenDetail={openDrawer}
         ariaLabel="Transactions"
         rowMenu={rowMenu}
-        rowNumbers
         rowLabel={transactionRowLabel}
         enableFilters
         enableSort
@@ -663,14 +718,69 @@ export function FinancesView({
         onChanged={patchRow}
         onCreateEnvelope={onCreateEnvelope}
       />
+      {categoryPickerOpen ? (
+        <ModalShell
+          open
+          onClose={() => setCategoryPickerOpen(false)}
+          labelledBy={categoryPickerTitleId}
+        >
+          <div className="p-5">
+            <h2
+              id={categoryPickerTitleId}
+              className="text-[0.9375rem] font-semibold text-ink"
+            >
+              Set category
+            </h2>
+            <p className="mt-1 text-[0.8125rem] text-ink-muted">
+              Applies to {selectedIds.size} selected transaction
+              {selectedIds.size === 1 ? "" : "s"}.
+            </p>
+            <div className="mt-4">
+              <CategorySelect
+                envelopes={envelopeCatalog}
+                value={null}
+                ariaLabel="Category"
+                onChange={(categoryId) => {
+                  const id = selectedId;
+                  setCategoryPickerOpen(false);
+                  if (id) onSetEnvelope(id, categoryId);
+                }}
+                onCreate={(kind) => {
+                  const id = selectedId;
+                  setCategoryPickerOpen(false);
+                  if (id) onCreateEnvelope(id, kind);
+                }}
+                className="min-h-tap w-full rounded border border-rule bg-surface px-2 text-[0.8125rem] text-ink"
+              />
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setCategoryPickerOpen(false)}
+                className="min-h-tap rounded border border-rule px-3 text-[0.8125rem] text-ink-muted hover:bg-surface-raised hover:text-ink"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </ModalShell>
+      ) : null}
       <ConfirmDialog
-        open={pendingDelete !== null}
-        title="Delete this transaction?"
-        message={`"${pendingDelete?.description ?? ""}" will be removed. It will come back the next time you import a file that contains it.`}
+        open={pendingDelete.length > 0}
+        title={
+          pendingDelete.length > 1
+            ? `Delete ${pendingDelete.length} transactions?`
+            : "Delete this transaction?"
+        }
+        message={
+          pendingDelete.length > 1
+            ? `${pendingDelete.length} transactions will be removed. They will come back the next time you import a file that contains them.`
+            : `"${pendingDelete[0]?.description ?? ""}" will be removed. It will come back the next time you import a file that contains it.`
+        }
         confirmLabel="Delete"
         destructive
         onConfirm={confirmDelete}
-        onCancel={() => setPendingDelete(null)}
+        onCancel={() => setPendingDelete([])}
       />
     </div>
   );

@@ -60,10 +60,11 @@ import {
 } from "@/lib/commands/scope";
 import { useIsCompact } from "@/components/shell/useIsCompact";
 import { CompactRow, type RowSwipe } from "./CompactRow";
-import type { SelectMods } from "@/lib/grid/selection";
+import type { SelectAllState, SelectMods } from "@/lib/grid/selection";
 import { NameIconContext } from "./nameIconContext";
 import { RowDragHandleContext, type RowDragHandleApi } from "./rowDragContext";
 import { RowSelectedContext } from "./rowSelectedContext";
+import { SelectionCheckbox } from "./SelectionCheckbox";
 import { downloadTextFile } from "./downloadCsv";
 
 export type GridSortKey = { columnId: string; direction: "asc" | "desc" };
@@ -125,9 +126,8 @@ type RowDragBinding = {
 
 const EMPTY_EXPORT_COMMANDS: Command[] = [];
 
-/** Left gutter width: wide enough for a 3-digit row number, narrow without one. */
-const HANDLE_WIDTH_NUMBERED = "2rem";
-const HANDLE_WIDTH_PLAIN = "1.25rem";
+/** Left gutter: a 14px checkbox with a bit of padding, not a rank index. */
+const HANDLE_WIDTH = "1.75rem";
 
 /** Dwell on a collapsed row before it opens under a drag. */
 const HOLD_EXPAND_MS = 500;
@@ -225,11 +225,8 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   rowSwipe,
   rowLabel,
   rowExpansion,
-  /**
-   * Show 1-based row numbers in the left handle. Outline leaves this off (Achieve did);
-   * list tabs turn it on so the gutter doubles as a rank index.
-   */
-  rowNumbers = false,
+  selectAllState,
+  onToggleSelectAll,
   exportCommands: registerExportCommands = true,
   commandScope,
   exportFocused = false,
@@ -272,7 +269,10 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   empty?: ReactNode;
   enableFilters?: boolean;
   enableSort?: boolean;
-  rowNumbers?: boolean;
+  /** Header checkbox tri-state. Omit with `onToggleSelectAll` only if the host has no rows. */
+  selectAllState?: SelectAllState;
+  /** Header / compact select-all click. Hosts pass `useMultiSelect().toggleSelectAll`. */
+  onToggleSelectAll?: () => void;
   /**
    * Register File ▸ Export / Copy for this grid. Default true so a lone grid keeps
    * the catalog complete. Two grids on one page pass `commandScope` so each export
@@ -462,7 +462,7 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
   const gridRef = useRef<HTMLDivElement>(null);
-  const handleWidth = rowNumbers ? HANDLE_WIDTH_NUMBERED : HANDLE_WIDTH_PLAIN;
+  const handleWidth = HANDLE_WIDTH;
   // Handle is grid chrome, not a host column — Show Fields cannot hide it, and widths
   // never apply to it. Prepended on desktop only; compact rows have no gutter.
   const bodyTemplate = buildGridTemplate(columns, widths);
@@ -1038,9 +1038,27 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
             widths={widths}
             controls={columnControls}
             enableFilters={enableFilters}
-            leadingGutter
+            leadingGutter={
+              <SelectionCheckbox
+                state={selectAllState ?? "none"}
+                onSelect={() => onToggleSelectAll?.()}
+                ariaLabel="Select all"
+              />
+            }
           />
         )}
+
+        {compact && onToggleSelectAll ? (
+          <div className="flex min-h-tap items-center gap-2 border-b border-rule-strong bg-surface-raised px-2.5">
+            <SelectionCheckbox
+              state={selectAllState ?? "none"}
+              onSelect={() => onToggleSelectAll()}
+              ariaLabel="Select all"
+              compact
+            />
+            <span className="text-[0.8125rem] text-ink-muted">Select all</span>
+          </div>
+        ) : null}
 
         <div
           ref={gridRef}
@@ -1082,14 +1100,6 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
                 </div>
               ))
             : (() => {
-                const nodeNumberAt = (index: number) => {
-                  let number = 0;
-                  for (let i = 0; i <= index; i++) {
-                    if (displayRows[i]?.kind === "node") number += 1;
-                  }
-                  return number;
-                };
-
                 const renderAt = (index: number, style?: CSSProperties) => {
                   const row = displayRows[index];
                   if (!row) return null;
@@ -1150,7 +1160,6 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
                         handleWidth={handleWidth}
                         selected={isSelected}
                         focused={isFocus}
-                        rowNumber={rowNumbers ? nodeNumberAt(index) : null}
                         onSelect={selectRow}
                         onOpenDetail={onOpenDetail ? openDetail : undefined}
                         drag={dragBindingFor(
@@ -1229,8 +1238,6 @@ type DataRowProps<TCtx, TRow> = {
   selected: boolean;
   /** Keyboard-focus row — the one that scrolls into view. Defaults to `selected`. */
   focused?: boolean;
-  /** 1-based index when the host asked for numbers; null otherwise. */
-  rowNumber: number | null;
   onSelect: (id: string, mods?: GridSelectMods) => void;
   onOpenDetail?: (id: string) => void;
   drag?: RowDragBinding;
@@ -1257,7 +1264,6 @@ const DataRow = memo(
     handleWidth,
     selected,
     focused = selected,
-    rowNumber,
     onSelect,
     onOpenDetail,
     drag,
@@ -1402,7 +1408,6 @@ const DataRow = memo(
         <RowSelectedContext.Provider value={selected}>
           <RowDragHandleContext.Provider value={handleApi}>
             <RowHandle
-              number={rowNumber}
               selected={selected}
               onSelect={(mods) => onSelect(row.id, mods)}
             />
@@ -1444,7 +1449,6 @@ const DataRow = memo(
       prev.handleWidth === next.handleWidth &&
       prev.selected === next.selected &&
       prev.focused === next.focused &&
-      prev.rowNumber === next.rowNumber &&
       prev.onSelect === next.onSelect &&
       prev.onOpenDetail === next.onOpenDetail &&
       prev.onContextMenu === next.onContextMenu &&
@@ -1456,16 +1460,14 @@ const DataRow = memo(
 ) as <TCtx, TRow>(props: DataRowProps<TCtx, TRow>) => React.ReactElement;
 
 /**
- * Left gutter shared by every desktop row: select (with multi modifiers) and drag handle.
- * Numbered on list tabs, blank on the Outline — same box, different chrome.
- * When the row offers drag, this element is the HTML5 drag source (not the row).
+ * Left gutter shared by every desktop row: checkbox (with Shift-range / toggle) and
+ * drag handle. When the row offers drag, this element is the HTML5 drag source (not
+ * the row); the checkbox itself does not start a drag.
  */
 function RowHandle({
-  number,
   selected,
   onSelect,
 }: {
-  number: number | null;
   selected: boolean;
   onSelect: (mods?: GridSelectMods) => void;
 }) {
@@ -1477,15 +1479,8 @@ function RowHandle({
       data-row-handle
       role="gridcell"
       draggable={canDrag || undefined}
-      aria-label={number !== null ? `Row ${number}` : "Row handle"}
-      title={canDrag ? "Drag to reorder · click to select" : "Click to select"}
-      onClick={(event) => {
-        event.stopPropagation();
-        onSelect({
-          extend: event.shiftKey,
-          toggle: event.metaKey || event.ctrlKey,
-        });
-      }}
+      aria-label="Select row"
+      title={canDrag ? "Drag to reorder · click the box to select" : "Select row"}
       onContextMenu={(event) => {
         // Same Ctrl/⌘+click → multi-select rule as the row body (macOS synthesises a
         // contextmenu for Ctrl+click and skips the click event).
@@ -1500,18 +1495,28 @@ function RowHandle({
           ? (event) => {
               if (event.button !== 0) return;
               if (event.shiftKey || event.metaKey || event.ctrlKey) return;
+              if ((event.target as HTMLElement).closest("input")) return;
               api.onHandleMouseDown();
             }
           : undefined
       }
       onDragStart={api ? (event) => api.onDragStart(event) : undefined}
       className={[
-        "flex h-full cursor-default select-none items-center justify-center self-stretch border-r border-rule/50 text-[0.6875rem] tabular-nums text-ink-faint",
+        "flex h-full cursor-default select-none items-center justify-center self-stretch border-r border-rule/50",
         canDrag ? "cursor-grab active:cursor-grabbing" : "",
-        selected ? "bg-select-edge/10 text-ink-muted" : "hover:bg-surface-raised",
+        selected ? "bg-select-edge/10" : "hover:bg-surface-raised",
       ].join(" ")}
     >
-      {number !== null ? number : ""}
+      <SelectionCheckbox
+        state={selected}
+        ariaLabel="Select row"
+        onSelect={(event) =>
+          onSelect({
+            extend: event.shiftKey,
+            toggle: !event.shiftKey,
+          })
+        }
+      />
     </div>
   );
 }

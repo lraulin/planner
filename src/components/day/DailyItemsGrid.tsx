@@ -131,7 +131,16 @@ export function DailyItemsGrid({
   );
   const { order, onIdsChange } = useNavigableIds(rowIds);
   const multi = useMultiSelect(order, null);
-  const { selectedId, selectedIds, select, selectOne, move } = multi;
+  const {
+    selectedId,
+    selectedIds,
+    select,
+    selectOne,
+    selectAll,
+    toggleSelectAll,
+    headerState,
+    move,
+  } = multi;
 
   const onAssignPriority = useCallback(
     (itemId: string, letter: PriorityLetter | null, rank: number | null) => {
@@ -227,6 +236,7 @@ export function DailyItemsGrid({
         selection: { id: itemId, count, label: item?.title },
         actions: {
           onCopyAsText: copySelectionAsText,
+          onSelectAll: selectAll,
           onOpen: () => {
             if (item && nodeId) onOpenTask(nodeId, item.title);
           },
@@ -388,6 +398,7 @@ export function DailyItemsGrid({
       order,
       selectedIds,
       copySelectionAsText,
+      selectAll,
       onOpenTask,
       onPromote,
       onMoveToDay,
@@ -505,6 +516,8 @@ export function DailyItemsGrid({
           columnCtx={columnCtx}
           selectedId={selectedId}
           selectedIds={selectedIds}
+          selectAllState={headerState}
+          onToggleSelectAll={toggleSelectAll}
           onSelect={select}
           ariaLabel="Today's task list"
           rowDrag={rowDrag}
@@ -515,7 +528,6 @@ export function DailyItemsGrid({
             if (item?.nodeId) onOpenTask(item.nodeId, item.title);
           }}
           rowLabel={(row) => row.node.title}
-          rowNumbers
           enableSort
           sorts={gridState.sorts}
           onSortChange={gridState.toggleSort}

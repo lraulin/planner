@@ -155,12 +155,22 @@ export async function deleteTransaction(
   transactionId: string,
 ): Promise<void> {
   await requireTransaction(userId, transactionId);
+  await deleteTransactions(userId, [transactionId]);
+}
+
+/** Delete the user's own rows in `ids`. Other users' ids are ignored. */
+export async function deleteTransactions(
+  userId: string,
+  transactionIds: readonly string[],
+): Promise<void> {
+  const unique = [...new Set(transactionIds)];
+  if (unique.length === 0) return;
   await db
     .delete(financeTransactions)
     .where(
       and(
-        eq(financeTransactions.id, transactionId),
         eq(financeTransactions.userId, userId),
+        inArray(financeTransactions.id, unique),
       ),
     );
 }

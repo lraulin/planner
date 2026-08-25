@@ -53,6 +53,35 @@ export function categoryAssignmentRefusal(input: {
   return null;
 }
 
+export type CategoryAssignmentSkip = { id: string; reason: string };
+
+/**
+ * Split a bulk Category write into rows we can update and rows we skip.
+ *
+ * Ids that did not load (another user's, or gone) are omitted from both lists so
+ * we do not advertise their existence.
+ */
+export function partitionCategoryTargets(
+  requestedIds: readonly string[],
+  loaded: readonly {
+    id: string;
+    accountOffBudget: boolean;
+    categoryAssignable: boolean;
+  }[],
+): { assignable: string[]; skipped: CategoryAssignmentSkip[] } {
+  const byId = new Map(loaded.map((row) => [row.id, row]));
+  const assignable: string[] = [];
+  const skipped: CategoryAssignmentSkip[] = [];
+  for (const id of requestedIds) {
+    const row = byId.get(id);
+    if (!row) continue;
+    const reason = categoryAssignmentRefusal(row);
+    if (reason) skipped.push({ id, reason });
+    else assignable.push(id);
+  }
+  return { assignable, skipped };
+}
+
 /** The exact rows Actual's Category backlog can act on. */
 export function categoryEligibleIds(
   rows: readonly CategoryEligibilityRow[],

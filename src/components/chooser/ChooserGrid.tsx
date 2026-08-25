@@ -114,6 +114,7 @@ export function ChooserGrid({
     onOpen: tab.openDetail,
     onRename: tab.setEditingId,
     onCopyAsText: tab.copySelectionAsText,
+    onSelectAll: tab.selectAll,
     onStateChange: tab.cellHandlers.onStateChange,
   });
   const [limit, setLimit] = useState(INITIAL_LIMIT);
@@ -410,6 +411,8 @@ export function ChooserGrid({
           columnCtx={columnCtx}
           selectedId={tab.selectedId}
           selectedIds={tab.selectedIds}
+          selectAllState={tab.headerState}
+          onToggleSelectAll={tab.toggleSelectAll}
           onSelect={tab.select}
           onOpenDetail={tab.openDetail}
           ariaLabel="Task Chooser"
@@ -417,7 +420,6 @@ export function ChooserGrid({
           rowMenu={nodeCommands.rowMenu}
           rowSwipe={nodeCommands.rowSwipe}
           rowDrag={rowDrag}
-          rowNumbers
           enableFilters={advancedFilters}
           enableSort
           sorts={gridState.sorts}

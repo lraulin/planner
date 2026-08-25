@@ -97,7 +97,15 @@ export function TimeChartsView({
   const rowIds = useMemo(() => rows.map((row) => row.id), [rows]);
   const { order, onIdsChange } = useNavigableIds(rowIds);
   const multi = useMultiSelect(order, null);
-  const { selectedId, selectedIds, select, move } = multi;
+  const {
+    selectedId,
+    selectedIds,
+    select,
+    selectAll,
+    toggleSelectAll,
+    headerState,
+    move,
+  } = multi;
   const apply = useCallback(
     (action: () => Promise<{ ok: true } | { ok: false; error: string }>) => {
       setError(null);
@@ -165,9 +173,12 @@ export function TimeChartsView({
         },
         onCreate: createNew,
         onOpen: openEditor,
-        onDelete: requestDelete,
+        onDelete: (ids) => {
+          if (ids[0]) requestDelete(ids[0]);
+        },
+        onSelectAll: selectAll,
       }),
-    [rows, createNew, openEditor, requestDelete],
+    [rows, createNew, openEditor, requestDelete, selectAll],
   );
 
   const commandCapabilities = useMemo(
@@ -242,11 +253,12 @@ export function TimeChartsView({
         columnCtx={columnCtx}
         selectedId={selectedId}
         selectedIds={selectedIds}
+        selectAllState={headerState}
+        onToggleSelectAll={toggleSelectAll}
         onSelect={select}
         onOpenDetail={openEditor}
         ariaLabel="Time Charts"
         rowMenu={rowMenu}
-        rowNumbers
         rowLabel={(row) => row.node.name || "Untitled time chart"}
         enableFilters
         enableSort

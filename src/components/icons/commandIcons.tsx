@@ -119,6 +119,17 @@ function CopyIcon() {
   );
 }
 
+/** Two ticked rows — select every navigable row, not copy and not complete. */
+function SelectAllIcon() {
+  return (
+    <Glyph>
+      <rect x="3.5" y="3.5" width="13" height="5.5" rx="1" />
+      <rect x="3.5" y="11" width="13" height="5.5" rx="1" />
+      <path d="M6 6.2l1.5 1.5 3-3M6 13.7l1.5 1.5 3-3" />
+    </Glyph>
+  );
+}
+
 /** Delete: Achieve's ✕, not a trash can. It is a row removal, not a recycle bin. */
 function DeleteIcon() {
   return (
@@ -429,6 +440,7 @@ export const COMMAND_ICONS: Record<CommandIcon, () => React.ReactElement> = {
   "insert-child": InsertChildIcon,
   open: OpenIcon,
   rename: RenameIcon,
+  "select-all": SelectAllIcon,
   copy: CopyIcon,
   attach: AttachIcon,
   delete: DeleteIcon,

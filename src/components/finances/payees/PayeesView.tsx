@@ -95,7 +95,15 @@ export function PayeesView({
   const rowIds = useMemo(() => rows.map((row) => row.id), [rows]);
   const { order, onIdsChange } = useNavigableIds(rowIds);
   const multi = useMultiSelect(order, null);
-  const { selectedId, selectedIds, select, move } = multi;
+  const {
+    selectedId,
+    selectedIds,
+    select,
+    selectAll,
+    toggleSelectAll,
+    headerState,
+    move,
+  } = multi;
   const clearSelection = multi.selectOne;
 
   const refresh = useCallback(() => {
@@ -227,7 +235,10 @@ export function PayeesView({
         },
         onCreate: rebuild,
         onOpen: openDrawer,
-        onDelete: requestDelete,
+        onDelete: (ids) => {
+          if (ids[0]) requestDelete(ids[0]);
+        },
+        onSelectAll: selectAll,
         pageCommands: [
           {
             id: "payees.merge",
@@ -241,7 +252,7 @@ export function PayeesView({
           },
         ],
       }),
-    [rows, rebuild, openDrawer, requestDelete, requestMerge],
+    [rows, rebuild, openDrawer, requestDelete, requestMerge, selectAll],
   );
 
   const commandCapabilities = useMemo(
@@ -313,11 +324,12 @@ export function PayeesView({
         columnCtx={{ compact, pending, onRename: rename }}
         selectedId={selectedId}
         selectedIds={selectedIds}
+        selectAllState={headerState}
+        onToggleSelectAll={toggleSelectAll}
         onSelect={select}
         onOpenDetail={openDrawer}
         ariaLabel="Payees"
         rowMenu={rowMenu}
-        rowNumbers
         rowLabel={(row) => row.node.name || "Payee"}
         enableFilters
         enableSort

@@ -27,6 +27,7 @@ import {
   RENAME,
   SAVE,
   SCHEDULE_BLOCK,
+  SELECT_ALL,
   VIEW_PROJECT,
   VIEW_TASKS,
 } from "./chords";
@@ -96,6 +97,7 @@ describe("the Return family", () => {
  */
 describe("the shared grid chords", () => {
   it("prints the glyphs the HintBar and menus already teach", () => {
+    expect(formatBindings(SELECT_ALL)).toBe("⌘A");
     expect(formatBindings(COPY_AS_TEXT)).toBe("⌘C");
     expect(formatBindings(CUT_ROWS)).toBe("⌘X");
     expect(formatBindings(PASTE_ROWS)).toBe("⌘V");

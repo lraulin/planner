@@ -3,6 +3,7 @@ import {
   categoryAssignableIds,
   categoryAssignmentRefusal,
   categoryEligibleIds,
+  partitionCategoryTargets,
 } from "./categoryEligibility";
 
 const ROWS = [
@@ -85,5 +86,29 @@ describe("categoryAssignableIds", () => {
         categoryAssignable: true,
       }),
     ).toBeNull();
+  });
+});
+
+describe("partitionCategoryTargets", () => {
+  it("keeps assignable rows and skips ineligible ones with their refusal", () => {
+    const result = partitionCategoryTargets(
+      ["ok", "off", "xfer"],
+      [
+        { id: "ok", accountOffBudget: false, categoryAssignable: true },
+        { id: "off", accountOffBudget: true, categoryAssignable: false },
+        { id: "xfer", accountOffBudget: false, categoryAssignable: false },
+      ],
+    );
+    expect(result.assignable).toEqual(["ok"]);
+    expect(result.skipped.map((row) => row.id)).toEqual(["off", "xfer"]);
+  });
+
+  it("omits ids that did not load, so another user's row is not advertised", () => {
+    const result = partitionCategoryTargets(
+      ["mine", "theirs"],
+      [{ id: "mine", accountOffBudget: false, categoryAssignable: true }],
+    );
+    expect(result.assignable).toEqual(["mine"]);
+    expect(result.skipped).toEqual([]);
   });
 });

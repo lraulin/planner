@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeAccounts,
@@ -19,7 +19,7 @@ import * as sortKey from "@/lib/tree/sortKey";
 import { effectiveFlow } from "../analytics";
 import {
   categoryAssignableIds,
-  categoryAssignmentRefusal,
+  partitionCategoryTargets,
 } from "../categoryEligibility";
 import { numericStringToCents } from "../money";
 import { applyPayeeAutoCategories, applyPayeeClaims } from "../payees/claims";
@@ -925,50 +925,54 @@ async function learnCategoryForPayee(
   await learnFromCategoryEdit(userId, payeeId, editedId);
 }
 
-/** Put one transaction in a Category, or make it Uncategorized. */
-export async function setTransactionBudgetCategory(
+export type BulkCategoryResult = {
+  updated: string[];
+  skipped: { id: string; reason: string }[];
+};
+
+const CATEGORY_ROW_COLUMNS = {
+  id: financeTransactions.id,
+  accountId: financeTransactions.accountId,
+  accountOffBudget: financeAccounts.offBudget,
+  transactionDate: financeTransactions.transactionDate,
+  transferGroupId: financeTransactions.transferGroupId,
+  derivedFlow: financeTransactions.derivedFlow,
+  flowOverride: financeTransactions.flowOverride,
+  amount: financeTransactions.amount,
+  payeeId: financeTransactions.payeeId,
+} as const;
+
+/** Put many transactions in a Category, skipping ineligible rows. */
+export async function setTransactionBudgetCategories(
   userId: string,
-  transactionId: string,
+  transactionIds: readonly string[],
   categoryId: string | null,
-): Promise<string | void> {
+): Promise<BulkCategoryResult> {
+  const unique = [...new Set(transactionIds)];
+  if (unique.length === 0) return { updated: [], skipped: [] };
   if (categoryId !== null) await requireCategory(userId, categoryId);
 
-  const [row] = await db
-    .select({
-      id: financeTransactions.id,
-      accountId: financeTransactions.accountId,
-      accountOffBudget: financeAccounts.offBudget,
-      transactionDate: financeTransactions.transactionDate,
-      transferGroupId: financeTransactions.transferGroupId,
-      derivedFlow: financeTransactions.derivedFlow,
-      flowOverride: financeTransactions.flowOverride,
-      amount: financeTransactions.amount,
-      payeeId: financeTransactions.payeeId,
-    })
+  const rows = await db
+    .select(CATEGORY_ROW_COLUMNS)
     .from(financeTransactions)
     .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
     .where(
       and(
-        eq(financeTransactions.id, transactionId),
         eq(financeTransactions.userId, userId),
+        inArray(financeTransactions.id, unique),
       ),
-    )
-    .limit(1);
-  if (!row) throw new Error("That transaction does not exist.");
+    );
 
-  if (categoryId !== null) {
-    const assignmentRows = row.transferGroupId
-      ? await db
-          .select({
-            id: financeTransactions.id,
-            accountId: financeTransactions.accountId,
-            accountOffBudget: financeAccounts.offBudget,
-            transactionDate: financeTransactions.transactionDate,
-            transferGroupId: financeTransactions.transferGroupId,
-            derivedFlow: financeTransactions.derivedFlow,
-            flowOverride: financeTransactions.flowOverride,
-            amount: financeTransactions.amount,
-          })
+  const groupIds = [
+    ...new Set(
+      rows.flatMap((row) => (row.transferGroupId ? [row.transferGroupId] : [])),
+    ),
+  ];
+  const mates =
+    groupIds.length === 0
+      ? []
+      : await db
+          .select(CATEGORY_ROW_COLUMNS)
           .from(financeTransactions)
           .innerJoin(
             financeAccounts,
@@ -977,47 +981,89 @@ export async function setTransactionBudgetCategory(
           .where(
             and(
               eq(financeTransactions.userId, userId),
-              eq(financeTransactions.transferGroupId, row.transferGroupId),
+              inArray(financeTransactions.transferGroupId, groupIds),
             ),
-          )
-      : [row];
-    const assignable = categoryAssignableIds(
-      assignmentRows.map((entry) => ({
-        id: entry.id,
-        accountId: entry.accountId,
-        transactionDate: entry.transactionDate,
-        transferGroupId: entry.transferGroupId,
-        effectiveFlow: effectiveFlow({
-          derivedFlow: entry.derivedFlow,
-          flowOverride: entry.flowOverride,
-          amountCents: numericStringToCents(entry.amount) ?? 0,
-        }),
-      })),
-      new Set(
-        assignmentRows.flatMap((entry) =>
-          entry.accountOffBudget ? [entry.accountId] : [],
-        ),
+          );
+
+  const byId = new Map<string, (typeof rows)[number]>();
+  for (const row of [...mates, ...rows]) byId.set(row.id, row);
+  const assignmentRows = [...byId.values()];
+  const assignableSet = categoryAssignableIds(
+    assignmentRows.map((entry) => ({
+      id: entry.id,
+      accountId: entry.accountId,
+      transactionDate: entry.transactionDate,
+      transferGroupId: entry.transferGroupId,
+      effectiveFlow: effectiveFlow({
+        derivedFlow: entry.derivedFlow,
+        flowOverride: entry.flowOverride,
+        amountCents: numericStringToCents(entry.amount) ?? 0,
+      }),
+    })),
+    new Set(
+      assignmentRows.flatMap((entry) =>
+        entry.accountOffBudget ? [entry.accountId] : [],
       ),
-    );
-    const refusal = categoryAssignmentRefusal({
-      accountOffBudget: row.accountOffBudget,
-      categoryAssignable: assignable.has(row.id),
-    });
-    if (refusal) throw new Error(refusal);
+    ),
+  );
+
+  const loadedIds = new Set(rows.map((row) => row.id));
+  const { assignable, skipped } =
+    categoryId === null
+      ? {
+          assignable: unique.filter((id) => loadedIds.has(id)),
+          skipped: [],
+        }
+      : partitionCategoryTargets(
+          unique,
+          rows.map((row) => ({
+            id: row.id,
+            accountOffBudget: row.accountOffBudget,
+            categoryAssignable: assignableSet.has(row.id),
+          })),
+        );
+
+  if (assignable.length > 0) {
+    await db
+      .update(financeTransactions)
+      .set({ budgetCategoryId: categoryId, updatedAt: new Date() })
+      .where(
+        and(
+          eq(financeTransactions.userId, userId),
+          inArray(financeTransactions.id, assignable),
+        ),
+      );
   }
 
-  await db
-    .update(financeTransactions)
-    .set({ budgetCategoryId: categoryId, updatedAt: new Date() })
-    .where(
-      and(
-        eq(financeTransactions.id, transactionId),
-        eq(financeTransactions.userId, userId),
-      ),
-    );
+  if (categoryId !== null) {
+    const latestByPayee = new Map<string, string>();
+    for (const id of assignable) {
+      const payeeId = rows.find((row) => row.id === id)?.payeeId;
+      if (payeeId) latestByPayee.set(payeeId, id);
+    }
+    for (const [payeeId, editedId] of latestByPayee) {
+      await learnCategoryForPayee(userId, editedId, payeeId);
+    }
+  }
 
-  if (categoryId === null || row.payeeId === null) return;
-  return learnCategoryForPayee(userId, transactionId, row.payeeId);
+  return { updated: assignable, skipped };
+}
+
+/** Put one transaction in a Category, or make it Uncategorized. */
+export async function setTransactionBudgetCategory(
+  userId: string,
+  transactionId: string,
+  categoryId: string | null,
+): Promise<string | void> {
+  const result = await setTransactionBudgetCategories(
+    userId,
+    [transactionId],
+    categoryId,
+  );
+  if (result.updated.includes(transactionId)) return;
+  const skip = result.skipped[0];
+  if (skip) throw new Error(skip.reason);
+  throw new Error("That transaction does not exist.");
 }
 
 async function requireSpendingCategory(

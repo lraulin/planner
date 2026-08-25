@@ -165,6 +165,7 @@ export function ResultAreasGrid({ initialNodes }: { initialNodes: OutlineNode[] 
     onOpen: tab.openDetail,
     onRename: tab.setEditingId,
     onCopyAsText: tab.copySelectionAsText,
+    onSelectAll: tab.selectAll,
     onStateChange: tab.cellHandlers.onStateChange,
   });
   const [counts, setCounts] = useState({ shown: 0, total: 0 });
@@ -246,10 +247,11 @@ export function ResultAreasGrid({ initialNodes }: { initialNodes: OutlineNode[] 
         columnCtx={columnCtx}
         selectedId={tab.selectedId}
         selectedIds={tab.selectedIds}
+        selectAllState={tab.headerState}
+        onToggleSelectAll={tab.toggleSelectAll}
         onSelect={tab.select}
         onOpenDetail={tab.openDetail}
         ariaLabel="Result Areas"
-        rowNumbers
         onNavigableIdsChange={tab.setNavigableIds}
         rowMenu={nodeCommands.rowMenu}
         rowSwipe={nodeCommands.rowSwipe}

@@ -93,7 +93,15 @@ export function AccountsView({
   const rowIds = useMemo(() => rows.map((row) => row.id), [rows]);
   const { order, onIdsChange } = useNavigableIds(rowIds);
   const multi = useMultiSelect(order, null);
-  const { selectedId, selectedIds, select, move } = multi;
+  const {
+    selectedId,
+    selectedIds,
+    select,
+    selectAll,
+    toggleSelectAll,
+    headerState,
+    move,
+  } = multi;
 
   const refresh = useCallback(() => {
     startTransition(async () => {
@@ -150,9 +158,12 @@ export function AccountsView({
         },
         onCreate: openImport,
         onOpen: openDrawer,
-        onDelete: requestDelete,
+        onDelete: (ids) => {
+          if (ids[0]) requestDelete(ids[0]);
+        },
+        onSelectAll: selectAll,
       }),
-    [rows, openImport, openDrawer, requestDelete],
+    [rows, openImport, openDrawer, requestDelete, selectAll],
   );
 
   const commandCapabilities = useMemo(
@@ -204,11 +215,12 @@ export function AccountsView({
         columnCtx={{}}
         selectedId={selectedId}
         selectedIds={selectedIds}
+        selectAllState={headerState}
+        onToggleSelectAll={toggleSelectAll}
         onSelect={select}
         onOpenDetail={openDrawer}
         ariaLabel="Accounts"
         rowMenu={rowMenu}
-        rowNumbers
         rowLabel={(row) => row.node.name || "Account"}
         enableFilters
         enableSort

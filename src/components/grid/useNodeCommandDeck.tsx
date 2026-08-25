@@ -41,6 +41,7 @@ export function useNodeCommandDeck({
   onOpen,
   onRename,
   onCopyAsText,
+  onSelectAll,
   onStateChange,
 }: {
   nodes: readonly OutlineNode[];
@@ -81,6 +82,8 @@ export function useNodeCommandDeck({
    * from it instead of written out again.
    */
   onCopyAsText: () => void;
+  /** Select every currently navigable row. Header checkbox and ⌘A. */
+  onSelectAll?: () => void;
   /**
    * The host's `useStateChange` bridge — `useGridTab` already exposes exactly this shape as
    * `cellHandlers.onStateChange`. Taking it rather than calling `setStateAction` here is what
@@ -138,6 +141,7 @@ export function useNodeCommandDeck({
       onOpen,
       onRename,
       onCopyAsText,
+      onSelectAll,
       onAttachFromClipboard: attachFromClipboard,
       onConvert,
       onSetPriority: () => setPriorityPromptOpen(true),
@@ -212,6 +216,7 @@ export function useNodeCommandDeck({
       onOpen,
       onRename,
       onCopyAsText,
+      onSelectAll,
       attachFromClipboard,
       onStateChange,
       router,

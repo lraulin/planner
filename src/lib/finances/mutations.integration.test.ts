@@ -20,6 +20,7 @@ import { loadRecurringBills } from "./dashboardQueries";
 import {
   deleteAccount,
   deleteTransaction,
+  deleteTransactions,
   setSubscriptionStatus,
   trackTransactionAsBill,
   updateAccount,
@@ -231,6 +232,11 @@ describeDb("finance user isolation", () => {
     await expect(deleteTransaction(intruderId, transactionId)).rejects.toThrow(
       "Transaction not found.",
     );
+    expect(await getTransaction(ownerId, transactionId)).not.toBeNull();
+  });
+
+  it("does not let a second user bulk-delete another user's transaction", async () => {
+    await deleteTransactions(intruderId, [transactionId]);
     expect(await getTransaction(ownerId, transactionId)).not.toBeNull();
   });
 

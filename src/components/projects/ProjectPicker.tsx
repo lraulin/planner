@@ -21,6 +21,8 @@ export function ProjectPicker({
   onChange,
   allowAll = false,
   allowNone = false,
+  noneLabel = "No Project",
+  includeTasks = false,
   excludedIds,
   listClassName = "max-h-[42dvh]",
   query: queryProp,
@@ -31,6 +33,9 @@ export function ProjectPicker({
   onChange: (value: ProjectPickerValue) => void;
   allowAll?: boolean;
   allowNone?: boolean;
+  noneLabel?: string;
+  /** Outline Move to… lists tasks so a task can become a subtask. */
+  includeTasks?: boolean;
   excludedIds?: ReadonlySet<string>;
   listClassName?: string;
   /** Controlled filter. Omit both to keep the filter local to this picker. */
@@ -54,8 +59,17 @@ export function ProjectPicker({
         includeDeferred,
         today,
         excludedIds,
+        includeTasks,
       }),
-    [nodes, query, groupByResultArea, includeDeferred, today, excludedIds],
+    [
+      nodes,
+      query,
+      groupByResultArea,
+      includeDeferred,
+      today,
+      excludedIds,
+      includeTasks,
+    ],
   );
 
   // Fully expanded by default — same as Achieve's dialog when it opens. Collapsing is
@@ -119,7 +133,7 @@ export function ProjectPicker({
         )}
         {allowNone && (
           <PickerRow
-            label="No Project"
+            label={noneLabel}
             selected={value.kind === "none"}
             onClick={() => onChange({ kind: "none" })}
           />

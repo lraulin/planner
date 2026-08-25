@@ -13,6 +13,17 @@ import type { GridCommandCapabilities, GridPageCommand } from "@/lib/grid/comman
  *
  * Only the nouns differ, so only the nouns are arguments.
  */
+/** Rows a catalog plural verb should act on: the selection, or the right-clicked row. */
+export function catalogTargetIds(
+  rowId: string | null,
+  count: number,
+  selectedIds: ReadonlySet<string>,
+  order: readonly string[],
+): string[] {
+  if (count > 1) return order.filter((id) => selectedIds.has(id));
+  return rowId ? [rowId] : [];
+}
+
 export function catalogCapabilities({
   createLabel,
   openLabel,
@@ -23,6 +34,7 @@ export function catalogCapabilities({
   onCreate,
   onOpen,
   onDelete,
+  onSelectAll,
   pageCommands = [],
 }: {
   /** e.g. `"New contact"`. */
@@ -37,10 +49,18 @@ export function catalogCapabilities({
    * Timeline has rows that edit in the grid and have no record to open.
    */
   openDisabled?: string;
-  selection: { id: string | null; count: number; label?: string | null };
+  selection: {
+    id: string | null;
+    count: number;
+    label?: string | null;
+    /** Rows a plural Delete acts on. Absent means just `id`. */
+    ids?: readonly string[];
+  };
   onCreate: () => void;
   onOpen: (id: string) => void;
-  onDelete: (id: string) => void;
+  onDelete: (ids: readonly string[]) => void;
+  /** Select every currently navigable row. Header checkbox and ⌘A. */
+  onSelectAll?: () => void;
   /** Anything this catalog has beyond the three verbs. */
   pageCommands?: readonly GridPageCommand[];
 }): GridCommandCapabilities {
@@ -59,7 +79,7 @@ export function catalogCapabilities({
 
   return {
     selection,
-    actions: {},
+    actions: { onSelectAll },
     pageCommands: [
       {
         id: "grid.create",
@@ -101,7 +121,10 @@ export function catalogCapabilities({
         bindings: DELETE_ROW,
         disabled: Boolean(cannotDelete),
         title: cannotDelete,
-        run: () => selection.id && onDelete(selection.id),
+        run: () => {
+          const ids = selection.ids ?? (selection.id ? [selection.id] : []);
+          if (ids.length > 0) onDelete(ids);
+        },
       },
       ...pageCommands,
     ],

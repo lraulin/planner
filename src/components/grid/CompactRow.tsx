@@ -29,6 +29,7 @@ import { haptic } from "@/lib/touch/haptics";
 import { CommandGlyph } from "@/components/icons/commandIcons";
 import type { CommandIcon } from "@/lib/commands/icons";
 import type { CompactFields } from "@/lib/grid/compactFields";
+import { SelectionCheckbox } from "./SelectionCheckbox";
 import { useDateFormatter } from "@/components/settings/SettingsProvider";
 import { formatFullDateKey } from "@/lib/dateFormat";
 import type { ColumnDef, NodeGridRow } from "./columns";
@@ -78,7 +79,7 @@ type CompactRowProps<TCtx, TRow> = {
   columnCtx: TCtx;
   fields: CompactFields<ColumnDef<TCtx, TRow>>;
   selected: boolean;
-  onSelect: (id: string) => void;
+  onSelect: (id: string, mods?: { extend?: boolean; toggle?: boolean }) => void;
   onOpenDetail?: (id: string) => void;
   onLongPress?: (id: string, x: number, y: number) => void;
   swipe?: RowSwipe;
@@ -295,6 +296,18 @@ export const CompactRow = memo(function CompactRow<TCtx, TRow>({
         ].join(" ")}
       >
         <RowSelectedContext.Provider value={selected}>
+          <SelectionCheckbox
+            state={selected}
+            compact
+            ariaLabel="Select row"
+            onSelect={(event) => {
+              event.preventDefault();
+              onSelect(row.id, {
+                extend: event.shiftKey,
+                toggle: !event.shiftKey,
+              });
+            }}
+          />
           <AccentBar text={accentText} />
 
           {/* The one column rendered as a live control rather than text — a Day item's check

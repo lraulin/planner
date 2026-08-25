@@ -5,7 +5,10 @@ import {
   applySelect,
   moveSelection,
   pruneSelection,
+  selectAll,
+  selectAllHeaderState,
   selectOnly,
+  toggleSelectAll,
   type SelectMods,
 } from "@/lib/grid/selection";
 
@@ -77,6 +80,7 @@ export function useMultiSelect(
           id,
           orderedIds,
           mods,
+          { allowEmpty: options.allowEmpty },
         );
         return {
           focusId: result.focusId,
@@ -85,7 +89,7 @@ export function useMultiSelect(
         };
       });
     },
-    [orderedIds],
+    [orderedIds, options.allowEmpty],
   );
 
   const selectOne = useCallback((id: string | null) => {
@@ -96,6 +100,30 @@ export function useMultiSelect(
       selectedIds: result.selectedIds,
     });
   }, []);
+
+  const selectEvery = useCallback(() => {
+    setState((current) => {
+      const result = selectAll(orderedIds, current.focusId);
+      return {
+        focusId: result.focusId,
+        anchorId: result.anchorId,
+        selectedIds: result.selectedIds,
+      };
+    });
+  }, [orderedIds]);
+
+  const toggleEvery = useCallback(() => {
+    setState((current) => {
+      const result = toggleSelectAll(orderedIds, current.selectedIds, current.focusId, {
+        allowEmpty: options.allowEmpty,
+      });
+      return {
+        focusId: result.focusId,
+        anchorId: result.anchorId,
+        selectedIds: result.selectedIds,
+      };
+    });
+  }, [orderedIds, options.allowEmpty]);
 
   const move = useCallback(
     (delta: number, extend: boolean) => {
@@ -123,6 +151,10 @@ export function useMultiSelect(
     [state.selectedIds],
   );
 
+  const headerState = selectAllHeaderState(orderedIds, state.selectedIds, {
+    allowEmpty: options.allowEmpty,
+  });
+
   return useMemo(
     () => ({
       /** Primary / keyboard-focus row. */
@@ -131,6 +163,9 @@ export function useMultiSelect(
       anchorId: state.anchorId,
       select,
       selectOne,
+      selectAll: selectEvery,
+      toggleSelectAll: toggleEvery,
+      headerState,
       move,
       isSelected,
       setSelectedId: selectOne,
@@ -141,6 +176,9 @@ export function useMultiSelect(
       state.anchorId,
       select,
       selectOne,
+      selectEvery,
+      toggleEvery,
+      headerState,
       move,
       isSelected,
     ],

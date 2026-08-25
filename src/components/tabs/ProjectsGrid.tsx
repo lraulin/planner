@@ -291,6 +291,7 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
     onOpen: tab.openDetail,
     onRename: tab.setEditingId,
     onCopyAsText: tab.copySelectionAsText,
+    onSelectAll: tab.selectAll,
     onStateChange: tab.cellHandlers.onStateChange,
   });
   // From `?scope=` rather than local state, so the narrowing survives reload and Back —
@@ -401,10 +402,11 @@ export function ProjectsGrid({ initialNodes }: { initialNodes: OutlineNode[] }) 
         columnCtx={tab.cellHandlers}
         selectedId={tab.selectedId}
         selectedIds={tab.selectedIds}
+        selectAllState={tab.headerState}
+        onToggleSelectAll={tab.toggleSelectAll}
         onSelect={tab.select}
         onOpenDetail={tab.openDetail}
         ariaLabel="Projects"
-        rowNumbers
         onNavigableIdsChange={tab.setNavigableIds}
         rowMenu={nodeCommands.rowMenu}
         rowSwipe={nodeCommands.rowSwipe}

@@ -98,7 +98,15 @@ export function ResidencesView({
   const rowIds = useMemo(() => rows.map((row) => row.id), [rows]);
   const { order, onIdsChange } = useNavigableIds(rowIds);
   const multi = useMultiSelect(order, null);
-  const { selectedId, selectedIds, select, move } = multi;
+  const {
+    selectedId,
+    selectedIds,
+    select,
+    selectAll,
+    toggleSelectAll,
+    headerState,
+    move,
+  } = multi;
 
   const refresh = useCallback(() => {
     startTransition(async () => {
@@ -164,9 +172,12 @@ export function ResidencesView({
         },
         onCreate: createNew,
         onOpen: openDrawer,
-        onDelete: requestDelete,
+        onDelete: (ids) => {
+          if (ids[0]) requestDelete(ids[0]);
+        },
+        onSelectAll: selectAll,
       }),
-    [rows, createNew, openDrawer, requestDelete],
+    [rows, createNew, openDrawer, requestDelete, selectAll],
   );
 
   const commandCapabilities = useMemo(
@@ -217,11 +228,12 @@ export function ResidencesView({
         columnCtx={{}}
         selectedId={selectedId}
         selectedIds={selectedIds}
+        selectAllState={headerState}
+        onToggleSelectAll={toggleSelectAll}
         onSelect={select}
         onOpenDetail={openDrawer}
         ariaLabel="Residences"
         rowMenu={rowMenu}
-        rowNumbers
         rowLabel={(row) => nameOf(row.node)}
         enableFilters
         enableSort

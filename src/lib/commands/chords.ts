@@ -80,6 +80,9 @@ export const DELETE_ROW: KeyBinding[] = [{ key: "Backspace" }, { key: "Delete" }
 /** `⌘C` — copy the selection as plain text. */
 export const COPY_AS_TEXT: KeyBinding[] = [{ key: "c", meta: true }];
 
+/** `⌘A` — select every navigable row. Does not fire while typing (`CommandKeys`). */
+export const SELECT_ALL: KeyBinding[] = [{ key: "a", meta: true }];
+
 /** `⌘X` — pick rows up for paste elsewhere. */
 export const CUT_ROWS: KeyBinding[] = [{ key: "x", meta: true }];
 

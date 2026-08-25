@@ -60,7 +60,16 @@ export function useGridTab(initialNodes: OutlineNode[]) {
     [navigableIds, nodes],
   );
   const multi = useMultiSelect(order, detailId);
-  const { selectedId, selectedIds, select, selectOne, move } = multi;
+  const {
+    selectedId,
+    selectedIds,
+    select,
+    selectOne,
+    selectAll,
+    toggleSelectAll,
+    headerState,
+    move,
+  } = multi;
 
   // Back / forward and deep-links change `?detail=`. Sync the row highlight during render
   // (same idiom as DayView re-syncing server props) so the open drawer always has a
@@ -260,6 +269,9 @@ export function useGridTab(initialNodes: OutlineNode[]) {
     setSelectedId: selectOne,
     select,
     selectOne,
+    selectAll,
+    toggleSelectAll,
+    headerState,
     move,
     /** Tell multi-select which ids are on screen, in screen order. */
     setNavigableIds,

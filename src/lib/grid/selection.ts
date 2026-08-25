@@ -51,6 +51,7 @@ export function applySelect(
   targetId: string,
   orderedIds: readonly string[],
   mods: SelectMods = {},
+  options: { allowEmpty?: boolean } = {},
 ): SelectResult {
   if (mods.extend && anchorId) {
     return {
@@ -63,9 +64,9 @@ export function applySelect(
   if (mods.toggle) {
     const next = new Set(current);
     if (next.has(targetId)) {
-      // Never leave the user with zero selection — a grid always has a focus row when
-      // rows exist. Dropping the last id would strand keyboard commands.
-      if (next.size > 1) next.delete(targetId);
+      // Never-empty grids keep a focus row when rows exist. Budget tables allow empty
+      // (empty means "assign all"), so the last checkbox can uncheck.
+      if (next.size > 1 || options.allowEmpty) next.delete(targetId);
     } else {
       next.add(targetId);
     }
@@ -98,6 +99,68 @@ export function selectOnly(id: string | null): SelectResult {
     anchorId: id,
     focusId: id,
   };
+}
+
+/** Header checkbox: every navigable row, more than the focus, or none. */
+export type SelectAllState = "all" | "some" | "none";
+
+/**
+ * Select every id in display order. Keep keyboard focus where it is when that row is
+ * still on screen; otherwise land on the first row.
+ */
+export function selectAll(
+  orderedIds: readonly string[],
+  focusId: string | null = null,
+): SelectResult {
+  if (orderedIds.length === 0) {
+    return { selectedIds: new Set(), anchorId: null, focusId: null };
+  }
+  const nextFocus = focusId && orderedIds.includes(focusId) ? focusId : orderedIds[0];
+  return {
+    selectedIds: new Set(orderedIds),
+    anchorId: nextFocus,
+    focusId: nextFocus,
+  };
+}
+
+/**
+ * Visual state of the header checkbox.
+ *
+ * Never-empty grids treat a lone focus row as **none** (clicking the header means
+ * select-all, not "this one row is a partial selection"). `allowEmpty` treats a real
+ * empty set as none, and a single selected row among several as **some**.
+ */
+export function selectAllHeaderState(
+  orderedIds: readonly string[],
+  selectedIds: ReadonlySet<string>,
+  options: { allowEmpty?: boolean } = {},
+): SelectAllState {
+  if (orderedIds.length === 0) return "none";
+  let selectedCount = 0;
+  for (const id of orderedIds) {
+    if (selectedIds.has(id)) selectedCount += 1;
+  }
+  if (selectedCount === orderedIds.length) return "all";
+  if (options.allowEmpty) return selectedCount === 0 ? "none" : "some";
+  return selectedCount <= 1 ? "none" : "some";
+}
+
+/**
+ * Header click: none/some → all; all → the focus row (never-empty) or empty
+ * (`allowEmpty`).
+ */
+export function toggleSelectAll(
+  orderedIds: readonly string[],
+  selectedIds: ReadonlySet<string>,
+  focusId: string | null,
+  options: { allowEmpty?: boolean } = {},
+): SelectResult {
+  const state = selectAllHeaderState(orderedIds, selectedIds, options);
+  if (state !== "all") return selectAll(orderedIds, focusId);
+  if (options.allowEmpty) return selectOnly(null);
+  const keep =
+    focusId && orderedIds.includes(focusId) ? focusId : (orderedIds[0] ?? null);
+  return selectOnly(keep);
 }
 
 /**

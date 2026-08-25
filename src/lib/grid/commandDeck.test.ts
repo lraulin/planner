@@ -340,6 +340,22 @@ describe("grid command deck", () => {
       expect(labels.get("record.complete")).toBe("Complete");
     });
 
+    it("registers Select all when the host supplies it", () => {
+      let ran = false;
+      const commands = build(
+        { id: "a", count: 1, ids: ["a"] },
+        {
+          onSelectAll: () => {
+            ran = true;
+          },
+        },
+      );
+      const selectAllCmd = commands.find((entry) => entry.id === "record.select-all");
+      expect(selectAllCmd?.label).toBe("Select all");
+      selectAllCmd?.run();
+      expect(ran).toBe(true);
+    });
+
     it("hands the whole selection to the action, not just the focus row", () => {
       // The bug this exists to prevent: `Delete (3)` removing one row. The label promised
       // three and the old signature could only carry the focus id.

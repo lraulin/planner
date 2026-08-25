@@ -148,7 +148,16 @@ export function TimelineView({
   const { order, onIdsChange } = useNavigableIds(rowIds);
   const eventRowId = openId ? `event:${openId}` : null;
   const multi = useMultiSelect(order, eventRowId);
-  const { selectedId, selectedIds, select, selectOne, move } = multi;
+  const {
+    selectedId,
+    selectedIds,
+    select,
+    selectOne,
+    selectAll,
+    toggleSelectAll,
+    headerState,
+    move,
+  } = multi;
 
   // Find and a pasted link land on `?detail=<life_events.id>`. The grid row is
   // `event:<id>` — prefix here so the URL matches every other catalog.
@@ -277,10 +286,13 @@ export function TimelineView({
         selection: { id: rowId, count, label: row?.title },
         onCreate: createNew,
         onOpen: openRow,
-        onDelete: requestDelete,
+        onDelete: (ids) => {
+          if (ids[0]) requestDelete(ids[0]);
+        },
+        onSelectAll: selectAll,
       });
     },
-    [rowById, createNew, openRow, requestDelete],
+    [rowById, createNew, openRow, requestDelete, selectAll],
   );
 
   const commandCapabilities = useMemo(
@@ -449,11 +461,12 @@ export function TimelineView({
         columnCtx={columnCtx}
         selectedId={selectedId}
         selectedIds={selectedIds}
+        selectAllState={headerState}
+        onToggleSelectAll={toggleSelectAll}
         onSelect={select}
         onOpenDetail={openRow}
         ariaLabel="Timeline"
         rowMenu={rowMenu}
-        rowNumbers
         rowLabel={(row) => row.node.title || "Untitled event"}
         enableFilters
         enableSort

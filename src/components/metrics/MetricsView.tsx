@@ -293,7 +293,16 @@ export function MetricsView({
   );
   const { order, onIdsChange } = useNavigableIds(rowIds);
   const multi = useMultiSelect(order, openId ?? initialMetrics[0]?.id ?? null);
-  const { selectedId, selectedIds, select, selectOne, move } = multi;
+  const {
+    selectedId,
+    selectedIds,
+    select,
+    selectOne,
+    selectAll,
+    toggleSelectAll,
+    headerState,
+    move,
+  } = multi;
 
   // Back / forward and deep-links change `?detail=`. Sync the row highlight during render
   // so the open drawer has a selected owner without an effect-driven cascade.
@@ -360,9 +369,12 @@ export function MetricsView({
         },
         onCreate: createNew,
         onOpen: openDrawer,
-        onDelete: requestDelete,
+        onDelete: (ids) => {
+          if (ids[0]) requestDelete(ids[0]);
+        },
+        onSelectAll: selectAll,
       }),
-    [rows, createNew, openDrawer, requestDelete],
+    [rows, createNew, openDrawer, requestDelete, selectAll],
   );
 
   const commandCapabilities = useMemo(
@@ -444,11 +456,12 @@ export function MetricsView({
         columnCtx={columnCtx}
         selectedId={selectedId}
         selectedIds={selectedIds}
+        selectAllState={headerState}
+        onToggleSelectAll={toggleSelectAll}
         onSelect={select}
         onOpenDetail={openDrawer}
         ariaLabel="Metrics"
         rowMenu={rowMenu}
-        rowNumbers
         rowLabel={(row) => row.node.title || "Untitled"}
         enableFilters
         enableSort

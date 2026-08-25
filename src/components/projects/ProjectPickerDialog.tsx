@@ -13,6 +13,9 @@ export function ProjectPickerDialog({
   onCancel,
   allowAll = false,
   allowNone = false,
+  noneLabel,
+  includeTasks = false,
+  excludedIds,
   title = "Choose project",
   description = "Choose a project, goal, dream, or result area whose tasks you want to see.",
 }: {
@@ -23,6 +26,9 @@ export function ProjectPickerDialog({
   onCancel: () => void;
   allowAll?: boolean;
   allowNone?: boolean;
+  noneLabel?: string;
+  includeTasks?: boolean;
+  excludedIds?: ReadonlySet<string>;
   title?: string;
   description?: string;
 }) {
@@ -35,6 +41,9 @@ export function ProjectPickerDialog({
       onCancel={onCancel}
       allowAll={allowAll}
       allowNone={allowNone}
+      noneLabel={noneLabel}
+      includeTasks={includeTasks}
+      excludedIds={excludedIds}
       title={title}
       description={description}
     />
@@ -48,6 +57,9 @@ function OpenProjectPickerDialog({
   onCancel,
   allowAll,
   allowNone,
+  noneLabel,
+  includeTasks,
+  excludedIds,
   title,
   description,
 }: {
@@ -57,6 +69,9 @@ function OpenProjectPickerDialog({
   onCancel: () => void;
   allowAll: boolean;
   allowNone: boolean;
+  noneLabel?: string;
+  includeTasks: boolean;
+  excludedIds?: ReadonlySet<string>;
   title: string;
   description: string;
 }) {
@@ -82,6 +97,9 @@ function OpenProjectPickerDialog({
             onChange={setDraft}
             allowAll={allowAll}
             allowNone={allowNone}
+            noneLabel={noneLabel}
+            includeTasks={includeTasks}
+            excludedIds={excludedIds}
           />
         </div>
         <div className="mt-4 flex justify-end gap-2">

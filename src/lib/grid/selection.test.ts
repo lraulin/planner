@@ -5,8 +5,11 @@ import {
   neighborAfterRemoval,
   pruneSelection,
   rangeIds,
+  selectAll,
+  selectAllHeaderState,
   selectOnly,
   selectionMoveRoots,
+  toggleSelectAll,
 } from "./selection";
 
 const ORDER = ["a", "b", "c", "d", "e"];
@@ -52,6 +55,22 @@ describe("applySelect", () => {
       toggle: true,
     });
     expect([...result.selectedIds]).toEqual(["c"]);
+  });
+
+  it("clears the last row when empty is allowed", () => {
+    const result = applySelect(
+      new Set(["c"]),
+      "c",
+      "c",
+      "c",
+      ORDER,
+      {
+        toggle: true,
+      },
+      { allowEmpty: true },
+    );
+    expect([...result.selectedIds]).toEqual([]);
+    expect(result.focusId).toBeNull();
   });
 });
 
@@ -147,6 +166,96 @@ describe("selectOnly", () => {
   it("clears when given null", () => {
     expect([...selectOnly(null).selectedIds]).toEqual([]);
     expect(selectOnly(null).focusId).toBeNull();
+  });
+});
+
+describe("selectAll", () => {
+  it("selects every navigable id and keeps a still-visible focus", () => {
+    const result = selectAll(ORDER, "c");
+    expect([...result.selectedIds]).toEqual(ORDER);
+    expect(result.focusId).toBe("c");
+    expect(result.anchorId).toBe("c");
+  });
+
+  it("lands on the first row when focus is not on screen", () => {
+    const result = selectAll(ORDER, "gone");
+    expect(result.focusId).toBe("a");
+    expect(result.selectedIds.size).toBe(5);
+  });
+
+  it("handles an empty list", () => {
+    const result = selectAll([], "a");
+    expect([...result.selectedIds]).toEqual([]);
+    expect(result.focusId).toBeNull();
+  });
+
+  it("selects a long list the way a virtualized register would pass it", () => {
+    const many = Array.from({ length: 200 }, (_, i) => String(i));
+    const result = selectAll(many, "3");
+    expect(result.selectedIds.size).toBe(200);
+    expect(result.selectedIds.has("199")).toBe(true);
+    expect(result.focusId).toBe("3");
+  });
+});
+
+describe("selectAllHeaderState", () => {
+  it("is all when every navigable id is selected", () => {
+    expect(selectAllHeaderState(ORDER, new Set(ORDER))).toBe("all");
+  });
+
+  it("is none on a never-empty grid when only the focus is selected", () => {
+    expect(selectAllHeaderState(ORDER, new Set(["c"]))).toBe("none");
+  });
+
+  it("is some when more than the focus is selected but not all", () => {
+    expect(selectAllHeaderState(ORDER, new Set(["a", "b", "c"]))).toBe("some");
+  });
+
+  it("treats a real empty set as none when empty is allowed", () => {
+    expect(selectAllHeaderState(ORDER, new Set(), { allowEmpty: true })).toBe("none");
+  });
+
+  it("treats a single selected row as some when empty is allowed", () => {
+    expect(selectAllHeaderState(ORDER, new Set(["c"]), { allowEmpty: true })).toBe(
+      "some",
+    );
+  });
+
+  it("is none on an empty list", () => {
+    expect(selectAllHeaderState([], new Set())).toBe("none");
+  });
+});
+
+describe("toggleSelectAll", () => {
+  it("selects all from a lone focus on a never-empty grid", () => {
+    const result = toggleSelectAll(ORDER, new Set(["b"]), "b");
+    expect([...result.selectedIds]).toEqual(ORDER);
+    expect(result.focusId).toBe("b");
+  });
+
+  it("collapses to the focus row when everything is already selected", () => {
+    const result = toggleSelectAll(ORDER, new Set(ORDER), "d");
+    expect([...result.selectedIds]).toEqual(["d"]);
+    expect(result.focusId).toBe("d");
+  });
+
+  it("clears entirely on an allowEmpty grid that is fully selected", () => {
+    const result = toggleSelectAll(ORDER, new Set(ORDER), "a", {
+      allowEmpty: true,
+    });
+    expect([...result.selectedIds]).toEqual([]);
+    expect(result.focusId).toBeNull();
+  });
+
+  it("selects all from empty when empty is allowed", () => {
+    const result = toggleSelectAll(ORDER, new Set(), null, { allowEmpty: true });
+    expect(result.selectedIds.size).toBe(5);
+    expect(result.focusId).toBe("a");
+  });
+
+  it("selects all from a partial (some) selection", () => {
+    const result = toggleSelectAll(ORDER, new Set(["a", "b"]), "b");
+    expect(result.selectedIds.size).toBe(5);
   });
 });
 

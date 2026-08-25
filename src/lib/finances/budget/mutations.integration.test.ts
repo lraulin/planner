@@ -26,6 +26,7 @@ import {
   seedBudget,
   setCarryover,
   setTransactionBudgetCategory,
+  setTransactionBudgetCategories,
   updateBudgetCategory,
 } from "./mutations";
 import { updateAccount } from "../mutations";
@@ -1058,6 +1059,13 @@ describeDb("budget mutations — cross-user isolation", () => {
     ).rejects.toThrow(/does not exist/);
     await expect(
       setTransactionBudgetCategory(intruderId, owned.transactionId, owned.categoryId),
+    ).rejects.toThrow(/does not exist/);
+    await expect(
+      setTransactionBudgetCategories(
+        intruderId,
+        [owned.transactionId],
+        owned.categoryId,
+      ),
     ).rejects.toThrow(/does not exist/);
     await expect(
       setPayeeAutoCategory(intruderId, owned.payeeId, {

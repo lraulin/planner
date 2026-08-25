@@ -5,6 +5,7 @@ import {
   useState,
   type DragEvent as ReactDragEvent,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from "react";
 import { MAX_COLUMN_WIDTH, MIN_COLUMN_WIDTH } from "@/lib/settings/grid";
 import type { SortDirection } from "@/lib/settings/grid";
@@ -71,10 +72,10 @@ export function ColumnHeaderRow({
   /** Show / hide / move / reset. Omit to leave the layout items unavailable. */
   controls?: ColumnControls;
   /**
-   * Blank cell matching the row handle track. The handle is grid chrome, not a column, so
-   * it never gets a header label or a menu.
+   * Cell matching the row handle track (select-all checkbox). The handle is grid
+   * chrome, not a column, so it never gets a header label or a menu.
    */
-  leadingGutter?: boolean;
+  leadingGutter?: ReactNode;
 }) {
   // One at a time: a second open menu beside the first is two popovers claiming to describe
   // the column under the cursor.
@@ -125,8 +126,10 @@ export function ColumnHeaderRow({
           height: "var(--row-height)",
         }}
       >
-        {leadingGutter && (
-          <div aria-hidden className="h-full self-stretch border-r border-rule/50" />
+        {leadingGutter != null && (
+          <div className="flex h-full items-center justify-center self-stretch border-r border-rule/50">
+            {leadingGutter}
+          </div>
         )}
         {columns.map((column, index) => {
           const sortIndex = sorts.findIndex((entry) => entry.columnId === column.id);

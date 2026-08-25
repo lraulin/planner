@@ -376,7 +376,16 @@ export function NotesGrid({
   );
   const { order, onIdsChange } = useNavigableIds(rowIds);
   const multi = useMultiSelect(order, urlNoteId);
-  const { selectedId, selectedIds, select, selectOne, move: moveSelection } = multi;
+  const {
+    selectedId,
+    selectedIds,
+    select,
+    selectOne,
+    selectAll,
+    toggleSelectAll,
+    headerState,
+    move: moveSelection,
+  } = multi;
 
   const selected = selectedId ? (byId.get(selectedId) ?? null) : null;
   const drawerNote = drawerId ? (details[drawerId] ?? null) : null;
@@ -573,6 +582,12 @@ export function NotesGrid({
           id: noteId,
           count,
           label: note?.title,
+          ids:
+            noteId && selectedIds.has(noteId)
+              ? order.filter((id) => selectedIds.has(id))
+              : noteId
+                ? [noteId]
+                : [],
           canMoveUp: canReorder,
           canMoveDown: canReorder,
           canIndent: canReorder,
@@ -584,6 +599,7 @@ export function NotesGrid({
         actions: {
           onOpen: (id) => openDetail(id),
           onCopyAsText: copySelectionAsText,
+          onSelectAll: selectAll,
           onDelete: (ids) => ids.forEach(requestDelete),
           onIndent: (id) => apply(() => indentNoteAction(id)),
           onOutdent: (id) => apply(() => outdentNoteAction(id)),
@@ -649,8 +665,11 @@ export function NotesGrid({
       showHierarchy,
       byId,
       canReorder,
+      order,
+      selectedIds,
       openDetail,
       copySelectionAsText,
+      selectAll,
       addNote,
       apply,
       requestDelete,
@@ -880,6 +899,8 @@ export function NotesGrid({
         columnCtx={columnCtx}
         selectedId={selectedId}
         selectedIds={selectedIds}
+        selectAllState={headerState}
+        onToggleSelectAll={toggleSelectAll}
         onSelect={select}
         onOpenDetail={openDetail}
         ariaLabel="Notes"
@@ -904,7 +925,6 @@ export function NotesGrid({
         onGroupIdsChange={setGroupIds}
         rowDrag={rowDrag}
         rowMenu={rowMenu}
-        rowNumbers
         rowLabel={(row) => `Note: ${row.node.title || "Untitled"}`}
         rowExpansion={(row) =>
           showHierarchy && row.node.hasChildren ? !row.node.collapsed : undefined

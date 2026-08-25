@@ -17,6 +17,7 @@ export const COMMAND_ICON_IDS = [
   "insert-child",
   "open",
   "rename",
+  "select-all",
   "copy",
   "attach",
   "delete",
