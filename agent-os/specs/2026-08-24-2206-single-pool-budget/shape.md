@@ -1,6 +1,6 @@
 # Shaping notes — one pool, every dollar assigned
 
-**Status: active**
+**Status: frozen / complete** (2026-08-24)
 
 ## Problem statement
 

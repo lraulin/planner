@@ -14,8 +14,12 @@ import { readSetting } from "@/lib/settings/queries";
 import { BUDGET_SCOPE } from "@/lib/settings/scopes";
 import { parseBudget, type BudgetSettings } from "@/lib/settings/finances";
 import { toDateKey } from "@/lib/schedule/geometry";
+import { accountPoolCents } from "../accountPool";
+import type { FinanceExecutor } from "../dbExecutor";
 import { numericStringToCents } from "../money";
 import { listAccounts } from "../queries";
+import { accountBalanceView } from "../workingBalance";
+import { loadSelectedWorkingPending } from "../workingPendingQuery";
 import { billAnchor } from "../commitments";
 import {
   buildBudget,
@@ -122,13 +126,10 @@ export type BudgetData = {
   /** Today, so the pure operations can date their movement lines without an ambient clock. */
   todayKey: string;
   /**
-   * On-budget position right now, from the same headline balances the Dashboard uses.
-   *
-   * The budget's own arithmetic never needs this — the fold is self-consistent from the
-   * recorded opening figure. It is here to be *checked against*, which is what turns a
-   * silent drift into a number on screen.
+   * Signed sum of on-budget working balances right now — the same pending selection and
+   * headline anchoring the Dashboard uses. Current Ready to Assign reconciles to this.
    */
-  onBudgetPositionCents: number;
+  accountPoolCents: number;
   /** On-budget rows since the start month with no envelope: the size of the backlog. */
   uncategorizedCount: number;
   uncategorizedCents: number;
@@ -141,7 +142,7 @@ export type BudgetData = {
    * What setup would actually seed "funds from last month" with — the position at the end of
    * *last* month, not today's.
    *
-   * A separate field from `onBudgetPositionCents` because the two genuinely differ by this
+   * A separate field from `accountPoolCents` because the two genuinely differ by this
    * month's activity so far, and the setup screen names a figure the user then sees again as
    * their first Ready to Assign. Showing today's position there and seeding last month's is
    * the exact failure `2026-08-18-2058-commitments-clarity` was written about: the decision
@@ -158,8 +159,8 @@ export type BudgetData = {
   preStartActivity: ActivityPoint[];
 };
 
-function groupsOf(userId: string) {
-  return db
+function groupsOf(userId: string, executor: FinanceExecutor = db) {
+  return executor
     .select({
       id: financeCategoryGroups.id,
       parentGroupId: financeCategoryGroups.parentGroupId,
@@ -172,8 +173,8 @@ function groupsOf(userId: string) {
     .orderBy(asc(financeCategoryGroups.sortKey));
 }
 
-function categoriesOf(userId: string) {
-  return db
+function categoriesOf(userId: string, executor: FinanceExecutor = db) {
+  return executor
     .select({
       id: financeBudgetCategories.id,
       groupId: financeBudgetCategories.groupId,
@@ -238,12 +239,16 @@ function parsedCategories(
  * we enforce it here as well as in the auto-map, because the Register lets a person set an
  * envelope on any row.
  *
- * A transfer to an **off-budget** account is deliberately still counted. Money moved to
- * savings has left the budget, and that is exactly what spending from a "Savings" envelope
- * means.
+ * A transfer to an **off-budget** account is deliberately still counted — money left the
+ * pool once. Checking↔savings and a card payment between two on-budget accounts are not
+ * activity; they only change where the money sits.
  */
-async function activitySince(userId: string, since: MonthKey) {
-  const rows = await db
+async function activitySince(
+  userId: string,
+  since: MonthKey,
+  executor: FinanceExecutor = db,
+) {
+  const rows = await executor
     .select({
       month: sql<string>`to_char(date_trunc('month', ${financeTransactions.transactionDate}), 'YYYY-MM-DD')`,
       categoryId: financeTransactions.budgetCategoryId,
@@ -280,8 +285,12 @@ async function activitySince(userId: string, since: MonthKey) {
 }
 
 /** On-budget rows since `since` that nothing has put in an envelope yet. */
-async function backlogSince(userId: string, since: MonthKey) {
-  const [row] = await db
+async function backlogSince(
+  userId: string,
+  since: MonthKey,
+  executor: FinanceExecutor = db,
+) {
+  const [row] = await executor
     .select({
       count: sql<number>`count(*)::int`,
       amount: sql<string>`coalesce(sum(${financeTransactions.amount}), 0)`,
@@ -319,6 +328,52 @@ async function backlogSince(userId: string, since: MonthKey) {
 }
 
 /**
+ * Signed uncategorized on-budget activity from `since` through the end of `through`.
+ *
+ * Current Ready to Assign names this as its own term. Future-dated uncategorized rows stay
+ * in the backlog tray but are not a term against today's pool.
+ */
+async function uncategorizedActivityThrough(
+  userId: string,
+  since: MonthKey,
+  through: MonthKey,
+  executor: FinanceExecutor = db,
+): Promise<number> {
+  const [row] = await executor
+    .select({
+      amount: sql<string>`coalesce(sum(${financeTransactions.amount}), 0)`,
+    })
+    .from(financeTransactions)
+    .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
+    .where(
+      and(
+        eq(financeTransactions.userId, userId),
+        eq(financeAccounts.userId, userId),
+        eq(financeAccounts.offBudget, false),
+        sql`${financeTransactions.budgetCategoryId} is null`,
+        gte(financeTransactions.transactionDate, since),
+        sql`${financeTransactions.transactionDate} <= ${monthEndKey(through)}`,
+        sql`(
+          ${financeTransactions.transferGroupId} is not null
+          or coalesce(${financeTransactions.flowOverride}::text, ${financeTransactions.derivedFlow}::text, '') <> 'internal_transfer'
+        )`,
+        sql`not exists (
+          select 1
+            from ${financeTransactions} as other
+            join ${financeAccounts} as other_account
+              on other_account.id = other.account_id
+           where other.transfer_group_id = ${financeTransactions.transferGroupId}
+             and other.id <> ${financeTransactions.id}
+             and other.user_id = ${userId}
+             and other_account.off_budget = false
+        )`,
+      ),
+    );
+
+  return numericStringToCents(row?.amount ?? "0") ?? 0;
+}
+
+/**
  * Everything the Budget page needs for one month.
  *
  * `requestedMonth` is clamped into the folded range rather than rejected: a stale link to a
@@ -327,22 +382,27 @@ async function backlogSince(userId: string, since: MonthKey) {
 export async function loadBudget(
   userId: string,
   requestedMonth: MonthKey | null,
+  executor: FinanceExecutor = db,
 ): Promise<BudgetData> {
   const todayKey = toDateKey(new Date());
   const currentMonth = monthKeyOf(todayKey);
 
   const [stored, groups, categoryRows, accounts] = await Promise.all([
-    readSetting(userId, BUDGET_SCOPE),
-    groupsOf(userId),
-    categoriesOf(userId),
-    listAccounts(userId),
+    readSetting(userId, BUDGET_SCOPE, executor),
+    groupsOf(userId, executor),
+    categoriesOf(userId, executor),
+    listAccounts(userId, executor),
   ]);
   const categories = parsedCategories(categoryRows);
 
   const settings = parseBudget(stored);
-  const onBudgetPositionCents = accounts
-    .filter((account) => !account.offBudget)
-    .reduce((total, account) => total + account.balanceCents, 0);
+  const pending = await loadSelectedWorkingPending(
+    userId,
+    accounts,
+    Date.now(),
+    executor,
+  );
+  const poolCents = accountPoolCents(accounts, pending);
 
   const empty: BudgetData = {
     configured: false,
@@ -352,7 +412,7 @@ export async function loadBudget(
     months: [],
     month: currentMonth,
     todayKey,
-    onBudgetPositionCents,
+    accountPoolCents: poolCents,
     uncategorizedCount: 0,
     uncategorizedCents: 0,
     goals: {},
@@ -365,7 +425,12 @@ export async function loadBudget(
   if (!startMonth) {
     return {
       ...empty,
-      prospectiveOpeningCents: await openingPositionFor(userId, currentMonth),
+      prospectiveOpeningCents: await openingPositionFor(
+        userId,
+        currentMonth,
+        undefined,
+        executor,
+      ),
     };
   }
 
@@ -374,28 +439,34 @@ export async function loadBudget(
     BUDGET_HORIZON_MONTHS,
   );
 
-  const [allocations, bufferedRows, activity, backlog] = await Promise.all([
-    db
-      .select({
-        month: financeBudgetAllocations.month,
-        categoryId: financeBudgetAllocations.categoryId,
-        amountCents: financeBudgetAllocations.amountCents,
-        carryover: financeBudgetAllocations.carryover,
-        goalCents: financeBudgetAllocations.goalCents,
-      })
-      .from(financeBudgetAllocations)
-      .where(eq(financeBudgetAllocations.userId, userId)),
-    db
-      .select({
-        month: financeBudgetMonths.month,
-        bufferedCents: financeBudgetMonths.bufferedCents,
-        notes: financeBudgetMonths.notes,
-      })
-      .from(financeBudgetMonths)
-      .where(eq(financeBudgetMonths.userId, userId)),
-    activitySince(userId, shiftMonthKey(startMonth, -ASSIGN_AVERAGE_MONTHS)),
-    backlogSince(userId, startMonth),
-  ]);
+  const [allocations, bufferedRows, activity, backlog, uncategorizedActivityCents] =
+    await Promise.all([
+      executor
+        .select({
+          month: financeBudgetAllocations.month,
+          categoryId: financeBudgetAllocations.categoryId,
+          amountCents: financeBudgetAllocations.amountCents,
+          carryover: financeBudgetAllocations.carryover,
+          goalCents: financeBudgetAllocations.goalCents,
+        })
+        .from(financeBudgetAllocations)
+        .where(eq(financeBudgetAllocations.userId, userId)),
+      executor
+        .select({
+          month: financeBudgetMonths.month,
+          bufferedCents: financeBudgetMonths.bufferedCents,
+          notes: financeBudgetMonths.notes,
+        })
+        .from(financeBudgetMonths)
+        .where(eq(financeBudgetMonths.userId, userId)),
+      activitySince(
+        userId,
+        shiftMonthKey(startMonth, -ASSIGN_AVERAGE_MONTHS),
+        executor,
+      ),
+      backlogSince(userId, startMonth, executor),
+      uncategorizedActivityThrough(userId, startMonth, currentMonth, executor),
+    ]);
   const foldActivity = activity.filter((row) => row.month >= startMonth);
   const preStartActivity = activity.filter((row) => row.month < startMonth);
 
@@ -416,6 +487,14 @@ export async function loadBudget(
     startMonth,
     endMonth,
     openingCents: settings.openingCents,
+    current:
+      currentMonth >= startMonth
+        ? {
+            month: currentMonth,
+            accountPoolCents: poolCents,
+            uncategorizedActivityCents,
+          }
+        : undefined,
   });
 
   const goals: Record<string, number> = {};
@@ -449,19 +528,33 @@ export async function loadBudget(
  *
  * Recorded once at setup rather than recomputed on every load, so importing an old statement
  * cannot silently move last month's Ready to Assign
- * (`agent-os/specs/2026-08-22-1948-zero-based-budget/` D2). Reuses the headline balances and
- * walks back over the rows that came after, which is the same reconstruction
- * `periodResult.ts` does — the budget must not disagree with the Dashboard about one wallet.
+ * (`agent-os/specs/2026-08-22-1948-zero-based-budget/` D2). Uses the same working balances
+ * and pending selection as the Dashboard, then walks back over rows after that day.
+ *
+ * Pass `accountIds` to measure one account (membership rebase) rather than the whole pool.
  */
 export async function openingPositionFor(
   userId: string,
   month: MonthKey,
+  accountIds?: readonly string[],
+  executor: FinanceExecutor = db,
 ): Promise<number> {
   const asOfKey = monthEndKey(shiftMonthKey(month, -1));
-  const accounts = (await listAccounts(userId)).filter((account) => !account.offBudget);
+  const allAccounts = await listAccounts(userId, executor);
+  const accounts = allAccounts.filter((account) =>
+    accountIds ? accountIds.includes(account.id) : !account.offBudget,
+  );
   if (accounts.length === 0) return 0;
 
-  const rows = await db
+  const pending = await loadSelectedWorkingPending(
+    userId,
+    allAccounts,
+    Date.now(),
+    executor,
+  );
+  const known = new Set(accounts.map((account) => account.id));
+
+  const rows = await executor
     .select({
       accountId: financeTransactions.accountId,
       amount: financeTransactions.amount,
@@ -472,12 +565,10 @@ export async function openingPositionFor(
       and(
         eq(financeTransactions.userId, userId),
         eq(financeAccounts.userId, userId),
-        eq(financeAccounts.offBudget, false),
         sql`${financeTransactions.transactionDate} > ${asOfKey}`,
       ),
     );
 
-  const known = new Set(accounts.map((account) => account.id));
   const after = rows.reduce(
     (total, row) =>
       known.has(row.accountId)
@@ -486,7 +577,11 @@ export async function openingPositionFor(
     0,
   );
 
-  return accounts.reduce((total, account) => total + account.balanceCents, 0) - after;
+  const working = accounts.reduce(
+    (total, account) => total + accountBalanceView(account, pending).workingCents,
+    0,
+  );
+  return working - after;
 }
 
 /**

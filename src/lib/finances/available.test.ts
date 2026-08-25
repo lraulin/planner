@@ -1,138 +1,17 @@
 import { describe, expect, it } from "vitest";
-import {
-  accountBalanceTooltip,
-  accountBalanceView,
-  cashPosition,
-  nextPayday,
-  paydaysPerCadence,
-  type DashboardAccount,
-} from "./available";
+import { nextPayday, paydaysPerCadence } from "./available";
 import type { Payday } from "./classify/income";
 
 /**
- * These tests exist because every number on the dashboard is plausible when wrong. A card
- * balance added instead of subtracted, pending counted twice, a payday projected off the wrong
- * anchor — each produces a figure that looks like money and is not.
+ * These tests exist because a payday projected off the wrong anchor produces a day count
+ * that looks like knowledge and is not.
  */
 
 const NO_OVERRIDE = { anchorDate: null, cadenceDays: null };
 
-function account(over: Partial<DashboardAccount> = {}): DashboardAccount {
-  return {
-    id: "a",
-    name: "Account",
-    kind: "checking",
-    balanceCents: 0,
-    syncedBalanceAsOf: null,
-    ...over,
-  };
-}
-
 function payday(dateKey: string): Payday {
   return { dateKey, employer: "TrustedQA", amountCents: 247433, transactionIds: [] };
 }
-
-describe("cashPosition", () => {
-  it("subtracts a card's negative balance rather than adding its magnitude", () => {
-    // The sign convention makes this an addition. Anyone reaching for Math.abs here turns
-    // $301 of debt into $301 of assets, and the total still looks like a reasonable number.
-    const position = cashPosition([
-      account({ id: "chk", kind: "checking", balanceCents: 57145 }),
-      account({ id: "card", kind: "credit_card", balanceCents: -30100 }),
-    ]);
-
-    expect(position.cardDebtCents).toBe(-30100);
-    expect(position.netCents).toBe(27045);
-  });
-
-  it("keeps savings out of spendable but inside the net", () => {
-    const position = cashPosition([
-      account({ id: "chk", kind: "checking", balanceCents: 57145 }),
-      account({ id: "sav", kind: "savings", balanceCents: 270000 }),
-    ]);
-
-    expect(position.spendableCents).toBe(57145);
-    expect(position.savingsCents).toBe(270000);
-    expect(position.netCents).toBe(327145);
-  });
-
-  it("ignores investment and loan accounts entirely", () => {
-    // Net worth is a different question, asked by assetDebtAt() in analytics.ts. A mortgage
-    // in here would swamp a figure about groceries.
-    const position = cashPosition([
-      account({ id: "chk", kind: "checking", balanceCents: 57145 }),
-      account({ id: "ira", kind: "investment", balanceCents: 5000000 }),
-      account({ id: "mtg", kind: "loan", balanceCents: -18000000 }),
-    ]);
-
-    expect(position.netCents).toBe(57145);
-  });
-
-  it("returns zeros rather than NaN for no accounts", () => {
-    expect(cashPosition([])).toEqual({
-      spendableCents: 0,
-      savingsCents: 0,
-      cardDebtCents: 0,
-      netCents: 0,
-    });
-  });
-});
-
-describe("accountBalanceView", () => {
-  it("adds pending on top of a synced card and leaves the posted figure alone", () => {
-    const view = accountBalanceView(
-      account({
-        id: "card",
-        kind: "credit_card",
-        balanceCents: -5978,
-        syncedBalanceAsOf: new Date("2026-08-16T09:00:00Z"),
-      }),
-      [
-        { accountId: "card", amountCents: -37968 },
-        { accountId: "other", amountCents: -1000 },
-      ],
-    );
-
-    expect(view.postedCents).toBe(-5978);
-    expect(view.pendingCents).toBe(-37968);
-    expect(view.workingCents).toBe(-43946);
-  });
-
-  it("does not add pending to a statement-anchored card", () => {
-    const view = accountBalanceView(
-      account({
-        id: "card",
-        kind: "credit_card",
-        balanceCents: -5978,
-        syncedBalanceAsOf: null,
-      }),
-      [{ accountId: "card", amountCents: -37968 }],
-    );
-
-    expect(view.pendingCents).toBe(0);
-    expect(view.workingCents).toBe(-5978);
-  });
-});
-
-describe("accountBalanceTooltip", () => {
-  it("names the current balance, and the posted split only when pending exists", () => {
-    expect(
-      accountBalanceTooltip({
-        workingCents: -43946,
-        postedCents: -5978,
-        pendingCents: -37968,
-      }),
-    ).toBe("Current balance -$439.46 (-$59.78 posted + -$379.68 pending)");
-
-    expect(
-      accountBalanceTooltip({
-        workingCents: -43946,
-        postedCents: -43946,
-        pendingCents: 0,
-      }),
-    ).toBe("Current balance -$439.46");
-  });
-});
 
 describe("nextPayday", () => {
   const series = [payday("2026-07-24"), payday("2026-08-07")];

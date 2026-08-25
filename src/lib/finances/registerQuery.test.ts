@@ -36,7 +36,7 @@ function tx(
     flowOverride: null,
     excludeFromBaseline: false,
     eventLabel: "",
-    plannedWithdrawal: false,
+
     notes: "",
     tags: [],
     balanceAfterCents: null,

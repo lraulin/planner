@@ -32,7 +32,7 @@ function row(
     flowOverride: extras.flowOverride ?? null,
     excludeFromBaseline: false,
     eventLabel: "",
-    plannedWithdrawal: false,
+
     notes: "",
     balanceAfterCents: null,
     budgetCategoryId: null,

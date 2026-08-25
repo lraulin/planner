@@ -168,6 +168,25 @@ export type BufferedInput = {
   bufferedCents: number;
 };
 
+/**
+ * Current-month reconciliation against today's account pool.
+ *
+ * Past months stay historical. The reconciled Ready to Assign is what later months inherit
+ * as "funds from last month", so paging forward does not resurrect the old discrepancy.
+ *
+ * Spec: `agent-os/specs/2026-08-24-2206-single-pool-budget/` D3.
+ */
+export type CurrentPoolInput = {
+  month: MonthKey;
+  /** Signed sum of on-budget working balances, pending included the Dashboard's way. */
+  accountPoolCents: number;
+  /**
+   * Signed uncategorized on-budget activity from the start month through this month.
+   * Named as a Ready to Assign term until those rows receive envelopes.
+   */
+  uncategorizedActivityCents: number;
+};
+
 export type BudgetInput = {
   categories: readonly BudgetCategoryInput[];
   /** Sparse. A missing month/category pair is `{ amountCents: 0, carryover: false }`. */
@@ -185,6 +204,8 @@ export type BudgetInput = {
    * Signed: card balances are on-budget, so starting in the hole is both possible and honest.
    */
   openingCents: number;
+  /** When set, this month's Ready to Assign is reconciled to the live account pool. */
+  current?: CurrentPoolInput;
 };
 
 // ─────────────────────────────── Outputs ───────────────────────────────
@@ -219,11 +240,21 @@ export type BudgetMonth = {
   bufferedCents: number;
   readyToAssignCents: number;
   /**
+   * Uncategorized on-budget activity named as a Ready to Assign term. Zero on historical
+   * months; the current month carries the signed backlog through that month.
+   */
+  uncategorizedActivityCents: number;
+  /**
+   * Residual between the ledger-derived fold and today's working account pool. Zero on
+   * historical months. Opening-snapshot drift and bank-headline/ledger mismatch land here
+   * rather than being labelled income.
+   */
+  accountReconciliationCents: number;
+  /**
    * The arithmetic in reading order, summing to `readyToAssignCents`.
    *
-   * Returned rather than reassembled in the component, for the reason `availableToSpend` does
-   * the same: a page that formats its terms twice is a page that can show a breakdown which
-   * does not add up to its own headline.
+   * Returned rather than reassembled in the component: a page that formats its terms twice
+   * is a page that can show a breakdown which does not add up to its own headline.
    */
   terms: BudgetTerm[];
 };
@@ -351,11 +382,37 @@ export function buildBudget(input: BudgetInput): BudgetMonth[] {
 
     const availableFundsCents = totalIncomeCents + fromLastMonthCents;
     const bufferedCents = buffered.get(month) ?? 0;
-    const readyToAssignCents =
+    const baseRtaCents =
       availableFundsCents +
       lastMonthOverspentCents -
       totalAssignedCents -
       bufferedCents;
+
+    const current = input.current?.month === month ? input.current : null;
+    const uncategorizedActivityCents = current
+      ? cents(current.uncategorizedActivityCents, "uncategorized activity")
+      : 0;
+    const accountReconciliationCents = current
+      ? cents(current.accountPoolCents, "account pool") -
+        (baseRtaCents + totalBalanceCents + bufferedCents + uncategorizedActivityCents)
+      : 0;
+    const readyToAssignCents = current
+      ? baseRtaCents + uncategorizedActivityCents + accountReconciliationCents
+      : baseRtaCents;
+
+    const terms: BudgetTerm[] = [
+      { label: "Funds from last month", cents: fromLastMonthCents },
+      { label: "Income this month", cents: totalIncomeCents },
+      { label: "Overspent last month", cents: lastMonthOverspentCents },
+      { label: "Assigned", cents: -totalAssignedCents },
+      { label: "Held for next month", cents: -bufferedCents },
+    ];
+    if (current) {
+      terms.push(
+        { label: "Uncategorized activity", cents: uncategorizedActivityCents },
+        { label: "Account reconciliation", cents: accountReconciliationCents },
+      );
+    }
 
     months.push({
       month,
@@ -369,13 +426,9 @@ export function buildBudget(input: BudgetInput): BudgetMonth[] {
       totalBalanceCents,
       bufferedCents,
       readyToAssignCents,
-      terms: [
-        { label: "Funds from last month", cents: fromLastMonthCents },
-        { label: "Income this month", cents: totalIncomeCents },
-        { label: "Overspent last month", cents: lastMonthOverspentCents },
-        { label: "Assigned", cents: -totalAssignedCents },
-        { label: "Held for next month", cents: -bufferedCents },
-      ],
+      uncategorizedActivityCents,
+      accountReconciliationCents,
+      terms,
     });
 
     previousReadyToAssign = readyToAssignCents;

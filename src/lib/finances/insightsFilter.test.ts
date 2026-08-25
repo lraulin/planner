@@ -25,7 +25,7 @@ function row(overrides: Partial<AnalyticsRow> = {}): AnalyticsRow {
     transferGroupId: null,
     excludeFromBaseline: false,
     eventLabel: "",
-    plannedWithdrawal: false,
+
     payeeId: null,
     payeeName: null,
     ...overrides,

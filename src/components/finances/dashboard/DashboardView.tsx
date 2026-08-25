@@ -10,21 +10,14 @@ import {
 } from "@/app/finances/actions";
 import { syncAction } from "@/app/settings/bankSyncActions";
 import type { BankConnectionRow } from "@/lib/banksync/queries";
+import { accountPoolBreakdown } from "@/lib/finances/accountPool";
+import { nextPayday, type BillCharge } from "@/lib/finances/available";
 import {
   accountBalanceTooltip,
   accountBalanceView,
-  cashPosition,
-  nextPayday,
-  type BillCharge,
   type PendingRow,
-} from "@/lib/finances/available";
+} from "@/lib/finances/workingBalance";
 import type { Payday } from "@/lib/finances/classify/income";
-import { buildPayPeriods } from "@/lib/finances/classify/payPeriods";
-import {
-  periodResults,
-  periodScorecard,
-  type PeriodLedgerRow,
-} from "@/lib/finances/periodResult";
 import {
   staleSubscriptions,
   type CommitmentCharge,
@@ -44,12 +37,12 @@ import {
   type SettingCodec,
 } from "@/components/settings/SettingsProvider";
 import { Panel, PanelEmpty, StatRow, StatTile } from "../insights/Panel";
-import { PeriodScorecardPanel } from "./PeriodScorecard";
 
 /**
  * The Finances dashboard: current position, and what is left to spend before the next paycheck.
  *
- * **Every number here is computed in `src/lib/finances/available.ts`**, in one `useMemo`. That
+ * **Every number here is computed in `src/lib/finances/accountPool.ts` and
+ * `workingBalance.ts`**, in one `useMemo`. That
  * is not a style preference — the arithmetic is where the reasoning lives and where a wrong
  * answer looks plausible, and a component is the one place in this codebase with no test
  * covering it. This file arranges and formats; it decides nothing.
@@ -57,22 +50,6 @@ import { PeriodScorecardPanel } from "./PeriodScorecard";
  * `today` is the reader's local day and is null until hydration, so the day count renders as a
  * dash rather than flashing a wrong one (`agent-os/standards/development/dates.md`).
  */
-
-/**
- * Where the pay-period calendar starts: the oldest row the scorecard was given.
- *
- * `buildPayPeriods` tiles a range, so handing it a range wider than the ledger would invent
- * windows with no transactions in them, and every one of those would score as a period with
- * nothing in it. Falling back to `today` yields an empty calendar, which is the honest
- * answer when there are no rows at all.
- */
-function earliestKey(rows: readonly PeriodLedgerRow[], today: string): string {
-  let earliest = today;
-  for (const row of rows) {
-    if (row.transactionDate < earliest) earliest = row.transactionDate;
-  }
-  return earliest;
-}
 
 const PAYDAY_CODEC: SettingCodec<{
   anchorDate: string | null;
@@ -89,7 +66,6 @@ export function DashboardView({
   paydays,
   billCharges,
   connections,
-  periodRows,
   readyToAssignCents,
   budgetConfigured,
   underfundedBills,
@@ -101,7 +77,6 @@ export function DashboardView({
   paydays: readonly Payday[];
   billCharges: readonly BillCharge[];
   connections: readonly BankConnectionRow[];
-  periodRows: readonly PeriodLedgerRow[];
   /** This month's Ready to Assign, from the envelope budget. Zero when unconfigured. */
   readyToAssignCents: number;
   budgetConfigured: boolean;
@@ -121,7 +96,7 @@ export function DashboardView({
   const [statusPending, startStatus] = useTransition();
 
   const analysis = useMemo(() => {
-    const position = cashPosition(accounts);
+    const position = accountPoolBreakdown(accounts, pending);
     const payday = today
       ? nextPayday(paydays, override, today)
       : { dateKey: null, daysAway: null, source: "unknown" as const };
@@ -134,30 +109,13 @@ export function DashboardView({
     }
     const stale = today ? staleSubscriptions(bills, chargesByName, today) : [];
 
-    // The backward figure. Periods are rebuilt here rather than on the server for the same
-    // reason the day count is: the calendar has to end on the reader's today, and a
-    // server-decided today makes the last bar depend on the deploy region.
-    const scorecard = today
-      ? periodScorecard(
-          periodResults(
-            accounts,
-            periodRows,
-            buildPayPeriods(paydays, {
-              startKey: earliestKey(periodRows, today),
-              endKey: today,
-            }),
-            today,
-          ),
-        )
-      : { latest: null, history: [], selfFundedCount: 0 };
-
-    return { position, payday, stale, scorecard };
-  }, [accounts, bills, paydays, billCharges, periodRows, override, today]);
+    return { position, payday, stale };
+  }, [accounts, pending, bills, paydays, billCharges, override, today]);
 
   const unpricedBillCount = bills.filter(
     (bill) => bill.status === "active" && (bill.expectedCents ?? 0) <= 0,
   ).length;
-  const { position, payday, stale, scorecard } = analysis;
+  const { position, payday, stale } = analysis;
   const openAccounts = accounts.filter((account) => account.closedAt === null);
 
   return (
@@ -233,7 +191,10 @@ export function DashboardView({
       </Panel>
 
       <StatRow>
-        <StatTile label="Checking & cash" value={formatUsd(position.spendableCents)} />
+        <StatTile
+          label="Checking & cash"
+          value={formatUsd(position.checkingCashCents)}
+        />
         <StatTile label="Savings" value={formatUsd(position.savingsCents)} />
         <StatTile
           label="Card debt"
@@ -241,13 +202,11 @@ export function DashboardView({
           tone={position.cardDebtCents < 0 ? "spend" : "neutral"}
         />
         <StatTile
-          label="Cash position"
-          value={formatUsd(position.netCents)}
-          detail="Checking + savings − cards"
+          label="Account pool"
+          value={formatUsd(position.accountPoolCents)}
+          detail="On-budget working balances"
         />
       </StatRow>
-
-      <PeriodScorecardPanel scorecard={scorecard} formatDate={formatDate} />
 
       <div className="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2">
         <Panel

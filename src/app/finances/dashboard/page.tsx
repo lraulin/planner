@@ -67,7 +67,6 @@ export default async function FinancesDashboardPage() {
           paydays={data.paydays}
           billCharges={data.billCharges}
           connections={data.connections}
-          periodRows={data.periodRows}
           readyToAssignCents={readyToAssignCents}
           budgetConfigured={budget.configured}
           underfundedBills={underfundedBills}

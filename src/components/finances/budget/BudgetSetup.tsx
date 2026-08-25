@@ -47,9 +47,11 @@ export function BudgetSetup({
         <p className="mt-1 text-[0.8125rem] leading-snug text-ink-muted">
           This month starts with{" "}
           <span className="tabular text-ink">{formatUsd(positionCents)}</span> carried
-          in — what checking and cash held at the end of last month, less what the cards
-          owed. Savings stays out of it, and nothing before this month is touched. This
-          month&rsquo;s own income lands on top of it.
+          in — the signed working balance of every on-budget account at the end of last
+          month, cards included. Checking, savings, cash and credit cards are one pool;
+          assigning to a Savings envelope is what gives money a savings job. Nothing
+          before this month is touched. This month&rsquo;s own income lands on top of
+          it.
         </p>
       </div>
 

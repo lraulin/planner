@@ -1,20 +1,10 @@
 /**
- * Cash position and the payday series — what is actually held right now, and when the next
- * paycheck lands.
+ * The payday series — when the next paycheck lands.
  *
- * **The Available to Spend headline and its set-aside accrual were retired by
- * `agent-os/specs/2026-08-23-2313-one-budget/` D5.** Ready to Assign
- * (`src/lib/finances/budget/envelope.ts`) is now the one spendable-money figure; a bill
- * envelope's own balance says whether it is funded, which is a per-bill answer instead of one
- * collapsed number. What survives here is genuinely independent of commitments: cash position
- * (checking + savings + cash − card debt) and the detected payday series, both still read by
- * the Dashboard and by budget income reporting.
- *
- * **Sign convention, inherited and load-bearing:** positive is money *into* the account, for
- * every account kind (`src/db/schema.ts`, `finance_transactions`). A credit card is simply a
- * liability whose balance runs negative. That is why nothing below branches on kind to decide
- * a sign — kind only ever chooses which accounts are in the sum. A `Math.abs` or a unary minus
- * anywhere in this file would be a bug.
+ * Ready to Assign (`src/lib/finances/budget/envelope.ts`) is the one unassigned-money
+ * figure. Account working balances live in `workingBalance.ts` and the on-budget pool in
+ * `accountPool.ts`. What remains here is independent of that pool: the detected payday
+ * series, still read by the Dashboard and by budget income reporting.
  *
  * **Pure, and takes `todayKey`.** No database import, no `new Date()`. "Today" is the reader's
  * local wall-clock day and comes from `useToday()` in the view; a server-derived today would
@@ -23,93 +13,9 @@
  * `YYYY-MM-DD` parts.
  */
 
-import type { FinanceAccountKind } from "@/db/schema";
 import { daysBetweenKeys, shiftDateKey } from "@/lib/schedule/geometry";
 import { BIWEEKLY_DAYS, type Payday } from "./classify/income";
-import { formatUsd } from "./money";
 import { cadenceDaysApprox, type Cadence } from "./recurringBills";
-
-/**
- * Kinds whose balance is money you could spend this fortnight without a decision.
- *
- * Exported because `periodResult.ts` measures the same wallet looking backward, and two
- * copies of "what counts as spendable" would let the forward and backward figures on one
- * page disagree about which accounts they describe.
- */
-export const SPENDABLE_KINDS: ReadonlySet<FinanceAccountKind> = new Set([
-  "checking",
-  "cash",
-]);
-
-/** Kinds held in reserve — real money, deliberately outside the spendable figure. */
-export const SAVINGS_KINDS: ReadonlySet<FinanceAccountKind> = new Set(["savings"]);
-
-/**
- * What the arithmetic needs from an account. A structural subset of `FinanceAccountRow`, so
- * the query layer's own type satisfies it and this module still imports nothing from the
- * database.
- */
-export type DashboardAccount = {
-  id: string;
-  name: string;
-  kind: FinanceAccountKind;
-  /** The headline balance: synced > statement-anchored > ledger sum. */
-  balanceCents: number;
-  /**
-   * When a live feed last reported this balance, or null for an account with no bank link.
-   *
-   * **This is what made Available to Spend correct**, not merely informative, before that
-   * headline was retired — see the pending rule that used to live here.
-   */
-  syncedBalanceAsOf: Date | null;
-};
-
-/** A pending row, as the dashboard needs it. Signed in module convention. */
-export type PendingRow = {
-  accountId: string;
-  amountCents: number;
-};
-
-export type AccountBalanceView = {
-  /** Posted headline plus pending, when pending sits on top of a synced balance. */
-  workingCents: number;
-  /** The headline: synced posted, or statement/ledger (already includes pending). */
-  postedCents: number;
-  pendingCents: number;
-};
-
-/**
- * What one account should show: the working figure, and the posted figure when they differ.
- *
- * Pending is added only on a synced headline, the same trap Available to Spend used to
- * guard against before it was retired.
- * A statement or ledger balance already contains every pending row.
- */
-export function accountBalanceView(
-  account: DashboardAccount,
-  pending: readonly PendingRow[],
-): AccountBalanceView {
-  const postedCents = account.balanceCents;
-  const pendingCents =
-    account.syncedBalanceAsOf === null
-      ? 0
-      : pending
-          .filter((row) => row.accountId === account.id)
-          .reduce((total, row) => total + row.amountCents, 0);
-  return {
-    workingCents: postedCents + pendingCents,
-    postedCents,
-    pendingCents,
-  };
-}
-
-/** Hover text for an account row: the current figure, and the posted split when they differ. */
-export function accountBalanceTooltip(view: AccountBalanceView): string {
-  if (view.pendingCents === 0) {
-    return `Current balance ${formatUsd(view.workingCents)}`;
-  }
-  return `Current balance ${formatUsd(view.workingCents)} (${formatUsd(view.postedCents)} posted + ${formatUsd(view.pendingCents)} pending)`;
-}
 
 /**
  * A posted charge against a declared bill, used to decide whether this period is already paid.
@@ -128,43 +34,6 @@ export type BillCharge = {
    */
   costCents?: number;
 };
-
-export type CashPosition = {
-  /** Checking and cash. */
-  spendableCents: number;
-  savingsCents: number;
-  /** Signed and negative when money is owed, like every other figure here. */
-  cardDebtCents: number;
-  /** `spendable + savings + cardDebt`. The "true net" of what is actually held. */
-  netCents: number;
-};
-
-/**
- * Checking + savings + cash − what the cards owe.
- *
- * Deliberately **not** `assetDebtAt()` in `analytics.ts`, which folds in investment and loan
- * accounts. That one answers "what am I worth", tracked over time; this answers "what do I
- * hold right now", which is a different question and a different set of accounts. Keeping them
- * separate is what stops a mortgage from swamping a figure about groceries.
- */
-export function cashPosition(accounts: readonly DashboardAccount[]): CashPosition {
-  let spendableCents = 0;
-  let savingsCents = 0;
-  let cardDebtCents = 0;
-
-  for (const account of accounts) {
-    if (SPENDABLE_KINDS.has(account.kind)) spendableCents += account.balanceCents;
-    else if (SAVINGS_KINDS.has(account.kind)) savingsCents += account.balanceCents;
-    else if (account.kind === "credit_card") cardDebtCents += account.balanceCents;
-  }
-
-  return {
-    spendableCents,
-    savingsCents,
-    cardDebtCents,
-    netCents: spendableCents + savingsCents + cardDebtCents,
-  };
-}
 
 export type PaydaySource = "detected" | "override" | "unknown";
 

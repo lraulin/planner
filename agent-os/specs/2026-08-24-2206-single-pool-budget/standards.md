@@ -1,6 +1,6 @@
 # Standards — one pool, every dollar assigned
 
-**Status: active**
+**Status: frozen / complete** (2026-08-24)
 
 Canonical standards are referenced rather than copied so this active spec does not fork their
 instructions. Read these before implementation:

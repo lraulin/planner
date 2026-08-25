@@ -28,7 +28,6 @@ function row(
     flowOverride: extras.flowOverride ?? null,
     excludeFromBaseline: extras.excludeFromBaseline ?? false,
     eventLabel: extras.eventLabel ?? "",
-    plannedWithdrawal: extras.plannedWithdrawal ?? false,
     notes: "",
     balanceAfterCents: null,
     budgetCategoryId: null,

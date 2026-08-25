@@ -73,8 +73,6 @@ export type AnalyticsRow = {
   transferGroupId: string | null;
   excludeFromBaseline: boolean;
   eventLabel: string;
-  /** Declared: this savings withdrawal is what the money was saved for. */
-  plannedWithdrawal: boolean;
   /** Stable identity assigned by reclassification; null means the row cannot be claimed. */
   payeeId: string | null;
   payeeName: string | null;

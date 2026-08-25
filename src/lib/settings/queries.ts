@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { userSettings } from "@/db/schema";
+import type { DbExecutor } from "@/db/executor";
 
 /** Every scope a user has stored, keyed by scope id. Unset scopes are simply absent. */
 export type SettingsSnapshot = Record<string, unknown>;
@@ -33,8 +34,12 @@ export async function loadUserSettings(userId: string): Promise<SettingsSnapshot
  * the dependency direction. Absent scope reads as `undefined`, which every parser in
  * `settings/` already treats as "use the default".
  */
-export async function readSetting(userId: string, scope: string): Promise<unknown> {
-  const [row] = await db
+export async function readSetting(
+  userId: string,
+  scope: string,
+  executor: DbExecutor = db,
+): Promise<unknown> {
+  const [row] = await executor
     .select({ value: userSettings.value })
     .from(userSettings)
     .where(and(eq(userSettings.userId, userId), eq(userSettings.scope, scope)))

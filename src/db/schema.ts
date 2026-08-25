@@ -2104,19 +2104,12 @@ export const financeAccounts = pgTable(
     /** Set when the account stops being live. Rows stay; the register can hide them. */
     closedAt: timestamp("closed_at", { withTimezone: true }),
     /**
-     * Keep this account out of the envelope budget entirely — its balance is not money to
-     * assign and its transactions are not budget activity
-     * (`agent-os/specs/2026-08-22-1948-zero-based-budget/` D3).
+     * Keep this account out of the envelope budget — its balance is not money to assign
+     * and its transactions are not budget activity.
      *
-     * On-budget is checking, cash and credit cards: the user's stated model is that cards are
-     * a way of spending checking money, paid in full monthly, so a card purchase is ordinary
-     * categorised spending and a card payment is a budget-neutral transfer between two
-     * on-budget accounts. Savings, investments and loans are off, which is the same exclusion
-     * `SPENDABLE_KINDS` already applies to Available to Spend.
-     *
-     * A stored column rather than a function of `kind`, because the mapping is a default and
-     * not a law: the first savings account someone actually spends out of would otherwise
-     * need a code change. The migration seeds it from `kind`; after that it is the user's.
+     * Checking, savings, cash and credit cards are always on-budget
+     * (`agent-os/specs/2026-08-24-2206-single-pool-budget/` D1). Investment, loan and other
+     * may be included or excluded; new investments and loans default off.
      */
     offBudget: boolean("off_budget").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -2129,6 +2122,11 @@ export const financeAccounts = pgTable(
       table.externalKey,
     ),
     index("finance_accounts_user_name_idx").on(table.userId, table.name),
+    check(
+      "finance_accounts_core_on_budget",
+      sql`${table.kind}::text not in ('checking', 'savings', 'cash', 'credit_card')
+          or ${table.offBudget} = false`,
+    ),
   ],
 );
 
@@ -2239,20 +2237,6 @@ export const financeTransactions = pgTable(
     excludeFromBaseline: boolean("exclude_from_baseline").notNull().default(false),
     /** Names the one-off — "Wedding", "House move" — so it totals as an event, not a blip. */
     eventLabel: text("event_label").notNull().default(""),
-    /**
-     * This withdrawal from savings is the thing the money was saved for.
-     *
-     * Meaningful only on an outflow from a savings account, where it is the difference
-     * between a purchase that was planned for and a reserve being raided to cover an
-     * overspend — the period result counts the second against you and exempts the first
-     * (`src/lib/finances/periodResult.ts`).
-     *
-     * Deliberately its own column rather than "has an `eventLabel`": that column already
-     * means "part of a named one-off spend event" in the baseline split, and inferring
-     * intent from it would let a stray label quietly excuse a raid
-     * (`agent-os/specs/2026-08-18-2005-period-result/` D5).
-     */
-    plannedWithdrawal: boolean("planned_withdrawal").notNull().default(false),
     /**
      * Which envelope this row spends from, in the zero-based budget
      * (`agent-os/specs/2026-08-22-1948-zero-based-budget/` D6).

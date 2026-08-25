@@ -49,6 +49,8 @@ import {
   finalizeTransactionIngestion,
   transactionIngestionWatermark,
 } from "./ingestion";
+import { defaultOffBudget } from "./accountKind";
+import { includeNewOnBudgetAccount } from "./budget/membership";
 
 /**
  * Writing parsed CSV or statement rows into the register.
@@ -86,7 +88,7 @@ async function resolveAccount(
   userId: string,
   externalSource: string,
   account: ParsedAccount,
-): Promise<{ id: string; created: boolean }> {
+): Promise<{ id: string; created: boolean; kind: (typeof account)["kind"] }> {
   const [existing] = await tx
     .select({ id: financeAccounts.id })
     .from(financeAccounts)
@@ -98,7 +100,7 @@ async function resolveAccount(
       ),
     )
     .limit(1);
-  if (existing) return { id: existing.id, created: false };
+  if (existing) return { id: existing.id, created: false, kind: account.kind };
 
   const [row] = await tx
     .insert(financeAccounts)
@@ -110,11 +112,12 @@ async function resolveAccount(
       externalSource,
       externalKey: account.externalKey,
       closedAt: account.closedOn ? fromDateKey(account.closedOn) : null,
+      offBudget: defaultOffBudget(account.kind),
     })
     // Two uploads racing on a brand-new account: let the index win, then read the winner.
     .onConflictDoNothing()
     .returning({ id: financeAccounts.id });
-  if (row) return { id: row.id, created: true };
+  if (row) return { id: row.id, created: true, kind: account.kind };
 
   const [raced] = await tx
     .select({ id: financeAccounts.id })
@@ -128,7 +131,7 @@ async function resolveAccount(
     )
     .limit(1);
   if (!raced) throw new Error("Could not create the account for this import.");
-  return { id: raced.id, created: false };
+  return { id: raced.id, created: false, kind: account.kind };
 }
 
 /**
@@ -469,7 +472,9 @@ export async function importFinanceCsvFiles({
         }
 
         return {
+          accountId: resolved.id,
           accountCreated: resolved.created,
+          accountKind: resolved.kind,
           inserted,
           skipped: skipCount + (values.length - inserted),
           statementsCreated: snapshotCounts.created,
@@ -477,7 +482,12 @@ export async function importFinanceCsvFiles({
         };
       });
 
-      if (outcome.accountCreated) accountsCreated += 1;
+      if (outcome.accountCreated) {
+        accountsCreated += 1;
+        if (!defaultOffBudget(outcome.accountKind)) {
+          await includeNewOnBudgetAccount(userId, outcome.accountId);
+        }
+      }
       created += outcome.inserted;
       skipped += outcome.skipped;
       statementsCreated += outcome.statementsCreated;

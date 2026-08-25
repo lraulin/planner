@@ -102,6 +102,10 @@ const DETAILED: readonly PresetGroup[] = [
       name,
     })),
   },
+  {
+    name: "Savings",
+    categories: [{ name: "Savings", kind: "savings" }],
+  },
 ];
 
 export const PRESET_GROUPS: Record<BudgetPreset, readonly PresetGroup[]> = {
@@ -118,5 +122,5 @@ export const PRESET_DESCRIPTIONS: Record<BudgetPreset, string> = {
   minimal:
     "Five envelopes: bills, recurring spend, discretionary, savings, and income.",
   detailed:
-    "One envelope per spending category. More to look at, and more to move money between.",
+    "One envelope per spending category, plus a Savings envelope. More to look at, and more to move money between.",
 };

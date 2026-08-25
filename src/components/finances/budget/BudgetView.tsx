@@ -19,6 +19,7 @@ import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import {
   categoryMonth,
   findMonth,
+  monthKeyOf,
   monthLabel,
   monthParamOf,
   nextMonthKey,
@@ -605,7 +606,13 @@ export function BudgetView({
           }}
         />
 
-        <BudgetSummary month={month} onAssign={() => setAssigning(true)} />
+        <BudgetSummary
+          month={month}
+          accountPoolCents={
+            data.month === monthKeyOf(data.todayKey) ? data.accountPoolCents : undefined
+          }
+          onAssign={() => setAssigning(true)}
+        />
 
         <IncomeSection
           rows={sections.income}
@@ -1001,11 +1008,11 @@ function MonthBar({
 }
 
 /**
- * The gap between the budget and the bank, stated rather than hidden.
+ * Uncategorized on-budget rows since the budget started.
  *
- * Ready to Assign plus every envelope balance equals the on-budget position exactly when
- * nothing since the start month is unenveloped. So this count *is* the discrepancy, and a
- * budget that did not show it would drift quietly instead of asking to be fixed.
+ * Current Ready to Assign names their signed total as its own term until they receive
+ * envelopes. Categorizing one moves it from that term into its envelope without breaking
+ * the pool identity.
  */
 function Backlog({ data }: { data: BudgetData }) {
   return (
@@ -1115,7 +1122,8 @@ function IncomeSection({
         </ul>
       ) : null}
       <p className="mt-1 text-[0.7rem] text-ink-faint">
-        Ready to Assign counts only what has been received.
+        Ready to Assign is unassigned money from every on-budget account, including
+        income already received. Moving money to a savings account does not assign it.
       </p>
     </section>
   );

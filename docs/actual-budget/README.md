@@ -52,12 +52,18 @@ semantics transfer; the machinery does not.**
 
 ## Where we diverge
 
-Divergences are recorded in the spec that makes them, not here. As of the first budget spec:
+Divergences are recorded in the spec that makes them, not here. As of the first budget spec,
+narrowed by later deltas:
 
-- On-budget accounts are an explicit column seeded from account kind, matching this app's
-  existing "checking + cash + full card balance" model.
+- Checking, savings, cash and credit cards are a **mandatory** on-budget pool. Actual lets
+  the user pick any account's membership; this app does not, because the product has a
+  declared one-pool invariant. Investment, loan and other stay optional. See
+  `agent-os/specs/2026-08-24-2206-single-pool-budget/` D1.
+- Current Ready to Assign reconciles to today's working account pool (same pending
+  selection as the Dashboard). Uncategorized activity and residual account reconciliation
+  are named terms, not income. Historical months stay historical. See that spec's D3.
 - The budget starts at a chosen month with an opening position, instead of assuming the ledger
-  goes back to the beginning.
+  goes back to the beginning. Changing the pool boundary rebases that opening once.
 - No CRDT, no tombstones, no local-first sync.
 - Recurrence for a bill envelope is derived from charge history (`nextDueFrom`) rather
   than a stored `RecurConfig` cursor — a missed or early charge self-corrects instead of

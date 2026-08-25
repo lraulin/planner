@@ -10,6 +10,7 @@ import {
   financeTransactions,
   bankAccountLinks,
 } from "@/db/schema";
+import type { FinanceExecutor } from "./dbExecutor";
 import { numericStringToCents } from "./money";
 import { tagsInNotes } from "./tags";
 import type {
@@ -58,8 +59,11 @@ function scopeConditions(userId: string, filter: TransactionFilter) {
 }
 
 /** Accounts with their balance and row count, newest-named first for a stable picker. */
-export async function listAccounts(userId: string): Promise<FinanceAccountRow[]> {
-  const rows = await db
+export async function listAccounts(
+  userId: string,
+  executor: FinanceExecutor = db,
+): Promise<FinanceAccountRow[]> {
+  const rows = await executor
     .select({
       id: financeAccounts.id,
       name: financeAccounts.name,
@@ -87,7 +91,7 @@ export async function listAccounts(userId: string): Promise<FinanceAccountRow[]>
     .groupBy(financeAccounts.id)
     .orderBy(asc(financeAccounts.name));
 
-  const latestRows = await db
+  const latestRows = await executor
     .select({
       accountId: financeStatements.accountId,
       periodEnd: financeStatements.periodEnd,
@@ -112,7 +116,7 @@ export async function listAccounts(userId: string): Promise<FinanceAccountRow[]>
   const postByAccount = new Map<string, number>();
   const latestList = [...latestByAccount.entries()];
   if (latestList.length > 0) {
-    const postRows = await db
+    const postRows = await executor
       .select({
         accountId: financeTransactions.accountId,
         total: sql<string>`coalesce(sum(${financeTransactions.amount}), 0)`,
@@ -140,7 +144,7 @@ export async function listAccounts(userId: string): Promise<FinanceAccountRow[]>
   // A live balance from the bank outranks both the statement close and the ledger sum: it
   // is what the bank's own app shows, read seconds ago. Nulls where an account has no live
   // feed, which is every account until one is linked.
-  const syncedRows = await db
+  const syncedRows = await executor
     .select({
       accountId: bankAccountLinks.accountId,
       balanceCents: bankAccountLinks.balanceCents,
@@ -228,7 +232,6 @@ export async function listTransactions(
       flowOverride: financeTransactions.flowOverride,
       excludeFromBaseline: financeTransactions.excludeFromBaseline,
       eventLabel: financeTransactions.eventLabel,
-      plannedWithdrawal: financeTransactions.plannedWithdrawal,
       notes: financeTransactions.notes,
       balanceAfter: financeTransactions.balanceAfter,
       budgetCategoryId: financeTransactions.budgetCategoryId,
@@ -281,7 +284,6 @@ const TRANSACTION_LIST_COLUMNS = {
   flowOverride: financeTransactions.flowOverride,
   excludeFromBaseline: financeTransactions.excludeFromBaseline,
   eventLabel: financeTransactions.eventLabel,
-  plannedWithdrawal: financeTransactions.plannedWithdrawal,
   notes: financeTransactions.notes,
   balanceAfter: financeTransactions.balanceAfter,
   budgetCategoryId: financeTransactions.budgetCategoryId,
@@ -307,7 +309,6 @@ function toTransactionListRow(row: {
   flowOverride: TransactionListRow["flowOverride"];
   excludeFromBaseline: boolean;
   eventLabel: string;
-  plannedWithdrawal: boolean;
   notes: string;
   balanceAfter: string | null;
   budgetCategoryId: string | null;
@@ -332,7 +333,6 @@ function toTransactionListRow(row: {
     flowOverride: row.flowOverride,
     excludeFromBaseline: row.excludeFromBaseline,
     eventLabel: row.eventLabel,
-    plannedWithdrawal: row.plannedWithdrawal,
     notes: row.notes,
     tags: tagsInNotes(row.notes),
     balanceAfterCents: numericStringToCents(row.balanceAfter),
@@ -455,7 +455,6 @@ export async function getTransaction(
       flowOverride: financeTransactions.flowOverride,
       excludeFromBaseline: financeTransactions.excludeFromBaseline,
       eventLabel: financeTransactions.eventLabel,
-      plannedWithdrawal: financeTransactions.plannedWithdrawal,
       notes: financeTransactions.notes,
       balanceAfter: financeTransactions.balanceAfter,
       budgetCategoryId: financeTransactions.budgetCategoryId,
@@ -503,7 +502,6 @@ export async function getTransaction(
     flowOverride: row.flowOverride,
     excludeFromBaseline: row.excludeFromBaseline,
     eventLabel: row.eventLabel,
-    plannedWithdrawal: row.plannedWithdrawal,
     notes: row.notes,
     tags: tagsInNotes(row.notes),
     balanceAfterCents: numericStringToCents(row.balanceAfter),

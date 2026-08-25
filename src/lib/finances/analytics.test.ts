@@ -58,7 +58,7 @@ function row(overrides: Partial<AnalyticsRow> = {}): AnalyticsRow {
     transferGroupId: null,
     excludeFromBaseline: false,
     eventLabel: "",
-    plannedWithdrawal: false,
+
     payeeId: description,
     // These fixtures model rows after the required payee pass. Canonical naming is stored on
     // that relation now; analytics no longer reaches back into the starter-rule corpus.

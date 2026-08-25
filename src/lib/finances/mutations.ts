@@ -14,6 +14,8 @@ import {
 import * as sortKey from "@/lib/tree/sortKey";
 import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { parseAccountUrl } from "./accountUrl";
+import { isCoreBudgetKind, resolvedOffBudget } from "./accountKind";
+import { rebaseAccountMembership } from "./budget/membership";
 import { changedRows, planReclassify } from "./classify/reclassify";
 import { summarizeClassifiedIncome, type IncomeSummary } from "./classify/income";
 import { summarizeFlowChanges, type FlowDiff } from "./classify/flowDiff";
@@ -89,8 +91,6 @@ export type TransactionEdit = {
   flowOverride?: FinanceFlowKind | null;
   excludeFromBaseline?: boolean;
   eventLabel?: string;
-  /** Declares a savings withdrawal to be what the money was saved for. */
-  plannedWithdrawal?: boolean;
 };
 
 /**
@@ -113,7 +113,6 @@ export async function updateTransaction(
     flowOverride?: FinanceFlowKind | null;
     excludeFromBaseline?: boolean;
     eventLabel?: string;
-    plannedWithdrawal?: boolean;
     updatedAt: Date;
   } = { updatedAt: new Date() };
 
@@ -129,9 +128,6 @@ export async function updateTransaction(
     values.excludeFromBaseline = edit.excludeFromBaseline;
   }
   if (edit.eventLabel !== undefined) values.eventLabel = edit.eventLabel.trim();
-  if (edit.plannedWithdrawal !== undefined) {
-    values.plannedWithdrawal = edit.plannedWithdrawal;
-  }
 
   await db
     .update(financeTransactions)
@@ -231,9 +227,8 @@ export type AccountEdit = {
    */
   closedOn?: string | null;
   /**
-   * Hold this account out of the envelope budget — its balance is not money to assign and
-   * its rows are not budget activity
-   * (`agent-os/specs/2026-08-22-1948-zero-based-budget/` D3).
+   * Include or exclude a flexible account (investment, loan, other) from the envelope
+   * budget. Core kinds ignore a request to leave; the write path forces them on-budget.
    */
   offBudget?: boolean;
 };
@@ -250,7 +245,27 @@ export async function updateAccount(
   accountId: string,
   edit: AccountEdit,
 ): Promise<void> {
-  await requireAccount(userId, accountId);
+  const [current] = await db
+    .select({
+      id: financeAccounts.id,
+      kind: financeAccounts.kind,
+      offBudget: financeAccounts.offBudget,
+    })
+    .from(financeAccounts)
+    .where(and(eq(financeAccounts.id, accountId), eq(financeAccounts.userId, userId)))
+    .limit(1);
+  if (!current) throw new Error("Account not found.");
+
+  const nextKind = edit.kind ?? current.kind;
+  if (isCoreBudgetKind(nextKind) && edit.offBudget === true) {
+    throw new Error(
+      "Checking, savings, cash, and credit-card accounts are always on budget.",
+    );
+  }
+  const nextOffBudget = resolvedOffBudget(
+    nextKind,
+    edit.offBudget ?? current.offBudget,
+  );
 
   const values: {
     name?: string;
@@ -277,12 +292,43 @@ export async function updateAccount(
   if (edit.closedOn !== undefined) {
     values.closedAt = closedAtFromKey(edit.closedOn);
   }
-  if (edit.offBudget !== undefined) values.offBudget = edit.offBudget;
 
-  await db
-    .update(financeAccounts)
-    .set(values)
-    .where(and(eq(financeAccounts.id, accountId), eq(financeAccounts.userId, userId)));
+  const membershipChanged = nextOffBudget !== current.offBudget;
+  const leaving = membershipChanged && nextOffBudget;
+
+  // Leaving the pool requires the kind to already be flexible (a core kind cannot
+  // store off-budget). Entering can happen before a kind edit that makes it core.
+  if (leaving && values.kind !== undefined) {
+    await db
+      .update(financeAccounts)
+      .set({ kind: values.kind, updatedAt: new Date() })
+      .where(
+        and(eq(financeAccounts.id, accountId), eq(financeAccounts.userId, userId)),
+      );
+    delete values.kind;
+  }
+
+  if (membershipChanged) {
+    await rebaseAccountMembership(userId, accountId, nextOffBudget);
+  } else {
+    values.offBudget = nextOffBudget;
+  }
+
+  if (
+    values.name !== undefined ||
+    values.kind !== undefined ||
+    values.institution !== undefined ||
+    values.url !== undefined ||
+    values.closedAt !== undefined ||
+    values.offBudget !== undefined
+  ) {
+    await db
+      .update(financeAccounts)
+      .set(values)
+      .where(
+        and(eq(financeAccounts.id, accountId), eq(financeAccounts.userId, userId)),
+      );
+  }
 }
 
 /**

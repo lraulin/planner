@@ -533,6 +533,13 @@
       "when": 1787622961306,
       "tag": "0075_payee_auto_category",
       "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1787630317272,
+      "tag": "0076_wealthy_tarantula",
+      "breakpoints": true
     }
   ]
 }

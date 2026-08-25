@@ -997,27 +997,25 @@ period)` so money already spent stops being held twice and only going over bites
   Assign → Underfunded names which envelopes will not be funded. What is still missing is
   the guided step from a red envelope to "cancel or skip this" as an action, not just a
   number to read.
-- **✅ Period result — "living within my means", shipped 2026-08-18.**
-  `agent-os/specs/2026-08-18-2005-period-result/`. The measurement half of the item below,
-  and the first surface that scores rather than reports. For every **closed** pay period:
-  checking plus cash less card balances at the close, with savings excluded and any
-  unplanned draw from it subtracted — so a period rescued from the reserve is not a
-  success. Cash flow could not answer this: it is a flow over an interval and ignores both
-  the opening position and a card balance carried in. Balances are reconstructed by
-  anchoring to today's headline and walking backwards. A withdrawal can be declared
-  **planned** (the thing the money was saved for) and then does not count against its
-  period. Sits under Available to Spend on the Dashboard with a dated six-period history.
-  On the real data at ship: **1 of 6** recent periods covered themselves.
-  _Known limitation, recorded not smoothed:_ subtracting the full card balance makes the
-  verdict sensitive to where a period boundary falls relative to card payments, so the row
-  of bars is a trend rather than six independent verdicts.
+- **✅ Period result — "living within my means", shipped 2026-08-18; retired 2026-08-24.**
+  `agent-os/specs/2026-08-18-2005-period-result/` shipped the scorecard.
+  `agent-os/specs/2026-08-24-2206-single-pool-budget/` D6 deleted it. Its premise — savings
+  is outside ordinary money and a withdrawal is evidence of failure — contradicted the
+  one-pool envelope budget. `planned_withdrawal` went with it. `event_label` remains for
+  one-off Insights.
+- **✅ One pool, every dollar assigned, shipped 2026-08-24.**
+  `agent-os/specs/2026-08-24-2206-single-pool-budget/`. Checking, savings, cash and
+  credit cards are a mandatory on-budget pool. Ready to Assign is the unassigned remainder
+  of that pool, reconciled to today's working balances (same pending selection as the
+  Dashboard). Savings intent is a Savings envelope, not an account exclusion. Account
+  membership changes rebase opening once; existing off-budget savings were cut over
+  without rewriting the ledger.
 - **Next — earmarked savings (open question, not yet designed).** Bills and recurring
   spend both accrue toward a charge that is _coming_. There is no way to hold money for
   something with no date: an emergency fund, or saving toward a specific thing. The
   shape is a **quasi-account** — a named sub-balance carved out of a real account, with
-  a target and progress. `available.ts` already excludes `savings`-kind accounts
-  wholesale, so today the choice is all-or-nothing per account; what this adds is naming
-  and splitting _within_ one.
+  a target and progress. Savings envelopes already name a job inside the one-pool budget;
+  what this would add is a target and progress on that job, without a reallocation surface.
 
   **Funded by a sweep, not by an allocation.** Money moves to savings _after_ a pay
   period is survived, not out of the paycheck that starts it. The user's rule
@@ -1029,10 +1027,10 @@ period)` so money already spent stops being held twice and only going over bites
   **The hard constraint: an earmark must never be a donor bucket.** From the user's
   YNAB experience — the buckets did their visible job, making it obvious that going over
   in one area means taking it from another, but the emergency fund and every other
-  nice-to-have were always the "another". Note that the current wholesale exclusion of
-  savings from Available to Spend already has the right property: the reserve is simply
-  not offered as a source. Adding named buckets is the moment that property could be
-  lost, so the feature must add names, targets and visible progress **without** adding a
+  nice-to-have were always the "another". Note that assigning to a Savings envelope
+  already has the right property: the reserve is money with a job, not a donor on Ready
+  to Assign. Adding named targets is the moment that property could be lost, so the
+  feature must add names, targets and visible progress **without** adding a
   reallocation surface. If moving money out of an earmark is as easy as moving it in,
   this rebuilds the failure it exists to prevent.
 

@@ -167,8 +167,8 @@ export type FinanceAccountRow = {
   closedAt: Date | null;
   /**
    * Held out of the envelope budget: not money to assign, and its rows are not budget
-   * activity. Seeded from `kind` (savings, investments and loans are out) and then the
-   * user's — see `agent-os/specs/2026-08-22-1948-zero-based-budget/` D3.
+   * activity. Checking, savings, cash and credit cards are always on-budget; investment,
+   * loan and other may be either.
    */
   offBudget: boolean;
   /**
@@ -203,14 +203,13 @@ export type FinanceAccountRow = {
  *
  * Carries both halves of the classification split: `derived*` is what the classifier worked
  * out and is rewritten by every reclassify, while `category`, `flowOverride`,
- * `excludeFromBaseline`, `eventLabel` and `plannedWithdrawal` are yours and survive one.
- * The register shows the effective value of each and marks which is which.
+ * `excludeFromBaseline` and `eventLabel` are yours and survive one. The register shows
+ * the effective value of each and marks which is which.
  */
 export type TransactionListRow = {
   id: string;
   accountId: string;
   accountName: string;
-  /** Decides which per-row controls make sense — savings withdrawals get the planned flag. */
   accountKind: FinanceAccountKind;
   transactionDate: string;
   postedDate: string | null;
@@ -232,8 +231,6 @@ export type TransactionListRow = {
   flowOverride: FinanceFlowKind | null;
   excludeFromBaseline: boolean;
   eventLabel: string;
-  /** Declared: this savings withdrawal is what the money was saved for. */
-  plannedWithdrawal: boolean;
   notes: string;
   /** Exact, case-sensitive `#tokens` parsed from Notes. */
   tags?: string[];

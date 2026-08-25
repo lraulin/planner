@@ -12,7 +12,11 @@ import {
   SelectField,
   TextField,
 } from "@/components/detail/fields";
-import { ACCOUNT_KIND_OPTIONS, accountSourceLabel } from "@/lib/finances/accountKind";
+import {
+  ACCOUNT_KIND_OPTIONS,
+  accountSourceLabel,
+  isCoreBudgetKind,
+} from "@/lib/finances/accountKind";
 import { formatUsd } from "@/lib/finances/money";
 import type { FinanceAccountRow } from "@/lib/finances/types";
 import type { FinanceAccountKind } from "@/db/schema";
@@ -148,7 +152,14 @@ function AccountForm({
                   value={draft.kind}
                   options={ACCOUNT_KIND_OPTIONS}
                   onChange={(value) => {
-                    if (value) patch("kind", value);
+                    if (!value) return;
+                    setJustSaved(false);
+                    setDirty(true);
+                    setDraft((current) => ({
+                      ...current,
+                      kind: value,
+                      offBudget: isCoreBudgetKind(value) ? false : current.offBudget,
+                    }));
                   }}
                 />
                 <TextField
@@ -169,12 +180,21 @@ function AccountForm({
                 onChange={(checked) => patch("closed", checked)}
                 hint="Closed accounts stay in the register and drop off the dashboard."
               />
-              <CheckboxField
-                label="Off budget"
-                checked={draft.offBudget}
-                onChange={(checked) => patch("offBudget", checked)}
-                hint="Kept out of the envelope budget: its balance is not money to assign and its transactions are not budget activity. Savings and investments start off budget; checking, cash and cards start on."
-              />
+              {isCoreBudgetKind(draft.kind) ? (
+                <p className="text-[0.8125rem] leading-snug text-ink-muted">
+                  On budget. Checking, savings, cash and credit cards always join the
+                  envelope pool. Assigning to a Savings envelope is what gives money a
+                  savings job; moving it to a savings account does not. Closing this
+                  account does not remove a remaining balance from the pool.
+                </p>
+              ) : (
+                <CheckboxField
+                  label="On budget"
+                  checked={!draft.offBudget}
+                  onChange={(checked) => patch("offBudget", !checked)}
+                  hint="When on, this account's working balance is money to assign and its transactions are budget activity. Changing this rebases the budget opening by this account's position just before the budget started, once."
+                />
+              )}
             </Section>
 
             <Section title="Identity">

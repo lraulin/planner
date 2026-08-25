@@ -19,7 +19,8 @@ import {
   type AnalyticsRow,
   type RecurringMerchant,
 } from "./analytics";
-import type { BillCharge, PendingRow } from "./available";
+import type { BillCharge } from "./available";
+import type { PendingRow } from "./workingBalance";
 import type { Payday } from "./classify/income";
 import {
   payeeClaimIndex,
@@ -32,13 +33,11 @@ import {
 } from "./commitments";
 import { billRows as billRowsOf, type BillRow } from "./commitmentRows";
 import { spendingVsIncome, type SpendingVsIncome } from "./expectedSpending";
-import { listTransactions } from "./queries";
 import { numericStringToCents } from "./money";
-import type { PeriodLedgerRow } from "./periodResult";
-import { listAccounts } from "./queries";
+import { listAccounts, listTransactions } from "./queries";
 import type { FinanceAccountRow } from "./types";
-import { selectWorkingPending } from "./workingPending";
-import { shiftDateKey, toDateKey } from "@/lib/schedule/geometry";
+import { loadSelectedWorkingPending } from "./workingPendingQuery";
+import { toDateKey } from "@/lib/schedule/geometry";
 import { tagsInNotes } from "./tags";
 
 /**
@@ -94,7 +93,6 @@ export async function loadInsightsRows(
       transferGroupId: financeTransactions.transferGroupId,
       excludeFromBaseline: financeTransactions.excludeFromBaseline,
       eventLabel: financeTransactions.eventLabel,
-      plannedWithdrawal: financeTransactions.plannedWithdrawal,
       payeeId: financeTransactions.payeeId,
       payeeName: financePayees.name,
       budgetCategoryName: financeBudgetCategories.name,
@@ -134,7 +132,6 @@ export async function loadInsightsRows(
     transferGroupId: row.transferGroupId,
     excludeFromBaseline: row.excludeFromBaseline,
     eventLabel: row.eventLabel,
-    plannedWithdrawal: row.plannedWithdrawal,
     payeeId: row.payeeId,
     payeeName: row.payeeName,
     budgetCategoryName: row.budgetCategoryName,
@@ -329,50 +326,22 @@ export type DashboardData = {
    * Detected recurring merchants no envelope has claimed. Review — propose, never apply.
    */
   review: RecurringMerchant[];
-  /**
-   * Recent ledger rows, for the period scorecard (`src/lib/finances/periodResult.ts`).
-   *
-   * Trimmed to {@link PERIOD_LEDGER_DAYS}, because a historical balance is reconstructed by
-   * undoing what posted *after* a date — so only rows newer than the oldest period shown are
-   * ever read, and shipping three years of history to the client to display six bars would
-   * be a payload nobody looks at.
-   */
-  periodRows: PeriodLedgerRow[];
 };
 
-/**
- * How far back the scorecard's ledger reaches: comfortably more than the six fortnights the
- * panel shows, so the oldest bar still has every row it needs to walk back through.
- */
-export const PERIOD_LEDGER_DAYS = 300;
-
 export async function loadDashboard(userId: string): Promise<DashboardData> {
-  const [accounts, rows, bills, pendingRows, connections, dismissedPayeeIds] =
-    await Promise.all([
-      listAccounts(userId),
-      loadInsightsRows(userId),
-      loadRecurringBills(userId),
-      db
-        .select({
-          accountId: financeTransactions.accountId,
-          amount: financeTransactions.amount,
-          source: financeTransactions.externalSource,
-        })
-        .from(financeTransactions)
-        .where(
-          and(
-            eq(financeTransactions.userId, userId),
-            eq(financeTransactions.pending, true),
-          ),
-        ),
-      listConnections(userId),
-      db
-        .select({ id: financePayees.id })
-        .from(financePayees)
-        .where(
-          and(eq(financePayees.userId, userId), eq(financePayees.notACommitment, true)),
-        ),
-    ]);
+  const [accounts, rows, bills, connections, dismissedPayeeIds] = await Promise.all([
+    listAccounts(userId),
+    loadInsightsRows(userId),
+    loadRecurringBills(userId),
+    listConnections(userId),
+    db
+      .select({ id: financePayees.id })
+      .from(financePayees)
+      .where(
+        and(eq(financePayees.userId, userId), eq(financePayees.notACommitment, true)),
+      ),
+  ]);
+  const pending = await loadSelectedWorkingPending(userId, accounts);
 
   // One index, built once, and the only route from a bank string to a bill envelope. Resolving
   // per panel is how a merchant ends up folded into a bill on one surface and not another.
@@ -398,32 +367,13 @@ export async function loadDashboard(userId: string): Promise<DashboardData> {
 
   return {
     accounts,
-    pending: selectWorkingPending(
-      pendingRows.map((row) => ({
-        accountId: row.accountId,
-        amountCents: numericStringToCents(row.amount) ?? 0,
-        source: row.source ?? "",
-      })),
-      accounts,
-      Date.now(),
-    ).map(({ accountId, amountCents }) => ({ accountId, amountCents })),
+    pending,
     bills,
     paydays: paydaysFrom(rows),
     billCharges,
     connections,
     merchants: [...merchantSet].sort((left, right) => left.localeCompare(right)),
     review: reviewCandidates(rows, bills, index, dismissed),
-    periodRows: rows
-      .filter((row) => row.transactionDate >= periodLedgerCutoff())
-      .map((row) => ({
-        accountId: row.accountId,
-        transactionDate: row.transactionDate,
-        description: row.description,
-        amountCents: row.amountCents,
-        transferGroupId: row.transferGroupId,
-        plannedWithdrawal: row.plannedWithdrawal,
-        eventLabel: row.eventLabel,
-      })),
   };
 }
 
@@ -457,9 +407,9 @@ export async function loadReviewCandidates(
  * merchant both detectors claim is bill-shaped: regular in amount *and* date is the stronger
  * finding, and the spend buttons are on every row anyway.
  *
- * `todayKey` comes from the server's day, which is allowed here for the same reason
- * `periodLedgerCutoff` is: it sizes the window a candidate is measured over, and never decides
- * a figure anyone reads. A candidate list an hour off at a timezone boundary costs nothing.
+ * `todayKey` comes from the server's day, which is allowed here because it only sizes
+ * the window a candidate is measured over, and never decides a figure anyone reads. A
+ * candidate list an hour off at a timezone boundary costs nothing.
  */
 function reviewCandidates(
   rows: readonly AnalyticsRow[],
@@ -492,17 +442,6 @@ function reviewCandidates(
       right.annualCents - left.annualCents ||
       left.merchant.localeCompare(right.merchant),
   );
-}
-
-/**
- * The oldest date the scorecard's ledger keeps.
- *
- * Uses the server's day only to size a window, never to decide what "today" is — the figures
- * themselves take `todayKey` from the reader (`agent-os/standards/development/dates.md`). A
- * window an hour off at a timezone boundary costs nothing; a headline an hour off would not.
- */
-function periodLedgerCutoff(): string {
-  return shiftDateKey(toDateKey(new Date()), -PERIOD_LEDGER_DAYS);
 }
 
 export type AccountCarryingCost = {

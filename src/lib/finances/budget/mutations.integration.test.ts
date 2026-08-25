@@ -66,7 +66,7 @@ afterAll(async () => {
 const TODAY = "2026-08-22";
 const MONTH = "2026-08-01";
 
-/** Checking with a starting deposit, a card, and a savings account that is off-budget. */
+/** Checking, a card, on-budget savings, and an off-budget investment. */
 async function seedAccounts(userId: string) {
   const [checking] = await db
     .insert(financeAccounts)
@@ -94,13 +94,28 @@ async function seedAccounts(userId: string) {
       userId,
       name: "Savings",
       kind: "savings",
-      offBudget: true,
       externalSource: "test",
       externalKey: `sav-${crypto.randomUUID()}`,
     })
     .returning({ id: financeAccounts.id });
+  const [investment] = await db
+    .insert(financeAccounts)
+    .values({
+      userId,
+      name: "Brokerage",
+      kind: "investment",
+      offBudget: true,
+      externalSource: "test",
+      externalKey: `inv-${crypto.randomUUID()}`,
+    })
+    .returning({ id: financeAccounts.id });
 
-  return { checkingId: checking.id, cardId: card.id, savingsId: savings.id };
+  return {
+    checkingId: checking.id,
+    cardId: card.id,
+    savingsId: savings.id,
+    investmentId: investment.id,
+  };
 }
 
 type TxSeed = {
@@ -227,7 +242,7 @@ describeDb("budget mutations", () => {
   });
 
   it("auto-maps by category and flow, and leaves an on-budget transfer alone", async () => {
-    const { checkingId, cardId, savingsId } = await seedAccounts(userId);
+    const { checkingId, cardId, investmentId } = await seedAccounts(userId);
     await addTransactions(userId, [
       {
         accountId: checkingId,
@@ -273,17 +288,17 @@ describeDb("budget mutations", () => {
         amount: "160.00",
         transferGroupId: "11111111-1111-4111-8111-111111111111",
       },
-      // To savings: leaves the budget, so it is real spending once someone envelopes it.
+      // To an off-budget investment: leaves the pool once, so it is real spending.
       {
         accountId: checkingId,
         date: "2026-08-12",
-        description: "TO SAVINGS",
+        description: "TO BROKERAGE",
         amount: "-300.00",
         transferGroupId: "22222222-2222-4222-8222-222222222222",
         category: "Shopping",
       },
       {
-        accountId: savingsId,
+        accountId: investmentId,
         date: "2026-08-12",
         description: "FROM CHECKING",
         amount: "300.00",
@@ -326,7 +341,7 @@ describeDb("budget mutations", () => {
     );
     await setTransactionBudgetCategory(
       userId,
-      byDescription.get("TO SAVINGS")!,
+      byDescription.get("TO BROKERAGE")!,
       ids.get("Discretionary")!,
     );
     const data = await loadBudget(userId, MONTH);
@@ -387,10 +402,9 @@ describeDb("budget mutations", () => {
   });
 
   it("only assigns a Category to the on-budget side of a boundary transfer", async () => {
-    const { checkingId, cardId, savingsId } = await seedAccounts(userId);
-    const [cardOut, cardIn, savingOut, savingIn, unpaired] = await addTransactions(
-      userId,
-      [
+    const { checkingId, cardId, savingsId, investmentId } = await seedAccounts(userId);
+    const [cardOut, cardIn, savingOut, savingIn, investOut, investIn, unpaired] =
+      await addTransactions(userId, [
         {
           accountId: checkingId,
           date: "2026-08-05",
@@ -425,13 +439,28 @@ describeDb("budget mutations", () => {
         },
         {
           accountId: checkingId,
+          date: "2026-08-06",
+          description: "TO BROKERAGE",
+          amount: "-40.00",
+          flow: "internal_transfer",
+          transferGroupId: "33333333-3333-4333-8333-333333333333",
+        },
+        {
+          accountId: investmentId,
+          date: "2026-08-06",
+          description: "FROM CHECKING BROKERAGE",
+          amount: "40.00",
+          flow: "internal_transfer",
+          transferGroupId: "33333333-3333-4333-8333-333333333333",
+        },
+        {
+          accountId: checkingId,
           date: "2026-08-07",
           description: "OLD CARD PAYMENT",
           amount: "-50.00",
           flow: "internal_transfer",
         },
-      ],
-    );
+      ]);
     await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
     const categoryId = (await envelopes(userId)).get("Savings")!;
 
@@ -444,9 +473,15 @@ describeDb("budget mutations", () => {
     await expect(
       setTransactionBudgetCategory(userId, unpaired, categoryId),
     ).rejects.toThrow(/Transfers between on-budget accounts/);
-    await setTransactionBudgetCategory(userId, savingOut, categoryId);
+    await expect(
+      setTransactionBudgetCategory(userId, savingOut, categoryId),
+    ).rejects.toThrow(/Transfers between on-budget accounts/);
     await expect(
       setTransactionBudgetCategory(userId, savingIn, categoryId),
+    ).rejects.toThrow(/Transfers between on-budget accounts/);
+    await setTransactionBudgetCategory(userId, investOut, categoryId);
+    await expect(
+      setTransactionBudgetCategory(userId, investIn, categoryId),
     ).rejects.toThrow(/outside the envelope budget/);
 
     const assigned = await db
@@ -461,6 +496,8 @@ describeDb("budget mutations", () => {
           cardIn,
           savingOut,
           savingIn,
+          investOut,
+          investIn,
           unpaired,
         ]),
       );
@@ -469,8 +506,10 @@ describeDb("budget mutations", () => {
     ).toMatchObject({
       [cardOut]: null,
       [cardIn]: null,
-      [savingOut]: categoryId,
+      [savingOut]: null,
       [savingIn]: null,
+      [investOut]: categoryId,
+      [investIn]: null,
       [unpaired]: null,
     });
   });
@@ -723,7 +762,7 @@ describeDb("budget mutations", () => {
     let august = findMonth((await loadBudget(userId, MONTH)).months, MONTH)!;
     expect(categoryMonth(august, ids.get("Discretionary")!).activityCents).toBe(-4_000);
 
-    await updateAccount(userId, cardId, { offBudget: true });
+    await updateAccount(userId, cardId, { kind: "investment", offBudget: true });
     august = findMonth((await loadBudget(userId, MONTH)).months, MONTH)!;
     expect(categoryMonth(august, ids.get("Discretionary")!).activityCents).toBe(0);
   });
@@ -966,7 +1005,7 @@ describeDb("budget mutations — cross-user isolation", () => {
     expect(data.groups).toEqual([]);
     expect(data.categories).toEqual([]);
     expect(data.goals).toEqual({});
-    expect(data.onBudgetPositionCents).toBe(0);
+    expect(data.accountPoolCents).toBe(0);
   });
 
   it("refuses every write against the owner's rows", async () => {
@@ -1092,7 +1131,7 @@ describeDb("budget mutations — cross-user isolation", () => {
       todayKey: TODAY,
     });
 
-    expect((await envelopes(intruderId)).size).toBe(23);
+    expect((await envelopes(intruderId)).size).toBe(24);
     expect((await envelopes(ownerId)).size).toBe(5);
   });
 });
@@ -1106,7 +1145,7 @@ describeDb("applyPayeeClaims", () => {
 
   /** A claimed payee with one charge inside the budget window and one before it. */
   async function seedClaim(owner: string) {
-    const { checkingId, savingsId } = await seedAccounts(owner);
+    const { checkingId, investmentId } = await seedAccounts(owner);
     await seedBudget(owner, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
     const byName = await envelopes(owner);
     const rent = byName.get("Bills") ?? [...byName.values()][0];
@@ -1125,7 +1164,7 @@ describeDb("applyPayeeClaims", () => {
         amount: "-900.00",
       },
       {
-        accountId: savingsId,
+        accountId: investmentId,
         date: "2026-08-06",
         description: "RENT",
         amount: "-900.00",

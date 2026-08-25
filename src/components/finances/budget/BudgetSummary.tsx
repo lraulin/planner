@@ -15,9 +15,12 @@ import type { BudgetMonth } from "@/lib/finances/budget/envelope";
  */
 export function BudgetSummary({
   month,
+  accountPoolCents,
   onAssign,
 }: {
   month: BudgetMonth;
+  /** When viewing the current month, the live on-budget working pool. */
+  accountPoolCents?: number;
   onAssign?: () => void;
 }) {
   const ready = month.readyToAssignCents;
@@ -36,7 +39,7 @@ export function BudgetSummary({
         </span>
         <span className="text-[0.8125rem] text-ink-muted">
           {ready > 0
-            ? "left to assign"
+            ? "unassigned from on-budget accounts"
             : ready < 0
               ? "assigned more than you have"
               : "every dollar has a job"}
@@ -66,6 +69,15 @@ export function BudgetSummary({
           </div>
         ))}
       </dl>
+      {accountPoolCents !== undefined ? (
+        <p className="mt-2 text-[0.75rem] leading-snug text-ink-muted">
+          Account pool{" "}
+          <span className="tabular text-ink">{formatUsd(accountPoolCents)}</span>
+          {" = "}
+          Ready to Assign + envelope balances + held. Credit-card debt reduces the pool;
+          a payment between on-budget accounts does not.
+        </p>
+      ) : null}
     </section>
   );
 }

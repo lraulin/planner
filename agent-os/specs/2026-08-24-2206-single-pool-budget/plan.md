@@ -1,6 +1,6 @@
 # One pool, every dollar assigned
 
-**Status: active**
+**Status: frozen / complete** (2026-08-24)
 Spec folder: `agent-os/specs/2026-08-24-2206-single-pool-budget/`
 
 ## Spec relationships
@@ -195,41 +195,43 @@ rather than relabeling the old score.
 
 ## Acceptance criteria
 
-- [ ] Checking, savings, cash, and credit-card accounts cannot be stored or edited as
+- [x] Checking, savings, cash, and credit-card accounts cannot be stored or edited as
       off-budget; investment, loan, and other accounts retain an explicit membership choice.
-- [ ] The current `accountPoolCents` uses the same selected pending rows and signed balances as
+- [x] The current `accountPoolCents` uses the same selected pending rows and signed balances as
       the Dashboard.
-- [ ] Current month `Ready to Assign + envelope balances + held = account pool` to the cent,
+- [x] Current month `Ready to Assign + envelope balances + held = account pool` to the cent,
       whether activity is categorized, uncategorized, pending, or affected by a headline/ledger
       mismatch.
-- [ ] The Ready to Assign summary names signed uncategorized activity and account reconciliation
+- [x] The Ready to Assign summary names signed uncategorized activity and account reconciliation
       separately and its displayed terms add to the headline.
-- [ ] Categorizing a transaction moves its effect from the uncategorized term into its envelope
+- [x] Categorizing a transaction moves its effect from the uncategorized term into its envelope
       without changing the one-pool identity.
-- [ ] Checking↔savings transfers and credit-card payments are budget-neutral; transfers across
+- [x] Checking↔savings transfers and credit-card payments are budget-neutral; transfers across
       an on/off-budget boundary affect the budget once.
-- [ ] Both setup presets contain a Savings envelope, and the required Savings section stays
+- [x] Both setup presets contain a Savings envelope, and the required Savings section stays
       visible when it has no rows; the seeded row remains editable and deletable.
-- [ ] Account/setup/Budget copy no longer says savings is excluded or that Ready to Assign is
+- [x] Account/setup/Budget copy no longer says savings is excluded or that Ready to Assign is
       only this month's income.
-- [ ] The guarded cutover rebases each existing off-budget savings account exactly once,
+- [x] The guarded cutover rebases each existing off-budget savings account exactly once,
       preserves allocations and categories, emits a complete receipt, and rolls back on an
       invariant failure.
-- [ ] Creating an on-budget account after budget start and changing a flexible account's
+- [x] Creating an on-budget account after budget start and changing a flexible account's
       membership each adjust opening once; retrying an import does not repeat the adjustment.
-- [ ] Cross-user integration tests prove another user cannot inspect or trigger an account
+- [x] Cross-user integration tests prove another user cannot inspect or trigger an account
       rebase or cutover against the owner's rows.
-- [ ] Period Result and every `plannedWithdrawal` / `planned_withdrawal` path are gone while
+- [x] Period Result and every `plannedWithdrawal` / `planned_withdrawal` path are gone while
       `eventLabel` / `event_label` and one-off Insights still work.
-- [ ] Frozen predecessor specs remain unchanged; current product docs and Actual divergence
+- [x] Frozen predecessor specs remain unchanged; current product docs and Actual divergence
       notes describe the single-pool model.
 
 ## Changes from original plan
 
 Material refinements during implementation (requirements, design, scope). Omit pure code polish.
 
-| #   | Change | Why |
-| --- | ------ | --- |
+| #   | Change                                                                                                                 | Why                                                                                                                                                 |
+| --- | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Cutover flips every off-budget **core** kind, not only savings.                                                        | A leftover off-budget checking/cash/card row would make the generated CHECK fail; savings was the designed case, the others are the same invariant. |
+| 2   | Current-month uncategorized term is activity from start through the current month end, not only rows dated this month. | Categorizing a backlog row should move it out of the named uncategorized term, matching the tray, rather than hiding it in reconciliation.          |
 
 ## Task 1: Save spec documentation
 
@@ -295,6 +297,7 @@ Create `agent-os/specs/2026-08-24-2206-single-pool-budget/` with:
 
 ---
 
-> While this spec is **active**, material changes to requirements, design, or scope—including
-> feedback from real use—must update the authoritative sections and append to **Changes from
-> original plan**. Skip pure implementation details. Freeze only after verification.
+> Frozen 2026-08-24 after unit, database integration (Postgres ran), lint, typecheck, smoke,
+> browser verification of Budget/Dashboard/Accounts, and a local cutover of the live savings
+> account (opening −$979.80 → $119.18; pool identity $1,160.23). Further change is a new
+> delta-spec.
