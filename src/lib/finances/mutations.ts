@@ -1,12 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, gte, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeAccounts,
   financeBudgetCategories,
   financePaymentResolutions,
   financePayeeAliases,
-  financeRules,
   financeTransactions,
   type EnvelopeStatus,
   type FinanceAccountKind,
@@ -17,12 +16,7 @@ import { fromDateKey, toDateKey } from "@/lib/schedule/geometry";
 import { parseAccountUrl } from "./accountUrl";
 import { changedRows, planReclassify } from "./classify/reclassify";
 import { summarizeClassifiedIncome, type IncomeSummary } from "./classify/income";
-import { compileRules } from "./rules/compile";
-import {
-  summarizeCategoryChanges,
-  summarizeFlowChanges,
-  type FlowDiff,
-} from "./classify/flowDiff";
+import { summarizeFlowChanges, type FlowDiff } from "./classify/flowDiff";
 import { cadenceColumns, cadenceOf, type Cadence } from "./recurringBills";
 import { numericStringToCents } from "./money";
 import type { PaypalResolution } from "./paypalMatch";
@@ -33,9 +27,6 @@ import {
 } from "./payees/mutations";
 import { applyClaimedPayees } from "./payees/claims";
 import { aliasFor, payeeIndex } from "./payees/resolve";
-import { applyRules, ownedCategoryAction } from "./rules/match";
-import { normalizeMerchant } from "./classify/merchant";
-import { addTagToNotes } from "./tags";
 
 /**
  * Writes for the register.
@@ -338,7 +329,7 @@ export type ReclassifySummary = {
  * never seen before is still unclaimed and reports it that way.
  */
 async function loadAndPlanReclassify(userId: string) {
-  const [rows, accounts, storedResolutions, aliases, ruleRows] = await Promise.all([
+  const [rows, accounts, storedResolutions, aliases] = await Promise.all([
     db
       .select({
         id: financeTransactions.id,
@@ -349,7 +340,6 @@ async function loadAndPlanReclassify(userId: string) {
         sourceCategory: financeTransactions.sourceCategory,
         transferGroupId: financeTransactions.transferGroupId,
         payeeId: financeTransactions.payeeId,
-        derivedCategory: financeTransactions.derivedCategory,
         derivedFlow: financeTransactions.derivedFlow,
       })
       .from(financeTransactions)
@@ -378,17 +368,6 @@ async function loadAndPlanReclassify(userId: string) {
       })
       .from(financePayeeAliases)
       .where(eq(financePayeeAliases.userId, userId)),
-    db
-      .select({
-        id: financeRules.id,
-        name: financeRules.name,
-        conditions: financeRules.conditions,
-        actions: financeRules.actions,
-        enabled: financeRules.enabled,
-        sortKey: financeRules.sortKey,
-      })
-      .from(financeRules)
-      .where(eq(financeRules.userId, userId)),
   ]);
 
   const parsed = rows.map((row) => ({
@@ -400,7 +379,6 @@ async function loadAndPlanReclassify(userId: string) {
     sourceCategory: row.sourceCategory,
     transferGroupId: row.transferGroupId,
     payeeId: row.payeeId,
-    derivedCategory: row.derivedCategory,
     derivedFlow: row.derivedFlow,
   }));
 
@@ -419,24 +397,15 @@ async function loadAndPlanReclassify(userId: string) {
     ];
   });
 
-  // Compiled once for the whole pass, not once per row: 65 rules over 7,030 transactions is
-  // 457,000 regex constructions if this moves inside the loop.
-  const { rules, problems } = compileRules(ruleRows);
-
   const plan = planReclassify(
     parsed,
     accounts,
     randomUUID,
     resolutions,
-    // Commitment categories are organizational Group names, not transaction classification —
-    // the classifier reads the payee's envelope claim through `budget_category_id`, not a
-    // taxonomy string, so nothing is fed to it here.
-    new Map(),
     payeeIndex(aliases),
-    rules,
   );
 
-  return { parsed, plan, problems, changed: changedRows(parsed, plan) };
+  return { parsed, plan, changed: changedRows(parsed, plan) };
 }
 
 /**
@@ -453,29 +422,24 @@ export type DerivedPreview = {
   scanned: number;
   updated: number;
   flow: FlowDiff;
-  category: FlowDiff;
   income: {
     before: IncomeSummary;
     after: IncomeSummary;
   };
-  /** Rules whose stored JSONB could not be compiled, so they did not run. */
-  problems: { name: string; reason: string }[];
 };
 
 /**
- * What a reclassify would do to both derived columns, without doing it.
+ * What a reclassify would do to `derived_flow`, without doing it.
  *
- * Both, because a rule change can move one and not the other: a category-only rule leaves flow
- * alone, and a flow-only rule pushes its row out of the categorised set entirely through
- * `carriesCategory`. Auditing one field would let half a regression through.
+ * Category is no longer a derived column; claims and payee defaults write `budget_category_id`
+ * on new or uncategorised rows only.
  */
 export async function previewDerivedChanges(userId: string): Promise<DerivedPreview> {
-  const { parsed, plan, problems, changed } = await loadAndPlanReclassify(userId);
+  const { parsed, plan, changed } = await loadAndPlanReclassify(userId);
   return {
     scanned: parsed.length,
     updated: changed.length,
     flow: summarizeFlowChanges(parsed, plan.rows),
-    category: summarizeCategoryChanges(parsed, plan.rows),
     income: {
       before: summarizeClassifiedIncome(parsed),
       after: {
@@ -484,10 +448,6 @@ export async function previewDerivedChanges(userId: string): Promise<DerivedPrev
         normalizedMonthlyIncomeCents: plan.normalizedMonthlyIncomeCents,
       },
     },
-    problems: problems.map((problem) => ({
-      name: problem.name,
-      reason: problem.reason,
-    })),
   };
 }
 
@@ -508,18 +468,17 @@ export async function reclassifyTransactions(
         const values = sql.join(
           chunk.map(
             (row) =>
-              sql`(${row.id}::uuid, ${row.derivedCategory}::text, ${row.derivedFlow}::finance_flow_kind, ${row.transferGroupId}::uuid, ${row.payeeId}::uuid)`,
+              sql`(${row.id}::uuid, ${row.derivedFlow}::finance_flow_kind, ${row.transferGroupId}::uuid, ${row.payeeId}::uuid)`,
           ),
           sql`, `,
         );
         await tx.execute(sql`
           update ${financeTransactions} as t
-          set derived_category = v.derived_category,
-              derived_flow = v.derived_flow,
+          set derived_flow = v.derived_flow,
               transfer_group_id = v.transfer_group_id,
               payee_id = v.payee_id,
               updated_at = now()
-          from (values ${values}) as v(id, derived_category, derived_flow, transfer_group_id, payee_id)
+          from (values ${values}) as v(id, derived_flow, transfer_group_id, payee_id)
           where t.id = v.id and t.user_id = ${userId}::uuid
         `);
       }
@@ -533,102 +492,6 @@ export async function reclassifyTransactions(
     medianPaycheckCents: plan.medianPaycheckCents,
     normalizedMonthlyIncomeCents: plan.normalizedMonthlyIncomeCents,
   };
-}
-
-/** Apply user-owned Category and Add tag actions after ingestion or an explicit rules run. */
-export async function applyRuleActionsToTransactions(
-  userId: string,
-  options: { createdSince?: Date } = {},
-): Promise<number> {
-  const [rows, storedRules, ownedCategories] = await Promise.all([
-    db
-      .select({
-        id: financeTransactions.id,
-        description: financeTransactions.description,
-        payeeId: financeTransactions.payeeId,
-        accountId: financeTransactions.accountId,
-        amount: financeTransactions.amount,
-        transactionDate: financeTransactions.transactionDate,
-        notes: financeTransactions.notes,
-        budgetCategoryId: financeTransactions.budgetCategoryId,
-        derivedFlow: financeTransactions.derivedFlow,
-      })
-      .from(financeTransactions)
-      .where(
-        and(
-          eq(financeTransactions.userId, userId),
-          ...(options.createdSince
-            ? [gte(financeTransactions.createdAt, options.createdSince)]
-            : []),
-        ),
-      ),
-    db
-      .select({
-        id: financeRules.id,
-        name: financeRules.name,
-        conditions: financeRules.conditions,
-        actions: financeRules.actions,
-        enabled: financeRules.enabled,
-        sortKey: financeRules.sortKey,
-      })
-      .from(financeRules)
-      .where(eq(financeRules.userId, userId)),
-    db
-      .select({ id: financeBudgetCategories.id })
-      .from(financeBudgetCategories)
-      .where(eq(financeBudgetCategories.userId, userId)),
-  ]);
-  const { rules } = compileRules(storedRules);
-  const ownedIds = new Set(ownedCategories.map((row) => row.id));
-  const deadRuleIds = new Set<string>();
-  let updated = 0;
-  await db.transaction(async (tx) => {
-    for (const row of rows) {
-      const outcome = applyRules(rules, {
-        merchant: normalizeMerchant(row.description),
-        description: row.description,
-        payeeId: row.payeeId,
-        accountId: row.accountId,
-        amountCents: numericStringToCents(row.amount) ?? 0,
-        transactionDate: row.transactionDate,
-      });
-      const resolved = ownedCategoryAction(
-        outcome.category,
-        outcome.categoryRuleId,
-        ownedIds,
-      );
-      if (resolved.deadRuleId) deadRuleIds.add(resolved.deadRuleId);
-      let notes = row.notes;
-      for (const tag of outcome.tags) notes = addTagToNotes(notes, tag);
-      const categoryId =
-        outcome.flow === "internal_transfer" || row.derivedFlow === "internal_transfer"
-          ? null
-          : (resolved.category ?? row.budgetCategoryId);
-      if (notes === row.notes && categoryId === row.budgetCategoryId) continue;
-      await tx
-        .update(financeTransactions)
-        .set({ notes, budgetCategoryId: categoryId, updatedAt: new Date() })
-        .where(
-          and(
-            eq(financeTransactions.userId, userId),
-            eq(financeTransactions.id, row.id),
-          ),
-        );
-      updated += 1;
-    }
-    if (deadRuleIds.size > 0) {
-      await tx
-        .update(financeRules)
-        .set({ categoryReviewRequired: true, updatedAt: new Date() })
-        .where(
-          and(
-            eq(financeRules.userId, userId),
-            inArray(financeRules.id, [...deadRuleIds]),
-          ),
-        );
-    }
-  });
-  return updated;
 }
 
 /**

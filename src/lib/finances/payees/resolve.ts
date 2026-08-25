@@ -2,8 +2,7 @@
  * Which payee a transaction belongs to.
  *
  * The lookup half of payees (`agent-os/specs/2026-08-23-0748-finance-payees/`). Pure, so the
- * precedence is pinned by tests rather than read out of a mutation — the same split
- * `budget/autoMap.ts` uses.
+ * precedence is pinned by tests rather than read out of a mutation.
  *
  * **Matching is exact, on the normalized merchant.** `normalizeMerchant` does the mechanical
  * work — strip the feed wrapper and the processor stamp, drop the store number, fold case —

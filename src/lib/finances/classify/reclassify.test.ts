@@ -1,6 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { compileRules } from "../rules/compile";
-import { planRuleSeed } from "../rules/seed";
 import {
   changedRows,
   planReclassify,
@@ -42,26 +40,8 @@ function minter(prefix = "group") {
   return () => `${prefix}-${++next}`;
 }
 
-/**
- * The rules as production has them: the seeded corpus, compiled.
- *
- * Passing none would test a configuration no real user has — every row classified from the
- * bank's own label alone — and would quietly stop exercising the interaction between rules and
- * the flow detectors, which is where this module's ordering decisions live.
- */
-const SEEDED = compileRules(
-  planRuleSeed([]).create.map((draft) => ({
-    id: draft.seededId,
-    name: draft.name,
-    sortKey: draft.sortKey,
-    enabled: true,
-    conditions: draft.conditions,
-    actions: draft.actions,
-  })),
-).rules;
-
 function planOf(rows: readonly ReclassifyRow[], mint = minter()) {
-  return planReclassify(rows, ACCOUNTS, mint, [], new Map(), new Map(), SEEDED);
+  return planReclassify(rows, ACCOUNTS, mint);
 }
 
 function flowOf(plan: ReturnType<typeof planOf>, id: string) {
@@ -101,7 +81,6 @@ describe("planReclassify", () => {
 
     expect(flowOf(plan, "bank")).toBe("internal_transfer");
     expect(flowOf(plan, "card")).toBe("internal_transfer");
-    expect(plan.rows.every((entry) => entry.derivedCategory === null)).toBe(true);
   });
 
   it("keeps an unpaired card payment out of spending", () => {
@@ -159,16 +138,12 @@ describe("planReclassify", () => {
       ACCOUNTS,
       minter(),
       [],
-      new Map(),
       walmart,
-      SEEDED,
     );
 
     expect(flowOf(plan, "out")).toBe("spend");
     // Money came back from a shop money went out to, so it is negative spending.
     expect(flowOf(plan, "back")).toBe("refund");
-    // Legacy reporting categories are no longer inferred; the payee still settles refund flow.
-    expect(plan.rows.map((entry) => entry.derivedCategory)).toEqual([null, null]);
   });
 
   it("does not call a credit a refund when the payee was never paid", () => {
@@ -182,7 +157,6 @@ describe("planReclassify", () => {
       ACCOUNTS,
       minter(),
       [],
-      new Map(),
       new Map([
         ["WM SUPERCENTER", "walmart-payee"],
         ["ACME MYSTERY SHOP", "acme-payee"],
@@ -295,7 +269,6 @@ describe("planReclassify", () => {
       changedRows(
         stored.map((entry, index) => ({
           ...entry,
-          derivedCategory: first.rows[index].derivedCategory,
           derivedFlow: first.rows[index].derivedFlow,
         })),
         second,
@@ -397,7 +370,6 @@ describe("planReclassify", () => {
           direction: "out",
         },
       ],
-      new Map(),
       new Map([
         ["BLUE BOTTLE COFFEE", "coffee-payee"],
         ["TRACTOR SUPPLY", "feed-payee"],
@@ -410,20 +382,16 @@ describe("planReclassify", () => {
     ]);
   });
 
-  it("applies commitment category precedence through the stable payee id", () => {
+  it("resolves the payee from the alias index", () => {
     const plan = planReclassify(
       [row("charge", "checking", "2026-03-14", "ACME MYSTERY SHOP", -2500)],
       ACCOUNTS,
       minter(),
       [],
-      new Map([["payee-acme", "Housing"]]),
       new Map([["ACME MYSTERY SHOP", "payee-acme"]]),
     );
 
-    expect(plan.rows[0]).toMatchObject({
-      payeeId: "payee-acme",
-      derivedCategory: "Housing",
-    });
+    expect(plan.rows[0].payeeId).toBe("payee-acme");
   });
 
   it("pairs a Coinbase withdrawal with checking and leaves the Sell as the liquidation", () => {
@@ -450,22 +418,7 @@ describe("planReclassify", () => {
     ).toBeNull();
   });
 
-  it("lets the bank line settle the flow and the counterparty settle the category", () => {
-    /*
-     * The PayPal merge runs `categorize` twice and picks a different winner per field, which
-     * reads like an oversight and is not:
-     *
-     * - **Category** comes from the counterparty. A statement naming the real merchant is
-     *   better evidence than a rail that says only `PAYPAL *`.
-     * - **Flow** comes from the bank line. Flow is about how the money moved, and
-     *   `paypal-outbound` files a checking withdrawal to PayPal as spend — something the
-     *   counterparty cannot know.
-     *
-     * The pairing below is deliberately contrived, because the asymmetry is only observable
-     * when **both** sides name the field: two `??` chains in opposite directions agree
-     * whenever one side is null, which is the ordinary case. So this is the only shape that
-     * can fail if someone "simplifies" the merge to take both fields from one side.
-     */
+  it("lets the bank line settle the flow over a counterparty named flow", () => {
     const plan = planReclassify(
       [
         row(
@@ -474,7 +427,6 @@ describe("planReclassify", () => {
           "2026-03-14",
           "Withdrawal from PAYPAL to LEE RAULIN INST XFER",
           -1099,
-          { sourceCategory: "Dining" },
         ),
       ],
       ACCOUNTS,
@@ -488,14 +440,9 @@ describe("planReclassify", () => {
           direction: "out",
         },
       ],
-      new Map(),
-      new Map(),
-      SEEDED,
     );
 
-    // Category rules now target budget UUIDs; the staged legacy field keeps the bank fallback.
-    expect(plan.rows[0].derivedCategory).toBe("Dining");
-    // The bank line's rule named the flow, over the counterparty's interest_fee.
+    // The bank line names spend; the counterparty would have been interest_fee.
     expect(plan.rows[0].derivedFlow).toBe("spend");
   });
 
@@ -520,7 +467,6 @@ describe("planReclassify", () => {
     const plan = planOf(rows);
     const stored = rows.map((entry, index) => ({
       ...entry,
-      derivedCategory: index === 0 ? plan.rows[0].derivedCategory : null,
       derivedFlow: plan.rows[index].derivedFlow,
     }));
 

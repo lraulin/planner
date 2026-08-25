@@ -9,6 +9,7 @@ import {
   removeAlias,
   isolatePayeeForBill,
   setPayeeNotACommitment,
+  setPayeeAutoCategory,
   setPayeeNotes,
   updatePayeeDetails,
 } from "@/lib/finances/payees/mutations";
@@ -26,7 +27,6 @@ import {
 import {
   deleteTransaction,
   reclassifyTransactions,
-  applyRuleActionsToTransactions,
   setOneOff,
   setSubscriptionStatus,
   updateAccount,
@@ -96,17 +96,6 @@ import type {
   TransactionFilter,
   TransactionListRow,
 } from "@/lib/finances/types";
-import {
-  createRule,
-  deleteRule,
-  moveRule,
-  setRuleEnabled,
-  updateRule,
-  type RuleInput,
-} from "@/lib/finances/rules/mutations";
-import { listRules, type RuleRow } from "@/lib/finances/rules/queries";
-import { seedRules } from "@/lib/finances/rules/cutover";
-import { previewDerivedChanges, type DerivedPreview } from "@/lib/finances/mutations";
 import {
   createFinanceTag,
   deleteFinanceTag,
@@ -247,11 +236,7 @@ export async function discoverFinanceTagsAction(): Promise<
 }
 
 export async function reclassifyAction(): Promise<DataActionResult<ReclassifySummary>> {
-  return runWithData(async (userId) => {
-    const result = await reclassifyTransactions(userId);
-    const rulesUpdated = await applyRuleActionsToTransactions(userId);
-    return { ...result, updated: result.updated + rulesUpdated };
-  });
+  return runWithData(reclassifyTransactions);
 }
 
 export async function setOneOffAction(
@@ -317,7 +302,9 @@ export async function pasteScrapedPendingAction(
     const startedAt = await transactionIngestionWatermark();
     const result = await replaceScrapedPending(userId, text, todayKey);
     if (result.inserted > 0) {
-      await finalizeTransactionIngestion(userId, { applyRulesSince: startedAt });
+      await finalizeTransactionIngestion(userId, {
+        applyAutoCategorySince: startedAt,
+      });
     }
     return result;
   });
@@ -510,9 +497,19 @@ export async function setPayeeNotesAction(
 
 export async function updatePayeeDetailsAction(
   payeeId: string,
-  input: { name: string; notes: string; learnCategories?: boolean },
+  input: { name: string; notes: string },
 ): Promise<ActionResult> {
   return run((userId) => updatePayeeDetails(userId, payeeId, input));
+}
+
+export async function setPayeeAutoCategoryAction(
+  payeeId: string,
+  input: {
+    mode: "learn" | "fixed" | "off";
+    defaultBudgetCategoryId: string | null;
+  },
+): Promise<ActionResult> {
+  return run((userId) => setPayeeAutoCategory(userId, payeeId, input));
 }
 
 export async function deletePayeeAction(payeeId: string): Promise<ActionResult> {
@@ -531,55 +528,4 @@ export async function mergePayeesAction(
   sourceIds: readonly string[],
 ): Promise<DataActionResult<{ movedTransactions: number; movedAliases: number }>> {
   return runWithData((userId) => mergePayees(userId, targetId, sourceIds));
-}
-
-// ─────────────────────────────────────── Rules ───────────────────────────────────────
-
-export async function listRulesAction(): Promise<QueryResult<RuleRow[]>> {
-  return runQuery(listRules);
-}
-
-export async function saveRuleAction(
-  ruleId: string | null,
-  input: RuleInput,
-): Promise<ActionResult> {
-  return run<string | void>((userId) =>
-    ruleId === null ? createRule(userId, input) : updateRule(userId, ruleId, input),
-  );
-}
-
-export async function setRuleEnabledAction(
-  ruleId: string,
-  enabled: boolean,
-): Promise<ActionResult> {
-  return run((userId) => setRuleEnabled(userId, ruleId, enabled));
-}
-
-export async function deleteRuleAction(ruleId: string): Promise<ActionResult> {
-  return run((userId) => deleteRule(userId, ruleId));
-}
-
-export async function moveRuleAction(
-  ruleId: string,
-  position: { afterId?: string | null; beforeId?: string | null },
-): Promise<ActionResult> {
-  return run((userId) => moveRule(userId, ruleId, position));
-}
-
-/**
- * What running the rules would change, without changing it.
- *
- * Deliberately the whole planner rather than just the matcher: a rule that names a flow enters
- * the income cadence detector, which moves the median paycheck and with it every figure on the
- * dashboard. A preview of "rows whose category would change" would miss that entirely.
- */
-export async function previewRulesAction(): Promise<DataActionResult<DerivedPreview>> {
-  return runWithData(previewDerivedChanges);
-}
-
-/** Seed the starter rules. One-time; a replay creates nothing. */
-export async function seedRulesAction(): Promise<
-  DataActionResult<{ created: number }>
-> {
-  return runWithData(seedRules);
 }

@@ -4,13 +4,22 @@ import { useId, useState, useTransition } from "react";
 import {
   addPayeeAliasAction,
   removePayeeAliasAction,
+  setPayeeAutoCategoryAction,
   updatePayeeDetailsAction,
 } from "@/app/finances/actions";
 import { ConfirmDialog } from "@/components/detail/ConfirmDialog";
 import { Drawer, DrawerFooter, DrawerHeader } from "@/components/detail/Drawer";
-import { CheckboxField, Section, TextArea } from "@/components/detail/fields";
+import { Section, SelectField, TextArea } from "@/components/detail/fields";
 import { formatUsd } from "@/lib/finances/money";
+import type { AutoCategoryMode } from "@/lib/finances/payees/autoCategory";
 import type { PayeeRow } from "@/lib/finances/payees/queries";
+import type { BudgetEnvelopeOption } from "@/lib/finances/budget/queries";
+
+const MODE_OPTIONS: { value: AutoCategoryMode; label: string }[] = [
+  { value: "learn", label: "Learn from my choices" },
+  { value: "fixed", label: "Use a fixed default" },
+  { value: "off", label: "Do not auto-categorize" },
+];
 
 function claimLabel(payee: PayeeRow): string {
   if (!payee.claim) return "Not claimed";
@@ -19,10 +28,12 @@ function claimLabel(payee: PayeeRow): string {
 
 export function PayeeDrawer({
   payee,
+  envelopes,
   onClose,
   onChanged,
 }: {
   payee: PayeeRow | null;
+  envelopes: readonly BudgetEnvelopeOption[];
   onClose: () => void;
   onChanged: () => void;
 }) {
@@ -33,6 +44,7 @@ export function PayeeDrawer({
     <PayeeForm
       key={payee.id}
       payee={payee}
+      envelopes={envelopes}
       titleId={titleId}
       onClose={onClose}
       onChanged={onChanged}
@@ -42,11 +54,13 @@ export function PayeeDrawer({
 
 function PayeeForm({
   payee,
+  envelopes,
   titleId,
   onClose,
   onChanged,
 }: {
   payee: PayeeRow;
+  envelopes: readonly BudgetEnvelopeOption[];
   titleId: string;
   onClose: () => void;
   onChanged: () => void;
@@ -55,7 +69,10 @@ function PayeeForm({
   const nameId = useId();
   const [name, setName] = useState(payee.name);
   const [notes, setNotes] = useState(payee.notes);
-  const [learnCategories, setLearnCategories] = useState(payee.learnCategories ?? true);
+  const [autoMode, setAutoMode] = useState<AutoCategoryMode>(payee.autoCategoryMode);
+  const [defaultCategoryId, setDefaultCategoryId] = useState(
+    payee.defaultBudgetCategoryId,
+  );
   const [aliasDraft, setAliasDraft] = useState("");
   const [dirty, setDirty] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
@@ -84,13 +101,17 @@ function PayeeForm({
   function save(thenClose: boolean) {
     setError(null);
     startTransition(async () => {
-      const result = await updatePayeeDetailsAction(payee.id, {
-        name,
-        notes,
-        learnCategories,
+      const details = await updatePayeeDetailsAction(payee.id, { name, notes });
+      if (!details.ok) {
+        setError(details.error);
+        return;
+      }
+      const auto = await setPayeeAutoCategoryAction(payee.id, {
+        mode: autoMode,
+        defaultBudgetCategoryId: defaultCategoryId,
       });
-      if (!result.ok) {
-        setError(result.error);
+      if (!auto.ok) {
+        setError(auto.error);
         return;
       }
       setDirty(false);
@@ -260,17 +281,46 @@ function PayeeForm({
               )}
             </Section>
 
-            <Section title="Notes">
-              <CheckboxField
-                label="Learn Categories from my choices"
-                checked={learnCategories}
-                onChange={(checked) => {
-                  setLearnCategories(checked);
+            <Section title="Auto Category">
+              {payee.claim ? (
+                <p className="text-[0.8125rem] leading-relaxed text-ink-muted">
+                  Claimed by {payee.claim.name}. These controls are disabled while the
+                  claim is held; the saved setting will resume if it is released.
+                </p>
+              ) : null}
+              <SelectField
+                label="Mode"
+                value={autoMode}
+                options={MODE_OPTIONS}
+                disabled={Boolean(payee.claim)}
+                onChange={(value) => {
+                  if (!value) return;
+                  setAutoMode(value);
                   setDirty(true);
                   setJustSaved(false);
                 }}
-                hint="After the same Category appears on 3 of the latest 5 transactions, create or update this payee's rule."
               />
+              {autoMode !== "off" ? (
+                <SelectField
+                  label={autoMode === "fixed" ? "Fixed default" : "Learned Category"}
+                  value={defaultCategoryId}
+                  options={envelopes.map((envelope) => ({
+                    value: envelope.id,
+                    label: envelope.label,
+                  }))}
+                  allowEmpty
+                  emptyLabel="None"
+                  disabled={Boolean(payee.claim)}
+                  onChange={(value) => {
+                    setDefaultCategoryId(value);
+                    setDirty(true);
+                    setJustSaved(false);
+                  }}
+                />
+              ) : null}
+            </Section>
+
+            <Section title="Notes">
               <TextArea
                 label="Notes"
                 value={notes}

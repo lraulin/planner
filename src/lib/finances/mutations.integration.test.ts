@@ -5,7 +5,6 @@ import {
   financeAccounts,
   financeBudgetCategories,
   financeCategoryGroups,
-  financeRules,
   financeTransactions,
   users,
 } from "@/db/schema";
@@ -733,19 +732,6 @@ describeDb("stable bill envelope payee claims", () => {
       .where(eq(financeTransactions.userId, userId));
     expect(filed.find((row) => row.id === billCharge.id)?.categoryId).toBe(extra?.id);
     expect(filed.find((row) => row.id === shopCharge.id)?.categoryId).toBeNull();
-
-    const rules = await db
-      .select({ conditions: financeRules.conditions, actions: financeRules.actions })
-      .from(financeRules)
-      .where(eq(financeRules.userId, userId));
-    expect(rules).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          conditions: [{ field: "payee", op: "is", value: extraCare }],
-          actions: [{ op: "set", field: "category", value: extra?.id }],
-        }),
-      ]),
-    );
   });
 });
 
@@ -848,7 +834,7 @@ describeDb("trackTransactionAsBill", () => {
     return row.id;
   }
 
-  it("mints a payee, files history, and writes the exact-payee rule from a row with none", async () => {
+  it("mints a payee and files history from a row with none", async () => {
     const recent = await addCharge("GEICO *AUTO", "-594.98", "2026-08-04");
     const history = await addCharge("GEICO *AUTO", "-594.98", "2026-02-04");
 
@@ -882,19 +868,6 @@ describeDb("trackTransactionAsBill", () => {
       categoryId: bills[0].id,
       payeeId,
     });
-
-    const rules = await db
-      .select({ conditions: financeRules.conditions, actions: financeRules.actions })
-      .from(financeRules)
-      .where(eq(financeRules.userId, userId));
-    expect(rules).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          conditions: [{ field: "payee", op: "is", value: payeeId }],
-          actions: [{ op: "set", field: "category", value: bills[0].id }],
-        }),
-      ]),
-    );
   });
 
   it("splits ExtraCare off a shared CVS payee so pharmacy charges stay unclaimed", async () => {

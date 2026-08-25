@@ -497,7 +497,7 @@ export function searchCorpus(
           detail("Notes", transaction.notes),
           detail("Category", transaction.category),
           detail("Source category", transaction.sourceCategory),
-          detail("Derived category", transaction.derivedCategory),
+
           detail("Event", transaction.eventLabel),
         ],
       });

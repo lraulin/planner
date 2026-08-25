@@ -82,12 +82,12 @@ describe("effectiveFlow", () => {
 });
 
 describe("effectiveCategory", () => {
-  it("runs user, then classifier, then the bank's vocabulary, then an admission", () => {
+  it("uses the envelope name, then a leftover user taxonomy, then Uncategorized", () => {
     expect(effectiveCategory(row({ category: "Baby" }))).toBe("Baby");
     expect(effectiveCategory(row({ category: null }))).toBe("Groceries");
     expect(
       effectiveCategory(row({ derivedCategory: null, sourceCategory: "Gas" })),
-    ).toBe("Gas & Auto");
+    ).toBe("Uncategorized");
     expect(effectiveCategory(row({ derivedCategory: null, sourceCategory: "" }))).toBe(
       "Uncategorized",
     );

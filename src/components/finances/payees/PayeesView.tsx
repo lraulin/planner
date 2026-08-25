@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import type { GridRow } from "@/lib/tree/slice";
+import type { BudgetEnvelopeOption } from "@/lib/finances/budget/queries";
 import type { PayeeRow } from "@/lib/finances/payees/queries";
 import {
   deletePayeeAction,
@@ -46,7 +47,13 @@ function deleteMessage(payee: PayeeRow): string {
     : `Delete ${payee.name}? Its ${payee.transactionCount} charges stay in the register and lose their payee until the next rebuild.`;
 }
 
-export function PayeesView({ initialPayees }: { initialPayees: PayeeRow[] }) {
+export function PayeesView({
+  initialPayees,
+  envelopes,
+}: {
+  initialPayees: PayeeRow[];
+  envelopes: readonly BudgetEnvelopeOption[];
+}) {
   const compact = useIsCompact();
   const [rows, setRows] = useState(initialPayees);
   const [seenServerRows, setSeenServerRows] = useState(initialPayees);
@@ -347,7 +354,12 @@ export function PayeesView({ initialPayees }: { initialPayees: PayeeRow[] }) {
         }
       />
 
-      <PayeeDrawer payee={openPayee} onClose={closeDrawer} onChanged={refresh} />
+      <PayeeDrawer
+        payee={openPayee}
+        envelopes={envelopes}
+        onClose={closeDrawer}
+        onChanged={refresh}
+      />
       <ConfirmDialog
         open={pendingDelete !== null}
         title="Delete this payee?"

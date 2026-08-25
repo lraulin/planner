@@ -2,6 +2,7 @@
 
 import type { ColumnDef } from "@/components/grid/columns";
 import { formatUsd } from "@/lib/finances/money";
+import { autoCategorySummary } from "@/lib/finances/payees/autoCategory";
 import type { PayeeRow } from "@/lib/finances/payees/queries";
 
 export type PayeeColumnCtx = {
@@ -15,7 +16,8 @@ export const PAYEE_COLUMN_IDS = [
   "aliases",
   "transactions",
   "total",
-  "commitment",
+  "autoCategory",
+  "envelope",
 ] as const;
 
 function Text({ value, muted = true }: { value: string; muted?: boolean }) {
@@ -105,8 +107,18 @@ export const payeeColumns: ColumnDef<PayeeColumnCtx, PayeeRow>[] = [
     ),
   },
   {
-    id: "commitment",
-    label: "Commitment",
+    id: "autoCategory",
+    label: "Auto Category",
+    width: "minmax(9rem,0.9fr)",
+    filterKind: "enum",
+    filterValue: (row) => autoCategorySummary(row.node),
+    sortValue: (row) => autoCategorySummary(row.node).toLowerCase(),
+    compact: "meta",
+    render: (row) => <Text value={autoCategorySummary(row.node)} />,
+  },
+  {
+    id: "envelope",
+    label: "Envelope",
     width: "minmax(8rem,0.8fr)",
     filterKind: "enum",
     filterValue: (row) => row.node.claim?.name ?? null,

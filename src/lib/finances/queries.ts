@@ -223,7 +223,6 @@ export async function listTransactions(
       amount: financeTransactions.amount,
       sourceCategory: financeTransactions.sourceCategory,
       category: financeTransactions.category,
-      derivedCategory: financeTransactions.derivedCategory,
       derivedFlow: financeTransactions.derivedFlow,
       transferGroupId: financeTransactions.transferGroupId,
       flowOverride: financeTransactions.flowOverride,
@@ -277,7 +276,6 @@ const TRANSACTION_LIST_COLUMNS = {
   amount: financeTransactions.amount,
   sourceCategory: financeTransactions.sourceCategory,
   category: financeTransactions.category,
-  derivedCategory: financeTransactions.derivedCategory,
   derivedFlow: financeTransactions.derivedFlow,
   transferGroupId: financeTransactions.transferGroupId,
   flowOverride: financeTransactions.flowOverride,
@@ -304,7 +302,6 @@ function toTransactionListRow(row: {
   amount: string;
   sourceCategory: string;
   category: string | null;
-  derivedCategory: string | null;
   derivedFlow: TransactionListRow["derivedFlow"];
   transferGroupId: string | null;
   flowOverride: TransactionListRow["flowOverride"];
@@ -330,7 +327,6 @@ function toTransactionListRow(row: {
     amountCents: numericStringToCents(row.amount) ?? 0,
     sourceCategory: row.sourceCategory,
     category: row.category,
-    derivedCategory: row.derivedCategory,
     derivedFlow: row.derivedFlow,
     transferGroupId: row.transferGroupId,
     flowOverride: row.flowOverride,
@@ -454,7 +450,6 @@ export async function getTransaction(
       amount: financeTransactions.amount,
       sourceCategory: financeTransactions.sourceCategory,
       category: financeTransactions.category,
-      derivedCategory: financeTransactions.derivedCategory,
       derivedFlow: financeTransactions.derivedFlow,
       transferGroupId: financeTransactions.transferGroupId,
       flowOverride: financeTransactions.flowOverride,
@@ -503,7 +498,6 @@ export async function getTransaction(
     amountCents: numericStringToCents(row.amount) ?? 0,
     sourceCategory: row.sourceCategory,
     category: row.category,
-    derivedCategory: row.derivedCategory,
     derivedFlow: row.derivedFlow,
     transferGroupId: row.transferGroupId,
     flowOverride: row.flowOverride,

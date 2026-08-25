@@ -7,7 +7,7 @@ import { importFinanceCsvFiles, type ImportFile } from "./import";
 import { updateAccount, updateTransaction } from "./mutations";
 import { listAccounts, listStatements, listTransactions } from "./queries";
 import { seedBudget } from "./budget/mutations";
-import { createRule } from "./rules/mutations";
+import { createPayee, setPayeeAutoCategory } from "./payees/mutations";
 
 const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
@@ -126,10 +126,13 @@ describeDb("finance CSV import", () => {
           eq(financeBudgetCategories.name, "Discretionary"),
         ),
       );
-    await createRule(userId, {
+    const payeeId = await createPayee(userId, {
       name: "Local cafe",
-      conditions: [{ field: "merchant", op: "is", value: "LOCAL CAFE" }],
-      actions: [{ op: "set", field: "category", value: category.id }],
+      aliases: ["LOCAL CAFE"],
+    });
+    await setPayeeAutoCategory(userId, payeeId, {
+      mode: "fixed",
+      defaultBudgetCategoryId: category.id,
     });
 
     await importFinanceCsvFiles({

@@ -216,7 +216,6 @@ export type TransactionRow = {
   notes: string;
   category: string | null;
   sourceCategory: string;
-  derivedCategory: string | null;
   eventLabel: string;
   transactionDate: string;
   accountName: string;
@@ -696,7 +695,6 @@ async function loadFinancesSource(userId: string): Promise<CorpusPart> {
           notes: financeTransactions.notes,
           category: financeTransactions.category,
           sourceCategory: financeTransactions.sourceCategory,
-          derivedCategory: financeTransactions.derivedCategory,
           eventLabel: financeTransactions.eventLabel,
           transactionDate: financeTransactions.transactionDate,
           accountName: financeAccounts.name,
@@ -735,7 +733,7 @@ async function loadFinancesSource(userId: string): Promise<CorpusPart> {
           id: financePayees.id,
           name: financePayees.name,
           notes: financePayees.notes,
-          envelopeId: financePayees.budgetCategoryId,
+          envelopeId: financePayees.claimedBudgetCategoryId,
         })
         .from(financePayees)
         .where(eq(financePayees.userId, userId)),

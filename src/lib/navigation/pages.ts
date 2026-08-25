@@ -266,14 +266,7 @@ const PAGES = {
       label: "Payees",
       segment: "payees",
       status: "built",
-      keywords: "merchants vendors aliases bank spellings identity",
-    },
-    {
-      id: "rules",
-      label: "Rules",
-      segment: "rules",
-      status: "built",
-      keywords: "categorize category flow regex merchant automation classify",
+      keywords: "merchants vendors aliases bank spellings identity auto category",
     },
     {
       id: "tags",

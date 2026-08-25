@@ -24,7 +24,7 @@
 
 import type { FinanceAccountKind, FinanceFlowKind } from "@/db/schema";
 import { daysBetweenKeys, shiftDateKey } from "@/lib/schedule/geometry";
-import { categoryFromBank, UNCATEGORIZED } from "./classify/categories";
+import { UNCATEGORIZED } from "./classify/categories";
 import { periodIndex, RATE_LOOKBACK_PERIODS, type Period } from "./commitments";
 import {
   detectIncome,
@@ -63,9 +63,10 @@ export type AnalyticsRow = {
   /** Signed; positive is money into the account. */
   amountCents: number;
   sourceCategory: string;
-  /** The user's category. Wins over everything below it. */
+  /** Legacy taxonomy override; unused for envelope Category. */
   category: string | null;
-  derivedCategory: string | null;
+  /** Test fixture stand-in for Category; production rows use `budgetCategoryName`. */
+  derivedCategory?: string | null;
   derivedFlow: FinanceFlowKind | null;
   flowOverride: FinanceFlowKind | null;
   /** Set when the classifier found this movement's other leg. Null means it never did. */
@@ -95,9 +96,9 @@ export type FlowFields = {
 
 /** The fields that decide a category, on the same terms as {@link FlowFields}. */
 export type CategoryFields = {
-  category: string | null;
-  derivedCategory: string | null;
-  sourceCategory: string;
+  category?: string | null;
+  derivedCategory?: string | null;
+  sourceCategory?: string;
   budgetCategoryName?: string | null;
 };
 
@@ -120,11 +121,13 @@ export function effectiveFlow(row: FlowFields): FinanceFlowKind {
  * our taxonomy, then an honest admission.
  */
 export function effectiveCategory(row: CategoryFields): string {
-  if ("budgetCategoryName" in row) return row.budgetCategoryName ?? UNCATEGORIZED;
+  if (row.budgetCategoryName) return row.budgetCategoryName;
+  if ("budgetCategoryName" in row) return UNCATEGORIZED;
   const own = row.category?.trim();
   if (own) return own;
+  // Test fixtures still pass a Category stand-in as `derivedCategory`.
   if (row.derivedCategory) return row.derivedCategory;
-  return categoryFromBank(row.sourceCategory) ?? UNCATEGORIZED;
+  return UNCATEGORIZED;
 }
 
 /** The fields that decide merchant identity, on the same terms as {@link FlowFields}. */

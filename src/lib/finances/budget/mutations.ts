@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeAccounts,
@@ -12,21 +12,18 @@ import {
   type EnvelopeKind,
   type EnvelopeSectionKind,
 } from "@/db/schema";
-import { parseBudget, serializeBudget } from "@/lib/settings/finances";
+import { serializeBudget } from "@/lib/settings/finances";
 import { writeUserSetting } from "@/lib/settings/mutations";
-import { readSetting } from "@/lib/settings/queries";
 import { BUDGET_SCOPE } from "@/lib/settings/scopes";
 import * as sortKey from "@/lib/tree/sortKey";
-import { FINANCE_CATEGORIES } from "../classify/categories";
 import { effectiveFlow } from "../analytics";
 import {
   categoryAssignableIds,
   categoryAssignmentRefusal,
 } from "../categoryEligibility";
 import { numericStringToCents } from "../money";
-import { learnedCategory } from "../categoryLearning";
-import { applyPayeeClaims, upsertPayeeCategoryRule } from "../payees/claims";
-import { envelopeForRow, envelopeIndex, type MappableRow } from "./autoMap";
+import { applyPayeeAutoCategories, applyPayeeClaims } from "../payees/claims";
+import { learnFromCategoryEdit } from "../payees/learn";
 import {
   budgetChildren,
   groupPageSection,
@@ -224,7 +221,6 @@ export async function seedBudget(
           // key alphabet and made the first nested insertion impossible.
           sortKey: categoryKeys[position] ?? sortKey.first(),
           kind: category.kind ?? "spending",
-          sourceCategories: [...category.sourceCategories],
         })),
       );
       categoryCount += group.categories.length;
@@ -241,140 +237,26 @@ export async function seedBudget(
 }
 
 /**
- * Put every unenveloped on-budget transaction since the start month into an envelope.
+ * Fill currently uncategorised eligible rows from payee claims then defaults.
  *
- * Only fills nulls — a row someone placed by hand is never moved, which is what makes this
- * safe to re-run after adding an envelope or editing what one claims. Rows the rules cannot
- * place stay null and stay in the backlog on screen.
+ * Taxonomy auto-map is retired. The `since` argument is kept so existing callers compile;
+ * uncategorised-only application is the safety, not the date bound.
  */
 export async function autoMapBudgetCategories(
   userId: string,
-  since: MonthKey,
+  _since?: MonthKey,
 ): Promise<{ placed: number; remaining: number }> {
-  const targets = await db
-    .select({
-      id: financeBudgetCategories.id,
-      sourceCategories: financeBudgetCategories.sourceCategories,
-      sortKey: financeBudgetCategories.sortKey,
-      kind: financeBudgetCategories.kind,
-    })
-    .from(financeBudgetCategories)
-    .where(eq(financeBudgetCategories.userId, userId));
-  if (targets.length === 0) return { placed: 0, remaining: 0 };
-
-  const rows = await db
-    .select({
-      id: financeTransactions.id,
-      description: financeTransactions.description,
-      sourceCategory: financeTransactions.sourceCategory,
-      category: financeTransactions.category,
-      derivedCategory: financeTransactions.derivedCategory,
-      derivedFlow: financeTransactions.derivedFlow,
-      flowOverride: financeTransactions.flowOverride,
-      amount: financeTransactions.amount,
-      transferGroupId: financeTransactions.transferGroupId,
-    })
-    .from(financeTransactions)
-    .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
-    .where(
-      and(
-        eq(financeTransactions.userId, userId),
-        eq(financeAccounts.userId, userId),
-        eq(financeAccounts.offBudget, false),
-        isNull(financeTransactions.budgetCategoryId),
-        sql`${financeTransactions.transactionDate} >= ${since}`,
-      ),
-    );
-  if (rows.length === 0) return { placed: 0, remaining: 0 };
-
-  // Transfer groups with two or more legs on on-budget accounts: money that moved inside the
-  // budget. Computed here rather than in `autoMap.ts`, which has no database to ask.
-  const internalGroups = new Set(
-    (
-      await db
-        .select({ groupId: financeTransactions.transferGroupId })
-        .from(financeTransactions)
-        .innerJoin(
-          financeAccounts,
-          eq(financeAccounts.id, financeTransactions.accountId),
-        )
-        .where(
-          and(
-            eq(financeTransactions.userId, userId),
-            eq(financeAccounts.userId, userId),
-            eq(financeAccounts.offBudget, false),
-            sql`${financeTransactions.transferGroupId} is not null`,
-          ),
-        )
-        .groupBy(financeTransactions.transferGroupId)
-        .having(sql`count(*) > 1`)
-    ).map((row) => row.groupId as string),
-  );
-
-  const index = envelopeIndex(
-    targets.map((target) => ({
-      ...target,
-      isIncome: target.kind === "income",
-    })),
-  );
-  const assignments = new Map<string, string[]>();
-
-  for (const row of rows) {
-    const mappable: MappableRow = {
-      description: row.description,
-      sourceCategory: row.sourceCategory,
-      category: row.category,
-      derivedCategory: row.derivedCategory,
-      derivedFlow: row.derivedFlow,
-      flowOverride: row.flowOverride,
-      amountCents: numericStringToCents(row.amount) ?? 0,
-      transferGroupId: row.transferGroupId,
-    };
-    const categoryId = envelopeForRow(mappable, index, internalGroups);
-    if (!categoryId) continue;
-    const bucket = assignments.get(categoryId) ?? [];
-    bucket.push(row.id);
-    assignments.set(categoryId, bucket);
-  }
-
-  let placed = 0;
-  await db.transaction(async (tx) => {
-    for (const [categoryId, ids] of assignments) {
-      // One statement per envelope rather than per row: the same pass on three years of
-      // history is a few dozen updates instead of a few thousand round trips.
-      await tx
-        .update(financeTransactions)
-        .set({ budgetCategoryId: categoryId, updatedAt: new Date() })
-        .where(
-          and(
-            eq(financeTransactions.userId, userId),
-            inArray(financeTransactions.id, ids),
-            isNull(financeTransactions.budgetCategoryId),
-          ),
-        );
-      placed += ids.length;
-    }
-  });
-
-  return { placed, remaining: rows.length - placed };
+  const placed = await applyPayeeAutoCategories(userId);
+  return { placed, remaining: 0 };
 }
 
 export { applyPayeeClaims };
 
-/**
- * Route claimed payees first, then fill what is left by taxonomy.
- *
- * Order is the precedence: a payee claim names one envelope outright, so it must land before
- * the auto-map — which only ever fills nulls — gets a chance to pool the same charge
- * somewhere broader.
- */
+/** Same fill, used after seeding a budget. */
 export async function autoMapConfiguredBudgetCategories(
   userId: string,
 ): Promise<{ placed: number; remaining: number }> {
-  const settings = parseBudget(await readSetting(userId, BUDGET_SCOPE));
-  if (settings.startMonth === null) return { placed: 0, remaining: 0 };
-  await applyPayeeClaims(userId, { since: settings.startMonth });
-  return autoMapBudgetCategories(userId, settings.startMonth);
+  return autoMapBudgetCategories(userId);
 }
 
 // ─────────────────────────── Moving money ───────────────────────────
@@ -668,7 +550,6 @@ export async function createBudgetCategory(
     groupId?: string | null;
     name: string;
     kind?: EnvelopeSectionKind;
-    sourceCategories?: readonly string[];
   },
 ): Promise<string> {
   const name = params.name.trim();
@@ -689,7 +570,6 @@ export async function createBudgetCategory(
       name,
       kind,
       sortKey: last === null ? sortKey.first() : sortKey.after(last),
-      sourceCategories: [...(params.sourceCategories ?? [])],
     })
     .returning({ id: financeBudgetCategories.id });
   if (!row) throw new Error("Could not create the envelope.");
@@ -780,72 +660,12 @@ export async function updateBudgetCategory(
     );
 }
 
-/**
- * Point one reporting-taxonomy category at exactly one spending envelope.
- *
- * The JSON arrays predate the editor, so uniqueness is established here rather than assumed:
- * remove the claim from every envelope, then add it to the selected one while the rows are
- * locked. Existing transaction assignments are deliberately untouched; the null-only auto-map
- * is what makes a hand choice authoritative.
- */
+/** Retired with the taxonomy auto-map. Kept as a named no-op so old callers compile. */
 export async function setTaxonomyCategoryEnvelope(
-  userId: string,
-  sourceCategory: string,
-  categoryId: string | null,
-): Promise<void> {
-  const knownCategories = new Set<string>(FINANCE_CATEGORIES);
-  if (!knownCategories.has(sourceCategory)) {
-    throw new Error("That spending category does not exist.");
-  }
-
-  await db.transaction(async (tx) => {
-    const rows = await tx
-      .select({
-        id: financeBudgetCategories.id,
-        sourceCategories: financeBudgetCategories.sourceCategories,
-        kind: financeBudgetCategories.kind,
-      })
-      .from(financeBudgetCategories)
-      .where(eq(financeBudgetCategories.userId, userId))
-      .for("update");
-
-    if (categoryId !== null) {
-      const target = rows.find((row) => row.id === categoryId);
-      if (!target) throw new Error("That envelope does not exist.");
-      if (target.kind === "income") {
-        throw new Error("A spending category cannot sort into an income envelope.");
-      }
-    }
-
-    const order = new Map<string, number>(
-      FINANCE_CATEGORIES.map((name, index) => [name, index]),
-    );
-    for (const row of rows) {
-      const next = row.sourceCategories.filter((name) => name !== sourceCategory);
-      if (row.id === categoryId) next.push(sourceCategory);
-      next.sort(
-        (left, right) =>
-          (order.get(left) ?? Number.MAX_SAFE_INTEGER) -
-          (order.get(right) ?? Number.MAX_SAFE_INTEGER),
-      );
-      if (
-        next.length === row.sourceCategories.length &&
-        next.every((name, index) => name === row.sourceCategories[index])
-      ) {
-        continue;
-      }
-      await tx
-        .update(financeBudgetCategories)
-        .set({ sourceCategories: next, updatedAt: new Date() })
-        .where(
-          and(
-            eq(financeBudgetCategories.id, row.id),
-            eq(financeBudgetCategories.userId, userId),
-          ),
-        );
-    }
-  });
-}
+  _userId: string,
+  _sourceCategory: string,
+  _categoryId: string | null,
+): Promise<void> {}
 
 export async function renameCategoryGroup(
   userId: string,
@@ -879,14 +699,38 @@ export async function deleteBudgetCategory(
   categoryId: string,
 ): Promise<void> {
   await requireCategory(userId, categoryId);
-  await db
-    .delete(financeBudgetCategories)
-    .where(
-      and(
-        eq(financeBudgetCategories.id, categoryId),
-        eq(financeBudgetCategories.userId, userId),
-      ),
-    );
+  await db.transaction(async (tx) => {
+    await tx
+      .update(financePayees)
+      .set({ claimedBudgetCategoryId: null, updatedAt: new Date() })
+      .where(
+        and(
+          eq(financePayees.userId, userId),
+          eq(financePayees.claimedBudgetCategoryId, categoryId),
+        ),
+      );
+    await tx
+      .update(financePayees)
+      .set({
+        defaultBudgetCategoryId: null,
+        autoCategoryMode: sql`case when ${financePayees.autoCategoryMode} = 'fixed' then 'learn' else ${financePayees.autoCategoryMode} end`,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(financePayees.userId, userId),
+          eq(financePayees.defaultBudgetCategoryId, categoryId),
+        ),
+      );
+    await tx
+      .delete(financeBudgetCategories)
+      .where(
+        and(
+          eq(financeBudgetCategories.id, categoryId),
+          eq(financeBudgetCategories.userId, userId),
+        ),
+      );
+  });
 }
 
 /** Remove an empty organisational group. Money-bearing descendants must be moved first. */
@@ -1078,44 +922,7 @@ async function learnCategoryForPayee(
   editedId: string,
   payeeId: string,
 ): Promise<string | void> {
-  const [payee, recent] = await Promise.all([
-    db
-      .select({ name: financePayees.name, learn: financePayees.learnCategories })
-      .from(financePayees)
-      .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)))
-      .limit(1),
-    db
-      .select({
-        id: financeTransactions.id,
-        categoryId: financeTransactions.budgetCategoryId,
-      })
-      .from(financeTransactions)
-      .where(
-        and(
-          eq(financeTransactions.userId, userId),
-          eq(financeTransactions.payeeId, payeeId),
-          gte(
-            financeTransactions.transactionDate,
-            sql`current_date - interval '180 days'`,
-          ),
-        ),
-      )
-      .orderBy(
-        desc(financeTransactions.transactionDate),
-        desc(financeTransactions.createdAt),
-      )
-      .limit(5),
-  ]);
-  if (!payee[0]?.learn) return;
-  const learned = learnedCategory(editedId, recent);
-  if (!learned) return;
-  await upsertPayeeCategoryRule(
-    userId,
-    payeeId,
-    learned,
-    "Learned from the same Category on 3 of the latest 5 transactions.",
-  );
-  return `Future ${payee[0].name} transactions will use this Category.`;
+  await learnFromCategoryEdit(userId, payeeId, editedId);
 }
 
 /** Put one transaction in a Category, or make it Uncategorized. */

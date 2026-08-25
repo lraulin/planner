@@ -49,7 +49,6 @@ import {
 } from "@/lib/finances/dashboardQueries";
 import { createCategoryGroup } from "@/lib/finances/budget/mutations";
 import { upsertBillEnvelope } from "@/lib/finances/mutations";
-import { createPayee } from "@/lib/finances/payees/mutations";
 import { getPayee, listAliasRows, listPayees } from "@/lib/finances/payees/queries";
 import { listFinanceTags } from "@/lib/finances/tags/queries";
 import {
@@ -276,10 +275,12 @@ async function seedOwner(): Promise<Owned> {
     cadence: { unit: "month", n: 6 },
     expectedCents: 141_260,
   });
-  const financePayeeId = await createPayee(userId, {
-    name: "Owner Merchant",
-    aliases: ["OWNER PURCHASE"],
-  });
+  // Import classifies as it writes, so the merchant already has a payee.
+  const [financePayee] = await listPayees(userId);
+  if (!financePayee) {
+    throw new Error("expected the finance seed to mint a payee");
+  }
+  const financePayeeId = financePayee.id;
   await importFinanceCsvFiles({
     userId,
     files: [

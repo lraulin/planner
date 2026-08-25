@@ -526,6 +526,13 @@
       "when": 1787588217763,
       "tag": "0074_ungrouped_envelopes",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1787622961306,
+      "tag": "0075_payee_auto_category",
+      "breakpoints": true
     }
   ]
 }

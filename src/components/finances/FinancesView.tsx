@@ -55,11 +55,6 @@ import { useSearchParams } from "next/navigation";
 import { useViewStateUrl } from "@/components/url/useViewStateUrl";
 import { FinanceImportPanel } from "./FinanceImportPanel";
 import { TransactionDrawer } from "./TransactionDrawer";
-import { RuleDrawer } from "./rules/RuleDrawer";
-import {
-  createRuleRefusal,
-  ruleDraftFromTransaction,
-} from "@/lib/finances/rules/fromTransaction";
 import { TrackAsBillDialog } from "./TrackAsBillDialog";
 import { NewEnvelopeDialog } from "./NewEnvelopeDialog";
 import type { EnvelopePickerOption } from "@/lib/finances/budget/groupEnvelopeOptions";
@@ -178,7 +173,7 @@ export function FinancesView({
   initialClaimed,
   envelopes,
   initialUpcoming = [],
-  payees,
+  payees: _payees,
   tags,
   todayKey,
   defaultCollapsedGroups,
@@ -211,7 +206,6 @@ export function FinancesView({
     null,
   );
   const [upcoming, setUpcoming] = useState(initialUpcoming);
-  const [ruleRowId, setRuleRowId] = useState<string | null>(null);
   const today = useToday();
   const {
     open: importOpen,
@@ -465,7 +459,6 @@ export function FinancesView({
       const row = rowId ? (rowById(rowId) ?? undefined) : undefined;
       const cannotTrack =
         rowId === null ? "Select a row first" : trackAsBillRefusal(row, claimedByPayee);
-      const cannotCreateRule = createRuleRefusal(row);
       return catalogCapabilities({
         // A transaction is not typed in, it arrives from the bank — so the catalog's
         // "make a new one" verb is the import, not a blank row.
@@ -480,21 +473,6 @@ export function FinancesView({
         onOpen: openDrawer,
         onDelete: requestDelete,
         pageCommands: [
-          {
-            id: "record.create-rule",
-            label: "Create rule from transaction…",
-            group: "record",
-            menu: "item",
-            section: "Item",
-            icon: "convert",
-            rowMenu: true,
-            keywords: "rule categorise classify merchant payee",
-            disabled: cannotCreateRule !== null,
-            title: cannotCreateRule ?? undefined,
-            run: () => {
-              if (rowId && !cannotCreateRule) setRuleRowId(rowId);
-            },
-          },
           {
             id: "record.track-as-bill",
             label: "Track as bill…",
@@ -528,7 +506,7 @@ export function FinancesView({
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (openId || ruleRowId || pendingDelete || isTypingTarget(event.target)) return;
+      if (openId || pendingDelete || isTypingTarget(event.target)) return;
       if (event.key === "ArrowDown") {
         event.preventDefault();
         move(1, event.shiftKey);
@@ -541,9 +519,7 @@ export function FinancesView({
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [openId, ruleRowId, pendingDelete, move]);
-
-  const ruleSource = ruleRowId ? rowById(ruleRowId) : undefined;
+  }, [openId, pendingDelete, move]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
@@ -687,18 +663,6 @@ export function FinancesView({
         onChanged={patchRow}
         onCreateEnvelope={onCreateEnvelope}
       />
-      {ruleSource ? (
-        <RuleDrawer
-          rule={null}
-          initialDraft={ruleDraftFromTransaction(ruleSource)}
-          payees={payees}
-          accounts={accounts.map(({ id, name }) => ({ id, name }))}
-          categories={envelopes}
-          open
-          onClose={() => setRuleRowId(null)}
-          onSaved={() => undefined}
-        />
-      ) : null}
       <ConfirmDialog
         open={pendingDelete !== null}
         title="Delete this transaction?"

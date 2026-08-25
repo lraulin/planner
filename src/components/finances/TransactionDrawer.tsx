@@ -257,8 +257,8 @@ function TransactionForm({
                     className="min-h-tap rounded border border-rule bg-surface px-2 text-base text-ink md:min-h-0 md:py-1 md:text-[0.8125rem]"
                   />
                   <span className="text-[0.75rem] text-ink-faint">
-                    Saved immediately. Repeated choices for the same payee can teach a
-                    rule.
+                    Saved immediately. Repeated choices for the same payee can teach its
+                    default Category.
                   </span>
                 </label>
               ))}

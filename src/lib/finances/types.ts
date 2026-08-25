@@ -223,7 +223,8 @@ export type TransactionListRow = {
   amountCents: number;
   sourceCategory: string;
   category: string | null;
-  derivedCategory: string | null;
+  /** Optional test fixture stand-in; not loaded from the database. */
+  derivedCategory?: string | null;
   derivedFlow: FinanceFlowKind | null;
   transferGroupId?: string | null;
   /** Derived by the Register from the whole ledger; absent on general finance reads. */

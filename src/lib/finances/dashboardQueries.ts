@@ -89,7 +89,6 @@ export async function loadInsightsRows(
       amount: financeTransactions.amount,
       sourceCategory: financeTransactions.sourceCategory,
       category: financeTransactions.category,
-      derivedCategory: financeTransactions.derivedCategory,
       derivedFlow: financeTransactions.derivedFlow,
       flowOverride: financeTransactions.flowOverride,
       transferGroupId: financeTransactions.transferGroupId,
@@ -130,7 +129,6 @@ export async function loadInsightsRows(
     amountCents: numericStringToCents(row.amount) ?? 0,
     sourceCategory: row.sourceCategory,
     category: row.category,
-    derivedCategory: row.derivedCategory,
     derivedFlow: row.derivedFlow,
     flowOverride: row.flowOverride,
     transferGroupId: row.transferGroupId,
@@ -198,13 +196,13 @@ export async function loadRecurringBills(userId: string): Promise<StoredBillRow[
       .select({
         id: financePayees.id,
         name: financePayees.name,
-        commitmentId: financePayees.budgetCategoryId,
+        commitmentId: financePayees.claimedBudgetCategoryId,
       })
       .from(financePayees)
       .where(
         and(
           eq(financePayees.userId, userId),
-          isNotNull(financePayees.budgetCategoryId),
+          isNotNull(financePayees.claimedBudgetCategoryId),
         ),
       )
       .orderBy(asc(financePayees.name)),

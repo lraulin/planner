@@ -5,7 +5,6 @@ import {
   financeAccounts,
   financeBudgetCategories,
   financeCategoryGroups,
-  financeRules,
   financeTransactions,
   users,
 } from "@/db/schema";
@@ -21,8 +20,14 @@ import {
   removeAlias,
   replaceCommitmentPayees,
   renamePayee,
+  setPayeeAutoCategory,
   updatePayeeDetails,
 } from "./mutations";
+import {
+  deleteBudgetCategory,
+  setTransactionBudgetCategory,
+} from "../budget/mutations";
+import { applyPayeeAutoCategories } from "./claims";
 import { getPayee, listAliasRows, listPayees, previewPayeeMerge } from "./queries";
 import { payeeForDescription, payeeIndex } from "./resolve";
 
@@ -337,28 +342,6 @@ describeDb("payee mutations", () => {
     expect(tx.payeeId).toBe(target);
   });
 
-  it("rewrites a rule condition holding the merged payee, which no foreign key protects", async () => {
-    const target = await createPayee(userId, { name: "Walmart" });
-    const source = await createPayee(userId, { name: "Wal-Mart" });
-
-    await db.insert(financeRules).values({
-      userId,
-      name: "Walmart is groceries",
-      sortKey: "a0",
-      conditions: [{ field: "payee", op: "oneOf", value: [source, target] }],
-      actions: [{ op: "set", field: "category", value: "Groceries" }],
-    });
-
-    await mergePayees(userId, target, [source]);
-
-    const [rule] = await db
-      .select({ conditions: financeRules.conditions })
-      .from(financeRules)
-      .where(eq(financeRules.userId, userId));
-
-    expect(rule.conditions).toEqual([{ field: "payee", op: "oneOf", value: [target] }]);
-  });
-
   it("refuses a merge that would put two commitments on one payee", async () => {
     const billA = await makeBillEnvelope(userId, "Bill A");
     const billB = await makeBillEnvelope(userId, "Bill B");
@@ -413,13 +396,6 @@ describeDb("payee mutations", () => {
       amount: "-15.99",
       payeeId: source,
     });
-    await db.insert(financeRules).values({
-      userId,
-      name: "Netflix",
-      sortKey: "a0",
-      conditions: [{ field: "payee", op: "is", value: source }],
-      actions: [{ op: "set", field: "category", value: "Streaming" }],
-    });
 
     const preview = await previewPayeeMerge(userId, target, [source]);
 
@@ -429,7 +405,6 @@ describeDb("payee mutations", () => {
       movedAliases: ["NETFLIX"],
       movedTransactions: 1,
       movedTotalCents: -1599,
-      affectedRules: [{ name: "Netflix" }],
       refusal: null,
     });
   });
@@ -456,26 +431,12 @@ describeDb("payee mutations", () => {
     expect(tx.payeeId).toBeNull();
   });
 
-  it("refuses to delete a payee referenced by an envelope claim or a rule", async () => {
+  it("refuses to delete a payee referenced by an envelope claim", async () => {
     const bill = await makeBillEnvelope(userId, "Internet");
     const claimed = await createPayee(userId, { name: "Comcast" });
     await claimPayeeForCommitment(userId, claimed, { id: bill.id });
     await expect(deletePayee(userId, claimed)).rejects.toThrow(/envelope/i);
-
-    // Same absence of a foreign key: a rule's payee id lives in JSONB, so deleting the
-    // payee would leave the rule matching nothing instead of failing.
-    const ruled = await createPayee(userId, { name: "Costco" });
-    await db.insert(financeRules).values({
-      userId,
-      name: "Costco is groceries",
-      sortKey: "a0",
-      conditions: [{ field: "payee", op: "is", value: ruled }],
-      actions: [{ op: "set", field: "category", value: "Groceries" }],
-    });
-    await expect(deletePayee(userId, ruled)).rejects.toThrow(/rule/i);
-
     expect(await getPayee(userId, claimed)).not.toBeNull();
-    expect(await getPayee(userId, ruled)).not.toBeNull();
   });
 
   it("removes an alias without touching the payee", async () => {
@@ -538,6 +499,12 @@ describeDb("payee mutations — cross-user isolation", () => {
     await expect(
       claimPayeeForCommitment(intruderId, ownedPayeeId, null),
     ).rejects.toThrow();
+    await expect(
+      setPayeeAutoCategory(intruderId, ownedPayeeId, {
+        mode: "off",
+        defaultBudgetCategoryId: null,
+      }),
+    ).rejects.toThrow();
 
     const intruderPayee = await createPayee(intruderId, { name: "Mine" });
     await expect(
@@ -570,5 +537,104 @@ describeDb("payee mutations — cross-user isolation", () => {
     expect(theirs).not.toBe(ownedPayeeId);
     const index = payeeIndex(await listAliasRows(intruderId));
     expect(payeeForDescription("WM SUPERCENTER #9", index)).toBe(theirs);
+  });
+});
+
+describeDb("payee auto-category", () => {
+  let userId: string;
+  let accountId: string;
+
+  beforeEach(async () => {
+    userId = await makeUser();
+    accountId = await makeAccount(userId);
+  });
+
+  async function makeSpendingEnvelope(name: string): Promise<string> {
+    const [group] = await db
+      .insert(financeCategoryGroups)
+      .values({
+        userId,
+        name: `${name} group ${crypto.randomUUID()}`,
+        sortKey: "a0",
+      })
+      .returning({ id: financeCategoryGroups.id });
+    const [row] = await db
+      .insert(financeBudgetCategories)
+      .values({
+        userId,
+        groupId: group.id,
+        name,
+        sortKey: "a0",
+        kind: "spending",
+      })
+      .returning({ id: financeBudgetCategories.id });
+    return row.id;
+  }
+
+  it("learns immediately from the first manual Category", async () => {
+    const food = await makeSpendingEnvelope("Groceries");
+    const payeeId = await createPayee(userId, { name: "Aldi" });
+    const txId = await addTransaction(userId, accountId, {
+      description: "ALDI",
+      amount: "-20.00",
+      payeeId,
+    });
+    await setTransactionBudgetCategory(userId, txId, food);
+    const payee = await getPayee(userId, payeeId);
+    expect(payee?.autoCategoryMode).toBe("learn");
+    expect(payee?.defaultBudgetCategoryId).toBe(food);
+  });
+
+  it("fills a new uncategorised charge from the learned default", async () => {
+    const food = await makeSpendingEnvelope("Groceries");
+    const payeeId = await createPayee(userId, { name: "Aldi" });
+    await setPayeeAutoCategory(userId, payeeId, {
+      mode: "learn",
+      defaultBudgetCategoryId: food,
+    });
+    const txId = await addTransaction(userId, accountId, {
+      description: "ALDI #2",
+      amount: "-12.00",
+      payeeId,
+    });
+    await applyPayeeAutoCategories(userId);
+    const [row] = await db
+      .select({ categoryId: financeTransactions.budgetCategoryId })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.id, txId));
+    expect(row?.categoryId).toBe(food);
+  });
+
+  it("does not fill new charges in off mode", async () => {
+    const food = await makeSpendingEnvelope("Groceries");
+    const payeeId = await createPayee(userId, { name: "Amazon" });
+    await setPayeeAutoCategory(userId, payeeId, {
+      mode: "off",
+      defaultBudgetCategoryId: food,
+    });
+    const txId = await addTransaction(userId, accountId, {
+      description: "AMAZON",
+      amount: "-40.00",
+      payeeId,
+    });
+    await applyPayeeAutoCategories(userId);
+    const [row] = await db
+      .select({ categoryId: financeTransactions.budgetCategoryId })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.id, txId));
+    expect(row?.categoryId).toBeNull();
+  });
+
+  it("falls back to learning with no default when a fixed envelope is deleted", async () => {
+    const food = await makeSpendingEnvelope("Groceries");
+    const payeeId = await createPayee(userId, { name: "Aldi" });
+    await setPayeeAutoCategory(userId, payeeId, {
+      mode: "fixed",
+      defaultBudgetCategoryId: food,
+    });
+    await deleteBudgetCategory(userId, food);
+    const payee = await getPayee(userId, payeeId);
+    expect(payee?.autoCategoryMode).toBe("learn");
+    expect(payee?.defaultBudgetCategoryId).toBeNull();
   });
 });

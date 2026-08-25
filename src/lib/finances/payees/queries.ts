@@ -11,13 +11,12 @@ import {
   financeBudgetCategories,
   financePayeeAliases,
   financePayees,
-  financeRules,
   financeTransactions,
 } from "@/db/schema";
 import { numericStringToCents } from "../money";
 import type { AliasRow } from "./resolve";
 import { mergeClaimDecision } from "./merge";
-import { storedConditionPayeeIds } from "./references";
+import type { AutoCategoryMode } from "./autoCategory";
 
 /** Which envelope claims a payee, if any. At most one column, so at most one claim. */
 export type PayeeClaim = { id: string; name: string };
@@ -26,7 +25,9 @@ export type PayeeRow = {
   id: string;
   name: string;
   notes: string;
-  learnCategories?: boolean;
+  autoCategoryMode: AutoCategoryMode;
+  defaultBudgetCategoryId: string | null;
+  defaultCategoryName: string | null;
   /** Sorted, so two reads of an unchanged payee render identically. */
   aliases: string[];
   transactionCount: number;
@@ -41,7 +42,6 @@ export type PayeeMergePreview = {
   movedAliases: string[];
   movedTransactions: number;
   movedTotalCents: number;
-  affectedRules: { id: string; name: string }[];
   resultingClaim: PayeeClaim | null;
   refusal: string | null;
 };
@@ -70,8 +70,9 @@ export async function listPayees(userId: string): Promise<PayeeRow[]> {
       id: financePayees.id,
       name: financePayees.name,
       notes: financePayees.notes,
-      learnCategories: financePayees.learnCategories,
-      budgetCategoryId: financePayees.budgetCategoryId,
+      autoCategoryMode: financePayees.autoCategoryMode,
+      defaultBudgetCategoryId: financePayees.defaultBudgetCategoryId,
+      budgetCategoryId: financePayees.claimedBudgetCategoryId,
     })
     .from(financePayees)
     .where(eq(financePayees.userId, userId))
@@ -136,7 +137,11 @@ export async function listPayees(userId: string): Promise<PayeeRow[]> {
       id: payee.id,
       name: payee.name,
       notes: payee.notes,
-      learnCategories: payee.learnCategories,
+      autoCategoryMode: payee.autoCategoryMode as AutoCategoryMode,
+      defaultBudgetCategoryId: payee.defaultBudgetCategoryId,
+      defaultCategoryName: payee.defaultBudgetCategoryId
+        ? (envelopeNames.get(payee.defaultBudgetCategoryId) ?? null)
+        : null,
       aliases: aliasesByPayee.get(payee.id) ?? [],
       transactionCount: seen?.count ?? 0,
       totalCents: seen?.cents ?? 0,
@@ -165,7 +170,7 @@ export async function payeesForCommitment(
     .where(
       and(
         eq(financePayees.userId, userId),
-        eq(financePayees.budgetCategoryId, claim.id),
+        eq(financePayees.claimedBudgetCategoryId, claim.id),
       ),
     )
     .orderBy(asc(sql`lower(${financePayees.name})`));
@@ -207,17 +212,6 @@ export async function previewPayeeMerge(
   }
   const ownedSources = sourceRows.filter((row): row is PayeeRow => row !== undefined);
   const claim = mergeClaimDecision([target, ...ownedSources]);
-  const sourceSet = new Set(sources);
-
-  const rules = await db
-    .select({
-      id: financeRules.id,
-      name: financeRules.name,
-      conditions: financeRules.conditions,
-    })
-    .from(financeRules)
-    .where(eq(financeRules.userId, userId))
-    .orderBy(asc(sql`lower(${financeRules.name})`));
 
   return {
     target: { id: target.id, name: target.name, claim: target.claim },
@@ -228,11 +222,6 @@ export async function previewPayeeMerge(
       0,
     ),
     movedTotalCents: ownedSources.reduce((total, row) => total + row.totalCents, 0),
-    affectedRules: rules
-      .filter((rule) =>
-        storedConditionPayeeIds(rule.conditions).some((id) => sourceSet.has(id)),
-      )
-      .map(({ id, name }) => ({ id, name })),
     resultingClaim: claim.claim,
     refusal: claim.refusal,
   };

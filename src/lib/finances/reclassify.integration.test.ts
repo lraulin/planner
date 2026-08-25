@@ -4,7 +4,6 @@ import { db } from "@/db";
 import { financeTransactions, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { importFinanceCsvFiles, type ImportFile } from "./import";
-import { seedRules } from "./rules/cutover";
 import {
   reclassifyTransactions,
   previewDerivedChanges,
@@ -14,8 +13,6 @@ import {
 import { addAlias, removeAlias } from "./payees/mutations";
 import { listPayees } from "./payees/queries";
 import { listAccounts, listTransactions } from "./queries";
-import { setRuleEnabled } from "./rules/mutations";
-import { listRules } from "./rules/queries";
 
 const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
@@ -92,7 +89,6 @@ async function classifiedRows(userId: string) {
     .select({
       description: financeTransactions.description,
       derivedFlow: financeTransactions.derivedFlow,
-      derivedCategory: financeTransactions.derivedCategory,
       transferGroupId: financeTransactions.transferGroupId,
       payeeId: financeTransactions.payeeId,
     })
@@ -117,11 +113,6 @@ describeDb("reclassifyTransactions", () => {
 
   beforeEach(async () => {
     userId = await makeUser();
-    // The rules a real user has. Without them these fixtures would test a configuration
-    // nobody runs — every row classified from the bank's own label alone — and would stop
-    // exercising the interaction between rules and the flow detectors, which is most of what
-    // this module decides.
-    await seedRules(userId);
     await seed(userId);
   });
 
@@ -165,11 +156,8 @@ describeDb("reclassifyTransactions", () => {
     expect(flowOf(rows, "TRUSTEDQA PAYROLL")).toBe("income");
     expect(flowOf(rows, "INTEREST CHARGE")).toBe("interest_fee");
     expect(
-      rows.find((row) => row.description.includes("WM SUPERCENTER"))?.derivedCategory,
-    ).toBe("Groceries");
-    expect(
-      rows.find((row) => row.description.includes("RENT:RAULI"))?.derivedCategory,
-    ).toBeNull();
+      rows.find((row) => row.description.includes("WM SUPERCENTER"))?.payeeId,
+    ).toBeTruthy();
   });
 
   it("mints the payee set and points each row at its stable identity", async () => {
@@ -210,8 +198,10 @@ describeDb("reclassifyTransactions", () => {
   });
 
   it("writes nothing on a second run and keeps every hand-made correction", async () => {
+    // Import classifies as it writes, so a later pass is a no-op.
     const first = await reclassifyTransactions(userId);
-    expect(first.updated).toBe(first.scanned);
+    expect(first.updated).toBe(0);
+    expect(first.scanned).toBeGreaterThan(0);
 
     const [walmart] = (await listTransactions(userId)).filter((row) =>
       row.description.includes("WM SUPERCENTER"),
@@ -253,10 +243,6 @@ describeDb("reclassifyTransactions", () => {
   it("previews the exact planner result without writing it", async () => {
     await reclassifyTransactions(userId);
     const before = await classifiedRows(userId);
-    const rentRule = (await listRules(userId)).find((rule) => rule.seededId === "rent");
-    if (!rentRule) throw new Error("Expected the starter rent rule.");
-    expect(rentRule.matchCount).toBe(1);
-    await setRuleEnabled(userId, rentRule.id, false);
 
     const preview = await previewDerivedChanges(userId);
     expect(await classifiedRows(userId)).toEqual(before);
@@ -305,19 +291,20 @@ describeDb("reclassify user isolation", () => {
   });
 
   it("does not classify another user's rows", async () => {
+    const before = await classifiedRows(ownerId);
+    expect(before.length).toBeGreaterThan(0);
+    expect(before.every((row) => row.derivedFlow !== null)).toBe(true);
+
     const summary = await reclassifyTransactions(intruderId);
     expect(summary).toMatchObject({ scanned: 0, updated: 0 });
-    expect(
-      (await classifiedRows(ownerId)).every((row) => row.derivedFlow === null),
-    ).toBe(true);
+    expect(await classifiedRows(ownerId)).toEqual(before);
   });
 
   it("does not preview another user's rows", async () => {
+    const before = await classifiedRows(ownerId);
     const preview = await previewDerivedChanges(intruderId);
     expect(preview).toMatchObject({ scanned: 0, updated: 0 });
-    expect(
-      (await classifiedRows(ownerId)).every((row) => row.derivedFlow === null),
-    ).toBe(true);
+    expect(await classifiedRows(ownerId)).toEqual(before);
   });
 
   it("leaves an owner's classification alone when the intruder reclassifies", async () => {

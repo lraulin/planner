@@ -23,7 +23,6 @@ export type BudgetRow = {
   isIncome: boolean;
   hidden: boolean;
   notes: string;
-  sourceCategories: readonly string[];
   assignedCents: number;
   activityCents: number;
   balanceCents: number;
@@ -93,7 +92,6 @@ export function budgetRows(
         isIncome: category.kind === "income",
         hidden: category.hidden,
         notes: category.notes,
-        sourceCategories: category.sourceCategories,
         templates: category.templates,
         goalCents: goals[`${month.month}|${category.id}`] ?? null,
         assignedCents: cell.assignedCents,

@@ -81,8 +81,6 @@ export type BudgetCategoryRow = {
   /** Derived from `kind` — income has no allocation and no balance. */
   isIncome: boolean;
   bill: BillFacet | null;
-  /** Spending-taxonomy values this envelope claims, for the auto-map and its editor. */
-  sourceCategories: string[];
   templates: Template[];
 };
 
@@ -183,7 +181,6 @@ function categoriesOf(userId: string) {
       sortKey: financeBudgetCategories.sortKey,
       hidden: financeBudgetCategories.hidden,
       notes: financeBudgetCategories.notes,
-      sourceCategories: financeBudgetCategories.sourceCategories,
       templates: financeBudgetCategories.templates,
       kind: financeBudgetCategories.kind,
       status: financeBudgetCategories.status,
@@ -211,7 +208,6 @@ function parsedCategories(
     sortKey: row.sortKey,
     hidden: row.hidden,
     notes: row.notes,
-    sourceCategories: row.sourceCategories,
     templates: parseTemplates(row.templates) ?? [],
     kind: row.kind,
     isIncome: row.kind === "income",
@@ -502,7 +498,7 @@ export async function openingPositionFor(
 async function lastChargeByEnvelope(userId: string): Promise<Map<string, string>> {
   const rows = await db
     .select({
-      envelopeId: financePayees.budgetCategoryId,
+      envelopeId: financePayees.claimedBudgetCategoryId,
       lastChargeKey: sql<string>`max(${financeTransactions.transactionDate})`,
     })
     .from(financeTransactions)
@@ -511,10 +507,10 @@ async function lastChargeByEnvelope(userId: string): Promise<Map<string, string>
       and(
         eq(financeTransactions.userId, userId),
         eq(financePayees.userId, userId),
-        isNotNull(financePayees.budgetCategoryId),
+        isNotNull(financePayees.claimedBudgetCategoryId),
       ),
     )
-    .groupBy(financePayees.budgetCategoryId);
+    .groupBy(financePayees.claimedBudgetCategoryId);
 
   return new Map(
     rows

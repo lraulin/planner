@@ -5,14 +5,12 @@
  * its **default suggested category list** and then spent their time shuffling money between
  * two dozen envelopes. That was a configuration choice, not a property of envelope budgeting
  * — which is why `2026-08-16-1938-commitments` D0 is narrowed here rather than discarded. The
- * product's answer to D0 is this file: offer few envelopes first, and make choosing few cost
- * nothing, because `sourceCategories` lets one envelope claim a dozen spending categories.
+ * product's answer to D0 is this file: offer few envelopes first.
  *
  * Spec: `agent-os/specs/2026-08-22-1948-zero-based-budget/` D5.
  */
 
 import type { EnvelopeSectionKind } from "@/db/schema";
-import { FINANCE_CATEGORIES, type FinanceCategory } from "../classify/categories";
 
 export const BUDGET_PRESETS = ["minimal", "detailed"] as const;
 export type BudgetPreset = (typeof BUDGET_PRESETS)[number];
@@ -21,42 +19,12 @@ export type PresetCategory = {
   name: string;
   /** Section this envelope belongs to. Omitted means ordinary spending. */
   kind?: EnvelopeSectionKind;
-  sourceCategories: readonly FinanceCategory[];
 };
 
 export type PresetGroup = {
   name: string;
   categories: readonly PresetCategory[];
 };
-
-/** Everything the taxonomy has that is not obviously a bill, a habit, or savings. */
-const DISCRETIONARY: readonly FinanceCategory[] = [
-  "Dining",
-  "Streaming & Media",
-  "Entertainment",
-  "AI",
-  "Productivity & Security",
-  "Software & Development",
-  "Games",
-  "Shopping",
-  "Personal Care",
-  "Travel",
-  "Health",
-  "Pets",
-];
-
-const BILLS: readonly FinanceCategory[] = [
-  "Rent & Housing",
-  "Utilities",
-  "Phone & Internet",
-  "Insurance",
-  "Home & Security",
-  "Taxes",
-  "Fees & Interest",
-  "Professional Services",
-];
-
-const HABITS: readonly FinanceCategory[] = ["Groceries", "Gas & Auto"];
 
 /**
  * Five envelopes, and the recommendation.
@@ -70,15 +38,15 @@ const HABITS: readonly FinanceCategory[] = ["Groceries", "Gas & Auto"];
 const MINIMAL: readonly PresetGroup[] = [
   {
     name: "Income",
-    categories: [{ name: "Income", kind: "income", sourceCategories: [] }],
+    categories: [{ name: "Income", kind: "income" }],
   },
   {
     name: "Spending",
     categories: [
-      { name: "Bills", sourceCategories: BILLS },
-      { name: "Recurring spend", sourceCategories: HABITS },
-      { name: "Discretionary", sourceCategories: DISCRETIONARY },
-      { name: "Savings", kind: "savings", sourceCategories: [] },
+      { name: "Bills" },
+      { name: "Recurring spend" },
+      { name: "Discretionary" },
+      { name: "Savings", kind: "savings" },
     ],
   },
 ];
@@ -87,15 +55,12 @@ const MINIMAL: readonly PresetGroup[] = [
  * One envelope per spending category, grouped.
  *
  * Here because the choice is the user's and refusing to offer it would be preachy, not
- * because it is a good idea for this situation. Every category claims exactly itself, so the
- * budget's axis and the classifier's agree row for row — which is genuinely useful if you
- * want the budget to double as a spending report, and is exactly the shape that turned into
- * shuffling last time.
+ * because it is a good idea for this situation.
  */
 const DETAILED: readonly PresetGroup[] = [
   {
     name: "Income",
-    categories: [{ name: "Income", kind: "income", sourceCategories: [] }],
+    categories: [{ name: "Income", kind: "income" }],
   },
   {
     name: "Home",
@@ -105,7 +70,7 @@ const DETAILED: readonly PresetGroup[] = [
       "Phone & Internet",
       "Home & Security",
       "Insurance",
-    ].map((name) => ({ name, sourceCategories: [name as FinanceCategory] })),
+    ].map((name) => ({ name })),
   },
   {
     name: "Everyday",
@@ -116,7 +81,7 @@ const DETAILED: readonly PresetGroup[] = [
       "Health",
       "Personal Care",
       "Pets",
-    ].map((name) => ({ name, sourceCategories: [name as FinanceCategory] })),
+    ].map((name) => ({ name })),
   },
   {
     name: "Enjoyment",
@@ -129,13 +94,12 @@ const DETAILED: readonly PresetGroup[] = [
       "Software & Development",
       "Shopping",
       "Travel",
-    ].map((name) => ({ name, sourceCategories: [name as FinanceCategory] })),
+    ].map((name) => ({ name })),
   },
   {
     name: "Obligations",
     categories: ["Taxes", "Fees & Interest", "Professional Services"].map((name) => ({
       name,
-      sourceCategories: [name as FinanceCategory],
     })),
   },
 ];
@@ -152,26 +116,7 @@ export const PRESET_LABELS: Record<BudgetPreset, string> = {
 
 export const PRESET_DESCRIPTIONS: Record<BudgetPreset, string> = {
   minimal:
-    "Five envelopes: bills, recurring spend, discretionary, savings, and income. Each one claims several spending categories, so nothing goes uncategorised.",
+    "Five envelopes: bills, recurring spend, discretionary, savings, and income.",
   detailed:
     "One envelope per spending category. More to look at, and more to move money between.",
 };
-
-/**
- * Every taxonomy value a preset claims, exactly once.
- *
- * Both presets must be exhaustive: a category no envelope claims is a transaction the
- * auto-map cannot place, and it would land in the backlog forever without anyone being told
- * why. A test pins this rather than a comment asking nicely.
- */
-export function claimedCategories(preset: BudgetPreset): string[] {
-  return PRESET_GROUPS[preset].flatMap((group) =>
-    group.categories.flatMap((category) => [...category.sourceCategories]),
-  );
-}
-
-/** Taxonomy values no envelope in this preset would claim. Empty for both, by test. */
-export function unclaimedCategories(preset: BudgetPreset): string[] {
-  const claimed = new Set(claimedCategories(preset));
-  return FINANCE_CATEGORIES.filter((category) => !claimed.has(category));
-}

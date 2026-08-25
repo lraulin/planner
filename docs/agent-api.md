@@ -666,15 +666,15 @@ complete input/output JSON Schemas.
 
 ### `list_commitments`
 
-List declared subscriptions/bills and recurring spend, with next due and rates.
+List declared bills, with next due and annual cost.
 
 - Use when: Use to see what is already spoken for before creating or updating a commitment.
 - Avoid when: Do not use it to detect undeclared merchants — that is list_commitment_candidates.
-- Returns: Both tables: bills with next due and annual cost, spend with auto/pinned rates.
+- Returns: Declared bills with next due and annual cost.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: legacy; replaced by `search_commitments`
 - Arguments: `{  }`
-- Output: `{ bills*, spend* }`
+- Output: `{ bills* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
 complete input/output JSON Schemas.
@@ -699,42 +699,12 @@ complete input/output JSON Schemas.
 Create or correct a subscription or bill.
 
 - Use when: Use to declare a bill, rename its matchers, set the amount, or mark it paused, cancelled, or dismissed.
-- Avoid when: Use upsert_recurring_spend for pizza and groceries.
+- Avoid when: Prefer save_subscription, which uses stable payee ids instead of matcher strings.
 - Returns: The saved bill's name, matchers, and status.
 - Effects: write; destructive=false; retry=safe; confirmation=user_intent
 - Exposure: legacy; replaced by `save_subscription`
-- Arguments: `{ name*, matchers?, cadenceMonths?, cadenceDays?, category?, expectedCents?, anchorDate?, status?, url?, scheduled?, dueDay?, notes? }`
+- Arguments: `{ name*, matchers?, cadenceMonths?, cadenceDays?, expectedCents?, anchorDate?, status?, url?, scheduled?, dueDay?, notes? }`
 - Output: `{ name*, matchers*, status* }`
-
-Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
-complete input/output JSON Schemas.
-
-### `upsert_recurring_spend`
-
-Create or correct a recurring-spend group.
-
-- Use when: Use to group merchants like Pizza Hut and Domino's under one weekly rate.
-- Avoid when: Use upsert_subscription for things that charge unless cancelled.
-- Returns: The saved entry's name, matchers, and period.
-- Effects: write; destructive=false; retry=safe; confirmation=user_intent
-- Exposure: legacy; replaced by `save_recurring_spend`
-- Arguments: `{ name*, matchers?, period?, amountSource?, expectedCents?, active?, category?, notes? }`
-- Output: `{ name*, matchers*, period* }`
-
-Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
-complete input/output JSON Schemas.
-
-### `add_commitment_matchers`
-
-Fold more bank spellings into a commitment that already exists.
-
-- Use when: Use when a vendor's name changed and the same bill now appears under a second string.
-- Avoid when: Use upsert_subscription or upsert_recurring_spend to replace a commitment's whole matcher list.
-- Returns: The commitment's name and its matchers after the merge.
-- Effects: write; destructive=false; retry=safe; confirmation=user_intent
-- Exposure: legacy; replaced by `set_commitment_payees`
-- Arguments: `{ kind*, name*, matchers* }`
-- Output: `{ kind*, name*, matchers* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
 complete input/output JSON Schemas.
@@ -756,14 +726,14 @@ complete input/output JSON Schemas.
 
 ### `search_commitments`
 
-Search bills and recurring-spend groups by name or stable payee.
+Search declared bills by name or stable payee.
 
 - Use when: Use to resolve a commitment id before editing its payees.
 - Avoid when: Use find_commitment_candidates for undeclared recurring charges.
 - Returns: A compact page of id-bearing commitments and their payees.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: domain
-- Arguments: `{ query?, kind?, offset*, limit* }`
+- Arguments: `{ query?, offset*, limit* }`
 - Output: `{ commitments*, pageInfo* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -771,14 +741,14 @@ complete input/output JSON Schemas.
 
 ### `find_commitment_candidates`
 
-Find unclaimed recurring payees that may be bills or recurring spend.
+Find unclaimed recurring payees that may be bills.
 
 - Use when: Use to propose commitments from transaction history.
 - Avoid when: Do not use it to list commitments already declared.
 - Returns: A page of stable payee ids, suggested tier, typical amount, and charge count.
 - Effects: read; destructive=false; retry=safe; confirmation=none
 - Exposure: domain
-- Arguments: `{ query?, kind?, offset*, limit* }`
+- Arguments: `{ query?, offset*, limit* }`
 - Output: `{ candidates*, pageInfo* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
@@ -789,27 +759,12 @@ complete input/output JSON Schemas.
 Create or correct a bill using stable payee ids.
 
 - Use when: Use for subscriptions and bills that charge unless cancelled.
-- Avoid when: Use save_recurring_spend for groceries, petrol, and other chosen spending.
+- Avoid when: Do not pass matcher strings — resolve payee ids first with list_payees.
 - Returns: The saved bill id, name, payees, and status.
 - Effects: write; destructive=false; retry=safe; confirmation=user_intent
 - Exposure: domain
-- Arguments: `{ name*, payeeIds?, cadenceMonths?, cadenceDays?, category?, expectedCents?, anchorDate?, status?, url?, scheduled?, dueDay?, notes? }`
+- Arguments: `{ name*, payeeIds?, cadenceMonths?, cadenceDays?, expectedCents?, anchorDate?, status?, url?, scheduled?, dueDay?, notes? }`
 - Output: `{ id*, name*, payees*, status* }`
-
-Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
-complete input/output JSON Schemas.
-
-### `save_recurring_spend`
-
-Create or correct recurring spend using stable payee ids.
-
-- Use when: Use for routines such as groceries or pizza that happen only when chosen.
-- Avoid when: Use save_subscription for charges that arrive unless cancelled.
-- Returns: The saved group id, name, payees, and period.
-- Effects: write; destructive=false; retry=safe; confirmation=user_intent
-- Exposure: domain
-- Arguments: `{ name*, payeeIds?, period?, amountSource?, expectedCents?, active?, category?, notes? }`
-- Output: `{ id*, name*, payees*, period* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
 complete input/output JSON Schemas.
@@ -823,23 +778,8 @@ Replace a commitment's complete stable-payee set.
 - Returns: The updated id-bearing commitment and its complete payee set.
 - Effects: write; destructive=false; retry=safe; confirmation=user_intent
 - Exposure: domain
-- Arguments: `{ kind*, id*, payeeIds* }`
+- Arguments: `{ id*, payeeIds* }`
 - Output: `{ commitment* }`
-
-Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
-complete input/output JSON Schemas.
-
-### `delete_commitment`
-
-Remove a bill or recurring-spend entry.
-
-- Use when: Use when the user undeclares a commitment entirely.
-- Avoid when: Use upsert_subscription with status cancelled to keep the history.
-- Returns: Confirmation of the kind and name removed.
-- Effects: write; destructive=true; retry=unsafe; confirmation=explicit
-- Exposure: domain
-- Arguments: `{ kind*, name* }`
-- Output: `{ deleted*, kind*, name* }`
 
 Call `describe_tool` for field descriptions, enums, nested objects, examples, and the
 complete input/output JSON Schemas.

@@ -135,25 +135,11 @@ export function PayeeMergeDialog({
                   {formatUsd(preview.movedTotalCents)}
                 </dd>
               </div>
-              <div>
-                <dt className="text-ink-muted">Rules</dt>
-                <dd className="mt-0.5 tabular-nums text-ink">
-                  {preview.affectedRules.length}
-                </dd>
-              </div>
             </dl>
 
             {preview.movedAliases.length > 0 && (
               <p className="text-[0.75rem] leading-relaxed text-ink-muted">
                 Spellings: {preview.movedAliases.join(", ")}
-              </p>
-            )}
-            {preview.affectedRules.length > 0 && (
-              <p className="text-[0.75rem] leading-relaxed text-ink-muted">
-                Rules:{" "}
-                {preview.affectedRules
-                  .map((row: { name: string }) => row.name)
-                  .join(", ")}
               </p>
             )}
             <p className="text-[0.75rem] leading-relaxed text-ink-muted">

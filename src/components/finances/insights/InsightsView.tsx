@@ -26,7 +26,7 @@ import {
 } from "@/lib/finances/insightsFilter";
 import { formatUsd } from "@/lib/finances/money";
 import { cashFlowSankey } from "@/lib/finances/sankeyFlow";
-import { RulePreviewDialog } from "@/components/finances/rules/RulePreviewDialog";
+import { reclassifyAction } from "@/app/finances/actions";
 import {
   CHART_MODE_LABELS,
   INSIGHTS_AXES,
@@ -119,7 +119,7 @@ export function InsightsView({
 
   const { value: view, patch } = useSetting(INSIGHTS_SCOPE, INSIGHTS_CODEC);
   const [reclassified, setReclassified] = useState<string | null>(null);
-  const [previewingRules, setPreviewingRules] = useState(false);
+  const [reclassifying, setReclassifying] = useState(false);
 
   const filterOptions = useMemo(() => insightsFilterOptions(rows), [rows]);
   const unresolvedPaypal = useMemo(
@@ -705,10 +705,23 @@ export function InsightsView({
             actions={
               <button
                 type="button"
-                onClick={() => setPreviewingRules(true)}
+                disabled={reclassifying}
+                onClick={() => {
+                  setReclassifying(true);
+                  void reclassifyAction().then((result) => {
+                    setReclassifying(false);
+                    if (result.ok && result.data) {
+                      setReclassified(
+                        `Reclassified ${result.data.updated.toLocaleString()} of ${result.data.scanned.toLocaleString()} rows.`,
+                      );
+                    } else if (!result.ok) {
+                      setReclassified(result.error);
+                    }
+                  });
+                }}
                 className="min-h-tap rounded border border-rule bg-surface-raised px-3 text-[0.8125rem] text-ink disabled:opacity-50"
               >
-                Run rules…
+                Reclassify…
               </button>
             }
           >
@@ -761,15 +774,6 @@ export function InsightsView({
           </Panel>
         </div>
       </div>
-      {previewingRules ? (
-        <RulePreviewDialog
-          onClose={() => setPreviewingRules(false)}
-          onRan={(message) => {
-            setPreviewingRules(false);
-            setReclassified(message);
-          }}
-        />
-      ) : null}
     </div>
   );
 }

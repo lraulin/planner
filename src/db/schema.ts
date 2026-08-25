@@ -2193,24 +2193,18 @@ export const financeTransactions = pgTable(
     notes: text("notes").notNull().default(""),
     /** Running balance where the feed supplies one (the 360 exports do; cards do not). */
     balanceAfter: numeric("balance_after", { precision: 14, scale: 2 }),
-    /**
-     * What the classifier worked out this row is spent on. **Recomputable** — wiping the
-     * column and re-running the rules must be a no-op, which is what makes "Reclassify" a
-     * button rather than a migration. The user's `category` above overrides it.
-     */
-    derivedCategory: text("derived_category"),
-    /** Classifier's flow. Recomputable on the same terms as `derivedCategory`. */
+    /** Classifier's flow. Recomputable — wiping the column and re-running must be a no-op. */
     derivedFlow: financeFlowKindEnum("derived_flow"),
     /**
      * Who was paid, as a row rather than a string
      * (`agent-os/specs/2026-08-23-0748-finance-payees/`).
      *
-     * **Recomputable, exactly like `derivedCategory` above** — resolved from the alias table by
-     * the reclassify pass, so wiping this column and re-running must be a no-op. That is what
-     * keeps it honest: the payee is a function of the description, and correcting one is an
-     * *alias* edit, which fixes every row that merchant ever produced rather than the one in
-     * front of you. There is deliberately no per-row override; Actual has one, and it buys a
-     * correction that leaves the next import just as wrong.
+     * **Recomputable** — resolved from the alias table by the reclassify pass, so wiping this
+     * column and re-running must be a no-op. That is what keeps it honest: the payee is a
+     * function of the description, and correcting one is an *alias* edit, which fixes every
+     * row that merchant ever produced rather than the one in front of you. There is
+     * deliberately no per-row override; Actual has one, and it buys a correction that leaves
+     * the next import just as wrong.
      *
      * Where a PayPal resolution names who was actually paid, that name resolves the payee
      * instead of the bank's line — the same substitution `classify/reclassify.ts` already makes
@@ -2263,11 +2257,9 @@ export const financeTransactions = pgTable(
      * Which envelope this row spends from, in the zero-based budget
      * (`agent-os/specs/2026-08-22-1948-zero-based-budget/` D6).
      *
-     * **A second, orthogonal axis to `category`** — not a replacement for it. `category` /
-     * `derivedCategory` answer "what was this bought for" against a fixed code taxonomy that
-     * every Insights chart is built on; this answers "whose money paid for it" against a
-     * hierarchy the user creates and renames. Many spending categories routinely map to one
-     * envelope, which is the entire point of the Minimal preset.
+     * This is the transaction's Category. A payee claim or learned/fixed default may fill it
+     * on a new uncategorised row; a manual choice stays. There is no derived-taxonomy column
+     * beside it (`agent-os/specs/2026-08-24-1522-category-by-kind-and-history/`).
      *
      * Null means unassigned, and that is load-bearing rather than merely missing: the budget's
      * invariant — Ready to Assign plus every envelope balance equals the on-budget position —
@@ -2581,14 +2573,11 @@ export const financeCategoryGroups = pgTable(
 /**
  * One envelope — an ordinary bucket, or a bill.
  *
- * **Not the same thing as `FINANCE_CATEGORIES`**, and named `finance_budget_categories` so the
- * difference survives contact with a hurried reader. That constant is the spending taxonomy —
- * fixed in code, produced by the classifier, and the axis every Insights chart is built on.
- * This is a hierarchy the user creates, renames and merges, answering "whose money paid for
- * it". The two are related only through the auto-map, which seeds one from the other once.
+ * Named `finance_budget_categories` because the envelope **is** the transaction's Category.
  *
  * Deleting an envelope sets `finance_transactions.budget_category_id` to null rather than
- * cascading; `hidden` is the ordinary way to retire one and keeps its history readable.
+ * cascading, and clears matching payee claims/defaults in the same mutation; `hidden` is the
+ * ordinary way to retire one and keeps its history readable.
  *
  * **A bill is an envelope with `kind = 'bill'`, not a separate table joined to one.**
  * Before `agent-os/specs/2026-08-23-2313-one-budget/`, one bill was three rows across three
@@ -2618,28 +2607,6 @@ export const financeBudgetCategories = pgTable(
     }),
     name: text("name").notNull(),
     sortKey: text("sort_key").notNull(),
-    /**
-     * Which `FINANCE_CATEGORIES` values this envelope claims, for the auto-map.
-     *
-     * The join between the two axes described above, and the reason a five-envelope budget is
-     * as usable as a twenty-envelope one: `Discretionary` can claim Shopping, Games,
-     * Entertainment and Travel at once, so choosing fewer envelopes costs nothing in
-     * categorisation. Name-matching alone would have worked only for the preset that mirrors
-     * the taxonomy one-for-one — which is the preset we recommend against.
-     *
-     * An array on the row rather than a rules table because one envelope routinely spans
-     * several taxonomy values and the alternative turns a user-level fact into a code change.
-     * **A taxonomy value should appear
-     * on at most one envelope**; the auto-map resolves a duplicate by sort order rather than
-     * failing, since the cost is a row in the wrong envelope and not a lost transaction.
-     *
-     * Empty for income envelopes, which claim by *flow* instead — the classifier decides what
-     * a paycheck is, and no spending category ever describes one. Empty for bill envelopes
-     * too — a bill's charges are claimed by payee (`finance_payees.budget_category_id`), not
-     * by taxonomy value, since one merchant should route to exactly one bill regardless of
-     * how the classifier happened to tag a given charge.
-     */
-    sourceCategories: text("source_categories").array().notNull().default([]),
     /** Retired without losing its history. Still counts toward totals — see the group. */
     hidden: boolean("hidden").notNull().default(false),
     /**
@@ -2887,8 +2854,8 @@ export const financeBudgetAllocations = pgTable(
  * MIT) — see `agent-os/specs/2026-08-23-0748-finance-payees/` and `docs/actual-budget/README.md`.
  *
  * Before this, "who was paid" was `effectiveMerchant()`: `normalizeMerchant(description)`
- * followed by a linear scan of the user's categorisation rules, evaluated per row
- * in a dozen callers. That produced three workarounds for one missing concept, which is the
+ * followed by a linear scan of merchant regexes, evaluated per row in a dozen callers.
+ * That produced three workarounds for one missing concept, which is the
  * signal `agent-os/standards/development/clean-code.md` names:
  *
  * 1. The canonical name — the knowledge that `WM SUPERCENTER` and `WAL-MART` are one company —
@@ -2912,13 +2879,14 @@ export const financePayees = pgTable(
      * What the user calls this merchant. Theirs to change, and **nothing joins on it** — the
      * aliases below carry the join, which is what makes a rename safe.
      *
-     * Initially named by a rule's `name-payee` action, not title-cased from the bank
-     * string the way Actual does (`accounts/sync.ts:416-483`). Title-casing invents
-     * `Wm Supercenter`; the rule list already holds the name a person would write.
+     * Initially named from the canonical payee-name list in
+     * `src/lib/finances/payees/canonicalNames.ts`, not title-cased from the bank string the
+     * way Actual does (`accounts/sync.ts:416-483`). Title-casing invents `Wm Supercenter`;
+     * the name list already holds the name a person would write.
      */
     name: text("name").notNull(),
     /**
-     * The envelope this payee's charges belong to, if any.
+     * The envelope this payee's charges belong to, if any — the hard claim.
      *
      * **This used to be two nullable ids and a CHECK** — `commitmentBillId` /
      * `commitmentSpendId`, because a bill and a recurring-spend entry were different tables
@@ -2927,13 +2895,33 @@ export const financePayees = pgTable(
      * charges belong to this envelope." Ownership inverts — "which payees does this envelope
      * claim" is now a query — which is the ordinary direction for a many-to-one.
      *
-     * `on delete set null`, not cascade: deleting an envelope must never delete the payee or
-     * orphan its transactions.
+     * Named `claimed_` so it is not confused with the learned/fixed default beside it
+     * (`agent-os/specs/2026-08-24-1522-category-by-kind-and-history/` D7). A claim overrides
+     * that default while held; the default is preserved and resumes if the claim is released.
+     *
+     * `on delete set null` at the FK, plus an application clear of defaults, so deleting an
+     * envelope never deletes the payee or orphans its transactions.
      */
-    budgetCategoryId: uuid("budget_category_id").references(
+    claimedBudgetCategoryId: uuid("claimed_budget_category_id").references(
       (): AnyPgColumn => financeBudgetCategories.id,
       { onDelete: "set null" },
     ),
+    /**
+     * Category applied to new uncategorised charges when this payee is unclaimed and
+     * `autoCategoryMode` is `learn` or `fixed`. Null means "no default yet".
+     */
+    defaultBudgetCategoryId: uuid("default_budget_category_id").references(
+      (): AnyPgColumn => financeBudgetCategories.id,
+      { onDelete: "set null" },
+    ),
+    /**
+     * How new charges of this unclaimed payee get a Category.
+     *
+     * `learn` — YNAB 2-of-latest-3, first assignment immediate.
+     * `fixed` — always this default, still allowing per-row corrections.
+     * `off` — leave new charges uncategorised (Amazon, Target, …).
+     */
+    autoCategoryMode: text("auto_category_mode").notNull().default("learn"),
     /**
      * Detection proposed this merchant as a recurring commitment and the user said no.
      *
@@ -2945,8 +2933,6 @@ export const financePayees = pgTable(
     notACommitment: boolean("not_a_commitment").notNull().default(false),
     /** Free text about the merchant. Not a matcher, and never read by the resolver. */
     notes: text("notes").notNull().default(""),
-    /** Whether direct transaction choices may teach an exact-payee Category rule. */
-    learnCategories: boolean("learn_categories").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -2958,9 +2944,16 @@ export const financePayees = pgTable(
       table.userId,
       sql`lower(${table.name})`,
     ),
-    index("finance_payees_budget_category_idx")
-      .on(table.userId, table.budgetCategoryId)
-      .where(sql`${table.budgetCategoryId} is not null`),
+    index("finance_payees_claimed_category_idx")
+      .on(table.userId, table.claimedBudgetCategoryId)
+      .where(sql`${table.claimedBudgetCategoryId} is not null`),
+    index("finance_payees_default_category_idx")
+      .on(table.userId, table.defaultBudgetCategoryId)
+      .where(sql`${table.defaultBudgetCategoryId} is not null`),
+    check(
+      "finance_payees_auto_category_mode",
+      sql`${table.autoCategoryMode} in ('learn', 'fixed', 'off')`,
+    ),
   ],
 );
 
@@ -3015,10 +3008,9 @@ export const financeCategoryCutovers = pgTable("finance_category_cutovers", {
  * below.** One normalized merchant string must belong to at most one payee — otherwise a
  * charge has two answers to "who was paid" and every total downstream can double-count. An
  * array column cannot carry uniqueness *across* rows; a child table can, so the rule becomes
- * the database's job instead of a mutation everyone has to remember to route through. That is
- * the same trade `financeBudgetCategories.sourceCategories` declined — and it declined it
- * knowingly, noting that a duplicate there costs a row in the wrong envelope rather than a
- * lost transaction. Here it would corrupt a total, so it is worth a table.
+ * the database's job instead of a mutation everyone has to remember to route through. A
+ * duplicate alias would give a charge two answers to "who was paid" and double-count every
+ * total downstream, so it is worth a table.
  *
  * Aliases are what a merge moves and what a rename leaves alone: `1PASSWORDTORONTOON` stays an
  * alias forever while the payee it points at is renamed to `1Password`.
@@ -3044,95 +3036,6 @@ export const financePayeeAliases = pgTable(
   (table) => [
     uniqueIndex("finance_payee_aliases_user_alias_uq").on(table.userId, table.alias),
     index("finance_payee_aliases_user_payee_idx").on(table.userId, table.payeeId),
-  ],
-);
-
-/**
- * ────────────────────────────────────── Rules ──────────────────────────────────────
- *
- * **Categorisation as data the user owns, instead of a deploy.**
- * Reimplemented from Actual Budget's rules (`packages/loot-core/src/server/rules/`, MIT) —
- * see `agent-os/specs/2026-08-23-1536-finance-rules/` and `docs/actual-budget/README.md`.
- *
- * Before this, "what kind of purchase is this" was 65 regexes in application code
- * TypeScript, matched first-hit-wins down a hardcoded array. The file's own header called
- * itself data and said it was expected to grow by inspection — but the only way to add a
- * line was an edit and a deploy, which is the same missing concept payees fixed for merchant
- * identity one spec earlier.
- *
- * **The engine is not here, and was not written for this.** `classify/reclassify.ts` is
- * already a pure idempotent planner that runs on import and on demand; these rows replace
- * one input to it. That is why this is a single table rather than a port of Actual's
- * sixteen-file package.
- *
- * **`sort_key` is the priority, and first match wins.** Actual instead scores condition
- * specificity — but `OP_SCORES` gives `matches` zero and the specificity bonus needs every
- * condition to be an equality op, so a corpus of regexes would tie at zero and rank by id.
- * Ranking by UUID is not an ordering anyone can reason about, so the order is the one a person
- * set and can see. (The seeded 65 happen not to overlap on any of the 851 real merchant
- * strings, so nothing today depends on it — but the first hand-written rule broad enough to
- * catch two merchants will, and that is a bad moment to discover the order is arbitrary.)
- * The reasoning a rule's position encodes lives in `notes`, which is where the old file's
- * comments went.
- */
-export const financeRules = pgTable(
-  "finance_rules",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    /** Unique per user, case-insensitively, so a seeded rule cannot be duplicated by hand. */
-    name: text("name").notNull(),
-    /**
-     * Actual-shaped `{field, op, value}` conditions, ANDed. Validated in
-     * `src/lib/finances/rules/conditions.ts` so bad JSONB never reaches a matcher — including
-     * a regex, which is compiled at parse and rejected there rather than thrown mid-pass.
-     *
-     * A `merchant` condition tests `normalizeMerchant(description)`; a `description` one
-     * tests the raw bank line. They are two fields rather than one with a flag, because every
-     * anchor written for the normalized string means something else against the raw one.
-     */
-    conditions: jsonb("conditions").$type<unknown>().notNull().default([]),
-    /**
-     * What the rule does: set a taxonomy category, set a flow, or name a payee at mint time.
-     * Actual's split, formula, schedule-link and delete actions are refused at parse.
-     */
-    actions: jsonb("actions").$type<unknown>().notNull().default([]),
-    enabled: boolean("enabled").notNull().default(true),
-    /**
-     * The priority. Fractional index, so reordering one rule rewrites one row.
-     * Unique per user because two rules at the same position is an unresolved tie, and this
-     * column exists precisely so that ties cannot happen.
-     */
-    sortKey: text("sort_key").notNull(),
-    /**
-     * The starter-corpus id this row was seeded from, or null for a hand-made rule.
-     *
-     * What makes seeding idempotent: a second run skips an id it already planted, so a rule
-     * the user has since renamed, reordered or disabled is left alone. A manually replayed
-     * one-time seed recreates a deleted row because no tombstone exists. Also what lets the
-     * parity audit name which rule decided a row in both the old world and the new.
-     */
-    seededId: text("seeded_id"),
-    /** A migrated rule whose tag survived but Category target needs a person. */
-    categoryReviewRequired: boolean("category_review_required")
-      .notNull()
-      .default(false),
-    /** Why this rule sits where it does. The old file kept that in comments. */
-    notes: text("notes").notNull().default(""),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [
-    uniqueIndex("finance_rules_user_name_uq").on(
-      table.userId,
-      sql`lower(${table.name})`,
-    ),
-    uniqueIndex("finance_rules_user_sort_uq").on(table.userId, table.sortKey),
-    uniqueIndex("finance_rules_user_seeded_uq")
-      .on(table.userId, table.seededId)
-      .where(sql`${table.seededId} is not null`),
   ],
 );
 
@@ -3630,8 +3533,6 @@ export type NewFinanceAccount = typeof financeAccounts.$inferInsert;
 export type FinanceAccountKind = (typeof financeAccountKindEnum.enumValues)[number];
 export type FinanceTransaction = typeof financeTransactions.$inferSelect;
 export type NewFinanceTransaction = typeof financeTransactions.$inferInsert;
-export type FinanceRule = typeof financeRules.$inferSelect;
-export type NewFinanceRule = typeof financeRules.$inferInsert;
 export type FinanceFlowKind = (typeof financeFlowKindEnum.enumValues)[number];
 export type FinanceStatement = typeof financeStatements.$inferSelect;
 export type NewFinanceStatement = typeof financeStatements.$inferInsert;

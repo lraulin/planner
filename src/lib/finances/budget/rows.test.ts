@@ -45,7 +45,6 @@ function category(
     sortKey,
     hidden,
     notes: "",
-    sourceCategories: [],
     templates: [],
     kind,
     isIncome: kind === "income",

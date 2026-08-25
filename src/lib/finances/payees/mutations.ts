@@ -5,9 +5,10 @@
  * touching it (`agent-os/standards/development/security.md`).
  *
  * **One guarantee lives in the database, not here**, and that is the point of the whole shape:
- * `(user_id, alias)` is unique, so one merchant string cannot reach two payees. `budget_category_id`
- * is a single nullable column, so "a payee is claimed by at most one envelope" needs no CHECK —
- * it is what a single column already means. The functions below translate the database's
+ * `(user_id, alias)` is unique, so one merchant string cannot reach two payees.
+ * `claimed_budget_category_id` is a single nullable column, so "a payee is claimed by at
+ * most one envelope" needs no CHECK — it is what a single column already means. The functions
+ * below translate the database's
  * refusals into sentences a person can act on — they do not re-implement them, because a check
  * written here would only hold for callers that remembered to come through here.
  */
@@ -18,23 +19,23 @@ import {
   financeBudgetCategories,
   financePayeeAliases,
   financePayees,
-  financeRules,
   financeTransactions,
 } from "@/db/schema";
 import { isUniqueViolation } from "@/lib/db/constraints";
 import { normalizeMerchant } from "../classify/merchant";
 import { suggestCommitmentName } from "../commitments";
+import { isAutoCategoryMode, type AutoCategoryMode } from "./autoCategory";
 import { aliasFor } from "./resolve";
 import { mergeClaimDecision } from "./merge";
-import { rewriteMergedPayeeIds, storedConditionPayeeIds } from "./references";
 import { applyClaimedPayees } from "./claims";
+import { relearnPayeeDefault } from "./learn";
 
 async function requirePayee(userId: string, payeeId: string) {
   const [row] = await db
     .select({
       id: financePayees.id,
       name: financePayees.name,
-      budgetCategoryId: financePayees.budgetCategoryId,
+      budgetCategoryId: financePayees.claimedBudgetCategoryId,
     })
     .from(financePayees)
     .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)));
@@ -308,7 +309,7 @@ export async function renamePayee(
 export async function updatePayeeDetails(
   userId: string,
   payeeId: string,
-  input: { name: string; notes: string; learnCategories?: boolean },
+  input: { name: string; notes: string },
 ): Promise<void> {
   const name = cleanName(input.name);
   try {
@@ -323,9 +324,6 @@ export async function updatePayeeDetails(
         .set({
           name,
           notes: input.notes,
-          ...(input.learnCategories !== undefined
-            ? { learnCategories: input.learnCategories }
-            : {}),
           updatedAt: new Date(),
         })
         .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)));
@@ -336,6 +334,47 @@ export async function updatePayeeDetails(
     }
     throw error;
   }
+}
+
+/**
+ * The one public mutation for auto-category mode and default.
+ *
+ * Claimed payees keep the saved setting; it does not apply until the claim is released.
+ */
+export async function setPayeeAutoCategory(
+  userId: string,
+  payeeId: string,
+  input: { mode: AutoCategoryMode; defaultBudgetCategoryId: string | null },
+): Promise<void> {
+  if (!isAutoCategoryMode(input.mode)) {
+    throw new Error("That auto-category mode is not recognised.");
+  }
+  if (input.mode === "fixed" && input.defaultBudgetCategoryId === null) {
+    throw new Error("A fixed default needs a Category.");
+  }
+  if (input.defaultBudgetCategoryId !== null) {
+    const [category] = await db
+      .select({ id: financeBudgetCategories.id })
+      .from(financeBudgetCategories)
+      .where(
+        and(
+          eq(financeBudgetCategories.userId, userId),
+          eq(financeBudgetCategories.id, input.defaultBudgetCategoryId),
+        ),
+      )
+      .limit(1);
+    if (!category) throw new Error("That Category does not exist.");
+  }
+  const [owned] = await db
+    .update(financePayees)
+    .set({
+      autoCategoryMode: input.mode,
+      defaultBudgetCategoryId: input.defaultBudgetCategoryId,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)))
+    .returning({ id: financePayees.id });
+  if (!owned) throw new Error("That payee does not exist.");
 }
 
 export async function setPayeeNotes(
@@ -403,7 +442,7 @@ export async function deletePayee(userId: string, payeeId: string): Promise<void
     const [payee] = await tx
       .select({
         id: financePayees.id,
-        budgetCategoryId: financePayees.budgetCategoryId,
+        budgetCategoryId: financePayees.claimedBudgetCategoryId,
       })
       .from(financePayees)
       .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)));
@@ -411,21 +450,6 @@ export async function deletePayee(userId: string, payeeId: string): Promise<void
     if (payee.budgetCategoryId) {
       throw new Error(
         "That payee belongs to an envelope. Merge it or release the claim before deleting.",
-      );
-    }
-
-    // A rule's payee condition is an id inside JSONB with no foreign key behind it, so
-    // deleting the payee would leave the rule quietly matching nothing rather than failing.
-    const rules = await tx
-      .select({ name: financeRules.name, conditions: financeRules.conditions })
-      .from(financeRules)
-      .where(eq(financeRules.userId, userId));
-    const ruledBy = rules.find((rule) =>
-      storedConditionPayeeIds(rule.conditions).includes(payeeId),
-    );
-    if (ruledBy) {
-      throw new Error(
-        `That payee is used by the rule "${ruledBy.name}". Merge it or edit the rule before deleting.`,
       );
     }
 
@@ -470,79 +494,54 @@ export async function mergePayees(
   if (claimDecision.refusal) throw new Error(claimDecision.refusal);
   const targetClaimed = claimOf(target).claim !== null;
 
-  return db.transaction(async (tx) => {
-    const movedAliasRows = await tx
-      .update(financePayeeAliases)
-      .set({ payeeId: targetId })
-      .where(
-        and(
-          eq(financePayeeAliases.userId, userId),
-          inArray(financePayeeAliases.payeeId, sources),
-        ),
-      )
-      .returning({ id: financePayeeAliases.id });
-    const movedAliases = movedAliasRows.length;
+  return db
+    .transaction(async (tx) => {
+      const movedAliasRows = await tx
+        .update(financePayeeAliases)
+        .set({ payeeId: targetId })
+        .where(
+          and(
+            eq(financePayeeAliases.userId, userId),
+            inArray(financePayeeAliases.payeeId, sources),
+          ),
+        )
+        .returning({ id: financePayeeAliases.id });
+      const movedAliases = movedAliasRows.length;
 
-    const movedTransactionRows = await tx
-      .update(financeTransactions)
-      .set({ payeeId: targetId, updatedAt: new Date() })
-      .where(
-        and(
-          eq(financeTransactions.userId, userId),
-          inArray(financeTransactions.payeeId, sources),
-        ),
-      )
-      .returning({ id: financeTransactions.id });
-    const movedTransactions = movedTransactionRows.length;
+      const movedTransactionRows = await tx
+        .update(financeTransactions)
+        .set({ payeeId: targetId, updatedAt: new Date() })
+        .where(
+          and(
+            eq(financeTransactions.userId, userId),
+            inArray(financeTransactions.payeeId, sources),
+          ),
+        )
+        .returning({ id: financeTransactions.id });
+      const movedTransactions = movedTransactionRows.length;
 
-    // Carry a lone claim across, so merging into an unclaimed payee does not quietly
-    // un-declare a commitment.
-    const carried = claimDecision.claim;
-    if (carried && !targetClaimed) {
+      // Carry a lone claim across, so merging into an unclaimed payee does not quietly
+      // un-declare a commitment.
+      const carried = claimDecision.claim;
+      if (carried && !targetClaimed) {
+        await tx
+          .update(financePayees)
+          .set({ claimedBudgetCategoryId: carried.id, updatedAt: new Date() })
+          .where(and(eq(financePayees.userId, userId), eq(financePayees.id, targetId)));
+      }
+
       await tx
-        .update(financePayees)
-        .set({ budgetCategoryId: carried.id, updatedAt: new Date() })
-        .where(and(eq(financePayees.userId, userId), eq(financePayees.id, targetId)));
-    }
+        .delete(financePayees)
+        .where(
+          and(eq(financePayees.userId, userId), inArray(financePayees.id, sources)),
+        );
 
-    await rewritePayeeConditions(tx, userId, sources, targetId);
-
-    await tx
-      .delete(financePayees)
-      .where(and(eq(financePayees.userId, userId), inArray(financePayees.id, sources)));
-
-    return { movedTransactions, movedAliases };
-  });
-}
-
-/**
- * Point every `payee` condition holding a merged id at the survivor.
- *
- * Rules hold this condition shape, and get the rewrite from the same pure function
- * (`rewriteMergedPayeeIds`) that the merge preview uses to find them — a second copy of this
- * logic is exactly how it would come to be missed: the merge would succeed, and the rule would
- * quietly match nothing thereafter.
- */
-async function rewritePayeeConditions(
-  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
-  userId: string,
-  sources: readonly string[],
-  targetId: string,
-): Promise<void> {
-  const merged = new Set(sources);
-
-  const rules = await tx
-    .select({ id: financeRules.id, conditions: financeRules.conditions })
-    .from(financeRules)
-    .where(eq(financeRules.userId, userId));
-  for (const row of rules) {
-    const next = rewriteMergedPayeeIds(row.conditions, merged, targetId);
-    if (!next) continue;
-    await tx
-      .update(financeRules)
-      .set({ conditions: next, updatedAt: new Date() })
-      .where(and(eq(financeRules.userId, userId), eq(financeRules.id, row.id)));
-  }
+      return { movedTransactions, movedAliases };
+    })
+    .then(async (result) => {
+      await relearnPayeeDefault(userId, targetId);
+      return result;
+    });
 }
 
 /**
@@ -559,7 +558,7 @@ export async function claimPayeeForCommitment(
   await requirePayee(userId, payeeId);
   await db
     .update(financePayees)
-    .set({ budgetCategoryId: claim?.id ?? null, updatedAt: new Date() })
+    .set({ claimedBudgetCategoryId: claim?.id ?? null, updatedAt: new Date() })
     .where(and(eq(financePayees.userId, userId), eq(financePayees.id, payeeId)));
   if (claim) await applyClaimedPayees(userId, claim.id, [payeeId]);
 }
@@ -584,11 +583,11 @@ export async function releaseCommitmentClaims(
 ): Promise<void> {
   await db
     .update(financePayees)
-    .set({ budgetCategoryId: null, updatedAt: new Date() })
+    .set({ claimedBudgetCategoryId: null, updatedAt: new Date() })
     .where(
       and(
         eq(financePayees.userId, userId),
-        eq(financePayees.budgetCategoryId, claim.id),
+        eq(financePayees.claimedBudgetCategoryId, claim.id),
       ),
     );
 }
@@ -634,7 +633,7 @@ export async function replaceCommitmentPayeesInTransaction(
           .select({
             id: financePayees.id,
             name: financePayees.name,
-            claimedId: financePayees.budgetCategoryId,
+            claimedId: financePayees.claimedBudgetCategoryId,
           })
           .from(financePayees)
           .where(and(eq(financePayees.userId, userId), inArray(financePayees.id, ids)))
@@ -660,17 +659,17 @@ export async function replaceCommitmentPayeesInTransaction(
 
   await tx
     .update(financePayees)
-    .set({ budgetCategoryId: null, updatedAt: new Date() })
+    .set({ claimedBudgetCategoryId: null, updatedAt: new Date() })
     .where(
       and(
         eq(financePayees.userId, userId),
-        eq(financePayees.budgetCategoryId, claim.id),
+        eq(financePayees.claimedBudgetCategoryId, claim.id),
       ),
     );
   if (ids.length > 0) {
     await tx
       .update(financePayees)
-      .set({ budgetCategoryId: claim.id, updatedAt: new Date() })
+      .set({ claimedBudgetCategoryId: claim.id, updatedAt: new Date() })
       .where(and(eq(financePayees.userId, userId), inArray(financePayees.id, ids)));
   }
 }

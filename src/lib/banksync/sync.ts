@@ -235,7 +235,7 @@ export async function syncAll(userId: string): Promise<SyncResult> {
   if (inserted) {
     await finalizeTransactionIngestion(userId, {
       forceReclassify: true,
-      applyRulesSince: syncStartedAt,
+      applyAutoCategorySince: syncStartedAt,
     });
   }
 

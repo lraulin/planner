@@ -1,9 +1,5 @@
-import {
-  applyRuleActionsToTransactions,
-  reclassifyTransactions,
-  type ReclassifySummary,
-} from "./mutations";
-import { applyPayeeClaims } from "./payees/claims";
+import { reclassifyTransactions, type ReclassifySummary } from "./mutations";
+import { applyPayeeAutoCategories } from "./payees/claims";
 import { db } from "@/db";
 import { sql } from "drizzle-orm";
 
@@ -16,30 +12,28 @@ export async function transactionIngestionWatermark(): Promise<Date> {
 }
 
 /**
- * Finish every transaction-ingestion path in the same order: stable payees first, then rules,
- * then the taxonomy-to-envelope map for anything still unassigned. A payee's bill claim
- * therefore wins over the broad category claim, and a hand assignment wins over both.
+ * Finish every transaction-ingestion path in the same order: stable payees first, then
+ * flow/identity reclassify, then claim-or-default on **new uncategorised** eligible rows.
+ * A hand assignment and a previously categorised row both win over automation.
  *
  * **`forceReclassify` runs the full pass**, walking every transaction rather than only the
  * ones since a watermark — bank sync opts in unconditionally, since it already promises
- * automatic classification. CSV and pasted-pending imports run the incremental rules pass
- * instead, which is cheap enough to run on every import without a gate.
+ * automatic classification. CSV and pasted-pending imports pass `applyAutoCategorySince`,
+ * which still reclassifies the whole ledger (auto-category keys on `payee_id`) and then
+ * fills only new uncategorised eligible rows.
  */
 export async function finalizeTransactionIngestion(
   userId: string,
-  options: { forceReclassify?: boolean; applyRulesSince?: Date } = {},
+  options: { forceReclassify?: boolean; applyAutoCategorySince?: Date } = {},
 ): Promise<{ reclassified: ReclassifySummary | null }> {
   let reclassified: ReclassifySummary | null = null;
-  if (options.forceReclassify) {
+  if (options.forceReclassify || options.applyAutoCategorySince) {
     reclassified = await reclassifyTransactions(userId);
   }
-  if (options.applyRulesSince) {
-    await applyRuleActionsToTransactions(userId, {
-      createdSince: options.applyRulesSince,
+  if (options.applyAutoCategorySince) {
+    await applyPayeeAutoCategories(userId, {
+      createdSince: options.applyAutoCategorySince,
     });
-    // Only the rows this ingest created. Scanning the whole ledger here locked the
-    // Register after every sync (`page not responding`).
-    await applyPayeeClaims(userId, { createdSince: options.applyRulesSince });
   }
   return { reclassified };
 }

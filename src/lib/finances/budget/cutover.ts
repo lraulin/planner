@@ -428,7 +428,7 @@ export async function applyCommitmentsCutover(
         if (!newEnvelopeId) continue;
         await tx
           .update(financePayees)
-          .set({ budgetCategoryId: newEnvelopeId, updatedAt: new Date() })
+          .set({ claimedBudgetCategoryId: newEnvelopeId, updatedAt: new Date() })
           .where(
             and(eq(financePayees.id, claim.payeeId), eq(financePayees.userId, userId)),
           );

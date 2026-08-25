@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { financeTransactions, users } from "@/db/schema";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { effectiveCategory, effectiveFlow } from "./analytics";
 import {
@@ -16,7 +16,6 @@ import { reclassifyTransactions, setOneOff, upsertBillEnvelope } from "./mutatio
 import { listTransactions } from "./queries";
 import { renamePayee } from "./payees/mutations";
 import { listPayees } from "./payees/queries";
-import { seedRules } from "./rules/cutover";
 
 const dbReachable = await databaseReachable();
 const describeDb = dbReachable ? describe : describe.skip;
@@ -90,8 +89,6 @@ const statementFile: ImportFile = {
 };
 
 async function seed(userId: string): Promise<void> {
-  // Import-time payee naming is driven by this user's persisted rules.
-  await seedRules(userId);
   await importFinanceCsvFiles({ userId, files: [cardFile, statementFile] });
 }
 
@@ -151,7 +148,19 @@ describeDb("unclassifiedCount", () => {
     const userId = await makeUser();
     await seed(userId);
 
-    expect(await unclassifiedCount(userId)).toBe(3);
+    // Import classifies as it writes, so a finished ingest is fully classified.
+    expect(await unclassifiedCount(userId)).toBe(0);
+
+    const [existing] = await listTransactions(userId);
+    await db.insert(financeTransactions).values({
+      userId,
+      accountId: existing.accountId,
+      transactionDate: "2026-05-01",
+      description: "UNSEEN MERCHANT",
+      amount: "-12.00",
+    });
+
+    expect(await unclassifiedCount(userId)).toBe(1);
     await reclassifyTransactions(userId);
     expect(await unclassifiedCount(userId)).toBe(0);
   });

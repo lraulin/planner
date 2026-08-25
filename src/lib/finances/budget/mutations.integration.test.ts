@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeAccounts,
@@ -25,12 +25,16 @@ import {
   saveEnvelopeTemplates,
   seedBudget,
   setCarryover,
-  setTaxonomyCategoryEnvelope,
   setTransactionBudgetCategory,
   updateBudgetCategory,
 } from "./mutations";
 import { updateAccount } from "../mutations";
-import { createPayee, replaceCommitmentPayees } from "../payees/mutations";
+import {
+  createPayee,
+  replaceCommitmentPayees,
+  setPayeeAutoCategory,
+} from "../payees/mutations";
+import { applyPayeeAutoCategories } from "../payees/claims";
 import { loadBudget } from "./queries";
 import { categoryMonth, findMonth } from "./envelope";
 import { budgetChildren } from "./hierarchy";
@@ -105,6 +109,7 @@ type TxSeed = {
   description: string;
   amount: string;
   category?: string;
+  payeeId?: string;
   flow?: "spend" | "income" | "internal_transfer";
   transferGroupId?: string;
 };
@@ -120,6 +125,7 @@ async function addTransactions(userId: string, rows: TxSeed[]): Promise<string[]
         description: row.description,
         amount: row.amount,
         category: row.category ?? null,
+        payeeId: row.payeeId ?? null,
         derivedFlow: row.flow ?? null,
         transferGroupId: row.transferGroupId ?? null,
       })),
@@ -286,10 +292,43 @@ describeDb("budget mutations", () => {
     ]);
 
     await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
-    const mapped = await autoMapBudgetCategories(userId, MONTH);
-    expect(mapped.placed).toBe(5);
-
     const ids = await envelopes(userId);
+    const byDescription = new Map(
+      (
+        await db
+          .select({
+            id: financeTransactions.id,
+            description: financeTransactions.description,
+          })
+          .from(financeTransactions)
+          .where(eq(financeTransactions.userId, userId))
+      ).map((row) => [row.description, row.id]),
+    );
+    await setTransactionBudgetCategory(
+      userId,
+      byDescription.get("PAYROLL")!,
+      ids.get("Income")!,
+    );
+    await setTransactionBudgetCategory(
+      userId,
+      byDescription.get("KROGER")!,
+      ids.get("Recurring spend")!,
+    );
+    await setTransactionBudgetCategory(
+      userId,
+      byDescription.get("STEAM")!,
+      ids.get("Discretionary")!,
+    );
+    await setTransactionBudgetCategory(
+      userId,
+      byDescription.get("ELECTRIC")!,
+      ids.get("Bills")!,
+    );
+    await setTransactionBudgetCategory(
+      userId,
+      byDescription.get("TO SAVINGS")!,
+      ids.get("Discretionary")!,
+    );
     const data = await loadBudget(userId, MONTH);
     const august = findMonth(data.months, MONTH)!;
 
@@ -436,34 +475,27 @@ describeDb("budget mutations", () => {
     });
   });
 
-  it("moves a taxonomy claim to one envelope and maps the unassigned backlog there", async () => {
+  it("fills an uncategorised charge from the payee's fixed default", async () => {
     const { checkingId } = await seedAccounts(userId);
+    await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
+    const ids = await envelopes(userId);
+    const discretionaryId = ids.get("Discretionary");
+    if (!discretionaryId) throw new Error("Discretionary fixture envelope is missing.");
+    const payeeId = await createPayee(userId, { name: "Kroger" });
+    await setPayeeAutoCategory(userId, payeeId, {
+      mode: "fixed",
+      defaultBudgetCategoryId: discretionaryId,
+    });
     const [txId] = await addTransactions(userId, [
       {
         accountId: checkingId,
         date: "2026-08-05",
         description: "KROGER",
         amount: "-50.00",
-        category: "Groceries",
+        payeeId,
       },
     ]);
-    await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
-    const ids = await envelopes(userId);
-    const discretionaryId = ids.get("Discretionary");
-    if (!discretionaryId) throw new Error("Discretionary fixture envelope is missing.");
-
-    await setTaxonomyCategoryEnvelope(userId, "Groceries", discretionaryId);
-    const configured = await loadBudget(userId, MONTH);
-    expect(
-      configured.categories.find((row) => row.name === "Recurring spend")
-        ?.sourceCategories,
-    ).not.toContain("Groceries");
-    expect(
-      configured.categories.find((row) => row.name === "Discretionary")
-        ?.sourceCategories,
-    ).toContain("Groceries");
-
-    await autoMapBudgetCategories(userId, MONTH);
+    await applyPayeeAutoCategories(userId);
     const [row] = await db
       .select({ budgetCategoryId: financeTransactions.budgetCategoryId })
       .from(financeTransactions)
@@ -489,9 +521,17 @@ describeDb("budget mutations", () => {
       },
     ]);
     await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
-    await autoMapBudgetCategories(userId, MONTH);
-
     const ids = await envelopes(userId);
+    const [kroger] = await db
+      .select({ id: financeTransactions.id })
+      .from(financeTransactions)
+      .where(
+        and(
+          eq(financeTransactions.userId, userId),
+          eq(financeTransactions.description, "KROGER"),
+        ),
+      );
+    await setTransactionBudgetCategory(userId, kroger.id, ids.get("Recurring spend")!);
     const food = { id: ids.get("Recurring spend")!, name: "Recurring spend" };
     const fun = { id: ids.get("Discretionary")!, name: "Discretionary" };
 
@@ -636,9 +676,8 @@ describeDb("budget mutations", () => {
       },
     ]);
     await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
-    await autoMapBudgetCategories(userId, MONTH);
-
     const ids = await envelopes(userId);
+    await setTransactionBudgetCategory(userId, txId, ids.get("Recurring spend")!);
     await deleteBudgetCategory(userId, ids.get("Recurring spend")!);
 
     const [row] = await db
@@ -669,9 +708,18 @@ describeDb("budget mutations", () => {
       },
     ]);
     await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
-    await autoMapBudgetCategories(userId, MONTH);
-
     const ids = await envelopes(userId);
+    const [steam] = await db
+      .select({ id: financeTransactions.id })
+      .from(financeTransactions)
+      .where(
+        and(
+          eq(financeTransactions.userId, userId),
+          eq(financeTransactions.description, "STEAM"),
+        ),
+      );
+    await setTransactionBudgetCategory(userId, steam.id, ids.get("Discretionary")!);
+
     let august = findMonth((await loadBudget(userId, MONTH)).months, MONTH)!;
     expect(categoryMonth(august, ids.get("Discretionary")!).activityCents).toBe(-4_000);
 
@@ -858,6 +906,7 @@ describeDb("budget mutations — cross-user isolation", () => {
     categoryId: string;
     transactionId: string;
     accountId: string;
+    payeeId: string;
   };
 
   beforeEach(async () => {
@@ -894,6 +943,7 @@ describeDb("budget mutations — cross-user isolation", () => {
       categoryId: ids.get("Bills")!,
       transactionId: txId,
       accountId: checkingId,
+      payeeId: await createPayee(ownerId, { name: "Isolation Payee" }),
     };
   });
 
@@ -971,7 +1021,10 @@ describeDb("budget mutations — cross-user isolation", () => {
       setTransactionBudgetCategory(intruderId, owned.transactionId, owned.categoryId),
     ).rejects.toThrow(/does not exist/);
     await expect(
-      setTaxonomyCategoryEnvelope(intruderId, "Groceries", owned.categoryId),
+      setPayeeAutoCategory(intruderId, owned.payeeId, {
+        mode: "fixed",
+        defaultBudgetCategoryId: owned.categoryId,
+      }),
     ).rejects.toThrow(/does not exist/);
     await expect(
       saveEnvelopeTemplates(intruderId, owned.categoryId, [

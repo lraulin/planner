@@ -486,7 +486,9 @@ export async function importFinanceCsvFiles({
   }
 
   if (created > 0) {
-    await finalizeTransactionIngestion(userId, { applyRulesSince: importStartedAt });
+    await finalizeTransactionIngestion(userId, {
+      applyAutoCategorySince: importStartedAt,
+    });
   }
 
   return {

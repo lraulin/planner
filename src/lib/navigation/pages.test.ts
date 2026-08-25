@@ -58,15 +58,12 @@ describe("hasPageBar", () => {
     expect(hasPageBar("library")).toBe(true);
     // Finances is ordered by how often a page is opened, not by when it was built. Budget
     // sits second because assigning is a daily act, ahead of the reference lists behind it.
-    // Rules sits beside Payees: both are opened when something was categorised wrongly, which
-    // is a repair, not a routine.
     expect(builtPagesForModule("finances").map((page) => page.id)).toEqual([
       "dashboard",
       "budget",
       "insights",
       "register",
       "payees",
-      "rules",
       "tags",
       "statements",
       "orders",

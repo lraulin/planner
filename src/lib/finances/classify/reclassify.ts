@@ -7,16 +7,19 @@
  * merchant is. This module is where their answers are ordered, and the order is the whole
  * of the design:
  *
- * 1. **A transfer is a transfer.** `Withdrawal from CAPITAL ONE MOBILE PMT` also matches a
- *    Capital One merchant rule; if the rule won, six figures of card payments would count
- *    as spending, which is the single largest error this layer exists to prevent.
+ * 1. **A transfer is a transfer.** `Withdrawal from CAPITAL ONE MOBILE PMT` also looks like
+ *    a Capital One merchant; if that won, six figures of card payments would count as
+ *    spending, which is the single largest error this layer exists to prevent.
  * 2. **A named flow beats a guessed one.** `INTEREST CHARGE` and `VACP TREAS` say what they
- *    are in the description. Rows a rule has claimed are also withheld from cadence
- *    detection, so a monthly benefit cannot drift into the biweekly paycheck median.
+ *    are in the description. Those rows are withheld from cadence detection so a monthly
+ *    benefit cannot drift into the biweekly paycheck median.
  * 3. **Cadence is income.** Whatever is left and arrives every fortnight is a paycheck.
  * 4. **Sign decides the rest.** Money out is spend. Money *in* that nobody claimed is a
  *    refund only when it comes back from a merchant money went out to; otherwise it is a
  *    deposit from outside, and calling it a refund would make it subtract from spending.
+ *
+ * Category is not recomputed here. Envelope claims and payee auto-category write
+ * `budget_category_id` on new or uncategorised rows; previously categorised rows stay.
  *
  * Everything here is pure and reproducible: same rows in, same plan out, including the
  * transfer group ids, which are **reused** whenever a pairing has not changed. That is what
@@ -27,7 +30,6 @@
 import type { FinanceFlowKind } from "@/db/schema";
 import { matchPaypalResolutions, type PaypalResolution } from "../paypalMatch";
 import { payeeForDescription, type PayeeIndex } from "../payees/resolve";
-import type { CompiledRule } from "../rules/compile";
 import { categorize } from "./categorize";
 import { detectIncome, type IncomeRow, type Payday } from "./income";
 import { matchTransfers, type TransferAccount, type TransferRow } from "./transfers";
@@ -52,7 +54,6 @@ export type ReclassifyAccount = TransferAccount;
 /** What one row should end up with. Every field is recomputable and safe to overwrite. */
 export type RowPlan = {
   id: string;
-  derivedCategory: string | null;
   derivedFlow: FinanceFlowKind;
   transferGroupId: string | null;
   payeeId: string | null;
@@ -65,15 +66,6 @@ export type ReclassifyPlan = {
   medianPaycheckCents: number;
   normalizedMonthlyIncomeCents: number;
 };
-
-/**
- * Flows that describe money moving rather than money spent. A category on one of these
- * would be a category on a number no spending report is allowed to count, which is exactly
- * how a "Transfers" slice ends up as the biggest thing on a spending chart.
- */
-function carriesCategory(flow: FinanceFlowKind): boolean {
-  return flow === "spend" || flow === "refund" || flow === "interest_fee";
-}
 
 /**
  * Reuse the group id two rows already share, or mint one.
@@ -110,16 +102,8 @@ export function planReclassify(
   accounts: readonly ReclassifyAccount[],
   mintGroupId: () => string,
   resolutions: readonly PaypalResolution[] = [],
-  /** Payee id → the category its commitment declares. Outranks a `rules.ts` match. */
-  commitmentCategories: ReadonlyMap<string, string> = new Map(),
   /** Normalized alias → stable payee id, ensured by the caller before planning. */
   payees: PayeeIndex = new Map(),
-  /**
-   * The user's rules, compiled once. Empty means "no rules", which classifies every row from
-   * the bank's own label alone — the honest answer for a user who has none, and the reason
-   * this defaults rather than throwing.
-   */
-  rules: readonly CompiledRule[] = [],
 ): ReclassifyPlan {
   const transferRows: TransferRow[] = rows.map((row) => ({
     id: row.id,
@@ -131,46 +115,24 @@ export function planReclassify(
   const transfers = matchTransfers(transferRows, accounts);
   const named = matchPaypalResolutions(rows, resolutions).byRowId;
 
-  // One pass for merchant, category and any flow the merchant itself settles.
-  // A resolution names who PayPal actually paid, so that name is what categorise
-  // should see — the bank description is only the rail.
   const perRow = new Map(
     rows.map((row) => {
-      const context = {
-        description: row.description,
-        payeeId: row.payeeId,
-        accountId: row.accountId,
-        amountCents: row.amountCents,
-        transactionDate: row.transactionDate,
-      };
-      const fromBank = categorize(row.description, row.sourceCategory, rules, context);
+      const fromBank = categorize(row.description);
       const resolution = named.get(row.id);
       if (!resolution?.counterparty) return [row.id, fromBank] as const;
-      const fromPaypal = categorize(
-        resolution.counterparty,
-        row.sourceCategory,
-        rules,
-        context,
-      );
+      const fromPaypal = categorize(resolution.counterparty);
       /*
-       * The two passes disagree deliberately, and each field picks a different winner.
-       *
-       * **Category comes from the counterparty**, because a statement naming Spotify is better
-       * evidence than a rail that says only `PAYPAL *`. **Flow comes from the bank line**,
-       * because flow is about how the money moved — `paypal-outbound` files a checking
-       * withdrawal as spend, and the counterparty knows nothing about that. **Merchant uses
-       * `||` rather than `??`**, so an empty string from a counterparty that normalized to
-       * nothing falls back instead of erasing a name the bank did give.
-       *
-       * This asymmetry looks like an oversight and is not. `reclassify.test.ts` pins it.
+       * **Flow comes from the bank line**, because flow is about how the money moved —
+       * `PAYPAL TO LEE RAULIN` files a checking withdrawal as spend, and the counterparty
+       * knows nothing about that. **Merchant uses `||` rather than `??`**, so an empty
+       * string from a counterparty that normalized to nothing falls back instead of
+       * erasing a name the bank did give.
        */
       return [
         row.id,
         {
           merchant: fromPaypal.merchant || fromBank.merchant,
-          category: fromPaypal.category ?? fromBank.category,
           flow: fromBank.flow ?? fromPaypal.flow,
-          ruleId: fromPaypal.ruleId ?? fromBank.ruleId,
         },
       ] as const;
     }),
@@ -183,16 +145,13 @@ export function planReclassify(
     ]),
   );
 
-  // A rule that names a flow has settled the row. Withholding those from cadence detection
-  // keeps a monthly VA benefit out of the biweekly median, which would otherwise deflate
-  // `median × 26 ÷ 12` — the one figure the whole dashboard leans on.
-  const ruleFlows = new Map<string, FinanceFlowKind>();
+  const namedFlows = new Map<string, FinanceFlowKind>();
   for (const row of rows) {
     const flow = perRow.get(row.id)?.flow;
-    if (flow) ruleFlows.set(row.id, flow);
+    if (flow) namedFlows.set(row.id, flow);
   }
 
-  const claimedByDetector = new Set([...transfers.flows.keys(), ...ruleFlows.keys()]);
+  const claimedByDetector = new Set([...transfers.flows.keys(), ...namedFlows.keys()]);
   const incomeRows: IncomeRow[] = rows.map((row) => ({
     id: row.id,
     transactionDate: row.transactionDate,
@@ -213,22 +172,15 @@ export function planReclassify(
   const claimed = new Map<string, FinanceFlowKind>();
   for (const row of rows) {
     const flow =
-      transfers.flows.get(row.id) ?? ruleFlows.get(row.id) ?? income.flows.get(row.id);
+      transfers.flows.get(row.id) ?? namedFlows.get(row.id) ?? income.flows.get(row.id);
     if (flow) claimed.set(row.id, flow);
     else if (row.amountCents <= 0) claimed.set(row.id, "spend");
   }
 
   /*
    * Payees money actually goes out to. A credit only counts as a refund if it comes back
-   * from one of these.
-   *
-   * **Keyed on the payee, not on the merchant string.** Two spellings of one shop are one
-   * identity, and until payees existed the only thing that knew so was `ClassifyRule.merchant`
-   * — a canonical name compiled into the app. Now that identity is a row, the string is the
-   * wrong key: it would split `WM SUPERCENTER` from `WAL-MART` again the moment a rule stopped
-   * naming them, and it disagrees with the payee on every PayPal row where the bank names a
-   * merchant (`categorize` always prefers the counterparty; `aliasFor` prefers it only when the
-   * bank line is opaque). The payee is the answer to "who was paid", so it is the key here too.
+   * from one of these. Keyed on the payee, not the merchant string — two spellings of one
+   * shop are one identity.
    *
    * A row with no payee is **never** a member. Null is not an identity, and grouping every
    * unresolved row under one absent key would make any credit a refund of any other.
@@ -244,23 +196,6 @@ export function planReclassify(
     const payeeId = payeeIdByRow.get(row.id) ?? null;
     const flow: FinanceFlowKind =
       claimed.get(row.id) ??
-      /*
-       * An unclaimed credit, and the two possibilities are not close.
-       *
-       * A **refund** is negative spending — returning the couch reduces what the couch cost
-       * — so it may only be a refund if the money came back from a merchant money went out
-       * to. Anything else is a deposit: a cheque, a tax refund, a Coinbase withdrawal, Zelle
-       * from a friend. Filing those as refunds made them *subtract* from spending, which is
-       * how a pay period that received a $2,516 tax refund reported negative money out.
-       *
-       * A PayPal resolution that names the sender takes priority over that refund check:
-       * $2,000 from Dennis Raulin is not a store credit even if we also shop somewhere
-       * whose merchant string happens to collide. Then the default is `external_transfer`:
-       * money arriving from outside what this module can see. That is deliberately the
-       * conservative bucket — it is neither a cost nor earnings, on the same reasoning
-       * already recorded for the Pentagon Federal sweeps in `transfers.ts`. Calling it
-       * income would invent a wage; calling it a refund invents a discount.
-       */
       (named.has(row.id)
         ? "external_transfer"
         : payeeId !== null && spendingPayees.has(payeeId)
@@ -269,11 +204,6 @@ export function planReclassify(
 
     return {
       id: row.id,
-      derivedCategory: carriesCategory(flow)
-        ? ((payeeId === null ? undefined : commitmentCategories.get(payeeId)) ??
-          perRow.get(row.id)?.category ??
-          null)
-        : null,
       derivedFlow: flow,
       transferGroupId: groupIdByRow.get(row.id) ?? null,
       payeeId,
@@ -291,7 +221,6 @@ export function planReclassify(
 /** Rows whose stored values differ from the plan — the only ones a reclassify writes. */
 export function changedRows(
   rows: readonly (ReclassifyRow & {
-    derivedCategory: string | null;
     derivedFlow: FinanceFlowKind | null;
   })[],
   plan: ReclassifyPlan,
@@ -301,7 +230,6 @@ export function changedRows(
     const row = stored.get(planned.id);
     if (!row) return true;
     return (
-      row.derivedCategory !== planned.derivedCategory ||
       row.derivedFlow !== planned.derivedFlow ||
       row.transferGroupId !== planned.transferGroupId ||
       row.payeeId !== planned.payeeId
