@@ -203,14 +203,6 @@ export function balanceTone(cents: number): BalanceTone {
   return "zero";
 }
 
-/** Assigned vs the last-applied template goal. No goal → no colour. */
-export type GoalTone = "met" | "unmet" | null;
-
-export function goalTone(assignedCents: number, goalCents: number | null): GoalTone {
-  if (goalCents === null) return null;
-  return assignedCents >= goalCents ? "met" : "unmet";
-}
-
 /** Envelopes with money in them, for the "cover from…" picker. Never offers the target. */
 export function coverSources(
   rows: readonly BudgetRow[],

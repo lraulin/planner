@@ -70,12 +70,9 @@
   --chart-average: #1a66b0;
 
   /*
-   * The template-goal indicator on an Assigned cell: funded to the goal, or short of it.
-   *
-   * Met borrows `--chart-income` because "there is money here" is the job that token already
-   * does on the Balance column. Short of the goal gets its own hue rather than `--chart-spend`:
-   * red in this app means overspent, and an envelope that is merely underfunded has not spent
-   * anything. Amber says "not finished" without saying "you did something wrong".
+   * Underfunded (a target still needs money assigned). Not overspend: red is
+   * `--chart-spend`, and an envelope that is merely short of its ask has not spent
+   * past Available. Amber says "not finished" without saying "you did something wrong".
    */
   --goal-unmet: #b45309;
 

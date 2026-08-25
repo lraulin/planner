@@ -42,7 +42,14 @@ export function runBy(
   templates: readonly ByTemplate[],
   month: MonthKey,
   carryInCents: number,
-): { toBudget: number; perTemplate: Map<string, number> } {
+): {
+  toBudget: number;
+  perTemplate: Map<string, number>;
+  /** Combined remaining target at the shortest window, before dividing by months. */
+  totalNeeded: number;
+  /** Months until that shortest window. 0 means due this month. */
+  numMonths: number;
+} {
   assertCents(carryInCents, "carry-in");
   const windows: { template: ByTemplate; numMonths: number }[] = [];
   for (const template of templates) {
@@ -53,7 +60,9 @@ export function runBy(
   }
 
   const perTemplate = new Map<string, number>();
-  if (windows.length === 0) return { toBudget: 0, perTemplate };
+  if (windows.length === 0) {
+    return { toBudget: 0, perTemplate, totalNeeded: 0, numMonths: 0 };
+  }
 
   const shortNumMonths = Math.min(...windows.map((entry) => entry.numMonths));
   let totalNeeded = 0;
@@ -76,5 +85,5 @@ export function runBy(
   }
 
   const toBudget = Math.round((totalNeeded - carryInCents) / (shortNumMonths + 1));
-  return { toBudget, perTemplate };
+  return { toBudget, perTemplate, totalNeeded, numMonths: shortNumMonths };
 }

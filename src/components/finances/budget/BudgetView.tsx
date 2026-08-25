@@ -49,6 +49,7 @@ import {
   currentMonthUnderfundedGap,
   isFutureBudgetMonth,
 } from "@/lib/finances/budget/assign/fromBudget";
+import { indicatorsFromAssign } from "@/lib/finances/budget/indicator";
 import {
   ASSIGN_OPTIONS,
   ASSIGN_OPTION_LABELS,
@@ -336,6 +337,10 @@ export function BudgetView({
       ),
     };
   }, [rows, previous, data.months, data.preStartActivity, data.settings.startMonth]);
+  const indicators = useMemo(
+    () => indicatorsFromAssign(data.month, assignInputs.envelopes, assignInputs.bills),
+    [data.month, assignInputs.envelopes, assignInputs.bills],
+  );
 
   const assignPlans = useMemo(() => {
     if (!month) return [];
@@ -407,6 +412,7 @@ export function BudgetView({
 
   const ctx: BudgetColumnCtx = {
     pending,
+    indicators,
     onAssign: (row, cents) =>
       run(() =>
         budgetOperationAction({
@@ -690,7 +696,7 @@ export function BudgetView({
 
           <SectionHeader
             title="Regular spending"
-            caption="Everything that is not a bill. Assign what you have; the balance is what is left."
+            caption="Everything that is not a bill. Assign what you have; Available is what is left."
             totals={envelopeTotals}
           />
           <DataGrid<BudgetColumnCtx, BudgetRow>
@@ -707,9 +713,10 @@ export function BudgetView({
               envelopeSelect.select(id, mods);
             }}
             /*
-             * The same menu the Balance cell opens, reachable by right-click and — the reason it
-             * is here — by long-press on a phone, where the compact row draws no Balance button
-             * at all. Without it the template editor would exist only on a desktop.
+             * The same menu the Available cell opens, reachable by right-click and — the
+             * reason it is here — by long-press on a phone, where the compact row draws the
+             * amount as a chip, not a button. Without it cover/move would exist only on
+             * desktop.
              */
             rowMenu={(rowId) => {
               const row = rows.find((candidate) => candidate.id === rowId);
@@ -1089,7 +1096,7 @@ function SectionHeader({
 /**
  * What came in this month, beside what a typical month brings.
  *
- * No Assigned and no Balance: income is not budgeted, it is the thing being budgeted
+ * No Assigned and no Available: income is not budgeted, it is the thing being budgeted
  * (`agent-os/specs/2026-08-23-2313-one-budget/` D7). Expected is a forecast from the payday
  * series and is deliberately not assignable — you assign money you have, which is why the
  * caption says so rather than leaving the two figures to be read as interchangeable.

@@ -13,19 +13,16 @@ import {
   cadenceOf,
   type Cadence,
 } from "@/lib/finances/recurringBills";
-import {
-  balanceTone,
-  goalTone,
-  type BudgetBillRow,
-  type BudgetRow,
-} from "@/lib/finances/budget/rows";
+import type { EnvelopeIndicator } from "@/lib/finances/budget/indicator";
+import { type BudgetBillRow, type BudgetRow } from "@/lib/finances/budget/rows";
+import { AvailablePill, FundingBar } from "./FundingChrome";
 import { UrlCell } from "./UrlCell";
 
 /**
  * Two column sets over one row shape: bills and ordinary envelopes are separate tables
  * (`agent-os/specs/2026-08-23-2313-one-budget/`, revised after use).
  *
- * Assigned / Activity / Balance are built by {@link moneyColumns} so the two tables cannot
+ * Assigned / Activity / Available are built by {@link moneyColumns} so the two tables cannot
  * drift on the figures that have to add up across them. Everything else differs: only a bill
  * has a cadence, a next charge, a status or a URL, and putting those on one grid meant six
  * columns reading `—` on every ordinary envelope.
@@ -38,44 +35,32 @@ export type BillPatch = Omit<BillEnvelopeEdit, "name" | "cadence"> & {
 export type BudgetColumnCtx = {
   /** Commit an inline assignment. Cents, absolute. */
   onAssign: (row: BudgetRow, cents: number) => void;
-  /** Open the row's menu at the balance cell, where the cover/move actions belong. */
+  /** Open the row's menu at the Available cell, where the cover/move actions belong. */
   onBalanceMenu: (row: BudgetRow, at: { x: number; y: number }) => void;
   /** Patch a bill's facet columns. */
   onPatchBill: (row: BudgetBillRow, patch: BillPatch) => void;
   pending: boolean;
+  /** Live funding scan, keyed by envelope id. */
+  indicators: ReadonlyMap<string, EnvelopeIndicator>;
 };
 
-/**
- * Goal-met / goal-not-met on the Assigned cell.
- *
- * The comparison is against `goalCents` — what Apply last wrote — not a live recompute, so
- * editing Assigned by hand afterwards still shows whether the template was met rather than
- * quietly redefining the goal to whatever was just typed.
- */
-const GOAL_CLASS: Record<"met" | "unmet", string> = {
-  // `ring-inset` rather than a thicker border: it doubles the weight of a 1px tint on a small
-  // input without changing the cell's box, so paging between months cannot nudge the grid.
-  met: "border-[var(--chart-income)] ring-1 ring-inset ring-[var(--chart-income)]",
-  unmet: "border-[var(--goal-unmet)] ring-1 ring-inset ring-[var(--goal-unmet)]",
+const IDLE: EnvelopeIndicator = {
+  state: "idle",
+  moreNeededCents: 0,
+  copy: null,
+  pill: "gray",
+  icon: null,
+  bar: null,
 };
 
-const TONE_CLASS: Record<ReturnType<typeof balanceTone>, string> = {
-  positive: "text-[var(--chart-income)]",
-  zero: "text-ink-faint",
-  negative: "text-[var(--chart-spend)]",
-};
+function indicatorOf(ctx: BudgetColumnCtx, id: string): EnvelopeIndicator {
+  return ctx.indicators.get(id) ?? IDLE;
+}
 
 function assignedCell<T extends BudgetRow>(row: NodeGridRow<T>, ctx: BudgetColumnCtx) {
-  const tone = goalTone(row.node.assignedCents, row.node.goalCents);
-
   return (
     <input
       key={row.node.assignedCents}
-      title={
-        row.node.goalCents === null
-          ? undefined
-          : `Goal ${formatUsd(row.node.goalCents)} · assigned ${formatUsd(row.node.assignedCents)}`
-      }
       type="text"
       inputMode="decimal"
       defaultValue={(row.node.assignedCents / 100).toFixed(2)}
@@ -99,9 +84,7 @@ function assignedCell<T extends BudgetRow>(row: NodeGridRow<T>, ctx: BudgetColum
         }
         if (next !== row.node.assignedCents) ctx.onAssign(row.node, next);
       }}
-      className={`tabular w-24 rounded border bg-surface px-1 text-right text-base text-ink md:text-[0.8125rem] ${
-        tone ? GOAL_CLASS[tone] : "border-rule"
-      }`}
+      className="tabular w-24 rounded border border-rule bg-surface px-1 text-right text-base text-ink md:text-[0.8125rem]"
     />
   );
 }
@@ -136,21 +119,18 @@ function moneyColumns<T extends BudgetRow>(): ColumnDef<BudgetColumnCtx, T>[] {
     },
     {
       id: "balance",
-      label: "Balance",
-      width: "7.5rem",
+      label: "Available",
+      width: "8rem",
       align: "right",
       hideable: false,
       render: (row, ctx) => (
-        <button
-          type="button"
-          onClick={(event) =>
-            ctx.onBalanceMenu(row.node, { x: event.clientX, y: event.clientY })
-          }
-          title="Cover, move money, or roll overspending forward"
-          className={`tabular rounded px-1 hover:bg-surface-raised ${TONE_CLASS[balanceTone(row.node.balanceCents)]}`}
-        >
-          {formatUsd(row.node.balanceCents)}
-        </button>
+        <AvailablePill
+          cents={row.node.balanceCents}
+          indicator={indicatorOf(ctx, row.node.id)}
+          label={row.node.name}
+          disabled={ctx.pending}
+          onOpen={(at) => ctx.onBalanceMenu(row.node, at)}
+        />
       ),
       sortValue: (row) => row.node.balanceCents,
       compactText: (row) => formatUsd(row.node.balanceCents),
@@ -164,21 +144,41 @@ function nameColumn<T extends BudgetRow>(label: string): ColumnDef<BudgetColumnC
     label,
     width: "minmax(12rem,1fr)",
     hideable: false,
-    render: (row) => (
-      <span className="flex min-w-0 items-center gap-1.5">
-        <span className={`truncate ${row.node.hidden ? "text-ink-faint italic" : ""}`}>
-          {row.node.name}
-        </span>
-        {row.node.carryover ? (
-          <span
-            title="Overspending rolls into this envelope instead of onto Ready to Assign"
-            className="shrink-0 rounded bg-surface-raised px-1 text-[0.625rem] text-ink-faint"
-          >
-            rolls over
-          </span>
-        ) : null}
-      </span>
-    ),
+    render: (row, ctx) => {
+      const indicator = indicatorOf(ctx, row.node.id);
+      return (
+        <div className="relative flex h-full w-full min-w-0 flex-col justify-center gap-0.5 md:block md:self-stretch">
+          <div className="flex min-w-0 items-center gap-1.5 md:h-full">
+            <span
+              className={`min-w-0 truncate ${row.node.hidden ? "text-ink-faint italic" : ""}`}
+            >
+              {row.node.name}
+            </span>
+            {row.node.carryover ? (
+              <span
+                title="Overspending rolls into this envelope instead of onto Ready to Assign"
+                className="shrink-0 rounded bg-surface-raised px-1 text-[0.625rem] text-ink-faint"
+              >
+                rolls over
+              </span>
+            ) : null}
+            {indicator.copy ? (
+              <span
+                title={indicator.copy}
+                className="ml-auto min-w-0 shrink truncate text-right text-[0.6875rem] text-ink-muted"
+              >
+                {indicator.copy}
+              </span>
+            ) : null}
+          </div>
+          {indicator.bar ? (
+            <div className="md:pointer-events-none md:absolute md:inset-x-0 md:bottom-0.5">
+              <FundingBar indicator={indicator} />
+            </div>
+          ) : null}
+        </div>
+      );
+    },
     sortValue: (row) => row.node.name,
     filterValue: (row) => row.node.name,
     compactText: (row) => row.node.name,
@@ -230,7 +230,7 @@ export const envelopeColumns: ColumnDef<BudgetColumnCtx, BudgetRow>[] = [
   ...moneyColumns<BudgetRow>(),
 ];
 
-/** Bills: the Commitments table's columns, with Assigned/Activity/Balance in place of the meter. */
+/** Bills: the Commitments table's columns, with Assigned/Activity/Available in place of the meter. */
 export const billColumns: ColumnDef<BudgetColumnCtx, BudgetBillRow>[] = [
   nameColumn("Bill"),
   {

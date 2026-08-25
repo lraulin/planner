@@ -82,3 +82,8 @@ narrowed by later deltas:
   next month's To Budget. This app subtracts later-month assignments from current Ready to
   Assign (YNAB). Hold is removed from the product; `buffered_cents` remains for leftover
   rows. See that spec's D2–D3.
+- **The Budget grid's scan layer is YNAB, not Actual.** Leftover is labeled Available.
+  Underfunded / funded / on-track / fully-spent show as a progress bar, status copy, and
+  a colored pill with an icon. Envelope math is still Actual's; the ask is Assign's
+  `neededAssigned`. Actual colors leftover by sign and puts goal status in a tooltip.
+  See `agent-os/specs/2026-08-25-1310-budget-funding-indicators/`.
