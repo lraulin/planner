@@ -19,14 +19,14 @@ describe("groupEnvelopeOptions", () => {
     ]);
     expect(grouped.map((entry) => entry.section.label)).toEqual([
       "Income",
-      "Bills",
       "Regular spending",
+      "Bills",
       "Savings",
     ]);
     expect(grouped.map((entry) => entry.envelopes.map((row) => row.id))).toEqual([
       [],
-      ["rent"],
       [],
+      ["rent"],
       [],
     ]);
   });
@@ -35,8 +35,8 @@ describe("groupEnvelopeOptions", () => {
     const grouped = groupEnvelopeOptions(envelopes);
     expect(grouped.flatMap((entry) => entry.envelopes.map((row) => row.id))).toEqual([
       "pay",
-      "rent",
       "food",
+      "rent",
       "house",
     ]);
   });

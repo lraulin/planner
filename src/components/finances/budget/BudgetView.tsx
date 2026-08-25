@@ -73,7 +73,7 @@ import { ReviewDrawer } from "./ReviewDrawer";
 const DEFAULT_HIDDEN_COLUMNS = new Set(["annual", "monthly"]);
 
 /**
- * The budget, one month at a time: **Income**, **Spending** (Bills above Regular), **Savings**.
+ * The budget, one month at a time: **Income**, **Spending** (Regular above Bills), **Savings**.
  *
  * **Sections, not one grid.** Only a bill has a cadence, a next charge, a status or a URL, so
  * putting bills and ordinary envelopes on one table meant six columns reading `—` on most
@@ -117,7 +117,7 @@ export function BudgetView({
     null,
   );
   const [focusedTable, setFocusedTable] = useState<"bills" | "envelopes" | "savings">(
-    "bills",
+    "envelopes",
   );
   const [editing, setEditing] = useState<string | null>(null);
   const [editingPayeesFor, setEditingPayeesFor] = useState<BudgetRow | null>(null);
@@ -678,42 +678,6 @@ export function BudgetView({
           <h2 className="text-[1rem] font-semibold text-ink">Spending</h2>
 
           <SectionHeader
-            title="Bills"
-            caption="Each funds itself from its own cadence — Assign → Underfunded fills what this month owes."
-            totals={billTotals}
-          />
-          <DataGrid<BudgetColumnCtx, BudgetBillRow>
-            rows={billGridRows}
-            columns={billGrid.columns}
-            allColumns={billColumns}
-            columnCtx={ctx}
-            selectedId={billSelect.selectedId}
-            selectedIds={billSelect.selectedIds}
-            selectAllState={billSelect.headerState}
-            onToggleSelectAll={billSelect.toggleSelectAll}
-            onSelect={(id, mods) => {
-              setFocusedTable("bills");
-              billSelect.select(id, mods);
-            }}
-            rowMenu={(rowId) => {
-              const row = rows.find((candidate) => candidate.id === rowId);
-              return row ? balanceMenu(row) : [];
-            }}
-            ariaLabel={`Bills for ${monthLabel(data.month)}`}
-            empty="No bills yet — Review proposes them from what actually charges you."
-            widths={billGrid.widths}
-            onResizeColumn={billGrid.setWidth}
-            onResetColumnWidth={billGrid.clearWidth}
-            columnControls={billGrid.columnControls}
-            collapsedGroups={billGrid.collapsedGroups}
-            onToggleGroup={billGrid.toggleGroup}
-            density={billGrid.density}
-            autoHeight
-            rowLabel={(row) => `Bill: ${row.node.name}`}
-            groupSummary={(_nodes, header) => groupTotals(sections.bills, header.id)}
-          />
-
-          <SectionHeader
             title="Regular spending"
             caption="Everything that is not a bill. Assign what you have; the balance is what is left."
             totals={envelopeTotals}
@@ -754,6 +718,42 @@ export function BudgetView({
             groupSummary={(_nodes, header) =>
               groupTotals(sections.envelopes, header.id)
             }
+          />
+
+          <SectionHeader
+            title="Bills"
+            caption="Each funds itself from its own cadence — Assign → Underfunded fills what this month owes."
+            totals={billTotals}
+          />
+          <DataGrid<BudgetColumnCtx, BudgetBillRow>
+            rows={billGridRows}
+            columns={billGrid.columns}
+            allColumns={billColumns}
+            columnCtx={ctx}
+            selectedId={billSelect.selectedId}
+            selectedIds={billSelect.selectedIds}
+            selectAllState={billSelect.headerState}
+            onToggleSelectAll={billSelect.toggleSelectAll}
+            onSelect={(id, mods) => {
+              setFocusedTable("bills");
+              billSelect.select(id, mods);
+            }}
+            rowMenu={(rowId) => {
+              const row = rows.find((candidate) => candidate.id === rowId);
+              return row ? balanceMenu(row) : [];
+            }}
+            ariaLabel={`Bills for ${monthLabel(data.month)}`}
+            empty="No bills yet — Review proposes them from what actually charges you."
+            widths={billGrid.widths}
+            onResizeColumn={billGrid.setWidth}
+            onResetColumnWidth={billGrid.clearWidth}
+            columnControls={billGrid.columnControls}
+            collapsedGroups={billGrid.collapsedGroups}
+            onToggleGroup={billGrid.toggleGroup}
+            density={billGrid.density}
+            autoHeight
+            rowLabel={(row) => `Bill: ${row.node.name}`}
+            groupSummary={(_nodes, header) => groupTotals(sections.bills, header.id)}
           />
 
           <footer className="tabular flex flex-wrap gap-x-5 gap-y-1 rounded border border-rule bg-surface px-3 py-2 text-[0.8125rem]">
@@ -865,15 +865,15 @@ export function BudgetView({
           readyToAssignCents={month.readyToAssignCents}
           options={assignPlans}
           envelopes={[
-            ...sections.bills.map((row) => ({
-              id: row.id,
-              name: row.name,
-              section: "Bills" as const,
-            })),
             ...sections.envelopes.map((row) => ({
               id: row.id,
               name: row.name,
               section: "Regular spending" as const,
+            })),
+            ...sections.bills.map((row) => ({
+              id: row.id,
+              name: row.name,
+              section: "Bills" as const,
             })),
             ...sections.savings.map((row) => ({
               id: row.id,

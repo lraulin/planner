@@ -23,16 +23,16 @@ export const CATEGORY_SECTIONS = [
     createLabel: "New income…",
   },
   {
-    kind: "bill" as const,
-    label: "Bills",
-    createValue: "__new__:bill",
-    createLabel: "New bill…",
-  },
-  {
     kind: "spending" as const,
     label: "Regular spending",
     createValue: "__new__:spending",
     createLabel: "New envelope…",
+  },
+  {
+    kind: "bill" as const,
+    label: "Bills",
+    createValue: "__new__:bill",
+    createLabel: "New bill…",
   },
   {
     kind: "savings" as const,

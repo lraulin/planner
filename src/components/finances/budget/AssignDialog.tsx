@@ -42,8 +42,8 @@ export function AssignDialog({
 
   const grouped = useMemo(() => {
     const groups: Record<EnvelopeOption["section"], EnvelopeOption[]> = {
-      Bills: [],
       "Regular spending": [],
+      Bills: [],
       Savings: [],
     };
     for (const envelope of envelopes) groups[envelope.section].push(envelope);
@@ -133,7 +133,7 @@ export function AssignDialog({
                 onChange={(event) => setTarget(event.target.value)}
                 className="min-h-tap rounded border border-rule bg-surface px-2 py-1.5 text-base font-normal normal-case tracking-normal text-ink md:min-h-0 md:text-[0.8125rem]"
               >
-                {(["Bills", "Regular spending", "Savings"] as const).map((section) =>
+                {(["Regular spending", "Bills", "Savings"] as const).map((section) =>
                   grouped[section].length === 0 ? null : (
                     <optgroup key={section} label={section}>
                       {grouped[section].map((envelope) => (

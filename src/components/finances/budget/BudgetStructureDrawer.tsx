@@ -225,7 +225,7 @@ export function BudgetStructureDrawer({
           </section>
 
           <p className="text-[0.75rem] leading-5 text-ink-muted">
-            Sections (Income, Bills, Regular spending, Savings) are the top level.
+            Sections (Income, Regular spending, Bills, Savings) are the top level.
             Groups are optional folders inside a section, for subtotals.
           </p>
 
