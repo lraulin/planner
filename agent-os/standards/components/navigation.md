@@ -47,12 +47,13 @@ that they were right.
 ## Modules live in one registry
 
 `src/components/shell/modules.ts` is the only list of modules. It is read by the sidebar, the
-phone bottom nav, the More sheet, the phone header's "you are here" title, and the palette's
-go-to entries.
+phone bottom nav, the More sheet, the phone header's "you are here" title, the palette's
+go-to entries, and the browser tab (`documentTitle` — `{page} · Planner`).
 
-**Never hard-code a module anywhere else.** Five surfaces reading one array is what stops the
-phone and the desktop from disagreeing about what the app contains — the previous version of
-this file was four surfaces reading `TABS`, and that was already the reason it worked.
+**Never hard-code a module anywhere else.** Those surfaces reading one array is what stops the
+phone, the desktop, and a row of browser tabs from disagreeing about what the app contains —
+the previous version of this file was four surfaces reading `TABS`, and that was already the
+reason it worked.
 
 The rule has already been broken once, quietly: `MobileNav` wrote out its three hrefs while this
 section listed it among the readers. It went unnoticed until Tasks became a page and `/tasks`

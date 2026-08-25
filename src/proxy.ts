@@ -31,6 +31,9 @@ export function proxy(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("content-security-policy", csp);
   requestHeaders.set("x-nonce", nonce);
+  // So root `generateMetadata` can name the tab on a full load. Layouts persist
+  // across in-app navigation; `DocumentTitle` follows the pathname from there.
+  requestHeaders.set("x-pathname", request.nextUrl.pathname);
 
   const withCsp = <T extends NextResponse>(response: T): T => {
     response.headers.set("content-security-policy", csp);

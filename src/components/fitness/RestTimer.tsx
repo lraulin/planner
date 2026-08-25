@@ -18,6 +18,10 @@ import {
 
 const STORAGE_KEY = "planner.fitness.restSec";
 
+function isRestDocumentTitle(title: string, base: string): boolean {
+  return title === `Rest done · ${base}` || title.endsWith(` rest · ${base}`);
+}
+
 function loadPreferredRest(): number {
   if (typeof window === "undefined") return DEFAULT_REST_SEC;
   try {
@@ -179,10 +183,15 @@ export function RestTimer({
   }, [running, finished, remaining]);
 
   // Restore the original title if the timer unmounts mid-countdown (drawer close).
+  // Leave the title alone if something else already replaced it — navigating away
+  // unmounts this timer after `DocumentTitle` has written the new page's name, and
+  // restoring the session title would put "Sessions · Planner" on Tasks.
   useEffect(() => {
     return () => {
       if (baseTitleRef.current !== null && typeof document !== "undefined") {
-        document.title = baseTitleRef.current;
+        if (isRestDocumentTitle(document.title, baseTitleRef.current)) {
+          document.title = baseTitleRef.current;
+        }
         baseTitleRef.current = null;
       }
     };

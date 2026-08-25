@@ -26,9 +26,9 @@ import {
 /**
  * Every **module** the app has, and every one it is going to have.
  *
- * One list, read by five surfaces that must not drift: the desktop `Sidebar`, the phone
- * `MobileNav`, the `MoreSheet` behind it, `MobileHeader`'s "you are here" title, and the
- * command palette's go-to entries.
+ * One list, read by six surfaces that must not drift: the desktop `Sidebar`, the phone
+ * `MobileNav`, the `MoreSheet` behind it, `MobileHeader`'s "you are here" title, the
+ * command palette's go-to entries, and the browser tab (`documentTitle`).
  *
  * This replaces the flat `TABS` array and the tab strip that rendered it. Achieve reached
  * its sixteen destinations through the **Go** menu (manual §1.3) and kept only the ones you
@@ -249,6 +249,30 @@ export function moduleDeclaredPages(id: ModuleId): readonly PageEntry[] {
 }
 
 /**
+ * Places that are real destinations but not modules — they have no sidebar row, so
+ * `MODULES` cannot name them. Listed here so the phone header, a Back link, and the
+ * browser tab all ask the same function.
+ *
+ * The trailing-slash boundary is the same one `pageForPathname` uses: `/login` must
+ * not claim a hypothetical `/login-help`.
+ */
+const STANDALONE_DESTINATIONS: readonly { href: string; label: string }[] = [
+  { href: "/settings", label: "Settings" },
+  { href: "/organize", label: "New Task Organizer" },
+  { href: "/login", label: "Sign in" },
+  { href: "/signup", label: "Sign up" },
+  { href: "/oauth/authorize", label: "Authorize" },
+];
+
+function standaloneLabel(pathname: string): string | null {
+  return (
+    STANDALONE_DESTINATIONS.find(
+      (entry) => pathname === entry.href || pathname.startsWith(`${entry.href}/`),
+    )?.label ?? null
+  );
+}
+
+/**
  * What to call a destination in a "← Back to …" control, given only its path.
  *
  * Named from the registry rather than by the caller, because the caller does not reliably know:
@@ -256,9 +280,10 @@ export function moduleDeclaredPages(id: ModuleId): readonly PageEntry[] {
  * `returnTo === "/time-charts" ? "Time Charts" : "Schedule"`, which was already wrong for one
  * destination and would silently mislabel every one added after it.
  *
- * Falls back to the module's own name, and then to `fallback` for a path in no module at all —
- * "Back" for the back-links this was written for, "Planner" for `MobileHeader`, which asks the
- * same question ("what is this place called?") and would look absurd answering it with a verb.
+ * Falls back to the module's own name, then to a standalone chrome route, then to `fallback`
+ * for a path in no module at all — "Back" for the back-links this was written for, "Planner"
+ * for `MobileHeader` and the browser tab, which ask the same question ("what is this place
+ * called?") and would look absurd answering it with a verb.
  */
 export function destinationLabel(path: string, fallback = "Back"): string {
   const pathname = path.split(/[?#]/)[0] ?? path;
@@ -266,10 +291,24 @@ export function destinationLabel(path: string, fallback = "Back"): string {
   const entry = MODULES.filter((item) => item.status === "built").find(
     (item) => pathname === item.href || pathname.startsWith(`${item.href}/`),
   );
-  if (!entry) return fallback;
+  if (!entry) return standaloneLabel(pathname) ?? fallback;
 
   const page = pageForPathname(entry.id, entry.href, pathname);
   return page && hasPageBar(entry.id) ? page.label : entry.label;
+}
+
+const APP_NAME = "Planner";
+
+/**
+ * Browser tab title for a pathname.
+ *
+ * The place name comes first so a row of Planner tabs can be told apart; the app name
+ * follows so a truncated tab still says which app it is. The suffix is dropped when the
+ * place itself is already called Planner, so an unknown path is not "Planner · Planner".
+ */
+export function documentTitle(path: string): string {
+  const name = destinationLabel(path, APP_NAME);
+  return name === APP_NAME ? APP_NAME : `${name} · ${APP_NAME}`;
 }
 
 /**

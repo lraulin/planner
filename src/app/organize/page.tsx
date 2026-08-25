@@ -14,7 +14,7 @@ export default async function OrganizePage() {
   const today = localDateKey(now);
 
   return (
-    <AppShell active={null} pageTitle="New Task Organizer">
+    <AppShell active={null}>
       <OrganizerView
         nodes={nodes}
         queue={organizerQueue(nodes, today)}

@@ -36,11 +36,9 @@ import type { ModuleId } from "./modules";
  */
 export function AppShell({
   active,
-  pageTitle,
   children,
 }: {
   active: ModuleId | null;
-  pageTitle?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -50,7 +48,7 @@ export function AppShell({
           <Sidebar active={active} />
 
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <MobileHeader title={pageTitle} />
+            <MobileHeader />
 
             {/*
               Application menu above the page bar: the catalog belongs to the app, not the

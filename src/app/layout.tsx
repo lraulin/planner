@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import { Archivo, IBM_Plex_Mono } from "next/font/google";
 import { SettingsProvider } from "@/components/settings/SettingsProvider";
+import { DocumentTitle } from "@/components/shell/DocumentTitle";
+import { documentTitle } from "@/components/shell/modules";
 import { loadSettingsForSession } from "@/lib/settings/session";
 import "./globals.css";
 
@@ -19,26 +22,31 @@ const plexMono = IBM_Plex_Mono({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  title: "Planner",
-  description: "Personal time management, in the spirit of Achieve Planner",
-  applicationName: "Planner",
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "default",
-    title: "Planner",
-  },
-  formatDetection: {
-    telephone: false,
-  },
-  icons: {
-    icon: [
-      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
-      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
-    ],
-    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180" }],
-  },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const headerList = await headers();
+  const pathname = headerList.get("x-pathname");
+
+  return {
+    title: pathname ? documentTitle(pathname) : "Planner",
+    description: "Personal time management, in the spirit of Achieve Planner",
+    applicationName: "Planner",
+    appleWebApp: {
+      capable: true,
+      statusBarStyle: "default",
+      title: "Planner",
+    },
+    formatDetection: {
+      telephone: false,
+    },
+    icons: {
+      icon: [
+        { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+        { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+      ],
+      apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180" }],
+    },
+  };
+}
 
 export const viewport: Viewport = {
   themeColor: [
@@ -72,6 +80,7 @@ export default async function RootLayout({
       className={`${archivo.variable} ${plexMono.variable} h-full antialiased`}
     >
       <body className="flex h-full flex-col">
+        <DocumentTitle />
         <SettingsProvider initial={settings}>{children}</SettingsProvider>
       </body>
     </html>

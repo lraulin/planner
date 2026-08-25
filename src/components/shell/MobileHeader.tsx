@@ -20,14 +20,14 @@ import { OverflowMenu } from "./OverflowMenu";
  *
  * It also carries the safe-area inset for the notch, so modules below it can ignore it.
  */
-export function MobileHeader({ title }: { title?: string }) {
+export function MobileHeader() {
   const pathname = usePathname();
 
   return (
     <header className="pt-safe flex-none border-b border-rule bg-shell md:hidden">
       <div className="flex h-11 items-center gap-2 px-3">
         <h1 className="min-w-0 flex-1 truncate text-[0.9375rem] font-semibold tracking-tight text-ink">
-          {title ?? destinationLabel(pathname, "Planner")}
+          {destinationLabel(pathname, "Planner")}
         </h1>
         {!isFocusedFlow(pathname) && <OverflowMenu label="More commands" />}
       </div>
