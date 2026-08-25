@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useTransition,
+  type ReactNode,
+} from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import {
@@ -26,6 +33,10 @@ import {
   prevMonthKey,
   type BudgetMonth,
 } from "@/lib/finances/budget/envelope";
+import {
+  budgetGridExportPlan,
+  type BudgetTableId,
+} from "@/lib/finances/budget/gridScopes";
 import type { BudgetData } from "@/lib/finances/budget/queries";
 import {
   budgetRows,
@@ -119,9 +130,7 @@ export function BudgetView({
   const [move, setMove] = useState<{ from: BudgetRow; targets: BudgetRow[] } | null>(
     null,
   );
-  const [focusedTable, setFocusedTable] = useState<"bills" | "envelopes" | "savings">(
-    "envelopes",
-  );
+  const [focusedTable, setFocusedTable] = useState<BudgetTableId>("envelopes");
   const [editing, setEditing] = useState<string | null>(null);
   const [editingPayeesFor, setEditingPayeesFor] = useState<BudgetRow | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -151,6 +160,7 @@ export function BudgetView({
     (billGrid.switches["show-hidden"] ?? false) ||
     (envelopeGrid.switches["show-hidden"] ?? false) ||
     (savingsGrid.switches["show-hidden"] ?? false);
+  const exportPlan = budgetGridExportPlan(focusedTable);
 
   const month = findMonth(data.months, data.month);
   const rows = useMemo(
@@ -699,80 +709,94 @@ export function BudgetView({
             caption="Everything that is not a bill. Assign what you have; Available is what is left."
             totals={envelopeTotals}
           />
-          <DataGrid<BudgetColumnCtx, BudgetRow>
-            rows={envelopeGridRows}
-            columns={envelopeGrid.columns}
-            allColumns={envelopeColumns}
-            columnCtx={ctx}
-            selectedId={envelopeSelect.selectedId}
-            selectedIds={envelopeSelect.selectedIds}
-            selectAllState={envelopeSelect.headerState}
-            onToggleSelectAll={envelopeSelect.toggleSelectAll}
-            onSelect={(id, mods) => {
-              setFocusedTable("envelopes");
-              envelopeSelect.select(id, mods);
-            }}
-            /*
-             * The same menu the Available cell opens, reachable by right-click and — the
-             * reason it is here — by long-press on a phone, where the compact row draws the
-             * amount as a chip, not a button. Without it cover/move would exist only on
-             * desktop.
-             */
-            rowMenu={(rowId) => {
-              const row = rows.find((candidate) => candidate.id === rowId);
-              return row ? balanceMenu(row) : [];
-            }}
-            ariaLabel={`Envelopes for ${monthLabel(data.month)}`}
-            empty="No envelopes yet."
-            widths={envelopeGrid.widths}
-            onResizeColumn={envelopeGrid.setWidth}
-            onResetColumnWidth={envelopeGrid.clearWidth}
-            columnControls={envelopeGrid.columnControls}
-            collapsedGroups={envelopeGrid.collapsedGroups}
-            onToggleGroup={envelopeGrid.toggleGroup}
-            density={envelopeGrid.density}
-            autoHeight
-            rowLabel={(row) => `Envelope: ${row.node.name}`}
-            groupSummary={(_nodes, header) =>
-              groupTotals(sections.envelopes, header.id)
-            }
-          />
+          <BudgetTable
+            focused={focusedTable === "envelopes"}
+            onFocus={() => setFocusedTable("envelopes")}
+          >
+            <DataGrid<BudgetColumnCtx, BudgetRow>
+              rows={envelopeGridRows}
+              columns={envelopeGrid.columns}
+              allColumns={envelopeColumns}
+              columnCtx={ctx}
+              selectedId={envelopeSelect.selectedId}
+              selectedIds={envelopeSelect.selectedIds}
+              selectAllState={envelopeSelect.headerState}
+              onToggleSelectAll={envelopeSelect.toggleSelectAll}
+              onSelect={(id, mods) => {
+                setFocusedTable("envelopes");
+                envelopeSelect.select(id, mods);
+              }}
+              commandScope={exportPlan.envelopes.commandScope}
+              exportFocused={exportPlan.envelopes.exportFocused}
+              /*
+               * The same menu the Available cell opens, reachable by right-click and — the
+               * reason it is here — by long-press on a phone, where the compact row draws the
+               * amount as a chip, not a button. Without it cover/move would exist only on
+               * desktop.
+               */
+              rowMenu={(rowId) => {
+                const row = rows.find((candidate) => candidate.id === rowId);
+                return row ? balanceMenu(row) : [];
+              }}
+              ariaLabel={`Envelopes for ${monthLabel(data.month)}`}
+              empty="No envelopes yet."
+              widths={envelopeGrid.widths}
+              onResizeColumn={envelopeGrid.setWidth}
+              onResetColumnWidth={envelopeGrid.clearWidth}
+              columnControls={envelopeGrid.columnControls}
+              collapsedGroups={envelopeGrid.collapsedGroups}
+              onToggleGroup={envelopeGrid.toggleGroup}
+              density={envelopeGrid.density}
+              autoHeight
+              rowLabel={(row) => `Envelope: ${row.node.name}`}
+              groupSummary={(_nodes, header) =>
+                groupTotals(sections.envelopes, header.id)
+              }
+            />
+          </BudgetTable>
 
           <SectionHeader
             title="Bills"
             caption="Each funds itself from its own cadence — Assign → Underfunded fills what this month owes."
             totals={billTotals}
           />
-          <DataGrid<BudgetColumnCtx, BudgetBillRow>
-            rows={billGridRows}
-            columns={billGrid.columns}
-            allColumns={billColumns}
-            columnCtx={ctx}
-            selectedId={billSelect.selectedId}
-            selectedIds={billSelect.selectedIds}
-            selectAllState={billSelect.headerState}
-            onToggleSelectAll={billSelect.toggleSelectAll}
-            onSelect={(id, mods) => {
-              setFocusedTable("bills");
-              billSelect.select(id, mods);
-            }}
-            rowMenu={(rowId) => {
-              const row = rows.find((candidate) => candidate.id === rowId);
-              return row ? balanceMenu(row) : [];
-            }}
-            ariaLabel={`Bills for ${monthLabel(data.month)}`}
-            empty="No bills yet — Review proposes them from what actually charges you."
-            widths={billGrid.widths}
-            onResizeColumn={billGrid.setWidth}
-            onResetColumnWidth={billGrid.clearWidth}
-            columnControls={billGrid.columnControls}
-            collapsedGroups={billGrid.collapsedGroups}
-            onToggleGroup={billGrid.toggleGroup}
-            density={billGrid.density}
-            autoHeight
-            rowLabel={(row) => `Bill: ${row.node.name}`}
-            groupSummary={(_nodes, header) => groupTotals(sections.bills, header.id)}
-          />
+          <BudgetTable
+            focused={focusedTable === "bills"}
+            onFocus={() => setFocusedTable("bills")}
+          >
+            <DataGrid<BudgetColumnCtx, BudgetBillRow>
+              rows={billGridRows}
+              columns={billGrid.columns}
+              allColumns={billColumns}
+              columnCtx={ctx}
+              selectedId={billSelect.selectedId}
+              selectedIds={billSelect.selectedIds}
+              selectAllState={billSelect.headerState}
+              onToggleSelectAll={billSelect.toggleSelectAll}
+              onSelect={(id, mods) => {
+                setFocusedTable("bills");
+                billSelect.select(id, mods);
+              }}
+              commandScope={exportPlan.bills.commandScope}
+              exportFocused={exportPlan.bills.exportFocused}
+              rowMenu={(rowId) => {
+                const row = rows.find((candidate) => candidate.id === rowId);
+                return row ? balanceMenu(row) : [];
+              }}
+              ariaLabel={`Bills for ${monthLabel(data.month)}`}
+              empty="No bills yet — Review proposes them from what actually charges you."
+              widths={billGrid.widths}
+              onResizeColumn={billGrid.setWidth}
+              onResetColumnWidth={billGrid.clearWidth}
+              columnControls={billGrid.columnControls}
+              collapsedGroups={billGrid.collapsedGroups}
+              onToggleGroup={billGrid.toggleGroup}
+              density={billGrid.density}
+              autoHeight
+              rowLabel={(row) => `Bill: ${row.node.name}`}
+              groupSummary={(_nodes, header) => groupTotals(sections.bills, header.id)}
+            />
+          </BudgetTable>
 
           <footer className="tabular flex flex-wrap gap-x-5 gap-y-1 rounded border border-rule bg-surface px-3 py-2 text-[0.8125rem]">
             <span className="text-ink-muted">
@@ -797,36 +821,45 @@ export function BudgetView({
             caption="Assigned money that is not a monthly expense. Held out of All spending so a house fund is not an overspend."
             totals={savingsTotals}
           />
-          <DataGrid<BudgetColumnCtx, BudgetRow>
-            rows={savingsGridRows}
-            columns={savingsGrid.columns}
-            allColumns={envelopeColumns}
-            columnCtx={ctx}
-            selectedId={savingsSelect.selectedId}
-            selectedIds={savingsSelect.selectedIds}
-            selectAllState={savingsSelect.headerState}
-            onToggleSelectAll={savingsSelect.toggleSelectAll}
-            onSelect={(id, mods) => {
-              setFocusedTable("savings");
-              savingsSelect.select(id, mods);
-            }}
-            rowMenu={(rowId) => {
-              const row = rows.find((candidate) => candidate.id === rowId);
-              return row ? balanceMenu(row) : [];
-            }}
-            ariaLabel={`Savings for ${monthLabel(data.month)}`}
-            empty="No savings envelopes yet — add one from Manage groups and envelopes."
-            widths={savingsGrid.widths}
-            onResizeColumn={savingsGrid.setWidth}
-            onResetColumnWidth={savingsGrid.clearWidth}
-            columnControls={savingsGrid.columnControls}
-            collapsedGroups={savingsGrid.collapsedGroups}
-            onToggleGroup={savingsGrid.toggleGroup}
-            density={savingsGrid.density}
-            autoHeight
-            rowLabel={(row) => `Savings: ${row.node.name}`}
-            groupSummary={(_nodes, header) => groupTotals(sections.savings, header.id)}
-          />
+          <BudgetTable
+            focused={focusedTable === "savings"}
+            onFocus={() => setFocusedTable("savings")}
+          >
+            <DataGrid<BudgetColumnCtx, BudgetRow>
+              rows={savingsGridRows}
+              columns={savingsGrid.columns}
+              allColumns={envelopeColumns}
+              columnCtx={ctx}
+              selectedId={savingsSelect.selectedId}
+              selectedIds={savingsSelect.selectedIds}
+              selectAllState={savingsSelect.headerState}
+              onToggleSelectAll={savingsSelect.toggleSelectAll}
+              onSelect={(id, mods) => {
+                setFocusedTable("savings");
+                savingsSelect.select(id, mods);
+              }}
+              commandScope={exportPlan.savings.commandScope}
+              exportFocused={exportPlan.savings.exportFocused}
+              rowMenu={(rowId) => {
+                const row = rows.find((candidate) => candidate.id === rowId);
+                return row ? balanceMenu(row) : [];
+              }}
+              ariaLabel={`Savings for ${monthLabel(data.month)}`}
+              empty="No savings envelopes yet — add one from Manage groups and envelopes."
+              widths={savingsGrid.widths}
+              onResizeColumn={savingsGrid.setWidth}
+              onResetColumnWidth={savingsGrid.clearWidth}
+              columnControls={savingsGrid.columnControls}
+              collapsedGroups={savingsGrid.collapsedGroups}
+              onToggleGroup={savingsGrid.toggleGroup}
+              density={savingsGrid.density}
+              autoHeight
+              rowLabel={(row) => `Savings: ${row.node.name}`}
+              groupSummary={(_nodes, header) =>
+                groupTotals(sections.savings, header.id)
+              }
+            />
+          </BudgetTable>
         </section>
 
         <ForecastDetails months={forecast.months} comparison={forecast.comparison} />
@@ -1058,6 +1091,29 @@ function Backlog({ data }: { data: BudgetData }) {
           Categorize
         </a>
       </span>
+    </div>
+  );
+}
+
+/**
+ * Last-interacted table: the ring is what makes `focusedTable` (Assign + File ▸ Export)
+ * visible. `onFocusCapture` so clicking the header or empty area counts, not only a row.
+ */
+function BudgetTable({
+  focused,
+  onFocus,
+  children,
+}: {
+  focused: boolean;
+  onFocus: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      onFocusCapture={onFocus}
+      className={focused ? "rounded ring-2 ring-select-edge ring-inset" : undefined}
+    >
+      {children}
     </div>
   );
 }
