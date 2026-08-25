@@ -367,6 +367,12 @@ View · Tools`) with an icon gutter and shortcut column; an **icon row** for the
   unification later shipped in `specs/2026-08-09-1956-settings-workspace-date-format`: module,
   grid, and named-view preferences share one grouped reset surface while saved-view settings
   remain protected from bulk reset. Deferred: capturing sort and density.
+  Working-copy Save shipped 2026-08-13 —
+  `specs/2026-08-13-0940-custom-view-working-set`. The live grid is one working copy per
+  module; named views are snapshots. Tweaks stay on the named view with an Unsaved
+  changes mark. Save writes the working copy over the active saved view (disabled on a
+  built-in); Save as deep-copies. Switching discards dirty with no prompt. Tasks views
+  also restore the Project picker.
 - **✅ Module pages.** `specs/2026-08-13-0747-module-pages`. Navigating _within_ a module was
   the one tier `components/navigation.md` never governed, so four modules had invented four
   answers: Fitness a bordered segment in one style, Schedule and Notes a bordered segment in
@@ -778,9 +784,15 @@ dollar is in is working against the point.
   pairing transfers, and the pay-period axis removes the three-paycheck month. It
   categorises by **who was paid**, which is the best the bank line can support and is
   still a lie for anything sold at more than one store (see Later, below).
-  Interactive reports (drill-down, shared filters, YTD/QTD, spending trends, top payees,
-  Sankey, cash-vs-card-debt) are in
-  `agent-os/specs/2026-08-13-2121-insights-interactive-reports/` (active).
+  ✅ Interactive reports shipped 2026-08-13 —
+  `agent-os/specs/2026-08-13-2121-insights-interactive-reports/`. Drill-down, shared
+  filters, YTD/QTD, spending trends, top payees, Sankey, and cash-vs-card-debt sit on
+  the same classified history. Click a number and see the rows.
+  ✅ External-transfer provenance shipped 2026-08-14/15 —
+  `agent-os/specs/2026-08-14-2001-external-transfer-provenance/`. Insights net mode
+  states `net + external = statement`, give or take a residual. PayPal statements
+  enrich counterparties without inserting a second ledger; Coinbase is a provenance
+  account whose BTC nets to zero.
   ✅ Finance agent tools shipped 2026-08-14 —
   `agent-os/specs/2026-08-14-1208-finance-agent-tools/`. Six read-only MCP tools
   (`get_finance_overview`, `get_cash_flow`, `get_spending_breakdown`,
@@ -1076,9 +1088,13 @@ period)` so money already spent stops being held twice and only going over bites
      still later: order-confirmation email; Walmart is harder from the bank feed but
      purchases go through the app.
 
-- **Eventually:** **Plaid** (or equivalent) to pull bank data by API — only after
-  CSV + commitments are trustworthy, given lock-in and security cost. Partly
-  overtaken by SimpleFIN live sync (`specs/2026-08-15-1315-live-bank-sync`).
+- **Eventually:** **Plaid** (or equivalent) remains a metered fallback if SimpleFIN
+  staleness is unacceptable. Live bank sync shipped 2026-08-16 —
+  `specs/2026-08-15-1315-live-bank-sync` — SimpleFIN setup-token paste, linked to
+  existing accounts, replaceable pending set, no forced refresh. Capital One pending
+  that SimpleFIN will not send is the scrape
+  (`specs/2026-08-16-1556-capitalone-pending-scrape`); Chase pending lag is
+  `specs/2026-08-18-1645-chase-pending-scrape`.
 
 ---
 

@@ -1,7 +1,10 @@
 # Capital One pending scrape
 
-**Status: active**
+**Status: frozen / complete** (2026-08-25)
 Spec folder: `agent-os/specs/2026-08-16-1556-capitalone-pending-scrape/`
+
+This is the as-built record. Chase pending scrape is a later delta
+(`2026-08-18-1645-chase-pending-scrape`).
 
 ## Spec relationships
 
@@ -32,14 +35,18 @@ SimpleFIN does not supply Capital One pending rows. The dashboard therefore unde
 
 ## Acceptance criteria
 
-- [ ] Userscript copies a `# planner-pending v1` TSV of the live pending table (10 rows, −$379.68) including Purchased dates.
-- [ ] Pasting on `/finances/dashboard` writes `pending=true` rows on the existing •••3448 card; available-to-spend drops by that total once.
-- [ ] A second paste of the same table does not duplicate. A paste with a row gone deletes that pending row.
-- [ ] A second user cannot read or write the first user's scrape-pending rows.
-- [ ] SimpleFIN posting a matching amount+merchant inserts the posted row and deletes one scrape-pending. It does not skip the posted row.
-- [ ] Two Sheetz $24.45 pending rows both survive a paste; one posted $24.45 Sheetz clears only one.
-- [ ] A gas hold that posts at a different amount stays pending until the next paste.
-- [ ] `npm run test:unit` including DB tests; `npm run smoke` after touching `src/app/**`.
+- [x] Userscript copies a `# planner-pending v1` TSV of the live pending table (10 rows, −$379.68) including Purchased dates.
+- [x] Pasting on `/finances/dashboard` writes `pending=true` rows on the existing •••3448 card; available-to-spend drops by that total once.
+- [x] A second paste of the same table does not duplicate. A paste with a row gone deletes that pending row.
+- [x] A second user cannot read or write the first user's scrape-pending rows.
+- [x] SimpleFIN posting a matching amount+merchant inserts the posted row and deletes one scrape-pending. It does not skip the posted row.
+- [x] Two Sheetz $24.45 pending rows both survive a paste; one posted $24.45 Sheetz clears only one.
+- [x] A gas hold that posts at a different amount stays pending until the next paste.
+- [x] `npm run test:unit` including DB tests; `npm run smoke` after touching `src/app/**`.
+
+Verified 2026-08-16: dashboard paste of the live 10-row table moved available from
+−$686.96 to −$1,066.64. Empty-table paste (change 3) verified 2026-08-18: unit 2707,
+integration 722, smoke 55/55, browser at 1280 and 390.
 
 ## Changes from original plan
 
@@ -73,4 +80,10 @@ Dashboard control, server action, `scripts/capitalone-pending.user.js` that expa
 
 ## Task 6 — Verify, freeze, update roadmap
 
-While this spec is **active**, material requirement/design/scope changes update these files and append to **Changes from original plan**. Freeze when verified.
+Done. Freeze delayed until 2026-08-25; the feature had already shipped and been
+extended by the Chase pending scrape.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- Chase pending scrape — shipped as `2026-08-18-1645-chase-pending-scrape`.
+- Cap One mobile / iPhone scrape remains out.

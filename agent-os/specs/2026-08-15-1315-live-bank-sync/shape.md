@@ -1,9 +1,9 @@
 # Live bank sync — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-08-25)
 
-> Shaped against Teller, which withdrew its API in early July 2026 before any code was
-> written. Rewritten for Plaid; see **Changes from original plan** in `plan.md`.
+> Shaped against Teller, rewritten for Plaid, then shipped as SimpleFIN. See **Changes
+> from original plan** in `plan.md`.
 
 ## Scope
 

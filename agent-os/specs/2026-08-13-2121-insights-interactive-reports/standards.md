@@ -1,6 +1,6 @@
 # Standards applied — Finances insights interactive reports
 
-**Status: active**
+**Status: frozen / complete** (2026-08-25)
 
 The following standards apply. Full text lives at the path named; this file records _why_
 each one is load-bearing here, matching the frozen insights spec's style.

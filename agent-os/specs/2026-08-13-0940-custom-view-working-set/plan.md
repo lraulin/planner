@@ -1,7 +1,10 @@
 # Working-copy views
 
-**Status: active**
+**Status: frozen / complete** (2026-08-25)
 Spec folder: `agent-os/specs/2026-08-13-0940-custom-view-working-set/`
+
+This is the as-built record. Named views change only on Save / Save as. Further change
+opens a new delta-spec.
 
 ## Spec relationships
 
@@ -32,17 +35,22 @@ This spec commits to **working-copy + explicit Save**. The live grid is a workin
 
 ## Acceptance criteria
 
-- [ ] Tweaking Full Outline keeps the picker on Full Outline and shows Unsaved changes.
-- [ ] Reload keeps Full Outline + unsaved + the same tweaks.
-- [ ] Save is disabled on a built-in.
-- [ ] Save as creates a new view, switches to it (clean). Picking Full Outline is the preset.
-- [ ] Save on a saved view writes the working copy and clears unsaved.
-- [ ] Tweak, Save as, switch back: the first view is what it was before the tweak.
-- [ ] Switching views discards dirty with no prompt.
-- [ ] Reset reloads the active definition.
-- [ ] Notes / Chooser extras follow the same machine.
-- [ ] Unit tests in `src/lib/settings`. Browser on Outline and Tasks.
-- [ ] Save a Tasks view with a project selected; switch away and back; that project is selected again. Save with All Projects clears the picker on restore. Built-in view switches leave the picker alone. `View tasks…` still lands on `?scope=` without the last view overwriting it.
+- [x] Tweaking Full Outline keeps the picker on Full Outline and shows Unsaved changes.
+- [x] Reload keeps Full Outline + unsaved + the same tweaks.
+- [x] Save is disabled on a built-in.
+- [x] Save as creates a new view, switches to it (clean). Picking Full Outline is the preset.
+- [x] Save on a saved view writes the working copy and clears unsaved.
+- [x] Tweak, Save as, switch back: the first view is what it was before the tweak.
+- [x] Switching views discards dirty with no prompt.
+- [x] Reset reloads the active definition.
+- [x] Notes / Chooser extras follow the same machine.
+- [x] Unit tests in `src/lib/settings`. Browser on Outline and Tasks.
+- [x] Save a Tasks view with a project selected; switch away and back; that project is selected again. Save with All Projects clears the picker on restore. Built-in view switches leave the picker alone. `View tasks…` still lands on `?scope=` without the last view overwriting it.
+
+Verified 2026-08-13: unit tests for overrides/equality/round-trip; Outline (Full Outline
+
+- Unsaved changes) and Tasks (search dirties, switch discards) in the browser. Tasks
+  project-picker restore verified 2026-08-13 in a follow-up commit.
 
 ## Changes from original plan
 
@@ -55,9 +63,13 @@ This spec commits to **working-copy + explicit Save**. The live grid is a workin
 
 ## Tasks
 
-1. This folder (revised).
-2. `useModuleViews` + ViewPicker implement the state machine.
-3. Extras isolation (Save as copies working extras; switch loads V).
-4. `data-grid.md`, tests, browser, freeze.
+1. This folder (revised). Done.
+2. `useModuleViews` + ViewPicker implement the state machine. Done.
+3. Extras isolation (Save as copies working extras; switch loads V). Done.
+4. `data-grid.md`, tests, browser, freeze. Done — the standard already describes the
+   working-copy machine; this freeze closes the leftover **Status: active**.
 
-> While this spec is **active**, material changes update these files and append to **Changes from original plan**.
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- Confirm-on-switch remains out (personal tool).
+- Achieve live-edit of the named view remains an intentional divergence.

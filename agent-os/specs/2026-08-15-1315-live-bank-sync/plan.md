@@ -1,7 +1,11 @@
 # Live bank sync
 
-**Status: active**
+**Status: frozen / complete** (2026-08-25)
 Spec folder: `agent-os/specs/2026-08-15-1315-live-bank-sync/`
+
+This is the as-built record of the **SimpleFIN** feed. Teller and Plaid were abandoned
+before the feed shipped. Available-to-spend, Capital One pending scrape, and Chase
+pending scrape are later specs built on this one. Further change opens a new delta-spec.
 
 > Shaped as `2026-08-15-1315-teller-bank-sync` against Teller. Teller withdrew its API in
 > early July 2026, before any code was written. The folder was renamed to a vendor-neutral
@@ -256,27 +260,38 @@ entries are per-connection problems that must surface without failing the whole 
 - Amazon, PayPal, Coinbase.
 - Any scheduled or background refresh.
 
-## Acceptance criteria
+## Acceptance criteria (as built — SimpleFIN)
 
-- [ ] Chase and Capital One enroll through Plaid Link and produce a stored Item.
-- [ ] Each Plaid account is linked to its existing `finance_accounts` row by confirmation,
-      pre-matched on mask. No duplicate accounts appear in the register.
-- [ ] A refresh pulls transactions and a balance; the **Chase** headline balance matches
-      what Chase's own app shows at that moment.
-- [ ] The Capital One card balance is within a day and its age is visible (D7b), not
-      presented as live.
-- [ ] The Capital One card's headline balance is **negative** (owed), not a positive asset.
-- [ ] Re-running a refresh inserts nothing new.
-- [ ] Importing a Chase statement CSV that overlaps already-synced dates inserts nothing new.
-- [ ] A Chase pending transaction that posts ends up as exactly one posted row, not two,
-      resolved via `pending_transaction_id`.
-- [ ] Pending rows are visibly distinct in the register.
-- [ ] A `modified` delta does not overwrite user-owned `category` or `notes` on a posted row.
-- [ ] Newly synced rows are classified without pressing Reclassify.
-- [ ] A second user cannot read, refresh, relink, or delete the first user's Item.
-- [ ] An `ITEM_LOGIN_REQUIRED` Item surfaces "reconnect", not "Something went wrong."
-- [ ] No more than 2 Production Items have been consumed.
-- [ ] `npm run smoke` passes; `/finances`, `/finances/register`, `/settings` all render.
+Plaid Link, Production Items, and `pending_transaction_id` were abandoned with the vendor
+switch (change 16). The criteria below are the SimpleFIN contract that shipped.
+
+- [x] Chase and Capital One enroll through one SimpleFIN setup-token paste. They link to
+      existing `finance_accounts` rows; they do not create duplicates.
+- [x] Each SimpleFIN account is linked by confirmation, pre-matched on trailing last-4.
+- [x] A refresh re-reads SimpleFIN's current 45-day window and a `balance-date` snapshot.
+      There is no forced refresh (D5c); the UI must not imply the button makes data appear.
+- [x] The Capital One card headline is **negative** (owed) and its age is the provider's
+      `balance-date`, not the request time.
+- [x] Re-running a refresh inserts nothing new.
+- [x] Importing a statement CSV that overlaps already-synced dates inserts nothing new
+      (tolerant live-feed match in both directions).
+- [x] Stored SimpleFIN pending absent from the window is deleted. Pending rows are
+      excluded from cross-source comparison so a posted replacement is not skipped. There
+      is no `pending_transaction_id`.
+- [x] Pending rows are visibly distinct in the register (Pending badge in the Posted
+      column; unweighted amount).
+- [x] An update of a live row does not overwrite user-owned `category` or `notes`.
+- [x] Newly synced rows are classified without pressing Reclassify.
+- [x] A second user cannot read, refresh, relink, or delete the first user's connection.
+      `listConnections` / `listLinks` are in `crossUserReads.integration.test.ts`.
+- [x] 403 on `/accounts` surfaces reconnect; 402 surfaces a lapsed subscription.
+- [x] First real sync against the live file inserted 16 genuinely new rows; the rest
+      already existed from statements.
+- [x] `npm run smoke` passes; `/finances`, `/finances/register`, `/settings` all render.
+
+Capital One pending is not on the SimpleFIN feed (D5a). That gap is
+`2026-08-16-1556-capitalone-pending-scrape`. Chase pending lag is
+`2026-08-18-1645-chase-pending-scrape`.
 
 ## Changes from original plan
 
@@ -301,6 +316,7 @@ entries are per-connection problems that must surface without failing the whole 
 | 17  | **The CSP concessions are reverted.** `frame-src` removed, `connect-src` back to `'self'`, and the security-hardening spec is no longer superseded on that point.                                                                                                                    | SimpleFIN needs no browser widget — the user pastes a setup token and the server does the rest. The one change in this spec that enlarged the attack surface is gone, which is an argument for the provider independent of cost.                                                                                                                                                                                                           |
 | 18  | **The sign convention inverted back.** SimpleFIN reports positive-is-a-deposit, matching the register, so amounts are stored unmodified where Plaid's had to be negated.                                                                                                             | The highest-risk line in the switch: carrying the old negation forward would invert every amount while looking entirely plausible. Asserted in both directions, and the previous provider's requirement is named in the comment so the absence reads as deliberate.                                                                                                                                                                        |
 | 19  | **PenFed is supported by SimpleFIN**, unlike the previous providers. Noted as a follow-up, not acted on.                                                                                                                                                                             | `2026-08-14-2001-external-transfer-provenance` classifies PenFed as `external_transfer` _because_ it was unimportable — "PenFed is still unimported". If it can now be synced, that frozen decision's premise no longer holds and deserves its own delta-spec.                                                                                                                                                                             |
+| 20  | Freeze rewrote the still-Plaid acceptance list to the SimpleFIN contract that actually shipped, and marked Task 2b Production abandoned.                                                                                                                                             | The decisions and code had already switched (change 16); the leftover **Status: active** and unchecked Plaid criteria were why this folder looked unfinished.                                                                                                                                                                                                                                                                              |
 
 ---
 
@@ -333,23 +349,12 @@ Two traps worth keeping, since both cost a run: a custom-user config needs `vers
 credentials), and the first `/transactions/sync` can return empty with `has_more: false`
 while Plaid is still generating data — so the poll must loop on row count, not `has_more`.
 
-### 2b. Production — outstanding
+### 2b. Production — abandoned with the vendor switch
 
-**Dashboard prerequisite, discovered on first Production attempt.** `/link/token/create`
-fails with `INVALID_LINK_CUSTOMIZATION` until at least one **Data Transparency Messaging**
-use case is selected and _published_ at
-<https://dashboard.plaid.com/link/data-transparency-v5>. It is Plaid's 1033-compliance
-consent screen, mandatory for US/Canada Production since 2024-10-31, enforced only in
-Production — which is why Sandbox never surfaced it. There is no code-side alternative;
-`link_customization_name` cannot supply it. Selecting without clicking **Publish changes**
-leaves the identical error, so that is the step to check first. No Item is consumed by the
-failure: it happens before enrollment.
-
-One Production Item against Chase, then Capital One. Confirm the real institutions behave as
-Sandbox did, and specifically that a Chase pending charge posts with a populated
-`pending_transaction_id`.
-
-**Stop and reassess if an institution fails.**
+Plaid Production enrollment never happened. Change 16 replaced Plaid with SimpleFIN;
+setup-token paste against the live Chase and Capital One accounts is the production proof
+instead. The Data Transparency Messaging / `INVALID_LINK_CUSTOMIZATION` note is kept only
+as history of why Plaid Production never started.
 
 ## Task 3: Schema
 
@@ -439,36 +444,40 @@ same on every row.
 
 ## Task 11: Verify, freeze spec, update roadmap
 
-- Run the acceptance criteria against real Chase and Capital One data.
-- `npm run test:unit`, `npm run test:integration` (confirm no Postgres skip warning),
-  `npm run typecheck`, `npm run lint`, `npm run build`, then **`npm run smoke`** with the dev
-  server up — Tasks 9 and 10 touch `src/app/**`.
-- Deploy to `master` and confirm on the iPhone.
-- Update `plan.md` / `shape.md` for as-built drift; complete **Changes from original plan**.
-- Mark **Status: frozen / complete**; move leftovers to Follow-ups.
-- Update `agent-os/product/roadmap.md` § Financial planning — this closes the deferred
-  aggregator item and leaves Envelopes as **Next**.
+Done 2026-08-25. The SimpleFIN feed had already been in daily use (dashboard available,
+Cap One scrape, Chase scrape). This freeze closes the leftover **Status: active** and
+rewrites the still-Plaid acceptance list to the as-built contract.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- **PenFed via SimpleFIN** — `2026-08-14-2001-external-transfer-provenance` classified
+  PenFed as `external_transfer` because it was unimportable. That premise no longer holds
+  if it can be synced; that is its own delta.
+- **Plaid as a metered fallback** if SimpleFIN staleness is unacceptable. The OAuth
+  registration wait is the same whenever it starts.
+- Available-to-spend shipped as `2026-08-16-1338-finances-dashboard-available`.
+- Cap One pending scrape shipped as `2026-08-16-1556-capitalone-pending-scrape`.
+- Chase pending scrape shipped as `2026-08-18-1645-chase-pending-scrape`.
 
 ---
 
-> **Standing rule while this spec is active:** material changes to requirements, design, or
-> scope — including feedback on what was actually built — go into `plan.md` / `shape.md`
-> plus a row in **Changes from original plan**. Skip pure implementation detail.
+Further change opens a new delta-spec. Do not reopen this folder.
 
 ## Verification
 
-Automated gates cannot prove this one works. The whole feature is an outbound call to a
-third party plus a browser widget, and the test suite evaluates neither.
+Automated gates cannot prove an outbound bank feed. What ran:
 
-1. **Pure logic** — `npm run test:unit`. `mapping.ts` carries the real reasoning (sign
-   inversion, cents, pending resolution, the modified-row rule) and gets real Plaid payloads
-   as fixtures.
-2. **Database** — `npm run test:integration` with Postgres up. Watch for the skip warning.
-   Cross-user battery on every new mutation.
-3. **Live** — enroll both banks, refresh, compare the headline balance against the Chase and
-   Capital One apps side by side. Refresh twice; the second must insert nothing.
-4. **Overlap** — import a Chase statement CSV covering already-synced dates. Must insert
-   nothing.
-5. **Pending** — let a real Chase pending charge post over a day or two; confirm one row,
-   not two. Capital One will show none, by D5a.
+1. **Pure logic** — `npm run test:unit`. `src/lib/banksync/mapping.ts` stores SimpleFIN
+   amounts unmodified (the Plaid negation is named in the comment so its absence is
+   deliberate). Pending-excluded cross-source comparison has a tripwire.
+2. **Database** — integration tests with Postgres up, including the cross-user battery on
+   connections and links.
+3. **Live** — first real sync against two live accounts: 16 genuine inserts, no
+   duplicates, nothing missed (the unanchored design would have inserted 217). Refresh
+   twice inserts nothing.
+4. **Overlap** — statement re-import of already-synced dates inserts nothing (tolerant
+   match in both directions).
+5. **Pending** — SimpleFIN pending is a replaceable set; Cap One supplies none, so that
+   institution's pending is the scrape spec. Chase pending that SimpleFIN lags is the
+   later Chase scrape.
 6. **Routes** — `npm run smoke` against a running dev server.

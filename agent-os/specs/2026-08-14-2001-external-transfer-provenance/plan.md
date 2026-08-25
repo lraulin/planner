@@ -1,7 +1,10 @@
 # External-transfer provenance: PayPal enrichment + Coinbase import
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-25)
 Spec folder: `agent-os/specs/2026-08-14-2001-external-transfer-provenance/`
+
+This is the as-built record. PayPal is enrichment, Coinbase is a provenance account, and
+Insights net mode states the residual identity. Further change opens a new delta-spec.
 
 ## Spec relationships
 
@@ -75,21 +78,27 @@ only). Rewriting the Recharts charts. The June 2025 Capital One reprint gap.
 
 ## Acceptance criteria
 
-- [ ] Insights net mode shows external transfers as a distinct series; the subtitle states
+- [x] Insights net mode shows external transfers as a distinct series; the subtitle states
       the identity rather than claiming the two series "should agree".
-- [ ] Over Sep 2024 – Jul 2026 the residual is under ~$200, and the page shows it.
-- [ ] The 47 `PAYPAL TO LEE RAULIN` withdrawals classify as `spend` (−$3,564.75 all-time;
+- [x] Over Sep 2024 – Jul 2026 the residual is under ~$200, and the page shows it.
+- [x] The 47 `PAYPAL TO LEE RAULIN` withdrawals classify as `spend` (−$3,564.75 all-time;
       −$1,018.26 within statement coverage), not `external_transfer`.
-- [ ] `PP*SPOTIFY*<hash>` collapses to one merchant; likewise the `PADDLE.NET` variants.
+- [x] `PP*SPOTIFY*<hash>` collapses to one merchant; likewise the `PADDLE.NET` variants.
       Spotify stops appearing as 14 merchants.
-- [ ] Both $2,000 deposits are attributed to Dennis Raulin. The Feb/Mar 2024 pair is
+- [x] Both $2,000 deposits are attributed to Dennis Raulin. The Feb/Mar 2024 pair is
       reported as unresolved with a named reason, not silently bucketed.
-- [ ] Coinbase imports 95 rows; net BTC reads 0.00000000; the 3 withdrawals pair with the
+- [x] Coinbase imports 95 rows; net BTC reads 0.00000000; the 3 withdrawals pair with the
       checking deposits by `transfer_group_id`.
-- [ ] Re-running any import inserts nothing new (insert-or-skip holds).
-- [ ] Second user sees none of it — cross-user integration test on every new query/mutation.
-- [ ] `npm run test:unit` (with Postgres up — check for the skip warning), typecheck, lint,
+- [x] Re-running any import inserts nothing new (insert-or-skip holds).
+- [x] Second user sees none of it — cross-user integration test on every new query/mutation.
+- [x] `npm run test:unit` (with Postgres up — check for the skip warning), typecheck, lint,
       and `npm run smoke` after any `src/app/**` change.
+
+Verified 2026-08-14/15: all 25 PayPal statements (588 unique ids, both $2,000 receipts from
+Dennis Raulin, 32 checking-funded payments totalling −$1,018.26); Coinbase CSV 95 rows,
+net BTC 0.00000000, three withdrawals sharing `transfer_group_id` with checking; File ▸
+Import names Coinbase; register shows Coinbase $0.00. `listPaymentResolutions` is in the
+cross-user sweep.
 
 ## Changes from original plan
 
@@ -184,15 +193,15 @@ gap. Regenerate `docs/agent-api.md`. Cross-user integration test.
 
 ## Task 8: Verify, freeze spec, update roadmap
 
-Import the real files, then confirm on the page and against the DB:
+Done. Real PayPal zips and Coinbase CSV imported; freeze delayed until 2026-08-25.
 
-- PayPal: `~/Downloads/statement-{2024,2025,2026}.zip` (25 PDFs)
-- Coinbase: `~/Downloads/0b7043a7-…__csv.csv`
+## Follow-ups (new work — not amendments to this frozen spec)
 
-Freeze both docs; roadmap § Financial planning gains a line under the shipped-imports list
-(envelopes remain **Next**). Follow-ups as new work: **PenFed import** — the last
-unattributed source, and the reason 77 Coinbase buys still come from nowhere; **PayPal
-Jan–Jun 2024** to resolve the $11,625; historical BTC market-value marks.
+- **PenFed import** — the last unattributed source, and the reason 77 Coinbase buys still
+  come from nowhere. SimpleFIN later listed PenFed as supported
+  (`2026-08-15-1315-live-bank-sync` change 19); that is its own delta.
+- **PayPal Jan–Jun 2024** to resolve the $11,625.
+- Historical BTC market-value marks.
 
 ## Verification
 
@@ -220,6 +229,4 @@ Jan–Jun 2024** to resolve the $11,625; historical BTC market-value marks.
 
 ---
 
-While this spec is **active**, when we make a material change to requirements, design, or
-scope, update the relevant sections and append to **Changes from original plan**. Skip pure
-implementation details. Freeze when verified.
+Further change opens a new delta-spec. Do not reopen this folder.

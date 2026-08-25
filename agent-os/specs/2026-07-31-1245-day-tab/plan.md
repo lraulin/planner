@@ -1,6 +1,12 @@
 # The Day tab — Franklin Covey daily list, master-list integration, and journal
 
-**Status: active** (2026-07-31)
+**Status: frozen / complete** (2026-08-25)
+
+This document is the as-built record of **what was built and why**. Later work relocated
+the Day surface into Schedule (`/schedule/day`, `/schedule/week-plan`) in
+`2026-08-13-0747-module-pages` and reused the journal contract in
+`2026-08-12-2145-notes-journal-presentation`. Those are later specs; they do not reopen
+this one.
 
 ## Context
 
@@ -150,3 +156,8 @@ Screenshots: `.artifacts/planner-shots/day-populated.png`, `day-forwarded-mark.p
 - **Agent API tools** for reading and writing the day list (`/api/agent/*`).
 - **GTD outcome / "done when" fields** on projects and tasks, prompted during weekly planning.
 - Drag directly from the Task Chooser tab onto a day (today it is the week grid or the form).
+
+Later specs (already frozen, not amendments here): Day folded into Schedule as
+`/schedule/day` and `/schedule/week-plan` (`2026-08-13-0747-module-pages`); Notes
+Journal presentation reused the `subject = "Journal"` contract
+(`2026-08-12-2145-notes-journal-presentation`).

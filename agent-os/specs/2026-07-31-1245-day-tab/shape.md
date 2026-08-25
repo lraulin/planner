@@ -1,6 +1,6 @@
 # Shaping — The Day tab
 
-**Status: active**
+**Status: frozen / complete** (2026-08-25)
 
 ## The ask
 

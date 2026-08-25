@@ -1,7 +1,12 @@
 # Fitness Tracker MVP — Strength Log + Outline Presence
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-25)
 Spec folder: `agent-os/specs/2026-07-30-1240-fitness-strength-log/`
+
+This document is the as-built record of the strength-log MVP. Later deltas extend it
+(timed isometrics, exercise groups, rest-done banner) or supersede the outline
+task ↔ exercise link (`2026-08-17-1402-shelve-task-exercise-link`). Do not reopen this
+folder for those.
 
 ## Context
 
@@ -210,13 +215,13 @@ Patterns to mirror: Notes tab (own domain + `TabStrip`), detail drawers, `Confir
 
 Create `agent-os/specs/2026-07-30-1240-fitness-strength-log/` with:
 
-- `plan.md` — this plan (**Status: active**), empty **Changes from original plan**
+- `plan.md` — this plan (now **Status: frozen / complete**)
 - `shape.md` — scope, decisions, product alignment, out of scope
 - `standards.md` — testing, migrations, drawer/ux, response-format if any agent API later (likely N/A for MVP)
 - `references.md` — notes module, task_details pattern, roadmap fitness section, goal metrics contrast
 - `visuals/` — none for now (no reference app)
 
-While the spec is **active**, material requirement/design/scope changes update this folder and **Changes from original plan**.
+Done. Further change opens a new delta-spec.
 
 ### Task 2: Schema + migration
 
@@ -261,9 +266,10 @@ Tests:
 
 ### Task 7: Verify, freeze, roadmap
 
-- Manual smoke: log a multi-lift session; link Bench task under a goal; cancel task; confirm history still in Fitness; delete session only with confirm
-- Update spec to as-built; freeze when verified
-- Roadmap: mark Fitness short-term MVP delivered (or partial if we ship without polish)
+Done. Manual smoke, tests, and roadmap MVP line were already in place; this freeze
+closes the leftover **Status: active**. The outline task ↔ exercise link shipped here
+and was later removed by `2026-08-17-1402-shelve-task-exercise-link` — this file stays
+the record of what the MVP built.
 
 ---
 
@@ -290,12 +296,10 @@ Tests:
 
 ---
 
-## Ready for execution
+Later specs (not amendments to this frozen document):
 
-When approved:
-
-1. Task 1 saves the agent-os spec folder (**Status: active**).
-2. Implementation proceeds Tasks 2–6; keep the active spec current for material refinements.
-3. Task 7 freezes the spec and updates the roadmap.
-
-**Suggested first code step after Task 1:** schema + `src/lib/fitness` mutations with the cascade/set-null integration tests that encode the history invariant — those tests are the product requirement in executable form.
+- `2026-08-17-1402-shelve-task-exercise-link` — removed the unused outline link
+- `2026-08-17-1238-workout-exercise-notes` — surfaced per-exercise session notes
+- `2026-08-20-1115-timed-isometric-exercises` — `measure` + `duration_seconds`
+- `2026-08-20-1233-exercise-groups` — supersets / circuits
+- `2026-08-20-1501-rest-timer-notification` — rest-done OS banner

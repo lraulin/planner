@@ -1,6 +1,6 @@
 # References for Capital One pending scrape
 
-**Status: active**
+**Status: frozen / complete** (2026-08-25)
 
 ## Governing specs
 

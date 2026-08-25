@@ -1,7 +1,10 @@
 # Finances insights — interactive reports
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-25)
 Spec folder: `agent-os/specs/2026-08-13-2121-insights-interactive-reports/`
+
+This is the as-built record. Interactive reports sit on the classified history the
+2026-08-12 insights dashboard already owned. Further change opens a new delta-spec.
 
 ## Spec relationships
 
@@ -41,21 +44,25 @@ It is a visualization delta, not a data-model spec. Roadmap § Financial plannin
 
 ## Acceptance criteria
 
-- [ ] Clicking a category bar, payee bar, cash-flow bucket, trend segment, Sankey node/link, or account in the cash-vs-debt panel updates the on-page transaction list to exactly the rows that produced that figure, in the current window and filters.
-- [ ] Account / category / merchant multi-filters recompute **every** panel from one filtered row set. Empty selection means all.
-- [ ] Internal transfers stay out of spend, income, Sankey, trends, and payees under every filter and drill. Refunds still net off the category they returned to.
-- [ ] Window presets include 3 months, QTD, and YTD, computed from local today. Existing 6m / 12m / 24m / all and the month vs pay-period axis still work, including the trailing-12 overlay (still computed from the whole history, then sliced).
-- [ ] Spending trends show the top categories (+ Other) as stacked bars over the current axis, with a grouped toggle. Click a segment drills. A dashed red line marks typical income for one bucket (the same monthly figure as the tile; restated per paycheck on the pay-period axis). Zero income hides the line.
-- [ ] Top payees is a ranked bar list (same encoding as "Where it went"), largest first, click drills.
-- [ ] Sankey shows income sources → Spent/Kept (or From savings) → categories for the window; hover gives amount and share; click drills. Thickness ∝ amount.
-- [ ] Cash-vs-debt shows asset and card-debt series (or bars + overlay) for imported accounts, a debt-to-asset percentage, and per-account contribution. Copy still says this is not net worth.
-- [ ] Existing panels remain: stat tiles, cash flow (in-out / net / bills-vs-rest + level bills), ranked categories, baseline vs one-off, recurring, one-off review, carrying cost, coverage gap, Reclassify.
-- [ ] Ranked category/payee lists stay one hue. Stacked trends and Sankey use only the new `--chart-cat-*` tokens.
-- [ ] No schema migration. Classification still does not change any account's `sum(amount)`.
-- [ ] A second user cannot read the first user's rows through any new query. New queries registered in `crossUserReads.integration.test.ts`.
-- [ ] Pure analytics (filter, drill, trends, payees, Sankey aggregation, assets-vs-debt) live in `src/lib/finances/**` with `*.test.ts` beside them. No React component tests.
-- [ ] Charts have hover **and** tap tooltips. Filter controls are 44px on compact.
-- [ ] `npm run test:unit` passes. After any query change, integration tests actually ran (no skip warning). After touching `src/app/**`, `npm run smoke` against the running dev server.
+- [x] Clicking a category bar, payee bar, cash-flow bucket, trend segment, Sankey node/link, or account in the cash-vs-debt panel updates the on-page transaction list to exactly the rows that produced that figure, in the current window and filters.
+- [x] Account / category / merchant multi-filters recompute **every** panel from one filtered row set. Empty selection means all.
+- [x] Internal transfers stay out of spend, income, Sankey, trends, and payees under every filter and drill. Refunds still net off the category they returned to.
+- [x] Window presets include 3 months, QTD, and YTD, computed from local today. Existing 6m / 12m / 24m / all and the month vs pay-period axis still work, including the trailing-12 overlay (still computed from the whole history, then sliced).
+- [x] Spending trends show the top categories (+ Other) as stacked bars over the current axis, with a grouped toggle. Click a segment drills. A dashed red line marks typical income for one bucket (the same monthly figure as the tile; restated per paycheck on the pay-period axis). Zero income hides the line.
+- [x] Top payees is a ranked bar list (same encoding as "Where it went"), largest first, click drills.
+- [x] Sankey shows income sources → Spent/Kept (or From savings) → categories for the window; hover gives amount and share; click drills. Thickness ∝ amount.
+- [x] Cash-vs-debt shows asset and card-debt series (or bars + overlay) for imported accounts, a debt-to-asset percentage, and per-account contribution. Copy still says this is not net worth.
+- [x] Existing panels remain: stat tiles, cash flow (in-out / net / bills-vs-rest + level bills), ranked categories, baseline vs one-off, recurring, one-off review, carrying cost, coverage gap, Reclassify.
+- [x] Ranked category/payee lists stay one hue. Stacked trends and Sankey use only the new `--chart-cat-*` tokens.
+- [x] No schema migration. Classification still does not change any account's `sum(amount)`.
+- [x] A second user cannot read the first user's rows through any new query. Drill/filter reuse `loadInsightsRows`, already registered in `crossUserReads.integration.test.ts`.
+- [x] Pure analytics (filter, drill, trends, payees, Sankey aggregation, assets-vs-debt) live in `src/lib/finances/**` with `*.test.ts` beside them. No React component tests.
+- [x] Charts have hover **and** tap tooltips. Filter controls are 44px on compact (`min-h-tap`).
+- [x] `npm run test:unit` passes. After any query change, integration tests actually ran (no skip warning). After touching `src/app/**`, `npm run smoke` against the running dev server.
+
+Verified 2026-08-13 against the live 3-year import: Groceries drilled to 43 rows equalling
+the bar; transfers stayed out of spend; smoke passed. Typical-income overlay on spending
+trends landed in a follow-up (change 5).
 
 ## Changes from original plan
 
@@ -95,7 +102,14 @@ Material refinements during implementation (requirements, design, scope). Omit p
 7. **Top payees** — ranked merchant bars.
 8. **Sankey cash flow**.
 9. **Richer cash vs card debt**.
-10. **Verify, freeze spec, update roadmap.**
+10. **Verify, freeze spec, update roadmap.** Done 2026-08-25 — the feature shipped
+    2026-08-13; this freeze closes the leftover **Status: active**.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- Named saved reports / shareable reports.
+- True net worth, holdings, projected cash flow — still out, as shaped.
+- Rewriting the original SVG charts onto Recharts.
 
 ## Code map (intended)
 
@@ -108,4 +122,4 @@ Material refinements during implementation (requirements, design, scope). Omit p
 | Panels                         | `src/components/finances/insights/`                               |
 | Chart tokens                   | `src/app/globals.css`                                             |
 
-While this spec is **active**, when we make a material change to requirements, design, or scope (including from feedback on what was implemented), update the relevant sections and append to **Changes from original plan**. Skip pure implementation details. Freeze when verified.
+Further change opens a new delta-spec. Do not reopen this folder.
