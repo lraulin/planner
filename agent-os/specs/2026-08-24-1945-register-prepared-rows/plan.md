@@ -36,10 +36,11 @@ Actual Budget’s register loads a compact index and fetches row details in bloc
 
 ## Changes from original plan
 
-| #   | Change                                                                                                            | Why                                                                                                                                                                                                           |
-| --- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Carry whole-ledger Category assignability as compact index metadata and apply it to every lazy row and deep link. | A 100-row block cannot decide whether a transfer's counterpart is on- or off-budget. Without the index fact, the backlog excluded on-budget card payments while the cell and drawer still offered Categorize. |
-| 2   | Register reload no longer lists **Run rules** as a trigger.                                                       | `2026-08-24-1522-category-by-kind-and-history` retires Rules; imports, deletions, and edits remain.                                                                                                           |
+| #   | Change                                                                                                            | Why                                                                                                                                                                                                             |
+| --- | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Carry whole-ledger Category assignability as compact index metadata and apply it to every lazy row and deep link. | A 100-row block cannot decide whether a transfer's counterpart is on- or off-budget. Without the index fact, the backlog excluded on-budget card payments while the cell and drawer still offered Categorize.   |
+| 2   | Register reload no longer lists **Run rules** as a trigger.                                                       | `2026-08-24-1522-category-by-kind-and-history` retires Rules; imports, deletions, and edits remain.                                                                                                             |
+| 3   | Tag chips in the Register stay on one line (`nowrap` + truncate), and DataGrid cells clip overflow.               | Virtual rows are a fixed `--row-height`. `flex-wrap` on `#software-and-development` made the cell ~38px in a 28px row; `items-center` then painted that chip across the neighbours. Drawer tags may still wrap. |
 
 ## Task 1: Save spec documentation
 

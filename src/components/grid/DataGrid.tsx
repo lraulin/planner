@@ -1411,7 +1411,7 @@ const DataRow = memo(
               <div
                 key={column.id}
                 role="gridcell"
-                className={`flex min-w-0 items-center self-stretch ${alignClass(column.align)}`}
+                className={`flex min-w-0 items-center self-stretch overflow-hidden ${alignClass(column.align)}`}
               >
                 {column.render(row, columnCtx)}
               </div>

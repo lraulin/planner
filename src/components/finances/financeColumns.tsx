@@ -196,20 +196,28 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, RegisterTransactionRow>
     ...accessors("tags"),
     compact: "meta",
     compactText: (row) => (row.node.tags ?? []).map((tag) => `#${tag}`).join(" "),
-    render: (row, ctx) => (
-      <span className="flex min-w-0 flex-wrap gap-1">
-        {(row.node.tags ?? []).map((tag) => (
-          <a
-            key={tag}
-            href={`/finances/register?view=tag&tag=${encodeURIComponent(tag)}`}
-            className="rounded px-1.5 py-px text-[0.75rem] text-ink"
-            style={{ backgroundColor: ctx.tagColors[tag] ?? "var(--surface-raised)" }}
-          >
-            #{tag}
-          </a>
-        ))}
-      </span>
-    ),
+    render: (row, ctx) => {
+      const tags = row.node.tags ?? [];
+      if (tags.length === 0) return null;
+      return (
+        <span
+          className="flex min-w-0 gap-1 overflow-hidden"
+          title={tags.map((tag) => `#${tag}`).join(" ")}
+        >
+          {tags.map((tag) => (
+            <a
+              key={tag}
+              href={`/finances/register?view=tag&tag=${encodeURIComponent(tag)}`}
+              title={`#${tag}`}
+              className="min-w-0 truncate whitespace-nowrap rounded px-1.5 py-px text-[0.75rem] text-ink"
+              style={{ backgroundColor: ctx.tagColors[tag] ?? "var(--surface-raised)" }}
+            >
+              #{tag}
+            </a>
+          ))}
+        </span>
+      );
+    },
   },
   {
     id: "flow",
