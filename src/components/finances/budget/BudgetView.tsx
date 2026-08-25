@@ -41,7 +41,7 @@ import {
   templateCarryIn,
   type EnvelopeApplyInput,
 } from "@/lib/finances/budget/templates/apply";
-import { planAssign } from "@/lib/finances/budget/assign/plan";
+import { needsAssignPreview, planAssign } from "@/lib/finances/budget/assign/plan";
 import {
   assignBillsFromRows,
   assignEnvelopeFromRow,
@@ -290,6 +290,20 @@ export function BudgetView({
     [data.month, router],
   );
 
+  /** Preview when the split or a shortfall needs a look; otherwise write immediately. */
+  const startAssign = useCallback(
+    (result: AssignResult, categoryIds?: readonly string[]) => {
+      if (!needsAssignPreview(result)) {
+        setAssigning(false);
+        commitAssign(result.option, categoryIds);
+        return;
+      }
+      setPreviewScope(categoryIds);
+      setPreview(result);
+    },
+    [commitAssign],
+  );
+
   function goToMonth(key: string) {
     const next = new URLSearchParams(params.toString());
     next.set("month", monthParamOf(key));
@@ -355,8 +369,7 @@ export function BudgetView({
         title: empty ? "Nothing to change for this option" : undefined,
         run: () => {
           if (!planned) return;
-          setPreviewScope(bannerScope);
-          setPreview(planned.result);
+          startAssign(planned.result, bannerScope);
         },
       };
     });
@@ -384,7 +397,7 @@ export function BudgetView({
       },
       ...assignCommands,
     ];
-  }, [assignPlans, bannerScope, review.length]);
+  }, [assignPlans, bannerScope, review.length, startAssign]);
 
   useRegisterCommands(commands);
 
@@ -516,8 +529,7 @@ export function BudgetView({
               history: assignInputs.history,
               categoryIds: [row.id],
             });
-            setPreviewScope([row.id]);
-            setPreview(result);
+            startAssign(result, [row.id]);
           },
         })),
       },
@@ -868,8 +880,7 @@ export function BudgetView({
           onPickOption={(option) => {
             const planned = assignPlans.find((entry) => entry.option === option);
             if (!planned) return;
-            setPreviewScope(bannerScope);
-            setPreview(planned.result);
+            startAssign(planned.result, bannerScope);
           }}
           onManual={(categoryId, amountCents) => {
             const target = rows.find((row) => row.id === categoryId);

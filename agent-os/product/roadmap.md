@@ -993,10 +993,11 @@ period)` so money already spent stops being held twice and only going over bites
   ✅ **YNAB-shaped Assign shipped 2026-08-24.**
   `agent-os/specs/2026-08-24-1311-budget-assign-options/`. Apply / Overwrite / Copy last
   month / 3-month average / Set all to zero are gone. Ready to Assign has Assign (Auto:
-  eight options, Manually: amount + To), always previewed, never consuming more than you
-  have. Underfunded reads templates + bill cadence + overspend. Right-click Assign targets
-  one envelope. The shortfall is the preview (partial / not funded), not a negative
-  headline.
+  eight options, Manually: amount + To), never consuming more than you have. A shortfall
+  or multi-envelope split still previews; a single fully funded envelope writes immediately
+  (`agent-os/specs/2026-08-25-0831-assign-skip-full-single/`). Underfunded reads templates +
+  bill cadence + overspend. Right-click Assign targets one envelope. The shortfall is the
+  preview (partial / not funded), not a negative headline.
   ✅ **Category by kind + payee auto-category shipped 2026-08-24.**
   `agent-os/specs/2026-08-24-1522-category-by-kind-and-history/`. Register Category is
   grouped Income / Bills / Regular spending / Savings, each with New {type}…. A claim files

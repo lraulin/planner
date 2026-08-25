@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { BillSnapshot } from "../templates/schedule";
 import type { Template } from "../templates/types";
-import { planAssign, neededAssigned } from "./plan";
+import { planAssign, neededAssigned, needsAssignPreview } from "./plan";
 import type { AssignEnvelope, AssignHistoryMonth } from "./types";
 
 const MONTH = "2026-08-01";
@@ -370,5 +370,50 @@ describe("return-money options", () => {
     const result = run("reset-assigned", [food]);
     expect(result.lines[0]?.toAssignedCents).toBe(0);
     expect(result.remainingRtaCents).toBe(1_000_000 + 12_000);
+  });
+});
+
+describe("needsAssignPreview", () => {
+  it("skips confirmation when one envelope is fully funded", () => {
+    const result = run("underfunded", [envelope()], { readyToAssignCents: 50_000 });
+    expect(result.lines).toEqual([
+      expect.objectContaining({
+        categoryId: "food",
+        status: "full",
+        deltaCents: 50_000,
+      }),
+    ]);
+    expect(needsAssignPreview(result)).toBe(false);
+  });
+
+  it("keeps confirmation when Ready to Assign cannot cover the ask", () => {
+    const result = run("underfunded", [envelope()], { readyToAssignCents: 10_000 });
+    expect(result.shortfall).toBe(true);
+    expect(result.lines[0]?.status).toBe("partial");
+    expect(needsAssignPreview(result)).toBe(true);
+  });
+
+  it("keeps confirmation when more than one envelope would change", () => {
+    const result = run("underfunded", [bill(), envelope()], {
+      readyToAssignCents: 1_000_000,
+      bills: new Map([["rent", snapshot("rent", 210_000, "2026-08-01")]]),
+    });
+    expect(result.lines.length).toBeGreaterThan(1);
+    expect(result.shortfall).toBe(false);
+    expect(needsAssignPreview(result)).toBe(true);
+  });
+
+  it("keeps confirmation when the option returns money", () => {
+    const result = run("reduce-overfunding", [
+      envelope({ assignedCents: 80_000, templates: [simple(50_000)] }),
+    ]);
+    expect(result.lines[0]?.status).toBe("reduced");
+    expect(needsAssignPreview(result)).toBe(true);
+  });
+
+  it("keeps confirmation when there is nothing to write", () => {
+    const result = run("underfunded", [envelope({ assignedCents: 50_000 })]);
+    expect(result.allocations).toEqual([]);
+    expect(needsAssignPreview(result)).toBe(true);
   });
 });

@@ -70,5 +70,6 @@ narrowed by later deltas:
   needing an explicit skip. See `agent-os/specs/2026-08-23-2313-one-budget/` D2.
 - **Assign is YNAB-shaped, not Actual's Apply/Overwrite.** Template _math_ (simple / by /
   remainder / bill sinking) is still Actual's. The fill _gesture_ clamps to Ready to Assign,
-  always previews, and offers eight auto-assign options. Apply may no longer drive Ready to
+  previews a shortfall or a multi-envelope split (a single fully funded envelope writes
+  immediately), and offers eight auto-assign options. Apply may no longer drive Ready to
   Assign negative. See `agent-os/specs/2026-08-24-1311-budget-assign-options/`.

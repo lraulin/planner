@@ -433,6 +433,21 @@ function planUnderfunded(
   );
 }
 
+/**
+ * Confirmation exists to show a shortfall or a multi-envelope split.
+ * One envelope that can be fully funded is already the option the user picked —
+ * the Auto list showed the amount.
+ *
+ * Spec: `agent-os/specs/2026-08-25-0831-assign-skip-full-single/` (supersedes
+ * assign-options D6 for this case only).
+ */
+export function needsAssignPreview(result: AssignResult): boolean {
+  if (result.shortfall) return true;
+  if (result.allocations.length === 0) return true;
+  if (result.lines.length !== 1) return true;
+  return result.lines[0]?.status !== "full";
+}
+
 export function planAssign(params: PlanAssignParams): AssignResult {
   assertCents(params.readyToAssignCents, "ready to assign");
   const participants = params.envelopes.filter((envelope) =>
