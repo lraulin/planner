@@ -662,8 +662,11 @@ export function DataGrid<TCtx, TRow = OutlineNode>({
   });
   const virtualItems = virtualizer.getVirtualItems();
 
+  const selectedIdRef = useRef(selectedId);
   useLayoutEffect(() => {
-    if (!virtualize || selectedId === null) return;
+    const selectionChanged = selectedIdRef.current !== selectedId;
+    selectedIdRef.current = selectedId;
+    if (!virtualize || selectedId === null || !selectionChanged) return;
     const index = displayRows.findIndex((row) => row.id === selectedId);
     if (index >= 0) virtualizer.scrollToIndex(index, { align: "auto" });
   }, [virtualize, selectedId, displayRows, virtualizer]);
