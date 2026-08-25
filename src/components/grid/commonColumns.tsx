@@ -560,7 +560,7 @@ export function costColumn(
     label,
     width: "6.5rem",
     align: "right",
-    filterKind: "text",
+    filterKind: "number",
     filterValue: (row) => formatMoney(value(row.node)) || null,
     sortValue: (row) => value(row.node),
     compact: "hidden",
@@ -576,7 +576,7 @@ export function importanceColumn(): ColumnDef<OutlineColumnCtx> {
     label: "Importance",
     width: "5rem",
     align: "right",
-    filterKind: "text",
+    filterKind: "number",
     filterValue: (row) =>
       row.node.importance === null ? null : String(row.node.importance),
     sortValue: (row) => row.node.importance,

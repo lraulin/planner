@@ -46,7 +46,7 @@ describe("matchesFilter — universal", () => {
    */
   it("hides every row under a cleared checklist", () => {
     expect(filterActive(NONE_FILTER)).toBe(true);
-    for (const kind of ["text", "enum", "priority", "date"] as const) {
+    for (const kind of ["text", "enum", "priority", "date", "number"] as const) {
       expect(matchesFilter("NS", NONE_FILTER, kind, TODAY)).toBe(false);
       expect(matchesFilter(null, NONE_FILTER, kind, TODAY)).toBe(false);
       expect(matchesFilter("", NONE_FILTER, kind, TODAY)).toBe(false);
@@ -223,6 +223,7 @@ describe("usesSetFilter", () => {
     expect(usesSetFilter("priority")).toBe(false);
     expect(usesSetFilter("date")).toBe(false);
     expect(usesSetFilter("text")).toBe(false);
+    expect(usesSetFilter("number")).toBe(false);
     expect(usesSetFilter(undefined)).toBe(false);
   });
 });
@@ -236,11 +237,19 @@ describe("presetOptions", () => {
 
     // Free text has no bands of its own, but "has a value at all" is still worth one click.
     expect(presetOptions("text").map((o) => o.id)).toEqual(["blanks", "nonblanks"]);
+    expect(presetOptions("number").map((o) => o.id)).toEqual(["blanks", "nonblanks"]);
     expect(presetOptions(undefined).map((o) => o.id)).toEqual(["blanks", "nonblanks"]);
   });
 
   it("never offers bands and the checklist on the same column", () => {
-    for (const kind of ["text", "priority", "date", "enum", undefined] as const) {
+    for (const kind of [
+      "text",
+      "priority",
+      "date",
+      "enum",
+      "number",
+      undefined,
+    ] as const) {
       expect(presetOptions(kind).length > 0).toBe(!usesSetFilter(kind));
     }
   });

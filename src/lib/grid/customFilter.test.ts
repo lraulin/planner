@@ -35,8 +35,8 @@ describe("operatorsForKind", () => {
     expect(en).toEqual(["eq", "neq", "blank", "nonblank"]);
   });
 
-  it("gives date and priority comparisons", () => {
-    for (const kind of ["date", "priority"] as const) {
+  it("gives date, priority, and number comparisons", () => {
+    for (const kind of ["date", "priority", "number"] as const) {
       const ids = operatorsForKind(kind).map((o) => o.id);
       expect(ids).toContain("gte");
       expect(ids).not.toContain("contains");
@@ -106,6 +106,46 @@ describe("matchesCondition — date and priority compares", () => {
     expect(matchesCondition("B", { op: "gte", value: "A" }, "priority")).toBe(true);
     expect(matchesCondition("A1", { op: "gt", value: "B" }, "priority")).toBe(false);
     expect(matchesCondition(null, { op: "gte", value: "A" }, "priority")).toBe(false);
+  });
+});
+
+describe("matchesCondition — number compares", () => {
+  /**
+   * Amount cells are stored as formatted dollars (`formatUsd`) so search still finds "$"
+   * and commas. The operators have to parse that back: string order puts "$9.99" after
+   * "$20.00", and a typed "100" would miss "$100.00".
+   */
+  it("compares formatted money by magnitude, not string order", () => {
+    expect(matchesCondition("$20.00", { op: "gt", value: "9.99" }, "number")).toBe(
+      true,
+    );
+    expect(matchesCondition("$9.99", { op: "gt", value: "10" }, "number")).toBe(false);
+    expect(matchesCondition("$1,234.56", { op: "gt", value: "1000" }, "number")).toBe(
+      true,
+    );
+    expect(matchesCondition("-$50.00", { op: "lt", value: "0" }, "number")).toBe(true);
+    expect(matchesCondition("($12.34)", { op: "lt", value: "0" }, "number")).toBe(true);
+  });
+
+  it("treats $100.00, 100, and 100.00 as the same amount", () => {
+    expect(matchesCondition("$100.00", { op: "eq", value: "100" }, "number")).toBe(
+      true,
+    );
+    expect(matchesCondition("$100.00", { op: "eq", value: "100.00" }, "number")).toBe(
+      true,
+    );
+    expect(matchesCondition("$100.00", { op: "neq", value: "99" }, "number")).toBe(
+      true,
+    );
+  });
+
+  it("fails closed on blanks and unparseable operands", () => {
+    expect(matchesCondition(null, { op: "gt", value: "0" }, "number")).toBe(false);
+    expect(matchesCondition("$10.00", { op: "gt", value: "" }, "number")).toBe(false);
+    expect(matchesCondition("$10.00", { op: "eq", value: "pending" }, "number")).toBe(
+      false,
+    );
+    expect(matchesCondition("pending", { op: "gt", value: "0" }, "number")).toBe(false);
   });
 });
 

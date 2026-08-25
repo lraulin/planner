@@ -280,6 +280,7 @@ export const billColumns: ColumnDef<BudgetColumnCtx, BudgetBillRow>[] = [
     label: "Amount",
     width: "7rem",
     align: "right",
+    filterKind: "number",
     filterValue: (row) => formatUsd(row.node.bill.expectedCents ?? 0),
     sortValue: (row) => row.node.bill.expectedCents ?? -1,
     compact: "meta",
@@ -337,6 +338,7 @@ export const billColumns: ColumnDef<BudgetColumnCtx, BudgetBillRow>[] = [
     label: "A year",
     width: "6rem",
     align: "right",
+    filterKind: "number",
     filterValue: (row) => formatUsd(annualCentsOf(row.node)),
     sortValue: (row) => annualCentsOf(row.node),
     render: (row) => (
@@ -350,6 +352,7 @@ export const billColumns: ColumnDef<BudgetColumnCtx, BudgetBillRow>[] = [
     label: "Monthly",
     width: "5.5rem",
     align: "right",
+    filterKind: "number",
     filterValue: (row) => formatUsd(Math.round(annualCentsOf(row.node) / 12)),
     sortValue: (row) => Math.round(annualCentsOf(row.node) / 12),
     render: (row) => (

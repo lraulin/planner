@@ -300,6 +300,9 @@ function GridFilterDialogBody({
                         <input
                           aria-label="Operand"
                           type={column?.filterKind === "date" ? "date" : "text"}
+                          inputMode={
+                            column?.filterKind === "number" ? "decimal" : undefined
+                          }
                           value={condition.value}
                           onChange={(event) =>
                             updateCondition(index, { value: event.target.value })
@@ -386,6 +389,7 @@ function defaultOpFor(byId: Map<string, ColumnMeta>, columnId: string): FilterOp
 function placeholderFor(kind: ColumnMeta["filterKind"]): string {
   if (kind === "priority") return "A1";
   if (kind === "date") return "YYYY-MM-DD";
+  if (kind === "number") return "0.00";
   return "value";
 }
 

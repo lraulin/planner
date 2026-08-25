@@ -98,7 +98,7 @@ export const amazonColumns: ColumnDef<AmazonColumnCtx, AmazonItemListRow>[] = [
     label: "Paid",
     width: "6.5rem",
     align: "right",
-    filterKind: "text",
+    filterKind: "number",
     filterValue: (row) =>
       row.node.itemPaidCents === null ? null : formatUsd(row.node.itemPaidCents),
     sortValue: (row) => row.node.itemPaidCents,
@@ -110,7 +110,7 @@ export const amazonColumns: ColumnDef<AmazonColumnCtx, AmazonItemListRow>[] = [
     label: "Unit price",
     width: "6.5rem",
     align: "right",
-    filterKind: "text",
+    filterKind: "number",
     filterValue: (row) =>
       row.node.unitPriceCents === null ? null : formatUsd(row.node.unitPriceCents),
     sortValue: (row) => row.node.unitPriceCents,
@@ -122,7 +122,7 @@ export const amazonColumns: ColumnDef<AmazonColumnCtx, AmazonItemListRow>[] = [
     label: "Discounts",
     width: "6.5rem",
     align: "right",
-    filterKind: "text",
+    filterKind: "number",
     filterValue: (row) =>
       row.node.discountsCents === null ? null : formatUsd(row.node.discountsCents),
     sortValue: (row) => row.node.discountsCents,

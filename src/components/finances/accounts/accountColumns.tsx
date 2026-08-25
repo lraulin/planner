@@ -136,6 +136,7 @@ export const accountColumns: ColumnDef<AccountColumnCtx, FinanceAccountRow>[] = 
     label: "Balance",
     width: "8rem",
     align: "right",
+    filterKind: "number",
     filterValue: (row) => formatUsd(row.node.balanceCents),
     sortValue: (row) => row.node.balanceCents,
     compact: "meta",

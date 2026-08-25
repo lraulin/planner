@@ -106,7 +106,7 @@ export const registerFields: Record<RegisterFieldId, RegisterField> = {
   },
   amount: {
     id: "amount",
-    filterKind: "text",
+    filterKind: "number",
     filterValue: (row) => formatUsd(row.amountCents),
     sortValue: (row) => row.amountCents,
   },
@@ -118,7 +118,7 @@ export const registerFields: Record<RegisterFieldId, RegisterField> = {
   },
   balance: {
     id: "balance",
-    filterKind: "text",
+    filterKind: "number",
     filterValue: (row) =>
       row.balanceAfterCents === null ? null : formatUsd(row.balanceAfterCents),
     sortValue: (row) => row.balanceAfterCents,

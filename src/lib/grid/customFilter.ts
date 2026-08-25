@@ -20,7 +20,7 @@ import {
  * Defined here rather than on `ColumnDef` because it is filter vocabulary, not
  * presentation — `components/grid/columns` re-exports it for the column definitions.
  */
-export type FilterKind = "text" | "priority" | "date" | "enum" | "tags";
+export type FilterKind = "text" | "priority" | "date" | "enum" | "tags" | "number";
 
 export type FilterJoin = "and" | "or";
 
@@ -150,7 +150,7 @@ const COMPARE_OPS: FilterOperator[] = [
 /** Operators legal for a column's filter kind. */
 export function operatorsForKind(kind: FilterKind | undefined): OperatorOption[] {
   const ops =
-    kind === "priority" || kind === "date"
+    kind === "priority" || kind === "date" || kind === "number"
       ? COMPARE_OPS
       : kind === "enum" || kind === "tags"
         ? ENUM_OPS
@@ -222,10 +222,14 @@ export function matchesCondition(
   }
 }
 
-function equals(cell: string, operand: string, _kind: FilterKind | undefined): boolean {
-  if (_kind === "tags") return cell === operand;
+function equals(cell: string, operand: string, kind: FilterKind | undefined): boolean {
+  if (kind === "tags") return cell === operand;
+  if (kind === "number") {
+    const left = parseFilterNumber(cell);
+    const right = parseFilterNumber(operand);
+    return left !== null && right !== null && left === right;
+  }
   // Case-fold so a typed "ns" matches "NS" on enum columns; accents still distinguish.
-  void _kind;
   return cell.localeCompare(operand, undefined, { sensitivity: "accent" }) === 0;
 }
 
@@ -247,8 +251,9 @@ function endsInsensitive(cell: string, operand: string): boolean {
 /**
  * Blank cells fail every comparison. Priority uses the grid's own ordering so A1 < A10 <
  * bare A < B — the same key the Pri column sorts on, or "greater than B1" would answer one
- * thing in the filter and another in the sort. Dates compare as ISO day strings; everything
- * else is locale string order.
+ * thing in the filter and another in the sort. Dates compare as ISO day strings; numbers
+ * parse the formatted cell (`$1,200.00`, `(12.34)`) back to a magnitude so Amount > 100
+ * means the dollars, not the string. Everything else is locale string order.
  */
 function compare(
   cell: string,
@@ -270,12 +275,40 @@ function compare(
     return applyCompare(cell, operand, op);
   }
 
+  if (kind === "number") {
+    const left = parseFilterNumber(cell);
+    const right = parseFilterNumber(operand);
+    if (left === null || right === null) return false;
+    return applyCompare(left, right, op);
+  }
+
   // Text / enum fallback: locale order with numeric awareness ("A2" < "A10").
   const order = cell.localeCompare(operand, undefined, {
     numeric: true,
     sensitivity: "base",
   });
   return applyCompare(order, 0, op);
+}
+
+/**
+ * Read a filter operand or formatted cell into a comparable magnitude.
+ *
+ * Accepts a plain number, a thousands-grouped display (`1,200.00`), a leading `$`, a
+ * leading `+`, and accounting negatives `(12.34)`. Returns null for blank or unparseable
+ * input so a comparison against "abc" fails closed rather than ranking a NaN.
+ */
+function parseFilterNumber(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (trimmed === "") return null;
+
+  const parenthesised = /^\((.*)\)$/.exec(trimmed);
+  const body = parenthesised ? parenthesised[1] : trimmed;
+  const cleaned = body.replace(/[$,\s]/g, "");
+  if (!/^[+-]?(\d+(\.\d*)?|\.\d+)$/.test(cleaned)) return null;
+
+  const value = Number(cleaned);
+  if (!Number.isFinite(value)) return null;
+  return parenthesised ? -Math.abs(value) : value;
 }
 
 function applyCompare(

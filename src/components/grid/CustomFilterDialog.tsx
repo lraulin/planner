@@ -192,6 +192,7 @@ function CustomFilterDialogBody({
                     ) : (
                       <input
                         type={useDateInput ? "date" : "text"}
+                        inputMode={kind === "number" ? "decimal" : undefined}
                         value={condition.value}
                         onChange={(event) =>
                           updateCondition(index, { value: event.target.value })
@@ -201,7 +202,9 @@ function CustomFilterDialogBody({
                             ? "A1"
                             : kind === "date"
                               ? "YYYY-MM-DD"
-                              : "value"
+                              : kind === "number"
+                                ? "0.00"
+                                : "value"
                         }
                         className={INPUT_CLASS}
                       />
