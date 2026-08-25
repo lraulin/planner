@@ -99,6 +99,15 @@ describe("toDateKey / fromDateKey", () => {
     const evening = new Date(2026, 7, 1, 20, 0, 0);
     expect(localDateKey(evening)).toBe("2026-08-01");
   });
+
+  it("does not treat an Eastern evening as tomorrow the way toDateKey of now does", () => {
+    // 9pm EDT is already 01:00Z the next day. Finance pages used toDateKey(new Date())
+    // for "today", so after ~8pm the budget month, upcoming bills, and Register year
+    // collapse all jumped a day. "Today" of an instant is localDateKey.
+    const evening = new Date(2026, 7, 25, 21, 0, 0);
+    expect(localDateKey(evening)).toBe("2026-08-25");
+    expect(toDateKey(evening)).toBe("2026-08-26");
+  });
 });
 
 describe("weekdayOfDateKey / floatingDateTime", () => {

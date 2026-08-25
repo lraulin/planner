@@ -13,7 +13,7 @@ import type { EnvelopeKind, EnvelopeStatus } from "@/db/schema";
 import { readSetting } from "@/lib/settings/queries";
 import { BUDGET_SCOPE } from "@/lib/settings/scopes";
 import { parseBudget, type BudgetSettings } from "@/lib/settings/finances";
-import { toDateKey } from "@/lib/schedule/geometry";
+import { localDateKey } from "@/lib/schedule/geometry";
 import { accountPoolCents } from "../accountPool";
 import type { FinanceExecutor } from "../dbExecutor";
 import { numericStringToCents } from "../money";
@@ -384,7 +384,7 @@ export async function loadBudget(
   requestedMonth: MonthKey | null,
   executor: FinanceExecutor = db,
 ): Promise<BudgetData> {
-  const todayKey = toDateKey(new Date());
+  const todayKey = localDateKey(new Date());
   const currentMonth = monthKeyOf(todayKey);
 
   const [stored, groups, categoryRows, accounts] = await Promise.all([

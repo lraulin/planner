@@ -8,7 +8,7 @@ import { collapsedYearGroupIds } from "@/lib/finances/grouping";
 import { parseRegisterQuery, prepareRegister } from "@/lib/finances/registerQuery";
 import { listBudgetEnvelopeOptions } from "@/lib/finances/budget/queries";
 import { listPayees } from "@/lib/finances/payees/queries";
-import { toDateKey } from "@/lib/schedule/geometry";
+import { localDateKey } from "@/lib/schedule/geometry";
 import { AppShell } from "@/components/shell/AppShell";
 import { FinancesView } from "@/components/finances/FinancesView";
 import { listFinanceTags } from "@/lib/finances/tags/queries";
@@ -26,7 +26,7 @@ export const dynamic = "force-dynamic";
  */
 export default async function FinancesRegisterPage() {
   const userId = await getCurrentUserId();
-  const todayKey = toDateKey(new Date());
+  const todayKey = localDateKey(new Date());
   const [
     transactions,
     accounts,

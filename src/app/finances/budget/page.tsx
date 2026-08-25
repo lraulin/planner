@@ -10,7 +10,7 @@ import {
   loadReviewCandidates,
 } from "@/lib/finances/dashboardQueries";
 import { listPayees } from "@/lib/finances/payees/queries";
-import { toDateKey } from "@/lib/schedule/geometry";
+import { localDateKey } from "@/lib/schedule/geometry";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +28,7 @@ export default async function FinancesBudgetPage({
 }) {
   const userId = await getCurrentUserId();
   const { month } = await searchParams;
-  const todayKey = toDateKey(new Date());
+  const todayKey = localDateKey(new Date());
   const [data, review, payees, forecast] = await Promise.all([
     loadBudget(userId, monthKeyFromParam(month ?? null)),
     loadReviewCandidates(userId),

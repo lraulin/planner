@@ -28,7 +28,7 @@ import {
   type EnvelopeStatus,
 } from "@/db/schema";
 import * as sortKeyLib from "@/lib/tree/sortKey";
-import { toDateKey } from "@/lib/schedule/geometry";
+import { localDateKey } from "@/lib/schedule/geometry";
 import { groupPageSection } from "./hierarchy";
 import { parseTemplates, type SimpleTemplate } from "./templates/types";
 
@@ -332,7 +332,7 @@ export async function applyCommitmentsCutover(
 
       const spendEnvelopeIdByOldId = new Map<string, string>();
       const spendMigrated: CutoverReceipt["spendMigrated"] = [];
-      const todayKey = toDateKey(new Date());
+      const todayKey = localDateKey(new Date());
 
       for (const entry of spend) {
         const [existing] = await tx

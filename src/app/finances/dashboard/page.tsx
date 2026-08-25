@@ -4,7 +4,7 @@ import { loadDashboard, loadUpcomingBills } from "@/lib/finances/dashboardQuerie
 import { UPCOMING_HORIZON_DAYS } from "@/lib/finances/commitments";
 import { loadBudget } from "@/lib/finances/budget/queries";
 import { monthKeyOf, findMonth, categoryMonth } from "@/lib/finances/budget/envelope";
-import { toDateKey } from "@/lib/schedule/geometry";
+import { localDateKey } from "@/lib/schedule/geometry";
 import { AppShell } from "@/components/shell/AppShell";
 import { DashboardView } from "@/components/finances/dashboard/DashboardView";
 
@@ -31,7 +31,7 @@ export const dynamic = "force-dynamic";
  */
 export default async function FinancesDashboardPage() {
   const userId = await getCurrentUserId();
-  const todayKey = toDateKey(new Date());
+  const todayKey = localDateKey(new Date());
   const [data, budget, upcoming] = await Promise.all([
     loadDashboard(userId),
     loadBudget(userId, monthKeyOf(todayKey)),

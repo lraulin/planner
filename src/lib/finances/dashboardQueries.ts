@@ -37,7 +37,7 @@ import { numericStringToCents } from "./money";
 import { listAccounts, listTransactions } from "./queries";
 import type { FinanceAccountRow } from "./types";
 import { loadSelectedWorkingPending } from "./workingPendingQuery";
-import { toDateKey } from "@/lib/schedule/geometry";
+import { localDateKey } from "@/lib/schedule/geometry";
 import { tagsInNotes } from "./tags";
 
 /**
@@ -407,9 +407,9 @@ export async function loadReviewCandidates(
  * merchant both detectors claim is bill-shaped: regular in amount *and* date is the stronger
  * finding, and the spend buttons are on every row anyway.
  *
- * `todayKey` comes from the server's day, which is allowed here because it only sizes
- * the window a candidate is measured over, and never decides a figure anyone reads. A
- * candidate list an hour off at a timezone boundary costs nothing.
+ * `todayKey` only sizes the window a candidate is measured over, and never decides a
+ * figure anyone reads. Use `localDateKey` anyway: `toDateKey(new Date())` is already
+ * tomorrow after ~8pm in the Americas.
  */
 function reviewCandidates(
   rows: readonly AnalyticsRow[],
@@ -429,7 +429,7 @@ function reviewCandidates(
   // regular enough to be a bill still surfaces here — Review proposes it as a plain envelope
   // with a `simple` template, not as a bill.
   const spendShaped = spendCandidates(rows, {
-    todayKey: toDateKey(new Date()),
+    todayKey: localDateKey(new Date()),
   }).filter(
     (entry) =>
       (!entry.payeeId || !index.has(entry.payeeId)) &&
