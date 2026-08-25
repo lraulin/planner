@@ -398,6 +398,7 @@ export function DateKeyCell({
   onChange,
   align = "right",
   overdue = false,
+  disabled = false,
 }: {
   /** `YYYY-MM-DD`, or `""` when unset. */
   value: string;
@@ -406,6 +407,7 @@ export function DateKeyCell({
   align?: "left" | "right";
   /** Draws the value in the overdue colour. Only the deadline column has an opinion here. */
   overdue?: boolean;
+  disabled?: boolean;
 }) {
   const formatDate = useDateFormatter();
   const tone = overdue ? "text-priority-a" : "text-ink-muted";
@@ -433,8 +435,10 @@ export function DateKeyCell({
       <input
         type="date"
         value={draft}
+        disabled={disabled}
         onClick={(event) => {
           event.stopPropagation();
+          if (disabled) return;
           event.currentTarget.showPicker();
         }}
         onChange={(event) => setDraft(event.target.value)}

@@ -1,7 +1,7 @@
 "use client";
 
 import type { ColumnDef, NodeGridRow } from "@/components/grid/columns";
-import { DateText } from "@/components/date/DateText";
+import { DateKeyCell } from "@/components/grid/cells";
 import { CadenceSelect } from "@/components/finances/CadenceSelect";
 import type { EnvelopeStatus } from "@/db/schema";
 import type { BillEnvelopeEdit } from "@/lib/finances/mutations";
@@ -241,13 +241,17 @@ export const billColumns: ColumnDef<BudgetColumnCtx, BudgetBillRow>[] = [
     filterValue: (row) => row.node.nextDueKey ?? "",
     sortValue: (row) => row.node.nextDueKey ?? "",
     compact: "meta",
-    render: (row) =>
-      row.node.nextDueKey === null ? (
-        <span className="text-ink-faint">
-          {row.node.bill.scheduled ? "—" : "Unscheduled"}
-        </span>
+    render: (row, ctx) =>
+      !row.node.bill.scheduled ? (
+        <span className="text-ink-faint">Unscheduled</span>
       ) : (
-        <DateText dateKey={row.node.nextDueKey} />
+        <DateKeyCell
+          value={row.node.nextDueKey ?? ""}
+          ariaLabel={`Next charge for ${row.node.name}`}
+          disabled={ctx.pending}
+          align="left"
+          onChange={(anchorDate) => ctx.onPatchBill(row.node, { anchorDate })}
+        />
       ),
   },
   {
