@@ -1,4 +1,5 @@
 import {
+  asFilterOperand,
   matchesCondition,
   operatorNeedsOperand,
   OPERATOR_META,
@@ -93,12 +94,8 @@ export function describeCrossCondition(
 ): string {
   const meta = OPERATOR_META[condition.op];
   if (!operatorNeedsOperand(condition.op)) return `${columnLabel} ${meta.label}`;
-  const shown =
-    condition.value === ""
-      ? "''"
-      : valueLabel
-        ? valueLabel(condition.value)
-        : condition.value;
+  const presented = valueLabel ? valueLabel(condition.value) : condition.value;
+  const shown = presented === "" ? "''" : presented;
   return `${columnLabel} ${meta.symbol} ${shown}`;
 }
 
@@ -143,7 +140,7 @@ export function parseCrossColumnFilter(value: unknown): CrossColumnFilter | null
     conditions.push({
       columnId: row.columnId,
       op: row.op as FilterOperator,
-      value: typeof row.value === "string" ? row.value : "",
+      value: asFilterOperand(row.value),
     });
   }
 

@@ -4,6 +4,7 @@ import { useId, useState } from "react";
 import { ModalShell } from "@/components/detail/ModalShell";
 import {
   customFilter,
+  defaultFilterOperand,
   describeCustom,
   operatorNeedsOperand,
   operatorsForKind,
@@ -69,6 +70,7 @@ function CustomFilterDialogBody({
   const titleId = useId();
   const operators = operatorsForKind(kind);
   const defaultOp = operators[0]?.id ?? "eq";
+  const defaultOperand = defaultFilterOperand(kind);
 
   const [draft, setDraft] = useState<CustomColumnFilter>(() =>
     filter && filter.conditions.length > 0
@@ -77,7 +79,7 @@ function CustomFilterDialogBody({
           join: filter.join,
           conditions: filter.conditions.map((c) => ({ ...c })),
         }
-      : customFilter("and", [{ op: defaultOp, value: "" }]),
+      : customFilter("and", [{ op: defaultOp, value: defaultOperand }]),
   );
 
   const setJoin = (join: FilterJoin) => setDraft((current) => ({ ...current, join }));
@@ -94,7 +96,7 @@ function CustomFilterDialogBody({
   const addCondition = () => {
     setDraft((current) => ({
       ...current,
-      conditions: [...current.conditions, { op: defaultOp, value: "" }],
+      conditions: [...current.conditions, { op: defaultOp, value: defaultOperand }],
     }));
   };
 
@@ -105,7 +107,11 @@ function CustomFilterDialogBody({
     }));
   };
 
-  const preview = describeCustom(columnLabel, draft);
+  const preview = describeCustom(
+    columnLabel,
+    draft,
+    kind === "number" ? (value) => (value.trim() === "" ? "0" : value) : undefined,
+  );
   const useValueSelect = kind === "enum" && distinctValues.length > 0;
   const useDateInput = kind === "date";
 

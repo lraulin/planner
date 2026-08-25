@@ -126,6 +126,25 @@ describe("buildGridChips", () => {
     expect(chips[0].label).toBe("[Deadline] = 'January 5, 2026'");
   });
 
+  it("presents a blank number operand as 0", () => {
+    const chips = buildGridChips(
+      context({
+        filters: {
+          amount: {
+            mode: "custom",
+            join: "and",
+            conditions: [{ op: "gt", value: "" }],
+          },
+        },
+        labelOf: (id) => (id === "amount" ? "Amount" : id),
+        operandLabelOf: (columnId, value) =>
+          columnId === "amount" && value === "" ? "0" : value,
+      }),
+    );
+
+    expect(chips[0].label).toBe("[Amount] > '0'");
+  });
+
   /**
    * One chip per condition, not one per advanced filter: removing a single criterion
    * without rebuilding the whole expression is the point of having chips at all.

@@ -75,8 +75,14 @@ export function GridFilterChips({
           );
           return options.find((option) => option.id === optionId)?.label ?? optionId;
         },
-        operandLabelOf: (columnId, value) =>
-          byId.get(columnId)?.filterKind === "date" ? formatDate(value) : value,
+        operandLabelOf: (columnId, value) => {
+          const kind = byId.get(columnId)?.filterKind;
+          if (kind === "date") return formatDate(value);
+          // Blank number operands mean 0; the chip has to agree or Amount > 0 reads as
+          // `[Amount] > ''`.
+          if (kind === "number" && value.trim() === "") return "0";
+          return value;
+        },
         // Only the values a column actually holds, so "all but Completed" means all but the
         // ones on screen — not all but every state the enum could ever have.
         domainOf: (columnId) =>

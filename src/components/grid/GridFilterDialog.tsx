@@ -3,6 +3,7 @@
 import { useId, useMemo, useState } from "react";
 import { ModalShell } from "@/components/detail/ModalShell";
 import {
+  defaultFilterOperand,
   operatorNeedsOperand,
   operatorsForKind,
   type FilterJoin,
@@ -109,7 +110,7 @@ function GridFilterDialogBody({
                 {
                   columnId: firstColumnId,
                   op: defaultOpFor(byId, firstColumnId),
-                  value: "",
+                  value: defaultOperandFor(byId, firstColumnId),
                 },
               ]
             : [],
@@ -134,12 +135,17 @@ function GridFilterDialogBody({
    */
   const changeColumn = (index: number, columnId: string) => {
     const current = draft.conditions[index];
-    const nextOps = operatorsForKind(byId.get(columnId)?.filterKind);
+    if (!current) return;
+    const nextKind = byId.get(columnId)?.filterKind;
+    const nextOps = operatorsForKind(nextKind);
     const keepsOp = nextOps.some((op) => op.id === current.op);
     updateCondition(index, {
       columnId,
       op: keepsOp ? current.op : (nextOps[0]?.id ?? "eq"),
-      value: keepsOp ? current.value : "",
+      value:
+        keepsOp && current.value !== ""
+          ? current.value
+          : defaultFilterOperand(nextKind),
     });
   };
 
@@ -152,7 +158,7 @@ function GridFilterDialogBody({
         {
           columnId: firstColumnId,
           op: defaultOpFor(byId, firstColumnId),
-          value: "",
+          value: defaultOperandFor(byId, firstColumnId),
         },
       ],
     }));
@@ -384,6 +390,10 @@ function GridFilterDialogBody({
 
 function defaultOpFor(byId: Map<string, ColumnMeta>, columnId: string): FilterOperator {
   return operatorsForKind(byId.get(columnId)?.filterKind)[0]?.id ?? "eq";
+}
+
+function defaultOperandFor(byId: Map<string, ColumnMeta>, columnId: string): string {
+  return defaultFilterOperand(byId.get(columnId)?.filterKind);
 }
 
 function placeholderFor(kind: ColumnMeta["filterKind"]): string {

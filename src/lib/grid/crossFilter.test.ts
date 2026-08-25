@@ -301,6 +301,18 @@ describe("parseCrossColumnFilter", () => {
       })?.join,
     ).toBe("and");
   });
+
+  it("keeps a numeric zero operand instead of turning it into a blank", () => {
+    expect(
+      parseCrossColumnFilter({
+        join: "and",
+        conditions: [{ columnId: "amount", op: "gt", value: 0 }],
+      }),
+    ).toEqual({
+      join: "and",
+      conditions: [{ columnId: "amount", op: "gt", value: "0" }],
+    });
+  });
 });
 
 describe("describeCrossFilter", () => {

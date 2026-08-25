@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   ALL_FILTER,
+  asFilterOperand,
   customFilter,
+  defaultFilterOperand,
   describeCustom,
   filterActive,
   matchesCondition,
@@ -139,9 +141,18 @@ describe("matchesCondition — number compares", () => {
     );
   });
 
-  it("fails closed on blanks and unparseable operands", () => {
+  it("treats a blank number operand as 0, not as unparseable", () => {
+    // The criteria dialog's placeholder is "0.00". Leaving it and picking > used to
+    // store '' and match nothing, while the chip read `[Amount] > ''`.
+    expect(matchesCondition("$10.00", { op: "gt", value: "" }, "number")).toBe(true);
+    expect(matchesCondition("$10.00", { op: "gt", value: "0" }, "number")).toBe(true);
+    expect(matchesCondition("-$5.00", { op: "gt", value: "" }, "number")).toBe(false);
+    expect(matchesCondition("$0.00", { op: "gt", value: "" }, "number")).toBe(false);
+    expect(matchesCondition("$0.00", { op: "eq", value: "" }, "number")).toBe(true);
+  });
+
+  it("fails closed on blank cells and unparseable operands", () => {
     expect(matchesCondition(null, { op: "gt", value: "0" }, "number")).toBe(false);
-    expect(matchesCondition("$10.00", { op: "gt", value: "" }, "number")).toBe(false);
     expect(matchesCondition("$10.00", { op: "eq", value: "pending" }, "number")).toBe(
       false,
     );
@@ -187,6 +198,34 @@ describe("describeCustom", () => {
       ),
     ).toBe("[State] ≠ 'C' AND [State] ≠ 'Cn'");
   });
+
+  it("presents a blank number operand as 0 when a label is supplied", () => {
+    expect(
+      describeCustom(
+        "Amount",
+        customFilter("and", [{ op: "gt", value: "" }]),
+        (value) => (value === "" ? "0" : value),
+      ),
+    ).toBe("[Amount] > '0'");
+  });
+});
+
+describe("asFilterOperand / defaultFilterOperand", () => {
+  it("keeps a numeric zero instead of turning it into a blank", () => {
+    expect(asFilterOperand(0)).toBe("0");
+    expect(asFilterOperand(12.5)).toBe("12.5");
+    expect(asFilterOperand("0")).toBe("0");
+    expect(asFilterOperand("")).toBe("");
+    expect(asFilterOperand(null)).toBe("");
+    expect(asFilterOperand(Number.NaN)).toBe("");
+  });
+
+  it("starts number columns at 0 and every other kind empty", () => {
+    expect(defaultFilterOperand("number")).toBe("0");
+    expect(defaultFilterOperand("text")).toBe("");
+    expect(defaultFilterOperand("date")).toBe("");
+    expect(defaultFilterOperand(undefined)).toBe("");
+  });
 });
 
 describe("parseColumnFilter", () => {
@@ -219,5 +258,19 @@ describe("parseColumnFilter", () => {
     expect(parseColumnFilter(null)).toBeNull();
     expect(parseColumnFilter("done")).toBeNull();
     expect(parseColumnFilter({ mode: "custom", conditions: "nope" })).toBeNull();
+  });
+
+  it("keeps a numeric zero operand instead of turning it into a blank", () => {
+    expect(
+      parseColumnFilter({
+        mode: "custom",
+        join: "and",
+        conditions: [{ op: "gt", value: 0 }],
+      }),
+    ).toEqual({
+      mode: "custom",
+      join: "and",
+      conditions: [{ op: "gt", value: "0" }],
+    });
   });
 });

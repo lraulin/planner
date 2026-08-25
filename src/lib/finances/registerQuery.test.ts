@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { optionsFilter } from "@/lib/grid/customFilter";
+import { customFilter, optionsFilter } from "@/lib/grid/customFilter";
 import type { TransactionListRow } from "./types";
 import {
   parseBlockOffset,
@@ -85,6 +85,19 @@ describe("parseRegisterQuery", () => {
     expect(parsed.groupBy).toEqual(["year", "account"]);
     expect(parsed.today).toBeNull();
   });
+
+  it("keeps Amount > 0 when the operand arrives as a JSON number", () => {
+    // jsonb / Flight may hand 0 as a number. Dropping non-strings to "" made the
+    // register show `[Amount] > ''` and match nothing.
+    const parsed = parseRegisterQuery({
+      filters: {
+        amount: { mode: "custom", join: "and", conditions: [{ op: "gt", value: 0 }] },
+      },
+    });
+    expect(parsed.filters).toEqual({
+      amount: customFilter("and", [{ op: "gt", value: "0" }]),
+    });
+  });
 });
 
 describe("prepareRegister", () => {
@@ -111,6 +124,31 @@ describe("prepareRegister", () => {
     expect(prepared.index.nodeIds).toEqual(["a"]);
     expect(prepared.index.shown).toBe(1);
     expect(prepared.index.total).toBe(2);
+  });
+
+  it("filters Amount > 0 to deposits, including a blank operand", () => {
+    const ledger = [
+      tx({ id: "out", transactionDate: "2026-08-01", amountCents: -500 }),
+      tx({ id: "in", transactionDate: "2026-08-02", amountCents: 1200 }),
+      tx({ id: "zero", transactionDate: "2026-08-03", amountCents: 0 }),
+    ];
+    const greaterThanZero = customFilter("and", [{ op: "gt", value: "0" }]);
+    const blankOperand = customFilter("and", [{ op: "gt", value: "" }]);
+
+    expect(
+      prepareRegister(
+        ledger,
+        query({ groupBy: [], filters: { amount: greaterThanZero } }),
+        EMPTY_CTX,
+      ).index.nodeIds,
+    ).toEqual(["in"]);
+    expect(
+      prepareRegister(
+        ledger,
+        query({ groupBy: [], filters: { amount: blankOperand } }),
+        EMPTY_CTX,
+      ).index.nodeIds,
+    ).toEqual(["in"]);
   });
 
   it("filters on the hidden Payee column", () => {

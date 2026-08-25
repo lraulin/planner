@@ -164,6 +164,25 @@ export function operatorNeedsOperand(op: FilterOperator): boolean {
 }
 
 /**
+ * Fresh-condition operand for a kind. Number columns start at 0 because that is the
+ * origin of the number line and the value the criteria dialog's "0.00" placeholder
+ * advertised — an empty string stored instead, and Amount > 0 became Amount > ''.
+ */
+export function defaultFilterOperand(kind: FilterKind | undefined): string {
+  return kind === "number" ? "0" : "";
+}
+
+/**
+ * Operand as stored on a condition. JSON/JSONB may hand a finite number (especially 0);
+ * that is still a value. Dropping non-strings to "" is how Amount > 0 became Amount > ''.
+ */
+export function asFilterOperand(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return "";
+}
+
+/**
  * Whether a cell value passes a custom filter. Empty conditions are inactive (pass all).
  * `kind` selects comparison semantics for gt/lt; text ops stay string-based either way.
  */
@@ -226,7 +245,7 @@ function equals(cell: string, operand: string, kind: FilterKind | undefined): bo
   if (kind === "tags") return cell === operand;
   if (kind === "number") {
     const left = parseFilterNumber(cell);
-    const right = parseFilterNumber(operand);
+    const right = parseNumberOperand(operand);
     return left !== null && right !== null && left === right;
   }
   // Case-fold so a typed "ns" matches "NS" on enum columns; accents still distinguish.
@@ -261,7 +280,18 @@ function compare(
   op: "lt" | "lte" | "gt" | "gte",
   kind: FilterKind | undefined,
 ): boolean {
-  if (cell === "" || operand === "") return false;
+  if (cell === "") return false;
+
+  if (kind === "number") {
+    const left = parseFilterNumber(cell);
+    const right = parseNumberOperand(operand);
+    if (left === null || right === null) return false;
+    return applyCompare(left, right, op);
+  }
+
+  // Other kinds still fail closed on a blank operand — there is no origin value the way
+  // 0 is for numbers, and a date/priority placeholder is not a legal key.
+  if (operand === "") return false;
 
   if (kind === "priority") {
     const left = priorityKey(cell);
@@ -273,13 +303,6 @@ function compare(
   if (kind === "date") {
     // Canonical filter values are YYYY-MM-DD — lexicographic order matches calendar order.
     return applyCompare(cell, operand, op);
-  }
-
-  if (kind === "number") {
-    const left = parseFilterNumber(cell);
-    const right = parseFilterNumber(operand);
-    if (left === null || right === null) return false;
-    return applyCompare(left, right, op);
   }
 
   // Text / enum fallback: locale order with numeric awareness ("A2" < "A10").
@@ -309,6 +332,18 @@ function parseFilterNumber(raw: string): number | null {
   const value = Number(cleaned);
   if (!Number.isFinite(value)) return null;
   return parenthesised ? -Math.abs(value) : value;
+}
+
+/**
+ * Operand side of a number comparison. A blank is 0 — the number line's origin, and the
+ * value the criteria dialog's "0.00" placeholder advertised. Treating it as unparseable
+ * made Amount > (empty) match nothing while the chip read `[Amount] > ''`.
+ *
+ * Blank *cells* still fail in `compare`; this is only the typed threshold.
+ */
+function parseNumberOperand(raw: string): number | null {
+  if (raw.trim() === "") return 0;
+  return parseFilterNumber(raw);
 }
 
 function applyCompare(
@@ -348,7 +383,8 @@ export function describeCustom(
       return `[${columnLabel}] ${meta.symbol}`;
     }
     const value = valueLabel ? valueLabel(condition.value) : condition.value;
-    const shown = condition.value === "" ? "''" : `'${value}'`;
+    // Present the labelled form so a blank number operand can read as 0 rather than ''.
+    const shown = value === "" ? "''" : `'${value}'`;
     return `[${columnLabel}] ${meta.symbol} ${shown}`;
   });
 
@@ -389,7 +425,7 @@ export function parseColumnFilter(value: unknown): ColumnFilter | null {
       if (typeof row.op !== "string" || !(row.op in OPERATOR_META)) continue;
       conditions.push({
         op: row.op as FilterOperator,
-        value: typeof row.value === "string" ? row.value : "",
+        value: asFilterOperand(row.value),
       });
     }
     return { mode: "custom", join, conditions };
