@@ -68,6 +68,21 @@ describe("billFundingDemand", () => {
     expect(result.toBudgetCents).toBe(2000 * 4);
   });
 
+  it("does not count the 1st of next month as an occurrence this month", () => {
+    // monthKey is YYYY-MM-01. Appending "-01" again made the exclusive end
+    // "2026-09-01-01", so "2026-09-01" compared as still inside August.
+    const weekly = snap({
+      id: "rent-share",
+      name: "Rent share",
+      cadenceMonths: 1,
+      cadenceDays: 7,
+      expectedCents: 2000,
+      nextDueKey: "2026-09-01",
+    });
+    // Back from Sep 1: Aug 25, 18, 11, 4. Four August Tuesdays. Sep 1 is next month.
+    expect(billFundingDemand(weekly, "2026-08-01", 0).toBudgetCents).toBe(2000 * 4);
+  });
+
   it("returns zero when the amount is zero", () => {
     expect(
       billFundingDemand(snap({ expectedCents: 0 }), "2026-08-01", 0).toBudgetCents,

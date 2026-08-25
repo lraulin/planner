@@ -32,7 +32,7 @@
  */
 
 import { shiftDateKey } from "@/lib/schedule/geometry";
-import { monthKeyOf, type MonthKey } from "../envelope";
+import { monthKeyOf, nextMonthKey, type MonthKey } from "../envelope";
 import { cadenceOf, type Cadence } from "@/lib/finances/recurringBills";
 import { monthsBetween, monthsUntilDate } from "./monthSpan";
 import { assertCents } from "./types";
@@ -78,8 +78,10 @@ function alwaysPayThisMonth(cadence: Cadence): boolean {
 function occurrencesInMonth(snapshot: BillSnapshot, month: MonthKey): string[] {
   const cadence = cadenceOfSnapshot(snapshot);
   const step = cadence.unit === "day" ? cadence.n : 1;
-  const monthStart = `${month}`;
-  const monthEnd = monthKeyOf(shiftDateKey(`${month.slice(0, 7)}-01`, 32)) + "-01";
+  const monthStart = month;
+  // MonthKey is already YYYY-MM-01. Appending "-01" made the exclusive end
+  // "2026-09-01-01", so the 1st of next month compared as still inside this month.
+  const monthEnd = nextMonthKey(month);
 
   // Walk backward from the next-due anchor to before the month, then forward through it —
   // bounded by the cadence, never by a fixed step count.
