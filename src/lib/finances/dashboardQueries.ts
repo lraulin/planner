@@ -25,7 +25,6 @@ import type { Payday } from "./classify/income";
 import {
   payeeClaimIndex,
   projectForwardMonths,
-  projectForwardPayPeriods,
   upcomingBillOccurrences,
   type CommitmentCharge,
   type StoredBillRow,
@@ -248,7 +247,6 @@ export async function loadUpcomingBills(
 export type BillForecast = {
   billRows: BillRow[];
   months: ReturnType<typeof projectForwardMonths>;
-  periods: ReturnType<typeof projectForwardPayPeriods>;
   comparison: SpendingVsIncome;
 };
 
@@ -258,9 +256,8 @@ export type BillForecast = {
  * retired Commitments page, secondary rather than a permanent section).
  *
  * Reads the full three-year `loadInsightsRows` pass rather than the register alone: payday
- * detection (`paydaysFrom`) needs the same classified history the Dashboard and Insights
- * pages already read, and there is no cheaper source for "what does a typical paycheck
- * look like" than the same detector everywhere else uses.
+ * detection (`paydaysFrom`) still feeds expected monthly income. The pay-period forecast
+ * axis is gone (`agent-os/specs/2026-08-25-1154-month-ahead-zero-based/` D5).
  */
 export async function loadBillForecast(
   userId: string,
@@ -289,7 +286,6 @@ export async function loadBillForecast(
   return {
     billRows: rowsOut,
     months: projectForwardMonths(bills, chargesByName, todayKey),
-    periods: projectForwardPayPeriods(bills, chargesByName, todayKey, paydays),
     comparison: spendingVsIncome(rowsOut, paydays),
   };
 }

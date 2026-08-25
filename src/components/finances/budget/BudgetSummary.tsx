@@ -74,8 +74,12 @@ export function BudgetSummary({
           Account pool{" "}
           <span className="tabular text-ink">{formatUsd(accountPoolCents)}</span>
           {" = "}
-          Ready to Assign + envelope balances + held. Credit-card debt reduces the pool;
-          a payment between on-budget accounts does not.
+          Ready to Assign + envelope balances
+          {month.assignedInFutureMonthsCents !== 0
+            ? " + assigned in future months"
+            : ""}
+          {month.bufferedCents !== 0 ? " + held" : ""}. Credit-card debt reduces the
+          pool; a payment between on-budget accounts does not.
         </p>
       ) : null}
     </section>

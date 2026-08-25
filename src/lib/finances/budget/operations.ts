@@ -235,12 +235,9 @@ export function setAssignment(params: {
 }
 
 /**
- * Rule 4: hold money back so next month starts funded.
- *
- * A **deferral, not a sink** — the held amount leaves this month's Ready to Assign and is
- * added straight back into next month's "funds from last month" by the fold. Only possible
- * while there is something left to hold, and never more than that; releasing is the same
- * operation with a negative amount, floored at giving it all back.
+ * Leftover Actual Hold. The product no longer creates holds
+ * (`agent-os/specs/2026-08-25-1154-month-ahead-zero-based/` D2); Release still uses this
+ * so a leftover `bufferedCents` can be given back. A deferral, not a sink.
  */
 export function holdForNextMonth(params: {
   month: BudgetMonth;

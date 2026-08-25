@@ -46,6 +46,8 @@ import {
   assignBillsFromRows,
   assignEnvelopeFromRow,
   assignHistoryWithLookback,
+  currentMonthUnderfundedGap,
+  isFutureBudgetMonth,
 } from "@/lib/finances/budget/assign/fromBudget";
 import {
   ASSIGN_OPTIONS,
@@ -592,23 +594,16 @@ export function BudgetView({
           onPrev={() => goToMonth(prevMonthKey(data.month))}
           onNext={() => goToMonth(nextMonthKey(data.month))}
           pending={pending}
-          onHold={() => {
-            const amount = window.prompt("Hold how much for next month?", "0");
-            if (amount === null) return;
-            const cents = Math.round(Number(amount.replace(/[$,\s]/g, "")) * 100);
-            if (!Number.isFinite(cents) || cents === 0) return;
-            run(() =>
-              budgetOperationAction({
-                kind: "hold",
-                month: data.month,
-                amountCents: cents,
-              }),
-            );
-          }}
-          onRelease={() =>
-            run(() =>
-              budgetOperationAction({ kind: "release-hold", month: data.month }),
-            )
+          onRelease={
+            month.bufferedCents > 0
+              ? () =>
+                  run(() =>
+                    budgetOperationAction({
+                      kind: "release-hold",
+                      month: data.month,
+                    }),
+                  )
+              : undefined
           }
           showHidden={showHidden}
           onShowHidden={(next) => {
@@ -625,6 +620,22 @@ export function BudgetView({
           }
           onAssign={() => setAssigning(true)}
         />
+        {isFutureBudgetMonth(data.month, data.todayKey) ? (
+          <p className="text-[0.75rem] leading-snug text-ink-muted">
+            Money assigned here is a job for {monthLabel(data.month)} and leaves Ready
+            to Assign now.
+            {currentMonthUnderfundedGap({
+              months: data.months,
+              todayKey: data.todayKey,
+              groups: data.groups,
+              categories: data.categories,
+              goals: data.goals,
+              nextDueKeys,
+            }) > 0
+              ? " This month still has envelopes to cover — those holes are the first job."
+              : ""}
+          </p>
+        ) : null}
 
         <IncomeSection
           rows={sections.income}
@@ -811,11 +822,7 @@ export function BudgetView({
           />
         </section>
 
-        <ForecastDetails
-          months={forecast.months}
-          periods={forecast.periods}
-          comparison={forecast.comparison}
-        />
+        <ForecastDetails months={forecast.months} comparison={forecast.comparison} />
       </div>
 
       {menu ? (
@@ -955,7 +962,6 @@ function MonthBar({
   month,
   onPrev,
   onNext,
-  onHold,
   onRelease,
   pending,
   showHidden,
@@ -964,8 +970,7 @@ function MonthBar({
   month: BudgetMonth;
   onPrev: () => void;
   onNext: () => void;
-  onHold: () => void;
-  onRelease: () => void;
+  onRelease?: () => void;
   pending: boolean;
   showHidden: boolean;
   onShowHidden: (next: boolean) => void;
@@ -994,31 +999,17 @@ function MonthBar({
           />
           Show hidden
         </label>
-        {month.bufferedCents > 0 ? (
+        {onRelease && month.bufferedCents > 0 ? (
           <button
             type="button"
             onClick={onRelease}
             disabled={pending}
             className={button}
-            title="Put the held money back into this month's Ready to Assign"
+            title="Put the leftover held money back into this month's Ready to Assign"
           >
             Release {formatUsd(month.bufferedCents)}
           </button>
-        ) : (
-          <button
-            type="button"
-            onClick={onHold}
-            disabled={pending || month.readyToAssignCents <= 0}
-            className={button}
-            title={
-              month.readyToAssignCents <= 0
-                ? "Nothing is left to hold"
-                : "Keep money back so next month starts funded"
-            }
-          >
-            Hold for next month
-          </button>
-        )}
+        ) : null}
       </span>
     </div>
   );

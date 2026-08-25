@@ -1,6 +1,5 @@
 import type { BillCharge } from "./available";
 import { billAnchor, type StoredBillRow } from "./commitments";
-import { PAYCHECKS_PER_YEAR } from "./classify/income";
 import { formatUsdWhole } from "./money";
 import { annualCents, cadenceOf } from "./recurringBills";
 
@@ -39,7 +38,7 @@ export function amountRangeLabel(range: {
 
 /**
  * A bill envelope with its cost columns and next-due date resolved — what the budget grid's
- * hideable A year / Monthly / Pay period columns and the URL/status cells read.
+ * hideable A year / Monthly columns and the URL/status cells read.
  *
  * **The accrual meter this module used to carry (`held`, `SetAside`, `billHoldCaption`) is
  * gone** — `agent-os/specs/2026-08-23-2313-one-budget/` D5 retired Available to Spend and the
@@ -59,8 +58,6 @@ export type BillRow = StoredBillRow & {
   annualCostCents: number;
   /** `annualCostCents / 12` — comparable across cadences. The Amount column is not. */
   monthlyCents: number;
-  /** Annual cost spread over 26 paychecks. */
-  paycheckCents: number;
   /**
    * Observed min–max of matched charges when the spread exceeds 25% of the dearest
    * charge. Null when history is tight, a single fill, or the amounts were not supplied.
@@ -104,7 +101,6 @@ export function billRows(
       amountCents,
       annualCostCents,
       monthlyCents: Math.round(annualCostCents / 12),
-      paycheckCents: Math.round(annualCostCents / PAYCHECKS_PER_YEAR),
       // The editable "Next charge" column: always today or later. `expectedKey` below is the
       // one that can sit in the past — that is exactly what "overdue" means.
       nextDueKey: anchor?.nextDueKey ?? null,
@@ -128,7 +124,6 @@ export function billRows(
 export type MoneyTotals = {
   annualCents: number;
   monthlyCents: number;
-  paycheckCents: number;
   weeklyCents: number;
 };
 
@@ -139,7 +134,6 @@ export function activeBillTotals(rows: readonly BillRow[]): MoneyTotals {
     (row) => ({
       annualCents: row.annualCostCents,
       monthlyCents: row.monthlyCents,
-      paycheckCents: row.paycheckCents,
       weeklyCents: 0,
     }),
   );
@@ -155,10 +149,9 @@ function sumMoney<T>(
       return {
         annualCents: total.annualCents + cents.annualCents,
         monthlyCents: total.monthlyCents + cents.monthlyCents,
-        paycheckCents: total.paycheckCents + cents.paycheckCents,
         weeklyCents: total.weeklyCents + cents.weeklyCents,
       };
     },
-    { annualCents: 0, monthlyCents: 0, paycheckCents: 0, weeklyCents: 0 },
+    { annualCents: 0, monthlyCents: 0, weeklyCents: 0 },
   );
 }

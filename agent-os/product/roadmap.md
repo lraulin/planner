@@ -1005,6 +1005,12 @@ period)` so money already spent stops being held twice and only going over bites
   Rules are retired. Each payee has `learn` / `fixed` / `off`; a claim overrides the saved
   default while held. Local cutover converted 0 custom rules, dropped 67 seeded ones, and
   inferred 175 payee defaults.
+  ✅ **Month-ahead (YNAB Rule 4) shipped 2026-08-25.**
+  `agent-os/specs/2026-08-25-1154-month-ahead-zero-based/`. Monthly bills ask for the full
+  amount in the month they are due, not half toward next month. Hold for next month is gone:
+  leftover Ready to Assign is assigned into future-month categories, and current Ready to
+  Assign subtracts those jobs. Expected vs Income / Next 12 months dropped the pay-period
+  axis. Insights still has pay-period charts; Dashboard still shows days until payday.
 - **Next:** **Shortfall attribution** is substantially answered by the merge above — the
   budget states a shortfall per bill envelope rather than as one collapsed number, and
   Assign → Underfunded names which envelopes will not be funded. What is still missing is

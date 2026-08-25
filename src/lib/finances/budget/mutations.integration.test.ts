@@ -637,7 +637,7 @@ describeDb("budget mutations", () => {
     expect(budget.movementNotes).toContain("Bills");
   });
 
-  it("holds money for next month and hands it back", async () => {
+  it("assigns into a future month and leaves current Ready to Assign", async () => {
     const { checkingId } = await seedAccounts(userId);
     await addTransactions(userId, [
       {
@@ -648,20 +648,36 @@ describeDb("budget mutations", () => {
       },
     ]);
     await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
+    const ids = await envelopes(userId);
+    const bills = { id: ids.get("Bills")!, name: "Bills" };
 
     await performBudgetOperation(userId, {
-      kind: "hold",
-      month: MONTH,
+      kind: "assign",
+      month: "2026-09-01",
+      category: bills,
       amountCents: 20_000,
     });
     const data = await loadBudget(userId, MONTH);
-    expect(findMonth(data.months, MONTH)?.readyToAssignCents).toBe(30_000);
-    expect(findMonth(data.months, "2026-09-01")?.fromLastMonthCents).toBe(50_000);
+    const august = findMonth(data.months, MONTH)!;
+    const september = findMonth(data.months, "2026-09-01")!;
+    expect(august.assignedInFutureMonthsCents).toBe(20_000);
+    expect(august.readyToAssignCents).toBe(30_000);
+    expect(categoryMonth(september, bills.id).assignedCents).toBe(20_000);
 
-    await performBudgetOperation(userId, { kind: "release-hold", month: MONTH });
+    await expect(
+      performBudgetOperation(await makeUser(), {
+        kind: "assign",
+        month: "2026-09-01",
+        category: bills,
+        amountCents: 1,
+      }),
+    ).rejects.toThrow();
     expect(
-      findMonth((await loadBudget(userId, MONTH)).months, MONTH)?.readyToAssignCents,
-    ).toBe(50_000);
+      categoryMonth(
+        findMonth((await loadBudget(userId, "2026-09-01")).months, "2026-09-01")!,
+        bills.id,
+      ).assignedCents,
+    ).toBe(20_000);
   });
 
   it("sets carryover on this month and every later one", async () => {

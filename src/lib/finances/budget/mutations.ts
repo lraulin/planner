@@ -44,7 +44,6 @@ import {
   assignFromReadyToAssign,
   copyPreviousMonth,
   coverOverspending,
-  holdForNextMonth,
   isEmptyEdit,
   releaseHold,
   setAssignment,
@@ -288,7 +287,6 @@ export type BudgetOperation =
       to: EnvelopeRef;
       amountCents: number | null;
     }
-  | { kind: "hold"; month: MonthKey; amountCents: number }
   | { kind: "release-hold"; month: MonthKey }
   | { kind: "copy-previous"; month: MonthKey }
   | { kind: "average"; month: MonthKey }
@@ -339,8 +337,6 @@ function editFor(
         amountCents: operation.amountCents,
         todayKey,
       });
-    case "hold":
-      return holdForNextMonth({ month, amountCents: operation.amountCents, todayKey });
     case "release-hold":
       return releaseHold({ month, todayKey });
     case "copy-previous":

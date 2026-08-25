@@ -73,3 +73,12 @@ narrowed by later deltas:
   previews a shortfall or a multi-envelope split (a single fully funded envelope writes
   immediately), and offers eight auto-assign options. Apply may no longer drive Ready to
   Assign negative. See `agent-os/specs/2026-08-24-1311-budget-assign-options/`.
+- **Monthly bills do not sink across months.** Actual's schedule template asks
+  `remaining / (monthsUntilDue + 1)` when a monthly charge is due next month (half of rent
+  in August). This app asks for the full amount in the due month and $0 otherwise; next
+  month's rent is funded by assigning in next month. Yearly/quarterly sinking is unchanged.
+  See `agent-os/specs/2026-08-25-1154-month-ahead-zero-based/` D1.
+- **Rule 4 is assign-into-a-future-month, not Hold.** Actual holds a lump so it appears in
+  next month's To Budget. This app subtracts later-month assignments from current Ready to
+  Assign (YNAB). Hold is removed from the product; `buffered_cents` remains for leftover
+  rows. See that spec's D2–D3.

@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import type { BillSnapshot } from "../templates/schedule";
 import type { Template } from "../templates/types";
-import { planAssign, neededAssigned, needsAssignPreview } from "./plan";
+import {
+  planAssign,
+  neededAssigned,
+  needsAssignPreview,
+  underfundedGapCents,
+} from "./plan";
 import type { AssignEnvelope, AssignHistoryMonth } from "./types";
 
 const MONTH = "2026-08-01";
@@ -150,6 +155,42 @@ describe("Underfunded", () => {
     );
   });
 
+  it("counts a remaining underfunded ask without planning an assign", () => {
+    const rent = bill({ nextDueKey: "2026-08-01" });
+    const bills = new Map([["rent", snapshot("rent", 210_000, "2026-08-01")]]);
+    expect(underfundedGapCents(MONTH, [rent], bills)).toBe(210_000);
+    expect(
+      underfundedGapCents(
+        MONTH,
+        [bill({ nextDueKey: "2026-09-01" })],
+        new Map([["rent", snapshot("rent", 210_000, "2026-09-01")]]),
+      ),
+    ).toBe(0);
+  });
+
+  it("does not underfund this month with half of next month's monthly bill", () => {
+    const rent = bill({ nextDueKey: "2026-09-01" });
+    const result = run("underfunded", [rent], {
+      bills: new Map([["rent", snapshot("rent", 210_000, "2026-09-01")]]),
+    });
+    expect(result.lines).toEqual([]);
+  });
+
+  it("funds a monthly bill in full when assigning the month it is due", () => {
+    const rent = bill({ nextDueKey: "2026-09-01" });
+    const result = run("underfunded", [rent], {
+      month: "2026-09-01",
+      bills: new Map([["rent", snapshot("rent", 210_000, "2026-09-01")]]),
+    });
+    expect(result.lines).toEqual([
+      expect.objectContaining({
+        categoryId: "rent",
+        deltaCents: 210_000,
+        status: "full",
+      }),
+    ]);
+  });
+
   it("funds a bill with empty templates from its cadence", () => {
     const result = run("underfunded", [bill()], {
       readyToAssignCents: 210_000,
@@ -201,7 +242,7 @@ describe("Underfunded", () => {
     const result = run("underfunded", [groceries, saveBy, laterBill, soonerBill], {
       readyToAssignCents: 1,
       bills: new Map([
-        ["geico", snapshot("geico", 100_000, "2026-09-15")],
+        ["geico", { ...snapshot("geico", 100_000, "2026-09-15"), cadenceMonths: 6 }],
         ["rent", snapshot("rent", 210_000, "2026-08-01")],
       ]),
     });

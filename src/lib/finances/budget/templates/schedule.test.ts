@@ -23,6 +23,18 @@ describe("billFundingDemand", () => {
     expect(billFundingDemand(snap(), "2026-08-01", 0).toBudgetCents).toBe(185_000);
   });
 
+  it("does not split a monthly bill across two months when the next charge is next month", () => {
+    // Today's Actual-shaped sink would ask remaining / (1 + 1) = half. Next month's rent
+    // is funded by assigning in next month, not by accruing half now.
+    const rent = snap({ nextDueKey: "2026-09-01" });
+    expect(billFundingDemand(rent, "2026-08-01", 0).toBudgetCents).toBe(0);
+    expect(billFundingDemand(rent, "2026-09-01", 0).toBudgetCents).toBe(185_000);
+  });
+
+  it("asks nothing more of a monthly bill whose envelope already holds the charge", () => {
+    expect(billFundingDemand(snap(), "2026-08-01", 185_000).toBudgetCents).toBe(0);
+  });
+
   it("sinks a yearly bill: remaining / (months until due + 1), reduced by carry-in", () => {
     const taxes = snap({
       id: "taxes",

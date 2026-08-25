@@ -51,8 +51,6 @@ describe("spendingVsIncome", () => {
     ]);
 
     expect(result.bills.monthlyCents).toBe(210_000);
-    expect(result.income.paycheckCents).toBe(200_000);
-    expect(result.remainder.paycheckCents).toBe(200_000 - result.bills.paycheckCents);
     expect(result.remainder.monthlyCents).toBe(
       result.income.monthlyCents - result.bills.monthlyCents,
     );
@@ -63,7 +61,6 @@ describe("spendingVsIncome", () => {
     expect(result.income).toEqual({
       medianPaycheckCents: 0,
       monthlyCents: 0,
-      paycheckCents: 0,
       annualCents: 0,
     });
     expect(result.remainder.monthlyCents).toBe(0);

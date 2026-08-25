@@ -34,14 +34,7 @@ import {
   shiftDateKeyMonths,
   type StoredBill,
 } from "./recurringBills";
-import type { Payday } from "./classify/income";
 
-/**
- * A recurring-spend entry as the table holds it. The tier 2 counterpart to `StoredBill`.
- *
- * `expectedCents` is meaningful only when `amountSource` is `"pinned"`; under `"auto"` the rate
- * comes from `recurringSpendRate` on every read, which is what keeps this tier maintenance-free.
- */
 /** A bill envelope as the table now holds it, with its claimed stable payees. */
 export type StoredBillRow = StoredBill & {
   id: string;
@@ -556,108 +549,6 @@ export function projectForwardMonths(
     finishBucket(key, key, monthStart(key), monthEnd(key), items),
   );
   return markAboveMedian(buckets);
-}
-
-/**
- * The same projection, grouped by pay period instead of calendar month.
- *
- * Walks detected (or supplied) payday dates forward 12 months. Unscheduled bill costs are
- * spread evenly across the periods they cover, not given a date.
- */
-export function projectForwardPayPeriods(
-  bills: readonly StoredBillRow[],
-  chargesByName: ReadonlyMap<string, readonly CommitmentCharge[]>,
-  todayKey: string,
-  paydays: readonly Payday[],
-): ForwardBucket[] {
-  if (paydays.length === 0) return [];
-
-  const sorted = [...paydays].map((payday) => payday.dateKey).sort();
-  const gaps: number[] = [];
-  for (let index = 1; index < sorted.length; index++) {
-    const gap = daysBetweenKeys(sorted[index - 1], sorted[index]);
-    if (gap > 0) gaps.push(gap);
-  }
-  const cadenceDays =
-    gaps.length === 0
-      ? 14
-      : gaps.length % 2 === 1
-        ? gaps[Math.floor(gaps.length / 2)]
-        : Math.round(
-            (gaps[Math.floor(gaps.length / 2) - 1] +
-              gaps[Math.floor(gaps.length / 2)]) /
-              2,
-          );
-
-  const horizonKey = shiftDateKeyMonths(todayKey, FORWARD_MONTHS);
-  let cursor = sorted[sorted.length - 1];
-  while (cursor > todayKey) {
-    cursor = shiftDateKey(cursor, -cadenceDays);
-  }
-  const starts: string[] = [];
-  for (let step = 0; step < 40 && cursor < horizonKey; step++) {
-    if (shiftDateKey(cursor, cadenceDays) > todayKey) starts.push(cursor);
-    cursor = shiftDateKey(cursor, cadenceDays);
-  }
-
-  const buckets: Omit<ForwardBucket, "aboveMedian">[] = starts.map((startKey) => {
-    const endKey = shiftDateKey(startKey, cadenceDays - 1);
-    return {
-      key: startKey,
-      label: `${startKey} – ${endKey}`,
-      startKey,
-      endKey,
-      items: [] as ForwardItem[],
-      totalCents: 0,
-    };
-  });
-
-  for (const bill of bills) {
-    if (bill.status !== "active") continue;
-    const amount = bill.expectedCents;
-    if (amount === null || amount <= 0) continue;
-
-    if (!bill.scheduled) {
-      const perPeriod = Math.round(
-        (annualCents(amount, cadenceOf(bill)) * cadenceDays) / 365,
-      );
-      for (const bucket of buckets) {
-        bucket.items.push({
-          name: bill.name,
-          cents: perPeriod,
-          dated: false,
-          dateKey: null,
-        });
-      }
-      continue;
-    }
-
-    for (const dateKey of billOccurrences(
-      bill,
-      chargesByName.get(bill.name) ?? [],
-      todayKey,
-      horizonKey,
-    )) {
-      const bucket = buckets.find(
-        (entry) => dateKey >= entry.startKey && dateKey <= entry.endKey,
-      );
-      if (bucket) {
-        bucket.items.push({ name: bill.name, cents: amount, dated: true, dateKey });
-      }
-    }
-  }
-
-  return markAboveMedian(
-    buckets.map((bucket) =>
-      finishBucket(
-        bucket.key,
-        bucket.label,
-        bucket.startKey,
-        bucket.endKey,
-        bucket.items,
-      ),
-    ),
-  );
 }
 
 /** Detected merchants not yet claimed by either table — the Commitments create list. */

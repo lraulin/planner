@@ -42,6 +42,9 @@ async function main(): Promise<number> {
     console.log(`  totalEnvelopeBalanceCents   ${usd(snap.totalEnvelopeBalanceCents)}`);
     console.log(`  heldForNextMonthCents       ${usd(snap.heldForNextMonthCents)}`);
     console.log(
+      `  assignedInFutureMonthsCents ${usd(snap.assignedInFutureMonthsCents)}`,
+    );
+    console.log(
       `  uncategorizedActivityCents  ${usd(snap.uncategorizedActivityCents)}`,
     );
     console.log(

@@ -26,6 +26,7 @@ export type PoolSnapshot = {
   readyToAssignCents: number;
   totalEnvelopeBalanceCents: number;
   heldForNextMonthCents: number;
+  assignedInFutureMonthsCents: number;
   uncategorizedActivityCents: number;
   accountReconciliationCents: number;
 };
@@ -69,6 +70,7 @@ function snapshotOf(data: Awaited<ReturnType<typeof loadBudget>>): PoolSnapshot 
     readyToAssignCents: current?.readyToAssignCents ?? 0,
     totalEnvelopeBalanceCents: current?.totalBalanceCents ?? 0,
     heldForNextMonthCents: current?.bufferedCents ?? 0,
+    assignedInFutureMonthsCents: current?.assignedInFutureMonthsCents ?? 0,
     uncategorizedActivityCents: current?.uncategorizedActivityCents ?? 0,
     accountReconciliationCents: current?.accountReconciliationCents ?? 0,
   };
@@ -78,10 +80,11 @@ function assertPoolIdentity(snapshot: PoolSnapshot): void {
   const rhs =
     snapshot.readyToAssignCents +
     snapshot.totalEnvelopeBalanceCents +
-    snapshot.heldForNextMonthCents;
+    snapshot.heldForNextMonthCents +
+    snapshot.assignedInFutureMonthsCents;
   if (rhs !== snapshot.accountPoolCents) {
     throw new Error(
-      `Account pool identity failed: pool ${snapshot.accountPoolCents} !== Ready to Assign ${snapshot.readyToAssignCents} + envelopes ${snapshot.totalEnvelopeBalanceCents} + held ${snapshot.heldForNextMonthCents}.`,
+      `Account pool identity failed: pool ${snapshot.accountPoolCents} !== Ready to Assign ${snapshot.readyToAssignCents} + envelopes ${snapshot.totalEnvelopeBalanceCents} + held ${snapshot.heldForNextMonthCents} + future assigned ${snapshot.assignedInFutureMonthsCents}.`,
     );
   }
 }

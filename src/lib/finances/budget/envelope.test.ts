@@ -424,6 +424,72 @@ describe("buildBudget — the reconciliation invariant", () => {
 });
 
 describe("buildBudget — current-month pool reconciliation", () => {
+  it("subtracts later-month assignments from current Ready to Assign", () => {
+    // Assigning $200 into September leaves August's leftover $100, and both months
+    // show that same leftover once September has no income of its own.
+    const months = build({
+      openingCents: 300_000,
+      allocations: [
+        {
+          month: "2026-09-01",
+          categoryId: RENT.id,
+          amountCents: 200_000,
+          carryover: false,
+        },
+      ],
+      current: {
+        month: "2026-08-01",
+        accountPoolCents: 300_000,
+        uncategorizedActivityCents: 0,
+      },
+    });
+
+    const august = findMonth(months, "2026-08-01")!;
+    const september = findMonth(months, "2026-09-01")!;
+    expect(august.assignedInFutureMonthsCents).toBe(200_000);
+    expect(august.readyToAssignCents).toBe(100_000);
+    expect(september.readyToAssignCents).toBe(100_000);
+    expect(august.readyToAssignCents).toBe(september.readyToAssignCents);
+    expect(
+      august.readyToAssignCents +
+        august.totalBalanceCents +
+        august.bufferedCents +
+        august.assignedInFutureMonthsCents,
+    ).toBe(300_000);
+    expect(
+      august.terms.some((term) => term.label === "Assigned in future months"),
+    ).toBe(true);
+    expect(august.terms.reduce((sum, term) => sum + term.cents, 0)).toBe(
+      august.readyToAssignCents,
+    );
+  });
+
+  it("does not rewrite a past month's Ready to Assign when a later month is assigned", () => {
+    const months = build({
+      openingCents: 300_000,
+      allocations: [
+        {
+          month: "2026-09-01",
+          categoryId: RENT.id,
+          amountCents: 200_000,
+          carryover: false,
+        },
+      ],
+      current: {
+        month: "2026-09-01",
+        accountPoolCents: 300_000,
+        uncategorizedActivityCents: 0,
+      },
+    });
+
+    const august = findMonth(months, "2026-08-01")!;
+    const september = findMonth(months, "2026-09-01")!;
+    expect(august.assignedInFutureMonthsCents).toBe(0);
+    expect(august.readyToAssignCents).toBe(300_000);
+    expect(september.assignedInFutureMonthsCents).toBe(0);
+    expect(september.readyToAssignCents).toBe(100_000);
+  });
+
   it("makes Ready to Assign + envelopes + held equal the account pool", () => {
     const months = build({
       openingCents: 100_000,
@@ -446,7 +512,10 @@ describe("buildBudget — current-month pool reconciliation", () => {
 
     const august = findMonth(months, "2026-08-01")!;
     expect(
-      august.readyToAssignCents + august.totalBalanceCents + august.bufferedCents,
+      august.readyToAssignCents +
+        august.totalBalanceCents +
+        august.bufferedCents +
+        august.assignedInFutureMonthsCents,
     ).toBe(200_000);
     expect(august.terms.reduce((sum, term) => sum + term.cents, 0)).toBe(
       august.readyToAssignCents,

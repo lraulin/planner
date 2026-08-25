@@ -2735,11 +2735,10 @@ export const financeBudgetCategories = pgTable(
 /**
  * Per-month state that belongs to the month itself rather than to any one envelope.
  *
- * `bufferedCents` is YNAB's fourth rule — money deliberately held back so next month is
- * funded by this month's income. It is a **deferral, not a sink**: it subtracts from this
- * month's Ready to Assign and is added straight back in next month's "funds from last month".
- * Get that pairing wrong in one direction and money vanishes; wrong in the other and it is
- * created.
+ * `bufferedCents` is leftover Actual-style Hold. Rule 4 is now assign-into-a-future-month
+ * (`agent-os/specs/2026-08-25-1154-month-ahead-zero-based/`). The column stays so existing
+ * rows do not need a migration; new holds are not created. A leftover amount still reduces
+ * this month's Ready to Assign and reappears in next month's "funds from last month".
  *
  * `notes` is an append-only audit line per money movement — *"Reassigned $12.34 from Groceries
  * → Dining on August 22"* — copied from Actual, which writes the same. It costs one column and

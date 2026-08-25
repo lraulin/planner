@@ -85,6 +85,20 @@ function gapOf(envelope: AssignEnvelope, needed: number): number {
   return Math.max(0, needed - envelope.assignedCents);
 }
 
+/** Total remaining ask on the current month — the month-ahead note, not a gate. */
+export function underfundedGapCents(
+  month: MonthKey,
+  envelopes: readonly AssignEnvelope[],
+  bills: ReadonlyMap<string, BillSnapshot>,
+): number {
+  let gap = 0;
+  for (const envelope of envelopes) {
+    if (!eligible(envelope, undefined)) continue;
+    gap += gapOf(envelope, neededAssigned(envelope, month, bills).needed);
+  }
+  return gap;
+}
+
 /** D4: overspend, then bills by due date, then `by` target month, then simple, then rest. */
 export function compareUnderfunded(
   left: AssignEnvelope,

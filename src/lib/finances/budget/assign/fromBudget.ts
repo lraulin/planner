@@ -7,11 +7,15 @@
 
 import {
   categoryMonth,
+  findMonth,
+  monthKeyOf,
+  prevMonthKey,
   shiftMonthKey,
   type BudgetMonth,
   type MonthKey,
 } from "../envelope";
-import type { BudgetRow } from "../rows";
+import { budgetRows, type BudgetRow } from "../rows";
+import { underfundedGapCents } from "./plan";
 import type { BillSnapshot } from "../templates/schedule";
 import { templateCarryIn } from "../templates/apply";
 import {
@@ -123,6 +127,36 @@ export function assignHistoryWithLookback(
     ...preStartAssignHistory(startMonth, categoryIds, preStartActivity),
     ...folded,
   ];
+}
+
+export function isFutureBudgetMonth(viewed: MonthKey, todayKey: string): boolean {
+  return viewed > monthKeyOf(todayKey);
+}
+
+export function currentMonthUnderfundedGap(params: {
+  months: readonly BudgetMonth[];
+  todayKey: string;
+  groups: Parameters<typeof budgetRows>[0];
+  categories: Parameters<typeof budgetRows>[1];
+  goals: Parameters<typeof budgetRows>[3];
+  nextDueKeys: ReadonlyMap<string, string>;
+}): number {
+  const currentKey = monthKeyOf(params.todayKey);
+  const current = findMonth(params.months, currentKey);
+  if (!current) return 0;
+  const previous = findMonth(params.months, prevMonthKey(currentKey));
+  const rows = budgetRows(
+    params.groups,
+    params.categories,
+    current,
+    params.goals,
+    params.nextDueKeys,
+  );
+  return underfundedGapCents(
+    currentKey,
+    rows.map((row) => assignEnvelopeFromRow(row, previous)),
+    assignBillsFromRows(rows),
+  );
 }
 
 export function assignBillsFromRows(

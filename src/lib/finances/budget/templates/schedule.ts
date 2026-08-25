@@ -8,19 +8,14 @@
  * computed here rather than declared as a template line — every bill funds itself, with
  * nothing to add or remove from the templates editor.
  *
- * **The math is still Actual's** — `packages/loot-core/src/server/budget/schedule-template.ts`
- * (MIT, © James Long): pay-this-month vs. sinking, weekly/daily summing occurrences in the
- * month, and the already-funded fallback to the base monthly rate. What changed is the input:
- * Actual's `RecurConfig` (frequency + interval) is replaced by this app's `Cadence`
- * (`unit: "month" | "day"`, `n`), so occurrence-walking uses `nextDueFrom` /
- * `shiftByCadence` from `recurringBills.ts` instead of `occurrences()`.
+ * **The math is still Actual's** for weekly/daily sums and for yearly/quarterly sinking
+ * (`packages/loot-core/src/server/budget/schedule-template.ts`, MIT, © James Long). Monthly
+ * (`n = 1`) bills diverge: Actual would sink `remaining / (monthsUntil + 1)` when the next
+ * charge is next month (half of rent in August). This app asks for the full amount in the due
+ * month and $0 otherwise — next month's rent is funded by assigning in next month
+ * (`agent-os/specs/2026-08-25-1154-month-ahead-zero-based/` D1).
  *
- * **The frequency/interval split collapses to one branch on `Cadence.unit`.** Actual treats
- * `frequency: "monthly", interval: 1` as "pay this month if due" and `interval > 1` (its
- * quarterly/annual shape) as always-sinking; both map here to `unit: "month"`, and the `n === 1`
- * check below reproduces the same split. Its `weekly`/`daily` "always pay this month, sum
- * occurrences" branch (interval ≤ 4 weeks, ≤ 31 days — 28 days either way) maps to
- * `unit: "day", n <= 31`, which is every day cadence `CADENCE_CHOICES` actually offers.
+ * Day cadences (weekly, biweekly, 28-day) still sum occurrences in the viewed month.
  *
  * **One bill, one demand — no batching.** Actual's `runSchedules` spends one carry-in across
  * several schedule templates stacked on one envelope. A bill envelope now *is* one obligation,
@@ -97,14 +92,12 @@ function occurrencesInMonth(snapshot: BillSnapshot, month: MonthKey): string[] {
   return dates;
 }
 
-function isPayThisMonth(snapshot: BillSnapshot, month: MonthKey): boolean {
-  const cadence = cadenceOfSnapshot(snapshot);
-  if (alwaysPayThisMonth(cadence)) return true;
-  return (
-    cadence.unit === "month" &&
-    cadence.n === 1 &&
-    monthsUntilDate(month, snapshot.nextDueKey) === 0
-  );
+function isMonthlyOnce(cadence: Cadence): boolean {
+  return cadence.unit === "month" && cadence.n === 1;
+}
+
+function isPayThisMonth(snapshot: BillSnapshot): boolean {
+  return alwaysPayThisMonth(cadenceOfSnapshot(snapshot));
 }
 
 function thisMonthNeed(snapshot: BillSnapshot, month: MonthKey): number {
@@ -156,12 +149,21 @@ export function billFundingDemand(
   assertCents(carryInCents, "carry-in");
   if (fillAmount(snapshot) === 0) return { toBudgetCents: 0, error: null };
 
-  if (isPayThisMonth(snapshot, month)) {
+  const cadence = cadenceOfSnapshot(snapshot);
+  const amount = fillAmount(snapshot);
+  if (isMonthlyOnce(cadence)) {
+    if (monthsUntilDate(month, snapshot.nextDueKey) !== 0) {
+      return { toBudgetCents: 0, error: null };
+    }
+    if (carryInCents >= amount) return { toBudgetCents: 0, error: null };
+    return { toBudgetCents: amount, error: null };
+  }
+
+  if (isPayThisMonth(snapshot)) {
     return { toBudgetCents: thisMonthNeed(snapshot, month), error: null };
   }
 
-  const upcoming = fillAmount(snapshot);
-  if (carryInCents >= upcoming) {
+  if (carryInCents >= amount) {
     return {
       toBudgetCents: Math.round(baseMonthlyContribution(snapshot)),
       error: null,

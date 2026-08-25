@@ -238,6 +238,12 @@ export type BudgetMonth = {
   /** Sum of every expense envelope's balance. With Ready to Assign, this is the whole pot. */
   totalBalanceCents: number;
   bufferedCents: number;
+  /**
+   * Assigned in months after this one. Zero on historical months. Subtracted from displayed
+   * Ready to Assign so a future job leaves money now
+   * (`agent-os/specs/2026-08-25-1154-month-ahead-zero-based/` D3).
+   */
+  assignedInFutureMonthsCents: number;
   readyToAssignCents: number;
   /**
    * Uncategorized on-budget activity named as a Ready to Assign term. Zero on historical
@@ -425,17 +431,51 @@ export function buildBudget(input: BudgetInput): BudgetMonth[] {
       totalActivityCents,
       totalBalanceCents,
       bufferedCents,
+      assignedInFutureMonthsCents: 0,
       readyToAssignCents,
       uncategorizedActivityCents,
       accountReconciliationCents,
       terms,
     });
 
+    // The unadjusted fold Ready to Assign, including current-month reconciliation. Next
+    // month's fromLastMonth must keep this figure — displayed Ready to Assign subtracts
+    // future assignments after the fold, and feeding that back would double-count them.
     previousReadyToAssign = readyToAssignCents;
     previousBuffered = bufferedCents;
   }
 
+  applyAssignedInFuture(months, input.current?.month);
   return months;
+}
+
+/**
+ * YNAB Rule 4: dollars already given a job in a later month leave Ready to Assign now.
+ *
+ * Only current and future months. Past months stay historical. `fromLastMonth` is not
+ * rewritten — it already rolled the unadjusted leftover.
+ */
+function applyAssignedInFuture(
+  months: BudgetMonth[],
+  currentMonth: MonthKey | undefined,
+): void {
+  if (!currentMonth) return;
+  const start = months.findIndex((month) => month.month === currentMonth);
+  if (start < 0) return;
+
+  let later = 0;
+  for (let index = months.length - 1; index >= start; index--) {
+    const month = months[index];
+    month.assignedInFutureMonthsCents = later;
+    if (later !== 0) {
+      month.readyToAssignCents -= later;
+      month.terms.push({
+        label: "Assigned in future months",
+        cents: -later,
+      });
+    }
+    later += month.totalAssignedCents;
+  }
 }
 
 /** The month, or null when the fold does not reach it. */

@@ -29,7 +29,7 @@ function bill(over: Partial<StoredBillRow> = {}): StoredBillRow {
 const CHARGES: BillCharge[] = [{ name: "1Password", dateKey: "2026-03-30" }];
 
 describe("billRows", () => {
-  it("annualizes a yearly bill's amount into Monthly and Pay period", () => {
+  it("annualizes a yearly bill's amount into Monthly", () => {
     const [row] = billRows([bill()], CHARGES, "2026-08-16");
     expect(row.annualCostCents).toBe(7188);
     expect(row.monthlyCents).toBe(Math.round(7188 / 12));

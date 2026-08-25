@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { assignHistoryWithLookback, preStartAssignHistory } from "./fromBudget";
+import {
+  assignHistoryWithLookback,
+  isFutureBudgetMonth,
+  preStartAssignHistory,
+} from "./fromBudget";
+
+describe("isFutureBudgetMonth", () => {
+  it("is true only for months after today", () => {
+    expect(isFutureBudgetMonth("2026-09-01", "2026-08-25")).toBe(true);
+    expect(isFutureBudgetMonth("2026-08-01", "2026-08-25")).toBe(false);
+    expect(isFutureBudgetMonth("2026-07-01", "2026-08-25")).toBe(false);
+  });
+});
 
 describe("preStartAssignHistory", () => {
   it("fills Assigned with 0 and keeps categorised spend from before the start month", () => {
