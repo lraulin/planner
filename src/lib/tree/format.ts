@@ -124,10 +124,11 @@ export function formatPriority(
  * Reads "A1" or "A" back into its parts. Empty input clears the priority; anything
  * unrecognised returns `undefined`, so a typo reverts rather than silently clearing.
  *
- * Achieve also accepts `aa` as a typing shortcut for `A1` (home-row convenience —
- * no shift needed to reach `1`). See `docs/achieve-planner/release-log.txt`
- * (1.1.10). We extend it to every letter — `ba`, `ca`, `da` — since a rank is no longer
- * optional and "top of this letter" is worth two keystrokes on all four.
+ * Rank 1 has two typing shortcuts so you never have to reach for `1`:
+ * - trailing `a` — Achieve's `aa` → A1 (release log 1.1.10), generalized to `ba`/`ca`/`da`
+ * - doubled letter — `bb` → B1, `cc` → C1, `dd` → D1 (`aa` already matches the first rule)
+ *
+ * Mixed two-letter strings (`ab`) stay unrecognised. Achieve only documented `aa`.
  */
 export function parsePriority(
   text: string,
@@ -135,12 +136,14 @@ export function parsePriority(
   const input = text.trim().toUpperCase();
   if (input === "") return { letter: null, rank: null };
 
-  // Achieve's "aa" → A1 shortcut, generalized: a trailing `a` means rank 1, so `ba` is B1,
-  // `ca` is C1 and `da` is D1. Achieve only ever documented `aa`, but now that every letter
-  // carries a rank the shortcut is worth having on every letter — and `A` is the only suffix
-  // the grammar below cannot already mean, since a rank is digits.
+  // Trailing `a` means rank 1 (`aa`/`ba`/`ca`/`da`). `A` is the only suffix the digit
+  // grammar below cannot already mean.
   const topOfLetter = /^([ABCD])A$/.exec(input);
   if (topOfLetter) return { letter: topOfLetter[1] as PriorityLetter, rank: 1 };
+
+  // Same key twice is faster than trailing `a` when the letter is not A.
+  const doubled = /^([ABCD])\1$/.exec(input);
+  if (doubled) return { letter: doubled[1] as PriorityLetter, rank: 1 };
 
   const match = /^([ABCD])(\d{1,2})?$/.exec(input);
   if (!match) return undefined;

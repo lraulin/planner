@@ -141,9 +141,15 @@ describe("parsePriority", () => {
     expect(parsePriority("ba")).toEqual({ letter: "B", rank: 1 });
     expect(parsePriority("ca")).toEqual({ letter: "C", rank: 1 });
     expect(parsePriority("da")).toEqual({ letter: "D", rank: 1 });
-    // Only a trailing `a` is a shortcut; a doubled letter is still a typo.
-    expect(parsePriority("bb")).toBeUndefined();
+    // Doubled letter is the same rank-1 shortcut without reaching for `a`.
+    expect(parsePriority("bb")).toEqual({ letter: "B", rank: 1 });
+    expect(parsePriority("BB")).toEqual({ letter: "B", rank: 1 });
+    expect(parsePriority(" bb ")).toEqual({ letter: "B", rank: 1 });
+    expect(parsePriority("cc")).toEqual({ letter: "C", rank: 1 });
+    expect(parsePriority("dd")).toEqual({ letter: "D", rank: 1 });
+    // Mixed two-letter strings that are not trailing-`a` stay typos.
     expect(parsePriority("ab")).toBeUndefined();
+    expect(parsePriority("cb")).toBeUndefined();
   });
 
   it("clears the priority on empty input", () => {
