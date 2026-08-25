@@ -12,7 +12,13 @@ import { daysBetweenKeys, toDateKey } from "@/lib/schedule/geometry";
  * UTC-noon encoding); the `today` handed in is the reader's local day.
  */
 
-/** The local calendar day a timestamp falls on, as `YYYY-MM-DD`. */
+/**
+ * Stored calendar day of a plan/record Date (`YYYY-MM-DD`).
+ *
+ * Deadlines and target dates are UTC noon. `toDateKey` is the decoder; `localDateKey`
+ * would be tomorrow after ~8pm in the Americas for a live instant, which is why it
+ * is not used here.
+ */
 export function dayString(date: Date): string {
   return toDateKey(date);
 }
