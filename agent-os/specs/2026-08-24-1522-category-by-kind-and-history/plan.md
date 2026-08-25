@@ -67,6 +67,7 @@ New income / envelope / savings: name, then `createBudgetCategory` + `setTransac
 | 3   | Ingest `applyPayeeClaims` is bounded to rows created in that ingest                                       | Unbounded scan on every import/sync was a second way to lock the page                                                                                         |
 | 4   | Track as bill isolates this merchant onto its own payee when the current payee also owns other aliases    | Seeded `/^CVS/` had named ExtraCare's payee "CVS", so a bill would have claimed 211 pharmacy charges                                                          |
 | 5   | Transaction-backed entry points call one `trackTransactionAsBill` mutation                                | Register, New bill…, Review, and Insights were composing isolate + upsert in the browser; Insights still refused `payeeId === null` independently             |
+| 6   | A payee already named for the merchant stays intact when it has multiple aliases                          | Alternate statement spellings are one payee, not proof of the shared-identity case that requires isolation; splitting tried to create a duplicate payee       |
 
 ## Task 1: Save spec documentation
 

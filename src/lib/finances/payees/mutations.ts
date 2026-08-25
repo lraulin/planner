@@ -182,8 +182,9 @@ export async function ensurePayeeForTransaction(
  * The payee that should own a bill declared from this row: this merchant only.
  *
  * Seeded `/^CVS/` named ExtraCare's payee "CVS" and put pharmacy charges on the same
- * identity. Tracking ExtraCare as a bill must not claim 200 grocery runs. If this
- * alias shares a payee with others, it is split onto its own payee first.
+ * identity. Tracking ExtraCare as a bill must not claim 200 grocery runs. Multiple
+ * aliases alone do not make a payee shared, though: a payee already named for this
+ * merchant can own alternate statement spellings without becoming two identities.
  */
 export async function isolatePayeeForBill(
   userId: string,
@@ -213,10 +214,24 @@ export async function isolatePayeeForBill(
         eq(financePayeeAliases.payeeId, payeeId),
       ),
     );
-  if (aliases.length <= 1) return payeeId;
 
   const name = suggestCommitmentName(alias);
-  const dedicated = await createPayee(userId, { name, aliases: [] });
+  const current = await requirePayee(userId, payeeId);
+  if (aliases.length <= 1 || current.name.toLowerCase() === name.toLowerCase()) {
+    return payeeId;
+  }
+
+  const [named] = await db
+    .select({ id: financePayees.id })
+    .from(financePayees)
+    .where(
+      and(
+        eq(financePayees.userId, userId),
+        sql`lower(${financePayees.name}) = ${name.toLowerCase()}`,
+      ),
+    )
+    .limit(1);
+  const dedicated = named?.id ?? (await createPayee(userId, { name, aliases: [] }));
   await db.transaction(async (tx) => {
     await tx
       .delete(financePayeeAliases)

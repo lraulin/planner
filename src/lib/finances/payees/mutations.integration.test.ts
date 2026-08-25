@@ -171,6 +171,31 @@ describeDb("payee mutations", () => {
     expect(shopRow?.payeeId).toBe(cvs);
   });
 
+  it("reuses a same-named payee when isolating it from a shared payee", async () => {
+    const existing = await createPayee(userId, { name: "LOTUSEATERS" });
+    const shared = await createPayee(userId, {
+      name: "Independent media",
+      aliases: ["LOTUSEATERS", "GRAY MIRROR"],
+    });
+    const charge = await addTransaction(userId, accountId, {
+      description: "LOTUSEATERS.COM",
+      amount: "-15.99",
+      payeeId: shared,
+    });
+
+    expect(await isolatePayeeForBill(userId, charge)).toBe(existing);
+    expect(await getPayee(userId, existing)).toMatchObject({
+      aliases: ["LOTUSEATERS"],
+    });
+    expect(await getPayee(userId, shared)).toMatchObject({ aliases: ["GRAY MIRROR"] });
+
+    const [row] = await db
+      .select({ payeeId: financeTransactions.payeeId })
+      .from(financeTransactions)
+      .where(eq(financeTransactions.id, charge));
+    expect(row?.payeeId).toBe(existing);
+  });
+
   it("will not mint a payee for another user's transaction", async () => {
     const txId = await addTransaction(userId, accountId, {
       description: "GEICO",

@@ -939,19 +939,28 @@ describeDb("trackTransactionAsBill", () => {
     });
   });
 
-  it("keeps a dedicated payee when this merchant already has its own alias", async () => {
+  it("keeps a named payee when alternate statement spellings give it multiple aliases", async () => {
     const dedicated = await createPayee(userId, {
-      name: "Netflix",
-      aliases: ["NETFLIX.COM"],
+      name: "LOTUSEATERS",
+      aliases: ["LOTUSEATERS", "LOTUSEATERS SWINDON"],
     });
-    const charge = await addCharge("NETFLIX.COM", "-15.99", "2026-08-01", dedicated);
+    const charge = await addCharge(
+      "LOTUSEATERS.COM",
+      "-15.99",
+      "2026-08-01",
+      dedicated,
+    );
 
     const { payeeId } = await trackTransactionAsBill(userId, charge, {
-      name: "Netflix",
+      name: "Lotuseaters",
       cadence: { unit: "month", n: 1 },
       expectedCents: 1599,
     });
     expect(payeeId).toBe(dedicated);
+    expect(await getPayee(userId, dedicated)).toMatchObject({
+      aliases: ["LOTUSEATERS", "LOTUSEATERS SWINDON"],
+      claim: { name: "Lotuseaters" },
+    });
   });
 
   it("rolls back on an illegal cadence without minting a payee", async () => {
