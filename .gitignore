@@ -47,3 +47,12 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 todo.tmp.md
+
+# Vendor Neon agent skills (`npx skills add neondatabase/agent-skills`).
+# Production Postgres is Neon, but these fire on ordinary "database" / "postgres" /
+# "migrations" work, push Neon Auth and neon.ts, and fight Docker-local + self-run
+# Better Auth. Pooled vs direct is already in agent-os/standards/database/migrations.md.
+.agents/skills/neon/
+.agents/skills/neon-postgres/
+.agents/skills/neon-postgres-egress-optimizer/
+skills-lock.json
