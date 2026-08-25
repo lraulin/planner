@@ -224,6 +224,25 @@ export function billAnchor(
 }
 
 /**
+ * Whether a typed next-charge date can be stored as `anchorDate`.
+ *
+ * `billAnchor` ignores an override on or before the last posted charge and walks from
+ * that charge instead — storing such a date would look like the save bounced. Clearing
+ * (`null`) always goes through: that is how the column returns to the derived date.
+ * No last charge yet means any date is the charge being waited for.
+ */
+export function nextChargeWriteError(
+  anchorDate: string | null,
+  lastChargeKey: string | null,
+): string | null {
+  if (anchorDate === null || lastChargeKey === null) return null;
+  if (anchorDate <= lastChargeKey) {
+    return `Next charge must be after the last posted charge (${lastChargeKey}).`;
+  }
+  return null;
+}
+
+/**
  * Two charges from different spellings of the same bill, arriving too close together.
  *
  * **What this is for.** A vendor renames itself and the same bill turns up twice on the review

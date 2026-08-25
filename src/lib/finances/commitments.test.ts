@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   aliasOverlap,
   billAnchor,
+  nextChargeWriteError,
   periodIndex,
   periodLengthDays,
   periodStartKey,
@@ -384,5 +385,31 @@ describe("billAnchor", () => {
         "2026-08-21",
       ),
     ).toMatchObject({ expectedKey: "2026-09-11", nextDueKey: "2026-09-11" });
+  });
+});
+
+describe("nextChargeWriteError", () => {
+  it("allows any date when nothing has posted yet", () => {
+    expect(nextChargeWriteError("2026-01-01", null)).toBeNull();
+  });
+
+  it("allows clearing the override whether or not there is a last charge", () => {
+    expect(nextChargeWriteError(null, null)).toBeNull();
+    expect(nextChargeWriteError(null, "2026-08-04")).toBeNull();
+  });
+
+  it("allows a date after the last posted charge", () => {
+    expect(nextChargeWriteError("2026-08-05", "2026-08-04")).toBeNull();
+  });
+
+  it("refuses a date on the last posted charge, not only one before it", () => {
+    // `billAnchor` treats equal as "already had", so storing the same day would
+    // look like the save bounced. `<` instead of `<=` would let that through.
+    expect(nextChargeWriteError("2026-08-04", "2026-08-04")).toBe(
+      "Next charge must be after the last posted charge (2026-08-04).",
+    );
+    expect(nextChargeWriteError("2026-08-03", "2026-08-04")).toBe(
+      "Next charge must be after the last posted charge (2026-08-04).",
+    );
   });
 });

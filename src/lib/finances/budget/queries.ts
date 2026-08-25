@@ -6,7 +6,6 @@ import {
   financeBudgetCategories,
   financeBudgetMonths,
   financeCategoryGroups,
-  financePayees,
   financeTransactions,
 } from "@/db/schema";
 import type { EnvelopeKind, EnvelopeStatus } from "@/db/schema";
@@ -20,7 +19,9 @@ import { numericStringToCents } from "../money";
 import { listAccounts } from "../queries";
 import { accountBalanceView } from "../workingBalance";
 import { loadSelectedWorkingPending } from "../workingPendingQuery";
+import { lastChargeByEnvelope } from "../billLastCharge";
 import { billAnchor } from "../commitments";
+import type { StoredBill } from "../recurringBills";
 import {
   buildBudget,
   findMonth,
@@ -584,36 +585,47 @@ export async function openingPositionFor(
   return working - after;
 }
 
-/**
- * The last posted charge date per bill envelope, keyed by envelope id — what `billAnchor`
- * needs to compute a next-due date. Joined through the payee claim, which is what routes a
- * charge to a bill (`finance_payees.budget_category_id`), not through the transaction's own
- * `budget_category_id` — a hand-recategorised charge should not move the due-date anchor.
- */
-async function lastChargeByEnvelope(userId: string): Promise<Map<string, string>> {
-  const rows = await db
-    .select({
-      envelopeId: financePayees.claimedBudgetCategoryId,
-      lastChargeKey: sql<string>`max(${financeTransactions.transactionDate})`,
-    })
-    .from(financeTransactions)
-    .innerJoin(financePayees, eq(financePayees.id, financeTransactions.payeeId))
-    .where(
-      and(
-        eq(financeTransactions.userId, userId),
-        eq(financePayees.userId, userId),
-        isNotNull(financePayees.claimedBudgetCategoryId),
-      ),
-    )
-    .groupBy(financePayees.claimedBudgetCategoryId);
+function storedBillOf(category: BudgetCategoryRow): StoredBill | null {
+  if (category.kind !== "bill" || !category.bill) return null;
+  if (category.bill.cadenceMonths === null) return null;
+  return {
+    name: category.name,
+    cadenceMonths: category.bill.cadenceMonths,
+    cadenceDays: category.bill.cadenceDays,
+    anchorDate: category.bill.anchorDate,
+    expectedCents: category.bill.expectedCents,
+    scheduled: category.bill.scheduled,
+    dueDay: category.bill.dueDay,
+  };
+}
 
-  return new Map(
-    rows
-      .filter((row): row is { envelopeId: string; lastChargeKey: string } =>
-        Boolean(row.envelopeId),
-      )
-      .map((row) => [row.envelopeId, row.lastChargeKey]),
-  );
+/**
+ * Next charge per scheduled bill envelope, of any status.
+ *
+ * Distinct from {@link loadBillSnapshots}: apply only funds active bills that state an
+ * amount, and deriving the grid column from that list left paused bills (and bills with
+ * no amount yet) showing "—" with nothing to edit.
+ */
+export async function loadNextDueKeys(
+  userId: string,
+  categories: readonly BudgetCategoryRow[],
+  todayKey: string,
+): Promise<Map<string, string>> {
+  const lastCharge = await lastChargeByEnvelope(userId);
+  const nextDueKeys = new Map<string, string>();
+
+  for (const category of categories) {
+    const bill = storedBillOf(category);
+    if (bill === null || !bill.scheduled) continue;
+    const nextDueKey = billAnchor(
+      bill,
+      lastCharge.get(category.id) ?? null,
+      todayKey,
+    ).nextDueKey;
+    if (nextDueKey !== null) nextDueKeys.set(category.id, nextDueKey);
+  }
+
+  return nextDueKeys;
 }
 
 /**
@@ -632,32 +644,22 @@ export async function loadBillSnapshots(
   const snapshots: BillSnapshot[] = [];
 
   for (const category of categories) {
-    if (category.kind !== "bill" || !category.bill) continue;
-    if (category.bill.status !== "active") continue;
-    const cadenceMonths = category.bill.cadenceMonths;
-    if (cadenceMonths === null) continue;
+    const bill = storedBillOf(category);
+    if (bill === null || category.bill?.status !== "active") continue;
 
     const anchor = billAnchor(
-      {
-        name: category.name,
-        cadenceMonths,
-        cadenceDays: category.bill.cadenceDays,
-        anchorDate: category.bill.anchorDate,
-        expectedCents: category.bill.expectedCents,
-        scheduled: category.bill.scheduled,
-        dueDay: category.bill.dueDay,
-      },
+      bill,
       lastCharge.get(category.id) ?? null,
       todayKey,
     );
-    if (anchor.nextDueKey === null || category.bill.expectedCents === null) continue;
+    if (anchor.nextDueKey === null || bill.expectedCents === null) continue;
 
     snapshots.push({
       id: category.id,
       name: category.name,
-      cadenceMonths,
-      cadenceDays: category.bill.cadenceDays,
-      expectedCents: category.bill.expectedCents,
+      cadenceMonths: bill.cadenceMonths,
+      cadenceDays: bill.cadenceDays ?? null,
+      expectedCents: bill.expectedCents,
       nextDueKey: anchor.nextDueKey,
     });
   }

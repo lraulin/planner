@@ -36,7 +36,7 @@ export type BudgetRow = {
   bill: BillFacet | null;
   /**
    * Next charge, derived from charge history via `billAnchor` — null for a bill with no
-   * charge yet, or an ordinary envelope. Computed by the caller (`loadBillSnapshots`) rather
+   * charge yet, or an ordinary envelope. Computed by the caller (`loadNextDueKeys`) rather
    * than here, since it needs a database read this pure module cannot make.
    */
   nextDueKey: string | null;

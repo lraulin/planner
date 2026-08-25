@@ -19,6 +19,8 @@ import { rebaseAccountMembership } from "./budget/membership";
 import { changedRows, planReclassify } from "./classify/reclassify";
 import { summarizeClassifiedIncome, type IncomeSummary } from "./classify/income";
 import { summarizeFlowChanges, type FlowDiff } from "./classify/flowDiff";
+import { lastChargeOnBill } from "./billLastCharge";
+import { nextChargeWriteError } from "./commitments";
 import { cadenceColumns, cadenceOf, type Cadence } from "./recurringBills";
 import { numericStringToCents } from "./money";
 import type { PaypalResolution } from "./paypalMatch";
@@ -759,6 +761,16 @@ export async function upsertBillEnvelope(
       .limit(1);
     if (existing) {
       categoryId = existing.id;
+      if (edit.anchorDate !== undefined) {
+        // Last charge is the payee claim, not a recategorised row on this envelope —
+        // `billLastCharge.ts`. A date on or before that charge is one `billAnchor` would
+        // ignore, so storing it would look like the save bounced.
+        const error = nextChargeWriteError(
+          edit.anchorDate,
+          await lastChargeOnBill(userId, categoryId),
+        );
+        if (error) throw new Error(error);
+      }
       // Only the fields supplied are written, the same rule `updateTransaction` follows. It
       // matters here because correcting a cadence from the grid sends the cadence and nothing
       // else, and a blanket write would silently clear the declared amount — after which the

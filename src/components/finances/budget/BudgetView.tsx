@@ -99,7 +99,7 @@ export function BudgetView({
   data: BudgetData;
   /** Detected recurring merchants no envelope has claimed yet. */
   review: readonly RecurringMerchant[];
-  /** Next charge per bill envelope id, from `loadBillSnapshots`. */
+  /** Next charge per bill envelope id, from `loadNextDueKeys`. */
   nextDueKeys: ReadonlyMap<string, string>;
   /** Every payee, with its current bill/envelope claim if any — for the payees dialog. */
   payees: readonly { id: string; name: string; budgetCategoryId: string | null }[];

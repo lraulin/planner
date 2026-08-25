@@ -9,6 +9,11 @@ import {
   users,
 } from "@/db/schema";
 import { createCategoryGroup } from "./budget/mutations";
+import {
+  loadBillSnapshots,
+  loadNextDueKeys,
+  type BudgetCategoryRow,
+} from "./budget/queries";
 import { databaseReachable, warnDatabaseSkipped } from "@/lib/testing/database";
 import { importFinanceCsvFiles, type ImportFile } from "./import";
 import { loadRecurringBills } from "./dashboardQueries";
@@ -521,6 +526,177 @@ describeDb("declared bill envelopes", () => {
     });
     expect(await loadRecurringBills(userId)).toHaveLength(1);
   });
+
+  it("corrects next charge on an existing bill and can clear it", async () => {
+    await upsertBillEnvelope(userId, {
+      name: "Geico",
+      cadence: { unit: "month", n: 6 },
+    });
+    await upsertBillEnvelope(userId, {
+      name: "Geico",
+      cadence: { unit: "month", n: 6 },
+      anchorDate: "2026-09-03",
+    });
+    expect((await loadRecurringBills(userId))[0].anchorDate).toBe("2026-09-03");
+
+    await upsertBillEnvelope(userId, {
+      name: "Geico",
+      cadence: { unit: "month", n: 6 },
+      anchorDate: null,
+    });
+    expect((await loadRecurringBills(userId))[0].anchorDate).toBeNull();
+  });
+});
+
+describeDb("bill next charge against posted history", () => {
+  let userId: string;
+  let accountId: string;
+
+  beforeEach(async () => {
+    userId = await makeUser();
+    const [account] = await db
+      .insert(financeAccounts)
+      .values({
+        userId,
+        name: "Card",
+        kind: "credit_card",
+        externalSource: "test",
+        externalKey: `card-${crypto.randomUUID()}`,
+      })
+      .returning({ id: financeAccounts.id });
+    accountId = account.id;
+  });
+
+  it("refuses a next charge on or before the last claimed payee charge", async () => {
+    const geico = await createPayee(userId, { name: "GEICO" });
+    await db.insert(financeTransactions).values({
+      userId,
+      accountId,
+      transactionDate: "2026-08-04",
+      description: "GEICO *AUTO",
+      amount: "-594.98",
+      payeeId: geico,
+    });
+    await upsertBillEnvelope(userId, {
+      name: "Geico",
+      payeeIds: [geico],
+      cadence: { unit: "month", n: 6 },
+      expectedCents: 59498,
+      anchorDate: "2026-09-03",
+    });
+
+    await expect(
+      upsertBillEnvelope(userId, {
+        name: "Geico",
+        cadence: { unit: "month", n: 6 },
+        anchorDate: "2026-08-04",
+      }),
+    ).rejects.toThrow("Next charge must be after the last posted charge (2026-08-04).");
+    await expect(
+      upsertBillEnvelope(userId, {
+        name: "Geico",
+        cadence: { unit: "month", n: 6 },
+        anchorDate: "2026-08-03",
+      }),
+    ).rejects.toThrow("Next charge must be after the last posted charge (2026-08-04).");
+
+    expect((await loadRecurringBills(userId))[0].anchorDate).toBe("2026-09-03");
+
+    await upsertBillEnvelope(userId, {
+      name: "Geico",
+      cadence: { unit: "month", n: 6 },
+      anchorDate: "2026-08-05",
+    });
+    expect((await loadRecurringBills(userId))[0].anchorDate).toBe("2026-08-05");
+  });
+
+  it("does not treat a recategorised charge as the last posted charge", async () => {
+    // Last charge is the payee claim. A later row filed onto the envelope by hand
+    // belongs to a different merchant and must not move the due-date floor.
+    const geico = await createPayee(userId, { name: "GEICO" });
+    const cvs = await createPayee(userId, { name: "CVS" });
+    await db.insert(financeTransactions).values({
+      userId,
+      accountId,
+      transactionDate: "2026-08-01",
+      description: "GEICO *AUTO",
+      amount: "-594.98",
+      payeeId: geico,
+    });
+    await upsertBillEnvelope(userId, {
+      name: "Geico",
+      payeeIds: [geico],
+      cadence: { unit: "month", n: 6 },
+      expectedCents: 59498,
+    });
+    const [bill] = await loadRecurringBills(userId);
+    await db.insert(financeTransactions).values({
+      userId,
+      accountId,
+      transactionDate: "2026-08-20",
+      description: "CVS/PHARMACY",
+      amount: "-12.00",
+      payeeId: cvs,
+      budgetCategoryId: bill.id,
+    });
+
+    await upsertBillEnvelope(userId, {
+      name: "Geico",
+      cadence: { unit: "month", n: 6 },
+      anchorDate: "2026-08-10",
+    });
+    expect((await loadRecurringBills(userId))[0].anchorDate).toBe("2026-08-10");
+  });
+});
+
+describeDb("next due keys for the bills grid", () => {
+  let userId: string;
+
+  beforeEach(async () => {
+    userId = await makeUser();
+  });
+
+  it("still dates a paused scheduled bill, which apply snapshots skip", async () => {
+    // The grid used to take nextDueKeys from loadBillSnapshots, so a paused bill
+    // showed "—" and had nothing to edit.
+    await upsertBillEnvelope(userId, {
+      name: "Paramount+",
+      cadence: { unit: "month", n: 1 },
+      expectedCents: 1299,
+      anchorDate: "2026-09-01",
+      status: "paused",
+    });
+    const [bill] = await loadRecurringBills(userId);
+    const categories: BudgetCategoryRow[] = [
+      {
+        id: bill.id,
+        groupId: null,
+        name: bill.name,
+        sortKey: "a",
+        hidden: false,
+        notes: "",
+        kind: "bill",
+        isIncome: false,
+        templates: [],
+        bill: {
+          status: "paused",
+          cancelledOn: null,
+          url: "",
+          cadenceMonths: 1,
+          cadenceDays: null,
+          dueDay: null,
+          anchorDate: "2026-09-01",
+          scheduled: true,
+          expectedCents: 1299,
+        },
+      },
+    ];
+
+    expect(
+      (await loadNextDueKeys(userId, categories, "2026-08-21")).get(bill.id),
+    ).toBe("2026-09-01");
+    expect(await loadBillSnapshots(userId, categories, "2026-08-21")).toEqual([]);
+  });
 });
 
 describeDb("declared bill envelope isolation", () => {
@@ -577,6 +753,22 @@ describeDb("declared bill envelope isolation", () => {
       cadenceDays: null,
       expectedCents: null,
     });
+  });
+
+  it("does not let a second user change another user's next charge", async () => {
+    await upsertBillEnvelope(ownerId, {
+      name: "Geico",
+      cadence: { unit: "month", n: 6 },
+      anchorDate: "2026-09-03",
+    });
+    await upsertBillEnvelope(intruderId, {
+      name: "Geico",
+      cadence: { unit: "month", n: 6 },
+      anchorDate: "2026-12-01",
+    });
+
+    expect((await loadRecurringBills(ownerId))[0].anchorDate).toBe("2026-09-03");
+    expect((await loadRecurringBills(intruderId))[0].anchorDate).toBe("2026-12-01");
   });
 });
 

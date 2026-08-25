@@ -887,7 +887,7 @@ const fieldDescriptions: Record<string, string> = {
   cadenceMonths: "How often the bill charges, in months. 1 monthly, 12 yearly.",
   expectedCents: "Stated amount in integer cents. Null means derive from history.",
   anchorDate:
-    "YYYY-MM-DD the next-due walk starts from when history does not reach it.",
+    "YYYY-MM-DD next charge. Must be after the last posted charge when the bill has history; null clears the override and walks from that last charge.",
   status: "active, paused, or cancelled.",
   url: "Where the bill is managed — account, billing or cancel page. Stored, never followed.",
   scheduled: "Whether the dates are predictable. False for propane.",
