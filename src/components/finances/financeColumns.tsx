@@ -5,13 +5,13 @@ import { DateText } from "@/components/date/DateText";
 import { effectiveFlow, effectiveMerchant } from "@/lib/finances/analytics";
 import { flowLabel } from "@/lib/finances/flowLabels";
 import { formatUsd } from "@/lib/finances/money";
-import type { TransactionListRow } from "@/lib/finances/types";
+import type { RegisterTransactionRow } from "@/lib/finances/registerQuery";
 import {
   REGISTER_VISIBLE_COLUMN_IDS,
   registerFields,
   type RegisterFieldId,
 } from "@/lib/finances/registerFields";
-import { envelopeAssignmentRefusal } from "@/lib/finances/budget/autoMap";
+import { categoryAssignmentRefusal } from "@/lib/finances/categoryEligibility";
 import type { EnvelopePickerOption } from "@/lib/finances/budget/groupEnvelopeOptions";
 import type { EnvelopeKind } from "@/db/schema";
 import { CategorySelect } from "./CategorySelect";
@@ -23,7 +23,6 @@ import { CategorySelect } from "./CategorySelect";
 export type FinanceColumnCtx = {
   /** Every envelope, in budget order. Empty until a budget is set up. */
   envelopes: readonly EnvelopePickerOption[];
-  budgetStartMonth: string | null;
   offBudgetAccountIds: ReadonlySet<string>;
   onSetEnvelope: (transactionId: string, categoryId: string | null) => void;
   onCreateEnvelope: (transactionId: string, kind: EnvelopeKind) => void;
@@ -37,13 +36,13 @@ function accessors(id: RegisterFieldId) {
   return {
     filterKind: field.filterKind,
     filterValue: field.filterValue
-      ? (row: NodeGridRow<TransactionListRow>) => field.filterValue!(row.node)
+      ? (row: NodeGridRow<RegisterTransactionRow>) => field.filterValue!(row.node)
       : undefined,
     filterValues: field.filterValues
-      ? (row: NodeGridRow<TransactionListRow>) => field.filterValues!(row.node)
+      ? (row: NodeGridRow<RegisterTransactionRow>) => field.filterValues!(row.node)
       : undefined,
     sortValue: field.sortValue
-      ? (row: NodeGridRow<TransactionListRow>) => field.sortValue!(row.node)
+      ? (row: NodeGridRow<RegisterTransactionRow>) => field.sortValue!(row.node)
       : undefined,
   };
 }
@@ -93,7 +92,7 @@ function Amount({ cents, strong = false }: { cents: number | null; strong?: bool
  * Nothing here edits the date, description or amount. Those are the bank's record, and the
  * dedup fingerprint is derived from them.
  */
-export const financeColumns: ColumnDef<FinanceColumnCtx, TransactionListRow>[] = [
+export const financeColumns: ColumnDef<FinanceColumnCtx, RegisterTransactionRow>[] = [
   {
     id: "date",
     label: "Date",
@@ -155,10 +154,9 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, TransactionListRow>[] =
     ...accessors("category"),
     compact: "meta",
     compactTextWithCtx: (row, ctx) =>
-      envelopeAssignmentRefusal({
-        transactionDate: row.node.transactionDate,
-        budgetStartMonth: ctx.budgetStartMonth,
+      categoryAssignmentRefusal({
         accountOffBudget: ctx.offBudgetAccountIds.has(row.node.accountId),
+        categoryAssignable: row.node.categoryAssignable,
       })
         ? "Not budgeted"
         : (row.node.budgetCategoryName ?? "Categorize"),
@@ -166,10 +164,9 @@ export const financeColumns: ColumnDef<FinanceColumnCtx, TransactionListRow>[] =
     // one-keystroke decision made while reading the description next to it, and a menu of
     // twenty envelopes is not a menu (`components/ux-principles`).
     render: (row, ctx) => {
-      const refusal = envelopeAssignmentRefusal({
-        transactionDate: row.node.transactionDate,
-        budgetStartMonth: ctx.budgetStartMonth,
+      const refusal = categoryAssignmentRefusal({
         accountOffBudget: ctx.offBudgetAccountIds.has(row.node.accountId),
+        categoryAssignable: row.node.categoryAssignable,
       });
       if (refusal) {
         return (

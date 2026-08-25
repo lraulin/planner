@@ -21,6 +21,7 @@ import type {
 } from "./types";
 import { trackAsBillDraft, type TrackAsBillDraft } from "./registerBillDraft";
 import {
+  annotateCategoryAssignability,
   parseRegisterQuery,
   prepareRegister,
   REGISTER_BLOCK_SIZE,
@@ -404,8 +405,9 @@ export async function loadRegisterExportRows(
   ctx: RegisterQueryContext,
 ): Promise<TransactionListRow[]> {
   const ledger = await listTransactions(userId);
-  const prepared = prepareRegister(ledger, parseRegisterQuery(rawQuery), ctx);
-  const byId = new Map(ledger.map((row) => [row.id, row]));
+  const preparedLedger = annotateCategoryAssignability(ledger, ctx.offBudgetAccountIds);
+  const prepared = prepareRegister(preparedLedger, parseRegisterQuery(rawQuery), ctx);
+  const byId = new Map(preparedLedger.map((row) => [row.id, row]));
   return prepared.index.nodeIds.flatMap((id) => {
     const row = byId.get(id);
     return row ? [row] : [];

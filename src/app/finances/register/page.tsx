@@ -75,7 +75,6 @@ export default async function FinancesRegisterPage() {
           initialAccounts={accounts}
           initialClaimed={claimedPayeesOf(bills)}
           envelopes={envelopes}
-          budgetStartMonth={budgetStartMonth}
           initialUpcoming={upcoming}
           payees={payees.map(({ id, name }) => ({ id, name }))}
           tags={tags.map(({ tag, color }) => ({ tag, color }))}

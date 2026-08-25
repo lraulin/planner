@@ -9,13 +9,14 @@ import { DateText } from "@/components/date/DateText";
 import { Drawer, DrawerFooter, DrawerHeader } from "@/components/detail/Drawer";
 import { Section, SelectField, TextArea } from "@/components/detail/fields";
 import { effectiveFlow } from "@/lib/finances/analytics";
-import { envelopeAssignmentRefusal } from "@/lib/finances/budget/autoMap";
+import { categoryAssignmentRefusal } from "@/lib/finances/categoryEligibility";
 import type { EnvelopePickerOption } from "@/lib/finances/budget/groupEnvelopeOptions";
 import type { EnvelopeKind, FinanceFlowKind } from "@/db/schema";
 import { CategorySelect } from "./CategorySelect";
 import { FLOW_KINDS, flowLabel } from "@/lib/finances/flowLabels";
 import { formatUsd } from "@/lib/finances/money";
 import type { TransactionListRow } from "@/lib/finances/types";
+import type { RegisterTransactionRow } from "@/lib/finances/registerQuery";
 import { addTagToNotes, normalizeTagInput, tagsInNotes } from "@/lib/finances/tags";
 
 /**
@@ -32,7 +33,6 @@ export function TransactionDrawer({
   transactionId,
   row,
   envelopes,
-  budgetStartMonth,
   offBudgetAccountIds,
   managedTags,
   onClose,
@@ -40,9 +40,8 @@ export function TransactionDrawer({
   onCreateEnvelope,
 }: {
   transactionId: string | null;
-  row: TransactionListRow | null;
+  row: RegisterTransactionRow | null;
   envelopes: readonly EnvelopePickerOption[];
-  budgetStartMonth: string | null;
   offBudgetAccountIds: ReadonlySet<string>;
   managedTags: readonly string[];
   onClose: () => void;
@@ -65,7 +64,6 @@ export function TransactionDrawer({
           key={row.id}
           row={row}
           envelopes={envelopes}
-          budgetStartMonth={budgetStartMonth}
           offBudgetAccountIds={offBudgetAccountIds}
           managedTags={managedTags}
           onClose={onClose}
@@ -95,16 +93,14 @@ function ReadOnly({ label, children }: { label: string; children: React.ReactNod
 function TransactionForm({
   row,
   envelopes,
-  budgetStartMonth,
   offBudgetAccountIds,
   managedTags,
   onClose,
   onChanged,
   onCreateEnvelope,
 }: {
-  row: TransactionListRow;
+  row: RegisterTransactionRow;
   envelopes: readonly EnvelopePickerOption[];
-  budgetStartMonth: string | null;
   offBudgetAccountIds: ReadonlySet<string>;
   managedTags: readonly string[];
   onClose: () => void;
@@ -123,10 +119,9 @@ function TransactionForm({
   const [savingEnvelope, startEnvelopeTransition] = useTransition();
   const [learningNotice, setLearningNotice] = useState<string | null>(null);
   const [tagDraft, setTagDraft] = useState("");
-  const envelopeRefusal = envelopeAssignmentRefusal({
-    transactionDate: row.transactionDate,
-    budgetStartMonth,
+  const envelopeRefusal = categoryAssignmentRefusal({
     accountOffBudget: offBudgetAccountIds.has(row.accountId),
+    categoryAssignable: row.categoryAssignable,
   });
 
   type Draft = typeof draft;

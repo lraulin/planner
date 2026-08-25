@@ -52,24 +52,6 @@ export type EnvelopeIndex = {
   incomeId: string | null;
 };
 
-/**
- * Why the Register must not offer an envelope editor for this transaction.
- *
- * Off-budget accounts never enter the fold. Dates before the start month *may* hold a
- * Category — that is analysis history for Insights and Average Spent — they just do not
- * change Ready to Assign (`agent-os/specs/2026-08-24-1522-category-by-kind-and-history/` D4).
- */
-export function envelopeAssignmentRefusal(input: {
-  transactionDate: string;
-  budgetStartMonth: string | null;
-  accountOffBudget: boolean;
-}): string | null {
-  if (input.accountOffBudget) {
-    return "This account is outside the envelope budget.";
-  }
-  return null;
-}
-
 export function envelopeIndex(targets: readonly EnvelopeTarget[]): EnvelopeIndex {
   const ordered = [...targets].sort((left, right) =>
     compareSortKeys(left.sortKey, right.sortKey),

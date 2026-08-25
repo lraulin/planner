@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
   financeAccounts,
@@ -345,6 +345,95 @@ describeDb("budget mutations", () => {
     await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
 
     expect((await loadBudget(userId, MONTH)).uncategorizedCount).toBe(0);
+  });
+
+  it("only assigns a Category to the on-budget side of a boundary transfer", async () => {
+    const { checkingId, cardId, savingsId } = await seedAccounts(userId);
+    const [cardOut, cardIn, savingOut, savingIn, unpaired] = await addTransactions(
+      userId,
+      [
+        {
+          accountId: checkingId,
+          date: "2026-08-05",
+          description: "CARD PAYMENT",
+          amount: "-100.00",
+          flow: "internal_transfer",
+          transferGroupId: "11111111-1111-4111-8111-111111111111",
+        },
+        {
+          accountId: cardId,
+          date: "2026-08-05",
+          description: "PAYMENT RECEIVED",
+          amount: "100.00",
+          flow: "internal_transfer",
+          transferGroupId: "11111111-1111-4111-8111-111111111111",
+        },
+        {
+          accountId: checkingId,
+          date: "2026-08-06",
+          description: "TO SAVINGS",
+          amount: "-75.00",
+          flow: "internal_transfer",
+          transferGroupId: "22222222-2222-4222-8222-222222222222",
+        },
+        {
+          accountId: savingsId,
+          date: "2026-08-06",
+          description: "FROM CHECKING",
+          amount: "75.00",
+          flow: "internal_transfer",
+          transferGroupId: "22222222-2222-4222-8222-222222222222",
+        },
+        {
+          accountId: checkingId,
+          date: "2026-08-07",
+          description: "OLD CARD PAYMENT",
+          amount: "-50.00",
+          flow: "internal_transfer",
+        },
+      ],
+    );
+    await seedBudget(userId, { preset: "minimal", startMonth: MONTH, todayKey: TODAY });
+    const categoryId = (await envelopes(userId)).get("Savings")!;
+
+    await expect(
+      setTransactionBudgetCategory(userId, cardOut, categoryId),
+    ).rejects.toThrow(/Transfers between on-budget accounts/);
+    await expect(
+      setTransactionBudgetCategory(userId, cardIn, categoryId),
+    ).rejects.toThrow(/Transfers between on-budget accounts/);
+    await expect(
+      setTransactionBudgetCategory(userId, unpaired, categoryId),
+    ).rejects.toThrow(/Transfers between on-budget accounts/);
+    await setTransactionBudgetCategory(userId, savingOut, categoryId);
+    await expect(
+      setTransactionBudgetCategory(userId, savingIn, categoryId),
+    ).rejects.toThrow(/outside the envelope budget/);
+
+    const assigned = await db
+      .select({
+        id: financeTransactions.id,
+        categoryId: financeTransactions.budgetCategoryId,
+      })
+      .from(financeTransactions)
+      .where(
+        inArray(financeTransactions.id, [
+          cardOut,
+          cardIn,
+          savingOut,
+          savingIn,
+          unpaired,
+        ]),
+      );
+    expect(
+      Object.fromEntries(assigned.map((entry) => [entry.id, entry.categoryId])),
+    ).toMatchObject({
+      [cardOut]: null,
+      [cardIn]: null,
+      [savingOut]: categoryId,
+      [savingIn]: null,
+      [unpaired]: null,
+    });
   });
 
   it("moves a taxonomy claim to one envelope and maps the unassigned backlog there", async () => {

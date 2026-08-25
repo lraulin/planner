@@ -208,6 +208,114 @@ describe("prepareRegister", () => {
     expect(prepared.index.nodeIds).toEqual(["a"]);
   });
 
+  it("carries whole-ledger Category assignability into filters and lazy row blocks", () => {
+    const ledger = [
+      tx({
+        id: "card-out",
+        accountId: "checking",
+        transactionDate: "2026-08-10",
+        derivedFlow: "internal_transfer",
+        transferGroupId: "inside",
+      }),
+      tx({
+        id: "card-in",
+        accountId: "card",
+        transactionDate: "2026-08-10",
+        amountCents: 1_000,
+        derivedFlow: "internal_transfer",
+        transferGroupId: "inside",
+      }),
+      tx({
+        id: "saving-out",
+        accountId: "checking",
+        transactionDate: "2026-08-09",
+        derivedFlow: "internal_transfer",
+        transferGroupId: "outside",
+      }),
+      tx({
+        id: "saving-in",
+        accountId: "savings",
+        transactionDate: "2026-08-09",
+        amountCents: 1_000,
+        derivedFlow: "internal_transfer",
+        transferGroupId: "outside",
+      }),
+      tx({
+        id: "unpaired",
+        accountId: "checking",
+        transactionDate: "2025-08-08",
+        derivedFlow: "internal_transfer",
+      }),
+      tx({
+        id: "historical-spend",
+        accountId: "checking",
+        transactionDate: "2025-08-07",
+      }),
+    ];
+    const ctx = { ...EMPTY_CTX, offBudgetAccountIds: new Set(["savings"]) };
+    const prepared = prepareRegister(
+      ledger,
+      query({ groupBy: [], collapsedGroups: [] }),
+      ctx,
+    );
+
+    expect(prepared.index.notBudgetedIds.sort()).toEqual([
+      "card-in",
+      "card-out",
+      "saving-in",
+      "unpaired",
+    ]);
+    expect(
+      Object.fromEntries(
+        prepared.block.rows.map((row) => [row.id, row.categoryAssignable]),
+      ),
+    ).toMatchObject({
+      "card-out": false,
+      "card-in": false,
+      "saving-out": true,
+      "saving-in": false,
+      unpaired: false,
+      "historical-spend": true,
+    });
+    expect(prepared.index.facets.category.sort()).toEqual([
+      "Not budgeted",
+      "Uncategorized",
+    ]);
+
+    const notBudgeted = prepareRegister(
+      ledger,
+      query({
+        groupBy: [],
+        filters: { category: optionsFilter(["value:Not budgeted"]) },
+      }),
+      ctx,
+    );
+    expect(notBudgeted.index.nodeIds.sort()).toEqual([
+      "card-in",
+      "card-out",
+      "saving-in",
+      "unpaired",
+    ]);
+  });
+
+  it("keeps non-budgeted metadata for a transfer hidden by group collapse", () => {
+    const prepared = prepareRegister(
+      [
+        tx({
+          id: "hidden-transfer",
+          accountId: "checking",
+          transactionDate: "2025-08-01",
+          derivedFlow: "internal_transfer",
+        }),
+      ],
+      query({ collapsedGroups: ["group:year:2025"] }),
+      EMPTY_CTX,
+    );
+
+    expect(prepared.index.nodeIds).toEqual([]);
+    expect(prepared.index.notBudgetedIds).toEqual(["hidden-transfer"]);
+  });
+
   it("returns 100-row blocks without gaps or duplicates on a 7030-row ledger", () => {
     const ledger = Array.from({ length: 7030 }, (_, index) => {
       const year = 2021 + Math.floor(index / 1172);

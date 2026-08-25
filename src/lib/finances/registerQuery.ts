@@ -7,7 +7,7 @@
  */
 
 import { effectiveFlow } from "./analytics";
-import { categoryEligibleIds } from "./categoryEligibility";
+import { categoryAssignableIds, categoryEligibleIds } from "./categoryEligibility";
 import { asFinanceGroupBy, groupTransactions } from "./grouping";
 import {
   REGISTER_FIELD_ID_SET,
@@ -64,21 +64,27 @@ export type RegisterIndex = {
   queryKey: string;
   entries: RegisterIndexEntry[];
   nodeIds: string[];
+  /** Whole-ledger metadata needed even when a collapsed or filtered row opens by deep link. */
+  notBudgetedIds: string[];
   shown: number;
   total: number;
   groupIds: string[];
   facets: Record<string, string[]>;
 };
 
-export type RegisterRowBlock = {
+export type RegisterTransactionRow = TransactionListRow & {
+  categoryAssignable: boolean;
+};
+
+export type RegisterRowBlock<Row extends TransactionListRow = TransactionListRow> = {
   queryKey: string;
   offset: number;
-  rows: TransactionListRow[];
+  rows: Row[];
 };
 
 export type RegisterPrepared = {
   index: RegisterIndex;
-  block: RegisterRowBlock;
+  block: RegisterRowBlock<RegisterTransactionRow>;
 };
 
 const VIEW_IDS: ReadonlySet<string> = new Set(["all", "uncategorized", "tag"]);
@@ -221,6 +227,26 @@ export function parseBlockOffset(value: unknown): number {
   return Math.floor(offset / REGISTER_BLOCK_SIZE) * REGISTER_BLOCK_SIZE;
 }
 
+export function annotateCategoryAssignability(
+  ledger: readonly TransactionListRow[],
+  offBudgetAccountIds: ReadonlySet<string>,
+): RegisterTransactionRow[] {
+  const assignable = categoryAssignableIds(
+    ledger.map((row) => ({
+      id: row.id,
+      accountId: row.accountId,
+      transactionDate: row.transactionDate,
+      transferGroupId: row.transferGroupId ?? null,
+      effectiveFlow: effectiveFlow(row),
+    })),
+    offBudgetAccountIds,
+  );
+  return ledger.map((row) => ({
+    ...row,
+    categoryAssignable: assignable.has(row.id),
+  }));
+}
+
 function viewRows(
   ledger: readonly TransactionListRow[],
   query: RegisterQuery,
@@ -268,11 +294,11 @@ function passingRows(
   });
 }
 
-export function sliceRegisterBlock(
-  ledger: readonly TransactionListRow[],
+export function sliceRegisterBlock<Row extends TransactionListRow>(
+  ledger: readonly Row[],
   nodeIds: readonly string[],
   offset: number,
-): TransactionListRow[] {
+): Row[] {
   const start = parseBlockOffset(offset);
   const wanted = nodeIds.slice(start, start + REGISTER_BLOCK_SIZE);
   if (wanted.length === 0) return [];
@@ -288,7 +314,8 @@ export function prepareRegister(
   query: RegisterQuery,
   ctx: RegisterQueryContext,
 ): RegisterPrepared {
-  const base = viewRows(ledger, query, ctx);
+  const preparedLedger = annotateCategoryAssignability(ledger, ctx.offBudgetAccountIds);
+  const base = viewRows(preparedLedger, query, ctx);
   const facets = collectDistinctValues(
     REGISTER_FIELDS.map((field) => ({
       id: field.id,
@@ -343,6 +370,9 @@ export function prepareRegister(
     queryKey,
     entries,
     nodeIds,
+    notBudgetedIds: preparedLedger.flatMap((row) =>
+      row.categoryAssignable ? [] : [row.id],
+    ),
     shown: matched.length,
     total: base.length,
     groupIds,
@@ -353,7 +383,7 @@ export function prepareRegister(
     block: {
       queryKey,
       offset: 0,
-      rows: sliceRegisterBlock(ledger, nodeIds, 0),
+      rows: sliceRegisterBlock(preparedLedger, nodeIds, 0),
     },
   };
 }
@@ -363,12 +393,13 @@ export function registerBlockAt(
   query: RegisterQuery,
   ctx: RegisterQueryContext,
   offset: number,
-): RegisterRowBlock {
-  const prepared = prepareRegister(ledger, query, ctx);
+): RegisterRowBlock<RegisterTransactionRow> {
+  const preparedLedger = annotateCategoryAssignability(ledger, ctx.offBudgetAccountIds);
+  const prepared = prepareRegister(preparedLedger, query, ctx);
   const start = parseBlockOffset(offset);
   return {
     queryKey: prepared.index.queryKey,
     offset: start,
-    rows: sliceRegisterBlock(ledger, prepared.index.nodeIds, start),
+    rows: sliceRegisterBlock(preparedLedger, prepared.index.nodeIds, start),
   };
 }

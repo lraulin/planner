@@ -13,6 +13,7 @@ import {
   registerQueryKey,
   type RegisterPrepared,
   type RegisterQuery,
+  type RegisterTransactionRow,
 } from "@/lib/finances/registerQuery";
 import type { GridRow } from "@/lib/tree/slice";
 import type { NodeGridRow } from "@/components/grid/columns";
@@ -50,6 +51,16 @@ function cacheFrom(prepared: RegisterPrepared): Map<string, TransactionListRow> 
   return new Map(prepared.block.rows.map((row) => [row.id, row]));
 }
 
+function asRegisterRow(
+  row: TransactionListRow,
+  notBudgetedIds: ReadonlySet<string>,
+): RegisterTransactionRow {
+  return {
+    ...row,
+    categoryAssignable: !notBudgetedIds.has(row.id),
+  };
+}
+
 export function useRegisterSource({
   initial,
   query,
@@ -74,6 +85,10 @@ export function useRegisterSource({
   });
 
   const key = registerQueryKey(query);
+  const notBudgetedIds = useMemo(
+    () => new Set(index.notBudgetedIds),
+    [index.notBudgetedIds],
+  );
 
   useEffect(() => {
     if (key === index.queryKey) return;
@@ -145,7 +160,7 @@ export function useRegisterSource({
     return pending;
   }, [index.entries, cache]);
 
-  const gridRows: GridRow<TransactionListRow>[] = useMemo(
+  const gridRows: GridRow<RegisterTransactionRow>[] = useMemo(
     () =>
       index.entries.map((entry) =>
         entry.kind === "group"
@@ -160,11 +175,14 @@ export function useRegisterSource({
           : {
               kind: "node" as const,
               id: entry.id,
-              node: cache.get(entry.id) ?? placeholder(entry.id),
+              node: asRegisterRow(
+                cache.get(entry.id) ?? placeholder(entry.id),
+                notBudgetedIds,
+              ),
               depth: 0,
             },
       ),
-    [index.entries, cache],
+    [index.entries, cache, notBudgetedIds],
   );
 
   const patchRow = useCallback(
@@ -194,7 +212,7 @@ export function useRegisterSource({
   }, []);
 
   const loadExportRows = useCallback(async (): Promise<
-    NodeGridRow<TransactionListRow>[]
+    NodeGridRow<RegisterTransactionRow>[]
   > => {
     const result = await loadRegisterExportAction(queryRef.current);
     if (!result.ok) {
@@ -204,14 +222,18 @@ export function useRegisterSource({
     return result.data.map((row) => ({
       kind: "node" as const,
       id: row.id,
-      node: row,
+      node: asRegisterRow(row, notBudgetedIds),
       depth: 0,
     }));
-  }, []);
+  }, [notBudgetedIds]);
 
   const rowById = useCallback(
-    (id: string | null) => (id ? (cache.get(id) ?? null) : null),
-    [cache],
+    (id: string | null) => {
+      if (!id) return null;
+      const row = cache.get(id);
+      return row ? asRegisterRow(row, notBudgetedIds) : null;
+    },
+    [cache, notBudgetedIds],
   );
 
   const putRow = useCallback((row: TransactionListRow) => {

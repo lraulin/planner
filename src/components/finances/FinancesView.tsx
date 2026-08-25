@@ -10,14 +10,17 @@ import {
 } from "react";
 import { formatUsd } from "@/lib/finances/money";
 import { FINANCE_GROUP_BY_VALUES } from "@/lib/finances/grouping";
-import type { FinanceAccountRow, TransactionListRow } from "@/lib/finances/types";
+import type { FinanceAccountRow } from "@/lib/finances/types";
 import {
   claimedPayeeMap,
   trackAsBillRefusal,
   type ClaimedPayee,
 } from "@/lib/finances/registerBillDraft";
-import { parseRegisterQuery } from "@/lib/finances/registerQuery";
-import type { RegisterPrepared } from "@/lib/finances/registerQuery";
+import {
+  parseRegisterQuery,
+  type RegisterPrepared,
+  type RegisterTransactionRow,
+} from "@/lib/finances/registerQuery";
 import {
   deleteTransactionAction,
   getTransactionAction,
@@ -94,7 +97,7 @@ function viewDefaults(
   };
 }
 
-function transactionRowLabel(row: { node: TransactionListRow }): string {
+function transactionRowLabel(row: { node: RegisterTransactionRow }): string {
   return row.node.description || "Transaction";
 }
 
@@ -174,7 +177,6 @@ export function FinancesView({
   initialAccounts,
   initialClaimed,
   envelopes,
-  budgetStartMonth,
   initialUpcoming = [],
   payees,
   tags,
@@ -186,8 +188,6 @@ export function FinancesView({
   initialClaimed: readonly ClaimedPayee[];
   /** Budget envelopes, in budget order. Empty until a budget exists. */
   envelopes: readonly EnvelopePickerOption[];
-  /** First date whose transactions contribute to the envelope budget. */
-  budgetStartMonth: string | null;
   /** Unposted schedule occurrences. Not transactions; never mixed into `rows`. */
   initialUpcoming?: UpcomingBillRow[];
   payees: readonly { id: string; name: string }[];
@@ -207,7 +207,9 @@ export function FinancesView({
   } | null>(null);
   const [createdEnvelopes, setCreatedEnvelopes] = useState<EnvelopePickerOption[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<TransactionListRow | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<RegisterTransactionRow | null>(
+    null,
+  );
   const [upcoming, setUpcoming] = useState(initialUpcoming);
   const [ruleRowId, setRuleRowId] = useState<string | null>(null);
   const today = useToday();
@@ -411,20 +413,12 @@ export function FinancesView({
   const columnCtx = useMemo(
     () => ({
       envelopes: envelopeCatalog,
-      budgetStartMonth,
       offBudgetAccountIds,
       tagColors,
       onSetEnvelope,
       onCreateEnvelope,
     }),
-    [
-      envelopeCatalog,
-      budgetStartMonth,
-      offBudgetAccountIds,
-      tagColors,
-      onSetEnvelope,
-      onCreateEnvelope,
-    ],
+    [envelopeCatalog, offBudgetAccountIds, tagColors, onSetEnvelope, onCreateEnvelope],
   );
 
   useEffect(() => {
@@ -588,7 +582,7 @@ export function FinancesView({
         </div>
       ) : null}
 
-      <DataGrid<FinanceColumnCtx, TransactionListRow>
+      <DataGrid<FinanceColumnCtx, RegisterTransactionRow>
         rows={isClient ? gridRows : []}
         columns={gridState.columns}
         allColumns={financeColumns}
@@ -687,7 +681,6 @@ export function FinancesView({
         transactionId={openId}
         row={openId ? rowById(openId) : null}
         envelopes={envelopeCatalog}
-        budgetStartMonth={budgetStartMonth}
         offBudgetAccountIds={offBudgetAccountIds}
         managedTags={tags.map((tag) => tag.tag)}
         onClose={closeDrawer}

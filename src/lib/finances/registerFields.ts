@@ -80,7 +80,10 @@ export const registerFields: Record<RegisterFieldId, RegisterField> = {
   category: {
     id: "category",
     filterKind: "enum",
-    filterValue: (row) => row.budgetCategoryName ?? "Uncategorized",
+    filterValue: (row) =>
+      row.categoryAssignable === false
+        ? "Not budgeted"
+        : (row.budgetCategoryName ?? "Uncategorized"),
     sortValue: (row) => (row.budgetCategoryName ?? "").toLowerCase(),
   },
   tags: {

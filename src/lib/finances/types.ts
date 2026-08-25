@@ -226,7 +226,8 @@ export type TransactionListRow = {
   derivedCategory: string | null;
   derivedFlow: FinanceFlowKind | null;
   transferGroupId?: string | null;
-  budgetEligible?: boolean;
+  /** Derived by the Register from the whole ledger; absent on general finance reads. */
+  categoryAssignable?: boolean;
   flowOverride: FinanceFlowKind | null;
   excludeFromBaseline: boolean;
   eventLabel: string;

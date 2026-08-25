@@ -18,6 +18,11 @@ import { readSetting } from "@/lib/settings/queries";
 import { BUDGET_SCOPE } from "@/lib/settings/scopes";
 import * as sortKey from "@/lib/tree/sortKey";
 import { FINANCE_CATEGORIES } from "../classify/categories";
+import { effectiveFlow } from "../analytics";
+import {
+  categoryAssignableIds,
+  categoryAssignmentRefusal,
+} from "../categoryEligibility";
 import { numericStringToCents } from "../money";
 import { learnedCategory } from "../categoryLearning";
 import { applyPayeeClaims, upsertPayeeCategoryRule } from "../payees/claims";
@@ -1122,8 +1127,19 @@ export async function setTransactionBudgetCategory(
   if (categoryId !== null) await requireCategory(userId, categoryId);
 
   const [row] = await db
-    .select({ id: financeTransactions.id, payeeId: financeTransactions.payeeId })
+    .select({
+      id: financeTransactions.id,
+      accountId: financeTransactions.accountId,
+      accountOffBudget: financeAccounts.offBudget,
+      transactionDate: financeTransactions.transactionDate,
+      transferGroupId: financeTransactions.transferGroupId,
+      derivedFlow: financeTransactions.derivedFlow,
+      flowOverride: financeTransactions.flowOverride,
+      amount: financeTransactions.amount,
+      payeeId: financeTransactions.payeeId,
+    })
     .from(financeTransactions)
+    .innerJoin(financeAccounts, eq(financeAccounts.id, financeTransactions.accountId))
     .where(
       and(
         eq(financeTransactions.id, transactionId),
@@ -1132,6 +1148,56 @@ export async function setTransactionBudgetCategory(
     )
     .limit(1);
   if (!row) throw new Error("That transaction does not exist.");
+
+  if (categoryId !== null) {
+    const assignmentRows = row.transferGroupId
+      ? await db
+          .select({
+            id: financeTransactions.id,
+            accountId: financeTransactions.accountId,
+            accountOffBudget: financeAccounts.offBudget,
+            transactionDate: financeTransactions.transactionDate,
+            transferGroupId: financeTransactions.transferGroupId,
+            derivedFlow: financeTransactions.derivedFlow,
+            flowOverride: financeTransactions.flowOverride,
+            amount: financeTransactions.amount,
+          })
+          .from(financeTransactions)
+          .innerJoin(
+            financeAccounts,
+            eq(financeAccounts.id, financeTransactions.accountId),
+          )
+          .where(
+            and(
+              eq(financeTransactions.userId, userId),
+              eq(financeTransactions.transferGroupId, row.transferGroupId),
+            ),
+          )
+      : [row];
+    const assignable = categoryAssignableIds(
+      assignmentRows.map((entry) => ({
+        id: entry.id,
+        accountId: entry.accountId,
+        transactionDate: entry.transactionDate,
+        transferGroupId: entry.transferGroupId,
+        effectiveFlow: effectiveFlow({
+          derivedFlow: entry.derivedFlow,
+          flowOverride: entry.flowOverride,
+          amountCents: numericStringToCents(entry.amount) ?? 0,
+        }),
+      })),
+      new Set(
+        assignmentRows.flatMap((entry) =>
+          entry.accountOffBudget ? [entry.accountId] : [],
+        ),
+      ),
+    );
+    const refusal = categoryAssignmentRefusal({
+      accountOffBudget: row.accountOffBudget,
+      categoryAssignable: assignable.has(row.id),
+    });
+    if (refusal) throw new Error(refusal);
+  }
 
   await db
     .update(financeTransactions)
