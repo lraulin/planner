@@ -1,7 +1,10 @@
 # Category picker by kind, payee auto-categorisation, and historical filing
 
-**Status: active**  
+**Status: frozen / complete** (2026-08-24)  
 Spec folder: `agent-os/specs/2026-08-24-1522-category-by-kind-and-history/`
+
+This document is the durable record of **what was built and why**. Further change opens a
+new delta-spec. Catalog bulk-delete is follow-up work, not an amendment here.
 
 ## Spec relationships
 
@@ -101,22 +104,22 @@ YNAB reference: [Categorizing transactions](https://support.ynab.com/en_us/categ
 
 ## Acceptance criteria
 
-- [ ] Register and transaction-drawer Category lists are grouped Income / Bills / Regular spending / Savings.
-- [ ] Each group has New {type}…; New bill… opens the same Track as bill confirm.
-- [ ] Every Track as bill / New bill / Review / agent / claim-picker path files that payee's on-budget charges (including pre-start) into the claimed envelope. Other CVS / CVS/PHARMACY payees are not claimed by an ExtraCare bill.
-- [ ] Pre-start on-budget rows can be categorised; off-budget rows still cannot.
-- [ ] Budget Uncategorized count and in-budget Activity still ignore pre-start rows.
-- [ ] Average Spent / Spent Last Month use pre-start categorised spend (up to 12 months).
-- [ ] `/finances/rules` is absent from nav, menus, command surfaces, and direct routing (not found).
-- [ ] Payees shows Auto Category and Envelope; modes work; claimed payees disable the controls with the resume explanation.
-- [ ] First assignment learns; 2-of-latest-3 changes the default; uncategorised slots do not vote; old-window edits do not; previously categorised rows are never rewritten.
-- [ ] Fixed / off modes behave as D7. Claim beats default. Ingest applies only to new/uncategorised eligible rows.
-- [ ] Migration converts convertible unseeded exact-payee category rules, infers remaining defaults, drops seeded rules, and aborts naming any non-convertible custom rule.
-- [ ] Envelope deletion clears claims/defaults; a deleted fixed default becomes learn with no default.
-- [ ] Payee merge keeps the target's claim and auto-category; conflicting claims still block; learn-mode targets relearn.
-- [ ] Flow, transfers, payee identity, payday statistics, and income summaries are unchanged vs the last rules-backed run; only retired taxonomy/tag automation may differ.
-- [ ] Second user cannot read/change/delete the first user's payees, categories, or transactions on the new writes.
-- [ ] lint, typecheck, test:unit and non-skipped database tests (Postgres up), production build, smoke on a running dev server. Driven in the browser at desktop and 390×844, light and dark.
+- [x] Register and transaction-drawer Category lists are grouped Income / Bills / Regular spending / Savings.
+- [x] Each group has New {type}…; New bill… opens the same Track as bill confirm.
+- [x] Every Track as bill / New bill / Review / agent / claim-picker path files that payee's on-budget charges (including pre-start) into the claimed envelope. Other CVS / CVS/PHARMACY payees are not claimed by an ExtraCare bill.
+- [x] Pre-start on-budget rows can be categorised; off-budget rows still cannot.
+- [x] Budget Uncategorized count and in-budget Activity still ignore pre-start rows.
+- [x] Average Spent / Spent Last Month use pre-start categorised spend (up to 12 months).
+- [x] `/finances/rules` is absent from nav, menus, command surfaces, and direct routing (not found).
+- [x] Payees shows Auto Category and Envelope; modes work; claimed payees disable the controls with the resume explanation.
+- [x] First assignment learns; 2-of-latest-3 changes the default; uncategorised slots do not vote; old-window edits do not; previously categorised rows are never rewritten.
+- [x] Fixed / off modes behave as D7. Claim beats default. Ingest applies only to new/uncategorised eligible rows.
+- [x] Migration converts convertible unseeded exact-payee category rules, infers remaining defaults, drops seeded rules, and aborts naming any non-convertible custom rule.
+- [x] Envelope deletion clears claims/defaults; a deleted fixed default becomes learn with no default.
+- [x] Payee merge keeps the target's claim and auto-category; conflicting claims still block; learn-mode targets relearn.
+- [x] Flow, transfers, payee identity, payday statistics, and income summaries are unchanged vs the last rules-backed run; only retired taxonomy/tag automation may differ.
+- [x] Second user cannot read/change/delete the first user's payees, categories, or transactions on the new writes.
+- [x] lint, typecheck, test:unit and non-skipped database tests (Postgres up), production build, smoke on a running dev server. Driven in the browser at desktop and 390×844, light and dark.
 
 ## Changes from original plan
 
@@ -131,34 +134,35 @@ YNAB reference: [Categorizing transactions](https://support.ynab.com/en_us/categ
 | 7   | Retire Rules; replace with YNAB-style payee auto-category (D6–D12). Claims stay the stronger override.    | The Rules page is leftover Actual generality. Dead taxonomy targets made it unusable; bulk-delete was broken; the user does not want an in-app rule language. |
 | 8   | Drop `derived_category`, hard-coded taxonomy, and automatic envelope mapping in the same cutover          | One cohesive change. Bank `source_category` stays as provenance only.                                                                                         |
 | 9   | Catalog bulk-delete (focused row vs selection count) is a follow-up, not this spec                        | Removing Rules eliminates this instance; expanding into the shared catalog helper would mix a grid bug with a finance-model change                            |
+| 10  | Ingest reclassifies the whole ledger, then auto-categorises only new uncategorised rows                   | Auto-category keys on `payee_id`, so payees must be assigned before the fill. CSV import therefore classifies as it writes.                                   |
 
-## Task 1: Save spec documentation
+Local cutover (`0075_payee_auto_category`): 0 unseeded custom rules (conversion UPDATE 0, no abort), 67 seeded rules dropped, 175 unclaimed payee defaults inferred.
+
+## Follow-ups (new work — not amendments to this frozen spec)
+
+- Catalog bulk-delete: the shared helper shows `N selected` and deletes the focused row. Removing Rules eliminated that instance on `/finances/rules`; Payees, Register, Accounts, and other catalogs still have it.
+- A replacement custom-rule language, if a need ever appears. Do not reopen this folder for it.
+
+## Task 1: Save spec documentation — done
 
 This folder, plus the one-budget reconciliation.
 
-## Task 2: Grouped picker + New {type}…
+## Task 2: Grouped picker + New {type}… — done
 
-## Task 3: Single claim write — file charges (no rule)
+## Task 3: Single claim write — file charges (no rule) — done
 
-## Task 4: Historical Category + assign lookback
+## Task 4: Historical Category + assign lookback — done
 
-## Task 5: Payee model, migration, retire taxonomy and Rules
+## Task 5: Payee model, migration, retire taxonomy and Rules — done
 
 Schema, guarded cutover, drop `finance_rules` and derived taxonomy. Abort naming non-convertible custom rules.
 
-## Task 6: Categorisation behaviour
+## Task 6: Categorisation behaviour — done
 
 Learning / fixed / off, claim precedence, ingest new-only, flow classifiers and canonical payee names as ordinary code.
 
-## Task 7: Payees UI and Rules removal
+## Task 7: Payees UI and Rules removal — done
 
 Columns, drawer, mutation, nav/route contracts.
 
-## Task 8: Verify, freeze spec, update roadmap
-
-- Confirm acceptance criteria.
-- Update plan/shape for any material as-built drift; complete **Changes from original plan**.
-- Mark files **Status: frozen / complete** (date); list follow-ups as new work (including catalog bulk-delete).
-- Update `agent-os/product/roadmap.md`: Rules shipped line becomes retired; Categories learning/rules composition notes this delta.
-
-> While this spec is **active**, when we make a material change to requirements, design, or scope (including from feedback on what was implemented), update the relevant sections and append to **Changes from original plan**. Skip pure implementation details. Freeze when verified.
+## Task 8: Verify, freeze spec, update roadmap — done

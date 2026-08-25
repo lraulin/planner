@@ -939,14 +939,12 @@ period)` so money already spent stops being held twice and only going over bites
   aliases, transactions, schedules and a compatible commitment claim in one transaction,
   while conflicting claims refuse without a partial write. Desktop and phone both expose
   rename, merge and payee-picker paths.
-  ✅ **Categorisation rules shipped 2026-08-23.**
-  `agent-os/specs/2026-08-23-1536-finance-rules/`. The 65 deploy-time regexes are now
-  user-owned, ordered rows with a grid/drawer editor, touch reordering and a full-run preview
-  before any write. Register rows propose rules against a stable payee id when they have one,
-  while merchant regexes remain available for first-seen names. The guarded real-file cutover
-  moved 0 of 7,030 flows, 0 categories and no income figure; the old runtime array and matcher
-  are gone. The same slice also connected budget structure editing, hidden-envelope recovery,
-  the movement log and Assign remaining.
+  ✅ **Categorisation rules shipped 2026-08-23; retired 2026-08-24.**
+  `agent-os/specs/2026-08-23-1536-finance-rules/` shipped the editor. Retired by
+  `agent-os/specs/2026-08-24-1522-category-by-kind-and-history/`: the user-owned rules
+  table, first-match engine, **Run rules**, and **Create rule** are gone. Payees now learn a
+  Category the YNAB way; envelope claims remain the stronger override. No replacement
+  custom-rule language.
   ✅ **Nested budget groups + Commitments import shipped 2026-08-23.**
   `agent-os/specs/2026-08-23-1807-nested-budget-groups-bill-import/`. Budget groups are now
   arbitrary-depth organizational containers with recursive Assigned, Activity and Available
@@ -958,12 +956,13 @@ period)` so money already spent stops being held twice and only going over bites
   split `Software & AI` into AI, Productivity & Security, and Software & Development.
   ✅ **Actual Categories and Tags shipped 2026-08-23.**
   `agent-os/specs/2026-08-23-2023-actual-categories-and-tags/`. Budget envelopes are now the
-  one transaction Category written by the Register and rules; the former reporting taxonomy
-  survives as case-sensitive Notes tags. Budget links to an exact Uncategorized Register,
-  repeated choices can teach exact-payee rules, every matching rule composes in visible order,
-  and Insights filters by tags without using overlapping tag totals. The additive cutover
-  preserved 4,798 tagged transactions and 4,799 Category assignments with no unresolved local
-  rules. Destructive removal of the compatibility storage is a future audited delta.
+  one transaction Category written by the Register; the former reporting taxonomy survives as
+  case-sensitive Notes tags. Learning and later-match rule composition from decisions 3, 4,
+  and 8 were superseded by payee auto-category
+  (`agent-os/specs/2026-08-24-1522-category-by-kind-and-history/`). Insights still filters by
+  tags without overlapping tag totals. The additive cutover preserved 4,798 tagged
+  transactions and 4,799 Category assignments. Destructive removal of the compatibility
+  storage is a future audited delta.
   ✅ **Budget, Schedules and Commitments merged into one budget, shipped 2026-08-24.**
   `agent-os/specs/2026-08-23-2313-one-budget/`. **The parallel-systems phase every entry
   above deferred is over.** A bill is now a `kind: 'bill'` row on `finance_budget_categories`
@@ -986,6 +985,13 @@ period)` so money already spent stops being held twice and only going over bites
   have. Underfunded reads templates + bill cadence + overspend. Right-click Assign targets
   one envelope. The shortfall is the preview (partial / not funded), not a negative
   headline.
+  ✅ **Category by kind + payee auto-category shipped 2026-08-24.**
+  `agent-os/specs/2026-08-24-1522-category-by-kind-and-history/`. Register Category is
+  grouped Income / Bills / Regular spending / Savings, each with New {type}…. A claim files
+  that payee's on-budget charges, including pre-start; Average Spent reads that history.
+  Rules are retired. Each payee has `learn` / `fixed` / `off`; a claim overrides the saved
+  default while held. Local cutover converted 0 custom rules, dropped 67 seeded ones, and
+  inferred 175 payee defaults.
 - **Next:** **Shortfall attribution** is substantially answered by the merge above — the
   budget states a shortfall per bill envelope rather than as one collapsed number, and
   Assign → Underfunded names which envelopes will not be funded. What is still missing is

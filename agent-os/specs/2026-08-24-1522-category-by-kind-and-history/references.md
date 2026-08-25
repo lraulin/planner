@@ -1,5 +1,7 @@
 # References for Category picker and payee auto-categorisation
 
+**Status: frozen / complete** (2026-08-24)
+
 ## Governing specs
 
 ### `agent-os/specs/2026-08-24-0930-envelope-sections/`

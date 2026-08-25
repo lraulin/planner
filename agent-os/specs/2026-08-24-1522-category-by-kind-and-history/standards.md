@@ -1,5 +1,7 @@
 # Standards for Category picker and payee auto-categorisation
 
+**Status: frozen / complete** (2026-08-24)
+
 Path references — the files stay canonical.
 
 @agent-os/standards/database/migrations.md

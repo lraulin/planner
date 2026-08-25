@@ -1,6 +1,6 @@
 # Category picker, payee auto-categorisation — Shaping Notes
 
-**Status: active**
+**Status: frozen / complete** (2026-08-24)
 
 ## Scope
 
