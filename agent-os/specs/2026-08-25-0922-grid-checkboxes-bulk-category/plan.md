@@ -37,7 +37,7 @@ No toast stack exists. Skipped-ineligible and failures use the existing `GridToo
 - **Select-all = currently navigable ids** (`onNavigableIdsChange`): filtered, search-narrowed, expanded; includes virtualized off-screen Register rows. Group headers are not records and are not selected.
 - **Never-empty grids:** unchecking the header collapses to the focus row (same invariant as `applySelect`). **`allowEmpty` grids (budget):** header can clear to empty.
 - **`⌘A` / `Ctrl+A`** is a registered **Select all** command (Item menu) when the grid is focused and the target is not a typing field. Arrow/Shift movement stays navigation, not a command.
-- **Category: both cell and command.** Editing Category on a row that is in a multi-selection writes that envelope onto every selected eligible transaction. `Set category…` is a registered Item / row-menu / `⌘K` command that opens the same grouped picker (ModalShell + existing `CategorySelect`). One selected row, or a cell on a row that is not in the selection, stays single-row.
+- **Category: both cell and command.** Editing Category on a row that is in a multi-selection writes that envelope onto every selected eligible transaction. `Set category…` is a registered Item / row-menu / `⌘K` command that opens the same grouped picker (ModalShell + existing `CategorySelect`). One selected row, or a cell on a row that is not in the selection, stays single-row. Clicking the Category cell (or any other cell control) on a selected row keeps the selection — collapsing it first would make the cell a surprising single-row exception.
 - **Ineligible rows are skipped**, not a refusal of the whole run. Off-budget and on-budget transfers stay ineligible. The banner reports `Category set on N of M` when any were skipped, or the existing refusal if none were eligible.
 - **One bulk mutation**, not N sequential server actions. `setTransactionBudgetCategories(userId, ids, categoryId)` filters to owned, eligible rows, one `UPDATE … WHERE id IN (…) AND userId`, then payee learning once per distinct payee in the written set (same `learnFromCategoryEdit` as today).
 - **Catalog Delete uses `selection.ids`.** `catalogCapabilities` grows `onDelete(ids)` and passes `ids`. Every current caller (Register, Payees, Accounts, Contacts, Resources, Time Charts, Timeline, Metrics, Jobs, Residences) confirms N and deletes N. Open / Track as bill / Rename stay singular. Payees **Merge selected** is already multi and stays.
@@ -64,9 +64,9 @@ No toast stack exists. Skipped-ineligible and failures use the existing `GridToo
 
 Material refinements during implementation (requirements, design, scope). Omit pure code polish.
 
-| #   | Change                      | Why |
-| --- | --------------------------- | --- |
-|     | _(filled during implement)_ |     |
+| #   | Change                                                                                                          | Why                                                                                                                                                                                                                                                |
+| --- | --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Clicking a cell control (`select` / `input` / `button`) on a selected row must not replace the multi-selection. | The Category cell is the bulk control. DataGrid was calling plain `onSelect(id)` when focusing a cell editor, which collapsed the set to that row before `onChange` — so filing Uncategorized with several rows ticked only wrote the clicked one. |
 
 ## Task 1: Save Spec Documentation
 

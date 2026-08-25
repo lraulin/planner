@@ -29,6 +29,7 @@ import { haptic } from "@/lib/touch/haptics";
 import { CommandGlyph } from "@/components/icons/commandIcons";
 import type { CommandIcon } from "@/lib/commands/icons";
 import type { CompactFields } from "@/lib/grid/compactFields";
+import type { SelectMods } from "@/lib/grid/selection";
 import { SelectionCheckbox } from "./SelectionCheckbox";
 import { useDateFormatter } from "@/components/settings/SettingsProvider";
 import { formatFullDateKey } from "@/lib/dateFormat";
@@ -79,7 +80,7 @@ type CompactRowProps<TCtx, TRow> = {
   columnCtx: TCtx;
   fields: CompactFields<ColumnDef<TCtx, TRow>>;
   selected: boolean;
-  onSelect: (id: string, mods?: { extend?: boolean; toggle?: boolean }) => void;
+  onSelect: (id: string, mods?: SelectMods) => void;
   onOpenDetail?: (id: string) => void;
   onLongPress?: (id: string, x: number, y: number) => void;
   swipe?: RowSwipe;
@@ -273,8 +274,10 @@ export const CompactRow = memo(function CompactRow<TCtx, TRow>({
             return;
           }
           // Inline controls inside a cell (an expander, a checkbox) handle their own tap.
+          // Keep a multi-selection the row is already in so a Category (or similar)
+          // edit applies to it rather than collapsing first.
           if ((event.target as HTMLElement).closest("input, select, button")) {
-            onSelect(row.id);
+            onSelect(row.id, { cellControl: true });
             return;
           }
           onSelect(row.id);

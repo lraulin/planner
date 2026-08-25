@@ -82,6 +82,13 @@ export function useMultiSelect(
           mods,
           { allowEmpty: options.allowEmpty },
         );
+        if (
+          result.focusId === current.focusId &&
+          result.anchorId === current.anchorId &&
+          result.selectedIds === current.selectedIds
+        ) {
+          return current;
+        }
         return {
           focusId: result.focusId,
           anchorId: result.anchorId,

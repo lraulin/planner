@@ -3,7 +3,8 @@
  *
  * The grid keeps one **focus** row (keyboard home, drawer target, context for single-row
  * commands) and a **set** of selected ids. Shift extends a range from an anchor; ⌘/Ctrl
- * toggles membership. Plain click replaces the set.
+ * toggles membership. Plain click replaces the set. Clicking a cell control on a selected
+ * row does not.
  */
 
 export type SelectMods = {
@@ -11,6 +12,13 @@ export type SelectMods = {
   extend?: boolean;
   /** ⌘/Ctrl: add or remove the target without clearing the rest. */
   toggle?: boolean;
+  /**
+   * Click on a cell control (`select`, `input`, `button`). Must not collapse a
+   * multi-selection the row is already in — that edit applies to the selection.
+   * An unselected row is a single-row edit, so the selection becomes that row.
+   * Shift/⌘ are ignored: a click on a date picker must not toggle membership.
+   */
+  cellControl?: boolean;
 };
 
 export type SelectResult = {
@@ -42,7 +50,11 @@ export function rangeIds(
  *
  * - **extend** (Shift): range from anchor → target; anchor stays put.
  * - **toggle** (⌘/Ctrl): flip membership of the target; becomes the new anchor.
- * - neither: single-select the target.
+ * - **cellControl**: keep a multi-selection the target is already in; otherwise
+ *   single-select. Spreadsheet/register UIs treat a cell edit inside a
+ *   selection as a bulk edit — replacing the set first would make it a
+ *   surprising one-row exception.
+ * - none of the above: single-select the target.
  */
 export function applySelect(
   current: ReadonlySet<string>,
@@ -53,6 +65,19 @@ export function applySelect(
   mods: SelectMods = {},
   options: { allowEmpty?: boolean } = {},
 ): SelectResult {
+  if (mods.cellControl) {
+    if (current.has(targetId)) {
+      return {
+        // Same Set identity so a native `<select>` opening on a selected row
+        // does not re-render the cell and dismiss the picker.
+        selectedIds: current instanceof Set ? current : new Set(current),
+        anchorId,
+        focusId,
+      };
+    }
+    return selectOnly(targetId);
+  }
+
   if (mods.extend && anchorId) {
     return {
       selectedIds: new Set(rangeIds(orderedIds, anchorId, targetId)),
@@ -90,6 +115,24 @@ export function applySelect(
     anchorId: targetId,
     focusId: targetId,
   };
+}
+
+/**
+ * Rows a cell edit should write, given the current selection.
+ *
+ * Editing a cell on a row that is already in a multi-selection applies to every
+ * selected row, in display order. A cell on a row outside the selection, or a
+ * selection of one, writes only that row.
+ */
+export function idsForFieldEdit(
+  editedId: string,
+  selectedIds: ReadonlySet<string>,
+  orderedIds: readonly string[],
+): string[] {
+  if (selectedIds.has(editedId) && selectedIds.size > 1) {
+    return orderedIds.filter((id) => selectedIds.has(id));
+  }
+  return [editedId];
 }
 
 /** Replace the whole selection with one id (or clear). */

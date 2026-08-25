@@ -53,6 +53,7 @@ import type { GridDefaults } from "@/components/grid/useGridState";
 import { optionsFilter } from "@/lib/grid/customFilter";
 import { useMultiSelect } from "@/components/grid/useMultiSelect";
 import { useNavigableIds } from "@/components/grid/useNavigableIds";
+import { idsForFieldEdit } from "@/lib/grid/selection";
 import { isTypingTarget } from "@/lib/keyboard";
 import { useRegisterSource } from "./useRegisterSource";
 import { useSearchParams } from "next/navigation";
@@ -366,10 +367,7 @@ export function FinancesView({
 
   const onSetEnvelope = useCallback(
     (transactionId: string, categoryId: string | null) => {
-      const ids =
-        selectedIds.has(transactionId) && selectedIds.size > 1
-          ? order.filter((id) => selectedIds.has(id))
-          : [transactionId];
+      const ids = idsForFieldEdit(transactionId, selectedIds, order);
       const name = categoryId ? (envelopeNameById.get(categoryId) ?? null) : null;
       setError(null);
       for (const id of ids) {

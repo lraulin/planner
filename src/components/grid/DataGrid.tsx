@@ -1336,9 +1336,10 @@ const DataRow = memo(
           if (
             (event.target as HTMLElement).closest("input, select, textarea, button")
           ) {
-            // Still mark the row selected when focusing a cell control, but without multi
-            // modifiers — a click on a date picker should not toggle ⌘-selection.
-            onSelect(row.id);
+            // Keep a multi-selection the row is already in: the cell edit applies to
+            // it. An unselected row is a single-row edit. No Shift/⌘ — a click on a
+            // date picker should not toggle membership.
+            onSelect(row.id, { cellControl: true });
             return;
           }
           // Shift = range, Ctrl (Windows) / ⌘ (Mac) = add/remove one row. Both are standard.

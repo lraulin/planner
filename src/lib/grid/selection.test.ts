@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applySelect,
+  idsForFieldEdit,
   moveSelection,
   neighborAfterRemoval,
   pruneSelection,
@@ -71,6 +72,43 @@ describe("applySelect", () => {
     );
     expect([...result.selectedIds]).toEqual([]);
     expect(result.focusId).toBeNull();
+  });
+
+  it("keeps a multi-selection when a cell control is used on a selected row", () => {
+    const current = new Set(["b", "c", "d"]);
+    const result = applySelect(current, "b", "c", "d", ORDER, {
+      cellControl: true,
+    });
+    expect(result.selectedIds).toBe(current);
+    expect([...result.selectedIds]).toEqual(["b", "c", "d"]);
+    expect(result.focusId).toBe("c");
+    expect(result.anchorId).toBe("b");
+  });
+
+  it("selects only the row when a cell control is used on an unselected row", () => {
+    const result = applySelect(new Set(["b", "c"]), "b", "c", "e", ORDER, {
+      cellControl: true,
+    });
+    expect([...result.selectedIds]).toEqual(["e"]);
+    expect(result.focusId).toBe("e");
+  });
+});
+
+describe("idsForFieldEdit", () => {
+  it("applies a cell edit to every selected row when the edited row is in a multi-selection", () => {
+    expect(idsForFieldEdit("c", new Set(["b", "c", "d"]), ORDER)).toEqual([
+      "b",
+      "c",
+      "d",
+    ]);
+  });
+
+  it("writes only the edited row when it is not in the selection", () => {
+    expect(idsForFieldEdit("e", new Set(["b", "c", "d"]), ORDER)).toEqual(["e"]);
+  });
+
+  it("writes only the edited row when the selection is a single row", () => {
+    expect(idsForFieldEdit("c", new Set(["c"]), ORDER)).toEqual(["c"]);
   });
 });
 

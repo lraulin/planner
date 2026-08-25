@@ -40,6 +40,8 @@ tasks, plus Top level). Mixed legality: confirm, then move only the legal subset
 - `⌘A` is a registered Item command, not host-local keydown. It must not steal text-field
   select-all (`isTypingTarget`).
 - Cell + command for Category. Cell on a row outside the selection stays single-row.
+  Clicking the cell (or any cell control) on a selected row keeps the selection; the
+  DataGrid must not collapse it on the way to focusing the editor.
 - Skip ineligible rather than refuse the whole run. Zero eligible → the existing refusal copy.
 - One bulk mutation; payee learning once per distinct payee in the written set.
 - No new feedback chrome: ErrorBanner for skips/failures; ConfirmDialog for partial Outline
