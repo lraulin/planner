@@ -8,7 +8,8 @@
   (`finance_recurring_bills` / `finance_recurring_spend`) and its tier-2 cadence
   admission test; D1's two separate tables and the `setAsideHeld` arithmetic; D3's
   cross-table "at most one commitment per merchant" matcher rule (now a single
-  `budget_category_id` claim column).
+  `claimed_budget_category_id` claim column; shipped as `budget_category_id`, renamed by
+  `2026-08-24-1522-category-by-kind-and-history`).
 - **`agent-os/specs/2026-08-18-2058-commitments-clarity/`** — D2's Set aside accrual
   meter and the framing that bill accrual was "the envelope-like behaviour" (an actual
   envelope now exists).

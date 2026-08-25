@@ -46,9 +46,15 @@ matching that `conditions` did, with stable ids instead of strings.
 **D3 — One claim column replaces the two-table CHECK.** `finance_payees` drops
 `commitment_bill_id` / `commitment_spend_id` and the
 `num_nonnulls(...) <= 1` CHECK that existed only because the rule spanned two tables. It
-gains `budget_category_id` — "this merchant's charges belong to this envelope" — which
+gains a single claim column — "this merchant's charges belong to this envelope" — which
 means the same thing for a bill and for Pizza. A dismissed Review row stops creating a
 fake `status: 'ignored'` bill and becomes `finance_payees.not_a_commitment`.
+
+_Revised by `2026-08-24-1522-category-by-kind-and-history`._ The claim column is
+`claimed_budget_category_id` (renamed from `budget_category_id`) so it is not confused
+with a learned/fixed default on the same row. The meaning is unchanged. Ingest no longer
+runs Rules or the taxonomy auto-map; a claim still files matching historical on-budget
+charges when it is created or changed, and later manual corrections stay.
 
 **D4 — A bill envelope funds itself.** The `{type: "schedule", scheduleId}` template
 retires; a bill's funding demand is intrinsic — sink `expected_cents` over the months
@@ -135,6 +141,7 @@ by default. Say so if you'd rather drop those two outright.
 | 5   | **Reopened after freezing.** D6 became three sections — Income, then Spending holding a Bills table and a Regular spending table — instead of one grid.                                                                               | The one-grid reading put six bill columns on every ordinary envelope, `—` on two thirds of the rows. The freeze itself was premature: acceptance was self-confirmed rather than confirmed by use.                                                                                                |
 | 6   | Payee claims now file a charge in the envelope that claims it (`applyPayeeClaims`), ahead of the taxonomy auto-map, and it **moves rows already filed elsewhere**.                                                                    | Task 6 required this and it was never implemented, which is why every bill read $0.00. Filling nulls only would have left the existing charges pooled forever. A hand placement is not yet distinguishable from an auto-mapped one, so the claim wins — recorded here rather than left implicit. |
 | 7   | `DataGrid` gained `autoHeight`, for a grid sharing a scrolling page with another.                                                                                                                                                     | The default fills its parent and scrolls internally, which is right for a grid that _is_ the page and collapses both to a single row when two are stacked.                                                                                                                                       |
+| 8   | Claim column renamed to `claimed_budget_category_id`. Ingest no longer consults Rules or taxonomy auto-map (D3 / Task 6).                                                                                                             | `2026-08-24-1522-category-by-kind-and-history` retires Rules and the derived taxonomy. The claim is still the hard envelope relationship; a separate learned/fixed default lives beside it. Change #6's "ahead of the taxonomy auto-map" no longer applies because that map is gone.             |
 
 ---
 
@@ -189,8 +196,9 @@ bill column null and `status = 'active'`. Carry over the range checks
 it folds a row away; `status` states a fact about the obligation.
 
 `financePayees`: drop `commitment_bill_id`, `commitment_spend_id` and the
-`finance_payees_single_commitment` CHECK; add `budget_category_id` (`on delete set null`)
-and `not_a_commitment boolean not null default false`.
+`finance_payees_single_commitment` CHECK; add the claim column (`on delete set null`)
+and `not_a_commitment boolean not null default false`. Shipped as `budget_category_id`;
+renamed to `claimed_budget_category_id` by `2026-08-24-1522-category-by-kind-and-history`.
 
 Drop: `financeRecurringBills`, `financeRecurringSpend`, `financeSchedules`,
 `financeBudgetCategories.source_bill_id`, `financeCategoryGroups.source_commitment_key`,
@@ -276,9 +284,10 @@ them.
 - **Dashboard** — delete the Available to Spend headline and the stacked claims bar; the
   spendable panel becomes Ready to Assign, underfunded bill envelopes, and charges due in
   the next 14 days. `dashboardQueries.ts` and `analytics.ts` lose their commitment reads.
-- **Categorisation** — `finance_payees.budget_category_id` is consulted where the
-  commitment claim was, at the same precedence (row override > payee claim > rules >
-  learning). No change to the rules engine itself.
+- **Categorisation** — `finance_payees.claimed_budget_category_id` is consulted where the
+  commitment claim was. Precedence is now row Category > payee claim > payee learned/fixed
+  default > uncategorised (`2026-08-24-1522-category-by-kind-and-history` D7). The rules
+  engine is retired; the taxonomy auto-map is retired.
 - **Find** — `src/lib/find/{sources,targets,searchable,queries,types}.ts` drop the
   commitments and recurring-spend sources; budget envelopes become the searchable target.
 - **Agent tools** — `src/lib/agent/{financeTools,tools,contracts}.ts`:

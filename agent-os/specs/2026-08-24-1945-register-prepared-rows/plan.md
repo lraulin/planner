@@ -29,7 +29,7 @@ Actual Budget’s register loads a compact index and fetches row details in bloc
 ## Acceptance criteria
 
 - [ ] All-history search, hidden Payee filters, multi-sort stability, grouping/collapse, counts/facets, stale settings, and 100-row blocks without gaps or duplicates are unit-tested.
-- [ ] Imports, rules, deletions, and edits reload the index around the selected row rather than `listTransactionsAction()` of the whole ledger.
+- [ ] Imports, deletions, and edits reload the index around the selected row rather than `listTransactionsAction()` of the whole ledger. **Run rules** is retired by `2026-08-24-1522-category-by-kind-and-history`.
 - [ ] At most ~150 grid rows are mounted; the initial RSC payload is a compact index plus one block, not 7,030 full rows.
 - [ ] Drawer, Track as bill, and complete export remain correct without a client-side full ledger.
 - [ ] lint, typecheck, Postgres tests without skip warnings, production build, smoke, browser Register verification.
@@ -39,6 +39,7 @@ Actual Budget’s register loads a compact index and fetches row details in bloc
 | #   | Change                                                                                                            | Why                                                                                                                                                                                                           |
 | --- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | Carry whole-ledger Category assignability as compact index metadata and apply it to every lazy row and deep link. | A 100-row block cannot decide whether a transfer's counterpart is on- or off-budget. Without the index fact, the backlog excluded on-budget card payments while the cell and drawer still offered Categorize. |
+| 2   | Register reload no longer lists **Run rules** as a trigger.                                                       | `2026-08-24-1522-category-by-kind-and-history` retires Rules; imports, deletions, and edits remain.                                                                                                           |
 
 ## Task 1: Save spec documentation
 
